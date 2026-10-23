@@ -7,11 +7,10 @@
 #pragma once
 #pragma managed(push, off)
 
-#include <cmath>
+#include <cstdint>
 #include <memory>
-#include <numbers>
+#include <stdexcept>
 
-#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Types/CameraAspectMode.h>
 
 #include <Oxygen/Scene/Camera/Perspective.h>
@@ -19,10 +18,31 @@
 #include <Oxygen/Scene/Types/NodeHandle.h>
 
 #include <Commands/OrthographicCameraPropertyApplier.h>
+#include <Commands/PropertyKeys.h>
 #include <EditorModule/EditorCommand.h>
 
 namespace oxygen::interop::module {
 
+  //! Whether `mode` is a member of the schema's `CameraAspectMode` for the
+  //! aspect-mode field of `component`.
+  [[nodiscard]] inline auto IsValidAspectMode(const ComponentId component,
+    const std::uint16_t field, const CameraAspectMode mode) -> bool
+  {
+    return IsInRange(PropertyEntry {
+      .component = component,
+      .field = field,
+      .value = static_cast<std::int32_t>(mode),
+    });
+  }
+
+  //! Attaches or replaces the perspective camera of one node.
+  /*!
+   The projection is validated when the command is made, so the caller sees
+   the refusal; each value against its field, then far beyond near.
+
+   \throws std::invalid_argument when a value is outside its field's range or
+   the far plane is not beyond the near plane.
+  */
   class AttachPerspectiveCameraCommand final : public EditorCommand {
   public:
     AttachPerspectiveCameraCommand(oxygen::scene::NodeHandle node,
@@ -36,6 +56,25 @@ namespace oxygen::interop::module {
       , far_plane_(far_plane)
       , aspect_mode_(aspect_mode)
     {
+      const auto valid = [](const PerspectiveCameraField field,
+                           const float value) {
+        return IsInRange(PropertyEntry {
+          .component = ComponentId::kPerspectiveCamera,
+          .field = static_cast<std::uint16_t>(field),
+          .value = value,
+        });
+      };
+      if (!valid(PerspectiveCameraField::kFieldOfViewYRadians,
+            field_of_view_y_radians_)
+        || !valid(PerspectiveCameraField::kAspectRatio, aspect_ratio_)
+        || !valid(PerspectiveCameraField::kNearPlane, near_plane_)
+        || !valid(PerspectiveCameraField::kFarPlane, far_plane_)
+        || !(far_plane_ > near_plane_)
+        || !IsValidAspectMode(ComponentId::kPerspectiveCamera,
+          static_cast<std::uint16_t>(PerspectiveCameraField::kAspectMode),
+          aspect_mode_)) {
+        throw std::invalid_argument("Invalid perspective camera projection");
+      }
     }
 
     void Execute(CommandContext& context) override
@@ -46,18 +85,6 @@ namespace oxygen::interop::module {
 
       auto scene_node_opt = context.Scene->GetNode(node_);
       if (!scene_node_opt || !scene_node_opt->IsAlive()) {
-        return;
-      }
-
-      if (!std::isfinite(field_of_view_y_radians_)
-        || field_of_view_y_radians_ <= 0.0F
-        || field_of_view_y_radians_ >= std::numbers::pi_v<float>
-        || !std::isfinite(aspect_ratio_) || aspect_ratio_ <= 0.0F
-        || !std::isfinite(near_plane_) || near_plane_ <= 0.0F
-        || !std::isfinite(far_plane_) || far_plane_ <= near_plane_
-        || (aspect_mode_ != oxygen::CameraAspectMode::kAuto
-          && aspect_mode_ != oxygen::CameraAspectMode::kFixed)) {
-        LOG_F(ERROR, "Rejected invalid perspective camera projection");
         return;
       }
 
@@ -73,13 +100,21 @@ namespace oxygen::interop::module {
 
   private:
     oxygen::scene::NodeHandle node_;
-    float field_of_view_y_radians_ = 1.0471975512F;
-    float aspect_ratio_ = 16.0F / 9.0F;
-    float near_plane_ = 0.1F;
-    float far_plane_ = 1000.0F;
-    oxygen::CameraAspectMode aspect_mode_ = oxygen::CameraAspectMode::kAuto;
+    float field_of_view_y_radians_;
+    float aspect_ratio_;
+    float near_plane_;
+    float far_plane_;
+    oxygen::CameraAspectMode aspect_mode_;
   };
 
+  //! Attaches or replaces the orthographic camera of one node.
+  /*!
+   The projection is validated when the command is made, so the caller sees
+   the refusal.
+
+   \throws std::invalid_argument when the projection or the aspect mode is
+   not valid.
+  */
   class AttachOrthographicCameraCommand final : public EditorCommand {
   public:
     AttachOrthographicCameraCommand(oxygen::scene::NodeHandle node,
@@ -90,6 +125,12 @@ namespace oxygen::interop::module {
       , projection_(projection)
       , aspect_mode_(aspect_mode)
     {
+      if (!projection_.IsValid()
+        || !IsValidAspectMode(ComponentId::kOrthographicCamera,
+          static_cast<std::uint16_t>(OrthographicCameraField::kAspectMode),
+          aspect_mode_)) {
+        throw std::invalid_argument("Invalid orthographic camera projection");
+      }
     }
 
     void Execute(CommandContext& context) override
@@ -103,13 +144,6 @@ namespace oxygen::interop::module {
         return;
       }
 
-      if (!projection_.IsValid()
-        || (aspect_mode_ != oxygen::CameraAspectMode::kAuto
-          && aspect_mode_ != oxygen::CameraAspectMode::kFixed)) {
-        LOG_F(ERROR, "Rejected invalid orthographic camera projection");
-        return;
-      }
-
       auto camera = std::make_unique<oxygen::scene::OrthographicCamera>();
       projection_.ApplyTo(*camera);
       camera->SetAspectMode(aspect_mode_);
@@ -120,7 +154,7 @@ namespace oxygen::interop::module {
   private:
     oxygen::scene::NodeHandle node_;
     OrthographicCameraProjection projection_;
-    oxygen::CameraAspectMode aspect_mode_ = oxygen::CameraAspectMode::kAuto;
+    oxygen::CameraAspectMode aspect_mode_;
   };
 
   class DetachCameraCommand final : public EditorCommand {

@@ -34,6 +34,7 @@
 #include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/Data/SceneAsset.h>
+#include <Oxygen/Data/SceneRecordDefaults.h>
 #include <Oxygen/Data/Schema/Generated.SceneComponents.h>
 #include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Data/Vertex.h>
@@ -94,7 +95,7 @@ namespace {
 
   auto Camera(const uint32_t node) -> world::PerspectiveCameraRecord
   {
-    auto record = world::PerspectiveCameraRecord {};
+    auto record = world::MakeDefaultRecord<world::PerspectiveCameraRecord>();
     record.node_index = node;
     return record;
   }
@@ -487,32 +488,35 @@ NOLINT_TEST_F(SceneInstantiationTest, AttachesEveryNodeRecordFamily)
   renderable.geometry_key = geometry->GetAssetKey();
   builder.AddComponents(ComponentType::kRenderable, std::vector { renderable });
   builder.AddComponents(ComponentType::kOverride,
-    std::vector { MaterialOverride(
-      mesh, surface, material_key, geometry->Surfaces().layout_revision) });
+    std::vector {
+      MaterialOverride(
+        mesh, surface, material_key, geometry->Surfaces().layout_revision),
+    });
   auto perspective = Camera(eye);
   perspective.fov_y = kFieldOfView;
   builder.AddComponents(
     ComponentType::kPerspectiveCamera, std::vector { perspective });
-  auto orthographic = world::OrthographicCameraRecord {};
+  auto orthographic
+    = world::MakeDefaultRecord<world::OrthographicCameraRecord>();
   orthographic.node_index = map;
   orthographic.left = -kOrthoHalfWidth;
   orthographic.right = kOrthoHalfWidth;
   builder.AddComponents(
     ComponentType::kOrthographicCamera, std::vector { orthographic });
-  auto directional = world::DirectionalLightRecord {};
+  auto directional = world::MakeDefaultRecord<world::DirectionalLightRecord>();
   directional.node_index = sun;
   directional.intensity_lux = kSunLux;
   builder.AddComponents(
     ComponentType::kDirectionalLight, std::vector { directional });
-  auto point = world::PointLightRecord {};
+  auto point = world::MakeDefaultRecord<world::PointLightRecord>();
   point.node_index = bulb;
   point.luminous_flux_lm = kBulbFlux;
   builder.AddComponents(ComponentType::kPointLight, std::vector { point });
-  auto spot_light = world::SpotLightRecord {};
+  auto spot_light = world::MakeDefaultRecord<world::SpotLightRecord>();
   spot_light.node_index = spot;
   spot_light.outer_cone_angle_radians = kSpotOuterCone;
   builder.AddComponents(ComponentType::kSpotLight, std::vector { spot_light });
-  auto fog = world::LocalFogVolumeRecord {};
+  auto fog = world::MakeDefaultRecord<world::LocalFogVolumeRecord>();
   fog.node_index = haze;
   fog.sort_priority = kFogSortPriority;
   builder.AddComponents(ComponentType::kLocalFogVolume, std::vector { fog });
@@ -724,7 +728,8 @@ NOLINT_TEST_F(SceneInstantiationTest, StaleMaterialOverrideIsAnIssue)
   builder.AddComponents(ComponentType::kRenderable, std::vector { renderable });
   builder.AddComponents(ComponentType::kOverride,
     std::vector {
-      MaterialOverride(0U, surface, material_key, stale_revision) });
+      MaterialOverride(0U, surface, material_key, stale_revision),
+    });
 
   const auto instance = Run(builder.Build());
 

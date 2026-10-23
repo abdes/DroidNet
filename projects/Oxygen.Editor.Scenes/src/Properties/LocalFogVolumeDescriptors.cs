@@ -7,7 +7,6 @@ using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Managed.Core;
-using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.Scenes.Properties;
 
@@ -23,49 +22,37 @@ public sealed class LocalFogVolumeDescriptors
             SceneSchema.LocalFogVolume.RadialFogExtinction,
             "Density",
             static volume => volume.RadialFogExtinction,
-            static (volume, value) => volume.RadialFogExtinction = value,
-            minimum: 0f,
-            maximum: null);
+            static (volume, value) => volume.RadialFogExtinction = value);
         this.HeightFogExtinctionDescriptor = FloatDescriptor(
             SceneSchema.LocalFogVolume.HeightFogExtinction,
             "Height Density",
             static volume => volume.HeightFogExtinction,
-            static (volume, value) => volume.HeightFogExtinction = value,
-            minimum: 0f,
-            maximum: null);
+            static (volume, value) => volume.HeightFogExtinction = value);
         this.HeightFogFalloffDescriptor = FloatDescriptor(
             SceneSchema.LocalFogVolume.HeightFogFalloff,
             "Height Falloff",
             static volume => volume.HeightFogFalloff,
-            static (volume, value) => volume.HeightFogFalloff = value,
-            minimum: 0f,
-            maximum: null);
+            static (volume, value) => volume.HeightFogFalloff = value);
         this.HeightFogOffsetDescriptor = FloatDescriptor(
             SceneSchema.LocalFogVolume.HeightFogOffset,
             "Height Offset",
             static volume => volume.HeightFogOffset,
-            static (volume, value) => volume.HeightFogOffset = value,
-            minimum: null,
-            maximum: null);
+            static (volume, value) => volume.HeightFogOffset = value);
         this.FogPhaseGDescriptor = FloatDescriptor(
             SceneSchema.LocalFogVolume.FogPhaseG,
             "Phase",
             static volume => volume.FogPhaseG,
-            static (volume, value) => volume.FogPhaseG = value,
-            minimum: 0f,
-            maximum: 0.999f);
+            static (volume, value) => volume.FogPhaseG = value);
         this.FogAlbedoDescriptor = VectorDescriptor(
             SceneSchema.LocalFogVolume.FogAlbedo,
             "Albedo",
             static volume => volume.FogAlbedo,
-            static (volume, value) => volume.FogAlbedo = value,
-            maximum: 1f);
+            static (volume, value) => volume.FogAlbedo = value);
         this.FogEmissiveDescriptor = VectorDescriptor(
             SceneSchema.LocalFogVolume.FogEmissive,
             "Emissive",
             static volume => volume.FogEmissive,
-            static (volume, value) => volume.FogEmissive = value,
-            maximum: null);
+            static (volume, value) => volume.FogEmissive = value);
         this.SortPriorityDescriptor = CreateSortPriorityDescriptor();
         this.ById = this.IndexById();
     }
@@ -117,59 +104,32 @@ public sealed class LocalFogVolumeDescriptors
             id: SceneSchema.LocalFogVolume.SortPriority,
             reader: static target => ((LocalFogVolumeComponent)target).SortPriority,
             writer: static (target, value) => ((LocalFogVolumeComponent)target).SortPriority = value,
-            validator: static value => value is >= -127 and <= 127
-                ? ValidationResult.Ok
-                : ValidationResult.Fail(SceneDiagnosticCodes.LocalFogVolumeInvalid, "Sort priority must be between -127 and 127."),
+            validator: PropertyValidators.Of(SceneSchema.LocalFogVolume.SortPriority, "Sort priority"),
             annotation: Annotation("sort_priority", new EditorAnnotation { Group = "Local Fog Volume", Label = "Sort Priority", Renderer = "numberbox", Step = 1 }));
 
     private static PropertyDescriptor<float> FloatDescriptor(
         PropertyId<float> id,
         string label,
         Func<LocalFogVolumeComponent, float> read,
-        Action<LocalFogVolumeComponent, float> write,
-        float? minimum,
-        float? maximum)
+        Action<LocalFogVolumeComponent, float> write)
         => new(
             id: id,
             reader: target => read((LocalFogVolumeComponent)target),
             writer: (target, value) => write((LocalFogVolumeComponent)target, value),
-            validator: value => Validate(label, minimum, maximum, value),
+            validator: PropertyValidators.Of(id, label),
             annotation: Annotation(id.Id.JsonPointer.TrimStart('/'), new EditorAnnotation { Group = "Local Fog Volume", Label = label, Renderer = "numberbox", Step = 0.01 }));
 
     private static PropertyDescriptor<Vector3> VectorDescriptor(
         PropertyId<Vector3> id,
         string label,
         Func<LocalFogVolumeComponent, Vector3> read,
-        Action<LocalFogVolumeComponent, Vector3> write,
-        float? maximum)
+        Action<LocalFogVolumeComponent, Vector3> write)
         => new(
             id: id,
             reader: target => read((LocalFogVolumeComponent)target),
             writer: (target, value) => write((LocalFogVolumeComponent)target, value),
-            validator: value =>
-            {
-                var x = Validate(label, 0f, maximum, value.X);
-                if (!x.IsValid)
-                {
-                    return x;
-                }
-
-                var y = Validate(label, 0f, maximum, value.Y);
-                return y.IsValid ? Validate(label, 0f, maximum, value.Z) : y;
-            },
+            validator: PropertyValidators.Of(id, label),
             annotation: Annotation(id.Id.JsonPointer.TrimStart('/'), new EditorAnnotation { Group = "Local Fog Volume", Label = label, Renderer = "color-rgb" }));
-
-    private static ValidationResult Validate(string label, float? minimum, float? maximum, float value)
-        => !float.IsFinite(value)
-            ? ValidationResult.Fail(SceneDiagnosticCodes.LocalFogVolumeInvalid, $"{label} must be finite.")
-            : (minimum is { } low && value < low) || (maximum is { } high && value > high)
-            ? ValidationResult.Fail(SceneDiagnosticCodes.LocalFogVolumeInvalid, RangeMessage(label, minimum, maximum))
-            : ValidationResult.Ok;
-
-    private static string RangeMessage(string label, float? minimum, float? maximum)
-        => maximum is { } high
-            ? string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{label} must be between {minimum ?? float.NegativeInfinity} and {high}.")
-            : string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{label} must be at least {minimum}.");
 
     private static EditorAnnotation Annotation(string property, EditorAnnotation fallback)
         => SceneEditorSchemaAnnotations.Get("#/definitions/local_fog_volume/" + property, fallback);

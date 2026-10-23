@@ -17,6 +17,7 @@
 #include <new>
 #include <optional>
 #include <ranges>
+#include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
@@ -45,6 +46,7 @@
 #include <Commands/SetGeometryCommand.h>
 #include <Commands/SetLocalTransformCommand.h>
 #include <Commands/SetOverridesCommand.h>
+#include <Commands/SchemaEnums.h>
 #include <Commands/SetPropertiesCommand.h>
 #include <Commands/UpdateTransformsForNodesCommand.h>
 #include <EditorModule/EditorModule.h>
@@ -191,41 +193,34 @@ namespace Oxygen::Interop::World {
       };
     }
 
-    static auto MakeLightCommon(System::Numerics::Vector3 color,
-      bool affectsWorld, int mobility, bool castsShadows, float shadowBias,
-      float shadowNormalBias, bool contactShadows, int shadowResolutionHint,
-      float exposureCompensation) -> oxygen::scene::CommonLightProperties
+    namespace interop = oxygen::interop::module;
+
+    //! The native vector of a managed one.
+    static auto ToVec3(System::Numerics::Vector3 value) -> oxygen::Vec3
     {
-      if (mobility != 0 || shadowResolutionHint < 0 || shadowResolutionHint > 3) {
-        throw gcnew System::ArgumentOutOfRangeException("light", "Unsupported light mobility or resolution hint");
-      }
-      oxygen::scene::CommonLightProperties common;
-      common.color_rgb = { color.X, color.Y, color.Z };
-      common.affects_world = affectsWorld;
-      common.casts_shadows = castsShadows;
-      common.shadow = { .bias = shadowBias, .normal_bias = shadowNormalBias,
-        .contact_shadows = contactShadows,
-        .resolution_hint = static_cast<oxygen::scene::ShadowResolutionHint>(shadowResolutionHint) };
-      common.exposure_compensation_ev = exposureCompensation;
-      return common;
+      return { value.X, value.Y, value.Z };
     }
 
-    static void EnqueueAttachLight(EngineContext^ context, System::Guid nodeId,
-      std::unique_ptr<oxygen::Component> light)
+    //! The common light values of the managed attach arguments; a light
+    //! mobility other than Realtime is refused.
+    static auto ToLightCommonValues(System::Numerics::Vector3 color,
+      bool affectsWorld, int mobility, bool castsShadows, float shadowBias,
+      float shadowNormalBias, bool contactShadows, int shadowResolutionHint,
+      float exposureCompensation) -> interop::LightCommonValues
     {
-      if (const auto error = oxygen::scene::ValidateLight(*light)) {
-        throw gcnew System::ArgumentException(gcnew System::String((error->field + ": " + error->message).c_str()));
+      if (mobility != 0) {
+        throw gcnew System::ArgumentOutOfRangeException("light", "Unsupported light mobility");
       }
-      auto native_ctx = context->NativePtr();
-      if (!native_ctx || !native_ctx->engine) return;
-      auto editor_module = native_ctx->engine->GetModule<EditorModule>();
-      if (!editor_module) return;
-      auto bytes = nodeId.ToByteArray();
-      std::array<uint8_t, 16> key {};
-      for (int i = 0; i < 16; ++i) key[i] = bytes[i];
-      const auto handle = NodeRegistry::Lookup(key);
-      if (!handle) return;
-      editor_module->get().Enqueue(std::make_unique<AttachLightCommand>(*handle, std::move(light)));
+      return {
+        .color = ToVec3(color),
+        .affects_world = affectsWorld,
+        .casts_shadows = castsShadows,
+        .shadow_bias = shadowBias,
+        .shadow_normal_bias = shadowNormalBias,
+        .contact_shadows = contactShadows,
+        .shadow_resolution_hint = shadowResolutionHint,
+        .exposure_compensation = exposureCompensation,
+      };
     }
 
     struct NodeCommandTarget {
@@ -256,6 +251,39 @@ namespace Oxygen::Interop::World {
         return std::nullopt;
       }
       return NodeCommandTarget { .module = editor_module->get(), .node = *handle };
+    }
+
+    //! Resolves the editor module and a registered node for a component
+    //! attach, reporting either one missing as `SetProperties` does.
+    static auto RequireNodeForCommand(EngineContext^ context,
+      System::Guid nodeId, System::String^ operation) -> NodeCommandTarget
+    {
+      auto native_ctx = context->NativePtr();
+      if (!native_ctx || !native_ctx->engine) {
+        throw gcnew System::InvalidOperationException(operation
+          + " failed because the native engine context is not available.");
+      }
+      auto editor_module = native_ctx->engine->GetModule<EditorModule>();
+      if (!editor_module) {
+        throw gcnew System::InvalidOperationException(
+          operation + " failed because EditorModule is not available.");
+      }
+      const auto target = LookupNodeForCommand(context, nodeId);
+      if (!target) {
+        throw gcnew System::ArgumentException(operation
+          + " failed because the target scene node is not registered.");
+      }
+      return *target;
+    }
+
+    //! Enqueues attaching `light`, which `MakeDirectionalLight`,
+    //! `MakePointLight` or `MakeSpotLight` built and validated.
+    static void EnqueueAttachLight(EngineContext^ context, System::Guid nodeId,
+      std::unique_ptr<oxygen::Component> light)
+    {
+      const auto target = RequireNodeForCommand(context, nodeId, "AttachLight");
+      target.module.Enqueue(
+        std::make_unique<AttachLightCommand>(target.node, std::move(light)));
     }
 
     static void EnqueueDetachLight(EngineContext^ context, System::Guid nodeId)
@@ -1024,68 +1052,53 @@ namespace Oxygen::Interop::World {
     editor_module->get().Enqueue(std::move(cmd));
   }
 
+  namespace {
+
+    //! The camera aspect mode `aspectMode` names; throws when it names none.
+    auto ToAspectMode(System::Byte aspectMode) -> oxygen::CameraAspectMode
+    {
+      const auto mode = interop::ToCameraAspectMode(aspectMode);
+      if (!mode) {
+        throw gcnew System::ArgumentOutOfRangeException(
+          "aspectMode", "The camera aspect mode is not a schema member.");
+      }
+      return *mode;
+    }
+
+  } // namespace
+
   void OxygenWorld::AttachPerspectiveCamera(System::Guid nodeId,
     float fieldOfViewYRadians, float aspectRatio, float nearPlane,
     float farPlane, System::Byte aspectMode) {
-    auto native_ctx = context_->NativePtr();
-    if (!native_ctx || !native_ctx->engine) {
-      return;
-    }
-
-    auto editor_module = native_ctx->engine->GetModule<EditorModule>();
-    if (!editor_module) {
-      return;
-    }
-
-    auto b = nodeId.ToByteArray();
-    std::array<uint8_t, 16> key{};
-    for (int i = 0; i < 16; ++i) {
-      key[i] = b[i];
-    }
-
-    auto opt = NodeRegistry::Lookup(key);
-    if (!opt.has_value()) {
-      return;
-    }
-
-    const auto& handle = opt.value();
-    auto cmd = std::unique_ptr<AttachPerspectiveCameraCommand>(
-      commandFactory_->CreateAttachPerspectiveCamera(handle,
+    const auto target
+      = RequireNodeForCommand(context_, nodeId, "AttachPerspectiveCamera");
+    std::unique_ptr<AttachPerspectiveCameraCommand> cmd;
+    try {
+      cmd.reset(commandFactory_->CreateAttachPerspectiveCamera(target.node,
         fieldOfViewYRadians, aspectRatio, nearPlane, farPlane,
-        static_cast<oxygen::CameraAspectMode>(aspectMode)));
-    editor_module->get().Enqueue(std::move(cmd));
+        ToAspectMode(aspectMode)));
+    } catch (const std::invalid_argument& error) {
+      throw gcnew System::ArgumentException(
+        gcnew System::String(error.what()));
+    }
+    target.module.Enqueue(std::move(cmd));
   }
 
   void OxygenWorld::AttachOrthographicCamera(System::Guid nodeId,
     float orthographicSize, float aspectRatio, float nearPlane,
     float farPlane, System::Byte aspectMode) {
-    auto native_ctx = context_->NativePtr();
-    if (!native_ctx || !native_ctx->engine) {
-      return;
-    }
-
-    auto editor_module = native_ctx->engine->GetModule<EditorModule>();
-    if (!editor_module) {
-      return;
-    }
-
-    auto b = nodeId.ToByteArray();
-    std::array<uint8_t, 16> key{};
-    for (int i = 0; i < 16; ++i) {
-      key[i] = b[i];
-    }
-
-    auto opt = NodeRegistry::Lookup(key);
-    if (!opt.has_value()) {
-      return;
-    }
-
-    const auto& handle = opt.value();
-    auto cmd = std::unique_ptr<AttachOrthographicCameraCommand>(
-      commandFactory_->CreateAttachOrthographicCamera(handle,
+    const auto target
+      = RequireNodeForCommand(context_, nodeId, "AttachOrthographicCamera");
+    std::unique_ptr<AttachOrthographicCameraCommand> cmd;
+    try {
+      cmd.reset(commandFactory_->CreateAttachOrthographicCamera(target.node,
         orthographicSize, aspectRatio, nearPlane, farPlane,
-        static_cast<oxygen::CameraAspectMode>(aspectMode)));
-    editor_module->get().Enqueue(std::move(cmd));
+        ToAspectMode(aspectMode)));
+    } catch (const std::invalid_argument& error) {
+      throw gcnew System::ArgumentException(
+        gcnew System::String(error.what()));
+    }
+    target.module.Enqueue(std::move(cmd));
   }
 
   void OxygenWorld::DetachCamera(System::Guid nodeId) {
@@ -1122,25 +1135,31 @@ namespace Oxygen::Interop::World {
     System::Numerics::Vector4 cascadeDistances, float distributionExponent,
     float transitionFraction, float distanceFadeoutFraction)
   {
-    if (atmosphereLightSlot < 0 || atmosphereLightSlot > 2 || cascadeCount < 1
-      || cascadeCount > 4 || splitMode < 0 || splitMode > 1) {
-      throw gcnew System::ArgumentOutOfRangeException("light", "Invalid directional light enum/count");
-    }
-    auto light = std::make_unique<oxygen::scene::DirectionalLight>();
-    light->Common() = MakeLightCommon(color, affectsWorld, mobility, castsShadows,
-      shadowBias, shadowNormalBias, contactShadows, shadowResolutionHint, exposureCompensation);
-    light->SetIntensityLux(intensityLux);
-    light->SetAngularSizeRadians(angularSizeRadians);
-    light->SetAtmosphereLightSlot(static_cast<oxygen::scene::AtmosphereLightSlot>(atmosphereLightSlot));
-    light->SetUsePerPixelAtmosphereTransmittance(usePerPixelAtmosphereTransmittance);
-    light->SetAtmosphereDiskLuminanceScale({ atmosphereDiskLuminanceScaleRgb.X,
-      atmosphereDiskLuminanceScaleRgb.Y, atmosphereDiskLuminanceScaleRgb.Z });
-    light->CascadedShadows() = { .cascade_count = static_cast<std::uint32_t>(cascadeCount),
-      .split_mode = static_cast<oxygen::scene::DirectionalCsmSplitMode>(splitMode),
+    const interop::DirectionalLightValues values {
+      .common = ToLightCommonValues(color, affectsWorld, mobility, castsShadows,
+        shadowBias, shadowNormalBias, contactShadows, shadowResolutionHint,
+        exposureCompensation),
+      .intensity_lux = intensityLux,
+      .angular_size_radians = angularSizeRadians,
+      .atmosphere_light_slot = atmosphereLightSlot,
+      .use_per_pixel_atmosphere_transmittance
+      = usePerPixelAtmosphereTransmittance,
+      .disk_luminance_scale = ToVec3(atmosphereDiskLuminanceScaleRgb),
+      .cascade_count = cascadeCount,
+      .split_mode = splitMode,
       .max_shadow_distance = maxShadowDistance,
-      .cascade_distances = { cascadeDistances.X, cascadeDistances.Y, cascadeDistances.Z, cascadeDistances.W },
-      .distribution_exponent = distributionExponent, .transition_fraction = transitionFraction,
-      .distance_fadeout_fraction = distanceFadeoutFraction };
+      .cascade_distances = { cascadeDistances.X, cascadeDistances.Y,
+        cascadeDistances.Z, cascadeDistances.W },
+      .distribution_exponent = distributionExponent,
+      .transition_fraction = transitionFraction,
+      .distance_fadeout_fraction = distanceFadeoutFraction,
+    };
+    std::unique_ptr<oxygen::scene::DirectionalLight> light;
+    try {
+      light = interop::MakeDirectionalLight(values);
+    } catch (const std::invalid_argument& error) {
+      throw gcnew System::ArgumentException(gcnew System::String(error.what()));
+    }
     EnqueueAttachLight(context_, nodeId, std::move(light));
   }
 
@@ -1149,12 +1168,20 @@ namespace Oxygen::Interop::World {
     bool affectsWorld, bool castsShadows, float shadowBias, float shadowNormalBias,
     bool contactShadows, int shadowResolutionHint, float exposureCompensation)
   {
-    auto light = std::make_unique<oxygen::scene::PointLight>();
-    light->Common() = MakeLightCommon(color, affectsWorld, 0, castsShadows,
-      shadowBias, shadowNormalBias, contactShadows, shadowResolutionHint, exposureCompensation);
-    light->SetLuminousFluxLm(luminousFluxLumens);
-    light->SetRange(range);
-    light->SetSourceRadius(sourceRadius);
+    const interop::PointLightValues values {
+      .common = ToLightCommonValues(color, affectsWorld, 0, castsShadows,
+        shadowBias, shadowNormalBias, contactShadows, shadowResolutionHint,
+        exposureCompensation),
+      .luminous_flux_lm = luminousFluxLumens,
+      .range = range,
+      .source_radius = sourceRadius,
+    };
+    std::unique_ptr<oxygen::scene::PointLight> light;
+    try {
+      light = interop::MakePointLight(values);
+    } catch (const std::invalid_argument& error) {
+      throw gcnew System::ArgumentException(gcnew System::String(error.what()));
+    }
     EnqueueAttachLight(context_, nodeId, std::move(light));
   }
 
@@ -1164,13 +1191,24 @@ namespace Oxygen::Interop::World {
     float shadowBias, float shadowNormalBias, bool contactShadows,
     int shadowResolutionHint, float exposureCompensation)
   {
-    auto light = std::make_unique<oxygen::scene::SpotLight>();
-    light->Common() = MakeLightCommon(color, affectsWorld, 0, castsShadows,
-      shadowBias, shadowNormalBias, contactShadows, shadowResolutionHint, exposureCompensation);
-    light->SetLuminousFluxLm(luminousFluxLumens);
-    light->SetRange(range);
-    light->SetSourceRadius(sourceRadius);
-    light->SetConeAnglesRadians(innerConeAngleRadians, outerConeAngleRadians);
+    const interop::SpotLightValues values {
+      .local = {
+        .common = ToLightCommonValues(color, affectsWorld, 0, castsShadows,
+          shadowBias, shadowNormalBias, contactShadows, shadowResolutionHint,
+          exposureCompensation),
+        .luminous_flux_lm = luminousFluxLumens,
+        .range = range,
+        .source_radius = sourceRadius,
+      },
+      .inner_cone_angle_radians = innerConeAngleRadians,
+      .outer_cone_angle_radians = outerConeAngleRadians,
+    };
+    std::unique_ptr<oxygen::scene::SpotLight> light;
+    try {
+      light = interop::MakeSpotLight(values);
+    } catch (const std::invalid_argument& error) {
+      throw gcnew System::ArgumentException(gcnew System::String(error.what()));
+    }
     EnqueueAttachLight(context_, nodeId, std::move(light));
   }
 
@@ -1184,29 +1222,27 @@ namespace Oxygen::Interop::World {
     System::Numerics::Vector3 fogAlbedo, System::Numerics::Vector3 fogEmissive,
     int sortPriority)
   {
-    for (const auto value : { radialFogExtinction, heightFogExtinction,
-           heightFogFalloff, heightFogOffset, fogPhaseG, fogAlbedo.X,
-           fogAlbedo.Y, fogAlbedo.Z, fogEmissive.X, fogEmissive.Y,
-           fogEmissive.Z }) {
-      if (!std::isfinite(value)) {
-        throw gcnew System::ArgumentException(
-          "Local fog volume values must be finite.");
-      }
-    }
     oxygen::scene::environment::LocalFogVolume volume;
-    volume.SetEnabled(enabled);
-    volume.SetRadialFogExtinction(radialFogExtinction);
-    volume.SetHeightFogExtinction(heightFogExtinction);
-    volume.SetHeightFogFalloff(heightFogFalloff);
-    volume.SetHeightFogOffset(heightFogOffset);
-    volume.SetFogPhaseG(fogPhaseG);
-    volume.SetFogAlbedo({ fogAlbedo.X, fogAlbedo.Y, fogAlbedo.Z });
-    volume.SetFogEmissive({ fogEmissive.X, fogEmissive.Y, fogEmissive.Z });
-    volume.SetSortPriority(sortPriority);
-    if (const auto handle = LookupNodeForCommand(context_, nodeId)) {
-      handle->module.Enqueue(
-        std::make_unique<AttachLocalFogVolumeCommand>(handle->node, volume));
+    try {
+      volume = MakeLocalFogVolume({
+        .enabled = enabled,
+        .radial_fog_extinction = radialFogExtinction,
+        .height_fog_extinction = heightFogExtinction,
+        .height_fog_falloff = heightFogFalloff,
+        .height_fog_offset = heightFogOffset,
+        .fog_phase_g = fogPhaseG,
+        .fog_albedo = ToVec3(fogAlbedo),
+        .fog_emissive = ToVec3(fogEmissive),
+        .sort_priority = sortPriority,
+      });
+    } catch (const std::invalid_argument& error) {
+      throw gcnew System::ArgumentException(
+        gcnew System::String(error.what()));
     }
+    const auto target
+      = RequireNodeForCommand(context_, nodeId, "AttachLocalFogVolume");
+    target.module.Enqueue(
+      std::make_unique<AttachLocalFogVolumeCommand>(target.node, volume));
   }
 
   void OxygenWorld::DetachLocalFogVolume(System::Guid nodeId) {

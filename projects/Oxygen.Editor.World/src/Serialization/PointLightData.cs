@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Text.Json.Serialization;
+using Oxygen.Editor.World.Components;
 
 namespace Oxygen.Editor.World.Serialization;
 
@@ -13,17 +14,25 @@ namespace Oxygen.Editor.World.Serialization;
 public sealed record PointLightData : LightComponentData
 {
     /// <summary>
+    /// Initializes a new instance of the <see cref="PointLightData"/> class with the scene schema's creation values.
+    /// </summary>
+    public PointLightData()
+        : base(LightSchema.Point)
+    {
+    }
+
+    /// <summary>
     /// Gets or sets luminous flux, in lumens.
     /// </summary>
-    public float LuminousFluxLumens { get; set; } = 800f;
+    public float LuminousFluxLumens { get; set; } = SceneSchema.PointLight.Defaults.LuminousFluxLumens;
 
     /// <summary>
     /// Gets or sets the influence range, in meters.
     /// </summary>
-    public float Range { get; set; } = 10f;
+    public float Range { get; set; } = SceneSchema.PointLight.Defaults.Range;
 
     /// <summary>
-    /// Gets the source radius, in meters.
+    /// Gets or sets the source radius, in meters.
     /// </summary>
-    public float SourceRadius { get; init; }
+    public float SourceRadius { get; set; } = SceneSchema.PointLight.Defaults.SourceRadius;
 }

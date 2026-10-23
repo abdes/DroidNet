@@ -289,7 +289,9 @@ namespace {
         source_id, "instances"));
       return outcome;
     }
-    std::array<bool, 3> atmosphere_slots {};
+    // Slots are indexed by wire value; an assigned slot has one owner.
+    std::array<bool, data::schema::kAtmosphereLightSlotMembers.size()>
+      atmosphere_slots {};
     const auto valid_lights = [&](const auto& lights) -> auto {
       for (const auto& light : lights) {
         if (!data::IsValidLightRecord(light)
@@ -299,7 +301,9 @@ namespace {
         }
         if constexpr (requires { light.atmosphere_light_slot; }) {
           const auto slot = light.atmosphere_light_slot;
-          if (slot != 0U && std::exchange(atmosphere_slots.at(slot), true)) {
+          if (slot
+              != std::to_underlying(data::schema::AtmosphereLightSlot::kNone)
+            && std::exchange(atmosphere_slots.at(slot), true)) {
             return false;
           }
         }
@@ -314,6 +318,15 @@ namespace {
           "Light values, per-node ownership or atmosphere assignments are "
           "invalid",
           source_id, "lights"));
+      return outcome;
+    }
+    if (!std::ranges::all_of(build.local_fog_volumes,
+          [](const LocalFogVolumeRecord& volume) -> bool {
+            return data::pak::world::HasValidLocalFogVolumeValues(volume);
+          })) {
+      diagnostics.push_back(MakeErrorDiagnostic(
+        "scene.local_fog_volume.invalid_parameters",
+        "Local fog volume values are invalid", source_id, "local_fog_volumes"));
       return outcome;
     }
     const auto nodes_bytes = std::as_bytes(std::span(build.nodes));

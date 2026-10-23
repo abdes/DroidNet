@@ -330,7 +330,9 @@ auto SceneAsset::ParseAndValidate() -> void
       = data_.subspan(desc_.component_table_directory_offset, dir_bytes);
 
     std::unordered_set<std::uint32_t> light_nodes;
-    std::array<bool, 3> atmosphere_slots {};
+    // Slots are indexed by wire value; an assigned slot has one owner.
+    std::array<bool, schema::kAtmosphereLightSlotMembers.size()>
+      atmosphere_slots {};
     component_tables_.clear();
     component_tables_.reserve(desc_.component_table_count);
     for (uint32_t i = 0; i < desc_.component_table_count; ++i) {
@@ -400,6 +402,17 @@ auto SceneAsset::ParseAndValidate() -> void
         throw std::runtime_error("SceneAsset spot light record size mismatch");
       }
 
+      if (type == ComponentType::kLocalFogVolume) {
+        // Decoding validates each record's values.
+        for (uint32_t index = 0; index < entry.table.count; ++index) {
+          std::ignore = ReadPackedRecord<pak::world::LocalFogVolumeRecord>(
+            data_.subspan(entry.table.offset
+                + (static_cast<size_t>(index) * entry.table.entry_size),
+              entry.table.entry_size),
+            "SceneAsset local fog volume");
+        }
+      }
+
       if (type == ComponentType::kPerspectiveCamera
         || type == ComponentType::kOrthographicCamera) {
         for (uint32_t index = 0; index < entry.table.count; ++index) {
@@ -442,7 +455,8 @@ auto SceneAsset::ParseAndValidate() -> void
           }
           if constexpr (requires { record.atmosphere_light_slot; }) {
             const auto slot = record.atmosphere_light_slot;
-            if (slot != 0U && std::exchange(atmosphere_slots.at(slot), true)) {
+            if (slot != std::to_underlying(schema::AtmosphereLightSlot::kNone)
+              && std::exchange(atmosphere_slots.at(slot), true)) {
               throw std::runtime_error(
                 "SceneAsset atmosphere slot has multiple owners");
             }

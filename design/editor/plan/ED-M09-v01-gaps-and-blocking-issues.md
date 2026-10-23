@@ -171,9 +171,8 @@ The decision:
   whole override state, each override an override id and a typed value; it
   replaces `SetMaterialOverrideCommand`. `PropertyEntry`'s float-only
   payload becomes a typed value.
-- **Data.** `media/scenes/MainScene.upgraded.scene`, the World, Scenes and
-  ContentPipeline fixtures and the content-pipeline LLD are edited; the owner
-  recooks.
+- **Data.** The World, Scenes and ContentPipeline fixtures and the
+  content-pipeline LLD are edited; the owner recooks.
 
 ### 2.2 #77 implementation slices
 

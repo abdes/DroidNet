@@ -7,7 +7,6 @@
 #pragma once
 #pragma managed(push, off)
 
-#include <cmath>
 #include <concepts>
 #include <cstdint>
 #include <span>
@@ -16,6 +15,7 @@
 
 #include <Commands/IComponentPropertyApplier.h>
 #include <Commands/PropertyKeys.h>
+#include <Commands/SchemaEnums.h>
 #include <Oxygen/Scene/Light/PointLight.h>
 #include <Oxygen/Scene/Light/SpotLight.h>
 #include <Oxygen/Scene/SceneNode.h>
@@ -62,6 +62,9 @@ namespace oxygen::interop::module {
   private:
     static auto ApplyEntry(T& light, const PropertyEntry& entry) -> bool
     {
+      if (!IsInRange(entry)) {
+        return false;
+      }
       const auto field = static_cast<LocalLightField>(entry.field);
       auto& common = light.Common();
       switch (field) {
@@ -74,22 +77,14 @@ namespace oxygen::interop::module {
       case LocalLightField::kContactShadows:
         common.shadow.contact_shadows = entry.Bool();
         return true;
-      case LocalLightField::kShadowResolutionHint: {
-        const auto hint = entry.Int32();
-        if (hint < 0 || hint > 3) {
-          return false;
-        }
+      case LocalLightField::kShadowResolutionHint:
         common.shadow.resolution_hint
-          = static_cast<scene::ShadowResolutionHint>(hint);
+          = ValidatedMember(ToShadowResolutionHint(entry.Int32()));
         return true;
-      }
       default:
         break;
       }
       const float value = entry.Float();
-      if (!std::isfinite(value)) {
-        return false;
-      }
       switch (field) {
       case LocalLightField::kColorR:
         common.color_rgb.x = value;
@@ -118,23 +113,24 @@ namespace oxygen::interop::module {
       case LocalLightField::kSourceRadius:
         light.SetSourceRadius(value);
         return true;
-      case LocalLightField::kInnerConeAngleRadians:
-        if constexpr (std::same_as<T, scene::SpotLight>) {
+      default:
+        break;
+      }
+      // The schema declares the cone fields for SpotLight only, so
+      // `IsInRange` already refused them for a point light.
+      if constexpr (std::same_as<T, scene::SpotLight>) {
+        switch (field) {
+        case LocalLightField::kInnerConeAngleRadians:
           light.SetInnerConeAngleRadians(value);
           return true;
-        } else {
-          return false;
-        }
-      case LocalLightField::kOuterConeAngleRadians:
-        if constexpr (std::same_as<T, scene::SpotLight>) {
+        case LocalLightField::kOuterConeAngleRadians:
           light.SetOuterConeAngleRadians(value);
           return true;
-        } else {
-          return false;
+        default:
+          break;
         }
-      default:
-        return false;
       }
+      return false;
     }
   };
 

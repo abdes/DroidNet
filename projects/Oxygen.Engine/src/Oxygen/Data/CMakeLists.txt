@@ -75,6 +75,7 @@ set(
   "PakFormat_core.h"
   "PakFormat_references.h"
   "PakFormat_world.h"
+  "SceneRecordDefaults.h"
   "LightValidation.h"
   "LodPolicyValidation.h"
   "PakFormat_geometry.h"

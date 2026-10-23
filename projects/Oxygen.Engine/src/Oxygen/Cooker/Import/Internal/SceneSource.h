@@ -32,6 +32,11 @@ namespace oxygen::content::import::internal {
 */
 inline constexpr uint32_t kSceneDescriptorVersion = 14;
 
+//! The code of a descriptor property that is not a finite value inside its
+//! generated range, or not a declared member of its enum.
+inline constexpr std::string_view kScenePropertyOutOfRangeCode
+  = "scene.descriptor.property_out_of_range";
+
 //! A scene's source values and symbolic dependencies, before cooked linking.
 struct SceneSource final {
   //! The virtual path of an asset an override names, before linking.
@@ -120,6 +125,16 @@ struct SceneSource final {
   std::optional<SkySphere> sky_sphere;
   std::optional<PostProcess> post_process;
 
+  //! Reads a scene descriptor, or reports why it cannot be read.
+  /*!
+   The descriptor schema states the types of camera, light, local fog volume
+   and node properties only; the scene schema owns their defaults, ranges and
+   members. A property the descriptor omits takes the scene schema's default.
+   One whose value is not finite, lies outside the property's generated range
+   or is not a declared enum member fails with `kScenePropertyOutOfRangeCode`
+   at the property's path; every such property of an object is reported. A
+   descriptor is scene data: unlike a model import, it is never clamped.
+  */
   OXGN_COOK_NDAPI static auto FromDescriptor(std::string_view bytes,
     const std::filesystem::path& source_path,
     std::vector<ImportDiagnostic>& diagnostics) -> std::optional<SceneSource>;

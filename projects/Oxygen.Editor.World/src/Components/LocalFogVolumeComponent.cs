@@ -16,15 +16,15 @@ public sealed partial class LocalFogVolumeComponent : GameComponent
     /// <summary>The volume radius at unit node scale, matching the native component.</summary>
     public const float BaseRadiusMeters = 5f;
 
-    private bool enabled = true;
-    private float radialFogExtinction = 1f;
-    private float heightFogExtinction = 1f;
-    private float heightFogFalloff = 1000f;
-    private float heightFogOffset;
-    private float fogPhaseG = 0.2f;
-    private Vector3 fogAlbedo = Vector3.One;
-    private Vector3 fogEmissive;
-    private int sortPriority;
+    private bool enabled = SceneSchema.LocalFogVolume.Defaults.Enabled;
+    private float radialFogExtinction = SceneSchema.LocalFogVolume.Defaults.RadialFogExtinction;
+    private float heightFogExtinction = SceneSchema.LocalFogVolume.Defaults.HeightFogExtinction;
+    private float heightFogFalloff = SceneSchema.LocalFogVolume.Defaults.HeightFogFalloff;
+    private float heightFogOffset = SceneSchema.LocalFogVolume.Defaults.HeightFogOffset;
+    private float fogPhaseG = SceneSchema.LocalFogVolume.Defaults.FogPhaseG;
+    private Vector3 fogAlbedo = SceneSchema.LocalFogVolume.Defaults.FogAlbedo;
+    private Vector3 fogEmissive = SceneSchema.LocalFogVolume.Defaults.FogEmissive;
+    private int sortPriority = SceneSchema.LocalFogVolume.Defaults.SortPriority;
 
     static LocalFogVolumeComponent()
     {
@@ -44,64 +44,117 @@ public sealed partial class LocalFogVolumeComponent : GameComponent
     }
 
     /// <summary>Gets or sets the fog density: extinction per metre at the volume's center, fading to zero at its edge.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">The value is outside the range the scene schema declares.</exception>
     public float RadialFogExtinction
     {
         get => this.radialFogExtinction;
-        set => _ = this.SetProperty(ref this.radialFogExtinction, value);
+        set
+        {
+            PropertyChecks.Require(SceneSchema.LocalFogVolume.RadialFogExtinction, value);
+            _ = this.SetProperty(ref this.radialFogExtinction, value);
+        }
     }
 
     /// <summary>Gets or sets the extinction of the volume's height-based density.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">The value is outside the range the scene schema declares.</exception>
     public float HeightFogExtinction
     {
         get => this.heightFogExtinction;
-        set => _ = this.SetProperty(ref this.heightFogExtinction, value);
+        set
+        {
+            PropertyChecks.Require(SceneSchema.LocalFogVolume.HeightFogExtinction, value);
+            _ = this.SetProperty(ref this.heightFogExtinction, value);
+        }
     }
 
     /// <summary>Gets or sets how quickly the height-based density thins above its offset.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">The value is outside the range the scene schema declares.</exception>
     public float HeightFogFalloff
     {
         get => this.heightFogFalloff;
-        set => _ = this.SetProperty(ref this.heightFogFalloff, value);
+        set
+        {
+            PropertyChecks.Require(SceneSchema.LocalFogVolume.HeightFogFalloff, value);
+            _ = this.SetProperty(ref this.heightFogFalloff, value);
+        }
     }
 
     /// <summary>Gets or sets the height, relative to the volume center, of the height-based density.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">The value is outside the range the scene schema declares.</exception>
     public float HeightFogOffset
     {
         get => this.heightFogOffset;
-        set => _ = this.SetProperty(ref this.heightFogOffset, value);
+        set
+        {
+            PropertyChecks.Require(SceneSchema.LocalFogVolume.HeightFogOffset, value);
+            _ = this.SetProperty(ref this.heightFogOffset, value);
+        }
     }
 
     /// <summary>Gets or sets the phase anisotropy; positive values scatter forward.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">The value is outside the range the scene schema declares.</exception>
     public float FogPhaseG
     {
         get => this.fogPhaseG;
-        set => _ = this.SetProperty(ref this.fogPhaseG, value);
+        set
+        {
+            PropertyChecks.Require(SceneSchema.LocalFogVolume.FogPhaseG, value);
+            _ = this.SetProperty(ref this.fogPhaseG, value);
+        }
     }
 
     /// <summary>Gets or sets the linear fraction of light the fog scatters rather than absorbs.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">The value is outside the range the scene schema declares.</exception>
     public Vector3 FogAlbedo
     {
         get => this.fogAlbedo;
-        set => _ = this.SetProperty(ref this.fogAlbedo, value);
+        set
+        {
+            PropertyChecks.Require(SceneSchema.LocalFogVolume.FogAlbedo, value);
+            _ = this.SetProperty(ref this.fogAlbedo, value);
+        }
     }
 
     /// <summary>Gets or sets the luminance the fog emits.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">The value is outside the range the scene schema declares.</exception>
     public Vector3 FogEmissive
     {
         get => this.fogEmissive;
-        set => _ = this.SetProperty(ref this.fogEmissive, value);
+        set
+        {
+            PropertyChecks.Require(SceneSchema.LocalFogVolume.FogEmissive, value);
+            _ = this.SetProperty(ref this.fogEmissive, value);
+        }
     }
 
     /// <summary>Gets or sets the order in which overlapping volumes compose, from -127 to 127.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">The value is outside the range the scene schema declares.</exception>
     public int SortPriority
     {
         get => this.sortPriority;
-        set => _ = this.SetProperty(ref this.sortPriority, value);
+        set
+        {
+            PropertyChecks.Require(SceneSchema.LocalFogVolume.SortPriority, value);
+            _ = this.SetProperty(ref this.sortPriority, value);
+        }
     }
 
     /// <inheritdoc/>
+    /// <exception cref="ArgumentOutOfRangeException">A value is outside the range the scene schema declares; nothing changes.</exception>
     public override void Hydrate(ComponentData data)
     {
+        if (data is LocalFogVolumeData candidate)
+        {
+            PropertyChecks.Require(SceneSchema.LocalFogVolume.RadialFogExtinction, candidate.RadialFogExtinction);
+            PropertyChecks.Require(SceneSchema.LocalFogVolume.HeightFogExtinction, candidate.HeightFogExtinction);
+            PropertyChecks.Require(SceneSchema.LocalFogVolume.HeightFogFalloff, candidate.HeightFogFalloff);
+            PropertyChecks.Require(SceneSchema.LocalFogVolume.HeightFogOffset, candidate.HeightFogOffset);
+            PropertyChecks.Require(SceneSchema.LocalFogVolume.FogPhaseG, candidate.FogPhaseG);
+            PropertyChecks.Require(SceneSchema.LocalFogVolume.FogAlbedo, candidate.FogAlbedo);
+            PropertyChecks.Require(SceneSchema.LocalFogVolume.FogEmissive, candidate.FogEmissive);
+            PropertyChecks.Require(SceneSchema.LocalFogVolume.SortPriority, candidate.SortPriority);
+        }
+
         base.Hydrate(data);
         if (data is not LocalFogVolumeData volume)
         {

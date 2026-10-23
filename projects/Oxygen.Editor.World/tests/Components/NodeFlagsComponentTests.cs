@@ -139,9 +139,9 @@ public sealed class NodeFlagsComponentTests
     }
 
     [TestMethod]
-    [DataRow(true, VisibilitySource.Shown, ShadowSource.On, DisplayName = "Root")]
-    [DataRow(false, VisibilitySource.Inherit, ShadowSource.Inherit, DisplayName = "Child")]
-    public void CreationModes_FollowThePlaceInTheHierarchy(bool isRoot, VisibilitySource visibility, ShadowSource shadows)
+    [DataRow(true, DisplayName = "Root")]
+    [DataRow(false, DisplayName = "Child")]
+    public void CreationModes_TakeTheSchemaDefaultsOfTheirPlaceInTheHierarchy(bool isRoot)
     {
         var flags = new NodeFlagsData { Name = NodeFlagsComponent.DefaultName, IsStatic = true }.WithCreationModes(isRoot);
 
@@ -150,10 +150,51 @@ public sealed class NodeFlagsComponentTests
             Id = flags.Id,
             Name = NodeFlagsComponent.DefaultName,
             IsStatic = true,
-            Visibility = visibility,
-            CastsShadows = shadows,
-            ReceivesShadows = shadows,
+            Visibility = isRoot ? SceneSchema.Node.RootDefaults.Visibility : SceneSchema.Node.Defaults.Visibility,
+            CastsShadows = isRoot ? SceneSchema.Node.RootDefaults.CastsShadows : SceneSchema.Node.Defaults.CastsShadows,
+            ReceivesShadows = isRoot ? SceneSchema.Node.RootDefaults.ReceivesShadows : SceneSchema.Node.Defaults.ReceivesShadows,
         });
+    }
+
+    [TestMethod]
+    public void NewComponentAndData_TakeTheSchemaDefaults()
+    {
+        var flags = new NodeFlagsComponent { Name = NodeFlagsComponent.DefaultName };
+        var data = new NodeFlagsData { Name = NodeFlagsComponent.DefaultName };
+
+        _ = flags.Visibility.Should().Be(SceneSchema.Node.Defaults.Visibility).And.Be(data.Visibility);
+        _ = flags.CastsShadows.Should().Be(SceneSchema.Node.Defaults.CastsShadows).And.Be(data.CastsShadows);
+        _ = flags.ReceivesShadows.Should().Be(SceneSchema.Node.Defaults.ReceivesShadows).And.Be(data.ReceivesShadows);
+        _ = flags.IsStatic.Should().Be(SceneSchema.Node.Defaults.IsStatic).And.Be(data.IsStatic);
+        _ = flags.IsRayCastingSelectable.Should().Be(SceneSchema.Node.Defaults.IsRayCastingSelectable).And.Be(data.IsRayCastingSelectable);
+        _ = flags.IgnoreParentTransform.Should().Be(SceneSchema.Node.Defaults.IgnoreParentTransform).And.Be(data.IgnoreParentTransform);
+    }
+
+    [TestMethod]
+    public void ResolvedRootFlags_TakeTheSchemaRootDefaults()
+    {
+        var root = new SceneNode(new Scene { Name = "Scene" }, "Root");
+
+        _ = root.Flags.ResolveVisibility().Value.Should().Be(SceneSchema.Node.RootDefaults.Visibility == VisibilitySource.Shown);
+        _ = root.Flags.ResolveCastsShadows().Value.Should().Be(SceneSchema.Node.RootDefaults.CastsShadows == ShadowSource.On);
+        _ = root.Flags.ResolveReceivesShadows().Value.Should().Be(SceneSchema.Node.RootDefaults.ReceivesShadows == ShadowSource.On);
+    }
+
+    [TestMethod]
+    public void UndefinedSourceModes_AreRejectedWithoutMutation()
+    {
+        var flags = new NodeFlagsComponent { Name = NodeFlagsComponent.DefaultName };
+        var before = flags.Dehydrate();
+        Action visibility = () => flags.Visibility = (VisibilitySource)99;
+        Action casts = () => flags.CastsShadows = (ShadowSource)99;
+        Action receives = () => flags.ReceivesShadows = (ShadowSource)99;
+        Action hydrate = () => flags.Hydrate(new NodeFlagsData { Name = "Rejected", IsStatic = true, ReceivesShadows = (ShadowSource)99 });
+
+        _ = visibility.Should().Throw<ArgumentOutOfRangeException>().Which.ActualValue.Should().Be((VisibilitySource)99);
+        _ = casts.Should().Throw<ArgumentOutOfRangeException>();
+        _ = receives.Should().Throw<ArgumentOutOfRangeException>();
+        _ = hydrate.Should().Throw<ArgumentOutOfRangeException>();
+        _ = flags.Dehydrate().Should().Be(before);
     }
 
     private static (SceneNode Parent, SceneNode Child) ParentAndChild()

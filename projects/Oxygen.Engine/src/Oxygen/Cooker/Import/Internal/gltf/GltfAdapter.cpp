@@ -56,6 +56,7 @@
 #include <Oxygen/Cooker/Import/Internal/AdapterTypes.h>
 #include <Oxygen/Cooker/Import/Internal/ImportSourceSnapshot.h>
 #include <Oxygen/Cooker/Import/Internal/ImportedLightSemantics.h>
+#include <Oxygen/Cooker/Import/Internal/ImportedPropertyCommit.h>
 #include <Oxygen/Cooker/Import/Internal/MaterialSource.h>
 #include <Oxygen/Cooker/Import/Internal/MeshTransformBake.h>
 #include <Oxygen/Cooker/Import/Internal/ModelGeometrySource.h>
@@ -76,14 +77,18 @@
 #include <Oxygen/Cooker/Import/SceneSourceInspection.h>
 #include <Oxygen/Cooker/Import/TextureImportPresets.h>
 #include <Oxygen/Cooker/Import/TextureImportTypes.h>
+#include <Oxygen/Core/Lighting/LightPhotometry.h>
 #include <Oxygen/Core/Transforms/Decompose.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/CameraAspectMode.h>
 #include <Oxygen/Core/Types/DescriptorExtensions.h>
 #include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Data/LightValidation.h>
 #include <Oxygen/Data/MaterialDomain.h>
 #include <Oxygen/Data/MeshType.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Data/SceneRecordDefaults.h>
+#include <Oxygen/Data/Schema/Generated.SceneComponents.h>
 
 namespace oxygen::content::import::adapters {
 
@@ -102,6 +107,7 @@ GltfAdapter::~GltfAdapter() = default;
 namespace {
 
   using data::pak::world::DirectionalLightRecord;
+  using data::pak::world::MakeDefaultRecord;
   using data::pak::world::NodeRecord;
   using data::pak::world::OrthographicCameraRecord;
   using data::pak::world::PerspectiveCameraRecord;
@@ -173,47 +179,15 @@ namespace {
     }
   }
 
-  [[nodiscard]] auto CandelaToLumens(const float intensity_cd,
-    const double solid_angle_sr) noexcept -> std::optional<float>
+  //! The luminous flux of `intensity_cd` candela over `solid_angle_sr`;
+  //! infinite when a float cannot hold it.
+  [[nodiscard]] auto CandelaToLumens(
+    const float intensity_cd, const double solid_angle_sr) noexcept -> float
   {
-    if (!std::isfinite(intensity_cd) || intensity_cd < 0.0F) {
-      return std::nullopt;
-    }
     const auto flux = static_cast<double>(intensity_cd) * solid_angle_sr;
-    if (!std::isfinite(flux) || flux > std::numeric_limits<float>::max()
-      || (flux > 0.0 && flux < std::numeric_limits<float>::min())) {
-      return std::nullopt;
-    }
-    return static_cast<float>(flux);
-  }
-
-  [[nodiscard]] auto CandelaToSpotLumens(const cgltf_light& light) noexcept
-    -> std::optional<float>
-  {
-    const auto inner_cone_angle_rad = light.spot_inner_cone_angle;
-    const auto outer_cone_angle_rad = light.spot_outer_cone_angle;
-    constexpr auto kHalfPi = std::numbers::pi_v<float> / 2.0F;
-    if (!std::isfinite(inner_cone_angle_rad)
-      || !std::isfinite(outer_cone_angle_rad) || inner_cone_angle_rad < 0.0F
-      || outer_cone_angle_rad <= 0.0F
-      || inner_cone_angle_rad > outer_cone_angle_rad
-      || outer_cone_angle_rad > kHalfPi
-      || (inner_cone_angle_rad == kHalfPi && outer_cone_angle_rad == kHalfPi)) {
-      return std::nullopt;
-    }
-    const auto inner_sine
-      = std::sin(static_cast<double>(inner_cone_angle_rad) / 2.0);
-    const auto outer_sine
-      = std::sin(static_cast<double>(outer_cone_angle_rad) / 2.0);
-    const auto inner = inner_sine * inner_sine;
-    // The stored float half-pi endpoint denotes exactly 90 degrees.
-    const auto outer
-      = outer_cone_angle_rad == kHalfPi ? 0.5 : outer_sine * outer_sine;
-    // Integrate the complete squared angular ramp. Half-angle coordinates
-    // preserve narrow support that 1-cos(angle) would round to zero.
-    const auto solid_angle
-      = 4.0 * std::numbers::pi * (inner + ((outer - inner) / 3.0));
-    return CandelaToLumens(light.intensity, solid_angle);
+    return std::abs(flux) <= std::numeric_limits<float>::max()
+      ? static_cast<float>(flux)
+      : std::numeric_limits<float>::infinity();
   }
 
   [[nodiscard]] auto MakeParseDiagnostic(
@@ -2904,48 +2878,59 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
           node, i, "Camera", glm::quat_cast(GltfToOxygenBasis()));
       }
       const auto unit_scale = ComputeUnitScale(request.options.coordinate);
+      auto commit = detail::ImportedPropertyCommit {};
       if (cam.type == cgltf_camera_type_perspective) {
+        namespace camera_schema = data::schema::perspective_camera;
         const auto& perspective = cam.data.perspective;
-        const float fov_y = perspective.yfov;
-        const float aspect_ratio = (perspective.has_aspect_ratio != 0)
-          ? static_cast<float>(perspective.aspect_ratio)
-          : kDefaultCameraAspectRatio;
-        const float near_plane = perspective.znear * unit_scale;
-        const float far_plane = (perspective.has_zfar != 0)
-          ? static_cast<float>(perspective.zfar) * unit_scale
-          : near_plane + (1000.0F * unit_scale);
-
-        build.perspective_cameras.push_back(PerspectiveCameraRecord {
-          .node_index = camera_node_index,
-          .fov_y = fov_y,
-          .aspect_ratio = aspect_ratio,
-          .near_plane = near_plane,
-          .far_plane = far_plane,
-          .aspect_mode = (perspective.has_aspect_ratio != 0)
-            ? CameraAspectMode::kFixed
-            : CameraAspectMode::kAuto,
-        });
+        auto camera = MakeDefaultRecord<PerspectiveCameraRecord>();
+        camera.node_index = camera_node_index;
+        camera.fov_y = commit("fov_y", camera_schema::kFieldOfViewYRadiansRange,
+          perspective.yfov, camera.fov_y);
+        // Without an aspect ratio, glTF frames the render target's.
+        camera.aspect_mode = CameraAspectMode::kAuto;
+        if (perspective.has_aspect_ratio != 0) {
+          camera.aspect_mode = CameraAspectMode::kFixed;
+          camera.aspect_ratio
+            = commit("aspect_ratio", camera_schema::kAspectRatioRange,
+              perspective.aspect_ratio, camera.aspect_ratio);
+        }
+        camera.near_plane = commit("near_plane", camera_schema::kNearPlaneRange,
+          perspective.znear * unit_scale, camera.near_plane);
+        // An infinite glTF projection takes the schema's far plane.
+        if (perspective.has_zfar != 0) {
+          camera.far_plane = commit("far_plane", camera_schema::kFarPlaneRange,
+            perspective.zfar * unit_scale, camera.far_plane);
+        }
+        build.perspective_cameras.push_back(camera);
       } else if (cam.type == cgltf_camera_type_orthographic) {
+        namespace camera_schema = data::schema::orthographic_camera;
         const auto& ortho = cam.data.orthographic;
-        const float half_w = static_cast<float>(ortho.xmag) * 0.5F * unit_scale;
-        const float half_h = static_cast<float>(ortho.ymag) * 0.5F * unit_scale;
-        const float near_plane = ortho.znear * unit_scale;
-        const float far_plane = ortho.zfar * unit_scale;
+        // glTF's xmag and ymag are half extents; the volume is the schema's
+        // half height and aspect ratio.
+        const auto half_height
+          = commit("orthographic_size", camera_schema::kOrthographicSizeRange,
+            ortho.ymag * unit_scale, camera_schema::kOrthographicSizeDefault);
+        const auto half_width = half_height
+          * commit("aspect_ratio", camera_schema::kAspectRatioRange,
+            ortho.xmag / ortho.ymag, camera_schema::kAspectRatioDefault);
 
-        build.orthographic_cameras.push_back(OrthographicCameraRecord {
-          .node_index = camera_node_index,
-          .left = -half_w,
-          .right = half_w,
-          .bottom = -half_h,
-          .top = half_h,
-          .near_plane = near_plane,
-          .far_plane = far_plane,
-          .aspect_mode = CameraAspectMode::kFixed,
-        });
+        auto camera = MakeDefaultRecord<OrthographicCameraRecord>();
+        camera.node_index = camera_node_index;
+        camera.left = -half_width;
+        camera.right = half_width;
+        camera.bottom = -half_height;
+        camera.top = half_height;
+        camera.near_plane = commit("near_plane", camera_schema::kNearPlaneRange,
+          ortho.znear * unit_scale, camera.near_plane);
+        camera.far_plane = commit("far_plane", camera_schema::kFarPlaneRange,
+          ortho.zfar * unit_scale, camera.far_plane);
+        camera.aspect_mode = CameraAspectMode::kFixed;
+        build.orthographic_cameras.push_back(camera);
       } else {
         diagnostics.push_back(MakeWarningDiagnostic("scene.camera.unsupported",
           "Unsupported camera projection type", input.source_id, name));
       }
+      commit.Report(input.source_id, name, diagnostics);
     }
 
     if (gltf_node != nullptr && gltf_node->light != nullptr) {
@@ -2953,10 +2938,14 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
         = ReadImportedLightSemantics(gltf_node->extras);
       const auto& light = *gltf_node->light;
       const auto light_semantics = ReadImportedLightSemantics(light.extras);
-      const auto imported_common = detail::ResolveImportedLightCommon(
-        node_light_semantics, light_semantics,
-        /*default_affects_world=*/true,
-        /*default_casts_shadows=*/true);
+      const auto resolve_common
+        = [&](const data::pak::world::LightCommonRecord& defaults)
+        -> data::pak::world::LightCommonRecord {
+        return detail::ResolveImportedLightCommon(defaults,
+          node_light_semantics, light_semantics,
+          /*default_affects_world=*/true,
+          /*default_casts_shadows=*/true);
+      };
       auto light_node_index = i;
       if (light.type == cgltf_light_type_directional
         || light.type == cgltf_light_type_spot) {
@@ -2967,75 +2956,73 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
         light_node_index
           = append_attachment(node, i, "Light", glm::quat(0, 0, 0, 1));
       }
-      float local_range = request.options.gltf_omitted_light_range_m;
-      if (light.type == cgltf_light_type_point
-        || light.type == cgltf_light_type_spot) {
-        if (light.has_range != 0) {
-          local_range
-            = light.range * ComputeUnitScale(request.options.coordinate);
-        }
-        if (!std::isfinite(local_range) || local_range <= 0.0F
-          || !std::isfinite(1.0F / local_range)) {
-          diagnostics.push_back(MakeErrorDiagnostic("scene.light.range_invalid",
-            "Local light range must be finite, positive and representable",
-            input.source_id, name));
-          return result;
-        }
-      }
+      auto commit = detail::ImportedPropertyCommit {};
+      const auto color
+        = std::array { light.color[0], light.color[1], light.color[2] };
+      // An omitted glTF range takes the importer's policy, not the schema's.
+      const auto local_range = light.has_range != 0
+        ? light.range * ComputeUnitScale(request.options.coordinate)
+        : request.options.gltf_omitted_light_range_m;
       switch (light.type) {
       case cgltf_light_type_directional: {
-        DirectionalLightRecord rec_light {};
+        namespace light_schema = data::schema::directional_light;
+        auto rec_light = MakeDefaultRecord<DirectionalLightRecord>();
         rec_light.node_index = light_node_index;
-        rec_light.common = imported_common;
-        rec_light.common.color_rgb[0] = light.color[0];
-        rec_light.common.color_rgb[1] = light.color[1];
-        rec_light.common.color_rgb[2] = light.color[2];
-        rec_light.intensity_lux = light.intensity;
+        rec_light.common = resolve_common(rec_light.common);
+        detail::CommitImportedLightColor(
+          commit, data::kDirectionalLightCommonRanges, color, rec_light.common);
+        rec_light.intensity_lux
+          = commit("intensity_lux", light_schema::kIntensityLuxRange,
+            light.intensity, rec_light.intensity_lux);
         build.directional_lights.push_back(rec_light);
         break;
       }
       case cgltf_light_type_point: {
-        PointLightRecord rec_light {};
-        rec_light.range = local_range;
+        namespace light_schema = data::schema::point_light;
+        auto rec_light = MakeDefaultRecord<PointLightRecord>();
         rec_light.node_index = i;
-        rec_light.common = imported_common;
-        rec_light.common.color_rgb[0] = light.color[0];
-        rec_light.common.color_rgb[1] = light.color[1];
-        rec_light.common.color_rgb[2] = light.color[2];
-        const auto flux
-          = CandelaToLumens(light.intensity, 4.0 * std::numbers::pi);
-        if (!flux) {
-          diagnostics.push_back(
-            MakeErrorDiagnostic("scene.light.photometry_invalid",
-              "Point intensity must be nonnegative and produce representable "
-              "lumen flux",
-              input.source_id, name));
-          return result;
-        }
-        rec_light.luminous_flux_lm = *flux;
+        rec_light.common = resolve_common(rec_light.common);
+        detail::CommitImportedLightColor(
+          commit, data::kPointLightCommonRanges, color, rec_light.common);
+        rec_light.range = commit(
+          "range", light_schema::kRangeRange, local_range, rec_light.range);
+        rec_light.luminous_flux_lm
+          = commit("luminous_flux_lm", light_schema::kLuminousFluxLmRange,
+            CandelaToLumens(light.intensity, 4.0 * std::numbers::pi),
+            rec_light.luminous_flux_lm);
         build.point_lights.push_back(rec_light);
         break;
       }
       case cgltf_light_type_spot: {
-        SpotLightRecord rec_light {};
-        rec_light.range = local_range;
+        namespace light_schema = data::schema::spot_light;
+        auto rec_light = MakeDefaultRecord<SpotLightRecord>();
         rec_light.node_index = light_node_index;
-        rec_light.common = imported_common;
-        rec_light.common.color_rgb[0] = light.color[0];
-        rec_light.common.color_rgb[1] = light.color[1];
-        rec_light.common.color_rgb[2] = light.color[2];
-        const auto flux = CandelaToSpotLumens(light);
-        if (!flux) {
+        rec_light.common = resolve_common(rec_light.common);
+        detail::CommitImportedLightColor(
+          commit, data::kSpotLightCommonRanges, color, rec_light.common);
+        rec_light.range = commit(
+          "range", light_schema::kRangeRange, local_range, rec_light.range);
+        rec_light.inner_cone_angle_radians = commit("inner_cone_angle_radians",
+          light_schema::kInnerConeAngleRadiansRange,
+          light.spot_inner_cone_angle, rec_light.inner_cone_angle_radians);
+        rec_light.outer_cone_angle_radians = commit("outer_cone_angle_radians",
+          light_schema::kOuterConeAngleRadiansRange,
+          light.spot_outer_cone_angle, rec_light.outer_cone_angle_radians);
+        // The cone pair is a rule across both angles, not a single property.
+        const auto cone
+          = lighting::ResolveSpotConeProfile(rec_light.inner_cone_angle_radians,
+            rec_light.outer_cone_angle_radians);
+        if (!cone) {
           diagnostics.push_back(
             MakeErrorDiagnostic("scene.light.photometry_invalid",
-              "Spot intensity and cone pair must define nonnegative "
-              "representable lumen flux",
+              "Spot cone angles must form a representable cone pair",
               input.source_id, name));
           return result;
         }
-        rec_light.inner_cone_angle_radians = light.spot_inner_cone_angle;
-        rec_light.outer_cone_angle_radians = light.spot_outer_cone_angle;
-        rec_light.luminous_flux_lm = *flux;
+        rec_light.luminous_flux_lm
+          = commit("luminous_flux_lm", light_schema::kLuminousFluxLmRange,
+            CandelaToLumens(light.intensity, cone->solid_angle_sr),
+            rec_light.luminous_flux_lm);
         build.spot_lights.push_back(rec_light);
         break;
       }
@@ -3044,6 +3031,7 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
           "Unsupported light type", input.source_id, name));
         break;
       }
+      commit.Report(input.source_id, name, diagnostics);
     }
   }
 

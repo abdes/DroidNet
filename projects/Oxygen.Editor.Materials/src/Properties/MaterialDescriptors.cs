@@ -173,7 +173,7 @@ public sealed class MaterialDescriptors
             static (state, v) => state.SetAlphaMode(v),
             static value => Enum.IsDefined(value)
                 ? ValidationResult.Ok
-                : ValidationResult.Fail("PROPERTY_ENUM_INVALID", "Alpha mode is not supported."));
+                : ValidationResult.Fail(MaterialDiagnosticCodes.PropertyValueUndefined, "Alpha mode is not supported."));
 
         return new MaterialDescriptors(byId);
     }
@@ -201,24 +201,24 @@ public sealed class MaterialDescriptors
     {
         if (!float.IsFinite(value))
         {
-            return ValidationResult.Fail("PROPERTY_NONFINITE", "Value must be finite.");
+            return ValidationResult.Fail(MaterialDiagnosticCodes.PropertyValueNotFinite, "Value must be finite.");
         }
 
         return value is >= 0.0f and <= 1.0f
             ? ValidationResult.Ok
-            : ValidationResult.Fail("PROPERTY_OUT_OF_RANGE", "Value must be between 0 and 1.");
+            : ValidationResult.Fail(MaterialDiagnosticCodes.PropertyValueOutOfRange, "Value must be between 0 and 1.");
     }
 
     private static ValidationResult ValidateNonNegativeFloat(float value)
     {
         if (!float.IsFinite(value))
         {
-            return ValidationResult.Fail("PROPERTY_NONFINITE", "Value must be finite.");
+            return ValidationResult.Fail(MaterialDiagnosticCodes.PropertyValueNotFinite, "Value must be finite.");
         }
 
         return value >= 0.0f
             ? ValidationResult.Ok
-            : ValidationResult.Fail("PROPERTY_OUT_OF_RANGE", "Value must be greater than or equal to 0.");
+            : ValidationResult.Fail(MaterialDiagnosticCodes.PropertyValueOutOfRange, "Value must be greater than or equal to 0.");
     }
 
     private static MaterialPbrMetallicRoughness Pbr(

@@ -7,7 +7,6 @@
 #pragma once
 #pragma managed(push, off)
 
-#include <cmath>
 #include <cstdint>
 #include <span>
 #include <stdexcept>
@@ -15,6 +14,7 @@
 
 #include <Commands/IComponentPropertyApplier.h>
 #include <Commands/PropertyKeys.h>
+#include <Commands/SchemaEnums.h>
 #include <Oxygen/Core/Types/CameraAspectMode.h>
 #include <Oxygen/Scene/Camera/Orthographic.h>
 #include <Oxygen/Scene/SceneNode.h>
@@ -41,12 +41,24 @@ namespace oxygen::interop::module {
       };
     }
 
-    [[nodiscard]] auto IsValid() const noexcept -> bool
+    //! Whether each value is valid for its field and the far plane is beyond
+    //! the near plane.
+    [[nodiscard]] auto IsValid() const -> bool
     {
-      return std::isfinite(orthographic_size) && orthographic_size > 0.0F
-        && std::isfinite(aspect_ratio) && aspect_ratio > 0.0F
-        && std::isfinite(near_plane) && near_plane > 0.0F
-        && std::isfinite(far_plane) && far_plane > near_plane;
+      const auto valid = [](const OrthographicCameraField field,
+                           const float value) {
+        return IsInRange(PropertyEntry {
+          .component = ComponentId::kOrthographicCamera,
+          .field = static_cast<std::uint16_t>(field),
+          .value = value,
+        });
+      };
+      return valid(OrthographicCameraField::kOrthographicSize,
+               orthographic_size)
+        && valid(OrthographicCameraField::kAspectRatio, aspect_ratio)
+        && valid(OrthographicCameraField::kNearPlane, near_plane)
+        && valid(OrthographicCameraField::kFarPlane, far_plane)
+        && far_plane > near_plane;
     }
 
     auto ApplyTo(scene::OrthographicCamera& camera) const -> void
@@ -81,19 +93,17 @@ namespace oxygen::interop::module {
       for (const auto& entry : entries) {
         const auto field = static_cast<OrthographicCameraField>(entry.field);
         if (field == OrthographicCameraField::kAspectMode) {
-          const auto aspect_mode = entry.Int32();
-          if (aspect_mode != 0 && aspect_mode != 1) {
+          if (!IsInRange(entry)) {
             throw std::invalid_argument("Invalid camera aspect mode");
           }
-          mode = aspect_mode == 0 ? CameraAspectMode::kAuto
-                                  : CameraAspectMode::kFixed;
+          mode = ValidatedMember(ToCameraAspectMode(entry.Int32()));
           continue;
         }
-        const float value = entry.Float();
-        if (!std::isfinite(value)) {
-          throw std::invalid_argument(
-            std::to_string(entry.field) + ": non-finite camera value");
+        if (!IsInRange(entry)) {
+          throw std::invalid_argument(std::to_string(entry.field)
+            + ": camera property value is not valid for its field");
         }
+        const float value = entry.Float();
         switch (field) {
         case OrthographicCameraField::kOrthographicSize:
           projection.orthographic_size = value;
@@ -122,8 +132,7 @@ namespace oxygen::interop::module {
         }
       }
 
-      if (!projection.IsValid() || exposure.aperture_f <= 0.0F
-        || exposure.shutter_rate <= 0.0F || exposure.iso <= 0.0F) {
+      if (!projection.IsValid()) {
         throw std::invalid_argument("Invalid orthographic camera candidate");
       }
       projection.ApplyTo(camera);

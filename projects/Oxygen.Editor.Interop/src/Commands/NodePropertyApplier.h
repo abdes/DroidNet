@@ -15,6 +15,7 @@
 
 #include <Commands/IComponentPropertyApplier.h>
 #include <Commands/PropertyKeys.h>
+#include <Commands/SchemaEnums.h>
 #include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Scene/Types/Flags.h>
 
@@ -43,21 +44,43 @@ namespace oxygen::interop::module {
     return std::nullopt;
   }
 
-  //! Wire values of a node flag with a source mode, numbered as the editor's
-  //! `VisibilitySource` and `ShadowSource`.
-  enum class NodeFlagSource : std::uint8_t {
-    kInherit = 0,
-    kLocalOn = 1,
-    kLocalOff = 2,
-  };
-
-  //! Whether an authored node field carries a source mode rather than a
-  //! local boolean.
+  //! Whether an authored node field carries a source mode (its schema value
+  //! type is an int32 enumeration) rather than a local boolean.
   [[nodiscard]] constexpr auto HasSourceMode(const NodeField field) noexcept
     -> bool
   {
-    return field == NodeField::kVisible || field == NodeField::kCastsShadows
-      || field == NodeField::kReceivesShadows;
+    return FindFieldType(ComponentId::kNode, static_cast<std::uint16_t>(field))
+      == FieldType::kInt32;
+  }
+
+  //! The local value a visibility source sets, or nullopt to inherit.
+  [[nodiscard]] constexpr auto LocalValueOf(const VisibilitySource source)
+    noexcept -> std::optional<bool>
+  {
+    switch (source) {
+    case VisibilitySource::kInherit:
+      return std::nullopt;
+    case VisibilitySource::kShown:
+      return true;
+    case VisibilitySource::kHidden:
+      return false;
+    }
+    return std::nullopt;
+  }
+
+  //! The local value a shadow source sets, or nullopt to inherit.
+  [[nodiscard]] constexpr auto LocalValueOf(const ShadowSource source) noexcept
+    -> std::optional<bool>
+  {
+    switch (source) {
+    case ShadowSource::kInherit:
+      return std::nullopt;
+    case ShadowSource::kOn:
+      return true;
+    case ShadowSource::kOff:
+      return false;
+    }
+    return std::nullopt;
   }
 
   //! Applies authored node flags. Visibility and the geometry shadow flags
@@ -89,29 +112,40 @@ namespace oxygen::interop::module {
         const auto flag = *ToSceneNodeFlag(field);
         if (!HasSourceMode(field)) {
           flags->get().SetLocalValue(flag, entry.Bool());
-        } else if (const auto source = static_cast<NodeFlagSource>(entry.Int32());
-          source == NodeFlagSource::kInherit) {
-          flags->get().SetInherited(flag, true);
+        } else if (const auto local = SourceLocalValue(field, entry.Int32())) {
+          flags->get().SetLocalValue(flag, *local);
         } else {
-          flags->get().SetLocalValue(flag, source == NodeFlagSource::kLocalOn);
+          flags->get().SetInherited(flag, true);
         }
       }
     }
 
   private:
-    [[nodiscard]] static auto IsValid(const PropertyEntry& entry) noexcept
+    //! The local value a validated source-mode field sets, or nullopt to
+    //! inherit. Visibility takes a `VisibilitySource`, the shadow flags a
+    //! `ShadowSource`.
+    [[nodiscard]] static auto SourceLocalValue(
+      const NodeField field, const std::int32_t wire) -> std::optional<bool>
+    {
+      switch (field) {
+      case NodeField::kVisible:
+        return LocalValueOf(ValidatedMember(ToVisibilitySource(wire)));
+      case NodeField::kCastsShadows:
+      case NodeField::kReceivesShadows:
+        return LocalValueOf(ValidatedMember(ToShadowSource(wire)));
+      default:
+        break;
+      }
+      throw std::invalid_argument(
+        std::to_string(static_cast<std::uint16_t>(field))
+        + ": node field has no source mode");
+    }
+
+    [[nodiscard]] static auto IsValid(const PropertyEntry& entry)
       -> bool
     {
       const auto field = static_cast<NodeField>(entry.field);
-      if (!ToSceneNodeFlag(field)) {
-        return false;
-      }
-      if (!HasSourceMode(field)) {
-        return true;
-      }
-      const auto source = entry.Int32();
-      return source >= static_cast<std::int32_t>(NodeFlagSource::kInherit)
-        && source <= static_cast<std::int32_t>(NodeFlagSource::kLocalOff);
+      return ToSceneNodeFlag(field).has_value() && IsInRange(entry);
     }
   };
 

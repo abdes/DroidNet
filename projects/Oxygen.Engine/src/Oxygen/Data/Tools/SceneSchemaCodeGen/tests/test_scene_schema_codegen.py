@@ -456,7 +456,7 @@ def test_defaults_and_ranges_are_rendered_per_field() -> None:
     assert "inline constexpr float kColorGDefault = 1.0F;" in text
     assert (
         "inline constexpr PropertyRange<float> kColorGRange "
-        "{ .min = 0.0F, .max = 1.0F };"
+        "{ .min = 0.0F, .max = 1.0F, .clamp = true };"
     ) in text
     assert "inline constexpr float kRangeDefault = 20.0F;" in text
     assert (
@@ -547,6 +547,45 @@ def test_commit_needs_a_range() -> None:
     assert "/components/0/properties/0" in _error_of(document)
 
 
+def test_clamping_range_renders_its_commit() -> None:
+    text = _text(_minimal())
+    assert (
+        "inline constexpr PropertyRange<float> kColorRRange "
+        "{ .min = 0.0F, .max = 1.0F, .clamp = true };"
+    ) in text
+    assert (
+        "inline constexpr PropertyRange<float> kRangeRange "
+        "{ .min = 0.0F, .min_exclusive = true };"
+    ) in text
+
+
+@pytest.mark.parametrize(
+    "bounds",
+    [
+        {"min": 0, "min_exclusive": True},
+        {"max": 1, "max_exclusive": True},
+        {"min": 0, "nonzero": True},
+    ],
+)
+def test_clamp_needs_a_bound_it_can_reach(bounds: dict[str, Any]) -> None:
+    document = _minimal()
+    document["components"][0]["properties"][0]["range"] = bounds
+    assert "PointLight.Color: clamp needs a bound it can reach" in _error_of(document)
+
+
+def test_field_value_checks_cover_each_wired_field_by_value_type() -> None:
+    text = _text(_with_enum(_minimal()))
+    assert (
+        "    case LightField::kColorG: "
+        "return point_light::kColorGRange.Contains(value);"
+    ) in text
+    assert (
+        "    case LightField::kRange: "
+        "return IsMember(point_light::kRangeValues, value);"
+    ) in text
+    assert "  case ComponentId::kPointLight: return false;" in text
+
+
 def test_range_contains_honours_every_bound() -> None:
     bounds = model.Range(0.0, 1.0, True, False, False)
     assert not bounds.contains(0.0)
@@ -572,9 +611,20 @@ def _with_enum(document: dict[str, Any]) -> dict[str, Any]:
 def test_enum_default_renders_its_wire_value_and_members() -> None:
     text = _text(_with_enum(_minimal()))
     assert "inline constexpr std::array<std::uint8_t, 2> kModeMembers { 0, 1 };" in text
-    assert "inline constexpr std::uint8_t kRangeDefault = 1; // Fixed" in text
+    assert "enum class Mode : std::uint8_t {\n  kAuto = 0,\n  kFixed = 1,\n};" in text
+    assert "inline constexpr Mode kRangeDefault = Mode::kFixed;" in text
     assert (
         "inline constexpr std::span<const std::uint8_t> kRangeValues { kModeMembers };"
+    ) in text
+
+
+def test_enum_member_keys_are_snake_case_in_member_order() -> None:
+    document = _minimal()
+    document["enums"][0]["members"][1]["name"] = "ManualDistances"
+    text = _text(document)
+    assert (
+        "inline constexpr std::array<std::string_view, 2> "
+        'kModeMemberKeys { "auto", "manual_distances" };'
     ) in text
 
 
@@ -582,7 +632,7 @@ def test_root_default_is_rendered() -> None:
     document = _with_enum(_minimal())
     document["components"][0]["properties"][1]["root_default"] = "Auto"
     text = _text(document)
-    assert "inline constexpr std::uint8_t kRangeRootDefault = 0; // Auto" in text
+    assert "inline constexpr Mode kRangeRootDefault = Mode::kAuto;" in text
 
 
 def test_enum_default_must_be_a_member() -> None:

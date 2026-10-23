@@ -50,6 +50,7 @@ oxygen_cooker_test(
     "Import/ImageProcessing_test.cpp"
     "Import/ImportPlanner_test.cpp"
     "Import/ImportedLightSemantics_test.cpp"
+    "Import/ImportedPropertyCommit_test.cpp"
     "Import/InputImportRequestBuilder_test.cpp"
     "Import/Jobs/TextureImportPolicy_test.cpp"
     "Import/SurfaceProvenance_test.cpp"

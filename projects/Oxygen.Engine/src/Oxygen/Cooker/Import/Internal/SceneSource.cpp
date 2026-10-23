@@ -4,14 +4,19 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
+#include <array>
+#include <cmath>
+#include <concepts>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <limits>
 #include <optional>
 #include <span>
 #include <string>
 #include <string_view>
-#include <unordered_map>
+#include <type_traits>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -27,12 +32,13 @@
 #include <Oxygen/Cooker/Import/Internal/ImportManifest_schema.h>
 #include <Oxygen/Cooker/Import/Internal/SceneSource.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
-#include <Oxygen/Core/Types/CameraAspectMode.h>
 #include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Data/AssetType.h>
-#include <Oxygen/Data/PakFormat_core.h>
+#include <Oxygen/Data/LightValidation.h>
 #include <Oxygen/Data/PakFormat_world.h>
+#include <Oxygen/Data/SceneRecordDefaults.h>
 #include <Oxygen/Data/Schema/Generated.SceneComponents.h>
+#include <Oxygen/Data/Schema/PropertyRange.h>
 #include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Scene/ExposureSettings.h>
 
@@ -105,6 +111,199 @@ namespace {
     return false;
   }
 
+  using data::schema::PropertyRange;
+  namespace world = data::pak::world;
+
+  //! Reads the properties of one authored object as the scene schema declares
+  //! them.
+  /*!
+   An omitted property keeps the value the caller holds, which is the schema's
+   default. A present one must be a finite value inside the generated range of
+   the property, or a declared member of its enum. A violation is reported as
+   `kScenePropertyOutOfRangeCode` at the property's path and keeps the caller's
+   value; the shared validity flag then reads false.
+  */
+  class PropertyReader final {
+  public:
+    PropertyReader(SourceContext& context, const json& document,
+      std::string object_path, bool& valid)
+      : context_(&context)
+      , document_(&document)
+      , path_(std::move(object_path))
+      , valid_(&valid)
+    {
+    }
+
+    //! The reader of the object `key` names, empty when it is omitted.
+    [[nodiscard]] auto Nested(const std::string_view key) const
+      -> PropertyReader
+    {
+      static const auto kEmptyObject = json::object();
+      const auto found = document_->find(key);
+      return { *context_, found == document_->end() ? kEmptyObject : *found,
+        PathOf(key), *valid_ };
+    }
+
+    [[nodiscard]] auto Bool(
+      const std::string_view key, const bool current) const -> bool
+    {
+      const auto found = document_->find(key);
+      return found == document_->end() ? current : found->get<bool>();
+    }
+
+    //! A boolean stored as 0 or 1.
+    template <std::unsigned_integral T>
+    [[nodiscard]] auto Flag(const std::string_view key, const T current) const
+      -> T
+    {
+      return Bool(key, current != T { 0 }) ? T { 1 } : T { 0 };
+    }
+
+    [[nodiscard]] auto Float(const std::string_view key, const float current,
+      const PropertyRange<float>& range) const -> float
+    {
+      const auto found = document_->find(key);
+      if (found == document_->end()) {
+        return current;
+      }
+      if (const auto value = ToFloat(found->get<double>());
+        value && range.Contains(*value)) {
+        return *value;
+      }
+      Reject(key, PathOf(key));
+      return current;
+    }
+
+    //! An integer stored in a field of type `T`, which holds every value of
+    //! the property's range.
+    template <std::integral T>
+    [[nodiscard]] auto Integer(const std::string_view key, const T current,
+      const PropertyRange<std::int32_t>& range) const -> T
+    {
+      DCHECK_F(std::in_range<T>(range.min.value_or(
+                 std::numeric_limits<std::int32_t>::lowest()))
+          && std::in_range<T>(
+            range.max.value_or(std::numeric_limits<std::int32_t>::max())),
+        "the field of property '{}' does not hold its range", key);
+      const auto found = document_->find(key);
+      if (found == document_->end()) {
+        return current;
+      }
+      const auto value = found->get<std::int64_t>();
+      if (std::in_range<std::int32_t>(value) && std::in_range<T>(value)
+        && range.Contains(static_cast<std::int32_t>(value))) {
+        return static_cast<T>(value);
+      }
+      Reject(key, PathOf(key));
+      return current;
+    }
+
+    //! An enum member by its wire value.
+    [[nodiscard]] auto Member(const std::string_view key, const uint8_t current,
+      const std::span<const uint8_t> members) const -> uint8_t
+    {
+      const auto found = document_->find(key);
+      if (found == document_->end()) {
+        return current;
+      }
+      const auto value = found->get<std::int64_t>();
+      const auto member = std::ranges::find_if(
+        members, [value](const uint8_t candidate) -> bool {
+          return std::cmp_equal(candidate, value);
+        });
+      if (member != members.end()) {
+        return *member;
+      }
+      Reject(key, PathOf(key));
+      return current;
+    }
+
+    //! A member of `E` by the key the descriptor spells for it; `members`
+    //! holds the wire values of `E` and `keys` the key of each, in the same
+    //! order.
+    template <typename E>
+      requires std::is_enum_v<E>
+    [[nodiscard]] auto Named(const std::string_view key, const E current,
+      const std::span<const uint8_t> members,
+      const std::span<const std::string_view> keys) const -> E
+    {
+      DCHECK_EQ_F(members.size(), keys.size());
+      const auto found = document_->find(key);
+      if (found == document_->end()) {
+        return current;
+      }
+      const auto& text = found->get_ref<const std::string&>();
+      const auto member = std::ranges::find(keys, text);
+      if (member != keys.end()) {
+        return static_cast<E>(
+          members[static_cast<size_t>(member - keys.begin())]);
+      }
+      Reject(key, PathOf(key));
+      return current;
+    }
+
+    //! An array of numbers, each inside its own range; unchanged unless every
+    //! element is valid.
+    auto FloatArray(const std::string_view key, const std::span<float> field,
+      const std::span<const PropertyRange<float>> ranges) const -> void
+    {
+      const auto found = document_->find(key);
+      if (found == document_->end()) {
+        return;
+      }
+      // The descriptor schema fixes the length of each array.
+      DCHECK_EQ_F(found->size(), field.size());
+      DCHECK_EQ_F(ranges.size(), field.size());
+      auto elements_valid = true;
+      for (size_t i = 0; i < field.size(); ++i) {
+        const auto value = ToFloat(found->at(i).get<double>());
+        if (!value || !ranges[i].Contains(*value)) {
+          Reject(key, PathOf(key) + "[" + std::to_string(i) + "]");
+          elements_valid = false;
+        }
+      }
+      if (!elements_valid) {
+        return;
+      }
+      for (size_t i = 0; i < field.size(); ++i) {
+        field[i] = static_cast<float>(found->at(i).get<double>());
+      }
+    }
+
+  private:
+    //! A value narrowed to float, or nothing for one a float cannot hold.
+    [[nodiscard]] static auto ToFloat(const double value)
+      -> std::optional<float>
+    {
+      if (!std::isfinite(value)
+        || std::abs(value) > std::numeric_limits<float>::max()) {
+        return std::nullopt;
+      }
+      return static_cast<float>(value);
+    }
+
+    [[nodiscard]] auto PathOf(const std::string_view key) const -> std::string
+    {
+      return path_ + "." + std::string(key);
+    }
+
+    auto Reject(const std::string_view key, std::string path) const -> void
+    {
+      AddDiagnostic(*context_, ImportSeverity::kError,
+        std::string(kScenePropertyOutOfRangeCode),
+        "Property '" + std::string(key)
+          + "' is not a finite value in the range, or a member, that the scene "
+            "schema declares",
+        std::move(path));
+      *valid_ = false;
+    }
+
+    observer_ptr<SourceContext> context_;
+    observer_ptr<const json> document_;
+    std::string path_;
+    observer_ptr<bool> valid_;
+  };
+
   //! Reads one authored override value as its property's value type.
   auto ReadOverrideValue(SourceContext& context,
     const data::schema::OverrideProperty& property, const json& document,
@@ -150,7 +349,8 @@ namespace {
     std::vector<SceneSource::Override>& overrides) -> bool
   {
     for (const auto& [key, document] : values.items()) {
-      const auto value_path = object_path + "[\"" + key + "\"]";
+      auto value_path = object_path;
+      value_path.append("[\"").append(key).append("\"]");
       const auto* property
         = data::schema::FindOverrideProperty("geometry", part_kind, key);
       if (property == nullptr) {
@@ -565,92 +765,114 @@ namespace {
     return false;
   }
 
-  auto ApplyLightCommon(
-    const json& common_doc, data::pak::world::LightCommonRecord& common) -> void
+  //! Reads a light's `common` object over the defaults `common` holds.
+  auto ReadLightCommon(const PropertyReader& light,
+    const data::LightCommonRanges& ranges,
+    data::pak::world::LightCommonRecord& common) -> void
   {
-    if (common_doc.contains("affects_world")) {
-      common.affects_world
-        = common_doc.at("affects_world").get<bool>() ? 1U : 0U;
-    }
-    if (common_doc.contains("color_rgb")) {
-      CopyFloatArray(common_doc.at("color_rgb"), common.color_rgb);
-    }
-    if (common_doc.contains("casts_shadows")) {
-      common.casts_shadows
-        = common_doc.at("casts_shadows").get<bool>() ? 1U : 0U;
-    }
-    if (common_doc.contains("exposure_compensation_ev")) {
-      common.exposure_compensation_ev
-        = common_doc.at("exposure_compensation_ev").get<float>();
-    }
-    if (common_doc.contains("shadow")) {
-      const auto& shadow = common_doc.at("shadow");
-      if (shadow.contains("bias")) {
-        common.shadow.bias = shadow.at("bias").get<float>();
-      }
-      if (shadow.contains("normal_bias")) {
-        common.shadow.normal_bias = shadow.at("normal_bias").get<float>();
-      }
-      if (shadow.contains("contact_shadows")) {
-        common.shadow.contact_shadows
-          = shadow.at("contact_shadows").get<bool>() ? 1U : 0U;
-      }
-      if (shadow.contains("resolution_hint")) {
-        common.shadow.resolution_hint
-          = static_cast<uint8_t>(shadow.at("resolution_hint").get<uint32_t>());
-      }
-    }
+    const auto reader = light.Nested("common");
+    common.affects_world = reader.Flag("affects_world", common.affects_world);
+    reader.FloatArray("color_rgb", common.color_rgb, ranges.color);
+    common.casts_shadows = reader.Flag("casts_shadows", common.casts_shadows);
+    common.exposure_compensation_ev = reader.Float("exposure_compensation_ev",
+      common.exposure_compensation_ev, ranges.exposure_compensation);
+
+    const auto shadow = reader.Nested("shadow");
+    common.shadow.bias
+      = shadow.Float("bias", common.shadow.bias, ranges.shadow_bias);
+    common.shadow.normal_bias = shadow.Float(
+      "normal_bias", common.shadow.normal_bias, ranges.shadow_normal_bias);
+    common.shadow.contact_shadows
+      = shadow.Flag("contact_shadows", common.shadow.contact_shadows);
+    common.shadow.resolution_hint = shadow.Member("resolution_hint",
+      common.shadow.resolution_hint, ranges.shadow_resolution_hints);
   }
 
-  auto BuildNodeFlags(const json& node_doc, const bool is_root,
-    data::pak::world::NodeRecord& node) -> void
+  //! Reads a node's `flags`: an omitted flag takes the schema's default for a
+  //! root or for a child.
+  auto ReadNodeFlags(const PropertyReader& node, const bool is_root,
+    data::pak::world::NodeRecord& record) -> void
   {
-    node.node_flags
-      = is_root ? data::pak::world::kSceneNodeFlags_Inheritable : 0U;
-    node.inherited_flags
-      = is_root ? 0U : data::pak::world::kSceneNodeFlags_Inheritable;
-    if (!node_doc.contains("flags")) {
-      return;
-    }
+    namespace flags_schema = data::schema::node_flags;
+    const auto flags = node.Nested("flags");
+    record.node_flags = 0U;
+    record.inherited_flags = 0U;
 
-    const auto& flags_doc = node_doc.at("flags");
-    const auto apply_flag = [&](const char* key, const uint32_t mask) -> void {
-      if (!flags_doc.contains(key)) {
-        return;
-      }
-      const auto enabled = flags_doc.at(key).get<bool>();
-      if (enabled) {
-        node.node_flags |= mask;
-      } else {
-        node.node_flags &= ~mask;
-      }
-    };
-
+    // Node flag sources share one encoding: inherit, local on, local off.
+    using data::schema::ShadowSource;
+    using data::schema::VisibilitySource;
+    static_assert(std::to_underlying(VisibilitySource::kInherit)
+      == std::to_underlying(ShadowSource::kInherit));
+    static_assert(std::to_underlying(VisibilitySource::kShown)
+      == std::to_underlying(ShadowSource::kOn));
+    static_assert(std::to_underlying(VisibilitySource::kHidden)
+      == std::to_underlying(ShadowSource::kOff));
     const auto apply_source
-      = [&](const char* key, const uint32_t mask) -> void {
-      if (!flags_doc.contains(key)) {
-        return;
+      = [&]<typename Source>(const std::string_view key,
+          const Source child_default, const Source root_default,
+          const std::span<const uint8_t> members,
+          const std::span<const std::string_view> keys,
+          const uint32_t mask) -> void {
+      const auto mode = std::to_underlying(flags.Named(
+        key, is_root ? root_default : child_default, members, keys));
+      if (mode == std::to_underlying(VisibilitySource::kInherit)) {
+        record.inherited_flags |= mask;
+      } else if (mode == std::to_underlying(VisibilitySource::kShown)) {
+        record.node_flags |= mask;
       }
-      const auto& source = flags_doc.at(key).get_ref<const std::string&>();
-      node.node_flags &= ~mask;
-      node.inherited_flags &= ~mask;
-      if (source == "inherit") {
-        node.inherited_flags |= mask;
-      } else if (source == "shown" || source == "on") {
-        node.node_flags |= mask;
+    };
+    const auto apply_flag
+      = [&](const std::string_view key, const bool default_value,
+          const uint32_t mask) -> void {
+      if (flags.Bool(key, default_value)) {
+        record.node_flags |= mask;
       }
     };
 
-    apply_source("visible", data::pak::world::kSceneNodeFlag_Visible);
-    apply_flag("static", data::pak::world::kSceneNodeFlag_Static);
-    apply_source(
-      "casts_shadows", data::pak::world::kSceneNodeFlag_CastsShadows);
-    apply_source(
-      "receives_shadows", data::pak::world::kSceneNodeFlag_ReceivesShadows);
+    apply_source("visible", flags_schema::kVisibleDefault,
+      flags_schema::kVisibleRootDefault, flags_schema::kVisibleValues,
+      data::schema::kVisibilitySourceMemberKeys, world::kSceneNodeFlag_Visible);
+    apply_flag(
+      "static", flags_schema::kStaticDefault, world::kSceneNodeFlag_Static);
+    apply_source("casts_shadows", flags_schema::kCastsShadowsDefault,
+      flags_schema::kCastsShadowsRootDefault, flags_schema::kCastsShadowsValues,
+      data::schema::kShadowSourceMemberKeys,
+      world::kSceneNodeFlag_CastsShadows);
+    apply_source("receives_shadows", flags_schema::kReceivesShadowsDefault,
+      flags_schema::kReceivesShadowsRootDefault,
+      flags_schema::kReceivesShadowsValues,
+      data::schema::kShadowSourceMemberKeys,
+      world::kSceneNodeFlag_ReceivesShadows);
     apply_flag("ray_cast_selectable",
-      data::pak::world::kSceneNodeFlag_RayCastingSelectable);
+      flags_schema::kRayCastingSelectableDefault,
+      world::kSceneNodeFlag_RayCastingSelectable);
     apply_flag("ignore_parent_transform",
-      data::pak::world::kSceneNodeFlag_IgnoreParentTransform);
+      flags_schema::kIgnoreParentTransformDefault,
+      world::kSceneNodeFlag_IgnoreParentTransform);
+  }
+
+  //! Reads a node's `transform` over the defaults `record` holds.
+  auto ReadNodeTransform(
+    const PropertyReader& node, data::pak::world::NodeRecord& record) -> void
+  {
+    namespace transform_schema = data::schema::transform;
+    // The rotation is a quaternion, which the scene schema states no range for
+    // beyond being finite.
+    constexpr auto kQuaternionRange = std::array<PropertyRange<float>, 4> {};
+    constexpr auto kTranslationRanges = std::array {
+      transform_schema::kPositionXRange,
+      transform_schema::kPositionYRange,
+      transform_schema::kPositionZRange,
+    };
+    constexpr auto kScaleRanges = std::array {
+      transform_schema::kScaleXRange,
+      transform_schema::kScaleYRange,
+      transform_schema::kScaleZRange,
+    };
+    const auto transform = node.Nested("transform");
+    transform.FloatArray("translation", record.translation, kTranslationRanges);
+    transform.FloatArray("rotation", record.rotation, kQuaternionRange);
+    transform.FloatArray("scale", record.scale, kScaleRanges);
   }
 
   auto PrepareSceneSource(SourceContext& context, const json& descriptor_doc)
@@ -690,20 +912,14 @@ namespace {
         node_record.parent_index = parent_index;
       }
 
-      BuildNodeFlags(node_doc,
+      auto node_valid = true;
+      const auto node_reader
+        = PropertyReader(context, node_doc, node_path, node_valid);
+      ReadNodeFlags(node_reader,
         node_record.parent_index == static_cast<uint32_t>(node_i), node_record);
-
-      if (node_doc.contains("transform")) {
-        const auto& transform = node_doc.at("transform");
-        if (transform.contains("translation")) {
-          CopyFloatArray(transform.at("translation"), node_record.translation);
-        }
-        if (transform.contains("rotation")) {
-          CopyFloatArray(transform.at("rotation"), node_record.rotation);
-        }
-        if (transform.contains("scale")) {
-          CopyFloatArray(transform.at("scale"), node_record.scale);
-        }
+      ReadNodeTransform(node_reader, node_record);
+      if (!node_valid) {
+        return std::nullopt;
       }
 
       if (node_doc.contains("instance")) {
@@ -782,27 +998,34 @@ namespace {
             return std::nullopt;
           }
 
-          auto camera = data::pak::world::PerspectiveCameraRecord {};
+          namespace camera_schema = data::schema::perspective_camera;
+          auto camera
+            = world::MakeDefaultRecord<world::PerspectiveCameraRecord>();
           camera.node_index = node_index;
-          camera.aspect_mode = camera_doc.at("aspect_mode") == "fixed"
-            ? CameraAspectMode::kFixed
-            : CameraAspectMode::kAuto;
-          if (camera_doc.contains("fov_y")) {
-            camera.fov_y = camera_doc.at("fov_y").get<float>();
+          auto camera_valid = true;
+          const auto reader
+            = PropertyReader(context, camera_doc, object_path, camera_valid);
+          camera.aspect_mode = world::ToCameraAspectMode(
+            reader.Named("aspect_mode", camera_schema::kAspectModeDefault,
+              camera_schema::kAspectModeValues,
+              data::schema::kCameraAspectModeMemberKeys));
+          camera.fov_y = reader.Float(
+            "fov_y", camera.fov_y, camera_schema::kFieldOfViewYRadiansRange);
+          camera.aspect_ratio = reader.Float("aspect_ratio",
+            camera.aspect_ratio, camera_schema::kAspectRatioRange);
+          camera.near_plane = reader.Float(
+            "near_plane", camera.near_plane, camera_schema::kNearPlaneRange);
+          camera.far_plane = reader.Float(
+            "far_plane", camera.far_plane, camera_schema::kFarPlaneRange);
+          camera.aperture_f = reader.Float(
+            "aperture_f", camera.aperture_f, camera_schema::kApertureFRange);
+          camera.shutter_rate = reader.Float("shutter_rate",
+            camera.shutter_rate, camera_schema::kShutterRateRange);
+          camera.iso
+            = reader.Float("iso", camera.iso, camera_schema::kIsoRange);
+          if (!camera_valid) {
+            return std::nullopt;
           }
-          if (camera_doc.contains("aspect_ratio")) {
-            camera.aspect_ratio = camera_doc.at("aspect_ratio").get<float>();
-          }
-          if (camera_doc.contains("near_plane")) {
-            camera.near_plane = camera_doc.at("near_plane").get<float>();
-          }
-          if (camera_doc.contains("far_plane")) {
-            camera.far_plane = camera_doc.at("far_plane").get<float>();
-          }
-          camera.aperture_f = camera_doc.value("aperture_f", camera.aperture_f);
-          camera.shutter_rate
-            = camera_doc.value("shutter_rate", camera.shutter_rate);
-          camera.iso = camera_doc.value("iso", camera.iso);
           prepared.build.perspective_cameras.push_back(camera);
         }
       }
@@ -822,29 +1045,41 @@ namespace {
             return std::nullopt;
           }
 
-          auto camera = data::pak::world::OrthographicCameraRecord {};
+          namespace camera_schema = data::schema::orthographic_camera;
+          auto camera
+            = world::MakeDefaultRecord<world::OrthographicCameraRecord>();
           camera.node_index = node_index;
-          camera.aspect_mode = camera_doc.at("aspect_mode") == "fixed"
-            ? CameraAspectMode::kFixed
-            : CameraAspectMode::kAuto;
-          const auto half_height
-            = camera_doc.value("orthographic_size", camera.top);
-          const auto half_width
-            = half_height * camera_doc.value("aspect_ratio", 1.0F);
+          auto camera_valid = true;
+          const auto reader
+            = PropertyReader(context, camera_doc, object_path, camera_valid);
+          camera.aspect_mode = world::ToCameraAspectMode(
+            reader.Named("aspect_mode", camera_schema::kAspectModeDefault,
+              camera_schema::kAspectModeValues,
+              data::schema::kCameraAspectModeMemberKeys));
+          // The volume is the authored half height and aspect ratio.
+          const auto half_height = reader.Float("orthographic_size",
+            camera_schema::kOrthographicSizeDefault,
+            camera_schema::kOrthographicSizeRange);
+          const auto half_width = half_height
+            * reader.Float("aspect_ratio", camera_schema::kAspectRatioDefault,
+              camera_schema::kAspectRatioRange);
           camera.left = -half_width;
           camera.right = half_width;
           camera.bottom = -half_height;
           camera.top = half_height;
-          if (camera_doc.contains("near_plane")) {
-            camera.near_plane = camera_doc.at("near_plane").get<float>();
+          camera.near_plane = reader.Float(
+            "near_plane", camera.near_plane, camera_schema::kNearPlaneRange);
+          camera.far_plane = reader.Float(
+            "far_plane", camera.far_plane, camera_schema::kFarPlaneRange);
+          camera.aperture_f = reader.Float(
+            "aperture_f", camera.aperture_f, camera_schema::kApertureFRange);
+          camera.shutter_rate = reader.Float("shutter_rate",
+            camera.shutter_rate, camera_schema::kShutterRateRange);
+          camera.iso
+            = reader.Float("iso", camera.iso, camera_schema::kIsoRange);
+          if (!camera_valid) {
+            return std::nullopt;
           }
-          if (camera_doc.contains("far_plane")) {
-            camera.far_plane = camera_doc.at("far_plane").get<float>();
-          }
-          camera.aperture_f = camera_doc.value("aperture_f", camera.aperture_f);
-          camera.shutter_rate
-            = camera_doc.value("shutter_rate", camera.shutter_rate);
-          camera.iso = camera_doc.value("iso", camera.iso);
           prepared.build.orthographic_cameras.push_back(camera);
         }
       }
@@ -867,60 +1102,67 @@ namespace {
             return std::nullopt;
           }
 
-          auto light = data::pak::world::DirectionalLightRecord {};
+          namespace light_schema = data::schema::directional_light;
+          auto light
+            = world::MakeDefaultRecord<world::DirectionalLightRecord>();
           light.node_index = node_index;
-          if (light_doc.contains("common")) {
-            ApplyLightCommon(light_doc.at("common"), light.common);
-          }
-          if (light_doc.contains("angular_size_radians")) {
-            light.angular_size_radians
-              = light_doc.at("angular_size_radians").get<float>();
-          }
-          light.atmosphere_light_slot
-            = light_doc.value("atmosphere_light_slot", uint8_t { 0U });
+          auto light_valid = true;
+          const auto reader
+            = PropertyReader(context, light_doc, object_path, light_valid);
+          ReadLightCommon(
+            reader, data::kDirectionalLightCommonRanges, light.common);
+          light.angular_size_radians = reader.Float("angular_size_radians",
+            light.angular_size_radians, light_schema::kAngularSizeRadiansRange);
+          light.atmosphere_light_slot = reader.Member("atmosphere_light_slot",
+            light.atmosphere_light_slot,
+            light_schema::kAtmosphereLightSlotValues);
           light.use_per_pixel_atmosphere_transmittance
-            = light_doc.value("use_per_pixel_atmosphere_transmittance", false)
-            ? 1U
-            : 0U;
-          if (light_doc.contains("atmosphere_disk_luminance_scale_rgb")) {
-            CopyFloatArray(light_doc.at("atmosphere_disk_luminance_scale_rgb"),
-              light.atmosphere_disk_luminance_scale_rgb);
-          }
-          if (light_doc.contains("cascade_count")) {
-            light.cascade_count = light_doc.at("cascade_count").get<uint32_t>();
-          }
-          if (light_doc.contains("split_mode")) {
-            light.split_mode = static_cast<uint8_t>(
-              light_doc.at("split_mode").get<uint32_t>());
-          }
-          if (light_doc.contains("max_shadow_distance")) {
-            light.max_shadow_distance
-              = light_doc.at("max_shadow_distance").get<float>();
-          }
+            = reader.Flag("use_per_pixel_atmosphere_transmittance",
+              light.use_per_pixel_atmosphere_transmittance);
+          constexpr auto kDiskScaleRanges = std::array {
+            light_schema::kDiskScaleRRange,
+            light_schema::kDiskScaleGRange,
+            light_schema::kDiskScaleBRange,
+          };
+          reader.FloatArray("atmosphere_disk_luminance_scale_rgb",
+            light.atmosphere_disk_luminance_scale_rgb, kDiskScaleRanges);
+          light.cascade_count = reader.Integer("cascade_count",
+            light.cascade_count, light_schema::kCascadeCountRange);
+          light.split_mode = reader.Member(
+            "split_mode", light.split_mode, light_schema::kSplitModeValues);
+          light.max_shadow_distance = reader.Float("max_shadow_distance",
+            light.max_shadow_distance, light_schema::kMaxShadowDistanceRange);
+          constexpr auto kCascadeDistanceRanges = std::array {
+            light_schema::kCascadeDistance0Range,
+            light_schema::kCascadeDistance1Range,
+            light_schema::kCascadeDistance2Range,
+            light_schema::kCascadeDistance3Range,
+          };
+          reader.FloatArray("cascade_distances", light.cascade_distances,
+            kCascadeDistanceRanges);
+          // Authored distances without a split mode or a shadow distance are
+          // the manual distances, ending at the last one.
           if (light_doc.contains("cascade_distances")) {
-            CopyFloatArray(
-              light_doc.at("cascade_distances"), light.cascade_distances);
             if (!light_doc.contains("split_mode")) {
-              light.split_mode = 1U;
+              light.split_mode = std::to_underlying(
+                data::schema::DirectionalCsmSplitMode::kManualDistances);
             }
             if (!light_doc.contains("max_shadow_distance")) {
               light.max_shadow_distance = light.cascade_distances[3];
             }
           }
-          if (light_doc.contains("distribution_exponent")) {
-            light.distribution_exponent
-              = light_doc.at("distribution_exponent").get<float>();
-          }
-          if (light_doc.contains("transition_fraction")) {
-            light.transition_fraction
-              = light_doc.at("transition_fraction").get<float>();
-          }
-          if (light_doc.contains("distance_fadeout_fraction")) {
-            light.distance_fadeout_fraction
-              = light_doc.at("distance_fadeout_fraction").get<float>();
-          }
-          if (light_doc.contains("intensity_lux")) {
-            light.intensity_lux = light_doc.at("intensity_lux").get<float>();
+          light.distribution_exponent
+            = reader.Float("distribution_exponent", light.distribution_exponent,
+              light_schema::kDistributionExponentRange);
+          light.transition_fraction = reader.Float("transition_fraction",
+            light.transition_fraction, light_schema::kTransitionFractionRange);
+          light.distance_fadeout_fraction = reader.Float(
+            "distance_fadeout_fraction", light.distance_fadeout_fraction,
+            light_schema::kDistanceFadeoutFractionRange);
+          light.intensity_lux = reader.Float("intensity_lux",
+            light.intensity_lux, light_schema::kIntensityLuxRange);
+          if (!light_valid) {
+            return std::nullopt;
           }
           prepared.build.directional_lights.push_back(light);
         }
@@ -941,20 +1183,21 @@ namespace {
             return std::nullopt;
           }
 
-          auto light = data::pak::world::PointLightRecord {};
+          namespace light_schema = data::schema::point_light;
+          auto light = world::MakeDefaultRecord<world::PointLightRecord>();
           light.node_index = node_index;
-          if (light_doc.contains("common")) {
-            ApplyLightCommon(light_doc.at("common"), light.common);
-          }
-          if (light_doc.contains("range")) {
-            light.range = light_doc.at("range").get<float>();
-          }
-          if (light_doc.contains("source_radius")) {
-            light.source_radius = light_doc.at("source_radius").get<float>();
-          }
-          if (light_doc.contains("luminous_flux_lm")) {
-            light.luminous_flux_lm
-              = light_doc.at("luminous_flux_lm").get<float>();
+          auto light_valid = true;
+          const auto reader
+            = PropertyReader(context, light_doc, object_path, light_valid);
+          ReadLightCommon(reader, data::kPointLightCommonRanges, light.common);
+          light.range
+            = reader.Float("range", light.range, light_schema::kRangeRange);
+          light.source_radius = reader.Float("source_radius",
+            light.source_radius, light_schema::kSourceRadiusRange);
+          light.luminous_flux_lm = reader.Float("luminous_flux_lm",
+            light.luminous_flux_lm, light_schema::kLuminousFluxLmRange);
+          if (!light_valid) {
+            return std::nullopt;
           }
           prepared.build.point_lights.push_back(light);
         }
@@ -975,28 +1218,27 @@ namespace {
             return std::nullopt;
           }
 
-          auto light = data::pak::world::SpotLightRecord {};
+          namespace light_schema = data::schema::spot_light;
+          auto light = world::MakeDefaultRecord<world::SpotLightRecord>();
           light.node_index = node_index;
-          if (light_doc.contains("common")) {
-            ApplyLightCommon(light_doc.at("common"), light.common);
-          }
-          if (light_doc.contains("range")) {
-            light.range = light_doc.at("range").get<float>();
-          }
-          if (light_doc.contains("inner_cone_angle_radians")) {
-            light.inner_cone_angle_radians
-              = light_doc.at("inner_cone_angle_radians").get<float>();
-          }
-          if (light_doc.contains("outer_cone_angle_radians")) {
-            light.outer_cone_angle_radians
-              = light_doc.at("outer_cone_angle_radians").get<float>();
-          }
-          if (light_doc.contains("source_radius")) {
-            light.source_radius = light_doc.at("source_radius").get<float>();
-          }
-          if (light_doc.contains("luminous_flux_lm")) {
-            light.luminous_flux_lm
-              = light_doc.at("luminous_flux_lm").get<float>();
+          auto light_valid = true;
+          const auto reader
+            = PropertyReader(context, light_doc, object_path, light_valid);
+          ReadLightCommon(reader, data::kSpotLightCommonRanges, light.common);
+          light.range
+            = reader.Float("range", light.range, light_schema::kRangeRange);
+          light.inner_cone_angle_radians = reader.Float(
+            "inner_cone_angle_radians", light.inner_cone_angle_radians,
+            light_schema::kInnerConeAngleRadiansRange);
+          light.outer_cone_angle_radians = reader.Float(
+            "outer_cone_angle_radians", light.outer_cone_angle_radians,
+            light_schema::kOuterConeAngleRadiansRange);
+          light.source_radius = reader.Float("source_radius",
+            light.source_radius, light_schema::kSourceRadiusRange);
+          light.luminous_flux_lm = reader.Float("luminous_flux_lm",
+            light.luminous_flux_lm, light_schema::kLuminousFluxLmRange);
+          if (!light_valid) {
+            return std::nullopt;
           }
           prepared.build.spot_lights.push_back(light);
         }
@@ -1048,23 +1290,40 @@ namespace {
           return std::nullopt;
         }
 
-        auto record = data::pak::world::LocalFogVolumeRecord {};
+        namespace fog_schema = data::schema::local_fog_volume;
+        auto record = world::MakeDefaultRecord<world::LocalFogVolumeRecord>();
         record.node_index = node_index;
-        record.enabled = volume_doc.value("enabled", true) ? 1U : 0U;
-        record.radial_fog_extinction = volume_doc.value(
-          "radial_fog_extinction", record.radial_fog_extinction);
-        record.height_fog_extinction = volume_doc.value(
-          "height_fog_extinction", record.height_fog_extinction);
-        record.height_fog_falloff
-          = volume_doc.value("height_fog_falloff", record.height_fog_falloff);
-        record.height_fog_offset
-          = volume_doc.value("height_fog_offset", record.height_fog_offset);
-        record.fog_phase_g
-          = volume_doc.value("fog_phase_g", record.fog_phase_g);
-        CopyFloatArray(volume_doc.at("fog_albedo"), record.fog_albedo);
-        CopyFloatArray(volume_doc.at("fog_emissive"), record.fog_emissive);
-        record.sort_priority
-          = volume_doc.value("sort_priority", record.sort_priority);
+        auto fog_valid = true;
+        const auto reader
+          = PropertyReader(context, volume_doc, object_path, fog_valid);
+        record.enabled = reader.Flag("enabled", record.enabled);
+        record.radial_fog_extinction = reader.Float("radial_fog_extinction",
+          record.radial_fog_extinction, fog_schema::kRadialFogExtinctionRange);
+        record.height_fog_extinction = reader.Float("height_fog_extinction",
+          record.height_fog_extinction, fog_schema::kHeightFogExtinctionRange);
+        record.height_fog_falloff = reader.Float("height_fog_falloff",
+          record.height_fog_falloff, fog_schema::kHeightFogFalloffRange);
+        record.height_fog_offset = reader.Float("height_fog_offset",
+          record.height_fog_offset, fog_schema::kHeightFogOffsetRange);
+        record.fog_phase_g = reader.Float(
+          "fog_phase_g", record.fog_phase_g, fog_schema::kFogPhaseGRange);
+        constexpr auto kAlbedoRanges = std::array {
+          fog_schema::kFogAlbedoRRange,
+          fog_schema::kFogAlbedoGRange,
+          fog_schema::kFogAlbedoBRange,
+        };
+        reader.FloatArray("fog_albedo", record.fog_albedo, kAlbedoRanges);
+        constexpr auto kEmissiveRanges = std::array {
+          fog_schema::kFogEmissiveRRange,
+          fog_schema::kFogEmissiveGRange,
+          fog_schema::kFogEmissiveBRange,
+        };
+        reader.FloatArray("fog_emissive", record.fog_emissive, kEmissiveRanges);
+        record.sort_priority = reader.Integer("sort_priority",
+          record.sort_priority, fog_schema::kSortPriorityRange);
+        if (!fog_valid) {
+          return std::nullopt;
+        }
         prepared.build.local_fog_volumes.push_back(record);
       }
     }

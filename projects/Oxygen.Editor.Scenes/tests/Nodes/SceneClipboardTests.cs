@@ -68,8 +68,10 @@ public sealed class SceneClipboardTests
     [TestMethod]
     public async Task Capture_UnrepresentableWorldTransform_HasNoWorldNodes()
     {
+        // A scene never stores a zero scale; a subnormal one still flattens the axis beyond what a world transform
+        // can decompose.
         var scene = SampleScene.Builder()
-            .Node(Singular, "Singular", transform: SampleScene.Transform(scale: new Vector3(0, 1, 1)))
+            .Node(Singular, "Singular", transform: SampleScene.Transform(scale: new Vector3(1e-39f, 1, 1)))
             .Node(UnderSingular, "UnderSingular", parent: Singular)
             .Build();
         using var fixture = await AuthoringFixture.CreateAsync(scene).ConfigureAwait(false);

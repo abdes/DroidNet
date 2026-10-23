@@ -41,6 +41,7 @@
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/AdapterTypes.h>
 #include <Oxygen/Cooker/Import/Internal/ImportedLightSemantics.h>
+#include <Oxygen/Cooker/Import/Internal/ImportedPropertyCommit.h>
 #include <Oxygen/Cooker/Import/Internal/MaterialSource.h>
 #include <Oxygen/Cooker/Import/Internal/MeshTransformBake.h>
 #include <Oxygen/Cooker/Import/Internal/ModelGeometrySource.h>
@@ -68,9 +69,12 @@
 #include <Oxygen/Core/Types/CameraAspectMode.h>
 #include <Oxygen/Core/Types/DescriptorExtensions.h>
 #include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Data/LightValidation.h>
 #include <Oxygen/Data/MaterialDomain.h>
 #include <Oxygen/Data/MeshType.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Data/SceneRecordDefaults.h>
+#include <Oxygen/Data/Schema/Generated.SceneComponents.h>
 
 namespace oxygen::content::import::adapters {
 
@@ -147,11 +151,10 @@ namespace {
   {
     constexpr float kMultiplierRangeEnd = 15.0F;
     constexpr float kCandleLumens = 15.0F;
-    const float clamped = (std::max)(0.0F, intensity);
-    if (clamped <= kMultiplierRangeEnd) {
-      return clamped * kCandleLumens;
+    if (intensity <= kMultiplierRangeEnd) {
+      return intensity * kCandleLumens;
     }
-    return clamped;
+    return intensity;
   }
 
   [[nodiscard]] auto ToStringView(const ufbx_string& s) -> std::string_view
@@ -193,6 +196,7 @@ namespace {
   }
 
   using data::pak::world::DirectionalLightRecord;
+  using data::pak::world::MakeDefaultRecord;
   using data::pak::world::NodeRecord;
   using data::pak::world::OrthographicCameraRecord;
   using data::pak::world::PerspectiveCameraRecord;
@@ -2805,47 +2809,61 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
 
     if (ufbx_node != nullptr && ufbx_node->camera != nullptr) {
       const auto& cam = *ufbx_node->camera;
+      auto commit = detail::ImportedPropertyCommit {};
       if (cam.projection_mode == UFBX_PROJECTION_MODE_PERSPECTIVE) {
-        const auto near_plane = static_cast<float>(cam.near_plane);
-        const auto far_plane = static_cast<float>(cam.far_plane);
-
-        const float fov_y_rad
-          = cam.field_of_view_deg.y * (std::numbers::pi_v<float> / 180.0F);
-
-        build.perspective_cameras.push_back(PerspectiveCameraRecord {
-          .node_index = i,
-          .fov_y = fov_y_rad,
-          .aspect_ratio = cam.aspect_ratio,
-          .near_plane = near_plane,
-          .far_plane = far_plane,
-          .aspect_mode = cam.aspect_mode == UFBX_ASPECT_MODE_WINDOW_SIZE
-            ? CameraAspectMode::kAuto
-            : CameraAspectMode::kFixed,
-        });
+        namespace camera_schema = data::schema::perspective_camera;
+        auto camera = MakeDefaultRecord<PerspectiveCameraRecord>();
+        camera.node_index = i;
+        camera.fov_y = commit("fov_y", camera_schema::kFieldOfViewYRadiansRange,
+          static_cast<float>(cam.field_of_view_deg.y)
+            * (std::numbers::pi_v<float> / 180.0F),
+          camera.fov_y);
+        camera.aspect_ratio
+          = commit("aspect_ratio", camera_schema::kAspectRatioRange,
+            static_cast<float>(cam.aspect_ratio), camera.aspect_ratio);
+        camera.near_plane = commit("near_plane", camera_schema::kNearPlaneRange,
+          static_cast<float>(cam.near_plane), camera.near_plane);
+        camera.far_plane = commit("far_plane", camera_schema::kFarPlaneRange,
+          static_cast<float>(cam.far_plane), camera.far_plane);
+        camera.aspect_mode = cam.aspect_mode == UFBX_ASPECT_MODE_WINDOW_SIZE
+          ? CameraAspectMode::kAuto
+          : CameraAspectMode::kFixed;
+        build.perspective_cameras.push_back(camera);
       } else if (cam.projection_mode == UFBX_PROJECTION_MODE_ORTHOGRAPHIC) {
-        float near_plane = std::abs(cam.near_plane);
-        float far_plane = std::abs(cam.far_plane);
+        namespace camera_schema = data::schema::orthographic_camera;
+        // FBX stores orthographic clip distances unsigned and unordered.
+        auto near_plane = std::abs(cam.near_plane);
+        auto far_plane = std::abs(cam.far_plane);
         if (far_plane < near_plane) {
           std::swap(far_plane, near_plane);
         }
+        // The volume is the schema's half height and aspect ratio.
+        const auto size_x = static_cast<float>(cam.orthographic_size.x);
+        const auto size_y = static_cast<float>(cam.orthographic_size.y);
+        const auto half_height
+          = commit("orthographic_size", camera_schema::kOrthographicSizeRange,
+            size_y * 0.5F, camera_schema::kOrthographicSizeDefault);
+        const auto half_width = half_height
+          * commit("aspect_ratio", camera_schema::kAspectRatioRange,
+            size_x / size_y, camera_schema::kAspectRatioDefault);
 
-        const float half_w = cam.orthographic_size.x * 0.5F;
-        const float half_h = cam.orthographic_size.y * 0.5F;
-
-        build.orthographic_cameras.push_back(OrthographicCameraRecord {
-          .node_index = i,
-          .left = -half_w,
-          .right = half_w,
-          .bottom = -half_h,
-          .top = half_h,
-          .near_plane = near_plane,
-          .far_plane = far_plane,
-          .aspect_mode = CameraAspectMode::kFixed,
-        });
+        auto camera = MakeDefaultRecord<OrthographicCameraRecord>();
+        camera.node_index = i;
+        camera.left = -half_width;
+        camera.right = half_width;
+        camera.bottom = -half_height;
+        camera.top = half_height;
+        camera.near_plane = commit("near_plane", camera_schema::kNearPlaneRange,
+          near_plane, camera.near_plane);
+        camera.far_plane = commit("far_plane", camera_schema::kFarPlaneRange,
+          far_plane, camera.far_plane);
+        camera.aspect_mode = CameraAspectMode::kFixed;
+        build.orthographic_cameras.push_back(camera);
       } else {
         diagnostics.push_back(MakeWarningDiagnostic("scene.camera.unsupported",
           "Unsupported camera projection type", input.source_id, name));
       }
+      commit.Report(input.source_id, name, diagnostics);
     }
 
     if (ufbx_node != nullptr && ufbx_node->light != nullptr) {
@@ -2853,32 +2871,46 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
         ufbx_node != nullptr ? &ufbx_node->props : nullptr);
       const auto& light = *ufbx_node->light;
       const auto light_semantics = ReadImportedLightSemantics(&light.props);
-      const auto imported_common = detail::ResolveImportedLightCommon(
-        node_light_semantics, light_semantics,
-        /*default_affects_world=*/light.cast_light,
-        /*default_casts_shadows=*/light.cast_shadows);
+      const auto resolve_common
+        = [&](const data::pak::world::LightCommonRecord& defaults)
+        -> data::pak::world::LightCommonRecord {
+        return detail::ResolveImportedLightCommon(defaults,
+          node_light_semantics, light_semantics,
+          /*default_affects_world=*/light.cast_light,
+          /*default_casts_shadows=*/light.cast_shadows);
+      };
+      auto commit = detail::ImportedPropertyCommit {};
+      const auto color = std::array {
+        static_cast<float>(light.color.x),
+        static_cast<float>(light.color.y),
+        static_cast<float>(light.color.z),
+      };
+      const auto intensity = static_cast<float>(light.intensity);
       switch (light.type) {
       case UFBX_LIGHT_DIRECTIONAL: {
-        DirectionalLightRecord rec_light {};
+        namespace light_schema = data::schema::directional_light;
+        auto rec_light = MakeDefaultRecord<DirectionalLightRecord>();
         rec_light.node_index = i;
-        rec_light.common = imported_common;
-        rec_light.common.color_rgb[0] = (std::max)(0.0F, light.color.x);
-        rec_light.common.color_rgb[1] = (std::max)(0.0F, light.color.y);
-        rec_light.common.color_rgb[2] = (std::max)(0.0F, light.color.z);
-        rec_light.intensity_lux = (std::max)(0.0F, light.intensity);
+        rec_light.common = resolve_common(rec_light.common);
+        detail::CommitImportedLightColor(
+          commit, data::kDirectionalLightCommonRanges, color, rec_light.common);
+        rec_light.intensity_lux = commit("intensity_lux",
+          light_schema::kIntensityLuxRange, intensity, rec_light.intensity_lux);
         build.directional_lights.push_back(rec_light);
         break;
       }
       case UFBX_LIGHT_POINT:
       case UFBX_LIGHT_AREA:
       case UFBX_LIGHT_VOLUME: {
-        PointLightRecord rec_light {};
+        namespace light_schema = data::schema::point_light;
+        auto rec_light = MakeDefaultRecord<PointLightRecord>();
         rec_light.node_index = i;
-        rec_light.common = imported_common;
-        rec_light.common.color_rgb[0] = (std::max)(0.0F, light.color.x);
-        rec_light.common.color_rgb[1] = (std::max)(0.0F, light.color.y);
-        rec_light.common.color_rgb[2] = (std::max)(0.0F, light.color.z);
-        rec_light.luminous_flux_lm = FbxIntensityToLumens(light.intensity);
+        rec_light.common = resolve_common(rec_light.common);
+        detail::CommitImportedLightColor(
+          commit, data::kPointLightCommonRanges, color, rec_light.common);
+        rec_light.luminous_flux_lm
+          = commit("luminous_flux_lm", light_schema::kLuminousFluxLmRange,
+            FbxIntensityToLumens(intensity), rec_light.luminous_flux_lm);
         build.point_lights.push_back(rec_light);
         if (light.type != UFBX_LIGHT_POINT) {
           diagnostics.push_back(
@@ -2889,18 +2921,27 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
         break;
       }
       case UFBX_LIGHT_SPOT: {
-        SpotLightRecord rec_light {};
+        namespace light_schema = data::schema::spot_light;
+        auto rec_light = MakeDefaultRecord<SpotLightRecord>();
         rec_light.node_index = i;
-        rec_light.common = imported_common;
-        rec_light.common.color_rgb[0] = (std::max)(0.0F, light.color.x);
-        rec_light.common.color_rgb[1] = (std::max)(0.0F, light.color.y);
-        rec_light.common.color_rgb[2] = (std::max)(0.0F, light.color.z);
-        rec_light.luminous_flux_lm = FbxIntensityToLumens(light.intensity);
-        const float inner = light.inner_angle;
-        const float outer = light.outer_angle;
-        rec_light.inner_cone_angle_radians = (std::max)(0.0F, inner);
-        rec_light.outer_cone_angle_radians
-          = (std::max)(rec_light.inner_cone_angle_radians, outer);
+        rec_light.common = resolve_common(rec_light.common);
+        detail::CommitImportedLightColor(
+          commit, data::kSpotLightCommonRanges, color, rec_light.common);
+        rec_light.luminous_flux_lm
+          = commit("luminous_flux_lm", light_schema::kLuminousFluxLmRange,
+            FbxIntensityToLumens(intensity), rec_light.luminous_flux_lm);
+        // FBX spot angles are full cone angles in degrees; the record holds
+        // the angle from the axis in radians.
+        constexpr auto kHalfConeRadiansPerDegree
+          = std::numbers::pi_v<float> / 360.0F;
+        rec_light.inner_cone_angle_radians = commit("inner_cone_angle_radians",
+          light_schema::kInnerConeAngleRadiansRange,
+          static_cast<float>(light.inner_angle) * kHalfConeRadiansPerDegree,
+          rec_light.inner_cone_angle_radians);
+        rec_light.outer_cone_angle_radians = commit("outer_cone_angle_radians",
+          light_schema::kOuterConeAngleRadiansRange,
+          static_cast<float>(light.outer_angle) * kHalfConeRadiansPerDegree,
+          rec_light.outer_cone_angle_radians);
         build.spot_lights.push_back(rec_light);
         break;
       }
@@ -2909,6 +2950,7 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
           "Unsupported light type", input.source_id, name));
         break;
       }
+      commit.Report(input.source_id, name, diagnostics);
     }
   }
 

@@ -11,7 +11,10 @@ using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Scenes.Properties;
 
-/// <summary>The rules of a point or spot light: the light's values stay valid together, cone angles included.</summary>
+/// <summary>
+/// The rules of a point or spot light: its values keep the light rules together (<see cref="LightValidation"/>), cone
+/// angles included. Each value's range is its descriptor's.
+/// </summary>
 /// <param name="kind">The point or spot light kind.</param>
 internal sealed class LocalLightRules(string kind) : IComponentRules
 {
@@ -30,8 +33,8 @@ internal sealed class LocalLightRules(string kind) : IComponentRules
     /// <inheritdoc/>
     public SceneDiagnostic? Validate(Scene scene, IReadOnlyList<PropertyTargetEdit> edits)
         => ComponentCandidates.Of<LightComponent>(scene, edits, this.Descriptors)
-            .Select(static light => (light.Node, Error: LightValidation.Validate((LightComponentData)light.Candidate.Dehydrate())))
-            .Where(static light => light.Error is not null)
-            .Select(static light => SceneDiagnostic.Error(SceneEditCodes.PropertiesInconsistent, light.Error!, light.Node))
+            .Select(static light => (light.Node, Violation: LightValidation.Validate((LightComponentData)light.Candidate.Dehydrate())))
+            .Where(static light => light.Violation is not null)
+            .Select(static light => SceneDiagnostic.Error(SceneEditCodes.PropertiesInconsistent, light.Violation!.Message, light.Node))
             .FirstOrDefault();
 }

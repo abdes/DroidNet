@@ -7,7 +7,6 @@
 #pragma once
 #pragma managed(push, off)
 
-#include <cmath>
 #include <cstdint>
 #include <span>
 #include <stdexcept>
@@ -52,64 +51,63 @@ namespace oxygen::interop::module {
     static auto ApplyEntry(scene::environment::LocalFogVolume& volume,
       const PropertyEntry& entry) -> bool
     {
+      // The volume's setters clamp, so the range is checked before any write.
+      if (!IsInRange(entry)) {
+        return false;
+      }
       switch (static_cast<LocalFogVolumeField>(entry.field)) {
       case LocalFogVolumeField::kEnabled:
         volume.SetEnabled(entry.Bool());
         return true;
-      case LocalFogVolumeField::kSortPriority: {
-        const auto priority = entry.Int32();
-        volume.SetSortPriority(priority);
-        return priority >= -127 && priority <= 127;
-      }
+      case LocalFogVolumeField::kSortPriority:
+        volume.SetSortPriority(entry.Int32());
+        return true;
       default:
         break;
       }
       const float value = entry.Float();
-      if (!std::isfinite(value)) {
-        return false;
-      }
       auto albedo = volume.GetFogAlbedo();
       auto emissive = volume.GetFogEmissive();
       switch (static_cast<LocalFogVolumeField>(entry.field)) {
       case LocalFogVolumeField::kRadialFogExtinction:
         volume.SetRadialFogExtinction(value);
-        return value >= 0.0F;
+        return true;
       case LocalFogVolumeField::kHeightFogExtinction:
         volume.SetHeightFogExtinction(value);
-        return value >= 0.0F;
+        return true;
       case LocalFogVolumeField::kHeightFogFalloff:
         volume.SetHeightFogFalloff(value);
-        return value >= 0.0F;
+        return true;
       case LocalFogVolumeField::kHeightFogOffset:
         volume.SetHeightFogOffset(value);
         return true;
       case LocalFogVolumeField::kFogPhaseG:
         volume.SetFogPhaseG(value);
-        return value >= 0.0F && value < 1.0F;
+        return true;
       case LocalFogVolumeField::kFogAlbedoR:
         albedo.x = value;
         volume.SetFogAlbedo(albedo);
-        return value >= 0.0F && value <= 1.0F;
+        return true;
       case LocalFogVolumeField::kFogAlbedoG:
         albedo.y = value;
         volume.SetFogAlbedo(albedo);
-        return value >= 0.0F && value <= 1.0F;
+        return true;
       case LocalFogVolumeField::kFogAlbedoB:
         albedo.z = value;
         volume.SetFogAlbedo(albedo);
-        return value >= 0.0F && value <= 1.0F;
+        return true;
       case LocalFogVolumeField::kFogEmissiveR:
         emissive.x = value;
         volume.SetFogEmissive(emissive);
-        return value >= 0.0F;
+        return true;
       case LocalFogVolumeField::kFogEmissiveG:
         emissive.y = value;
         volume.SetFogEmissive(emissive);
-        return value >= 0.0F;
+        return true;
       case LocalFogVolumeField::kFogEmissiveB:
         emissive.z = value;
         volume.SetFogEmissive(emissive);
-        return value >= 0.0F;
+        return true;
       default:
         return false;
       }

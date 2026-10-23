@@ -24,8 +24,8 @@
 # and its valid `range`, both in the property's authored units. A range bounds
 # each component of a vec3 alike; an absent `min` or `max` is unlimited. Every
 # float and vec3 value is finite, and every enum value a declared member.
-# `commit: clamp` lets an inspector edit clamp a finite value into the range;
-# everything else rejects it. A rule relating two properties is not a range:
+# `commit: clamp` lets a commit of outside data (an inspector edit, a model
+# import) clamp a finite value into the range; loading and cooking reject it. A rule relating two properties is not a range:
 # it stays in the component's rules. `unit` names the unit of the stored value;
 # `display_unit` the unit UIs show it in.
 # An asset property names the `asset_type` of the asset it references.

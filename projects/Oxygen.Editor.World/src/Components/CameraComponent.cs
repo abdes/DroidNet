@@ -13,69 +13,85 @@ namespace Oxygen.Editor.World.Components;
 /// </summary>
 public abstract class CameraComponent : GameComponent
 {
-    /// <summary>Default authored aperture, matching the native scene contract.</summary>
-    public const float DefaultApertureF = 11f;
+    private readonly CameraSchema schema;
+    private float apertureF;
+    private float shutterRate;
+    private float iso;
+    private float nearPlane;
+    private float farPlane;
 
-    /// <summary>Default shutter rate in reciprocal seconds.</summary>
-    public const float DefaultShutterRate = 125f;
-
-    /// <summary>Default ISO sensitivity.</summary>
-    public const float DefaultIso = 100f;
-
-    private float apertureF = DefaultApertureF;
-    private float shutterRate = DefaultShutterRate;
-    private float iso = DefaultIso;
-
-    private float nearPlane = 0.1f;
-    private float farPlane = 1000f;
+    /// <summary>Initializes a new instance of the <see cref="CameraComponent"/> class with the creation values of its kind.</summary>
+    /// <param name="schema">The scene schema of the camera kind.</param>
+    private protected CameraComponent(CameraSchema schema)
+    {
+        this.schema = schema;
+        this.nearPlane = schema.NearPlane;
+        this.farPlane = schema.FarPlane;
+        this.apertureF = schema.ApertureF;
+        this.shutterRate = schema.ShutterRate;
+        this.iso = schema.Iso;
+    }
 
     /// <summary>
     /// Gets or sets the near clipping plane distance.
     /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">The value is outside the range the scene schema declares.</exception>
     public float NearPlane
     {
         get => this.nearPlane;
-        set => _ = this.SetProperty(ref this.nearPlane, value);
+        set
+        {
+            PropertyChecks.Require(this.schema.NearPlaneId, value);
+            _ = this.SetProperty(ref this.nearPlane, value);
+        }
     }
 
     /// <summary>
     /// Gets or sets the far clipping plane distance.
     /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">The value is outside the range the scene schema declares.</exception>
     public float FarPlane
     {
         get => this.farPlane;
-        set => _ = this.SetProperty(ref this.farPlane, value);
+        set
+        {
+            PropertyChecks.Require(this.schema.FarPlaneId, value);
+            _ = this.SetProperty(ref this.farPlane, value);
+        }
     }
 
     /// <summary>Gets or sets the aperture as an f-number.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">The value is outside the range the scene schema declares.</exception>
     public float ApertureF
     {
         get => this.apertureF;
         set
         {
-            ValidatePhysicalValue(value, nameof(this.ApertureF));
+            PropertyChecks.Require(this.schema.ApertureFId, value);
             _ = this.SetProperty(ref this.apertureF, value);
         }
     }
 
     /// <summary>Gets or sets the shutter rate in reciprocal seconds.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">The value is outside the range the scene schema declares.</exception>
     public float ShutterRate
     {
         get => this.shutterRate;
         set
         {
-            ValidatePhysicalValue(value, nameof(this.ShutterRate));
+            PropertyChecks.Require(this.schema.ShutterRateId, value);
             _ = this.SetProperty(ref this.shutterRate, value);
         }
     }
 
     /// <summary>Gets or sets the ISO sensitivity.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">The value is outside the range the scene schema declares.</exception>
     public float Iso
     {
         get => this.iso;
         set
         {
-            ValidatePhysicalValue(value, nameof(this.Iso));
+            PropertyChecks.Require(this.schema.IsoId, value);
             _ = this.SetProperty(ref this.iso, value);
         }
     }
@@ -85,9 +101,11 @@ public abstract class CameraComponent : GameComponent
     {
         if (data is CameraComponentData cameraData)
         {
-            ValidatePhysicalValue(cameraData.ApertureF, nameof(this.ApertureF));
-            ValidatePhysicalValue(cameraData.ShutterRate, nameof(this.ShutterRate));
-            ValidatePhysicalValue(cameraData.Iso, nameof(this.Iso));
+            PropertyChecks.Require(this.schema.NearPlaneId, cameraData.NearPlane);
+            PropertyChecks.Require(this.schema.FarPlaneId, cameraData.FarPlane);
+            PropertyChecks.Require(this.schema.ApertureFId, cameraData.ApertureF);
+            PropertyChecks.Require(this.schema.ShutterRateId, cameraData.ShutterRate);
+            PropertyChecks.Require(this.schema.IsoId, cameraData.Iso);
         }
 
         base.Hydrate(data);
@@ -115,14 +133,4 @@ public abstract class CameraComponent : GameComponent
     /// Throws <see cref="System.NotSupportedException"/> in the base class. Concrete camera components return the appropriate <see cref="ComponentData"/> DTO.
     /// </returns>
     public override ComponentData Dehydrate() => throw new System.NotSupportedException();
-
-    // Intentionally no IPersistent<TData> on the domain types; concrete components register
-    // factories for their DTO types and Hydrate/Dehydrate using ComponentData-based methods.
-    private static void ValidatePhysicalValue(float value, string field)
-    {
-        if (!float.IsFinite(value) || value <= 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(value), value, $"{field} must be finite and positive.");
-        }
-    }
 }

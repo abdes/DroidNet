@@ -2,14 +2,12 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Globalization;
 using System.Numerics;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Core;
-using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.Scenes.Properties;
 
@@ -205,19 +203,19 @@ public sealed class DirectionalLightDescriptors
     private static DirectionalLightDescriptorGroup BuildLightDescriptors()
         => new(
             BuildColorDescriptor(),
-            FloatDescriptor(SceneSchema.DirectionalLight.IntensityLux, "Intensity", static light => light.IntensityLux, static (light, value) => light.IntensityLux = value, minimum: 0f),
+            FloatDescriptor(SceneSchema.DirectionalLight.IntensityLux, "Intensity", static light => light.IntensityLux, static (light, value) => light.IntensityLux = value),
             EnumDescriptor(SceneSchema.DirectionalLight.AtmosphereSlot, "Atmosphere source", static light => light.AtmosphereSlot, static (light, value) => light.AtmosphereSlot = value),
             BoolDescriptor(SceneSchema.DirectionalLight.UsePerPixelAtmosphereTransmittance, "Per-pixel transmittance", static light => light.UsePerPixelAtmosphereTransmittance, static (light, value) => light.UsePerPixelAtmosphereTransmittance = value),
             BoolDescriptor(SceneSchema.DirectionalLight.CastsShadows, "Shadows", static light => light.CastsShadows, static (light, value) => light.CastsShadows = value),
             BoolDescriptor(SceneSchema.DirectionalLight.AffectsWorld, "Affects World", static light => light.AffectsWorld, static (light, value) => light.AffectsWorld = value),
-            FloatDescriptor(SceneSchema.DirectionalLight.AngularSizeRadians, "Angular Size", static light => light.AngularSizeRadians, static (light, value) => light.AngularSizeRadians = value, minimum: 0f, maximum: MathF.PI),
+            FloatDescriptor(SceneSchema.DirectionalLight.AngularSizeRadians, "Angular Size", static light => light.AngularSizeRadians, static (light, value) => light.AngularSizeRadians = value),
             FloatDescriptor(SceneSchema.DirectionalLight.ExposureCompensation, "Exposure Compensation", static light => light.ExposureCompensation, static (light, value) => light.ExposureCompensation = value),
             BuildDiskScaleDescriptor());
 
     private static DirectionalShadowDescriptorGroup BuildShadowDescriptors()
         => new(
-            FloatDescriptor(SceneSchema.DirectionalLight.ShadowBias, "Shadow Bias", static light => light.ShadowBias, static (light, value) => light.ShadowBias = value, minimum: 0f),
-            FloatDescriptor(SceneSchema.DirectionalLight.ShadowNormalBias, "Normal Bias", static light => light.ShadowNormalBias, static (light, value) => light.ShadowNormalBias = value, minimum: 0f),
+            FloatDescriptor(SceneSchema.DirectionalLight.ShadowBias, "Shadow Bias", static light => light.ShadowBias, static (light, value) => light.ShadowBias = value),
+            FloatDescriptor(SceneSchema.DirectionalLight.ShadowNormalBias, "Normal Bias", static light => light.ShadowNormalBias, static (light, value) => light.ShadowNormalBias = value),
             BoolDescriptor(SceneSchema.DirectionalLight.ContactShadows, "Contact Shadows", static light => light.ContactShadows, static (light, value) => light.ContactShadows = value),
             EnumDescriptor(SceneSchema.DirectionalLight.ShadowResolutionHint, "Resolution", static light => light.ShadowResolutionHint, static (light, value) => light.ShadowResolutionHint = value));
 
@@ -225,25 +223,21 @@ public sealed class DirectionalLightDescriptors
         => new(
             IntDescriptor(SceneSchema.DirectionalLight.CascadeCount, "Cascade Count", static light => light.CascadeCount, static (light, value) => light.CascadeCount = value),
             EnumDescriptor(SceneSchema.DirectionalLight.SplitMode, "Split Mode", static light => light.SplitMode, static (light, value) => light.SplitMode = value),
-            PositiveFloatDescriptor(SceneSchema.DirectionalLight.MaxShadowDistance, "Max Distance", static light => light.MaxShadowDistance, static (light, value) => light.MaxShadowDistance = value),
+            FloatDescriptor(SceneSchema.DirectionalLight.MaxShadowDistance, "Max Distance", static light => light.MaxShadowDistance, static (light, value) => light.MaxShadowDistance = value),
             CascadeDistanceDescriptor(0, SceneSchema.DirectionalLight.CascadeDistance0, "Cascade 1"),
             CascadeDistanceDescriptor(1, SceneSchema.DirectionalLight.CascadeDistance1, "Cascade 2"),
             CascadeDistanceDescriptor(2, SceneSchema.DirectionalLight.CascadeDistance2, "Cascade 3"),
             CascadeDistanceDescriptor(3, SceneSchema.DirectionalLight.CascadeDistance3, "Cascade 4"),
-            BuildDistributionExponentDescriptor(),
-            FractionDescriptor(SceneSchema.DirectionalLight.TransitionFraction, "Transition", static light => light.TransitionFraction, static (light, value) => light.TransitionFraction = value),
-            FractionDescriptor(SceneSchema.DirectionalLight.DistanceFadeoutFraction, "Fadeout", static light => light.DistanceFadeoutFraction, static (light, value) => light.DistanceFadeoutFraction = value));
+            FloatDescriptor(SceneSchema.DirectionalLight.DistributionExponent, "Distribution", static light => light.DistributionExponent, static (light, value) => light.DistributionExponent = value),
+            FloatDescriptor(SceneSchema.DirectionalLight.TransitionFraction, "Transition", static light => light.TransitionFraction, static (light, value) => light.TransitionFraction = value),
+            FloatDescriptor(SceneSchema.DirectionalLight.DistanceFadeoutFraction, "Fadeout", static light => light.DistanceFadeoutFraction, static (light, value) => light.DistanceFadeoutFraction = value));
 
     private static PropertyDescriptor<Vector3> BuildColorDescriptor()
         => new(
             id: SceneSchema.DirectionalLight.Color,
             reader: static target => ((DirectionalLightComponent)target).Color,
             writer: static (target, value) => ((DirectionalLightComponent)target).Color = value,
-            validator: static value => !IsFinite(value)
-                ? ValidationResult.Fail(SceneDiagnosticCodes.DirectionalLightFieldNotFinite, "Directional light values must be finite numbers.")
-                : value.X < 0f || value.Y < 0f || value.Z < 0f
-                    ? ValidationResult.Fail(SceneDiagnosticCodes.DirectionalLightFieldNotFinite, "Light color must be zero or greater.")
-                    : ValidationResult.Ok,
+            validator: PropertyValidators.Of(SceneSchema.DirectionalLight.Color, "Color"),
             annotation: Annotation(SceneSchema.DirectionalLight.Color.Id.JsonPointer,
                 new EditorAnnotation { Group = "Light", Label = "Color", Renderer = "color-rgb" }));
 
@@ -252,15 +246,14 @@ public sealed class DirectionalLightDescriptors
             id: SceneSchema.DirectionalLight.AtmosphereDiskLuminanceScaleRgb,
             reader: static target => ((DirectionalLightComponent)target).AtmosphereDiskLuminanceScaleRgb,
             writer: static (target, value) => ((DirectionalLightComponent)target).AtmosphereDiskLuminanceScaleRgb = value,
-            validator: static value => IsFinite(value) && value.X >= 0 && value.Y >= 0 && value.Z >= 0
-                ? ValidationResult.Ok : ValidationResult.Fail("LIGHT_DISK_SCALE_INVALID", "Disk scale must be finite and nonnegative."),
+            validator: PropertyValidators.Of(SceneSchema.DirectionalLight.AtmosphereDiskLuminanceScaleRgb, "Disk luminance scale"),
             annotation: Annotation(SceneSchema.DirectionalLight.AtmosphereDiskLuminanceScaleRgb.Id.JsonPointer, new EditorAnnotation { Group = "Atmosphere", Label = "Disk luminance scale", Renderer = "color-rgb" }));
 
     private static PropertyDescriptor<float> CascadeDistanceDescriptor(
         int index,
         PropertyId<float> id,
         string label)
-        => PositiveFloatDescriptor(
+        => FloatDescriptor(
             id,
             label,
             light => ReadCascadeDistance(light, index),
@@ -270,59 +263,12 @@ public sealed class DirectionalLightDescriptors
         PropertyId<float> id,
         string label,
         Func<DirectionalLightComponent, float> read,
-        Action<DirectionalLightComponent, float> write,
-        float minimum = float.NegativeInfinity,
-        float maximum = float.PositiveInfinity)
-        => new(
-            id: id,
-            reader: target => read((DirectionalLightComponent)target),
-            writer: (target, value) => write((DirectionalLightComponent)target, value),
-            validator: value => float.IsFinite(value) && value >= minimum && value <= maximum
-                ? ValidationResult.Ok
-                : ValidationResult.Fail(SceneDiagnosticCodes.DirectionalLightFieldNotFinite, Range(label, minimum, maximum)),
-            annotation: Annotation(id.Id.JsonPointer, new EditorAnnotation { Group = "Light", Label = label, Renderer = "numberbox", Step = 0.01 }));
-
-    private static string Range(string label, float minimum, float maximum)
-        => float.IsInfinity(minimum) && float.IsInfinity(maximum) ? $"{label} must be a finite number."
-            : float.IsInfinity(maximum) ? string.Create(CultureInfo.InvariantCulture, $"{label} must be {minimum} or greater.")
-            : string.Create(CultureInfo.InvariantCulture, $"{label} must be between {minimum} and {maximum:0.####}.");
-
-    private static PropertyDescriptor<float> BuildDistributionExponentDescriptor()
-        => new(
-            id: SceneSchema.DirectionalLight.DistributionExponent,
-            reader: static target => ((DirectionalLightComponent)target).DistributionExponent,
-            writer: static (target, value) => ((DirectionalLightComponent)target).DistributionExponent = value,
-            validator: static value => float.IsFinite(value) && value >= 1f
-                ? ValidationResult.Ok
-                : ValidationResult.Fail(SceneDiagnosticCodes.DirectionalLightFieldNotFinite, "Distribution must be 1 or greater."),
-            annotation: Annotation(SceneSchema.DirectionalLight.DistributionExponent.Id.JsonPointer, new EditorAnnotation { Group = "Light", Label = "Distribution", Renderer = "numberbox", Step = 0.01 }));
-
-    private static PropertyDescriptor<float> PositiveFloatDescriptor(
-        PropertyId<float> id,
-        string label,
-        Func<DirectionalLightComponent, float> read,
         Action<DirectionalLightComponent, float> write)
         => new(
             id: id,
             reader: target => read((DirectionalLightComponent)target),
             writer: (target, value) => write((DirectionalLightComponent)target, value),
-            validator: static value => float.IsFinite(value) && value > 0f
-                ? ValidationResult.Ok
-                : ValidationResult.Fail(SceneDiagnosticCodes.DirectionalLightFieldNotFinite, "Directional light values must be finite positive numbers."),
-            annotation: Annotation(id.Id.JsonPointer, new EditorAnnotation { Group = "Light", Label = label, Renderer = "numberbox", Step = 0.01 }));
-
-    private static PropertyDescriptor<float> FractionDescriptor(
-        PropertyId<float> id,
-        string label,
-        Func<DirectionalLightComponent, float> read,
-        Action<DirectionalLightComponent, float> write)
-        => new(
-            id: id,
-            reader: target => read((DirectionalLightComponent)target),
-            writer: (target, value) => write((DirectionalLightComponent)target, value),
-            validator: static value => float.IsFinite(value) && value is >= 0f and <= 1f
-                ? ValidationResult.Ok
-                : ValidationResult.Fail(SceneDiagnosticCodes.DirectionalLightFieldNotFinite, "Directional light fractions must be finite values in [0, 1]."),
+            validator: PropertyValidators.Of(id, label),
             annotation: Annotation(id.Id.JsonPointer, new EditorAnnotation { Group = "Light", Label = label, Renderer = "numberbox", Step = 0.01 }));
 
     private static PropertyDescriptor<int> IntDescriptor(
@@ -334,9 +280,7 @@ public sealed class DirectionalLightDescriptors
             id: id,
             reader: target => read((DirectionalLightComponent)target),
             writer: (target, value) => write((DirectionalLightComponent)target, value),
-            validator: static value => value is >= 1 and <= 4
-                ? ValidationResult.Ok
-                : ValidationResult.Fail(SceneDiagnosticCodes.DirectionalLightFieldNotFinite, "Cascade count must be between 1 and 4."),
+            validator: PropertyValidators.Of(id, label),
             annotation: Annotation(id.Id.JsonPointer, new EditorAnnotation { Group = "Light", Label = label, Renderer = "numberbox", Step = 1 }));
 
     private static PropertyDescriptor<T> EnumDescriptor<T>(
@@ -349,9 +293,7 @@ public sealed class DirectionalLightDescriptors
             id: id,
             reader: target => read((DirectionalLightComponent)target),
             writer: (target, value) => write((DirectionalLightComponent)target, value),
-            validator: static value => Enum.IsDefined(value)
-                ? ValidationResult.Ok
-                : ValidationResult.Fail(SceneDiagnosticCodes.DirectionalLightFieldNotFinite, "Directional light enum value is not valid."),
+            validator: PropertyValidators.Defined<T>(label),
             annotation: Annotation(id.Id.JsonPointer, new EditorAnnotation { Group = "Light", Label = label, Renderer = "combo" }));
 
     private static PropertyDescriptor<bool> BoolDescriptor(
@@ -420,9 +362,6 @@ public sealed class DirectionalLightDescriptors
         };
         light.CascadeDistances = updated;
     }
-
-    private static bool IsFinite(Vector3 value)
-        => float.IsFinite(value.X) && float.IsFinite(value.Y) && float.IsFinite(value.Z);
 
     private sealed record DirectionalLightDescriptorGroup(
         PropertyDescriptor<Vector3> Color,

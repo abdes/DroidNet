@@ -9,6 +9,7 @@ using Oxygen.Editor.Scenes.Edits.Properties;
 using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.Scenes.Tests.TestSupport;
 using Oxygen.Editor.Schemas;
+using Oxygen.Editor.World;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Core;
 
@@ -31,10 +32,14 @@ public sealed class LocalLightRulesTests
     public static IEnumerable<TestDataRow<PropertyCase>> InRange =>
     [
         PropertyCase.Of("Range_Tiny", SampleScene.Lamp, Point.RangeDescriptor, 1e-6f),
-        PropertyCase.Of("Flux_Zero", SampleScene.Lamp, Point.LuminousFluxLumensDescriptor, 0f),
+        PropertyCase.Of("Flux_Tiny", SampleScene.Lamp, Point.LuminousFluxLumensDescriptor, 1e-6f),
         PropertyCase.Of("SourceRadius_Zero", SampleScene.Lamp, Point.SourceRadiusDescriptor, 0f),
         PropertyCase.Of("Color_Black", SampleScene.Lamp, Point.ColorDescriptor, Vector3.Zero),
         PropertyCase.Of("OuterCone_RightAngle", SampleScene.Spot, SpotLight.OuterConeAngleRadiansDescriptor, RightAngle),
+        PropertyCase.Of("Color_ChannelAtOne", SampleScene.Lamp, Point.ColorDescriptor, new Vector3(1, 0.5f, 1)),
+        PropertyCase.Of("ExposureCompensation_Max", SampleScene.Lamp, Point.ExposureCompensationDescriptor, 10f),
+        PropertyCase.Of("ExposureCompensation_Min", SampleScene.Lamp, Point.ExposureCompensationDescriptor, -10f),
+        PropertyCase.Of("ShadowBias_Max", SampleScene.Lamp, Point.ShadowBiasDescriptor, 10f),
     ];
 
     // Each out-of-range row is the first value past the boundary of its rule, or a value no rule accepts.
@@ -42,6 +47,11 @@ public sealed class LocalLightRulesTests
     [
         PropertyCase.Of("Range_Zero", SampleScene.Lamp, Point.RangeDescriptor, 0f),
         PropertyCase.Of("Range_Negative", SampleScene.Lamp, Point.RangeDescriptor, -1f),
+        PropertyCase.Of("Flux_Zero", SampleScene.Lamp, Point.LuminousFluxLumensDescriptor, 0f),
+        PropertyCase.Of("Color_AboveOne", SampleScene.Lamp, Point.ColorDescriptor, new Vector3(1, 1.01f, 1)),
+        PropertyCase.Of("ExposureCompensation_AboveMax", SampleScene.Lamp, Point.ExposureCompensationDescriptor, 10.01f),
+        PropertyCase.Of("ExposureCompensation_BelowMin", SampleScene.Lamp, Point.ExposureCompensationDescriptor, -10.01f),
+        PropertyCase.Of("ShadowBias_AboveMax", SampleScene.Lamp, Point.ShadowBiasDescriptor, 10.01f),
         PropertyCase.Of("Flux_Negative", SampleScene.Lamp, Point.LuminousFluxLumensDescriptor, -1f),
         PropertyCase.Of("SourceRadius_Negative", SampleScene.Lamp, Point.SourceRadiusDescriptor, -1f),
         PropertyCase.Of("ShadowBias_Negative", SampleScene.Lamp, Point.ShadowBiasDescriptor, -1f),
@@ -112,8 +122,8 @@ public sealed class LocalLightRulesTests
     {
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
         var edit = new PropertyEdit.Builder()
-            .SetRaw(Point.RangeDescriptor.Id, 20f)
-            .SetRaw(Point.LuminousFluxLumensDescriptor.Id, 1600f)
+            .SetRaw(Point.RangeDescriptor.Id, 2 * SceneSchema.PointLight.Defaults.Range)
+            .SetRaw(Point.LuminousFluxLumensDescriptor.Id, 2 * SceneSchema.PointLight.Defaults.LuminousFluxLumens)
             .Build();
 
         _ = await SceneAssert.RoundTripAsync(fixture, new SetProperties(new Dictionary<NodeId, PropertyEdit> { [SampleScene.Lamp] = edit }, "Lamp")).ConfigureAwait(false);

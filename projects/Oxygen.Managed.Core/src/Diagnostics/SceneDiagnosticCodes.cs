@@ -15,53 +15,20 @@ public static class SceneDiagnosticCodes
     /// <summary>The native surface inventory is currently unavailable.</summary>
     public const string SurfaceInventoryUnavailable = DiagnosticCodes.ScenePrefix + "Surface.Inventory.Unavailable";
 
-    /// <summary>Transform scale has a zero axis.</summary>
-    public const string TransformScaleZeroAxis = DiagnosticCodes.ScenePrefix + "TransformComponent.Scale.ZeroAxis";
+    /// <summary>A numeric property value is not finite.</summary>
+    public const string PropertyValueNotFinite = DiagnosticCodes.ScenePrefix + "Property.Value.NotFinite";
 
-    /// <summary>Transform field is not finite.</summary>
-    public const string TransformFieldNotFinite = DiagnosticCodes.ScenePrefix + "TransformComponent.Field.NotFinite";
+    /// <summary>A finite numeric property value is outside the range the scene schema declares for the property.</summary>
+    public const string PropertyValueOutOfRange = DiagnosticCodes.ScenePrefix + "Property.Value.OutOfRange";
+
+    /// <summary>An enumeration property value is not a member the scene schema declares.</summary>
+    public const string PropertyValueUndefined = DiagnosticCodes.ScenePrefix + "Property.Value.Undefined";
 
     /// <summary>Geometry reference is required.</summary>
     public const string GeometryReferenceRequired = DiagnosticCodes.ScenePrefix + "GeometryComponent.Geometry.Required";
 
-    /// <summary>Perspective camera near/far planes are invalid.</summary>
-    public const string PerspectiveCameraNearFarInvalid = DiagnosticCodes.ScenePrefix + "PerspectiveCamera.NearFar.Invalid";
-
-    /// <summary>Perspective camera near plane is not positive.</summary>
-    public const string PerspectiveCameraNearPlaneNonPositive = DiagnosticCodes.ScenePrefix + "PerspectiveCamera.NearPlane.NonPositive";
-
-    /// <summary>Perspective camera aspect ratio is not positive.</summary>
-    public const string PerspectiveCameraAspectRatioNonPositive = DiagnosticCodes.ScenePrefix + "PerspectiveCamera.AspectRatio.NonPositive";
-
-    /// <summary>Orthographic camera size is not positive.</summary>
-    public const string OrthographicCameraSizeNonPositive = DiagnosticCodes.ScenePrefix + "OrthographicCamera.Size.NonPositive";
-
-    /// <summary>Orthographic camera aspect ratio is not positive.</summary>
-    public const string OrthographicCameraAspectRatioNonPositive = DiagnosticCodes.ScenePrefix + "OrthographicCamera.AspectRatio.NonPositive";
-
-    /// <summary>Orthographic camera near plane is not positive.</summary>
-    public const string OrthographicCameraNearPlaneNonPositive = DiagnosticCodes.ScenePrefix + "OrthographicCamera.NearPlane.NonPositive";
-
-    /// <summary>Orthographic camera near/far planes are invalid.</summary>
-    public const string OrthographicCameraNearFarInvalid = DiagnosticCodes.ScenePrefix + "OrthographicCamera.NearFar.Invalid";
-
-    /// <summary>A camera aperture, shutter rate or ISO is not positive.</summary>
-    public const string CameraExposureNonPositive = DiagnosticCodes.ScenePrefix + "Camera.Exposure.NonPositive";
-
-    /// <summary>A point or spot light candidate failed the canonical light contract.</summary>
-    public const string LocalLightInvalid = DiagnosticCodes.ScenePrefix + "LocalLight.Invalid";
-
-    /// <summary>A node flag's source mode is not one of its defined modes.</summary>
-    public const string NodeFlagSourceInvalid = DiagnosticCodes.ScenePrefix + "NodeFlags.Source.Invalid";
-
-    /// <summary>Local fog volume value is invalid.</summary>
-    public const string LocalFogVolumeInvalid = DiagnosticCodes.ScenePrefix + "LocalFogVolume.Invalid";
-
     /// <summary>Directional light sun exclusivity was violated.</summary>
     public const string DirectionalLightSunExclusivity = DiagnosticCodes.ScenePrefix + "DirectionalLight.Sun.Exclusivity";
-
-    /// <summary>Directional light field is not finite.</summary>
-    public const string DirectionalLightFieldNotFinite = DiagnosticCodes.ScenePrefix + "DirectionalLight.Field.NotFinite";
 
     /// <summary>Environment sun reference is stale.</summary>
     public const string EnvironmentSunRefStale = DiagnosticCodes.ScenePrefix + "ENVIRONMENT.SunRefStale";

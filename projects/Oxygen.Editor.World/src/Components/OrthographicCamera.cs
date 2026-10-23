@@ -12,15 +12,9 @@ namespace Oxygen.Editor.World.Components;
 /// </summary>
 public partial class OrthographicCamera : CameraComponent
 {
-    /// <summary>Default half of the visible height, in meters.</summary>
-    public const float DefaultOrthographicSize = 10f;
-
-    /// <summary>Default retained Fixed aspect ratio (width / height).</summary>
-    public const float DefaultAspectRatio = 16f / 9f;
-
-    private float orthographicSize = DefaultOrthographicSize;
-    private float aspectRatio = DefaultAspectRatio;
-    private CameraAspectMode aspectMode;
+    private float orthographicSize = SceneSchema.OrthographicCamera.Defaults.OrthographicSize;
+    private float aspectRatio = SceneSchema.OrthographicCamera.Defaults.AspectRatio;
+    private CameraAspectMode aspectMode = SceneSchema.OrthographicCamera.Defaults.AspectMode;
 
     static OrthographicCamera()
     {
@@ -32,38 +26,59 @@ public partial class OrthographicCamera : CameraComponent
         });
     }
 
+    /// <summary>Initializes a new instance of the <see cref="OrthographicCamera"/> class with the scene schema's creation values.</summary>
+    public OrthographicCamera()
+        : base(CameraSchema.Orthographic)
+    {
+    }
+
     /// <summary>Gets or sets half of the visible height, in meters.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">The value is outside the range the scene schema declares.</exception>
     public float OrthographicSize
     {
         get => this.orthographicSize;
-        set => _ = this.SetProperty(ref this.orthographicSize, value);
+        set
+        {
+            PropertyChecks.Require(SceneSchema.OrthographicCamera.OrthographicSize, value);
+            _ = this.SetProperty(ref this.orthographicSize, value);
+        }
     }
 
     /// <summary>Gets or sets the retained Fixed aspect ratio (width / height).</summary>
+    /// <exception cref="ArgumentOutOfRangeException">The value is outside the range the scene schema declares.</exception>
     public float AspectRatio
     {
         get => this.aspectRatio;
-        set => _ = this.SetProperty(ref this.aspectRatio, value);
+        set
+        {
+            PropertyChecks.Require(SceneSchema.OrthographicCamera.AspectRatio, value);
+            _ = this.SetProperty(ref this.aspectRatio, value);
+        }
     }
 
     /// <summary>Gets or sets framing policy without changing the retained ratio.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">The value is not a mode the scene schema declares.</exception>
     public CameraAspectMode AspectMode
     {
         get => this.aspectMode;
         set
         {
-            if (!Enum.IsDefined(value))
-            {
-                throw new ArgumentOutOfRangeException(nameof(value));
-            }
-
+            PropertyChecks.Require(SceneSchema.OrthographicCamera.AspectMode, value);
             _ = this.SetProperty(ref this.aspectMode, value);
         }
     }
 
     /// <inheritdoc/>
+    /// <exception cref="ArgumentOutOfRangeException">A value is outside the range the scene schema declares; nothing changes.</exception>
     public override void Hydrate(ComponentData data)
     {
+        if (data is OrthographicCameraData candidate)
+        {
+            PropertyChecks.Require(SceneSchema.OrthographicCamera.OrthographicSize, candidate.OrthographicSize);
+            PropertyChecks.Require(SceneSchema.OrthographicCamera.AspectRatio, candidate.AspectRatio);
+            PropertyChecks.Require(SceneSchema.OrthographicCamera.AspectMode, candidate.AspectMode);
+        }
+
         base.Hydrate(data);
 
         if (data is not OrthographicCameraData od)

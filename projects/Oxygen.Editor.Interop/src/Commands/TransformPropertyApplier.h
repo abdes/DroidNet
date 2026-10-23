@@ -8,9 +8,10 @@
 #pragma managed(push, off)
 
 #include <array>
-#include <cmath>
 #include <cstdint>
 #include <span>
+#include <stdexcept>
+#include <string>
 
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/glm.hpp>
@@ -43,6 +44,13 @@ namespace oxygen::interop::module {
     void Apply(oxygen::scene::SceneNode& node,
       std::span<const PropertyEntry> entries) override
     {
+      for (const auto& entry : entries) {
+        if (!IsInRange(entry)) {
+          throw std::invalid_argument(std::to_string(entry.field)
+            + ": transform property value is not valid for its field");
+        }
+      }
+
       auto transform = node.GetTransform();
 
       // Local working state — read-modify-write.
@@ -59,22 +67,9 @@ namespace oxygen::interop::module {
       }
 
       for (const auto& entry : entries) {
-        const float value = entry.Float();
-        if (!std::isfinite(value)) {
-          LOG_F(WARNING,
-            "TransformPropertyApplier skipped field {}: non-finite value {}",
-            entry.field, value);
-          continue;
-        }
-
         const auto idx = static_cast<std::size_t>(entry.field);
-        if (idx >= static_cast<std::size_t>(TransformField::kCount)) {
-          LOG_F(WARNING,
-            "TransformPropertyApplier skipped unknown field id {}",
-            entry.field);
-          continue;
-        }
-        kFieldTable[idx](state, value);
+        DCHECK_LT_F(idx, static_cast<std::size_t>(TransformField::kCount));
+        kFieldTable[idx](state, entry.Float());
       }
 
       if (state.position_dirty) {

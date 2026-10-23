@@ -125,17 +125,17 @@ internal sealed partial class InspectorEditSessionCoordinator(
     }
 
     /// <summary>Submits uniform property values without delaying the authoring transaction.</summary>
-    /// <param name="edit">The uniform requested values.</param>
+    /// <param name="edit">The uniform requested values, committed as <see cref="InspectorCommits"/> says.</param>
     public void Submit(PropertyEdit edit)
     {
-        ArgumentNullException.ThrowIfNull(edit);
-        this.Submit(this.targets.ToDictionary(id => id, _ => edit), uniform: edit);
+        var committed = InspectorCommits.Commit(edit);
+        this.Submit(this.targets.ToDictionary(id => id, _ => committed), uniform: committed);
     }
 
     /// <summary>Submits per-target values for color axes and world-space sun orientation.</summary>
-    /// <param name="edits">The requested values for each target.</param>
+    /// <param name="edits">The requested values for each target, committed as <see cref="InspectorCommits"/> says.</param>
     public void Submit(IReadOnlyDictionary<NodeId, PropertyEdit> edits)
-        => this.Submit(edits, uniform: null);
+        => this.Submit(InspectorCommits.Commit(edits), uniform: null);
 
     /// <summary>Ends the current gesture exactly once.</summary>
     /// <param name="completion">Whether to commit or restore the original values.</param>

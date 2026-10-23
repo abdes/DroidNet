@@ -15,8 +15,8 @@ using Oxygen.Managed.Core;
 namespace Oxygen.Editor.Scenes.Properties;
 
 /// <summary>
-/// The rules of a directional light: its cascades and values stay valid, and one atmosphere source slot has at most one
-/// light in the scene.
+/// The rules of a directional light: its values keep the light rules together (<see cref="LightValidation"/>), and one
+/// atmosphere source slot has at most one light in the scene. Each value's range is its descriptor's.
 /// </summary>
 internal sealed class DirectionalLightRules : IComponentRules
 {
@@ -37,9 +37,9 @@ internal sealed class DirectionalLightRules : IComponentRules
         foreach (var (node, source, candidate) in ComponentCandidates.Of<DirectionalLightComponent>(scene, edits, this.Descriptors))
         {
             var data = (DirectionalLightData)candidate.Dehydrate();
-            if (LightValidation.Validate(data) is { } error)
+            if (LightValidation.Validate(data) is { } violation)
             {
-                return SceneDiagnostic.Error(SceneEditCodes.PropertiesInconsistent, error, node);
+                return SceneDiagnostic.Error(SceneEditCodes.PropertiesInconsistent, violation.Message, node);
             }
 
             candidates[node] = data;

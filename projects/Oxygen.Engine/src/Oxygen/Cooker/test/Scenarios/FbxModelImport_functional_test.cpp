@@ -8,7 +8,7 @@
 
 #include <cstddef>
 #include <filesystem>
-#include <memory>
+#include <numbers>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -16,7 +16,6 @@
 
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
-#include <Oxygen/Cooker/Import/Naming.h>
 #include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
 #include <Oxygen/Cooker/test/Support/ModelImportTestBase.h>
 #include <Oxygen/Cooker/test/Support/TestPaths.h>
@@ -129,6 +128,40 @@ NOLINT_TEST_F(AsyncFbxImporterFullTest,
   const auto& light = scene.point_lights.front();
   EXPECT_EQ(light.common.affects_world, 0U);
   EXPECT_EQ(light.common.casts_shadows, 0U);
+}
+
+NOLINT_TEST_F(
+  AsyncFbxImporterFullTest, AsyncBackendImportsSpotConesAsHalfAnglesInRadians)
+{
+  const auto models_dir = TestModelsDirFromFile();
+  const auto source_path = models_dir / "spot_cone_angles.fbx";
+  ASSERT_TRUE(std::filesystem::exists(source_path)) << source_path.string();
+
+  const auto temp_dir = MakeTempDir("async_fbx_spot_cone_angles");
+  ImportRequest request {
+    .source_path = source_path,
+    .asset_virtual_path = oxygen::cooker::test::ModelVirtualPath(source_path),
+    .additional_sources = {},
+    .cooked_root = temp_dir,
+    .loose_cooked_layout = LooseCookedLayout {},
+    .source_key = std::nullopt,
+    .options = {},
+  };
+  request.options.import_content = ImportContentFlags::kAll;
+
+  const auto run_result = RunImport(std::move(request));
+
+  EXPECT_EQ(run_result.finished_id, run_result.job_id);
+  EXPECT_TRUE(run_result.report.success);
+
+  // The fixture's full cone angles are 30 and 60 degrees.
+  const auto scene = LoadSceneReadback(run_result.report);
+  ASSERT_EQ(scene.spot_lights.size(), 1U);
+  const auto& light = scene.spot_lights.front();
+  EXPECT_FLOAT_EQ(
+    light.inner_cone_angle_radians, std::numbers::pi_v<float> / 12.0F);
+  EXPECT_FLOAT_EQ(
+    light.outer_cone_angle_radians, std::numbers::pi_v<float> / 6.0F);
 }
 
 } // namespace

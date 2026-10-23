@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.Immutable;
+using System.Diagnostics;
 using Oxygen.Editor.Runtime.Diagnostics;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World;
@@ -388,13 +389,13 @@ internal sealed partial class ScenePreview
             directional.TransitionFraction,
             directional.DistanceFadeoutFraction));
 
+    // A perspective camera holds only a field of view in its schema range, so the radians are within (0, pi).
     private static float ToEngineFieldOfViewRadians(float fieldOfViewDegrees)
     {
-        var degrees = float.IsFinite(fieldOfViewDegrees) && fieldOfViewDegrees > 0.0f
-            ? fieldOfViewDegrees
-            : PerspectiveCamera.DefaultFieldOfViewDegrees;
-
-        return degrees * (MathF.PI / 180.0f);
+        Debug.Assert(
+            PropertyChecks.Check(SceneSchema.PerspectiveCamera.FieldOfViewDegrees, fieldOfViewDegrees) == RangeCheck.InRange,
+            "The scene model holds a field of view only in its schema range.");
+        return fieldOfViewDegrees * (MathF.PI / 180.0f);
     }
 
     private bool TryClassifyReadiness(

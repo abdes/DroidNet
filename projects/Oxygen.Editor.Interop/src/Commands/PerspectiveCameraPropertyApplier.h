@@ -7,14 +7,15 @@
 #pragma once
 #pragma managed(push, off)
 
-#include <cmath>
 #include <cstdint>
 #include <span>
+#include <stdexcept>
+#include <string>
 #include <string_view>
 
 #include <Commands/IComponentPropertyApplier.h>
 #include <Commands/PropertyKeys.h>
-#include <Oxygen/Base/Logging.h>
+#include <Commands/SchemaEnums.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/SceneNode.h>
 
@@ -52,75 +53,65 @@ namespace oxygen::interop::module {
     {
       auto camera_ref = node.GetCameraAs<oxygen::scene::PerspectiveCamera>();
       if (!camera_ref) {
-        LOG_F(WARNING,
-          "PerspectiveCameraPropertyApplier skipped {} entries: node has no "
-          "PerspectiveCamera",
-          entries.size());
-        return;
+        throw std::invalid_argument("The node has no perspective camera");
       }
-
       auto& camera = camera_ref->get();
+
+      // The whole run is checked before the camera changes: each value
+      // against its field, then the candidate's planes against each other.
+      float near_plane = camera.GetNearPlane();
+      float far_plane = camera.GetFarPlane();
       for (const auto& entry : entries) {
         const auto field = static_cast<PerspectiveCameraField>(entry.field);
-        if (field == PerspectiveCameraField::kAspectMode) {
-          const auto mode = entry.Int32();
-          if (mode == 0 || mode == 1) {
-            camera.SetAspectMode(mode == 0 ? oxygen::CameraAspectMode::kAuto
-                                           : oxygen::CameraAspectMode::kFixed);
-          }
-          continue;
+        if (!IsInRange(entry)) {
+          throw std::invalid_argument(std::string { to_string(field) }
+            + ": camera property value is not valid for its field");
         }
-        const float value = entry.Float();
-        if (!std::isfinite(value)) {
-          LOG_F(WARNING,
-            "PerspectiveCameraPropertyApplier skipped field {}: non-finite "
-            "value {}",
-            entry.field, value);
-          continue;
+        if (field == PerspectiveCameraField::kNearPlane) {
+          near_plane = entry.Float();
+        } else if (field == PerspectiveCameraField::kFarPlane) {
+          far_plane = entry.Float();
         }
+      }
+      if (!(far_plane > near_plane)) {
+        throw std::invalid_argument(
+          "The perspective camera far plane must be beyond its near plane");
+      }
 
+      for (const auto& entry : entries) {
+        const auto field = static_cast<PerspectiveCameraField>(entry.field);
         switch (field) {
+        case PerspectiveCameraField::kAspectMode:
+          camera.SetAspectMode(
+            ValidatedMember(ToCameraAspectMode(entry.Int32())));
+          break;
         case PerspectiveCameraField::kFieldOfViewYRadians:
-          camera.SetFieldOfView(value);
+          camera.SetFieldOfView(entry.Float());
           break;
         case PerspectiveCameraField::kAspectRatio:
-          if (value > 0.0F) {
-            camera.SetAspectRatio(value);
-          }
+          camera.SetAspectRatio(entry.Float());
           break;
         case PerspectiveCameraField::kNearPlane:
-          if (value > 0.0F) {
-            camera.SetNearPlane(value);
-          }
+          camera.SetNearPlane(entry.Float());
           break;
         case PerspectiveCameraField::kFarPlane:
-          if (value > 0.0F) {
-            camera.SetFarPlane(value);
-          }
+          camera.SetFarPlane(entry.Float());
           break;
         case PerspectiveCameraField::kApertureF:
         case PerspectiveCameraField::kShutterRate:
         case PerspectiveCameraField::kIso: {
-          if (value <= 0.0F) {
-            LOG_F(WARNING, "Camera exposure edit rejected: {} must be positive (received {})",
-              to_string(field), value);
-            break;
-          }
           auto exposure = camera.Exposure();
           if (field == PerspectiveCameraField::kApertureF) {
-            exposure.aperture_f = value;
+            exposure.aperture_f = entry.Float();
           } else if (field == PerspectiveCameraField::kShutterRate) {
-            exposure.shutter_rate = value;
+            exposure.shutter_rate = entry.Float();
           } else {
-            exposure.iso = value;
+            exposure.iso = entry.Float();
           }
           camera.SetExposure(exposure);
           break;
         }
-        default:
-          LOG_F(WARNING,
-            "PerspectiveCameraPropertyApplier skipped unknown field id {}",
-            entry.field);
+        case PerspectiveCameraField::kCount:
           break;
         }
       }

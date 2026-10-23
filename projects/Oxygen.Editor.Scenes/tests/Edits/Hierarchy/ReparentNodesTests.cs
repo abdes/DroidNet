@@ -92,9 +92,9 @@ public sealed class ReparentNodesTests
     [DataRow(false, DisplayName = "ShearedResult")]
     public async Task PreserveWorld_Unrepresentable_IsInvalid(bool singularParent)
     {
-        // A parent that flattens an axis cannot be inverted; a parent that stretches one axis turns a rotated child's
-        // world into a shear.
-        var parentScale = singularParent ? new Vector3(0, 1, 1) : new Vector3(1, 2, 1);
+        // A parent that flattens an axis (a subnormal scale: a scene never stores a zero one) has no representable
+        // inverse; a parent that stretches one axis turns a rotated child's world into a shear.
+        var parentScale = singularParent ? new Vector3(1e-39f, 1, 1) : new Vector3(1, 2, 1);
         var scene = SampleScene.Builder()
             .Node(Container, "Container", transform: SampleScene.Transform(scale: parentScale))
             .Node(Moved, "Moved", transform: SampleScene.Transform(rotation: Quaternion.CreateFromAxisAngle(Vector3.UnitZ, MathF.PI / 4)))

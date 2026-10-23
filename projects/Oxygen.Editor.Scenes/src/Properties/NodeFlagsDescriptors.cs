@@ -7,7 +7,6 @@ using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Core;
-using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.Scenes.Properties;
 
@@ -83,9 +82,7 @@ public sealed class NodeFlagsDescriptors
             id: id,
             reader: target => read((NodeFlagsComponent)target),
             writer: (target, value) => write((NodeFlagsComponent)target, value),
-            validator: static value => Enum.IsDefined(value)
-                ? ValidationResult.Ok
-                : ValidationResult.Fail(SceneDiagnosticCodes.NodeFlagSourceInvalid, "The node flag source mode is not defined."),
+            validator: PropertyValidators.Defined<T>(label),
             annotation: SceneEditorSchemaAnnotations.Get(
                 "#/definitions/node_flags" + id.Id.JsonPointer,
                 new EditorAnnotation { Group = "Rendering", Label = label, Renderer = "segmented" }));

@@ -2,49 +2,44 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Numerics;
 using System.Runtime.InteropServices;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Components;
 
-/// <summary>Validates complete authored light values before hydration, edits or cooking.</summary>
+/// <summary>
+/// The rules that relate several values of a light, and the light ownership of a scene; the range of each single value
+/// is decided by <see cref="PropertyChecks"/>.
+/// </summary>
+/// <remarks>
+/// The rules take values that are each in their range: the scene model holds only such values, and loading checks each
+/// one before the rules.
+/// </remarks>
 public static class LightValidation
 {
     private const double MinimumNormal = 1.1754943508222875e-38;
 
-    /// <summary>Returns the rejected field and reason, or null for a valid candidate.</summary>
-    /// <param name="light">The candidate light values.</param>
-    /// <returns>The reason the light is rejected, or <see langword="null"/> when it is valid.</returns>
-    public static string? Validate(LightComponentData light)
+    /// <summary>Checks the rules that relate the values of one light.</summary>
+    /// <param name="light">The light's values, each in its range.</param>
+    /// <returns>The first rule the values break, or <see langword="null"/> when they keep every rule.</returns>
+    public static LightRuleViolation? Validate(LightComponentData light)
     {
         ArgumentNullException.ThrowIfNull(light);
-        if (ValidateCommon(light) is { } common)
-        {
-            return common;
-        }
-
-        string? error;
-        Emission emission;
+        var schema = LightSchema.Of(light);
         if (light is DirectionalLightData directional)
         {
-            error = ValidateDirectional(directional);
-            emission = new(directional.IntensityLux, SolidAngle: 1);
-        }
-        else
-        {
-            error = ValidateLocal(light, out emission);
+            return ValidateCascades(directional)
+                ?? ValidateRepresentable(light, schema, new(directional.IntensityLux, SolidAngle: 1, [SceneSchema.DirectionalLight.IntensityLux.Id]));
         }
 
-        return error ?? ValidateRepresentable(light, emission);
+        return ValidateLocal(light, out var emission) ?? ValidateRepresentable(light, schema, emission);
     }
 
-    /// <summary>Validates light ownership and values across stored nodes, including inactive ones.</summary>
+    /// <summary>Validates light ownership and the light rules across stored nodes, including inactive ones.</summary>
     /// <param name="scene">The scene whose lights are validated.</param>
-    /// <param name="candidates">Directional light values to validate in place of the stored ones, by node.</param>
     /// <returns>The reason the scene's lights are rejected, or <see langword="null"/> when they are valid.</returns>
-    public static string? ValidateScene(Scene scene, IReadOnlyDictionary<NodeId, DirectionalLightData>? candidates = null)
+    public static string? ValidateScene(Scene scene)
     {
         ArgumentNullException.ThrowIfNull(scene);
         var owners = new Dictionary<AtmosphereLightSlot, string>();
@@ -61,11 +56,10 @@ public static class LightValidation
                 continue;
             }
 
-            var light = candidates is not null && candidates.TryGetValue(node.Id, out var candidate)
-                ? candidate : (LightComponentData)lights[0].Dehydrate();
-            if (Validate(light) is { } error)
+            var light = (LightComponentData)lights[0].Dehydrate();
+            if (Validate(light) is { } violation)
             {
-                return $"'{node.Metadata.Name}': {error}";
+                return $"'{node.Metadata.Name}': {violation.Message}";
             }
 
             if (light is DirectionalLightData { AtmosphereSlot: not AtmosphereLightSlot.None } directional
@@ -78,8 +72,8 @@ public static class LightValidation
         return null;
     }
 
-    /// <summary>Validates stored lights before replacing a scene during hydration.</summary>
-    /// <param name="scene">The scene data whose lights are validated.</param>
+    /// <summary>Validates light ownership and the light rules of stored lights before replacing a scene during hydration.</summary>
+    /// <param name="scene">The scene data whose lights are validated; each value is in its range.</param>
     /// <returns>The reason the scene's lights are rejected, or <see langword="null"/> when they are valid.</returns>
     public static string? ValidateScene(SceneData scene)
     {
@@ -96,9 +90,9 @@ public static class LightValidation
 
             foreach (var light in lights)
             {
-                if (Validate(light) is { } error)
+                if (Validate(light) is { } violation)
                 {
-                    return $"'{node.Name}': {error}";
+                    return $"'{node.Name}': {violation.Message}";
                 }
 
                 if (light is DirectionalLightData { AtmosphereSlot: not AtmosphereLightSlot.None } directional
@@ -117,59 +111,23 @@ public static class LightValidation
         return null;
     }
 
-    private static string? ValidateCommon(LightComponentData light)
+    private static LightRuleViolation? ValidateCascades(DirectionalLightData directional)
     {
-        if (!Nonnegative(light.Color))
-        {
-            return "Color must be finite and nonnegative.";
-        }
-
-        if (!float.IsFinite(light.ExposureCompensation))
-        {
-            return "Exposure compensation must be finite.";
-        }
-
-        var shadow = light.Shadow ?? new();
-        return !Nonnegative(shadow.Bias) || !Nonnegative(shadow.NormalBias)
-            ? "Shadow biases must be finite and nonnegative."
-            : Enum.IsDefined(shadow.ResolutionHint) ? null : "Unknown shadow resolution hint.";
-    }
-
-    private static string? ValidateDirectional(DirectionalLightData directional)
-        => !Enum.IsDefined(directional.AtmosphereSlot) ? "Unknown atmosphere light slot."
-            : !Nonnegative(directional.AngularSizeRadians) || directional.AngularSizeRadians > MathF.PI ? "Angular diameter must be in [0, pi]."
-            : !Nonnegative(directional.AtmosphereDiskLuminanceScaleRgb) ? "Disk scale must be finite and nonnegative."
-            : ValidateCascades(directional);
-
-    private static string? ValidateCascades(DirectionalLightData directional)
-    {
-        if (directional.CascadeCount is < 1 or > 4 || !Enum.IsDefined(directional.SplitMode))
-        {
-            return "Invalid cascade count or split mode.";
-        }
-
-        if (!Nonnegative(directional.MaxShadowDistance) || directional.MaxShadowDistance == 0)
-        {
-            return "Shadow distance must be positive.";
-        }
-
-        if (!float.IsFinite(directional.DistributionExponent) || directional.DistributionExponent < 1)
-        {
-            return "Distribution exponent must be at least one.";
-        }
-
-        if (!Fraction(directional.TransitionFraction) || !Fraction(directional.DistanceFadeoutFraction))
-        {
-            return "Shadow fade fractions must be in [0, 1].";
-        }
-
         float previous = 0;
-        for (var i = 0; i < 4; ++i)
+        for (var i = 0; i < directional.CascadeCount; ++i)
         {
             var distance = directional.CascadeDistances[i];
-            if (!float.IsFinite(distance) || (i < directional.CascadeCount && distance <= previous))
+            if (distance <= previous)
             {
-                return "Active cascade distances must be positive and increasing; inactive entries must be finite.";
+                return new(
+                    LightRule.CascadeDistancesNotIncreasing,
+                    [
+                        SceneSchema.DirectionalLight.CascadeCount.Id,
+                        SceneSchema.DirectionalLight.CascadeDistance0.Id,
+                        SceneSchema.DirectionalLight.CascadeDistance1.Id,
+                        SceneSchema.DirectionalLight.CascadeDistance2.Id,
+                        SceneSchema.DirectionalLight.CascadeDistance3.Id,
+                    ]);
             }
 
             previous = distance;
@@ -178,23 +136,23 @@ public static class LightValidation
         return null;
     }
 
-    private static string? ValidateLocal(LightComponentData light, out Emission emission)
+    private static LightRuleViolation? ValidateLocal(LightComponentData light, out Emission emission)
     {
-        var (range, radius, flux) = light switch
+        var (range, radius, flux, rangeId, radiusId, fluxId) = light switch
         {
-            PointLightData point => (point.Range, point.SourceRadius, point.LuminousFluxLumens),
-            SpotLightData spot => (spot.Range, spot.SourceRadius, spot.LuminousFluxLumens),
-            _ => (float.NaN, 0f, 0f),
+            PointLightData point => (point.Range, point.SourceRadius, point.LuminousFluxLumens, SceneSchema.PointLight.Range.Id, SceneSchema.PointLight.SourceRadius.Id, SceneSchema.PointLight.LuminousFluxLumens.Id),
+            SpotLightData spot => (spot.Range, spot.SourceRadius, spot.LuminousFluxLumens, SceneSchema.SpotLight.Range.Id, SceneSchema.SpotLight.SourceRadius.Id, SceneSchema.SpotLight.LuminousFluxLumens.Id),
+            _ => throw new ArgumentException($"A {light.GetType().Name} is not a local light.", nameof(light)),
         };
-        emission = new(flux, SolidAngle: 4 * Math.PI);
-        if (!Nonnegative(range) || !Nonnegative(radius) || (double)range + radius > float.MaxValue)
+        emission = new(flux, SolidAngle: 4 * Math.PI, [fluxId]);
+        if ((double)range + radius > float.MaxValue)
         {
-            return "Local range and radius must be finite and nonnegative.";
+            return new(LightRule.ExtentNotRepresentable, [rangeId, radiusId]);
         }
 
-        if (range > 0 && (1.0 / range < MinimumNormal || 1.0 / range > float.MaxValue))
+        if (1.0 / range < MinimumNormal || 1.0 / range > float.MaxValue)
         {
-            return "Inverse light range is not representable.";
+            return new(LightRule.InverseRangeNotRepresentable, [rangeId]);
         }
 
         if (light is not SpotLightData spotLight)
@@ -202,20 +160,24 @@ public static class LightValidation
             return null;
         }
 
-        var error = ValidateSpotCone(spotLight, out var coneFraction);
-        emission = emission with { SolidAngle = emission.SolidAngle * coneFraction };
-        return error;
+        var violation = ValidateSpotCone(spotLight, out var coneFraction);
+        emission = emission with
+        {
+            SolidAngle = emission.SolidAngle * coneFraction,
+            Properties = [fluxId, SceneSchema.SpotLight.InnerConeAngleRadians.Id, SceneSchema.SpotLight.OuterConeAngleRadians.Id],
+        };
+        return violation;
     }
 
-    private static string? ValidateSpotCone(SpotLightData spot, out double coneFraction)
+    private static LightRuleViolation? ValidateSpotCone(SpotLightData spot, out double coneFraction)
     {
         coneFraction = 1;
         var inner = spot.InnerConeAngleRadians;
         var outer = spot.OuterConeAngleRadians;
-        if (!Nonnegative(inner) || !float.IsFinite(outer) || outer <= 0 || inner > outer || outer > MathF.PI / 2
-            || (inner == outer && outer == MathF.PI / 2))
+        PropertyId[] cone = [SceneSchema.SpotLight.InnerConeAngleRadians.Id, SceneSchema.SpotLight.OuterConeAngleRadians.Id];
+        if (outer <= 0 || inner > outer || (inner == outer && outer == MathF.PI / 2))
         {
-            return "Invalid spot cone pair.";
+            return new(LightRule.SpotConeInvalid, cone);
         }
 
         var innerSineSquared = inner == MathF.PI / 2 ? 0.5 : Math.Pow(Math.Sin(inner / 2.0), 2);
@@ -224,20 +186,16 @@ public static class LightValidation
         var outerCosine = (float)(1 - (2 * outerSineSquared));
         if (outerCosine >= 1 || (inner != outer && innerCosine <= outerCosine))
         {
-            return "Spot cone is not representable by the renderer.";
+            return new(LightRule.SpotConeNotRepresentable, cone);
         }
 
         coneFraction = innerSineSquared + ((outerSineSquared - innerSineSquared) / 3);
         return null;
     }
 
-    private static string? ValidateRepresentable(LightComponentData light, Emission emission)
+    private static LightRuleViolation? ValidateRepresentable(LightComponentData light, LightSchema schema, Emission emission)
     {
-        if (!Nonnegative(emission.Strength))
-        {
-            return "Light intensity must be finite and nonnegative.";
-        }
-
+        PropertyId[] intensity = [.. emission.Properties, schema.ColorId.Id, schema.ExposureCompensationId.Id];
         for (var channel = 0; channel < 3; ++channel)
         {
             if (emission.Strength == 0 || light.Color[channel] == 0)
@@ -248,7 +206,7 @@ public static class LightValidation
             var logIntensity = Math.Log2(emission.Strength * (double)light.Color[channel] / emission.SolidAngle) + light.ExposureCompensation;
             if (!double.IsFinite(logIntensity) || logIntensity < -126 || logIntensity > Math.Log2(float.MaxValue))
             {
-                return "Resolved light intensity is not representable.";
+                return new(LightRule.IntensityNotRepresentable, intensity);
             }
 
             if (light is DirectionalLightData disk && disk.AngularSizeRadians > 0)
@@ -257,7 +215,9 @@ public static class LightValidation
                 var radiance = Math.Pow(2, logIntensity) * disk.AtmosphereDiskLuminanceScaleRgb[channel] / (Math.PI * sine * sine);
                 if (!double.IsFinite(radiance) || radiance > float.MaxValue || (radiance > 0 && radiance < MinimumNormal))
                 {
-                    return "Resolved disk radiance is not representable.";
+                    return new(
+                        LightRule.DiskRadianceNotRepresentable,
+                        [.. intensity, SceneSchema.DirectionalLight.AngularSizeRadians.Id, SceneSchema.DirectionalLight.AtmosphereDiskLuminanceScaleRgb.Id]);
                 }
             }
         }
@@ -265,12 +225,7 @@ public static class LightValidation
         return null;
     }
 
-    private static bool Nonnegative(float value) => float.IsFinite(value) && value >= 0;
-
-    private static bool Nonnegative(Vector3 value) => Nonnegative(value.X) && Nonnegative(value.Y) && Nonnegative(value.Z);
-
-    private static bool Fraction(float value) => Nonnegative(value) && value <= 1;
-
+    // What a light emits, the solid angle it spreads over, and the properties that decide both.
     [StructLayout(LayoutKind.Auto)]
-    private readonly record struct Emission(float Strength, double SolidAngle);
+    private readonly record struct Emission(float Strength, double SolidAngle, IReadOnlyList<PropertyId> Properties);
 }

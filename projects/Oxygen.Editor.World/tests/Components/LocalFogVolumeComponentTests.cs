@@ -41,4 +41,41 @@ public sealed class LocalFogVolumeComponentTests
 
         _ = restored.Dehydrate().Should().Be(volume.Dehydrate());
     }
+
+    [TestMethod]
+    public void LocalFogVolume_SettersOutsideTheSchemaRange_ThrowWithoutMutation()
+    {
+        var volume = new LocalFogVolumeComponent { Name = "Fog" };
+        var before = volume.Dehydrate();
+        Action[] changes =
+        [
+            () => volume.RadialFogExtinction = -1f,
+            () => volume.HeightFogExtinction = float.NaN,
+            () => volume.HeightFogFalloff = -1f,
+            () => volume.HeightFogOffset = float.PositiveInfinity,
+            () => volume.FogPhaseG = 1f,
+            () => volume.FogAlbedo = new Vector3(0.5f, 1.5f, 0.5f),
+            () => volume.FogEmissive = new Vector3(-1, 0, 0),
+            () => volume.SortPriority = 128,
+        ];
+
+        foreach (var change in changes)
+        {
+            _ = change.Should().Throw<ArgumentOutOfRangeException>();
+        }
+
+        _ = volume.Dehydrate().Should().Be(before);
+    }
+
+    [TestMethod]
+    public void LocalFogVolume_HydrateOutsideTheSchemaRange_ThrowsWithoutMutation()
+    {
+        var volume = new LocalFogVolumeComponent { Name = "Accepted" };
+
+        Action hydrate = () => volume.Hydrate(new LocalFogVolumeData { Name = "Rejected", SortPriority = -128 });
+
+        _ = hydrate.Should().Throw<ArgumentOutOfRangeException>().Which.ActualValue.Should().Be(-128);
+        _ = volume.Name.Should().Be("Accepted");
+        _ = volume.SortPriority.Should().Be(SceneSchema.LocalFogVolume.Defaults.SortPriority);
+    }
 }

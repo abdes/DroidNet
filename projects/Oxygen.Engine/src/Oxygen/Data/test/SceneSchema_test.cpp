@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <limits>
 #include <numbers>
+#include <utility>
 
 #include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Data/Schema/Generated.SceneComponents.h>
@@ -32,8 +33,10 @@ NOLINT_TEST(PropertyRangeTest, UnlimitedRangeAcceptsEveryFiniteValue)
 
 NOLINT_TEST(PropertyRangeTest, HonoursExclusiveBoundsAndNonZero)
 {
-  constexpr PropertyRange<float> kPositive { .min = 0.0F,
-    .min_exclusive = true };
+  constexpr PropertyRange<float> kPositive {
+    .min = 0.0F,
+    .min_exclusive = true,
+  };
   constexpr PropertyRange<float> kNonZero { .nonzero = true };
   constexpr PropertyRange<std::int32_t> kCascades { .min = 1, .max = 4 };
 
@@ -43,6 +46,29 @@ NOLINT_TEST(PropertyRangeTest, HonoursExclusiveBoundsAndNonZero)
   EXPECT_TRUE(kNonZero.Contains(-1.0F));
   EXPECT_TRUE(kCascades.Contains(4));
   EXPECT_FALSE(kCascades.Contains(5));
+}
+
+NOLINT_TEST(PropertyRangeTest, CommitClampsOnlyFiniteValuesOfAClampingRange)
+{
+  constexpr PropertyRange<float> kClamping {
+    .min = 0.0F,
+    .max = 1.0F,
+    .clamp = true,
+  };
+  constexpr PropertyRange<float> kRejecting {
+    .min = 0.0F,
+    .min_exclusive = true,
+  };
+
+  EXPECT_EQ(kClamping.Commit(0.5F), 0.5F);
+  EXPECT_EQ(kClamping.Commit(2.0F), 1.0F);
+  EXPECT_EQ(kClamping.Commit(-1.0F), 0.0F);
+  EXPECT_FALSE(
+    kClamping.Commit(std::numeric_limits<float>::quiet_NaN()).has_value());
+  EXPECT_FALSE(
+    kClamping.Commit(std::numeric_limits<float>::infinity()).has_value());
+  EXPECT_EQ(kRejecting.Commit(2.0F), 2.0F);
+  EXPECT_FALSE(kRejecting.Commit(0.0F).has_value());
 }
 
 // The generator refuses a default outside its range; this checks the
@@ -68,10 +94,10 @@ NOLINT_TEST(SceneSchemaTest, NodeFlagDefaultsAreDeclaredMembers)
 {
   namespace flags = schema::node_flags;
 
-  EXPECT_TRUE(
-    std::ranges::contains(flags::kVisibleValues, flags::kVisibleDefault));
-  EXPECT_TRUE(
-    std::ranges::contains(flags::kVisibleValues, flags::kVisibleRootDefault));
+  EXPECT_TRUE(std::ranges::contains(
+    flags::kVisibleValues, std::to_underlying(flags::kVisibleDefault)));
+  EXPECT_TRUE(std::ranges::contains(
+    flags::kVisibleValues, std::to_underlying(flags::kVisibleRootDefault)));
   EXPECT_NE(flags::kVisibleDefault, flags::kVisibleRootDefault);
 }
 

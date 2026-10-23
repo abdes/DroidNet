@@ -8,6 +8,7 @@
 
 #pragma unmanaged
 
+#include <Commands/AttachCameraCommand.h>
 #include <Commands/AttachLightCommand.h>
 #include <Commands/DirectionalLightPropertyApplier.h>
 #include <Commands/PerspectiveCameraPropertyApplier.h>
@@ -16,6 +17,7 @@
 #include <Commands/LocalFogVolumeCommands.h>
 #include <Commands/LocalFogVolumePropertyApplier.h>
 #include <Commands/NodePropertyApplier.h>
+#include <Commands/OrthographicCameraPropertyApplier.h>
 #include <Commands/ObserveEnvironmentCommand.h>
 #include <Commands/SetEnvironmentCommand.h>
 #include <EditorModule/EditorCommand.h>
@@ -536,7 +538,7 @@ auto RunSetPropertiesNodeFlagSourceModes(NodeFlagSourcesSnapshot& result)
     auto context = BuildContext(*scene);
     PropertyApplierRegistry::Bootstrap();
 
-    const auto entry = [](const NodeField field, const NodeFlagSource mode) {
+    const auto entry = [](const NodeField field, const auto mode) {
       return PropertyEntry { .component = ComponentId::kNode,
         .field = static_cast<std::uint16_t>(field),
         .value = static_cast<std::int32_t>(mode) };
@@ -549,12 +551,12 @@ auto RunSetPropertiesNodeFlagSourceModes(NodeFlagSourcesSnapshot& result)
 
     // A root's Inherit resolves the scene defaults Shown and On.
     SetPropertiesCommand(parent.GetHandle(),
-      { entry(NodeField::kVisible, NodeFlagSource::kInherit),
-        entry(NodeField::kCastsShadows, NodeFlagSource::kInherit) })
+      { entry(NodeField::kVisible, VisibilitySource::kInherit),
+        entry(NodeField::kCastsShadows, ShadowSource::kInherit) })
       .Execute(context);
     SetPropertiesCommand(child.GetHandle(),
-      { entry(NodeField::kVisible, NodeFlagSource::kInherit),
-        entry(NodeField::kCastsShadows, NodeFlagSource::kInherit) })
+      { entry(NodeField::kVisible, VisibilitySource::kInherit),
+        entry(NodeField::kCastsShadows, ShadowSource::kInherit) })
       .Execute(context);
     scene->Update(false);
     result.inherit_root_visible
@@ -566,8 +568,8 @@ auto RunSetPropertiesNodeFlagSourceModes(NodeFlagSourcesSnapshot& result)
 
     // Inherit copies the parent's resolved value.
     SetPropertiesCommand(parent.GetHandle(),
-      { entry(NodeField::kVisible, NodeFlagSource::kLocalOff),
-        entry(NodeField::kCastsShadows, NodeFlagSource::kLocalOff) })
+      { entry(NodeField::kVisible, VisibilitySource::kHidden),
+        entry(NodeField::kCastsShadows, ShadowSource::kOff) })
       .Execute(context);
     scene->Update(false);
     result.inherit_child_of_hidden_visible
@@ -577,7 +579,7 @@ auto RunSetPropertiesNodeFlagSourceModes(NodeFlagSourcesSnapshot& result)
 
     // A local value replaces inheritance.
     SetPropertiesCommand(child.GetHandle(),
-      { entry(NodeField::kVisible, NodeFlagSource::kLocalOn) })
+      { entry(NodeField::kVisible, VisibilitySource::kShown) })
       .Execute(context);
     scene->Update(false);
     result.local_child_of_hidden_visible
@@ -616,8 +618,8 @@ auto RunSetPropertiesDirectionalLightEditInvalidatesResolvedSun(
     const auto set_visible = [&](const bool visible) -> void {
       SetPropertiesCommand(node.GetHandle(),
         { { ComponentId::kNode, static_cast<std::uint16_t>(NodeField::kVisible),
-          static_cast<std::int32_t>(visible ? NodeFlagSource::kLocalOn
-                                     : NodeFlagSource::kLocalOff) } })
+          static_cast<std::int32_t>(visible ? VisibilitySource::kShown
+                                     : VisibilitySource::kHidden) } })
         .Execute(context);
     };
     set_visible(false);
@@ -914,7 +916,15 @@ auto RunExposureEditContracts() -> NativeStatus
         entry(PerspectiveCameraField::kShutterRate, invalid),
         entry(PerspectiveCameraField::kIso, invalid),
       };
-      applier.Apply(camera_node, edits);
+      bool rejected = false;
+      try {
+        applier.Apply(camera_node, edits);
+      } catch (const std::invalid_argument&) {
+        rejected = true;
+      }
+      if (!rejected) {
+        throw std::runtime_error("Invalid physical camera edit was accepted");
+      }
     }
     if (!camera || camera->get().Exposure().aperture_f != 8.0F
       || camera->get().Exposure().shutter_rate != 60.0F
@@ -1006,6 +1016,318 @@ auto RunAuthoredFogContracts() -> NativeStatus
   }
 }
 
+//! Whether `action` completes; false when it throws std::invalid_argument.
+template <typename TAction>
+auto Accepts(TAction action) -> bool
+{
+  try {
+    action();
+    return true;
+  } catch (const std::invalid_argument&) {
+    return false;
+  }
+}
+
+auto ValidLightCommon() -> LightCommonValues
+{
+  return {
+    .color = { 1.0F, 1.0F, 1.0F },
+    .affects_world = true,
+    .casts_shadows = true,
+    .shadow_bias = 0.0F,
+    .shadow_normal_bias = 0.02F,
+    .contact_shadows = false,
+    .shadow_resolution_hint = 1,
+    .exposure_compensation = 0.0F,
+  };
+}
+
+auto ValidDirectionalLight() -> DirectionalLightValues
+{
+  return {
+    .common = ValidLightCommon(),
+    .intensity_lux = 100000.0F,
+    .angular_size_radians = 0.00935F,
+    .atmosphere_light_slot = 0,
+    .use_per_pixel_atmosphere_transmittance = false,
+    .disk_luminance_scale = { 1.0F, 1.0F, 1.0F },
+    .cascade_count = 4,
+    .split_mode = 0,
+    .max_shadow_distance = 160.0F,
+    .cascade_distances = { 8.0F, 24.0F, 64.0F, 160.0F },
+    .distribution_exponent = 3.0F,
+    .transition_fraction = 0.1F,
+    .distance_fadeout_fraction = 0.1F,
+  };
+}
+
+auto ValidPointLight() -> PointLightValues
+{
+  return {
+    .common = ValidLightCommon(),
+    .luminous_flux_lm = 1600.0F,
+    .range = 20.0F,
+    .source_radius = 0.0F,
+  };
+}
+
+auto RunAttachAndCrossFieldContracts() -> NativeStatus
+{
+  try {
+    auto scene = CreateTestScene("Attach and cross-field rules");
+
+    // The perspective applier refuses a candidate whose far plane is not
+    // beyond its near plane, and leaves the camera unchanged.
+    auto camera_node = scene->CreateNode("Perspective");
+    if (!camera_node.AttachCamera(
+          std::make_unique<oxygen::scene::PerspectiveCamera>())) {
+      throw std::runtime_error("Failed to attach test camera");
+    }
+    const auto camera
+      = camera_node.GetCameraAs<oxygen::scene::PerspectiveCamera>();
+    PerspectiveCameraPropertyApplier perspective;
+    const auto planes = [](const float near_plane, const float far_plane) {
+      return std::vector {
+        PropertyEntry { .component = ComponentId::kPerspectiveCamera,
+          .field = static_cast<std::uint16_t>(PerspectiveCameraField::kNearPlane),
+          .value = near_plane },
+        PropertyEntry { .component = ComponentId::kPerspectiveCamera,
+          .field = static_cast<std::uint16_t>(PerspectiveCameraField::kFarPlane),
+          .value = far_plane },
+      };
+    };
+    perspective.Apply(camera_node, planes(1.0F, 50.0F));
+    const auto far_only = std::vector { PropertyEntry {
+      .component = ComponentId::kPerspectiveCamera,
+      .field = static_cast<std::uint16_t>(PerspectiveCameraField::kFarPlane),
+      .value = 0.5F } };
+    if (Accepts([&] { perspective.Apply(camera_node, planes(10.0F, 5.0F)); })
+      || Accepts([&] { perspective.Apply(camera_node, planes(5.0F, 5.0F)); })
+      || Accepts([&] { perspective.Apply(camera_node, far_only); })
+      || camera->get().GetNearPlane() != 1.0F
+      || camera->get().GetFarPlane() != 50.0F) {
+      throw std::runtime_error("A perspective candidate with far not beyond near was applied");
+    }
+    if (!Accepts([&] { perspective.Apply(camera_node, planes(60.0F, 70.0F)); })
+      || camera->get().GetNearPlane() != 60.0F
+      || camera->get().GetFarPlane() != 70.0F) {
+      throw std::runtime_error("A valid perspective plane pair was refused");
+    }
+
+    // The applier refuses a node without a perspective camera.
+    auto bare = scene->CreateNode("Bare");
+    if (Accepts([&] { perspective.Apply(bare, planes(1.0F, 50.0F)); })) {
+      throw std::runtime_error("A perspective edit of a node without a camera was accepted");
+    }
+
+    // The orthographic attach refuses an out-of-range projection or aspect
+    // mode when the command is made.
+    const auto ortho = [&](const OrthographicCameraProjection& projection,
+                         const oxygen::CameraAspectMode mode) {
+      return Accepts([&] {
+        (void)AttachOrthographicCameraCommand(bare.GetHandle(), projection, mode);
+      });
+    };
+    constexpr OrthographicCameraProjection kValidOrtho {
+      .orthographic_size = 5.0F,
+      .aspect_ratio = 1.5F,
+      .near_plane = 0.1F,
+      .far_plane = 100.0F,
+    };
+    auto zero_size = kValidOrtho;
+    zero_size.orthographic_size = 0.0F;
+    auto flat_aspect = kValidOrtho;
+    flat_aspect.aspect_ratio = -1.0F;
+    auto inverted = kValidOrtho;
+    inverted.far_plane = 0.05F;
+    if (!ortho(kValidOrtho, oxygen::CameraAspectMode::kFixed)
+      || ortho(zero_size, oxygen::CameraAspectMode::kAuto)
+      || ortho(flat_aspect, oxygen::CameraAspectMode::kAuto)
+      || ortho(inverted, oxygen::CameraAspectMode::kAuto)
+      || ortho(kValidOrtho, static_cast<oxygen::CameraAspectMode>(2))) {
+      throw std::runtime_error("The orthographic attach does not follow the generated ranges");
+    }
+
+    // The perspective attach refuses far not beyond near.
+    if (Accepts([&] {
+          (void)AttachPerspectiveCameraCommand(bare.GetHandle(), 1.0F, 1.0F,
+            10.0F, 10.0F, oxygen::CameraAspectMode::kAuto);
+        })) {
+      throw std::runtime_error("A perspective attach with far not beyond near was accepted");
+    }
+
+    // A light attach checks every value against its field.
+    if (!Accepts([] { (void)MakeDirectionalLight(ValidDirectionalLight()); })) {
+      throw std::runtime_error("A valid directional light was refused");
+    }
+    using DirectionalMutation = void (*)(DirectionalLightValues&);
+    for (const DirectionalMutation mutate : {
+           static_cast<DirectionalMutation>([](DirectionalLightValues& v) { v.common.color.x = 1.5F; }),
+           static_cast<DirectionalMutation>([](DirectionalLightValues& v) { v.atmosphere_light_slot = 3; }),
+           static_cast<DirectionalMutation>([](DirectionalLightValues& v) { v.common.exposure_compensation = 10.5F; }),
+           static_cast<DirectionalMutation>([](DirectionalLightValues& v) { v.common.shadow_bias = -0.1F; }),
+           static_cast<DirectionalMutation>([](DirectionalLightValues& v) { v.common.shadow_resolution_hint = 4; }),
+           static_cast<DirectionalMutation>([](DirectionalLightValues& v) { v.cascade_count = 5; }),
+           static_cast<DirectionalMutation>([](DirectionalLightValues& v) { v.split_mode = 2; }),
+           static_cast<DirectionalMutation>([](DirectionalLightValues& v) { v.transition_fraction = 1.5F; }),
+         }) {
+      auto invalid = ValidDirectionalLight();
+      mutate(invalid);
+      if (Accepts([&] { (void)MakeDirectionalLight(invalid); })) {
+        throw std::runtime_error("A directional light value outside its field was accepted");
+      }
+    }
+
+    auto bright_point = ValidPointLight();
+    bright_point.common.color.y = 1.5F;
+    auto no_range = ValidPointLight();
+    no_range.range = 0.0F;
+    if (!Accepts([] { (void)MakePointLight(ValidPointLight()); })
+      || Accepts([&] { (void)MakePointLight(bright_point); })
+      || Accepts([&] { (void)MakePointLight(no_range); })) {
+      throw std::runtime_error("The point light attach does not follow the generated ranges");
+    }
+
+    const SpotLightValues valid_spot {
+      .local = ValidPointLight(),
+      .inner_cone_angle_radians = 0.3F,
+      .outer_cone_angle_radians = 0.6F,
+    };
+    auto wide_spot = valid_spot;
+    wide_spot.outer_cone_angle_radians = 2.0F;
+    if (!Accepts([&] { (void)MakeSpotLight(valid_spot); })
+      || Accepts([&] { (void)MakeSpotLight(wide_spot); })) {
+      throw std::runtime_error("The spot light attach does not follow the generated ranges");
+    }
+    return {};
+  } catch (const std::exception& error) {
+    return NativeFailure(error.what());
+  }
+}
+
+auto RunGeneratedRangeContracts() -> NativeStatus
+{
+  try {
+    auto scene = CreateTestScene("Generated ranges");
+    auto context = BuildContext(*scene);
+    PropertyApplierRegistry::Bootstrap();
+
+    const auto accepts
+      = [&](oxygen::scene::SceneNode& node, const PropertyEntry& entry) {
+          try {
+            SetPropertiesCommand(node.GetHandle(), { entry }).Execute(context);
+            return true;
+          } catch (const std::invalid_argument&) {
+            return false;
+          }
+        };
+
+    auto sun = scene->CreateNode("Sun");
+    AttachLightCommand(
+      sun.GetHandle(), std::make_unique<oxygen::scene::DirectionalLight>())
+      .Execute(context);
+    const auto light_entry = [](DirectionalLightField field, FieldValue value) {
+      return PropertyEntry { .component = ComponentId::kDirectionalLight,
+        .field = static_cast<std::uint16_t>(field), .value = value };
+    };
+    if (!accepts(sun, light_entry(DirectionalLightField::kCascadeCount, std::int32_t { 4 }))
+      || accepts(sun, light_entry(DirectionalLightField::kCascadeCount, std::int32_t { 5 }))
+      || accepts(sun, light_entry(DirectionalLightField::kCascadeCount, std::int32_t { 0 }))) {
+      throw std::runtime_error("Cascade count does not follow the generated range");
+    }
+    if (accepts(sun, light_entry(DirectionalLightField::kShadowResolutionHint, std::int32_t { 4 }))
+      || accepts(sun, light_entry(DirectionalLightField::kSplitMode, std::int32_t { 2 }))
+      || accepts(sun, light_entry(DirectionalLightField::kAtmosphereLightSlot, std::int32_t { 3 }))
+      || !accepts(sun, light_entry(DirectionalLightField::kShadowResolutionHint, std::int32_t { 3 }))) {
+      throw std::runtime_error("Enumeration fields do not follow the generated members");
+    }
+    if (accepts(sun, light_entry(DirectionalLightField::kColorR, 1.0001F))
+      || accepts(sun, light_entry(DirectionalLightField::kExposureCompensation, 10.5F))
+      || accepts(sun, light_entry(DirectionalLightField::kShadowBias, 10.001F))
+      || accepts(sun, light_entry(DirectionalLightField::kIntensityLux, -1.0F))
+      || !accepts(sun, light_entry(DirectionalLightField::kColorR, 1.0F))
+      || !accepts(sun, light_entry(DirectionalLightField::kExposureCompensation, -10.0F))) {
+      throw std::runtime_error("Directional light floats do not follow the generated ranges");
+    }
+
+    auto camera_node = scene->CreateNode("Camera");
+    if (!camera_node.AttachCamera(std::make_unique<oxygen::scene::PerspectiveCamera>())) {
+      throw std::runtime_error("Failed to attach test camera");
+    }
+    const auto camera_entry = [](PerspectiveCameraField field, FieldValue value) {
+      return PropertyEntry { .component = ComponentId::kPerspectiveCamera,
+        .field = static_cast<std::uint16_t>(field), .value = value };
+    };
+    const auto& fov_range
+      = oxygen::data::schema::perspective_camera::kFieldOfViewYRadiansRange;
+    if (!accepts(camera_node, camera_entry(PerspectiveCameraField::kFieldOfViewYRadians, *fov_range.min))
+      || !accepts(camera_node, camera_entry(PerspectiveCameraField::kFieldOfViewYRadians, *fov_range.max))
+      || accepts(camera_node, camera_entry(PerspectiveCameraField::kFieldOfViewYRadians, 3.1416F))
+      || accepts(camera_node, camera_entry(PerspectiveCameraField::kFieldOfViewYRadians, 0.0F))
+      || accepts(camera_node, camera_entry(PerspectiveCameraField::kNearPlane, 0.0F))
+      || accepts(camera_node, camera_entry(PerspectiveCameraField::kAspectMode, std::int32_t { 2 }))) {
+      throw std::runtime_error("Perspective camera fields do not follow the generated ranges");
+    }
+
+    // A refused attach is reported when the command is made; the generated
+    // field-of-view maximum is accepted.
+    auto attach_target = scene->CreateNode("Attach");
+    if (Accepts([&] {
+          (void)AttachPerspectiveCameraCommand(attach_target.GetHandle(),
+            3.1416F, 1.0F, 0.1F, 100.0F, oxygen::CameraAspectMode::kAuto);
+        })) {
+      throw std::runtime_error("A field of view above the generated range was attached");
+    }
+    AttachPerspectiveCameraCommand(attach_target.GetHandle(), *fov_range.max,
+      1.0F, 0.1F, 100.0F, oxygen::CameraAspectMode::kAuto)
+      .Execute(context);
+    if (!attach_target.GetCameraAs<oxygen::scene::PerspectiveCamera>()) {
+      throw std::runtime_error("The generated field-of-view maximum was refused");
+    }
+
+    // The local fog attach path refuses a value the volume's setters would
+    // clamp.
+    LocalFogVolumeValues values {};
+    values.fog_phase_g = 0.999F;
+    if (MakeLocalFogVolume(values).GetFogPhaseG() != 0.999F) {
+      throw std::runtime_error("The fog phase boundary was not built");
+    }
+    using Mutation = void (*)(LocalFogVolumeValues&);
+    for (const Mutation mutate : {
+           static_cast<Mutation>([](LocalFogVolumeValues& v) { v.radial_fog_extinction = -1.0F; }),
+           static_cast<Mutation>([](LocalFogVolumeValues& v) { v.height_fog_extinction = -1.0F; }),
+           static_cast<Mutation>([](LocalFogVolumeValues& v) { v.height_fog_falloff = -1.0F; }),
+           static_cast<Mutation>([](LocalFogVolumeValues& v) {
+             v.height_fog_offset = std::numeric_limits<float>::quiet_NaN();
+           }),
+           static_cast<Mutation>([](LocalFogVolumeValues& v) { v.fog_phase_g = 0.9995F; }),
+           static_cast<Mutation>([](LocalFogVolumeValues& v) { v.fog_albedo.x = 1.5F; }),
+           static_cast<Mutation>([](LocalFogVolumeValues& v) { v.fog_albedo.y = -0.1F; }),
+           static_cast<Mutation>([](LocalFogVolumeValues& v) { v.fog_albedo.z = 1.5F; }),
+           static_cast<Mutation>([](LocalFogVolumeValues& v) { v.fog_emissive.x = -1.0F; }),
+           static_cast<Mutation>([](LocalFogVolumeValues& v) { v.fog_emissive.y = -1.0F; }),
+           static_cast<Mutation>([](LocalFogVolumeValues& v) { v.fog_emissive.z = -1.0F; }),
+           static_cast<Mutation>([](LocalFogVolumeValues& v) { v.sort_priority = 128; }),
+           static_cast<Mutation>([](LocalFogVolumeValues& v) { v.sort_priority = -128; }),
+         }) {
+      auto invalid = values;
+      mutate(invalid);
+      bool refused = false;
+      try {
+        (void)MakeLocalFogVolume(invalid);
+      } catch (const std::invalid_argument&) {
+        refused = true;
+      }
+      if (!refused) {
+        throw std::runtime_error("A local fog value outside the generated range was built");
+      }
+    }
+    return {};
+  } catch (const std::exception& error) {
+    return NativeFailure(error.what());
+  }
+}
+
 auto RunLocalFogVolumeContracts() -> NativeStatus
 {
   try {
@@ -1065,6 +1387,24 @@ auto RunLocalFogVolumeContracts() -> NativeStatus
       throw std::runtime_error("Invalid local fog volume edit was not rejected atomically");
     }
 
+    // The generated range ends at 0.999: the boundary is accepted and a value
+    // above it is refused, never clamped by the setter.
+    applier.Apply(node, std::vector { entry(LocalFogVolumeField::kFogPhaseG, 0.999F) });
+    if (read()->GetFogPhaseG() != 0.999F) {
+      throw std::runtime_error("The fog phase boundary was not accepted");
+    }
+    for (const float outside : { 0.9995F, 1.0F, -0.0001F }) {
+      bool refused = false;
+      try {
+        applier.Apply(node, std::vector { entry(LocalFogVolumeField::kFogPhaseG, outside) });
+      } catch (const std::invalid_argument&) {
+        refused = true;
+      }
+      if (!refused || read()->GetFogPhaseG() != 0.999F) {
+        throw std::runtime_error("A fog phase outside the generated range was accepted");
+      }
+    }
+
     // A value of another type than its field's schema type never reaches an
     // applier: the command refuses it.
     for (const auto& mistyped : { entry(LocalFogVolumeField::kSortPriority, 3.0F),
@@ -1121,6 +1461,18 @@ public:
   void LocalFogVolumesAttachEditAndDetachAtomically()
   {
     AssertSucceeded(RunLocalFogVolumeContracts());
+  }
+
+  [TestMethod]
+  void PropertyAppliersAndAttachCommandsFollowTheGeneratedRanges()
+  {
+    AssertSucceeded(RunGeneratedRangeContracts());
+  }
+
+  [TestMethod]
+  void AttachCommandsAndAppliersRefuseInvalidCandidates()
+  {
+    AssertSucceeded(RunAttachAndCrossFieldContracts());
   }
 
   [TestMethod]

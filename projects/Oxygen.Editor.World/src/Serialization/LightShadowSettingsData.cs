@@ -12,20 +12,20 @@ public sealed record LightShadowSettingsData
     /// <summary>
     /// Gets the shadow depth bias.
     /// </summary>
-    public float Bias { get; init; }
+    public required float Bias { get; init; }
 
     /// <summary>
     /// Gets or sets the shadow normal bias.
     /// </summary>
-    public float NormalBias { get; set; } = 0.02f;
+    public required float NormalBias { get; set; }
 
     /// <summary>
     /// Gets a value indicating whether contact shadows are enabled.
     /// </summary>
-    public bool ContactShadows { get; init; }
+    public required bool ContactShadows { get; init; }
 
     /// <summary>
     /// Gets or sets the renderer shadow-map resolution hint.
     /// </summary>
-    public ShadowResolutionHint ResolutionHint { get; set; } = ShadowResolutionHint.Medium;
+    public required ShadowResolutionHint ResolutionHint { get; set; }
 }

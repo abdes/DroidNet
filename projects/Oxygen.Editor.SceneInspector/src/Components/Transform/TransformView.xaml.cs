@@ -6,6 +6,7 @@ using DroidNet.Controls;
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI;
 using Microsoft.UI.Xaml.Media;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.SceneInspector.Components.Transform;
 
@@ -34,46 +35,20 @@ public partial class TransformView
     }
 
     private void PositionBox_Validate(object? sender, ValidationEventArgs<double> e)
-    {
-        e.IsValid = double.IsFinite(e.NewValue);
-        this.ViewModel?.ReportControlValidation(TransformEditFieldGroup.Position, e);
-    }
+        => this.ValidateAxis(TransformEditFieldGroup.Position, e);
 
     private void RotationBox_Validate(object? sender, ValidationEventArgs<double> e)
-    {
-        var v = e.NewValue;
-
-        // Reject non-finite values
-        if (!double.IsFinite(v))
-        {
-            e.IsValid = false;
-            this.ViewModel?.ReportControlValidation(TransformEditFieldGroup.Rotation, e);
-            return;
-        }
-
-        // Enforce editor-expected range: rotation must be between -180 and 180 degrees (inclusive)
-        const double min = -180;
-        const double max = 180;
-        e.IsValid = v is >= min and <= max;
-        this.ViewModel?.ReportControlValidation(TransformEditFieldGroup.Rotation, e);
-    }
+        => this.ValidateAxis(TransformEditFieldGroup.Rotation, e);
 
     private void ScaleBox_Validate(object? sender, ValidationEventArgs<double> e)
+        => this.ValidateAxis(TransformEditFieldGroup.Scale, e);
+
+    // The vector box names the component it validates; the schema range of that axis decides.
+    private void ValidateAxis(TransformEditFieldGroup group, ValidationEventArgs<double> e)
     {
-        var v = e.NewValue;
-
-        // Reject non-finite values
-        if (!double.IsFinite(v))
-        {
-            e.IsValid = false;
-            this.ViewModel?.ReportControlValidation(TransformEditFieldGroup.Scale, e);
-            return;
-        }
-
-        // Disallow near-zero scale which degenerates geometry; allow negatives.
-        const double minMagnitude = 1e-3; // tweakable threshold
-        e.IsValid = Math.Abs(v) >= minMagnitude;
-        this.ViewModel?.ReportControlValidation(TransformEditFieldGroup.Scale, e);
+        e.IsValid = e.Target is Component component
+            && TransformEditController.CheckValue(group, component, e.NewValue) == RangeCheck.InRange;
+        this.ViewModel?.ReportControlValidation(group, e);
     }
 
     private void PositionBox_EditSessionStarted(object? sender, VectorBoxEditSessionEventArgs e)

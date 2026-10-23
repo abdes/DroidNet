@@ -12,19 +12,9 @@ namespace Oxygen.Editor.World.Components;
 /// </summary>
 public partial class PerspectiveCamera : CameraComponent
 {
-    /// <summary>
-    /// Default vertical field of view stored by the editor, in degrees.
-    /// </summary>
-    public const float DefaultFieldOfViewDegrees = 60f;
-
-    /// <summary>
-    /// Default camera aspect ratio (width / height).
-    /// </summary>
-    public const float DefaultAspectRatio = 16f / 9f;
-
-    private float fieldOfView = DefaultFieldOfViewDegrees;
-    private float aspectRatio = DefaultAspectRatio;
-    private CameraAspectMode aspectMode;
+    private float fieldOfView = SceneSchema.PerspectiveCamera.Defaults.FieldOfViewDegrees;
+    private float aspectRatio = SceneSchema.PerspectiveCamera.Defaults.AspectRatio;
+    private CameraAspectMode aspectMode = SceneSchema.PerspectiveCamera.Defaults.AspectMode;
 
     static PerspectiveCamera()
     {
@@ -37,41 +27,64 @@ public partial class PerspectiveCamera : CameraComponent
     }
 
     /// <summary>
+    /// Initializes a new instance of the <see cref="PerspectiveCamera"/> class with the scene schema's creation values.
+    /// </summary>
+    public PerspectiveCamera()
+        : base(CameraSchema.Perspective)
+    {
+    }
+
+    /// <summary>
     /// Gets or sets the field of view in degrees.
     /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">The value is outside the range the scene schema declares.</exception>
     public float FieldOfView
     {
         get => this.fieldOfView;
-        set => _ = this.SetProperty(ref this.fieldOfView, value);
+        set
+        {
+            PropertyChecks.Require(SceneSchema.PerspectiveCamera.FieldOfViewDegrees, value);
+            _ = this.SetProperty(ref this.fieldOfView, value);
+        }
     }
 
     /// <summary>
     /// Gets or sets the aspect ratio (width / height).
     /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">The value is outside the range the scene schema declares.</exception>
     public float AspectRatio
     {
         get => this.aspectRatio;
-        set => _ = this.SetProperty(ref this.aspectRatio, value);
+        set
+        {
+            PropertyChecks.Require(SceneSchema.PerspectiveCamera.AspectRatio, value);
+            _ = this.SetProperty(ref this.aspectRatio, value);
+        }
     }
 
     /// <summary>Gets or sets framing policy without changing the retained ratio.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">The value is not a mode the scene schema declares.</exception>
     public CameraAspectMode AspectMode
     {
         get => this.aspectMode;
         set
         {
-            if (!Enum.IsDefined(value))
-            {
-                throw new ArgumentOutOfRangeException(nameof(value));
-            }
-
+            PropertyChecks.Require(SceneSchema.PerspectiveCamera.AspectMode, value);
             _ = this.SetProperty(ref this.aspectMode, value);
         }
     }
 
     /// <inheritdoc/>
+    /// <exception cref="ArgumentOutOfRangeException">A value is outside the range the scene schema declares; nothing changes.</exception>
     public override void Hydrate(ComponentData data)
     {
+        if (data is PerspectiveCameraData candidate)
+        {
+            PropertyChecks.Require(SceneSchema.PerspectiveCamera.FieldOfViewDegrees, candidate.FieldOfView);
+            PropertyChecks.Require(SceneSchema.PerspectiveCamera.AspectRatio, candidate.AspectRatio);
+            PropertyChecks.Require(SceneSchema.PerspectiveCamera.AspectMode, candidate.AspectMode);
+        }
+
         base.Hydrate(data);
 
         if (data is not PerspectiveCameraData pd)

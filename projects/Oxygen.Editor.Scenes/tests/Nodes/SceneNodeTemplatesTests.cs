@@ -8,6 +8,7 @@ using Oxygen.Editor.Scenes.Edits.Hierarchy;
 using Oxygen.Editor.Scenes.Edits.Layout;
 using Oxygen.Editor.Scenes.Nodes;
 using Oxygen.Editor.Scenes.Tests.TestSupport;
+using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 
@@ -72,6 +73,24 @@ public sealed class SceneNodeTemplatesTests
         var transform = node.Components.OfType<TransformData>().Single();
         _ = transform.Position.Should().Be(row.Position);
         SceneAssert.SameRotation(transform.Rotation, row.Rotation);
+    }
+
+    [TestMethod]
+    public async Task Light_SetsNoValueOfItsOwn_TheSchemaDecidesEveryDefault()
+    {
+        using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
+
+        var directional = SceneNodeTemplates.Light(fixture.Scene, LightKind.Directional).Components.OfType<DirectionalLightData>().Single();
+        var point = SceneNodeTemplates.Light(fixture.Scene, LightKind.Point).Components.OfType<PointLightData>().Single();
+        var spot = SceneNodeTemplates.Light(fixture.Scene, LightKind.Spot).Components.OfType<SpotLightData>().Single();
+
+        _ = directional.CastsShadows.Should().Be(SceneSchema.DirectionalLight.Defaults.CastsShadows);
+        _ = directional.IntensityLux.Should().Be(SceneSchema.DirectionalLight.Defaults.IntensityLux);
+        _ = point.LuminousFluxLumens.Should().Be(SceneSchema.PointLight.Defaults.LuminousFluxLumens);
+        _ = point.Range.Should().Be(SceneSchema.PointLight.Defaults.Range);
+        _ = spot.LuminousFluxLumens.Should().Be(SceneSchema.SpotLight.Defaults.LuminousFluxLumens);
+        _ = spot.Range.Should().Be(SceneSchema.SpotLight.Defaults.Range);
+        _ = spot.InnerConeAngleRadians.Should().Be(SceneSchema.SpotLight.Defaults.InnerConeAngleRadians);
     }
 
     [TestMethod]
@@ -143,7 +162,7 @@ public sealed class SceneNodeTemplatesTests
         _ = LayoutScopes.EntriesOf(fixture.Layout, container)[^1].Should().Be(LayoutEntryId.Of(node.Id));
     }
 
-    // Scene model: a new root starts Shown, On and On, a new child Inherit for all three.
+    // Scene model: a new root takes the schema's root defaults, a new child its defaults.
     [TestMethod]
     [DynamicData(nameof(Scopes))]
     public async Task Append_GivesTheNodeTheSourceModesOfANewRootOrChild(AppendCase row)
@@ -157,9 +176,9 @@ public sealed class SceneNodeTemplatesTests
         SceneAssert.Applied(result);
         var flags = fixture.Node(node.Id).Flags;
         var isRoot = row.Parent is null;
-        _ = flags.Visibility.Should().Be(isRoot ? VisibilitySource.Shown : VisibilitySource.Inherit);
-        _ = flags.CastsShadows.Should().Be(isRoot ? ShadowSource.On : ShadowSource.Inherit);
-        _ = flags.ReceivesShadows.Should().Be(isRoot ? ShadowSource.On : ShadowSource.Inherit);
+        _ = flags.Visibility.Should().Be(isRoot ? SceneSchema.Node.RootDefaults.Visibility : SceneSchema.Node.Defaults.Visibility);
+        _ = flags.CastsShadows.Should().Be(isRoot ? SceneSchema.Node.RootDefaults.CastsShadows : SceneSchema.Node.Defaults.CastsShadows);
+        _ = flags.ReceivesShadows.Should().Be(isRoot ? SceneSchema.Node.RootDefaults.ReceivesShadows : SceneSchema.Node.Defaults.ReceivesShadows);
     }
 
     // Created nodes are new: no id of the node or its components is the scene's, and none is empty.

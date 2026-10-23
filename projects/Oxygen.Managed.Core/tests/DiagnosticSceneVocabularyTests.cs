@@ -76,14 +76,11 @@ public sealed class DiagnosticSceneVocabularyTests
     [TestMethod]
     public void SceneDiagnosticCodes_AreStableStrings()
     {
-        _ = SceneDiagnosticCodes.TransformScaleZeroAxis.Should().Be("OXE.SCENE.TransformComponent.Scale.ZeroAxis");
-        _ = SceneDiagnosticCodes.TransformFieldNotFinite.Should().Be("OXE.SCENE.TransformComponent.Field.NotFinite");
+        _ = SceneDiagnosticCodes.PropertyValueNotFinite.Should().Be("OXE.SCENE.Property.Value.NotFinite");
+        _ = SceneDiagnosticCodes.PropertyValueOutOfRange.Should().Be("OXE.SCENE.Property.Value.OutOfRange");
+        _ = SceneDiagnosticCodes.PropertyValueUndefined.Should().Be("OXE.SCENE.Property.Value.Undefined");
         _ = SceneDiagnosticCodes.GeometryReferenceRequired.Should().Be("OXE.SCENE.GeometryComponent.Geometry.Required");
-        _ = SceneDiagnosticCodes.PerspectiveCameraNearFarInvalid.Should().Be("OXE.SCENE.PerspectiveCamera.NearFar.Invalid");
-        _ = SceneDiagnosticCodes.PerspectiveCameraNearPlaneNonPositive.Should().Be("OXE.SCENE.PerspectiveCamera.NearPlane.NonPositive");
-        _ = SceneDiagnosticCodes.PerspectiveCameraAspectRatioNonPositive.Should().Be("OXE.SCENE.PerspectiveCamera.AspectRatio.NonPositive");
         _ = SceneDiagnosticCodes.DirectionalLightSunExclusivity.Should().Be("OXE.SCENE.DirectionalLight.Sun.Exclusivity");
-        _ = SceneDiagnosticCodes.DirectionalLightFieldNotFinite.Should().Be("OXE.SCENE.DirectionalLight.Field.NotFinite");
         _ = SceneDiagnosticCodes.EnvironmentSunRefStale.Should().Be("OXE.SCENE.ENVIRONMENT.SunRefStale");
         _ = SceneDiagnosticCodes.EnvironmentExposureModeInvalid.Should().Be("OXE.SCENE.ENVIRONMENT.ExposureMode.Invalid");
         _ = SceneDiagnosticCodes.EnvironmentToneMappingInvalid.Should().Be("OXE.SCENE.ENVIRONMENT.ToneMapping.Invalid");

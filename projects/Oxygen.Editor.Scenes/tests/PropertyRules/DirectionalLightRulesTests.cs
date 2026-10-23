@@ -45,6 +45,9 @@ public sealed class DirectionalLightRulesTests
         PropertyCase.Of("Color_Black", SampleScene.Sun, SceneSchema.DirectionalLight.Color, Vector3.Zero),
         PropertyCase.Of("DiskScale_Zero", SampleScene.Sun, SceneSchema.DirectionalLight.AtmosphereDiskLuminanceScaleRgb, Vector3.Zero),
         PropertyCase.Of("IntensityLux_Zero", SampleScene.Sun, SceneSchema.DirectionalLight.IntensityLux, 0f),
+        PropertyCase.Of("Color_White", SampleScene.Sun, SceneSchema.DirectionalLight.Color, Vector3.One),
+        PropertyCase.Of("ExposureCompensation_Max", SampleScene.Sun, SceneSchema.DirectionalLight.ExposureCompensation, 10f),
+        PropertyCase.Of("ShadowBias_Max", SampleScene.Sun, SceneSchema.DirectionalLight.ShadowBias, 10f),
     ];
 
     // Each out-of-range row is the first value past the boundary of its rule, or a value no rule accepts.
@@ -58,6 +61,9 @@ public sealed class DirectionalLightRulesTests
         PropertyCase.Of("MaxShadowDistance_Zero", SampleScene.Sun, SceneSchema.DirectionalLight.MaxShadowDistance, 0f),
         PropertyCase.Of("AngularSize_AbovePi", SampleScene.Sun, SceneSchema.DirectionalLight.AngularSizeRadians, MathF.PI + 0.01f),
         PropertyCase.Of("Color_NegativeRed", SampleScene.Sun, SceneSchema.DirectionalLight.Color, new Vector3(-0.1f, 1, 1)),
+        PropertyCase.Of("Color_AboveOne", SampleScene.Sun, SceneSchema.DirectionalLight.Color, new Vector3(1, 1, 1.01f)),
+        PropertyCase.Of("ExposureCompensation_AboveMax", SampleScene.Sun, SceneSchema.DirectionalLight.ExposureCompensation, 10.01f),
+        PropertyCase.Of("ShadowBias_AboveMax", SampleScene.Sun, SceneSchema.DirectionalLight.ShadowBias, 10.01f),
         PropertyCase.Of("ExposureCompensation_NaN", SampleScene.Sun, SceneSchema.DirectionalLight.ExposureCompensation, float.NaN),
         PropertyCase.Of("ShadowBias_Negative", SampleScene.Sun, SceneSchema.DirectionalLight.ShadowBias, -1f),
         PropertyCase.Of("ShadowNormalBias_Negative", SampleScene.Sun, SceneSchema.DirectionalLight.ShadowNormalBias, -1f),

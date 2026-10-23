@@ -13,6 +13,7 @@
 #include <optional>
 #include <span>
 #include <string_view>
+#include <utility>
 
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakFormat_geometry.h>
@@ -454,23 +455,82 @@ inline constexpr std::array<OverrideProperty, 4> kOverrideProperties {
   return nullptr;
 }
 
+//! The members of VisibilitySource, by wire value.
+enum class VisibilitySource : std::uint8_t {
+  kInherit = 0,
+  kShown = 1,
+  kHidden = 2,
+};
+
 //! The wire values of the VisibilitySource members.
 inline constexpr std::array<std::uint8_t, 3> kVisibilitySourceMembers { 0, 1, 2 };
+
+//! The key a document spells each VisibilitySource member by, in member order.
+inline constexpr std::array<std::string_view, 3> kVisibilitySourceMemberKeys { "inherit", "shown", "hidden" };
+
+//! The members of ShadowSource, by wire value.
+enum class ShadowSource : std::uint8_t {
+  kInherit = 0,
+  kOn = 1,
+  kOff = 2,
+};
 
 //! The wire values of the ShadowSource members.
 inline constexpr std::array<std::uint8_t, 3> kShadowSourceMembers { 0, 1, 2 };
 
+//! The key a document spells each ShadowSource member by, in member order.
+inline constexpr std::array<std::string_view, 3> kShadowSourceMemberKeys { "inherit", "on", "off" };
+
+//! The members of CameraAspectMode, by wire value.
+enum class CameraAspectMode : std::uint8_t {
+  kAuto = 0,
+  kFixed = 1,
+};
+
 //! The wire values of the CameraAspectMode members.
 inline constexpr std::array<std::uint8_t, 2> kCameraAspectModeMembers { 0, 1 };
+
+//! The key a document spells each CameraAspectMode member by, in member order.
+inline constexpr std::array<std::string_view, 2> kCameraAspectModeMemberKeys { "auto", "fixed" };
+
+//! The members of AtmosphereLightSlot, by wire value.
+enum class AtmosphereLightSlot : std::uint8_t {
+  kNone = 0,
+  kPrimary = 1,
+  kSecondary = 2,
+};
 
 //! The wire values of the AtmosphereLightSlot members.
 inline constexpr std::array<std::uint8_t, 3> kAtmosphereLightSlotMembers { 0, 1, 2 };
 
+//! The key a document spells each AtmosphereLightSlot member by, in member order.
+inline constexpr std::array<std::string_view, 3> kAtmosphereLightSlotMemberKeys { "none", "primary", "secondary" };
+
+//! The members of ShadowResolutionHint, by wire value.
+enum class ShadowResolutionHint : std::uint8_t {
+  kLow = 0,
+  kMedium = 1,
+  kHigh = 2,
+  kUltra = 3,
+};
+
 //! The wire values of the ShadowResolutionHint members.
 inline constexpr std::array<std::uint8_t, 4> kShadowResolutionHintMembers { 0, 1, 2, 3 };
 
+//! The key a document spells each ShadowResolutionHint member by, in member order.
+inline constexpr std::array<std::string_view, 4> kShadowResolutionHintMemberKeys { "low", "medium", "high", "ultra" };
+
+//! The members of DirectionalCsmSplitMode, by wire value.
+enum class DirectionalCsmSplitMode : std::uint8_t {
+  kGenerated = 0,
+  kManualDistances = 1,
+};
+
 //! The wire values of the DirectionalCsmSplitMode members.
 inline constexpr std::array<std::uint8_t, 2> kDirectionalCsmSplitModeMembers { 0, 1 };
+
+//! The key a document spells each DirectionalCsmSplitMode member by, in member order.
+inline constexpr std::array<std::string_view, 2> kDirectionalCsmSplitModeMemberKeys { "generated", "manual_distances" };
 
 //! Defaults and ranges of Transform, in field units.
 namespace transform {
@@ -496,14 +556,14 @@ inline constexpr PropertyRange<float> kScaleZRange { .nonzero = true };
 
 //! Defaults and ranges of Node, in field units.
 namespace node_flags {
-inline constexpr std::uint8_t kVisibleDefault = 0; // Inherit
-inline constexpr std::uint8_t kVisibleRootDefault = 1; // Shown
+inline constexpr VisibilitySource kVisibleDefault = VisibilitySource::kInherit;
+inline constexpr VisibilitySource kVisibleRootDefault = VisibilitySource::kShown;
 inline constexpr std::span<const std::uint8_t> kVisibleValues { kVisibilitySourceMembers };
-inline constexpr std::uint8_t kCastsShadowsDefault = 0; // Inherit
-inline constexpr std::uint8_t kCastsShadowsRootDefault = 1; // On
+inline constexpr ShadowSource kCastsShadowsDefault = ShadowSource::kInherit;
+inline constexpr ShadowSource kCastsShadowsRootDefault = ShadowSource::kOn;
 inline constexpr std::span<const std::uint8_t> kCastsShadowsValues { kShadowSourceMembers };
-inline constexpr std::uint8_t kReceivesShadowsDefault = 0; // Inherit
-inline constexpr std::uint8_t kReceivesShadowsRootDefault = 1; // On
+inline constexpr ShadowSource kReceivesShadowsDefault = ShadowSource::kInherit;
+inline constexpr ShadowSource kReceivesShadowsRootDefault = ShadowSource::kOn;
 inline constexpr std::span<const std::uint8_t> kReceivesShadowsValues { kShadowSourceMembers };
 inline constexpr bool kStaticDefault = false;
 inline constexpr bool kRayCastingSelectableDefault = true;
@@ -527,7 +587,7 @@ inline constexpr bool kCastsShadowsDefault = true;
 //! Defaults and ranges of PerspectiveCamera, in field units.
 namespace perspective_camera {
 inline constexpr float kFieldOfViewYRadiansDefault = 1.0471976F;
-inline constexpr PropertyRange<float> kFieldOfViewYRadiansRange { .min = 0.017453292F, .max = 3.1241393F };
+inline constexpr PropertyRange<float> kFieldOfViewYRadiansRange { .min = 0.017453292F, .max = 3.1241393F, .clamp = true };
 inline constexpr float kAspectRatioDefault = 1.7777778F;
 inline constexpr PropertyRange<float> kAspectRatioRange { .min = 0.0F, .min_exclusive = true };
 inline constexpr float kNearPlaneDefault = 0.1F;
@@ -540,7 +600,7 @@ inline constexpr float kShutterRateDefault = 125.0F;
 inline constexpr PropertyRange<float> kShutterRateRange { .min = 0.0F, .min_exclusive = true };
 inline constexpr float kIsoDefault = 100.0F;
 inline constexpr PropertyRange<float> kIsoRange { .min = 0.0F, .min_exclusive = true };
-inline constexpr std::uint8_t kAspectModeDefault = 0; // Auto
+inline constexpr CameraAspectMode kAspectModeDefault = CameraAspectMode::kAuto;
 inline constexpr std::span<const std::uint8_t> kAspectModeValues { kCameraAspectModeMembers };
 } // namespace perspective_camera
 
@@ -548,7 +608,7 @@ inline constexpr std::span<const std::uint8_t> kAspectModeValues { kCameraAspect
 namespace orthographic_camera {
 inline constexpr float kOrthographicSizeDefault = 10.0F;
 inline constexpr PropertyRange<float> kOrthographicSizeRange { .min = 0.0F, .min_exclusive = true };
-inline constexpr std::uint8_t kAspectModeDefault = 0; // Auto
+inline constexpr CameraAspectMode kAspectModeDefault = CameraAspectMode::kAuto;
 inline constexpr std::span<const std::uint8_t> kAspectModeValues { kCameraAspectModeMembers };
 inline constexpr float kAspectRatioDefault = 1.7777778F;
 inline constexpr PropertyRange<float> kAspectRatioRange { .min = 0.0F, .min_exclusive = true };
@@ -567,22 +627,22 @@ inline constexpr PropertyRange<float> kIsoRange { .min = 0.0F, .min_exclusive = 
 //! Defaults and ranges of DirectionalLight, in field units.
 namespace directional_light {
 inline constexpr float kColorRDefault = 1.0F;
-inline constexpr PropertyRange<float> kColorRRange { .min = 0.0F, .max = 1.0F };
+inline constexpr PropertyRange<float> kColorRRange { .min = 0.0F, .max = 1.0F, .clamp = true };
 inline constexpr float kColorGDefault = 1.0F;
-inline constexpr PropertyRange<float> kColorGRange { .min = 0.0F, .max = 1.0F };
+inline constexpr PropertyRange<float> kColorGRange { .min = 0.0F, .max = 1.0F, .clamp = true };
 inline constexpr float kColorBDefault = 1.0F;
-inline constexpr PropertyRange<float> kColorBRange { .min = 0.0F, .max = 1.0F };
+inline constexpr PropertyRange<float> kColorBRange { .min = 0.0F, .max = 1.0F, .clamp = true };
 inline constexpr float kIntensityLuxDefault = 100000.0F;
-inline constexpr PropertyRange<float> kIntensityLuxRange { .min = 0.0F };
-inline constexpr std::uint8_t kAtmosphereLightSlotDefault = 0; // None
+inline constexpr PropertyRange<float> kIntensityLuxRange { .min = 0.0F, .clamp = true };
+inline constexpr AtmosphereLightSlot kAtmosphereLightSlotDefault = AtmosphereLightSlot::kNone;
 inline constexpr std::span<const std::uint8_t> kAtmosphereLightSlotValues { kAtmosphereLightSlotMembers };
 inline constexpr bool kUsePerPixelAtmosphereTransmittanceDefault = false;
 inline constexpr bool kCastsShadowsDefault = true;
 inline constexpr bool kAffectsWorldDefault = true;
 inline constexpr float kAngularSizeRadiansDefault = 0.00935F;
-inline constexpr PropertyRange<float> kAngularSizeRadiansRange { .min = 0.0F, .max = 3.1415927F };
+inline constexpr PropertyRange<float> kAngularSizeRadiansRange { .min = 0.0F, .max = 3.1415927F, .clamp = true };
 inline constexpr float kExposureCompensationDefault = 0.0F;
-inline constexpr PropertyRange<float> kExposureCompensationRange { .min = -10.0F, .max = 10.0F };
+inline constexpr PropertyRange<float> kExposureCompensationRange { .min = -10.0F, .max = 10.0F, .clamp = true };
 inline constexpr float kDiskScaleRDefault = 1.0F;
 inline constexpr PropertyRange<float> kDiskScaleRRange { .min = 0.0F };
 inline constexpr float kDiskScaleGDefault = 1.0F;
@@ -590,15 +650,15 @@ inline constexpr PropertyRange<float> kDiskScaleGRange { .min = 0.0F };
 inline constexpr float kDiskScaleBDefault = 1.0F;
 inline constexpr PropertyRange<float> kDiskScaleBRange { .min = 0.0F };
 inline constexpr float kShadowBiasDefault = 0.0F;
-inline constexpr PropertyRange<float> kShadowBiasRange { .min = 0.0F, .max = 10.0F };
+inline constexpr PropertyRange<float> kShadowBiasRange { .min = 0.0F, .max = 10.0F, .clamp = true };
 inline constexpr float kShadowNormalBiasDefault = 0.02F;
-inline constexpr PropertyRange<float> kShadowNormalBiasRange { .min = 0.0F };
+inline constexpr PropertyRange<float> kShadowNormalBiasRange { .min = 0.0F, .clamp = true };
 inline constexpr bool kContactShadowsDefault = false;
-inline constexpr std::uint8_t kShadowResolutionHintDefault = 1; // Medium
+inline constexpr ShadowResolutionHint kShadowResolutionHintDefault = ShadowResolutionHint::kMedium;
 inline constexpr std::span<const std::uint8_t> kShadowResolutionHintValues { kShadowResolutionHintMembers };
 inline constexpr std::int32_t kCascadeCountDefault = 4;
 inline constexpr PropertyRange<std::int32_t> kCascadeCountRange { .min = 1, .max = 4 };
-inline constexpr std::uint8_t kSplitModeDefault = 0; // Generated
+inline constexpr DirectionalCsmSplitMode kSplitModeDefault = DirectionalCsmSplitMode::kGenerated;
 inline constexpr std::span<const std::uint8_t> kSplitModeValues { kDirectionalCsmSplitModeMembers };
 inline constexpr float kMaxShadowDistanceDefault = 160.0F;
 inline constexpr PropertyRange<float> kMaxShadowDistanceRange { .min = 0.0F, .min_exclusive = true };
@@ -621,21 +681,21 @@ inline constexpr PropertyRange<float> kDistanceFadeoutFractionRange { .min = 0.0
 //! Defaults and ranges of PointLight, in field units.
 namespace point_light {
 inline constexpr float kColorRDefault = 1.0F;
-inline constexpr PropertyRange<float> kColorRRange { .min = 0.0F, .max = 1.0F };
+inline constexpr PropertyRange<float> kColorRRange { .min = 0.0F, .max = 1.0F, .clamp = true };
 inline constexpr float kColorGDefault = 1.0F;
-inline constexpr PropertyRange<float> kColorGRange { .min = 0.0F, .max = 1.0F };
+inline constexpr PropertyRange<float> kColorGRange { .min = 0.0F, .max = 1.0F, .clamp = true };
 inline constexpr float kColorBDefault = 1.0F;
-inline constexpr PropertyRange<float> kColorBRange { .min = 0.0F, .max = 1.0F };
+inline constexpr PropertyRange<float> kColorBRange { .min = 0.0F, .max = 1.0F, .clamp = true };
 inline constexpr bool kAffectsWorldDefault = true;
 inline constexpr bool kCastsShadowsDefault = true;
 inline constexpr float kExposureCompensationDefault = 0.0F;
-inline constexpr PropertyRange<float> kExposureCompensationRange { .min = -10.0F, .max = 10.0F };
+inline constexpr PropertyRange<float> kExposureCompensationRange { .min = -10.0F, .max = 10.0F, .clamp = true };
 inline constexpr float kShadowBiasDefault = 0.0F;
-inline constexpr PropertyRange<float> kShadowBiasRange { .min = 0.0F, .max = 10.0F };
+inline constexpr PropertyRange<float> kShadowBiasRange { .min = 0.0F, .max = 10.0F, .clamp = true };
 inline constexpr float kShadowNormalBiasDefault = 0.02F;
-inline constexpr PropertyRange<float> kShadowNormalBiasRange { .min = 0.0F };
+inline constexpr PropertyRange<float> kShadowNormalBiasRange { .min = 0.0F, .clamp = true };
 inline constexpr bool kContactShadowsDefault = false;
-inline constexpr std::uint8_t kShadowResolutionHintDefault = 1; // Medium
+inline constexpr ShadowResolutionHint kShadowResolutionHintDefault = ShadowResolutionHint::kMedium;
 inline constexpr std::span<const std::uint8_t> kShadowResolutionHintValues { kShadowResolutionHintMembers };
 inline constexpr float kLuminousFluxLmDefault = 1600.0F;
 inline constexpr PropertyRange<float> kLuminousFluxLmRange { .min = 0.0F, .min_exclusive = true };
@@ -648,21 +708,21 @@ inline constexpr PropertyRange<float> kSourceRadiusRange { .min = 0.0F };
 //! Defaults and ranges of SpotLight, in field units.
 namespace spot_light {
 inline constexpr float kColorRDefault = 1.0F;
-inline constexpr PropertyRange<float> kColorRRange { .min = 0.0F, .max = 1.0F };
+inline constexpr PropertyRange<float> kColorRRange { .min = 0.0F, .max = 1.0F, .clamp = true };
 inline constexpr float kColorGDefault = 1.0F;
-inline constexpr PropertyRange<float> kColorGRange { .min = 0.0F, .max = 1.0F };
+inline constexpr PropertyRange<float> kColorGRange { .min = 0.0F, .max = 1.0F, .clamp = true };
 inline constexpr float kColorBDefault = 1.0F;
-inline constexpr PropertyRange<float> kColorBRange { .min = 0.0F, .max = 1.0F };
+inline constexpr PropertyRange<float> kColorBRange { .min = 0.0F, .max = 1.0F, .clamp = true };
 inline constexpr bool kAffectsWorldDefault = true;
 inline constexpr bool kCastsShadowsDefault = true;
 inline constexpr float kExposureCompensationDefault = 0.0F;
-inline constexpr PropertyRange<float> kExposureCompensationRange { .min = -10.0F, .max = 10.0F };
+inline constexpr PropertyRange<float> kExposureCompensationRange { .min = -10.0F, .max = 10.0F, .clamp = true };
 inline constexpr float kShadowBiasDefault = 0.0F;
-inline constexpr PropertyRange<float> kShadowBiasRange { .min = 0.0F, .max = 10.0F };
+inline constexpr PropertyRange<float> kShadowBiasRange { .min = 0.0F, .max = 10.0F, .clamp = true };
 inline constexpr float kShadowNormalBiasDefault = 0.02F;
-inline constexpr PropertyRange<float> kShadowNormalBiasRange { .min = 0.0F };
+inline constexpr PropertyRange<float> kShadowNormalBiasRange { .min = 0.0F, .clamp = true };
 inline constexpr bool kContactShadowsDefault = false;
-inline constexpr std::uint8_t kShadowResolutionHintDefault = 1; // Medium
+inline constexpr ShadowResolutionHint kShadowResolutionHintDefault = ShadowResolutionHint::kMedium;
 inline constexpr std::span<const std::uint8_t> kShadowResolutionHintValues { kShadowResolutionHintMembers };
 inline constexpr float kLuminousFluxLmDefault = 1600.0F;
 inline constexpr PropertyRange<float> kLuminousFluxLmRange { .min = 0.0F, .min_exclusive = true };
@@ -704,6 +764,240 @@ inline constexpr PropertyRange<float> kFogEmissiveBRange { .min = 0.0F };
 inline constexpr std::int32_t kSortPriorityDefault = 0;
 inline constexpr PropertyRange<std::int32_t> kSortPriorityRange { .min = -127, .max = 127 };
 } // namespace local_fog_volume
+
+//! Whether `value` is the wire value of one of `members`.
+[[nodiscard]] constexpr auto IsMember(
+  const std::span<const std::uint8_t> members,
+  const std::int32_t value) noexcept -> bool
+{
+  for (const auto member : members) {
+    if (std::cmp_equal(member, value)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// Fields of one value type share a branch body by design.
+// NOLINTBEGIN(bugprone-branch-clone)
+
+//! Whether `value` is a valid bool value of `field` of `component`:
+//! inside the field's range or a member of its enumeration. False for a
+//! field the component does not declare, or one of another value type.
+[[nodiscard]] constexpr auto IsValidFieldValue(const ComponentId component,
+  const std::uint16_t field, [[maybe_unused]] const bool value) noexcept -> bool
+{
+  switch (component) {
+  case ComponentId::kTransform: return false;
+  case ComponentId::kPerspectiveCamera: return false;
+  case ComponentId::kDirectionalLight:
+    switch (static_cast<DirectionalLightField>(field)) {
+    case DirectionalLightField::kUsePerPixelAtmosphereTransmittance: return true;
+    case DirectionalLightField::kCastsShadows: return true;
+    case DirectionalLightField::kAffectsWorld: return true;
+    case DirectionalLightField::kContactShadows: return true;
+    default: return false;
+    }
+  case ComponentId::kOrthographicCamera: return false;
+  case ComponentId::kPointLight:
+    switch (static_cast<LocalLightField>(field)) {
+    case LocalLightField::kAffectsWorld: return true;
+    case LocalLightField::kCastsShadows: return true;
+    case LocalLightField::kContactShadows: return true;
+    default: return false;
+    }
+  case ComponentId::kSpotLight:
+    switch (static_cast<LocalLightField>(field)) {
+    case LocalLightField::kAffectsWorld: return true;
+    case LocalLightField::kCastsShadows: return true;
+    case LocalLightField::kContactShadows: return true;
+    default: return false;
+    }
+  case ComponentId::kNode:
+    switch (static_cast<NodeField>(field)) {
+    case NodeField::kStatic: return true;
+    case NodeField::kRayCastingSelectable: return true;
+    case NodeField::kIgnoreParentTransform: return true;
+    default: return false;
+    }
+  case ComponentId::kLocalFogVolume:
+    switch (static_cast<LocalFogVolumeField>(field)) {
+    case LocalFogVolumeField::kEnabled: return true;
+    default: return false;
+    }
+  case ComponentId::kInvalid: break;
+  }
+  return false;
+}
+
+//! Whether `value` is a valid std::int32_t value of `field` of `component`:
+//! inside the field's range or a member of its enumeration. False for a
+//! field the component does not declare, or one of another value type.
+[[nodiscard]] constexpr auto IsValidFieldValue(const ComponentId component,
+  const std::uint16_t field, const std::int32_t value) noexcept -> bool
+{
+  switch (component) {
+  case ComponentId::kTransform: return false;
+  case ComponentId::kPerspectiveCamera:
+    switch (static_cast<PerspectiveCameraField>(field)) {
+    case PerspectiveCameraField::kAspectMode: return IsMember(perspective_camera::kAspectModeValues, value);
+    default: return false;
+    }
+  case ComponentId::kDirectionalLight:
+    switch (static_cast<DirectionalLightField>(field)) {
+    case DirectionalLightField::kAtmosphereLightSlot: return IsMember(directional_light::kAtmosphereLightSlotValues, value);
+    case DirectionalLightField::kShadowResolutionHint: return IsMember(directional_light::kShadowResolutionHintValues, value);
+    case DirectionalLightField::kCascadeCount: return directional_light::kCascadeCountRange.Contains(value);
+    case DirectionalLightField::kSplitMode: return IsMember(directional_light::kSplitModeValues, value);
+    default: return false;
+    }
+  case ComponentId::kOrthographicCamera:
+    switch (static_cast<OrthographicCameraField>(field)) {
+    case OrthographicCameraField::kAspectMode: return IsMember(orthographic_camera::kAspectModeValues, value);
+    default: return false;
+    }
+  case ComponentId::kPointLight:
+    switch (static_cast<LocalLightField>(field)) {
+    case LocalLightField::kShadowResolutionHint: return IsMember(point_light::kShadowResolutionHintValues, value);
+    default: return false;
+    }
+  case ComponentId::kSpotLight:
+    switch (static_cast<LocalLightField>(field)) {
+    case LocalLightField::kShadowResolutionHint: return IsMember(spot_light::kShadowResolutionHintValues, value);
+    default: return false;
+    }
+  case ComponentId::kNode:
+    switch (static_cast<NodeField>(field)) {
+    case NodeField::kVisible: return IsMember(node_flags::kVisibleValues, value);
+    case NodeField::kCastsShadows: return IsMember(node_flags::kCastsShadowsValues, value);
+    case NodeField::kReceivesShadows: return IsMember(node_flags::kReceivesShadowsValues, value);
+    default: return false;
+    }
+  case ComponentId::kLocalFogVolume:
+    switch (static_cast<LocalFogVolumeField>(field)) {
+    case LocalFogVolumeField::kSortPriority: return local_fog_volume::kSortPriorityRange.Contains(value);
+    default: return false;
+    }
+  case ComponentId::kInvalid: break;
+  }
+  return false;
+}
+
+//! Whether `value` is a valid float value of `field` of `component`:
+//! inside the field's range or a member of its enumeration. False for a
+//! field the component does not declare, or one of another value type.
+[[nodiscard]] constexpr auto IsValidFieldValue(const ComponentId component,
+  const std::uint16_t field, const float value) noexcept -> bool
+{
+  switch (component) {
+  case ComponentId::kTransform:
+    switch (static_cast<TransformField>(field)) {
+    case TransformField::kPositionX: return transform::kPositionXRange.Contains(value);
+    case TransformField::kPositionY: return transform::kPositionYRange.Contains(value);
+    case TransformField::kPositionZ: return transform::kPositionZRange.Contains(value);
+    case TransformField::kRotationXDegrees: return transform::kRotationXDegreesRange.Contains(value);
+    case TransformField::kRotationYDegrees: return transform::kRotationYDegreesRange.Contains(value);
+    case TransformField::kRotationZDegrees: return transform::kRotationZDegreesRange.Contains(value);
+    case TransformField::kScaleX: return transform::kScaleXRange.Contains(value);
+    case TransformField::kScaleY: return transform::kScaleYRange.Contains(value);
+    case TransformField::kScaleZ: return transform::kScaleZRange.Contains(value);
+    default: return false;
+    }
+  case ComponentId::kPerspectiveCamera:
+    switch (static_cast<PerspectiveCameraField>(field)) {
+    case PerspectiveCameraField::kFieldOfViewYRadians: return perspective_camera::kFieldOfViewYRadiansRange.Contains(value);
+    case PerspectiveCameraField::kAspectRatio: return perspective_camera::kAspectRatioRange.Contains(value);
+    case PerspectiveCameraField::kNearPlane: return perspective_camera::kNearPlaneRange.Contains(value);
+    case PerspectiveCameraField::kFarPlane: return perspective_camera::kFarPlaneRange.Contains(value);
+    case PerspectiveCameraField::kApertureF: return perspective_camera::kApertureFRange.Contains(value);
+    case PerspectiveCameraField::kShutterRate: return perspective_camera::kShutterRateRange.Contains(value);
+    case PerspectiveCameraField::kIso: return perspective_camera::kIsoRange.Contains(value);
+    default: return false;
+    }
+  case ComponentId::kDirectionalLight:
+    switch (static_cast<DirectionalLightField>(field)) {
+    case DirectionalLightField::kColorR: return directional_light::kColorRRange.Contains(value);
+    case DirectionalLightField::kColorG: return directional_light::kColorGRange.Contains(value);
+    case DirectionalLightField::kColorB: return directional_light::kColorBRange.Contains(value);
+    case DirectionalLightField::kIntensityLux: return directional_light::kIntensityLuxRange.Contains(value);
+    case DirectionalLightField::kAngularSizeRadians: return directional_light::kAngularSizeRadiansRange.Contains(value);
+    case DirectionalLightField::kExposureCompensation: return directional_light::kExposureCompensationRange.Contains(value);
+    case DirectionalLightField::kDiskScaleR: return directional_light::kDiskScaleRRange.Contains(value);
+    case DirectionalLightField::kDiskScaleG: return directional_light::kDiskScaleGRange.Contains(value);
+    case DirectionalLightField::kDiskScaleB: return directional_light::kDiskScaleBRange.Contains(value);
+    case DirectionalLightField::kShadowBias: return directional_light::kShadowBiasRange.Contains(value);
+    case DirectionalLightField::kShadowNormalBias: return directional_light::kShadowNormalBiasRange.Contains(value);
+    case DirectionalLightField::kMaxShadowDistance: return directional_light::kMaxShadowDistanceRange.Contains(value);
+    case DirectionalLightField::kCascadeDistance0: return directional_light::kCascadeDistance0Range.Contains(value);
+    case DirectionalLightField::kCascadeDistance1: return directional_light::kCascadeDistance1Range.Contains(value);
+    case DirectionalLightField::kCascadeDistance2: return directional_light::kCascadeDistance2Range.Contains(value);
+    case DirectionalLightField::kCascadeDistance3: return directional_light::kCascadeDistance3Range.Contains(value);
+    case DirectionalLightField::kDistributionExponent: return directional_light::kDistributionExponentRange.Contains(value);
+    case DirectionalLightField::kTransitionFraction: return directional_light::kTransitionFractionRange.Contains(value);
+    case DirectionalLightField::kDistanceFadeoutFraction: return directional_light::kDistanceFadeoutFractionRange.Contains(value);
+    default: return false;
+    }
+  case ComponentId::kOrthographicCamera:
+    switch (static_cast<OrthographicCameraField>(field)) {
+    case OrthographicCameraField::kOrthographicSize: return orthographic_camera::kOrthographicSizeRange.Contains(value);
+    case OrthographicCameraField::kAspectRatio: return orthographic_camera::kAspectRatioRange.Contains(value);
+    case OrthographicCameraField::kNearPlane: return orthographic_camera::kNearPlaneRange.Contains(value);
+    case OrthographicCameraField::kFarPlane: return orthographic_camera::kFarPlaneRange.Contains(value);
+    case OrthographicCameraField::kApertureF: return orthographic_camera::kApertureFRange.Contains(value);
+    case OrthographicCameraField::kShutterRate: return orthographic_camera::kShutterRateRange.Contains(value);
+    case OrthographicCameraField::kIso: return orthographic_camera::kIsoRange.Contains(value);
+    default: return false;
+    }
+  case ComponentId::kPointLight:
+    switch (static_cast<LocalLightField>(field)) {
+    case LocalLightField::kColorR: return point_light::kColorRRange.Contains(value);
+    case LocalLightField::kColorG: return point_light::kColorGRange.Contains(value);
+    case LocalLightField::kColorB: return point_light::kColorBRange.Contains(value);
+    case LocalLightField::kExposureCompensation: return point_light::kExposureCompensationRange.Contains(value);
+    case LocalLightField::kShadowBias: return point_light::kShadowBiasRange.Contains(value);
+    case LocalLightField::kShadowNormalBias: return point_light::kShadowNormalBiasRange.Contains(value);
+    case LocalLightField::kLuminousFluxLm: return point_light::kLuminousFluxLmRange.Contains(value);
+    case LocalLightField::kRange: return point_light::kRangeRange.Contains(value);
+    case LocalLightField::kSourceRadius: return point_light::kSourceRadiusRange.Contains(value);
+    default: return false;
+    }
+  case ComponentId::kSpotLight:
+    switch (static_cast<LocalLightField>(field)) {
+    case LocalLightField::kColorR: return spot_light::kColorRRange.Contains(value);
+    case LocalLightField::kColorG: return spot_light::kColorGRange.Contains(value);
+    case LocalLightField::kColorB: return spot_light::kColorBRange.Contains(value);
+    case LocalLightField::kExposureCompensation: return spot_light::kExposureCompensationRange.Contains(value);
+    case LocalLightField::kShadowBias: return spot_light::kShadowBiasRange.Contains(value);
+    case LocalLightField::kShadowNormalBias: return spot_light::kShadowNormalBiasRange.Contains(value);
+    case LocalLightField::kLuminousFluxLm: return spot_light::kLuminousFluxLmRange.Contains(value);
+    case LocalLightField::kRange: return spot_light::kRangeRange.Contains(value);
+    case LocalLightField::kSourceRadius: return spot_light::kSourceRadiusRange.Contains(value);
+    case LocalLightField::kInnerConeAngleRadians: return spot_light::kInnerConeAngleRadiansRange.Contains(value);
+    case LocalLightField::kOuterConeAngleRadians: return spot_light::kOuterConeAngleRadiansRange.Contains(value);
+    default: return false;
+    }
+  case ComponentId::kNode: return false;
+  case ComponentId::kLocalFogVolume:
+    switch (static_cast<LocalFogVolumeField>(field)) {
+    case LocalFogVolumeField::kRadialFogExtinction: return local_fog_volume::kRadialFogExtinctionRange.Contains(value);
+    case LocalFogVolumeField::kHeightFogExtinction: return local_fog_volume::kHeightFogExtinctionRange.Contains(value);
+    case LocalFogVolumeField::kHeightFogFalloff: return local_fog_volume::kHeightFogFalloffRange.Contains(value);
+    case LocalFogVolumeField::kHeightFogOffset: return local_fog_volume::kHeightFogOffsetRange.Contains(value);
+    case LocalFogVolumeField::kFogPhaseG: return local_fog_volume::kFogPhaseGRange.Contains(value);
+    case LocalFogVolumeField::kFogAlbedoR: return local_fog_volume::kFogAlbedoRRange.Contains(value);
+    case LocalFogVolumeField::kFogAlbedoG: return local_fog_volume::kFogAlbedoGRange.Contains(value);
+    case LocalFogVolumeField::kFogAlbedoB: return local_fog_volume::kFogAlbedoBRange.Contains(value);
+    case LocalFogVolumeField::kFogEmissiveR: return local_fog_volume::kFogEmissiveRRange.Contains(value);
+    case LocalFogVolumeField::kFogEmissiveG: return local_fog_volume::kFogEmissiveGRange.Contains(value);
+    case LocalFogVolumeField::kFogEmissiveB: return local_fog_volume::kFogEmissiveBRange.Contains(value);
+    default: return false;
+    }
+  case ComponentId::kInvalid: break;
+  }
+  return false;
+}
+
+// NOLINTEND(bugprone-branch-clone)
 
 } // namespace oxygen::data::schema
 

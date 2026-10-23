@@ -67,6 +67,7 @@ def render(schema: Schema, source: str) -> str:
         "#include <optional>",
         "#include <span>",
         "#include <string_view>",
+        "#include <utility>",
         "",
         "#include <Oxygen/Data/AssetType.h>",
         "#include <Oxygen/Data/PakFormat_geometry.h>",
@@ -99,6 +100,7 @@ def render(schema: Schema, source: str) -> str:
         lines.extend(["", *_enumeration_values(enumeration)])
     for component in schema.components:
         lines.extend(_component_values(schema, component))
+    lines.extend(["", *_field_value_checks(schema)])
     lines.extend(
         ["", "} // namespace oxygen::data::schema", "", "// clang-format on", ""]
     )
@@ -165,6 +167,102 @@ def _component_field_type_lookup(schema: Schema) -> list[str]:
         "  return std::nullopt;",
         "}",
     ]
+
+
+def _field_value_checks(schema: Schema) -> list[str]:
+    lines = [
+        "//! Whether `value` is the wire value of one of `members`.",
+        "[[nodiscard]] constexpr auto IsMember(",
+        "  const std::span<const std::uint8_t> members,",
+        "  const std::int32_t value) noexcept -> bool",
+        "{",
+        "  for (const auto member : members) {",
+        "    if (std::cmp_equal(member, value)) {",
+        "      return true;",
+        "    }",
+        "  }",
+        "  return false;",
+        "}",
+        "",
+        "// Fields of one value type share a branch body by design.",
+        "// NOLINTBEGIN(bugprone-branch-clone)",
+    ]
+    for value_type, cpp_type in (
+        ("bool", "bool"),
+        ("int32", "std::int32_t"),
+        ("float", "float"),
+    ):
+        lines.extend(["", *_field_value_check(schema, value_type, cpp_type)])
+    lines.extend(["", "// NOLINTEND(bugprone-branch-clone)"])
+    return lines
+
+
+def _field_value_check(schema: Schema, value_type: str, cpp_type: str) -> list[str]:
+    cases: list[str] = []
+    for component, wire in schema.wired():
+        checks = [
+            (field, check)
+            for field, field_type, check in _field_checks(component)
+            if field_type == value_type
+        ]
+        enum = f"{wire.field_set}Field"
+        if not checks:
+            cases.append(f"  case ComponentId::k{component.name}: return false;")
+            continue
+        cases.extend(
+            [
+                f"  case ComponentId::k{component.name}:",
+                f"    switch (static_cast<{enum}>(field)) {{",
+                *(
+                    f"    case {enum}::k{field}: return {check};"
+                    for field, check in checks
+                ),
+                "    default: return false;",
+                "    }",
+            ]
+        )
+    # A bool field accepts either value.
+    unused = "[[maybe_unused]] " if value_type == "bool" else ""
+    return [
+        f"//! Whether `value` is a valid {cpp_type} value of `field` of `component`:",
+        "//! inside the field's range or a member of its enumeration. False for a",
+        "//! field the component does not declare, or one of another value type.",
+        "[[nodiscard]] constexpr auto IsValidFieldValue(const ComponentId component,",
+        (
+            f"  const std::uint16_t field, {unused}const {cpp_type} value) "
+            "noexcept -> bool"
+        ),
+        "{",
+        "  switch (component) {",
+        *cases,
+        "  case ComponentId::kInvalid: break;",
+        "  }",
+        "  return false;",
+        "}",
+    ]
+
+
+def _field_checks(component: Component) -> list[tuple[str, str, str]]:
+    """Each wired field of `component`: its name, value type and check."""
+    space = _snake(component.kind)
+    checks: list[tuple[str, str, str]] = []
+    for entry in component.properties:
+        for field in entry.fields:
+            if entry.type == "bool":
+                checks.append((field, "bool", "true"))
+            elif entry.type == "enum":
+                checks.append(
+                    (field, "int32", f"IsMember({space}::k{field}Values, value)")
+                )
+            elif entry.type == "int":
+                checks.append(
+                    (field, "int32", f"{space}::k{field}Range.Contains(value)")
+                )
+            else:
+                checks.append(
+                    (field, "float", f"{space}::k{field}Range.Contains(value)")
+                )
+    return checks
 
 
 def _value_type_enum() -> list[str]:
@@ -275,15 +373,35 @@ def _override_name(component: Component, part: Part | None, entry: Property) -> 
 
 def _enumeration_values(enumeration: Enumeration) -> list[str]:
     values = ", ".join(str(member.value) for member in enumeration.members)
+    keys = ", ".join(f'"{_member_key(member.name)}"' for member in enumeration.members)
     count = len(enumeration.members)
     name = enumeration.name
     return [
+        f"//! The members of {name}, by wire value.",
+        f"enum class {name} : std::uint8_t {{",
+        *(f"  k{member.name} = {member.value}," for member in enumeration.members),
+        "};",
+        "",
         f"//! The wire values of the {name} members.",
         (
             f"inline constexpr std::array<std::uint8_t, {count}> "
             f"k{name}Members {{ {values} }};"
         ),
+        "",
+        f"//! The key a document spells each {name} member by, in member order.",
+        (
+            f"inline constexpr std::array<std::string_view, {count}> "
+            f"k{name}MemberKeys {{ {keys} }};"
+        ),
     ]
+
+
+def _member_key(name: str) -> str:
+    """The snake_case key of a PascalCase member name."""
+    return "".join(
+        f"_{char.lower()}" if char.isupper() and index > 0 else char.lower()
+        for index, char in enumerate(name)
+    )
 
 
 def _component_values(schema: Schema, component: Component) -> list[str]:
@@ -338,22 +456,17 @@ def _enum_values(schema: Schema, entry: Property, name: str) -> list[str]:
     assert entry.enum is not None
     enumeration = schema.enumeration(entry.enum)
     lines = [
-        _constant(
-            "std::uint8_t",
-            f"k{name}Default",
-            f"{enumeration.value_of(str(entry.default))}; // {entry.default}",
-            terminate=False,
-        )
+        _constant(entry.enum, f"k{name}Default", f"{entry.enum}::k{entry.default}")
     ]
     if entry.root_default is not None:
         lines.append(
             _constant(
-                "std::uint8_t",
+                entry.enum,
                 f"k{name}RootDefault",
-                f"{enumeration.value_of(entry.root_default)}; // {entry.root_default}",
-                terminate=False,
+                f"{entry.enum}::k{entry.root_default}",
             )
         )
+    assert enumeration.value_of(str(entry.default)) is not None
     lines.append(
         f"inline constexpr std::span<const std::uint8_t> k{name}Values "
         f"{{ k{entry.enum}Members }};"
@@ -381,7 +494,7 @@ def _numeric_values(entry: Property, names: list[str]) -> list[str]:
         )
         lines.append(
             f"inline constexpr PropertyRange<{value_type}> k{name}Range "
-            f"{_range(bounds, is_int)};"
+            f"{_range(bounds, is_int, entry.commit == 'clamp')};"
         )
     return lines
 
@@ -426,7 +539,7 @@ def _encoded_range(entry: Property) -> Range:
     )
 
 
-def _range(bounds: Range, is_int: bool) -> str:
+def _range(bounds: Range, is_int: bool, clamp: bool) -> str:
     def number(value: float) -> str:
         return _int(value) if is_int else _float(value)
 
@@ -441,6 +554,8 @@ def _range(bounds: Range, is_int: bool) -> str:
         members.append(".max_exclusive = true")
     if bounds.nonzero:
         members.append(".nonzero = true")
+    if clamp:
+        members.append(".clamp = true")
     return "{ " + ", ".join(members) + " }" if members else "{}"
 
 

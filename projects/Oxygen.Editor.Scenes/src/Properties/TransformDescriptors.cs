@@ -81,8 +81,8 @@ public sealed class TransformDescriptors
     public IReadOnlyDictionary<PropertyId, PropertyDescriptor> ById { get; }
 
     /// <summary>
-    /// Builds the canonical descriptor catalog. Validators reject NaN /
-    /// infinite values; scale axes additionally reject zero.
+    /// Builds the canonical descriptor catalog. Validators take the scene schema's ranges: every value is finite and a
+    /// scale axis is not zero.
     /// </summary>
     /// <returns>The catalog.</returns>
     public static TransformDescriptors Build()
@@ -105,9 +105,7 @@ public sealed class TransformDescriptors
             id: id,
             reader: target => read((TransformComponent)target),
             writer: (target, value) => write((TransformComponent)target, value),
-            validator: static value => float.IsFinite(value)
-                ? ValidationResult.Ok
-                : ValidationResult.Fail("PROPERTY_NONFINITE", "Position must be finite."),
+            validator: PropertyValidators.Of(id, "Position"),
             annotation: new EditorAnnotation { Group = "Transform", Renderer = "vector3-box", Step = 0.01 });
 
     private static PropertyDescriptor<float> BuildRotationAxis(PropertyId<float> id, int axisIndex)
@@ -115,9 +113,7 @@ public sealed class TransformDescriptors
             id: id,
             reader: target => ReadRotationAxis((TransformComponent)target, axisIndex),
             writer: (target, value) => WriteRotationAxis((TransformComponent)target, axisIndex, value),
-            validator: static value => float.IsFinite(value)
-                ? ValidationResult.Ok
-                : ValidationResult.Fail("PROPERTY_NONFINITE", "Rotation must be finite."),
+            validator: PropertyValidators.Of(id, "Rotation"),
             annotation: new EditorAnnotation { Group = "Transform", Renderer = "vector3-box", Step = 0.5 });
 
     private static PropertyDescriptor<float> BuildScaleAxis(
@@ -128,11 +124,7 @@ public sealed class TransformDescriptors
             id: id,
             reader: target => read((TransformComponent)target),
             writer: (target, value) => write((TransformComponent)target, value),
-            validator: static value => !float.IsFinite(value)
-                ? ValidationResult.Fail("PROPERTY_NONFINITE", "Scale must be finite.")
-                : value == 0f
-                    ? ValidationResult.Fail("PROPERTY_DEGENERATE_SCALE", "Scale axis must be non-zero.")
-                    : ValidationResult.Ok,
+            validator: PropertyValidators.Of(id, "Scale"),
             annotation: new EditorAnnotation { Group = "Transform", Renderer = "vector3-box", Step = 0.01 });
 
     private static float ReadRotationAxis(TransformComponent component, int axisIndex)

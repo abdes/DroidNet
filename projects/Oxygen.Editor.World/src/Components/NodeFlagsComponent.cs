@@ -12,7 +12,7 @@ namespace Oxygen.Editor.World.Components;
 /// </summary>
 /// <remarks>
 /// Scene visibility and the two shadow flags store a source mode: Inherit takes the parent's resolved value, and a
-/// root's Inherit takes the scene defaults Shown, On and On. The resolution methods give the value and the node it
+/// root's Inherit takes the scene schema's root defaults. The resolution methods give the value and the node it
 /// comes from; resolved values are never stored.
 /// </remarks>
 public sealed class NodeFlagsComponent : GameComponent
@@ -20,12 +20,12 @@ public sealed class NodeFlagsComponent : GameComponent
     /// <summary>The component name a new node's flags take.</summary>
     public const string DefaultName = "Rendering";
 
-    private VisibilitySource visibility;
-    private ShadowSource castsShadows;
-    private ShadowSource receivesShadows;
-    private bool isStatic;
-    private bool isRayCastingSelectable = true;
-    private bool ignoreParentTransform;
+    private VisibilitySource visibility = SceneSchema.Node.Defaults.Visibility;
+    private ShadowSource castsShadows = SceneSchema.Node.Defaults.CastsShadows;
+    private ShadowSource receivesShadows = SceneSchema.Node.Defaults.ReceivesShadows;
+    private bool isStatic = SceneSchema.Node.Defaults.IsStatic;
+    private bool isRayCastingSelectable = SceneSchema.Node.Defaults.IsRayCastingSelectable;
+    private bool ignoreParentTransform = SceneSchema.Node.Defaults.IgnoreParentTransform;
 
     static NodeFlagsComponent()
     {
@@ -40,28 +40,43 @@ public sealed class NodeFlagsComponent : GameComponent
     /// <summary>
     /// Gets or sets the source mode of the node's scene visibility.
     /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">The value is not a member the scene schema declares.</exception>
     public VisibilitySource Visibility
     {
         get => this.visibility;
-        set => _ = this.SetProperty(ref this.visibility, value);
+        set
+        {
+            PropertyChecks.Require(SceneSchema.Node.Visibility, value);
+            _ = this.SetProperty(ref this.visibility, value);
+        }
     }
 
     /// <summary>
     /// Gets or sets the source mode of the node's geometry shadow casting.
     /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">The value is not a member the scene schema declares.</exception>
     public ShadowSource CastsShadows
     {
         get => this.castsShadows;
-        set => _ = this.SetProperty(ref this.castsShadows, value);
+        set
+        {
+            PropertyChecks.Require(SceneSchema.Node.CastsShadows, value);
+            _ = this.SetProperty(ref this.castsShadows, value);
+        }
     }
 
     /// <summary>
     /// Gets or sets the source mode of the node's geometry shadow receiving.
     /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">The value is not a member the scene schema declares.</exception>
     public ShadowSource ReceivesShadows
     {
         get => this.receivesShadows;
-        set => _ = this.SetProperty(ref this.receivesShadows, value);
+        set
+        {
+            PropertyChecks.Require(SceneSchema.Node.ReceivesShadows, value);
+            _ = this.SetProperty(ref this.receivesShadows, value);
+        }
     }
 
     /// <summary>
@@ -105,19 +120,30 @@ public sealed class NodeFlagsComponent : GameComponent
             VisibilitySource.Shown => true,
             VisibilitySource.Hidden => false,
             _ => null,
-        });
+        },
+        SceneSchema.Node.RootDefaults.Visibility == VisibilitySource.Shown);
 
     /// <summary>Resolves whether the node's geometry casts shadows.</summary>
     /// <returns>Whether it casts, and the node whose local mode decides it.</returns>
-    public ResolvedNodeFlag ResolveCastsShadows() => this.Resolve(static flags => Local(flags.CastsShadows));
+    public ResolvedNodeFlag ResolveCastsShadows()
+        => this.Resolve(static flags => Local(flags.CastsShadows), SceneSchema.Node.RootDefaults.CastsShadows == ShadowSource.On);
 
     /// <summary>Resolves whether the node's geometry receives shadows.</summary>
     /// <returns>Whether it receives, and the node whose local mode decides it.</returns>
-    public ResolvedNodeFlag ResolveReceivesShadows() => this.Resolve(static flags => Local(flags.ReceivesShadows));
+    public ResolvedNodeFlag ResolveReceivesShadows()
+        => this.Resolve(static flags => Local(flags.ReceivesShadows), SceneSchema.Node.RootDefaults.ReceivesShadows == ShadowSource.On);
 
     /// <inheritdoc/>
+    /// <exception cref="ArgumentOutOfRangeException">A source mode is not one the scene schema declares; nothing changes.</exception>
     public override void Hydrate(ComponentData data)
     {
+        if (data is NodeFlagsData candidate)
+        {
+            PropertyChecks.Require(SceneSchema.Node.Visibility, candidate.Visibility);
+            PropertyChecks.Require(SceneSchema.Node.CastsShadows, candidate.CastsShadows);
+            PropertyChecks.Require(SceneSchema.Node.ReceivesShadows, candidate.ReceivesShadows);
+        }
+
         base.Hydrate(data);
         if (data is not NodeFlagsData d)
         {
@@ -156,9 +182,8 @@ public sealed class NodeFlagsComponent : GameComponent
         _ => null,
     };
 
-    // Inherit copies the parent's resolved value, up to a local mode or, past the root, the scene default (true for
-    // all three flags).
-    private ResolvedNodeFlag Resolve(Func<NodeFlagsComponent, bool?> local)
+    // Inherit copies the parent's resolved value, up to a local mode or, past the root, the scene schema's root default.
+    private ResolvedNodeFlag Resolve(Func<NodeFlagsComponent, bool?> local, bool rootDefault)
     {
         if (local(this) is { } own)
         {
@@ -173,6 +198,6 @@ public sealed class NodeFlagsComponent : GameComponent
             }
         }
 
-        return new ResolvedNodeFlag(Value: true, Source: null);
+        return new ResolvedNodeFlag(Value: rootDefault, Source: null);
     }
 }

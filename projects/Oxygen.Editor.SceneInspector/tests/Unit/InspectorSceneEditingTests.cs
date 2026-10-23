@@ -9,6 +9,7 @@ using Oxygen.Editor.Input;
 using Oxygen.Editor.SceneInspector.Components.Cameras;
 using Oxygen.Editor.SceneInspector.Components.Lights;
 using Oxygen.Editor.SceneInspector.SceneSettings;
+using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.Scenes.Testing;
 using Oxygen.Editor.World;
@@ -127,6 +128,61 @@ public sealed class InspectorSceneEditingTests
 
         _ = editor.NearPlaneDiagnostic.Message.Should().BeEmpty();
         _ = editor.FarPlaneDiagnostic.Message.Should().BeEmpty();
+    }
+
+    [TestMethod]
+    public async Task FieldOfViewAboveItsRange_CommitsTheClampedValue()
+    {
+        var scene = CreateScene();
+        using var testScene = Open(scene, CameraNode(scene, 60), out var node);
+        using var editor = new PerspectiveCameraViewModel(() => testScene.Authoring);
+        editor.UpdateValues([node]);
+        editor.BeginEditSession("FieldOfView", NumberBoxEditInteractionKind.Text);
+        editor.FieldOfView.Value = 200;
+        editor.EndEditSession(NumberBoxEditCompletionKind.Commit);
+        await editor.PendingEdits.ConfigureAwait(false);
+
+        _ = FieldOfViewOf(node).Should().Be(179f);
+        _ = editor.FieldOfView.Value.Should().Be(179);
+        _ = editor.FieldOfViewDiagnostic.Code.Should().BeEmpty();
+        _ = testScene.Document.History.UndoStack.Should().ContainSingle();
+    }
+
+    [TestMethod]
+    public async Task LightColorChannelAboveOne_CommitsOne()
+    {
+        var scene = CreateScene();
+        var built = DirectionalLightNode(scene, "Sun", AtmosphereLightSlot.None);
+        built.Components.OfType<DirectionalLightComponent>().Single().Color = new Vector3(0.1f, 0.2f, 0.3f);
+        using var testScene = Open(scene, built, out var node);
+        using var editor = new DirectionalLightViewModel(() => testScene.Authoring);
+        editor.UpdateValues([node]);
+        editor.BeginEditSession("ColorR", NumberBoxEditInteractionKind.Text);
+        editor.ColorR = 1.5f;
+        editor.EndEditSession(NumberBoxEditCompletionKind.Commit);
+        await editor.PendingEdits.ConfigureAwait(false);
+
+        _ = ColorOf(node).Should().Be(new Vector3(1f, 0.2f, 0.3f));
+        _ = testScene.Document.History.UndoStack.Should().ContainSingle();
+    }
+
+    [TestMethod]
+    public async Task NearPlaneAtZero_IsRefusedNotClamped()
+    {
+        var scene = CreateScene();
+        using var testScene = Open(scene, CameraNode(scene, 60), out var node);
+        var camera = node.Components.OfType<PerspectiveCamera>().Single();
+        var near = camera.NearPlane;
+        using var editor = new PerspectiveCameraViewModel(() => testScene.Authoring);
+        editor.UpdateValues([node]);
+        editor.BeginEditSession("NearPlane", NumberBoxEditInteractionKind.Text);
+        editor.NearPlane.Value = 0;
+        editor.EndEditSession(NumberBoxEditCompletionKind.Commit);
+        await editor.PendingEdits.ConfigureAwait(false);
+
+        _ = camera.NearPlane.Should().Be(near);
+        _ = editor.NearPlaneDiagnostic.Code.Should().Be(SceneEditCodes.PropertyOutOfRange);
+        _ = testScene.Document.History.UndoStack.Should().BeEmpty();
     }
 
     [TestMethod]

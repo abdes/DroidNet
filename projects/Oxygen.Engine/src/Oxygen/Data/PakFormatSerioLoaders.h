@@ -423,6 +423,9 @@ inline auto Load(AnyReader& reader,
     CHECK_RESULT(reader.ReadInto(v));
   }
   CHECK_RESULT(reader.ReadInto(record.sort_priority));
+  if (!data::pak::world::HasValidLocalFogVolumeValues(record)) {
+    return ::oxygen::Err(std::errc::invalid_argument);
+  }
 
   return {};
 }
@@ -850,10 +853,7 @@ inline auto Load(AnyReader& reader,
   CHECK_RESULT(reader.ReadInto(r.normal_bias));
   CHECK_RESULT(reader.ReadInto(r.contact_shadows));
   CHECK_RESULT(reader.ReadInto(r.resolution_hint));
-
-  if (!data::IsValidLightRecord(r)) {
-    return ::oxygen::Err(std::errc::invalid_argument);
-  }
+  // The light record holding these settings validates them for its kind.
   return {};
 }
 
@@ -872,10 +872,7 @@ inline auto Load(AnyReader& reader, data::pak::world::LightCommonRecord& r)
 
   CHECK_RESULT(reader.ReadInto(r.shadow));
   CHECK_RESULT(reader.ReadInto(r.exposure_compensation_ev));
-
-  if (!data::IsValidLightRecord(r)) {
-    return ::oxygen::Err(std::errc::invalid_argument);
-  }
+  // The light record holding these properties validates them for its kind.
   return {};
 }
 

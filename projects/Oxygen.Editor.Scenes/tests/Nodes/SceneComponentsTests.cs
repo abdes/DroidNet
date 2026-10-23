@@ -25,20 +25,24 @@ public sealed class SceneComponentsTests
         Row("PointLight", SceneComponents.PointLight, static component =>
         {
             var light = component.Should().BeOfType<PointLightComponent>().Which;
-            _ = light.LuminousFluxLumens.Should().Be(1600f);
-            _ = light.Range.Should().Be(10f);
+            _ = light.LuminousFluxLumens.Should().Be(SceneSchema.PointLight.Defaults.LuminousFluxLumens);
+            _ = light.Range.Should().Be(SceneSchema.PointLight.Defaults.Range);
+            _ = light.CastsShadows.Should().Be(SceneSchema.PointLight.Defaults.CastsShadows);
         }),
         Row("SpotLight", SceneComponents.SpotLight, static component =>
         {
             var light = component.Should().BeOfType<SpotLightComponent>().Which;
-            _ = light.LuminousFluxLumens.Should().Be(1600f);
-            _ = light.Range.Should().Be(15f);
+            _ = light.LuminousFluxLumens.Should().Be(SceneSchema.SpotLight.Defaults.LuminousFluxLumens);
+            _ = light.Range.Should().Be(SceneSchema.SpotLight.Defaults.Range);
+            _ = light.InnerConeAngleRadians.Should().Be(SceneSchema.SpotLight.Defaults.InnerConeAngleRadians);
+            _ = light.OuterConeAngleRadians.Should().Be(SceneSchema.SpotLight.Defaults.OuterConeAngleRadians);
         }),
         Row("DirectionalLight", SceneComponents.DirectionalLight, static component =>
         {
             var light = component.Should().BeOfType<DirectionalLightComponent>().Which;
-            _ = light.CastsShadows.Should().BeTrue();
-            _ = light.AtmosphereSlot.Should().Be(AtmosphereLightSlot.None);
+            _ = light.CastsShadows.Should().Be(SceneSchema.DirectionalLight.Defaults.CastsShadows);
+            _ = light.IntensityLux.Should().Be(SceneSchema.DirectionalLight.Defaults.IntensityLux);
+            _ = light.AtmosphereSlot.Should().Be(SceneSchema.DirectionalLight.Defaults.AtmosphereSlot);
         }),
         Row("Scripting", SceneComponents.Scripting, static component =>
         {

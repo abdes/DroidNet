@@ -16,7 +16,6 @@
 #include <filesystem>
 #include <fstream>
 #include <ios>
-#include <iterator>
 #include <memory>
 #include <numbers>
 #include <optional>
@@ -46,7 +45,7 @@
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
-#include <Oxygen/Cooker/Import/Naming.h>
+#include <Oxygen/Cooker/Import/Internal/ImportedPropertyCommit.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
 #include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
 #include <Oxygen/Cooker/test/Support/DescriptorFixtures.h>
@@ -64,6 +63,7 @@
 #include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/Data/SceneAsset.h>
+#include <Oxygen/Data/Schema/Generated.SceneComponents.h>
 #include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Data/Unorm16.h>
 #include <Oxygen/Serio/FileStream.h>
@@ -197,6 +197,67 @@ protected:
         result.report.surface_provenance_json);
     }
     return result;
+  }
+
+  //! Imports a glTF document holding `light` after a valid point light, each
+  //! on its own root node.
+  auto ImportSecondLight(const std::string_view light, const std::string& name)
+    -> ImportRunResult
+  {
+    const auto document = nlohmann::json {
+      { "asset", { { "version", "2.0" } } },
+      { "extensionsUsed", { "KHR_lights_punctual" } },
+      {
+        "extensions",
+        {
+          {
+            "KHR_lights_punctual",
+            {
+              {
+                "lights",
+                {
+                  nlohmann::json { { "type", "point" }, { "intensity", 20 } },
+                  nlohmann::json::parse(light),
+                },
+              },
+            },
+          },
+        },
+      },
+      {
+        "nodes",
+        {
+          {
+            {
+              "extensions",
+              { { "KHR_lights_punctual", { { "light", 0 } } } },
+            },
+          },
+          {
+            {
+              "extensions",
+              { { "KHR_lights_punctual", { { "light", 1 } } } },
+            },
+          },
+        },
+      },
+      { "scenes", { { { "nodes", { 0, 1 } } } } },
+      { "scene", 0 },
+    };
+    const auto root = MakeTempDir(name);
+    const auto source_path = root / "lights.gltf";
+    {
+      std::ofstream source(source_path);
+      source << document.dump();
+      source.close();
+      EXPECT_TRUE(source.good());
+    }
+    ImportRequest request {};
+    request.source_path = source_path;
+    request.asset_virtual_path
+      = oxygen::cooker::test::ModelVirtualPath(request.source_path);
+    request.cooked_root = root / "cooked";
+    return RunImport(std::move(request));
   }
 };
 
@@ -469,13 +530,18 @@ NOLINT_TEST_F(
     EXPECT_EQ(
       CheckedAt(perspective, 1).aspect_mode, oxygen::CameraAspectMode::kAuto);
     EXPECT_FLOAT_EQ(CheckedAt(perspective, 1).aspect_ratio,
-      oxygen::kDefaultCameraAspectRatio);
+      oxygen::data::schema::perspective_camera::kAspectRatioDefault);
     EXPECT_FLOAT_EQ(CheckedAt(perspective, 0).near_plane, 0.2F);
     EXPECT_FLOAT_EQ(CheckedAt(perspective, 0).far_plane, 250.0F);
     EXPECT_FLOAT_EQ(CheckedAt(ortho, 0).near_plane, 0.3F);
     EXPECT_FLOAT_EQ(CheckedAt(ortho, 0).far_plane, 40.0F);
     EXPECT_EQ(
       CheckedAt(ortho, 0).aspect_mode, oxygen::CameraAspectMode::kFixed);
+    // xmag and ymag are half extents.
+    EXPECT_FLOAT_EQ(CheckedAt(ortho, 0).left, -2.0F);
+    EXPECT_FLOAT_EQ(CheckedAt(ortho, 0).right, 2.0F);
+    EXPECT_FLOAT_EQ(CheckedAt(ortho, 0).bottom, -1.0F);
+    EXPECT_FLOAT_EQ(CheckedAt(ortho, 0).top, 1.0F);
   }
 }
 
@@ -838,89 +904,99 @@ NOLINT_TEST_F(AsyncGltfImporterFullTest,
 }
 
 NOLINT_TEST_F(
-  AsyncGltfImporterFullTest, InvalidLocalLightValuesFailImportWithoutClamping)
+  AsyncGltfImporterFullTest, InvalidImportedLightValuesWarnAndTakeTheDefaults)
 {
   const auto invalid_lights = std::array {
     R"({"type":"point","intensity":-1})",
+    R"({"type":"point","intensity":0})",
     R"({"type":"point","intensity":3e38})",
     R"({"type":"point","range":0})",
     R"({"type":"point","range":-1})",
     R"({"type":"spot","range":0,"spot":{}})",
     R"({"type":"spot","intensity":-1,"spot":{"innerConeAngle":0.2,"outerConeAngle":0.5}})",
     R"({"type":"spot","intensity":100,"spot":{"innerConeAngle":-0.1,"outerConeAngle":0.5}})",
+    R"({"type":"spot","intensity":100,"spot":{"innerConeAngle":0,"outerConeAngle":1.6}})",
+  };
+  for (std::size_t index = 0; index < invalid_lights.size(); ++index) {
+    SCOPED_TRACE(invalid_lights.at(index));
+    const auto imported = ImportSecondLight(
+      invalid_lights.at(index), "gltf_invalid_light_" + std::to_string(index));
+    EXPECT_TRUE(imported.report.success);
+    EXPECT_TRUE(std::ranges::any_of(
+      imported.report.diagnostics, [](const auto& diagnostic) -> auto {
+        return diagnostic.code
+          == oxygen::content::import::detail::kImportedPropertyInvalidCode;
+      }));
+  }
+}
+
+NOLINT_TEST_F(AsyncGltfImporterFullTest, InvalidSpotConePairsFailImport)
+{
+  const auto invalid_lights = std::array {
     R"({"type":"spot","intensity":100,"spot":{"innerConeAngle":0.6,"outerConeAngle":0.5}})",
     R"({"type":"spot","intensity":100,"spot":{"innerConeAngle":0,"outerConeAngle":0}})",
-    R"({"type":"spot","intensity":100,"spot":{"innerConeAngle":0,"outerConeAngle":1.6}})",
     R"({"type":"spot","intensity":100,"spot":{"innerConeAngle":1.5707963267948966,"outerConeAngle":1.5707963267948966}})",
     R"({"type":"spot","intensity":1e-30,"spot":{"innerConeAngle":0,"outerConeAngle":1e-5}})",
   };
   for (std::size_t index = 0; index < invalid_lights.size(); ++index) {
     SCOPED_TRACE(invalid_lights.at(index));
-    const auto document = nlohmann::json {
-      { "asset", { { "version", "2.0" } } },
-      { "extensionsUsed", { "KHR_lights_punctual" } },
-      {
-        "extensions",
-        {
-          {
-            "KHR_lights_punctual",
-            {
-              {
-                "lights",
-                {
-                  nlohmann::json { { "type", "point" }, { "intensity", 20 } },
-                  nlohmann::json::parse(invalid_lights.at(index)),
-                },
-              },
-            },
-          },
-        },
-      },
-      {
-        "nodes",
-        {
-          {
-            {
-              "extensions",
-              { { "KHR_lights_punctual", { { "light", 0 } } } },
-            },
-          },
-          {
-            {
-              "extensions",
-              { { "KHR_lights_punctual", { { "light", 1 } } } },
-            },
-          },
-        },
-      },
-      { "scenes", { { { "nodes", { 0, 1 } } } } },
-      { "scene", 0 },
-    };
-    const auto root
-      = MakeTempDir("gltf_invalid_photometry_" + std::to_string(index));
-    const auto source_path = root / "invalid.gltf";
-    {
-      std::ofstream source(source_path);
-      source << document.dump();
-      source.close();
-      ASSERT_TRUE(source.good());
-    }
-    ImportRequest request {};
-    request.source_path = source_path;
-    request.asset_virtual_path
-      = oxygen::cooker::test::ModelVirtualPath(request.source_path);
-    request.cooked_root = root / "cooked";
-    const auto imported = RunImport(std::move(request));
+    const auto imported = ImportSecondLight(
+      invalid_lights.at(index), "gltf_invalid_cone_" + std::to_string(index));
     EXPECT_FALSE(imported.report.success);
-    const auto* const expected_code
-      = nlohmann::json::parse(invalid_lights.at(index)).contains("range")
-      ? "scene.light.range_invalid"
-      : "scene.light.photometry_invalid";
-    EXPECT_TRUE(std::ranges::any_of(imported.report.diagnostics,
-      [expected_code](const auto& diagnostic) -> auto {
-        return diagnostic.code == expected_code;
+    EXPECT_TRUE(std::ranges::any_of(
+      imported.report.diagnostics, [](const auto& diagnostic) -> auto {
+        return diagnostic.code == "scene.light.photometry_invalid";
       }));
   }
+}
+
+//! An imported value outside a clamping range takes the nearest bound; one the
+//! schema rejects takes the schema default with a warning.
+NOLINT_TEST_F(AsyncGltfImporterFullTest, ImportedValuesCommitThroughTheSchema)
+{
+  const auto root = MakeTempDir("gltf_commit");
+  const auto source_path = root / "commit.gltf";
+  {
+    std::ofstream source(source_path);
+    source
+      << R"({"asset":{"version":"2.0"},"extensionsUsed":["KHR_lights_punctual"],
+      "extensions":{"KHR_lights_punctual":{"lights":[
+        {"type":"directional","intensity":5000,"color":[2.0,0.5,-1.0]}]}},
+      "cameras":[{"type":"perspective","perspective":{
+        "yfov":1.0,"znear":-1.0,"zfar":100}}],
+      "nodes":[{"name":"Sun","extensions":{"KHR_lights_punctual":{"light":0}}},
+        {"name":"Camera","camera":0}],
+      "scenes":[{"nodes":[0,1]}],"scene":0})";
+    source.close();
+    ASSERT_TRUE(source.good());
+  }
+  ImportRequest request {};
+  request.source_path = source_path;
+  request.asset_virtual_path
+    = oxygen::cooker::test::ModelVirtualPath(request.source_path);
+  request.cooked_root = root / "cooked";
+  const auto imported = RunImport(std::move(request));
+  ASSERT_TRUE(imported.report.success);
+  const auto scene = LoadCameraScene(imported.report);
+  ASSERT_TRUE(scene);
+
+  const auto lights = scene->GetComponents<world::DirectionalLightRecord>();
+  ASSERT_EQ(lights.size(), 1U);
+  ExpectVec3Near({ CheckedAt(lights, 0).common.color_rgb[0],
+                   CheckedAt(lights, 0).common.color_rgb[1],
+                   CheckedAt(lights, 0).common.color_rgb[2] },
+    { 1.0F, 0.5F, 0.0F });
+
+  const auto cameras = scene->GetComponents<world::PerspectiveCameraRecord>();
+  ASSERT_EQ(cameras.size(), 1U);
+  EXPECT_FLOAT_EQ(CheckedAt(cameras, 0).near_plane,
+    oxygen::data::schema::perspective_camera::kNearPlaneDefault);
+  const auto warnings = std::ranges::count_if(
+    imported.report.diagnostics, [](const auto& diagnostic) -> auto {
+      return diagnostic.code
+        == oxygen::content::import::detail::kImportedPropertyInvalidCode;
+    });
+  EXPECT_EQ(warnings, 1);
 }
 
 // Namespace scope, not nested in the fixture: the fixture's inline static

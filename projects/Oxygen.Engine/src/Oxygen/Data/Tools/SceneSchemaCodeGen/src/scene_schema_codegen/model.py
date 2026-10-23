@@ -608,6 +608,13 @@ def _check_numeric(where: str, entry: Property) -> None:
         for bound in (bounds.min, bounds.max)
     ):
         raise SchemaError(f"{where}: int range with a fractional bound")
+    if entry.commit == "clamp" and (
+        (bounds.min is None and bounds.max is None)
+        or bounds.min_exclusive
+        or bounds.max_exclusive
+        or bounds.nonzero
+    ):
+        raise SchemaError(f"{where}: clamp needs a bound it can reach")
     for value in entry.components():
         if not bounds.contains(value):
             raise SchemaError(f"{where}: default {value:g} is outside its range")

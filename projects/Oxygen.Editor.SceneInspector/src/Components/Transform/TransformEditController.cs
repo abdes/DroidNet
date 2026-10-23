@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Diagnostics;
 using DroidNet.Controls;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -98,6 +99,14 @@ internal sealed partial class TransformEditController(
 
         GC.SuppressFinalize(this);
     }
+
+    /// <summary>Checks a control value against the generated range of the axis it edits, before it is narrowed.</summary>
+    /// <param name="group">The transform vector being edited.</param>
+    /// <param name="component">The edited component of the vector.</param>
+    /// <param name="value">The value the control holds.</param>
+    /// <returns>The result of the check; a value no float holds is out of range.</returns>
+    internal static RangeCheck CheckValue(TransformEditFieldGroup group, Component component, double value)
+        => PropertyChecks.Check(TransformDescriptor(ToPropertyName(group, component)).TypedId, value);
 
     /// <summary>Rebinds selection, cancelling captured old-target gestures before accepting later input.</summary>
     /// <param name="items">The new selection.</param>
@@ -228,15 +237,9 @@ internal sealed partial class TransformEditController(
 
         var property = TransformDescriptor(field).Id;
         var ticket = this.diagnostics.Begin([property]);
-        var result = args.IsValid ? Nothing : new SceneEditResult(
-            SceneEditOutcome.Invalid,
-            [SceneDiagnostic.Error(SceneEditCodes.PropertyOutOfRange, group switch
-            {
-                TransformEditFieldGroup.Position => "Position must be finite.",
-                TransformEditFieldGroup.Rotation => "Rotation must be finite and between -180 and 180 degrees.",
-                _ => "Scale must be finite and have magnitude at least 0.001.",
-            }, property: property)]);
-        this.diagnostics.Complete(ticket, result);
+        var check = CheckValue(group, component, args.NewValue);
+        Debug.Assert(args.IsValid == (check == RangeCheck.InRange), "The Transform view validates an axis by its schema range alone.");
+        this.diagnostics.Complete(ticket, args.IsValid ? Nothing : Refusal(field, check));
     }
 
     /// <summary>Submits an absolute value: a preview within the axis's gesture, otherwise one edit.</summary>
@@ -260,18 +263,22 @@ internal sealed partial class TransformEditController(
             return;
         }
 
+        if (!this.TryAxisEdit(property, value, out var edit))
+        {
+            return;
+        }
+
         this.LogApplyingChange(property, (float)value, this.selectedItems.Count);
-        var descriptor = TransformDescriptor(property);
         if (this.activeSessions.TryGetValue(property, out var session))
         {
-            var edits = session.Nodes.ToDictionary(static node => node.Id, _ => PropertyEdit.SingleEdit(descriptor.TypedId, (float)value));
+            var edits = session.Nodes.ToDictionary(static node => node.Id, _ => edit);
             _ = this.RequestAsync(property, session.Nodes, validates: true, async () =>
                 await (await session.Gesture.ConfigureAwait(true)).PreviewAsync(new SetProperties(edits, Label)).ConfigureAwait(true));
             return;
         }
 
         var nodes = this.selectedItems.ToList();
-        var oneShot = nodes.ToDictionary(static node => node.Id, _ => PropertyEdit.SingleEdit(descriptor.TypedId, (float)value));
+        var oneShot = nodes.ToDictionary(static node => node.Id, _ => edit);
         _ = this.RequestAsync(property, nodes, validates: true, () => authoring.ExecuteAsync(new SetProperties(oneShot, Label)));
     }
 
@@ -313,6 +320,14 @@ internal sealed partial class TransformEditController(
                 _ => nameof(TransformViewModel.ScaleZ),
             },
         };
+
+    // The refusal of a value the edit never received, worded as the scene refuses one.
+    private static SceneEditResult Refusal(string property, RangeCheck check)
+    {
+        var id = TransformDescriptor(property).Id;
+        var label = $"{property[..^1]} {property[^1]}";
+        return new(SceneEditOutcome.Invalid, [SceneDiagnostic.Error(SceneEditCodes.PropertyOutOfRange, PropertyChecks.Describe(id, check, label), property: id)]);
+    }
 
     private static PropertyDescriptor<float> TransformDescriptor(string property)
         => property switch
@@ -468,13 +483,37 @@ internal sealed partial class TransformEditController(
             return;
         }
 
-        var descriptor = TransformDescriptor(property);
-        var edits = session.Nodes.ToDictionary(
-            static node => node.Id,
-            node => PropertyEdit.SingleEdit(descriptor.TypedId, (float)expression.Apply(session.OriginalValues[node.Id])));
+        var edits = new Dictionary<NodeId, PropertyEdit>();
+        foreach (var node in session.Nodes)
+        {
+            if (!this.TryAxisEdit(property, expression.Apply(session.OriginalValues[node.Id]), out var edit))
+            {
+                await this.EndAsync(property, session, NumberBoxEditCompletionKind.Cancel).ConfigureAwait(true);
+                return;
+            }
+
+            edits[node.Id] = edit;
+        }
+
         await this.RequestAsync(property, session.Nodes, validates: true, async () =>
             await (await session.Gesture.ConfigureAwait(true)).PreviewAsync(new SetProperties(edits, Label)).ConfigureAwait(true)).ConfigureAwait(true);
         await this.EndAsync(property, session, NumberBoxEditCompletionKind.Commit).ConfigureAwait(true);
+    }
+
+    // The edit of an axis value as the inspector commits it. A finite value no float holds cannot reach the edit, so it
+    // is refused here, out of range, instead of narrowing to an infinity the scene would call not finite.
+    private bool TryAxisEdit(string property, double value, out PropertyEdit edit)
+    {
+        var descriptor = TransformDescriptor(property);
+        if (double.IsFinite(value) && Math.Abs(value) > float.MaxValue)
+        {
+            this.diagnostics.Complete(this.diagnostics.Begin([descriptor.Id]), Refusal(property, RangeCheck.OutOfRange));
+            edit = PropertyEdit.Empty;
+            return false;
+        }
+
+        edit = InspectorCommits.Commit(PropertyEdit.SingleEdit(descriptor.TypedId, (float)value));
+        return true;
     }
 
     private async Task WaitForPendingEditsAsync()

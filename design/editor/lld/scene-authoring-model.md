@@ -309,10 +309,16 @@ states its own:
   `max_exclusive` (inclusive when absent), and `nonzero`. Every `float` and
   `vec3` value is finite whether or not it declares a range, and every `enum`
   value is a declared member.
-- `commit: clamp` lets an inspector edit clamp a finite value into the range
-  on commit; the default, `commit: reject`, rejects it. Loading, cooking and
-  the runtime always reject an out-of-range value: saved or imported source is
-  diagnosed, never repaired.
+- `commit: clamp` lets a commit of outside values clamp a finite value into the
+  range; the default, `commit: reject`, rejects it. A commit of outside values
+  is an inspector edit, or a model import that maps imported values onto scene
+  properties (V0.1 imports none). The inspector clamps once, through
+  `PropertyChecks.Commit`, before it builds the edit, and the edit then refuses
+  any value still out of range. Loading, hydrating the scene model, model and
+  edit validation, cooking and the runtime always reject an out-of-range
+  value: saved source is diagnosed, never repaired. The scene model's setters
+  and `Hydrate` throw on such a value, so a scene in memory holds only values
+  in range.
 - Enumerations are declared once in the schema's `enums`, each member with its
   wire value; the editor generator reports a mapped CLR enumeration whose
   members differ.
@@ -336,6 +342,14 @@ owner per atmosphere slot) is not a range: it stays in the component's rules,
 in the editor and the engine. Engine constructor defaults of runtime
 components are low-level API defaults for code that builds scenes, not
 authored creation defaults (section 4).
+
+Node templates place what they create, and that placement is not a property
+default: a new point light's node stands at (0, 2, 0), a new spot light's at
+(0, 3, 3) pitched down 45 degrees, and a new directional light's node, like an
+unrotated node a directional light is added to, takes
+`DirectionalLightComponent.DefaultLocalRotation`. The template writes the
+node's transform; the transform's schema defaults stay the origin, no rotation
+and unit scale.
 
 Every property reports the same range failures:
 `SceneDiagnosticCodes.PropertyValueNotFinite`, `PropertyValueOutOfRange` and

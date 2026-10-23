@@ -21,8 +21,10 @@
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/ComponentType.h>
 #include <Oxygen/Data/DescriptorStrings.h>
+#include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/Data/SceneAsset.h>
+#include <Oxygen/Data/SceneRecordDefaults.h>
 #include <Oxygen/Data/SourceOrigin.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
@@ -64,7 +66,7 @@ auto AppendTable(std::vector<std::byte>& bytes, const std::vector<T>& records)
 
 auto MakeComposedScene(const CompositionInput& input) -> std::vector<std::byte>
 {
-  auto camera = world::PerspectiveCameraRecord {};
+  auto camera = world::MakeDefaultRecord<world::PerspectiveCameraRecord>();
   camera.node_index = kCameraNode;
   const auto cameras = std::vector { camera };
 
@@ -238,7 +240,7 @@ auto InvalidCompositions() -> std::vector<CompositionInput>
 {
   auto inputs = std::vector<CompositionInput> {};
   const auto add
-    = [&inputs]() -> CompositionInput& { return inputs.emplace_back(); };
+    = [&inputs] -> CompositionInput& { return inputs.emplace_back(); };
   add().starting_camera = 0U; // Not a camera node.
   add().starting_camera = kNodeCount; // Not a node.
   add().instances = { { .node_index = kNodeCount, .scene_key = ModelKey() } };

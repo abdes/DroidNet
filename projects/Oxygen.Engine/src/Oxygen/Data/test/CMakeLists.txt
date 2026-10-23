@@ -50,6 +50,8 @@ m_gtest_program(
     "MeshView_test.cpp"
     "ProceduralMeshes_test.cpp"
     "SceneOverrides_test.cpp"
+    "SceneRecordDefaults_test.cpp"
+    "SceneRecordValidation_test.cpp"
     "SceneScriptLayout_test.cpp"
     "SubMesh_test.cpp"
     "TextureResource_test.cpp"

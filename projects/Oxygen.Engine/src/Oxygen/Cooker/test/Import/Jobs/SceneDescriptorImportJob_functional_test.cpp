@@ -20,7 +20,6 @@
 #include <string>
 #include <string_view>
 #include <utility>
-#include <variant>
 #include <vector>
 
 #include <nlohmann/json.hpp>
@@ -52,6 +51,7 @@
 #include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/Data/SceneAsset.h>
+#include <Oxygen/Data/Schema/Generated.SceneComponents.h>
 #include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Serio/FileStream.h>
@@ -130,20 +130,16 @@ namespace {
 
   class SceneDescriptorImportJobTest : public ImportServiceTest {
   protected:
+    //! A request that cooks the scene at the identity its own name spells.
     auto MakeRequest(const std::filesystem::path& cooked_root,
-      const std::string& descriptor_json, std::string asset_virtual_path = {})
-      -> ImportRequest
+      const std::string& descriptor_json) -> ImportRequest
     {
       auto document = nlohmann::json::parse(descriptor_json);
       document.emplace("version", internal::kSceneDescriptorVersion);
-      if (asset_virtual_path.empty()) {
-        // By default a scene is cooked at the identity its own name spells.
-        asset_virtual_path = "/.cooked/Scenes/"
-          + document.at("name").get<std::string>() + ".oscene";
-      }
       auto request = ImportRequest {};
       request.source_path = "inline://scene.oscene.json";
-      request.asset_virtual_path = std::move(asset_virtual_path);
+      request.asset_virtual_path = "/.cooked/Scenes/"
+        + document.at("name").get<std::string>() + ".oscene";
       request.cooked_root = cooked_root;
       request.loose_cooked_layout.virtual_mount_root = "/.cooked";
       request.scene_descriptor = ImportRequest::SceneDescriptorPayload {
@@ -443,14 +439,16 @@ namespace {
     const auto library = TempDir() / "mask_library";
     std::filesystem::create_directories(root);
     oxygen::cooker::test::WriteTextureLibrary(library, kMask,
-      { .size_bytes = 4U,
+      {
+        .size_bytes = 4U,
         .texture_type = static_cast<uint8_t>(TextureType::kTexture2D),
         .width = 1U,
         .height = 1U,
         .depth = 1U,
         .array_layers = 1U,
         .mip_levels = 1U,
-        .format = static_cast<uint8_t>(Format::kRGBA8UNorm) });
+        .format = static_cast<uint8_t>(Format::kRGBA8UNorm),
+      });
     auto request = MakeRequest(root, R"({"name":"MaskScene","nodes":[{}],
       "environment":{"post_process_volume":{"auto_exposure_metering_mask":"/Library/Textures/Meter.otex"}}})");
     request.cooked_context_roots = { library };
@@ -599,20 +597,22 @@ namespace {
     const auto scene = data::SceneAsset(data::AssetKey {}, bytes);
     const auto nodes = scene.GetNodes();
     ASSERT_EQ(nodes.size(), 5U);
-    EXPECT_EQ(
-      CheckedAt(nodes, 0).node_flags, world::kSceneNodeFlag_ReceivesShadows);
+    // Ray cast selection is on unless a descriptor turns it off.
+    constexpr auto kSelectable = world::kSceneNodeFlag_RayCastingSelectable;
+    EXPECT_EQ(CheckedAt(nodes, 0).node_flags,
+      world::kSceneNodeFlag_ReceivesShadows | kSelectable);
     EXPECT_EQ(CheckedAt(nodes, 0).inherited_flags, 0U);
-    EXPECT_EQ(CheckedAt(nodes, 1).node_flags, 0U);
+    EXPECT_EQ(CheckedAt(nodes, 1).node_flags, kSelectable);
     EXPECT_EQ(
       CheckedAt(nodes, 1).inherited_flags, world::kSceneNodeFlags_Inheritable);
     EXPECT_EQ(CheckedAt(nodes, 2).node_flags,
       world::kSceneNodeFlag_Visible | world::kSceneNodeFlag_CastsShadows
-        | world::kSceneNodeFlag_Static);
+        | world::kSceneNodeFlag_Static | kSelectable);
     EXPECT_EQ(CheckedAt(nodes, 2).inherited_flags, 0U);
-    EXPECT_EQ(
-      CheckedAt(nodes, 3).node_flags, world::kSceneNodeFlags_Inheritable);
+    EXPECT_EQ(CheckedAt(nodes, 3).node_flags,
+      world::kSceneNodeFlags_Inheritable | kSelectable);
     EXPECT_EQ(CheckedAt(nodes, 3).inherited_flags, 0U);
-    EXPECT_EQ(CheckedAt(nodes, 4).node_flags, 0U);
+    EXPECT_EQ(CheckedAt(nodes, 4).node_flags, kSelectable);
     EXPECT_EQ(
       CheckedAt(nodes, 4).inherited_flags, world::kSceneNodeFlags_Inheritable);
   }
@@ -629,7 +629,9 @@ namespace {
                                          : "Materials/Wrong.omat",
       fixture.bytes, fixture.references,
       content::import::LooseCookedProducer {
-        .source = "/Art/Geometry/Mesh.ogeo.json", .completes = {} });
+        .source = "/Art/Geometry/Mesh.ogeo.json",
+        .completes = {},
+      });
     static_cast<void>(writer.Finish());
   }
 
@@ -684,8 +686,8 @@ namespace {
     const auto* const descriptor = R"({"name":"Scene","nodes":[{"name":"Mesh"}],
       "renderables":[{"node":0,"geometry_ref":"/Art/Geometry/Mesh.ogeo"}]})";
     for (const auto own_wins : { true, false }) {
-      auto request
-        = MakeRequest(output, descriptor, "/Art/Scenes/Scene.oscene");
+      auto request = MakeRequest(output, descriptor);
+      request.asset_virtual_path = "/Art/Scenes/Scene.oscene";
       request.loose_cooked_layout.virtual_mount_root = "/Art";
       request.cooked_context_roots = own_wins
         ? std::vector<std::filesystem::path> { library, output }
@@ -1235,8 +1237,9 @@ namespace {
             { "exposure_enabled", exposure == 1 },
           });
           SCOPED_TRACE(document.dump());
-          const auto report = Import(MakeRequest(
-            root, document.dump(), "/.cooked/Scenes/Environment.oscene"));
+          auto request = MakeRequest(root, document.dump());
+          request.asset_virtual_path = "/.cooked/Scenes/Environment.oscene";
+          const auto report = Import(std::move(request));
           ASSERT_HAS_VALUE(report);
           ASSERT_TRUE(report->success);
           EXPECT_EQ(report->scenes_written, 1U);
@@ -1325,13 +1328,17 @@ namespace {
         data::AssetType::kGeometry, kEngineCube,
         "Generated/BasicShapes/Cube.ogeo", geometry.bytes, geometry.references,
         content::import::LooseCookedProducer {
-          .source = std::string(kEngineCube) + ".json", .completes = {} });
+          .source = std::string(kEngineCube) + ".json",
+          .completes = {},
+        });
       writer.WriteAssetDescriptor(
         data::AssetKey::FromVirtualPath(kEngineDefault),
         data::AssetType::kMaterial, kEngineDefault,
         "Generated/Materials/Default.omat", material.bytes, material.references,
         content::import::LooseCookedProducer {
-          .source = std::string(kEngineDefault) + ".json", .completes = {} });
+          .source = std::string(kEngineDefault) + ".json",
+          .completes = {},
+        });
       static_cast<void>(writer.Finish());
     }
     const auto pak_path = work / "engine.pak";
@@ -1340,7 +1347,7 @@ namespace {
       .sources = { data::CookedSource {
         .kind = data::CookedSourceKind::kLooseCooked,
         .path = loose,
-      } },
+      }, },
       .output_pak_path = pak_path,
       .content_version = 1U,
       .source_key = data::SourceKey { Uuid::Generate() },

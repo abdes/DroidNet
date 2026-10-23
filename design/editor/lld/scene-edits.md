@@ -167,11 +167,20 @@ public abstract record SceneEditApplication
   redo stay paired.
 - **Refuse, never clamp.** A value outside its allowed range is refused as
   `Invalid` with the range in the message; the scene holds exactly what the
-  caller sets. Clamping, where the user experience wants it, is the job of the
-  view or the remote client. Each field has one rule: its descriptor declares
-  the range (the field of view in 1–179 degrees, the sky atmosphere ranges), and
-  where a descriptor and `LightValidation` disagree, both apply the stricter
-  rule. Hydrating existing files is unaffected.
+  caller sets. The range of a component property is the one the scene property
+  schema generates for it ([scene model](scene-authoring-model.md) 5.3), and
+  `PropertyChecks` is its only check and its only message: the descriptor's
+  validator reports it with a generic range code, the component's setter and
+  `Hydrate` throw on it, so loading a file refuses an out-of-range value
+  too. A rule that relates several values (near below far, the spot cone pair,
+  increasing cascade distances, representable light intensity) stays in the
+  component's rules; for lights `LightValidation` checks those rules alone and
+  reports the broken `LightRule` with its properties, which the rules refuse as
+  `PropertiesInconsistent`. Clamping is the view's: an inspector edit commits
+  through `PropertyChecks.Commit`, which clamps a property whose range declares
+  `commit: clamp` before the edit is built, so the edit receives a value in
+  range. Values of other properties reach the edit as entered, and it refuses
+  them.
 - **Exact inverse.** The revert restores exactly the state the edit replaced,
   captured during `Apply`, including state the edit changed as a consequence
   (layout entries, compensated transforms, coupled properties). It is never a

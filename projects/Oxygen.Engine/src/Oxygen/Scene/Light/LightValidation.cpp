@@ -11,8 +11,10 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 
 #include <Oxygen/Core/Lighting/LightPhotometry.h>
+#include <Oxygen/Data/Schema/Generated.SceneComponents.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Light/LightCommon.h>
 #include <Oxygen/Scene/Light/LightValidation.h>
@@ -21,6 +23,34 @@
 
 namespace oxygen::scene {
 namespace {
+
+  namespace schema = data::schema;
+
+  // Scene records carry the scene schema's wire values of these enums; the
+  // runtime enumerators are the schema members, member for member.
+  static_assert(schema::kShadowResolutionHintMembers.size() == 4U);
+  static_assert(std::to_underlying(ShadowResolutionHint::kLow)
+    == std::to_underlying(schema::ShadowResolutionHint::kLow));
+  static_assert(std::to_underlying(ShadowResolutionHint::kMedium)
+    == std::to_underlying(schema::ShadowResolutionHint::kMedium));
+  static_assert(std::to_underlying(ShadowResolutionHint::kHigh)
+    == std::to_underlying(schema::ShadowResolutionHint::kHigh));
+  static_assert(std::to_underlying(ShadowResolutionHint::kUltra)
+    == std::to_underlying(schema::ShadowResolutionHint::kUltra));
+
+  static_assert(schema::kAtmosphereLightSlotMembers.size() == 3U);
+  static_assert(std::to_underlying(AtmosphereLightSlot::kNone)
+    == std::to_underlying(schema::AtmosphereLightSlot::kNone));
+  static_assert(std::to_underlying(AtmosphereLightSlot::kPrimary)
+    == std::to_underlying(schema::AtmosphereLightSlot::kPrimary));
+  static_assert(std::to_underlying(AtmosphereLightSlot::kSecondary)
+    == std::to_underlying(schema::AtmosphereLightSlot::kSecondary));
+
+  static_assert(schema::kDirectionalCsmSplitModeMembers.size() == 2U);
+  static_assert(std::to_underlying(DirectionalCsmSplitMode::kGenerated)
+    == std::to_underlying(schema::DirectionalCsmSplitMode::kGenerated));
+  static_assert(std::to_underlying(DirectionalCsmSplitMode::kManualDistances)
+    == std::to_underlying(schema::DirectionalCsmSplitMode::kManualDistances));
 
   auto Reject(std::string_view field, std::string_view message)
     -> std::optional<LightValidationError>
@@ -80,14 +110,15 @@ namespace {
     if (!Nonnegative(range)) {
       return Reject("range", "Range must be finite and nonnegative");
     }
-    const auto inverse = range == 0.0F ? 0.0 : 1.0 / double(range);
+    const auto inverse = range == 0.0F ? 0.0 : 1.0 / static_cast<double>(range);
     if (inverse > std::numeric_limits<float>::max()
       || (inverse > 0.0 && inverse < std::numeric_limits<float>::min())) {
       return Reject(
         "range", "Inverse range is not representable by the renderer");
     }
     if (!Nonnegative(source_radius)
-      || double(range) + source_radius > std::numeric_limits<float>::max()) {
+      || static_cast<double>(range) + source_radius
+        > std::numeric_limits<float>::max()) {
       return Reject("source_radius",
         "Source radius must be finite, nonnegative and representable");
     }
@@ -97,8 +128,9 @@ namespace {
   auto ValidateDirectional(const DirectionalLight& light)
     -> std::optional<LightValidationError>
   {
-    if (const auto error = ValidateCommon(light.Common()))
+    if (const auto error = ValidateCommon(light.Common())) {
       return error;
+    }
     const auto rgb = lighting::ResolveDirectionalIlluminanceRgb(
       light.GetIntensityLux(), Modifiers(light.Common()));
     if (!rgb) {
@@ -115,17 +147,18 @@ namespace {
       return Reject("atmosphere_light_slot", "Unknown atmosphere light slot");
     }
     const auto scale = light.GetAtmosphereDiskLuminanceScale();
-    const auto sine = std::sin(double(diameter) * 0.5);
+    const auto sine = std::sin(static_cast<double>(diameter) * 0.5);
     const auto projected_solid_angle = std::numbers::pi * sine * sine;
     for (int channel = 0; channel < 3; ++channel) {
       if (!Nonnegative(scale[channel])) {
         return Reject("atmosphere_disk_luminance_scale_rgb",
           "Disk scale must be finite and nonnegative");
       }
-      if (diameter == 0.0F)
+      if (diameter == 0.0F) {
         continue;
-      const auto radiance
-        = double((*rgb)[channel]) * scale[channel] / projected_solid_angle;
+      }
+      const auto radiance = static_cast<double>((*rgb)[channel])
+        * scale[channel] / projected_solid_angle;
       if (!std::isfinite(radiance)
         || radiance > std::numeric_limits<float>::max()
         || (radiance > 0.0 && radiance < std::numeric_limits<float>::min())) {
@@ -183,11 +216,13 @@ auto ValidateLight(const Component& light)
   }
   if (light.GetTypeId() == PointLight::ClassTypeId()) {
     const auto& point = static_cast<const PointLight&>(light);
-    if (const auto error = ValidateCommon(point.Common()))
+    if (const auto error = ValidateCommon(point.Common())) {
       return error;
+    }
     if (const auto error
-      = ValidateLocal(point.GetRange(), point.GetSourceRadius()))
+      = ValidateLocal(point.GetRange(), point.GetSourceRadius())) {
       return error;
+    }
     if (!lighting::ResolvePointIntensityRgb(
           point.GetLuminousFluxLm(), Modifiers(point.Common()))) {
       return Reject("luminous_flux_lm",
@@ -197,11 +232,13 @@ auto ValidateLight(const Component& light)
   }
   if (light.GetTypeId() == SpotLight::ClassTypeId()) {
     const auto& spot = static_cast<const SpotLight&>(light);
-    if (const auto error = ValidateCommon(spot.Common()))
+    if (const auto error = ValidateCommon(spot.Common())) {
       return error;
+    }
     if (const auto error
-      = ValidateLocal(spot.GetRange(), spot.GetSourceRadius()))
+      = ValidateLocal(spot.GetRange(), spot.GetSourceRadius())) {
       return error;
+    }
     const auto cone = lighting::ResolveSpotConeProfile(
       spot.GetInnerConeAngleRadians(), spot.GetOuterConeAngleRadians());
     if (!cone) {

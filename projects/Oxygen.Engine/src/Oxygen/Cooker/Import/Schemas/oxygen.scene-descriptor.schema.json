@@ -140,7 +140,7 @@
         "visible": {
           "type": "string",
           "enum": ["inherit", "shown", "hidden"],
-          "description": "Local scene visibility or inheritance. Omitted: shown for roots, inherit for children."
+          "description": "Local scene visibility or inheritance."
         },
         "static": {
           "type": "boolean"
@@ -148,12 +148,12 @@
         "casts_shadows": {
           "type": "string",
           "enum": ["inherit", "on", "off"],
-          "description": "Local geometry casting or inheritance. Omitted: on for roots, inherit for children."
+          "description": "Local geometry casting or inheritance."
         },
         "receives_shadows": {
           "type": "string",
           "enum": ["inherit", "on", "off"],
-          "description": "Local geometry receiving or inheritance. Omitted: on for roots, inherit for children."
+          "description": "Local geometry receiving or inheritance."
         },
         "ray_cast_selectable": {
           "type": "boolean"
@@ -299,56 +299,42 @@
     "perspective_camera": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["node", "aspect_mode"],
+      "required": ["node"],
       "properties": {
         "node": {
           "type": "integer",
           "minimum": 0
         },
         "fov_y": {
-          "type": "number",
-          "exclusiveMinimum": 0.0,
-          "exclusiveMaximum": 3.141592653589793
+          "type": "number"
         },
         "aspect_mode": {
           "enum": ["auto", "fixed"]
         },
         "aspect_ratio": {
-          "type": "number",
-          "exclusiveMinimum": 0.0
+          "type": "number"
         },
         "near_plane": {
-          "type": "number",
-          "exclusiveMinimum": 0.0
+          "type": "number"
         },
         "far_plane": {
-          "type": "number",
-          "exclusiveMinimum": 0.0
+          "type": "number"
         },
         "aperture_f": {
-          "type": "number",
-          "minimum": 1.401298464324817e-45,
-          "maximum": 3.4028234663852886e38,
-          "default": 11.0
+          "type": "number"
         },
         "shutter_rate": {
-          "type": "number",
-          "minimum": 1.401298464324817e-45,
-          "maximum": 3.4028234663852886e38,
-          "default": 125.0
+          "type": "number"
         },
         "iso": {
-          "type": "number",
-          "minimum": 1.401298464324817e-45,
-          "maximum": 3.4028234663852886e38,
-          "default": 100.0
+          "type": "number"
         }
       }
     },
     "orthographic_camera": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["node", "aspect_mode"],
+      "required": ["node"],
       "properties": {
         "node": {
           "type": "integer",
@@ -359,15 +345,11 @@
         },
         "orthographic_size": {
           "description": "Half of the visible height in meters.",
-          "type": "number",
-          "exclusiveMinimum": 0.0,
-          "default": 10.0
+          "type": "number"
         },
         "aspect_ratio": {
           "description": "Retained Fixed width / height.",
-          "type": "number",
-          "exclusiveMinimum": 0.0,
-          "default": 1.0
+          "type": "number"
         },
         "near_plane": {
           "type": "number"
@@ -376,22 +358,13 @@
           "type": "number"
         },
         "aperture_f": {
-          "type": "number",
-          "minimum": 1.401298464324817e-45,
-          "maximum": 3.4028234663852886e38,
-          "default": 11.0
+          "type": "number"
         },
         "shutter_rate": {
-          "type": "number",
-          "minimum": 1.401298464324817e-45,
-          "maximum": 3.4028234663852886e38,
-          "default": 125.0
+          "type": "number"
         },
         "iso": {
-          "type": "number",
-          "minimum": 1.401298464324817e-45,
-          "maximum": 3.4028234663852886e38,
-          "default": 100.0
+          "type": "number"
         }
       }
     },
@@ -418,22 +391,16 @@
       "additionalProperties": false,
       "properties": {
         "bias": {
-          "type": "number",
-          "minimum": 0,
-          "maximum": 3.4028234663852886e38
+          "type": "number"
         },
         "normal_bias": {
-          "type": "number",
-          "minimum": 0,
-          "maximum": 3.4028234663852886e38
+          "type": "number"
         },
         "contact_shadows": {
           "type": "boolean"
         },
         "resolution_hint": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 3
+          "type": "integer"
         }
       }
     },
@@ -449,17 +416,14 @@
           "minItems": 3,
           "maxItems": 3,
           "items": {
-            "type": "number",
-            "minimum": -3.4028234663852886e38,
-            "maximum": 3.4028234663852886e38
+            "type": "number"
           }
         },
         "casts_shadows": {
           "type": "boolean"
         },
         "exposure_compensation_ev": {
-          "type": "number",
-          "maximum": 3.4028234663852886e38
+          "type": "number"
         },
         "shadow": {
           "$ref": "#/definitions/light_shadow"
@@ -479,58 +443,39 @@
           "$ref": "#/definitions/light_common"
         },
         "angular_size_radians": {
-          "type": "number",
-          "minimum": 0.0,
-          "maximum": 3.1415927410125732
+          "type": "number"
         },
         "cascade_count": {
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 4
+          "type": "integer"
         },
         "split_mode": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 1
+          "type": "integer"
         },
         "max_shadow_distance": {
-          "type": "number",
-          "exclusiveMinimum": 0.0,
-          "maximum": 3.4028234663852886e38
+          "type": "number"
         },
         "cascade_distances": {
           "type": "array",
           "items": {
-            "type": "number",
-            "minimum": -3.4028234663852886e38,
-            "maximum": 3.4028234663852886e38
+            "type": "number"
           },
           "minItems": 4,
           "maxItems": 4
         },
         "distribution_exponent": {
-          "type": "number",
-          "minimum": 1,
-          "maximum": 3.4028234663852886e38
+          "type": "number"
         },
         "transition_fraction": {
-          "type": "number",
-          "minimum": 0.0,
-          "maximum": 1.0
+          "type": "number"
         },
         "distance_fadeout_fraction": {
-          "type": "number",
-          "minimum": 0.0,
-          "maximum": 1.0
+          "type": "number"
         },
         "intensity_lux": {
-          "type": "number",
-          "minimum": 0.0,
-          "maximum": 3.4028234663852886e38
+          "type": "number"
         },
         "atmosphere_light_slot": {
-          "type": "integer",
-          "enum": [0, 1, 2]
+          "type": "integer"
         },
         "use_per_pixel_atmosphere_transmittance": {
           "type": "boolean"
@@ -540,9 +485,7 @@
           "minItems": 3,
           "maxItems": 3,
           "items": {
-            "type": "number",
-            "minimum": -3.4028234663852886e38,
-            "maximum": 3.4028234663852886e38
+            "type": "number"
           }
         }
       }
@@ -560,19 +503,13 @@
           "$ref": "#/definitions/light_common"
         },
         "range": {
-          "type": "number",
-          "minimum": 0.0,
-          "maximum": 3.4028234663852886e38
+          "type": "number"
         },
         "source_radius": {
-          "type": "number",
-          "minimum": 0.0,
-          "maximum": 3.4028234663852886e38
+          "type": "number"
         },
         "luminous_flux_lm": {
-          "type": "number",
-          "minimum": 0.0,
-          "maximum": 3.4028234663852886e38
+          "type": "number"
         }
       }
     },
@@ -589,29 +526,19 @@
           "$ref": "#/definitions/light_common"
         },
         "range": {
-          "type": "number",
-          "minimum": 0.0,
-          "maximum": 3.4028234663852886e38
+          "type": "number"
         },
         "inner_cone_angle_radians": {
-          "type": "number",
-          "minimum": 0.0,
-          "maximum": 1.5707963705062866
+          "type": "number"
         },
         "outer_cone_angle_radians": {
-          "type": "number",
-          "minimum": 0.0,
-          "maximum": 1.5707963705062866
+          "type": "number"
         },
         "source_radius": {
-          "type": "number",
-          "minimum": 0.0,
-          "maximum": 3.4028234663852886e38
+          "type": "number"
         },
         "luminous_flux_lm": {
-          "type": "number",
-          "minimum": 0.0,
-          "maximum": 3.4028234663852886e38
+          "type": "number"
         }
       }
     },
@@ -1232,18 +1159,7 @@
     "local_fog_volume": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "node",
-        "enabled",
-        "radial_fog_extinction",
-        "height_fog_extinction",
-        "height_fog_falloff",
-        "height_fog_offset",
-        "fog_phase_g",
-        "fog_albedo",
-        "fog_emissive",
-        "sort_priority"
-      ],
+      "required": ["node"],
       "properties": {
         "node": {
           "type": "integer",
@@ -1253,12 +1169,10 @@
           "type": "boolean"
         },
         "radial_fog_extinction": {
-          "type": "number",
-          "minimum": 0.0
+          "type": "number"
         },
         "height_fog_extinction": {
-          "type": "number",
-          "minimum": 0.0
+          "type": "number"
         },
         "height_fog_falloff": {
           "type": "number"

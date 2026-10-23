@@ -103,15 +103,16 @@ public partial class Scene : GameObject, IPersistent<Serialization.SceneData>
     public void Hydrate(Serialization.SceneData data)
     {
         Serialization.SceneSerializer.EnsureFactories();
-        if (LightValidation.ValidateScene(data) is { } error)
-        {
-            throw new ArgumentException(error, nameof(data));
-        }
-
         using (this.SuppressNotifications())
         {
-            // Build every node before replacing any, so data the model rejects leaves the scene as it was.
+            // Build every node before replacing any, so data the model rejects leaves the scene as it was. Building
+            // checks each value and each light's rules; the scene's light ownership is checked once all are known.
             var nodes = data.RootNodes.Select(nodeData => SceneNode.CreateAndHydrate(this, nodeData)).ToList();
+            if (LightValidation.ValidateScene(data) is { } error)
+            {
+                throw new ArgumentException(error, nameof(data));
+            }
+
             this.RootNodes.Clear();
             foreach (var node in nodes)
             {

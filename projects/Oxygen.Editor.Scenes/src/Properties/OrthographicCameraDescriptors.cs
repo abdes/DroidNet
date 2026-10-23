@@ -6,7 +6,6 @@ using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Managed.Core;
-using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.Scenes.Properties;
 
@@ -81,73 +80,54 @@ public sealed class OrthographicCameraDescriptors
                 SceneSchema.OrthographicCamera.OrthographicSize,
                 "Orthographic Size",
                 static camera => camera.OrthographicSize,
-                static (camera, value) => camera.OrthographicSize = value,
-                Positive(SceneDiagnosticCodes.OrthographicCameraSizeNonPositive, "Orthographic size must be greater than zero.")),
+                static (camera, value) => camera.OrthographicSize = value),
             aspectMode: new(
                 id: SceneSchema.OrthographicCamera.AspectMode,
                 reader: static target => ((OrthographicCamera)target).AspectMode,
                 writer: static (target, value) => ((OrthographicCamera)target).AspectMode = value,
-                validator: static value => Enum.IsDefined(value)
-                    ? ValidationResult.Ok
-                    : ValidationResult.Fail(SceneDiagnosticCodes.TransformFieldNotFinite, "Unknown camera aspect mode."),
+                validator: PropertyValidators.Defined<CameraAspectMode>("Aspect mode"),
                 annotation: Annotation("aspect_mode", new EditorAnnotation { Group = "Projection", Label = "Aspect Mode", Renderer = "combobox" })),
             aspectRatio: FloatDescriptor(
                 SceneSchema.OrthographicCamera.AspectRatio,
                 "Fixed Aspect Ratio",
                 static camera => camera.AspectRatio,
-                static (camera, value) => camera.AspectRatio = value,
-                Positive(SceneDiagnosticCodes.OrthographicCameraAspectRatioNonPositive, "Aspect ratio must be greater than zero.")),
+                static (camera, value) => camera.AspectRatio = value),
             nearPlane: FloatDescriptor(
                 SceneSchema.OrthographicCamera.NearPlane,
                 "Near Plane",
                 static camera => camera.NearPlane,
-                static (camera, value) => camera.NearPlane = value,
-                Positive(SceneDiagnosticCodes.OrthographicCameraNearPlaneNonPositive, "Near plane must be greater than zero.")),
+                static (camera, value) => camera.NearPlane = value),
             farPlane: FloatDescriptor(
                 SceneSchema.OrthographicCamera.FarPlane,
                 "Far Plane",
                 static camera => camera.FarPlane,
-                static (camera, value) => camera.FarPlane = value,
-                static value => float.IsFinite(value)
-                    ? ValidationResult.Ok
-                    : ValidationResult.Fail(SceneDiagnosticCodes.TransformFieldNotFinite, "Camera values must be finite numbers.")),
+                static (camera, value) => camera.FarPlane = value),
             apertureF: FloatDescriptor(
                 SceneSchema.OrthographicCamera.ApertureF,
                 "Aperture",
                 static camera => camera.ApertureF,
-                static (camera, value) => camera.ApertureF = value,
-                Positive(SceneDiagnosticCodes.CameraExposureNonPositive, "Aperture must be greater than zero.")),
+                static (camera, value) => camera.ApertureF = value),
             shutterRate: FloatDescriptor(
                 SceneSchema.OrthographicCamera.ShutterRate,
                 "Shutter Speed",
                 static camera => camera.ShutterRate,
-                static (camera, value) => camera.ShutterRate = value,
-                Positive(SceneDiagnosticCodes.CameraExposureNonPositive, "Shutter speed must be greater than zero.")),
+                static (camera, value) => camera.ShutterRate = value),
             iso: FloatDescriptor(
                 SceneSchema.OrthographicCamera.Iso,
                 "ISO",
                 static camera => camera.Iso,
-                static (camera, value) => camera.Iso = value,
-                Positive(SceneDiagnosticCodes.CameraExposureNonPositive, "ISO must be greater than zero.")));
-
-    private static Func<float, ValidationResult> Positive(string code, string message)
-        => value => !float.IsFinite(value)
-            ? ValidationResult.Fail(SceneDiagnosticCodes.TransformFieldNotFinite, "Camera values must be finite numbers.")
-            : value <= 0f
-                ? ValidationResult.Fail(code, message)
-                : ValidationResult.Ok;
+                static (camera, value) => camera.Iso = value));
 
     private static PropertyDescriptor<float> FloatDescriptor(
         PropertyId<float> id,
         string label,
         Func<OrthographicCamera, float> read,
-        Action<OrthographicCamera, float> write,
-        Func<float, ValidationResult> validate)
+        Action<OrthographicCamera, float> write)
         => new(
             id: id,
             reader: target => read((OrthographicCamera)target),
             writer: (target, value) => write((OrthographicCamera)target, value),
-            validator: validate,
+            validator: PropertyValidators.Of(id, label),
             annotation: Annotation(id.Id.JsonPointer.TrimStart('/'), new EditorAnnotation { Group = "Projection", Label = label, Renderer = "numberbox", Step = 0.01 }));
 
     private static EditorAnnotation Annotation(string property, EditorAnnotation fallback)

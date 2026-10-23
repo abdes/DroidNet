@@ -222,6 +222,7 @@
     <ClInclude Include="Commands\RenameSceneNodeCommand.h" />
     <ClInclude Include="Commands\ReparentSceneNodesCommand.h" />
     <ClInclude Include="Commands\PropertyKeys.h" />
+    <ClInclude Include="Commands\SchemaEnums.h" />
     <ClInclude Include="Commands\LocalLightPropertyApplier.h" />
     <ClInclude Include="Commands\NodePropertyApplier.h" />
     <ClInclude Include="Commands\OrthographicCameraPropertyApplier.h" />

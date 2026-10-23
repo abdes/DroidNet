@@ -19,15 +19,35 @@ namespace Oxygen.Editor.World.Tests.Components;
 public sealed class CameraComponentTests
 {
     [TestMethod]
-    public void PerspectiveCamera_Defaults_ShouldUseEditorDegreeUnits()
+    public void PerspectiveCamera_Defaults_ComeFromTheSceneSchema()
     {
         var cam = new PerspectiveCamera { Name = "Camera" };
-        var data = new PerspectiveCameraData { Name = "Camera", AspectMode = Oxygen.Managed.Core.CameraAspectMode.Auto };
+        var data = new PerspectiveCameraData { Name = "Camera", AspectMode = SceneSchema.PerspectiveCamera.Defaults.AspectMode };
 
-        _ = cam.FieldOfView.Should().Be(60f);
-        _ = cam.AspectRatio.Should().Be(16f / 9f);
-        _ = data.FieldOfView.Should().Be(60f);
-        _ = data.AspectRatio.Should().Be(16f / 9f);
+        _ = cam.FieldOfView.Should().Be(SceneSchema.PerspectiveCamera.Defaults.FieldOfViewDegrees).And.Be(data.FieldOfView);
+        _ = cam.AspectRatio.Should().Be(SceneSchema.PerspectiveCamera.Defaults.AspectRatio).And.Be(data.AspectRatio);
+        _ = cam.NearPlane.Should().Be(SceneSchema.PerspectiveCamera.Defaults.NearPlane).And.Be(data.NearPlane);
+        _ = cam.FarPlane.Should().Be(SceneSchema.PerspectiveCamera.Defaults.FarPlane).And.Be(data.FarPlane);
+        _ = cam.ApertureF.Should().Be(SceneSchema.PerspectiveCamera.Defaults.ApertureF).And.Be(data.ApertureF);
+        _ = cam.ShutterRate.Should().Be(SceneSchema.PerspectiveCamera.Defaults.ShutterRate).And.Be(data.ShutterRate);
+        _ = cam.Iso.Should().Be(SceneSchema.PerspectiveCamera.Defaults.Iso).And.Be(data.Iso);
+        _ = cam.AspectMode.Should().Be(SceneSchema.PerspectiveCamera.Defaults.AspectMode);
+    }
+
+    [TestMethod]
+    public void OrthographicCamera_Defaults_ComeFromTheSceneSchema()
+    {
+        var cam = new OrthographicCamera { Name = "Camera" };
+        var data = new OrthographicCameraData { Name = "Camera", AspectMode = SceneSchema.OrthographicCamera.Defaults.AspectMode };
+
+        _ = cam.OrthographicSize.Should().Be(SceneSchema.OrthographicCamera.Defaults.OrthographicSize).And.Be(data.OrthographicSize);
+        _ = cam.AspectRatio.Should().Be(SceneSchema.OrthographicCamera.Defaults.AspectRatio).And.Be(data.AspectRatio);
+        _ = cam.NearPlane.Should().Be(SceneSchema.OrthographicCamera.Defaults.NearPlane).And.Be(data.NearPlane);
+        _ = cam.FarPlane.Should().Be(SceneSchema.OrthographicCamera.Defaults.FarPlane).And.Be(data.FarPlane);
+        _ = cam.ApertureF.Should().Be(SceneSchema.OrthographicCamera.Defaults.ApertureF).And.Be(data.ApertureF);
+        _ = cam.ShutterRate.Should().Be(SceneSchema.OrthographicCamera.Defaults.ShutterRate).And.Be(data.ShutterRate);
+        _ = cam.Iso.Should().Be(SceneSchema.OrthographicCamera.Defaults.Iso).And.Be(data.Iso);
+        _ = cam.AspectMode.Should().Be(SceneSchema.OrthographicCamera.Defaults.AspectMode);
     }
 
     [TestMethod]
@@ -91,19 +111,92 @@ public sealed class CameraComponentTests
     [DataRow(-1f)]
     [DataRow(float.NaN)]
     [DataRow(float.PositiveInfinity)]
-    public void PhysicalExposure_RejectsInvalidValuesWithoutMutation(float invalid)
+    public void CameraProperties_RejectValuesOutsideTheSchemaRangeWithoutMutation(float invalid)
     {
         foreach (var camera in new CameraComponent[] { new PerspectiveCamera { Name = "Perspective" }, new OrthographicCamera { Name = "Ortho" } })
         {
+            var before = (camera.NearPlane, camera.FarPlane, camera.ApertureF, camera.ShutterRate, camera.Iso);
+            Action changeNear = () => camera.NearPlane = invalid;
+            Action changeFar = () => camera.FarPlane = invalid;
             Action changeAperture = () => camera.ApertureF = invalid;
             Action changeShutter = () => camera.ShutterRate = invalid;
             Action changeIso = () => camera.Iso = invalid;
+            _ = changeNear.Should().Throw<ArgumentOutOfRangeException>();
+            _ = changeFar.Should().Throw<ArgumentOutOfRangeException>();
             _ = changeAperture.Should().Throw<ArgumentOutOfRangeException>();
             _ = changeShutter.Should().Throw<ArgumentOutOfRangeException>();
             _ = changeIso.Should().Throw<ArgumentOutOfRangeException>();
-            _ = camera.ApertureF.Should().Be(11f);
-            _ = camera.ShutterRate.Should().Be(125f);
-            _ = camera.Iso.Should().Be(100f);
+            _ = (camera.NearPlane, camera.FarPlane, camera.ApertureF, camera.ShutterRate, camera.Iso).Should().Be(before);
         }
+    }
+
+    [TestMethod]
+    [DataRow(0f)]
+    [DataRow(0.5f)]
+    [DataRow(179.5f)]
+    [DataRow(float.NaN)]
+    public void PerspectiveFieldOfView_OutsideTheSchemaRange_IsRejectedWithoutMutation(float invalid)
+    {
+        var camera = new PerspectiveCamera { Name = "Camera" };
+
+        Action change = () => camera.FieldOfView = invalid;
+        Action hydrate = () => camera.Hydrate(new PerspectiveCameraData { Name = "Rejected", AspectMode = CameraAspectMode.Auto, FieldOfView = invalid });
+
+        _ = change.Should().Throw<ArgumentOutOfRangeException>().Which.ActualValue.Should().Be(invalid);
+        _ = hydrate.Should().Throw<ArgumentOutOfRangeException>();
+        _ = camera.FieldOfView.Should().Be(SceneSchema.PerspectiveCamera.Defaults.FieldOfViewDegrees);
+        _ = camera.Name.Should().Be("Camera");
+    }
+
+    [TestMethod]
+    [DataRow(0f)]
+    [DataRow(-1f)]
+    [DataRow(float.PositiveInfinity)]
+    public void AspectRatioAndOrthographicSize_OutsideTheSchemaRange_AreRejectedWithoutMutation(float invalid)
+    {
+        var perspective = new PerspectiveCamera { Name = "Perspective" };
+        var orthographic = new OrthographicCamera { Name = "Orthographic" };
+
+        Action perspectiveAspect = () => perspective.AspectRatio = invalid;
+        Action orthographicAspect = () => orthographic.AspectRatio = invalid;
+        Action orthographicSize = () => orthographic.OrthographicSize = invalid;
+        Action hydrateSize = () => orthographic.Hydrate(new OrthographicCameraData { Name = "Rejected", AspectMode = CameraAspectMode.Auto, OrthographicSize = invalid });
+        Action hydrateAspect = () => perspective.Hydrate(new PerspectiveCameraData { Name = "Rejected", AspectMode = CameraAspectMode.Auto, AspectRatio = invalid });
+
+        _ = perspectiveAspect.Should().Throw<ArgumentOutOfRangeException>();
+        _ = orthographicAspect.Should().Throw<ArgumentOutOfRangeException>();
+        _ = orthographicSize.Should().Throw<ArgumentOutOfRangeException>();
+        _ = hydrateSize.Should().Throw<ArgumentOutOfRangeException>();
+        _ = hydrateAspect.Should().Throw<ArgumentOutOfRangeException>();
+        _ = perspective.AspectRatio.Should().Be(SceneSchema.PerspectiveCamera.Defaults.AspectRatio);
+        _ = orthographic.AspectRatio.Should().Be(SceneSchema.OrthographicCamera.Defaults.AspectRatio);
+        _ = orthographic.OrthographicSize.Should().Be(SceneSchema.OrthographicCamera.Defaults.OrthographicSize);
+        _ = (perspective.Name, orthographic.Name).Should().Be(("Perspective", "Orthographic"));
+    }
+
+    [TestMethod]
+    public void AspectMode_Undefined_IsRejected()
+    {
+        var perspective = new PerspectiveCamera { Name = "Perspective" };
+        var orthographic = new OrthographicCamera { Name = "Orthographic" };
+
+        Action perspectiveMode = () => perspective.AspectMode = (CameraAspectMode)99;
+        Action orthographicMode = () => orthographic.Hydrate(new OrthographicCameraData { Name = "Rejected", AspectMode = (CameraAspectMode)99 });
+
+        _ = perspectiveMode.Should().Throw<ArgumentOutOfRangeException>().Which.ActualValue.Should().Be((CameraAspectMode)99);
+        _ = orthographicMode.Should().Throw<ArgumentOutOfRangeException>();
+        _ = orthographic.Name.Should().Be("Orthographic");
+    }
+
+    [TestMethod]
+    public void Hydrate_RejectsDataOutsideTheSchemaRangeWithoutMutation()
+    {
+        var camera = new PerspectiveCamera { Name = "Camera" };
+
+        Action hydrate = () => camera.Hydrate(new PerspectiveCameraData { Name = "Rejected", AspectMode = CameraAspectMode.Auto, NearPlane = 0f });
+
+        _ = hydrate.Should().Throw<ArgumentOutOfRangeException>();
+        _ = camera.Name.Should().Be("Camera");
+        _ = camera.NearPlane.Should().Be(SceneSchema.PerspectiveCamera.Defaults.NearPlane);
     }
 }

@@ -11,9 +11,9 @@ namespace Oxygen.Editor.World.Components;
 /// </summary>
 public sealed partial class PointLightComponent : LightComponent
 {
-    private float luminousFluxLumens = 800f;
-    private float range = 10f;
-    private float sourceRadius;
+    private float luminousFluxLumens = SceneSchema.PointLight.Defaults.LuminousFluxLumens;
+    private float range = SceneSchema.PointLight.Defaults.Range;
+    private float sourceRadius = SceneSchema.PointLight.Defaults.SourceRadius;
 
     static PointLightComponent()
     {
@@ -26,35 +26,67 @@ public sealed partial class PointLightComponent : LightComponent
     }
 
     /// <summary>
+    /// Initializes a new instance of the <see cref="PointLightComponent"/> class with the scene schema's creation values.
+    /// </summary>
+    public PointLightComponent()
+        : base(LightSchema.Point)
+    {
+    }
+
+    /// <summary>
     /// Gets or sets luminous flux, in lumens.
     /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">The value is outside the range the scene schema declares.</exception>
     public float LuminousFluxLumens
     {
         get => this.luminousFluxLumens;
-        set => _ = this.SetProperty(ref this.luminousFluxLumens, value);
+        set
+        {
+            PropertyChecks.Require(SceneSchema.PointLight.LuminousFluxLumens, value);
+            _ = this.SetProperty(ref this.luminousFluxLumens, value);
+        }
     }
 
     /// <summary>
     /// Gets or sets the influence range, in meters.
     /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">The value is outside the range the scene schema declares.</exception>
     public float Range
     {
         get => this.range;
-        set => _ = this.SetProperty(ref this.range, value);
+        set
+        {
+            PropertyChecks.Require(SceneSchema.PointLight.Range, value);
+            _ = this.SetProperty(ref this.range, value);
+        }
     }
 
     /// <summary>
     /// Gets or sets the source radius, in meters.
     /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">The value is outside the range the scene schema declares.</exception>
     public float SourceRadius
     {
         get => this.sourceRadius;
-        set => _ = this.SetProperty(ref this.sourceRadius, value);
+        set
+        {
+            PropertyChecks.Require(SceneSchema.PointLight.SourceRadius, value);
+            _ = this.SetProperty(ref this.sourceRadius, value);
+        }
     }
 
     /// <inheritdoc/>
+    /// <exception cref="ArgumentOutOfRangeException">A value is outside the range the scene schema declares; nothing changes.</exception>
+    /// <exception cref="ArgumentException">The values break a light rule; nothing changes.</exception>
     public override void Hydrate(ComponentData data)
     {
+        if (data is PointLightData candidate)
+        {
+            PropertyChecks.Require(SceneSchema.PointLight.LuminousFluxLumens, candidate.LuminousFluxLumens);
+            PropertyChecks.Require(SceneSchema.PointLight.Range, candidate.Range);
+            PropertyChecks.Require(SceneSchema.PointLight.SourceRadius, candidate.SourceRadius);
+        }
+
         base.Hydrate(data);
         if (data is not PointLightData light)
         {

@@ -19,17 +19,19 @@ namespace Oxygen.Editor.World.Tests.Components;
 public sealed class SpotLightComponentTests
 {
     [TestMethod]
-    public void SpotLight_Defaults_ShouldHaveExpectedValues()
+    public void SpotLight_Defaults_ComeFromTheSceneSchema()
     {
         var light = new SpotLightComponent { Name = "Spot" };
+        var data = new SpotLightData { Name = "Spot" };
 
-        _ = light.LuminousFluxLumens.Should().Be(800f);
-        _ = light.Range.Should().Be(10f);
-        _ = light.SourceRadius.Should().Be(0f);
-        _ = light.InnerConeAngleRadians.Should().Be(0.4f);
-        _ = light.OuterConeAngleRadians.Should().Be(0.6f);
-        _ = light.Color.Should().Be(Vector3.One);
-        _ = light.AffectsWorld.Should().BeTrue();
+        _ = light.LuminousFluxLumens.Should().Be(SceneSchema.SpotLight.Defaults.LuminousFluxLumens).And.Be(data.LuminousFluxLumens);
+        _ = light.Range.Should().Be(SceneSchema.SpotLight.Defaults.Range).And.Be(data.Range);
+        _ = light.SourceRadius.Should().Be(SceneSchema.SpotLight.Defaults.SourceRadius).And.Be(data.SourceRadius);
+        _ = light.InnerConeAngleRadians.Should().Be(SceneSchema.SpotLight.Defaults.InnerConeAngleRadians).And.Be(data.InnerConeAngleRadians);
+        _ = light.OuterConeAngleRadians.Should().Be(SceneSchema.SpotLight.Defaults.OuterConeAngleRadians).And.Be(data.OuterConeAngleRadians);
+        _ = light.Color.Should().Be(SceneSchema.SpotLight.Defaults.Color).And.Be(data.Color);
+        _ = light.AffectsWorld.Should().Be(SceneSchema.SpotLight.Defaults.AffectsWorld).And.Be(data.AffectsWorld);
+        _ = light.CastsShadows.Should().Be(SceneSchema.SpotLight.Defaults.CastsShadows).And.Be(data.CastsShadows);
     }
 
     [TestMethod]
@@ -58,5 +60,39 @@ public sealed class SpotLightComponentTests
         _ = light.InnerConeAngleRadians.Should().Be(0.35f);
         _ = light.OuterConeAngleRadians.Should().Be(0.55f);
         _ = dehydrated.Should().BeEquivalentTo(source);
+    }
+
+    [TestMethod]
+    public void SpotLight_SettersOutsideTheSchemaRange_ThrowWithoutMutation()
+    {
+        var light = new SpotLightComponent { Name = "Spot" };
+        var before = light.Dehydrate();
+        Action[] changes =
+        [
+            () => light.LuminousFluxLumens = float.NegativeInfinity,
+            () => light.Range = 0f,
+            () => light.SourceRadius = -0.1f,
+            () => light.InnerConeAngleRadians = -0.1f,
+            () => light.OuterConeAngleRadians = 2f,
+        ];
+
+        foreach (var change in changes)
+        {
+            _ = change.Should().Throw<ArgumentOutOfRangeException>();
+        }
+
+        _ = light.Dehydrate().Should().BeEquivalentTo(before);
+    }
+
+    [TestMethod]
+    public void SpotLight_HydrateOutsideTheSchemaRange_ThrowsWithoutMutation()
+    {
+        var light = new SpotLightComponent { Name = "Accepted" };
+
+        Action hydrate = () => light.Hydrate(new SpotLightData { Name = "Rejected", OuterConeAngleRadians = 2f });
+
+        _ = hydrate.Should().Throw<ArgumentOutOfRangeException>().Which.ActualValue.Should().Be(2f);
+        _ = light.Name.Should().Be("Accepted");
+        _ = light.OuterConeAngleRadians.Should().Be(SceneSchema.SpotLight.Defaults.OuterConeAngleRadians);
     }
 }

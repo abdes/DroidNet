@@ -9,6 +9,8 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <stdexcept>
+#include <string>
 #include <type_traits>
 #include <variant>
 
@@ -101,6 +103,46 @@ namespace oxygen::interop::module {
   {
     const auto type = FindFieldType(entry.component, entry.field);
     return type.has_value() && *type == TypeOf(entry.value);
+  }
+
+  //! Whether `entry` addresses a field of the schema, holds its value type and
+  //! the value is inside the field's generated range or enumeration.
+  /*!
+   This is the only value check an applier makes for a single field: ranges
+   and enumeration members come from `Generated.SceneComponents.h`
+   (`IsValidFieldValue`), never from the applier. A bool field has no range.
+   Rules between fields (near before far, cone pair, cascade order) stay with
+   the applier.
+  */
+  [[nodiscard]] constexpr auto IsInRange(const PropertyEntry& entry) -> bool
+  {
+    return IsWellTyped(entry)
+      && std::visit(
+        [&entry](const auto value) {
+          return data::schema::IsValidFieldValue(
+            entry.component, entry.field, value);
+        },
+        entry.value);
+  }
+
+  //! Checks one authored value against `field` of `component`, for a command
+  //! that builds a whole component from values rather than entries.
+  /*!
+   \throws std::invalid_argument when `IsInRange` refuses the value.
+  */
+  template <typename TField>
+    requires std::is_enum_v<TField>
+  auto RequireInRange(const ComponentId component, const TField field,
+    const FieldValue value) -> void
+  {
+    const auto id = static_cast<std::uint16_t>(field);
+    if (!IsInRange(
+          PropertyEntry { .component = component, .field = id, .value = value })) {
+      throw std::invalid_argument("Field " + std::to_string(id)
+        + " of component "
+        + std::to_string(static_cast<std::uint16_t>(component))
+        + " is outside its valid range");
+    }
   }
 
 } // namespace oxygen::interop::module

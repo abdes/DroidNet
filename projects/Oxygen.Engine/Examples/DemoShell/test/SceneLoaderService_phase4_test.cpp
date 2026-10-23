@@ -54,6 +54,8 @@
 #include <Oxygen/Data/PhysicsResource.h>
 #include <Oxygen/Data/PhysicsSceneAsset.h>
 #include <Oxygen/Data/SceneAsset.h>
+#include <Oxygen/Data/SceneRecordDefaults.h>
+#include <Oxygen/Data/Schema/Generated.SceneComponents.h>
 #include <Oxygen/Data/ScriptAsset.h>
 #include <Oxygen/Data/ScriptResource.h>
 #include <Oxygen/Data/SourceKey.h>
@@ -268,7 +270,7 @@ namespace {
     table_desc.table.count = 1U;
     table_desc.table.entry_size = sizeof(pakw::DirectionalLightRecord);
 
-    auto directional = pakw::DirectionalLightRecord {};
+    auto directional = pakw::MakeDefaultRecord<pakw::DirectionalLightRecord>();
     directional.node_index = 1U;
     directional.common.casts_shadows = 1U;
     directional.common.shadow.bias = kSunShadowBias;

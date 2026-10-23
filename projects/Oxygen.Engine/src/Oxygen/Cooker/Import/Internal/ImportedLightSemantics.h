@@ -6,9 +6,13 @@
 
 #pragma once
 
+#include <array>
+#include <cstddef>
 #include <optional>
 #include <string_view>
 
+#include <Oxygen/Cooker/Import/Internal/ImportedPropertyCommit.h>
+#include <Oxygen/Data/LightValidation.h>
 #include <Oxygen/Data/PakFormat_world.h>
 
 namespace oxygen::content::import::detail {
@@ -36,13 +40,17 @@ inline constexpr std::string_view kImportedLightCastsShadowsFbxProp
   return node_override.value_or(light_override.value_or(fallback));
 }
 
+//! `common` with the flags the importer's semantics resolve.
+/*!
+ `common` holds the light kind's schema defaults; every other field stays.
+*/
 [[nodiscard]] constexpr auto ResolveImportedLightCommon(
+  data::pak::world::LightCommonRecord common,
   const ImportedLightSemantics& node_overrides,
   const ImportedLightSemantics& light_overrides,
   const bool default_affects_world, const bool default_casts_shadows) noexcept
   -> data::pak::world::LightCommonRecord
 {
-  auto common = data::pak::world::LightCommonRecord {};
   common.affects_world = ResolveImportedLightFlag(node_overrides.affects_world,
                            light_overrides.affects_world, default_affects_world)
     ? 1U
@@ -52,6 +60,23 @@ inline constexpr std::string_view kImportedLightCastsShadowsFbxProp
     ? 1U
     : 0U;
   return common;
+}
+
+//! Commits an imported linear RGB light color into `common`, through the
+//! light kind's color ranges.
+inline auto CommitImportedLightColor(ImportedPropertyCommit& commit,
+  const data::LightCommonRanges& ranges, const std::array<float, 3>& color,
+  data::pak::world::LightCommonRecord& common) -> void
+{
+  constexpr auto kChannels = std::array<std::string_view, 3> {
+    "color_rgb[0]",
+    "color_rgb[1]",
+    "color_rgb[2]",
+  };
+  for (std::size_t channel = 0; channel < kChannels.size(); ++channel) {
+    common.color_rgb[channel] = commit(kChannels[channel],
+      ranges.color[channel], color[channel], common.color_rgb[channel]);
+  }
 }
 
 } // namespace oxygen::content::import::detail

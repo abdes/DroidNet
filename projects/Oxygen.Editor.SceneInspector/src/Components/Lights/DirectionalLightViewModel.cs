@@ -155,8 +155,25 @@ public sealed partial class DirectionalLightViewModel : ComponentPropertyEditor,
     /// <summary>Gets or sets the resolution hint.</summary>
     public ShadowResolutionHint ShadowResolutionHint { get => this.shadowResolutionHintBinding.Value; set => this.RequestLightValue(this.shadowResolutionHintBinding, value); }
 
-    /// <summary>Gets or sets the numeric display adapter for the authored integer count.</summary>
-    public double CascadeCount { get => this.cascadeCountBinding.Value; set => this.RequestLightValue(this.cascadeCountBinding, Math.Clamp((int)Math.Round(value), 1, 4)); }
+    /// <summary>
+    /// Gets or sets the numeric display adapter for the authored integer count; a count outside the schema range is
+    /// rejected, not clamped, and a number with no integer value shows the authored count again.
+    /// </summary>
+    public double CascadeCount
+    {
+        get => this.cascadeCountBinding.Value;
+        set
+        {
+            if (InspectorValues.TryToInt32(value, out var count))
+            {
+                this.RequestLightValue(this.cascadeCountBinding, count);
+            }
+            else
+            {
+                this.RefreshValues();
+            }
+        }
+    }
 
     /// <summary>Gets or sets the cascade split mode.</summary>
     public DirectionalCsmSplitMode SplitMode { get => this.splitModeBinding.Value; set => this.RequestLightValue(this.splitModeBinding, value); }

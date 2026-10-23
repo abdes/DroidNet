@@ -76,6 +76,36 @@ public sealed class SceneJsonDefaultsTests
             .Should().Be(JsonSerializer.Serialize(declared with { Id = read.Id }, SceneJsonContext.Default.ComponentData));
     }
 
+    [TestMethod]
+    [DataRow("DirectionalLight")]
+    [DataRow("PointLight")]
+    [DataRow("SpotLight")]
+    public void PartialShadowSettings_FailToLoadNamingTheMissingValue(string type)
+    {
+        var json = JsonNode.Parse(JsonSerializer.Serialize(Declared(type), SceneJsonContext.Default.ComponentData))!.AsObject();
+        var shadow = json[nameof(LightComponentData.Shadow)]!.AsObject();
+        _ = shadow.Remove(nameof(LightShadowSettingsData.NormalBias));
+
+        var read = () => JsonSerializer.Deserialize(json.ToJsonString(), SceneJsonContext.Default.ComponentData);
+
+        _ = read.Should().Throw<JsonException>().WithMessage($"*{nameof(LightShadowSettingsData.NormalBias)}*");
+    }
+
+    [TestMethod]
+    [DataRow("DirectionalLight")]
+    [DataRow("PointLight")]
+    [DataRow("SpotLight")]
+    public void AbsentShadowSettings_TakeTheKindsSchemaDefaults(string type)
+    {
+        var declared = (LightComponentData)Declared(type);
+        var json = JsonNode.Parse(JsonSerializer.Serialize<ComponentData>(declared, SceneJsonContext.Default.ComponentData))!.AsObject();
+        _ = json.Remove(nameof(LightComponentData.Shadow));
+
+        var read = (LightComponentData)JsonSerializer.Deserialize(json.ToJsonString(), SceneJsonContext.Default.ComponentData)!;
+
+        _ = read.Shadow.Should().Be(declared.Shadow);
+    }
+
     private static ComponentData Declared(string type)
         => type switch
         {

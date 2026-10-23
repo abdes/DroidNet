@@ -6,7 +6,11 @@
 
 // Covers: Import/Schemas/oxygen.scene-descriptor.schema.json
 
+#include <algorithm>
+#include <array>
+#include <cstddef>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include <nlohmann/json.hpp>
@@ -341,11 +345,12 @@ NOLINT_TEST(SceneDescriptorSchemaTest, NodeFlagSourceModesAreCanonical)
     ValidateJson(Schema(), document), Contains(HasSubstr("/version: ")));
 }
 
-NOLINT_TEST(SceneDescriptorSchemaTest, RequiresExplicitCameraAspectPolicy)
+// An omitted aspect policy takes the scene schema's default.
+NOLINT_TEST(SceneDescriptorSchemaTest, CameraAspectPolicyIsADeclaredMember)
 {
   auto doc = MakeCurrentSceneDescriptor(R"({
     "name": "CameraPolicy", "nodes": [{}],
-    "cameras": { "perspective": [{ "node": 0, "aspect_mode": "auto" }] }
+    "cameras": { "perspective": [{ "node": 0 }] }
   })");
   EXPECT_THAT(ValidateJson(Schema(), doc), IsEmpty());
   auto& camera = doc.at("cameras").at("perspective").at(0);
@@ -356,9 +361,6 @@ NOLINT_TEST(SceneDescriptorSchemaTest, RequiresExplicitCameraAspectPolicy)
   camera.update({ { "aspect_mode", "stretch" } });
   EXPECT_THAT(ValidateJson(Schema(), doc),
     Contains(HasSubstr("/cameras/perspective/0/aspect_mode: ")));
-  camera.erase("aspect_mode");
-  EXPECT_THAT(
-    ValidateJson(Schema(), doc), Contains(HasSubstr("'aspect_mode'")));
 }
 
 NOLINT_TEST(
@@ -467,6 +469,130 @@ NOLINT_TEST(SceneDescriptorSchemaTest, RejectsRetiredCaptureModeAndOldVersion)
   previous.update({ { "version", kRetiredVersion } });
   EXPECT_THAT(
     ValidateJson(Schema(), previous), Contains(HasSubstr("/version: ")));
+}
+
+//! Appends the path of every default, numeric bound or integer member list
+//! below `schema`, other than the index a component names its node by.
+auto CollectValueRules(const json& schema, const std::string& path,
+  std::vector<std::string>& found) -> void
+{
+  constexpr auto kValueRules = std::array<std::string_view, 5> {
+    "default",
+    "minimum",
+    "maximum",
+    "exclusiveMinimum",
+    "exclusiveMaximum",
+  };
+  if (schema.is_array()) {
+    for (size_t i = 0; i < schema.size(); ++i) {
+      CollectValueRules(schema.at(i), path + "/" + std::to_string(i), found);
+    }
+    return;
+  }
+  if (!schema.is_object()) {
+    return;
+  }
+  for (const auto& [key, value] : schema.items()) {
+    auto child = path;
+    child.append("/").append(key);
+    const auto is_node_index = key == "node" && path.ends_with("/properties");
+    // An integer enum restates members the scene schema declares; a string
+    // enum spells them, which is structure.
+    const auto is_integer_members = key == "enum" && schema.contains("type")
+      && schema.at("type") == "integer";
+    if (std::ranges::find(kValueRules, key) != kValueRules.end()
+      || is_integer_members) {
+      found.push_back(child);
+    }
+    if (!is_node_index) {
+      CollectValueRules(value, child, found);
+    }
+  }
+}
+
+//! The descriptor schema definitions of component properties.
+constexpr auto kComponentDefinitions = std::array {
+  "node_flags",
+  "node_transform",
+  "perspective_camera",
+  "orthographic_camera",
+  "light_shadow",
+  "light_common",
+  "directional_light",
+  "point_light",
+  "spot_light",
+  "local_fog_volume",
+};
+
+//! Appends the path of every property below `schema` that is required, other
+//! than the index a component names its node by.
+auto CollectRequiredProperties(const json& schema, const std::string& path,
+  std::vector<std::string>& found) -> void
+{
+  if (schema.is_array()) {
+    for (size_t i = 0; i < schema.size(); ++i) {
+      CollectRequiredProperties(
+        schema.at(i), path + "/" + std::to_string(i), found);
+    }
+    return;
+  }
+  if (!schema.is_object()) {
+    return;
+  }
+  for (const auto& [key, value] : schema.items()) {
+    auto child = path;
+    child.append("/").append(key);
+    if (key == "required") {
+      for (const auto& name : value) {
+        if (name != "node") {
+          found.push_back(child + "/" + name.get<std::string>());
+        }
+      }
+      continue;
+    }
+    CollectRequiredProperties(value, child, found);
+  }
+}
+
+// The generated scene schema owns every default, range and member of a
+// component property; the descriptor schema states types and structure only.
+NOLINT_TEST(SceneDescriptorSchemaTest, ComponentRecordsStateNoDefaultsOrRanges)
+{
+  auto found = std::vector<std::string> {};
+  for (const auto* const name : kComponentDefinitions) {
+    CollectValueRules(Schema().at("definitions").at(name),
+      std::string("/definitions/") + name, found);
+  }
+  EXPECT_THAT(found, IsEmpty());
+}
+
+// An omitted component property takes the scene schema's default, so none is
+// required.
+NOLINT_TEST(SceneDescriptorSchemaTest, ComponentPropertiesAreOptional)
+{
+  auto found = std::vector<std::string> {};
+  for (const auto* const name : kComponentDefinitions) {
+    CollectRequiredProperties(Schema().at("definitions").at(name),
+      std::string("/definitions/") + name, found);
+  }
+  EXPECT_THAT(found, IsEmpty());
+}
+
+// A value outside its range is a property error of the cooker, which names the
+// property; the schema accepts it as a number.
+NOLINT_TEST(SceneDescriptorSchemaTest, ComponentValuesAreNotRangeChecked)
+{
+  const auto document = MakeCurrentSceneDescriptor(R"({
+    "name": "Ranges", "nodes": [{}],
+    "cameras": { "perspective": [
+      { "node": 0, "aspect_mode": "auto", "fov_y": 10.0, "near_plane": -1.0, "iso": 0 }
+    ] },
+    "lights": { "point": [
+      { "node": 0, "range": 0, "luminous_flux_lm": -5,
+        "common": { "color_rgb": [2, 2, 2], "shadow": { "resolution_hint": 9 } } }
+    ] }
+  })");
+  EXPECT_THAT(ValidateJson(Schema(), document), IsEmpty());
 }
 
 } // namespace

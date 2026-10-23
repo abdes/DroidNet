@@ -7,7 +7,6 @@ using Oxygen.Editor.Scenes.Edits.Components;
 using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
-using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 
@@ -58,7 +57,7 @@ public static class SceneComponents
         return consequences.Count == 0 ? add : new SceneEditBatch(add.Label, [add, .. consequences]);
     }
 
-    /// <summary>Creates a component of a kind with its defaults and a new identity.</summary>
+    /// <summary>Creates a component of a kind with the scene schema's defaults and a new identity.</summary>
     /// <param name="kind">The component kind, one of this class's constants.</param>
     /// <returns>The component.</returns>
     /// <exception cref="ArgumentException">The kind is unknown.</exception>
@@ -72,9 +71,9 @@ public static class SceneComponents
             },
             PerspectiveCamera => new PerspectiveCamera { Name = "Perspective Camera" },
             OrthographicCamera => new OrthographicCamera { Name = "Orthographic Camera" },
-            DirectionalLight => new DirectionalLightComponent { Name = "Directional Light", CastsShadows = true, AtmosphereSlot = AtmosphereLightSlot.None },
-            PointLight => new PointLightComponent { Name = "Point Light", LuminousFluxLumens = 1_600f, Range = 10f },
-            SpotLight => new SpotLightComponent { Name = "Spot Light", LuminousFluxLumens = 1_600f, Range = 15f },
+            DirectionalLight => new DirectionalLightComponent { Name = "Directional Light" },
+            PointLight => new PointLightComponent { Name = "Point Light" },
+            SpotLight => new SpotLightComponent { Name = "Spot Light" },
             LocalFogVolume => new LocalFogVolumeComponent { Name = "Local Fog Volume" },
             Scripting => new ScriptingComponent { Name = ScriptingComponent.DefaultName, Slots = [new ScriptSlot()] },
             _ => throw new ArgumentException($"Component kind '{kind}' is not supported.", nameof(kind)),

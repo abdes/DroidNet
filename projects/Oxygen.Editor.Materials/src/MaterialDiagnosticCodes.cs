@@ -18,6 +18,15 @@ public static class MaterialDiagnosticCodes
     /// <summary>An edit names a property the material does not have.</summary>
     public const string PropertyUnknown = DiagnosticCodes.MaterialPrefix + "Property.Unknown";
 
+    /// <summary>An edited numeric material property value is not finite.</summary>
+    public const string PropertyValueNotFinite = DiagnosticCodes.MaterialPrefix + "Property.Value.NotFinite";
+
+    /// <summary>A finite edited material property value is outside the range the material editor accepts.</summary>
+    public const string PropertyValueOutOfRange = DiagnosticCodes.MaterialPrefix + "Property.Value.OutOfRange";
+
+    /// <summary>An edited enumeration material property value is not one of its declared members.</summary>
+    public const string PropertyValueUndefined = DiagnosticCodes.MaterialPrefix + "Property.Value.Undefined";
+
     /// <summary>The edited material does not match the engine schema or the editor's constraints on it.</summary>
     public const string EditRejected = DiagnosticCodes.MaterialPrefix + "Edit.Rejected";
 

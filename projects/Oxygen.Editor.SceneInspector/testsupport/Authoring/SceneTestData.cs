@@ -39,6 +39,8 @@ internal static class SceneTestData
         Geometry = EngineAssets.BasicShape("Cube"),
     };
 
+    // The value is both the camera's field of view and the light's intensity, so it must be in both schema ranges
+    // (1 to 179 degrees, and not negative); the components refuse any other.
     internal static SceneNode AddNumericNode(Scene scene, float value)
     {
         var node = new SceneNode(scene, "Other target");
@@ -50,6 +52,7 @@ internal static class SceneTestData
 
     internal static float ReadNumericSource(SceneNode node, string kind) => string.Equals(kind, "Camera", StringComparison.Ordinal) ? node.Components.OfType<PerspectiveCamera>().Single().FieldOfView : node.Components.OfType<DirectionalLightComponent>().Single().IntensityLux;
 
+    // The value must be in the edited property's schema range; the component refuses any other.
     internal static void SetNumericSource(SceneNode node, string kind, float value)
     {
         if (string.Equals(kind, "Camera", StringComparison.Ordinal))

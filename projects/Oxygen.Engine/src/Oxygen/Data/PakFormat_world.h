@@ -11,7 +11,6 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
-#include <numbers>
 
 #include <Oxygen/Base/Compilers.h>
 #include <Oxygen/Base/Macros.h>
@@ -305,6 +304,8 @@ static_assert(sizeof(OverrideValue) == 16);
  holds at most one override per property and part. The table is sorted by node,
  override id and part.
 */
+// `override_id` is no tag: its property's schema value type selects the member.
+// NOLINTNEXTLINE(bugprone-tagged-union-member-count)
 struct OverrideRecord {
   SceneNodeIndexT node_index = 0;
   schema::OverrideId override_id = schema::OverrideId::kInvalid;
@@ -318,21 +319,46 @@ static_assert(sizeof(OverrideRecord) == 70);
 #pragma pack(push, 1)
 
 //! Node-attached local fog volume component record.
+/*!
+  Authored fields are value-initialized: the scene schema owns the defaults,
+  and a writer sets every field (see `MakeDefaultRecord`).
+*/
 struct LocalFogVolumeRecord {
   SceneNodeIndexT node_index = 0;
-  uint32_t enabled = 1;
+  uint32_t enabled {};
 
-  float radial_fog_extinction = 1.0F;
-  float height_fog_extinction = 1.0F;
-  float height_fog_falloff = 1000.0F;
-  float height_fog_offset = 0.0F;
-  float fog_phase_g = 0.2F;
-  float fog_albedo[3] = { 1.0F, 1.0F, 1.0F };
-  float fog_emissive[3] = { 0.0F, 0.0F, 0.0F };
-  int32_t sort_priority = 0;
+  float radial_fog_extinction {};
+  float height_fog_extinction {};
+  float height_fog_falloff {};
+  float height_fog_offset {};
+  float fog_phase_g {};
+  float fog_albedo[3] {};
+  float fog_emissive[3] {};
+  int32_t sort_priority {};
 };
 #pragma pack(pop)
 static_assert(sizeof(LocalFogVolumeRecord) == 56);
+
+//! Whether `record` holds valid values of the local fog volume's schema
+//! properties; cooking and loading share this contract.
+[[nodiscard]] inline auto HasValidLocalFogVolumeValues(
+  const LocalFogVolumeRecord& record) -> bool
+{
+  namespace fog = schema::local_fog_volume;
+  return record.enabled <= 1U
+    && fog::kRadialFogExtinctionRange.Contains(record.radial_fog_extinction)
+    && fog::kHeightFogExtinctionRange.Contains(record.height_fog_extinction)
+    && fog::kHeightFogFalloffRange.Contains(record.height_fog_falloff)
+    && fog::kHeightFogOffsetRange.Contains(record.height_fog_offset)
+    && fog::kFogPhaseGRange.Contains(record.fog_phase_g)
+    && fog::kFogAlbedoRRange.Contains(record.fog_albedo[0])
+    && fog::kFogAlbedoGRange.Contains(record.fog_albedo[1])
+    && fog::kFogAlbedoBRange.Contains(record.fog_albedo[2])
+    && fog::kFogEmissiveRRange.Contains(record.fog_emissive[0])
+    && fog::kFogEmissiveGRange.Contains(record.fog_emissive[1])
+    && fog::kFogEmissiveBRange.Contains(record.fog_emissive[2])
+    && fog::kSortPriorityRange.Contains(record.sort_priority);
+}
 
 #pragma pack(push, 1)
 
@@ -343,18 +369,20 @@ static_assert(sizeof(LocalFogVolumeRecord) == 56);
   ### Coordinate System
   - The camera looks down the -Z axis in its local space.
   - FOV is vertical, in radians.
+
+  Authored fields are value-initialized: the scene schema owns the defaults,
+  and a writer sets every field (see `MakeDefaultRecord`).
 */
 struct PerspectiveCameraRecord {
   SceneNodeIndexT node_index = 0; // Index of the owner node
-  float fov_y = 0.785398F; // Vertical FOV in radians (~45 deg)
-  float aspect_ratio
-    = kDefaultCameraAspectRatio; // Retained Fixed width / height
-  float near_plane = 0.1F; // Distance to near clipping plane
-  float far_plane = 1000.0F; // Distance to far clipping plane
-  float aperture_f = engine::kDefaultCameraApertureF;
-  float shutter_rate = engine::kDefaultCameraShutterRate;
-  float iso = engine::kDefaultCameraIso;
-  CameraAspectMode aspect_mode = CameraAspectMode::kAuto;
+  float fov_y {}; // Vertical FOV in radians
+  float aspect_ratio {}; // Retained Fixed width / height
+  float near_plane {}; // Distance to near clipping plane
+  float far_plane {}; // Distance to far clipping plane
+  float aperture_f {};
+  float shutter_rate {};
+  float iso {};
+  CameraAspectMode aspect_mode {};
 };
 #pragma pack(pop)
 static_assert(sizeof(PerspectiveCameraRecord) == 33);
@@ -363,21 +391,23 @@ static_assert(offsetof(PerspectiveCameraRecord, shutter_rate) == 24);
 static_assert(offsetof(PerspectiveCameraRecord, iso) == 28);
 static_assert(offsetof(PerspectiveCameraRecord, aspect_mode) == 32);
 
-//! The canonical finite perspective lens contract shared by cooking and
-//! loading.
-inline auto HasValidPerspectiveCameraValues(
+//! Whether `record` holds valid values of the perspective camera's schema
+//! properties and a far plane beyond its near plane; cooking and loading share
+//! this contract.
+[[nodiscard]] inline auto HasValidPerspectiveCameraValues(
   const PerspectiveCameraRecord& record) -> bool
 {
-  return (record.aspect_mode == CameraAspectMode::kAuto
-           || record.aspect_mode == CameraAspectMode::kFixed)
-    && std::isfinite(record.fov_y) && record.fov_y > 0.0F
-    && record.fov_y < std::numbers::pi_v<float>
-    && std::isfinite(record.aspect_ratio) && record.aspect_ratio > 0.0F
-    && std::isfinite(record.near_plane) && record.near_plane > 0.0F
-    && std::isfinite(record.far_plane) && record.far_plane > record.near_plane
-    && std::isfinite(record.aperture_f) && record.aperture_f > 0.0F
-    && std::isfinite(record.shutter_rate) && record.shutter_rate > 0.0F
-    && std::isfinite(record.iso) && record.iso > 0.0F;
+  namespace camera = schema::perspective_camera;
+  return schema::IsMember(
+           camera::kAspectModeValues, nostd::to_underlying(record.aspect_mode))
+    && camera::kFieldOfViewYRadiansRange.Contains(record.fov_y)
+    && camera::kAspectRatioRange.Contains(record.aspect_ratio)
+    && camera::kNearPlaneRange.Contains(record.near_plane)
+    && camera::kFarPlaneRange.Contains(record.far_plane)
+    && record.far_plane > record.near_plane
+    && camera::kApertureFRange.Contains(record.aperture_f)
+    && camera::kShutterRateRange.Contains(record.shutter_rate)
+    && camera::kIsoRange.Contains(record.iso);
 }
 
 #pragma pack(push, 1)
@@ -390,19 +420,22 @@ inline auto HasValidPerspectiveCameraValues(
   - Defined by a box (left, right, bottom, top, near, far) in local space.
   - Fixed keeps these extents; Auto keeps the vertical extents and horizontal
     centre and derives the width from each render target's aspect ratio.
+
+  Authored fields are value-initialized: the scene schema owns the defaults,
+  and a writer sets every field (see `MakeDefaultRecord`).
 */
 struct OrthographicCameraRecord {
   SceneNodeIndexT node_index = 0; // Index of the owner node
-  float left = -10.0F;
-  float right = 10.0F;
-  float bottom = -10.0F;
-  float top = 10.0F;
-  float near_plane = -100.0F;
-  float far_plane = 100.0F;
-  float aperture_f = engine::kDefaultCameraApertureF;
-  float shutter_rate = engine::kDefaultCameraShutterRate;
-  float iso = engine::kDefaultCameraIso;
-  CameraAspectMode aspect_mode = CameraAspectMode::kFixed;
+  float left {};
+  float right {};
+  float bottom {};
+  float top {};
+  float near_plane {};
+  float far_plane {};
+  float aperture_f {};
+  float shutter_rate {};
+  float iso {};
+  CameraAspectMode aspect_mode {};
 };
 #pragma pack(pop)
 static_assert(sizeof(OrthographicCameraRecord) == 41);
@@ -411,21 +444,33 @@ static_assert(offsetof(OrthographicCameraRecord, shutter_rate) == 32);
 static_assert(offsetof(OrthographicCameraRecord, iso) == 36);
 static_assert(offsetof(OrthographicCameraRecord, aspect_mode) == 40);
 
-//! The canonical finite orthographic volume contract shared by cooking and
-//! loading.
-inline auto HasValidOrthographicCameraValues(
+//! Whether `record` holds valid values of the orthographic camera's schema
+//! properties, a non-empty volume and a far plane beyond its near plane;
+//! cooking and loading share this contract.
+/*!
+ The volume's half height is the schema's orthographic size, and its width over
+ its height the schema's aspect ratio.
+*/
+[[nodiscard]] inline auto HasValidOrthographicCameraValues(
   const OrthographicCameraRecord& record) -> bool
 {
-  return (record.aspect_mode == CameraAspectMode::kAuto
-           || record.aspect_mode == CameraAspectMode::kFixed)
-    && std::isfinite(record.left) && std::isfinite(record.right)
-    && record.right > record.left && std::isfinite(record.bottom)
-    && std::isfinite(record.top) && record.top > record.bottom
-    && std::isfinite(record.near_plane) && std::isfinite(record.far_plane)
-    && record.far_plane > record.near_plane && std::isfinite(record.aperture_f)
-    && record.aperture_f > 0.0F && std::isfinite(record.shutter_rate)
-    && record.shutter_rate > 0.0F && std::isfinite(record.iso)
-    && record.iso > 0.0F;
+  namespace camera = schema::orthographic_camera;
+  if (!schema::IsMember(
+        camera::kAspectModeValues, nostd::to_underlying(record.aspect_mode))
+    || !(record.right > record.left) || !(record.top > record.bottom)) {
+    return false;
+  }
+  // Halved before subtracting: the half extents of finite bounds are finite.
+  const auto half_height = (0.5F * record.top) - (0.5F * record.bottom);
+  const auto half_width = (0.5F * record.right) - (0.5F * record.left);
+  return camera::kOrthographicSizeRange.Contains(half_height)
+    && camera::kAspectRatioRange.Contains(half_width / half_height)
+    && camera::kNearPlaneRange.Contains(record.near_plane)
+    && camera::kFarPlaneRange.Contains(record.far_plane)
+    && record.far_plane > record.near_plane
+    && camera::kApertureFRange.Contains(record.aperture_f)
+    && camera::kShutterRateRange.Contains(record.shutter_rate)
+    && camera::kIsoRange.Contains(record.iso);
 }
 
 //=== Scene: Lights and Environment -----------------------------------------//
@@ -897,16 +942,19 @@ inline constexpr std::array kKnownEnvironmentRecordSizes {
 //! Common shadow settings packed into light component records.
 #pragma pack(push, 1)
 struct LightShadowSettingsRecord {
-  float bias = 0.0F;
-  float normal_bias = 0.02F;
-  uint32_t contact_shadows = 0;
-  uint8_t resolution_hint = 1; // ShadowResolutionHint
+  float bias {};
+  float normal_bias {};
+  uint32_t contact_shadows {};
+  uint8_t resolution_hint {}; // ShadowResolutionHint
 };
 #pragma pack(pop)
 static_assert(sizeof(LightShadowSettingsRecord) == 13);
 
 //! Common authored properties shared by all light records.
 /*!
+  Authored fields are value-initialized: the scene schema owns the defaults,
+  and a writer sets every field (see `MakeDefaultRecord`).
+
   @note Intensity fields are now in specific light records:
   - DirectionalLightRecord::intensity_lux (lux, lm/m²)
   - PointLightRecord::luminous_flux_lm (lumens)
@@ -914,14 +962,14 @@ static_assert(sizeof(LightShadowSettingsRecord) == 13);
 */
 #pragma pack(push, 1)
 struct LightCommonRecord {
-  uint32_t affects_world = 1;
-  float color_rgb[3] = { 1.0F, 1.0F, 1.0F };
+  uint32_t affects_world {};
+  float color_rgb[3] {};
   // intensity REMOVED - now in specific light records with physical units
 
-  uint8_t casts_shadows = 0;
+  uint8_t casts_shadows {};
 
-  LightShadowSettingsRecord shadow = {};
-  float exposure_compensation_ev = 0.0F;
+  LightShadowSettingsRecord shadow {};
+  float exposure_compensation_ev {};
 };
 #pragma pack(pop)
 static_assert(sizeof(LightCommonRecord) == 34);
@@ -931,25 +979,28 @@ static_assert(sizeof(LightCommonRecord) == 34);
   Contains `intensity_lux` for physical illuminance in lux (lm/m²).
 
  * Typical values: 100,000 lux (bright sun), 10,000 lux (overcast).
+
+  Authored fields are value-initialized: the scene schema owns the defaults,
+  and a writer sets every field (see `MakeDefaultRecord`).
 */
 #pragma pack(push, 1)
 struct DirectionalLightRecord {
   world::SceneNodeIndexT node_index = 0;
-  LightCommonRecord common = {};
-  float angular_size_radians = 0.0F;
-  uint8_t atmosphere_light_slot = 0; // None=0, Primary=1, Secondary=2
-  uint8_t use_per_pixel_atmosphere_transmittance = 0;
-  float atmosphere_disk_luminance_scale_rgb[3] = { 1.0F, 1.0F, 1.0F };
+  LightCommonRecord common {};
+  float angular_size_radians {};
+  uint8_t atmosphere_light_slot {}; // None=0, Primary=1, Secondary=2
+  uint8_t use_per_pixel_atmosphere_transmittance {};
+  float atmosphere_disk_luminance_scale_rgb[3] {};
 
-  uint32_t cascade_count = 4;
-  float cascade_distances[4] = { 8.0F, 24.0F, 64.0F, 160.0F };
-  float distribution_exponent = 3.0F;
-  uint8_t split_mode = 0;
-  float max_shadow_distance = 160.0F;
-  float transition_fraction = 0.1F;
-  float distance_fadeout_fraction = 0.1F;
+  uint32_t cascade_count {};
+  float cascade_distances[4] {};
+  float distribution_exponent {};
+  uint8_t split_mode {};
+  float max_shadow_distance {};
+  float transition_fraction {};
+  float distance_fadeout_fraction {};
 
-  float intensity_lux = 100000.0F; //!< Illuminance in lux (lm/m²)
+  float intensity_lux {}; //!< Illuminance in lux (lm/m²)
 };
 #pragma pack(pop)
 static_assert(sizeof(DirectionalLightRecord) == 97);
@@ -958,14 +1009,17 @@ static_assert(sizeof(DirectionalLightRecord) == 97);
 /*!
   Contains `luminous_flux_lm` for physical luminous flux in lumens.
   Typical values: 800 lm (~60W incandescent), 1600 lm (~100W).
+
+  Authored fields are value-initialized: the scene schema owns the defaults,
+  and a writer sets every field (see `MakeDefaultRecord`).
 */
 #pragma pack(push, 1)
 struct PointLightRecord {
   world::SceneNodeIndexT node_index = 0;
-  LightCommonRecord common = {};
-  float range = 10.0F;
-  float source_radius = 0.0F;
-  float luminous_flux_lm = 800.0F; //!< Luminous flux in lumens (lm)
+  LightCommonRecord common {};
+  float range {};
+  float source_radius {};
+  float luminous_flux_lm {}; //!< Luminous flux in lumens (lm)
 };
 #pragma pack(pop)
 static_assert(sizeof(PointLightRecord) == 50);
@@ -974,16 +1028,19 @@ static_assert(sizeof(PointLightRecord) == 50);
 /*!
   Contains `luminous_flux_lm` for physical luminous flux in lumens.
   Typical values: 800 lm (~60W incandescent), 1600 lm (~100W).
+
+  Authored fields are value-initialized: the scene schema owns the defaults,
+  and a writer sets every field (see `MakeDefaultRecord`).
 */
 #pragma pack(push, 1)
 struct SpotLightRecord {
   world::SceneNodeIndexT node_index = 0;
-  LightCommonRecord common = {};
-  float range = 10.0F;
-  float inner_cone_angle_radians = 0.4F;
-  float outer_cone_angle_radians = 0.6F;
-  float source_radius = 0.0F;
-  float luminous_flux_lm = 800.0F; //!< Luminous flux in lumens (lm)
+  LightCommonRecord common {};
+  float range {};
+  float inner_cone_angle_radians {};
+  float outer_cone_angle_radians {};
+  float source_radius {};
+  float luminous_flux_lm {}; //!< Luminous flux in lumens (lm)
 };
 #pragma pack(pop)
 static_assert(sizeof(SpotLightRecord) == 58);

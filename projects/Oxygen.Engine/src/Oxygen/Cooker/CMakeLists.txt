@@ -211,6 +211,7 @@ set(
   "Import/Internal/ModelTextureSource.h"
   "Import/Internal/MaterialSource.h"
   "Import/Internal/ImportedLightSemantics.h"
+  "Import/Internal/ImportedPropertyCommit.h"
   "Import/Internal/JobEntry.h"
   "Import/Internal/Jobs/AudioImportJob.h"
   "Import/Internal/Jobs/BufferContainerImportJob.h"

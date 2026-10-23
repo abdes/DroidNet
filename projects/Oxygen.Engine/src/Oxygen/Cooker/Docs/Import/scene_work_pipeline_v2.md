@@ -319,7 +319,22 @@ Adapter responsibilities (the adapter's `BuildSceneStage` must do these):
   exposes authored light shadow intent, the adapter must preserve it in the
   light component record instead of replacing it with a blanket default.
 - Attach components (renderables/cameras/lights) and populate component records
-  with `node_index` referring to the node table.
+  with `node_index` referring to the node table. The camera, light and local fog
+  records are value-initialized: the adapter writes every field, starting from
+  `MakeDefaultRecord<Record>()` (`Data/SceneRecordDefaults.h`), which holds the
+  scene schema's defaults, for each property its source does not state. A
+  model import (glTF, FBX) commits each camera and light value it reads
+  through the property's generated range: a value outside a range the schema
+  declares `commit: clamp` takes the nearest bound, and any other invalid
+  value keeps the schema default with a `scene.import.property_invalid`
+  warning. Rules across properties (near before far, the spot cone pair)
+  still fail the import. A scene descriptor is scene data and is never
+  clamped: it takes the same defaults for an omitted property and rejects a
+  value outside the schema's range or members with
+  `scene.descriptor.property_out_of_range`, naming the property. The
+  descriptor JSON schema states types and structure only: it requires no
+  component property but `node`, and declares no default, bound or integer
+  member list.
 - Ensure the string table begins with a leading NUL byte.
 
 Pipeline responsibilities (performed by `ScenePipeline`):

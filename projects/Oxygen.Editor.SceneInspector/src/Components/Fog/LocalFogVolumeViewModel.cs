@@ -79,11 +79,24 @@ public sealed partial class LocalFogVolumeViewModel : ComponentPropertyEditor, I
         set => InspectorBindingRequests.Request(this.enabledBinding, value);
     }
 
-    /// <summary>Gets or sets the composition order through its guarded binding.</summary>
+    /// <summary>
+    /// Gets or sets the composition order through its guarded binding; a number with no integer value shows the authored
+    /// order again.
+    /// </summary>
     public double SortPriority
     {
         get => this.sortPriorityBinding.Value;
-        set => InspectorBindingRequests.Request(this.sortPriorityBinding, (int)Math.Round(value));
+        set
+        {
+            if (InspectorValues.TryToInt32(value, out var priority))
+            {
+                InspectorBindingRequests.Request(this.sortPriorityBinding, priority);
+            }
+            else
+            {
+                this.RefreshValues();
+            }
+        }
     }
 
     /// <summary>Gets the radial extinction binding and its mixed state.</summary>

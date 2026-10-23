@@ -7,8 +7,6 @@
 #pragma once
 #pragma managed(push, off)
 
-#include <algorithm>
-#include <cmath>
 #include <cstdint>
 #include <span>
 #include <stdexcept>
@@ -16,6 +14,7 @@
 
 #include <Commands/IComponentPropertyApplier.h>
 #include <Commands/PropertyKeys.h>
+#include <Commands/SchemaEnums.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/SceneNode.h>
 
@@ -36,8 +35,8 @@ namespace oxygen::interop::module {
         auto disk = light.GetAtmosphereDiskLuminanceScale();
         for (const auto& entry : entries) {
           const auto field = static_cast<DirectionalLightField>(entry.field);
-          if (!ValidEncoding(field, entry)) {
-            error = { .field = std::to_string(entry.field), .message = "Invalid light property encoding" };
+          if (!IsInRange(entry)) {
+            error = { .field = std::to_string(entry.field), .message = "Property value is not valid for its field" };
             return false;
           }
           switch (field) {
@@ -49,12 +48,12 @@ namespace oxygen::interop::module {
           case DirectionalLightField::kShadowBias: common.shadow.bias = entry.Float(); break;
           case DirectionalLightField::kShadowNormalBias: common.shadow.normal_bias = entry.Float(); break;
           case DirectionalLightField::kContactShadows: common.shadow.contact_shadows = entry.Bool(); break;
-          case DirectionalLightField::kShadowResolutionHint: common.shadow.resolution_hint = static_cast<scene::ShadowResolutionHint>(entry.Int32()); break;
+          case DirectionalLightField::kShadowResolutionHint: common.shadow.resolution_hint = ValidatedMember(ToShadowResolutionHint(entry.Int32())); break;
           case DirectionalLightField::kExposureCompensation: common.exposure_compensation_ev = entry.Float(); break;
           case DirectionalLightField::kIntensityLux: light.SetIntensityLux(entry.Float()); break;
           case DirectionalLightField::kAngularSizeRadians: light.SetAngularSizeRadians(entry.Float()); break;
           case DirectionalLightField::kCascadeCount: csm.cascade_count = static_cast<std::uint32_t>(entry.Int32()); break;
-          case DirectionalLightField::kSplitMode: csm.split_mode = static_cast<scene::DirectionalCsmSplitMode>(entry.Int32()); break;
+          case DirectionalLightField::kSplitMode: csm.split_mode = ValidatedMember(ToDirectionalCsmSplitMode(entry.Int32())); break;
           case DirectionalLightField::kMaxShadowDistance: csm.max_shadow_distance = entry.Float(); break;
           case DirectionalLightField::kCascadeDistance0: csm.cascade_distances[0] = entry.Float(); break;
           case DirectionalLightField::kCascadeDistance1: csm.cascade_distances[1] = entry.Float(); break;
@@ -63,7 +62,7 @@ namespace oxygen::interop::module {
           case DirectionalLightField::kDistributionExponent: csm.distribution_exponent = entry.Float(); break;
           case DirectionalLightField::kTransitionFraction: csm.transition_fraction = entry.Float(); break;
           case DirectionalLightField::kDistanceFadeoutFraction: csm.distance_fadeout_fraction = entry.Float(); break;
-          case DirectionalLightField::kAtmosphereLightSlot: light.SetAtmosphereLightSlot(static_cast<scene::AtmosphereLightSlot>(entry.Int32())); break;
+          case DirectionalLightField::kAtmosphereLightSlot: light.SetAtmosphereLightSlot(ValidatedMember(ToAtmosphereLightSlot(entry.Int32()))); break;
           case DirectionalLightField::kUsePerPixelAtmosphereTransmittance: light.SetUsePerPixelAtmosphereTransmittance(entry.Bool()); break;
           case DirectionalLightField::kDiskScaleR: disk.x = entry.Float(); break;
           case DirectionalLightField::kDiskScaleG: disk.y = entry.Float(); break;
@@ -77,29 +76,6 @@ namespace oxygen::interop::module {
         return true;
       }, &error);
       if (!accepted) throw std::invalid_argument(error.field + ": " + error.message);
-    }
-
-  private:
-    // A value the light accepts: a finite float, or an int32 inside its
-    // enumeration or count. A bool field is valid as it is.
-    static auto ValidEncoding(DirectionalLightField field,
-      const PropertyEntry& entry) -> bool
-    {
-      const auto type = FindFieldType(field);
-      if (!type) return false;
-      switch (*type) {
-      case FieldType::kBool: return true;
-      case FieldType::kFloat: return std::isfinite(entry.Float());
-      case FieldType::kInt32: break;
-      }
-      const auto value = entry.Int32();
-      switch (field) {
-      case DirectionalLightField::kShadowResolutionHint: return value >= 0 && value <= 3;
-      case DirectionalLightField::kAtmosphereLightSlot: return value >= 0 && value <= 2;
-      case DirectionalLightField::kCascadeCount: return value >= 1 && value <= 4;
-      case DirectionalLightField::kSplitMode: return value == 0 || value == 1;
-      default: return false;
-      }
     }
   };
 } // namespace oxygen::interop::module

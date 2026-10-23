@@ -6,7 +6,6 @@ using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Managed.Core;
-using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.Scenes.Properties;
 
@@ -84,92 +83,61 @@ public sealed class PerspectiveCameraDescriptors
                 SceneSchema.PerspectiveCamera.AspectRatio,
                 "Aspect Ratio",
                 static camera => camera.AspectRatio,
-                static (camera, value) => camera.AspectRatio = value,
-                static value => !float.IsFinite(value)
-                    ? ValidationResult.Fail(SceneDiagnosticCodes.TransformFieldNotFinite, "Camera values must be finite numbers.")
-                    : value <= 0f
-                        ? ValidationResult.Fail(SceneDiagnosticCodes.PerspectiveCameraAspectRatioNonPositive, "Aspect ratio must be greater than zero.")
-                        : ValidationResult.Ok),
+                static (camera, value) => camera.AspectRatio = value),
             nearPlane: FloatDescriptor(
                 SceneSchema.PerspectiveCamera.NearPlane,
                 "Near Plane",
                 static camera => camera.NearPlane,
-                static (camera, value) => camera.NearPlane = value,
-                static value => !float.IsFinite(value)
-                    ? ValidationResult.Fail(SceneDiagnosticCodes.TransformFieldNotFinite, "Camera values must be finite numbers.")
-                    : value <= 0f
-                        ? ValidationResult.Fail(SceneDiagnosticCodes.PerspectiveCameraNearPlaneNonPositive, "Near plane must be greater than zero.")
-                        : ValidationResult.Ok),
+                static (camera, value) => camera.NearPlane = value),
             farPlane: FloatDescriptor(
                 SceneSchema.PerspectiveCamera.FarPlane,
                 "Far Plane",
                 static camera => camera.FarPlane,
-                static (camera, value) => camera.FarPlane = value,
-                static value => float.IsFinite(value)
-                    ? ValidationResult.Ok
-                    : ValidationResult.Fail(SceneDiagnosticCodes.TransformFieldNotFinite, "Camera values must be finite numbers.")),
+                static (camera, value) => camera.FarPlane = value),
             aspectMode: CreateAspectMode(),
             apertureF: FloatDescriptor(
                 SceneSchema.PerspectiveCamera.ApertureF,
                 "Aperture",
                 static camera => camera.ApertureF,
-                static (camera, value) => camera.ApertureF = value,
-                Positive("Aperture must be greater than zero.")),
+                static (camera, value) => camera.ApertureF = value),
             shutterRate: FloatDescriptor(
                 SceneSchema.PerspectiveCamera.ShutterRate,
                 "Shutter Speed",
                 static camera => camera.ShutterRate,
-                static (camera, value) => camera.ShutterRate = value,
-                Positive("Shutter speed must be greater than zero.")),
+                static (camera, value) => camera.ShutterRate = value),
             iso: FloatDescriptor(
                 SceneSchema.PerspectiveCamera.Iso,
                 "ISO",
                 static camera => camera.Iso,
-                static (camera, value) => camera.Iso = value,
-                Positive("ISO must be greater than zero.")));
+                static (camera, value) => camera.Iso = value));
 
     private static PropertyDescriptor<float> CreateFieldOfView()
         => FloatDescriptor(
             SceneSchema.PerspectiveCamera.FieldOfViewDegrees,
             "Field of View",
             static camera => camera.FieldOfView,
-            static (camera, value) => camera.FieldOfView = value,
-            static value => !float.IsFinite(value)
-                ? ValidationResult.Fail(SceneDiagnosticCodes.TransformFieldNotFinite, "Camera values must be finite numbers.")
-                : value is < 1f or > 179f
-                    ? ValidationResult.Fail(SceneDiagnosticCodes.TransformFieldNotFinite, "Field of view must be between 1 and 179 degrees.")
-                    : ValidationResult.Ok);
+            static (camera, value) => camera.FieldOfView = value);
 
     private static PropertyDescriptor<CameraAspectMode> CreateAspectMode()
         => new(
             id: SceneSchema.PerspectiveCamera.AspectMode,
             reader: static target => ((PerspectiveCamera)target).AspectMode,
             writer: static (target, value) => ((PerspectiveCamera)target).AspectMode = value,
-            validator: static value => Enum.IsDefined(value)
-                ? ValidationResult.Ok
-                : ValidationResult.Fail(SceneDiagnosticCodes.TransformFieldNotFinite, "Unknown camera aspect mode."),
+            validator: PropertyValidators.Defined<CameraAspectMode>("Aspect mode"),
             annotation: SceneEditorSchemaAnnotations.Get(
                 "#/definitions/perspective_camera/aspect_mode",
                 new EditorAnnotation { Group = "Projection", Label = "Aspect Mode", Renderer = "combobox" }));
-
-    private static Func<float, ValidationResult> Positive(string message)
-        => value => !float.IsFinite(value)
-            ? ValidationResult.Fail(SceneDiagnosticCodes.TransformFieldNotFinite, "Camera values must be finite numbers.")
-            : value <= 0f
-                ? ValidationResult.Fail(SceneDiagnosticCodes.CameraExposureNonPositive, message)
-                : ValidationResult.Ok;
 
     private static PropertyDescriptor<float> FloatDescriptor(
         PropertyId<float> id,
         string label,
         Func<PerspectiveCamera, float> read,
-        Action<PerspectiveCamera, float> write,
-        Func<float, ValidationResult> validate)
+        Action<PerspectiveCamera, float> write)
         => new(
             id: id,
             reader: target => read((PerspectiveCamera)target),
             writer: (target, value) => write((PerspectiveCamera)target, value),
-            validator: validate,
+            validator: PropertyValidators.Of(id, label),
             annotation: SceneEditorSchemaAnnotations.Get(
                 ToSceneSchemaPointer(id.Id.JsonPointer),
                 new EditorAnnotation { Group = "Projection", Label = label, Renderer = "numberbox", Step = 0.01 }));

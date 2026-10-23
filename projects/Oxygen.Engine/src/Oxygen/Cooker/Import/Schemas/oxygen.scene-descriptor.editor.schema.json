@@ -114,8 +114,7 @@
           "x-editor-label": "Height Offset",
           "x-editor-group": "Local Fog Volume",
           "x-editor-renderer": "numberbox",
-          "x-editor-step": 0.01,
-          "x-editor-unit": "m"
+          "x-editor-step": 0.01
         },
         "fog_phase_g": {
           "x-editor-label": "Phase",
@@ -470,8 +469,7 @@
           "x-editor-group": "Projection",
           "x-editor-order": 0,
           "x-editor-renderer": "numberbox",
-          "x-editor-step": 0.1,
-          "x-editor-unit": "deg"
+          "x-editor-step": 0.1
         },
         "aspect_ratio": {
           "x-editor-label": "Fixed Aspect Ratio",
@@ -491,16 +489,14 @@
           "x-editor-group": "Projection",
           "x-editor-order": 20,
           "x-editor-renderer": "numberbox",
-          "x-editor-step": 0.01,
-          "x-editor-unit": "m"
+          "x-editor-step": 0.01
         },
         "far_plane": {
           "x-editor-label": "Far Plane",
           "x-editor-group": "Projection",
           "x-editor-order": 30,
           "x-editor-renderer": "numberbox",
-          "x-editor-step": 1.0,
-          "x-editor-unit": "m"
+          "x-editor-step": 1.0
         },
         "aperture_f": {
           "x-editor-label": "Aperture",
@@ -516,7 +512,6 @@
           "x-editor-order": 50,
           "x-editor-renderer": "numberbox",
           "x-editor-step": 1.0,
-          "x-editor-unit": "1/s",
           "x-editor-tooltip": "Reciprocal exposure time. Used by ManualCamera exposure."
         },
         "iso": {
@@ -536,8 +531,7 @@
           "x-editor-group": "Projection",
           "x-editor-order": 0,
           "x-editor-renderer": "numberbox",
-          "x-editor-step": 0.1,
-          "x-editor-unit": "m"
+          "x-editor-step": 0.1
         },
         "aspect_mode": {
           "x-editor-label": "Aspect Mode",
@@ -557,16 +551,14 @@
           "x-editor-group": "Projection",
           "x-editor-order": 20,
           "x-editor-renderer": "numberbox",
-          "x-editor-step": 0.01,
-          "x-editor-unit": "m"
+          "x-editor-step": 0.01
         },
         "far_plane": {
           "x-editor-label": "Far Plane",
           "x-editor-group": "Projection",
           "x-editor-order": 30,
           "x-editor-renderer": "numberbox",
-          "x-editor-step": 1.0,
-          "x-editor-unit": "m"
+          "x-editor-step": 1.0
         },
         "aperture_f": {
           "x-editor-label": "Aperture",
@@ -582,7 +574,6 @@
           "x-editor-order": 50,
           "x-editor-renderer": "numberbox",
           "x-editor-step": 1.0,
-          "x-editor-unit": "1/s",
           "x-editor-tooltip": "Reciprocal exposure time. Used by ManualCamera exposure."
         },
         "iso": {
@@ -650,8 +641,7 @@
           "x-editor-group": "Exposure",
           "x-editor-order": 0,
           "x-editor-renderer": "numberbox",
-          "x-editor-step": 0.1,
-          "x-editor-unit": "EV"
+          "x-editor-step": 0.1
         },
         "shadow": {
           "x-editor-label": "Shadows",
@@ -668,16 +658,14 @@
           "x-editor-group": "Emission",
           "x-editor-order": 0,
           "x-editor-renderer": "numberbox",
-          "x-editor-step": 100.0,
-          "x-editor-unit": "lux"
+          "x-editor-step": 100.0
         },
         "angular_size_radians": {
           "x-editor-label": "Angular Size",
           "x-editor-group": "Emission",
           "x-editor-order": 10,
           "x-editor-renderer": "numberbox",
-          "x-editor-step": 0.001,
-          "x-editor-unit": "rad"
+          "x-editor-step": 0.001
         },
         "cascade_count": {
           "x-editor-label": "Cascade Count",
@@ -697,16 +685,14 @@
           "x-editor-group": "Cascades",
           "x-editor-order": 20,
           "x-editor-renderer": "numberbox",
-          "x-editor-step": 1.0,
-          "x-editor-unit": "m"
+          "x-editor-step": 1.0
         },
         "cascade_distances": {
           "x-editor-label": "Cascade Distances",
           "x-editor-group": "Cascades",
           "x-editor-order": 30,
           "x-editor-renderer": "vector4-box",
-          "x-editor-step": 1.0,
-          "x-editor-unit": "m"
+          "x-editor-step": 1.0
         },
         "distribution_exponent": {
           "x-editor-label": "Distribution",
@@ -756,24 +742,21 @@
           "x-editor-group": "Emission",
           "x-editor-order": 0,
           "x-editor-renderer": "numberbox",
-          "x-editor-step": 10.0,
-          "x-editor-unit": "lm"
+          "x-editor-step": 10.0
         },
         "range": {
           "x-editor-label": "Range",
           "x-editor-group": "Emission",
           "x-editor-order": 10,
           "x-editor-renderer": "numberbox",
-          "x-editor-step": 0.1,
-          "x-editor-unit": "m"
+          "x-editor-step": 0.1
         },
         "source_radius": {
           "x-editor-label": "Source Radius",
           "x-editor-group": "Emission",
           "x-editor-order": 20,
           "x-editor-renderer": "numberbox",
-          "x-editor-step": 0.01,
-          "x-editor-unit": "m"
+          "x-editor-step": 0.01
         }
       }
     },
@@ -784,40 +767,35 @@
           "x-editor-group": "Emission",
           "x-editor-order": 0,
           "x-editor-renderer": "numberbox",
-          "x-editor-step": 10.0,
-          "x-editor-unit": "lm"
+          "x-editor-step": 10.0
         },
         "range": {
           "x-editor-label": "Range",
           "x-editor-group": "Emission",
           "x-editor-order": 10,
           "x-editor-renderer": "numberbox",
-          "x-editor-step": 0.1,
-          "x-editor-unit": "m"
+          "x-editor-step": 0.1
         },
         "source_radius": {
           "x-editor-label": "Source Radius",
           "x-editor-group": "Emission",
           "x-editor-order": 20,
           "x-editor-renderer": "numberbox",
-          "x-editor-step": 0.01,
-          "x-editor-unit": "m"
+          "x-editor-step": 0.01
         },
         "inner_cone_angle_radians": {
           "x-editor-label": "Inner Cone Angle",
           "x-editor-group": "Cone",
           "x-editor-order": 0,
           "x-editor-renderer": "numberbox",
-          "x-editor-step": 0.5,
-          "x-editor-unit": "deg"
+          "x-editor-step": 0.5
         },
         "outer_cone_angle_radians": {
           "x-editor-label": "Outer Cone Angle",
           "x-editor-group": "Cone",
           "x-editor-order": 10,
           "x-editor-renderer": "numberbox",
-          "x-editor-step": 0.5,
-          "x-editor-unit": "deg"
+          "x-editor-step": 0.5
         }
       }
     },

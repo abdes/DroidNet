@@ -19,15 +19,31 @@ namespace Oxygen.Editor.World.Tests.Components;
 public sealed class PointLightComponentTests
 {
     [TestMethod]
-    public void PointLight_Defaults_ShouldHaveExpectedValues()
+    public void PointLight_Defaults_ComeFromTheSceneSchema()
     {
         var light = new PointLightComponent { Name = "Point" };
+        var data = new PointLightData { Name = "Point" };
 
-        _ = light.LuminousFluxLumens.Should().Be(800f);
-        _ = light.Range.Should().Be(10f);
-        _ = light.SourceRadius.Should().Be(0f);
-        _ = light.Color.Should().Be(Vector3.One);
-        _ = light.AffectsWorld.Should().BeTrue();
+        _ = light.LuminousFluxLumens.Should().Be(SceneSchema.PointLight.Defaults.LuminousFluxLumens).And.Be(data.LuminousFluxLumens);
+        _ = light.Range.Should().Be(SceneSchema.PointLight.Defaults.Range).And.Be(data.Range);
+        _ = light.SourceRadius.Should().Be(SceneSchema.PointLight.Defaults.SourceRadius).And.Be(data.SourceRadius);
+        _ = light.Color.Should().Be(SceneSchema.PointLight.Defaults.Color).And.Be(data.Color);
+        _ = light.AffectsWorld.Should().Be(SceneSchema.PointLight.Defaults.AffectsWorld).And.Be(data.AffectsWorld);
+        _ = light.CastsShadows.Should().Be(SceneSchema.PointLight.Defaults.CastsShadows).And.Be(data.CastsShadows);
+        _ = light.ExposureCompensation.Should().Be(SceneSchema.PointLight.Defaults.ExposureCompensation).And.Be(data.ExposureCompensation);
+        _ = light.ShadowBias.Should().Be(SceneSchema.PointLight.Defaults.ShadowBias).And.Be(data.Shadow!.Bias);
+        _ = light.ShadowNormalBias.Should().Be(SceneSchema.PointLight.Defaults.ShadowNormalBias).And.Be(data.Shadow!.NormalBias);
+        _ = light.ContactShadows.Should().Be(SceneSchema.PointLight.Defaults.ContactShadows).And.Be(data.Shadow!.ContactShadows);
+        _ = light.ShadowResolutionHint.Should().Be(SceneSchema.PointLight.Defaults.ShadowResolutionHint).And.Be(data.Shadow!.ResolutionHint);
+    }
+
+    [TestMethod]
+    public void PointLight_HydratedWithoutShadowSettings_TakesTheSchemaShadowDefaults()
+    {
+        var light = (PointLightComponent)GameComponent.CreateAndHydrate(new PointLightData { Name = "Point", Shadow = null });
+
+        _ = light.ShadowNormalBias.Should().Be(SceneSchema.PointLight.Defaults.ShadowNormalBias);
+        _ = light.ShadowResolutionHint.Should().Be(SceneSchema.PointLight.Defaults.ShadowResolutionHint);
     }
 
     [TestMethod]
@@ -54,5 +70,39 @@ public sealed class PointLightComponentTests
         _ = light.SourceRadius.Should().Be(0.25f);
         _ = light.Color.Should().Be(new Vector3(1f, 0.9f, 0.8f));
         _ = dehydrated.Should().BeEquivalentTo(source);
+    }
+
+    [TestMethod]
+    public void PointLight_SettersOutsideTheSchemaRange_ThrowWithoutMutation()
+    {
+        var light = new PointLightComponent { Name = "Point" };
+        var before = light.Dehydrate();
+        Action[] changes =
+        [
+            () => light.LuminousFluxLumens = 0f,
+            () => light.Range = -1f,
+            () => light.SourceRadius = float.NaN,
+            () => light.Color = new Vector3(0, -0.5f, 0),
+            () => light.ExposureCompensation = 11f,
+        ];
+
+        foreach (var change in changes)
+        {
+            _ = change.Should().Throw<ArgumentOutOfRangeException>();
+        }
+
+        _ = light.Dehydrate().Should().BeEquivalentTo(before);
+    }
+
+    [TestMethod]
+    public void PointLight_HydrateOutsideTheSchemaRange_ThrowsWithoutMutation()
+    {
+        var light = new PointLightComponent { Name = "Accepted" };
+
+        Action hydrate = () => light.Hydrate(new PointLightData { Name = "Rejected", SourceRadius = -1f });
+
+        _ = hydrate.Should().Throw<ArgumentOutOfRangeException>().Which.ActualValue.Should().Be(-1f);
+        _ = light.Name.Should().Be("Accepted");
+        _ = light.SourceRadius.Should().Be(SceneSchema.PointLight.Defaults.SourceRadius);
     }
 }

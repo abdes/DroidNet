@@ -49,8 +49,8 @@ public static class SceneNodeTemplates
         LightComponent light = kind switch
         {
             LightKind.Directional => new DirectionalLightComponent { Name = "Directional Light" },
-            LightKind.Point => new PointLightComponent { Name = "Point Light", LuminousFluxLumens = 1_600f, Range = 10f },
-            LightKind.Spot => new SpotLightComponent { Name = "Spot Light", LuminousFluxLumens = 1_600f, Range = 15f },
+            LightKind.Point => new PointLightComponent { Name = "Point Light" },
+            LightKind.Spot => new SpotLightComponent { Name = "Spot Light" },
             _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unknown light kind."),
         };
         var node = new SceneNode(scene, $"{kind} Light");

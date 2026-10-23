@@ -118,6 +118,25 @@ internal sealed class ShadowCascadePresentationTests : VisualUserInterfaceTests
     });
 
     [TestMethod]
+    [DataRow(0)]
+    [DataRow(5)]
+    public Task CascadeCountOutsideTheSchemaRangeIsRejectedNotClamped(int count) => EnqueueAsync(async () =>
+    {
+        using var fixture = new SceneAuthoringFixture();
+        var light = fixture.Node.Components.OfType<DirectionalLightComponent>().Single();
+        var stored = light.CascadeCount;
+        using var model = (DirectionalLightViewModel)CreateModel("Light", fixture);
+
+        model.CascadeCount = count;
+        await model.PendingEdits.ConfigureAwait(true);
+        await WaitForRenderAsync().ConfigureAwait(true);
+
+        _ = light.CascadeCount.Should().Be(stored);
+        _ = model.CascadeCountDiagnostic.HasError.Should().BeTrue();
+        _ = fixture.Document.History.UndoStack.Should().BeEmpty();
+    });
+
+    [TestMethod]
     public Task MixedSelectionsEnableOnlySettingsApplicableToEveryLight() => EnqueueAsync(async () =>
     {
         using var fixture = new SceneAuthoringFixture();
