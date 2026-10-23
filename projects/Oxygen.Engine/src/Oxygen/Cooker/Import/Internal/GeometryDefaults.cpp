@@ -76,6 +76,29 @@ auto MakeDefaultLodPolicy(const std::optional<LodPolicyRecord>& authored)
   return authored.value_or(data::schema::geometry::kLodPolicyDefault);
 }
 
+auto MakeImportedLodPolicy(const std::size_t lod_count) -> LodPolicyRecord
+{
+  constexpr auto kFinestEnterPixels = 256.0F;
+  constexpr auto kExitRatio = 0.8F;
+  constexpr auto kPerLod = 0.5F;
+  if (lod_count < 2) {
+    return MakeDefaultLodPolicy(std::nullopt);
+  }
+  auto record = LodPolicyRecord {};
+  record.type = LodPolicyType::kScreenSpaceError;
+  record.boundary_count = static_cast<uint8_t>((std::min)(lod_count - 1,
+    std::size_t { data::pak::geometry::kMaxLodBoundaryCount }));
+  const auto enter = std::span<float> { record.enter_finer_sse };
+  const auto exit = std::span<float> { record.exit_coarser_sse };
+  auto pixels = kFinestEnterPixels;
+  for (std::size_t boundary = 0; boundary < record.boundary_count; ++boundary) {
+    enter[boundary] = pixels;
+    exit[boundary] = pixels * kExitRatio;
+    pixels *= kPerLod;
+  }
+  return record;
+}
+
 auto ReadLodPolicy(const json& document) -> std::optional<LodPolicyRecord>
 {
   auto record = LodPolicyRecord {};

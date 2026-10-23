@@ -84,6 +84,11 @@ struct MeshLod {
   std::string lod_name;
   TriangleMesh source;
   std::shared_ptr<const void> source_owner;
+
+  //! Static transform from this LOD's source space into the geometry's, such
+  //! as an FBX LOD level's node transform under its group. It applies before
+  //! the item's `bake_transform`, with the same requirements.
+  std::optional<glm::mat4> bake_transform;
 };
 
 //! Buffer bindings used to finalize geometry descriptors.

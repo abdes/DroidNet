@@ -11,6 +11,7 @@
 #include <array>
 #include <filesystem>
 #include <optional>
+#include <span>
 #include <string_view>
 #include <variant>
 #include <vector>
@@ -21,6 +22,7 @@
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/GeometryDefaults.h>
 #include <Oxygen/Cooker/Import/Internal/GeometrySource.h>
+#include <Oxygen/Data/LodPolicyValidation.h>
 #include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Data/Schema/Generated.SceneComponents.h>
 #include <Oxygen/Data/SurfaceId.h>
@@ -355,6 +357,26 @@ namespace {
     EXPECT_EQ(internal::WriteLodPolicy(*record), document);
     EXPECT_EQ(internal::MakeDefaultLodPolicy(std::nullopt).type,
       data::schema::geometry::kLodPolicyDefault.type);
+  }
+
+  //! An imported geometry with several LODs switches them by screen-space
+  //! error, halving the projected radius per LOD; one LOD keeps the schema's
+  //! default.
+  NOLINT_TEST(GeometryDefaultsTest, ImportedLodPolicySwitchesSeveralLods)
+  {
+    const auto single = internal::MakeImportedLodPolicy(1);
+    const auto three = internal::MakeImportedLodPolicy(3);
+
+    EXPECT_EQ(single.type, data::schema::geometry::kLodPolicyDefault.type);
+    EXPECT_EQ(
+      three.type, data::pak::geometry::LodPolicyType::kScreenSpaceError);
+    ASSERT_EQ(three.boundary_count, 2U);
+    EXPECT_THAT(std::span<const float>(three.enter_finer_sse).first(3),
+      testing::ElementsAre(256.0F, 128.0F, 0.0F));
+    EXPECT_THAT(std::span<const float>(three.exit_coarser_sse).first(3),
+      testing::ElementsAre(
+        testing::FloatEq(204.8F), testing::FloatEq(102.4F), 0.0F));
+    EXPECT_TRUE(data::IsValidLodPolicy(three));
   }
 } // namespace
 } // namespace oxygen::content::import::test

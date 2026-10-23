@@ -541,8 +541,25 @@ coverage.
   - Create one `TriangleRange` per material slot in the mesh (sorted).
   - Map `ufbx_material` index to `material_keys`.
 - **LOD mapping**
-  - If the scene provides LOD groups, map each LOD entry to a `MeshLod`.
-  - Otherwise create a single `LOD0` entry.
+  - An FBX LodGroup node is one geometry, named after the group and shown by
+    the group's node: its children, in order, are LOD0, LOD1, …. Sibling
+    meshes named `<base>_LOD<n>` (`LOD` in any case, `n` from 0) are one
+    geometry named `<base>`, shown by the `_LOD0` node; they need a usable
+    LOD0 and LOD1. Level nodes are not imported as scene nodes.
+  - A level is usable when it holds a static mesh, directly or on its geometry
+    transform helper, and has no children, camera or light. A group keeps its
+    levels up to the first missing or unusable one, at most 8, and reports each
+    level it leaves out (`fbx.lod.level_skipped`); a group with no usable LOD0
+    imports as separate nodes (`fbx.lod_group.ignored`).
+  - Each level's transform into the group's space is its `MeshLod`
+    `bake_transform`. Coarser LODs renumber their material slots to LOD0's by
+    material, so a material is one surface with a binding per LOD. The
+    geometry's layout witness hashes every level's mesh witness and transform.
+  - FBX level distances are not mapped. A model geometry with several LODs
+    takes a Screen-space error policy: boundary `i` enters its finer LOD at a
+    projected radius of 256 / 2^i pixels and its coarser LOD at 0.8 of that
+    (`MakeImportedLodPolicy`); a single LOD keeps the schema's Fixed LOD0.
+  - Any other mesh is a single `LOD0` entry.
 - **Tangents/bitangents**
   - Use `ufbx` tangent layers when present; otherwise rely on pipeline
     generation based on `tangent_policy`.

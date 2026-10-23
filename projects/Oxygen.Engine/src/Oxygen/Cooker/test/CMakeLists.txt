@@ -108,6 +108,7 @@ oxygen_cooker_test(
     "Import/AsyncImporter_functional_test.cpp"
     "Import/BufferContainerImportRequestBuilder_functional_test.cpp"
     "Import/CollisionShapeDescriptorImportRequestBuilder_functional_test.cpp"
+    "Import/FbxLodGroups_functional_test.cpp"
     "Import/GeometryDescriptorImportRequestBuilder_functional_test.cpp"
     "Import/ImageDecode_functional_test.cpp"
     "Import/ImportEventLoop_functional_test.cpp"

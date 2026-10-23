@@ -357,8 +357,9 @@ namespace {
     std::ranges::copy(bounds.min, std::begin(asset_desc.bounding_box_min));
     std::ranges::copy(bounds.max, std::begin(asset_desc.bounding_box_max));
 
-    // Model imports have no authored surface defaults or LOD policy yet, so
-    // they take the scene schema's.
+    // Model imports have no authored surface defaults or LOD policy yet: the
+    // surfaces take the scene schema's, and several LODs a policy that
+    // switches them.
     auto declared = std::vector<data::SurfaceId> {};
     for (const auto& lod : lods) {
       for (const auto& submesh : lod.submeshes) {
@@ -370,7 +371,7 @@ namespace {
     const auto surface_table = internal::MakeSurfaceTable(declared, {});
     asset_desc.surface_count = static_cast<uint32_t>(surface_table.size());
     asset_desc.default_lod_policy
-      = internal::MakeDefaultLodPolicy(std::nullopt);
+      = internal::MakeImportedLodPolicy(lods.size());
 
     serio::MemoryStream stream;
     serio::Writer writer(stream);
@@ -1012,16 +1013,24 @@ namespace {
       }
     }
 
+    // A LOD's own transform takes its source into the geometry's space; the
+    // item's then applies to the geometry as a whole.
+    auto bake_transform = lod_source.bake_transform;
     if (item.bake_transform.has_value()) {
+      bake_transform = bake_transform.has_value()
+        ? *item.bake_transform * *bake_transform
+        : *item.bake_transform;
+    }
+    if (bake_transform.has_value()) {
       if (lod.mesh_type != data::MeshType::kStandard
-        || !internal::IsBakeTransformInvertible(*item.bake_transform)) {
+        || !internal::IsBakeTransformInvertible(*bake_transform)) {
         diagnostics.push_back(MakeErrorDiagnostic("mesh.invalid_transform_bake",
           "Transform baking requires static geometry and an invertible "
           "transform",
           item.source_id, item.mesh_name));
         return std::nullopt;
       }
-      const auto& transform = *item.bake_transform;
+      const auto& transform = *bake_transform;
       const auto linear = glm::mat3(transform);
       const auto normal_matrix = glm::transpose(glm::inverse(linear));
       const auto finite = [](const glm::vec3& value) -> bool {
@@ -1086,7 +1095,7 @@ namespace {
       DLOG_F(INFO, "Mesh '{}' LOD '{}' views_with_base_vertex={}",
         item.mesh_name, lod.lod_name, views_with_base_vertex);
     }
-    if (mesh.bounds.has_value() && !item.bake_transform.has_value()) {
+    if (mesh.bounds.has_value() && !bake_transform.has_value()) {
       lod.bounds = *mesh.bounds;
     } else {
       lod.bounds = computed_bounds;

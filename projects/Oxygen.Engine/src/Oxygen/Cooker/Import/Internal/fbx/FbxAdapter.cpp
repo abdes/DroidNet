@@ -15,6 +15,8 @@
 #include <memory>
 #include <numbers>
 #include <optional>
+#include <ranges>
+#include <set>
 #include <span>
 #include <stop_token>
 #include <string>
@@ -1468,9 +1470,335 @@ namespace {
     return loaded;
   }
 
-  [[nodiscard]] auto BuildFbxBakePlan(const ufbx_scene& scene,
-    const CoordinateConversionPolicy& policy) -> internal::MeshBakePlan
+  //! One LOD level of a group: the node holding its mesh and the transform
+  //! that takes that mesh into the group's geometry space.
+  struct FbxLodLevel final {
+    const ufbx_node* mesh_node = nullptr;
+    glm::mat4 transform { 1.0F };
+  };
+
+  //! Source levels that form one geometry with several LODs: an FBX LodGroup,
+  //! shown by its own node, or sibling meshes named `<base>_LOD<n>`, shown by
+  //! the `_LOD0` node.
+  struct FbxLodGroup final {
+    size_t host_node = internal::kNoBakeIndex;
+    std::string name;
+    std::vector<FbxLodLevel> levels;
+  };
+
+  //! Why a LOD level, or a whole group, is not imported as authored.
+  struct FbxLodNote final {
+    std::string code;
+    std::string message;
+    size_t node = internal::kNoBakeIndex;
+  };
+
+  //! The LOD groups of an FBX scene and the nodes they take over.
+  struct FbxLodGroups final {
+    std::vector<FbxLodGroup> groups;
+    //! Per node: the group it hosts, or `kNoBakeIndex`.
+    std::vector<size_t> host_group;
+    //! Per node: 1 when the node is a LOD level or helper the group replaces,
+    //! so the scene imports neither it nor its subtree.
+    std::vector<uint8_t> member;
+    //! Per node: 1 when a group owns the node's mesh, so it makes no geometry
+    //! of its own.
+    std::vector<uint8_t> grouped;
+    std::vector<FbxLodNote> notes;
+  };
+
+  //! The geometry plan of an FBX scene: the shared mesh variants, then one
+  //! variant per LOD group, in group order.
+  struct FbxBakePlan final {
+    internal::MeshBakePlan plan;
+    FbxLodGroups lods;
+  };
+
+  //! The mesh of a LOD level and the transform from the level node to it.
+  struct FbxLodLevelSource final {
+    const ufbx_node* mesh_node = nullptr;
+    glm::mat4 transform { 1.0F };
+    std::string problem;
+  };
+
+  //! Reads a LOD level: a node with a static mesh, directly or on its
+  //! geometry transform helper, and nothing else beneath it.
+  [[nodiscard]] auto ReadLodLevel(const ufbx_node& level) -> FbxLodLevelSource
   {
+    const auto* helper = level.geometry_transform_helper;
+    const ufbx_node* mesh_node = nullptr;
+    if (level.mesh != nullptr) {
+      mesh_node = &level;
+    } else if (helper != nullptr && helper->mesh != nullptr) {
+      mesh_node = helper;
+    } else {
+      return {
+        .mesh_node = nullptr, .transform = {}, .problem = "has no mesh"
+      };
+    }
+    const auto own_children = std::ranges::count_if(Items(level.children),
+      [helper](const ufbx_node* child) -> bool { return child != helper; });
+    if (own_children != 0
+      || (helper != nullptr && helper->children.count != 0)) {
+      return {
+        .mesh_node = nullptr,
+        .transform = {},
+        .problem = "has child nodes",
+      };
+    }
+    if (level.camera != nullptr || level.light != nullptr
+      || mesh_node->camera != nullptr || mesh_node->light != nullptr) {
+      return {
+        .mesh_node = nullptr,
+        .transform = {},
+        .problem = "has a camera or a light",
+      };
+    }
+    if (mesh_node->mesh->all_deformers.count != 0) {
+      return {
+        .mesh_node = nullptr,
+        .transform = {},
+        .problem = "is skinned or deformed",
+      };
+    }
+    return {
+      .mesh_node = mesh_node,
+      .transform = mesh_node == &level
+        ? glm::mat4 { 1.0F }
+        : MakeLocalTransformMatrix(mesh_node->local_transform),
+      .problem = {},
+    };
+  }
+
+  //! Splits `<base>_LOD<n>`, with `LOD` in any case and `n` of one or two
+  //! digits.
+  [[nodiscard]] auto ParseLodSuffix(const std::string_view name)
+    -> std::optional<std::pair<std::string_view, size_t>>
+  {
+    constexpr auto kTag = std::string_view { "LOD" };
+    constexpr auto kMaxDigits = size_t { 2 };
+    constexpr auto kRadix = size_t { 10 };
+    const auto separator = name.rfind('_');
+    if (separator == std::string_view::npos || separator == 0) {
+      return std::nullopt;
+    }
+    const auto suffix = name.substr(separator + 1);
+    if (suffix.size() <= kTag.size() || suffix.size() > kTag.size() + kMaxDigits
+      || !StartsWithIgnoreCase(suffix, kTag)) {
+      return std::nullopt;
+    }
+    size_t level = 0;
+    for (const auto digit : suffix.substr(kTag.size())) {
+      if (std::isdigit(static_cast<unsigned char>(digit)) == 0) {
+        return std::nullopt;
+      }
+      level = level * kRadix + static_cast<size_t>(digit - '0');
+    }
+    return std::pair { name.substr(0, separator), level };
+  }
+
+  /*!
+   Collects the scene's LOD groups. A group keeps its levels from LOD0 up to the
+   first level that is missing or unusable, at most `kMaxLodCount`; it imports
+   none of the levels after that one and notes each. A LodGroup without a
+   usable LOD0, and named siblings without usable LOD0 and LOD1, are no group:
+   their nodes import as authored.
+  */
+  [[nodiscard]] auto FindFbxLodGroups(const ufbx_scene& scene) -> FbxLodGroups
+  {
+    auto result = FbxLodGroups {
+      .groups = {},
+      .host_group = std::vector(scene.nodes.count, internal::kNoBakeIndex),
+      .member = std::vector<uint8_t>(scene.nodes.count, 0),
+      .grouped = std::vector<uint8_t>(scene.nodes.count, 0),
+      .notes = {},
+    };
+    auto node_indices = std::unordered_map<const ufbx_node*, size_t> {};
+    for (size_t index = 0; index < scene.nodes.count; ++index) {
+      node_indices.emplace(ItemAt(scene.nodes, index), index);
+    }
+    const auto index_of = [&node_indices](const ufbx_node* node) -> size_t {
+      return node_indices.at(node);
+    };
+    auto problems = std::unordered_map<size_t, std::string> {};
+
+    // Adds a usable level while the group has room for it.
+    const auto try_add_level = [&](FbxLodGroup& lods, const ufbx_node& level,
+                                 const glm::mat4& to_group) -> bool {
+      if (lods.levels.size() == data::pak::geometry::kMaxLodCount) {
+        problems.emplace(index_of(&level),
+          "is beyond the " + std::to_string(data::pak::geometry::kMaxLodCount)
+            + " LODs a geometry has");
+        return false;
+      }
+      const auto source = ReadLodLevel(level);
+      const auto transform = to_group * source.transform;
+      if (source.problem.empty()
+        && !internal::IsBakeTransformInvertible(transform)) {
+        problems.emplace(index_of(&level), "has a non-invertible transform");
+        return false;
+      }
+      if (!source.problem.empty()) {
+        problems.emplace(index_of(&level), source.problem);
+        return false;
+      }
+      lods.levels.push_back({
+        .mesh_node = source.mesh_node,
+        .transform = transform,
+      });
+      return true;
+    };
+
+    // Notes each level the group leaves out, with why for the first one.
+    const auto commit = [&](FbxLodGroup lods, std::span<const size_t> skipped,
+                          std::span<const size_t> members) -> void {
+      for (const auto node : skipped) {
+        const auto problem = problems.find(node);
+        result.notes.push_back({
+          .code = "fbx.lod.level_skipped",
+          .message = "LOD level '"
+            + std::string(ToStringView(ItemAt(scene.nodes, node)->name))
+            + "' of '" + lods.name + "' is not imported: "
+            + (problem != problems.end()
+                ? "it " + problem->second
+                : std::string("a level before it is not imported")),
+          .node = node,
+        });
+      }
+      // A replaced node's subtree goes with it, meshes included.
+      const auto replace = [&](auto&& self, const size_t node) -> void {
+        result.member.at(node) = 1;
+        result.grouped.at(node) = 1;
+        for (const auto* child : Items(ItemAt(scene.nodes, node)->children)) {
+          self(self, index_of(child));
+        }
+      };
+      for (const auto node : members) {
+        replace(replace, node);
+      }
+      result.grouped.at(lods.host_node) = 1;
+      for (const auto& level : lods.levels) {
+        result.grouped.at(index_of(level.mesh_node)) = 1;
+      }
+      result.host_group.at(lods.host_node) = result.groups.size();
+      result.groups.push_back(std::move(lods));
+    };
+
+    const auto ignore
+      = [&](const ufbx_node& node, const std::string& message) -> void {
+      result.notes.push_back({
+        .code = "fbx.lod_group.ignored",
+        .message = message,
+        .node = index_of(&node),
+      });
+    };
+
+    const auto add_lod_group = [&](const ufbx_node& group) -> void {
+      auto lods = FbxLodGroup {
+        .host_node = index_of(&group),
+        .name = std::string(ToStringView(group.name)),
+        .levels = {},
+      };
+      auto skipped = std::vector<size_t> {};
+      auto members = std::vector<size_t> {};
+      for (const auto* child : Items(group.children)) {
+        members.push_back(index_of(child));
+        if (child->geometry_transform_helper != nullptr) {
+          members.push_back(index_of(child->geometry_transform_helper));
+        }
+        if (!skipped.empty()
+          || !try_add_level(
+            lods, *child, MakeLocalTransformMatrix(child->local_transform))) {
+          skipped.push_back(index_of(child));
+        }
+      }
+      if (lods.levels.empty()) {
+        ignore(group,
+          "LOD group '" + lods.name
+            + "' has no usable LOD0; its children import as separate nodes");
+        return;
+      }
+      commit(std::move(lods), skipped, members);
+    };
+
+    const auto add_named_levels = [&](const ufbx_node& parent) -> void {
+      auto bases
+        = std::map<std::string_view, std::map<size_t, const ufbx_node*>> {};
+      for (const auto* child : Items(parent.children)) {
+        if (const auto parsed = ParseLodSuffix(ToStringView(child->name));
+          child != parent.geometry_transform_helper && parsed.has_value()) {
+          bases[parsed->first].try_emplace(parsed->second, child);
+        }
+      }
+      for (const auto& [base, named] : bases) {
+        const auto first = named.find(0);
+        if (first == named.end() || !named.contains(1)) {
+          continue;
+        }
+        const auto& host = *first->second;
+        const auto host_local = MakeLocalTransformMatrix(host.local_transform);
+        if (!internal::IsBakeTransformInvertible(host_local)) {
+          ignore(host,
+            "LOD0 of '" + std::string(base)
+              + "' has a non-invertible transform; its levels import as "
+                "separate nodes");
+          continue;
+        }
+        const auto to_host = glm::inverse(host_local);
+        auto lods = FbxLodGroup {
+          .host_node = index_of(&host),
+          .name = std::string(base),
+          .levels = {},
+        };
+        auto skipped = std::vector<size_t> {};
+        auto members = std::vector<size_t> {};
+        auto expected = size_t { 0 };
+        for (const auto& [level, node] : named) {
+          if (level != 0) {
+            members.push_back(index_of(node));
+          }
+          if (node->geometry_transform_helper != nullptr) {
+            members.push_back(index_of(node->geometry_transform_helper));
+          }
+          const auto to_group = level == 0
+            ? glm::mat4 { 1.0F }
+            : to_host * MakeLocalTransformMatrix(node->local_transform);
+          if (!skipped.empty() || level != expected
+            || !try_add_level(lods, *node, to_group)) {
+            skipped.push_back(index_of(node));
+          }
+          ++expected;
+        }
+        if (lods.levels.size() < 2) {
+          ignore(host,
+            "'" + std::string(base)
+              + "' has no usable LOD0 and LOD1; its levels import as separate "
+                "nodes");
+          continue;
+        }
+        commit(std::move(lods), skipped, members);
+      }
+    };
+
+    for (const auto* node : Items(scene.nodes)) {
+      // A Null node may carry the LodGroup beside its own attribute.
+      const auto is_lod_group = std::ranges::any_of(
+        Items(node->all_attribs), [](const ufbx_element* attribute) -> bool {
+          return attribute->type == UFBX_ELEMENT_LOD_GROUP;
+        });
+      if (is_lod_group) {
+        add_lod_group(*node);
+      } else {
+        add_named_levels(*node);
+      }
+    }
+    return result;
+  }
+
+  [[nodiscard]] auto BuildFbxBakePlan(const ufbx_scene& scene,
+    const CoordinateConversionPolicy& policy) -> FbxBakePlan
+  {
+    auto lods = FindFbxLodGroups(scene);
     std::vector<internal::MeshBakeNode> nodes(scene.nodes.count);
     std::vector<uint8_t> emit_mesh(scene.meshes.count, 1);
     std::unordered_map<const ufbx_mesh*, size_t> mesh_indices;
@@ -1485,9 +1813,25 @@ namespace {
         animated.insert(property.element);
       }
     }
+    // A mesh only LOD groups use makes no geometry of its own.
+    std::vector<uint8_t> grouped_use(scene.meshes.count, 0);
+    std::vector<uint8_t> own_use(scene.meshes.count, 0);
     for (size_t index = 0; index < scene.nodes.count; ++index) {
       const auto* node = ItemAt(scene.nodes, index);
-      if (node == nullptr || node->mesh == nullptr) {
+      if (node != nullptr && node->mesh != nullptr) {
+        auto& use = lods.grouped.at(index) != 0 ? grouped_use : own_use;
+        use.at(mesh_indices.at(node->mesh)) = 1;
+      }
+    }
+    for (size_t mesh = 0; mesh < scene.meshes.count; ++mesh) {
+      if (grouped_use.at(mesh) != 0 && own_use.at(mesh) == 0) {
+        emit_mesh.at(mesh) = 0;
+      }
+    }
+    for (size_t index = 0; index < scene.nodes.count; ++index) {
+      const auto* node = ItemAt(scene.nodes, index);
+      if (node == nullptr || node->mesh == nullptr
+        || lods.grouped.at(index) != 0) {
         continue;
       }
       auto& input = nodes.at(index);
@@ -1512,8 +1856,92 @@ namespace {
         input.retain_reason = "animation, skinning, or deformation transform";
       }
     }
-    return internal::BuildMeshBakePlan(
+    auto plan = internal::BuildMeshBakePlan(
       nodes, emit_mesh, policy.bake_transforms_into_meshes);
+    // Each group is one geometry, shown by its host node; its levels keep
+    // their transforms per LOD, so the host's own transform stays on it.
+    for (const auto& group : lods.groups) {
+      plan.node_variant.at(group.host_node) = plan.variants.size();
+      plan.variants.push_back(internal::MeshBakeVariant {
+        .mesh_index = mesh_indices.at(group.levels.front().mesh_node->mesh),
+        .representative_node = group.host_node,
+        .material_binding = 0,
+        .transform = std::nullopt,
+        .name_suffix = {},
+      });
+    }
+    return { .plan = std::move(plan), .lods = std::move(lods) };
+  }
+
+  //! The LOD group a plan variant stands for, or null.
+  [[nodiscard]] auto LodGroupOf(const FbxBakePlan& bake,
+    const internal::MeshBakeVariant& variant) -> const FbxLodGroup*
+  {
+    if (variant.representative_node == internal::kNoBakeIndex) {
+      return nullptr;
+    }
+    const auto group = bake.lods.host_group.at(variant.representative_node);
+    return group == internal::kNoBakeIndex ? nullptr
+                                           : &bake.lods.groups.at(group);
+  }
+
+  //! The materials a mesh binds on a node: the node's, or the mesh's own.
+  [[nodiscard]] auto MaterialsOf(const ufbx_mesh& mesh, const ufbx_node* node)
+    -> const ufbx_material_list&
+  {
+    return node != nullptr && node->materials.count > 0 ? node->materials
+                                                        : mesh.materials;
+  }
+
+  /*!
+   Renumbers a coarser LOD's material slots to the geometry's: each takes
+   the slot its material has in `slots`, which starts as LOD0's list, or the
+   next new slot. A surface is identified by its slot, so a material used in
+   several LODs is one surface with a binding in each.
+  */
+  auto RemapLodSlots(std::vector<TriangleRange>& ranges,
+    const ufbx_material_list& materials,
+    std::vector<const ufbx_material*>& slots) -> void
+  {
+    for (auto& range : ranges) {
+      if (range.source_slot >= materials.count) {
+        range.source_slot = UFBX_NO_INDEX;
+        continue;
+      }
+      const auto* material = ItemAt(materials, range.source_slot);
+      const auto match = std::ranges::find(slots, material);
+      range.source_slot = static_cast<uint32_t>(match - slots.begin());
+      if (match == slots.end()) {
+        slots.push_back(material);
+      }
+    }
+    std::ranges::stable_sort(ranges, {}, &TriangleRange::source_slot);
+  }
+
+  /*!
+   The layout witness of a LOD group's geometry: its levels' mesh witnesses
+   and transforms, in LOD order, so a change to any level changes it.
+  */
+  [[nodiscard]] auto LodGroupWitness(const FbxLodGroup& group,
+    const std::unordered_map<const ufbx_mesh*, size_t>& mesh_indices,
+    const std::span<const base::Sha256Digest> source_witnesses)
+    -> base::Sha256Digest
+  {
+    SourceLayoutHash hash("oxygen.fbx-lod-group-layout/v1");
+    hash.AddCount(group.levels.size());
+    for (const auto& level : group.levels) {
+      const auto& witness = oxygen::base::CheckedAt(
+        source_witnesses, mesh_indices.at(level.mesh_node->mesh));
+      for (const auto byte : witness) {
+        hash.Add(static_cast<uint32_t>(byte));
+      }
+      for (int column = 0; column < 4; ++column) {
+        for (int row = 0; row < 4; ++row) {
+          hash.AddFloat(level.transform[column][row]);
+        }
+      }
+    }
+    return hash.Finish();
   }
 
   auto PrepareGeometryNames(const ufbx_scene& scene, const AdapterInput& input)
@@ -1527,8 +1955,8 @@ namespace {
       return result;
     }
     CHECK_F(input.naming_service != nullptr, "NamingService must not be null");
-    const auto bake_plan
-      = BuildFbxBakePlan(scene, input.request.options.coordinate);
+    const auto bake = BuildFbxBakePlan(scene, input.request.options.coordinate);
+    const auto& bake_plan = bake.plan;
     for (size_t index = 0; index < bake_plan.retained_reasons.size(); ++index) {
       if (!bake_plan.retained_reasons.at(index).empty()) {
         result.diagnostics.push_back(
@@ -1537,6 +1965,11 @@ namespace {
               + bake_plan.retained_reasons.at(index),
             input.source_id_prefix, "/nodes/" + std::to_string(index)));
       }
+    }
+    for (const auto& note : bake.lods.notes) {
+      result.diagnostics.push_back(
+        MakeWarningDiagnostic(note.code, note.message, input.source_id_prefix,
+          "/nodes/" + std::to_string(note.node)));
     }
     result.sources.reserve(bake_plan.variants.size());
     for (size_t variant_index = 0; variant_index < bake_plan.variants.size();
@@ -1552,7 +1985,11 @@ namespace {
       if (mesh == nullptr) {
         continue;
       }
-      const auto authored_name = ToStringView(mesh->name);
+      // A LOD group's geometry takes the group's name.
+      const auto* group = LodGroupOf(bake, variant);
+      const auto authored_name = group != nullptr
+        ? std::string_view(group->name)
+        : ToStringView(mesh->name);
       const auto context = NamingContext {
         .kind = ImportNameKind::kMesh,
         .ordinal = static_cast<uint32_t>(variant.mesh_index),
@@ -1604,6 +2041,12 @@ namespace {
     if (!result.success) {
       return result;
     }
+    const auto bake = BuildFbxBakePlan(scene, input.request.options.coordinate);
+    std::unordered_map<const ufbx_mesh*, size_t> mesh_indices;
+    mesh_indices.reserve(scene.meshes.count);
+    for (size_t index = 0; index < scene.meshes.count; ++index) {
+      mesh_indices.emplace(ItemAt(scene.meshes, index), index);
+    }
     for (const auto& source : prepared.sources) {
       const auto& variant = source.variant;
       const auto mesh_i = variant.mesh_index;
@@ -1616,9 +2059,39 @@ namespace {
         return result;
       }
 
+      // The meshes of the geometry's LODs: a variant's one mesh, or a LOD
+      // group's levels, each with the transform into the group's space.
+      struct LodInput final {
+        const ufbx_mesh* mesh = nullptr;
+        const ufbx_node* material_node = nullptr;
+        std::optional<glm::mat4> transform;
+      };
+      const auto* group = LodGroupOf(bake, variant);
+      std::vector<LodInput> inputs;
+      if (group != nullptr) {
+        for (const auto& level : group->levels) {
+          inputs.push_back({
+            .mesh = level.mesh_node->mesh,
+            .material_node = level.mesh_node,
+            .transform = level.transform == glm::mat4 { 1.0F }
+              ? std::nullopt
+              : std::optional(level.transform),
+          });
+        }
+      } else {
+        inputs.push_back({
+          .mesh = mesh,
+          .material_node = variant.representative_node != internal::kNoBakeIndex
+            ? ItemAt(scene.nodes, variant.representative_node)
+            : nullptr,
+          .transform = std::nullopt,
+        });
+      }
+
       MeshBuildPipeline::WorkItem item;
-      item.source_layout_witness
-        = oxygen::base::CheckedAt(source_witnesses, mesh_i);
+      item.source_layout_witness = group != nullptr && group->levels.size() > 1
+        ? LodGroupWitness(*group, mesh_indices, source_witnesses)
+        : oxygen::base::CheckedAt(source_witnesses, mesh_i);
       item.source_id = source.source_id;
       item.mesh_name = mesh_name;
       item.storage_mesh_name = mesh_name;
@@ -1631,114 +2104,103 @@ namespace {
         input.material_keys.begin(), input.material_keys.end());
       item.default_material_key = input.default_material_key;
       item.want_textures = true;
-      bool has_material_textures = false;
-      const ufbx_node* material_node
-        = variant.representative_node != internal::kNoBakeIndex
-        ? ItemAt(scene.nodes, variant.representative_node)
-        : nullptr;
-      const ufbx_material_list* material_list = &mesh->materials;
-      if (material_node != nullptr && material_node->materials.count > 0) {
-        material_list = &material_node->materials;
-      }
-      for (size_t mat_i = 0; mat_i < material_list->count; ++mat_i) {
-        const auto* material = ItemAt(*material_list, mat_i);
-        if (HasMaterialTextures(material)) {
-          has_material_textures = true;
-          break;
-        }
-      }
-      item.has_material_textures = has_material_textures;
       item.request = input.request;
       item.naming_service = input.naming_service;
       item.stop_token = input.stop_token;
 
-      std::vector<ImportDiagnostic> diagnostics;
-      auto buffers = BuildTriangleBuffers(*mesh, material_node,
-        scene_material_index_by_ptr,
-        static_cast<uint32_t>(scene_material_index_by_ptr.size()), diagnostics,
-        item.source_id, item.mesh_name);
-      if (!buffers.has_value()) {
-        result.diagnostics.insert(
-          result.diagnostics.end(), diagnostics.begin(), diagnostics.end());
-        result.success = false;
-        continue;
-      }
+      // LOD0's material list numbers the slots; coarser LODs renumber theirs
+      // to it, so each material is one surface across the LODs.
+      const auto& lod0_materials
+        = MaterialsOf(*inputs.front().mesh, inputs.front().material_node);
+      std::vector<const ufbx_material*> slot_materials(
+        Items(lod0_materials).begin(), Items(lod0_materials).end());
+      std::set<uint32_t> surfaces_used;
+      bool built = true;
+      for (const auto& [lod_index, lod_input] : std::views::enumerate(inputs)) {
+        const auto& materials
+          = MaterialsOf(*lod_input.mesh, lod_input.material_node);
+        if (std::ranges::any_of(Items(materials), HasMaterialTextures)) {
+          item.has_material_textures = true;
+        }
 
-      if (!buffers->ranges.empty()) {
+        std::vector<ImportDiagnostic> diagnostics;
+        auto buffers = BuildTriangleBuffers(*lod_input.mesh,
+          lod_input.material_node, scene_material_index_by_ptr,
+          static_cast<uint32_t>(scene_material_index_by_ptr.size()),
+          diagnostics, item.source_id, item.mesh_name);
+        if (!buffers.has_value()) {
+          result.diagnostics.insert(
+            result.diagnostics.end(), diagnostics.begin(), diagnostics.end());
+          built = false;
+          break;
+        }
+        if (lod_index != 0) {
+          RemapLodSlots(buffers->ranges, materials, slot_materials);
+        }
         for (const auto& range : buffers->ranges) {
-          const auto* material = range.source_slot < material_list->count
-            ? ItemAt(*material_list, range.source_slot)
+          const auto* material = range.source_slot < slot_materials.size()
+            ? slot_materials.at(range.source_slot)
             : nullptr;
           item.surface_names.try_emplace(range.source_slot,
             material != nullptr ? std::string(ToStringView(material->name))
                                 : "Default");
-        }
-        uint32_t max_surface = 0;
-        for (const auto& range : buffers->ranges) {
-          max_surface = (std::max)(max_surface, range.surface);
+          surfaces_used.insert(range.surface);
         }
 
-        std::vector<uint8_t> used(max_surface + 1, 0);
-        for (const auto& range : buffers->ranges) {
-          used.at(range.surface) = static_cast<uint8_t>(1);
-        }
+        DLOG_F(2,
+          "FBX mesh[{}] LOD{} skin_deformer_found={} joints={} weights={}",
+          mesh_i, lod_index, FindSkinDeformer(*lod_input.mesh) != nullptr,
+          buffers->joint_indices.size(), buffers->joint_weights.size());
 
-        item.surfaces_used.clear();
-        for (uint32_t i = 0; i < used.size(); ++i) {
-          if (used.at(i) != 0U) {
-            item.surfaces_used.push_back(i);
-          }
-        }
-      }
+        const bool is_skinned = !buffers->joint_indices.empty()
+          && buffers->joint_weights.size() == buffers->joint_indices.size();
 
-      DLOG_F(2, "FBX mesh[{}] skin_deformer_found={} joints={} weights={}",
-        mesh_i, FindSkinDeformer(*mesh) != nullptr,
-        buffers->joint_indices.size(), buffers->joint_weights.size());
+        auto owner = std::make_shared<TriangleMeshBuffers>(std::move(*buffers));
+        TriangleMesh triangle_mesh {
+          .mesh_type = is_skinned ? data::MeshType::kSkinned
+                                  : data::MeshType::kStandard,
+          .streams = MeshStreamView {
+            .positions = std::span<const glm::vec3>(
+              owner->positions.data(), owner->positions.size()),
+            .normals = std::span<const glm::vec3>(
+              owner->normals.data(), owner->normals.size()),
+            .texcoords = std::span<const glm::vec2>(
+              owner->texcoords.data(), owner->texcoords.size()),
+            .tangents = std::span<const glm::vec3>(
+              owner->tangents.data(), owner->tangents.size()),
+            .bitangents = std::span<const glm::vec3>(
+              owner->bitangents.data(), owner->bitangents.size()),
+            .colors = std::span<const glm::vec4>(
+              owner->colors.data(), owner->colors.size()),
+            .joint_indices = std::span<const glm::uvec4>(
+              owner->joint_indices.data(), owner->joint_indices.size()),
+            .joint_weights = std::span<const glm::vec4>(
+              owner->joint_weights.data(), owner->joint_weights.size()),
+          },
+          .inverse_bind_matrices = std::span<const glm::mat4>(
+            owner->inverse_bind_matrices.data(),
+            owner->inverse_bind_matrices.size()),
+          .joint_remap = std::span<const uint32_t>(
+            owner->joint_remap.data(), owner->joint_remap.size()),
+          .indices = std::span<const uint32_t>(
+            owner->indices.data(), owner->indices.size()),
+          .ranges = std::span<const TriangleRange>(
+            owner->ranges.data(), owner->ranges.size()),
+          .bounds = std::nullopt,
+        };
 
-      const bool is_skinned = !buffers->joint_indices.empty()
-        && buffers->joint_weights.size() == buffers->joint_indices.size();
-
-      auto owner = std::make_shared<TriangleMeshBuffers>(std::move(*buffers));
-      TriangleMesh triangle_mesh {
-        .mesh_type = is_skinned ? data::MeshType::kSkinned
-                                : data::MeshType::kStandard,
-        .streams = MeshStreamView {
-          .positions = std::span<const glm::vec3>(
-            owner->positions.data(), owner->positions.size()),
-          .normals = std::span<const glm::vec3>(
-            owner->normals.data(), owner->normals.size()),
-          .texcoords = std::span<const glm::vec2>(
-            owner->texcoords.data(), owner->texcoords.size()),
-          .tangents = std::span<const glm::vec3>(
-            owner->tangents.data(), owner->tangents.size()),
-          .bitangents = std::span<const glm::vec3>(
-            owner->bitangents.data(), owner->bitangents.size()),
-          .colors = std::span<const glm::vec4>(
-            owner->colors.data(), owner->colors.size()),
-          .joint_indices = std::span<const glm::uvec4>(
-            owner->joint_indices.data(), owner->joint_indices.size()),
-          .joint_weights = std::span<const glm::vec4>(
-            owner->joint_weights.data(), owner->joint_weights.size()),
-        },
-        .inverse_bind_matrices = std::span<const glm::mat4>(
-          owner->inverse_bind_matrices.data(),
-          owner->inverse_bind_matrices.size()),
-        .joint_remap = std::span<const uint32_t>(
-          owner->joint_remap.data(), owner->joint_remap.size()),
-        .indices = std::span<const uint32_t>(
-          owner->indices.data(), owner->indices.size()),
-        .ranges = std::span<const TriangleRange>(
-          owner->ranges.data(), owner->ranges.size()),
-        .bounds = std::nullopt,
-      };
-
-      item.lods = {
-        MeshLod {
-          .lod_name = "LOD0",
+        item.lods.push_back(MeshLod {
+          .lod_name = "LOD" + std::to_string(lod_index),
           .source = triangle_mesh,
           .source_owner = std::move(owner),
-        },
-      };
+          .bake_transform = lod_input.transform,
+        });
+      }
+      if (!built) {
+        result.success = false;
+        continue;
+      }
+      item.surfaces_used.assign(surfaces_used.begin(), surfaces_used.end());
 
       if (!sink.Consume(std::move(item))) {
         return result;
@@ -2567,7 +3029,8 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
   const auto& scene = *impl_->source.scene;
   const auto& request = *input.request;
 
-  const auto bake_plan = BuildFbxBakePlan(scene, request.options.coordinate);
+  const auto bake = BuildFbxBakePlan(scene, request.options.coordinate);
+  const auto& bake_plan = bake.plan;
   std::unordered_map<const ufbx_node*, size_t> source_node_indices;
   source_node_indices.reserve(scene.nodes.count);
   for (size_t index = 0; index < scene.nodes.count; ++index) {
@@ -2586,6 +3049,10 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
   auto traverse = [&](auto&& self, const ufbx_node* node, uint32_t parent,
                     uint32_t& ordinal, const glm::mat4& parent_world) -> void {
     if (node == nullptr || input.stop_token.stop_requested()) {
+      return;
+    }
+    // A LOD level is part of its group's geometry, shown by the group's host.
+    if (bake.lods.member.at(source_node_indices.at(node)) != 0) {
       return;
     }
 
@@ -2620,8 +3087,8 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
     node_input.has_renderable = false;
     node_input.source_node = node;
 
-    if ((node->mesh != nullptr)
-      && (variant_index < input.geometry_keys.size())) {
+    // A node with a mesh, or a LOD group's host, shows its geometry.
+    if (variant_index < input.geometry_keys.size()) {
       node_input.has_renderable = true;
     }
 
@@ -2795,7 +3262,7 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
     build.nodes.push_back(rec);
 
     const auto* ufbx_node = static_cast<const ::ufbx_node*>(node.source_node);
-    if (ufbx_node != nullptr && ufbx_node->mesh != nullptr) {
+    if (ufbx_node != nullptr) {
       const auto variant_index
         = bake_plan.node_variant.at(source_node_indices.at(ufbx_node));
       if (variant_index < input.geometry_keys.size()) {

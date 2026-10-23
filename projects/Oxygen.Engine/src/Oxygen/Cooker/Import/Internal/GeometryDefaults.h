@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <optional>
 #include <span>
 #include <vector>
@@ -38,6 +39,17 @@ OXGN_COOK_NDAPI auto MakeSurfaceTable(std::span<const data::SurfaceId> declared,
 //! The authored default LOD policy, else the scene schema's default.
 OXGN_COOK_NDAPI auto MakeDefaultLodPolicy(
   const std::optional<data::pak::geometry::LodPolicyRecord>& authored)
+  -> data::pak::geometry::LodPolicyRecord;
+
+//! The default LOD policy of an imported model's geometry with `lod_count`
+//! LODs.
+/*!
+ One LOD keeps the scene schema's default. Several LODs select by screen-space
+ error, so an application that sets no policy still sees them switch: boundary
+ `i` enters its finer LOD at a projected radius of 256 / 2^i pixels and its
+ coarser LOD at 0.8 of that, a band that keeps the LOD from flickering.
+*/
+OXGN_COOK_NDAPI auto MakeImportedLodPolicy(std::size_t lod_count)
   -> data::pak::geometry::LodPolicyRecord;
 
 //! The LOD policy `document` spells, as a descriptor's `lod_policy` object.
