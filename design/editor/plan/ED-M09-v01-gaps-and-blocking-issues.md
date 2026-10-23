@@ -9,7 +9,7 @@ owner's order from section 3; the LLD gaps of section 2 start once their
 dependencies are closed. An item is `done` only when the done gate of section 6
 holds; its row then names the commit.
 
-**Next: item 12**, #77 slice 77.6 ([section 2.2](#22-77-implementation-slices)):
+**Next: item 13**, #77 slice 77.7 ([section 2.2](#22-77-implementation-slices)):
 its dependencies (item 11, #95 and #76) are closed.
 
 | Order | Item                                                 | Needs        | State | Commit    |
@@ -25,7 +25,7 @@ its dependencies (item 11, #95 and #76) are closed.
 | 9     | #76 LivePreview leaves Ready on engine fault         | -            | done  | 7f4392514 |
 | 10    | Inherit source modes (section 2)                     | 4, #94, #95  | done  | 26124f382 |
 | 11    | #77 slice 77.5: format and runtime                   | 5            | done  | adce0424e |
-| 12    | #77 slice 77.6: surface values in the editor         | 11, #95, #76 | open  | -         |
+| 12    | #77 slice 77.6: surface values in the editor         | 11, #95, #76 | done  | e70244363 |
 | 13    | #77 slice 77.7: LOD policy in the editor             | 11, #95, #76 | open  | -         |
 | 14    | #77 slice 77.8: model instances                      | 11, 12, 10   | open  | -         |
 | 15    | Light collection by resolved visibility              | 10, 11       | open  | -         |
