@@ -17,7 +17,7 @@ public sealed partial class SceneDescriptorGenerator
         var schema = sceneSchema["definitions"]!["post_process_volume_environment"]!.DeepClone().AsObject();
         schema["$schema"] = sceneSchema["$schema"]!.DeepClone();
         schema["definitions"] = sceneSchema["definitions"]!.DeepClone();
-        return JsonSchema.FromText(schema.ToJsonString());
+        return SceneSchemas.Value.BuildValidationSchema(schema);
     });
 
     /// <summary>Checks the native schema and relationships without changing authored values.</summary>

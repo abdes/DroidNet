@@ -25,12 +25,17 @@ public sealed class EditorSchemaCatalog
     private readonly Dictionary<string, JsonSchema> builtMergedSchemas = new(StringComparer.OrdinalIgnoreCase);
     private readonly Lock buildGate = new();
 
+    // The catalog's own registry: references resolve to its schemas, and no other user of the process-wide registry
+    // registers a different schema under the same URI or replaces its fetch.
+    private readonly SchemaRegistry registry = new();
+
     private EditorSchemaCatalog(
         Dictionary<string, JsonObject> engineByFileName,
         Dictionary<string, JsonObject> overlayByEngineFileName)
     {
         this.engineByFileName = engineByFileName;
         this.overlayByEngineFileName = overlayByEngineFileName;
+        this.registry.Fetch = new InMemorySchemaResolver(this.GetOrBuildEngineSchema).Resolve;
     }
 
     /// <summary>
@@ -111,6 +116,21 @@ public sealed class EditorSchemaCatalog
     /// <param name="engineFileName">The engine schema file name.</param>
     /// <returns>The built schema.</returns>
     public JsonSchema GetValidationSchema(string engineFileName) => this.GetOrBuildEngineSchema(engineFileName);
+
+    /// <summary>
+    /// Builds a schema made from engine schema parts, such as one definition with the definitions it uses, for
+    /// evaluation. Its references to other engine schemas resolve within the catalog, as an engine schema's do.
+    /// </summary>
+    /// <param name="schema">The schema.</param>
+    /// <returns>The built schema.</returns>
+    public JsonSchema BuildValidationSchema(JsonObject schema)
+    {
+        ArgumentNullException.ThrowIfNull(schema);
+        lock (this.buildGate)
+        {
+            return JsonSchema.FromText(CloneForValidation(schema).ToJsonString(), this.CreateBuildOptions());
+        }
+    }
 
     /// <summary>
     /// Validates an instance against the engine schema for the given file name.
@@ -203,13 +223,7 @@ public sealed class EditorSchemaCatalog
         }
     }
 
-    private BuildOptions CreateBuildOptions()
-    {
-        var resolver = new InMemorySchemaResolver(this.GetOrBuildEngineSchema);
-        var buildOptions = new BuildOptions();
-        buildOptions.SchemaRegistry.Fetch = resolver.Resolve;
-        return buildOptions;
-    }
+    private BuildOptions CreateBuildOptions() => new() { SchemaRegistry = this.registry };
 
     private sealed class InMemorySchemaResolver(Func<string, JsonSchema> resolveByFileName)
     {

@@ -82,12 +82,14 @@ public sealed class CookedGeometryReport
             _ => throw new InvalidDataException("The native geometry query returned more than one asset."),
         };
 
+    // The report's schemas live in their own registry: the process-wide one may already hold another build of the LOD
+    // policy schema under its URI, and a second registration there is refused.
     private static JsonSchema LoadSchema()
     {
-        var options = new BuildOptions();
+        var options = new BuildOptions { SchemaRegistry = new SchemaRegistry() };
         options.SchemaRegistry.Fetch = static (uri, _) =>
             string.Equals(Path.GetFileName(uri.LocalPath), LodPolicySchemaFileName, StringComparison.Ordinal)
-                ? JsonSchema.FromText(ReadSchemaResource(LodPolicySchemaFileName))
+                ? JsonSchema.FromText(ReadSchemaResource(LodPolicySchemaFileName), new BuildOptions { SchemaRegistry = new SchemaRegistry() })
                 : null;
         return JsonSchema.FromText(ReadSchemaResource("oxygen.cooked-geometries.schema.json"), options);
     }
