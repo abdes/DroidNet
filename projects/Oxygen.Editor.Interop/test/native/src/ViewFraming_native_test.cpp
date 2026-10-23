@@ -168,7 +168,8 @@ public:
     EditorView view(EditorView::Config {
       .name = "Pane", .width = 400, .height = 200 });
     view.Initialize(*authored, *cameras);
-    auto transform = view.GetCameraNode().GetTransform();
+    auto camera = view.GetCameraNode();
+    auto transform = camera.GetTransform();
     const auto rotation
       = transform.GetLocalRotation().value_or(glm::quat { 1, 0, 0, 0 });
     const glm::vec3 center { 5.0F, -2.0F, 1.0F };
@@ -228,10 +229,9 @@ public:
     Settle(view);
 
     Assert::IsTrue(outcome == EditorFramingOutcome::kFramed);
-    const glm::vec3 position = view.GetCameraNode()
-                                 .GetTransform()
-                                 .GetLocalPosition()
-                                 .value_or(glm::vec3 { 0.0F });
+    auto camera = view.GetCameraNode();
+    const glm::vec3 position = camera.GetTransform().GetLocalPosition().value_or(
+      glm::vec3 { 0.0F });
     Assert::AreEqual(2.0F * 1.1F + 1.0F,
       glm::length(position - glm::vec3 { 2.0F, 0.0F, 0.0F }), 1.0e-3F);
   }
@@ -247,7 +247,8 @@ public:
     view.AdvanceFraming(1.0F / 60.0F);
 
     // The user moves the camera: the framing move must not fight it.
-    auto transform = view.GetCameraNode().GetTransform();
+    auto camera = view.GetCameraNode();
+    auto transform = camera.GetTransform();
     const glm::vec3 navigated { -20.0F, -20.0F, 20.0F };
     (void)transform.SetLocalPosition(navigated);
     Settle(view);

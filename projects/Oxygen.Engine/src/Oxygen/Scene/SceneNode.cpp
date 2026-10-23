@@ -377,7 +377,7 @@ auto SceneNode::IsRoot() noexcept -> bool { return !HasParent(); }
  @note If the node has no TransformComponent, operations will be no-ops.
 */
 
-auto SceneNode::GetTransform() noexcept -> Transform
+auto SceneNode::GetTransform() & noexcept -> Transform
 {
   return Transform(*this);
 }
@@ -385,7 +385,7 @@ auto SceneNode::GetTransform() noexcept -> Transform
 /*!
  @copydoc SceneNode::GetTransform() const
 */
-auto SceneNode::GetTransform() const noexcept -> Transform
+auto SceneNode::GetTransform() const& noexcept -> Transform
 {
   return Transform(
     const_cast<SceneNode&>(*this)); // NOLINT(*-pro-type-const-cast)
@@ -393,13 +393,13 @@ auto SceneNode::GetTransform() const noexcept -> Transform
 
 /*! The Renderable interface provides safe access to geometry/submesh/LOD APIs
     without exposing component types. */
-auto SceneNode::GetRenderable() noexcept -> Renderable
+auto SceneNode::GetRenderable() & noexcept -> Renderable
 {
   return Renderable(*this);
 }
 
 /*! @copydoc SceneNode::GetRenderable() */
-auto SceneNode::GetRenderable() const noexcept -> Renderable
+auto SceneNode::GetRenderable() const& noexcept -> Renderable
 {
   return Renderable(
     const_cast<SceneNode&>(*this)); // NOLINT(*-pro-type-const-cast)
@@ -960,12 +960,12 @@ auto SceneNode::HasLight() noexcept -> bool
 //=== Renderable Component ===------------------------------------------------//
 //=== Scripting Access ===--------------------------------------------------//
 
-auto SceneNode::GetScripting() noexcept -> Scripting
+auto SceneNode::GetScripting() & noexcept -> Scripting
 {
   return Scripting(*this);
 }
 
-auto SceneNode::GetScripting() const noexcept -> Scripting
+auto SceneNode::GetScripting() const& noexcept -> Scripting
 {
   // NOLINTNEXTLINE(*-pro-type-const-cast)
   return Scripting(const_cast<SceneNode&>(*this));

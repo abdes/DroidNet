@@ -875,8 +875,10 @@ auto EditorView::GetEditorCameraState() const
   if (!camera_node_.IsAlive()) {
     return std::nullopt;
   }
-  // The editor camera is a scene root: its local pose is its world pose.
-  auto transform = scene::SceneNode(camera_node_).GetTransform();
+  // The editor camera is a scene root: its local pose is its world pose. The
+  // transform refers to its node, so the copy lives as long as the transform.
+  auto camera = camera_node_;
+  auto transform = camera.GetTransform();
   return EditorCameraState {
     .position = transform.GetLocalPosition().value_or(glm::vec3 { 0.0F }),
     .rotation = transform.GetLocalRotation().value_or(
@@ -1026,8 +1028,10 @@ auto EditorView::ResolveEditorCameraPose(scene::SceneNode& node) const
   if (!camera_node_.IsAlive() || !node.IsAlive()) {
     return std::nullopt;
   }
-  // The editor camera is a scene root: its local pose is its world pose.
-  auto proxy = scene::SceneNode(camera_node_).GetTransform();
+  // The editor camera is a scene root: its local pose is its world pose. The
+  // transform refers to its node, so the copy lives as long as the transform.
+  auto camera = camera_node_;
+  auto proxy = camera.GetTransform();
   const viewport::CameraPlacement world {
     .position = proxy.GetLocalPosition().value_or(glm::vec3 { 0.0F }),
     .rotation = proxy.GetLocalRotation().value_or(

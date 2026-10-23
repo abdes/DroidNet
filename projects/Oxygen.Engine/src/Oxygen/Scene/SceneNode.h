@@ -154,21 +154,30 @@ public:
   //=== Transform Access ===--------------------------------------------------//
 
   //! Gets a Transform interface for safe transform operations.
-  OXGN_SCN_NDAPI auto GetTransform() noexcept -> Transform;
-  OXGN_SCN_NDAPI auto GetTransform() const noexcept -> Transform;
+  OXGN_SCN_NDAPI auto GetTransform() & noexcept -> Transform;
+  OXGN_SCN_NDAPI auto GetTransform() const& noexcept -> Transform;
+  //! A Transform refers to its node, so it cannot come from a temporary.
+  auto GetTransform() && -> Transform = delete;
+  auto GetTransform() const&& -> Transform = delete;
 
   //=== Renderable Access ===-------------------------------------------------//
 
   //! Gets a Renderable interface for safe renderable operations (geometry,
   //! LOD, submeshes, overrides, bounds).
-  OXGN_SCN_NDAPI auto GetRenderable() noexcept -> Renderable;
-  OXGN_SCN_NDAPI auto GetRenderable() const noexcept -> Renderable;
+  OXGN_SCN_NDAPI auto GetRenderable() & noexcept -> Renderable;
+  OXGN_SCN_NDAPI auto GetRenderable() const& noexcept -> Renderable;
+  //! A Renderable refers to its node, so it cannot come from a temporary.
+  auto GetRenderable() && -> Renderable = delete;
+  auto GetRenderable() const&& -> Renderable = delete;
 
   //=== Scripting Access ===--------------------------------------------------//
 
   //! Gets a Scripting interface for safe script operations.
-  OXGN_SCN_NDAPI auto GetScripting() noexcept -> Scripting;
-  OXGN_SCN_NDAPI auto GetScripting() const noexcept -> Scripting;
+  OXGN_SCN_NDAPI auto GetScripting() & noexcept -> Scripting;
+  OXGN_SCN_NDAPI auto GetScripting() const& noexcept -> Scripting;
+  //! A Scripting refers to its node, so it cannot come from a temporary.
+  auto GetScripting() && -> Scripting = delete;
+  auto GetScripting() const&& -> Scripting = delete;
 
   //=== Camera Attachment ===-------------------------------------------------//
 
