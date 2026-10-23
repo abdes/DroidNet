@@ -59,9 +59,15 @@ replacement; cosmetic renaming creates no feature value.
   before clamping, conversion or mutation. Check converted values for overflow.
 - Undefined enum values, invalid identities and impossible cross-field values
   fail with a field-scoped diagnostic; no partial edit remains.
-- Tables specify stored bounds. Controls may use softer drag ranges. A finite
-  value can clamp on commit where the table says Clamp; imported/saved invalid
-  source is diagnosed rather than silently repaired during runtime load.
+- Tables specify creation defaults and stored bounds. The scene property
+  schema implements them for every scene component property
+  ([scene model 5.3](scene-authoring-model.md#53-the-scene-property-schema)):
+  its `default`, `range` and `commit` entries, generated for every consumer, are
+  the only code that states them. A table's Clamp is `commit: clamp`; any other
+  bound rejects. A cross-field bound (`<Far`, `[0, Outer Angle]`, strictly
+  increasing distances) is a component rule, not a range. Controls may use
+  softer drag ranges from the overlay. Imported/saved invalid source is
+  diagnosed rather than silently repaired during runtime load.
 - Optional hidden-by-mode fields retain valid source values; when inactive they
   do not imply an effect. Missing implementation is not an inapplicability rule.
 - Raw/Diagnostics shows useful identities, unresolved references and computed

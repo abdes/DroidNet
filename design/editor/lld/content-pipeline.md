@@ -1224,16 +1224,21 @@ across LODs is insufficient to establish that relation.
 
 The engine-owned inventory schema contains:
 
-| Field                     | Contract                                                                                                                                                               |
-| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `schema_version`          | Inventory schema version, checked before use.                                                                                                                          |
-| `geometry_asset_key`      | Exact native geometry identity; authored callers retain its URI and winning source.                                                                                    |
-| `layout_revision`         | SHA-256 of canonical surface IDs, binding locations and default keys. Excludes display labels, material scalar/texture bytes, producer timestamps and temporary paths. |
-| `surfaces[].surface_id`   | Unique, nonempty SurfaceId.                                                                                                                                            |
-| `surfaces[].display_name` | Presentation only; may be duplicated or renamed.                                                                                                                       |
-| `surfaces[].bindings[]`   | Explicit `lod_index`, `submesh_index` and `default_material_key` for each existing binding. Each material-bearing submesh belongs to exactly one declared surface.     |
+| Field                      | Contract                                                                                                                                                               |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `schema_version`           | Inventory schema version, checked before use.                                                                                                                          |
+| `geometry_asset_key`       | Exact native geometry identity; authored callers retain its URI and winning source.                                                                                    |
+| `layout_revision`          | SHA-256 of canonical surface IDs, binding locations and default keys. Excludes display labels, material scalar/texture bytes, producer timestamps and temporary paths. |
+| `surfaces[].surface_id`    | Unique, nonempty SurfaceId.                                                                                                                                            |
+| `surfaces[].display_name`  | Presentation only; may be duplicated or renamed.                                                                                                                       |
+| `surfaces[].bindings[]`    | Explicit `lod_index`, `submesh_index` and `default_material_key` for each existing binding. Each material-bearing submesh belongs to exactly one declared surface.     |
+| `surfaces[].visible`       | The surface's asset default for the scene schema's surface `Visibility` (section 20.5).                                                                                |
+| `surfaces[].casts_shadows` | The surface's asset default for the scene schema's surface `CastsShadows` (section 20.5).                                                                              |
+| `lod_policy`               | The geometry's default LOD policy (section 20.5).                                                                                                                      |
 
-Inventory order is display order only. The native canonical hash writer sorts
+Inventory order is display order only. The surface defaults and the LOD policy
+are values, not layout: they are excluded from `layout_revision`, so changing a
+default never makes an override stale. The native canonical hash writer sorts
 surfaces by ID and each binding list by LOD/submesh before hashing the fixed-schema
 UTF-8 record. Managed code transports the native revision and validates the
 report/record schema; it does not invent another canonical hash algorithm.
@@ -1248,10 +1253,12 @@ current inventory. Project replacement cancels the request. Engine geometry is
 read from `engine.pak` the same way, so its inventory exists before any cook. No
 managed code decodes geometry bytes or hashes surfaces.
 
-Canonical scene assignments contain GeometryUri, SurfaceId, MaterialUri and the
-last resolved layout revision. MaterialUri absence means no override; clearing
-removes that entry and restores the native default for every binding of that
-surface. If defaults differ across LOD bindings, show that fact rather than
+Canonical scene surface overrides contain GeometryUri, SurfaceId, the last
+resolved layout revision and the overridden values of the surface's schema
+properties (`Material`, `Visibility`, `CastsShadows`;
+[scene model 5.2](scene-authoring-model.md#52-parts-sources-and-overrides)).
+An absent value means no override; clearing removes it and restores the native
+default for every binding of that surface. If defaults differ across LOD bindings, show that fact rather than
 changing the mesh. Choosing the engine default is an explicit ordinary material
 assignment.
 
@@ -1337,7 +1344,7 @@ no shipping legacy resolver remains.
 
 ### 20.3 Repair state and affected publication
 
-Keep an unresolved scene override's GeometryUri, SurfaceId, MaterialUri, previous
+Keep an unresolved scene override's GeometryUri, SurfaceId, values, previous
 layout revision and human-readable prior surface context. These are useful authored
 intent, not a hidden compatibility binding. Show Missing surface / Layout changed
 on the instance and provide explicit Reassign or Clear commands. Reassign
@@ -1393,6 +1400,49 @@ repair.
 - A failed/abandoned repair attempt does not block unrelated work or publish an
   incompatible preserved scene. Repaired joint publication and rollback retain
   source identity/provenance and all unaffected assets.
+
+### 20.5 Surface defaults and the default LOD policy
+
+A geometry asset supplies the asset defaults of its surfaces' `Visibility` and
+`CastsShadows` and of its geometry component's `LodPolicy`
+([scene model 5.3](scene-authoring-model.md#53-the-scene-property-schema)).
+The cooked geometry carries them once:
+
+- one `SurfaceDesc` per declared surface (`surface_id`, `flags` with
+  `kSurfaceFlag_Visible` and `kSurfaceFlag_CastsShadows`), listing exactly the
+  SurfaceIds its bindings declare. The default material stays per binding,
+  since LODs may bind different defaults;
+- `default_lod_policy`, a `LodPolicyRecord`: `type` (`kFixed`, `kDistance`,
+  `kScreenSpaceError`), `lod_index`, `boundary_count`, `thresholds`,
+  `hysteresis_ratio`, `enter_finer_sse` and `exit_coarser_sse`. A geometry has
+  at most `kMaxLodCount` (8) LODs, so each threshold array holds 7 boundaries.
+
+The geometry descriptor spells them as the scene schema keys: a top-level
+`surfaces` array of `{ surface_id, visible, casts_shadows }` and a
+`lod_policy` object (`type` `fixed`, `distance` or `screen_space_error`, with
+that policy's fields). An absent entry takes the scene schema's default. The
+inventory reports the cooked values (section 20.1).
+
+Model import settings carry the same values per imported geometry: the default
+LOD policy and, by SurfaceId, each surface's Visibility and Cast Shadows. The
+model import settings editor shows them with the geometry's surfaces, and the
+adapters write them into the produced geometry; without a setting the
+adapters write the schema defaults.
+
+A scene stores its changes of these values as overrides of the geometry
+component (scene model 5.2). The cooked scene carries every override in one
+`kOverride` table of `OverrideRecord`s, addressed by node, the schema's
+`override_id`, the part ID and the witnessed layout revision; the scene
+descriptor spells them as a renderable's `overrides`:
+
+```json
+"overrides": {
+  "values": { "/lod_policy": { "type": "fixed", "lod_index": 1 } },
+  "parts": [ { "kind": "surface", "id": "…", "layout_revision": "…",
+               "values": { "/material": "/Content/Materials/Red.omat",
+                           "/visible": false } } ]
+}
+```
 
 ## 21. Material Emission Precision
 

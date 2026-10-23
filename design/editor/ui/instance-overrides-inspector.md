@@ -54,8 +54,9 @@ selection header and the Scene Explorer.
 - **Surfaces** are cards in the script slot card style, each with a
   `QuietDisclosure` header: material thumbnail, surface name, and a summary of
   the material plus Hidden or No shadows when that value is off, from any
-  source. Inside, Material, Visible and Cast shadows are ordinary rows.
-  Visible and Cast shadows are plain `ToggleSwitch`es: a surface has no
+  source. Inside, Material, Visibility and Cast Shadows are ordinary rows,
+  the schema's `Material`, `Visibility` and `CastsShadows` surface properties.
+  Visibility and Cast Shadows are plain `ToggleSwitch`es: a surface has no
   hierarchy. No eye glyph is used: the eye is the editor Hide.
 - **Kept changes** for a surface or template node no longer proven use the
   caution box Scripting uses for values a script no longer declares.

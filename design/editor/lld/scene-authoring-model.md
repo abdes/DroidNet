@@ -3,7 +3,7 @@
 Status: **Final V0.1 contract**. Implementation evidence is tracked in
 [IMPLEMENTATION_STATUS.md](../IMPLEMENTATION_STATUS.md).
 
-Last Updated: 2026-10-22 14:10
+Last Updated: 2026-10-23 12:00
 
 ## 1. Purpose and related contracts
 
@@ -117,7 +117,7 @@ runtime-loaded state.
 | Geometry Cast Shadows    | Inherit / On / Off; Off removes the geometry as an occluder while it stays visible and lit                           |
 | Light Cast Shadows       | Off keeps the light's illumination without shadowing from it                                                         |
 | Geometry Receive Shadows | Inherit / On / Off; Off skips direct-light shadow attenuation, not ambient occlusion or ordinary lighting            |
-| Surface Visible          | Per surface of one geometry instance (section 5); Off removes that surface only                                      |
+| Surface Visibility       | Per surface of one geometry instance (section 5); Off removes that surface only, as a draw and as an occluder        |
 | Surface Cast Shadows     | Per surface of one geometry instance (section 5); Off removes that surface as an occluder only                       |
 | Atmosphere assignment    | Per directional light None / Primary / Secondary (section 6)                                                         |
 
@@ -188,8 +188,8 @@ the geometry, and each surface binds one submesh per LOD; separate source
 objects import as separate nodes. A surface is therefore the finest authored
 part of one geometry. The engine's surface inventory supplies IDs, the layout
 revision and per-LOD/submesh bindings; the editor does not derive IDs from
-names/indices. Each surface carries its asset defaults: Material, Visible and
-Cast Shadows. The geometry asset also carries a default LOD policy.
+names/indices. Each surface carries its asset defaults: Material, Visibility
+and Cast Shadows. The geometry asset also carries a default LOD policy.
 [content-pipeline.md](content-pipeline.md) owns the inventory, its provenance
 and the import settings that set these defaults.
 
@@ -245,51 +245,121 @@ the same rules as surface IDs ([content-pipeline.md](content-pipeline.md)).
 ### 5.3 The scene property schema
 
 One engine-owned schema declares every authored scene component once, with
-its cardinality (required or optional), its part kinds, and each property: key,
-value type, creation default, the sources that may supply it, its resolution
-rule and its wire and cooked field. It is a YAML file of the Scene module,
-`Oxygen/Scene/Schema/SceneComponents.yaml`, validated by its JSON Schema
-(`SceneComponents.schema.json`). Each platform generates its own code from it,
-with its own tools, and none knows the others:
+its cardinality (`required` or `optional`), its part kinds, and each property:
+name, key, value type, creation default, valid range, unit, the sources that
+may supply it, its wire fields and, for a sourced property, its override ID. It is
+a YAML file of the Scene module, `Oxygen/Scene/Schema/SceneComponents.yaml`,
+validated by its JSON Schema (`SceneComponents.schema.json`). Each platform
+generates its own code from it, with its own tools, and none knows the others:
 
 - the engine build runs `SceneSchemaCodeGen` (Python, in the uv workspace)
-  before compiling Scene; it validates the file and generates the component
-  and field enums (`Generated.SceneComponents.h`), the record codecs and the
-  default tables. Interop's property appliers include the header natively;
+  before compiling Scene; it validates the file and generates
+  `Generated.SceneComponents.h`: the component and field enums, the override
+  IDs and the override property table (ID, component, part kind, key, value
+  type), and each property's default and range in field units. Interop's
+  appliers, the cooker and `SceneInstantiation` include it. It validates the
+  units and emits none, since no engine UI reads them;
 - the editor's Roslyn generator `SceneComponentsGenerator`
   (`Oxygen.Editor.Schemas/Generators`) reads the same file and generates
-  Runtime's component and field enums, the scene component kinds and typed
-  `PropertyId`s with their descriptor skeletons, and LivePreview's
-  property-to-field table. It reports a problem of the file as a compiler error
-  at its line. Readers, writers and validators attach to the generated ids;
-  inspector labels and grouping stay in the `.editor.schema.json` overlays.
+  Runtime's component, field and override enums, the scene component kinds
+  with their cardinality, typed `PropertyId`s with their descriptor
+  skeletons, each property's default, range, unit and display unit, and
+  LivePreview's
+  property-to-field table. It reports a problem of the file as a compiler
+  error at its line. Readers, writers and validators attach to the generated
+  ids; inspector labels, grouping, steps and soft drag ranges stay in the
+  `.editor.schema.json` overlays.
 
 The engine never refers to an editor project; the editor reads the engine's
-file.
+file. Values are encoded once per value type (`bool`, `int`, `float`, `vec3`,
+`enum`, `asset`, `string`, `lod-policy`), never per property.
+
+The required components are `Metadata` (kind `metadata`, with `Name` of type
+`string`), `Hierarchy` (kind `hierarchy`, with no properties: parent and
+children are structure), `Transform` and `Node` (kind `node-flags`); every
+other component is optional (section 3).
 
 A property key is valid only on the component or part kind the schema lists,
 so a scope the engine cannot apply cannot be written. Overrides travel on the
-wire and in the cooked scene as their address (section 5.2) and a typed value, through one override
-command and one cooked override table; a new property adds a schema entry, not a
-command, record type or hand-written mirror. Adding a property keeps existing
-source valid: an absent key means the source's value, so no data migration is
-needed.
+wire and in the cooked scene as their address (section 5.2), the property's
+override ID and a typed value, through one override command and one cooked
+override table; a new property adds a schema entry, not a command, record type
+or hand-written mirror. An override ID is stable and unique across the schema,
+and is never reused. Adding a property keeps existing source valid: an absent
+key means the source's value, so no data migration is needed.
+
+**Defaults and ranges.** The schema is the only place that decides a
+property's creation default and its valid range. No component class, record
+initializer, serializer, validator, inspector control, cooker or applier
+states its own:
+
+- `default` is the creation value, in the property's authored units: a number,
+  three numbers for a `vec3`, an enumeration member name or a `lod-policy`
+  object. Every property declares one except `asset` and `string` properties,
+  whose value the creating command supplies. A node flag also declares
+  `root_default`: a new child takes `default` (Inherit), a new root takes
+  `root_default`, and an Inherit root resolves to `root_default` (section 4).
+- `range` bounds a numeric property, each component of a `vec3` alike: `min`
+  and `max`, each optional (absent means unlimited), `min_exclusive` and
+  `max_exclusive` (inclusive when absent), and `nonzero`. Every `float` and
+  `vec3` value is finite whether or not it declares a range, and every `enum`
+  value is a declared member.
+- `commit: clamp` lets an inspector edit clamp a finite value into the range
+  on commit; the default, `commit: reject`, rejects it. Loading, cooking and
+  the runtime always reject an out-of-range value: saved or imported source is
+  diagnosed, never repaired.
+- Enumerations are declared once in the schema's `enums`, each member with its
+  wire value; the editor generator reports a mapped CLR enumeration whose
+  members differ.
+- Units are declared once in the schema's `units`, each with an `id`, an
+  `abbreviation` and a `name` (`metre`, `m`, `metres`). A property with a
+  physical unit names it in `unit`: the unit of its stored value, the one its
+  `default` and `range` use (`/inner_cone_angle_radians` is in `radian`,
+  `/field_of_view_degrees` in `degree`). A property that UIs show in another
+  unit declares `display_unit`; the only conversion is between `radian` and
+  `degree`, the pair `degrees-to-radians` already defines. Dimensionless
+  values, `bool`, `enum`, `asset` and `string` properties have no unit. UIs
+  take every unit string from the generated schema, never from a literal of
+  their own.
+
+Defaults and ranges are written in authored units; the engine generator
+converts them through the property's `encoding` (such as
+`degrees-to-radians`) into field units, so engine consumers compare field
+values. A rule that relates two properties (near below far, the spot cone
+pair, increasing active cascade distances, representable light intensity, one
+owner per atmosphere slot) is not a range: it stays in the component's rules,
+in the editor and the engine. Engine constructor defaults of runtime
+components are low-level API defaults for code that builds scenes, not
+authored creation defaults (section 4).
+
+Every property reports the same range failures:
+`SceneDiagnosticCodes.PropertyValueNotFinite`, `PropertyValueOutOfRange` and
+`PropertyValueUndefined`. An edit wraps them in
+`SceneEditCodes.PropertyOutOfRange`, and the cooker reports
+`scene.descriptor.property_out_of_range` with the property key. The field
+tables of the [property inspector](property-inspector.md) and
+[environment authoring](environment-authoring.md) LLDs are the contract that
+the schema's defaults and ranges implement.
 
 V0.1 properties with an asset source:
 
-| Property     | Part               | Asset default                | Resolution in scene preparation                        |
-| ------------ | ------------------ | ---------------------------- | ------------------------------------------------------ |
-| Material     | Surface            | The mesh-assigned material   | Binds to every submesh of the surface                  |
-| Visible      | Surface            | On unless the asset says Off | Draws when the node resolves Shown and this is On      |
-| Cast Shadows | Surface            | On unless the asset says Off | Casts when the node resolves casting On and this is On |
-| LOD policy   | Geometry component | Fixed finest LOD unless set  | Selects the LOD per view                               |
+| Property     | Key              | Part               | Override ID | Asset default                | Resolution in scene preparation                                              |
+| ------------ | ---------------- | ------------------ | ----------- | ---------------------------- | ---------------------------------------------------------------------------- |
+| Material     | `/material`      | Surface            | 1           | The mesh-assigned material   | Binds to every submesh of the surface                                        |
+| Visibility   | `/visible`       | Surface            | 2           | On unless the asset says Off | Draws when the node resolves Shown and this is On                            |
+| CastsShadows | `/casts_shadows` | Surface            | 3           | On unless the asset says Off | Casts when the node resolves casting On, this is On and its Visibility is On |
+| LodPolicy    | `/lod_policy`    | Geometry component | 4           | Fixed finest LOD unless set  | Selects the LOD per view                                                     |
 
-Receive Shadows stays a `NodeFlagsComponent` property; no surface value changes
-receiving. A
+The surface properties take the node flags' names and keys (`Visibility`,
+`/visible`; `CastsShadows`, `/casts_shadows`): a surface stores a `bool`,
+since it has no hierarchy, where a node stores a source mode. Receive Shadows
+stays a `NodeFlagsComponent` property; no surface value changes receiving. A
 hidden node therefore hides every surface, and a hidden surface never shows
-under a Shown node. The LOD policy is the engine's: Fixed (LOD index, clamped
-to the LOD count), Distance (per-LOD thresholds and a hysteresis ratio) or
-Screen-space error (per-LOD enter-finer and exit-coarser thresholds).
+under a Shown node. A surface whose Visibility is Off casts no shadow either,
+because authored shadows-only modes are excluded (section 4). The LOD policy
+is the engine's: Fixed (LOD index, clamped to the LOD count), Distance
+(per-LOD thresholds and a hysteresis ratio) or Screen-space error (per-LOD
+enter-finer and exit-coarser thresholds).
 
 The inspector shows each value with its origin (this scene, model, asset or,
 for Inherit, the parent it resolves from) and a reset for overridden values
@@ -341,13 +411,14 @@ component, a part and an override can hold.
 
 **Schema.** A component may declare `parts`, each with a PascalCase name, a
 kind and its properties. A property may declare `sources` (`asset`, `model`):
-the property is then stored as a sparse override. A part property declares at
-least one source and has no `fields`; overrides reach the engine through the
-override table and command, never field by field. The Geometry component
-declares the `Surface` part (kind `surface`) with `Material` (key `/material`,
-type `asset`, source `asset`). The engine's generator validates parts and
-sources and emits nothing for them until the engine applies overrides; the
-editor's generator emits their ids.
+the property is then stored as a sparse override and declares an
+`override_id`. A part property declares at least one source and has no
+`fields`; overrides reach the engine through the override table and command,
+never field by field. The Geometry component declares the `Surface` part (kind
+`surface`) with `Material`, `Visibility` and `CastsShadows`, and its own
+`LodPolicy` (section 5.3). Both generators emit the override IDs: the engine's
+for the cooked table, `SceneInstantiation` and Interop, the editor's for
+`RuntimeOverrideId` and the typed ids.
 
 **Identity.** `PropertyId` (component kind, optional part kind, JSON pointer)
 and `PropertyId<T>` are vocabulary of `Oxygen.Managed.Core`, so the scene model,
@@ -360,9 +431,15 @@ source to its value type; nothing else may be overridden.
 
 **Values.** An override holds a value of its property's schema type, the CLR
 type of its typed id: `bool`, `int`, `float`, `Vector3`, a mapped enumeration,
-`AssetPath`. A structured type, such as the LOD policy, is a schema `struct`
-mapped to an editor record type the same way enumerations are mapped; it
-arrives with its first property. Script parameter values stay a separate,
+`AssetPath`, `string` or `LodPolicy`. `lod-policy` is a schema value type like
+`vec3`, not a general structure: the engine policy is a variant with
+variable-length thresholds, so each platform implements its value once (the
+engine's `LodPolicyRecord`, the editor's `LodPolicy` record in World). Its
+JSON, the same in the saved form, the descriptors and the inventory, is
+`{ "type": "fixed", "lod_index": 0 }`,
+`{ "type": "distance", "thresholds": […], "hysteresis_ratio": 0.1 }` or
+`{ "type": "screen_space_error", "enter_finer_sse": […], "exit_coarser_sse": […] }`,
+with at most 7 thresholds, since a geometry has at most 8 LODs. Script parameter values stay a separate,
 tagged representation: a script declares its parameters at run time and a
 value may outlive its declaration, whereas a schema property's type is fixed
 at compile time.
@@ -566,7 +643,7 @@ one schema instead of per class.
 
 Test identity/cardinality/finite constraints, duplicate names, hierarchy order,
 inherited reparenting, local overrides, all slots and reimport conflicts,
-surface Visible/Cast Shadows against node flags, asset-default and instance LOD
+surface Visibility/Cast Shadows against node flags, asset-default and instance LOD
 policies, retention across geometry replacement, template overrides through
 model reimport, Inherit over a template's local value, reset to each source,
 camera
@@ -592,7 +669,7 @@ envelope; the LLDs below own exact fields, defaults and conversions.
 | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
 | Hierarchy and transforms      | Stable IDs; create/delete/duplicate/rename/reparent; local position/rotation/scale; mixed selection; explicit handling of unrepresentable transforms                                      | This LLD, [property pipeline](property-pipeline.md)                                           |
 | Primitive creation            | Ten native recipes (section 5); SubdividedCube under Advanced                                                                                                                             | [Inspector](property-inspector.md#primitive-recipes), [content pipeline](content-pipeline.md) |
-| Mesh surfaces                 | Per-surface instance override of material, Visible and Cast Shadows over asset defaults; Reset restores the source value; stable SurfaceId and explicit repair of lost continuity         | Section 5, [content pipeline](content-pipeline.md), [material editor](material-editor.md)     |
+| Mesh surfaces                 | Per-surface instance override of Material, Visibility and Cast Shadows over asset defaults; Reset restores the source value; stable SurfaceId and explicit repair of lost continuity      | Section 5, [content pipeline](content-pipeline.md), [material editor](material-editor.md)     |
 | Model instances               | A node instances a model scene; template nodes follow reimport; the scene stores only its overrides, with origin and reset per property                                                   | Section 5.2, [content pipeline](content-pipeline.md)                                          |
 | Level of detail               | Fixed, Distance or Screen-space error policy per geometry asset, optionally replaced per instance                                                                                         | Section 5, [content pipeline](content-pipeline.md)                                            |
 | Scalar materials              | Base colour/opacity, metallic, roughness, alpha mode/cutoff, sidedness, emission colour and HDR intensity; texture-dependent controls only when meaningful                                | [Material editor](material-editor.md)                                                         |
