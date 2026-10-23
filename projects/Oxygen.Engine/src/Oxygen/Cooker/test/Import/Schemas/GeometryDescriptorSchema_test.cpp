@@ -4,7 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-// Covers: Import/Schemas/oxygen.geometry-descriptor.schema.json
+// Covers: Import/Schemas/oxygen.geometry-descriptor.schema.json,
+// Import/Schemas/oxygen.lod-policy.schema.json
 
 #include <cstdint>
 #include <limits>
@@ -27,6 +28,7 @@ using oxygen::cooker::test::ValidateJson;
 using ::testing::Contains;
 using ::testing::HasSubstr;
 using ::testing::IsEmpty;
+using ::testing::Not;
 
 auto Schema() -> const json&
 {
@@ -368,6 +370,61 @@ NOLINT_TEST(GeometryDescriptorSchemaTest, RejectsInvalidCapsuleParameters)
     SCOPED_TRACE(test_case.parameters.dump());
     EXPECT_THAT(ValidateJson(Schema(), CapsuleDescriptor(test_case.parameters)),
       Contains(HasSubstr(test_case.error_substr)));
+  }
+}
+
+//! Surface defaults and the default LOD policy, from the shared LOD policy
+//! schema.
+NOLINT_TEST(GeometryDescriptorSchemaTest, AcceptsAssetDefaults)
+{
+  const auto policies = std::vector<json> {
+    json::parse(R"({ "type": "fixed", "lod_index": 2 })"),
+    json::parse(
+      R"({ "type": "distance", "thresholds": [0.5, 1], "hysteresis_ratio": 0.1 })"),
+    json::parse(R"({ "type": "screen_space_error",
+      "enter_finer_sse": [2], "exit_coarser_sse": [1] })"),
+  };
+  for (const auto& policy : policies) {
+    SCOPED_TRACE(policy.dump());
+    auto doc = CapsuleDescriptor(json {});
+    doc["surfaces"] = json::parse(R"([{
+      "surface_id": "018f8f8f-1111-7111-8111-111111111111",
+      "visible": false, "casts_shadows": true }])");
+    doc["lod_policy"] = policy;
+    EXPECT_THAT(ValidateJson(Schema(), doc), IsEmpty());
+  }
+}
+
+NOLINT_TEST(GeometryDescriptorSchemaTest, RejectsInvalidAssetDefaults)
+{
+  struct Case {
+    std::string_view member;
+    std::string_view value;
+  };
+  const auto cases = std::vector<Case> {
+    { "surfaces", R"([{ "visible": false }])" },
+    { "surfaces", R"([{ "surface_id": "x", "visible": false }])" },
+    { "surfaces",
+      R"([{ "surface_id": "018f8f8f-1111-7111-8111-111111111111",
+        "material": "/Content/Red.omat" }])" },
+    { "lod_policy", R"({ "type": "fixed", "lod_index": 8 })" },
+    { "lod_policy", R"({ "type": "fixed" })" },
+    { "lod_policy",
+      R"({ "type": "distance", "thresholds": [1], "hysteresis_ratio": 1 })" },
+    { "lod_policy",
+      R"({ "type": "distance", "thresholds": [1, 2, 3, 4, 5, 6, 7, 8],
+        "hysteresis_ratio": 0.1 })" },
+    { "lod_policy", R"({ "type": "distance", "thresholds": [-1],
+        "hysteresis_ratio": 0.1 })" },
+    { "lod_policy", R"({ "type": "screen_space_error",
+        "enter_finer_sse": [1] })" },
+    { "lod_policy", R"({ "type": "nearest" })" },
+  };
+  for (const auto& test_case : cases) {
+    SCOPED_TRACE(test_case.value);
+    auto doc = CapsuleDescriptor(json {});
+    doc[std::string(test_case.member)] = json::parse(test_case.value);
+    EXPECT_THAT(ValidateJson(Schema(), doc), Not(IsEmpty()));
   }
 }
 

@@ -12,19 +12,35 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["geometry_asset_key", "layout_revision", "surfaces"],
+        "required": [
+          "geometry_asset_key",
+          "layout_revision",
+          "lod_policy",
+          "surfaces"
+        ],
         "properties": {
           "geometry_asset_key": { "$ref": "#/definitions/nonNilKey" },
           "layout_revision": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+          "lod_policy": {
+            "$ref": "oxygen.lod-policy.schema.json#/definitions/lod_policy"
+          },
           "surfaces": {
             "type": "array",
             "items": {
               "type": "object",
               "additionalProperties": false,
-              "required": ["surface_id", "display_name", "bindings"],
+              "required": [
+                "surface_id",
+                "display_name",
+                "visible",
+                "casts_shadows",
+                "bindings"
+              ],
               "properties": {
                 "surface_id": { "$ref": "#/definitions/nonNilKey" },
                 "display_name": { "type": "string" },
+                "visible": { "type": "boolean" },
+                "casts_shadows": { "type": "boolean" },
                 "bindings": {
                   "type": "array",
                   "minItems": 1,

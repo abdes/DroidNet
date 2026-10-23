@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <iomanip>
 #include <iostream>
+#include <span>
 #include <string>
 
 #include "PrintUtils.h"
@@ -47,25 +48,30 @@ void Bytes(
 
 void HexDump(const uint8_t* data, size_t size, size_t max_bytes)
 {
-  size_t bytes_to_show = (std::min)(size, max_bytes);
-  for (size_t i = 0; i < bytes_to_show; i += 16) {
+  HexDump(std::as_bytes(std::span(data, size)), max_bytes);
+}
+
+void HexDump(const std::span<const std::byte> data, const size_t max_bytes)
+{
+  const auto shown = data.first((std::min)(data.size(), max_bytes));
+  for (size_t i = 0; i < shown.size(); i += 16) {
     std::string line = fmt::format("{:>4}: {:08x} ", i, i);
     for (size_t j = 0; j < 16; ++j) {
-      if (i + j < bytes_to_show) {
-        line += fmt::format("{:02x} ", data[i + j]);
+      if (i + j < shown.size()) {
+        line += fmt::format("{:02x} ", std::to_integer<uint8_t>(shown[i + j]));
       } else {
         line += "   ";
       }
     }
     line += " ";
-    for (size_t j = 0; j < 16 && i + j < bytes_to_show; ++j) {
-      uint8_t c = data[i + j];
+    for (size_t j = 0; j < 16 && i + j < shown.size(); ++j) {
+      const auto c = std::to_integer<uint8_t>(shown[i + j]);
       line += (c >= 32 && c <= 126) ? static_cast<char>(c) : '.';
     }
     fmt::print("{}\n", line);
   }
-  if (size > max_bytes) {
-    std::cout << "    ... (" << (size - max_bytes) << " more bytes)\n";
+  if (data.size() > max_bytes) {
+    std::cout << "    ... (" << (data.size() - max_bytes) << " more bytes)\n";
   }
   std::cout << std::setfill(' ');
 }

@@ -6,7 +6,9 @@
 
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
+#include <span>
 #include <string>
 
 #include <fmt/format.h>
@@ -24,5 +26,7 @@ void Field(const std::string& name, const T& value, int indent = 4)
 void Bytes(
   const std::string& name, const uint8_t* data, size_t size, int indent = 4);
 void HexDump(const uint8_t* data, size_t size, size_t max_bytes = 256);
+//! Hex dump of `data`, at most `max_bytes` of it.
+void HexDump(std::span<const std::byte> data, size_t max_bytes = 256);
 
 } // namespace PrintUtils

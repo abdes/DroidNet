@@ -36,6 +36,7 @@
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
+#include <Oxygen/Cooker/Import/Internal/GeometryDefaults.h>
 #include <Oxygen/Cooker/Import/Internal/ImportPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/MeshTransformBake.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/GeometryPipeline_tangents.h>
@@ -53,6 +54,7 @@
 #include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/MeshType.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Data/Vertex.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
@@ -355,6 +357,21 @@ namespace {
     std::ranges::copy(bounds.min, std::begin(asset_desc.bounding_box_min));
     std::ranges::copy(bounds.max, std::begin(asset_desc.bounding_box_max));
 
+    // Model imports have no authored surface defaults or LOD policy yet, so
+    // they take the scene schema's.
+    auto declared = std::vector<data::SurfaceId> {};
+    for (const auto& lod : lods) {
+      for (const auto& submesh : lod.submeshes) {
+        if (std::ranges::find(declared, submesh.surface_id) == declared.end()) {
+          declared.push_back(submesh.surface_id);
+        }
+      }
+    }
+    const auto surface_table = internal::MakeSurfaceTable(declared, {});
+    asset_desc.surface_count = static_cast<uint32_t>(surface_table.size());
+    asset_desc.default_lod_policy
+      = internal::MakeDefaultLodPolicy(std::nullopt);
+
     serio::MemoryStream stream;
     serio::Writer writer(stream);
     const auto pack = writer.ScopedAlignment(1);
@@ -472,6 +489,12 @@ namespace {
           return {};
         }
       }
+    }
+
+    if (!writer.WriteBlob(std::as_bytes(std::span(surface_table)))) {
+      diagnostics.push_back(MakeErrorDiagnostic("mesh.serialize_failed",
+        "Failed to serialize the surface table", source_id, mesh_name));
+      return {};
     }
 
     const auto data = stream.Data();
@@ -1370,9 +1393,11 @@ namespace {
       return out;
     }
 
-    if (item.lods.size() > 8) {
+    if (item.lods.size() > data::pak::geometry::kMaxLodCount) {
       out.diagnostics.push_back(MakeErrorDiagnostic("mesh.invalid_lod_count",
-        "Mesh LOD count exceeds maximum of 8", item.source_id, item.mesh_name));
+        "Mesh LOD count exceeds maximum of "
+          + std::to_string(data::pak::geometry::kMaxLodCount),
+        item.source_id, item.mesh_name));
       return out;
     }
 

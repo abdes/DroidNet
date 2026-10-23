@@ -236,6 +236,37 @@ inline auto Load(AnyReader& reader, data::pak::geometry::MeshViewDesc& desc)
 }
 
 inline auto Load(AnyReader& reader,
+  data::pak::geometry::LodPolicyRecord& record) -> Result<void>
+{
+  auto pack = reader.ScopedAlignment(1);
+  CHECK_RESULT(reader.ReadInto(record.type));
+  CHECK_RESULT(reader.ReadInto(record.lod_index));
+  CHECK_RESULT(reader.ReadInto(record.boundary_count));
+  for (auto& value : record.thresholds) {
+    CHECK_RESULT(reader.ReadInto(value));
+  }
+  CHECK_RESULT(reader.ReadInto(record.hysteresis_ratio));
+  for (auto& value : record.enter_finer_sse) {
+    CHECK_RESULT(reader.ReadInto(value));
+  }
+  for (auto& value : record.exit_coarser_sse) {
+    CHECK_RESULT(reader.ReadInto(value));
+  }
+  return {};
+}
+
+inline auto Load(AnyReader& reader, data::pak::geometry::SurfaceDesc& desc)
+  -> Result<void>
+{
+  auto pack = reader.ScopedAlignment(1);
+  auto bytes = data::SurfaceId::ByteArray {};
+  CHECK_RESULT(reader.ReadBlobInto(std::as_writable_bytes(std::span(bytes))));
+  desc.surface_id = data::SurfaceId::FromBytes(bytes);
+  CHECK_RESULT(reader.ReadInto(desc.flags));
+  return {};
+}
+
+inline auto Load(AnyReader& reader,
   data::pak::render::ShaderReferenceDesc& desc) -> Result<void>
 {
   auto pack = reader.ScopedAlignment(1);

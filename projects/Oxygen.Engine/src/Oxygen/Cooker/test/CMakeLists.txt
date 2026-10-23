@@ -37,6 +37,7 @@ oxygen_cooker_test(
   DEPS
     nlohmann_json::nlohmann_json
     nlohmann_json_schema_validator
+    oxygen::scene
   SOURCES
     "Import/AsyncImporter_test.cpp"
     "Import/Bc7Encoder_test.cpp"
@@ -162,6 +163,7 @@ oxygen_cooker_test(
   FUNCTIONAL
   DEPS
     oxygen::content
+    oxygen::scene
     oxygen::serio
     nlohmann_json::nlohmann_json
     nlohmann_json_schema_validator

@@ -83,6 +83,7 @@ namespace {
       = static_cast<uint8_t>(data::AssetType::kGeometry);
     descriptor.header.version = geometry::kGeometryAssetVersion;
     descriptor.lod_count = 1;
+    descriptor.surface_count = 1;
     auto mesh = geometry::MeshDesc {};
     mesh.mesh_type = static_cast<uint8_t>(data::MeshType::kStandard);
     mesh.submesh_count = 1;
@@ -98,10 +99,14 @@ namespace {
       .first_vertex = 0,
       .vertex_count = 3,
     };
+    const auto surface = geometry::SurfaceDesc {
+      .surface_id = submesh.surface_id,
+      .flags = geometry::kSurfaceFlag_Visible,
+    };
     const auto strings = data::DescriptorStringsBuilder {};
     descriptor.header.strings = {
-      .offset
-      = sizeof(descriptor) + sizeof(mesh) + sizeof(submesh) + sizeof(view),
+      .offset = sizeof(descriptor) + sizeof(mesh) + sizeof(submesh)
+        + sizeof(view) + sizeof(surface),
       .size = strings.Size(),
     };
     const auto write = [&writer](const auto& record) -> auto {
@@ -111,6 +116,7 @@ namespace {
     write(mesh);
     write(submesh);
     write(view);
+    write(surface);
     ASSERT_TRUE(writer.WriteBlob(strings.Bytes()));
     ASSERT_TRUE(writer.Flush());
   }

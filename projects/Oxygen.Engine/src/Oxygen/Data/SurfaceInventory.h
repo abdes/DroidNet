@@ -6,7 +6,6 @@
 
 #pragma once
 
-#include <compare>
 #include <cstdint>
 #include <optional>
 #include <span>
@@ -41,22 +40,34 @@ struct SurfaceBinding final {
   //! Nil retains the native omitted-reference/default-material sentinel.
   //! Validation never replaces it with a material key or resolves missing
   //! assets.
-  AssetKey default_material_key {};
+  AssetKey default_material_key;
 
   auto operator==(const SurfaceBinding&) const -> bool = default;
 };
 
+//! The asset defaults of a surface's `Visibility` and `CastsShadows`, as its
+//! geometry declares them.
+struct SurfaceDefaults final {
+  bool visible = false;
+  bool casts_shadows = false;
+
+  auto operator==(const SurfaceDefaults&) const -> bool = default;
+};
+
 //! One declared semantic surface. Equal labels or defaults never merge entries.
 struct Surface final {
-  SurfaceId surface_id {};
+  SurfaceId surface_id;
   std::string display_name;
   std::vector<SurfaceBinding> bindings;
+  //! Absent when the geometry declares none, as a geometry built at runtime;
+  //! its users then take the scene schema's defaults. Not part of the layout.
+  std::optional<SurfaceDefaults> defaults;
 };
 
 //! Native inventory value model; surface order is presentation order only.
 struct SurfaceInventory final {
   uint32_t schema_version = kSurfaceInventorySchemaVersion;
-  AssetKey geometry_asset_key {};
+  AssetKey geometry_asset_key;
   base::Sha256Digest layout_revision {};
   std::vector<Surface> surfaces;
 };
@@ -79,7 +90,7 @@ enum class SurfaceValidationErrorCode : uint8_t {
 //! Structured semantic failure with the affected surface/location when
 //! available.
 struct SurfaceValidationError final {
-  SurfaceValidationErrorCode code;
+  SurfaceValidationErrorCode code {};
   std::optional<SurfaceId> surface_id;
   std::optional<SurfaceBindingLocation> binding;
 };

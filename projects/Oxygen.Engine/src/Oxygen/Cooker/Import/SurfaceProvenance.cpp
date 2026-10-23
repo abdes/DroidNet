@@ -9,6 +9,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <set>
 #include <stdexcept>
 #include <string>
@@ -88,6 +89,7 @@ namespace {
           .value(),
         .display_name = surface_json.at("display_name").get<std::string>(),
         .bindings = {},
+        .defaults = std::nullopt,
       };
       for (const auto& binding : surface_json.at("bindings")) {
         surface.bindings.push_back(data::SurfaceBinding {

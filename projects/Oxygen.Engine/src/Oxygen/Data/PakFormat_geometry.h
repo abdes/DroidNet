@@ -26,41 +26,112 @@ namespace oxygen::data::pak::geometry {
 [[maybe_unused]] constexpr uint8_t kGeometryAssetVersion
   = version::kGeometryAssetVersion;
 
+//! The most LODs a geometry asset has.
+[[maybe_unused]] constexpr uint8_t kMaxLodCount = 8;
+
+//! The most LOD boundaries a policy has: boundary `i` lies between LOD `i` and
+//! LOD `i + 1`.
+[[maybe_unused]] constexpr uint8_t kMaxLodBoundaryCount = kMaxLodCount - 1;
+
+//! How a LOD policy selects the LOD shown per view.
+enum class LodPolicyType : uint8_t {
+  kFixed = 0, //!< Always `lod_index`, clamped to the LOD count.
+  kDistance = 1, //!< By normalized view distance, with symmetric hysteresis.
+  kScreenSpaceError = 2, //!< By screen-space error, with directional
+                         //!< hysteresis.
+};
+
+//! A geometry LOD policy, the value of the scene schema's `lod-policy` type.
+/*!
+  Each policy type reads only its own fields; the others are zero.
+
+  - `kFixed`: `lod_index`, below kMaxLodCount.
+  - `kDistance`: `thresholds[boundary_count]`, non-decreasing, and
+    `hysteresis_ratio` in [0, 0.99].
+  - `kScreenSpaceError`: `enter_finer_sse[boundary_count]` and
+    `exit_coarser_sse[boundary_count]`, each non-decreasing.
+
+  `boundary_count` is at most kMaxLodBoundaryCount, since a geometry has at most
+  kMaxLodCount LODs. Every threshold is finite.
+
+  @see IsValidLodPolicy
+*/
+#pragma pack(push, 1)
+struct LodPolicyRecord {
+  LodPolicyType type = LodPolicyType::kFixed;
+  uint8_t lod_index = 0;
+  uint8_t boundary_count = 0;
+  float thresholds[kMaxLodBoundaryCount] = {};
+  float hysteresis_ratio = 0.0F;
+  float enter_finer_sse[kMaxLodBoundaryCount] = {};
+  float exit_coarser_sse[kMaxLodBoundaryCount] = {};
+};
+#pragma pack(pop)
+static_assert(sizeof(LodPolicyRecord) == 91);
+
+//! The surface is drawn by default (the schema's surface `Visibility`).
+[[maybe_unused]] constexpr uint32_t kSurfaceFlag_Visible = (1U << 0U);
+//! The surface casts shadows by default (the schema's surface `CastsShadows`).
+[[maybe_unused]] constexpr uint32_t kSurfaceFlag_CastsShadows = (1U << 1U);
+
+//! The asset defaults of one declared surface.
+/*!
+  A geometry lists one SurfaceDesc per SurfaceId its submeshes declare, and no
+  other. The default material stays on each SubMeshDesc, since LODs may bind
+  different defaults to one surface.
+
+  `flags` holds `kSurfaceFlag_*` bits; the other bits are zero.
+*/
+#pragma pack(push, 1)
+struct SurfaceDesc {
+  SurfaceId surface_id;
+  uint32_t flags = 0;
+};
+#pragma pack(pop)
+static_assert(sizeof(SurfaceDesc) == 20);
+
 //! Geometry asset descriptor
 /*!
   Describes a geometry asset, with one or more levels of detail (LODs) for
   efficient rendering. This structure provides the metadata and bounding
   information for the geometry, and is followed by an array of MeshDesc
-  structures (one per LOD).
+  structures (one per LOD), then by the surface table.
 
   ### Relationships
 
   - 1 GeometryAssetDesc : N MeshDesc (LODs)
+  - 1 GeometryAssetDesc : N SurfaceDesc (declared surfaces)
   - 1 MeshDesc : N SubMeshDesc (submeshes)
   - 1 SubMeshDesc : N MeshViewDesc (mesh views)
   - 1 SubMeshDesc : 1 MaterialAsset (by AssetKey)
 
   ### Notes
 
-  - `lod_count`: Number of LODs (must be >= 1). Each LOD is described by a
-    MeshDesc.
+  - `lod_count`: Number of LODs, from 1 to kMaxLodCount. Each LOD is described
+    by a MeshDesc.
   - `bounding_box_min`, `bounding_box_max`: Axis-aligned bounding box (AABB) for
     the entire geometry, used for culling and spatial queries.
   - Bounds are required and must be pre-computed by tooling. All-zero bounds are
     valid and must not be interpreted as "missing".
+  - `surface_count`: Number of SurfaceDesc records, one per declared surface.
+  - `default_lod_policy`: The LOD policy of a renderable that does not override
+    it.
 
-  @see MeshDesc, SubMeshDesc, MeshViewDesc, AssetHeader
+  @see MeshDesc, SubMeshDesc, MeshViewDesc, SurfaceDesc, AssetHeader
 */
 #pragma pack(push, 1)
 struct GeometryAssetDesc {
   core::AssetHeader header;
-  uint32_t lod_count = 0; // Number of LODs (must be >= 1)
+  uint32_t lod_count = 0; // Number of LODs (1 to kMaxLodCount)
   float bounding_box_min[3] = {}; // AABB min coordinates
   float bounding_box_max[3] = {}; // AABB max coordinates
+  uint32_t surface_count = 0; // Number of SurfaceDesc records
+  LodPolicyRecord default_lod_policy; // LOD policy unless overridden
 };
-// Followed by: MeshDesc meshes[lod_count], then the descriptor string table.
+// Followed by: MeshDesc meshes[lod_count], SurfaceDesc surfaces[surface_count],
+// then the descriptor string table.
 #pragma pack(pop)
-static_assert(sizeof(GeometryAssetDesc) == 79);
+static_assert(sizeof(GeometryAssetDesc) == 174);
 
 //! Fields for a standard (static) mesh
 /*! Boundaries are required and must be pre-computed by tooling. All-zero
@@ -251,47 +322,6 @@ struct MeshViewDesc {
 };
 #pragma pack(pop)
 static_assert(sizeof(MeshViewDesc) == 40);
-
-//! The most LODs a geometry asset has.
-[[maybe_unused]] constexpr uint8_t kMaxLodCount = 8;
-
-//! The most LOD boundaries a policy has: boundary `i` lies between LOD `i` and
-//! LOD `i + 1`.
-[[maybe_unused]] constexpr uint8_t kMaxLodBoundaryCount = kMaxLodCount - 1;
-
-//! How a LOD policy selects the LOD shown per view.
-enum class LodPolicyType : uint8_t {
-  kFixed = 0, //!< Always `lod_index`, clamped to the LOD count.
-  kDistance = 1, //!< By normalized view distance, with symmetric hysteresis.
-  kScreenSpaceError = 2, //!< By screen-space error, with directional
-                         //!< hysteresis.
-};
-
-//! A geometry LOD policy, the value of the scene schema's `lod-policy` type.
-/*!
-  Each policy type reads only its own fields; the others are zero.
-
-  - `kFixed`: `lod_index`.
-  - `kDistance`: `thresholds[boundary_count]`, non-decreasing, and
-    `hysteresis_ratio` in [0, 0.99].
-  - `kScreenSpaceError`: `enter_finer_sse[boundary_count]` and
-    `exit_coarser_sse[boundary_count]`, each non-decreasing.
-
-  `boundary_count` is at most kMaxLodBoundaryCount, since a geometry has at most
-  kMaxLodCount LODs.
-*/
-#pragma pack(push, 1)
-struct LodPolicyRecord {
-  LodPolicyType type = LodPolicyType::kFixed;
-  uint8_t lod_index = 0;
-  uint8_t boundary_count = 0;
-  float thresholds[kMaxLodBoundaryCount] = {};
-  float hysteresis_ratio = 0.0F;
-  float enter_finer_sse[kMaxLodBoundaryCount] = {};
-  float exit_coarser_sse[kMaxLodBoundaryCount] = {};
-};
-#pragma pack(pop)
-static_assert(sizeof(LodPolicyRecord) == 91);
 
 } // namespace oxygen::data::pak::geometry
 

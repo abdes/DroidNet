@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -21,6 +22,7 @@
 
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/BufferSource.h>
+#include <Oxygen/Cooker/Import/Internal/GeometryDefaults.h>
 #include <Oxygen/Cooker/Import/Internal/GeometrySource.h>
 #include <Oxygen/Cooker/Import/Internal/ImportManifest_schema.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/BufferDescriptorSidecar.h>
@@ -211,6 +213,59 @@ namespace {
     return true;
   }
 
+  //! Reads `surfaces` and `lod_policy` into `source`, whose LODs are read.
+  auto ReadAssetDefaults(const json& document,
+    const std::filesystem::path& source_path,
+    std::vector<ImportDiagnostic>& diagnostics, GeometrySource& source) -> bool
+  {
+    if (document.contains("surfaces")) {
+      const auto declared = source.DeclaredSurfaces();
+      const auto& surfaces = document.at("surfaces");
+      for (size_t index = 0; index < surfaces.size(); ++index) {
+        const auto& surface_doc = surfaces.at(index);
+        const auto path = "surfaces[" + std::to_string(index) + "]";
+        const auto id = data::SurfaceId::FromString(
+          surface_doc.at("surface_id").get<std::string>());
+        if (!id || std::ranges::find(declared, id.value()) == declared.end()) {
+          AddDiagnostic(diagnostics, source_path, ImportSeverity::kError,
+            "geometry.descriptor.surface_unknown",
+            "Surface defaults name a surface no submesh declares",
+            path + ".surface_id");
+          return false;
+        }
+        if (std::ranges::find(
+              source.surfaces, id.value(), &AuthoredSurfaceDefaults::surface_id)
+          != source.surfaces.end()) {
+          AddDiagnostic(diagnostics, source_path, ImportSeverity::kError,
+            "geometry.descriptor.surface_duplicate",
+            "Surface defaults name a surface more than once",
+            path + ".surface_id");
+          return false;
+        }
+        auto entry = AuthoredSurfaceDefaults { .surface_id = id.value() };
+        if (surface_doc.contains("visible")) {
+          entry.visible = surface_doc.at("visible").get<bool>();
+        }
+        if (surface_doc.contains("casts_shadows")) {
+          entry.casts_shadows = surface_doc.at("casts_shadows").get<bool>();
+        }
+        source.surfaces.push_back(entry);
+      }
+    }
+    if (document.contains("lod_policy")) {
+      source.lod_policy = ReadLodPolicy(document.at("lod_policy"));
+      if (!source.lod_policy.has_value()) {
+        AddDiagnostic(diagnostics, source_path, ImportSeverity::kError,
+          "geometry.descriptor.lod_policy_invalid",
+          "LOD policy thresholds must not decrease, and its screen-space "
+          "error lists must have equal lengths",
+          "lod_policy");
+        return false;
+      }
+    }
+    return true;
+  }
+
   auto ReadSource(const json& document,
     const std::filesystem::path& source_path,
     std::vector<ImportDiagnostic>& diagnostics) -> std::optional<GeometrySource>
@@ -336,9 +391,25 @@ namespace {
       }
       source.lods.push_back(std::move(lod));
     }
+    if (!ReadAssetDefaults(document, source_path, diagnostics, source)) {
+      return std::nullopt;
+    }
     return source;
   }
 } // namespace
+
+auto GeometrySource::DeclaredSurfaces() const -> std::vector<data::SurfaceId>
+{
+  auto declared = std::vector<data::SurfaceId> {};
+  for (const auto& lod : lods) {
+    for (const auto& submesh : lod.submeshes) {
+      if (std::ranges::find(declared, submesh.surface_id) == declared.end()) {
+        declared.push_back(submesh.surface_id);
+      }
+    }
+  }
+  return declared;
+}
 
 auto GeometrySource::FromDescriptor(const std::string_view bytes,
   const std::filesystem::path& source_path,

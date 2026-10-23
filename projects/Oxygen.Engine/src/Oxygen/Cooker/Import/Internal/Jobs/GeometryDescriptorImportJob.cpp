@@ -30,6 +30,7 @@
 #include <Oxygen/Cooker/Import/ImportProgress.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/AssetEmitter.h>
+#include <Oxygen/Cooker/Import/Internal/GeometryDefaults.h>
 #include <Oxygen/Cooker/Import/Internal/GeometrySource.h>
 #include <Oxygen/Cooker/Import/Internal/ImportSession.h>
 #include <Oxygen/Cooker/Import/Internal/Jobs/BufferImportSubmitter.h>
@@ -495,6 +496,11 @@ namespace {
     asset_desc.lod_count = static_cast<uint32_t>(lod_count);
     std::ranges::copy(root_bounds.min, std::begin(asset_desc.bounding_box_min));
     std::ranges::copy(root_bounds.max, std::begin(asset_desc.bounding_box_max));
+    const auto surface_table
+      = internal::MakeSurfaceTable(source.DeclaredSurfaces(), source.surfaces);
+    asset_desc.surface_count = static_cast<uint32_t>(surface_table.size());
+    asset_desc.default_lod_policy
+      = internal::MakeDefaultLodPolicy(source.lod_policy);
     auto strings = data::DescriptorStringsBuilder {};
     asset_desc.header.name_offset = strings.Add(prepared.geometry_name);
 
@@ -762,6 +768,13 @@ namespace {
       }
 
       prepared.lod_bindings.push_back(mesh_bindings);
+    }
+
+    if (!writer.WriteBlob(std::as_bytes(std::span(surface_table)))) {
+      AddDiagnostic(context.session, context.request, ImportSeverity::kError,
+        "geometry.descriptor.serialize_failed",
+        "Failed writing the surface table", "surfaces");
+      co_return std::nullopt;
     }
 
     const auto bytes = output_stream.Data();

@@ -10,6 +10,7 @@
 #include <array>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <stdexcept>
 #include <utility>
 #include <vector>
@@ -91,6 +92,7 @@ auto Publish(SurfaceGeometryProvenance geometry)
       .bindings = { { .lod_index = oxygen::data::LodIndex {},
         .submesh_index = oxygen::data::SubmeshIndex { submesh++ },
         .default_material_key = {}, }, },
+      .defaults = std::nullopt,
     });
   }
   geometry.inventory.layout_revision

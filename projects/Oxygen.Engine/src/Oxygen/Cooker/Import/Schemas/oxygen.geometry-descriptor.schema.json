@@ -30,6 +30,17 @@
       "items": {
         "$ref": "#/definitions/lod_descriptor"
       }
+    },
+    "surfaces": {
+      "description": "Surface asset defaults, each of a surface the submeshes declare, at most once.",
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/surface_defaults"
+      }
+    },
+    "lod_policy": {
+      "description": "The default LOD policy; absent takes the scene schema's default.",
+      "$ref": "oxygen.lod-policy.schema.json#/definitions/lod_policy"
     }
   },
   "required": ["name", "bounds", "lods"],
@@ -719,13 +730,33 @@
       },
       "required": ["view_ref"]
     },
+    "surface_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "surface_defaults": {
+      "description": "The asset defaults of one declared surface; an absent value takes the scene schema's default.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "surface_id": {
+          "$ref": "#/definitions/surface_id"
+        },
+        "visible": {
+          "type": "boolean"
+        },
+        "casts_shadows": {
+          "type": "boolean"
+        }
+      },
+      "required": ["surface_id"]
+    },
     "submesh_descriptor": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
         "surface_id": {
-          "type": "string",
-          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+          "$ref": "#/definitions/surface_id"
         },
         "name": {
           "$ref": "oxygen.name.schema.json#/definitions/segment"

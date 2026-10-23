@@ -30,6 +30,7 @@
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
 #include <Oxygen/Data/SurfaceId.h>
+#include <Oxygen/Scene/Schema/Generated.SceneComponents.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
 #include <Oxygen/Testing/GTest.h>
@@ -381,6 +382,84 @@ NOLINT_TEST(GeometryDescriptorImportJobProceduralTest,
     ASSERT_EQ(views.size(), 1U);
     EXPECT_EQ(views.front().VertexCount(), mesh->VertexCount());
     EXPECT_EQ(views.front().IndexCount(), mesh->IndexCount());
+  }
+}
+
+//! Authored surface defaults and LOD policy reach the cooked geometry; absent
+//! ones take the scene schema's defaults.
+NOLINT_TEST(GeometryDescriptorImportJobProceduralTest,
+  AssetDefaultsReachTheCookedGeometry)
+{
+  namespace schema = scene::schema::geometry;
+  struct Case {
+    std::string_view name;
+    json surfaces;
+    json lod_policy;
+  };
+  const auto surface = GeneratedSurfaceId("Capsule");
+  const auto cases = std::vector<Case> {
+    { .name = "schema_defaults", .surfaces = nullptr, .lod_policy = nullptr },
+    {
+      .name = "authored",
+      .surfaces = json::array({ {
+        { "surface_id", surface },
+        { "casts_shadows", false },
+      } }),
+      .lod_policy = { { "type", "fixed" }, { "lod_index", 3 } },
+    },
+  };
+  auto service = AsyncImportService(AsyncImportService::Config {
+    .thread_pool_size = 2U,
+  });
+  [[maybe_unused]] auto stop_service
+    = oxygen::Finally([&service] -> void { service.Stop(); });
+
+  for (const auto& test_case : cases) {
+    SCOPED_TRACE(test_case.name);
+    const ScopedTempDir temp;
+    const auto root = temp.Path() / test_case.name;
+    const auto cooked_root = root / ".cooked";
+    const auto source_path = root / "Sources" / "capsule.geometry.json";
+    WriteText(cooked_root / "Materials" / "default.omat", "placeholder");
+    auto doc = MakeCapsuleDescriptor(nullptr, 2.0F, 0.5F);
+    if (!test_case.surfaces.is_null()) {
+      doc["surfaces"] = test_case.surfaces;
+    }
+    if (!test_case.lod_policy.is_null()) {
+      doc["lod_policy"] = test_case.lod_policy;
+    }
+    WriteText(source_path, doc.dump(2));
+    const auto report = SubmitAndWait(
+      service, MakeGeometryRequest(source_path, cooked_root, doc));
+    ASSERT_HAS_VALUE(report);
+    ASSERT_TRUE(report->success) << DiagnosticSummary(report->diagnostics);
+    const auto output = FindOutputByExtension(*report, ".ogeo");
+    ASSERT_HAS_VALUE(output) << "Expected output to contain a value";
+    auto bytes = ReadBytes(cooked_root / *output);
+
+    auto stream = serio::MemoryStream(std::span<std::byte>(bytes));
+    auto reader = serio::Reader(stream);
+    auto context = content::LoaderContext {};
+    context.desc_reader = &reader;
+    context.parse_only = true;
+    const auto geometry
+      = content::loaders::LoadGeometryAsset(std::move(context));
+    ASSERT_NE(geometry, nullptr);
+    ASSERT_EQ(geometry->Surfaces().surfaces.size(), 1U);
+    const auto& defaults = geometry->Surfaces().surfaces.front().defaults;
+    ASSERT_HAS_VALUE(defaults) << "Expected surface defaults";
+    const auto& policy = geometry->DefaultLodPolicy();
+    ASSERT_HAS_VALUE(policy) << "Expected a default LOD policy";
+    EXPECT_EQ(defaults->visible, schema::surface::kVisibilityDefault);
+    if (test_case.surfaces.is_null()) {
+      EXPECT_EQ(defaults->casts_shadows, schema::surface::kCastsShadowsDefault);
+      EXPECT_EQ(policy->type, schema::kLodPolicyDefault.type);
+      EXPECT_EQ(policy->lod_index, schema::kLodPolicyDefault.lod_index);
+    } else {
+      EXPECT_FALSE(defaults->casts_shadows);
+      EXPECT_EQ(policy->type, data::pak::geometry::LodPolicyType::kFixed);
+      EXPECT_EQ(policy->lod_index, 3U);
+    }
   }
 }
 

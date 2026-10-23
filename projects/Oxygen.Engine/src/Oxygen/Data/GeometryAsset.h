@@ -752,6 +752,17 @@ private:
   @note The mesh LOD array immediately follows the descriptor and is sized
   by `lod_count`.
 
+  ### Asset defaults
+
+  A cooked geometry declares the asset defaults of its surfaces and its default
+  LOD policy: `surface_table` lists one SurfaceDesc per declared surface, and
+  `desc.default_lod_policy` holds the policy. A geometry built at runtime passes
+  no table and declares none; its users take the scene schema's defaults.
+
+  @throw std::invalid_argument when a LOD is null, the LOD count exceeds
+  kMaxLodCount, a surface identity is nil, or a surface table does not list
+  exactly the declared surfaces or comes with an invalid LOD policy.
+
   @see Mesh, SubMesh, AssetHeader, PakFormat.h
 */
 class GeometryAsset : public Asset {
@@ -761,7 +772,9 @@ public:
   OXGN_DATA_API GeometryAsset(AssetKey asset_key,
     pak::geometry::GeometryAssetDesc desc,
     std::vector<std::shared_ptr<Mesh>> lod_meshes,
-    SourceOrigin source_origin = {});
+    SourceOrigin source_origin = {},
+    std::optional<std::span<const pak::geometry::SurfaceDesc>> surface_table
+    = std::nullopt);
 
   //! Immutable declaration inventory, resolved once when geometry is created.
   [[nodiscard]] auto Surfaces() const noexcept -> const SurfaceInventory&
@@ -771,6 +784,14 @@ public:
 
   OXGN_DATA_NDAPI auto FindSurface(SurfaceId id) const noexcept
     -> const Surface*;
+
+  //! The LOD policy a renderable uses unless it overrides it; absent when the
+  //! geometry declares none.
+  [[nodiscard]] auto DefaultLodPolicy() const noexcept
+    -> const std::optional<pak::geometry::LodPolicyRecord>&
+  {
+    return default_lod_policy_;
+  }
 
   ~GeometryAsset() override = default;
 
@@ -825,9 +846,13 @@ public:
   }
 
 private:
+  auto ApplySurfaceTable(
+    std::span<const pak::geometry::SurfaceDesc> surface_table) -> void;
+
   pak::geometry::GeometryAssetDesc desc_ {};
   std::vector<std::shared_ptr<Mesh>> lod_meshes_;
   SurfaceInventory surfaces_ {};
+  std::optional<pak::geometry::LodPolicyRecord> default_lod_policy_;
 };
 
 //! Builder for a single submesh within a MeshBuilder type-state API.

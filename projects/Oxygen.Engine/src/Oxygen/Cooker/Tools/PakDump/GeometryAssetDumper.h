@@ -10,6 +10,8 @@
 #include <cstddef>
 #include <cstring>
 #include <iostream>
+#include <span>
+#include <string_view>
 
 #include "AssetDumpHelpers.h"
 #include "AssetDumper.h"
@@ -66,6 +68,8 @@ public:
       "AABB Min", asset_dump_helpers::FormatVec3(geo.bounding_box_min), 8);
     PrintUtils::Field(
       "AABB Max", asset_dump_helpers::FormatVec3(geo.bounding_box_max), 8);
+    PrintUtils::Field("Surface Count", geo.surface_count, 8);
+    PrintLodPolicy(geo.default_lod_policy);
     std::cout << "\n";
 
     if (geo.lod_count == 0) {
@@ -95,8 +99,7 @@ public:
       const auto mesh_name = asset_dump_helpers::DescriptorString(
         *data, geo.header, mesh_desc.name_offset);
 
-      const auto mesh_type
-        = static_cast<MeshType>(static_cast<uint8_t>(mesh_desc.mesh_type));
+      const auto mesh_type = static_cast<MeshType>(mesh_desc.mesh_type);
 
       std::cout << "    LOD[" << lod << "] Mesh: " << mesh_name << "\n";
       PrintUtils::Field("Mesh Type",
@@ -166,8 +169,7 @@ public:
           std::cout << "      Procedural Params Preview (" << params_size
                     << " bytes):\n";
           PrintUtils::HexDump(
-            reinterpret_cast<const uint8_t*>(data->data()) + offset,
-            (std::min)(params_size, ctx.max_data_bytes), ctx.max_data_bytes);
+            std::span(*data).subspan(offset, params_size), ctx.max_data_bytes);
         }
         offset += params_size;
       }
@@ -258,8 +260,68 @@ public:
       std::cout << "\n";
     }
 
+    std::cout << "    Surfaces (" << geo.surface_count << "):\n";
+    for (uint32_t surface = 0; surface < geo.surface_count; ++surface) {
+      data::pak::geometry::SurfaceDesc surface_desc {};
+      if (!asset_dump_helpers::ReadStructAt(
+            *data, offset, sizeof(surface_desc), &surface_desc)) {
+        std::cout << "        (surface table not present in descriptor)\n";
+        break;
+      }
+      offset += sizeof(surface_desc);
+      std::cout << "        " << data::to_string(surface_desc.surface_id)
+                << std::boolalpha << ": visible="
+                << ((surface_desc.flags
+                      & data::pak::geometry::kSurfaceFlag_Visible)
+                     != 0U)
+                << ", casts_shadows="
+                << ((surface_desc.flags
+                      & data::pak::geometry::kSurfaceFlag_CastsShadows)
+                     != 0U)
+                << std::noboolalpha << "\n";
+    }
+
     std::cout << "\n";
     co_return;
+  }
+
+private:
+  static auto PrintLodPolicy(const data::pak::geometry::LodPolicyRecord& policy)
+    -> void
+  {
+    using data::pak::geometry::LodPolicyType;
+
+    const auto print_list = [&policy](const std::string_view name,
+                              const std::span<const float> values) -> void {
+      std::cout << "        " << name << ": [";
+      // A damaged record may claim more boundaries than the arrays hold.
+      const auto shown = values.first(
+        (std::min)(std::size_t { policy.boundary_count }, values.size()));
+      auto separator = std::string_view {};
+      for (const auto value : shown) {
+        std::cout << separator << value;
+        separator = ", ";
+      }
+      std::cout << "]\n";
+    };
+    switch (policy.type) {
+    case LodPolicyType::kFixed:
+      std::cout << "        LOD Policy: fixed, lod_index="
+                << static_cast<uint32_t>(policy.lod_index) << "\n";
+      return;
+    case LodPolicyType::kDistance:
+      std::cout << "        LOD Policy: distance, hysteresis_ratio="
+                << policy.hysteresis_ratio << "\n";
+      print_list("thresholds", policy.thresholds);
+      return;
+    case LodPolicyType::kScreenSpaceError:
+      std::cout << "        LOD Policy: screen_space_error\n";
+      print_list("enter_finer_sse", policy.enter_finer_sse);
+      print_list("exit_coarser_sse", policy.exit_coarser_sse);
+      return;
+    }
+    std::cout << "        LOD Policy: unknown type "
+              << static_cast<uint32_t>(policy.type) << "\n";
   }
 };
 

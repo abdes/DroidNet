@@ -289,7 +289,8 @@ For each work item the worker performs:
      entry (standard/procedural/skinned support). Skinned blobs are patched with
      vertex/index/joint buffer indices and any auxiliary indices (e.g.,
      `inverse_bind_buffer`, `joint_remap_buffer`) when present.
-   - Writes submesh descriptors and mesh views verbatim.
+   - Writes submesh descriptors and mesh views verbatim, then copies the
+     surface table (`SurfaceDesc[surface_count]`) unchanged.
    - Applies all material key patches by seeking to each recorded absolute
      offset and writing the `data::AssetKey` value. Offsets outside the
      descriptor bounds are treated as errors.

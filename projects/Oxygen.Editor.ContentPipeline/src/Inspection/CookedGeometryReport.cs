@@ -12,6 +12,8 @@ namespace Oxygen.Editor.ContentPipeline.Inspection;
 /// <summary>Schema-validated native inventories, without managed identity or hash generation.</summary>
 public sealed class CookedGeometryReport
 {
+    private const string LodPolicySchemaFileName = "oxygen.lod-policy.schema.json";
+
     private static readonly Lazy<JsonSchema> Schema = new(LoadSchema);
     private readonly ImmutableDictionary<Guid, Inventory> geometries;
 
@@ -77,10 +79,20 @@ public sealed class CookedGeometryReport
 
     private static JsonSchema LoadSchema()
     {
-        using var stream = typeof(CookedGeometryReport).Assembly.GetManifestResourceStream("oxygen.cooked-geometries.schema.json")
-            ?? throw new InvalidOperationException("The native geometry metadata schema is missing.");
+        var options = new BuildOptions();
+        options.SchemaRegistry.Fetch = static (uri, _) =>
+            string.Equals(Path.GetFileName(uri.LocalPath), LodPolicySchemaFileName, StringComparison.Ordinal)
+                ? JsonSchema.FromText(ReadSchemaResource(LodPolicySchemaFileName))
+                : null;
+        return JsonSchema.FromText(ReadSchemaResource("oxygen.cooked-geometries.schema.json"), options);
+    }
+
+    private static string ReadSchemaResource(string fileName)
+    {
+        using var stream = typeof(CookedGeometryReport).Assembly.GetManifestResourceStream(fileName)
+            ?? throw new InvalidOperationException($"The native geometry metadata schema '{fileName}' is missing.");
         using var reader = new StreamReader(stream);
-        return JsonSchema.FromText(reader.ReadToEnd());
+        return reader.ReadToEnd();
     }
 
     private sealed record Inventory(string LayoutRevision, ImmutableArray<GeometrySurface> Surfaces);

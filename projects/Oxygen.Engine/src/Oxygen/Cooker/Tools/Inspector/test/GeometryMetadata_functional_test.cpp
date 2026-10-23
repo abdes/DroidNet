@@ -12,6 +12,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <optional>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -164,6 +165,23 @@ auto GeometryAsset(const GeometryFixture& fixture) -> AssetSpec
     = static_cast<uint8_t>(oxygen::data::AssetType::kGeometry);
   descriptor.header.version = fixture.version;
   descriptor.lod_count = 2;
+  // Every surface is drawn by default; the second casts no shadows.
+  auto surfaces = std::vector<geometry::SurfaceDesc> {
+    { .surface_id = fixture.first_surface,
+      .flags
+      = geometry::kSurfaceFlag_Visible | geometry::kSurfaceFlag_CastsShadows },
+  };
+  if (fixture.first_surface != MakeSurfaceId(2)) {
+    surfaces.push_back({
+      .surface_id = MakeSurfaceId(2),
+      .flags = geometry::kSurfaceFlag_Visible,
+    });
+  }
+  descriptor.surface_count = static_cast<uint32_t>(surfaces.size());
+  descriptor.default_lod_policy = {
+    .type = geometry::LodPolicyType::kFixed,
+    .lod_index = 1,
+  };
   auto bytes = std::vector<std::byte> {};
   AppendRecord(bytes, descriptor);
   auto strings = oxygen::data::DescriptorStringsBuilder {};
@@ -196,6 +214,9 @@ auto GeometryAsset(const GeometryFixture& fixture) -> AssetSpec
       };
       AppendRecord(bytes, view);
     }
+  }
+  for (const auto& surface : surfaces) {
+    AppendRecord(bytes, surface);
   }
   oxygen::data::AppendDescriptorStrings(bytes, strings);
   auto references = AssetReferences::Create(
@@ -239,6 +260,7 @@ auto ExpectedLayoutRevision() -> oxygen::base::Sha256Digest
         { .lod_index = oxygen::data::LodIndex {}, .submesh_index = oxygen::data::SubmeshIndex {}, .default_material_key = material },
         { .lod_index = oxygen::data::LodIndex { 1U }, .submesh_index = oxygen::data::SubmeshIndex {}, .default_material_key = {} },
       },
+      .defaults = std::nullopt,
     },
     oxygen::data::Surface {
       .surface_id = MakeSurfaceId(2),
@@ -247,6 +269,7 @@ auto ExpectedLayoutRevision() -> oxygen::base::Sha256Digest
         { .lod_index = oxygen::data::LodIndex {}, .submesh_index = oxygen::data::SubmeshIndex { 1U }, .default_material_key = material },
         { .lod_index = oxygen::data::LodIndex { 1U }, .submesh_index = oxygen::data::SubmeshIndex { 1U }, .default_material_key = material },
       },
+      .defaults = std::nullopt,
     },
   };
   return oxygen::data::ComputeSurfaceLayoutRevision(surfaces).value();
@@ -369,6 +392,8 @@ NOLINT_TEST_F(InspectorGeometryMetadataTest, ReportsSeparateSurfacesAcrossLods)
     oxygen::data::to_string(
       AssetKey::FromVirtualPath("/Content/Geometry/Inspection.ogeo")));
   EXPECT_NE(row.at("layout_revision"), std::string(64, '0'));
+  EXPECT_EQ(row.at("lod_policy"),
+    nlohmann::json({ { "type", "fixed" }, { "lod_index", 1 } }));
   const auto& surfaces = row.at("surfaces");
   ASSERT_EQ(surfaces.size(), 2U);
   for (size_t surface_index = 0; surface_index < surfaces.size();
@@ -378,6 +403,8 @@ NOLINT_TEST_F(InspectorGeometryMetadataTest, ReportsSeparateSurfacesAcrossLods)
       oxygen::data::to_string(
         MakeSurfaceId(static_cast<uint8_t>(surface_index + 1))));
     EXPECT_EQ(surface.at("display_name"), "Surface");
+    EXPECT_EQ(surface.at("visible"), true);
+    EXPECT_EQ(surface.at("casts_shadows"), surface_index == 0);
     ASSERT_EQ(surface.at("bindings").size(), 2U);
     for (size_t lod = 0; lod < 2; ++lod) {
       const auto& binding = surface.at("bindings").at(lod);

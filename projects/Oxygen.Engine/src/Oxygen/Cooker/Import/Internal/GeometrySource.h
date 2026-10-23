@@ -18,7 +18,9 @@
 
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/BufferSource.h>
+#include <Oxygen/Cooker/Import/Internal/GeometryDefaults.h>
 #include <Oxygen/Cooker/api_export.h>
+#include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Data/SurfaceId.h>
 
 namespace oxygen::content::import::internal {
@@ -79,7 +81,14 @@ struct GeometrySource final {
   Bounds bounds;
   std::vector<BufferSource> buffers;
   std::vector<Lod> lods;
+  //! Authored surface defaults, each of a declared surface, at most once.
+  std::vector<AuthoredSurfaceDefaults> surfaces;
+  //! The authored default LOD policy; absent takes the schema's default.
+  std::optional<data::pak::geometry::LodPolicyRecord> lod_policy;
   std::optional<bool> content_hashing;
+
+  //! The surfaces the submeshes declare, in first-declaration order.
+  OXGN_COOK_NDAPI auto DeclaredSurfaces() const -> std::vector<data::SurfaceId>;
 
   OXGN_COOK_NDAPI static auto FromDescriptor(std::string_view bytes,
     const std::filesystem::path& source_path,

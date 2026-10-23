@@ -26,6 +26,7 @@
 #include <Oxygen/Clap/Option.h>
 #include <Oxygen/Content/LoaderContext.h>
 #include <Oxygen/Content/Loaders/GeometryLoader.h>
+#include <Oxygen/Cooker/Import/Internal/GeometryDefaults.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/GeometryAsset.h>
@@ -134,9 +135,13 @@ auto RunGeometryMetadataReport(const GeometryMetadataOptions& options) -> int
               },
             });
           }
+          // The loader rejects a cooked geometry that declares no defaults.
+          const auto& defaults = surface.defaults.value();
           surfaces.push_back({
             { "surface_id", data::to_string(surface.surface_id) },
             { "display_name", surface.display_name },
+            { "visible", defaults.visible },
+            { "casts_shadows", defaults.casts_shadows },
             { "bindings", std::move(bindings) },
           });
         }
@@ -148,6 +153,11 @@ auto RunGeometryMetadataReport(const GeometryMetadataOptions& options) -> int
           {
             "layout_revision",
             fmt::format("{:02x}", fmt::join(inventory.layout_revision, "")),
+          },
+          {
+            "lod_policy",
+            import::internal::WriteLodPolicy(
+              geometry->DefaultLodPolicy().value()),
           },
           { "surfaces", std::move(surfaces) },
         });

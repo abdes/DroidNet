@@ -143,10 +143,12 @@ Oxygen.Cooker.Inspector.exe geometries <cooked_root> --output <geometries.json>
 
 Writes schema version 1 geometry inventories using
 `GeometryAsset::Surfaces()`. Each geometry reports its asset key, SHA-256
-layout revision and ordered surfaces. Each surface retains its opaque ID, display
-label and exact LOD/submesh/default material bindings. Equal labels or material
-keys never merge surfaces. Nil default material keys remain the omitted-reference
-sentinel.
+layout revision, default LOD policy (`lod_policy`, in the shared
+`oxygen.lod-policy.schema.json` spelling) and ordered surfaces. Each surface
+retains its opaque ID, display label, asset defaults (`visible`,
+`casts_shadows`) and exact LOD/submesh/default material bindings. Equal labels
+or material keys never merge surfaces. Nil default material keys remain the
+omitted-reference sentinel.
 
 The native loader supplies these records without loading vertex/index buffers or
 starting the renderer. An invalid geometry returns exit code 2 before writing a

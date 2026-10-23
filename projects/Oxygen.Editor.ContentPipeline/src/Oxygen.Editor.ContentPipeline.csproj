@@ -18,6 +18,8 @@
         <!-- The cooker's schemas, as the installed engine SDK ships them. -->
         <EmbeddedResource Include="$(OxygenSdkSchemasDir)\oxygen.cooked-geometries.schema.json"
                           LogicalName="oxygen.cooked-geometries.schema.json" />
+        <EmbeddedResource Include="$(OxygenSdkSchemasDir)\oxygen.lod-policy.schema.json"
+                          LogicalName="oxygen.lod-policy.schema.json" />
         <EmbeddedResource Include="$(OxygenSdkSchemasDir)\oxygen.surface-provenance.schema.json"
                           LogicalName="oxygen.surface-provenance.schema.json" />
         <EmbeddedResource Include="$(OxygenSdkSchemasDir)\oxygen.cooked-scripts.schema.json"

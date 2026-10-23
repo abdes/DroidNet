@@ -156,7 +156,8 @@ namespace {
         .display_name = "fixture",
         .bindings = { { .lod_index = oxygen::data::LodIndex {},
           .submesh_index = oxygen::data::SubmeshIndex {},
-          .default_material_key = material, }, }, }, };
+          .default_material_key = material, }, },
+        .defaults = std::nullopt, }, };
       const auto revision = data::ComputeSurfaceLayoutRevision(surfaces);
       if (!revision) {
         throw std::logic_error("Invalid fixture surface layout");
@@ -224,6 +225,7 @@ namespace {
         = static_cast<uint8_t>(data::AssetType::kGeometry);
       geometry.header.version = data::pak::geometry::kGeometryAssetVersion;
       geometry.lod_count = 1U;
+      geometry.surface_count = 1U;
       auto strings = data::DescriptorStringsBuilder {};
       data::pak::geometry::MeshDesc mesh {};
       mesh.name_offset = strings.Add("Cube/Mesh");
@@ -243,6 +245,10 @@ namespace {
         .first_vertex = 0U,
         .vertex_count = 24U,
       };
+      const data::pak::geometry::SurfaceDesc surface {
+        .surface_id = submesh.surface_id,
+        .flags = data::pak::geometry::kSurfaceFlag_Visible,
+      };
       std::vector<std::byte> geometry_bytes;
       const auto append = [&geometry_bytes](const auto& record) -> void {
         const auto bytes = std::as_bytes(std::span(&record, 1U));
@@ -252,6 +258,7 @@ namespace {
       append(mesh);
       append(submesh);
       append(view);
+      append(surface);
       data::AppendDescriptorStrings(geometry_bytes, strings);
       writer.WriteAssetDescriptor(geometry_key, data::AssetType::kGeometry,
         "/test/bound-cube.ogeo", "bound-cube.ogeo", geometry_bytes,

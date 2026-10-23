@@ -73,10 +73,13 @@ asset descriptors; they are not listed in the asset directory themselves.
 ### From PAK (standard asset load)
 
 1. Read directory entry (contains `AssetKey`, descriptor offsets).
-2. Read `GeometryAssetDesc`, then mesh + submesh + view descriptors.
+2. Read `GeometryAssetDesc`, then mesh + submesh + view descriptors, then the
+   surface table.
 3. Create `BufferResource` objects for vertex & index tables.
 4. Use `MeshBuilder.WithBufferResources(...)`, add SubMeshes & MeshViews.
-5. Wrap meshes into a `GeometryAsset`.
+5. Wrap meshes into a `GeometryAsset` with the surface table: each surface's
+   asset defaults (`Surface::defaults`) and the default LOD policy
+   (`DefaultLodPolicy()`). A geometry built at runtime declares neither.
 
 ### Procedural Generation
 

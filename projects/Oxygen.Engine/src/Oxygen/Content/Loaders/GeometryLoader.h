@@ -7,6 +7,7 @@
 #pragma once
 
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <stdexcept>
@@ -554,11 +555,45 @@ inline auto LoadGeometryAsset(LoaderContext context)
   // bounding_box_max
   detail::ReadBoundingBox(reader, desc.bounding_box_max, "g.bounding_box_max");
 
+  if (desc.lod_count == 0
+    || desc.lod_count > data::pak::geometry::kMaxLodCount) {
+    throw std::runtime_error(
+      fmt::format("geometry has {} LODs, expected 1 to {}", desc.lod_count,
+        data::pak::geometry::kMaxLodCount));
+  }
+
+  auto surface_count_result = reader.ReadInto<uint32_t>(desc.surface_count);
+  detail::CheckResult(surface_count_result, "g.surface_count");
+  LOG_F(2, "surface count  : {}", desc.surface_count);
+
+  auto lod_policy_result = reader.Read<data::pak::geometry::LodPolicyRecord>();
+  detail::CheckResult(lod_policy_result, "g.default_lod_policy");
+  desc.default_lod_policy = *lod_policy_result;
+
   // Read LOD meshes
   std::vector<std::shared_ptr<Mesh>> lod_meshes;
   for (uint32_t i = 0; i < desc.lod_count; ++i) {
     auto mesh = LoadMesh(context, data::LodIndex { i }, strings);
     lod_meshes.push_back(std::move(mesh));
+  }
+
+  // A cooked geometry declares the defaults of every surface it declares, and
+  // every surface has at least one submesh.
+  auto submesh_count = std::size_t { 0 };
+  for (const auto& mesh : lod_meshes) {
+    submesh_count += mesh->SubMeshes().size();
+  }
+  if (desc.surface_count > submesh_count) {
+    throw std::runtime_error(
+      fmt::format("geometry has {} surface defaults for {} submeshes",
+        desc.surface_count, submesh_count));
+  }
+  std::vector<data::pak::geometry::SurfaceDesc> surface_table;
+  surface_table.reserve(desc.surface_count);
+  for (uint32_t i = 0; i < desc.surface_count; ++i) {
+    auto surface_result = reader.Read<data::pak::geometry::SurfaceDesc>();
+    detail::CheckResult(surface_result, "s.surface");
+    surface_table.push_back(*surface_result);
   }
   SkipDescriptorStrings(reader, *descriptor_start, desc.header);
 
@@ -625,11 +660,14 @@ inline auto LoadGeometryAsset(LoaderContext context)
     context.ValidateReferences(resources, keys);
   }
 
-  // Construct and return GeometryAsset with LOD meshes
+  // Construct and return GeometryAsset with LOD meshes; it rejects a surface
+  // table that does not list exactly the declared surfaces, and an invalid
+  // default LOD policy.
   const auto name_offset = desc.header.name_offset;
   auto geometry = std::make_unique<data::GeometryAsset>(
     context.current_asset_key, std::move(desc), std::move(lod_meshes),
-    data::SourceOrigin { context.source_key, context.source_instance });
+    data::SourceOrigin { context.source_key, context.source_instance },
+    surface_table);
   geometry->SetAssetName(
     ResolveDescriptorString(strings, name_offset, "asset name"));
   return geometry;

@@ -69,11 +69,14 @@ In scope:
    `ResourceIndexT` placeholders and material `AssetKey` fields; optionally
    hashes the full byte span.
 8. Loose-cooked descriptor emission (`.ogeo`) via `LooseCookedLayout`.
-9. Binary format: `GeometryAssetDesc` (79 bytes) + `MeshDesc[lod_count]` (85
-   bytes each, variable tail) + the descriptor string table, in
-   `PakFormat_geometry.h`.
-10. Runtime loading via `LoadGeometryAsset` and `GeometryAsset`.
-11. Manifest batch orchestration with buffer and material dependency ordering.
+9. Binary format: `GeometryAssetDesc` (174 bytes) + `MeshDesc[lod_count]` (85
+   bytes each, variable tail) + `SurfaceDesc[surface_count]` (20 bytes each) +
+   the descriptor string table, in `PakFormat_geometry.h`.
+10. Asset defaults: each surface's `Visibility` and `CastsShadows` and the
+    geometry's default LOD policy, authored or else the scene schema's
+    defaults (Section 7.2.7).
+11. Runtime loading via `LoadGeometryAsset` and `GeometryAsset`.
+12. Manifest batch orchestration with buffer and material dependency ordering.
 
 Out of scope:
 
@@ -521,6 +524,8 @@ JSON Schema draft-07, `additionalProperties: false` at all levels.
 | `$schema`         | No       | `string`            | Points to shipped JSON Schema for editor integration |
 | `content_hashing` | No       | `bool`              | Override global content hashing toggle               |
 | `buffers`         | No       | `array` (≥1 items)  | Inline `buffer_descriptor` entries (Section 7.2.3)   |
+| `surfaces`        | No       | `array`             | Surface asset defaults (Section 7.2.7)               |
+| `lod_policy`      | No       | `lod_policy`        | Default LOD policy (Section 7.2.7)                   |
 
 Example (`woodfloor_tile.geometry.json`):
 
@@ -713,6 +718,37 @@ The parameter blob is encoded by `BuildProceduralParamBlob` (packed binary,
 the corresponding `MeshDesc`. `GenerateMeshBuffers` is called at cook time only
 to derive `vertex_count` and `index_count` for `MeshViewDesc` population.
 
+#### 7.2.7 Surface defaults and the default LOD policy
+
+A geometry supplies the asset defaults of its surfaces' `Visibility` and
+`CastsShadows` and of its geometry component's `LodPolicy`, the values a scene
+uses unless it overrides them
+([scene model 5.3](../../../../design/editor/lld/scene-authoring-model.md#53-the-scene-property-schema)).
+The descriptor spells them as the scene schema keys:
+
+```json
+"surfaces": [
+  { "surface_id": "018f8f8f-1111-7111-8111-111111111111", "visible": false }
+],
+"lod_policy": { "type": "distance", "thresholds": [0.5, 1.0], "hysteresis_ratio": 0.1 }
+```
+
+- `surfaces` entries name a surface the submeshes declare, at most once
+  (`geometry.descriptor.surface_unknown`, `geometry.descriptor.surface_duplicate`).
+  `visible` and `casts_shadows` are optional.
+- `lod_policy` follows the shared
+  `oxygen.lod-policy.schema.json#/definitions/lod_policy`: `fixed` with
+  `lod_index`, `distance` with `thresholds` and `hysteresis_ratio` (0 to
+  0.99), or `screen_space_error` with `enter_finer_sse` and
+  `exit_coarser_sse`. Each list holds at most 7 boundaries, one per pair of
+  the at most 8 LODs. The cooker rejects what the schema cannot state, a list
+  that decreases or two screen-space error lists of different lengths
+  (`geometry.descriptor.lod_policy_invalid`).
+- An absent surface, value or policy takes the scene schema's default
+  (`Generated.SceneComponents.h`: `geometry::surface::kVisibilityDefault`,
+  `kCastsShadowsDefault`, `geometry::kLodPolicyDefault`). Model imports have no
+  authored values yet and always write the schema defaults.
+
 ---
 
 ## 8. Descriptor Build Stages (Internal)
@@ -737,7 +773,7 @@ Produces `PreparedGeometryDescriptor` (raw descriptor bytes +
 
 | Step | Action                                                                                                                                                                                                                                                                                                  |
 | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1    | **Header** — `GeometryAssetDesc.header.asset_type = kGeometry`, `version = kGeometryAssetVersion`, `lod_count`, `bounding_box_min/max`. `WritePod(writer, asset_desc)`.                                                                                                                                 |
+| 1    | **Header** — `GeometryAssetDesc.header.asset_type = kGeometry`, `version = kGeometryAssetVersion`, `lod_count`, `bounding_box_min/max`, `surface_count`, `default_lod_policy` (`MakeDefaultLodPolicy`). `WritePod(writer, asset_desc)`.                                                                 |
 | 2    | **For each LOD** — read `lod_doc` from `lods[i]`. Resolve `lod_bounds`.                                                                                                                                                                                                                                 |
 | 3    | **`mesh_type`** — set `MeshDesc.mesh_type` from `"standard"` / `"skinned"` / `"procedural"`.                                                                                                                                                                                                            |
 | 4    | **Standard LOD** — `co_await ResolveBufferSidecarByVirtualPath` for `vb_ref` and `ib_ref`. Validate `kVertexBuffer` / `kIndexBuffer` usage flags. Store `ResourceIndexT` into `mesh_bindings`. Set VB/IB fields to `kNoResourceIndex` (patched later).                                                  |
@@ -748,13 +784,14 @@ Produces `PreparedGeometryDescriptor` (raw descriptor bytes +
 | 9    | **Procedural param blob** — if non-empty, writes raw blob bytes immediately after `MeshDesc`.                                                                                                                                                                                                           |
 | 10   | **For each submesh** — for each `submesh_doc` in `lod_doc["submeshes"]`: resolve `material_ref` → `AssetKey` via `ResolveMaterialKeyByVirtualPath`; fill `SubMeshDesc.material_asset_key`; fill bounds. `WritePod(writer, submesh_desc)`.                                                               |
 | 11   | **For each submesh view** — for `"standard"` / `"skinned"`: call `ResolveMeshViewPair` to read `element_offset`/`element_count` from the named VB and IB buffer views into `MeshViewDesc`. For `"procedural"`: `view_ref` must be `"__all__"`, write counts from step 6. `WritePod(writer, view_desc)`. |
+| 12   | **Surface table** — after the last LOD, one `SurfaceDesc` per declared surface in first-declaration order (`MakeSurfaceTable`), then the string table.                                                                                                                                                  |
 
 ### 8.3 Post-Descriptor Stages (in `ExecuteAsync`, after `PrepareGeometryDescriptor`)
 
 | Step | Function                  | Action                                                                                                                                                                                                                                                              |
 | ---- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 12   | `FinalizeDescriptorBytes` | `GeometryPipeline::FinalizeDescriptorBytes(bindings, descriptor_bytes, material_patches, diagnostics)` — re-reads `GeometryAssetDesc`, for each LOD reads `MeshDesc` and patches the corresponding `MeshBufferBindings`; re-serializes; optionally hashes full span |
-| 13   | `EmitAsset`               | `session.AssetEmitter().Emit(geometry_key, AssetType::kGeometry, virtual_path, descriptor_relpath, *finalized_bytes)`                                                                                                                                               |
+| 13   | `FinalizeDescriptorBytes` | `GeometryPipeline::FinalizeDescriptorBytes(bindings, descriptor_bytes, material_patches, diagnostics)` — re-reads `GeometryAssetDesc`, for each LOD reads `MeshDesc` and patches the corresponding `MeshBufferBindings`; re-serializes; optionally hashes full span |
+| 14   | `EmitAsset`               | `session.AssetEmitter().Emit(geometry_key, AssetType::kGeometry, virtual_path, descriptor_relpath, *finalized_bytes)`                                                                                                                                               |
 
 ### 8.4 `GeometryPipeline::FinalizeDescriptorBytes` Internal Steps
 
@@ -767,7 +804,9 @@ Produces `PreparedGeometryDescriptor` (raw descriptor bytes +
    procedural param blob. Forward over `SubMeshDesc[]` and `MeshViewDesc[]`.
 5. Apply any `MaterialKeyPatch` entries by writing `AssetKey` at the specified
    byte offset.
-6. If `config_.with_content_hashing`: compute `XXH3_64bits` (or engine hash)
+6. Copy the `SurfaceDesc[surface_count]` table unchanged; the string table
+   follows it at the same offset.
+7. If `config_.with_content_hashing`: compute `XXH3_64bits` (or engine hash)
    over the finalized byte span on the thread pool; patch `content_hash` at its
    fixed offset in the re-written `GeometryAssetDesc.header`.
 
@@ -796,20 +835,31 @@ The geometry, LOD and submesh names are offsets into the descriptor's string
 table: NUL-terminated UTF-8 strings after the last record, starting with the
 empty string at offset 0. Names have no length limit and are never truncated.
 
-### 9.2 `GeometryAssetDesc` (79 bytes, `PakFormat_geometry.h`)
+### 9.2 `GeometryAssetDesc` (174 bytes, `PakFormat_geometry.h`)
 
 ```cpp
 #pragma pack(push, 1)
 struct GeometryAssetDesc {
   AssetHeader header;             // 51 bytes; asset_type = kGeometry
-  uint32_t lod_count = 0;         // Number of MeshDesc entries following
+  uint32_t lod_count = 0;         // 1 to kMaxLodCount (8) MeshDesc entries
   float bounding_box_min[3] = {}; // AABB min (pre-computed by tooling)
   float bounding_box_max[3] = {}; // AABB max (pre-computed by tooling)
+  uint32_t surface_count = 0;     // Number of SurfaceDesc records
+  LodPolicyRecord default_lod_policy; // 91 bytes; LOD policy unless overridden
 };
-// Followed by: MeshDesc meshes[lod_count]; then the string table.
+// Followed by: MeshDesc meshes[lod_count]; SurfaceDesc surfaces[surface_count];
+// then the string table.
 #pragma pack(pop)
-static_assert(sizeof(GeometryAssetDesc) == 79);
+static_assert(sizeof(GeometryAssetDesc) == 174);
 ```
+
+`LodPolicyRecord` (91 bytes) holds `LodPolicyType type` (`kFixed`,
+`kDistance`, `kScreenSpaceError`), `uint8_t lod_index`,
+`uint8_t boundary_count`, `float thresholds[7]`, `float hysteresis_ratio`,
+`float enter_finer_sse[7]` and `float exit_coarser_sse[7]`. Each type reads
+only its own fields and the others are zero; `IsValidLodPolicy`
+(`Data/LodPolicyValidation.h`) states the rules the cooker and the loader
+enforce.
 
 ### 9.3 `MeshDesc` (85 bytes + optional tail, `PakFormat_geometry.h`)
 
@@ -892,10 +942,28 @@ The view bounds must lie inside the submesh bounds. Adding them increments
 `kGeometryAssetVersion` from 3 to 4 (constraint 9); geometry cooked at version 3
 is re-cooked.
 
-### 9.6 Full `.ogeo` File Layout
+### 9.6 `SurfaceDesc` (20 bytes, `PakFormat_geometry.h`)
+
+```cpp
+#pragma pack(push, 1)
+struct SurfaceDesc {
+  SurfaceId surface_id;  // a surface the submeshes declare
+  uint32_t  flags = 0;   // kSurfaceFlag_Visible | kSurfaceFlag_CastsShadows
+};
+#pragma pack(pop)
+static_assert(sizeof(SurfaceDesc) == 20);
+```
+
+The surface table lists exactly the SurfaceIds the submeshes declare, each
+once. The default material stays on each `SubMeshDesc`, since LODs may bind
+different defaults to one surface. The defaults are not part of the surface
+layout revision. Adding the table and `default_lod_policy` increments
+`kGeometryAssetVersion` from 5 to 6; geometry cooked at version 5 is re-cooked.
+
+### 9.7 Full `.ogeo` File Layout
 
 ```text
-GeometryAssetDesc                       79 bytes
+GeometryAssetDesc                       174 bytes
   MeshDesc[0]                           85 bytes
     [if procedural] param_blob          params_size bytes
     SubMeshDesc[0]                      64 bytes
@@ -905,6 +973,7 @@ GeometryAssetDesc                       79 bytes
   MeshDesc[1]                           85 bytes
     ...
   MeshDesc[lod_count - 1]
+SurfaceDesc[surface_count]              20 bytes each
 String table                            header.strings.size bytes
 ```
 
@@ -912,7 +981,7 @@ Buffer `ResourceIndexT` fields within `MeshDesc.info.standard/skinned` and
 `SubMeshDesc.material_asset_key` are fully resolved values at the time the file
 is written.
 
-### 9.7 Loose Cooked Layout
+### 9.8 Loose Cooked Layout
 
 ```text
 <cooked_root>/
@@ -951,6 +1020,9 @@ messages written to `error_stream`. Error codes follow the pattern
 | Schema     | `geometry.descriptor.lod_count_invalid`        | `lods` array is empty or exceeds 8 entries                  |
 | Schema     | `geometry.descriptor.serialize_failed`         | `serio::Writer` write error during descriptor build         |
 | Schema     | `geometry.descriptor.view_count_overflow`      | Total mesh view count exceeds `uint32_t` range              |
+| Schema     | `geometry.descriptor.surface_unknown`          | `surfaces` names a surface no submesh declares              |
+| Schema     | `geometry.descriptor.surface_duplicate`        | `surfaces` names a surface more than once                   |
+| Schema     | `geometry.descriptor.lod_policy_invalid`       | Decreasing thresholds or unequal screen-space error lists   |
 | I/O        | `geometry.descriptor.index_load_failed`        | `container.index.bin` could not be loaded                   |
 | Buffer     | `geometry.buffer.virtual_path_invalid`         | Non-canonical virtual path in `vb_ref`/`ib_ref`             |
 | Buffer     | `geometry.buffer.virtual_path_unmounted`       | Virtual path outside all mounted cooked roots               |
@@ -990,7 +1062,8 @@ Runtime load sequence:
    `Geometry/` directory.
 3. `ScopedAlignment(1)` is applied; `GeometryAssetDesc` is read field-by-field
    via `serio::Reader`.
-4. `desc.lod_count` determines how many `LoadMesh(context)` calls follow.
+4. `desc.lod_count`, from 1 to `kMaxLodCount`, determines how many
+   `LoadMesh(context)` calls follow.
 5. For each LOD `LoadMesh`:
    - Reads `MeshDesc.name`, `mesh_type`, `submesh_count`, `mesh_view_count`.
    - **Standard mesh**: reads `StandardMeshInfo` including `vertex_buffer` and
@@ -1013,9 +1086,14 @@ Runtime load sequence:
      non-zero; creates default material placeholder.
    - For each submesh view: reads `MeshViewDesc`.
    - Builds `Mesh` via `MeshBuilder`.
-6. `std::make_unique<data::GeometryAsset>(context.current_asset_key, desc, lod_meshes)`
-   is returned.
-7. Buffer `ResourceKey` and material `AssetKey` dependencies are resolved and
+6. Reads the `SurfaceDesc[surface_count]` table.
+7. `GeometryAsset` is built from the descriptor, the LOD meshes and the surface
+   table. It rejects a table that does not list exactly the declared surfaces
+   and an invalid `default_lod_policy`, then exposes the values as
+   `Surface::defaults` and `DefaultLodPolicy()`. A geometry built at runtime
+   passes no table: both are absent, and its users take the scene schema's
+   defaults.
+8. Buffer `ResourceKey` and material `AssetKey` dependencies are resolved and
    published asynchronously; `SubMesh::SetMaterial` is called once the material
    `AssetKey` dependency is satisfied.
 

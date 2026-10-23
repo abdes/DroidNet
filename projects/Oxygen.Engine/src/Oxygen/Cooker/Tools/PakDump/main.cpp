@@ -11,6 +11,7 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "DumpContext.h"
 #include "PakFileDumper.h"
@@ -57,6 +58,8 @@ constexpr std::string_view kVersion = "0.1";
 
 struct PakDumpOptions {
   std::string pakfile;
+  //! The paks the dumped one depends on, mounted below it in this order.
+  std::vector<std::filesystem::path> mounts;
   bool no_header = false;
   bool no_footer = false;
   bool no_directory = false;
@@ -80,6 +83,18 @@ auto BuildCli(PakDumpOptions& opts) -> std::unique_ptr<Cli>
     = CommandBuilder(Command::DEFAULT)
         .About("Dump and inspect a PAK content archive.")
         .WithPositionalArguments(pakfile_positional)
+        .WithOption(Option::WithKey("mount")
+            .About("Mount a pak the dumped pak depends on, below it; repeat "
+                   "in the order the dependencies are declared")
+            .Long("mount")
+            .WithValue<std::filesystem::path>()
+            .UserFriendlyName("PAK")
+            .Repeatable()
+            .CallOnEachValue(
+              [&opts](const std::filesystem::path& path) -> void {
+                opts.mounts.push_back(path);
+              })
+            .Build())
         .WithOption(Option::WithKey("no-header")
             .About("Don't show PAK header information")
             .Long("no-header")
@@ -186,6 +201,12 @@ auto main(int argc, char** argv) -> int
     ctx.max_data_bytes = opts.max_data_bytes;
     ctx.pak_path = std::filesystem::path(opts.pakfile);
 
+    for (const auto& path : opts.mounts) {
+      if (!std::filesystem::exists(path)) {
+        std::cerr << "File not found: " << path << "\n";
+        return 1;
+      }
+    }
     if (!std::filesystem::exists(ctx.pak_path)) {
       std::cerr << "File not found: " << ctx.pak_path << "\n";
       return 1;
@@ -197,7 +218,7 @@ auto main(int argc, char** argv) -> int
 
     bool succeeded = false;
     asio::io_context io;
-    (oxygen::co::Run)(io, [&]() -> oxygen::co::Co<> {
+    oxygen::co::Run(io, [&]() -> oxygen::co::Co<> {
       oxygen::co::ThreadPool pool(io, 2);
       AssetLoaderConfig loader_config {
         .thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool },
@@ -217,6 +238,9 @@ auto main(int argc, char** argv) -> int
         co_await n.Start(&AssetLoader::ActivateAsync, &asset_loader);
         asset_loader.Run();
 
+        for (const auto& path : opts.mounts) {
+          asset_loader.AddPakFile(path);
+        }
         asset_loader.AddPakFile(ctx.pak_path);
         PakFileDumper dumper(ctx);
         succeeded = co_await dumper.DumpAsync(pak, asset_loader);

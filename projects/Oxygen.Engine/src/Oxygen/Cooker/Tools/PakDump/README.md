@@ -59,6 +59,11 @@ Oxygen.Cooker.PakDump <pakfile> [options]
 | `--hex-dump-assets` | Hex dump full asset descriptor bytes.                                      |
 | `--verbose`         | Enable extended detail (GUID raw bytes, resource fields, limited entries). |
 | `--max-data=N`      | Limit bytes shown in any data/descriptor dump (default 256).               |
+| `--mount=PAK`       | Mount a pak the dumped pak depends on, below it; repeat in declared order. |
+
+A pak that depends on others, such as content built against the engine pak,
+opens only with its dependencies mounted, for example
+`--mount out/install/Debug/share/oxygen/engine.pak`.
 
 ### Examples
 
@@ -141,7 +146,7 @@ Code registers specialized dumpers for known asset/resource types. To extend:
 
 ## Future Improvements (Ideas)
 
-- Additional asset type specific dumpers (geometry, textures, pipelines)
+- Additional asset type specific dumpers (textures, pipelines)
 - JSON / machine-readable output mode
 - Filtering by asset type or name pattern
 - Stats summary (aggregate sizes per asset/resource type)

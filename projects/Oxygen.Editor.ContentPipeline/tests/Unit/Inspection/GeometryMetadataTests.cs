@@ -66,9 +66,12 @@ public sealed class GeometryMetadataTests
           "geometries": [{
             "geometry_asset_key": "10203040-5060-7080-90a0-b0c0d0e0f001",
             "layout_revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "lod_policy": {"type": "fixed", "lod_index": 0},
             "surfaces": [{
               "surface_id": "00000000-0000-0000-0000-000000000001",
               "display_name": "Surface",
+              "visible": true,
+              "casts_shadows": true,
               "bindings": [{"lod_index": 0, "submesh_index": 1,
                 "default_material_key": "00000000-0000-0000-0000-000000000000"}]
             }]

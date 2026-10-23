@@ -356,8 +356,26 @@ auto GeometryPipeline::FinalizeDescriptor(
     }
   }
 
-  // The descriptor string table follows the meshes; records keep their sizes,
-  // so it keeps its offset.
+  // The surface table follows the meshes unchanged.
+  if (asset_desc.surface_count
+    > (input_copy.size() / sizeof(data::pak::geometry::SurfaceDesc))) {
+    diagnostics.push_back(MakeErrorDiagnostic("mesh.finalize_failed",
+      "Geometry surface count exceeds the descriptor size", "", ""));
+    co_return std::nullopt;
+  }
+  const auto surface_table_size = static_cast<size_t>(asset_desc.surface_count)
+    * sizeof(data::pak::geometry::SurfaceDesc);
+  auto surface_table = reader.ReadBlob(surface_table_size);
+  if (!surface_table
+    || !writer.WriteBlob(std::as_bytes(std::span<const std::byte>(
+      surface_table->data(), surface_table->size())))) {
+    diagnostics.push_back(MakeErrorDiagnostic(
+      "mesh.finalize_failed", "Failed to copy the surface table", "", ""));
+    co_return std::nullopt;
+  }
+
+  // The descriptor string table follows the surface table; records keep their
+  // sizes, so it keeps its offset.
   const auto& strings = asset_desc.header.strings;
   const auto strings_position = writer.Position();
   if (!strings_position || *strings_position != strings.offset

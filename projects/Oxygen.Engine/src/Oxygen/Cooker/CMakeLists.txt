@@ -63,6 +63,8 @@ oxygen_embed_json_schemas(
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.import-manifest.schema.json"
     kNameSchema
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.name.schema.json"
+    kLodPolicySchema
+    "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.lod-policy.schema.json"
     kCapturedInputsSchema
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.captured-inputs.schema.json"
     kBufferContainerSchema
@@ -199,6 +201,7 @@ set(
   "Import/Internal/ImportSessionToken.h"
   "Import/Internal/ImportSourceSnapshot.h"
   "Import/Internal/BufferSource.h"
+  "Import/Internal/GeometryDefaults.h"
   "Import/Internal/GeometrySource.h"
   "Import/Internal/SceneBuild.h"
   "Import/Internal/SceneSource.h"
@@ -346,6 +349,7 @@ set(
   "Import/SceneImportSettings.cpp"
   "Import/Internal/ImportSourceSnapshot.cpp"
   "Import/Internal/BufferSource.cpp"
+  "Import/Internal/GeometryDefaults.cpp"
   "Import/Internal/GeometrySource.cpp"
   "Import/Internal/SceneSource.cpp"
   "Import/Internal/MaterialSource.cpp"

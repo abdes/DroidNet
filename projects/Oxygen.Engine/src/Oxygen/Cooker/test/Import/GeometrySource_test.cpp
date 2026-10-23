@@ -4,11 +4,13 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-// Covers: Import/Internal/GeometrySource.cpp
+// Covers: Import/Internal/GeometrySource.cpp,
+// Import/Internal/GeometryDefaults.cpp
 
 #include <algorithm>
 #include <array>
 #include <filesystem>
+#include <optional>
 #include <string_view>
 #include <variant>
 #include <vector>
@@ -17,7 +19,11 @@
 #include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/Internal/GeometryDefaults.h>
 #include <Oxygen/Cooker/Import/Internal/GeometrySource.h>
+#include <Oxygen/Data/PakFormat_geometry.h>
+#include <Oxygen/Data/SurfaceId.h>
+#include <Oxygen/Scene/Schema/Generated.SceneComponents.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace oxygen::content::import::test {
@@ -202,6 +208,141 @@ namespace {
       std::ranges::any_of(diagnostics, [](const auto& diagnostic) -> auto {
         return diagnostic.code == "geometry.descriptor.surface_id_invalid";
       }));
+  }
+
+  //! The descriptor's surface id, the one surface it declares.
+  constexpr auto kSurface = std::string_view {
+    "018f8f8f-1111-7111-8111-111111111111",
+  };
+
+  auto HasCode(const std::vector<ImportDiagnostic>& diagnostics,
+    const std::string_view code) -> bool
+  {
+    return std::ranges::any_of(
+      diagnostics, [code](const auto& diagnostic) -> auto {
+        return diagnostic.code == code;
+      });
+  }
+
+  NOLINT_TEST(GeometrySourceTest, RetainsAuthoredAssetDefaults)
+  {
+    auto document = MakeDescriptor();
+    document.emplace("surfaces",
+      nlohmann::json::array({ {
+        { "surface_id", kSurface },
+        { "visible", false },
+      } }));
+    document.emplace("lod_policy",
+      nlohmann::json::parse(
+        R"({"type":"distance","thresholds":[0.5,0.75],"hysteresis_ratio":0.1})"));
+    auto diagnostics = std::vector<ImportDiagnostic> {};
+    const auto source = GeometrySource::FromDescriptor(
+      document.dump(), "geometry.json", diagnostics);
+    ASSERT_HAS_VALUE(source) << "Expected source to contain a value";
+    ASSERT_EQ(source->surfaces.size(), 1U);
+    EXPECT_EQ(source->surfaces.front().visible, false);
+    EXPECT_FALSE(source->surfaces.front().casts_shadows.has_value());
+    ASSERT_HAS_VALUE(source->lod_policy) << "Expected a LOD policy";
+    EXPECT_EQ(
+      source->lod_policy->type, data::pak::geometry::LodPolicyType::kDistance);
+    EXPECT_EQ(source->lod_policy->boundary_count, 2U);
+    EXPECT_EQ(source->lod_policy->thresholds[1], 0.75F);
+  }
+
+  NOLINT_TEST(GeometrySourceTest, RejectsDefaultsOfUndeclaredSurface)
+  {
+    auto document = MakeDescriptor();
+    document.emplace("surfaces",
+      nlohmann::json::array({ {
+        { "surface_id", "018f8f8f-2222-7222-8222-222222222222" },
+        { "visible", false },
+      } }));
+    auto diagnostics = std::vector<ImportDiagnostic> {};
+    EXPECT_FALSE(GeometrySource::FromDescriptor(
+      document.dump(), "geometry.json", diagnostics));
+    EXPECT_TRUE(HasCode(diagnostics, "geometry.descriptor.surface_unknown"));
+  }
+
+  NOLINT_TEST(GeometrySourceTest, RejectsRepeatedSurfaceDefaults)
+  {
+    auto document = MakeDescriptor();
+    document.emplace("surfaces",
+      nlohmann::json::array({
+        { { "surface_id", kSurface }, { "visible", false } },
+        { { "surface_id", kSurface }, { "casts_shadows", false } },
+      }));
+    auto diagnostics = std::vector<ImportDiagnostic> {};
+    EXPECT_FALSE(GeometrySource::FromDescriptor(
+      document.dump(), "geometry.json", diagnostics));
+    EXPECT_TRUE(HasCode(diagnostics, "geometry.descriptor.surface_duplicate"));
+  }
+
+  NOLINT_TEST(GeometrySourceTest, RejectsDecreasingLodThresholds)
+  {
+    auto document = MakeDescriptor();
+    document.emplace("lod_policy",
+      nlohmann::json::parse(
+        R"({"type":"distance","thresholds":[0.75,0.5],"hysteresis_ratio":0.1})"));
+    auto diagnostics = std::vector<ImportDiagnostic> {};
+    EXPECT_FALSE(GeometrySource::FromDescriptor(
+      document.dump(), "geometry.json", diagnostics));
+    EXPECT_TRUE(HasCode(diagnostics, "geometry.descriptor.lod_policy_invalid"));
+  }
+
+  NOLINT_TEST(GeometrySourceTest, RejectsScreenSpaceErrorListsOfDifferentLength)
+  {
+    auto document = MakeDescriptor();
+    document.emplace(
+      "lod_policy", nlohmann::json::parse(R"({"type":"screen_space_error",
+        "enter_finer_sse":[1,2],"exit_coarser_sse":[1]})"));
+    auto diagnostics = std::vector<ImportDiagnostic> {};
+    EXPECT_FALSE(GeometrySource::FromDescriptor(
+      document.dump(), "geometry.json", diagnostics));
+    EXPECT_TRUE(HasCode(diagnostics, "geometry.descriptor.lod_policy_invalid"));
+  }
+
+  //! Absent values take the scene schema's defaults.
+  NOLINT_TEST(GeometryDefaultsTest, SurfaceTableTakesSchemaDefaults)
+  {
+    using data::pak::geometry::kSurfaceFlag_CastsShadows;
+    using data::pak::geometry::kSurfaceFlag_Visible;
+    namespace surface_schema = scene::schema::geometry::surface;
+
+    const auto first = data::SurfaceId::FromStableIdentity("first");
+    const auto second = data::SurfaceId::FromStableIdentity("second");
+    const auto declared = std::array { first, second };
+    const auto authored = std::array {
+      internal::AuthoredSurfaceDefaults {
+        .surface_id = second,
+        .visible = false,
+        .casts_shadows = std::nullopt,
+      },
+    };
+    const auto table = internal::MakeSurfaceTable(declared, authored);
+
+    const auto expected_flags = [](const bool visible, const bool casts) {
+      return (visible ? kSurfaceFlag_Visible : 0U)
+        | (casts ? kSurfaceFlag_CastsShadows : 0U);
+    };
+    ASSERT_EQ(table.size(), 2U);
+    EXPECT_EQ(table.at(0).surface_id, first);
+    EXPECT_EQ(table.at(0).flags,
+      expected_flags(surface_schema::kVisibilityDefault,
+        surface_schema::kCastsShadowsDefault));
+    EXPECT_EQ(table.at(1).surface_id, second);
+    EXPECT_EQ(table.at(1).flags,
+      expected_flags(false, surface_schema::kCastsShadowsDefault));
+  }
+
+  NOLINT_TEST(GeometryDefaultsTest, LodPolicyRoundTripsThroughJson)
+  {
+    const auto document = nlohmann::json::parse(R"({"type":"screen_space_error",
+      "enter_finer_sse":[1,2],"exit_coarser_sse":[0.5,1.5]})");
+    const auto record = internal::ReadLodPolicy(document);
+    ASSERT_HAS_VALUE(record) << "Expected a LOD policy";
+    EXPECT_EQ(internal::WriteLodPolicy(*record), document);
+    EXPECT_EQ(internal::MakeDefaultLodPolicy(std::nullopt).type,
+      scene::schema::geometry::kLodPolicyDefault.type);
   }
 } // namespace
 } // namespace oxygen::content::import::test

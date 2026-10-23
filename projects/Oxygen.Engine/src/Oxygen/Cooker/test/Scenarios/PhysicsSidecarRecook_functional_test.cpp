@@ -617,9 +617,16 @@ namespace {
     view.first_vertex = 0U;
     view.vertex_count = static_cast<uint32_t>(vertices.size());
 
+    descriptor.surface_count = 1U;
+    const auto surface = geometry::SurfaceDesc {
+      .surface_id = submesh.surface_id,
+      .flags
+      = geometry::kSurfaceFlag_Visible | geometry::kSurfaceFlag_CastsShadows,
+    };
+
     auto descriptor_bytes = std::vector<std::byte> {};
-    descriptor_bytes.reserve(
-      sizeof(descriptor) + sizeof(mesh) + sizeof(submesh) + sizeof(view));
+    descriptor_bytes.reserve(sizeof(descriptor) + sizeof(mesh) + sizeof(submesh)
+      + sizeof(view) + sizeof(surface));
     const auto append_pod
       = [&descriptor_bytes]<typename T>(const T& pod) -> auto {
       static_assert(std::is_trivially_copyable_v<T>);
@@ -630,6 +637,7 @@ namespace {
     append_pod(mesh);
     append_pod(submesh);
     append_pod(view);
+    append_pod(surface);
     data::AppendDescriptorStrings(descriptor_bytes, strings);
 
     auto table_entries = std::array<core::BufferResourceDesc, 3> {};

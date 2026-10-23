@@ -27,6 +27,7 @@
 #include <Oxygen/Data/Asset.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/GeometryIndices.h>
+#include <Oxygen/Data/LodPolicyValidation.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Data/SourceOrigin.h>
@@ -271,13 +272,15 @@ using oxygen::data::SurfaceId;
 
 oxygen::data::GeometryAsset::GeometryAsset(AssetKey asset_key,
   pak::geometry::GeometryAssetDesc desc,
-  std::vector<std::shared_ptr<Mesh>> lod_meshes, SourceOrigin source_origin)
+  std::vector<std::shared_ptr<Mesh>> lod_meshes, SourceOrigin source_origin,
+  const std::optional<std::span<const pak::geometry::SurfaceDesc>>
+    surface_table)
   : Asset(asset_key, source_origin)
   , desc_(desc)
   , lod_meshes_(std::move(lod_meshes))
 {
   surfaces_.geometry_asset_key = asset_key;
-  if (lod_meshes_.size() > std::numeric_limits<uint32_t>::max()) {
+  if (lod_meshes_.size() > pak::geometry::kMaxLodCount) {
     throw std::invalid_argument("Geometry has too many LODs");
   }
   std::unordered_map<SurfaceId, size_t> surface_indices;
@@ -304,6 +307,7 @@ oxygen::data::GeometryAsset::GeometryAsset(AssetKey asset_key,
           .surface_id = id,
           .display_name = std::string(submesh.GetName()),
           .bindings = {},
+          .defaults = std::nullopt,
         });
       }
       auto key = AssetKey {};
@@ -325,6 +329,40 @@ oxygen::data::GeometryAsset::GeometryAsset(AssetKey asset_key,
     throw std::invalid_argument("Geometry surface layout is invalid");
   }
   surfaces_.layout_revision = revision.value();
+  if (surface_table.has_value()) {
+    ApplySurfaceTable(*surface_table);
+  }
+}
+
+auto oxygen::data::GeometryAsset::ApplySurfaceTable(
+  const std::span<const pak::geometry::SurfaceDesc> surface_table) -> void
+{
+  if (surface_table.size() != surfaces_.surfaces.size()) {
+    throw std::invalid_argument(
+      "Geometry surface table does not list the declared surfaces");
+  }
+  constexpr auto kKnownFlags = pak::geometry::kSurfaceFlag_Visible
+    | pak::geometry::kSurfaceFlag_CastsShadows;
+  for (const auto& entry : surface_table) {
+    if ((entry.flags & ~kKnownFlags) != 0U) {
+      throw std::invalid_argument("Geometry surface flags are unknown");
+    }
+    const auto found = std::ranges::find(
+      surfaces_.surfaces, entry.surface_id, &Surface::surface_id);
+    if (found == surfaces_.surfaces.end() || found->defaults.has_value()) {
+      throw std::invalid_argument(
+        "Geometry surface table does not list the declared surfaces");
+    }
+    found->defaults = SurfaceDefaults {
+      .visible = (entry.flags & pak::geometry::kSurfaceFlag_Visible) != 0U,
+      .casts_shadows
+      = (entry.flags & pak::geometry::kSurfaceFlag_CastsShadows) != 0U,
+    };
+  }
+  if (!IsValidLodPolicy(desc_.default_lod_policy)) {
+    throw std::invalid_argument("Geometry default LOD policy is invalid");
+  }
+  default_lod_policy_ = desc_.default_lod_policy;
 }
 
 auto oxygen::data::GeometryAsset::FindSurface(const SurfaceId id) const noexcept

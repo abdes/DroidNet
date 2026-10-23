@@ -98,6 +98,7 @@ inline auto GeometryDescriptor(const std::string_view name) -> DescriptorFixture
     = static_cast<uint8_t>(data::AssetType::kGeometry);
   descriptor.header.version = data::pak::geometry::kGeometryAssetVersion;
   descriptor.lod_count = 1U;
+  descriptor.surface_count = 1U;
   auto strings = data::DescriptorStringsBuilder {};
   descriptor.header.name_offset = strings.Add(name);
   data::pak::geometry::MeshDesc mesh {};
@@ -115,11 +116,17 @@ inline auto GeometryDescriptor(const std::string_view name) -> DescriptorFixture
     .first_vertex = 0U,
     .vertex_count = 24U,
   };
+  const data::pak::geometry::SurfaceDesc surface {
+    .surface_id = submesh.surface_id,
+    .flags = data::pak::geometry::kSurfaceFlag_Visible
+      | data::pak::geometry::kSurfaceFlag_CastsShadows,
+  };
   DescriptorFixture fixture;
   AppendRecord(fixture.bytes, descriptor);
   AppendRecord(fixture.bytes, mesh);
   AppendRecord(fixture.bytes, submesh);
   AppendRecord(fixture.bytes, view);
+  AppendRecord(fixture.bytes, surface);
   data::AppendDescriptorStrings(fixture.bytes, strings);
   return fixture;
 }

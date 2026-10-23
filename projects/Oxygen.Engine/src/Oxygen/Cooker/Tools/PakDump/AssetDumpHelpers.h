@@ -13,6 +13,7 @@
 #include <iomanip>
 #include <iostream>
 #include <optional>
+#include <span>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -128,7 +129,8 @@ inline auto PrintAssetHeaderFields(
   return header;
 }
 
-[[nodiscard]] inline auto FormatVec3(const float v[3]) -> std::string
+[[nodiscard]] inline auto FormatVec3(const std::span<const float, 3> v)
+  -> std::string
 {
   return fmt::format("[{:.3f}, {:.3f}, {:.3f}]", v[0], v[1], v[2]);
 }
