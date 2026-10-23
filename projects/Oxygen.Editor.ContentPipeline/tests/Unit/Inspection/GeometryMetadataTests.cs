@@ -7,6 +7,7 @@ using AwesomeAssertions;
 using Moq;
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.ContentPipeline.TestSupport;
+using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 using static Oxygen.Editor.ContentPipeline.TestSupport.CookScenario;
@@ -34,6 +35,33 @@ public sealed class GeometryMetadataTests
         _ = surface.CastsShadows.Should().BeFalse("the asset's surface defaults reach the inspector");
         _ = surface.Bindings.Should().ContainSingle().Which.DefaultMaterialKey.Should().Be(Guid.Empty);
         _ = result.LayoutRevision.Should().Be(new string('a', 64));
+    }
+
+    /// <summary>The asset's LOD policy and LOD count reach the inspector, read from the native report's sorted keys.</summary>
+    [TestMethod]
+    public void GeometryMetadataReadsTheLodPolicyAndCountsTheLods()
+    {
+        var source = JsonNode.Parse(SurfaceReport())!;
+        var geometry = source["geometries"]![0]!;
+        geometry["lod_policy"] = JsonNode.Parse("""{"hysteresis_ratio": 0.2, "thresholds": [0.25, 0.5, 0.8], "type": "distance"}""");
+        geometry["surfaces"]![0]!["bindings"]!.AsArray().Add(JsonNode.Parse("""{"lod_index": 3, "submesh_index": 0, "default_material_key": "00000000-0000-0000-0000-000000000000"}"""));
+
+        var result = CookedGeometryReport.Parse(source.ToJsonString()).SingleOrDefault(AssetPath.Parse("/Content/Geometry/Test.ogeo"))!;
+
+        _ = result.LodPolicy.Should().Be(new LodPolicy.Distance([0.25f, 0.5f, 0.8f], 0.2f));
+        _ = result.LodCount.Should().Be(4);
+    }
+
+    /// <summary>A policy the engine would not accept is a defect of the report, not a value to show.</summary>
+    [TestMethod]
+    public void GeometryMetadataRejectsAnUnorderedLodPolicy()
+    {
+        var source = JsonNode.Parse(SurfaceReport())!;
+        source["geometries"]![0]!["lod_policy"] = JsonNode.Parse("""{"hysteresis_ratio": 0.1, "thresholds": [0.5, 0.25], "type": "distance"}""");
+
+        Action read = () => CookedGeometryReport.Parse(source.ToJsonString());
+
+        _ = read.Should().Throw<InvalidDataException>().WithMessage("*LOD policy*");
     }
 
     /// <summary>Ambiguous identity data never reaches material authoring.</summary>
@@ -68,7 +96,7 @@ public sealed class GeometryMetadataTests
           "geometries": [{
             "geometry_asset_key": "10203040-5060-7080-90a0-b0c0d0e0f001",
             "layout_revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            "lod_policy": {"type": "fixed", "lod_index": 0},
+            "lod_policy": {"lod_index": 0, "type": "fixed"},
             "surfaces": [{
               "surface_id": "00000000-0000-0000-0000-000000000001",
               "display_name": "Surface",

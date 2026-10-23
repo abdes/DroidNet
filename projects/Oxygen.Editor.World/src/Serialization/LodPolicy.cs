@@ -77,7 +77,7 @@ public abstract record LodPolicy
             => this.LodIndex is >= 0 and < MaxLodCount ? null : string.Create(CultureInfo.InvariantCulture, $"The fixed LOD must be below {MaxLodCount}.");
     }
 
-    /// <summary>Selects a LOD by normalized view distance.</summary>
+    /// <summary>Selects a LOD by view distance, in radii of the geometry's bounding sphere.</summary>
     /// <param name="Thresholds">The distance of each boundary.</param>
     /// <param name="HysteresisRatio">The symmetric band around each boundary within which the current LOD is kept.</param>
     public sealed record Distance(
@@ -101,7 +101,9 @@ public abstract record LodPolicy
                     : string.Create(CultureInfo.InvariantCulture, $"The hysteresis ratio must lie in [0, {MaxHysteresisRatio}]."));
     }
 
-    /// <summary>Selects a LOD by screen-space error, with directional hysteresis.</summary>
+    /// <summary>
+    /// Selects a LOD by screen-space error, the bounding sphere's projected radius in pixels, with directional hysteresis.
+    /// </summary>
     /// <param name="EnterFinerSse">The error of each boundary above which a finer LOD is entered.</param>
     /// <param name="ExitCoarserSse">The error of each boundary below which a coarser LOD is entered.</param>
     public sealed record ScreenSpaceError(

@@ -11,6 +11,7 @@ using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
+using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
@@ -99,6 +100,34 @@ public sealed partial class ScenePreviewTests
         var cleared = fixture.World.Commands.OfType<RuntimeSetOverrides>().Should().ContainSingle().Subject;
         _ = cleared.Part.Should().Be(new RuntimeOverridePart(target.SurfaceId, target.LayoutRevision));
         _ = cleared.Overrides.Should().BeEmpty();
+    }
+
+    [TestMethod]
+    public async Task EditedLodPolicy_ReachesTheEngineAndItsResetClearsIt()
+    {
+        using var fixture = new PreviewFixture();
+        var built = new Scene { Name = "Test Scene" };
+        var node = new SceneNode(built, "Cube");
+        built.RootNodes.Add(node);
+        node.Components.Add(new GeometryComponent { Name = "Geometry", Geometry = EngineAssets.BasicShape("Cube") });
+        var document = await fixture.OpenAsync(built).ConfigureAwait(false);
+        _ = await fixture.Preview.SyncSceneAsync(PreviewFixture.SceneOf(document), this.TestContext.CancellationToken).ConfigureAwait(false);
+        fixture.Requests.Clear();
+        var authoring = PreviewFixture.AuthoringOf(document);
+        var policy = new LodPolicy.Fixed(1);
+
+        _ = await authoring.ExecuteAsync(new SetOverrides([node.Id], [new OverrideWrite(SceneSchema.Geometry.LodPolicy.Id, Part: null, LayoutRevision: null, policy)], "Edit Level of Detail")).ConfigureAwait(false);
+
+        var set = fixture.World.Commands.OfType<RuntimeSetOverrides>().Should().ContainSingle().Subject;
+        _ = set.Part.Should().BeNull("the policy belongs to the geometry component, not to a surface");
+        _ = set.Overrides.Should().Equal(new RuntimeOverride(RuntimeOverrideId.GeometryLodPolicy, new RuntimeOverrideValue.LodPolicyValue(policy)));
+        fixture.Requests.Clear();
+
+        _ = await authoring.ExecuteAsync(new SetOverrides([node.Id], [new OverrideWrite(SceneSchema.Geometry.LodPolicy.Id, Part: null, LayoutRevision: null, Value: null)], "Reset Level of Detail")).ConfigureAwait(false);
+
+        var cleared = fixture.World.Commands.OfType<RuntimeSetOverrides>().Should().ContainSingle().Subject;
+        _ = cleared.Part.Should().BeNull();
+        _ = cleared.Overrides.Should().BeEmpty("the asset's policy applies again");
     }
 
     [TestMethod]

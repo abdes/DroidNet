@@ -1426,8 +1426,21 @@ inventory reports the cooked values (section 20.1).
 Model import settings carry the same values per imported geometry: the default
 LOD policy and, by SurfaceId, each surface's Visibility and Cast Shadows. The
 model import settings editor shows them with the geometry's surfaces, and the
-adapters write them into the produced geometry; without a setting the
-adapters write the schema defaults.
+adapters write them into the produced geometry. Without a setting, the
+surfaces take the schema defaults, and so does the LOD policy of a geometry
+with one LOD. A geometry with several LODs, such as an FBX LOD group, takes a
+Screen-space error policy instead, so that an application that sets no policy,
+such as a native demo, still sees its LODs switch. The error is the bounding
+sphere's projected radius in pixels. Boundary `i` enters its finer LOD at
+256 / 2^i pixels (256, 128, 64, …) and its coarser LOD at 0.8 of that, a band
+that keeps the LOD from flickering.
+
+The policy units are the engine's. A Distance threshold is the view distance
+in radii of the geometry's bounding sphere, and a Screen-space error is that
+sphere's projected radius in pixels. Thresholds of 4, 8, 16, … radii match the
+default errors in a 1080p view with a 60° vertical field of view. The
+inspector starts a new policy of the asset's kind from the asset's values,
+and a policy of another kind from these defaults.
 
 A scene stores its changes of these values as overrides of the geometry
 component (scene model 5.2). The cooked scene carries every override in one

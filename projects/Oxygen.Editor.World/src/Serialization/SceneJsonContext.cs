@@ -52,7 +52,10 @@ namespace Oxygen.Editor.World.Serialization;
 [JsonSerializable(typeof(AssetPath))]
 [JsonSerializable(typeof(Vector3))]
 [JsonSerializable(typeof(LodPolicy))]
+
+// A LOD policy's "type" may follow its fields, as in the engine's reports, whose JSON objects sort their keys.
 [JsonSourceGenerationOptions(
+    AllowOutOfOrderMetadataProperties = true,
     WriteIndented = true,
     DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     Converters = new[] { typeof(Vector3JsonConverter), typeof(Vector4JsonConverter), typeof(QuaternionJsonConverter) })]

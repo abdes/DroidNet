@@ -5,6 +5,8 @@
 using System.Collections.Immutable;
 using System.Text.Json;
 using Json.Schema;
+using Oxygen.Editor.World;
+using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Inspection;
@@ -47,6 +49,11 @@ public sealed class CookedGeometryReport
                     throw new InvalidDataException("The native geometry inventory contains duplicate surface identities or surface bindings.");
                 }
 
+                if (bindings.Any(static binding => binding.LodIndex >= LodPolicy.MaxLodCount))
+                {
+                    throw new InvalidDataException($"The native geometry inventory binds a LOD beyond the {LodPolicy.MaxLodCount} a geometry has.");
+                }
+
                 surfaces.Add(new(
                     surfaceId,
                     surface.GetProperty("display_name").GetString()!,
@@ -55,7 +62,7 @@ public sealed class CookedGeometryReport
                     bindings));
             }
 
-            if (!geometries.TryAdd(key, new(row.GetProperty("layout_revision").GetString()!, surfaces.ToImmutable())))
+            if (!geometries.TryAdd(key, new(row.GetProperty("layout_revision").GetString()!, surfaces.ToImmutable(), ReadLodPolicy(row.GetProperty("lod_policy")))))
             {
                 throw new InvalidDataException("The native geometry report contains duplicate asset keys.");
             }
@@ -69,7 +76,7 @@ public sealed class CookedGeometryReport
     /// <param name="nativeGeometryKey">The native key to resolve.</param>
     /// <returns>The matching inventory, or null.</returns>
     public GeometrySurfaceMetadata? Find(AssetPath geometryUri, Guid nativeGeometryKey)
-        => this.geometries.TryGetValue(nativeGeometryKey, out var inventory) ? new(geometryUri, nativeGeometryKey, inventory.LayoutRevision, inventory.Surfaces) : null;
+        => this.geometries.TryGetValue(nativeGeometryKey, out var inventory) ? new(geometryUri, nativeGeometryKey, inventory.LayoutRevision, inventory.Surfaces, inventory.LodPolicy) : null;
 
     /// <summary>Reads a native command result scoped to one virtual path.</summary>
     /// <param name="geometryUri">The authored identity.</param>
@@ -81,6 +88,19 @@ public sealed class CookedGeometryReport
             1 => this.Find(geometryUri, this.geometries.Keys.Single()),
             _ => throw new InvalidDataException("The native geometry query returned more than one asset."),
         };
+
+    // The policy's JSON is the scene's (scene model 5.7), so the scene's reader reads it and applies the engine's rules.
+    private static LodPolicy ReadLodPolicy(JsonElement json)
+    {
+        try
+        {
+            return (LodPolicy)SourceOverridesJson.ReadValue(SceneSchema.Geometry.LodPolicy.Id, json);
+        }
+        catch (JsonException error)
+        {
+            throw new InvalidDataException("The native geometry report has an invalid LOD policy. " + error.Message, error);
+        }
+    }
 
     // The report's schemas live in their own registry: the process-wide one may already hold another build of the LOD
     // policy schema under its URI, and a second registration there is refused.
@@ -102,5 +122,5 @@ public sealed class CookedGeometryReport
         return reader.ReadToEnd();
     }
 
-    private sealed record Inventory(string LayoutRevision, ImmutableArray<GeometrySurface> Surfaces);
+    private sealed record Inventory(string LayoutRevision, ImmutableArray<GeometrySurface> Surfaces, LodPolicy LodPolicy);
 }

@@ -94,7 +94,7 @@ internal sealed partial class SceneAuthoringFixture : IDisposable
     /// <summary>Publishes the inventory of a geometry as one visible, shadow-casting surface named "Surface", the one <see cref="TargetFor"/> names.</summary>
     /// <param name="geometry">The geometry.</param>
     public void PublishSurface(AssetPath geometry)
-        => this.Surfaces.Publish(new GeometrySurfaceMetadata(geometry, Guid.Parse("20000000-0000-0000-0000-000000000001"), new string('a', 64), [new(TargetFor(geometry).SurfaceId, "Surface", Visible: true, CastsShadows: true, [new(0, 0, Guid.Empty)])]));
+        => this.Surfaces.Publish(new GeometrySurfaceMetadata(geometry, Guid.Parse("20000000-0000-0000-0000-000000000001"), new string('a', 64), [new(TargetFor(geometry).SurfaceId, "Surface", Visible: true, CastsShadows: true, [new(0, 0, Guid.Empty)])], SceneSchema.Geometry.Defaults.LodPolicy));
 
     /// <summary>Writes the node selection of the fixture's document through the shared selection service, as the Explorer, a viewport or another panel does.</summary>
     /// <param name="nodes">The selected nodes, of which the last is primary; none clears the selection.</param>

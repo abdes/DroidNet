@@ -4,6 +4,7 @@
 
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.World;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Testing;
@@ -26,13 +27,17 @@ public sealed partial class FakeSurfaceProvider : IGeometrySurfaceProvider, IDis
     /// </summary>
     /// <param name="geometry">The geometry.</param>
     /// <param name="layoutRevision">The inventory's layout revision.</param>
-    /// <param name="surfaces">The surface ids; each surface is visible and casts shadows unless a scene overrides it.</param>
+    /// <param name="surfaces">
+    /// The surface ids; each surface is visible and casts shadows unless a scene overrides it, and the geometry has the
+    /// schema's default LOD policy.
+    /// </param>
     public void Publish(AssetPath geometry, string layoutRevision, params IEnumerable<Guid> surfaces)
         => this.Publish(new GeometrySurfaceMetadata(
             geometry,
             NativeGeometryKey: Guid.Empty,
             layoutRevision,
-            [.. surfaces.Select(static surface => new GeometrySurface(surface, surface.ToString(), Visible: true, CastsShadows: true, []))]));
+            [.. surfaces.Select(static surface => new GeometrySurface(surface, surface.ToString(), Visible: true, CastsShadows: true, []))],
+            SceneSchema.Geometry.Defaults.LodPolicy));
 
     /// <summary>
     /// Publishes an inventory of its geometry, replacing any earlier one.

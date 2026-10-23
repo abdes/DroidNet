@@ -57,6 +57,10 @@ public sealed class SceneJsonFormatTests
     [DataRow("""{"type":"fixed","lod_index":2}""")]
     [DataRow("""{"type":"distance","thresholds":[10,20],"hysteresis_ratio":0.1}""")]
     [DataRow("""{"type":"screen_space_error","enter_finer_sse":[4,2],"exit_coarser_sse":[3,1]}""")]
+
+    // The engine's reports sort their keys, so the type follows the fields.
+    [DataRow("""{"lod_index":2,"type":"fixed"}""")]
+    [DataRow("""{"hysteresis_ratio":0.1,"thresholds":[10,20],"type":"distance"}""")]
     public void LodPolicy_RoundTripsItsSchemaJson(string json)
     {
         var policy = JsonSerializer.Deserialize(json, SceneJsonContext.Default.LodPolicy);
