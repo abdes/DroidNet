@@ -509,6 +509,7 @@ using ProgressEventCallback = std::function<void(const ProgressEvent&)>; // invo
 struct Config {
   uint32_t thread_pool_size = std::thread::hardware_concurrency();
   uint32_t max_in_flight_jobs = std::thread::hardware_concurrency();
+  uint32_t job_admission_capacity = 64;
   ImportConcurrency concurrency{}; // per-pipeline workers & queue capacities
 };
 ```
@@ -517,6 +518,7 @@ The config specifies global resources shared across all import jobs:
 
 - **thread_pool_size**: Number of worker threads for CPU-bound cooking (BC7, mip gen, etc.)
 - **max_in_flight_jobs**: Maximum number of jobs processed concurrently by the importer (default is hardware_concurrency; defaults to 1 in some deployments)
+- **job_admission_capacity**: Maximum number of jobs admitted and not yet finished (default 64). A submission beyond it is refused; the batch command defers it until a job finishes (backpressure).
 - **concurrency**: Per-pipeline concurrency knobs (`ImportConcurrency`) that control worker counts and queue capacities for texture/buffer/material/mesh/scene pipelines.
 
 #### Core API

@@ -156,6 +156,10 @@ public:
     //! Maximum number of jobs processed concurrently.
     uint32_t max_in_flight_jobs = std::thread::hardware_concurrency();
 
+    //! Maximum number of jobs admitted and not yet finished; a submission
+    //! beyond it is refused, and the caller retries later (backpressure).
+    uint32_t job_admission_capacity = 64;
+
     //! Per-pipeline concurrency settings (workers and queue capacity).
     ImportConcurrency concurrency {};
 

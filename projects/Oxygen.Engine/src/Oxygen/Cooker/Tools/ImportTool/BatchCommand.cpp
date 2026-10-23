@@ -877,6 +877,9 @@ auto BatchCommand::PrepareImportServiceConfig()
   if (options_.max_in_flight_jobs_set) {
     service_config.max_in_flight_jobs = options_.max_in_flight_jobs;
   }
+  if (manifest->job_admission_capacity.has_value()) {
+    service_config.job_admission_capacity = *manifest->job_admission_capacity;
+  }
   if (manifest->concurrency.has_value()) {
     service_config.concurrency = *manifest->concurrency;
   }

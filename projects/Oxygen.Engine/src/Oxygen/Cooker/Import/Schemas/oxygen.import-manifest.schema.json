@@ -20,6 +20,10 @@
       "type": "integer",
       "minimum": 1
     },
+    "job_admission_capacity": {
+      "type": "integer",
+      "minimum": 1
+    },
     "concurrency": {
       "type": "object",
       "properties": {

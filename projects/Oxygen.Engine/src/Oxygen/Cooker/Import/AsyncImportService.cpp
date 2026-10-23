@@ -171,10 +171,11 @@ namespace {
 //===-------------------------------------------------------//
 
 struct AsyncImportService::Impl {
-  static constexpr size_t kImportChannelCapacity = 64;
-  explicit Impl(const Config& config)
-    : config_(config)
+  explicit Impl(Config config)
+    : config_(std::move(config))
   {
+    CHECK_GT_F(config_.job_admission_capacity, 0U,
+      "the import service must admit at least one job");
   }
 
   ~Impl() = default;
@@ -273,7 +274,7 @@ struct AsyncImportService::Impl {
     // Create the async importer
     async_importer_
       = std::make_unique<detail::AsyncImporter>(detail::AsyncImporter::Config {
-        .channel_capacity = kImportChannelCapacity,
+        .channel_capacity = config_.job_admission_capacity,
         .max_in_flight_jobs = config_.max_in_flight_jobs,
         .file_writer = file_writer_.get(),
         .table_registry = table_registry_.get(),
@@ -550,13 +551,17 @@ auto AsyncImportService::SubmitImport(ImportRequest request,
     }
   }
 
+  // Claim one admission slot, or refuse the job while the service is full.
   auto admitted = impl_->admitted_jobs_.load(std::memory_order_relaxed);
-  do {
-    if (admitted >= Impl::kImportChannelCapacity) {
+  while (true) {
+    if (admitted >= impl_->config_.job_admission_capacity) {
       return std::nullopt;
     }
-  } while (!impl_->admitted_jobs_.compare_exchange_weak(admitted, admitted + 1,
-    std::memory_order_acq_rel, std::memory_order_relaxed));
+    if (impl_->admitted_jobs_.compare_exchange_weak(admitted, admitted + 1,
+          std::memory_order_acq_rel, std::memory_order_relaxed)) {
+      break;
+    }
+  }
   auto posted = false;
   const auto admission = ScopeGuard([&] noexcept -> void {
     if (!posted) {

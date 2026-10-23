@@ -1165,6 +1165,10 @@ auto ImportManifest::Parse(const std::string_view text,
         manifest.max_in_flight_jobs, error_stream)) {
     return std::nullopt;
   }
+  if (!ReadOptionalUIntField(*json_data, "job_admission_capacity",
+        manifest.job_admission_capacity, error_stream)) {
+    return std::nullopt;
+  }
   if (json_data->contains("concurrency")) {
     if (!(*json_data).at("concurrency").is_object()) {
       error_stream << "ERROR: concurrency must be an object\n";

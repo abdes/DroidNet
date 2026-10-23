@@ -546,6 +546,7 @@ Top-level fields:
   "output": "F:/absolute/cooked/root",
   "thread_pool_size": 8,
   "max_in_flight_jobs": 16,
+  "job_admission_capacity": 64,
   "concurrency": {
     "texture": { "workers": 4, "queue_capacity": 64 },
     "buffer": { "workers": 2, "queue_capacity": 32 },

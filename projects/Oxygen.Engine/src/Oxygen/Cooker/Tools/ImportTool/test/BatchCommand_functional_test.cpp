@@ -440,18 +440,20 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
 }
 #endif
 
-//! Large manifests defer saturated submissions and emit every independent
-//! asset.
+//! A batch larger than the admission capacity defers saturated submissions
+//! and emits every independent asset.
 NOLINT_TEST_F(BatchCommandPhysicsDagTest,
-  LargeIndependentMaterialBatchRespectsAdmissionBackpressure)
+  IndependentMaterialBatchRespectsAdmissionBackpressure)
 {
   const auto root = MakeScenarioDir("material_admission_backpressure");
   const auto cooked_root = root / ".cooked";
   const auto manifest_path = root / "import-manifest.json";
   std::ostringstream manifest;
+  // One admitted job at a time: every submission after the first meets a
+  // saturated service and must be deferred, not dropped.
   manifest << R"({"version":1,"output":")" << cooked_root.generic_string()
-           << R"(","jobs":[)";
-  constexpr size_t kMaterialCount = 1000;
+           << R"(","max_in_flight_jobs":1,"job_admission_capacity":1,"jobs":[)";
+  constexpr size_t kMaterialCount = 8;
   for (size_t index = 0; index < kMaterialCount; ++index) {
     const auto name = std::string("M") + std::to_string(index);
     const auto source = std::string("Materials/") + name + ".material.json";

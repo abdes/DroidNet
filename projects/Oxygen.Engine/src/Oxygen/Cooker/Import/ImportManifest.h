@@ -94,6 +94,7 @@ struct ImportManifest {
   uint32_t version = 1;
   std::optional<uint32_t> thread_pool_size;
   std::optional<uint32_t> max_in_flight_jobs;
+  std::optional<uint32_t> job_admission_capacity;
   std::optional<ImportConcurrency> concurrency;
   ImportManifestDefaults defaults;
   std::vector<ImportManifestJob> jobs;
