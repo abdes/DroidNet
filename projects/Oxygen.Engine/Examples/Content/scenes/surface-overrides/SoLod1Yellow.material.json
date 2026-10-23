@@ -1,0 +1,11 @@
+{
+  "name": "SoLod1Yellow",
+  "domain": "opaque",
+  "alpha_mode": "opaque",
+  "parameters": {
+    "base_color": [0.95, 0.8, 0.1, 1.0],
+    "metalness": 0.0,
+    "roughness": 0.55,
+    "ambient_occlusion": 1.0
+  }
+}

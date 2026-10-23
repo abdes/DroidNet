@@ -71,10 +71,13 @@ installed SDK uses its `share/oxygen/engine.pak`; a source checkout builds the
 build tree records. `-EnginePak` selects another pak and is required with an
 explicit `-ToolPath` outside an SDK. `engine-assets` shows every `/Engine` asset
 on a large floor, with the example materials overriding the shapes' surface.
+`surface-overrides` shows surface and LOD policy overrides against asset
+defaults and checks them while it plays; it uses the models `sdk-furniture`
+cooks, which `-All` cooks first.
 
 `-All` processes each `scenes/*/import-manifest.json` in name order, including
 its materials, geometry, textures, scripts, inputs and physics sidecars. It does
-not reimport retained external models or build PAKs. The checkout has seventeen
+not reimport retained external models or build PAKs. The checkout has eighteen
 scene manifests; the SDK ships a smaller selection. Unreferenced raw models and
 images are imported explicitly by their consumers.
 

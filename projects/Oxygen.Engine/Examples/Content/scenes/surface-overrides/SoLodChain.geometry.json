@@ -1,0 +1,94 @@
+{
+  "$schema": "../../../../src/Oxygen/Cooker/Import/Schemas/oxygen.geometry-descriptor.schema.json",
+  "name": "SoLodChain",
+  "bounds": {
+    "min": [-0.5, -0.5, -0.5],
+    "max": [0.5, 0.5, 0.5]
+  },
+  "lods": [
+    {
+      "name": "SoLodChain_lod0",
+      "mesh_type": "procedural",
+      "bounds": {
+        "min": [-0.5, -0.5, -0.5],
+        "max": [0.5, 0.5, 0.5]
+      },
+      "procedural": {
+        "generator": "Sphere",
+        "mesh_name": "SoLodChain_lod0",
+        "params": {
+          "latitude_segments": 32,
+          "longitude_segments": 48
+        }
+      },
+      "submeshes": [
+        {
+          "name": "SoLodChain_lod0_surface",
+          "surface_id": "cd681955-052b-4034-8b6f-0da3d3346b2a",
+          "material_ref": "/.cooked/Materials/SoLod0Green.omat",
+          "views": [
+            {
+              "view_ref": "__all__"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "SoLodChain_lod1",
+      "mesh_type": "procedural",
+      "bounds": {
+        "min": [-0.5, -0.5, -0.5],
+        "max": [0.5, 0.5, 0.5]
+      },
+      "procedural": {
+        "generator": "IcoSphere",
+        "mesh_name": "SoLodChain_lod1",
+        "params": {
+          "subdivision_level": 1
+        }
+      },
+      "submeshes": [
+        {
+          "name": "SoLodChain_lod1_surface",
+          "surface_id": "cd681955-052b-4034-8b6f-0da3d3346b2a",
+          "material_ref": "/.cooked/Materials/SoLod1Yellow.omat",
+          "views": [
+            {
+              "view_ref": "__all__"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "SoLodChain_lod2",
+      "mesh_type": "procedural",
+      "bounds": {
+        "min": [-0.5, -0.5, -0.5],
+        "max": [0.5, 0.5, 0.5]
+      },
+      "procedural": {
+        "generator": "Cube",
+        "mesh_name": "SoLodChain_lod2"
+      },
+      "submeshes": [
+        {
+          "name": "SoLodChain_lod2_surface",
+          "surface_id": "cd681955-052b-4034-8b6f-0da3d3346b2a",
+          "material_ref": "/.cooked/Materials/SoLod2Red.omat",
+          "views": [
+            {
+              "view_ref": "__all__"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "lod_policy": {
+    "type": "distance",
+    "thresholds": [14.0, 26.0],
+    "hysteresis_ratio": 0.1
+  }
+}

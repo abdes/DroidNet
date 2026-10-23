@@ -1,0 +1,86 @@
+{
+  "actions": [
+    {
+      "name": "ToggleShadeAction",
+      "type": "bool",
+      "consumes_input": true
+    },
+    {
+      "name": "ToggleMetalShadowAction",
+      "type": "bool",
+      "consumes_input": true
+    },
+    {
+      "name": "CycleShadeMaterialAction",
+      "type": "bool",
+      "consumes_input": true
+    },
+    {
+      "name": "CycleLodPolicyAction",
+      "type": "bool",
+      "consumes_input": true
+    },
+    {
+      "name": "ResetOverridesAction",
+      "type": "bool",
+      "consumes_input": true
+    }
+  ],
+  "contexts": [
+    {
+      "name": "SurfaceOverridesContext",
+      "mappings": [
+        {
+          "action": "ToggleShadeAction",
+          "slot": "Alpha1",
+          "triggers": [
+            {
+              "type": "pressed",
+              "behavior": "implicit"
+            }
+          ]
+        },
+        {
+          "action": "ToggleMetalShadowAction",
+          "slot": "Alpha2",
+          "triggers": [
+            {
+              "type": "pressed",
+              "behavior": "implicit"
+            }
+          ]
+        },
+        {
+          "action": "CycleShadeMaterialAction",
+          "slot": "Alpha3",
+          "triggers": [
+            {
+              "type": "pressed",
+              "behavior": "implicit"
+            }
+          ]
+        },
+        {
+          "action": "CycleLodPolicyAction",
+          "slot": "Alpha4",
+          "triggers": [
+            {
+              "type": "pressed",
+              "behavior": "implicit"
+            }
+          ]
+        },
+        {
+          "action": "ResetOverridesAction",
+          "slot": "Alpha0",
+          "triggers": [
+            {
+              "type": "pressed",
+              "behavior": "implicit"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

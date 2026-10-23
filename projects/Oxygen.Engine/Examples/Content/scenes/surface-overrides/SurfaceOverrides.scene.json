@@ -1,0 +1,487 @@
+{
+  "version": 13,
+  "name": "SurfaceOverrides",
+  "starting_input_contexts": [
+    {
+      "context_ref": "/.cooked/Input/surface_overrides.input/SurfaceOverridesContext.oimap",
+      "priority": 0
+    }
+  ],
+  "nodes": [
+    {
+      "name": "Root",
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      }
+    },
+    {
+      "name": "Floor",
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      },
+      "parent": 0,
+      "transform": {
+        "translation": [0.0, 20.0, 0.0],
+        "rotation": [0.0, 0.0, 0.0, 1.0],
+        "scale": [400.0, 400.0, 1.0]
+      }
+    },
+    {
+      "name": "Lamp_Asset",
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      },
+      "parent": 0,
+      "transform": {
+        "translation": [-6.9, 0.6, 0.0],
+        "rotation": [0.0, 0.0, 0.0, 1.0],
+        "scale": [1.0, 1.0, 1.0]
+      }
+    },
+    {
+      "name": "Lamp_SceneMaterial",
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      },
+      "parent": 0,
+      "transform": {
+        "translation": [-1.9, 0.6, 0.0],
+        "rotation": [0.0, 0.0, 0.0, 1.0],
+        "scale": [1.0, 1.0, 1.0]
+      }
+    },
+    {
+      "name": "Lamp_ShadeHidden",
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      },
+      "parent": 0,
+      "transform": {
+        "translation": [3.1, 0.6, 0.0],
+        "rotation": [0.0, 0.0, 0.0, 1.0],
+        "scale": [1.0, 1.0, 1.0]
+      }
+    },
+    {
+      "name": "Lamp_MetalNoShadow",
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      },
+      "parent": 0,
+      "transform": {
+        "translation": [8.1, 0.6, 0.0],
+        "rotation": [0.0, 0.0, 0.0, 1.0],
+        "scale": [1.0, 1.0, 1.0]
+      }
+    },
+    {
+      "name": "Pot_Asset",
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      },
+      "parent": 0,
+      "transform": {
+        "translation": [-5.0, 7.0, 0.0],
+        "rotation": [0.70710678, 0.0, 0.0, 0.70710678],
+        "scale": [1.5, 1.5, 1.5]
+      }
+    },
+    {
+      "name": "Pot_SceneMaterials",
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      },
+      "parent": 0,
+      "transform": {
+        "translation": [0.0, 7.0, 0.0],
+        "rotation": [0.70710678, 0.0, 0.0, 0.70710678],
+        "scale": [1.5, 1.5, 1.5]
+      }
+    },
+    {
+      "name": "Pot_Runtime",
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      },
+      "parent": 0,
+      "transform": {
+        "translation": [5.0, 7.0, 0.0],
+        "rotation": [0.70710678, 0.0, 0.0, 0.70710678],
+        "scale": [1.5, 1.5, 1.5]
+      }
+    },
+    {
+      "name": "Pillar_Asset",
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      },
+      "parent": 0,
+      "transform": {
+        "translation": [-9.0, 14.0, 1.0],
+        "rotation": [0.0, 0.0, 0.0, 1.0],
+        "scale": [1.0, 1.0, 1.0]
+      }
+    },
+    {
+      "name": "Pillar_CastOverride",
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      },
+      "parent": 0,
+      "transform": {
+        "translation": [-6.0, 14.0, 1.0],
+        "rotation": [0.0, 0.0, 0.0, 1.0],
+        "scale": [1.0, 1.0, 1.0]
+      }
+    },
+    {
+      "name": "Ghost_Asset",
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      },
+      "parent": 0,
+      "transform": {
+        "translation": [-3.0, 14.0, 0.5],
+        "rotation": [0.0, 0.0, 0.0, 1.0],
+        "scale": [1.0, 1.0, 1.0]
+      }
+    },
+    {
+      "name": "Ghost_VisibleOverride",
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      },
+      "parent": 0,
+      "transform": {
+        "translation": [0.0, 14.0, 0.5],
+        "rotation": [0.0, 0.0, 0.0, 1.0],
+        "scale": [1.0, 1.0, 1.0]
+      }
+    },
+    {
+      "name": "Lod_Asset",
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      },
+      "parent": 0,
+      "transform": {
+        "translation": [4.0, 14.0, 0.5],
+        "rotation": [0.0, 0.0, 0.0, 1.0],
+        "scale": [1.0, 1.0, 1.0]
+      }
+    },
+    {
+      "name": "Lod_Fixed2",
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      },
+      "parent": 0,
+      "transform": {
+        "translation": [7.0, 14.0, 0.5],
+        "rotation": [0.0, 0.0, 0.0, 1.0],
+        "scale": [1.0, 1.0, 1.0]
+      }
+    },
+    {
+      "name": "Lod_ScreenSpaceError",
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      },
+      "parent": 0,
+      "transform": {
+        "translation": [10.0, 14.0, 0.5],
+        "rotation": [0.0, 0.0, 0.0, 1.0],
+        "scale": [1.0, 1.0, 1.0]
+      }
+    },
+    {
+      "name": "Lod_Material",
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      },
+      "parent": 0,
+      "transform": {
+        "translation": [13.0, 14.0, 0.5],
+        "rotation": [0.0, 0.0, 0.0, 1.0],
+        "scale": [1.0, 1.0, 1.0]
+      }
+    },
+    {
+      "name": "Play_Lamp",
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      },
+      "parent": 0,
+      "transform": {
+        "translation": [-2.4, 21.6, 0.0],
+        "rotation": [0.0, 0.0, 0.0, 1.0],
+        "scale": [1.0, 1.0, 1.0]
+      }
+    },
+    {
+      "name": "Play_Lod",
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      },
+      "parent": 0,
+      "transform": {
+        "translation": [3.0, 21.0, 0.5],
+        "rotation": [0.0, 0.0, 0.0, 1.0],
+        "scale": [1.0, 1.0, 1.0]
+      }
+    },
+    {
+      "name": "MainCamera",
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      },
+      "parent": 0,
+      "transform": {
+        "translation": [0.0, -16.0, 9.0],
+        "rotation": [0.5736, 0.0, 0.0, 0.8192],
+        "scale": [1.0, 1.0, 1.0]
+      }
+    },
+    {
+      "name": "Sun",
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      },
+      "parent": 0,
+      "transform": {
+        "translation": [0.0, 5.0, 8.0],
+        "rotation": [0.5, 0.0, 0.0, 0.8660254],
+        "scale": [1.0, 1.0, 1.0]
+      }
+    },
+    {
+      "name": "Showcase",
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      },
+      "parent": 0,
+      "transform": {
+        "translation": [0.0, 0.0, 0.0],
+        "rotation": [0.0, 0.0, 0.0, 1.0],
+        "scale": [1.0, 1.0, 1.0]
+      }
+    }
+  ],
+  "renderables": [
+    {
+      "node": 1,
+      "geometry_ref": "/Engine/Generated/BasicShapes/Plane.ogeo",
+      "visible": true,
+      "material_overrides": [
+        {
+          "surface_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/SoFloor.omat",
+          "layout_revision": "70d2458daeb2184329ef81aef4e913cb828e2494a8cd5eda069969aff3f64aa6"
+        }
+      ]
+    },
+    {
+      "node": 2,
+      "geometry_ref": "/.cooked/fbx/showcase/lampRoundTable.fbx/Mesh_0__baked_1.ogeo",
+      "visible": true
+    },
+    {
+      "node": 3,
+      "geometry_ref": "/.cooked/fbx/showcase/lampRoundTable.fbx/Mesh_0__baked_1.ogeo",
+      "visible": true,
+      "material_overrides": [
+        {
+          "surface_id": "61fcfaeb-0ff4-a13e-0355-842dd715bdbb",
+          "material_ref": "/.cooked/Materials/SoShadeRed.omat",
+          "layout_revision": "323bf2b2f42400efee5ff51cbbb6a40915c56ff568f6750a7ea4beac3d6a8864"
+        }
+      ]
+    },
+    {
+      "node": 4,
+      "geometry_ref": "/.cooked/fbx/showcase/lampRoundTable.fbx/Mesh_0__baked_1.ogeo",
+      "visible": true
+    },
+    {
+      "node": 5,
+      "geometry_ref": "/.cooked/fbx/showcase/lampRoundTable.fbx/Mesh_0__baked_1.ogeo",
+      "visible": true
+    },
+    {
+      "node": 6,
+      "geometry_ref": "/.cooked/fbx/showcase/pottedPlant.fbx/Mesh_0.ogeo",
+      "visible": true
+    },
+    {
+      "node": 7,
+      "geometry_ref": "/.cooked/fbx/showcase/pottedPlant.fbx/Mesh_0.ogeo",
+      "visible": true,
+      "material_overrides": [
+        {
+          "surface_id": "15f61e58-02db-1303-d223-663d1e95110e",
+          "material_ref": "/.cooked/Materials/SoPotTeal.omat",
+          "layout_revision": "5936ed2604c9b4f26f4a706a257b45e1be9766b2d1152aefd88d7991adb7f0a8"
+        },
+        {
+          "surface_id": "5aac8d25-d9b8-dafb-0dfb-da32cd6051c1",
+          "material_ref": "/.cooked/Materials/SoPotGold.omat",
+          "layout_revision": "5936ed2604c9b4f26f4a706a257b45e1be9766b2d1152aefd88d7991adb7f0a8"
+        }
+      ]
+    },
+    {
+      "node": 8,
+      "geometry_ref": "/.cooked/fbx/showcase/pottedPlant.fbx/Mesh_0.ogeo",
+      "visible": true
+    },
+    {
+      "node": 9,
+      "geometry_ref": "/.cooked/Geometry/SoPillar.ogeo",
+      "visible": true
+    },
+    {
+      "node": 10,
+      "geometry_ref": "/.cooked/Geometry/SoPillar.ogeo",
+      "visible": true
+    },
+    {
+      "node": 11,
+      "geometry_ref": "/.cooked/Geometry/SoGhost.ogeo",
+      "visible": true
+    },
+    {
+      "node": 12,
+      "geometry_ref": "/.cooked/Geometry/SoGhost.ogeo",
+      "visible": true
+    },
+    {
+      "node": 13,
+      "geometry_ref": "/.cooked/Geometry/SoLodChain.ogeo",
+      "visible": true
+    },
+    {
+      "node": 14,
+      "geometry_ref": "/.cooked/Geometry/SoLodChain.ogeo",
+      "visible": true
+    },
+    {
+      "node": 15,
+      "geometry_ref": "/.cooked/Geometry/SoLodChain.ogeo",
+      "visible": true
+    },
+    {
+      "node": 16,
+      "geometry_ref": "/.cooked/Geometry/SoLodChain.ogeo",
+      "visible": true
+    },
+    {
+      "node": 17,
+      "geometry_ref": "/.cooked/fbx/showcase/lampRoundTable.fbx/Mesh_0__baked_1.ogeo",
+      "visible": true
+    },
+    {
+      "node": 18,
+      "geometry_ref": "/.cooked/Geometry/SoLodChain.ogeo",
+      "visible": true
+    }
+  ],
+  "cameras": {
+    "perspective": [
+      {
+        "node": 19,
+        "fov_y": 0.785398,
+        "aspect_ratio": 1.777778,
+        "aspect_mode": "fixed",
+        "near_plane": 0.1,
+        "far_plane": 400.0
+      }
+    ]
+  },
+  "lights": {
+    "directional": [
+      {
+        "node": 20,
+        "common": {
+          "affects_world": true,
+          "color_rgb": [1.0, 0.98, 0.92],
+          "casts_shadows": true,
+          "shadow": {
+            "bias": 0.03
+          }
+        },
+        "angular_size_radians": 0.00935,
+        "atmosphere_light_slot": 1,
+        "intensity_lux": 120000.0
+      }
+    ]
+  },
+  "references": {
+    "materials": [
+      "/.cooked/Materials/SoFloor.omat",
+      "/.cooked/Materials/SoShadeRed.omat",
+      "/.cooked/Materials/SoShadeBlue.omat",
+      "/.cooked/Materials/SoPotTeal.omat",
+      "/.cooked/Materials/SoPotGold.omat",
+      "/.cooked/Materials/SoLod0Green.omat",
+      "/.cooked/Materials/SoLod1Yellow.omat",
+      "/.cooked/Materials/SoLod2Red.omat",
+      "/.cooked/Materials/SoLodPurple.omat",
+      "/.cooked/Materials/SoPillar.omat"
+    ],
+    "scripts": ["/.cooked/Scripts/surface_overrides.oscript"],
+    "input_actions": [
+      "/.cooked/Input/surface_overrides.input/ToggleShadeAction.oiact",
+      "/.cooked/Input/surface_overrides.input/ToggleMetalShadowAction.oiact",
+      "/.cooked/Input/surface_overrides.input/CycleShadeMaterialAction.oiact",
+      "/.cooked/Input/surface_overrides.input/CycleLodPolicyAction.oiact",
+      "/.cooked/Input/surface_overrides.input/ResetOverridesAction.oiact"
+    ],
+    "input_mapping_contexts": [
+      "/.cooked/Input/surface_overrides.input/SurfaceOverridesContext.oimap"
+    ]
+  }
+}

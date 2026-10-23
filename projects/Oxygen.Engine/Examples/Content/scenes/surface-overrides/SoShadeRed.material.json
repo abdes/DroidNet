@@ -1,0 +1,11 @@
+{
+  "name": "SoShadeRed",
+  "domain": "opaque",
+  "alpha_mode": "opaque",
+  "parameters": {
+    "base_color": [0.85, 0.08, 0.06, 1.0],
+    "metalness": 0.0,
+    "roughness": 0.55,
+    "ambient_occlusion": 1.0
+  }
+}

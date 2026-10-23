@@ -1,0 +1,11 @@
+{
+  "name": "SoPillar",
+  "domain": "opaque",
+  "alpha_mode": "opaque",
+  "parameters": {
+    "base_color": [0.8, 0.8, 0.78, 1.0],
+    "metalness": 0.0,
+    "roughness": 0.55,
+    "ambient_occlusion": 1.0
+  }
+}

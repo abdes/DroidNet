@@ -1,0 +1,332 @@
+{
+  "$schema": "../../../../src/Oxygen/Cooker/Import/Schemas/oxygen.import-manifest.schema.json",
+  "version": 1,
+  "max_in_flight_jobs": 1,
+  "output": "../../.cooked/main",
+  "jobs": [
+    {
+      "id": "material.SoFloor",
+      "type": "material-descriptor",
+      "source": "./SoFloor.material.json",
+      "virtual_path": "/.cooked/Materials/SoFloor.omat",
+      "name": "SoFloor",
+      "content_hashing": true
+    },
+    {
+      "id": "material.SoShadeRed",
+      "type": "material-descriptor",
+      "source": "./SoShadeRed.material.json",
+      "virtual_path": "/.cooked/Materials/SoShadeRed.omat",
+      "name": "SoShadeRed",
+      "content_hashing": true
+    },
+    {
+      "id": "material.SoShadeBlue",
+      "type": "material-descriptor",
+      "source": "./SoShadeBlue.material.json",
+      "virtual_path": "/.cooked/Materials/SoShadeBlue.omat",
+      "name": "SoShadeBlue",
+      "content_hashing": true
+    },
+    {
+      "id": "material.SoPotTeal",
+      "type": "material-descriptor",
+      "source": "./SoPotTeal.material.json",
+      "virtual_path": "/.cooked/Materials/SoPotTeal.omat",
+      "name": "SoPotTeal",
+      "content_hashing": true
+    },
+    {
+      "id": "material.SoPotGold",
+      "type": "material-descriptor",
+      "source": "./SoPotGold.material.json",
+      "virtual_path": "/.cooked/Materials/SoPotGold.omat",
+      "name": "SoPotGold",
+      "content_hashing": true
+    },
+    {
+      "id": "material.SoLod0Green",
+      "type": "material-descriptor",
+      "source": "./SoLod0Green.material.json",
+      "virtual_path": "/.cooked/Materials/SoLod0Green.omat",
+      "name": "SoLod0Green",
+      "content_hashing": true
+    },
+    {
+      "id": "material.SoLod1Yellow",
+      "type": "material-descriptor",
+      "source": "./SoLod1Yellow.material.json",
+      "virtual_path": "/.cooked/Materials/SoLod1Yellow.omat",
+      "name": "SoLod1Yellow",
+      "content_hashing": true
+    },
+    {
+      "id": "material.SoLod2Red",
+      "type": "material-descriptor",
+      "source": "./SoLod2Red.material.json",
+      "virtual_path": "/.cooked/Materials/SoLod2Red.omat",
+      "name": "SoLod2Red",
+      "content_hashing": true
+    },
+    {
+      "id": "material.SoLodPurple",
+      "type": "material-descriptor",
+      "source": "./SoLodPurple.material.json",
+      "virtual_path": "/.cooked/Materials/SoLodPurple.omat",
+      "name": "SoLodPurple",
+      "content_hashing": true
+    },
+    {
+      "id": "material.SoPillar",
+      "type": "material-descriptor",
+      "source": "./SoPillar.material.json",
+      "virtual_path": "/.cooked/Materials/SoPillar.omat",
+      "name": "SoPillar",
+      "content_hashing": true
+    },
+    {
+      "id": "geometry.SoPillar",
+      "type": "geometry-descriptor",
+      "source": "./SoPillar.geometry.json",
+      "virtual_path": "/.cooked/Geometry/SoPillar.ogeo",
+      "name": "SoPillar",
+      "content_hashing": true,
+      "depends_on": ["material.SoPillar"]
+    },
+    {
+      "id": "geometry.SoGhost",
+      "type": "geometry-descriptor",
+      "source": "./SoGhost.geometry.json",
+      "virtual_path": "/.cooked/Geometry/SoGhost.ogeo",
+      "name": "SoGhost",
+      "content_hashing": true,
+      "depends_on": ["material.SoShadeBlue"]
+    },
+    {
+      "id": "geometry.SoLodChain",
+      "type": "geometry-descriptor",
+      "source": "./SoLodChain.geometry.json",
+      "virtual_path": "/.cooked/Geometry/SoLodChain.ogeo",
+      "name": "SoLodChain",
+      "content_hashing": true,
+      "depends_on": [
+        "material.SoLod0Green",
+        "material.SoLod1Yellow",
+        "material.SoLod2Red"
+      ]
+    },
+    {
+      "id": "script.SurfaceOverrides",
+      "type": "script",
+      "source": "./surface_overrides.lua",
+      "virtual_path": "/.cooked/Scripts/surface_overrides.oscript",
+      "name": "SurfaceOverridesScript",
+      "compile": false,
+      "script_storage": "external",
+      "content_hashing": true
+    },
+    {
+      "id": "input.surface_overrides",
+      "type": "input",
+      "source": "./surface_overrides.input.json",
+      "virtual_path": "/.cooked/Input/surface_overrides.input"
+    },
+    {
+      "id": "scene.SurfaceOverrides",
+      "type": "scene-descriptor",
+      "source": "./SurfaceOverrides.scene.json",
+      "virtual_path": "/.cooked/Scenes/SurfaceOverrides.oscene",
+      "name": "SurfaceOverrides",
+      "content_hashing": true,
+      "depends_on": [
+        "material.SoFloor",
+        "material.SoShadeRed",
+        "material.SoShadeBlue",
+        "material.SoPotTeal",
+        "material.SoPotGold",
+        "material.SoLod0Green",
+        "material.SoLod1Yellow",
+        "material.SoLod2Red",
+        "material.SoLodPurple",
+        "material.SoPillar",
+        "geometry.SoPillar",
+        "geometry.SoGhost",
+        "geometry.SoLodChain",
+        "script.SurfaceOverrides",
+        "input.surface_overrides"
+      ]
+    },
+    {
+      "id": "script-sidecar.SurfaceOverrides",
+      "type": "script-sidecar",
+      "name": "surface_overrides_script_sidecar",
+      "target_scene_virtual_path": "/.cooked/Scenes/SurfaceOverrides.oscene",
+      "content_hashing": true,
+      "depends_on": [
+        "scene.SurfaceOverrides",
+        "script.SurfaceOverrides",
+        "input.surface_overrides",
+        "material.SoFloor",
+        "material.SoShadeRed",
+        "material.SoShadeBlue",
+        "material.SoPotTeal",
+        "material.SoPotGold",
+        "material.SoLod0Green",
+        "material.SoLod1Yellow",
+        "material.SoLod2Red",
+        "material.SoLodPurple",
+        "material.SoPillar"
+      ],
+      "bindings": [
+        {
+          "node_index": 21,
+          "slot_id": "SurfaceOverridesScript",
+          "script_virtual_path": "/.cooked/Scripts/surface_overrides.oscript",
+          "execution_order": 0,
+          "params": [
+            {
+              "key": "lamp_asset",
+              "type": "node",
+              "value": 2
+            },
+            {
+              "key": "lamp_scene_material",
+              "type": "node",
+              "value": 3
+            },
+            {
+              "key": "lamp_shade_hidden",
+              "type": "node",
+              "value": 4
+            },
+            {
+              "key": "lamp_metal_no_shadow",
+              "type": "node",
+              "value": 5
+            },
+            {
+              "key": "pot_asset",
+              "type": "node",
+              "value": 6
+            },
+            {
+              "key": "pot_scene_materials",
+              "type": "node",
+              "value": 7
+            },
+            {
+              "key": "pot_runtime",
+              "type": "node",
+              "value": 8
+            },
+            {
+              "key": "pillar_asset",
+              "type": "node",
+              "value": 9
+            },
+            {
+              "key": "pillar_cast_override",
+              "type": "node",
+              "value": 10
+            },
+            {
+              "key": "ghost_asset",
+              "type": "node",
+              "value": 11
+            },
+            {
+              "key": "ghost_visible_override",
+              "type": "node",
+              "value": 12
+            },
+            {
+              "key": "lod_asset",
+              "type": "node",
+              "value": 13
+            },
+            {
+              "key": "lod_fixed",
+              "type": "node",
+              "value": 14
+            },
+            {
+              "key": "lod_sse",
+              "type": "node",
+              "value": 15
+            },
+            {
+              "key": "lod_material",
+              "type": "node",
+              "value": 16
+            },
+            {
+              "key": "play_lamp",
+              "type": "node",
+              "value": 17
+            },
+            {
+              "key": "play_lod",
+              "type": "node",
+              "value": 18
+            },
+            {
+              "key": "shade_red",
+              "type": "asset",
+              "value": "/.cooked/Materials/SoShadeRed.omat"
+            },
+            {
+              "key": "shade_blue",
+              "type": "asset",
+              "value": "/.cooked/Materials/SoShadeBlue.omat"
+            },
+            {
+              "key": "pot_teal",
+              "type": "asset",
+              "value": "/.cooked/Materials/SoPotTeal.omat"
+            },
+            {
+              "key": "pot_gold",
+              "type": "asset",
+              "value": "/.cooked/Materials/SoPotGold.omat"
+            },
+            {
+              "key": "lod_purple",
+              "type": "asset",
+              "value": "/.cooked/Materials/SoLodPurple.omat"
+            },
+            {
+              "key": "toggle_shade",
+              "type": "asset",
+              "value": "/.cooked/Input/surface_overrides.input/ToggleShadeAction.oiact"
+            },
+            {
+              "key": "toggle_metal_shadow",
+              "type": "asset",
+              "value": "/.cooked/Input/surface_overrides.input/ToggleMetalShadowAction.oiact"
+            },
+            {
+              "key": "cycle_shade_material",
+              "type": "asset",
+              "value": "/.cooked/Input/surface_overrides.input/CycleShadeMaterialAction.oiact"
+            },
+            {
+              "key": "cycle_lod_policy",
+              "type": "asset",
+              "value": "/.cooked/Input/surface_overrides.input/CycleLodPolicyAction.oiact"
+            },
+            {
+              "key": "reset_overrides",
+              "type": "asset",
+              "value": "/.cooked/Input/surface_overrides.input/ResetOverridesAction.oiact"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "defaults": {
+    "script": {
+      "source_root": "../.."
+    }
+  }
+}
