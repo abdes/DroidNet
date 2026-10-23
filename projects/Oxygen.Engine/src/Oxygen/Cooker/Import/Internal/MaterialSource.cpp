@@ -346,6 +346,29 @@ auto MaterialSource::CanPackOrm() const noexcept -> bool
     == roughness.uv_transform.rotation_radians;
 }
 
+auto MaterialSource::RepairModelInputs(const std::string_view source_id,
+  std::vector<ImportDiagnostic>& diagnostics) -> void
+{
+  auto repaired = false;
+  for (auto& value : inputs.emissive_factor) {
+    const auto clamped = std::isfinite(value)
+      ? std::clamp(value, 0.0F,
+          static_cast<float>(data::pak::render::kMaxMaterialEmissiveFactor))
+      : 0.0F;
+    repaired = repaired || clamped != value;
+    value = clamped;
+  }
+  if (repaired) {
+    diagnostics.push_back(ImportDiagnostic {
+      .severity = ImportSeverity::kWarning,
+      .code = "material.emissive_factor_range",
+      .message = "Emission channels outside [0,65504] were clamped",
+      .source_path = std::string(source_id),
+      .object_path = name,
+    });
+  }
+}
+
 auto MaterialSource::Validate(const std::string_view source_id,
   std::vector<ImportDiagnostic>& diagnostics) const -> bool
 {

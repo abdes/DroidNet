@@ -41,6 +41,7 @@
 #include <Oxygen/Content/LoaderContext.h>
 #include <Oxygen/Content/Loaders/SceneLoader.h>
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportJobId.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
@@ -930,7 +931,9 @@ NOLINT_TEST_F(
   }
 }
 
-NOLINT_TEST_F(AsyncGltfImporterFullTest, InvalidSpotConePairsFailImport)
+//! A spot light whose cone angles form no representable cone is dropped with a
+//! warning; the model imports.
+NOLINT_TEST_F(AsyncGltfImporterFullTest, InvalidSpotConePairsDropTheLight)
 {
   const auto invalid_lights = std::array {
     R"({"type":"spot","intensity":100,"spot":{"innerConeAngle":0.6,"outerConeAngle":0.5}})",
@@ -942,11 +945,14 @@ NOLINT_TEST_F(AsyncGltfImporterFullTest, InvalidSpotConePairsFailImport)
     SCOPED_TRACE(invalid_lights.at(index));
     const auto imported = ImportSecondLight(
       invalid_lights.at(index), "gltf_invalid_cone_" + std::to_string(index));
-    EXPECT_FALSE(imported.report.success);
+    EXPECT_TRUE(imported.report.success);
     EXPECT_TRUE(std::ranges::any_of(
       imported.report.diagnostics, [](const auto& diagnostic) -> auto {
-        return diagnostic.code == "scene.light.photometry_invalid";
+        return diagnostic.code == "scene.light.photometry_invalid"
+          && diagnostic.severity
+          == oxygen::content::import::ImportSeverity::kWarning;
       }));
+    EXPECT_TRUE(LoadSceneReadback(imported.report).spot_lights.empty());
   }
 }
 
@@ -1419,6 +1425,123 @@ NOLINT_TEST_F(AsyncGltfImporterFullTest, ModelIdentityOfAnotherTypeIsRefused)
     imported.report.diagnostics, [](const auto& diagnostic) -> bool {
       return diagnostic.code == "import.asset_virtual_path_invalid";
     }));
+}
+
+//! A texture missing at its authored path is found by name in the model's
+//! `Textures` folder, where model-sharing sites put it.
+NOLINT_TEST_F(AsyncGltfImporterFullTest, MissingTextureIsFoundInTexturesFolder)
+{
+  const auto root = MakeTempDir("async_gltf_textures_folder");
+  std::filesystem::create_directories(root / "Textures");
+  std::filesystem::copy_file(
+    TestModelsDirFromFile() / "static_textured_checker.png",
+    root / "Textures" / "static_textured_checker.png");
+  auto document = nlohmann::json::parse(
+    std::ifstream(TestModelsDirFromFile() / "static_textured_triangle.gltf"));
+  document.at("images").at(0).at("uri") = "exports/static_textured_checker.png";
+  const auto source_path = root / "textured.gltf";
+  {
+    std::ofstream source(source_path);
+    source << document.dump();
+  }
+  ImportRequest request {};
+  request.source_path = source_path;
+  request.asset_virtual_path
+    = oxygen::cooker::test::ModelVirtualPath(request.source_path);
+  request.cooked_root = root / "cooked";
+
+  const auto imported = RunImport(std::move(request));
+
+  EXPECT_TRUE(imported.report.success);
+  EXPECT_TRUE(std::ranges::any_of(
+    imported.report.diagnostics, [](const auto& diagnostic) -> bool {
+      return diagnostic.code == "import.texture.found_by_name";
+    }));
+  EXPECT_TRUE(std::ranges::none_of(
+    imported.report.diagnostics, [](const auto& diagnostic) -> bool {
+      return diagnostic.code == "import.texture.load_failed";
+    }));
+}
+
+//! A mesh with nothing the importer can build is dropped with a warning; the
+//! model imports and every other node keeps its own geometry.
+NOLINT_TEST_F(AsyncGltfImporterFullTest, UnbuildableMeshIsDroppedWithoutShift)
+{
+  const auto root = MakeTempDir("async_gltf_dropped_mesh");
+  constexpr auto kPositions = std::array {
+    0.0F,
+    0.0F,
+    0.0F,
+    1.0F,
+    0.0F,
+    0.0F,
+    0.0F,
+    1.0F,
+    0.0F, //
+  };
+  {
+    std::ofstream buffer(root / "triangle.bin", std::ios::binary);
+    buffer.write(reinterpret_cast<const char*>(kPositions.data()),
+      static_cast<std::streamsize>(sizeof(kPositions)));
+  }
+  const auto byte_length = static_cast<int>(sizeof(kPositions));
+  const auto position = nlohmann::json { { "POSITION", 0 } };
+  const auto document = nlohmann::json {
+    { "asset", { { "version", "2.0" } } },
+    { "buffers",
+      { { { "uri", "triangle.bin" }, { "byteLength", byte_length } } } },
+    { "bufferViews", { { { "buffer", 0 }, { "byteLength", byte_length } } } },
+    { "accessors",
+      { {
+        { "bufferView", 0 },
+        { "componentType", 5126 },
+        { "count", 3 },
+        { "type", "VEC3" },
+        { "min", { 0.0, 0.0, 0.0 } },
+        { "max", { 1.0, 1.0, 0.0 } },
+      } } },
+    // Mesh 0 holds only a line primitive; mesh 1 is a triangle.
+    { "meshes",
+      {
+        { { "name", "Lines" },
+          { "primitives", { { { "attributes", position }, { "mode", 1 } } } } },
+        { { "name", "Triangle" },
+          { "primitives", { { { "attributes", position } } } } },
+      } },
+    { "nodes",
+      {
+        { { "name", "Lines" }, { "mesh", 0 } },
+        { { "name", "Triangle" }, { "mesh", 1 } },
+      } },
+    { "scenes", { { { "nodes", { 0, 1 } } } } },
+    { "scene", 0 },
+  };
+  const auto source_path = root / "dropped.gltf";
+  {
+    std::ofstream source(source_path);
+    source << document.dump();
+  }
+  ImportRequest request {};
+  request.source_path = source_path;
+  request.asset_virtual_path
+    = oxygen::cooker::test::ModelVirtualPath(request.source_path);
+  request.cooked_root = root / "cooked";
+  request.options.coordinate.bake_transforms_into_meshes = false;
+
+  const auto imported = RunImport(std::move(request));
+
+  EXPECT_TRUE(imported.report.success);
+  EXPECT_EQ(imported.report.geometry_written, 1U);
+  EXPECT_TRUE(std::ranges::any_of(
+    imported.report.diagnostics, [](const auto& diagnostic) -> bool {
+      return diagnostic.code == "gltf.primitive.type"
+        && diagnostic.severity
+        == oxygen::content::import::ImportSeverity::kWarning;
+    }));
+  const auto scene = LoadSceneReadback(imported.report);
+  ASSERT_EQ(scene.nodes.size(), 2U);
+  ASSERT_EQ(scene.renderables.size(), 1U);
+  EXPECT_EQ(scene.renderables.front().node_index, 1U);
 }
 
 } // namespace

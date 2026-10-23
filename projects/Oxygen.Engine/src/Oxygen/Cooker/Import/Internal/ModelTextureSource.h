@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <cstdint>
 #include <filesystem>
 #include <functional>
@@ -14,12 +15,42 @@
 #include <string>
 #include <vector>
 
+#include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/TexturePipeline.h>
 #include <Oxygen/Cooker/Import/Naming.h>
 #include <Oxygen/Cooker/Import/TextureImportDesc.h>
 
 namespace oxygen::content::import::adapters {
+
+//! Where a model's external texture is looked for, in order, when its
+//! authored path is missing: the file of that name beside the model and in its
+//! `textures` and `Textures` folders, then the same in the model folder's
+//! parent, as model-sharing sites lay them out (`Models/` beside `Textures/`).
+//! The authored path and paths naming the same file are never listed twice.
+[[nodiscard]] inline auto TextureFallbackPaths(
+  const std::filesystem::path& model, const std::filesystem::path& texture)
+  -> std::vector<std::filesystem::path>
+{
+  auto paths = std::vector<std::filesystem::path> {};
+  if (!texture.has_filename()) {
+    return paths;
+  }
+  auto seen = std::vector<std::string> { base::PathIdentityKey(texture) };
+  const auto folder = model.parent_path();
+  const auto parent = folder.parent_path();
+  for (const auto& candidate :
+    { folder, folder / "textures", folder / "Textures", parent,
+      parent / "textures", parent / "Textures" }) {
+    auto path = (candidate / texture.filename()).lexically_normal();
+    auto key = base::PathIdentityKey(path);
+    if (std::ranges::find(seen, key) == seen.end()) {
+      seen.push_back(std::move(key));
+      paths.push_back(std::move(path));
+    }
+  }
+  return paths;
+}
 
 //! One texture use, before reading its external file or decoding embedded
 //! bytes.

@@ -46,6 +46,7 @@
 #include <Oxygen/Cooker/Import/Internal/ImportEventLoop.h>
 #include <Oxygen/Cooker/Import/Internal/ImportSourceSnapshot.h>
 #include <Oxygen/Cooker/Import/Internal/MaterialSource.h>
+#include <Oxygen/Cooker/Import/Internal/ModelTextureSource.h>
 #include <Oxygen/Cooker/Import/Internal/SceneSource.h>
 #include <Oxygen/Cooker/Import/Internal/SourceAnalysisRunner.h>
 #include <Oxygen/Cooker/Import/Internal/TextureSourceAssembly_internal.h>
@@ -280,6 +281,11 @@ namespace {
       if (!texture.embedded && !texture.source_path.empty()) {
         report.files.push_back(
           { .path = texture.source_path, .required = false });
+        for (auto& fallback : adapters::TextureFallbackPaths(
+               input.request.source_path, texture.source_path)) {
+          report.files.push_back(
+            { .path = std::move(fallback), .required = false });
+        }
       }
     }
     if constexpr (std::is_same_v<Adapter, adapters::GltfAdapter>) {

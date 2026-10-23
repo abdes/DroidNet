@@ -26,6 +26,7 @@
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/Import/CapturedInputSet.h>
 #include <Oxygen/Cooker/Import/FileInfo.h>
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportManifest.h>
 #include <Oxygen/Cooker/Import/ImportSourceAnalysis.h>
 #include <Oxygen/Cooker/test/Support/ModelImportTestBase.h>
@@ -179,9 +180,11 @@ namespace {
     EXPECT_GT(cooked.report.scenes_written, 0U);
   }
 
-  NOLINT_TEST_F(ModelCapturedInputTest, TextureFallbackCannotHideUndeclaredRead)
+  //! A texture the capture does not list is missing: the model imports, and
+  //! its material is bound to the error texture.
+  NOLINT_TEST_F(ModelCapturedInputTest, UncapturedTextureImportsAsMissing)
   {
-    const auto root = MakeTempDir("captured_model_undeclared_texture");
+    const auto root = MakeTempDir("captured_model_uncaptured_texture");
     const auto logical = root / "model.gltf";
     auto document = Triangle();
     document.emplace(
@@ -201,9 +204,15 @@ namespace {
     request.cooked_root = root / "cooked";
     request.captured_inputs
       = std::make_shared<const CapturedInputSet>(std::span(&entry, 1));
-    request.options.texture_tuning.placeholder_on_failure = true;
     const auto cooked = RunImport(std::move(request));
-    EXPECT_FALSE(cooked.report.success);
+    EXPECT_TRUE(cooked.report.success);
+    EXPECT_GT(cooked.report.geometry_written, 0U);
+    EXPECT_GT(cooked.report.materials_written, 0U);
+    EXPECT_TRUE(std::ranges::any_of(
+      cooked.report.diagnostics, [](const auto& diagnostic) -> bool {
+        return diagnostic.code == "import.texture.load_failed"
+          && diagnostic.severity == ImportSeverity::kWarning;
+      }));
   }
 } // namespace
 } // namespace oxygen::content::import::test

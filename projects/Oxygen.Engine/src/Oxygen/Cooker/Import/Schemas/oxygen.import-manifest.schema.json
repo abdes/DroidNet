@@ -618,9 +618,6 @@
           "type": "object",
           "description": "Retained native provenance, validated against oxygen.surface-provenance.schema.json by the importer."
         },
-        "content_policy": {
-          "enum": ["default", "static"]
-        },
         "unit_policy": {
           "enum": ["normalize", "preserve", "custom"]
         },
@@ -1005,9 +1002,6 @@
         "surface_provenance": {
           "type": "object",
           "description": "Retained native provenance, validated against oxygen.surface-provenance.schema.json by the importer."
-        },
-        "content_policy": {
-          "enum": ["default", "static"]
         },
         "unit_policy": {
           "enum": ["normalize", "preserve", "custom"]

@@ -102,10 +102,10 @@ auto WorldTransform(const SceneAsset& scene, SceneNodeIndexT index) -> glm::mat4
 
 using oxygen::cooker::test::ExpectVec3Near;
 
-//! The cooked values of a single-mesh static model, read without the Content
+//! The cooked values of a single-mesh model, read without the Content
 //! runtime: the scene, geometry and material descriptors decoded parse-only,
 //! and the mesh's vertex and index bytes copied from the cooked buffer files.
-struct CookedStaticModel {
+struct CookedModel {
   std::unique_ptr<SceneAsset> scene;
   std::unique_ptr<GeometryAsset> geometry;
   std::unique_ptr<MaterialAsset> material;
@@ -113,7 +113,7 @@ struct CookedStaticModel {
   std::vector<uint32_t> indices;
 };
 
-using CookedModelCheck = std::function<void(const CookedStaticModel&)>;
+using CookedModelCheck = std::function<void(const CookedModel&)>;
 
 template <typename Decode>
 auto DecodeParseOnly(const std::filesystem::path& cooked_root,
@@ -133,10 +133,9 @@ auto DecodeParseOnly(const std::filesystem::path& cooked_root,
 }
 
 //! Copies the one vertex buffer and the one index buffer of the cooked root
-//! into `model`. A single-mesh static model cooks exactly one of each.
+//! into `model`. A single-mesh model cooks exactly one of each.
 auto ReadCookedMeshBuffers(const std::filesystem::path& cooked_root,
-  const oxygen::content::lc::Inspection& inspection, CookedStaticModel& model)
-  -> void
+  const oxygen::content::lc::Inspection& inspection, CookedModel& model) -> void
 {
   using oxygen::data::BufferResource;
   using BufferDesc = oxygen::data::pak::core::BufferResourceDesc;
@@ -197,9 +196,8 @@ auto ReadCookedMeshBuffers(const std::filesystem::path& cooked_root,
     index_buffer.size_bytes);
 }
 
-auto VerifyCookedTriangle(const CookedStaticModel& model,
-  const float unit_scale, const float front_sign = 1.0F,
-  const bool hierarchy = false) -> void
+auto VerifyCookedTriangle(const CookedModel& model, const float unit_scale,
+  const float front_sign = 1.0F, const bool hierarchy = false) -> void
 {
   const auto& scene = *model.scene;
   const auto& geometry = *model.geometry;
@@ -248,8 +246,8 @@ auto VerifyCookedTriangle(const CookedStaticModel& model,
   ExpectVec3Near(face_normal, { 0, -front_sign, 0 });
 }
 
-auto VerifyCookedGltfValues(const CookedStaticModel& model,
-  const float unit_scale, const bool hierarchy) -> void
+auto VerifyCookedGltfValues(const CookedModel& model, const float unit_scale,
+  const bool hierarchy) -> void
 {
   VerifyCookedTriangle(model, unit_scale, 1.0F, hierarchy);
   const auto& scene = *model.scene;
@@ -328,7 +326,7 @@ auto WriteGltfSource(const std::filesystem::path& path, nlohmann::json document)
   }
 }
 
-class StaticModelValuesTest
+class ModelValuesTest
   : public oxygen::content::import::test::ModelImportTestBase {
 protected:
   auto ImportAndVerifyCleanCopy(oxygen::content::import::ImportRequest request,
@@ -385,7 +383,7 @@ protected:
     const auto material_entry
       = FindAssetOfType(inspection, oxygen::data::AssetType::kMaterial);
     ASSERT_TRUE(scene_entry && geometry_entry && material_entry);
-    auto model = CookedStaticModel {};
+    auto model = CookedModel {};
     model.scene = DecodeParseOnly(
       report.cooked_root, *scene_entry, [](const auto& context) -> auto {
         return oxygen::content::loaders::LoadSceneAsset(context);
@@ -405,7 +403,7 @@ protected:
   }
 };
 
-NOLINT_TEST_F(StaticModelValuesTest, FbxGeneratesMissingNormalMapTangents)
+NOLINT_TEST_F(ModelValuesTest, FbxGeneratesMissingNormalMapTangents)
 {
   const auto root = MakeTempDir("normal_map_tangents");
   for (const auto* name :
@@ -417,13 +415,11 @@ NOLINT_TEST_F(StaticModelValuesTest, FbxGeneratesMissingNormalMapTangents)
   request.asset_virtual_path
     = oxygen::cooker::test::ModelVirtualPath(request.source_path);
   request.cooked_root = root / "cooked";
-  request.options.scene_content_policy
-    = oxygen::content::import::SceneContentPolicy::kStatic;
   request.options.coordinate.bake_transforms_into_meshes = false;
   request.options.tangent_policy
     = oxygen::content::import::GeometryAttributePolicy::kGenerateMissing;
   ImportAndVerifyCleanCopy(
-    std::move(request), [](const CookedStaticModel& model) -> void {
+    std::move(request), [](const CookedModel& model) -> void {
       const auto& scene = *model.scene;
       ASSERT_NE(
         model.material->GetNormalTexture(), oxygen::data::kNoResourceReference);
@@ -451,8 +447,8 @@ NOLINT_TEST_F(StaticModelValuesTest, FbxGeneratesMissingNormalMapTangents)
     });
 }
 
-NOLINT_TEST_F(StaticModelValuesTest,
-  GltfCookPreservesConvertedGeometryCameraLightAndMaterial)
+NOLINT_TEST_F(
+  ModelValuesTest, GltfCookPreservesConvertedGeometryCameraLightAndMaterial)
 {
   for (const auto* const extension : { "gltf", "glb" }) {
     SCOPED_TRACE(extension);
@@ -482,14 +478,12 @@ NOLINT_TEST_F(StaticModelValuesTest,
         request.asset_virtual_path
           = oxygen::cooker::test::ModelVirtualPath(request.source_path);
         request.cooked_root = root / "cooked";
-        request.options.scene_content_policy
-          = oxygen::content::import::SceneContentPolicy::kStatic;
         request.options.coordinate.bake_transforms_into_meshes = false;
         request.options.coordinate.unit_normalization = oxygen::content::
           import::UnitNormalizationPolicy::kApplyCustomFactor;
         request.options.coordinate.unit_scale = scale;
         ImportAndVerifyCleanCopy(std::move(request),
-          [scale, hierarchy](const CookedStaticModel& model) -> void {
+          [scale, hierarchy](const CookedModel& model) -> void {
             VerifyCookedGltfValues(model, scale, hierarchy);
           });
       }
@@ -497,7 +491,7 @@ NOLINT_TEST_F(StaticModelValuesTest,
   }
 }
 
-NOLINT_TEST_F(StaticModelValuesTest, FbxCookPreservesUnitsHandednessAndValues)
+NOLINT_TEST_F(ModelValuesTest, FbxCookPreservesUnitsHandednessAndValues)
 {
   for (const auto centimeters : { false, true }) {
     for (const auto reflected : { false, true }) {
@@ -576,12 +570,10 @@ NOLINT_TEST_F(StaticModelValuesTest, FbxCookPreservesUnitsHandednessAndValues)
         request.asset_virtual_path
           = oxygen::cooker::test::ModelVirtualPath(request.source_path);
         request.cooked_root = root / "cooked";
-        request.options.scene_content_policy
-          = oxygen::content::import::SceneContentPolicy::kStatic;
         request.options.coordinate.bake_transforms_into_meshes = false;
         ImportAndVerifyCleanCopy(std::move(request),
           [centimeters, reflected, hierarchy](
-            const CookedStaticModel& model) -> void {
+            const CookedModel& model) -> void {
             const auto& scene = *model.scene;
             const auto& material = *model.material;
             const auto units = centimeters ? 0.01F : 1.0F;

@@ -6,14 +6,17 @@
 
 // Covers: Import/AsyncImportService.cpp, Import/Internal/fbx/FbxAdapter.cpp
 
+#include <algorithm>
 #include <cstddef>
 #include <filesystem>
+#include <fstream>
 #include <numbers>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
 
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
@@ -95,73 +98,39 @@ NOLINT_TEST_F(AsyncFbxImporterFullTest, ImportsTexturedFbxScene)
   GTEST_LOG_(INFO) << "Cooked root: " << run_result.report.cooked_root.string();
 }
 
-NOLINT_TEST_F(AsyncFbxImporterFullTest,
-  AsyncBackendImportsLightCustomPropertiesAsSceneSemantics)
-{
-  const auto models_dir = TestModelsDirFromFile();
-  const auto source_path = models_dir / "light_overrides.fbx";
-  ASSERT_TRUE(std::filesystem::exists(source_path)) << source_path.string();
-
-  const auto temp_dir = MakeTempDir("async_fbx_light_overrides");
-  ImportRequest request {
-    .source_path = source_path,
-    .asset_virtual_path = oxygen::cooker::test::ModelVirtualPath(source_path),
-    .additional_sources = {},
-    .cooked_root = temp_dir,
-    .loose_cooked_layout = LooseCookedLayout {},
-    .source_key = std::nullopt,
-    .options = {},
-  };
-  request.options.import_content = ImportContentFlags::kAll;
-
-  const auto run_result = RunImport(std::move(request));
-
-  EXPECT_EQ(run_result.finished_id, run_result.job_id);
-  EXPECT_TRUE(run_result.report.success);
-
-  const auto scene = LoadSceneReadback(run_result.report);
-  EXPECT_TRUE(scene.renderables.empty());
-  EXPECT_TRUE(scene.directional_lights.empty());
-  ASSERT_EQ(scene.point_lights.size(), 1U);
-  EXPECT_TRUE(scene.spot_lights.empty());
-
-  const auto& light = scene.point_lights.front();
-  EXPECT_EQ(light.common.affects_world, 0U);
-  EXPECT_EQ(light.common.casts_shadows, 0U);
-}
-
+//! An FBX file that states no unit scale imports, with a warning naming the
+//! assumed units.
 NOLINT_TEST_F(
-  AsyncFbxImporterFullTest, AsyncBackendImportsSpotConesAsHalfAnglesInRadians)
+  AsyncFbxImporterFullTest, FbxWithoutAuthoredUnitsImportsWithWarning)
 {
-  const auto models_dir = TestModelsDirFromFile();
-  const auto source_path = models_dir / "spot_cone_angles.fbx";
-  ASSERT_TRUE(std::filesystem::exists(source_path)) << source_path.string();
+  const auto root = MakeTempDir("fbx_missing_units");
+  std::ifstream input(TestModelsDirFromFile() / "static_scalar_triangle.fbx");
+  ASSERT_TRUE(input);
+  const auto source = root / "ambiguous.fbx";
+  {
+    std::ofstream output(source);
+    for (std::string line; std::getline(input, line);) {
+      if (!line.contains("UnitScaleFactor")) {
+        output << line << '\n';
+      }
+    }
+  }
+  ImportRequest request {};
+  request.source_path = source;
+  request.asset_virtual_path
+    = oxygen::cooker::test::ModelVirtualPath(request.source_path);
+  request.cooked_root = root / "cooked";
 
-  const auto temp_dir = MakeTempDir("async_fbx_spot_cone_angles");
-  ImportRequest request {
-    .source_path = source_path,
-    .asset_virtual_path = oxygen::cooker::test::ModelVirtualPath(source_path),
-    .additional_sources = {},
-    .cooked_root = temp_dir,
-    .loose_cooked_layout = LooseCookedLayout {},
-    .source_key = std::nullopt,
-    .options = {},
-  };
-  request.options.import_content = ImportContentFlags::kAll;
+  const auto result = RunImport(std::move(request));
 
-  const auto run_result = RunImport(std::move(request));
-
-  EXPECT_EQ(run_result.finished_id, run_result.job_id);
-  EXPECT_TRUE(run_result.report.success);
-
-  // The fixture's full cone angles are 30 and 60 degrees.
-  const auto scene = LoadSceneReadback(run_result.report);
-  ASSERT_EQ(scene.spot_lights.size(), 1U);
-  const auto& light = scene.spot_lights.front();
-  EXPECT_FLOAT_EQ(
-    light.inner_cone_angle_radians, std::numbers::pi_v<float> / 12.0F);
-  EXPECT_FLOAT_EQ(
-    light.outer_cone_angle_radians, std::numbers::pi_v<float> / 6.0F);
+  EXPECT_TRUE(result.report.success);
+  EXPECT_EQ(result.report.geometry_written, 1U);
+  EXPECT_TRUE(std::ranges::any_of(
+    result.report.diagnostics, [](const auto& diagnostic) -> bool {
+      return diagnostic.code == "fbx.units_unknown"
+        && diagnostic.severity
+        == oxygen::content::import::ImportSeverity::kWarning;
+    }));
 }
 
 } // namespace

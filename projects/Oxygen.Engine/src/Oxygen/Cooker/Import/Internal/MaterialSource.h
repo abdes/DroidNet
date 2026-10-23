@@ -142,6 +142,11 @@ struct MaterialSource final {
   OXGN_COOK_NDAPI auto Validate(std::string_view source_id,
     std::vector<ImportDiagnostic>& diagnostics) const -> bool;
 
+  //! Brings values a model file states out of range into range, with a
+  //! warning, so the material imports; descriptors are validated as authored.
+  OXGN_COOK_API auto RepairModelInputs(std::string_view source_id,
+    std::vector<ImportDiagnostic>& diagnostics) -> void;
+
   OXGN_COOK_NDAPI auto CanPackOrm() const noexcept -> bool;
 };
 

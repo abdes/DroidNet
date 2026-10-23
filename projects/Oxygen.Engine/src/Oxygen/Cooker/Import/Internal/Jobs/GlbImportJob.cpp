@@ -363,9 +363,10 @@ auto GlbImportJob::BuildPlan(ParsedGlbAsset& asset,
 
         const auto it = plan_.texture_by_source_id.find(binding.source_id);
         if (it == plan_.texture_by_source_id.end()) {
-          diagnostics_.push_back(MakeErrorDiagnostic("material.texture_missing",
-            "Missing texture dependency", payload.item.source_id,
-            binding.source_id));
+          diagnostics_.push_back(
+            MakeWarningDiagnostic("material.texture_missing",
+              "Material texture is missing; it binds the error texture",
+              payload.item.source_id, binding.source_id));
           return;
         }
 

@@ -18,4 +18,16 @@ public static class AssetImportDiagnosticCodes
     /// Import execution failed.
     /// </summary>
     public const string ImportFailed = DiagnosticCodes.AssetImportPrefix + "ImportFailed";
+
+    /// <summary>
+    /// A missing file the source names outside the folder its inputs are kept
+    /// under is left out of them; the import proceeds without it.
+    /// </summary>
+    public const string MissingDependencyOmitted = DiagnosticCodes.AssetImportPrefix + "MissingDependencyOmitted";
+
+    /// <summary>
+    /// An existing file the source names lies outside the folder its inputs are
+    /// kept under, so it cannot be retained with them.
+    /// </summary>
+    public const string DependencyOutsideSource = DiagnosticCodes.AssetImportPrefix + "DependencyOutsideSource";
 }

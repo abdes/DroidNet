@@ -43,6 +43,7 @@ oxygen_cooker_test(
     "Import/Bc7Encoder_test.cpp"
     "Import/BufferSource_test.cpp"
     "Import/CapturedInputSet_test.cpp"
+    "Import/DroppedSourceFeatures_test.cpp"
     "Import/EngineContent_test.cpp"
     "Import/FileError_test.cpp"
     "Import/GeometrySource_test.cpp"
@@ -71,7 +72,6 @@ oxygen_cooker_test(
     "Import/Schemas/TextureDescriptorSchema_test.cpp"
     "Import/ScratchImage_test.cpp"
     "Import/ScriptImportRequestBuilder_test.cpp"
-    "Import/StaticSourceValidation_test.cpp"
     "Import/TextureCooker_test.cpp"
     "Import/TextureImportPresets_test.cpp"
     "Import/TexturePackingPolicy_test.cpp"
@@ -88,7 +88,7 @@ endif()
 # The source-validation fixtures construct ufbx values passed into Cooker.
 # Match Cooker's private vendor ABI without exposing it to engine consumers.
 set_source_files_properties(
-  "Import/StaticSourceValidation_test.cpp"
+  "Import/DroppedSourceFeatures_test.cpp"
   PROPERTIES
     COMPILE_DEFINITIONS
       UFBX_REAL_IS_FLOAT
@@ -288,7 +288,6 @@ oxygen_cooker_test(
     "Scenarios/FbxModelImport_functional_test.cpp"
     "Scenarios/GltfModelImport_functional_test.cpp"
     "Scenarios/ModelTextureCapture_functional_test.cpp"
+    "Scenarios/ModelValues_functional_test.cpp"
     "Scenarios/PhysicsSidecarRecook_functional_test.cpp"
-    "Scenarios/StaticModelImport_functional_test.cpp"
-    "Scenarios/StaticModelValues_functional_test.cpp"
 )

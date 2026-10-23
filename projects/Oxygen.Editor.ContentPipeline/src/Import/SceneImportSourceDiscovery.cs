@@ -69,14 +69,24 @@ public sealed class SceneImportSourceDiscovery(IContentCookCoordinator coordinat
                 throw new CookInputDiscoveryException(issues);
             }
 
-            var root = FindCommonRoot(directory, facts.Observations.Select(static item => item.Path).Concat(facts.Files.Select(static file => file.Path)));
-            var files = await CookSavedSourceReader.ReadNativeInputsAsync(facts, FileSystemPath.From(root), ImmutableHashSet<FileSystemPath>.Empty, cancellationToken).ConfigureAwait(false);
-            if (!files.Any(file => file.Kind == CookSnapshotInputKind.File && file.SourcePath == FileSystemPath.From(primary)))
+            var root = CookSavedSourceReader.FindNativeInputsRoot(facts, FileSystemPath.From(directory));
+            var inputs = await CookSavedSourceReader.ReadNativeInputsAsync(facts, root, ImmutableHashSet<FileSystemPath>.Empty, cancellationToken).ConfigureAwait(false);
+            if (!inputs.Outside.IsEmpty)
+            {
+                throw new CookInputDiscoveryException(inputs.OutsideDiagnostics(operation.OperationId, FailureDomain.AssetImport, virtualPath: null));
+            }
+
+            foreach (var omitted in inputs.OmittedDiagnostics(operation.OperationId, FailureDomain.AssetImport, virtualPath: null))
+            {
+                CookRunContext.Report(new(omitted.Message, omitted.Severity, Diagnostic: omitted));
+            }
+
+            if (!inputs.Files.Any(file => file.Kind == CookSnapshotInputKind.File && file.SourcePath == FileSystemPath.From(primary)))
             {
                 throw new InvalidDataException("Native analysis omitted its primary source file.");
             }
 
-            return new(Path.GetRelativePath(root, primary).Replace('\\', '/'), files);
+            return new(Path.GetRelativePath(root.FullPath, primary).Replace('\\', '/'), inputs.Files);
         }
         catch (ContentPipelineTerminationException failure)
         {
@@ -89,25 +99,6 @@ public sealed class SceneImportSourceDiscovery(IContentCookCoordinator coordinat
             {
                 DeleteScratch(scratch);
             }
-        }
-    }
-
-    private static string FindCommonRoot(string root, IEnumerable<string> paths)
-    {
-        foreach (var path in paths)
-        {
-            while (Escapes(root, path))
-            {
-                root = Path.GetDirectoryName(root) ?? throw new InvalidDataException("Source dependencies must share a filesystem root.");
-            }
-        }
-
-        return root;
-
-        static bool Escapes(string root, string path)
-        {
-            var relative = Path.GetRelativePath(root, path);
-            return Path.IsPathRooted(relative) || string.Equals(relative, "..", StringComparison.Ordinal) || relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal);
         }
     }
 

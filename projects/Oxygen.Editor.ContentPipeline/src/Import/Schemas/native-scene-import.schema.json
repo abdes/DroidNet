@@ -4,7 +4,7 @@
   "type": "object",
   "properties": {
     "SchemaVersion": {
-      "const": 5
+      "const": 6
     },
     "Importer": {
       "const": "Oxygen.Cooker.Scene/v1"
@@ -34,9 +34,6 @@
         "minLength": 1
       }
     },
-    "ContentPolicy": {
-      "const": "static"
-    },
     "UnitPolicy": {
       "const": "normalize"
     },
@@ -61,7 +58,6 @@
     "PrimaryRelativePath",
     "SourceHash",
     "Files",
-    "ContentPolicy",
     "UnitPolicy",
     "BakeTransforms",
     "NormalsPolicy",

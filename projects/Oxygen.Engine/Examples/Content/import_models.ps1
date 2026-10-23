@@ -139,7 +139,6 @@ if ($SourceList) {
         @{
             id = $source.name; name = $source.name; type = $type; source = $original
             virtual_path = $virtualPath
-            content_policy = 'default'
             content_flags = @{ textures = $true; materials = $true; geometry = $true; scene = $true }
             content_hashing = $true; unit_policy = 'normalize'; bake_transforms = $true
             normals_policy = 'generate'; tangents_policy = 'generate'

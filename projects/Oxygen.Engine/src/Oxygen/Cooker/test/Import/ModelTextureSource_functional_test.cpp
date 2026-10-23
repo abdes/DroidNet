@@ -4,7 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-// Covers: Import/Internal/fbx/FbxAdapter.cpp,
+// Covers: Import/Internal/ModelTextureSource.h,
+//   Import/Internal/fbx/FbxAdapter.cpp,
 //   Import/Internal/gltf/GltfAdapter.cpp,
 //   Import/Internal/Pipelines/TexturePipeline.cpp
 
@@ -18,9 +19,11 @@
 #include <utility>
 #include <vector>
 
+#include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/AdapterTypes.h>
+#include <Oxygen/Cooker/Import/Internal/ModelTextureSource.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/TexturePipeline.h>
 #include <Oxygen/Cooker/Import/Internal/fbx/FbxAdapter.h>
 #include <Oxygen/Cooker/Import/Internal/gltf/GltfAdapter.h>
@@ -269,6 +272,58 @@ namespace {
       EXPECT_EQ(item->desc.output_format, source.desc.output_format);
       EXPECT_EQ(item->failure_policy, source.failure_policy);
     }
+  }
+  //! A missing texture is looked for beside the model, in its textures folders,
+  //! then the same in the model folder's parent.
+  NOLINT_TEST(TextureFallbackPathsTest, SearchesModelThenParentFolders)
+  {
+    const auto root = std::filesystem::absolute("pack");
+    const auto paths = adapters::TextureFallbackPaths(
+      root / "Models" / "model.fbx", "C:/artist/temp/wall.png");
+
+    auto expected = std::vector<std::filesystem::path> {
+      root / "Models" / "wall.png",
+      root / "Models" / "textures" / "wall.png",
+      root / "Models" / "Textures" / "wall.png",
+      root / "wall.png",
+      root / "textures" / "wall.png",
+      root / "Textures" / "wall.png",
+    };
+    // A case-insensitive file system names each folder spelling once.
+    const auto distinct = [](std::vector<std::filesystem::path> list)
+      -> std::vector<std::filesystem::path> {
+      auto keys = std::vector<std::string> {};
+      std::erase_if(list, [&](const std::filesystem::path& path) -> bool {
+        auto key = base::PathIdentityKey(path);
+        if (std::ranges::find(keys, key) != keys.end()) {
+          return true;
+        }
+        keys.push_back(std::move(key));
+        return false;
+      });
+      return list;
+    };
+    expected = distinct(expected);
+    ASSERT_EQ(paths.size(), expected.size());
+    for (size_t index = 0; index < paths.size(); ++index) {
+      EXPECT_EQ(base::PathIdentityKey(paths.at(index)),
+        base::PathIdentityKey(expected.at(index)));
+    }
+  }
+
+  //! The authored path itself and a path that names no file are not listed.
+  NOLINT_TEST(TextureFallbackPathsTest, SkipsAuthoredPathAndFolders)
+  {
+    const auto model = std::filesystem::absolute("pack") / "model.gltf";
+    const auto authored = model.parent_path() / "wall.png";
+    const auto paths = adapters::TextureFallbackPaths(model, authored);
+    EXPECT_TRUE(std::ranges::none_of(
+      paths, [&](const std::filesystem::path& path) -> bool {
+        return base::PathIdentityKey(path) == base::PathIdentityKey(authored);
+      }));
+    EXPECT_TRUE(adapters::TextureFallbackPaths(
+      model, model.parent_path() / "textures" / "")
+        .empty());
   }
 } // namespace
 } // namespace oxygen::content::import::test

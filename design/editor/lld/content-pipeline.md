@@ -858,50 +858,66 @@ are not authored identities or required manual repair steps.
 
 ## 17. Qualified Import And Reproduction Policy
 
-V0.1 qualifies glTF 2.0 (`.gltf`/`.glb`) and FBX through the existing native
-importers, restricted to static triangle geometry, node-local transforms,
-normals, UVs when present, and material groups assignable to supported scalar
-materials. The qualification fixtures include one small self-contained source of
-each format. They use explicit source units/axis metadata and the engine
-importer's canonical Oxygen conversion; the import report records effective
-units, handedness, axis conversion, winding, and resulting bounds.
-Unknown/ambiguous FBX units or axis metadata is rejected rather than guessed. A
-unit cube, oriented triangle, and nonuniform transform fixture prove each
-conversion.
+V0.1 imports glTF 2.0 (`.gltf`/`.glb`) and FBX through the native importers
+and carries everything the engine can represent: the node hierarchy with local
+transforms, triangle geometry with its LODs and skinning data, every material
+channel the material format has a field for, perspective and orthographic
+cameras, and directional, point and spot lights. The editor applies no
+narrower content policy than the engine's; there is one import behavior for
+initial import, retained source cooking, replacement and captured-input
+execution. The qualification fixtures include one small self-contained source
+of each format, and the import report records effective units, handedness,
+axis conversion, winding, and resulting bounds.
 
-Perspective cameras and directional lights are included under REQ-009. Map
-explicit source camera ratios to Fixed and omitted ratios to Auto; preserve
-valid FOV/clipping. For FBX, window-size aspect mode maps to Auto and its fixed
+A source feature the engine cannot represent is dropped with a source-attributed
+warning, `import.source_feature_dropped`, and the import continues: animation,
+skeletons (skinned geometry imports in its bind pose), morph targets, material
+variants, texture wrap and filter modes, per-texture UV mappings that differ
+within a material, material fields the format has no slot for, and FBX vertex
+caches, constraints, curves and procedural geometry; a glTF extension listed as
+required that the importer does not read is reported as
+`import.source_extension_required` and its content imports as far as it can be
+read. FBX without unit metadata imports with `fbx.units_unknown` and without
+axis metadata with `fbx.axis_unknown`.
+
+Broken source data drops the smallest unit that cannot be built, with a warning
+that names it, and the model imports: a triangle with an out-of-range index, a
+non-triangle or unreadable primitive, an FBX LOD level, and a mesh left with
+no usable triangles. A scene node whose mesh was dropped keeps its place and
+transform and shows no geometry; every other node keeps its own geometry. Skin
+data that cannot bind its mesh is dropped and the mesh imports as static
+geometry in its bind pose. A spot light whose cone angles form no representable
+cone is dropped. Material values outside their range are clamped, and a
+missing texture binds the error texture; a texture that cannot be read at its
+authored path is first looked for by file name beside the model and in the
+model's `textures` and `Textures` folders, then the same in the model folder's
+parent, as model-sharing sites lay them out (`import.texture.found_by_name`). A
+texture path that names a folder names no image and is missing. Source analysis declares those places, so a
+captured cook sees them. An import fails only when the source
+file itself cannot be read. Perspective cameras map explicit source ratios to
+Fixed and omitted
+ratios to Auto; for FBX, window-size aspect mode maps to Auto and its fixed
 aspect modes map to Fixed using the importer-resolved ratio. Canonical
-descriptors store an explicit `aspect_mode` and retain a positive `aspect_ratio`
-in both modes. Scene records carry the same policy; hydrate every camera before
-selecting a view. Reject invalid projection values rather than normalizing
-clipping distances. Per-light atmosphere assignment uses the canonical
-None/Primary/Secondary contract; ambiguous old sun combinations require explicit
-migration repair, not an automatic selection. Orthographic cameras, point/spot
-lights, animation, skinning, morphs, physics and scripts do not enter the
-qualified scene. Detect such required content before publication and return a
-precise unsupported-content result while preserving the source. Import must not
-appear successful by silently dropping those features. Static glTF/FBX imports
-accept the native importer's supported core texture bindings. Imported textures
-remain read-only in the editor; texture creation and editing are outside this
-slice. Unsupported animation, skinning and material channels fail native
-validation before publication, with source-attributed messages. A texture
-binding must resolve to an emitted resource, not an error index advertised as
-successful support.
-
-The native request uses `SceneContentPolicy::kStatic`, selected by manifest
-`content_policy: "static"`. The same policy applies to initial import, retained
-source cooking, replacement and captured-input execution. The retired
-`"static-scalar"` spelling is rejected; maintained projects are upgraded and
-recooked rather than carried through a compatibility path.
+descriptors store an explicit `aspect_mode` and retain a positive
+`aspect_ratio` in both modes. Per-light atmosphere assignment uses the
+canonical None/Primary/Secondary contract. Imported textures remain read-only
+in the editor. A texture binding must resolve to an emitted resource, not an
+error index advertised as successful support.
 
 Initial intake uses the same native `analyze-sources` recipes as cooking. The
 request owns its native surface source identity through discovery,
 retention, settings creation and retries. Native declarations and observations
 identify the input closure; capture checks their existence, metadata and read
 proofs against private copies. Relative paths remain relative to the primary
-source, including parent-relative buffers and external images. Embedded data
+source, including parent-relative buffers and external images. A missing file
+the source names outside the folder its inputs are kept under, typically a
+DCC's temporary folder, is not an input: it is reported as
+`MissingDependencyOmitted` and the import proceeds without it. An existing file
+outside that folder cannot be retained and fails the source with
+`DependencyOutsideSource`. One reader classifies every native input this way
+for both import discovery and cooking. A missing file is never fatal: during a
+captured cook, a path the capture does not list reads as absent, so a missing
+texture binds the error texture with a warning and the author overrides it. Embedded data
 needs no extra file. Failed analysis cannot publish a partial source bundle.
 
 Each attempt supplies the primary-relative path with the complete input set, so
@@ -917,11 +933,11 @@ worker termination until native drain and cleanup complete. Query output remains
 in its operation directory and cannot overwrite an authored source.
 
 Native retained settings use the existing `<source>.import.json` naming
-convention with `SchemaVersion: 4` for new imports and
+convention with `SchemaVersion: 6` for new imports and
 `Importer: "Oxygen.Cooker.Scene/v1"`. The sidecar records the Content
 bundle/primary paths, initially discovered files and primary hash, output mount
 and exclusive destination, and explicit native
-content/unit/normal/tangent/transform policies. Retired sidecars require the
+unit/normal/tangent/transform policies. Retired sidecars require the
 one-time migration tool and cannot silently replace existing identities. Normals
 and tangents use native generation of missing attributes, preserving authored
 values. This supplies the UV-derived tangent basis required by normal maps in

@@ -115,7 +115,7 @@ internal sealed partial class CookSourceAnalyzer(
         return (prepared, diagnostics);
     }
 
-    // A job's own diagnostics, a dependency outside the project, and an analysis that did not complete.
+    // A job's own diagnostics and an analysis that did not complete.
     private void AddReportDiagnostics(NativeSourceAnalysisReport report, List<PreparedSource> prepared, ImmutableArray<DiagnosticRecord>.Builder diagnostics)
     {
         foreach (var job in report.Jobs)
@@ -123,23 +123,6 @@ internal sealed partial class CookSourceAnalyzer(
             var owner = prepared.FirstOrDefault(source => string.Equals(source.Job.Id, job.Id, StringComparison.Ordinal))?.Input;
             var ownerPath = owner is null ? null : owner.AssetUri.VirtualPath;
             diagnostics.AddRange(job.Diagnostics.Select(issue => issue with { AffectedVirtualPath = ownerPath }));
-            foreach (var path in job.Files.Select(static file => file.Path).Concat(job.Observations.Select(static observation => observation.Path)).DistinctBy(FileSystemPath.From))
-            {
-                var relative = Path.GetRelativePath(operation.Project.ProjectRoot.FullPath, path).Replace('\\', '/');
-                if (Path.IsPathRooted(relative) || relative is ".." || relative.StartsWith("../", StringComparison.Ordinal))
-                {
-                    diagnostics.Add(new()
-                    {
-                        OperationId = operation.OperationId,
-                        Domain = FailureDomain.ContentPipeline,
-                        Severity = DiagnosticSeverity.Error,
-                        Code = "asset_cook.source_outside_project",
-                        Message = $"Cook dependency '{path}' is outside the project. Retain it inside the project before cooking.",
-                        AffectedPath = path,
-                        AffectedVirtualPath = ownerPath,
-                    });
-                }
-            }
 
             if (!job.Complete && !job.Diagnostics.Any(static issue => issue.Severity >= DiagnosticSeverity.Error))
             {
@@ -178,7 +161,16 @@ internal sealed partial class CookSourceAnalyzer(
                 continue;
             }
 
-            var files = await CookSavedSourceReader.ReadNativeInputsAsync(facts, operation.Project.ProjectRoot, generatedPaths, cancellationToken).ConfigureAwait(false);
+            var inputs = await CookSavedSourceReader.ReadNativeInputsAsync(facts, operation.Project.ProjectRoot, generatedPaths, cancellationToken).ConfigureAwait(false);
+            var virtualPath = source.Input.AssetUri.VirtualPath;
+            diagnostics.AddRange(inputs.OmittedDiagnostics(operation.OperationId, FailureDomain.ContentPipeline, virtualPath));
+            if (!inputs.Outside.IsEmpty)
+            {
+                diagnostics.AddRange(inputs.OutsideDiagnostics(operation.OperationId, FailureDomain.ContentPipeline, virtualPath));
+                continue;
+            }
+
+            var files = inputs.Files;
             analyzed.Add(new(
                 source.Input,
                 facts.Outputs,

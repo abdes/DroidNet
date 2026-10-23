@@ -656,18 +656,24 @@ namespace {
     EXPECT_EQ(reader_.metadata_reads, 0U);
   }
 
-  NOLINT_TEST_F(
-    ImportSourceSnapshotTest, UndeclaredReadRemainsFatalWhenItsErrorIsIgnored)
+  //! A path the capture does not list is absent, like any missing file.
+  NOLINT_TEST_F(ImportSourceSnapshotTest, UncapturedPathIsAbsent)
   {
     const auto input = CapturedFile();
     ASSERT_HAS_VALUE(input.file) << "Expected input.file to contain a value";
     auto mapped
       = detail::ImportSourceSnapshot(reader_, pool_, CaptureMap(input));
     co::Run(loop_, [&] -> co::Co<> {
-      EXPECT_FALSE(co_await mapped.ReadFile("not-declared.bin"));
-      EXPECT_THROW(co_await mapped.Verify(), std::runtime_error);
+      const auto bytes = co_await mapped.ReadFile("not-captured.bin");
+      EXPECT_FALSE(bytes.has_value());
+      EXPECT_EQ(bytes.error().code, FileError::kNotFound);
+      const auto present = co_await mapped.Exists("not-captured.bin");
+      EXPECT_TRUE(present.has_value());
+      EXPECT_FALSE(present.has_value() && present.value());
+      co_await mapped.Verify();
     });
     EXPECT_EQ(reader_.content_reads, 0U);
+    EXPECT_EQ(reader_.presence_reads, 0U);
   }
 
   NOLINT_TEST_F(ImportSourceSnapshotTest, ProbeAdmissionDoesNotPermitByteReads)

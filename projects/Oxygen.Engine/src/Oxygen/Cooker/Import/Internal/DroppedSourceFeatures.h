@@ -17,15 +17,17 @@ struct ufbx_scene;
 
 namespace oxygen::content::import::internal {
 
-//! Reject source features that cannot be preserved by supported static scene
-//! import.
-OXGN_COOK_NDAPI auto ValidateStaticSource(const cgltf_data& source,
+//! Warn about each glTF source feature that model import does not carry into
+//! cooked content, including required extensions it does not read. The import
+//! continues without them.
+OXGN_COOK_API auto ReportDroppedSourceFeatures(const cgltf_data& source,
   std::string_view source_path, std::vector<ImportDiagnostic>& diagnostics)
-  -> bool;
+  -> void;
 
-//! Apply the same policy to FBX, including explicit source units and axes.
-OXGN_COOK_NDAPI auto ValidateStaticSource(const ufbx_scene& source,
+//! Warn about each FBX source feature that model import does not carry into
+//! cooked content, and about source units the import has to assume.
+OXGN_COOK_API auto ReportDroppedSourceFeatures(const ufbx_scene& source,
   std::string_view source_path, std::vector<ImportDiagnostic>& diagnostics)
-  -> bool;
+  -> void;
 
 } // namespace oxygen::content::import::internal

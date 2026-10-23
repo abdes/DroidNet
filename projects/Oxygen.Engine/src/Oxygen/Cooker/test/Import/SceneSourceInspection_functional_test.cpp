@@ -6,6 +6,7 @@
 
 // Covers: Import/SceneSourceInspection.cpp
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -173,17 +174,19 @@ NOLINT_TEST_F(SceneSourceInspectionTest, ReportsFbxUnitsAxesAndAppliedWinding)
   ValidateReport(result);
 }
 
-NOLINT_TEST_F(
-  SceneSourceInspectionTest, UnsupportedContentRetainsItsMetadataAndIssues)
+NOLINT_TEST_F(SceneSourceInspectionTest, LocalLightsAreSupportedContent)
 {
   for (const auto* filename :
     { "light_overrides.gltf", "light_overrides.fbx" }) {
     SCOPED_TRACE(filename);
     const auto result = InspectSceneSource(TestModelsDirFromFile() / filename);
     EXPECT_TRUE(result.parsed);
-    EXPECT_FALSE(result.supported);
+    EXPECT_TRUE(result.supported) << ExportSceneSourceInspection(result);
     EXPECT_GT(result.node_count, 0U);
-    EXPECT_FALSE(result.diagnostics.empty());
+    EXPECT_TRUE(std::ranges::none_of(
+      result.diagnostics, [](const auto& diagnostic) -> bool {
+        return diagnostic.code == "import.source_feature_dropped";
+      }));
     ValidateReport(result);
   }
 }

@@ -884,7 +884,38 @@ namespace {
     return mesh_bounds;
   }
 
-  [[nodiscard]] auto BuildLodData(const TriangleMesh& mesh,
+  //! Why a skinned mesh's skin data cannot bind it, or null when it can.
+  [[nodiscard]] auto SkinDefect(const TriangleMesh& mesh)
+    -> std::optional<std::pair<const char*, const char*>>
+  {
+    const auto vertex_count = mesh.streams.positions.size();
+    if (mesh.streams.joint_indices.size() != vertex_count
+      || mesh.streams.joint_weights.size() != vertex_count) {
+      return std::pair { "mesh.missing_skinning",
+        "Skinned mesh lacks joint indices or weights for its vertices" };
+    }
+    if (mesh.inverse_bind_matrices.empty()) {
+      return std::pair { "mesh.missing_inverse_bind",
+        "Skinned mesh missing inverse bind matrices" };
+    }
+    if (mesh.joint_remap.empty()) {
+      return std::pair { "mesh.missing_joint_remap",
+        "Skinned mesh missing joint remap data" };
+    }
+    uint32_t max_joint = 0;
+    for (const auto& joints : mesh.streams.joint_indices) {
+      max_joint
+        = (std::max)({ max_joint, joints.x, joints.y, joints.z, joints.w });
+    }
+    if (max_joint >= mesh.inverse_bind_matrices.size()
+      || max_joint >= mesh.joint_remap.size()) {
+      return std::pair { "mesh.skinning_buffers_mismatch",
+        "Skinned mesh joint data exceeds inverse bind/remap counts" };
+    }
+    return std::nullopt;
+  }
+
+  [[nodiscard]] auto BuildLodData(const TriangleMesh& authored,
     const MeshLod& lod_source, const WorkItem& item,
     const SurfaceGeometryProvenance& allocation,
     const uint64_t max_data_blob_bytes,
@@ -892,6 +923,22 @@ namespace {
     -> std::optional<LodBuildData>
   {
     DLOG_F(1, "Build LOD data");
+    // Skin data that cannot bind the mesh is dropped: the LOD builds as static
+    // geometry in its bind pose.
+    auto mesh = authored;
+    if (mesh.mesh_type == data::MeshType::kSkinned) {
+      if (const auto defect = SkinDefect(mesh); defect.has_value()) {
+        diagnostics.push_back(MakeWarningDiagnostic(defect->first,
+          std::string(defect->second)
+            + "; the mesh imports as static geometry in its bind pose",
+          item.source_id, item.mesh_name));
+        mesh.mesh_type = data::MeshType::kStandard;
+        mesh.streams.joint_indices = {};
+        mesh.streams.joint_weights = {};
+        mesh.inverse_bind_matrices = {};
+        mesh.joint_remap = {};
+      }
+    }
     LodBuildData lod;
     lod.lod_name = lod_source.lod_name;
     lod.mesh_type = mesh.mesh_type;
@@ -934,18 +981,6 @@ namespace {
     }
 
     if (lod.mesh_type == data::MeshType::kSkinned) {
-      if (mesh.inverse_bind_matrices.empty()) {
-        diagnostics.push_back(MakeErrorDiagnostic("mesh.missing_inverse_bind",
-          "Skinned mesh missing inverse bind matrices", item.source_id,
-          item.mesh_name));
-        return std::nullopt;
-      }
-      if (mesh.joint_remap.empty()) {
-        diagnostics.push_back(MakeErrorDiagnostic("mesh.missing_joint_remap",
-          "Skinned mesh missing joint remap data", item.source_id,
-          item.mesh_name));
-        return std::nullopt;
-      }
       lod.inverse_bind_matrices.assign(
         mesh.inverse_bind_matrices.begin(), mesh.inverse_bind_matrices.end());
       lod.joint_remap.assign(mesh.joint_remap.begin(), mesh.joint_remap.end());
@@ -1172,18 +1207,8 @@ namespace {
       }
 
       if (!lod.joint_indices.empty()) {
+        // SkinDefect proved every joint has an inverse bind and a remap.
         const uint32_t required_joint_count = max_joint + 1;
-        if (required_joint_count
-            > static_cast<uint32_t>(lod.inverse_bind_matrices.size())
-          || required_joint_count
-            > static_cast<uint32_t>(lod.joint_remap.size())) {
-          diagnostics.push_back(
-            MakeErrorDiagnostic("mesh.skinning_buffers_mismatch",
-              "Skinned mesh joint data exceeds inverse bind/remap counts",
-              item.source_id, item.mesh_name));
-          return std::nullopt;
-        }
-
         const auto max_u16
           = static_cast<uint32_t>(std::numeric_limits<uint16_t>::max());
         lod.joint_count

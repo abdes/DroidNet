@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-// Covers: Import/Internal/StaticSourceValidation.cpp
+// Covers: Import/Internal/DroppedSourceFeatures.cpp
 
 #include <algorithm>
 #include <array>
@@ -13,7 +13,7 @@
 #include <vector>
 
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
-#include <Oxygen/Cooker/Import/Internal/StaticSourceValidation.h>
+#include <Oxygen/Cooker/Import/Internal/DroppedSourceFeatures.h>
 #include <Oxygen/Cooker/Import/Internal/fbx/FbxMaterialTextures.h>
 #include <Oxygen/Cooker/Import/Internal/fbx/ufbx.h>
 #include <Oxygen/Cooker/Import/Internal/gltf/cgltf.h>
@@ -22,9 +22,19 @@
 namespace {
 
 using oxygen::content::import::ImportDiagnostic;
-using oxygen::content::import::internal::ValidateStaticSource;
+using oxygen::content::import::ImportSeverity;
+using oxygen::content::import::internal::ReportDroppedSourceFeatures;
 
-NOLINT_TEST(StaticSourceValidationTest, DisabledFbxCoreMapsAreNotSelected)
+constexpr auto kDropped = "import.source_feature_dropped";
+
+auto AllDropWarnings(const std::vector<ImportDiagnostic>& diagnostics) -> bool
+{
+  return std::ranges::all_of(diagnostics, [](const auto& issue) -> bool {
+    return issue.code == kDropped && issue.severity == ImportSeverity::kWarning;
+  });
+}
+
+NOLINT_TEST(DroppedSourceFeaturesTest, DisabledFbxCoreMapsAreNotSelected)
 {
   auto texture = ufbx_texture {};
   auto fallback_texture = ufbx_texture {};
@@ -66,7 +76,7 @@ NOLINT_TEST(StaticSourceValidationTest, DisabledFbxCoreMapsAreNotSelected)
   }
 }
 
-NOLINT_TEST(StaticSourceValidationTest, ActiveUnmappedFbxChannelsAreRejected)
+NOLINT_TEST(DroppedSourceFeaturesTest, ActiveUnmappedFbxChannelsAreReported)
 {
   auto texture = ufbx_texture {};
   auto material = ufbx_material {};
@@ -76,15 +86,34 @@ NOLINT_TEST(StaticSourceValidationTest, ActiveUnmappedFbxChannelsAreRejected)
   auto source = ufbx_scene {};
   source.materials = { .data = &material_pointer, .count = 1 };
   auto diagnostics = std::vector<ImportDiagnostic> {};
-  EXPECT_FALSE(ValidateStaticSource(source, "opacity.fbx", diagnostics));
+  ReportDroppedSourceFeatures(source, "opacity.fbx", diagnostics);
   EXPECT_TRUE(std::ranges::any_of(diagnostics, [](const auto& issue) -> auto {
-    return issue.code == "import.static.unsupported"
+    return issue.code == kDropped && issue.severity == ImportSeverity::kWarning
       && issue.object_path
       == "/Materials/0/pbr/" + std::to_string(UFBX_MATERIAL_PBR_OPACITY);
   }));
 }
 
-NOLINT_TEST(StaticSourceValidationTest, FbxInstanceMaterialMustUseEmittedUvSet)
+NOLINT_TEST(DroppedSourceFeaturesTest, FbxTextureWrapModesAreReported)
+{
+  auto texture = ufbx_texture {};
+  texture.type = UFBX_TEXTURE_FILE;
+  texture.wrap_u = UFBX_WRAP_CLAMP;
+  texture.wrap_v = UFBX_WRAP_REPEAT;
+  auto material = ufbx_material {};
+  material.pbr.base_color.texture = &texture;
+  material.pbr.base_color.texture_enabled = true;
+  auto* material_pointer = &material;
+  auto source = ufbx_scene {};
+  source.materials = { .data = &material_pointer, .count = 1 };
+  auto diagnostics = std::vector<ImportDiagnostic> {};
+  ReportDroppedSourceFeatures(source, "wrap.fbx", diagnostics);
+  EXPECT_TRUE(std::ranges::any_of(diagnostics, [](const auto& issue) -> auto {
+    return issue.code == kDropped && issue.object_path == "/Materials/0";
+  }));
+}
+
+NOLINT_TEST(DroppedSourceFeaturesTest, FbxTextureOnAnotherUvSetIsReported)
 {
   auto texture = ufbx_texture {};
   texture.uv_set = { .data = "Second", .length = 6 };
@@ -104,16 +133,16 @@ NOLINT_TEST(StaticSourceValidationTest, FbxInstanceMaterialMustUseEmittedUvSet)
   source.materials = { .data = &material_pointer, .count = 1 };
   source.nodes = { .data = &node_pointer, .count = 1 };
   auto diagnostics = std::vector<ImportDiagnostic> {};
-  EXPECT_FALSE(ValidateStaticSource(source, "uv.fbx", diagnostics));
+  ReportDroppedSourceFeatures(source, "uv.fbx", diagnostics);
   EXPECT_TRUE(std::ranges::any_of(diagnostics, [](const auto& issue) -> auto {
-    return issue.object_path == "/Nodes/0" && issue.message.contains("Second");
+    return issue.code == kDropped && issue.object_path == "/Nodes/0"
+      && issue.message.contains("Second");
   }));
 }
 
-NOLINT_TEST(StaticSourceValidationTest, ReportsAllUnsupportedSourceFeatures)
+NOLINT_TEST(DroppedSourceFeaturesTest, ReportsEachDroppedGltfFeature)
 {
   cgltf_primitive primitive {};
-  primitive.type = cgltf_primitive_type_lines;
   primitive.targets_count = 1U;
   cgltf_mesh mesh {};
   mesh.primitives = &primitive;
@@ -123,68 +152,94 @@ NOLINT_TEST(StaticSourceValidationTest, ReportsAllUnsupportedSourceFeatures)
   source.meshes_count = 1U;
   source.animations_count = 1U;
   source.skins_count = 1U;
-  cgltf_camera camera {};
-  camera.type = cgltf_camera_type_orthographic;
-  cgltf_light light {};
-  light.type = cgltf_light_type_point;
-  source.cameras = &camera;
-  source.cameras_count = 1U;
-  source.lights = &light;
-  source.lights_count = 1U;
   std::vector<ImportDiagnostic> diagnostics;
 
-  EXPECT_FALSE(ValidateStaticSource(source, "animated.gltf", diagnostics));
-  EXPECT_EQ(diagnostics.size(), 6U);
+  ReportDroppedSourceFeatures(source, "animated.gltf", diagnostics);
+
+  EXPECT_EQ(diagnostics.size(), 3U);
+  EXPECT_TRUE(AllDropWarnings(diagnostics));
   for (const auto& diagnostic : diagnostics) {
     EXPECT_EQ(diagnostic.source_path, "animated.gltf");
     EXPECT_FALSE(diagnostic.object_path.empty());
   }
 }
 
-NOLINT_TEST(StaticSourceValidationTest, RejectsRequiredUnknownExtensions)
+NOLINT_TEST(DroppedSourceFeaturesTest, ImportedComponentsAreNotReported)
+{
+  cgltf_camera camera {};
+  camera.type = cgltf_camera_type_orthographic;
+  auto lights = std::array<cgltf_light, 2> {};
+  lights.at(0).type = cgltf_light_type_point;
+  lights.at(1).type = cgltf_light_type_spot;
+  cgltf_data source {};
+  source.cameras = &camera;
+  source.cameras_count = 1U;
+  source.lights = lights.data();
+  source.lights_count = lights.size();
+  std::vector<ImportDiagnostic> diagnostics;
+
+  ReportDroppedSourceFeatures(source, "components.gltf", diagnostics);
+
+  EXPECT_TRUE(diagnostics.empty());
+}
+
+NOLINT_TEST(DroppedSourceFeaturesTest, RequiredUnreadExtensionIsReported)
 {
   std::string extension = "EXT_physics";
   std::array extensions { extension.data() };
   cgltf_data source {};
+  source.extensions_used = extensions.data();
+  source.extensions_used_count = 1U;
   source.extensions_required = extensions.data();
   source.extensions_required_count = 1U;
   std::vector<ImportDiagnostic> diagnostics;
-  EXPECT_FALSE(ValidateStaticSource(source, "physics.gltf", diagnostics));
+
+  ReportDroppedSourceFeatures(source, "physics.gltf", diagnostics);
+
   ASSERT_EQ(diagnostics.size(), 1U);
+  EXPECT_EQ(diagnostics.front().code, "import.source_extension_required");
+  EXPECT_EQ(diagnostics.front().severity, ImportSeverity::kWarning);
   EXPECT_THAT(diagnostics.front().message, ::testing::HasSubstr(extension));
 }
 
-NOLINT_TEST(StaticSourceValidationTest, AcceptsMappedScalarExtensions)
+NOLINT_TEST(DroppedSourceFeaturesTest, UsedUnreadExtensionIsReported)
 {
-  cgltf_material material {};
-  material.has_clearcoat = 1;
-  material.has_volume = 1;
-  material.has_transmission = 1;
+  std::string extension = "EXT_physics";
+  std::array extensions { extension.data() };
   cgltf_data source {};
-  source.materials = &material;
-  source.materials_count = 1U;
+  source.extensions_used = extensions.data();
+  source.extensions_used_count = 1U;
   std::vector<ImportDiagnostic> diagnostics;
-  EXPECT_TRUE(ValidateStaticSource(source, "scalar.gltf", diagnostics));
-  EXPECT_TRUE(diagnostics.empty());
+
+  ReportDroppedSourceFeatures(source, "physics.gltf", diagnostics);
+
+  ASSERT_EQ(diagnostics.size(), 1U);
+  EXPECT_TRUE(AllDropWarnings(diagnostics));
+  EXPECT_EQ(diagnostics.front().object_path, "/extensions/EXT_physics");
 }
 
-NOLINT_TEST(StaticSourceValidationTest, RejectsUnemittedTextureChannels)
+NOLINT_TEST(DroppedSourceFeaturesTest, MaterialTextureChannelsAreNotReported)
 {
   auto texture = cgltf_texture {};
   auto material = cgltf_material {};
   material.has_clearcoat = 1;
   material.clearcoat.clearcoat_texture.texture = &texture;
+  material.clearcoat.clearcoat_normal_texture.texture = &texture;
+  material.has_transmission = 1;
+  material.transmission.transmission_texture.texture = &texture;
+  material.has_volume = 1;
+  material.volume.thickness_texture.texture = &texture;
   auto source = cgltf_data {};
   source.materials = &material;
   source.materials_count = 1U;
   auto diagnostics = std::vector<ImportDiagnostic> {};
-  EXPECT_FALSE(ValidateStaticSource(source, "coat.gltf", diagnostics));
-  ASSERT_EQ(diagnostics.size(), 1U);
-  EXPECT_EQ(diagnostics.front().object_path,
-    "/materials/0/extensions/KHR_materials_clearcoat");
+
+  ReportDroppedSourceFeatures(source, "coat.gltf", diagnostics);
+
+  EXPECT_TRUE(diagnostics.empty());
 }
 
-NOLINT_TEST(StaticSourceValidationTest, RejectsConflictingTextureUvMappings)
+NOLINT_TEST(DroppedSourceFeaturesTest, ConflictingTextureUvMappingsAreReported)
 {
   auto texture = cgltf_texture {};
   auto material = cgltf_material {};
@@ -196,24 +251,50 @@ NOLINT_TEST(StaticSourceValidationTest, RejectsConflictingTextureUvMappings)
   source.materials = &material;
   source.materials_count = 1U;
   auto diagnostics = std::vector<ImportDiagnostic> {};
-  EXPECT_FALSE(ValidateStaticSource(source, "uv.gltf", diagnostics));
+
+  ReportDroppedSourceFeatures(source, "uv.gltf", diagnostics);
+
   ASSERT_EQ(diagnostics.size(), 1U);
+  EXPECT_TRUE(AllDropWarnings(diagnostics));
   EXPECT_EQ(diagnostics.front().object_path, "/materials/0");
 }
 
-NOLINT_TEST(StaticSourceValidationTest, RejectsUnmappedScalarFields)
+NOLINT_TEST(DroppedSourceFeaturesTest, CustomSamplingIsReported)
+{
+  auto sampler = cgltf_sampler {};
+  sampler.wrap_s = cgltf_wrap_mode_clamp_to_edge;
+  sampler.wrap_t = cgltf_wrap_mode_repeat;
+  auto texture = cgltf_texture {};
+  texture.sampler = &sampler;
+  auto material = cgltf_material {};
+  material.pbr_metallic_roughness.base_color_texture.texture = &texture;
+  auto source = cgltf_data {};
+  source.materials = &material;
+  source.materials_count = 1U;
+  auto diagnostics = std::vector<ImportDiagnostic> {};
+
+  ReportDroppedSourceFeatures(source, "clamp.gltf", diagnostics);
+
+  ASSERT_EQ(diagnostics.size(), 1U);
+  EXPECT_TRUE(AllDropWarnings(diagnostics));
+}
+
+NOLINT_TEST(DroppedSourceFeaturesTest, UnmappedScalarFieldsAreReported)
 {
   cgltf_material material {};
   material.has_specular = 1;
-  material.specular.specular_color_factor[0] = 1.0F;
+  material.specular.specular_color_factor[0] = 0.5F;
   material.has_sheen = 1;
   material.sheen.sheen_roughness_factor = 1.0F;
   cgltf_data source {};
   source.materials = &material;
   source.materials_count = 1U;
   std::vector<ImportDiagnostic> diagnostics;
-  EXPECT_FALSE(ValidateStaticSource(source, "scalar.gltf", diagnostics));
+
+  ReportDroppedSourceFeatures(source, "scalar.gltf", diagnostics);
+
   EXPECT_EQ(diagnostics.size(), 2U);
+  EXPECT_TRUE(AllDropWarnings(diagnostics));
 }
 
 } // namespace

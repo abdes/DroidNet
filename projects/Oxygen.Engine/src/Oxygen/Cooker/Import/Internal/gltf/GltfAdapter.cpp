@@ -54,6 +54,7 @@
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/AdapterTypes.h>
+#include <Oxygen/Cooker/Import/Internal/DroppedSourceFeatures.h>
 #include <Oxygen/Cooker/Import/Internal/ImportSourceSnapshot.h>
 #include <Oxygen/Cooker/Import/Internal/ImportedLightSemantics.h>
 #include <Oxygen/Cooker/Import/Internal/ImportedPropertyCommit.h>
@@ -69,7 +70,6 @@
 #include <Oxygen/Cooker/Import/Internal/SceneBuild.h>
 #include <Oxygen/Cooker/Import/Internal/SceneNodeImportDefaults.h>
 #include <Oxygen/Cooker/Import/Internal/SourceLayoutHash.h>
-#include <Oxygen/Cooker/Import/Internal/StaticSourceValidation.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Cooker/Import/Internal/gltf/GltfAdapter.h>
 #include <Oxygen/Cooker/Import/Internal/gltf/cgltf.h>
@@ -95,6 +95,9 @@ namespace oxygen::content::import::adapters {
 struct GltfAdapter::Impl final {
   std::shared_ptr<detail::ImportSourceSnapshot> source_snapshot;
   std::shared_ptr<const cgltf_data> data_owner;
+  //! The bake-plan variant of each geometry work item, in emission order; the
+  //! scene stage's geometry keys follow this order.
+  std::vector<size_t> emitted_variants;
 };
 
 GltfAdapter::GltfAdapter()
@@ -434,7 +437,9 @@ namespace {
     const auto separator = path_text.find_last_of("/\\");
     path_text.resize(separator == std::string::npos ? 0U : separator + 1U);
     path_text += uri;
-    return PathFromUtf8(path_text);
+    // A URI that names a folder names no image: the texture is missing.
+    auto path = PathFromUtf8(path_text);
+    return path.has_filename() ? path : std::filesystem::path {};
   }
 
   [[nodiscard]] auto ReadVec2(const cgltf_accessor* accessor)
@@ -1138,6 +1143,7 @@ namespace {
         input.source_id_prefix, name, static_cast<uint32_t>(variant_index));
       result.sources.push_back({
         .variant = variant,
+        .variant_index = variant_index,
         .name = std::move(name),
         .source_id = std::move(source_id),
       });
@@ -1145,11 +1151,15 @@ namespace {
     return result;
   }
 
+  //! Streams one work item per mesh variant. A primitive or mesh whose source
+  //! data cannot be built is dropped with a warning; `emitted_variants`
+  //! receives the variant index of each item, in emission order.
   [[nodiscard]] auto StreamWorkItemsFromData(const cgltf_data& data,
-    const AdapterInput& input, GeometryWorkItemSink& sink)
-    -> WorkItemStreamResult
+    const AdapterInput& input, GeometryWorkItemSink& sink,
+    std::vector<size_t>& emitted_variants) -> WorkItemStreamResult
   {
     WorkItemStreamResult result;
+    emitted_variants.clear();
     if (input.stop_token.stop_requested()) {
       result.success = false;
       result.diagnostics.push_back(
@@ -1226,12 +1236,10 @@ namespace {
           std::span(mesh->primitives, mesh->primitives_count), prim_i);
         if (prim.type != cgltf_primitive_type_triangles) {
           result.diagnostics.push_back(
-            MakeErrorDiagnostic("gltf.primitive.type",
-              "glTF primitive is not a triangle list; import requires "
-              "triangles only",
+            MakeWarningDiagnostic("gltf.primitive.type",
+              "glTF primitive is not a triangle list; the primitive is dropped",
               input.source_id_prefix, mesh_name));
-          result.success = false;
-          return result;
+          continue;
         }
 
         const cgltf_accessor* positions = nullptr;
@@ -1390,20 +1398,20 @@ namespace {
 
         if (positions == nullptr) {
           result.diagnostics.push_back(
-            MakeErrorDiagnostic("mesh.missing_positions",
-              "glTF primitive missing POSITION attribute",
+            MakeWarningDiagnostic("mesh.missing_positions",
+              "glTF primitive missing POSITION attribute; the primitive is "
+              "dropped",
               input.source_id_prefix, mesh_name));
-          result.success = false;
           continue;
         }
 
         const auto vertex_count = static_cast<uint32_t>(positions->count);
         if (vertex_count == 0) {
           result.diagnostics.push_back(
-            MakeErrorDiagnostic("mesh.missing_positions",
-              "glTF primitive contains no vertex positions",
+            MakeWarningDiagnostic("mesh.missing_positions",
+              "glTF primitive contains no vertex positions; the primitive is "
+              "dropped",
               input.source_id_prefix, mesh_name));
-          result.success = false;
           continue;
         }
 
@@ -1458,11 +1466,11 @@ namespace {
         }
 
         if ((index_count % 3U) != 0U) {
-          result.diagnostics.push_back(MakeErrorDiagnostic("mesh.invalid_range",
-            "glTF primitive index count must be a multiple of 3",
-            input.source_id_prefix, mesh_name));
-          result.success = false;
-          return result;
+          result.diagnostics.push_back(
+            MakeWarningDiagnostic("mesh.invalid_range",
+              "glTF primitive index count is not a multiple of 3; the "
+              "incomplete last triangle is dropped",
+              input.source_id_prefix, mesh_name));
         }
 
         primitives.push_back(PrimitiveInfo {
@@ -1510,11 +1518,11 @@ namespace {
       }
       if (!witness.has_value()) {
         result.diagnostics.push_back(
-          MakeErrorDiagnostic("mesh.source_layout_invalid",
-            "Could not read the source-native glTF positions",
+          MakeWarningDiagnostic("mesh.source_layout_invalid",
+            "Could not read the source-native glTF positions; the mesh is "
+            "dropped",
             input.source_id_prefix, mesh_name));
-        result.success = false;
-        return result;
+        continue;
       }
       item.source_layout_witness = *witness;
       item.source_id = source.source_id;
@@ -1596,10 +1604,11 @@ namespace {
       for (const auto& prim_info : primitives) {
         auto positions_vec = ReadVec3(prim_info.positions);
         if (positions_vec.empty()) {
-          result.diagnostics.push_back(MakeErrorDiagnostic(
-            "mesh.missing_positions", "glTF primitive contains no positions",
-            input.source_id_prefix, mesh_name));
-          result.success = false;
+          result.diagnostics.push_back(
+            MakeWarningDiagnostic("mesh.missing_positions",
+              "glTF primitive positions cannot be read; the primitive is "
+              "dropped",
+              input.source_id_prefix, mesh_name));
           continue;
         }
 
@@ -1737,34 +1746,38 @@ namespace {
           }
         }
 
-        if ((indices_vec.size() % 3U) != 0U) {
-          result.diagnostics.push_back(MakeErrorDiagnostic("mesh.invalid_range",
-            "glTF primitive index count must be a multiple of 3",
-            input.source_id_prefix, mesh_name));
-          result.success = false;
-          return result;
-        }
-
-        if (indices_vec.empty()) {
-          result.diagnostics.push_back(MakeErrorDiagnostic(
-            "mesh.missing_indices", "glTF primitive contains no indices",
-            input.source_id_prefix, mesh_name));
-          result.success = false;
-          continue;
-        }
-
+        // An incomplete last triangle and the triangles that name a vertex
+        // the primitive does not have are dropped; the rest are kept.
+        indices_vec.resize(indices_vec.size() - (indices_vec.size() % 3U));
         const auto vertex_count_u32
           = static_cast<uint32_t>(positions_vec.size());
-        uint32_t max_index = 0;
-        for (const auto idx : indices_vec) {
-          max_index = (std::max)(max_index, idx);
+        const auto authored_triangles = indices_vec.size() / 3U;
+        auto kept = size_t { 0 };
+        for (size_t triangle = 0; triangle < authored_triangles; ++triangle) {
+          const auto first = triangle * 3U;
+          if (indices_vec.at(first) < vertex_count_u32
+            && indices_vec.at(first + 1U) < vertex_count_u32
+            && indices_vec.at(first + 2U) < vertex_count_u32) {
+            indices_vec.at(kept * 3U) = indices_vec.at(first);
+            indices_vec.at((kept * 3U) + 1U) = indices_vec.at(first + 1U);
+            indices_vec.at((kept * 3U) + 2U) = indices_vec.at(first + 2U);
+            ++kept;
+          }
         }
-        if (vertex_count_u32 == 0 || max_index >= vertex_count_u32) {
+        indices_vec.resize(kept * 3U);
+        if (kept != authored_triangles) {
           result.diagnostics.push_back(
-            MakeErrorDiagnostic("mesh.invalid_indices",
-              "glTF primitive index buffer references out-of-range vertices",
+            MakeWarningDiagnostic("mesh.invalid_indices",
+              "glTF primitive has " + std::to_string(authored_triangles - kept)
+                + " triangles that reference out-of-range vertices; they are "
+                  "dropped",
               input.source_id_prefix, mesh_name));
-          result.success = false;
+        }
+        if (indices_vec.empty()) {
+          result.diagnostics.push_back(MakeWarningDiagnostic(
+            "mesh.missing_indices",
+            "glTF primitive has no usable triangles; the primitive is dropped",
+            input.source_id_prefix, mesh_name));
           continue;
         }
 
@@ -1785,46 +1798,48 @@ namespace {
         });
       }
 
-      if (owner->positions.empty() || owner->indices.empty()) {
-        result.success = false;
+      if (owner->ranges.empty()) {
+        result.diagnostics.push_back(MakeWarningDiagnostic("mesh.dropped",
+          "glTF mesh has no usable primitives; the mesh is dropped",
+          input.source_id_prefix, mesh_name));
         continue;
       }
 
-      const bool is_skinned = keep_skin && !owner->joint_indices.empty()
+      auto is_skinned = keep_skin && !owner->joint_indices.empty()
         && !owner->joint_weights.empty();
 
       if (is_skinned) {
+        // Skin data that cannot bind the mesh is dropped: the mesh imports as
+        // static geometry in its bind pose.
+        const auto drop_skin
+          = [&](const char* code, const char* reason) -> void {
+          result.diagnostics.push_back(MakeWarningDiagnostic(code,
+            std::string(reason)
+              + "; the mesh imports as static geometry in its bind pose",
+            input.source_id_prefix, mesh_name));
+          is_skinned = false;
+          owner->joint_indices.clear();
+          owner->joint_weights.clear();
+          owner->inverse_bind_matrices.clear();
+        };
         const auto* skin = FindSkinForMesh(data, *mesh);
         if (skin == nullptr || skin->inverse_bind_matrices == nullptr) {
-          result.diagnostics.push_back(
-            MakeErrorDiagnostic("mesh.missing_inverse_bind",
-              "glTF skinned mesh missing inverse bind matrices",
-              input.source_id_prefix, mesh_name));
-          result.success = false;
-          continue;
+          drop_skin("mesh.missing_inverse_bind",
+            "glTF skinned mesh missing inverse bind matrices");
+        } else {
+          owner->inverse_bind_matrices = ReadMat4(skin->inverse_bind_matrices);
+          const auto joint_count = DetermineJointCount(owner->joint_indices);
+          if (joint_count == 0 || owner->inverse_bind_matrices.empty()) {
+            drop_skin("mesh.missing_inverse_bind",
+              "glTF skinned mesh missing inverse bind matrices");
+          } else if (owner->inverse_bind_matrices.size() < joint_count) {
+            drop_skin("mesh.skinning_buffers_mismatch",
+              "glTF skin inverse bind count is smaller than joint count");
+          } else {
+            owner->joint_remap.resize(joint_count);
+            std::iota(owner->joint_remap.begin(), owner->joint_remap.end(), 0U);
+          }
         }
-
-        owner->inverse_bind_matrices = ReadMat4(skin->inverse_bind_matrices);
-        const uint32_t joint_count = DetermineJointCount(owner->joint_indices);
-        if (joint_count == 0 || owner->inverse_bind_matrices.empty()) {
-          result.diagnostics.push_back(
-            MakeErrorDiagnostic("mesh.missing_inverse_bind",
-              "glTF skinned mesh missing inverse bind matrices",
-              input.source_id_prefix, mesh_name));
-          result.success = false;
-          continue;
-        }
-        if (owner->inverse_bind_matrices.size() < joint_count) {
-          result.diagnostics.push_back(
-            MakeErrorDiagnostic("mesh.skinning_buffers_mismatch",
-              "glTF skin inverse bind count is smaller than joint count",
-              input.source_id_prefix, mesh_name));
-          result.success = false;
-          continue;
-        }
-
-        owner->joint_remap.resize(joint_count);
-        std::iota(owner->joint_remap.begin(), owner->joint_remap.end(), 0U);
       }
 
       std::optional<Bounds3> bounds3;
@@ -1902,6 +1917,7 @@ namespace {
       if (!sink.Consume(std::move(item))) {
         return result;
       }
+      emitted_variants.push_back(source.variant_index);
       ++result.emitted;
     }
 
@@ -1933,7 +1949,8 @@ auto GltfAdapter::InspectSource(const std::filesystem::path& source_path,
     return result;
   }
   result.parsed = true;
-  result.supported = internal::ValidateStaticSource(
+  result.supported = true;
+  internal::ReportDroppedSourceFeatures(
     *data, input.source_id_prefix, result.diagnostics);
   result.source_unit_meters = 1.0;
   result.source_right = "+X";
@@ -2002,13 +2019,8 @@ auto GltfAdapter::Parse(const std::filesystem::path& source_path,
     return result;
   }
 
-  if (input.request.options.scene_content_policy == SceneContentPolicy::kStatic
-    && !internal::ValidateStaticSource(
-      *data, input.source_id_prefix, result.diagnostics)) {
-    impl_->data_owner.reset();
-    result.success = false;
-    return result;
-  }
+  internal::ReportDroppedSourceFeatures(
+    *data, input.source_id_prefix, result.diagnostics);
 
   impl_->data_owner
     = std::shared_ptr<const cgltf_data>(data.release(), &cgltf_free);
@@ -2035,13 +2047,8 @@ auto GltfAdapter::Parse(const std::span<const std::byte> source_bytes,
     return result;
   }
 
-  if (input.request.options.scene_content_policy == SceneContentPolicy::kStatic
-    && !internal::ValidateStaticSource(
-      *data, input.source_id_prefix, result.diagnostics)) {
-    impl_->data_owner.reset();
-    result.success = false;
-    return result;
-  }
+  internal::ReportDroppedSourceFeatures(
+    *data, input.source_id_prefix, result.diagnostics);
 
   impl_->data_owner
     = std::shared_ptr<const cgltf_data>(data.release(), &cgltf_free);
@@ -2074,7 +2081,8 @@ auto GltfAdapter::BuildWorkItems(GeometryWorkTag /*unused*/,
     return result;
   }
 
-  return StreamWorkItemsFromData(*impl_->data_owner, input, sink);
+  return StreamWorkItemsFromData(
+    *impl_->data_owner, input, sink, impl_->emitted_variants);
 }
 
 auto GltfAdapter::PrepareMaterials(const AdapterInput& input)
@@ -2290,6 +2298,7 @@ auto GltfAdapter::PrepareMaterials(const AdapterInput& input)
       }
     }
 
+    item.material.RepairModelInputs(item.source_id, result.diagnostics);
     if (!item.material.Validate(item.source_id, result.diagnostics)) {
       result.success = false;
       return result;
@@ -2503,6 +2512,8 @@ auto GltfAdapter::BuildWorkItems(TextureWorkTag /*unused*/,
     item.failure_policy = source.failure_policy;
     item.source = resolved->bytes;
     item.source_path = std::move(resolved->source_path);
+    item.fallback_source_paths
+      = TextureFallbackPaths(input.request.source_path, item.source_path);
     item.stop_token = input.stop_token;
     if (!sink.Consume(std::move(item))) {
       return result;
@@ -2578,11 +2589,21 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
 
   const auto bake_plan = BuildGltfBakePlan(data, request.options.coordinate);
 
-  if (!input.geometry_keys.empty()
-    && input.geometry_keys.size() < bake_plan.variants.size()) {
+  if (input.geometry_keys.size() > impl_->emitted_variants.size()) {
     diagnostics.push_back(MakeErrorDiagnostic("scene.geometry_key_missing",
-      "Geometry key count does not match mesh count", input.source_id, {}));
+      "Geometry key count does not match the emitted geometry", input.source_id,
+      {}));
   }
+  // A node whose mesh was dropped keeps its place but shows no geometry.
+  const auto geometry_keys = GeometryKeysByVariant(
+    bake_plan.variants.size(), impl_->emitted_variants, input.geometry_keys);
+  const auto geometry_key_of
+    = [&](const cgltf_node& node) -> std::optional<oxygen::data::AssetKey> {
+    const auto variant
+      = bake_plan.node_variant.at(static_cast<size_t>(&node - data.nodes));
+    return variant < geometry_keys.size() ? geometry_keys.at(variant)
+                                          : std::nullopt;
+  };
 
   CHECK_F(input.naming_service != nullptr, "NamingService must not be null");
   const auto scene_name = request.GetSceneName();
@@ -2629,7 +2650,8 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
     node_input.visible = true;
     node_input.has_camera = node->camera != nullptr;
     node_input.has_light = node->light != nullptr;
-    node_input.has_renderable = node->mesh != nullptr;
+    node_input.has_renderable
+      = node->mesh != nullptr && geometry_key_of(*node).has_value();
     node_input.source_node = node;
 
     const auto index = static_cast<uint32_t>(nodes.size());
@@ -2753,8 +2775,8 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
         if (std::abs(det) > kSingularDeterminant) {
           node.local_matrix = glm::inverse(parent_world) * node.world_matrix;
         } else {
-          diagnostics.push_back(MakeErrorDiagnostic("scene.pruning.singular",
-            "Node pruning failed due to singular parent transform",
+          diagnostics.push_back(MakeWarningDiagnostic("scene.pruning.singular",
+            "Node keeps its local transform: its parent transform is singular",
             input.source_id, node.base_name));
         }
       }
@@ -2854,14 +2876,10 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
 
     const auto* gltf_node = static_cast<const cgltf_node*>(node.source_node);
     if (gltf_node != nullptr && gltf_node->mesh != nullptr) {
-      const auto source_node_index
-        = static_cast<size_t>(gltf_node - data.nodes);
-      const auto key_index = bake_plan.node_variant.at(source_node_index);
-      if (key_index < input.geometry_keys.size()) {
+      if (const auto key = geometry_key_of(*gltf_node); key.has_value()) {
         build.renderables.push_back(RenderableRecord {
           .node_index = i,
-          .geometry_key
-          = oxygen::base::CheckedAt(input.geometry_keys, key_index),
+          .geometry_key = *key,
         });
       }
     }
@@ -3014,10 +3032,11 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
             rec_light.outer_cone_angle_radians);
         if (!cone) {
           diagnostics.push_back(
-            MakeErrorDiagnostic("scene.light.photometry_invalid",
-              "Spot cone angles must form a representable cone pair",
+            MakeWarningDiagnostic("scene.light.photometry_invalid",
+              "Spot cone angles do not form a representable cone pair; the "
+              "light is dropped",
               input.source_id, name));
-          return result;
+          break;
         }
         rec_light.luminous_flux_lm
           = commit("luminous_flux_lm", light_schema::kLuminousFluxLmRange,

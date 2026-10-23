@@ -464,8 +464,10 @@ namespace {
     EXPECT_EQ(view_desc.vertex_count, 3U);
   }
 
+  //! Skin data that cannot bind the mesh is dropped with a warning; the mesh
+  //! cooks as static geometry.
   NOLINT_TEST_F(
-    GeometryPipelineTest, CollectSkinnedMissingInverseBindReturnsFailure)
+    GeometryPipelineTest, CollectSkinnedMissingInverseBindCooksStatic)
   {
     auto buffers = MakeSkinnedTriangleMeshBuffers();
     buffers->inverse_bind_matrices.clear();
@@ -478,8 +480,8 @@ namespace {
         .with_content_hashing = true,
       });
 
-    EXPECT_FALSE(result.success);
-    EXPECT_FALSE(result.cooked.has_value());
+    EXPECT_TRUE(result.success);
+    EXPECT_TRUE(result.cooked.has_value());
     EXPECT_TRUE(
       HasDiagnosticCode(result.diagnostics, "mesh.missing_inverse_bind"));
   }

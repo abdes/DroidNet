@@ -25,6 +25,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Result.h>
+#include <Oxygen/Cooker/Import/FileError.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/ImportPipeline.h>
@@ -926,6 +927,21 @@ namespace {
 
     const auto read_start = std::chrono::steady_clock::now();
     auto read_result = co_await reader.get()->ReadFile(item.source_path);
+    if (!read_result.has_value()
+      && read_result.error().code != FileError::kCancelled) {
+      for (const auto& fallback_path : item.fallback_source_paths) {
+        auto fallback = co_await reader.get()->ReadFile(fallback_path);
+        if (fallback.has_value()) {
+          diagnostics.push_back(
+            MakeWarningDiagnostic("import.texture.found_by_name",
+              "Texture file is missing; using '" + fallback_path.string()
+                + "' instead",
+              item.source_id, source_path_string));
+          read_result = std::move(fallback);
+          break;
+        }
+      }
+    }
     const auto read_end = std::chrono::steady_clock::now();
     if (on_io_duration) {
       on_io_duration(MakeDuration(read_start, read_end));

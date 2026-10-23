@@ -344,7 +344,6 @@ auto RetainedModelImport::MakeRecipe(const SceneImportSettings& settings,
     }
   };
   add("name", settings.job_name);
-  add("content_policy", settings.content_policy);
   add("unit_policy", settings.unit_policy);
   add("normals_policy", settings.normals_policy);
   add("tangents_policy", settings.tangents_policy);

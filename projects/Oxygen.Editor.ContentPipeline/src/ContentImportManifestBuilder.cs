@@ -114,7 +114,6 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
             ArgumentNullException.ThrowIfNull(modelSettings);
             return this.BuildModelJob(input.SourceRelativePath, dependsOn, modelSettings.Name, input.AssetUri, modelSettings.SurfaceProvenance) with
             {
-                ContentPolicy = modelSettings.ContentPolicy,
                 UnitPolicy = modelSettings.UnitPolicy,
                 BakeTransforms = modelSettings.BakeTransforms,
                 NormalsPolicy = modelSettings.NormalsPolicy,
@@ -163,7 +162,6 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
             // The model names its products under its identity, the virtual path of its source file.
             Layout = new ContentImportLayout(AssetPath.Create(identity.Mount).VirtualPath),
             VirtualPath = identity.VirtualPath,
-            ContentPolicy = Import.NativeSceneImportSettings.DefaultContentPolicy,
             UnitPolicy = Import.NativeSceneImportSettings.DefaultUnitPolicy,
             BakeTransforms = false,
             NormalsPolicy = Import.NativeSceneImportSettings.DefaultNormalsPolicy,

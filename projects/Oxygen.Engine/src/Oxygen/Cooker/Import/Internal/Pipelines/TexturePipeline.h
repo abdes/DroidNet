@@ -122,6 +122,10 @@ public:
     //! Leave empty when `source` already contains content.
     std::filesystem::path source_path {};
 
+    //! Where the texture is looked for, in order, when `source_path` is
+    //! missing, such as the file of that name beside its model.
+    std::vector<std::filesystem::path> fallback_source_paths;
+
     //! Canonical dedupe key (normalized path or embedded hash).
     std::string texture_id;
 

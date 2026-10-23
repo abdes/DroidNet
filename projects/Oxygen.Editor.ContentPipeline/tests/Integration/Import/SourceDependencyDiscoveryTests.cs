@@ -246,20 +246,33 @@ public sealed class SourceDependencyDiscoveryTests
         _ = result.CookedAssets.Should().Contain(asset => asset.SourceAssetUri == AssetPath.Parse("/Content/Geometry/AuthoredCube.ogeo"));
     }
 
-    /// <summary>Source traversal cannot capture files outside the retained project.</summary>
+    /// <summary>An existing file outside the project cannot be retained with its source, so discovery refuses the source.</summary>
     /// <returns>The asynchronous test operation.</returns>
     [TestMethod]
     public async Task GeometryMediaOutsideProjectFailsDiscovery()
     {
         using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         WriteAuthoredGeometry(workspace, withBuffer: true);
-        const string source = "Content/Geometry/AuthoredCube.ogeo.json";
-        var descriptor = JsonNode.Parse(workspace.ReadText(source))!;
-        descriptor["buffers"]![0]!["uri"] = "../../../outside.bin";
-        workspace.WriteText(source, descriptor.ToJsonString());
-        var geometry = CookInputResolver.Resolve(workspace.ProjectContext, AssetPath.Parse("/" + source[..^5]), ContentCookInputRole.Primary);
-        var graph = await NativeSourceFactsFixture.CreateDiscovery(workspace).DiscoverAsync(workspace.ProjectContext, [geometry], this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = graph.Diagnostics.Should().ContainSingle(diagnostic => diagnostic.Message.Contains("outside the project", StringComparison.Ordinal) && diagnostic.AffectedVirtualPath == geometry.AssetUri.VirtualPath);
+        var outside = Path.Combine(Path.GetTempPath(), "outside-" + Guid.NewGuid().ToString("N") + ".bin");
+        File.Copy(Path.Combine(workspace.Root, "Content", "Geometry", "mesh.bin"), outside);
+        try
+        {
+            const string source = "Content/Geometry/AuthoredCube.ogeo.json";
+            var descriptor = JsonNode.Parse(workspace.ReadText(source))!;
+            descriptor["buffers"]![0]!["uri"] = outside;
+            workspace.WriteText(source, descriptor.ToJsonString());
+            var geometry = CookInputResolver.Resolve(workspace.ProjectContext, AssetPath.Parse("/" + source[..^5]), ContentCookInputRole.Primary);
+
+            var graph = await NativeSourceFactsFixture.CreateDiscovery(workspace).DiscoverAsync(workspace.ProjectContext, [geometry], this.TestContext.CancellationToken).ConfigureAwait(false);
+
+            _ = graph.Diagnostics.Should().ContainSingle(diagnostic => diagnostic.Code == AssetImportDiagnosticCodes.DependencyOutsideSource
+                && diagnostic.Severity == DiagnosticSeverity.Error
+                && diagnostic.AffectedVirtualPath == geometry.AssetUri.VirtualPath);
+        }
+        finally
+        {
+            File.Delete(outside);
+        }
     }
 
     /// <summary>Absolute paths to retained media are captured without altering authored descriptor bytes.</summary>

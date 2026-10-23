@@ -241,13 +241,12 @@ auto ImportSourceSnapshot::CaptureFor(const std::filesystem::path& path)
   if (!captured_inputs_) {
     return nullptr;
   }
+  // A path the capture does not list is absent, like any missing file: the
+  // import proceeds without it.
+  static const auto kUncaptured = CapturedInput {};
   try {
     const auto* input = captured_inputs_->Find(path);
-    if (input != nullptr) {
-      return input;
-    }
-    throw std::runtime_error(
-      "Undeclared captured source access: " + path.string());
+    return input != nullptr ? input : &kUncaptured;
   } catch (...) {
     Invalidate();
     throw;

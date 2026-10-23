@@ -29,7 +29,6 @@ public sealed class NativeSceneImportSettingsTests
         _ = parsed.Name.Should().Be("Model");
         _ = parsed.BundleRoot.Should().Be("Content/Models/Model");
         _ = parsed.Files.Should().Equal("model.gltf");
-        _ = parsed.ContentPolicy.Should().Be("static");
         _ = parsed.UnitPolicy.Should().Be("normalize");
         _ = parsed.BakeTransforms.Should().BeFalse();
         _ = parsed.NormalsPolicy.Should().Be("generate");
@@ -58,6 +57,17 @@ public sealed class NativeSceneImportSettingsTests
         json["SchemaVersion"] = 4;
         json["MountPoint"] = "Content";
         json["OutputDirectory"] = "Model";
+        Action parse = () => _ = NativeSceneImportSettings.Parse(System.Text.Encoding.UTF8.GetBytes(json.ToJsonString()));
+        _ = parse.Should().Throw<InvalidDataException>();
+    }
+
+    /// <summary>A version 5 sidecar, which named a source-content policy, is refused, not migrated.</summary>
+    [TestMethod]
+    public void ContentPolicySettingsAreRefused()
+    {
+        var json = JsonNode.Parse(CreateSettings().ToBytes())!;
+        json["SchemaVersion"] = 5;
+        json["ContentPolicy"] = "static";
         Action parse = () => _ = NativeSceneImportSettings.Parse(System.Text.Encoding.UTF8.GetBytes(json.ToJsonString()));
         _ = parse.Should().Throw<InvalidDataException>();
     }

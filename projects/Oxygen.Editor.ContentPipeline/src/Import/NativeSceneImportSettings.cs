@@ -33,16 +33,13 @@ public sealed record NativeSceneImportSettings(
     ImmutableArray<string> Files)
 {
     /// <summary>The settings version this editor writes and reads.</summary>
-    public const int CurrentSchemaVersion = 5;
+    public const int CurrentSchemaVersion = 6;
 
     /// <summary>The sidecar suffix already used for source import configuration.</summary>
     public const string SidecarSuffix = AssetFileTypes.ImportSettings;
 
     /// <summary>The native scene importer contract.</summary>
     public const string ImporterIdentity = "Oxygen.Cooker.Scene/v1";
-
-    /// <summary>The supported editor model policy.</summary>
-    public const string DefaultContentPolicy = "static";
 
     /// <summary>The native unit conversion default.</summary>
     public const string DefaultUnitPolicy = "normalize";
@@ -64,9 +61,6 @@ public sealed record NativeSceneImportSettings(
 
     /// <summary>Gets the native identities published with this source's geometry.</summary>
     public required NativeSurfaceProvenance SurfaceProvenance { get; init; }
-
-    /// <summary>Gets the required supported source-content policy.</summary>
-    public string ContentPolicy { get; init; } = DefaultContentPolicy;
 
     /// <summary>Gets the canonical meter conversion policy.</summary>
     public string UnitPolicy { get; init; } = DefaultUnitPolicy;

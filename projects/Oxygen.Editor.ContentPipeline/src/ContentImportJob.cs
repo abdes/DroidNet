@@ -87,11 +87,6 @@ public sealed record ContentImportJob(
     [JsonIgnore]
     public string AttributedSource => this.Source ?? this.OwnerSource ?? string.Empty;
 
-    /// <summary>Gets the required native source-content policy for model jobs.</summary>
-    [JsonPropertyName("content_policy")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? ContentPolicy { get; init; }
-
     /// <summary>Gets whether source transforms are baked into vertices.</summary>
     [JsonPropertyName("bake_transforms")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]

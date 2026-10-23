@@ -51,7 +51,6 @@ public sealed class TexturedModelImportTests
         _ = (await File.ReadAllBytesAsync(retainedImage, this.TestContext.CancellationToken).ConfigureAwait(false))
             .Should().Equal(await File.ReadAllBytesAsync(Path.Combine(original, imageName), this.TestContext.CancellationToken).ConfigureAwait(false));
         var settings = NativeSceneImportSettings.Parse(await File.ReadAllBytesAsync(retained + NativeSceneImportSettings.SidecarSuffix, this.TestContext.CancellationToken).ConfigureAwait(false));
-        _ = settings.ContentPolicy.Should().Be("static");
         _ = settings.TangentsPolicy.Should().Be("generate");
         _ = settings.SurfaceProvenance.SourceIdentity.Should().Be(request.Provenance.SourceIdentity);
 

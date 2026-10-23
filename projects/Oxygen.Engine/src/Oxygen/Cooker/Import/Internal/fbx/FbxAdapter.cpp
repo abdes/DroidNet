@@ -43,6 +43,7 @@
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/AdapterTypes.h>
+#include <Oxygen/Cooker/Import/Internal/DroppedSourceFeatures.h>
 #include <Oxygen/Cooker/Import/Internal/ImportedLightSemantics.h>
 #include <Oxygen/Cooker/Import/Internal/ImportedPropertyCommit.h>
 #include <Oxygen/Cooker/Import/Internal/MaterialSource.h>
@@ -57,7 +58,6 @@
 #include <Oxygen/Cooker/Import/Internal/SceneBuild.h>
 #include <Oxygen/Cooker/Import/Internal/SceneNodeImportDefaults.h>
 #include <Oxygen/Cooker/Import/Internal/SourceLayoutHash.h>
-#include <Oxygen/Cooker/Import/Internal/StaticSourceValidation.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Cooker/Import/Internal/fbx/CoordTransform.h>
 #include <Oxygen/Cooker/Import/Internal/fbx/FbxAdapter.h>
@@ -92,6 +92,9 @@ namespace {
 
 struct FbxAdapter::Impl final {
   FbxSceneSource source;
+  //! The bake-plan variant of each geometry work item, in emission order; the
+  //! scene stage's geometry keys follow this order.
+  std::vector<size_t> emitted_variants;
 };
 
 FbxAdapter::FbxAdapter()
@@ -511,8 +514,12 @@ namespace {
     constexpr float kMinWeight = 1.0e-4F;
 
     if (weights.size() != joints.size()) {
-      diagnostics.push_back(MakeErrorDiagnostic("mesh.skinning_buffers",
-        "Skinning buffers must have matching sizes", source_id, object_path));
+      diagnostics.push_back(MakeWarningDiagnostic("mesh.skinning_buffers",
+        "Skinning buffers have different sizes; the mesh imports as static "
+        "geometry in its bind pose",
+        source_id, object_path));
+      weights.clear();
+      joints.clear();
       return;
     }
 
@@ -565,13 +572,13 @@ namespace {
     std::string_view object_path) -> std::optional<TriangleMeshBuffers>
   {
     if (mesh.num_indices == 0 || mesh.num_faces == 0) {
-      diagnostics.push_back(MakeErrorDiagnostic(
+      diagnostics.push_back(MakeWarningDiagnostic(
         "mesh.no_faces", "FBX mesh contains no faces", source_id, object_path));
       return std::nullopt;
     }
 
     if (!HasAttribute(mesh.vertex_position)) {
-      diagnostics.push_back(MakeErrorDiagnostic("mesh.missing_positions",
+      diagnostics.push_back(MakeWarningDiagnostic("mesh.missing_positions",
         "FBX mesh missing vertex positions", source_id, object_path));
       return std::nullopt;
     }
@@ -596,6 +603,7 @@ namespace {
     std::vector<uint32_t> tri_indices;
     tri_indices.resize(static_cast<size_t>(mesh.max_face_triangles) * 3U);
     size_t triangulated_faces = 0;
+    size_t out_of_range_faces = 0;
 
     for (size_t idx = 0; idx < mesh.num_indices; ++idx) {
       out.positions.push_back(
@@ -704,18 +712,16 @@ namespace {
       }
 
       const auto tri_index_count = static_cast<size_t>(tri_count) * 3U;
-      for (size_t i = 0; i < tri_index_count; ++i) {
-        const auto idx = tri_indices.at(i);
-        if (idx >= mesh.num_indices) {
-          diagnostics.push_back(MakeErrorDiagnostic("mesh.index_oob",
-            "FBX mesh contains out-of-range indices", source_id, object_path));
-          return std::nullopt;
-        }
+      const auto used_indices = std::span(tri_indices).first(tri_index_count);
+      if (std::ranges::any_of(used_indices, [&](const uint32_t idx) -> bool {
+            return idx >= mesh.num_indices;
+          })) {
+        ++out_of_range_faces;
+        continue;
       }
 
-      const auto used = std::span(tri_indices).first(tri_index_count);
       it->second.indices.insert(
-        it->second.indices.end(), used.begin(), used.end());
+        it->second.indices.end(), used_indices.begin(), used_indices.end());
       it->second.range.index_count += static_cast<uint32_t>(tri_index_count);
       if (face.num_indices != 3) {
         ++triangulated_faces;
@@ -725,6 +731,12 @@ namespace {
     if (triangulated_faces > 0) {
       DLOG_F(INFO, "FBX mesh '{}' triangulated {} faces", object_path,
         triangulated_faces);
+    }
+    if (out_of_range_faces > 0) {
+      diagnostics.push_back(MakeWarningDiagnostic("mesh.index_oob",
+        "FBX mesh has " + std::to_string(out_of_range_faces)
+          + " faces that reference out-of-range indices; they are dropped",
+        source_id, object_path));
     }
 
     if (const auto* skin_deformer = FindSkinDeformer(mesh);
@@ -783,8 +795,8 @@ namespace {
     }
 
     if (out.ranges.empty()) {
-      diagnostics.push_back(MakeErrorDiagnostic("mesh.no_ranges",
-        "FBX mesh emitted no triangle ranges", source_id, object_path));
+      diagnostics.push_back(MakeWarningDiagnostic("mesh.no_ranges",
+        "FBX mesh has no usable triangles", source_id, object_path));
       return std::nullopt;
     }
 
@@ -1031,6 +1043,10 @@ namespace {
         : (request.source_path.parent_path() / abs_path);
     }
 
+    // A path that names a folder names no image: the texture is missing.
+    if (!identity.resolved_path.has_filename()) {
+      identity.resolved_path.clear();
+    }
     if (!identity.resolved_path.empty()) {
       identity.texture_id = NormalizeTexturePathId(identity.resolved_path);
     }
@@ -2064,6 +2080,7 @@ namespace {
         input.source_id_prefix, name, static_cast<uint32_t>(variant_index));
       result.sources.push_back({
         .variant = variant,
+        .variant_index = variant_index,
         .name = std::move(name),
         .source_id = std::move(source_id),
       });
@@ -2071,12 +2088,16 @@ namespace {
     return result;
   }
 
+  //! Streams one work item per mesh variant. A LOD or mesh whose source data
+  //! cannot be built is dropped with a warning; `emitted_variants` receives
+  //! the variant index of each item, in emission order.
   [[nodiscard]] auto StreamWorkItemsFromScene(const ufbx_scene& scene,
     const std::span<const base::Sha256Digest> source_witnesses,
-    const AdapterInput& input, GeometryWorkItemSink& sink)
-    -> WorkItemStreamResult
+    const AdapterInput& input, GeometryWorkItemSink& sink,
+    std::vector<size_t>& emitted_variants) -> WorkItemStreamResult
   {
     WorkItemStreamResult result;
+    emitted_variants.clear();
     if (input.stop_token.stop_requested()) {
       result.success = false;
       result.diagnostics.push_back(
@@ -2188,16 +2209,25 @@ namespace {
           item.has_material_textures = true;
         }
 
-        std::vector<ImportDiagnostic> diagnostics;
         auto buffers = BuildTriangleBuffers(*lod_input.mesh, basis,
           lod_input.material_node, scene_material_index_by_ptr,
           static_cast<uint32_t>(scene_material_index_by_ptr.size()),
-          diagnostics, item.source_id, item.mesh_name);
+          result.diagnostics, item.source_id, item.mesh_name);
         if (!buffers.has_value()) {
-          result.diagnostics.insert(
-            result.diagnostics.end(), diagnostics.begin(), diagnostics.end());
-          built = false;
-          break;
+          // LOD0 is the geometry; a coarser level that cannot be built is
+          // left out of it.
+          if (lod_index == 0) {
+            result.diagnostics.push_back(MakeWarningDiagnostic("mesh.dropped",
+              "FBX mesh cannot be built; the mesh is dropped",
+              input.source_id_prefix, mesh_name));
+            built = false;
+            break;
+          }
+          result.diagnostics.push_back(MakeWarningDiagnostic("mesh.lod_dropped",
+            "FBX LOD " + std::to_string(lod_index)
+              + " cannot be built; the level is dropped",
+            input.source_id_prefix, mesh_name));
+          continue;
         }
         if (lod_index != 0) {
           RemapLodSlots(buffers->ranges, materials, slot_materials);
@@ -2255,14 +2285,13 @@ namespace {
         };
 
         item.lods.push_back(MeshLod {
-          .lod_name = "LOD" + std::to_string(lod_index),
+          .lod_name = "LOD" + std::to_string(item.lods.size()),
           .source = triangle_mesh,
           .source_owner = std::move(owner),
           .bake_transform = lod_input.transform,
         });
       }
       if (!built) {
-        result.success = false;
         continue;
       }
       item.surfaces_used.assign(surfaces_used.begin(), surfaces_used.end());
@@ -2270,6 +2299,7 @@ namespace {
       if (!sink.Consume(std::move(item))) {
         return result;
       }
+      emitted_variants.push_back(source.variant_index);
       ++result.emitted;
     }
 
@@ -2292,7 +2322,8 @@ auto FbxAdapter::InspectSource(const std::filesystem::path& source_path,
     return result;
   }
   result.parsed = true;
-  result.supported = internal::ValidateStaticSource(
+  result.supported = true;
+  internal::ReportDroppedSourceFeatures(
     *scene, input.source_id_prefix, result.diagnostics);
   const auto axis_name = [](const ufbx_coordinate_axis axis) -> std::string {
     switch (axis) {
@@ -2371,13 +2402,8 @@ auto FbxAdapter::Parse(const std::filesystem::path& source_path,
     return result;
   }
 
-  if (input.request.options.scene_content_policy == SceneContentPolicy::kStatic
-    && !internal::ValidateStaticSource(
-      *scene, input.source_id_prefix, result.diagnostics)) {
-    impl_->source = {};
-    result.success = false;
-    return result;
-  }
+  internal::ReportDroppedSourceFeatures(
+    *scene, input.source_id_prefix, result.diagnostics);
 
   impl_->source = std::move(loaded);
   return result;
@@ -2402,13 +2428,8 @@ auto FbxAdapter::Parse(const std::span<const std::byte> source_bytes,
     return result;
   }
 
-  if (input.request.options.scene_content_policy == SceneContentPolicy::kStatic
-    && !internal::ValidateStaticSource(
-      *scene, input.source_id_prefix, result.diagnostics)) {
-    impl_->source = {};
-    result.success = false;
-    return result;
-  }
+  internal::ReportDroppedSourceFeatures(
+    *scene, input.source_id_prefix, result.diagnostics);
 
   impl_->source = std::move(loaded);
   return result;
@@ -2451,8 +2472,9 @@ auto FbxAdapter::BuildWorkItems(GeometryWorkTag /*unused*/,
     return result;
   }
 
-  return StreamWorkItemsFromScene(
-    *impl_->source.scene, impl_->source.source_layout_witnesses, input, sink);
+  return StreamWorkItemsFromScene(*impl_->source.scene,
+    impl_->source.source_layout_witnesses, input, sink,
+    impl_->emitted_variants);
 }
 
 auto FbxAdapter::PrepareMaterials(const AdapterInput& input)
@@ -2531,6 +2553,7 @@ auto FbxAdapter::PrepareMaterials(const AdapterInput& input)
     item.material.domain = data::MaterialDomain::kOpaque;
     item.material.alpha_mode = MaterialAlphaMode::kOpaque;
 
+    item.material.RepairModelInputs(item.source_id, result.diagnostics);
     if (!item.material.Validate(item.source_id, result.diagnostics)) {
       result.success = false;
       return result;
@@ -2803,6 +2826,7 @@ auto FbxAdapter::PrepareMaterials(const AdapterInput& input)
       }
     }
 
+    item.material.RepairModelInputs(item.source_id, result.diagnostics);
     if (!item.material.Validate(item.source_id, result.diagnostics)) {
       result.success = false;
       return result;
@@ -3039,6 +3063,8 @@ auto FbxAdapter::BuildWorkItems(TextureWorkTag /*unused*/,
     item.failure_policy = source.failure_policy;
     item.source = resolved->bytes;
     item.source_path = std::move(resolved->source_path);
+    item.fallback_source_paths
+      = TextureFallbackPaths(input.request.source_path, item.source_path);
     item.stop_token = input.stop_token;
     if (!sink.Consume(std::move(item))) {
       return result;
@@ -3103,11 +3129,19 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
     source_node_indices.emplace(ItemAt(scene.nodes, index), index);
   }
 
-  if (!input.geometry_keys.empty()
-    && input.geometry_keys.size() < bake_plan.variants.size()) {
+  if (input.geometry_keys.size() > impl_->emitted_variants.size()) {
     diagnostics.push_back(MakeErrorDiagnostic("scene.geometry_key_missing",
-      "Geometry key count does not match mesh count", input.source_id, {}));
+      "Geometry key count does not match the emitted geometry", input.source_id,
+      {}));
   }
+  // A node whose mesh was dropped keeps its place but shows no geometry.
+  const auto geometry_keys = GeometryKeysByVariant(
+    bake_plan.variants.size(), impl_->emitted_variants, input.geometry_keys);
+  const auto geometry_key_of
+    = [&](const size_t variant) -> std::optional<data::AssetKey> {
+    return variant < geometry_keys.size() ? geometry_keys.at(variant)
+                                          : std::nullopt;
+  };
 
   std::vector<NodeInput> nodes;
   nodes.reserve(scene.nodes.count > 0 ? scene.nodes.count : 1U);
@@ -3154,9 +3188,7 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
     node_input.source_node = node;
 
     // A node with a mesh, or a LOD group's host, shows its geometry.
-    if (variant_index < input.geometry_keys.size()) {
-      node_input.has_renderable = true;
-    }
+    node_input.has_renderable = geometry_key_of(variant_index).has_value();
 
     const auto index = static_cast<uint32_t>(nodes.size());
     if (index == 0) {
@@ -3272,8 +3304,8 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
         if (std::abs(det) > kSingularDeterminant) {
           node.local_matrix = glm::inverse(parent_world) * node.world_matrix;
         } else {
-          diagnostics.push_back(MakeErrorDiagnostic("scene.pruning.singular",
-            "Node pruning failed due to singular parent transform",
+          diagnostics.push_back(MakeWarningDiagnostic("scene.pruning.singular",
+            "Node keeps its local transform: its parent transform is singular",
             input.source_id, node.base_name));
         }
       }
@@ -3368,11 +3400,10 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
     if (ufbx_node != nullptr) {
       const auto variant_index
         = bake_plan.node_variant.at(source_node_indices.at(ufbx_node));
-      if (variant_index < input.geometry_keys.size()) {
+      if (const auto key = geometry_key_of(variant_index); key.has_value()) {
         build.renderables.push_back(RenderableRecord {
           .node_index = i,
-          .geometry_key
-          = oxygen::base::CheckedAt(input.geometry_keys, variant_index),
+          .geometry_key = *key,
         });
       }
     }
