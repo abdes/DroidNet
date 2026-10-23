@@ -106,7 +106,8 @@
             never from the engine source tree.
         -->
         <OxygenSdkDir>$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)</OxygenSdkDir>
-        <OxygenSdkSchemasDir>$(OxygenSdkDir)\share\oxygen\schemas</OxygenSdkSchemasDir>
+        <OxygenSdkDataDir>$(OxygenSdkDir)\share\oxygen</OxygenSdkDataDir>
+        <OxygenSdkSchemasDir>$(OxygenSdkDataDir)\schemas</OxygenSdkSchemasDir>
 
         <GenerateDocumentationFile>true</GenerateDocumentationFile>
         <ProduceReferenceAssembly>true</ProduceReferenceAssembly>

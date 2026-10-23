@@ -17,9 +17,9 @@
         <PackageReference Include="Moq" />
     </ItemGroup>
 
-    <!-- The case table of the virtual path rules lives beside the engine's VirtualPath.h; both suites run it. -->
+    <!-- The case table of the virtual path rules, as the installed engine SDK ships it; the engine runs the same table. -->
     <ItemGroup>
-        <None Include="$(ProjectsRoot)\Oxygen.Engine\src\Oxygen\Content\VirtualPathCases.json" Link="VirtualPathCases.json" CopyToOutputDirectory="PreserveNewest" />
+        <None Include="$(OxygenSdkDataDir)\conformance\VirtualPathCases.json" Link="VirtualPathCases.json" CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
 
 </Project>

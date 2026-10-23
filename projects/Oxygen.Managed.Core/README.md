@@ -126,7 +126,9 @@ flowchart LR
 Both implementations build their Unicode tables from the same database, each in
 its own build (`UnicodeCodeGen` in the engine, `UnicodeTablesGenerator` here),
 and both test suites run the same case table, so neither can accept or refuse
-what the other does not.
+what the other does not. This project reads both from the installed engine SDK
+(`share/oxygen/unicode/15.1.0` and `share/oxygen/conformance`), never from the
+engine source tree.
 
 | Member                                             | Use                                                                                             |
 | -------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
