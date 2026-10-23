@@ -200,7 +200,49 @@ internal static class RuntimeTransportConversion
     /// <param name="entries">The managed payload.</param>
     /// <returns>The native transport value.</returns>
     public static PropertyValueEntry[] ToNative(ImmutableArray<RuntimePropertyValue> entries)
-        => [.. entries.Select(value => new PropertyValueEntry { ComponentId = (ushort)value.ComponentId, FieldId = value.FieldId, Value = value.Value })];
+        => [.. entries.Select(ToNative)];
+
+    /// <summary>Converts a managed field value without changing its identity, type or units.</summary>
+    /// <param name="value">The managed field value.</param>
+    /// <returns>The native transport value.</returns>
+    public static PropertyValueEntry ToNative(RuntimePropertyValue value)
+    {
+        var entry = new PropertyValueEntry { ComponentId = (ushort)value.ComponentId, FieldId = value.FieldId };
+        switch (value.Value)
+        {
+            case RuntimeFieldValue.Flag flag:
+                entry.Type = FieldType.Bool;
+                entry.BoolValue = flag.Value;
+                break;
+            case RuntimeFieldValue.Integer integer:
+                entry.Type = FieldType.Int32;
+                entry.Int32Value = integer.Value;
+                break;
+            case RuntimeFieldValue.Scalar scalar:
+                entry.Type = FieldType.Float;
+                entry.FloatValue = scalar.Value;
+                break;
+            default:
+                throw new ArgumentException($"Field {value.FieldId} of component {value.ComponentId} has no value.", nameof(value));
+        }
+
+        return entry;
+    }
+
+    /// <summary>Converts an observed native field value without changing its identity, type or units.</summary>
+    /// <param name="entry">The native transport value.</param>
+    /// <returns>The managed field value.</returns>
+    public static RuntimePropertyValue FromNative(PropertyValueEntry entry)
+        => new(
+            (RuntimeComponentId)entry.ComponentId,
+            entry.FieldId,
+            entry.Type switch
+            {
+                FieldType.Bool => new RuntimeFieldValue.Flag(entry.BoolValue),
+                FieldType.Int32 => new RuntimeFieldValue.Integer(entry.Int32Value),
+                FieldType.Float => new RuntimeFieldValue.Scalar(entry.FloatValue),
+                _ => throw new ArgumentOutOfRangeException(nameof(entry), entry.Type, "Unknown field value type."),
+            });
 
     /// <summary>Converts a managed payload without changing its identity or units.</summary>
     /// <param name="value">The managed payload.</param>

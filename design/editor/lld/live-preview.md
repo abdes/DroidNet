@@ -402,8 +402,12 @@ Runtime generates `RuntimeComponentId` and the field enums (`TransformField`,
 `NodeField`, `PerspectiveCameraField`, `OrthographicCameraField`,
 `DirectionalLightField`, `LocalLightField`, `LocalFogVolumeField`), so its
 public commands load without Interop.
-`RuntimePropertyValue(RuntimeComponentId ComponentId, ushort FieldId, float Value)`
-carries a field id as the field enum's value.
+`RuntimePropertyValue(RuntimeComponentId ComponentId, ushort FieldId, RuntimeFieldValue Value)`
+carries a field id as the field enum's value and a value of the field's schema
+value type: a `Flag` (bool), an `Integer` (int, or an enum member's wire value)
+or a `Scalar` (float, or one axis of a vector). Interop refuses a value of
+another type than the field's; a node observation reports Visibility and the
+shadow flags as their effective `Flag`.
 
 LivePreview's internal `SceneWire` maps each `PropertyId` to a
 `RuntimeComponentId`, its field ids and their encoding (the field of view in

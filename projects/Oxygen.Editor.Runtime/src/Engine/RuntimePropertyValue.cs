@@ -6,9 +6,9 @@ using System.Runtime.InteropServices;
 
 namespace Oxygen.Editor.Runtime.Engine;
 
-/// <summary>A scalar component property at the managed runtime boundary.</summary>
+/// <summary>One engine field of a component property at the managed runtime boundary.</summary>
 /// <param name="ComponentId">The component the property belongs to.</param>
 /// <param name="FieldId">The component-local field, a value of that component's Interop field enumeration.</param>
-/// <param name="Value">The authored scalar value in engine units.</param>
+/// <param name="Value">The field's value, of the field's schema value type, in engine units.</param>
 [StructLayout(LayoutKind.Auto)]
-public readonly record struct RuntimePropertyValue(RuntimeComponentId ComponentId, ushort FieldId, float Value);
+public readonly record struct RuntimePropertyValue(RuntimeComponentId ComponentId, ushort FieldId, RuntimeFieldValue Value);

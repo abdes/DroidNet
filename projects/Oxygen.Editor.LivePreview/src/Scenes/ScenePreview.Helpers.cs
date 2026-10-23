@@ -226,9 +226,9 @@ internal sealed partial class ScenePreview
     {
         ImmutableArray<RuntimePropertyValue> exposure =
         [
-            new(component, apertureField, camera.ApertureF),
-            new(component, shutterField, camera.ShutterRate),
-            new(component, isoField, camera.Iso),
+            new(component, apertureField, new RuntimeFieldValue.Scalar(camera.ApertureF)),
+            new(component, shutterField, new RuntimeFieldValue.Scalar(camera.ShutterRate)),
+            new(component, isoField, new RuntimeFieldValue.Scalar(camera.Iso)),
         ];
         world.Execute(new RuntimeSetProperties(node.Id, exposure));
     }
@@ -238,17 +238,17 @@ internal sealed partial class ScenePreview
         var source = node.Flags;
         ImmutableArray<RuntimePropertyValue> flags =
         [
-            Value(NodeField.Visible, (int)source.Visibility),
-            Value(NodeField.CastsShadows, (int)source.CastsShadows),
-            Value(NodeField.ReceivesShadows, (int)source.ReceivesShadows),
-            Value(NodeField.Static, source.IsStatic ? 1 : 0),
-            Value(NodeField.RayCastingSelectable, source.IsRayCastingSelectable ? 1 : 0),
-            Value(NodeField.IgnoreParentTransform, source.IgnoreParentTransform ? 1 : 0),
+            Value(NodeField.Visible, new RuntimeFieldValue.Integer((int)source.Visibility)),
+            Value(NodeField.CastsShadows, new RuntimeFieldValue.Integer((int)source.CastsShadows)),
+            Value(NodeField.ReceivesShadows, new RuntimeFieldValue.Integer((int)source.ReceivesShadows)),
+            Value(NodeField.Static, new RuntimeFieldValue.Flag(source.IsStatic)),
+            Value(NodeField.RayCastingSelectable, new RuntimeFieldValue.Flag(source.IsRayCastingSelectable)),
+            Value(NodeField.IgnoreParentTransform, new RuntimeFieldValue.Flag(source.IgnoreParentTransform)),
         ];
         world.Execute(new RuntimeSetProperties(node.Id, flags));
 
-        // Visibility and the shadow flags send their source mode; the others their local value.
-        static RuntimePropertyValue Value(NodeField field, int value)
+        // Visibility and the shadow flags send their source mode's wire value; the others their local bool.
+        static RuntimePropertyValue Value(NodeField field, RuntimeFieldValue value)
             => new(RuntimeComponentId.Node, (ushort)field, value);
     }
 

@@ -59,10 +59,11 @@ namespace oxygen::interop::module {
       }
 
       for (const auto& entry : entries) {
-        if (!std::isfinite(entry.value)) {
+        const float value = entry.Float();
+        if (!std::isfinite(value)) {
           LOG_F(WARNING,
             "TransformPropertyApplier skipped field {}: non-finite value {}",
-            entry.field, entry.value);
+            entry.field, value);
           continue;
         }
 
@@ -73,7 +74,7 @@ namespace oxygen::interop::module {
             entry.field);
           continue;
         }
-        kFieldTable[idx](state, entry.value);
+        kFieldTable[idx](state, value);
       }
 
       if (state.position_dirty) {

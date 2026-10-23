@@ -60,7 +60,7 @@ public sealed class SceneWireTests
 
         _ = mapping.Component.Should().Be(RuntimeComponentId.PerspectiveCamera);
         _ = mapping.Fields.Should().Equal((ushort)PerspectiveCameraField.FieldOfViewYRadians);
-        _ = mapping.EncodeValue(90f).Should().ContainSingle().Which.Should().BeApproximately(MathF.PI / 2, 0.00001f);
+        _ = mapping.EncodeValue(90f).Should().ContainSingle().Which.Should().BeOfType<RuntimeFieldValue.Scalar>().Which.Value.Should().BeApproximately(MathF.PI / 2, 0.00001f);
     }
 
     [TestMethod]

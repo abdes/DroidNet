@@ -36,39 +36,38 @@ namespace oxygen::interop::module {
         auto disk = light.GetAtmosphereDiskLuminanceScale();
         for (const auto& entry : entries) {
           const auto field = static_cast<DirectionalLightField>(entry.field);
-          const float value = entry.value;
-          if (!ValidEncoding(field, value)) {
+          if (!ValidEncoding(field, entry)) {
             error = { .field = std::to_string(entry.field), .message = "Invalid light property encoding" };
             return false;
           }
           switch (field) {
-          case DirectionalLightField::kColorR: common.color_rgb.x = value; break;
-          case DirectionalLightField::kColorG: common.color_rgb.y = value; break;
-          case DirectionalLightField::kColorB: common.color_rgb.z = value; break;
-          case DirectionalLightField::kAffectsWorld: common.affects_world = value != 0.0F; break;
-          case DirectionalLightField::kCastsShadows: common.casts_shadows = value != 0.0F; break;
-          case DirectionalLightField::kShadowBias: common.shadow.bias = value; break;
-          case DirectionalLightField::kShadowNormalBias: common.shadow.normal_bias = value; break;
-          case DirectionalLightField::kContactShadows: common.shadow.contact_shadows = value != 0.0F; break;
-          case DirectionalLightField::kShadowResolutionHint: common.shadow.resolution_hint = static_cast<scene::ShadowResolutionHint>(static_cast<unsigned>(value)); break;
-          case DirectionalLightField::kExposureCompensation: common.exposure_compensation_ev = value; break;
-          case DirectionalLightField::kIntensityLux: light.SetIntensityLux(value); break;
-          case DirectionalLightField::kAngularSizeRadians: light.SetAngularSizeRadians(value); break;
-          case DirectionalLightField::kCascadeCount: csm.cascade_count = static_cast<std::uint32_t>(value); break;
-          case DirectionalLightField::kSplitMode: csm.split_mode = static_cast<scene::DirectionalCsmSplitMode>(static_cast<unsigned>(value)); break;
-          case DirectionalLightField::kMaxShadowDistance: csm.max_shadow_distance = value; break;
-          case DirectionalLightField::kCascadeDistance0: csm.cascade_distances[0] = value; break;
-          case DirectionalLightField::kCascadeDistance1: csm.cascade_distances[1] = value; break;
-          case DirectionalLightField::kCascadeDistance2: csm.cascade_distances[2] = value; break;
-          case DirectionalLightField::kCascadeDistance3: csm.cascade_distances[3] = value; break;
-          case DirectionalLightField::kDistributionExponent: csm.distribution_exponent = value; break;
-          case DirectionalLightField::kTransitionFraction: csm.transition_fraction = value; break;
-          case DirectionalLightField::kDistanceFadeoutFraction: csm.distance_fadeout_fraction = value; break;
-          case DirectionalLightField::kAtmosphereLightSlot: light.SetAtmosphereLightSlot(static_cast<scene::AtmosphereLightSlot>(static_cast<unsigned>(value))); break;
-          case DirectionalLightField::kUsePerPixelAtmosphereTransmittance: light.SetUsePerPixelAtmosphereTransmittance(value != 0.0F); break;
-          case DirectionalLightField::kDiskScaleR: disk.x = value; break;
-          case DirectionalLightField::kDiskScaleG: disk.y = value; break;
-          case DirectionalLightField::kDiskScaleB: disk.z = value; break;
+          case DirectionalLightField::kColorR: common.color_rgb.x = entry.Float(); break;
+          case DirectionalLightField::kColorG: common.color_rgb.y = entry.Float(); break;
+          case DirectionalLightField::kColorB: common.color_rgb.z = entry.Float(); break;
+          case DirectionalLightField::kAffectsWorld: common.affects_world = entry.Bool(); break;
+          case DirectionalLightField::kCastsShadows: common.casts_shadows = entry.Bool(); break;
+          case DirectionalLightField::kShadowBias: common.shadow.bias = entry.Float(); break;
+          case DirectionalLightField::kShadowNormalBias: common.shadow.normal_bias = entry.Float(); break;
+          case DirectionalLightField::kContactShadows: common.shadow.contact_shadows = entry.Bool(); break;
+          case DirectionalLightField::kShadowResolutionHint: common.shadow.resolution_hint = static_cast<scene::ShadowResolutionHint>(entry.Int32()); break;
+          case DirectionalLightField::kExposureCompensation: common.exposure_compensation_ev = entry.Float(); break;
+          case DirectionalLightField::kIntensityLux: light.SetIntensityLux(entry.Float()); break;
+          case DirectionalLightField::kAngularSizeRadians: light.SetAngularSizeRadians(entry.Float()); break;
+          case DirectionalLightField::kCascadeCount: csm.cascade_count = static_cast<std::uint32_t>(entry.Int32()); break;
+          case DirectionalLightField::kSplitMode: csm.split_mode = static_cast<scene::DirectionalCsmSplitMode>(entry.Int32()); break;
+          case DirectionalLightField::kMaxShadowDistance: csm.max_shadow_distance = entry.Float(); break;
+          case DirectionalLightField::kCascadeDistance0: csm.cascade_distances[0] = entry.Float(); break;
+          case DirectionalLightField::kCascadeDistance1: csm.cascade_distances[1] = entry.Float(); break;
+          case DirectionalLightField::kCascadeDistance2: csm.cascade_distances[2] = entry.Float(); break;
+          case DirectionalLightField::kCascadeDistance3: csm.cascade_distances[3] = entry.Float(); break;
+          case DirectionalLightField::kDistributionExponent: csm.distribution_exponent = entry.Float(); break;
+          case DirectionalLightField::kTransitionFraction: csm.transition_fraction = entry.Float(); break;
+          case DirectionalLightField::kDistanceFadeoutFraction: csm.distance_fadeout_fraction = entry.Float(); break;
+          case DirectionalLightField::kAtmosphereLightSlot: light.SetAtmosphereLightSlot(static_cast<scene::AtmosphereLightSlot>(entry.Int32())); break;
+          case DirectionalLightField::kUsePerPixelAtmosphereTransmittance: light.SetUsePerPixelAtmosphereTransmittance(entry.Bool()); break;
+          case DirectionalLightField::kDiskScaleR: disk.x = entry.Float(); break;
+          case DirectionalLightField::kDiskScaleG: disk.y = entry.Float(); break;
+          case DirectionalLightField::kDiskScaleB: disk.z = entry.Float(); break;
           default:
             error = { .field = std::to_string(entry.field), .message = "Unknown or removed light property" };
             return false;
@@ -81,24 +80,25 @@ namespace oxygen::interop::module {
     }
 
   private:
-    static auto ValidEncoding(DirectionalLightField field, float value) -> bool
+    // A value the light accepts: a finite float, or an int32 inside its
+    // enumeration or count. A bool field is valid as it is.
+    static auto ValidEncoding(DirectionalLightField field,
+      const PropertyEntry& entry) -> bool
     {
-      if (!std::isfinite(value)) return false;
+      const auto type = FindFieldType(field);
+      if (!type) return false;
+      switch (*type) {
+      case FieldType::kBool: return true;
+      case FieldType::kFloat: return std::isfinite(entry.Float());
+      case FieldType::kInt32: break;
+      }
+      const auto value = entry.Int32();
       switch (field) {
-      case DirectionalLightField::kAffectsWorld:
-      case DirectionalLightField::kCastsShadows:
-      case DirectionalLightField::kContactShadows:
-      case DirectionalLightField::kUsePerPixelAtmosphereTransmittance:
-        return value == 0.0F || value == 1.0F;
-      case DirectionalLightField::kShadowResolutionHint:
-        return value >= 0.0F && value <= 3.0F && std::floor(value) == value;
-      case DirectionalLightField::kAtmosphereLightSlot:
-        return value >= 0.0F && value <= 2.0F && std::floor(value) == value;
-      case DirectionalLightField::kCascadeCount:
-        return value >= 1.0F && value <= 4.0F && std::floor(value) == value;
-      case DirectionalLightField::kSplitMode:
-        return value == 0.0F || value == 1.0F;
-      default: return true;
+      case DirectionalLightField::kShadowResolutionHint: return value >= 0 && value <= 3;
+      case DirectionalLightField::kAtmosphereLightSlot: return value >= 0 && value <= 2;
+      case DirectionalLightField::kCascadeCount: return value >= 1 && value <= 4;
+      case DirectionalLightField::kSplitMode: return value == 0 || value == 1;
+      default: return false;
       }
     }
   };

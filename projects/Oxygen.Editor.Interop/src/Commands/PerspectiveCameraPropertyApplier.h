@@ -61,55 +61,58 @@ namespace oxygen::interop::module {
 
       auto& camera = camera_ref->get();
       for (const auto& entry : entries) {
-        if (!std::isfinite(entry.value)) {
+        const auto field = static_cast<PerspectiveCameraField>(entry.field);
+        if (field == PerspectiveCameraField::kAspectMode) {
+          const auto mode = entry.Int32();
+          if (mode == 0 || mode == 1) {
+            camera.SetAspectMode(mode == 0 ? oxygen::CameraAspectMode::kAuto
+                                           : oxygen::CameraAspectMode::kFixed);
+          }
+          continue;
+        }
+        const float value = entry.Float();
+        if (!std::isfinite(value)) {
           LOG_F(WARNING,
             "PerspectiveCameraPropertyApplier skipped field {}: non-finite "
             "value {}",
-            entry.field, entry.value);
+            entry.field, value);
           continue;
         }
 
-        switch (static_cast<PerspectiveCameraField>(entry.field)) {
+        switch (field) {
         case PerspectiveCameraField::kFieldOfViewYRadians:
-          camera.SetFieldOfView(entry.value);
+          camera.SetFieldOfView(value);
           break;
         case PerspectiveCameraField::kAspectRatio:
-          if (entry.value > 0.0F) {
-            camera.SetAspectRatio(entry.value);
-          }
-          break;
-        case PerspectiveCameraField::kAspectMode:
-          if (entry.value == 0.0F || entry.value == 1.0F) {
-            camera.SetAspectMode(entry.value == 0.0F
-              ? oxygen::CameraAspectMode::kAuto : oxygen::CameraAspectMode::kFixed);
+          if (value > 0.0F) {
+            camera.SetAspectRatio(value);
           }
           break;
         case PerspectiveCameraField::kNearPlane:
-          if (entry.value > 0.0F) {
-            camera.SetNearPlane(entry.value);
+          if (value > 0.0F) {
+            camera.SetNearPlane(value);
           }
           break;
         case PerspectiveCameraField::kFarPlane:
-          if (entry.value > 0.0F) {
-            camera.SetFarPlane(entry.value);
+          if (value > 0.0F) {
+            camera.SetFarPlane(value);
           }
           break;
         case PerspectiveCameraField::kApertureF:
         case PerspectiveCameraField::kShutterRate:
         case PerspectiveCameraField::kIso: {
-          const auto field = static_cast<PerspectiveCameraField>(entry.field);
-          if (entry.value <= 0.0F) {
+          if (value <= 0.0F) {
             LOG_F(WARNING, "Camera exposure edit rejected: {} must be positive (received {})",
-              to_string(field), entry.value);
+              to_string(field), value);
             break;
           }
           auto exposure = camera.Exposure();
           if (field == PerspectiveCameraField::kApertureF) {
-            exposure.aperture_f = entry.value;
+            exposure.aperture_f = value;
           } else if (field == PerspectiveCameraField::kShutterRate) {
-            exposure.shutter_rate = entry.value;
+            exposure.shutter_rate = value;
           } else {
-            exposure.iso = entry.value;
+            exposure.iso = value;
           }
           camera.SetExposure(exposure);
           break;

@@ -79,7 +79,7 @@ public sealed class PendingPropertySyncQueueTests
 
         _ = queue.Snapshot(scene, lifetime).Should().BeEmpty();
         _ = queue.Snapshot(scene, reopened).Should().ContainSingle().Which.Entries.Should().ContainSingle()
-            .Which.Value.Should().Be(9);
+            .Which.Value.Should().Be(new RuntimeFieldValue.Scalar(9));
     }
 
     [TestMethod]
@@ -94,7 +94,7 @@ public sealed class PendingPropertySyncQueueTests
         var pending = queue.Snapshot(scene, lifetime);
 
         _ = pending.Select(request => request.Revision.Revision).Should().Equal(1, 2);
-        _ = pending[1].Entries.Should().ContainSingle().Which.Value.Should().Be(7);
+        _ = pending[1].Entries.Should().ContainSingle().Which.Value.Should().Be(new RuntimeFieldValue.Scalar(7));
         _ = queue.Count(scene).Should().Be(2, "reading a replay batch does not acknowledge it");
     }
 
@@ -108,5 +108,5 @@ public sealed class PendingPropertySyncQueueTests
     }
 
     private static EnginePropertyValueEntry Entry(TransformField field, float value)
-        => new(RuntimeComponentId.Transform, (ushort)field, value);
+        => new(RuntimeComponentId.Transform, (ushort)field, new RuntimeFieldValue.Scalar(value));
 }

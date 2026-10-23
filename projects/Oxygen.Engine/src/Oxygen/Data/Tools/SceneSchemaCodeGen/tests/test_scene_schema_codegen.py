@@ -234,6 +234,46 @@ def test_unknown_field_set_is_refused() -> None:
     assert "PointLight: unknown field set Lamp" in _error_of(document)
 
 
+def test_field_types_follow_the_properties_they_receive() -> None:
+    document = _minimal()
+    document["field_sets"][0]["fields"].append({"name": "Mode", "id": 6})
+    document["components"][0]["properties"].append(
+        {
+            "name": "Mode",
+            "key": "/mode",
+            "type": "enum",
+            "enum": "Mode",
+            "fields": ["Mode"],
+            "default": "Auto",
+        }
+    )
+    text = cpp.render(model.parse(document, _rules()), "test.yaml")
+    assert "  case LightField::kColorG: return FieldType::kFloat;\n" in text
+    assert "  case LightField::kRange: return FieldType::kFloat;\n" in text
+    assert "  case LightField::kMode: return FieldType::kInt32;\n" in text
+    assert (
+        "  case ComponentId::kPointLight: "
+        "return FindFieldType(static_cast<LightField>(field));\n"
+    ) in text
+
+
+def test_field_no_property_uses_is_refused() -> None:
+    document = _minimal()
+    document["field_sets"][0]["fields"].append({"name": "Radius", "id": 6})
+    assert "Light.Radius: no property uses it" in _error_of(document)
+
+
+def test_field_receiving_two_value_types_is_refused() -> None:
+    document = _minimal()
+    twin = copy.deepcopy(document["components"][0])
+    twin.update(
+        name="SpotLight", kind="spot-light", wire={"id": 4, "field_set": "Light"}
+    )
+    twin["properties"][1].update(type="int", default=20)
+    document["components"].append(twin)
+    assert "Light.Range: receives float and int32 values" in _error_of(document)
+
+
 def _with_surface(document: dict[str, Any]) -> dict[str, Any]:
     document["components"][1]["parts"] = [
         {

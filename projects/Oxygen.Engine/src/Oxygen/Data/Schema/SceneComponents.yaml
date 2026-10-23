@@ -15,8 +15,10 @@
 # set; point and spot lights share one. Ids are stable: never renumber or reuse
 # one. A property is addressed by its component kind and key (a JSON pointer
 # into the component's authored record) and has one value type. The fields of
-# a property receive its value in order, one float each; `encoding` names a
-# unit conversion applied before the value goes to its fields.
+# a property receive its value in order, one value each: a bool as a bool, an
+# int or an enum member's wire value as an int32, a float or each axis of a
+# vec3 as a float. `encoding` names a unit conversion applied before the value
+# goes to its fields.
 #
 # The schema is the only place that decides a property's creation `default`
 # and its valid `range`, both in the property's authored units. A range bounds

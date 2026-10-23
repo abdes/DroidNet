@@ -507,9 +507,9 @@ auto RunSetPropertiesNodeFlagsApplyLocalValues(NodeFlagsSnapshot& result)
     };
     SetPropertiesCommand(child.GetHandle(),
       {
-        { ComponentId::kNode, field(NodeField::kStatic), 1.0F },
-        { ComponentId::kNode, field(NodeField::kRayCastingSelectable), 0.0F },
-        { ComponentId::kNode, field(NodeField::kIgnoreParentTransform), 1.0F },
+        { ComponentId::kNode, field(NodeField::kStatic), true },
+        { ComponentId::kNode, field(NodeField::kRayCastingSelectable), false },
+        { ComponentId::kNode, field(NodeField::kIgnoreParentTransform), true },
       })
       .Execute(context);
     scene->Update(false);
@@ -539,7 +539,7 @@ auto RunSetPropertiesNodeFlagSourceModes(NodeFlagSourcesSnapshot& result)
     const auto entry = [](const NodeField field, const NodeFlagSource mode) {
       return PropertyEntry { .component = ComponentId::kNode,
         .field = static_cast<std::uint16_t>(field),
-        .value = static_cast<float>(mode) };
+        .value = static_cast<std::int32_t>(mode) };
     };
     const auto effective = [](oxygen::scene::SceneNode& node,
                              const oxygen::scene::SceneNodeFlags flag) {
@@ -616,7 +616,7 @@ auto RunSetPropertiesDirectionalLightEditInvalidatesResolvedSun(
     const auto set_visible = [&](const bool visible) -> void {
       SetPropertiesCommand(node.GetHandle(),
         { { ComponentId::kNode, static_cast<std::uint16_t>(NodeField::kVisible),
-          static_cast<float>(visible ? NodeFlagSource::kLocalOn
+          static_cast<std::int32_t>(visible ? NodeFlagSource::kLocalOn
                                      : NodeFlagSource::kLocalOff) } })
         .Execute(context);
     };
@@ -635,10 +635,10 @@ auto RunSetPropertiesDirectionalLightEditInvalidatesResolvedSun(
       { ComponentId::kDirectionalLight,
         static_cast<std::uint16_t>(
           DirectionalLightField::kUsePerPixelAtmosphereTransmittance),
-        1.0F },
+        true },
       { ComponentId::kDirectionalLight,
         static_cast<std::uint16_t>(DirectionalLightField::kAtmosphereLightSlot),
-        1.0F },
+        std::int32_t { 1 } },
       { ComponentId::kDirectionalLight,
         static_cast<std::uint16_t>(DirectionalLightField::kIntensityLux),
         90000.0F },
@@ -647,7 +647,7 @@ auto RunSetPropertiesDirectionalLightEditInvalidatesResolvedSun(
     edit_command.Execute(context);
     std::vector<PropertyEntry> invalid_entries {
       { ComponentId::kDirectionalLight, static_cast<std::uint16_t>(DirectionalLightField::kIntensityLux), 123.0F },
-      { ComponentId::kDirectionalLight, static_cast<std::uint16_t>(DirectionalLightField::kCascadeCount), 0.0F },
+      { ComponentId::kDirectionalLight, static_cast<std::uint16_t>(DirectionalLightField::kCascadeCount), std::int32_t { 0 } },
     };
     try {
       SetPropertiesCommand invalid(node.GetHandle(), std::move(invalid_entries));
@@ -1036,14 +1036,14 @@ auto RunLocalFogVolumeContracts() -> NativeStatus
     }
 
     LocalFogVolumePropertyApplier applier;
-    const auto entry = [](LocalFogVolumeField field, float value) {
+    const auto entry = [](LocalFogVolumeField field, FieldValue value) {
       return PropertyEntry { .component = ComponentId::kLocalFogVolume,
         .field = static_cast<std::uint16_t>(field), .value = value };
     };
     const auto edits = std::vector {
-      entry(LocalFogVolumeField::kEnabled, 0.0F),
+      entry(LocalFogVolumeField::kEnabled, false),
       entry(LocalFogVolumeField::kFogEmissiveG, 0.25F),
-      entry(LocalFogVolumeField::kSortPriority, -5.0F),
+      entry(LocalFogVolumeField::kSortPriority, std::int32_t { -5 }),
     };
     applier.Apply(node, edits);
     if (read()->IsEnabled() || read()->GetFogEmissive().y != 0.25F
@@ -1063,6 +1063,22 @@ auto RunLocalFogVolumeContracts() -> NativeStatus
     }
     if (!rejected || read()->GetRadialFogExtinction() != 2.0F) {
       throw std::runtime_error("Invalid local fog volume edit was not rejected atomically");
+    }
+
+    // A value of another type than its field's schema type never reaches an
+    // applier: the command refuses it.
+    for (const auto& mistyped : { entry(LocalFogVolumeField::kSortPriority, 3.0F),
+           entry(LocalFogVolumeField::kEnabled, std::int32_t { 1 }),
+           entry(LocalFogVolumeField::kFogPhaseG, true) }) {
+      bool refused = false;
+      try {
+        SetPropertiesCommand(node.GetHandle(), { mistyped });
+      } catch (const std::invalid_argument&) {
+        refused = true;
+      }
+      if (!refused) {
+        throw std::runtime_error("A value of another type than its field's was accepted");
+      }
     }
 
     DetachLocalFogVolumeCommand(node.GetHandle()).Execute(context);

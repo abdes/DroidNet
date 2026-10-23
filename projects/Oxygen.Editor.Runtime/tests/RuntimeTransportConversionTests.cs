@@ -7,6 +7,7 @@ using System.Numerics;
 using AwesomeAssertions;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Interop.Input;
+using Oxygen.Interop.World;
 
 namespace Oxygen.Editor.Runtime.Tests;
 
@@ -68,17 +69,30 @@ public sealed class RuntimeTransportConversionTests
     }
 
     [TestMethod]
-    public void PropertyConversion_PreservesComponentFieldAndScalarValues()
+    public void PropertyConversion_PreservesComponentFieldAndTypedValues()
     {
-        ImmutableArray<RuntimePropertyValue> values = [new(RuntimeComponentId.Transform, 23, -4.5f), new((RuntimeComponentId)ushort.MaxValue, 67, float.MaxValue)];
+        ImmutableArray<RuntimePropertyValue> values =
+        [
+            new(RuntimeComponentId.Transform, 23, new RuntimeFieldValue.Scalar(-4.5f)),
+            new((RuntimeComponentId)ushort.MaxValue, 67, new RuntimeFieldValue.Scalar(float.MaxValue)),
+            new(RuntimeComponentId.Node, (ushort)NodeField.Visible, new RuntimeFieldValue.Integer(2)),
+            new(RuntimeComponentId.Node, (ushort)NodeField.Static, new RuntimeFieldValue.Flag(true)),
+        ];
         var native = RuntimeTransportConversion.ToNative(values);
 
-        _ = native.Should().HaveCount(2);
+        _ = native.Should().HaveCount(values.Length);
         for (var index = 0; index < values.Length; ++index)
         {
             _ = native[index].ComponentId.Should().Be((ushort)values[index].ComponentId);
             _ = native[index].FieldId.Should().Be(values[index].FieldId);
-            _ = native[index].Value.Should().Be(values[index].Value);
+            _ = RuntimeTransportConversion.FromNative(native[index]).Should().Be(values[index]);
         }
+
+        _ = native[0].Type.Should().Be(FieldType.Float);
+        _ = native[0].FloatValue.Should().Be(-4.5f);
+        _ = native[2].Type.Should().Be(FieldType.Int32);
+        _ = native[2].Int32Value.Should().Be(2);
+        _ = native[3].Type.Should().Be(FieldType.Bool);
+        _ = native[3].BoolValue.Should().BeTrue();
     }
 }

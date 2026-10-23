@@ -63,12 +63,33 @@ namespace oxygen::interop::module {
     static auto ApplyEntry(T& light, const PropertyEntry& entry) -> bool
     {
       const auto field = static_cast<LocalLightField>(entry.field);
-      const float value = entry.value;
+      auto& common = light.Common();
+      switch (field) {
+      case LocalLightField::kAffectsWorld:
+        common.affects_world = entry.Bool();
+        return true;
+      case LocalLightField::kCastsShadows:
+        common.casts_shadows = entry.Bool();
+        return true;
+      case LocalLightField::kContactShadows:
+        common.shadow.contact_shadows = entry.Bool();
+        return true;
+      case LocalLightField::kShadowResolutionHint: {
+        const auto hint = entry.Int32();
+        if (hint < 0 || hint > 3) {
+          return false;
+        }
+        common.shadow.resolution_hint
+          = static_cast<scene::ShadowResolutionHint>(hint);
+        return true;
+      }
+      default:
+        break;
+      }
+      const float value = entry.Float();
       if (!std::isfinite(value)) {
         return false;
       }
-      const bool is_flag = value == 0.0F || value == 1.0F;
-      auto& common = light.Common();
       switch (field) {
       case LocalLightField::kColorR:
         common.color_rgb.x = value;
@@ -79,28 +100,11 @@ namespace oxygen::interop::module {
       case LocalLightField::kColorB:
         common.color_rgb.z = value;
         return true;
-      case LocalLightField::kAffectsWorld:
-        common.affects_world = value != 0.0F;
-        return is_flag;
-      case LocalLightField::kCastsShadows:
-        common.casts_shadows = value != 0.0F;
-        return is_flag;
       case LocalLightField::kShadowBias:
         common.shadow.bias = value;
         return true;
       case LocalLightField::kShadowNormalBias:
         common.shadow.normal_bias = value;
-        return true;
-      case LocalLightField::kContactShadows:
-        common.shadow.contact_shadows = value != 0.0F;
-        return is_flag;
-      case LocalLightField::kShadowResolutionHint:
-        if (value < 0.0F || value > 3.0F || std::floor(value) != value) {
-          return false;
-        }
-        common.shadow.resolution_hint
-          = static_cast<scene::ShadowResolutionHint>(
-            static_cast<unsigned>(value));
         return true;
       case LocalLightField::kExposureCompensation:
         common.exposure_compensation_ev = value;

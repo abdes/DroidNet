@@ -50,7 +50,7 @@ public sealed class ScenePreviewEngineTests : DroidNet.Tests.VisualUserInterface
                 engine,
                 target!.Value,
                 node.Id,
-                state => state.Properties.Any(static value => value.ComponentId == RuntimeComponentId.Transform && value.FieldId == (ushort)TransformField.PositionX && MathF.Abs(value.Value - 7f) < 0.001f),
+                state => state.Properties.Any(static value => value.ComponentId == RuntimeComponentId.Transform && value.FieldId == (ushort)TransformField.PositionX && value.Value is RuntimeFieldValue.Scalar { Value: var x } && MathF.Abs(x - 7f) < 0.001f),
                 timeout.Token).ConfigureAwait(true);
             _ = SharedEngine.Results.Should().NotContain(static value => value.Severity == Oxygen.Managed.Core.Diagnostics.DiagnosticSeverity.Error);
         }

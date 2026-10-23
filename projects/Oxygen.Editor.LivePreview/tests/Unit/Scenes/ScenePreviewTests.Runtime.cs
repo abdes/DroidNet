@@ -44,7 +44,7 @@ public sealed partial class ScenePreviewTests
         _ = captured.Target.ActivationId.Should().NotBeEmpty();
         var command = captured.Command.Should().BeOfType<RuntimeSetProperties>().Subject;
         _ = command.NodeId.Should().Be(node.Id);
-        _ = command.Entries.Should().ContainSingle().Which.Value.Should().Be(42.5f);
+        _ = command.Entries.Should().ContainSingle().Which.Value.Should().Be(new RuntimeFieldValue.Scalar(42.5f));
         _ = outcome.Scope.NodeId.Should().Be(node.Id);
     }
 
@@ -104,11 +104,12 @@ public sealed partial class ScenePreviewTests
         _ = camera.AspectMode.Should().Be(CameraAspectMode.Fixed);
         _ = camera.NearPlane.Should().Be(0.5f);
         _ = camera.FarPlane.Should().Be(50f);
-        // Source modes go as their wire values: Inherit 0, the local on value 1 and the local off value 2.
-        _ = Flags(parent.Id).Should().Equal(2f, 1f, 2f, 0f, 1f, 0f);
-        _ = Flags(child.Id).Should().Equal(1f, 0f, 0f, 0f, 1f, 0f);
+        // Source modes go as their int32 wire values: Inherit 0, the local on value 1 and the local off value 2; the
+        // other flags go as bools.
+        _ = Flags(parent.Id).Should().Equal(Mode(2), Mode(1), Mode(2), Flag(false), Flag(true), Flag(false));
+        _ = Flags(child.Id).Should().Equal(Mode(1), Mode(0), Mode(0), Flag(false), Flag(true), Flag(false));
 
-        IEnumerable<float> Flags(NodeId nodeId)
+        IEnumerable<RuntimeFieldValue> Flags(NodeId nodeId)
             => fixture.World.PropertiesOf(nodeId, RuntimeComponentId.Node).OrderBy(static entry => entry.FieldId).Select(static entry => entry.Value);
     }
 
@@ -134,7 +135,7 @@ public sealed partial class ScenePreviewTests
             (ushort)NodeField.Static,
             (ushort)NodeField.RayCastingSelectable,
             (ushort)NodeField.IgnoreParentTransform);
-        _ = sent.Select(static entry => entry.Value).Should().Equal(0f, 0f, 0f, 1f, 0f, 1f);
+        _ = sent.Select(static entry => entry.Value).Should().Equal(Mode(0), Mode(0), Mode(0), Flag(true), Flag(false), Flag(true));
     }
 
     [TestMethod]
@@ -197,4 +198,8 @@ public sealed partial class ScenePreviewTests
             new RuntimeOverride(RuntimeOverrideId.GeometrySurfaceCastsShadows, new RuntimeOverrideValue.Flag(true)),
         ]);
     }
+
+    private static RuntimeFieldValue Mode(int value) => new RuntimeFieldValue.Integer(value);
+
+    private static RuntimeFieldValue Flag(bool value) => new RuntimeFieldValue.Flag(value);
 }

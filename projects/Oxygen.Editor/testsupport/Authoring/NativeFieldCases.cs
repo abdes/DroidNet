@@ -63,43 +63,44 @@ internal static class NativeFieldCases
     /// <summary>The node fields an edit writes, with the native field it reaches and the value the engine reports.</summary>
     internal static readonly NodeFieldCase[] NativeNodeFields =
     [
-        new("Transform", "PositionX", 1, 0, Set(SceneSchema.Transform.PositionX, 12f), 12f),
-        new("Transform", "RotationY", 1, 4, Set(SceneSchema.Transform.RotationY, 30f), 30f),
-        new("Camera", "FieldOfView", 2, 0, Set(SceneSchema.PerspectiveCamera.FieldOfViewDegrees, 75f), 75f * MathF.PI / 180f),
-        new("Light", "ColorR", 3, 0, static node => PropertyEdit.SingleEdit(SceneSchema.DirectionalLight.Color, LightOf(node).Color with { X = 0.2f }), 0.2f),
-        new("Light", "CastsShadows", 3, 5, Set(SceneSchema.DirectionalLight.CastsShadows, value: false), 0),
-        new("Light", "IntensityLux", 3, 11, Set(SceneSchema.DirectionalLight.IntensityLux, 80000f), 80000f),
-        new("Light", "CascadeCount", 3, 15, Set(SceneSchema.DirectionalLight.CascadeCount, 3), 3),
-        new("Light", "SplitMode", 3, 16, Set(SceneSchema.DirectionalLight.SplitMode, DirectionalCsmSplitMode.ManualDistances), 1),
-        new("Node", "Visible", 7, 0, Set(SceneSchema.Node.Visibility, VisibilitySource.Hidden), 0f),
-        new("Node", "Static", 7, 3, Set(SceneSchema.Node.IsStatic, true), 1f),
-        new("Node", "RayCastingSelectable", 7, 4, Set(SceneSchema.Node.IsRayCastingSelectable, false), 0f),
-        new("Node", "IgnoreParentTransform", 7, 5, Set(SceneSchema.Node.IgnoreParentTransform, true), 1f),
+        new("Transform", "PositionX", 1, 0, Set(SceneSchema.Transform.PositionX, 12f), Scalar(12f)),
+        new("Transform", "RotationY", 1, 4, Set(SceneSchema.Transform.RotationY, 30f), Scalar(30f)),
+        new("Camera", "FieldOfView", 2, 0, Set(SceneSchema.PerspectiveCamera.FieldOfViewDegrees, 75f), Scalar(75f * MathF.PI / 180f)),
+        new("Light", "ColorR", 3, 0, static node => PropertyEdit.SingleEdit(SceneSchema.DirectionalLight.Color, LightOf(node).Color with { X = 0.2f }), Scalar(0.2f)),
+        new("Light", "CastsShadows", 3, 5, Set(SceneSchema.DirectionalLight.CastsShadows, value: false), Flag(value: false)),
+        new("Light", "IntensityLux", 3, 11, Set(SceneSchema.DirectionalLight.IntensityLux, 80000f), Scalar(80000f)),
+        new("Light", "CascadeCount", 3, 15, Set(SceneSchema.DirectionalLight.CascadeCount, 3), Integer(3)),
+        new("Light", "SplitMode", 3, 16, Set(SceneSchema.DirectionalLight.SplitMode, DirectionalCsmSplitMode.ManualDistances), Integer(1)),
+        new("Node", "Visible", 7, 0, Set(SceneSchema.Node.Visibility, VisibilitySource.Hidden), Flag(value: false)),
+        new("Node", "Static", 7, 3, Set(SceneSchema.Node.IsStatic, true), Flag(value: true)),
+        new("Node", "RayCastingSelectable", 7, 4, Set(SceneSchema.Node.IsRayCastingSelectable, false), Flag(value: false)),
+        new("Node", "IgnoreParentTransform", 7, 5, Set(SceneSchema.Node.IgnoreParentTransform, true), Flag(value: true)),
     ];
 
-    /// <summary>Reads a node's properties as the engine observes them: by component and field, as numbers.</summary>
+    /// <summary>Reads a node's properties as the engine observes them: by component and field, each of its field's value type.</summary>
     /// <param name="node">The node.</param>
     /// <returns>The values, by native component and field.</returns>
-    internal static Dictionary<(ushort component, ushort field), float> SourceNodeProperties(SceneNode node)
+    internal static Dictionary<(ushort component, ushort field), RuntimeFieldValue> SourceNodeProperties(SceneNode node)
     {
-        var result = new Dictionary<(ushort component, ushort field), float>();
+        var result = new Dictionary<(ushort component, ushort field), RuntimeFieldValue>();
         var transform = node.Transform;
         var position = transform.LocalPosition;
         var rotation = TransformConverter.QuaternionToEulerDegrees(transform.LocalRotation);
         var scale = transform.LocalScale;
-        Add(1, [position.X, position.Y, position.Z, rotation.X, rotation.Y, rotation.Z, scale.X, scale.Y, scale.Z]);
+        Add(1, [Scalar(position.X), Scalar(position.Y), Scalar(position.Z), Scalar(rotation.X), Scalar(rotation.Y), Scalar(rotation.Z), Scalar(scale.X), Scalar(scale.Y), Scalar(scale.Z)]);
 
-        // Node flags (NodeField order); native observation reports their resolved values for every node.
+        // Node flags (NodeField order); native observation reports their resolved values for every node, as bools.
         var flags = node.Flags;
-        Add(7, [flags.ResolveVisibility().Value ? 1f : 0f, flags.ResolveCastsShadows().Value ? 1f : 0f, flags.ResolveReceivesShadows().Value ? 1f : 0f, flags.IsStatic ? 1f : 0f, flags.IsRayCastingSelectable ? 1f : 0f, flags.IgnoreParentTransform ? 1f : 0f]);
+        Add(7, [Flag(flags.ResolveVisibility().Value), Flag(flags.ResolveCastsShadows().Value), Flag(flags.ResolveReceivesShadows().Value), Flag(flags.IsStatic), Flag(flags.IsRayCastingSelectable), Flag(flags.IgnoreParentTransform)]);
         if (node.Components.OfType<PerspectiveCamera>().FirstOrDefault() is { } camera)
         {
-            Add(2, [camera.FieldOfView * MathF.PI / 180f, camera.AspectRatio, camera.NearPlane, camera.FarPlane, camera.ApertureF, camera.ShutterRate, camera.Iso, (float)camera.AspectMode]);
+            Add(2, [Scalar(camera.FieldOfView * MathF.PI / 180f), Scalar(camera.AspectRatio), Scalar(camera.NearPlane), Scalar(camera.FarPlane), Scalar(camera.ApertureF), Scalar(camera.ShutterRate), Scalar(camera.Iso), Integer((int)camera.AspectMode)]);
         }
 
         if (node.Components.OfType<DirectionalLightComponent>().FirstOrDefault() is { } light)
         {
-            Add(3, [light.Color.X, light.Color.Y, light.Color.Z, light.AffectsWorld ? 1f : 0f, 0, light.CastsShadows ? 1f : 0f, light.ShadowBias, light.ShadowNormalBias, light.ContactShadows ? 1f : 0f, (int)light.ShadowResolutionHint, light.ExposureCompensation, light.IntensityLux, light.AngularSizeRadians, 0, 0, light.CascadeCount, (int)light.SplitMode, light.MaxShadowDistance, light.CascadeDistances.X, light.CascadeDistances.Y, light.CascadeDistances.Z, light.CascadeDistances.W, light.DistributionExponent, light.TransitionFraction, light.DistanceFadeoutFraction, (int)light.AtmosphereSlot, light.UsePerPixelAtmosphereTransmittance ? 1f : 0f, light.AtmosphereDiskLuminanceScaleRgb.X, light.AtmosphereDiskLuminanceScaleRgb.Y, light.AtmosphereDiskLuminanceScaleRgb.Z,]);
+            // Ids 4, 13 and 14 are not fields: their placeholders are removed below.
+            Add(3, [Scalar(light.Color.X), Scalar(light.Color.Y), Scalar(light.Color.Z), Flag(light.AffectsWorld), Flag(value: false), Flag(light.CastsShadows), Scalar(light.ShadowBias), Scalar(light.ShadowNormalBias), Flag(light.ContactShadows), Integer((int)light.ShadowResolutionHint), Scalar(light.ExposureCompensation), Scalar(light.IntensityLux), Scalar(light.AngularSizeRadians), Flag(value: false), Flag(value: false), Integer(light.CascadeCount), Integer((int)light.SplitMode), Scalar(light.MaxShadowDistance), Scalar(light.CascadeDistances.X), Scalar(light.CascadeDistances.Y), Scalar(light.CascadeDistances.Z), Scalar(light.CascadeDistances.W), Scalar(light.DistributionExponent), Scalar(light.TransitionFraction), Scalar(light.DistanceFadeoutFraction), Integer((int)light.AtmosphereSlot), Flag(light.UsePerPixelAtmosphereTransmittance), Scalar(light.AtmosphereDiskLuminanceScaleRgb.X), Scalar(light.AtmosphereDiskLuminanceScaleRgb.Y), Scalar(light.AtmosphereDiskLuminanceScaleRgb.Z),]);
             foreach (var removed in new ushort[] { 4, 13, 14 })
             {
                 result.Remove((3, removed));
@@ -107,7 +108,7 @@ internal static class NativeFieldCases
         }
 
         return result;
-        void Add(ushort component, float[] values)
+        void Add(ushort component, RuntimeFieldValue[] values)
         {
             for (ushort index = 0; index < values.Length; index++)
             {
@@ -115,6 +116,22 @@ internal static class NativeFieldCases
             }
         }
     }
+
+    /// <summary>Whether an observed field value matches an expected one: a float within <paramref name="tolerance"/>, any other value exactly.</summary>
+    /// <param name="actual">The observed value.</param>
+    /// <param name="expected">The expected value.</param>
+    /// <param name="tolerance">The largest float difference accepted.</param>
+    /// <returns><see langword="true"/> when the values match.</returns>
+    internal static bool Matches(RuntimeFieldValue actual, RuntimeFieldValue expected, float tolerance)
+        => actual is RuntimeFieldValue.Scalar observed && expected is RuntimeFieldValue.Scalar wanted
+            ? MathF.Abs(observed.Value - wanted.Value) <= tolerance
+            : Equals(actual, expected);
+
+    private static RuntimeFieldValue Scalar(float value) => new RuntimeFieldValue.Scalar(value);
+
+    private static RuntimeFieldValue Integer(int value) => new RuntimeFieldValue.Integer(value);
+
+    private static RuntimeFieldValue Flag(bool value) => new RuntimeFieldValue.Flag(value);
 
     private static Func<SceneNode, PropertyEdit> Set<T>(PropertyId<T> id, T value) => _ => PropertyEdit.SingleEdit(id, value);
 
@@ -133,5 +150,5 @@ internal static class NativeFieldCases
     /// <param name="NativeField">The native field.</param>
     /// <param name="Edit">Builds the property edit from the node's current values.</param>
     /// <param name="ExpectedValue">The value the engine reports once the edit applies.</param>
-    internal sealed record NodeFieldCase(string Kind, string Field, ushort Component, ushort NativeField, Func<SceneNode, PropertyEdit> Edit, float ExpectedValue);
+    internal sealed record NodeFieldCase(string Kind, string Field, ushort Component, ushort NativeField, Func<SceneNode, PropertyEdit> Edit, RuntimeFieldValue ExpectedValue);
 }

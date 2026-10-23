@@ -23,6 +23,19 @@ import yaml
 # The value types whose value goes to one field each, by number of fields.
 _FIELD_COUNTS = {"bool": 1, "int": 1, "float": 1, "enum": 1, "vec3": 3}
 
+# The value type of a field, by the value type of the property it receives:
+# an enum goes as its member's wire value, a vec3 as one float per axis.
+_FIELD_TYPES = {
+    "bool": "bool",
+    "int": "int32",
+    "enum": "int32",
+    "float": "float",
+    "vec3": "float",
+}
+
+# The field value types, in wire order.
+FIELD_TYPES = ("bool", "int32", "float")
+
 # The value types a range bounds.
 NUMERIC_TYPES = frozenset({"int", "float", "vec3"})
 
@@ -257,6 +270,21 @@ class Schema:
         """The enumeration called `name`."""
         return next(entry for entry in self.enums if entry.name == name)
 
+    def field_types(self, field_set: FieldSet) -> dict[str, str]:
+        """The value type of each field of `field_set`, by field name.
+
+        A field takes the value type of the properties it receives; the
+        checks make it one type, and give every field one.
+        """
+        types: dict[str, str] = {}
+        for component, wire in self.wired():
+            if wire.field_set != field_set.name:
+                continue
+            for entry in component.properties:
+                for name in entry.fields:
+                    types.setdefault(name, _FIELD_TYPES[entry.type])
+        return types
+
 
 def load(path: Path, json_schema: Path) -> Schema:
     """Reads `path`, validates it against `json_schema` and checks it."""
@@ -438,6 +466,8 @@ def _check(schema: Schema) -> None:
                     schema, f"{component.name}.{part.name}.{entry.name}", entry
                 )
     _check_unique("override id", [entry.id for entry in schema.overrides()])
+    for field_set in schema.field_sets:
+        _check_field_types(schema, field_set)
 
 
 def _check_component(component: Component, field_sets: Mapping[str, FieldSet]) -> None:
@@ -476,6 +506,27 @@ def _check_component(component: Component, field_sets: Mapping[str, FieldSet]) -
         f"field use in {where}",
         [name for entry in component.properties for name in entry.fields],
     )
+
+
+def _check_field_types(schema: Schema, field_set: FieldSet) -> None:
+    # Components sharing a field set send each field the same value type, and
+    # every field has a property that sends it a value.
+    sent: dict[str, set[str]] = {}
+    for component, wire in schema.wired():
+        if wire.field_set != field_set.name:
+            continue
+        for entry in component.properties:
+            for name in entry.fields:
+                sent.setdefault(name, set()).add(_FIELD_TYPES[entry.type])
+    for field in field_set.ordered():
+        types = sent.get(field.name)
+        if types is None:
+            raise SchemaError(f"{field_set.name}.{field.name}: no property uses it")
+        if len(types) > 1:
+            raise SchemaError(
+                f"{field_set.name}.{field.name}: receives "
+                f"{' and '.join(sorted(types))} values"
+            )
 
 
 def _check_parts(component: Component) -> None:

@@ -17,7 +17,7 @@ internal sealed partial class NativeRuntimeCommandTransport
         return new(
             state.Exists,
             state.IsPrimarySun,
-            [.. state.Properties.Select(value => new RuntimePropertyValue((RuntimeComponentId)value.ComponentId, value.FieldId, value.Value))],
+            [.. state.Properties.Select(RuntimeTransportConversion.FromNative)],
             state.GeometryKey,
             state.GeometryName,
             state.VertexCount,

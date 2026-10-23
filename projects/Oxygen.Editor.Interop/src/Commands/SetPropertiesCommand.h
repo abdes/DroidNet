@@ -11,6 +11,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <span>
+#include <stdexcept>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -31,7 +33,8 @@ namespace oxygen::interop::module {
    schema-agnostic: at execute time it groups entries by `ComponentId`
    and hands each contiguous run to the applier resolved from the
    `PropertyApplierRegistry`. Adding new components or new properties
-   does not modify this command.
+   does not modify this command. Every entry must hold its field's schema
+   value type; the constructor refuses the command otherwise.
   */
   class SetPropertiesCommand : public EditorCommand {
   public:
@@ -51,6 +54,14 @@ namespace oxygen::interop::module {
     , node_(node)
     , entries_(std::move(entries))
   {
+    for (const auto& entry : entries_) {
+      if (!IsWellTyped(entry)) {
+        throw std::invalid_argument("SetPropertiesCommand: component "
+          + std::to_string(static_cast<std::uint16_t>(entry.component))
+          + " field " + std::to_string(entry.field)
+          + " is not a schema field of that value type");
+      }
+    }
   }
 
   inline void SetPropertiesCommand::Execute(CommandContext& context)

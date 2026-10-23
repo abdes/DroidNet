@@ -9,7 +9,10 @@ namespace Oxygen.Editor.Runtime.Engine;
 /// <summary>Stored node properties and currently resolved LOD-zero assets.</summary>
 /// <param name="Exists">Whether the native node still exists.</param>
 /// <param name="IsPrimarySun">Whether the native light resolver selects this node as the sun.</param>
-/// <param name="Properties">Scalar fields for the components present on the node.</param>
+/// <param name="Properties">
+/// The fields of the components present on the node, each of its schema value type, except Visibility and the shadow
+/// flags, observed as their effective value: a <see cref="RuntimeFieldValue.Flag"/>.
+/// </param>
 /// <param name="GeometryKey">The resolved geometry key, or an empty string when absent.</param>
 /// <param name="GeometryName">The resolved geometry name.</param>
 /// <param name="VertexCount">The first LOD's vertex count.</param>

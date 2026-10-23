@@ -579,6 +579,43 @@ namespace Oxygen::Interop::World {
     editor_module->get().Enqueue(std::move(cmd));
   }
 
+  namespace {
+
+    // The native entry of a managed one; refuses an entry that is not a schema
+    // field of its value type.
+    auto ToNativeProperty(PropertyValueEntry entry)
+      -> oxygen::interop::module::PropertyEntry
+    {
+      using oxygen::interop::module::FieldValue;
+      FieldValue value;
+      switch (entry.Type) {
+      case FieldType::Bool:
+        value = entry.BoolValue;
+        break;
+      case FieldType::Int32:
+        value = static_cast<std::int32_t>(entry.Int32Value);
+        break;
+      case FieldType::Float:
+        value = entry.FloatValue;
+        break;
+      default:
+        throw gcnew System::ArgumentException(System::String::Format(
+          "SetProperties failed because field {0} of component {1} has the unknown value type {2}.",
+          entry.FieldId, entry.ComponentId, static_cast<System::Byte>(entry.Type)));
+      }
+      oxygen::interop::module::PropertyEntry native {
+        static_cast<oxygen::interop::module::ComponentId>(entry.ComponentId),
+        entry.FieldId, value };
+      if (!oxygen::interop::module::IsWellTyped(native)) {
+        throw gcnew System::ArgumentException(System::String::Format(
+          "SetProperties failed because field {0} of component {1} is not a schema field of value type {2}.",
+          entry.FieldId, entry.ComponentId, entry.Type));
+      }
+      return native;
+    }
+
+  } // namespace
+
   void OxygenWorld::SetProperties(System::Guid nodeId,
     array<PropertyValueEntry>^ entries) {
     if (entries == nullptr || entries->Length == 0) {
@@ -618,11 +655,7 @@ namespace Oxygen::Interop::World {
     std::vector<oxygen::interop::module::PropertyEntry> native_entries;
     native_entries.reserve(entries->Length);
     for (int i = 0; i < entries->Length; ++i) {
-      PropertyValueEntry entry = entries[i];
-      native_entries.push_back({
-        static_cast<oxygen::interop::module::ComponentId>(entry.ComponentId),
-        entry.FieldId,
-        entry.Value });
+      native_entries.push_back(ToNativeProperty(entries[i]));
     }
 
     auto cmd = std::unique_ptr<SetPropertiesCommand>(

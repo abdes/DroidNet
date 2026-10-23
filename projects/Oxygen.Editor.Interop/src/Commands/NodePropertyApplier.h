@@ -61,8 +61,8 @@ namespace oxygen::interop::module {
   }
 
   //! Applies authored node flags. Visibility and the geometry shadow flags
-  //! take a source mode: Inherit, or a local value. The other flags take a
-  //! local boolean.
+  //! take a source mode, an int32 field: Inherit, or a local value. The other
+  //! flags take a local bool.
   class NodePropertyApplier final : public IComponentPropertyApplier {
   public:
     [[nodiscard]] auto GetComponentId() const noexcept -> ComponentId override
@@ -87,16 +87,13 @@ namespace oxygen::interop::module {
       for (const auto& entry : entries) {
         const auto field = static_cast<NodeField>(entry.field);
         const auto flag = *ToSceneNodeFlag(field);
-        if (HasSourceMode(field)
-          && static_cast<NodeFlagSource>(entry.value)
-            == NodeFlagSource::kInherit) {
+        if (!HasSourceMode(field)) {
+          flags->get().SetLocalValue(flag, entry.Bool());
+        } else if (const auto source = static_cast<NodeFlagSource>(entry.Int32());
+          source == NodeFlagSource::kInherit) {
           flags->get().SetInherited(flag, true);
-        } else if (HasSourceMode(field)) {
-          flags->get().SetLocalValue(flag,
-            static_cast<NodeFlagSource>(entry.value)
-              == NodeFlagSource::kLocalOn);
         } else {
-          flags->get().SetLocalValue(flag, entry.value != 0.0F);
+          flags->get().SetLocalValue(flag, source == NodeFlagSource::kLocalOn);
         }
       }
     }
@@ -109,11 +106,12 @@ namespace oxygen::interop::module {
       if (!ToSceneNodeFlag(field)) {
         return false;
       }
-      if (HasSourceMode(field)) {
-        return entry.value == 0.0F || entry.value == 1.0F
-          || entry.value == 2.0F;
+      if (!HasSourceMode(field)) {
+        return true;
       }
-      return entry.value == 0.0F || entry.value == 1.0F;
+      const auto source = entry.Int32();
+      return source >= static_cast<std::int32_t>(NodeFlagSource::kInherit)
+        && source <= static_cast<std::int32_t>(NodeFlagSource::kLocalOff);
     }
   };
 

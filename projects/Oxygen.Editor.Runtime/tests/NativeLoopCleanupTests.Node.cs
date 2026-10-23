@@ -14,8 +14,11 @@ namespace Oxygen.Editor.Runtime.Tests;
 public sealed partial class NativeLoopCleanupTests
 {
     // The wire values of the local source modes of a node flag.
-    private const float LocalOnMode = 1f;
-    private const float LocalOffMode = 2f;
+    private const int LocalOnValue = 1;
+    private const int LocalOffValue = 2;
+
+    private static readonly RuntimeFieldValue LocalOnMode = Integer(LocalOnValue);
+    private static readonly RuntimeFieldValue LocalOffMode = Integer(LocalOffValue);
 
     [TestMethod]
     public Task NodeObservationReadsPropertiesGeometryAndDeletion()
@@ -23,72 +26,91 @@ public sealed partial class NativeLoopCleanupTests
 
     private static ImmutableArray<RuntimePropertyValue> ObservedNodeProperties() =>
     [
-        new(RuntimeComponentId.Transform, 0, 1f),
-        new(RuntimeComponentId.Transform, 1, 2f),
-        new(RuntimeComponentId.Transform, 2, 3f),
-        new(RuntimeComponentId.Transform, 3, 10f),
-        new(RuntimeComponentId.Transform, 4, 20f),
-        new(RuntimeComponentId.Transform, 5, 30f),
-        new(RuntimeComponentId.Transform, 6, 2f),
-        new(RuntimeComponentId.Transform, 7, 3f),
-        new(RuntimeComponentId.Transform, 8, 4f),
-        new(RuntimeComponentId.PerspectiveCamera, 0, 1.2f),
-        new(RuntimeComponentId.PerspectiveCamera, 1, 1.6f),
-        new(RuntimeComponentId.PerspectiveCamera, 2, 0.3f),
-        new(RuntimeComponentId.PerspectiveCamera, 3, 2000f),
-        new(RuntimeComponentId.PerspectiveCamera, 4, 8f),
-        new(RuntimeComponentId.PerspectiveCamera, 5, 60f),
-        new(RuntimeComponentId.PerspectiveCamera, 6, 200f),
-        new(RuntimeComponentId.PerspectiveCamera, 7, (float)Oxygen.Managed.Core.CameraAspectMode.Auto),
-        new(RuntimeComponentId.DirectionalLight, 0, 0.2f),
-        new(RuntimeComponentId.DirectionalLight, 1, 0.3f),
-        new(RuntimeComponentId.DirectionalLight, 2, 0.4f),
-        new(RuntimeComponentId.DirectionalLight, 3, 1f),
-        new(RuntimeComponentId.DirectionalLight, 5, 0f),
-        new(RuntimeComponentId.DirectionalLight, 6, 0.02f),
-        new(RuntimeComponentId.DirectionalLight, 7, 0.03f),
-        new(RuntimeComponentId.DirectionalLight, 8, 1f),
-        new(RuntimeComponentId.DirectionalLight, 9, 1f),
-        new(RuntimeComponentId.DirectionalLight, 10, 1.5f),
-        new(RuntimeComponentId.DirectionalLight, 11, 80000f),
-        new(RuntimeComponentId.DirectionalLight, 12, 0.04f),
-        new(RuntimeComponentId.DirectionalLight, 15, 4f),
-        new(RuntimeComponentId.DirectionalLight, 16, 0f),
-        new(RuntimeComponentId.DirectionalLight, 17, 1000f),
-        new(RuntimeComponentId.DirectionalLight, 18, 50f),
-        new(RuntimeComponentId.DirectionalLight, 19, 150f),
-        new(RuntimeComponentId.DirectionalLight, 20, 400f),
-        new(RuntimeComponentId.DirectionalLight, 21, 1000f),
-        new(RuntimeComponentId.DirectionalLight, 22, 2f),
-        new(RuntimeComponentId.DirectionalLight, 23, 0.15f),
-        new(RuntimeComponentId.DirectionalLight, 24, 0.2f),
-        new(RuntimeComponentId.DirectionalLight, 25, 1f),
-        new(RuntimeComponentId.DirectionalLight, 26, 1f),
-        new(RuntimeComponentId.DirectionalLight, 27, 0.5f),
-        new(RuntimeComponentId.DirectionalLight, 28, 1.25f),
-        new(RuntimeComponentId.DirectionalLight, 29, 2f),
+        new(RuntimeComponentId.Transform, 0, Scalar(1f)),
+        new(RuntimeComponentId.Transform, 1, Scalar(2f)),
+        new(RuntimeComponentId.Transform, 2, Scalar(3f)),
+        new(RuntimeComponentId.Transform, 3, Scalar(10f)),
+        new(RuntimeComponentId.Transform, 4, Scalar(20f)),
+        new(RuntimeComponentId.Transform, 5, Scalar(30f)),
+        new(RuntimeComponentId.Transform, 6, Scalar(2f)),
+        new(RuntimeComponentId.Transform, 7, Scalar(3f)),
+        new(RuntimeComponentId.Transform, 8, Scalar(4f)),
+        new(RuntimeComponentId.PerspectiveCamera, 0, Scalar(1.2f)),
+        new(RuntimeComponentId.PerspectiveCamera, 1, Scalar(1.6f)),
+        new(RuntimeComponentId.PerspectiveCamera, 2, Scalar(0.3f)),
+        new(RuntimeComponentId.PerspectiveCamera, 3, Scalar(2000f)),
+        new(RuntimeComponentId.PerspectiveCamera, 4, Scalar(8f)),
+        new(RuntimeComponentId.PerspectiveCamera, 5, Scalar(60f)),
+        new(RuntimeComponentId.PerspectiveCamera, 6, Scalar(200f)),
+        new(RuntimeComponentId.PerspectiveCamera, 7, Integer((int)Oxygen.Managed.Core.CameraAspectMode.Auto)),
+        new(RuntimeComponentId.DirectionalLight, 0, Scalar(0.2f)),
+        new(RuntimeComponentId.DirectionalLight, 1, Scalar(0.3f)),
+        new(RuntimeComponentId.DirectionalLight, 2, Scalar(0.4f)),
+        new(RuntimeComponentId.DirectionalLight, 3, Flag(true)),
+        new(RuntimeComponentId.DirectionalLight, 5, Flag(false)),
+        new(RuntimeComponentId.DirectionalLight, 6, Scalar(0.02f)),
+        new(RuntimeComponentId.DirectionalLight, 7, Scalar(0.03f)),
+        new(RuntimeComponentId.DirectionalLight, 8, Flag(true)),
+        new(RuntimeComponentId.DirectionalLight, 9, Integer(1)),
+        new(RuntimeComponentId.DirectionalLight, 10, Scalar(1.5f)),
+        new(RuntimeComponentId.DirectionalLight, 11, Scalar(80000f)),
+        new(RuntimeComponentId.DirectionalLight, 12, Scalar(0.04f)),
+        new(RuntimeComponentId.DirectionalLight, 15, Integer(4)),
+        new(RuntimeComponentId.DirectionalLight, 16, Integer(0)),
+        new(RuntimeComponentId.DirectionalLight, 17, Scalar(1000f)),
+        new(RuntimeComponentId.DirectionalLight, 18, Scalar(50f)),
+        new(RuntimeComponentId.DirectionalLight, 19, Scalar(150f)),
+        new(RuntimeComponentId.DirectionalLight, 20, Scalar(400f)),
+        new(RuntimeComponentId.DirectionalLight, 21, Scalar(1000f)),
+        new(RuntimeComponentId.DirectionalLight, 22, Scalar(2f)),
+        new(RuntimeComponentId.DirectionalLight, 23, Scalar(0.15f)),
+        new(RuntimeComponentId.DirectionalLight, 24, Scalar(0.2f)),
+        new(RuntimeComponentId.DirectionalLight, 25, Integer(1)),
+        new(RuntimeComponentId.DirectionalLight, 26, Flag(true)),
+        new(RuntimeComponentId.DirectionalLight, 27, Scalar(0.5f)),
+        new(RuntimeComponentId.DirectionalLight, 28, Scalar(1.25f)),
+        new(RuntimeComponentId.DirectionalLight, 29, Scalar(2f)),
         // Visibility and the shadow flags take a source mode (Inherit 0, Shown/On 1, Hidden/Off 2).
         new(RuntimeComponentId.Node, (ushort)NodeField.Visible, LocalOnMode),
         new(RuntimeComponentId.Node, (ushort)NodeField.CastsShadows, LocalOffMode),
         new(RuntimeComponentId.Node, (ushort)NodeField.ReceivesShadows, LocalOnMode),
 
         // A node created natively keeps the engine's creation defaults for the flags the test never sets.
-        new(RuntimeComponentId.Node, 3, 0f),
-        new(RuntimeComponentId.Node, 4, 0f),
-        new(RuntimeComponentId.Node, 5, 0f),
+        new(RuntimeComponentId.Node, 3, Flag(false)),
+        new(RuntimeComponentId.Node, 4, Flag(false)),
+        new(RuntimeComponentId.Node, 5, Flag(false)),
     ];
 
-    // A node flag with a source mode is observed as its effective value; the others as the value sent.
-    private static float ObservedValue(RuntimePropertyValue sent)
+    private static RuntimeFieldValue Scalar(float value) => new RuntimeFieldValue.Scalar(value);
+
+    private static RuntimeFieldValue Integer(int value) => new RuntimeFieldValue.Integer(value);
+
+    private static RuntimeFieldValue Flag(bool value) => new RuntimeFieldValue.Flag(value);
+
+    // A node flag with a source mode is observed as its effective bool; the others as the value sent.
+    private static RuntimeFieldValue ObservedValue(RuntimePropertyValue sent)
         => sent.ComponentId == RuntimeComponentId.Node
             && (NodeField)sent.FieldId is NodeField.Visible or NodeField.CastsShadows or NodeField.ReceivesShadows
                 ? sent.Value switch
                 {
-                    LocalOnMode => 1f,
-                    LocalOffMode => 0f,
+                    RuntimeFieldValue.Integer { Value: LocalOnValue } => Flag(true),
+                    RuntimeFieldValue.Integer { Value: LocalOffValue } => Flag(false),
                     _ => throw new ArgumentOutOfRangeException(nameof(sent), "The test sends local modes only."),
                 }
                 : sent.Value;
+
+    private static void AssertObserved(RuntimeFieldValue actual, RuntimeFieldValue expected, RuntimePropertyValue property)
+    {
+        if (expected is RuntimeFieldValue.Scalar scalar)
+        {
+            _ = actual.Should().BeOfType<RuntimeFieldValue.Scalar>("component {0}, field {1}", property.ComponentId, property.FieldId)
+                .Which.Value.Should().BeApproximately(scalar.Value, 0.0001f, "component {0}, field {1}", property.ComponentId, property.FieldId);
+        }
+        else
+        {
+            _ = actual.Should().Be(expected, "component {0}, field {1}", property.ComponentId, property.FieldId);
+        }
+    }
 
     private async Task CheckNativeNodeAsync(RuntimeCommandDispatcher commands)
     {
@@ -126,20 +148,20 @@ public sealed partial class NativeLoopCleanupTests
         foreach (var property in expected)
         {
             var actual = observed.State.Properties.Single(value => value.ComponentId == property.ComponentId && value.FieldId == property.FieldId);
-            _ = actual.Value.Should().BeApproximately(ObservedValue(property), 0.0001f, "component {0}, field {1}", property.ComponentId, property.FieldId);
+            AssertObserved(actual.Value, ObservedValue(property), property);
         }
 
         _ = observed.State.GeometryName.Should().Be("Cube");
         _ = observed.State.VertexCount.Should().BePositive();
         _ = observed.State.IndexCount.Should().Be(36);
         _ = observed.State.MaterialKeys.Should().ContainSingle();
-        Send(new RuntimeSetProperties(node, [new(RuntimeComponentId.PerspectiveCamera, 7, (float)Oxygen.Managed.Core.CameraAspectMode.Fixed)]));
+        Send(new RuntimeSetProperties(node, [new(RuntimeComponentId.PerspectiveCamera, 7, Integer((int)Oxygen.Managed.Core.CameraAspectMode.Fixed))]));
         var fixedCamera = await commands.ObserveNodeAsync(Guid.NewGuid(), target, node, timeout.Token).ConfigureAwait(false);
         _ = fixedCamera.Outcome.Succeeded.Should().BeTrue();
         _ = fixedCamera.State!.Properties.Single(value => value.ComponentId == RuntimeComponentId.PerspectiveCamera && value.FieldId == 7)
-            .Value.Should().Be((float)Oxygen.Managed.Core.CameraAspectMode.Fixed);
+            .Value.Should().Be(Integer((int)Oxygen.Managed.Core.CameraAspectMode.Fixed));
         _ = fixedCamera.State.Properties.Single(value => value.ComponentId == RuntimeComponentId.PerspectiveCamera && value.FieldId == 1)
-            .Value.Should().Be(1.6f);
+            .Value.Should().Be(Scalar(1.6f));
         Send(new RuntimeRemoveSceneNodes([node]));
         var missing = await commands.ObserveNodeAsync(Guid.NewGuid(), target, node, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = missing.Outcome.Succeeded.Should().BeTrue();

@@ -10,6 +10,7 @@
 
 #include <array>
 #include <cstdint>
+#include <optional>
 #include <span>
 #include <string_view>
 
@@ -155,6 +156,200 @@ enum class LocalFogVolumeField : std::uint16_t {
   kSortPriority = 12,
   kCount = 13,
 };
+
+//! The value type a field receives: a bool, an int32 (an int, or the wire
+//! value of an enum member) or a float (a float, or one axis of a vec3).
+enum class FieldType : std::uint8_t {
+  kBool = 0,
+  kInt32 = 1,
+  kFloat = 2,
+};
+
+// NOLINTBEGIN(bugprone-branch-clone)
+
+//! The value type of a field of the Transform field set, or nullopt
+//! for an id the set does not declare.
+[[nodiscard]] constexpr auto FindFieldType(const TransformField field) noexcept
+  -> std::optional<FieldType>
+{
+  switch (field) {
+  case TransformField::kPositionX: return FieldType::kFloat;
+  case TransformField::kPositionY: return FieldType::kFloat;
+  case TransformField::kPositionZ: return FieldType::kFloat;
+  case TransformField::kRotationXDegrees: return FieldType::kFloat;
+  case TransformField::kRotationYDegrees: return FieldType::kFloat;
+  case TransformField::kRotationZDegrees: return FieldType::kFloat;
+  case TransformField::kScaleX: return FieldType::kFloat;
+  case TransformField::kScaleY: return FieldType::kFloat;
+  case TransformField::kScaleZ: return FieldType::kFloat;
+  case TransformField::kCount: break;
+  }
+  return std::nullopt;
+}
+
+//! The value type of a field of the Node field set, or nullopt
+//! for an id the set does not declare.
+[[nodiscard]] constexpr auto FindFieldType(const NodeField field) noexcept
+  -> std::optional<FieldType>
+{
+  switch (field) {
+  case NodeField::kVisible: return FieldType::kInt32;
+  case NodeField::kCastsShadows: return FieldType::kInt32;
+  case NodeField::kReceivesShadows: return FieldType::kInt32;
+  case NodeField::kStatic: return FieldType::kBool;
+  case NodeField::kRayCastingSelectable: return FieldType::kBool;
+  case NodeField::kIgnoreParentTransform: return FieldType::kBool;
+  case NodeField::kCount: break;
+  }
+  return std::nullopt;
+}
+
+//! The value type of a field of the PerspectiveCamera field set, or nullopt
+//! for an id the set does not declare.
+[[nodiscard]] constexpr auto FindFieldType(const PerspectiveCameraField field) noexcept
+  -> std::optional<FieldType>
+{
+  switch (field) {
+  case PerspectiveCameraField::kFieldOfViewYRadians: return FieldType::kFloat;
+  case PerspectiveCameraField::kAspectRatio: return FieldType::kFloat;
+  case PerspectiveCameraField::kNearPlane: return FieldType::kFloat;
+  case PerspectiveCameraField::kFarPlane: return FieldType::kFloat;
+  case PerspectiveCameraField::kApertureF: return FieldType::kFloat;
+  case PerspectiveCameraField::kShutterRate: return FieldType::kFloat;
+  case PerspectiveCameraField::kIso: return FieldType::kFloat;
+  case PerspectiveCameraField::kAspectMode: return FieldType::kInt32;
+  case PerspectiveCameraField::kCount: break;
+  }
+  return std::nullopt;
+}
+
+//! The value type of a field of the OrthographicCamera field set, or nullopt
+//! for an id the set does not declare.
+[[nodiscard]] constexpr auto FindFieldType(const OrthographicCameraField field) noexcept
+  -> std::optional<FieldType>
+{
+  switch (field) {
+  case OrthographicCameraField::kOrthographicSize: return FieldType::kFloat;
+  case OrthographicCameraField::kAspectRatio: return FieldType::kFloat;
+  case OrthographicCameraField::kNearPlane: return FieldType::kFloat;
+  case OrthographicCameraField::kFarPlane: return FieldType::kFloat;
+  case OrthographicCameraField::kApertureF: return FieldType::kFloat;
+  case OrthographicCameraField::kShutterRate: return FieldType::kFloat;
+  case OrthographicCameraField::kIso: return FieldType::kFloat;
+  case OrthographicCameraField::kAspectMode: return FieldType::kInt32;
+  case OrthographicCameraField::kCount: break;
+  }
+  return std::nullopt;
+}
+
+//! The value type of a field of the DirectionalLight field set, or nullopt
+//! for an id the set does not declare.
+[[nodiscard]] constexpr auto FindFieldType(const DirectionalLightField field) noexcept
+  -> std::optional<FieldType>
+{
+  switch (field) {
+  case DirectionalLightField::kColorR: return FieldType::kFloat;
+  case DirectionalLightField::kColorG: return FieldType::kFloat;
+  case DirectionalLightField::kColorB: return FieldType::kFloat;
+  case DirectionalLightField::kAffectsWorld: return FieldType::kBool;
+  case DirectionalLightField::kCastsShadows: return FieldType::kBool;
+  case DirectionalLightField::kShadowBias: return FieldType::kFloat;
+  case DirectionalLightField::kShadowNormalBias: return FieldType::kFloat;
+  case DirectionalLightField::kContactShadows: return FieldType::kBool;
+  case DirectionalLightField::kShadowResolutionHint: return FieldType::kInt32;
+  case DirectionalLightField::kExposureCompensation: return FieldType::kFloat;
+  case DirectionalLightField::kIntensityLux: return FieldType::kFloat;
+  case DirectionalLightField::kAngularSizeRadians: return FieldType::kFloat;
+  case DirectionalLightField::kCascadeCount: return FieldType::kInt32;
+  case DirectionalLightField::kSplitMode: return FieldType::kInt32;
+  case DirectionalLightField::kMaxShadowDistance: return FieldType::kFloat;
+  case DirectionalLightField::kCascadeDistance0: return FieldType::kFloat;
+  case DirectionalLightField::kCascadeDistance1: return FieldType::kFloat;
+  case DirectionalLightField::kCascadeDistance2: return FieldType::kFloat;
+  case DirectionalLightField::kCascadeDistance3: return FieldType::kFloat;
+  case DirectionalLightField::kDistributionExponent: return FieldType::kFloat;
+  case DirectionalLightField::kTransitionFraction: return FieldType::kFloat;
+  case DirectionalLightField::kDistanceFadeoutFraction: return FieldType::kFloat;
+  case DirectionalLightField::kAtmosphereLightSlot: return FieldType::kInt32;
+  case DirectionalLightField::kUsePerPixelAtmosphereTransmittance: return FieldType::kBool;
+  case DirectionalLightField::kDiskScaleR: return FieldType::kFloat;
+  case DirectionalLightField::kDiskScaleG: return FieldType::kFloat;
+  case DirectionalLightField::kDiskScaleB: return FieldType::kFloat;
+  case DirectionalLightField::kCount: break;
+  }
+  return std::nullopt;
+}
+
+//! The value type of a field of the LocalLight field set, or nullopt
+//! for an id the set does not declare.
+[[nodiscard]] constexpr auto FindFieldType(const LocalLightField field) noexcept
+  -> std::optional<FieldType>
+{
+  switch (field) {
+  case LocalLightField::kColorR: return FieldType::kFloat;
+  case LocalLightField::kColorG: return FieldType::kFloat;
+  case LocalLightField::kColorB: return FieldType::kFloat;
+  case LocalLightField::kAffectsWorld: return FieldType::kBool;
+  case LocalLightField::kCastsShadows: return FieldType::kBool;
+  case LocalLightField::kShadowBias: return FieldType::kFloat;
+  case LocalLightField::kShadowNormalBias: return FieldType::kFloat;
+  case LocalLightField::kContactShadows: return FieldType::kBool;
+  case LocalLightField::kShadowResolutionHint: return FieldType::kInt32;
+  case LocalLightField::kExposureCompensation: return FieldType::kFloat;
+  case LocalLightField::kLuminousFluxLm: return FieldType::kFloat;
+  case LocalLightField::kRange: return FieldType::kFloat;
+  case LocalLightField::kSourceRadius: return FieldType::kFloat;
+  case LocalLightField::kInnerConeAngleRadians: return FieldType::kFloat;
+  case LocalLightField::kOuterConeAngleRadians: return FieldType::kFloat;
+  case LocalLightField::kCount: break;
+  }
+  return std::nullopt;
+}
+
+//! The value type of a field of the LocalFogVolume field set, or nullopt
+//! for an id the set does not declare.
+[[nodiscard]] constexpr auto FindFieldType(const LocalFogVolumeField field) noexcept
+  -> std::optional<FieldType>
+{
+  switch (field) {
+  case LocalFogVolumeField::kEnabled: return FieldType::kBool;
+  case LocalFogVolumeField::kRadialFogExtinction: return FieldType::kFloat;
+  case LocalFogVolumeField::kHeightFogExtinction: return FieldType::kFloat;
+  case LocalFogVolumeField::kHeightFogFalloff: return FieldType::kFloat;
+  case LocalFogVolumeField::kHeightFogOffset: return FieldType::kFloat;
+  case LocalFogVolumeField::kFogPhaseG: return FieldType::kFloat;
+  case LocalFogVolumeField::kFogAlbedoR: return FieldType::kFloat;
+  case LocalFogVolumeField::kFogAlbedoG: return FieldType::kFloat;
+  case LocalFogVolumeField::kFogAlbedoB: return FieldType::kFloat;
+  case LocalFogVolumeField::kFogEmissiveR: return FieldType::kFloat;
+  case LocalFogVolumeField::kFogEmissiveG: return FieldType::kFloat;
+  case LocalFogVolumeField::kFogEmissiveB: return FieldType::kFloat;
+  case LocalFogVolumeField::kSortPriority: return FieldType::kInt32;
+  case LocalFogVolumeField::kCount: break;
+  }
+  return std::nullopt;
+}
+
+//! The value type of `field` of `component`, or nullopt for a component or
+//! field the schema does not declare.
+[[nodiscard]] constexpr auto FindFieldType(const ComponentId component,
+  const std::uint16_t field) noexcept -> std::optional<FieldType>
+{
+  switch (component) {
+  case ComponentId::kTransform: return FindFieldType(static_cast<TransformField>(field));
+  case ComponentId::kPerspectiveCamera: return FindFieldType(static_cast<PerspectiveCameraField>(field));
+  case ComponentId::kDirectionalLight: return FindFieldType(static_cast<DirectionalLightField>(field));
+  case ComponentId::kOrthographicCamera: return FindFieldType(static_cast<OrthographicCameraField>(field));
+  case ComponentId::kPointLight: return FindFieldType(static_cast<LocalLightField>(field));
+  case ComponentId::kSpotLight: return FindFieldType(static_cast<LocalLightField>(field));
+  case ComponentId::kNode: return FindFieldType(static_cast<NodeField>(field));
+  case ComponentId::kLocalFogVolume: return FindFieldType(static_cast<LocalFogVolumeField>(field));
+  case ComponentId::kInvalid: break;
+  }
+  return std::nullopt;
+}
+
+// NOLINTEND(bugprone-branch-clone)
 
 //! The value types of the schema properties.
 enum class ValueType : std::uint8_t {

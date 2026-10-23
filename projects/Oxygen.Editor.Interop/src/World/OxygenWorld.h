@@ -18,6 +18,15 @@ namespace Oxygen::Interop::World {
 using namespace System;
 using namespace System::Numerics;
 
+//! The value type of a property-pipeline field, numbered as the engine's
+//! `FieldType`.
+public
+enum class FieldType : System::Byte {
+  Bool = 0,
+  Int32 = 1,
+  Float = 2,
+};
+
 //! Wire-format entry for the property-pipeline transport (§5.3).
 /*!
  The (ComponentId, FieldId) pair is the property-pipeline §5.3 wire
@@ -27,15 +36,18 @@ using namespace System::Numerics;
  `IComponentPropertyApplier`. Adding a new component or property
  never requires changing this struct.
 
- The payload is intentionally a single `float`: vector/quaternion/
- color values decompose into per-axis float entries so the transport
- remains uniform. Non-scalar payloads will tag-extend later.
+ `Type` names the member that holds the value; the others stay at their
+ defaults. It must be the field's schema value type: SetProperties refuses
+ an entry that is not. Vectors and colors go as one float field per axis.
 */
 public
 value struct PropertyValueEntry {
   System::UInt16 ComponentId;
   System::UInt16 FieldId;
-  float Value;
+  FieldType Type;
+  bool BoolValue;
+  System::Int32 Int32Value;
+  float FloatValue;
 };
 
   //! A LOD policy as the scene schema spells it. `Type` is the native

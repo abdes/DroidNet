@@ -80,7 +80,16 @@ namespace oxygen::interop::module {
       auto exposure = camera.Exposure();
       for (const auto& entry : entries) {
         const auto field = static_cast<OrthographicCameraField>(entry.field);
-        const float value = entry.value;
+        if (field == OrthographicCameraField::kAspectMode) {
+          const auto aspect_mode = entry.Int32();
+          if (aspect_mode != 0 && aspect_mode != 1) {
+            throw std::invalid_argument("Invalid camera aspect mode");
+          }
+          mode = aspect_mode == 0 ? CameraAspectMode::kAuto
+                                  : CameraAspectMode::kFixed;
+          continue;
+        }
+        const float value = entry.Float();
         if (!std::isfinite(value)) {
           throw std::invalid_argument(
             std::to_string(entry.field) + ": non-finite camera value");
@@ -106,13 +115,6 @@ namespace oxygen::interop::module {
           break;
         case OrthographicCameraField::kIso:
           exposure.iso = value;
-          break;
-        case OrthographicCameraField::kAspectMode:
-          if (value != 0.0F && value != 1.0F) {
-            throw std::invalid_argument("Invalid camera aspect mode");
-          }
-          mode = value == 0.0F ? CameraAspectMode::kAuto
-                               : CameraAspectMode::kFixed;
           break;
         default:
           throw std::invalid_argument(

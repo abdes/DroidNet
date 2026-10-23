@@ -100,7 +100,7 @@ public sealed partial class ScenePreviewTests
         var request = await createdRequest.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
         camera.FieldOfView = 70;
         _ = fixture.Preview.AdvanceRevision(scene);
-        _ = await fixture.Preview.UpdatePropertiesAsync(scene, node, [new(RuntimeComponentId.PerspectiveCamera, (ushort)PerspectiveCameraField.FieldOfViewYRadians, 70 * MathF.PI / 180)], fixture.Preview.CaptureRevision(scene), this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = await fixture.Preview.UpdatePropertiesAsync(scene, node, [new(RuntimeComponentId.PerspectiveCamera, (ushort)PerspectiveCameraField.FieldOfViewYRadians, new RuntimeFieldValue.Scalar(70 * MathF.PI / 180))], fixture.Preview.CaptureRevision(scene), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = node.Components.Remove(camera);
         _ = fixture.Preview.AdvanceRevision(scene);
         _ = await fixture.Preview.DetachCameraAsync(scene, node.Id, this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -110,9 +110,9 @@ public sealed partial class ScenePreviewTests
 
         // The initial projection keeps the frozen physical-camera recipe; the queued field of view is discarded.
         _ = fixture.World.PropertiesOf(node.Id, RuntimeComponentId.PerspectiveCamera).Should().Equal(
-            new RuntimePropertyValue(RuntimeComponentId.PerspectiveCamera, (ushort)PerspectiveCameraField.ApertureF, camera.ApertureF),
-            new RuntimePropertyValue(RuntimeComponentId.PerspectiveCamera, (ushort)PerspectiveCameraField.ShutterRate, camera.ShutterRate),
-            new RuntimePropertyValue(RuntimeComponentId.PerspectiveCamera, (ushort)PerspectiveCameraField.Iso, camera.Iso));
+            new RuntimePropertyValue(RuntimeComponentId.PerspectiveCamera, (ushort)PerspectiveCameraField.ApertureF, new RuntimeFieldValue.Scalar(camera.ApertureF)),
+            new RuntimePropertyValue(RuntimeComponentId.PerspectiveCamera, (ushort)PerspectiveCameraField.ShutterRate, new RuntimeFieldValue.Scalar(camera.ShutterRate)),
+            new RuntimePropertyValue(RuntimeComponentId.PerspectiveCamera, (ushort)PerspectiveCameraField.Iso, new RuntimeFieldValue.Scalar(camera.Iso)));
         _ = fixture.World.Commands.OfType<RuntimeDetachCamera>().Should().ContainSingle();
         _ = fixture.Preview.PendingFieldCount(document.Id).Should().Be(0);
     }

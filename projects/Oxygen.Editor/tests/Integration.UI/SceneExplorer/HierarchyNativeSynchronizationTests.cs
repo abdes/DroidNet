@@ -145,7 +145,7 @@ public sealed partial class HierarchyNativeSynchronizationTests : DroidNet.Tests
     private static async Task AssertNativeLocalTrsAsync(
         NativeSceneFixture fixture,
         NodeId nodeId,
-        IReadOnlyDictionary<(ushort component, ushort field), float> expected,
+        IReadOnlyDictionary<(ushort component, ushort field), RuntimeFieldValue> expected,
         CancellationToken cancellationToken)
     {
         // ObserveNode reads stored local TRS, not native parenting, world pose or the ignored-parent flag.
@@ -155,14 +155,14 @@ public sealed partial class HierarchyNativeSynchronizationTests : DroidNet.Tests
             state => state.Exists && expected.All(field => state.Properties.Any(
                 actual => (ushort)actual.ComponentId == field.Key.component
                     && actual.FieldId == field.Key.field
-                    && MathF.Abs(actual.Value - field.Value) <= 0.001f)),
+                    && Matches(actual.Value, field.Value, 0.001f))),
             cancellationToken).ConfigureAwait(true);
         _ = state.Exists.Should().BeTrue();
         _ = state.Properties.Where(property => property.ComponentId == RuntimeComponentId.Transform).Should().HaveCount(9);
         foreach (var field in expected)
         {
             var actual = state.Properties.Single(property => (ushort)property.ComponentId == field.Key.component && property.FieldId == field.Key.field);
-            _ = actual.Value.Should().BeApproximately(field.Value, 0.001f, "native local TRS field {0}", field.Key.field);
+            _ = Matches(actual.Value, field.Value, 0.001f).Should().BeTrue("native local TRS field {0} is {1}, not {2}", field.Key.field, actual.Value, field.Value);
         }
     }
 }

@@ -55,7 +55,18 @@ public:
       PropertyValueEntry entry;
       entry.ComponentId = static_cast<System::UInt16>(property.component);
       entry.FieldId = property.field;
-      entry.Value = property.value;
+      entry.Type = static_cast<FieldType>(TypeOf(property.value));
+      switch (TypeOf(property.value)) {
+      case oxygen::interop::module::FieldType::kBool:
+        entry.BoolValue = property.Bool();
+        break;
+      case oxygen::interop::module::FieldType::kInt32:
+        entry.Int32Value = property.Int32();
+        break;
+      case oxygen::interop::module::FieldType::kFloat:
+        entry.FloatValue = property.Float();
+        break;
+      }
       result.Properties[index] = entry;
     }
     result.MaterialKeys = gcnew array<System::String^>(static_cast<int>(value.material_keys.size()));

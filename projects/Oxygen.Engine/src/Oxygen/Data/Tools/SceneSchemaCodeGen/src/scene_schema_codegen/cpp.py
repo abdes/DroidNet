@@ -14,6 +14,7 @@ import math
 import struct
 
 from .model import (
+    FIELD_TYPES,
     UNLIMITED,
     Component,
     Enumeration,
@@ -63,6 +64,7 @@ def render(schema: Schema, source: str) -> str:
         "",
         "#include <array>",
         "#include <cstdint>",
+        "#include <optional>",
         "#include <span>",
         "#include <string_view>",
         "",
@@ -83,6 +85,13 @@ def render(schema: Schema, source: str) -> str:
     ]
     for field_set in schema.field_sets:
         lines.extend(["", *_field_enum(field_set)])
+    lines.extend(["", *_field_type_enum()])
+    # Fields of one value type share a branch body by design.
+    lines.extend(["", "// NOLINTBEGIN(bugprone-branch-clone)"])
+    for field_set in schema.field_sets:
+        lines.extend(["", *_field_type_lookup(schema, field_set)])
+    lines.extend(["", *_component_field_type_lookup(schema)])
+    lines.extend(["", "// NOLINTEND(bugprone-branch-clone)"])
     lines.extend(["", *_value_type_enum()])
     lines.extend(["", *_part_kind_enum(schema)])
     lines.extend(["", *_override_table(schema)])
@@ -103,6 +112,58 @@ def _field_enum(field_set: FieldSet) -> list[str]:
         *(f"  k{field.name} = {field.id}," for field in field_set.ordered()),
         f"  kCount = {field_set.count},",
         "};",
+    ]
+
+
+def _field_type_enum() -> list[str]:
+    return [
+        "//! The value type a field receives: a bool, an int32 (an int, or the wire",
+        "//! value of an enum member) or a float (a float, or one axis of a vec3).",
+        "enum class FieldType : std::uint8_t {",
+        *(f"  k{_pascal(name)} = {index}," for index, name in enumerate(FIELD_TYPES)),
+        "};",
+    ]
+
+
+def _field_type_lookup(schema: Schema, field_set: FieldSet) -> list[str]:
+    types = schema.field_types(field_set)
+    enum = f"{field_set.name}Field"
+    return [
+        f"//! The value type of a field of the {field_set.name} field set, or nullopt",
+        "//! for an id the set does not declare.",
+        f"[[nodiscard]] constexpr auto FindFieldType(const {enum} field) noexcept",
+        "  -> std::optional<FieldType>",
+        "{",
+        "  switch (field) {",
+        *(
+            f"  case {enum}::k{field.name}: "
+            f"return FieldType::k{_pascal(types[field.name])};"
+            for field in field_set.ordered()
+        ),
+        f"  case {enum}::kCount: break;",
+        "  }",
+        "  return std::nullopt;",
+        "}",
+    ]
+
+
+def _component_field_type_lookup(schema: Schema) -> list[str]:
+    return [
+        "//! The value type of `field` of `component`, or nullopt for a component or",
+        "//! field the schema does not declare.",
+        "[[nodiscard]] constexpr auto FindFieldType(const ComponentId component,",
+        "  const std::uint16_t field) noexcept -> std::optional<FieldType>",
+        "{",
+        "  switch (component) {",
+        *(
+            f"  case ComponentId::k{component.name}: return FindFieldType("
+            f"static_cast<{wire.field_set}Field>(field));"
+            for component, wire in schema.wired()
+        ),
+        "  case ComponentId::kInvalid: break;",
+        "  }",
+        "  return std::nullopt;",
+        "}",
     ]
 
 

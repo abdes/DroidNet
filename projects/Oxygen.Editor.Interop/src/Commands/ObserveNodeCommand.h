@@ -11,7 +11,9 @@
 #include <cstdint>
 #include <functional>
 #include <span>
+#include <stdexcept>
 #include <string>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -36,6 +38,11 @@ namespace oxygen::interop::module {
 
 //! Stored node properties and resolved LOD-zero assets at one mutation
 //! boundary.
+/*!
+ Each property holds its field's schema value type, except the node flags
+ with a source mode (Visibility and the shadow flags): those report their
+ effective value as a bool, so inheritance is observable.
+*/
 struct NodeObservation {
   bool exists = false;
   bool primary_sun = false;
@@ -90,12 +97,34 @@ public:
   }
 
 private:
+  //! Adds a field's value as its schema value type: a bool as it is, an
+  //! enum or an integer as an int32, any other number as a float.
   template <typename TField, typename TValue>
   static void Add(
     NodeObservation& result, ComponentId component, TField field, TValue value)
   {
-    result.properties.push_back({ component, static_cast<std::uint16_t>(field),
-      static_cast<float>(value) });
+    PropertyEntry entry { component, static_cast<std::uint16_t>(field),
+      ToFieldValue(value) };
+    if (!IsWellTyped(entry)) {
+      throw std::logic_error("ObserveNodeCommand: field "
+        + std::to_string(entry.field) + " of component "
+        + std::to_string(static_cast<std::uint16_t>(component))
+        + " is observed as another value type than its schema type");
+    }
+    result.properties.push_back(entry);
+  }
+
+  template <typename TValue>
+  static auto ToFieldValue(TValue value) -> FieldValue
+  {
+    if constexpr (std::is_same_v<TValue, bool>) {
+      return value;
+    } else if constexpr (std::is_enum_v<TValue> || std::is_integral_v<TValue>) {
+      return static_cast<std::int32_t>(value);
+    } else {
+      static_assert(std::is_floating_point_v<TValue>);
+      return static_cast<float>(value);
+    }
   }
 
   static void ReadTransform(scene::SceneNode& node, NodeObservation& result)
@@ -175,8 +204,14 @@ private:
            NodeField::kReceivesShadows, NodeField::kStatic,
            NodeField::kRayCastingSelectable,
            NodeField::kIgnoreParentTransform }) {
-      Add(result, ComponentId::kNode, field,
-        flags->get().GetEffectiveValue(*ToSceneNodeFlag(field)));
+      const bool effective
+        = flags->get().GetEffectiveValue(*ToSceneNodeFlag(field));
+      if (HasSourceMode(field)) {
+        result.properties.push_back({ ComponentId::kNode,
+          static_cast<std::uint16_t>(field), effective });
+      } else {
+        Add(result, ComponentId::kNode, field, effective);
+      }
     }
   }
 

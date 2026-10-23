@@ -4,6 +4,7 @@
 
 using System.Numerics;
 using AwesomeAssertions;
+using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.Scenes.Edits.Properties;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.TestSupport;
@@ -51,7 +52,7 @@ public sealed partial class NodeFieldSynchronizationTests : DroidNet.Tests.Visua
         var edit = new SetProperties(new Dictionary<NodeId, PropertyEdit> { [node.Id] = field.Edit(node) }, $"Edit {field.Field}");
         _ = (await fixture.Authoring.ExecuteAsync(edit).ConfigureAwait(true)).Succeeded.Should().BeTrue();
         _ = fixture.Document.History.UndoStack.Should().ContainSingle();
-        var expected = new Dictionary<(ushort component, ushort field), float>(before)
+        var expected = new Dictionary<(ushort component, ushort field), RuntimeFieldValue>(before)
         {
             [(field.Component, field.NativeField)] = field.ExpectedValue,
         };
@@ -83,14 +84,14 @@ public sealed partial class NodeFieldSynchronizationTests : DroidNet.Tests.Visua
         await fixture.InitializeAsync(timeout.Token).ConfigureAwait(true);
         var node = fixture.Source.RootNodes.Single();
         var expected = SourceNodeProperties(node);
-        _ = expected[(3, 21)].Should().Be(220f);
+        _ = expected[(3, 21)].Should().Be(new RuntimeFieldValue.Scalar(220f));
         await AssertNodeValuesAsync(fixture, node.Id, expected, timeout.Token).ConfigureAwait(true);
         await fixture.SaveAndReopenAsync(timeout.Token).ConfigureAwait(true);
         await AssertNodeValuesAsync(fixture, node.Id, expected, timeout.Token).ConfigureAwait(true);
         _ = fixture.Document.History.UndoStack.Should().BeEmpty();
     });
 
-    private static async Task AssertNodeValuesAsync(NativeSceneFixture fixture, NodeId nodeId, Dictionary<(ushort component, ushort field), float> expected, CancellationToken cancellationToken)
+    private static async Task AssertNodeValuesAsync(NativeSceneFixture fixture, NodeId nodeId, Dictionary<(ushort component, ushort field), RuntimeFieldValue> expected, CancellationToken cancellationToken)
     {
         var source = SourceNodeProperties(fixture.Source.RootNodes.Single(node => node.Id == nodeId));
         var native = await fixture.ReadNodeAsync(nodeId, cancellationToken).ConfigureAwait(true);
@@ -98,9 +99,9 @@ public sealed partial class NodeFieldSynchronizationTests : DroidNet.Tests.Visua
         _ = native.Properties.Should().HaveCount(expected.Count);
         foreach (var (key, value) in expected)
         {
-            _ = source[key].Should().BeApproximately(value, 0.0001f, "source component {0}, field {1}", key.component, key.field);
+            _ = Matches(source[key], value, 0.0001f).Should().BeTrue("source component {0}, field {1} is {2}, not {3}", key.component, key.field, source[key], value);
             var actual = native.Properties.Single(property => (ushort)property.ComponentId == key.component && property.FieldId == key.field);
-            _ = actual.Value.Should().BeApproximately(value, 0.0001f, "native component {0}, field {1}", key.component, key.field);
+            _ = Matches(actual.Value, value, 0.0001f).Should().BeTrue("native component {0}, field {1} is {2}, not {3}", key.component, key.field, actual.Value, value);
         }
     }
 }

@@ -52,16 +52,25 @@ namespace oxygen::interop::module {
     static auto ApplyEntry(scene::environment::LocalFogVolume& volume,
       const PropertyEntry& entry) -> bool
     {
-      const float value = entry.value;
+      switch (static_cast<LocalFogVolumeField>(entry.field)) {
+      case LocalFogVolumeField::kEnabled:
+        volume.SetEnabled(entry.Bool());
+        return true;
+      case LocalFogVolumeField::kSortPriority: {
+        const auto priority = entry.Int32();
+        volume.SetSortPriority(priority);
+        return priority >= -127 && priority <= 127;
+      }
+      default:
+        break;
+      }
+      const float value = entry.Float();
       if (!std::isfinite(value)) {
         return false;
       }
       auto albedo = volume.GetFogAlbedo();
       auto emissive = volume.GetFogEmissive();
       switch (static_cast<LocalFogVolumeField>(entry.field)) {
-      case LocalFogVolumeField::kEnabled:
-        volume.SetEnabled(value != 0.0F);
-        return value == 0.0F || value == 1.0F;
       case LocalFogVolumeField::kRadialFogExtinction:
         volume.SetRadialFogExtinction(value);
         return value >= 0.0F;
@@ -101,10 +110,6 @@ namespace oxygen::interop::module {
         emissive.z = value;
         volume.SetFogEmissive(emissive);
         return value >= 0.0F;
-      case LocalFogVolumeField::kSortPriority:
-        volume.SetSortPriority(static_cast<int>(value));
-        return std::floor(value) == value && value >= -127.0F
-          && value <= 127.0F;
       default:
         return false;
       }

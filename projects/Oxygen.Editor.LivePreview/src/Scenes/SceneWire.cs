@@ -76,42 +76,42 @@ internal static partial class SceneWire
     }
 
     // The schema's degrees-to-radians encoding: the inspector edits angles in degrees; the engine takes radians.
-    private static ImmutableArray<float> DegreesToRadians(object? value) => [(float)value! * (MathF.PI / 180f)];
+    private static ImmutableArray<RuntimeFieldValue> DegreesToRadians(object? value) => [new RuntimeFieldValue.Scalar((float)value! * (MathF.PI / 180f))];
 
     /// <summary>A property's engine component and fields, one field per encoded value.</summary>
     /// <remarks>
-    /// The engine takes every property as floats. A scalar maps to one field; a vector maps to one field per axis. The
-    /// default encoding writes floats and integers as they are, booleans as one or zero and enumerations as their numeric
-    /// value; <see cref="Encode"/> replaces it when the engine expects another unit.
+    /// Each field has one schema value type, which the engine checks. A scalar maps to one field; a vector maps to one
+    /// float field per axis. The default encoding writes a float as a <see cref="RuntimeFieldValue.Scalar"/>, an integer
+    /// or an enumeration's numeric value as a <see cref="RuntimeFieldValue.Integer"/> and a boolean as a
+    /// <see cref="RuntimeFieldValue.Flag"/>; <see cref="Encode"/> replaces it when the engine expects another unit.
     /// </remarks>
     /// <param name="Component">The engine component.</param>
     /// <param name="Fields">The engine fields, one per encoded value.</param>
     internal sealed record Mapping(RuntimeComponentId Component, ImmutableArray<ushort> Fields)
     {
-        /// <summary>Gets the encoding of a value into one float per field, or <see langword="null"/> for the default.</summary>
-        public Func<object?, ImmutableArray<float>>? Encode { get; init; }
+        /// <summary>Gets the encoding of a value into one value per field, or <see langword="null"/> for the default.</summary>
+        public Func<object?, ImmutableArray<RuntimeFieldValue>>? Encode { get; init; }
 
-        /// <summary>Encodes a value into one float per field.</summary>
+        /// <summary>Encodes a value into one value per field.</summary>
         /// <param name="value">The property's value.</param>
         /// <returns>The encoded values, in field order.</returns>
-        /// <exception cref="InvalidOperationException">The value does not encode into one float per field.</exception>
-        public ImmutableArray<float> EncodeValue(object? value)
+        /// <exception cref="InvalidOperationException">The value does not encode into one value per field.</exception>
+        public ImmutableArray<RuntimeFieldValue> EncodeValue(object? value)
         {
             var encoded = this.Encode?.Invoke(value) ?? EncodeDefault(value);
             return encoded.Length == this.Fields.Length
                 ? encoded
-                : throw new InvalidOperationException($"A value of type {value?.GetType().Name ?? "null"} encodes into {encoded.Length} floats, not {this.Fields.Length}.");
+                : throw new InvalidOperationException($"A value of type {value?.GetType().Name ?? "null"} encodes into {encoded.Length} values, not {this.Fields.Length}.");
         }
 
-        private static ImmutableArray<float> EncodeDefault(object? value)
+        private static ImmutableArray<RuntimeFieldValue> EncodeDefault(object? value)
             => value switch
             {
-                float scalar => [scalar],
-                int integer => [integer],
-                bool flag => [flag ? 1f : 0f],
-                Enum enumeration => [Convert.ToInt32(enumeration, CultureInfo.InvariantCulture)],
-                Vector3 vector => [vector.X, vector.Y, vector.Z],
-                Vector4 vector => [vector.X, vector.Y, vector.Z, vector.W],
+                float scalar => [new RuntimeFieldValue.Scalar(scalar)],
+                int integer => [new RuntimeFieldValue.Integer(integer)],
+                bool flag => [new RuntimeFieldValue.Flag(flag)],
+                Enum enumeration => [new RuntimeFieldValue.Integer(Convert.ToInt32(enumeration, CultureInfo.InvariantCulture))],
+                Vector3 vector => [new RuntimeFieldValue.Scalar(vector.X), new RuntimeFieldValue.Scalar(vector.Y), new RuntimeFieldValue.Scalar(vector.Z)],
                 null => throw new InvalidOperationException("A null value has no engine encoding."),
                 _ => throw new InvalidOperationException($"A value of type {value.GetType().Name} has no default engine encoding."),
             };
