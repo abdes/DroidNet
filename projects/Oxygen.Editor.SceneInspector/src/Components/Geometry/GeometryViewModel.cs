@@ -81,14 +81,14 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
     /// <summary>Gets the geometries the picker offers, grouped as Engine, Packages and Content.</summary>
     public AssetPickerModel GeometryChoices { get; } = new(static asset => AssetChoice.For(asset, "Geometry", "\uF158"));
 
-    /// <summary>Gets the materials the surface picker offers, after the choice that clears the surface's override.</summary>
-    public AssetPickerModel MaterialChoices { get; } = new(static asset => AssetChoice.For(asset, "Material", "\uE8B9"), ClearMaterialChoice);
+    /// <summary>Gets the materials a surface's picker offers.</summary>
+    public AssetPickerModel MaterialChoices { get; } = new(static asset => AssetChoice.For(asset, "Material", "\uE8B9"));
 
     /// <inheritdoc />
     public override string Header => "Geometry";
 
     /// <inheritdoc />
-    public override string Description => "Defines renderable geometry by referencing a geometry (mesh) asset.";
+    public override string Description => "References a geometry asset and overrides its surfaces.";
 
     /// <summary>
     /// Gets or sets a value indicating whether the currently selected scene nodes have
@@ -118,29 +118,6 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
     /// </summary>
     public string AssetButtonLabel => this.IsMixed ? "--" : this.SelectedAssetName;
 
-    /// <summary>
-    /// Gets or sets a value indicating whether the currently selected scene nodes have
-    /// differing material assignments.
-    /// </summary>
-    [ObservableProperty]
-    public partial bool IsMaterialMixed { get; set; }
-
-    /// <summary>
-    /// Gets or sets the currently selected material asset.
-    /// </summary>
-    [ObservableProperty]
-    public partial AssetPath? SelectedMaterial { get; set; }
-
-    /// <summary>
-    /// Gets or sets the display name of the currently selected material asset.
-    /// </summary>
-    [ObservableProperty]
-    public partial string SelectedMaterialName { get; set; } = "None";
-
-    /// <summary>
-    /// Gets the label to show on the material button.
-    /// </summary>
-    public string MaterialButtonLabel => this.IsMaterialMixed ? "--" : this.SelectedMaterialName;
 
     /// <summary>
     /// Gets a glyph string to use as a thumbnail indicator for the currently selected asset.
@@ -162,27 +139,6 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
             }
 
             return "\uF158"; // Geometry
-        }
-    }
-
-    /// <summary>
-    /// Gets a glyph string to use as a thumbnail indicator for the selected material.
-    /// </summary>
-    public string MaterialThumbnailGlyph
-    {
-        get
-        {
-            if (this.IsMaterialMixed)
-            {
-                return "\uE9D9"; // Indeterminate / mixed
-            }
-
-            if (this.SelectedMaterial is null)
-            {
-                return string.Empty;
-            }
-
-            return "\uE790"; // Material
         }
     }
 
@@ -223,52 +179,6 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
     }
 
     /// <summary>
-    /// Applies the specified material assignment to all currently selected scene nodes.
-    /// </summary>
-    /// <param name="choice">The picked material, or the choice that clears the override.</param>
-    /// <returns>A <see cref="Task"/> that completes when the operation has finished.</returns>
-    public async Task ApplyMaterialAsync(AssetChoice choice)
-    {
-        var picker = this.materialEdit;
-        this.materialEdit = null;
-        if (!this.IsInputEnabled || choice is not { IsEnabled: true } || picker is null
-            || !this.IsCurrentSelection(picker.Nodes)
-            || !ReferenceEquals(this.authoringProvider?.Invoke(), picker.Authoring))
-        {
-            return;
-        }
-
-        var project = this.session.Context;
-        var nodeIds = picker.Nodes.ConvertAll(static node => node.Id);
-        var built = await SurfaceEdits.SetAsync(this.surfaces, project, nodeIds, picker.Target, SceneSchema.Geometry.Surface.Material.Id, choice.Asset, "Edit Surface Material").ConfigureAwait(true);
-        var succeeded = built.Edit is { } edit && (await picker.Authoring.ExecuteAsync(edit).ConfigureAwait(true)).Succeeded;
-        if (!this.IsCurrentSelection(picker.Nodes))
-        {
-            return;
-        }
-
-        if (succeeded)
-        {
-            this.UpdateMaterialDisplay(choice.Asset);
-        }
-
-        await this.RefreshSurfacesAsync().ConfigureAwait(true);
-    }
-
-    /// <summary>
-    /// Refreshes the material picker from the live catalog before the material flyout is shown.
-    /// </summary>
-    /// <returns>A task that completes when the picker snapshot has been republished.</returns>
-    public async Task RefreshMaterialPickerAsync()
-    {
-        this.materialEdit = this.SelectedSurface is { } surface && this.CanEditSurfaceMaterial
-            && this.selectedItems is { Count: > 0 } nodes && this.authoringProvider?.Invoke() is { } authoring
-                ? new(authoring, nodes.ToList(), surface.Target) : null;
-        await this.assetProvider.RefreshAsync().ConfigureAwait(true);
-        this.ApplyContentMaterials();
-    }
-
-    /// <summary>
     /// Update the view model state from the given collection of selected scene nodes.
     /// </summary>
     /// <param name="items">The currently selected scene nodes.</param>
@@ -298,9 +208,13 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
             this.SelectedAssetName = selected is null ? "None" : this.ResolveGeometryDisplayName(selected);
         }
 
-        // Authored assignments change synchronously, including during undo/redo.
-        this.UpdateSelectedSurfaceDisplay();
-        _ = this.RefreshSurfacesAsync();
+        // Authored overrides change synchronously, including during undo/redo, and the cards show them in place. Only
+        // another selection or geometry needs the inventory read again: an override never changes it.
+        this.ProjectSurfaces();
+        if (!this.ShowsInventoryOf(items))
+        {
+            _ = this.RefreshSurfacesAsync();
+        }
     }
 
     /// <inheritdoc />
@@ -319,8 +233,6 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
     /// <returns>The user-facing name.</returns>
     internal static string NameOf(AssetPath asset) => AssetFileTypes.RemoveSuffix(asset.Name);
 
-    private static AssetChoice ClearMaterialChoice { get; } = new("Clear override", Asset: null, "Use the geometry default", "Geometry default", IsEnabled: true, Glyph: string.Empty);
-
     private bool IsCurrentSelection(List<SceneNode> nodes)
         => !this.disposed && this.selectedItems?.Count == nodes.Count
             && nodes.TrueForAll(node => this.selectedItems.Any(selected => ReferenceEquals(selected, node)));
@@ -338,14 +250,7 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
 
     // Lists the materials the surface accepts, keeping the one assigned now even when it is gone.
     private void ApplyContentMaterials()
-        => this.MaterialChoices.Update(AssetRule.For(AssetKind.Material).Apply(this.latestMaterialAssets, this.IsMaterialMixed ? null : this.SelectedMaterial));
-
-    private void UpdateMaterialDisplay(AssetPath? material)
-    {
-        this.SelectedMaterial = material;
-        this.SelectedMaterialName = material is null ? "Geometry default" : this.ResolveMaterialDisplayName(material);
-        this.IsMaterialMixed = false;
-    }
+        => this.MaterialChoices.Update(AssetRule.For(AssetKind.Material).Apply(this.latestMaterialAssets, this.pickedMaterial));
 
     private string ResolveMaterialDisplayName(AssetPath material)
         => this.MaterialChoices.Find(material)?.Name ?? NameOf(material);
@@ -382,26 +287,5 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
     {
         _ = value;
         this.OnPropertyChanged(nameof(this.AssetThumbnailGlyph));
-    }
-
-    partial void OnIsMaterialMixedChanged(bool value)
-    {
-        _ = value;
-        this.OnPropertyChanged(nameof(this.MaterialButtonLabel));
-        this.OnPropertyChanged(nameof(this.MaterialToolTip));
-        this.OnPropertyChanged(nameof(this.MaterialThumbnailGlyph));
-    }
-
-    partial void OnSelectedMaterialNameChanged(string value)
-    {
-        _ = value;
-        this.OnPropertyChanged(nameof(this.MaterialButtonLabel));
-        this.OnPropertyChanged(nameof(this.MaterialToolTip));
-    }
-
-    partial void OnSelectedMaterialChanged(AssetPath? value)
-    {
-        _ = value;
-        this.OnPropertyChanged(nameof(this.MaterialThumbnailGlyph));
     }
 }

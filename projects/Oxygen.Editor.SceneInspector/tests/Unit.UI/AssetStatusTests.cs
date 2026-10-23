@@ -38,20 +38,13 @@ internal sealed class AssetStatusTests : DroidNet.Tests.VisualUserInterfaceTests
         _ = catalog.Setup(value => value.RefreshAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
         using var surfaces = new FakeSurfaceProvider();
         using var session = new TestSession(TestProject.Create(new MockFileSystem()).Context);
-        using var model = new GeometryViewModel(CreateStatusHosting(), catalog.Object, surfaces, session)
-        {
-            IsExpanded = true,
-        };
-        var view = new GeometryView
-        {
-            ViewModel = model,
-            Width = 440,
-        };
-        await LoadTestContentAsync(view).ConfigureAwait(true);
+        using var model = new GeometryViewModel(CreateStatusHosting(), catalog.Object, surfaces, session);
+
+        // Every surface card opens this picker over the section's material choices.
+        var owner = new Button { Content = "Material", Width = 440 };
+        var flyout = new Flyout { AreOpenCloseAnimationsEnabled = false, Content = new AssetPicker { Model = model.MaterialChoices } };
+        await LoadTestContentAsync(owner).ConfigureAwait(true);
         await WaitForRenderAsync().ConfigureAwait(true);
-        var owner = (SplitButton)view.FindName("MaterialSplitButton");
-        var flyout = (Flyout)owner.Flyout;
-        flyout.AreOpenCloseAnimationsEnabled = false;
         flyout.ShowAt(owner);
         try
         {

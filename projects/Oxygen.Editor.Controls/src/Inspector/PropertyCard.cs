@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Windows.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
@@ -17,6 +18,11 @@ namespace Oxygen.Editor.Controls;
 ///     A styled card control for displaying a property and its value in a property editor UI.
 ///     Supports visual states for normal, pointer-over, and disabled interactions.
 /// </summary>
+/// <remarks>
+///     A row whose value overrides its source, such as a surface's asset default, shows a bar in the gutter before it:
+///     full strength when every edited object overrides it, half strength when only some do. While it is marked and has
+///     a <see cref="ResetCommand"/>, a trailing button resets it to the source.
+/// </remarks>
 [TemplateVisualState(Name = NormalState, GroupName = CommonStates)]
 [TemplateVisualState(Name = PointerOverState, GroupName = CommonStates)]
 [TemplateVisualState(Name = DisabledState, GroupName = CommonStates)]
@@ -56,6 +62,16 @@ public partial class PropertyCard : ContentControl
     /// <summary>Identifies a value-group accessory, such as a color swatch.</summary>
     public static readonly DependencyProperty LeadingContentProperty = RegisterLayoutProperty(nameof(LeadingContent), typeof(object), defaultValue: null);
 
+    /// <summary>Identifies how many edited objects override the value.</summary>
+    public static readonly DependencyProperty OverrideStateProperty = RegisterOverrideProperty(nameof(OverrideState), typeof(OverrideState), OverrideState.None);
+
+    /// <summary>Identifies the command that resets the value to its source.</summary>
+    public static readonly DependencyProperty ResetCommandProperty = RegisterOverrideProperty(nameof(ResetCommand), typeof(ICommand), defaultValue: null);
+
+    /// <summary>Identifies the reset button's tooltip and automation name.</summary>
+    public static readonly DependencyProperty ResetToolTipProperty = DependencyProperty.Register(
+        nameof(ResetToolTip), typeof(string), typeof(PropertyCard), new PropertyMetadata("Reset to the source value"));
+
     /// <summary>
     /// The backing <see cref="DependencyProperty"/> for the <see cref="PropertyName"/> property.
     /// </summary>
@@ -74,6 +90,8 @@ public partial class PropertyCard : ContentControl
     private TextBlock? headerQualifier;
     private TextBlock? suffix;
     private ContentPresenter? leading;
+    private FrameworkElement? overrideBar;
+    private Button? resetButton;
     private PropertyLayout? appliedLayout;
 
     /// <summary>
@@ -115,6 +133,15 @@ public partial class PropertyCard : ContentControl
     /// <summary>Gets or sets the accessory preceding the editor in its value row.</summary>
     public object? LeadingContent { get => this.GetValue(LeadingContentProperty); set => this.SetValue(LeadingContentProperty, value); }
 
+    /// <summary>Gets or sets how many edited objects override the value; the bar shows unless it is none.</summary>
+    public OverrideState OverrideState { get => (OverrideState)this.GetValue(OverrideStateProperty); set => this.SetValue(OverrideStateProperty, value); }
+
+    /// <summary>Gets or sets the command that resets the value to its source; the reset button shows while the value is overridden.</summary>
+    public ICommand? ResetCommand { get => (ICommand?)this.GetValue(ResetCommandProperty); set => this.SetValue(ResetCommandProperty, value); }
+
+    /// <summary>Gets or sets the reset button's tooltip, which names the source, such as "Reset to the asset value (On)".</summary>
+    public string ResetToolTip { get => (string)this.GetValue(ResetToolTipProperty); set => this.SetValue(ResetToolTipProperty, value); }
+
     /// <summary>Gets the layout selected during measurement.</summary>
     public PropertyLayout ActualLayout { get; private set; }
 
@@ -139,7 +166,10 @@ public partial class PropertyCard : ContentControl
         this.headerQualifier = this.GetTemplateChild("HeaderQualifier") as TextBlock;
         this.suffix = this.GetTemplateChild("ValueQualifier") as TextBlock;
         this.leading = this.GetTemplateChild("ValueLeading") as ContentPresenter;
+        this.overrideBar = this.GetTemplateChild("OverrideBar") as FrameworkElement;
+        this.resetButton = this.GetTemplateChild("ResetButton") as Button;
         this.appliedLayout = null;
+        this.UpdateOverrideVisuals();
         this.IsEnabledChanged -= this.OnIsEnabledChanged;
         this.PointerEntered -= this.OnPointerEntered;
         this.PointerExited -= this.OnPointerExited;
@@ -173,7 +203,15 @@ public partial class PropertyCard : ContentControl
             var accessoryWidth = this.LeadingContent is null ? 0 : (this.leading?.DesiredSize.Width ?? 0) + 4;
             var trailingWidth = qualifierWidth + ((this.Content as NumberBox)?.UnitWidth ?? 0);
             var reserve = this.AlignWithQualifierGroup(trailingWidth) - trailingWidth;
-            var minimum = editorWidth + qualifierWidth + accessoryWidth + reserve;
+            var resetWidth = 0d;
+            if (this.resetButton is { Visibility: Visibility.Visible } reset)
+            {
+                reset.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+                resetWidth = reset.DesiredSize.Width;
+            }
+
+            // The reset button ends the value, so it narrows the editor, never the label column.
+            var minimum = editorWidth + qualifierWidth + accessoryWidth + reserve + resetWidth;
             var rowWidth = availableSize.Width - this.Padding.Left - this.Padding.Right;
             var chosenLayout = this.Layout == PropertyLayout.Auto
                 ? (rowWidth >= 12 + Math.Max(this.LabelWidth * scale / InlineLabelWidthRatio, minimum / (1 - InlineLabelWidthRatio))
@@ -224,6 +262,21 @@ public partial class PropertyCard : ContentControl
             card.appliedLayout = null;
             card.InvalidateMeasure();
         }));
+
+    private static DependencyProperty RegisterOverrideProperty(string propertyName, Type type, object? defaultValue)
+        => DependencyProperty.Register(propertyName, type, typeof(PropertyCard), new PropertyMetadata(defaultValue, (d, _) =>
+        {
+            var card = (PropertyCard)d;
+            card.UpdateOverrideVisuals();
+            card.InvalidateMeasure();
+        }));
+
+    private void UpdateOverrideVisuals()
+    {
+        this.overrideBar?.Opacity = OverrideStates.BarOpacity(this.OverrideState);
+        this.overrideBar?.Visibility = this.OverrideState == OverrideState.None ? Visibility.Collapsed : Visibility.Visible;
+        this.resetButton?.Visibility = this.ResetCommand is null ? Visibility.Collapsed : OverrideStates.ResetVisibility(this.OverrideState);
+    }
 
     // The editor's one-row width with its margin: reported by a responsive editor, measured for fixed-size content.
     private double EditorPreferredWidth()

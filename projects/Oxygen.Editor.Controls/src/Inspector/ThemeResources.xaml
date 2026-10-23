@@ -64,6 +64,7 @@
     <x:Double x:Key="PropertyCardMinWidth">148</x:Double>
     <x:Double x:Key="PropertyCardMinHeight">32</x:Double>
     <x:Double x:Key="PropertyCardLabelWidth">124</x:Double>
+    <Thickness x:Key="PropertyCardOverrideBarMargin">-9,4,0,4</Thickness>
     <x:Double x:Key="PropertiesExpanderDescriptionFontSize">12</x:Double>
     <x:Double x:Key="PropertyCardHeaderFontSize">14</x:Double>
     <x:Double x:Key="PropertyCardLeftIndention">0</x:Double>

@@ -47,7 +47,12 @@ public sealed class CookedGeometryReport
                     throw new InvalidDataException("The native geometry inventory contains duplicate surface identities or surface bindings.");
                 }
 
-                surfaces.Add(new(surfaceId, surface.GetProperty("display_name").GetString()!, bindings));
+                surfaces.Add(new(
+                    surfaceId,
+                    surface.GetProperty("display_name").GetString()!,
+                    surface.GetProperty("visible").GetBoolean(),
+                    surface.GetProperty("casts_shadows").GetBoolean(),
+                    bindings));
             }
 
             if (!geometries.TryAdd(key, new(row.GetProperty("layout_revision").GetString()!, surfaces.ToImmutable())))

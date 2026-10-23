@@ -16,56 +16,86 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="local:PropertyCard">
-                    <Grid x:Name="RootGrid" Padding="{TemplateBinding Padding}">
-                        <Grid
-                            x:Name="PropertyHeader"
-                            VerticalAlignment="Center"
-                            ColumnSpacing="8">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <TextBlock
-                                x:Name="PropertyName"
-                                FontSize="{TemplateBinding FontSize}"
-                                Text="{TemplateBinding PropertyName}"
-                                TextTrimming="CharacterEllipsis"
-                                TextWrapping="NoWrap"
-                                ToolTipService.ToolTip="{TemplateBinding PropertyName}" />
-                            <TextBlock
-                                x:Name="HeaderQualifier"
-                                Grid.Column="1"
+                    <!--
+                        The override bar sits in the gutter before the row and the reset button at the end of the value,
+                        so every row splits label and value alike and marked and unmarked rows stay aligned.
+                    -->
+                    <Grid x:Name="CardRoot">
+                        <Rectangle
+                            x:Name="OverrideBar"
+                            Width="3"
+                            Margin="{StaticResource PropertyCardOverrideBarMargin}"
+                            HorizontalAlignment="Left"
+                            Fill="{ThemeResource AccentFillColorDefaultBrush}"
+                            RadiusX="1"
+                            RadiusY="1"
+                            Visibility="Collapsed" />
+                        <Grid x:Name="RootGrid" Padding="{TemplateBinding Padding}">
+                            <Grid
+                                x:Name="PropertyHeader"
                                 VerticalAlignment="Center"
-                                FontSize="12"
-                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                Text="{TemplateBinding Qualifier}"
-                                TextWrapping="Wrap" />
-                        </Grid>
-                        <Grid VerticalAlignment="Center">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <ContentPresenter
-                                x:Name="ValueLeading"
-                                Margin="0,0,4,0"
-                                VerticalAlignment="Top"
-                                Content="{TemplateBinding LeadingContent}" />
-                            <ContentPresenter
-                                x:Name="PropertyEditor"
-                                Grid.Column="1"
-                                HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
-                                Content="{TemplateBinding Content}"
-                                ContentTemplate="{TemplateBinding ContentTemplate}" />
-                            <TextBlock
-                                x:Name="ValueQualifier"
-                                Grid.Column="2"
-                                Margin="4,0,0,0"
-                                VerticalAlignment="Center"
-                                FontSize="12"
-                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                Text="{TemplateBinding Qualifier}" />
+                                ColumnSpacing="8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock
+                                    x:Name="PropertyName"
+                                    FontSize="{TemplateBinding FontSize}"
+                                    Text="{TemplateBinding PropertyName}"
+                                    TextTrimming="CharacterEllipsis"
+                                    TextWrapping="NoWrap"
+                                    ToolTipService.ToolTip="{TemplateBinding PropertyName}" />
+                                <TextBlock
+                                    x:Name="HeaderQualifier"
+                                    Grid.Column="1"
+                                    VerticalAlignment="Center"
+                                    FontSize="12"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    Text="{TemplateBinding Qualifier}"
+                                    TextWrapping="Wrap" />
+                            </Grid>
+                            <Grid VerticalAlignment="Center">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <ContentPresenter
+                                    x:Name="ValueLeading"
+                                    Margin="0,0,4,0"
+                                    VerticalAlignment="Top"
+                                    Content="{TemplateBinding LeadingContent}" />
+                                <ContentPresenter
+                                    x:Name="PropertyEditor"
+                                    Grid.Column="1"
+                                    HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                    Content="{TemplateBinding Content}"
+                                    ContentTemplate="{TemplateBinding ContentTemplate}" />
+                                <TextBlock
+                                    x:Name="ValueQualifier"
+                                    Grid.Column="2"
+                                    Margin="4,0,0,0"
+                                    VerticalAlignment="Center"
+                                    FontSize="12"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    Text="{TemplateBinding Qualifier}" />
+                                <Button
+                                    x:Name="ResetButton"
+                                    Grid.Column="3"
+                                    Margin="4,0,0,0"
+                                    Padding="6"
+                                    VerticalAlignment="Center"
+                                    AutomationProperties.Name="{TemplateBinding ResetToolTip}"
+                                    Background="Transparent"
+                                    BorderThickness="0"
+                                    Command="{TemplateBinding ResetCommand}"
+                                    ToolTipService.ToolTip="{TemplateBinding ResetToolTip}"
+                                    Visibility="Collapsed">
+                                    <FontIcon FontSize="12" Glyph="&#xE777;" />
+                                </Button>
+                            </Grid>
                         </Grid>
                         <VisualStateManager.VisualStateGroups>
                             <VisualStateGroup x:Name="CommonStates">
@@ -73,7 +103,7 @@
                                 <VisualState x:Name="PointerOver" />
                                 <VisualState x:Name="Disabled">
                                     <VisualState.Setters>
-                                        <Setter Target="RootGrid.Opacity" Value="0.4" />
+                                        <Setter Target="CardRoot.Opacity" Value="0.4" />
                                     </VisualState.Setters>
                                 </VisualState>
                             </VisualStateGroup>

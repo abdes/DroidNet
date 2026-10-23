@@ -26,13 +26,13 @@ public sealed partial class FakeSurfaceProvider : IGeometrySurfaceProvider, IDis
     /// </summary>
     /// <param name="geometry">The geometry.</param>
     /// <param name="layoutRevision">The inventory's layout revision.</param>
-    /// <param name="surfaces">The surface ids.</param>
+    /// <param name="surfaces">The surface ids; each surface is visible and casts shadows unless a scene overrides it.</param>
     public void Publish(AssetPath geometry, string layoutRevision, params IEnumerable<Guid> surfaces)
         => this.Publish(new GeometrySurfaceMetadata(
             geometry,
             NativeGeometryKey: Guid.Empty,
             layoutRevision,
-            [.. surfaces.Select(static surface => new GeometrySurface(surface, surface.ToString(), []))]));
+            [.. surfaces.Select(static surface => new GeometrySurface(surface, surface.ToString(), Visible: true, CastsShadows: true, []))]));
 
     /// <summary>
     /// Publishes an inventory of its geometry, replacing any earlier one.

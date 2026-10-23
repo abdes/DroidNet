@@ -45,6 +45,20 @@
         <Setter Property="BorderThickness" Value="0" />
         <Setter Property="CornerRadius" Value="4" />
     </Style>
+    <!--  A card for one item of a section's list, such as a script slot or a geometry surface.  -->
+    <Style x:Key="InspectorItemCard" TargetType="Border">
+        <Setter Property="Padding" Value="10" />
+        <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorSecondaryBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="6" />
+    </Style>
+    <!--  Values kept for something their source no longer declares, such as a surface lost on reimport.  -->
+    <Style x:Key="InspectorCautionBox" TargetType="Border">
+        <Setter Property="Padding" Value="8" />
+        <Setter Property="Background" Value="{ThemeResource SystemFillColorCautionBackgroundBrush}" />
+        <Setter Property="CornerRadius" Value="4" />
+    </Style>
     <Style
         x:Key="SceneNumberBoxStyle"
         BasedOn="{StaticResource DefaultNumberBoxStyle}"

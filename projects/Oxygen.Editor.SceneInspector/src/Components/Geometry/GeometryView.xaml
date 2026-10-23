@@ -7,6 +7,7 @@
     xmlns:ctkcvt="using:CommunityToolkit.WinUI.Converters"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:editorcontrols="using:Oxygen.Editor.Controls"
+    xmlns:local="using:Oxygen.Editor.SceneInspector.Components.Geometry"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:muxc="using:Microsoft.UI.Xaml.Controls"
     xmlns:pickers="using:Oxygen.Editor.Pickers"
@@ -16,6 +17,9 @@
 
     <UserControl.Resources>
         <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="ms-appx:///Oxygen.Editor.SceneInspector/SceneInspectorStyles.xaml" />
+            </ResourceDictionary.MergedDictionaries>
             <ctkcvt:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter" />
 
             <DataTemplate x:Key="AssetThumbnailTemplate">
@@ -28,6 +32,142 @@
                         <FontIcon Glyph="{Binding}" />
                     </Viewbox>
                 </Border>
+            </DataTemplate>
+
+            <!--  One surface: a disclosure whose header names it and summarizes its values, over its three rows.  -->
+            <DataTemplate x:Key="SurfaceCardTemplate" x:DataType="local:SurfaceCardViewModel">
+                <Border Padding="10,2,4,6" Style="{StaticResource InspectorItemCard}">
+                    <Grid>
+                        <Rectangle
+                            Width="3"
+                            Margin="-7,6,0,6"
+                            HorizontalAlignment="Left"
+                            VerticalAlignment="Stretch"
+                            Fill="{ThemeResource AccentFillColorDefaultBrush}"
+                            Opacity="{x:Bind editorcontrols:OverrideStates.BarOpacity(OverrideState), Mode=OneWay}"
+                            RadiusX="1"
+                            RadiusY="1" />
+                        <Expander
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Stretch"
+                            AutomationProperties.Name="{x:Bind Name, Mode=OneWay}"
+                            IsExpanded="{x:Bind IsExpanded, Mode=TwoWay}"
+                            Style="{StaticResource QuietDisclosure}">
+                            <Expander.Header>
+                                <Grid ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <controls:Thumbnail
+                                        Width="24"
+                                        Height="24"
+                                        VerticalAlignment="Center"
+                                        Content="{x:Bind MaterialGlyph, Mode=OneWay}"
+                                        ContentTemplate="{StaticResource AssetThumbnailTemplate}" />
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                        <TextBlock
+                                            FontWeight="SemiBold"
+                                            Text="{x:Bind Name, Mode=OneWay}"
+                                            TextTrimming="CharacterEllipsis" />
+                                        <TextBlock
+                                            FontSize="12"
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                            Text="{x:Bind Summary, Mode=OneWay}"
+                                            TextTrimming="CharacterEllipsis"
+                                            ToolTipService.ToolTip="{x:Bind Summary, Mode=OneWay}" />
+                                    </StackPanel>
+                                    <Button
+                                        Grid.Column="2"
+                                        AutomationProperties.Name="{x:Bind ResetToolTip, Mode=OneWay}"
+                                        Command="{x:Bind ResetCommand}"
+                                        IsEnabled="{x:Bind CanEdit, Mode=OneWay}"
+                                        Style="{StaticResource QuietInspectorAction}"
+                                        ToolTipService.ToolTip="{x:Bind ResetToolTip, Mode=OneWay}"
+                                        Visibility="{x:Bind editorcontrols:OverrideStates.ResetVisibility(OverrideState), Mode=OneWay}">
+                                        <FontIcon FontSize="12" Glyph="&#xE777;" />
+                                    </Button>
+                                </Grid>
+                            </Expander.Header>
+                            <StackPanel Padding="0,4,0,0" Spacing="4">
+                                <editorcontrols:PropertyCard
+                                    HorizontalContentAlignment="Stretch"
+                                    IsEnabled="{x:Bind CanEdit, Mode=OneWay}"
+                                    OverrideState="{x:Bind MaterialOverrideState, Mode=OneWay}"
+                                    PropertyName="Material"
+                                    ResetCommand="{x:Bind ResetMaterialCommand}"
+                                    ResetToolTip="{x:Bind MaterialResetToolTip, Mode=OneWay}">
+                                    <muxc:SplitButton
+                                        HorizontalAlignment="Stretch"
+                                        AutomationProperties.Name="Material"
+                                        Content="{x:Bind MaterialLabel, Mode=OneWay}"
+                                        ToolTipService.ToolTip="{x:Bind MaterialLabel, Mode=OneWay}">
+                                        <muxc:SplitButton.Flyout>
+                                            <Flyout Opening="OnMaterialPickerOpening">
+                                                <pickers:AssetPicker ChoiceInvoked="OnMaterialChoiceInvoked" Model="{x:Bind MaterialChoices}" />
+                                            </Flyout>
+                                        </muxc:SplitButton.Flyout>
+                                    </muxc:SplitButton>
+                                </editorcontrols:PropertyCard>
+                                <editorcontrols:InspectorToggleField
+                                    IsEnabled="{x:Bind CanEdit, Mode=OneWay}"
+                                    Label="Visible"
+                                    OverrideState="{x:Bind VisibleOverrideState, Mode=OneWay}"
+                                    ResetCommand="{x:Bind ResetVisibleCommand}"
+                                    ResetToolTip="{x:Bind VisibleResetToolTip, Mode=OneWay}"
+                                    Value="{x:Bind Visible, Mode=TwoWay}" />
+                                <editorcontrols:InspectorToggleField
+                                    IsEnabled="{x:Bind CanEdit, Mode=OneWay}"
+                                    Label="Cast shadows"
+                                    OverrideState="{x:Bind CastsShadowsOverrideState, Mode=OneWay}"
+                                    ResetCommand="{x:Bind ResetCastsShadowsCommand}"
+                                    ResetToolTip="{x:Bind CastsShadowsResetToolTip, Mode=OneWay}"
+                                    Value="{x:Bind CastsShadows, Mode=TwoWay}" />
+                            </StackPanel>
+                        </Expander>
+                    </Grid>
+                </Border>
+            </DataTemplate>
+
+            <!--  Changes kept for a lost surface: what they are, a current surface to apply them to, or removal.  -->
+            <DataTemplate x:Key="KeptChangesTemplate" x:DataType="local:KeptSurfaceChangesViewModel">
+                <Grid ColumnSpacing="8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="{x:Bind Name}" TextTrimming="CharacterEllipsis" />
+                        <TextBlock
+                            FontSize="12"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Text="{x:Bind Summary, Mode=OneWay}"
+                            TextTrimming="CharacterEllipsis"
+                            ToolTipService.ToolTip="{x:Bind Summary, Mode=OneWay}" />
+                    </StackPanel>
+                    <ComboBox
+                        Grid.Column="1"
+                        MinWidth="120"
+                        VerticalAlignment="Center"
+                        AutomationProperties.Name="Apply to surface"
+                        DisplayMemberPath="Name"
+                        IsEnabled="{x:Bind CanEdit, Mode=OneWay}"
+                        ItemsSource="{x:Bind Targets, Mode=OneWay}"
+                        PlaceholderText="Apply to…"
+                        SelectedItem="{x:Bind Target, Mode=TwoWay}"
+                        ToolTipService.ToolTip="Apply these changes to a surface of the geometry" />
+                    <Button
+                        Grid.Column="2"
+                        AutomationProperties.Name="Remove these changes"
+                        Command="{x:Bind RemoveCommand}"
+                        IsEnabled="{x:Bind CanEdit, Mode=OneWay}"
+                        Style="{StaticResource QuietInspectorAction}"
+                        ToolTipService.ToolTip="Remove these changes">
+                        <FontIcon FontSize="12" Glyph="&#xE711;" />
+                    </Button>
+                </Grid>
             </DataTemplate>
         </ResourceDictionary>
     </UserControl.Resources>
@@ -72,86 +212,89 @@
                     </Grid>
                 </editorcontrols:PropertyCard>
 
-                <editorcontrols:PropertyCard
-                    HorizontalContentAlignment="Stretch"
-                    PropertyName="Surface"
-                    Visibility="{x:Bind ViewModel.ShowSurfaceSelector, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
-                    <ComboBox
-                        x:Name="SurfaceSelector"
-                        HorizontalAlignment="Stretch"
-                        DisplayMemberPath="DisplayName"
-                        ItemsSource="{x:Bind ViewModel.Surfaces, Mode=OneWay}"
-                        SelectedItem="{x:Bind ViewModel.SelectedSurface, Mode=TwoWay}" />
-                </editorcontrols:PropertyCard>
+                <!--  Surfaces: title and count, then refresh and clear-unresolved.  -->
+                <Grid Margin="0,8,0,0" ColumnSpacing="6">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock
+                        VerticalAlignment="Center"
+                        FontWeight="SemiBold"
+                        Text="Surfaces" />
+                    <TextBlock
+                        Grid.Column="1"
+                        VerticalAlignment="Center"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Text="{x:Bind ViewModel.SurfaceCount, Mode=OneWay}" />
+                    <Button
+                        Grid.Column="2"
+                        AutomationProperties.Name="Refresh surfaces"
+                        Command="{x:Bind ViewModel.RefreshSurfacesCommand}"
+                        Style="{StaticResource QuietInspectorAction}"
+                        ToolTipService.ToolTip="Refresh surfaces: read this geometry's surfaces again from its cooked output, for example after a cook or reimport.">
+                        <FontIcon
+                            FontSize="14"
+                            Glyph="&#xE72C;"
+                            RenderTransformOrigin="0.5,0.5">
+                            <FontIcon.RenderTransform>
+                                <RotateTransform x:Name="RefreshSurfacesRotation" />
+                            </FontIcon.RenderTransform>
+                        </FontIcon>
+                    </Button>
+                    <Button
+                        Grid.Column="3"
+                        AutomationProperties.Name="Remove every kept change"
+                        Command="{x:Bind ViewModel.ClearUnresolvedSurfacesCommand}"
+                        Style="{StaticResource QuietInspectorAction}"
+                        ToolTipService.ToolTip="Remove every change kept for a surface this geometry no longer has. Undo restores them."
+                        Visibility="{x:Bind ViewModel.HasKeptChanges, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                        <FontIcon FontSize="14" Glyph="&#xE894;" />
+                    </Button>
+                </Grid>
 
-                <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Material">
-                    <Grid HorizontalAlignment="Stretch" ColumnSpacing="4">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
+                <TextBlock
+                    x:Name="SurfaceNoticeText"
+                    AutomationProperties.LiveSetting="Polite"
+                    FontSize="12"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Text="{x:Bind ViewModel.SurfaceNotice, Mode=OneWay}"
+                    TextWrapping="Wrap"
+                    Visibility="{x:Bind ViewModel.HasSurfaceNotice, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
 
-                        <controls:Thumbnail
-                            Width="24"
-                            Height="24"
-                            VerticalAlignment="Center"
-                            Content="{x:Bind ViewModel.MaterialThumbnailGlyph, Mode=OneWay}"
-                            ContentTemplate="{StaticResource AssetThumbnailTemplate}" />
+                <ItemsControl ItemTemplate="{StaticResource SurfaceCardTemplate}" ItemsSource="{x:Bind ViewModel.Surfaces, Mode=OneWay}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Spacing="6" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                </ItemsControl>
 
-                        <Border
-                            x:Name="MaterialValueBorder"
-                            Grid.Column="1"
-                            Margin="4,0,0,0"
-                            BorderBrush="Transparent"
-                            BorderThickness="1"
-                            CornerRadius="{ThemeResource ControlCornerRadius}">
-                            <muxc:SplitButton
-                                x:Name="MaterialSplitButton"
-                                HorizontalAlignment="Stretch"
-                                Content="{x:Bind ViewModel.MaterialButtonLabel, Mode=OneWay}"
-                                IsEnabled="{x:Bind ViewModel.CanEditSurfaceMaterial, Mode=OneWay}"
-                                ToolTipService.ToolTip="{x:Bind ViewModel.MaterialToolTip, Mode=OneWay}">
-                                <muxc:SplitButton.Flyout>
-                                    <Flyout x:Name="MaterialPickerFlyout" Opening="OnMaterialPickerOpening">
-                                        <pickers:AssetPicker ChoiceInvoked="OnMaterialChoiceInvoked" Model="{x:Bind ViewModel.MaterialChoices}" />
-                                    </Flyout>
-                                </muxc:SplitButton.Flyout>
-                            </muxc:SplitButton>
-                        </Border>
-                        <Button
-                            Grid.Column="2"
-                            Padding="6"
-                            VerticalAlignment="Center"
-                            AutomationProperties.Name="Refresh surfaces"
-                            Background="Transparent"
-                            BorderThickness="0"
-                            Command="{x:Bind ViewModel.RefreshSurfacesCommand}"
-                            ToolTipService.ToolTip="Refresh surfaces: read this geometry's surfaces again from its cooked output, for example after a cook or reimport.">
+                <Border Style="{StaticResource InspectorCautionBox}" Visibility="{x:Bind ViewModel.HasKeptChanges, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                    <StackPanel Spacing="6">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
                             <FontIcon
-                                FontSize="14"
-                                Glyph="&#xE72C;"
-                                RenderTransformOrigin="0.5,0.5">
-                                <FontIcon.RenderTransform>
-                                    <RotateTransform x:Name="RefreshSurfacesRotation" />
-                                </FontIcon.RenderTransform>
-                            </FontIcon>
-                        </Button>
-                        <Button
-                            Grid.Column="3"
-                            Padding="6"
-                            VerticalAlignment="Center"
-                            AutomationProperties.Name="Clear unresolved material assignments"
-                            Background="Transparent"
-                            BorderThickness="0"
-                            Command="{x:Bind ViewModel.ClearUnresolvedSurfacesCommand}"
-                            ToolTipService.ToolTip="Clear unresolved assignments: remove material overrides that target another geometry or a surface this geometry no longer has. Resolved overrides are kept; Undo restores them."
-                            Visibility="{x:Bind ViewModel.HasUnresolvedSurfaces, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
-                            <FontIcon FontSize="14" Glyph="&#xE894;" />
-                        </Button>
-                    </Grid>
-                </editorcontrols:PropertyCard>
+                                FontSize="12"
+                                Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                                Glyph="&#xE7BA;" />
+                            <TextBlock FontWeight="SemiBold" Text="Not in this geometry" />
+                        </StackPanel>
+                        <TextBlock
+                            FontSize="12"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Text="The cook fails until these changes are applied to a surface or removed."
+                            TextWrapping="Wrap" />
+                        <ItemsControl ItemTemplate="{StaticResource KeptChangesTemplate}" ItemsSource="{x:Bind ViewModel.KeptChanges, Mode=OneWay}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Spacing="4" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
             </editorcontrols:PropertiesExpander.Items>
         </editorcontrols:PropertiesExpander>
         <VisualStateManager.VisualStateGroups>
@@ -159,10 +302,10 @@
                 <VisualState x:Name="SurfacesResolved" />
                 <VisualState x:Name="SurfacesInError">
                     <VisualState.StateTriggers>
-                        <StateTrigger IsActive="{x:Bind ViewModel.HasSurfaceError, Mode=OneWay}" />
+                        <StateTrigger IsActive="{x:Bind ViewModel.IsSurfaceInventoryFailed, Mode=OneWay}" />
                     </VisualState.StateTriggers>
                     <VisualState.Setters>
-                        <Setter Target="MaterialValueBorder.BorderBrush" Value="{ThemeResource SystemFillColorCriticalBrush}" />
+                        <Setter Target="SurfaceNoticeText.Foreground" Value="{ThemeResource SystemFillColorCriticalBrush}" />
                     </VisualState.Setters>
                 </VisualState>
             </VisualStateGroup>

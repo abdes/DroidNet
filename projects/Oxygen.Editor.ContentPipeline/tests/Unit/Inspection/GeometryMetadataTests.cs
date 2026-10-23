@@ -30,6 +30,8 @@ public sealed class GeometryMetadataTests
         _ = result.NativeGeometryKey.Should().Be(Guid.Parse("10203040-5060-7080-90a0-b0c0d0e0f001"));
         var surface = result.Surfaces.Should().ContainSingle().Subject;
         _ = surface.SurfaceId.Should().Be(Guid.Parse("00000000-0000-0000-0000-000000000001"));
+        _ = surface.Visible.Should().BeTrue();
+        _ = surface.CastsShadows.Should().BeFalse("the asset's surface defaults reach the inspector");
         _ = surface.Bindings.Should().ContainSingle().Which.DefaultMaterialKey.Should().Be(Guid.Empty);
         _ = result.LayoutRevision.Should().Be(new string('a', 64));
     }
@@ -71,7 +73,7 @@ public sealed class GeometryMetadataTests
               "surface_id": "00000000-0000-0000-0000-000000000001",
               "display_name": "Surface",
               "visible": true,
-              "casts_shadows": true,
+              "casts_shadows": false,
               "bindings": [{"lod_index": 0, "submesh_index": 1,
                 "default_material_key": "00000000-0000-0000-0000-000000000000"}]
             }]

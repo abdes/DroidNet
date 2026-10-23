@@ -87,18 +87,18 @@ public sealed partial class NodeRenderingViewModel : ComponentPropertyEditor, ID
     /// <summary>Gets the geometry shadow receiving source mode.</summary>
     public NodeFlagSourceField ReceivesShadows { get; }
 
-    /// <summary>Gets or sets a value indicating whether the node is static, an optimization hint.</summary>
-    public bool IsStatic
+    /// <summary>Gets or sets a value indicating whether the node is static, an optimization hint; null when the nodes differ.</summary>
+    public bool? IsStatic
     {
-        get => this.isStaticBinding.Value;
-        set => InspectorBindingRequests.Request(this.isStaticBinding, value);
+        get => ValueOf(this.isStaticBinding);
+        set => Request(this.isStaticBinding, value);
     }
 
-    /// <summary>Gets or sets a value indicating whether ray casting can select the node.</summary>
-    public bool IsRayCastingSelectable
+    /// <summary>Gets or sets a value indicating whether ray casting can select the node; null when the nodes differ.</summary>
+    public bool? IsRayCastingSelectable
     {
-        get => this.isRayCastingSelectableBinding.Value;
-        set => InspectorBindingRequests.Request(this.isRayCastingSelectableBinding, value);
+        get => ValueOf(this.isRayCastingSelectableBinding);
+        set => Request(this.isRayCastingSelectableBinding, value);
     }
 
     /// <inheritdoc />
@@ -151,6 +151,17 @@ public sealed partial class NodeRenderingViewModel : ComponentPropertyEditor, ID
     private static int Index<T>(PropertyBinding<T> binding)
         where T : struct, Enum
         => binding.IsMixed || !binding.HasValue ? -1 : Convert.ToInt32(binding.Value, CultureInfo.InvariantCulture);
+
+    private static bool? ValueOf(PropertyBinding<bool> binding) => binding.IsMixed || !binding.HasValue ? null : binding.Value;
+
+    // A mixed toggle sends a value only once clicked, so null is never a request.
+    private static void Request(PropertyBinding<bool> binding, bool? value)
+    {
+        if (value is { } flag)
+        {
+            InspectorBindingRequests.Request(binding, flag);
+        }
+    }
 
     private static bool HasGeometry(SceneNode node) => node.Components.OfType<GeometryComponent>().Any();
 

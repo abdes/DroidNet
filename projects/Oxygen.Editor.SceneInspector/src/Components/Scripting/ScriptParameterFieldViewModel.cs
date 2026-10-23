@@ -8,6 +8,7 @@ using System.Numerics;
 using System.Text;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Oxygen.Editor.Controls;
 using Oxygen.Editor.Pickers;
 using Oxygen.Editor.Scripting;
 using Oxygen.Editor.World.Components;
@@ -79,12 +80,26 @@ public sealed partial class ScriptParameterFieldViewModel : ObservableObject
 
     /// <summary>Gets a value indicating whether the value differs from the declared default.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ShowsOverrideMarker))]
+    [NotifyPropertyChangedFor(nameof(OverrideState))]
     public partial bool IsOverridden { get; private set; }
 
     /// <summary>Gets or sets the value of a boolean parameter.</summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ToggleValue))]
     public partial bool BoolValue { get; set; }
+
+    /// <summary>Gets or sets <see cref="BoolValue"/> as the toggle field edits it; one slot's value is never mixed.</summary>
+    public bool? ToggleValue
+    {
+        get => this.BoolValue;
+        set
+        {
+            if (value is { } on)
+            {
+                this.BoolValue = on;
+            }
+        }
+    }
 
     /// <summary>Gets or sets the value of a number parameter.</summary>
     [ObservableProperty]
@@ -120,7 +135,6 @@ public sealed partial class ScriptParameterFieldViewModel : ObservableObject
 
     /// <summary>Gets a value indicating whether the referenced node or asset no longer exists.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ShowsOverrideMarker))]
     public partial bool IsReferenceMissing { get; private set; }
 
     /// <summary>Gets or sets the node search text.</summary>
@@ -134,9 +148,8 @@ public sealed partial class ScriptParameterFieldViewModel : ObservableObject
     /// <summary>Gets a value indicating whether the field shows an error.</summary>
     public bool HasError => this.ErrorText.Length > 0;
 
-    /// <summary>Gets a value indicating whether the override marker shows; a missing node shows in the critical
-    /// color instead.</summary>
-    public bool ShowsOverrideMarker => this.IsOverridden && !this.IsReferenceMissing;
+    /// <summary>Gets the field's override bar: full while the slot stores a value of its own, so reset shows.</summary>
+    public OverrideState OverrideState => this.IsOverridden ? OverrideState.Full : OverrideState.None;
 
     /// <summary>Gets a value indicating whether the slot can be edited.</summary>
     public bool CanEdit => this.card.CanEdit;

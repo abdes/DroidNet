@@ -24,209 +24,91 @@
                 <Setter Property="VerticalAlignment" Value="Center" />
                 <Setter Property="TextTrimming" Value="CharacterEllipsis" />
             </Style>
-            <Style x:Key="ScriptIconButton" TargetType="Button">
-                <Setter Property="Padding" Value="6" />
-                <Setter Property="VerticalAlignment" Value="Center" />
-                <Setter Property="Background" Value="Transparent" />
-                <Setter Property="BorderThickness" Value="0" />
-            </Style>
 
-            <!--  Every field: override marker, label, editor, reset.  -->
+            <!--  Every field is a property row: label, editor, the override bar and the reset to the script's default.  -->
             <DataTemplate x:Key="ToggleField" x:DataType="local:ScriptParameterFieldViewModel">
-                <Grid
-                    Padding="0,2"
-                    ColumnSpacing="6"
-                    ToolTipService.ToolTip="{x:Bind ToolTip}">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="3" />
-                        <ColumnDefinition Width="120" />
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    <Rectangle
-                        Fill="{ThemeResource AccentFillColorDefaultBrush}"
-                        RadiusX="1"
-                        RadiusY="1"
-                        Visibility="{x:Bind IsOverridden, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
-                    <TextBlock
-                        Grid.Column="1"
-                        Style="{StaticResource ScriptFieldLabel}"
-                        Text="{x:Bind Label}" />
-                    <ToggleSwitch
-                        Grid.Column="2"
-                        AutomationProperties.Name="{x:Bind Label}"
-                        IsEnabled="{x:Bind CanEdit, Mode=OneWay}"
-                        IsOn="{x:Bind BoolValue, Mode=TwoWay}"
-                        OffContent=""
-                        OnContent="" />
-                    <Button
-                        Grid.Column="3"
-                        AutomationProperties.Name="Reset to default"
-                        Command="{x:Bind ResetCommand}"
-                        Content="{ui:FontIcon Glyph='&#xE777;',
-                                              FontSize=12}"
-                        IsEnabled="{x:Bind CanEdit, Mode=OneWay}"
-                        Style="{StaticResource ScriptIconButton}"
-                        ToolTipService.ToolTip="Reset to default"
-                        Visibility="{x:Bind IsOverridden, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
-                </Grid>
+                <editorcontrols:InspectorToggleField
+                    IsEnabled="{x:Bind CanEdit, Mode=OneWay}"
+                    Label="{x:Bind Label}"
+                    OverrideState="{x:Bind OverrideState, Mode=OneWay}"
+                    ResetCommand="{x:Bind ResetCommand}"
+                    ResetToolTip="Reset to the script's default"
+                    ToolTipService.ToolTip="{x:Bind ToolTip}"
+                    Value="{x:Bind ToggleValue, Mode=TwoWay}" />
             </DataTemplate>
 
             <DataTemplate x:Key="NumberField" x:DataType="local:ScriptParameterFieldViewModel">
-                <Grid
-                    Padding="0,2"
-                    ColumnSpacing="6"
+                <editorcontrols:PropertyCard
+                    HorizontalContentAlignment="Stretch"
+                    IsEnabled="{x:Bind CanEdit, Mode=OneWay}"
+                    OverrideState="{x:Bind OverrideState, Mode=OneWay}"
+                    PropertyName="{x:Bind Label}"
+                    ResetCommand="{x:Bind ResetCommand}"
+                    ResetToolTip="Reset to the script's default"
                     ToolTipService.ToolTip="{x:Bind ToolTip}">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="3" />
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    <Rectangle
-                        Fill="{ThemeResource AccentFillColorDefaultBrush}"
-                        RadiusX="1"
-                        RadiusY="1"
-                        Visibility="{x:Bind IsOverridden, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
                     <controls:NumberBox
-                        Grid.Column="1"
                         AutomationProperties.Name="{x:Bind Label}"
                         EditSessionCompleted="OnFieldNumberCompleted"
                         EditSessionStarted="OnFieldNumberStarted"
-                        IsEnabled="{x:Bind CanEdit, Mode=OneWay}"
-                        Label="{x:Bind Label}"
-                        LabelPosition="Left"
-                        LabelSpacing="6"
-                        LabelWidth="120"
+                        LabelPosition="None"
                         Mask="{x:Bind NumberMask}"
                         NumberValue="{x:Bind NumberValue, Mode=TwoWay}"
                         Style="{StaticResource SceneNumberBoxStyle}"
                         Unit="{x:Bind Unit}" />
-                    <Button
-                        Grid.Column="2"
-                        AutomationProperties.Name="Reset to default"
-                        Command="{x:Bind ResetCommand}"
-                        Content="{ui:FontIcon Glyph='&#xE777;',
-                                              FontSize=12}"
-                        IsEnabled="{x:Bind CanEdit, Mode=OneWay}"
-                        Style="{StaticResource ScriptIconButton}"
-                        ToolTipService.ToolTip="Reset to default"
-                        Visibility="{x:Bind IsOverridden, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
-                </Grid>
+                </editorcontrols:PropertyCard>
             </DataTemplate>
 
             <DataTemplate x:Key="ChoiceField" x:DataType="local:ScriptParameterFieldViewModel">
-                <Grid
-                    Padding="0,2"
-                    ColumnSpacing="6"
+                <editorcontrols:PropertyCard
+                    HorizontalContentAlignment="Stretch"
+                    IsEnabled="{x:Bind CanEdit, Mode=OneWay}"
+                    OverrideState="{x:Bind OverrideState, Mode=OneWay}"
+                    PropertyName="{x:Bind Label}"
+                    ResetCommand="{x:Bind ResetCommand}"
+                    ResetToolTip="Reset to the script's default"
                     ToolTipService.ToolTip="{x:Bind ToolTip}">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="3" />
-                        <ColumnDefinition Width="120" />
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    <Rectangle
-                        Fill="{ThemeResource AccentFillColorDefaultBrush}"
-                        RadiusX="1"
-                        RadiusY="1"
-                        Visibility="{x:Bind IsOverridden, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
-                    <TextBlock
-                        Grid.Column="1"
-                        Style="{StaticResource ScriptFieldLabel}"
-                        Text="{x:Bind Label}" />
                     <ComboBox
-                        Grid.Column="2"
                         HorizontalAlignment="Stretch"
                         AutomationProperties.Name="{x:Bind Label}"
-                        IsEnabled="{x:Bind CanEdit, Mode=OneWay}"
                         ItemsSource="{x:Bind Options}"
                         SelectedItem="{x:Bind SelectedOption, Mode=TwoWay}" />
-                    <Button
-                        Grid.Column="3"
-                        AutomationProperties.Name="Reset to default"
-                        Command="{x:Bind ResetCommand}"
-                        Content="{ui:FontIcon Glyph='&#xE777;',
-                                              FontSize=12}"
-                        IsEnabled="{x:Bind CanEdit, Mode=OneWay}"
-                        Style="{StaticResource ScriptIconButton}"
-                        ToolTipService.ToolTip="Reset to default"
-                        Visibility="{x:Bind IsOverridden, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
-                </Grid>
+                </editorcontrols:PropertyCard>
             </DataTemplate>
 
             <DataTemplate x:Key="TextField" x:DataType="local:ScriptParameterFieldViewModel">
-                <Grid
-                    Padding="0,2"
-                    ColumnSpacing="6"
-                    ToolTipService.ToolTip="{x:Bind ToolTip}">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="3" />
-                        <ColumnDefinition Width="120" />
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                    </Grid.RowDefinitions>
-                    <Rectangle
-                        Fill="{ThemeResource AccentFillColorDefaultBrush}"
-                        RadiusX="1"
-                        RadiusY="1"
-                        Visibility="{x:Bind IsOverridden, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
-                    <TextBlock
-                        Grid.Column="1"
-                        Style="{StaticResource ScriptFieldLabel}"
-                        Text="{x:Bind Label}" />
-                    <TextBox
-                        Grid.Column="2"
-                        AutomationProperties.Name="{x:Bind Label}"
+                <StackPanel Spacing="2">
+                    <editorcontrols:PropertyCard
+                        HorizontalContentAlignment="Stretch"
                         IsEnabled="{x:Bind CanEdit, Mode=OneWay}"
-                        MaxLength="59"
-                        Text="{x:Bind TextValue, Mode=TwoWay}" />
-                    <Button
-                        Grid.Column="3"
-                        AutomationProperties.Name="Reset to default"
-                        Command="{x:Bind ResetCommand}"
-                        Content="{ui:FontIcon Glyph='&#xE777;',
-                                              FontSize=12}"
-                        IsEnabled="{x:Bind CanEdit, Mode=OneWay}"
-                        Style="{StaticResource ScriptIconButton}"
-                        ToolTipService.ToolTip="Reset to default"
-                        Visibility="{x:Bind IsOverridden, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
+                        OverrideState="{x:Bind OverrideState, Mode=OneWay}"
+                        PropertyName="{x:Bind Label}"
+                        ResetCommand="{x:Bind ResetCommand}"
+                        ResetToolTip="Reset to the script's default"
+                        ToolTipService.ToolTip="{x:Bind ToolTip}">
+                        <TextBox
+                            AutomationProperties.Name="{x:Bind Label}"
+                            MaxLength="59"
+                            Text="{x:Bind TextValue, Mode=TwoWay}" />
+                    </editorcontrols:PropertyCard>
                     <TextBlock
-                        Grid.Row="1"
-                        Grid.Column="2"
-                        Grid.ColumnSpan="2"
                         Foreground="{ThemeResource SystemFillColorCriticalBrush}"
                         Text="{x:Bind ErrorText, Mode=OneWay}"
                         TextWrapping="Wrap"
                         Visibility="{x:Bind HasError, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
-                </Grid>
+                </StackPanel>
             </DataTemplate>
 
             <DataTemplate x:Key="VectorField" x:DataType="local:ScriptParameterFieldViewModel">
-                <Grid
-                    Padding="0,2"
-                    ColumnSpacing="6"
+                <editorcontrols:PropertyCard
+                    HorizontalContentAlignment="Stretch"
+                    IsCompound="True"
+                    IsEnabled="{x:Bind CanEdit, Mode=OneWay}"
+                    OverrideState="{x:Bind OverrideState, Mode=OneWay}"
+                    PropertyName="{x:Bind Label}"
+                    ResetCommand="{x:Bind ResetCommand}"
+                    ResetToolTip="Reset to the script's default"
                     ToolTipService.ToolTip="{x:Bind ToolTip}">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="3" />
-                        <ColumnDefinition Width="120" />
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    <Rectangle
-                        Fill="{ThemeResource AccentFillColorDefaultBrush}"
-                        RadiusX="1"
-                        RadiusY="1"
-                        Visibility="{x:Bind IsOverridden, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
-                    <TextBlock
-                        Grid.Column="1"
-                        Style="{StaticResource ScriptFieldLabel}"
-                        Text="{x:Bind Label}" />
                     <controls:VectorBox
-                        Grid.Column="2"
                         Padding="0"
                         AutomationProperties.Name="{x:Bind Label}"
                         CompactComponentLabels="True"
@@ -236,48 +118,25 @@
                         EditSessionCompleted="OnVectorCompleted"
                         EditSessionStarted="OnVectorStarted"
                         HorizontalValueAlignment="Right"
-                        IsEnabled="{x:Bind CanEdit, Mode=OneWay}"
                         LabelPosition="None"
                         WValue="{x:Bind W, Mode=TwoWay}"
                         XValue="{x:Bind X, Mode=TwoWay}"
                         YValue="{x:Bind Y, Mode=TwoWay}"
                         ZValue="{x:Bind Z, Mode=TwoWay}" />
-                    <Button
-                        Grid.Column="3"
-                        AutomationProperties.Name="Reset to default"
-                        Command="{x:Bind ResetCommand}"
-                        Content="{ui:FontIcon Glyph='&#xE777;',
-                                              FontSize=12}"
-                        IsEnabled="{x:Bind CanEdit, Mode=OneWay}"
-                        Style="{StaticResource ScriptIconButton}"
-                        ToolTipService.ToolTip="Reset to default"
-                        Visibility="{x:Bind IsOverridden, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
-                </Grid>
+                </editorcontrols:PropertyCard>
             </DataTemplate>
 
             <DataTemplate x:Key="ColorField" x:DataType="local:ScriptParameterFieldViewModel">
-                <Grid
-                    Padding="0,2"
-                    ColumnSpacing="6"
+                <editorcontrols:PropertyCard
+                    HorizontalContentAlignment="Stretch"
+                    IsEnabled="{x:Bind CanEdit, Mode=OneWay}"
+                    OverrideState="{x:Bind OverrideState, Mode=OneWay}"
+                    PropertyName="{x:Bind Label}"
+                    ResetCommand="{x:Bind ResetCommand}"
+                    ResetToolTip="Reset to the script's default"
                     ToolTipService.ToolTip="{x:Bind ToolTip}">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="3" />
-                        <ColumnDefinition Width="120" />
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    <Rectangle
-                        Fill="{ThemeResource AccentFillColorDefaultBrush}"
-                        RadiusX="1"
-                        RadiusY="1"
-                        Visibility="{x:Bind IsOverridden, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
-                    <TextBlock
-                        Grid.Column="1"
-                        Style="{StaticResource ScriptFieldLabel}"
-                        Text="{x:Bind Label}" />
                     <!--  Script colors are linear, like every color the engine reads.  -->
                     <controls:ColorBox
-                        Grid.Column="2"
                         Alpha="{x:Bind W, Mode=TwoWay}"
                         AutomationProperties.Name="{x:Bind Label}"
                         Blue="{x:Bind Z, Mode=TwoWay}"
@@ -286,172 +145,100 @@
                         Encoding="Linear"
                         Green="{x:Bind Y, Mode=TwoWay}"
                         HasAlpha="{x:Bind HasAlpha}"
-                        IsEnabled="{x:Bind CanEdit, Mode=OneWay}"
                         PickerAutomationName="Pick a color"
                         Red="{x:Bind X, Mode=TwoWay}" />
-                    <Button
-                        Grid.Column="3"
-                        AutomationProperties.Name="Reset to default"
-                        Command="{x:Bind ResetCommand}"
-                        Content="{ui:FontIcon Glyph='&#xE777;',
-                                              FontSize=12}"
-                        IsEnabled="{x:Bind CanEdit, Mode=OneWay}"
-                        Style="{StaticResource ScriptIconButton}"
-                        ToolTipService.ToolTip="Reset to default"
-                        Visibility="{x:Bind IsOverridden, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
-                </Grid>
+                </editorcontrols:PropertyCard>
             </DataTemplate>
 
             <DataTemplate x:Key="AssetField" x:DataType="local:ScriptParameterFieldViewModel">
-                <Grid
-                    Padding="0,2"
-                    ColumnSpacing="6"
-                    ToolTipService.ToolTip="{x:Bind ToolTip}">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="3" />
-                        <ColumnDefinition Width="120" />
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                    </Grid.RowDefinitions>
-                    <Rectangle
-                        Fill="{ThemeResource AccentFillColorDefaultBrush}"
-                        RadiusX="1"
-                        RadiusY="1"
-                        Visibility="{x:Bind IsOverridden, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
-                    <TextBlock
-                        Grid.Column="1"
-                        Style="{StaticResource ScriptFieldLabel}"
-                        Text="{x:Bind Label}" />
-                    <DropDownButton
-                        Grid.Column="2"
-                        HorizontalAlignment="Stretch"
-                        HorizontalContentAlignment="Left"
-                        AutomationProperties.Name="{x:Bind Label}"
-                        IsEnabled="{x:Bind CanEdit, Mode=OneWay}">
-                        <TextBlock Text="{x:Bind ReferenceText, Mode=OneWay}" TextTrimming="CharacterEllipsis" />
-                        <DropDownButton.Flyout>
-                            <Flyout Opening="OnAssetFlyoutOpening" Placement="BottomEdgeAlignedLeft">
-                                <pickers:AssetPicker
-                                    Width="320"
-                                    ChoiceInvoked="OnAssetChoiceInvoked"
-                                    Model="{x:Bind AssetChoices}" />
-                            </Flyout>
-                        </DropDownButton.Flyout>
-                    </DropDownButton>
-                    <Button
-                        Grid.Column="3"
-                        AutomationProperties.Name="Clear"
-                        Command="{x:Bind ResetCommand}"
-                        Content="{ui:FontIcon Glyph='&#xE711;',
-                                              FontSize=12}"
+                <StackPanel Spacing="2">
+                    <editorcontrols:PropertyCard
+                        HorizontalContentAlignment="Stretch"
                         IsEnabled="{x:Bind CanEdit, Mode=OneWay}"
-                        Style="{StaticResource ScriptIconButton}"
-                        ToolTipService.ToolTip="Clear"
-                        Visibility="{x:Bind IsOverridden, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
+                        OverrideState="{x:Bind OverrideState, Mode=OneWay}"
+                        PropertyName="{x:Bind Label}"
+                        ResetCommand="{x:Bind ResetCommand}"
+                        ResetToolTip="Reset to the script's default"
+                        ToolTipService.ToolTip="{x:Bind ToolTip}">
+                        <DropDownButton
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Left"
+                            AutomationProperties.Name="{x:Bind Label}">
+                            <TextBlock Text="{x:Bind ReferenceText, Mode=OneWay}" TextTrimming="CharacterEllipsis" />
+                            <DropDownButton.Flyout>
+                                <Flyout Opening="OnAssetFlyoutOpening" Placement="BottomEdgeAlignedLeft">
+                                    <pickers:AssetPicker
+                                        Width="320"
+                                        ChoiceInvoked="OnAssetChoiceInvoked"
+                                        Model="{x:Bind AssetChoices}" />
+                                </Flyout>
+                            </DropDownButton.Flyout>
+                        </DropDownButton>
+                    </editorcontrols:PropertyCard>
                     <TextBlock
-                        Grid.Row="1"
-                        Grid.Column="2"
-                        Grid.ColumnSpan="2"
                         Foreground="{ThemeResource SystemFillColorCriticalBrush}"
                         Text="{x:Bind ReferenceText, Mode=OneWay}"
                         TextWrapping="Wrap"
                         Visibility="{x:Bind IsReferenceMissing, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
-                </Grid>
+                </StackPanel>
             </DataTemplate>
 
             <DataTemplate x:Key="NodeField" x:DataType="local:ScriptParameterFieldViewModel">
-                <Grid
-                    Padding="0,2"
-                    ColumnSpacing="6"
-                    ToolTipService.ToolTip="{x:Bind ToolTip}">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="3" />
-                        <ColumnDefinition Width="120" />
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                    </Grid.RowDefinitions>
-                    <Rectangle
-                        Fill="{ThemeResource AccentFillColorDefaultBrush}"
-                        RadiusX="1"
-                        RadiusY="1"
-                        Visibility="{x:Bind ShowsOverrideMarker, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
-                    <Rectangle
-                        Fill="{ThemeResource SystemFillColorCriticalBrush}"
-                        RadiusX="1"
-                        RadiusY="1"
-                        Visibility="{x:Bind IsReferenceMissing, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
-                    <TextBlock
-                        Grid.Column="1"
-                        Style="{StaticResource ScriptFieldLabel}"
-                        Text="{x:Bind Label}" />
-                    <DropDownButton
-                        Grid.Column="2"
-                        HorizontalAlignment="Stretch"
-                        HorizontalContentAlignment="Left"
-                        AllowDrop="True"
-                        AutomationProperties.Name="{x:Bind Label}"
-                        DragOver="OnNodeDragOver"
-                        Drop="OnNodeDrop"
+                <StackPanel Spacing="2">
+                    <editorcontrols:PropertyCard
+                        HorizontalContentAlignment="Stretch"
                         IsEnabled="{x:Bind CanEdit, Mode=OneWay}"
-                        ToolTipService.ToolTip="Pick a node, or drag one here from the Scene Explorer">
-                        <TextBlock Text="{x:Bind ReferenceText, Mode=OneWay}" TextTrimming="CharacterEllipsis" />
-                        <DropDownButton.Flyout>
-                            <Flyout Opening="OnNodeFlyoutOpening" Placement="BottomEdgeAlignedLeft">
-                                <StackPanel Width="280" Spacing="6">
-                                    <TextBox
-                                        AutomationProperties.Name="Search nodes"
-                                        PlaceholderText="Search nodes"
-                                        Text="{x:Bind NodeQuery, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-                                    <ListView
-                                        MaxHeight="280"
-                                        IsItemClickEnabled="True"
-                                        ItemClick="OnNodeChosen"
-                                        ItemsSource="{x:Bind NodeChoices}"
-                                        SelectionMode="None">
-                                        <ListView.ItemTemplate>
-                                            <DataTemplate x:DataType="local:ScriptNodeChoice">
-                                                <StackPanel Padding="0,2">
-                                                    <TextBlock Text="{x:Bind Name}" />
-                                                    <TextBlock
-                                                        FontSize="11"
-                                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                        Text="{x:Bind Path}"
-                                                        TextTrimming="CharacterEllipsis" />
-                                                </StackPanel>
-                                            </DataTemplate>
-                                        </ListView.ItemTemplate>
-                                    </ListView>
-                                </StackPanel>
-                            </Flyout>
-                        </DropDownButton.Flyout>
-                    </DropDownButton>
-                    <Button
-                        Grid.Column="3"
-                        AutomationProperties.Name="Clear"
-                        Command="{x:Bind ResetCommand}"
-                        Content="{ui:FontIcon Glyph='&#xE711;',
-                                              FontSize=12}"
-                        IsEnabled="{x:Bind CanEdit, Mode=OneWay}"
-                        Style="{StaticResource ScriptIconButton}"
-                        ToolTipService.ToolTip="Clear"
-                        Visibility="{x:Bind IsOverridden, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
+                        OverrideState="{x:Bind OverrideState, Mode=OneWay}"
+                        PropertyName="{x:Bind Label}"
+                        ResetCommand="{x:Bind ResetCommand}"
+                        ResetToolTip="Reset to the script's default"
+                        ToolTipService.ToolTip="{x:Bind ToolTip}">
+                        <DropDownButton
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Left"
+                            AllowDrop="True"
+                            AutomationProperties.Name="{x:Bind Label}"
+                            DragOver="OnNodeDragOver"
+                            Drop="OnNodeDrop"
+                            ToolTipService.ToolTip="Pick a node, or drag one here from the Scene Explorer">
+                            <TextBlock Text="{x:Bind ReferenceText, Mode=OneWay}" TextTrimming="CharacterEllipsis" />
+                            <DropDownButton.Flyout>
+                                <Flyout Opening="OnNodeFlyoutOpening" Placement="BottomEdgeAlignedLeft">
+                                    <StackPanel Width="280" Spacing="6">
+                                        <TextBox
+                                            AutomationProperties.Name="Search nodes"
+                                            PlaceholderText="Search nodes"
+                                            Text="{x:Bind NodeQuery, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                        <ListView
+                                            MaxHeight="280"
+                                            IsItemClickEnabled="True"
+                                            ItemClick="OnNodeChosen"
+                                            ItemsSource="{x:Bind NodeChoices}"
+                                            SelectionMode="None">
+                                            <ListView.ItemTemplate>
+                                                <DataTemplate x:DataType="local:ScriptNodeChoice">
+                                                    <StackPanel Padding="0,2">
+                                                        <TextBlock Text="{x:Bind Name}" />
+                                                        <TextBlock
+                                                            FontSize="11"
+                                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                            Text="{x:Bind Path}"
+                                                            TextTrimming="CharacterEllipsis" />
+                                                    </StackPanel>
+                                                </DataTemplate>
+                                            </ListView.ItemTemplate>
+                                        </ListView>
+                                    </StackPanel>
+                                </Flyout>
+                            </DropDownButton.Flyout>
+                        </DropDownButton>
+                    </editorcontrols:PropertyCard>
                     <TextBlock
-                        Grid.Row="1"
-                        Grid.Column="2"
-                        Grid.ColumnSpan="2"
                         Foreground="{ThemeResource SystemFillColorCriticalBrush}"
                         Text="{x:Bind ErrorText, Mode=OneWay}"
                         TextWrapping="Wrap"
                         Visibility="{x:Bind HasError, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
-                </Grid>
+                </StackPanel>
             </DataTemplate>
 
             <local:ScriptFieldTemplateSelector
@@ -500,12 +287,7 @@
                 </ItemsControl.ItemsPanel>
                 <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="local:ScriptSlotCardViewModel">
-                        <Border
-                            Padding="10"
-                            Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
-                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                            BorderThickness="1"
-                            CornerRadius="6">
+                        <Border Style="{StaticResource InspectorItemCard}">
                             <StackPanel Spacing="6">
                                 <!--  Header: script name, problems badge, order and removal.  -->
                                 <Grid ColumnSpacing="4">
@@ -550,7 +332,7 @@
                                         Content="{ui:FontIcon Glyph='&#xE70E;',
                                                               FontSize=12}"
                                         IsEnabled="{x:Bind CanMoveUp, Mode=OneWay}"
-                                        Style="{StaticResource ScriptIconButton}"
+                                        Style="{StaticResource QuietInspectorAction}"
                                         ToolTipService.ToolTip="Move up" />
                                     <Button
                                         Grid.Column="3"
@@ -559,7 +341,7 @@
                                         Content="{ui:FontIcon Glyph='&#xE70D;',
                                                               FontSize=12}"
                                         IsEnabled="{x:Bind CanMoveDown, Mode=OneWay}"
-                                        Style="{StaticResource ScriptIconButton}"
+                                        Style="{StaticResource QuietInspectorAction}"
                                         ToolTipService.ToolTip="Move down" />
                                     <Button
                                         Grid.Column="4"
@@ -568,7 +350,7 @@
                                         Content="{ui:FontIcon Glyph='&#xE74D;',
                                                               FontSize=12}"
                                         IsEnabled="{x:Bind CanEdit, Mode=OneWay}"
-                                        Style="{StaticResource ScriptIconButton}"
+                                        Style="{StaticResource QuietInspectorAction}"
                                         ToolTipService.ToolTip="Remove slot" />
                                 </Grid>
 
@@ -605,7 +387,7 @@
                                         Content="{ui:FontIcon Glyph='&#xE710;',
                                                               FontSize=12}"
                                         IsEnabled="{x:Bind CanEdit, Mode=OneWay}"
-                                        Style="{StaticResource ScriptIconButton}"
+                                        Style="{StaticResource QuietInspectorAction}"
                                         ToolTipService.ToolTip="New Script" />
                                     <Border
                                         Grid.Column="3"
@@ -618,7 +400,7 @@
                                             Content="{ui:FontIcon Glyph='&#xE70F;',
                                                                   FontSize=12}"
                                             IsEnabled="{x:Bind CanEditScript, Mode=OneWay}"
-                                            Style="{StaticResource ScriptIconButton}" />
+                                            Style="{StaticResource QuietInspectorAction}" />
                                     </Border>
                                 </Grid>
                                 <TextBlock
@@ -649,11 +431,7 @@
                                     Visibility="{x:Bind HasNotice, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
                                 <ItemsControl ItemTemplateSelector="{StaticResource FieldTemplates}" ItemsSource="{x:Bind Fields}" />
 
-                                <Border
-                                    Padding="8"
-                                    Background="{ThemeResource SystemFillColorCautionBackgroundBrush}"
-                                    CornerRadius="4"
-                                    Visibility="{x:Bind HasStaleValues, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
+                                <Border Style="{StaticResource InspectorCautionBox}" Visibility="{x:Bind HasStaleValues, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
                                     <StackPanel Spacing="4">
                                         <StackPanel Orientation="Horizontal" Spacing="6">
                                             <FontIcon
@@ -698,7 +476,7 @@
                                                             Content="{ui:FontIcon Glyph='&#xE711;',
                                                                                   FontSize=12}"
                                                             IsEnabled="{x:Bind CanEdit, Mode=OneWay}"
-                                                            Style="{StaticResource ScriptIconButton}"
+                                                            Style="{StaticResource QuietInspectorAction}"
                                                             ToolTipService.ToolTip="Remove value" />
                                                     </Grid>
                                                 </DataTemplate>
