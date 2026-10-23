@@ -483,7 +483,10 @@ automatic selection from caller-selected launchers; choosing a launcher does not
 guarantee that every compiler invocation is cacheable.
 
 Oxygen-owned MSVC targets using a recognizable ccache launcher default to
-embedded debug information (`/Z7`) in Debug/RelWithDebInfo. Explicit
+embedded debug information (`/Z7`) in Debug/RelWithDebInfo, and their
+executables and shared libraries link with `/INCREMENTAL:NO` there: an
+incremental link keeps every object's embedded type records in the previous PDB
+without compacting it, so the PDB grows on each relink until `LNK1140`. Explicit
 target/toolchain debug formats remain unchanged; ccache cannot cache MSVC `/Zi`
 or `/ZI` compilations. Custom wrapper commands own their compatible settings.
 Visual Studio's ordinary debug settings are unchanged, and the existing

@@ -134,6 +134,25 @@ class CompilerPolicyTests(CommandTestCase):
         self.build(self.binary)
         self.ctest(self.binary, "consumer")
 
+    @windows_only
+    def test_ccache_targets_embed_debug_info_and_link_in_full(self) -> None:
+        # A pass-through launcher named as the ccache tool stands in for ccache.
+        self.write_project(shared=True)
+        launcher = f"{Path(CMAKE).as_posix()};-E;env"
+        self.configure(
+            self.root,
+            self.binary,
+            NINJA,
+            "-DCMAKE_BUILD_TYPE=Debug",
+            f"-DCCACHE_TOOL_PATH={Path(CMAKE).as_posix()}",
+            f"-DCMAKE_C_COMPILER_LAUNCHER={launcher}",
+            f"-DCMAKE_CXX_COMPILER_LAUNCHER={launcher}",
+        )
+        result = self.build(self.binary, "--verbose")
+        self.assertIn("Z7", self.compile_command("subject.cpp"))
+        link = next(line for line in result.stdout.splitlines() if "subject.dll" in line and "/dll" in line.lower())
+        self.assertIn("/INCREMENTAL:NO", link)
+
     def test_runtime_launcher_preserves_arguments_and_exit_status(self) -> None:
         arguments = ["", "a;b", '"quoted"', "]==]", "trailing\\", "${not_expanded}"]
         result = self.cmake_script(

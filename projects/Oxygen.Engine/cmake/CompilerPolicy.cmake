@@ -147,6 +147,16 @@ function(oxygen_apply_build_policy target)
                 MSVC_DEBUG_INFORMATION_FORMAT
                   "$<$<CONFIG:Debug,RelWithDebInfo>:Embedded>"
             )
+            # An incremental link keeps every object's embedded type records in
+            # the previous PDB and never compacts it, so each relink grows the
+            # PDB until LNK1140. Link these targets in full instead.
+            if(_type MATCHES "^(EXECUTABLE|SHARED_LIBRARY|MODULE_LIBRARY)$")
+              target_link_options(
+                ${target}
+                PRIVATE
+                  "$<$<CONFIG:Debug,RelWithDebInfo>:/INCREMENTAL:NO>"
+              )
+            endif()
             break()
           endif()
         endif()
