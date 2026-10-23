@@ -32,6 +32,7 @@
 #include <glm/ext/vector_float3.hpp>
 #include <glm/ext/vector_float4.hpp>
 #include <glm/ext/vector_uint4.hpp>
+#include <glm/gtc/quaternion.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/matrix.hpp>
 
@@ -556,7 +557,7 @@ namespace {
   }
 
   [[nodiscard]] auto BuildTriangleBuffers(const ufbx_mesh& mesh,
-    const ufbx_node* material_node,
+    const glm::mat4& basis, const ufbx_node* material_node,
     const std::unordered_map<const ufbx_material*, uint32_t>&
       scene_material_index_by_ptr,
     const uint32_t material_key_count,
@@ -820,6 +821,18 @@ namespace {
         object_path));
     }
 
+    // The geometry in Oxygen axes, matching its nodes (see LocalTransform). A
+    // rotation keeps lengths and winding.
+    if (basis != glm::mat4 { 1.0F }) {
+      const auto rotation = glm::mat3(basis);
+      for (auto* stream :
+        { &out.positions, &out.normals, &out.tangents, &out.bitangents }) {
+        for (auto& value : *stream) {
+          value = rotation * value;
+        }
+      }
+    }
+
     if (!out.joint_indices.empty()) {
       const auto* skin_deformer = FindSkinDeformer(mesh);
       if (skin_deformer != nullptr) {
@@ -832,7 +845,7 @@ namespace {
             continue;
           }
           out.inverse_bind_matrices.push_back(
-            ToMat4(cluster->geometry_to_bone));
+            basis * ToMat4(cluster->geometry_to_bone) * glm::transpose(basis));
           out.joint_remap.push_back(static_cast<uint32_t>(i));
         }
       }
@@ -1179,6 +1192,39 @@ namespace {
     return coord::ToGlmMat4(matrix);
   }
 
+  //! The rotation from the source's axes to Oxygen's, as ufbx found it.
+  /*!
+   ufbx converts units in the geometry but leaves the axis change as a rotation
+   on the top-level nodes (`metadata.root_rotation`). The adapter moves it into
+   the geometry, as the glTF adapter does, so a geometry is in Oxygen axes on
+   its own, such as when a scene places it without its model's nodes.
+  */
+  [[nodiscard]] auto OxygenBasis(const ufbx_scene& scene) -> glm::mat4
+  {
+    const auto& rotation = scene.metadata.root_rotation;
+    return glm::mat4_cast(
+      glm::quat(static_cast<float>(rotation.w), static_cast<float>(rotation.x),
+        static_cast<float>(rotation.y), static_cast<float>(rotation.z)));
+  }
+
+  //! A node's local transform in Oxygen axes, for geometry rotated by `basis`.
+  /*!
+   With `C` the basis and `L` ufbx's local transform, a top-level node, whose
+   `L` ends with `C`, takes `L * inverse(C)` and any deeper node
+   `C * L * inverse(C)`. Each node's world transform is then ufbx's times
+   `inverse(C)`, so geometry rotated by `C` lands where ufbx places it.
+  */
+  [[nodiscard]] auto LocalTransform(
+    const ufbx_node& node, const glm::mat4& basis) -> glm::mat4
+  {
+    if (node.is_root) {
+      return glm::mat4 { 1.0F };
+    }
+    const auto local = MakeLocalTransformMatrix(node.local_transform);
+    const auto to_source = glm::transpose(basis);
+    return node.node_depth <= 1 ? local * to_source : basis * local * to_source;
+  }
+
   [[nodiscard]] auto MakeSceneLoadError(std::string_view source_id,
     std::string_view error_message) -> ImportDiagnostic
   {
@@ -1523,7 +1569,8 @@ namespace {
 
   //! Reads a LOD level: a node with a static mesh, directly or on its
   //! geometry transform helper, and nothing else beneath it.
-  [[nodiscard]] auto ReadLodLevel(const ufbx_node& level) -> FbxLodLevelSource
+  [[nodiscard]] auto ReadLodLevel(
+    const ufbx_node& level, const glm::mat4& basis) -> FbxLodLevelSource
   {
     const auto* helper = level.geometry_transform_helper;
     const ufbx_node* mesh_node = nullptr;
@@ -1563,9 +1610,8 @@ namespace {
     }
     return {
       .mesh_node = mesh_node,
-      .transform = mesh_node == &level
-        ? glm::mat4 { 1.0F }
-        : MakeLocalTransformMatrix(mesh_node->local_transform),
+      .transform = mesh_node == &level ? glm::mat4 { 1.0F }
+                                       : LocalTransform(*mesh_node, basis),
       .problem = {},
     };
   }
@@ -1606,6 +1652,7 @@ namespace {
   */
   [[nodiscard]] auto FindFbxLodGroups(const ufbx_scene& scene) -> FbxLodGroups
   {
+    const auto basis = OxygenBasis(scene);
     auto result = FbxLodGroups {
       .groups = {},
       .host_group = std::vector(scene.nodes.count, internal::kNoBakeIndex),
@@ -1631,7 +1678,7 @@ namespace {
             + " LODs a geometry has");
         return false;
       }
-      const auto source = ReadLodLevel(level);
+      const auto source = ReadLodLevel(level, basis);
       const auto transform = to_group * source.transform;
       if (source.problem.empty()
         && !internal::IsBakeTransformInvertible(transform)) {
@@ -1707,8 +1754,7 @@ namespace {
           members.push_back(index_of(child->geometry_transform_helper));
         }
         if (!skipped.empty()
-          || !try_add_level(
-            lods, *child, MakeLocalTransformMatrix(child->local_transform))) {
+          || !try_add_level(lods, *child, LocalTransform(*child, basis))) {
           skipped.push_back(index_of(child));
         }
       }
@@ -1736,7 +1782,7 @@ namespace {
           continue;
         }
         const auto& host = *first->second;
-        const auto host_local = MakeLocalTransformMatrix(host.local_transform);
+        const auto host_local = LocalTransform(host, basis);
         if (!internal::IsBakeTransformInvertible(host_local)) {
           ignore(host,
             "LOD0 of '" + std::string(base)
@@ -1762,7 +1808,7 @@ namespace {
           }
           const auto to_group = level == 0
             ? glm::mat4 { 1.0F }
-            : to_host * MakeLocalTransformMatrix(node->local_transform);
+            : to_host * LocalTransform(*node, basis);
           if (!skipped.empty() || level != expected
             || !try_add_level(lods, *node, to_group)) {
             skipped.push_back(index_of(node));
@@ -1799,6 +1845,7 @@ namespace {
     const CoordinateConversionPolicy& policy) -> FbxBakePlan
   {
     auto lods = FindFbxLodGroups(scene);
+    const auto basis = OxygenBasis(scene);
     std::vector<internal::MeshBakeNode> nodes(scene.nodes.count);
     std::vector<uint8_t> emit_mesh(scene.meshes.count, 1);
     std::unordered_map<const ufbx_mesh*, size_t> mesh_indices;
@@ -1836,7 +1883,7 @@ namespace {
       }
       auto& input = nodes.at(index);
       input.mesh_index = mesh_indices.at(node->mesh);
-      input.local_transform = MakeLocalTransformMatrix(node->local_transform);
+      input.local_transform = LocalTransform(*node, basis);
       const auto& materials
         = node->materials.count != 0 ? node->materials : node->mesh->materials;
       const auto material_items = Items(materials);
@@ -1858,15 +1905,32 @@ namespace {
     }
     auto plan = internal::BuildMeshBakePlan(
       nodes, emit_mesh, policy.bake_transforms_into_meshes);
-    // Each group is one geometry, shown by its host node; its levels keep
-    // their transforms per LOD, so the host's own transform stays on it.
+    // Each group is one geometry, shown by its host node. Its levels carry
+    // their transforms into the group's space per LOD; the host's own
+    // transform bakes into the whole geometry as another mesh's node would,
+    // its levels being part of it rather than attachments.
     for (const auto& group : lods.groups) {
+      const auto* host = ItemAt(scene.nodes, group.host_node);
+      const auto local = LocalTransform(*host, basis);
+      auto transform = std::optional<glm::mat4> {};
+      if (policy.bake_transforms_into_meshes && local != glm::mat4(1.0F)) {
+        auto& reason = plan.retained_reasons.at(group.host_node);
+        if (host->camera != nullptr || host->light != nullptr) {
+          reason = "attachment or camera/light transform";
+        } else if (animated.contains(&host->element)) {
+          reason = "animation, skinning, or deformation transform";
+        } else if (!internal::IsBakeTransformInvertible(local)) {
+          reason = "non-invertible transform";
+        } else {
+          transform = local;
+        }
+      }
       plan.node_variant.at(group.host_node) = plan.variants.size();
       plan.variants.push_back(internal::MeshBakeVariant {
         .mesh_index = mesh_indices.at(group.levels.front().mesh_node->mesh),
         .representative_node = group.host_node,
         .material_binding = 0,
-        .transform = std::nullopt,
+        .transform = transform,
         .name_suffix = {},
       });
     }
@@ -2042,6 +2106,7 @@ namespace {
       return result;
     }
     const auto bake = BuildFbxBakePlan(scene, input.request.options.coordinate);
+    const auto basis = OxygenBasis(scene);
     std::unordered_map<const ufbx_mesh*, size_t> mesh_indices;
     mesh_indices.reserve(scene.meshes.count);
     for (size_t index = 0; index < scene.meshes.count; ++index) {
@@ -2124,7 +2189,7 @@ namespace {
         }
 
         std::vector<ImportDiagnostic> diagnostics;
-        auto buffers = BuildTriangleBuffers(*lod_input.mesh,
+        auto buffers = BuildTriangleBuffers(*lod_input.mesh, basis,
           lod_input.material_node, scene_material_index_by_ptr,
           static_cast<uint32_t>(scene_material_index_by_ptr.size()),
           diagnostics, item.source_id, item.mesh_name);
@@ -3031,6 +3096,7 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
 
   const auto bake = BuildFbxBakePlan(scene, request.options.coordinate);
   const auto& bake_plan = bake.plan;
+  const auto basis = OxygenBasis(scene);
   std::unordered_map<const ufbx_node*, size_t> source_node_indices;
   source_node_indices.reserve(scene.nodes.count);
   for (size_t index = 0; index < scene.nodes.count; ++index) {
@@ -3066,7 +3132,7 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
     const auto base_name
       = input.naming_service->MakeUniqueName(authored, node_context);
 
-    auto local_matrix = MakeLocalTransformMatrix(node->local_transform);
+    auto local_matrix = LocalTransform(*node, basis);
     const auto variant_index
       = bake_plan.node_variant.at(source_node_indices.at(node));
     if (variant_index < bake_plan.variants.size()
@@ -3226,6 +3292,43 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
     request, scene_name, data::kSceneDescriptorExtension)
                               .virtual_path;
 
+  // A camera or light keeps the frame ufbx gave it. Its node's transform is
+  // in Oxygen axes for geometry rotated by the basis (LocalTransform), so the
+  // component sits on a child whose local transform is the basis, as in the
+  // glTF adapter; the owner's mesh and children keep the owner's frame.
+  std::vector<NodeRecord> component_attachments;
+  const auto component_node
+    = [&](const NodeInput& owner, const uint32_t owner_index,
+        const std::string_view role) -> uint32_t {
+    if (basis == glm::mat4 { 1.0F }) {
+      return owner_index;
+    }
+    const auto index = static_cast<uint32_t>(
+      pruned_nodes.size() + component_attachments.size());
+    const NamingContext context {
+      .kind = ImportNameKind::kSceneNode,
+      .ordinal = index,
+    };
+    const auto name = input.naming_service->MakeUniqueName(
+      owner.base_name + "_" + std::string(role), context);
+    const auto rotation = glm::quat_cast(basis);
+    NodeRecord attachment {};
+    attachment.node_id = MakeNodeKey(std::string(virtual_path) + "/" + name);
+    attachment.scene_name_offset = build.strings.Add(name);
+    attachment.parent_index = owner_index;
+    // Visibility and shadow edits on the owner still govern its component.
+    attachment.inherited_flags = data::pak::world::kSceneNodeFlags_Inheritable;
+    attachment.rotation[0] = rotation.x;
+    attachment.rotation[1] = rotation.y;
+    attachment.rotation[2] = rotation.z;
+    attachment.rotation[3] = rotation.w;
+    attachment.scale[0] = 1.0F;
+    attachment.scale[1] = 1.0F;
+    attachment.scale[2] = 1.0F;
+    component_attachments.push_back(attachment);
+    return index;
+  };
+
   for (uint32_t i = 0; i < pruned_nodes.size(); ++i) {
     auto& node = pruned_nodes.at(i);
     const auto& name = node.base_name;
@@ -3276,11 +3379,16 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
 
     if (ufbx_node != nullptr && ufbx_node->camera != nullptr) {
       const auto& cam = *ufbx_node->camera;
+      const auto camera_node
+        = cam.projection_mode == UFBX_PROJECTION_MODE_PERSPECTIVE
+          || cam.projection_mode == UFBX_PROJECTION_MODE_ORTHOGRAPHIC
+        ? component_node(node, i, "Camera")
+        : i;
       auto commit = detail::ImportedPropertyCommit {};
       if (cam.projection_mode == UFBX_PROJECTION_MODE_PERSPECTIVE) {
         namespace camera_schema = data::schema::perspective_camera;
         auto camera = MakeDefaultRecord<PerspectiveCameraRecord>();
-        camera.node_index = i;
+        camera.node_index = camera_node;
         camera.fov_y = commit("fov_y", camera_schema::kFieldOfViewYRadiansRange,
           static_cast<float>(cam.field_of_view_deg.y)
             * (std::numbers::pi_v<float> / 180.0F),
@@ -3315,7 +3423,7 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
             size_x / size_y, camera_schema::kAspectRatioDefault);
 
         auto camera = MakeDefaultRecord<OrthographicCameraRecord>();
-        camera.node_index = i;
+        camera.node_index = camera_node;
         camera.left = -half_width;
         camera.right = half_width;
         camera.bottom = -half_height;
@@ -3338,6 +3446,11 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
         ufbx_node != nullptr ? &ufbx_node->props : nullptr);
       const auto& light = *ufbx_node->light;
       const auto light_semantics = ReadImportedLightSemantics(&light.props);
+      // A point light has no direction to keep.
+      const auto light_node
+        = light.type == UFBX_LIGHT_DIRECTIONAL || light.type == UFBX_LIGHT_SPOT
+        ? component_node(node, i, "Light")
+        : i;
       const auto resolve_common
         = [&](const data::pak::world::LightCommonRecord& defaults)
         -> data::pak::world::LightCommonRecord {
@@ -3357,7 +3470,7 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
       case UFBX_LIGHT_DIRECTIONAL: {
         namespace light_schema = data::schema::directional_light;
         auto rec_light = MakeDefaultRecord<DirectionalLightRecord>();
-        rec_light.node_index = i;
+        rec_light.node_index = light_node;
         rec_light.common = resolve_common(rec_light.common);
         detail::CommitImportedLightColor(
           commit, data::kDirectionalLightCommonRanges, color, rec_light.common);
@@ -3371,7 +3484,7 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
       case UFBX_LIGHT_VOLUME: {
         namespace light_schema = data::schema::point_light;
         auto rec_light = MakeDefaultRecord<PointLightRecord>();
-        rec_light.node_index = i;
+        rec_light.node_index = light_node;
         rec_light.common = resolve_common(rec_light.common);
         detail::CommitImportedLightColor(
           commit, data::kPointLightCommonRanges, color, rec_light.common);
@@ -3390,7 +3503,7 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
       case UFBX_LIGHT_SPOT: {
         namespace light_schema = data::schema::spot_light;
         auto rec_light = MakeDefaultRecord<SpotLightRecord>();
-        rec_light.node_index = i;
+        rec_light.node_index = light_node;
         rec_light.common = resolve_common(rec_light.common);
         detail::CommitImportedLightColor(
           commit, data::kSpotLightCommonRanges, color, rec_light.common);
@@ -3421,6 +3534,8 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
     }
   }
 
+  build.nodes.insert(build.nodes.end(), component_attachments.begin(),
+    component_attachments.end());
   result.build = std::move(build);
   result.success = true;
   return result;

@@ -540,6 +540,14 @@ coverage.
 - **Material slots**
   - Create one `TriangleRange` per material slot in the mesh (sorted).
   - Map `ufbx_material` index to `material_keys`.
+- **Axes**
+  - ufbx converts units in the geometry but leaves the axis change as a
+    rotation on the top-level nodes. The adapter moves it into the geometry,
+    as the glTF adapter does: vertices, normals and tangents are rotated into
+    Oxygen axes (Z up, forward -Y), and every node's local transform is
+    re-expressed for them, so a geometry is upright without its model's nodes.
+  - Cameras and directional or spot lights keep their frames on a child node
+    whose local rotation is that axis change.
 - **LOD mapping**
   - An FBX LodGroup node is one geometry, named after the group and shown by
     the group's node: its children, in order, are LOD0, LOD1, …. Sibling
@@ -552,7 +560,9 @@ coverage.
     level it leaves out (`fbx.lod.level_skipped`); a group with no usable LOD0
     imports as separate nodes (`fbx.lod_group.ignored`).
   - Each level's transform into the group's space is its `MeshLod`
-    `bake_transform`. Coarser LODs renumber their material slots to LOD0's by
+    `bake_transform`. With `bake_transforms_into_meshes`, the host node's own
+    transform bakes into the whole geometry and the host keeps an identity
+    transform, under the same rules as any mesh's node. Coarser LODs renumber their material slots to LOD0's by
     material, so a material is one surface with a binding per LOD. The
     geometry's layout witness hashes every level's mesh witness and transform.
   - FBX level distances are not mapped. A model geometry with several LODs

@@ -436,8 +436,9 @@ NOLINT_TEST_F(StaticModelValuesTest, FbxGeneratesMissingNormalMapTangents)
         = glm::mat3(WorldTransform(scene, renderables.front().node_index));
       const auto normal_matrix = glm::transpose(glm::inverse(world));
       for (const auto& vertex : vertices) {
-        ExpectVec3Near(vertex.normal, { 0, 0, 1 });
-        ExpectVec3Near(vertex.tangent, { 0, 1, 0 });
+        // The geometry is in Oxygen axes: the Y-up source's +Z normal is -Y.
+        ExpectVec3Near(vertex.normal, { 0, -1, 0 });
+        ExpectVec3Near(vertex.tangent, { 0, 0, 1 });
         ExpectVec3Near(vertex.bitangent, { 1, 0, 0 });
         ExpectVec3Near(
           glm::normalize(normal_matrix * vertex.normal), { 0, -1, 0 });
@@ -596,6 +597,40 @@ NOLINT_TEST_F(StaticModelValuesTest, FbxCookPreservesUnitsHandednessAndValues)
             const auto lights = scene.GetComponents<DirectionalLightRecord>();
             ASSERT_EQ(lights.size(), 1U);
             EXPECT_FLOAT_EQ(lights.front().intensity_lux, 1.0F);
+
+            // The source is Y up. Its geometry is in Oxygen axes on its own,
+            // Z up, and its nodes carry no axis rotation, so a scene that
+            // places the geometry without the model's nodes shows it upright.
+            if (!reflected) {
+              for (const auto expected : { glm::vec3(0, 0, 0),
+                     glm::vec3(1, 0, 0), glm::vec3(0, 0, 1) }) {
+                EXPECT_TRUE(std::ranges::any_of(model.vertices,
+                  [&](const oxygen::data::Vertex& vertex) -> bool {
+                    return glm::distance(vertex.position, expected * units)
+                      < 0.0001F;
+                  }))
+                  << "source (0,1,0) lands on Oxygen up";
+              }
+            }
+            if (!reflected && !hierarchy) {
+              const auto& shown = scene.GetNode(
+                scene.GetComponents<RenderableRecord>().front().node_index);
+              EXPECT_NEAR(std::abs(shown.rotation[3]), 1.0F, 0.0001F);
+            }
+            // Cameras and lights keep their frames: the FBX camera looks along
+            // its +X with +Y up, and the FBX light points down its -Y.
+            if (!reflected) {
+              const auto camera_world
+                = glm::mat3(WorldTransform(scene, cameras.front().node_index));
+              ExpectVec3Near(glm::normalize(camera_world * glm::vec3(0, 0, -1)),
+                { 1, 0, 0 });
+              ExpectVec3Near(
+                glm::normalize(camera_world * glm::vec3(0, 1, 0)), { 0, 0, 1 });
+              const auto light_world
+                = glm::mat3(WorldTransform(scene, lights.front().node_index));
+              ExpectVec3Near(glm::normalize(light_world * glm::vec3(0, -1, 0)),
+                { 0, 0, -1 });
+            }
             ExpectVec3Near({ lights.front().common.color_rgb[0],
                              lights.front().common.color_rgb[1],
                              lights.front().common.color_rgb[2] },

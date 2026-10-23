@@ -54,6 +54,8 @@ struct LodImport {
   std::vector<ImportDiagnostic> diagnostics;
   size_t node_count = 0;
   size_t renderable_count = 0;
+  //! The local translation of the node that shows the first geometry.
+  glm::vec3 shown_translation {};
   std::vector<CookedLodGeometry> geometries;
 };
 
@@ -124,16 +126,18 @@ protected:
       + "}\nConnections: {\n" + connections + "}\n";
   }
 
-  auto Import(const std::string& source) -> LodImport
+  auto Import(const std::string& source, const bool bake = true) -> LodImport
   {
     const auto root = MakeTempDir("fbx_lod_"
       + std::string(
-        testing::UnitTest::GetInstance()->current_test_info()->name()));
+        testing::UnitTest::GetInstance()->current_test_info()->name())
+      + (bake ? "_baked" : "_retained"));
     auto request = ImportRequest {};
     request.source_path = root / "model.fbx";
     request.asset_virtual_path
       = oxygen::cooker::test::ModelVirtualPath(request.source_path);
     request.cooked_root = root / "cooked";
+    request.options.coordinate.bake_transforms_into_meshes = bake;
     {
       std::ofstream output(request.source_path, std::ios::binary);
       output << source;
@@ -144,6 +148,7 @@ protected:
       .diagnostics = imported.report.diagnostics,
       .node_count = 0,
       .renderable_count = 0,
+      .shown_translation = {},
       .geometries = {},
     };
     if (!result.success) {
@@ -155,6 +160,11 @@ protected:
     const auto scene = LoadSceneReadback(imported.report);
     result.node_count = scene.nodes.size();
     result.renderable_count = scene.renderables.size();
+    if (!scene.renderables.empty()) {
+      const auto& shown = scene.nodes.at(scene.renderables.front().node_index);
+      result.shown_translation = glm::vec3(
+        shown.translation[0], shown.translation[1], shown.translation[2]);
+    }
     const auto inspection = LoadInspection(imported.report.cooked_root);
     for (const auto& asset : inspection.Assets()) {
       if (asset.asset_type
@@ -245,6 +255,43 @@ NOLINT_TEST_F(FbxLodGroupsTest, LodGroupIsOneGeometryWithALodPerChild)
   EXPECT_EQ(imported.renderable_count, 1U);
   EXPECT_EQ(imported.node_count, 2U) << "the root and the group's node";
   EXPECT_EQ(Count(imported.diagnostics, "fbx.lod.level_skipped"), 0U);
+}
+
+/*!
+ With transform baking on, a LodGroup's own transform bakes into its geometry
+ and its node keeps none, as any mesh's node; with baking off, the node keeps
+ it and the geometry stays in the group's space.
+*/
+NOLINT_TEST_F(FbxLodGroupsTest, LodGroupTransformFollowsTheBakePolicy)
+{
+  // Arrange
+  const auto source = Document(Square(2001, "Lod0") + Square(2002, "Lod1")
+      + Model(3000, "Car", "Null", 3) + Model(3001, "Car_LOD0", "Mesh")
+      + Model(3002, "Car_LOD1", "Mesh")
+      + "    NodeAttribute: 3010, \"NodeAttribute::Car\", \"LodGroup\" {\n"
+        "        TypeFlags: \"Null\"\n"
+        "    }\n",
+    Connect(3000, 0) + Connect(3010, 3000) + Connect(3001, 3000)
+      + Connect(3002, 3000) + Connect(2001, 3001) + Connect(kPaint, 3001)
+      + Connect(kGlass, 3001) + Connect(2002, 3002) + Connect(kPaint, 3002)
+      + Connect(kGlass, 3002));
+
+  // Act
+  const auto baked = Import(source, true);
+  const auto retained = Import(source, false);
+
+  // Assert
+  ASSERT_TRUE(baked.success);
+  ASSERT_TRUE(retained.success);
+  ASSERT_EQ(baked.geometries.size(), 1U);
+  ASSERT_EQ(retained.geometries.size(), 1U);
+  EXPECT_EQ(baked.geometries.front().lod_count, 2U);
+  EXPECT_NEAR(baked.shown_translation.z, 0.0F, 1e-4F);
+  EXPECT_NEAR(baked.geometries.front().bounds_max.z, 4.0F, 1e-4F)
+    << "the group's 3 m lift is in the geometry";
+  EXPECT_NEAR(retained.shown_translation.z, 3.0F, 1e-4F);
+  EXPECT_NEAR(retained.geometries.front().bounds_max.z, 1.0F, 1e-4F)
+    << "the group's lift stays on its node";
 }
 
 //! Sibling meshes named `<base>_LOD<n>` import as one geometry shown by the
