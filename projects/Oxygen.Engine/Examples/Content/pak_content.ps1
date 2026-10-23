@@ -157,12 +157,20 @@ $ManifestPath = Join-Path $OutputDir ($BaseName + ".manifest.json")
 # .cooked/imports/<source>/<generation>; older generations stay until reclaimed.
 $ImportRoots = @()
 $Records = Join-Path $ContentRoot 'imports'
+$Generations = Join-Path $ContentRoot '.cooked/imports'
 if (Test-Path -LiteralPath $Records -PathType Container) {
     $ImportRoots = @(Get-ChildItem -LiteralPath $Records -Filter '*.import.json' -File | Sort-Object Name | ForEach-Object {
         $published = (Get-Content -LiteralPath $_.FullName -Raw | ConvertFrom-Json).published_generation
         if ($published) {
-            $root = @(Get-ChildItem -LiteralPath (Join-Path $ContentRoot '.cooked/imports') -Directory -Filter $published.id -Recurse -Depth 1)
-            if ($root.Count -ne 1) { throw "Published generation $($published.id) of $($_.Name) not found." }
+            $root = @()
+            if (Test-Path -LiteralPath $Generations -PathType Container) {
+                $root = @(Get-ChildItem -LiteralPath $Generations -Directory -Filter $published.id -Recurse -Depth 1)
+            }
+            if ($root.Count -ne 1) {
+                # Imports are optional: pack without the ones not cooked here.
+                Write-Warning "Skipping $($_.Name): its published generation $($published.id) is not under $Generations."
+                return
+            }
             $root[0].FullName
         }
     })
