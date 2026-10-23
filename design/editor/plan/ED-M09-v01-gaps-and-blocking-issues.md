@@ -270,7 +270,7 @@ Units (scene model 5.3) are declared in 77.5:
 | `per-second`     | 1/s            | per second     | Camera shutter rate                                                                                                                         |
 | `per-metre`      | 1/m            | per metre      | Fog radial and height extinction, height falloff                                                                                            |
 | `f-number`       | f/             | f-number       | Camera aperture                                                                                                                             |
-| `multiplier`     | x              | times          | Transform scale; directional atmosphere disk luminance scale                                                                                |
+| `multiplier`     | x              | multiplier     | Transform scale; directional atmosphere disk luminance scale                                                                                |
 
 Today the inspector's unit strings are literals in each view's XAML, and the
 overlay's `x-editor-unit` entries are read by no code. 77.5 removes those
