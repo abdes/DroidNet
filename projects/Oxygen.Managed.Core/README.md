@@ -35,7 +35,7 @@ flowchart BT
     assets["Oxygen.Managed.Assets<br/>asset formats"]
     world["Oxygen.Editor.World<br/>scene model"]
     editor["Editor modules<br/>Projects, Scenes,<br/>ContentPipeline, ..."]
-    engine["Engine source tree<br/>Unicode data<br/>case table"]
+    engine["Installed engine SDK<br/>Unicode data<br/>case table"]
 
     config --> core
     core --> assets
@@ -49,7 +49,7 @@ flowchart BT
     class core focus
 ```
 
-The engine's source tree is read for data only: the Unicode database the rules
+The installed engine SDK is read for data only: the Unicode database the rules
 are stated against, at compile time, and the case table, by the tests. The
 editor build needs no engine build.
 
@@ -229,7 +229,7 @@ folders: personal and local projects, and the state database.
 - `DroidNet.Config`: the base path finder.
 - `Testably.Abstractions`: the file system abstraction `OxygenPathFinder` uses.
 - At build time, the analyzer reference to `Generators/src` and the Unicode
-  database in the engine's source tree.
+  database in the installed engine SDK (`$(OxygenSdkDataDir)`).
 
 ## Tests
 
