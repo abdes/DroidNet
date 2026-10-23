@@ -182,9 +182,11 @@ static_assert(RenderItemDataExtractor<decltype(MeshResolver)>);
 //! Per-submesh visibility extractor with frustum culling.
 /*!
  Computes the list of visible submesh indices for the resolved mesh by
- combining the node's submesh visibility state with view-frustum culling.
- When a per-submesh world AABB is available it is used for culling; otherwise
- the node's world bounding sphere is used as a fallback.
+ combining the surface Visibility of each submesh with view-frustum culling.
+ A visible submesh outside the frustum is kept as shadow-only when the node and
+ its surface both cast shadows. When a per-submesh world AABB is available it
+ is used for culling; otherwise the node's world bounding sphere is used as a
+ fallback.
 
  @param ctx Scene preparation context providing the view frustum.
  @param state Scene preparation state (unused).
@@ -281,7 +283,7 @@ inline auto SubMeshVisibilityFilter(const ScenePrepContext& ctx,
       }
     }
     if (!in_frustum) {
-      if (item.CastsShadows()) {
+      if (item.CastsShadows() && rend.SubmeshCastsShadows(lod, submesh)) {
         shadow_only_submeshes.push_back(submesh);
       }
       continue;
@@ -404,7 +406,8 @@ inline auto EmitPerVisibleSubmesh(const ScenePrepContext& ctx,
       .world_transform = item.GetWorldTransform(),
       .sort_distance2 = sort_distance2,
       .transform_handle = item.GetTransformHandle(),
-      .cast_shadows = item.CastsShadows(),
+      .cast_shadows = item.CastsShadows()
+        && item.Renderable().SubmeshCastsShadows(lod, submesh),
       .receive_shadows = item.ReceivesShadows(),
       .main_view_visible = main_view_visible,
       .static_shadow_caster

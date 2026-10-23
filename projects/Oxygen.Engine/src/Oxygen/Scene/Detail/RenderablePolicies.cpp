@@ -8,13 +8,17 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <span>
+#include <vector>
 
 #include <Oxygen/Data/GeometryIndices.h>
+#include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Scene/Types/RenderablePolicies.h>
 
 using oxygen::data::LodIndex;
 using oxygen::scene::DistancePolicy;
 using oxygen::scene::FixedPolicy;
+using oxygen::scene::LodPolicy;
 using oxygen::scene::ScreenSpaceErrorPolicy;
 
 auto FixedPolicy::Clamp(std::size_t lod_count) const noexcept -> LodIndex
@@ -144,4 +148,33 @@ auto ScreenSpaceErrorPolicy::ApplyHysteresis(std::optional<LodIndex> current,
   } else {
     return (sse >= e_in) ? base : last;
   }
+}
+
+auto oxygen::scene::MakeLodPolicy(
+  const data::pak::geometry::LodPolicyRecord& record) -> LodPolicy
+{
+  using data::pak::geometry::kMaxLodBoundaryCount;
+  using data::pak::geometry::LodPolicyType;
+
+  const auto count = (std::min)(std::size_t { record.boundary_count },
+    std::size_t { kMaxLodBoundaryCount });
+  const auto first = [count](const auto& values) {
+    const auto list = std::span<const float> { values }.first(count);
+    return std::vector<float>(list.begin(), list.end());
+  };
+  switch (record.type) {
+  case LodPolicyType::kFixed:
+    return FixedPolicy { .index = LodIndex { record.lod_index } };
+  case LodPolicyType::kDistance:
+    return DistancePolicy {
+      .thresholds = first(record.thresholds),
+      .hysteresis_ratio = record.hysteresis_ratio,
+    };
+  case LodPolicyType::kScreenSpaceError:
+    return ScreenSpaceErrorPolicy {
+      .enter_finer_sse = first(record.enter_finer_sse),
+      .exit_coarser_sse = first(record.exit_coarser_sse),
+    };
+  }
+  return FixedPolicy {};
 }

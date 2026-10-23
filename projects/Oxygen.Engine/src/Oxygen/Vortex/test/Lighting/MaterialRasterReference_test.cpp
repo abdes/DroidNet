@@ -33,6 +33,7 @@
 #include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Data/ShaderReference.h>
+#include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/Data/Unorm16.h>
 #include <Oxygen/Data/Vertex.h>
@@ -50,9 +51,12 @@
 #include <Oxygen/Vortex/test/Fixtures/TextureBinderPayloads.h>
 #include <Oxygen/Vortex/test/Lighting/Reference/MaterialDecode.h>
 #include <Oxygen/Vortex/test/Lighting/Reference/MaterialEvaluation.h>
+#include <Oxygen/Vortex/test/Support/FirstSurface.h>
 
 namespace oxygen::vortex::testing {
 namespace {
+  using oxygen::vortex::testing::FirstSurfaceOf;
+
   using Rgba8 = std::array<std::uint8_t, 4>;
 
   // Independent mode-6 fixture writer: one subset, 7-bit RGBA endpoints,
@@ -334,12 +338,12 @@ namespace {
           }
           keys.at(static_cast<std::size_t>(MaterialSlot::kEmissive))
             = emission_key;
-          mesh_node.GetRenderable().SetMaterialOverride(
-            oxygen::data::LodIndex { 0U }, oxygen::data::SubmeshIndex { 0U },
+          ASSERT_TRUE(mesh_node.GetRenderable().SetMaterialOverride(
+            FirstSurfaceOf(mesh_node),
             std::make_shared<data::MaterialAsset>(
               data::AssetKey::FromVirtualPath("/test/Lighting/Material-"
                 + std::to_string(++material_sequence) + ".omat"),
-              desc, std::vector<data::ShaderReference> {}, std::move(keys)));
+              desc, std::vector<data::ShaderReference> {}, std::move(keys))));
           auto input = reference::MaterialEvaluationInput {
             .factors = { .base_color = { .rgb = { .red = desc.base_color[0],
                   .green = desc.base_color[1], .blue = desc.base_color[2], }, .alpha = desc.base_color[3], },
@@ -611,12 +615,12 @@ namespace {
             keys.at(static_cast<std::size_t>(MaterialSlot::kBaseColor)) = color;
             keys.at(static_cast<std::size_t>(MaterialSlot::kNormal)) = normal;
             keys.at(static_cast<std::size_t>(MaterialSlot::kEmissive)) = color;
-            mesh_node.GetRenderable().SetMaterialOverride(
-              oxygen::data::LodIndex { 0U }, oxygen::data::SubmeshIndex { 0U },
+            ASSERT_TRUE(mesh_node.GetRenderable().SetMaterialOverride(
+              FirstSurfaceOf(mesh_node),
               std::make_shared<data::MaterialAsset>(
                 data::AssetKey::FromVirtualPath("/test/Lighting/Filtered-"
                   + std::to_string(++material_sequence) + ".omat"),
-                desc, std::vector<data::ShaderReference> {}, std::move(keys)));
+                desc, std::vector<data::ShaderReference> {}, std::move(keys))));
             ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0.0F, 3U));
             const auto image = ReadFloatTexture(*probe->color);
             ASSERT_EQ(image.size(), 1U);
@@ -810,13 +814,13 @@ namespace {
             static_cast<std::size_t>(MaterialSlot::kCount));
           keys.at(static_cast<std::size_t>(MaterialSlot::kBaseColor)) = key;
           keys.at(static_cast<std::size_t>(MaterialSlot::kEmissive)) = key;
-          mesh_node.GetRenderable().SetMaterialOverride(
-            oxygen::data::LodIndex { 0U }, oxygen::data::SubmeshIndex { 0U },
+          ASSERT_TRUE(mesh_node.GetRenderable().SetMaterialOverride(
+            FirstSurfaceOf(mesh_node),
             std::make_shared<data::MaterialAsset>(
               data::AssetKey::FromVirtualPath("/test/Lighting/Mip-"
                 + std::to_string(++material_sequence) + ".omat"),
               material, std::vector<data::ShaderReference> {},
-              std::move(keys)));
+              std::move(keys))));
           // At 90-degree FOV on a unit viewport, d(world.xy)/d(pixel)=2.
           // The authored UV gradient is 1/4 and texture width is 4:
           // rho=2*scale.

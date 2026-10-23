@@ -202,6 +202,24 @@ auto BuildCubeGeometry(
     std::vector<std::shared_ptr<oxygen::data::Mesh>> { std::move(mesh) });
 }
 
+//! Overrides the material of the surface bound to LOD 0, submesh 0.
+auto OverrideFirstSurfaceMaterial(oxygen::scene::SceneNode& node,
+  std::shared_ptr<const oxygen::data::MaterialAsset> material) -> void
+{
+  const auto geometry = node.GetRenderable().GetGeometry();
+  const auto mesh
+    = geometry ? geometry->MeshAt(oxygen::data::LodIndex { 0 }) : nullptr;
+  if (!mesh || mesh->SubMeshes().empty()) {
+    LOG_F(WARNING, "Node '{}' has no surface to override", node.GetName());
+    return;
+  }
+  if (!node.GetRenderable().SetMaterialOverride(
+        mesh->SubMeshes().front().SurfaceIdentity(), std::move(material))) {
+    LOG_F(WARNING, "Node '{}' does not declare the surface to override",
+      node.GetName());
+  }
+}
+
 } // namespace
 
 namespace oxygen::examples::textured_cube {
@@ -268,9 +286,7 @@ auto SceneSetup::UpdateSphere(const ObjectTextureState& sphere_texture,
     }
 
     if (!sphere_material_ || sphere_material_.get() != custom_material.get()) {
-      sphere_node_.GetRenderable().SetMaterialOverride(
-        oxygen::data::LodIndex { 0 }, oxygen::data::SubmeshIndex { 0 },
-        custom_material);
+      OverrideFirstSurfaceMaterial(sphere_node_, custom_material);
     }
     sphere_material_ = std::move(custom_material);
     return;
@@ -310,9 +326,7 @@ auto SceneSetup::UpdateSphere(const ObjectTextureState& sphere_texture,
   // Update material using per-submesh override (LOD 0, submesh 0)
   if (!sphere_material_
     || sphere_material_.get() != new_sphere_material.get()) {
-    sphere_node_.GetRenderable().SetMaterialOverride(
-      oxygen::data::LodIndex { 0 }, oxygen::data::SubmeshIndex { 0 },
-      new_sphere_material);
+    OverrideFirstSurfaceMaterial(sphere_node_, new_sphere_material);
   }
 
   sphere_material_ = std::move(new_sphere_material);
@@ -333,9 +347,7 @@ auto SceneSetup::UpdateCube(const ObjectTextureState& cube_texture,
     }
 
     if (!cube_material_ || cube_material_.get() != custom_material.get()) {
-      cube_node_.GetRenderable().SetMaterialOverride(
-        oxygen::data::LodIndex { 0 }, oxygen::data::SubmeshIndex { 0 },
-        custom_material);
+      OverrideFirstSurfaceMaterial(cube_node_, custom_material);
     }
     cube_material_ = std::move(custom_material);
     return;
@@ -371,8 +383,7 @@ auto SceneSetup::UpdateCube(const ObjectTextureState& cube_texture,
   }
 
   if (!cube_material_ || cube_material_.get() != new_cube_material.get()) {
-    cube_node_.GetRenderable().SetMaterialOverride(oxygen::data::LodIndex { 0 },
-      oxygen::data::SubmeshIndex { 0 }, new_cube_material);
+    OverrideFirstSurfaceMaterial(cube_node_, new_cube_material);
   }
 
   cube_material_ = std::move(new_cube_material);

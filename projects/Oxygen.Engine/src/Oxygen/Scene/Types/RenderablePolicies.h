@@ -8,9 +8,12 @@
 
 #include <cstddef>
 #include <optional>
+#include <variant>
 #include <vector>
 
 #include <Oxygen/Data/GeometryIndices.h>
+#include <Oxygen/Data/PakFormat_geometry.h>
+#include <Oxygen/Scene/api_export.h>
 
 namespace oxygen::scene {
 //! Invariant: LOD 0 is the finest quality. Index i denotes the boundary
@@ -56,5 +59,17 @@ struct ScreenSpaceErrorPolicy {
     data::LodIndex base, float sse, std::size_t lod_count) const noexcept
     -> data::LodIndex;
 };
+
+//! The LOD policy a renderable selects its LOD with.
+using LodPolicy
+  = std::variant<FixedPolicy, DistancePolicy, ScreenSpaceErrorPolicy>;
+
+//! The runtime policy a cooked LOD policy record describes.
+/*!
+ Takes the first `boundary_count` values of the record's lists. A record of an
+ unknown type gives the fixed finest-LOD policy.
+*/
+OXGN_SCN_NDAPI auto MakeLodPolicy(
+  const data::pak::geometry::LodPolicyRecord& record) -> LodPolicy;
 
 } // namespace oxygen::scene

@@ -9,6 +9,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -40,6 +41,7 @@
 #include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
 #include <Oxygen/Data/ShaderReference.h>
+#include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Data/Vertex.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Environment/Fog.h>
@@ -445,6 +447,23 @@ auto AnimateSphereOrbit(oxygen::examples::async::SphereState& sphere,
   sphere_node.GetTransform().SetLocalRotation(spin_quat);
 }
 
+//! The surface bound to the given LOD and submesh of a renderable's geometry,
+//! or nothing when the geometry has no such submesh.
+auto SurfaceOf(oxygen::scene::SceneNode::Renderable& renderable,
+  const oxygen::data::LodIndex lod, const oxygen::data::SubmeshIndex submesh)
+  -> std::optional<oxygen::data::SurfaceId>
+{
+  const auto geometry = renderable.GetGeometry();
+  if (!geometry) {
+    return std::nullopt;
+  }
+  const auto& mesh = geometry->MeshAt(lod);
+  if (!mesh || submesh.get() >= mesh->SubMeshes().size()) {
+    return std::nullopt;
+  }
+  return mesh->SubMeshes()[submesh.get()].SurfaceIdentity();
+}
+
 } // namespace
 
 namespace oxygen::examples::async {
@@ -491,7 +510,7 @@ auto AsyncScene::Populate(scene::Scene& scene) -> void
       DistancePolicy pol;
       pol.thresholds = { 24.0F };
       pol.hysteresis_ratio = 0.08F; // modest hysteresis to avoid flicker
-      r.SetLodPolicy(std::move(pol));
+      r.SetLodPolicyOverride(std::move(pol));
     }
 
     // Fixed phases and material rows make lighting comparisons repeatable.
@@ -531,8 +550,11 @@ auto AsyncScene::Populate(scene::Scene& scene) -> void
     // retains the material override. Use EffectiveLodCount() to iterate.
     const auto lod_count = static_cast<std::uint32_t>(r.EffectiveLodCount());
     for (std::uint32_t lod = 0; lod < lod_count; ++lod) {
-      r.SetMaterialOverride(
-        oxygen::data::LodIndex { lod }, oxygen::data::SubmeshIndex {}, mat);
+      const auto surface = SurfaceOf(
+        r, oxygen::data::LodIndex { lod }, oxygen::data::SubmeshIndex {});
+      if (!surface || !r.SetMaterialOverride(*surface, mat)) {
+        LOG_F(WARNING, "[{}] LOD {} has no surface to override", name, lod);
+      }
     }
 
     SphereState s;
@@ -716,8 +738,11 @@ auto AsyncScene::UpdateMaterials(const double elapsed_seconds) -> void
     if (vis_phase != last_vis_toggle_) {
       last_vis_toggle_ = vis_phase;
       const bool visible = (vis_phase % 2) == 0;
-      r.SetSubmeshVisible(oxygen::data::LodIndex { lod },
-        oxygen::data::SubmeshIndex { 0 }, visible);
+      const auto surface = SurfaceOf(
+        r, oxygen::data::LodIndex { lod }, oxygen::data::SubmeshIndex { 0 });
+      if (!surface || !r.SetVisibilityOverride(*surface, visible)) {
+        LOG_F(WARNING, "[MultiSubmesh] Submesh 0 has no surface to toggle");
+      }
       LOG_F(2, "[MultiSubmesh] Submesh 0 visibility -> {}", visible);
     }
 
@@ -727,12 +752,13 @@ auto AsyncScene::UpdateMaterials(const double elapsed_seconds) -> void
     if (ovr_phase != last_ovr_toggle_) {
       last_ovr_toggle_ = ovr_phase;
       const bool apply_override = (ovr_phase % 2) == 1;
-      if (apply_override) {
-        r.SetMaterialOverride(oxygen::data::LodIndex { lod },
-          oxygen::data::SubmeshIndex { 1 }, blue_override_);
-      } else {
-        r.ClearMaterialOverride(
-          oxygen::data::LodIndex { lod }, oxygen::data::SubmeshIndex { 1 });
+      const auto surface = SurfaceOf(
+        r, oxygen::data::LodIndex { lod }, oxygen::data::SubmeshIndex { 1 });
+      const bool applied = surface
+        && (apply_override ? r.SetMaterialOverride(*surface, blue_override_)
+                           : r.ClearMaterialOverride(*surface));
+      if (!applied) {
+        LOG_F(WARNING, "[MultiSubmesh] Submesh 1 has no surface to override");
       }
       LOG_F(2, "[MultiSubmesh] Submesh 1 override -> {}",
         apply_override ? "blue" : "clear");

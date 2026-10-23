@@ -546,7 +546,11 @@ function on_scene_mutation()
   local geometry = node:renderable_get_geometry()
   if geometry ~= "proc/cube" then error("geometry token mismatch") end
 
-  if not node:renderable_set_material_override(1, 1, "mat://override_v1") then
+  local surfaces = node:renderable_get_surface_ids()
+  if surfaces == nil or #surfaces ~= 1 then error("surface ids missing") end
+  local surface = surfaces[1]
+
+  if not node:renderable_set_material_override(surface, "mat://override_v1") then
     error("set material override failed")
   end
 
@@ -555,21 +559,71 @@ function on_scene_mutation()
     error("resolve override mismatch")
   end
 
-  if not node:renderable_clear_material_override(1, 1) then
+  if not node:renderable_clear_material_override(surface) then
     error("clear material override failed")
   end
 
   local resolved_default = node:renderable_resolve_submesh_material(1, 1)
   if resolved_default == nil then error("resolved default material missing") end
 
+  if node:renderable_set_material_override("not-a-surface", "mat://x") then
+    error("expected surface id check for set_material_override")
+  end
+
+  if not node:renderable_set_casts_shadows_override(surface, false) then
+    error("set casts shadows override failed")
+  end
+  if node:renderable_submesh_casts_shadows(1, 1) then
+    error("casts shadows override not applied")
+  end
+  if not node:renderable_clear_casts_shadows_override(surface) then
+    error("clear casts shadows override failed")
+  end
+  if not node:renderable_submesh_casts_shadows(1, 1) then
+    error("casts shadows default not restored")
+  end
+
+  if not node:renderable_set_visibility_override(surface, false) then
+    error("set visibility override failed")
+  end
+  if node:renderable_is_submesh_visible(1, 1)
+    or node:renderable_submesh_casts_shadows(1, 1) then
+    error("a hidden surface must neither draw nor cast")
+  end
+  if not node:renderable_clear_visibility_override(surface) then
+    error("clear visibility override failed")
+  end
+  if not node:renderable_is_submesh_visible(1, 1) then
+    error("visibility default not restored")
+  end
+
   local call_ok_bool, ok_bool = pcall(function()
-    return node:renderable_set_all_submeshes_visible(1)
+    return node:renderable_set_visibility_override(surface, 1)
   end)
   if not call_ok_bool then
-    error("set_all_submeshes_visible must not throw on invalid type")
+    error("set_visibility_override must not throw on invalid type")
   end
   if ok_bool then
-    error("expected boolean type check for set_all_submeshes_visible")
+    error("expected boolean type check for set_visibility_override")
+  end
+
+  if node:renderable_get_lod_policy().kind ~= "fixed" then
+    error("expected the default fixed LOD policy")
+  end
+  if not node:renderable_set_lod_policy_override({
+    kind = "distance", hysteresis_ratio = 0.25, thresholds = { 2, 4 } }) then
+    error("set lod policy override failed")
+  end
+  local policy = node:renderable_get_lod_policy()
+  if policy.kind ~= "distance" or #policy.thresholds ~= 2
+    or policy.thresholds[2] ~= 4 then
+    error("lod policy override mismatch")
+  end
+  if not node:renderable_clear_lod_policy_override() then
+    error("clear lod policy override failed")
+  end
+  if node:renderable_get_lod_policy().kind ~= "fixed" then
+    error("default lod policy not restored")
   end
 end
 )lua" },
@@ -622,7 +676,8 @@ function on_scene_mutation()
   local material = assets.create_default_material()
   if material == nil then error("default material missing") end
   if material:type_name() ~= "MaterialAsset" then error("unexpected material type") end
-  if not node:renderable_set_material_override(1, 1, material) then
+  local surface = node:renderable_get_surface_ids()[1]
+  if not node:renderable_set_material_override(surface, material) then
     error("set material userdata failed")
   end
 
@@ -684,7 +739,8 @@ function on_scene_mutation()
   end
 
   local ok_set_material, result_set_material = pcall(function()
-    return node:renderable_set_material_override(1, 1, geometry)
+    return node:renderable_set_material_override(
+      node:renderable_get_surface_ids()[1], geometry)
   end)
   if ok_set_material and result_set_material ~= false and result_set_material ~= nil then
     error("renderable_set_material_override should reject GeometryAsset userdata deterministically")
@@ -961,7 +1017,9 @@ function on_scene_mutation()
     "attach_perspective_camera", "attach_orthographic_camera", "detach_camera", "has_camera",
     "attach_directional_light", "attach_point_light", "attach_spot_light", "detach_light", "has_light",
     "renderable_set_geometry", "renderable_get_geometry", "renderable_set_material_override",
-    "renderable_resolve_submesh_material", "renderable_set_all_submeshes_visible",
+    "renderable_resolve_submesh_material", "renderable_get_surface_ids",
+    "renderable_set_visibility_override", "renderable_set_casts_shadows_override",
+    "renderable_set_lod_policy_override",
     "attach_scripting", "detach_scripting", "has_scripting", "scripting_slots",
     "scripting_add_slot", "scripting_remove_slot", "scripting_set_param", "scripting_get_param"
   }

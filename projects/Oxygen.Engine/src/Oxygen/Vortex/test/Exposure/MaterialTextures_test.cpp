@@ -16,6 +16,7 @@
 #include <utility>
 #include <vector>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Config/RendererConfig.h>
 #include <Oxygen/Content/ResourceKey.h>
@@ -41,6 +42,7 @@
 #include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Data/ShaderReference.h>
+#include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/Data/Vertex.h>
 #include <Oxygen/Engine/IAsyncEngine.h>
@@ -75,8 +77,15 @@
 #include <Oxygen/Vortex/test/Fakes/AssetLoader.h>
 #include <Oxygen/Vortex/test/Fixtures/RendererPublicationProbe.h>
 #include <Oxygen/Vortex/test/Fixtures/TextureBinderPayloads.h>
+#include <Oxygen/Vortex/test/Support/FirstSurface.h>
 
 namespace oxygen::vortex::testing::exposure {
+
+namespace {
+
+  using oxygen::vortex::testing::FirstSurfaceOf;
+
+} // namespace
 
 using graphics::FramebufferDesc;
 using graphics::ResourceStates;
@@ -464,9 +473,8 @@ NOLINT_TEST_F(
               data::AssetKey::FromVirtualPath(
                 "/test/Exposure/Domain" + std::to_string(case_count) + ".omat"),
               material_desc, std::vector<data::ShaderReference> {}, keys);
-            mesh_node.GetRenderable().SetMaterialOverride(
-              oxygen::data::LodIndex { 0 }, oxygen::data::SubmeshIndex { 0 },
-              material);
+            ASSERT_TRUE(mesh_node.GetRenderable().SetMaterialOverride(
+              FirstSurfaceOf(mesh_node), material));
             settings.manual_ev = ev;
             post.SetExposureSettings(settings);
             scene->Update();

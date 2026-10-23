@@ -110,6 +110,24 @@ namespace {
     return material;
   }
 
+  //! Overrides the material of the surface bound to LOD 0, submesh 0.
+  auto OverrideFirstSurfaceMaterial(scene::SceneNode& node,
+    std::shared_ptr<const data::MaterialAsset> material) -> void
+  {
+    const auto geometry = node.GetRenderable().GetGeometry();
+    const auto mesh
+      = geometry ? geometry->MeshAt(data::LodIndex { 0 }) : nullptr;
+    if (!mesh || mesh->SubMeshes().empty()) {
+      LOG_F(WARNING, "Node '{}' has no surface to override", node.GetName());
+      return;
+    }
+    if (!node.GetRenderable().SetMaterialOverride(
+          mesh->SubMeshes().front().SurfaceIdentity(), std::move(material))) {
+      LOG_F(WARNING, "Node '{}' does not declare the surface to override",
+        node.GetName());
+    }
+  }
+
 } // namespace
 
 void SceneBootstrapper::BindToScene(observer_ptr<scene::Scene> scene)
@@ -236,16 +254,13 @@ auto SceneBootstrapper::ApplyMixedExposureProof() -> void
   ApplyConsumerVisualProof(VisualFogMode::kVolumetric);
   // The original sphere remains opaque and lit. The other existing shapes
   // exercise material domains together at comparable daylight radiance.
-  cube_node_.GetRenderable().SetMaterialOverride(oxygen::data::LodIndex { 0 },
-    oxygen::data::SubmeshIndex { 0 },
+  OverrideFirstSurfaceMaterial(cube_node_,
     MakeSolidColorMaterial("MixedExposureEmissive", { .7F, .65F, .5F, 1 },
       data::MaterialDomain::kOpaque, true, 4096));
-  cylinder_node_.GetRenderable().SetMaterialOverride(
-    oxygen::data::LodIndex { 0 }, oxygen::data::SubmeshIndex { 0 },
+  OverrideFirstSurfaceMaterial(cylinder_node_,
     MakeSolidColorMaterial("MixedExposureTranslucent", { .3F, .4F, .9F, .5F },
       data::MaterialDomain::kAlphaBlended));
-  cone_node_.GetRenderable().SetMaterialOverride(oxygen::data::LodIndex { 0 },
-    oxygen::data::SubmeshIndex { 0 },
+  OverrideFirstSurfaceMaterial(cone_node_,
     MakeSolidColorMaterial("MixedExposureMasked", { .9F, .4F, .4F, .8F },
       data::MaterialDomain::kMasked));
 }
@@ -394,8 +409,7 @@ auto SceneBootstrapper::ApplyAtmosphereProof(const std::uint64_t frame) -> void
       forward ? data::MaterialDomain::kAlphaBlended
               : data::MaterialDomain::kOpaque,
       true);
-    node.GetRenderable().SetMaterialOverride(oxygen::data::LodIndex { 0U },
-      oxygen::data::SubmeshIndex { 0U }, std::move(material));
+    OverrideFirstSurfaceMaterial(node, std::move(material));
     SetShadowParticipation(node, false, false);
   }
   atmosphere_proof_phase_ = phase;

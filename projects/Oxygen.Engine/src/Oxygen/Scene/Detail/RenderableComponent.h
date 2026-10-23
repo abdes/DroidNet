@@ -10,7 +10,6 @@
 #include <memory>
 #include <optional>
 #include <utility>
-#include <variant>
 #include <vector>
 
 #include <Oxygen/Composition/Component.h>
@@ -30,15 +29,25 @@ class SurfaceId;
 
 namespace oxygen::scene::detail {
 
-// Renderable component holds a reference to GeometryAsset (preferred) and
-// provides a minimal compatibility path for legacy Mesh attachment.
+//! Draws one geometry asset, with this instance's overrides of its defaults.
+/*!
+ The overrides are the scene schema's asset-sourced properties: per surface,
+ `Material`, `Visibility` and `CastsShadows`; per renderable, the LOD policy.
+ Without an override a surface takes the geometry's default, and a geometry
+ that declares none takes the schema's default.
+
+ Surface overrides are kept by SurfaceId. Replacing the geometry with one of
+ the same identity keeps those of the surfaces it still declares; any other
+ geometry drops them. The LOD policy override is kept across replacement.
+ Edits and replacement resolve the overrides into a per-submesh state, which
+ drawing reads without identity lookups.
+*/
 class RenderableComponent final : public Component {
   OXYGEN_COMPONENT(RenderableComponent)
   OXYGEN_COMPONENT_REQUIRES(TransformComponent)
 
 public:
-  using LodPolicy
-    = std::variant<FixedPolicy, DistancePolicy, ScreenSpaceErrorPolicy>;
+  using LodPolicy = scene::LodPolicy;
 
   // Preferred: full geometry asset with LODs and submeshes
   OXGN_SCN_API explicit RenderableComponent(
@@ -63,9 +72,18 @@ public:
   OXGN_SCN_NDAPI auto UsesDistancePolicy() const noexcept -> bool;
   OXGN_SCN_NDAPI auto UsesScreenSpaceErrorPolicy() const noexcept -> bool;
 
-  OXGN_SCN_API void SetLodPolicy(FixedPolicy p);
-  OXGN_SCN_API void SetLodPolicy(DistancePolicy p);
-  OXGN_SCN_API void SetLodPolicy(ScreenSpaceErrorPolicy p);
+  //! The LOD policy in effect: the override, else the geometry's default,
+  //! else the schema's default.
+  [[nodiscard]] auto GetLodPolicy() const noexcept -> const LodPolicy&
+  {
+    return policy_;
+  }
+
+  //! Selects LODs with `policy` instead of the geometry's default.
+  OXGN_SCN_API void SetLodPolicyOverride(LodPolicy policy);
+  //! Returns to the geometry's default LOD policy.
+  OXGN_SCN_API void ClearLodPolicyOverride();
+  OXGN_SCN_NDAPI auto HasLodPolicyOverride() const noexcept -> bool;
 
   // Select active LOD based on current policy using strong types.
   // For distance policy, pass NormalizedDistance (||cam-center|| / radius).
@@ -98,36 +116,37 @@ public:
     data::SubmeshIndex submesh) const noexcept
     -> std::optional<std::pair<Vec3, Vec3>>;
 
-  //=== Submesh visibility and material overrides ========================//
+  //=== Surface overrides ==================================================//
 
-  //! Returns whether the given submesh (by LOD and index) is visible.
-  OXGN_SCN_NDAPI auto IsSubmeshVisible(
-    data::LodIndex lod, data::SubmeshIndex submesh) const noexcept -> bool;
-
-  //! Sets visibility for the given submesh (by LOD and index).
-  OXGN_SCN_API void SetSubmeshVisible(
-    data::LodIndex lod, data::SubmeshIndex submesh, bool visible) noexcept;
-
-  //! Sets visibility for all submeshes across all LODs.
-  OXGN_SCN_API void SetAllSubmeshesVisible(bool visible) noexcept;
-
-  //! Sets a material override for a submesh (by LOD and index). Pass nullptr
-  //! to clear the override and fall back to the submesh material.
-  //! This binding override is transient across geometry replacement; use a
-  //! SurfaceId assignment when authoring intent must survive replacement.
-  OXGN_SCN_API void SetMaterialOverride(data::LodIndex lod,
-    data::SubmeshIndex submesh,
-    std::shared_ptr<const data::MaterialAsset> material) noexcept;
-
-  //! Applies one authored assignment to every declared binding atomically.
+  //! Binds `material` to every submesh of `surface`; nullptr clears the
+  //! override. False when the geometry does not declare `surface`.
   OXGN_SCN_NDAPI auto SetMaterialOverride(data::SurfaceId surface,
     std::shared_ptr<const data::MaterialAsset> material) noexcept -> bool;
   OXGN_SCN_NDAPI auto ClearMaterialOverride(data::SurfaceId surface) noexcept
     -> bool;
 
-  //! Clears the material override for the given submesh.
-  OXGN_SCN_API void ClearMaterialOverride(
-    data::LodIndex lod, data::SubmeshIndex submesh) noexcept;
+  //! Shows or hides `surface`. False when the geometry does not declare it.
+  OXGN_SCN_NDAPI auto SetVisibilityOverride(
+    data::SurfaceId surface, bool visible) noexcept -> bool;
+  OXGN_SCN_NDAPI auto ClearVisibilityOverride(data::SurfaceId surface) noexcept
+    -> bool;
+
+  //! Sets whether `surface` casts shadows. False when the geometry does not
+  //! declare it.
+  OXGN_SCN_NDAPI auto SetCastsShadowsOverride(
+    data::SurfaceId surface, bool casts_shadows) noexcept -> bool;
+  OXGN_SCN_NDAPI auto ClearCastsShadowsOverride(
+    data::SurfaceId surface) noexcept -> bool;
+
+  //! Whether the surface bound to the submesh is visible; false for a submesh
+  //! the geometry does not have.
+  OXGN_SCN_NDAPI auto IsSubmeshVisible(
+    data::LodIndex lod, data::SubmeshIndex submesh) const noexcept -> bool;
+
+  //! Whether the surface bound to the submesh casts shadows: it is visible and
+  //! its CastsShadows is on. The node's own shadow flag is not included.
+  OXGN_SCN_NDAPI auto SubmeshCastsShadows(
+    data::LodIndex lod, data::SubmeshIndex submesh) const noexcept -> bool;
 
   //! Resolves the effective material applying override → submesh → default.
   OXGN_SCN_NDAPI auto ResolveSubmeshMaterial(
@@ -168,16 +187,40 @@ private:
       submesh_world_aabbs;
   };
 
+  //! This instance's overrides of one surface's asset defaults.
+  struct SurfaceOverrides {
+    std::shared_ptr<const data::MaterialAsset> material;
+    std::optional<bool> visible;
+    std::optional<bool> casts_shadows;
+  };
+
+  //! What drawing reads for one submesh, resolved from its surface.
+  struct SubmeshState {
+    bool visible { true };
+    bool casts_shadows { true };
+    std::shared_ptr<const data::MaterialAsset> override_material;
+  };
+
   void RebuildLocalBoundsCache();
   void RecomputeWorldBoundingSphere() const noexcept;
   void InvalidateWorldAabbCache() const noexcept;
   void RebuildSubmeshStateCache(
     const data::GeometryAsset* previous_geometry = nullptr);
+  void ResolveLodPolicy();
+  void ResolveSurface(std::size_t index) noexcept;
+  [[nodiscard]] auto FindSubmeshState(data::LodIndex lod,
+    data::SubmeshIndex submesh) const noexcept -> const SubmeshState*;
+  template <typename Edit>
+  [[nodiscard]] auto EditSurface(data::SurfaceId surface, Edit edit) noexcept
+    -> bool;
 
   // Preferred data
   std::shared_ptr<const data::GeometryAsset> geometry_asset_;
 
-  // LOD policy (runtime variant)
+  // This instance's LOD policy, replacing the geometry's default when set.
+  std::optional<LodPolicy> lod_policy_override_;
+
+  // LOD policy in effect, resolved on geometry and override changes.
   LodPolicy policy_ { FixedPolicy {} };
 
   // Cached dynamic LOD result (updated during updates/submission)
@@ -186,21 +229,15 @@ private:
   // Per-LOD and per-submesh local bounds cache (rebuilt on SetGeometry)
   std::vector<LodBounds> lod_bounds_;
 
-  // Authored assignments in the current inventory's declaration order.
+  // Surface overrides in the current inventory's declaration order.
   // Resolved into submesh_state_ only on edits and geometry replacement.
-  std::vector<std::shared_ptr<const data::MaterialAsset>> surface_materials_;
+  std::vector<SurfaceOverrides> surface_overrides_;
 
   // World transform state and derived bounds
   Mat4 world_matrix_ { 1.0F };
   mutable Vec4 world_bounding_sphere_ { 0.0F, 0.0F, 0.0F, 0.0F };
 
-  // Policy parameters live inside the variant
-
-  struct SubmeshState {
-    bool visible { true };
-    std::shared_ptr<const data::MaterialAsset> override_material;
-  };
-  // Per-LOD submesh state (visibility + override). Rebuilt on SetGeometry.
+  // Per-LOD submesh state resolved from the surface overrides and defaults.
   std::vector<std::vector<SubmeshState>> submesh_state_;
 };
 

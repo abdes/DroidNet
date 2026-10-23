@@ -40,6 +40,7 @@
 #include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Data/MaterialDomain.h>
 #include <Oxygen/Data/PakFormat_geometry.h>
+#include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Data/Vertex.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandRecording.h>
@@ -77,9 +78,12 @@
 #include <Oxygen/Vortex/test/Exposure/Fixtures/ExposureTestTags.h>
 #include <Oxygen/Vortex/test/Fixtures/RendererPublicationProbe.h>
 #include <Oxygen/Vortex/test/Support/CpuAllocationCounter.h>
+#include <Oxygen/Vortex/test/Support/FirstSurface.h>
 
 namespace oxygen::vortex::testing {
 namespace {
+  using oxygen::vortex::testing::FirstSurfaceOf;
+
   class ShadowAdmissionGpuTest : public exposure::ExposureLightingGpuTest {
   protected:
     auto AdditionalCapabilities() const -> CapabilitySet override
@@ -325,8 +329,8 @@ namespace {
       data::AssetKey::FromVirtualPath("/test/PointPcf/Box.ogeo"), desc,
       std::vector<std::shared_ptr<data::Mesh>> { mesh }));
     // Exercise ordinary one-sided winding as well as the cube orientation.
-    mesh_node.GetRenderable().SetMaterialOverride(oxygen::data::LodIndex { 0 },
-      oxygen::data::SubmeshIndex { 0 }, data::MaterialAsset::CreateDefault());
+    ASSERT_TRUE(mesh_node.GetRenderable().SetMaterialOverride(
+      FirstSurfaceOf(mesh_node), data::MaterialAsset::CreateDefault()));
     auto records = std::vector<CubeLocalShadowRecord> {};
     std::vector<ShadowContentLease> retained_maps;
     probe->inspect = [&](const auto& ctx, const auto&, unsigned) -> void {
@@ -721,8 +725,8 @@ namespace {
     auto blocker = scene->CreateNode("Contact blocker");
     blocker.GetRenderable().SetGeometry(
       mesh_node.GetRenderable().GetGeometry());
-    blocker.GetRenderable().SetMaterialOverride(oxygen::data::LodIndex { 0 },
-      oxygen::data::SubmeshIndex { 0 }, MakeEmissiveMaterial(0.0F));
+    ASSERT_TRUE(blocker.GetRenderable().SetMaterialOverride(
+      FirstSurfaceOf(blocker), MakeEmissiveMaterial(0.0F)));
     ASSERT_TRUE(blocker.GetTransform().SetLocalScale({ 0.05F, 0.05F, 0.05F }));
     ASSERT_TRUE(
       blocker.GetTransform().SetLocalPosition({ 0.09F, 0.0F, -0.8606F }));
@@ -807,8 +811,8 @@ namespace {
     auto blocker = scene->CreateNode("Offscreen shadow caster");
     blocker.GetRenderable().SetGeometry(
       mesh_node.GetRenderable().GetGeometry());
-    blocker.GetRenderable().SetMaterialOverride(oxygen::data::LodIndex { 0 },
-      oxygen::data::SubmeshIndex { 0 }, MakeEmissiveMaterial(0.0F));
+    ASSERT_TRUE(blocker.GetRenderable().SetMaterialOverride(
+      FirstSurfaceOf(blocker), MakeEmissiveMaterial(0.0F)));
     ASSERT_TRUE(blocker.GetTransform().SetLocalScale({ 0.2F, 0.2F, 0.2F }));
     ASSERT_TRUE(blocker.GetTransform().SetLocalPosition({ 1.0F, 0.0F, -0.3F }));
     auto mesh_flags = mesh_node.GetFlags();

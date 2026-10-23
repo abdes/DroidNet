@@ -15,6 +15,7 @@
 #include <utility>
 #include <vector>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Commands/Command.h>
@@ -33,6 +34,7 @@
 #include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Data/ShaderReference.h>
+#include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/Data/Vertex.h>
 #include <Oxygen/Engine/IAsyncEngine.h>
@@ -64,6 +66,7 @@
 #include <Oxygen/Vortex/test/Fakes/AssetLoader.h>
 #include <Oxygen/Vortex/test/Fixtures/RendererPublicationProbe.h>
 #include <Oxygen/Vortex/test/Fixtures/TextureBinderPayloads.h>
+#include <Oxygen/Vortex/test/Support/FirstSurface.h>
 
 namespace oxygen::vortex::testing::exposure {
 
@@ -71,6 +74,12 @@ using graphics::Framebuffer;
 using graphics::FramebufferDesc;
 using graphics::ResourceStates;
 using graphics::Texture;
+
+namespace {
+
+  using oxygen::vortex::testing::FirstSurfaceOf;
+
+} // namespace
 
 auto ExposureLightingGpuTest::AdditionalCapabilities() const -> CapabilitySet
 {
@@ -450,13 +459,14 @@ auto ExposureLightingGpuTest::SetSurface(
     1,
   };
   desc.uv_scale[0] = desc.uv_scale[1] = 1;
-  mesh_node.GetRenderable().SetMaterialOverride(oxygen::data::LodIndex { 0 },
-    oxygen::data::SubmeshIndex { 0 },
-    std::make_shared<data::MaterialAsset>(
-      data::AssetKey::FromVirtualPath("/test/Exposure/Lit"
-        + std::to_string(static_cast<int>(domain)) + "-"
-        + std::to_string(++material_sequence) + ".omat"),
-      desc, std::vector<data::ShaderReference> {}));
+  CHECK_F(
+    mesh_node.GetRenderable().SetMaterialOverride(FirstSurfaceOf(mesh_node),
+      std::make_shared<data::MaterialAsset>(
+        data::AssetKey::FromVirtualPath("/test/Exposure/Lit"
+          + std::to_string(static_cast<int>(domain)) + "-"
+          + std::to_string(++material_sequence) + ".omat"),
+        desc, std::vector<data::ShaderReference> {})),
+    "the surface material needs a surface on the fixture mesh");
 }
 
 auto ExposureLightingGpuTest::RenderSurface(

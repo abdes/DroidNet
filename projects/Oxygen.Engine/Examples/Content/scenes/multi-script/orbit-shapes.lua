@@ -51,6 +51,13 @@ local function node_tag(node)
     id.node_index or -1)
 end
 
+-- Binds `material` to the only surface of `node`'s procedural geometry.
+local function set_surface_material(node, material)
+  local surfaces = node:renderable_get_surface_ids()
+  return surfaces ~= nil
+    and node:renderable_set_material_override(surfaces[1], material)
+end
+
 local function apply_shape(self)
   local shape = shapes[self.shape_index]
   local geometry = assets.create_procedural_geometry(shape)
@@ -70,7 +77,7 @@ local function apply_material(self, node, material)
   end
   local loaded = assets.get_material(material)
   if loaded ~= nil then
-    node:renderable_set_material_override(1, 1, loaded)
+    set_surface_material(node, loaded)
     return
   end
   if assets.has_material(material) or self.pending_materials[material] then
@@ -82,7 +89,7 @@ local function apply_material(self, node, material)
     if mat == nil then
       log.debug("showcase: material load miss/fail " .. material)
     elseif valid(node) then
-      node:renderable_set_material_override(1, 1, mat)
+      set_surface_material(node, mat)
     end
   end)
 end
@@ -111,7 +118,7 @@ local function toggle_orb(self)
   end
   local orb_mat = assets.create_debug_material()
   if orb_mat ~= nil then
-    self.orb:renderable_set_material_override(1, 1, orb_mat)
+    set_surface_material(self.orb, orb_mat)
   end
   apply_material(self, self.orb, self.params.orb_material)
   log.info("showcase: companion orb spawned orb=" .. node_tag(self.orb)

@@ -390,19 +390,37 @@ userdata. No failed token resolves to a substitute cube.
 
 ## 7.2 LOD and Selection
 
-1. `renderable:get_lod_policy() -> table`
-2. `renderable:set_lod_policy(policy: table) -> boolean`
-3. `renderable:get_active_lod_index() -> integer?`
-4. `renderable:get_effective_lod_count() -> integer`
+1. `renderable:get_lod_policy() -> table?`
+   The policy in effect: the override, else the geometry's default, else the
+   scene schema's default (fixed, finest LOD). Shape:
+   `{kind="fixed", index}`, `{kind="distance", hysteresis_ratio, thresholds}`
+   or `{kind="screen_space_error", enter_finer_sse, exit_coarser_sse}`; LOD
+   indices are 1-based.
+2. `renderable:set_lod_policy_override(policy: table) -> boolean`
+   Takes the same shape.
+3. `renderable:clear_lod_policy_override() -> boolean`
+4. `renderable:get_active_lod_index() -> integer?`
+5. `renderable:get_effective_lod_count() -> integer`
 
-## 7.3 Submesh and Materials
+## 7.3 Surfaces and Materials
 
-1. `renderable:is_submesh_visible(lod: integer, submesh: integer) -> boolean`
-2. `renderable:set_submesh_visible(lod: integer, submesh: integer, visible: boolean) -> boolean`
-3. `renderable:set_all_submeshes_visible(visible: boolean) -> boolean`
-4. `renderable:set_material_override(lod: integer, submesh: integer, material: string|userdata) -> boolean`
-5. `renderable:clear_material_override(lod: integer, submesh: integer) -> boolean`
-6. `renderable:resolve_submesh_material(lod: integer, submesh: integer) -> any?`
+Overrides address a surface of the geometry by its `SurfaceId`, as canonical
+UUID text. They replace the geometry's defaults for every submesh the surface
+binds; a cleared override returns to the default. A hidden surface neither
+draws nor casts shadows.
+
+1. `renderable:get_surface_ids() -> {string}?`
+2. `renderable:set_material_override(surface: string, material: string|userdata|nil) -> boolean`
+   `nil` clears the override.
+3. `renderable:clear_material_override(surface: string) -> boolean`
+4. `renderable:set_visibility_override(surface: string, visible: boolean) -> boolean`
+5. `renderable:clear_visibility_override(surface: string) -> boolean`
+6. `renderable:set_casts_shadows_override(surface: string, casts_shadows: boolean) -> boolean`
+7. `renderable:clear_casts_shadows_override(surface: string) -> boolean`
+8. `renderable:is_submesh_visible(lod: integer, submesh: integer) -> boolean`
+9. `renderable:submesh_casts_shadows(lod: integer, submesh: integer) -> boolean`
+   Ignores the node's own shadow flag.
+10. `renderable:resolve_submesh_material(lod: integer, submesh: integer) -> any?`
 
 ## 7.4 Bounds
 
@@ -652,7 +670,8 @@ Legend:
 
 ## 15.7 Renderable
 
-1. geometry, LOD policy, submesh visibility/material override, bounds helpers:
+1. geometry, LOD policy override, surface material/visibility/shadow
+   overrides, bounds helpers:
    `backed-now`
    Backed by `SceneNode::Renderable`.
 2. script-friendly asset handle interchange (`string|userdata` policy):

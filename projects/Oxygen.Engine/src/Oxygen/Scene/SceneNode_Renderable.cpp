@@ -275,27 +275,40 @@ auto SceneNode::Renderable::UsesScreenSpaceErrorPolicy() const noexcept -> bool
     });
 }
 
-auto SceneNode::Renderable::SetLodPolicy(const FixedPolicy p) -> void
+auto SceneNode::Renderable::GetLodPolicy() const noexcept
+  -> std::optional<LodPolicy>
 {
-  SafeCall(
-    RequiresRenderable(), [&](const SafeCallState& state) noexcept -> void {
-      state.renderable->SetLodPolicy(p);
+  return SafeCall(RequiresRenderable(),
+    [&](const SafeCallState& state) noexcept -> std::optional<LodPolicy> {
+      try {
+        return state.renderable->GetLodPolicy();
+      } catch (const std::exception&) {
+        return std::nullopt;
+      }
     });
 }
 
-auto SceneNode::Renderable::SetLodPolicy(DistancePolicy p) -> void
+auto SceneNode::Renderable::SetLodPolicyOverride(LodPolicy policy) -> void
 {
   SafeCall(
     RequiresRenderable(), [&](const SafeCallState& state) noexcept -> void {
-      state.renderable->SetLodPolicy(std::move(p));
+      state.renderable->SetLodPolicyOverride(std::move(policy));
     });
 }
 
-auto SceneNode::Renderable::SetLodPolicy(ScreenSpaceErrorPolicy p) -> void
+auto SceneNode::Renderable::ClearLodPolicyOverride() -> void
 {
   SafeCall(
     RequiresRenderable(), [&](const SafeCallState& state) noexcept -> void {
-      state.renderable->SetLodPolicy(std::move(p));
+      state.renderable->ClearLodPolicyOverride();
+    });
+}
+
+auto SceneNode::Renderable::HasLodPolicyOverride() const noexcept -> bool
+{
+  return SafeCall(
+    RequiresRenderable(), [&](const SafeCallState& state) noexcept -> bool {
+      return state.renderable->HasLodPolicyOverride();
     });
 }
 
@@ -370,33 +383,6 @@ auto SceneNode::Renderable::GetWorldSubMeshBoundingBox(
     });
 }
 
-auto SceneNode::Renderable::IsSubmeshVisible(const data::LodIndex lod,
-  const data::SubmeshIndex submesh) const noexcept -> bool
-{
-  return SafeCall(
-    RequiresRenderable(), [&](const SafeCallState& state) noexcept -> bool {
-      return state.renderable->IsSubmeshVisible(lod, submesh);
-    });
-}
-
-auto SceneNode::Renderable::SetSubmeshVisible(const data::LodIndex lod,
-  const data::SubmeshIndex submesh, const bool visible) noexcept -> void
-{
-  SafeCall(
-    RequiresRenderable(), [&](const SafeCallState& state) noexcept -> void {
-      state.renderable->SetSubmeshVisible(lod, submesh, visible);
-    });
-}
-
-auto SceneNode::Renderable::SetAllSubmeshesVisible(const bool visible) noexcept
-  -> void
-{
-  SafeCall(
-    RequiresRenderable(), [&](const SafeCallState& state) noexcept -> void {
-      state.renderable->SetAllSubmeshesVisible(visible);
-    });
-}
-
 auto SceneNode::Renderable::SetMaterialOverride(
   const data::SurfaceId surface, MaterialAssetPtr material) noexcept -> bool
 {
@@ -413,21 +399,57 @@ auto SceneNode::Renderable::ClearMaterialOverride(
   return SetMaterialOverride(surface, nullptr);
 }
 
-auto SceneNode::Renderable::SetMaterialOverride(const data::LodIndex lod,
-  const data::SubmeshIndex submesh, MaterialAssetPtr material) noexcept -> void
+auto SceneNode::Renderable::SetVisibilityOverride(
+  const data::SurfaceId surface, const bool visible) noexcept -> bool
 {
-  SafeCall(
-    RequiresRenderable(), [&](const SafeCallState& state) noexcept -> void {
-      state.renderable->SetMaterialOverride(lod, submesh, std::move(material));
+  return SafeCall(
+    RequiresRenderable(), [&](const SafeCallState& state) noexcept -> bool {
+      return state.renderable->SetVisibilityOverride(surface, visible);
     });
 }
 
-auto SceneNode::Renderable::ClearMaterialOverride(
-  const data::LodIndex lod, const data::SubmeshIndex submesh) noexcept -> void
+auto SceneNode::Renderable::ClearVisibilityOverride(
+  const data::SurfaceId surface) noexcept -> bool
 {
-  SafeCall(
-    RequiresRenderable(), [&](const SafeCallState& state) noexcept -> void {
-      state.renderable->ClearMaterialOverride(lod, submesh);
+  return SafeCall(
+    RequiresRenderable(), [&](const SafeCallState& state) noexcept -> bool {
+      return state.renderable->ClearVisibilityOverride(surface);
+    });
+}
+
+auto SceneNode::Renderable::SetCastsShadowsOverride(
+  const data::SurfaceId surface, const bool casts_shadows) noexcept -> bool
+{
+  return SafeCall(
+    RequiresRenderable(), [&](const SafeCallState& state) noexcept -> bool {
+      return state.renderable->SetCastsShadowsOverride(surface, casts_shadows);
+    });
+}
+
+auto SceneNode::Renderable::ClearCastsShadowsOverride(
+  const data::SurfaceId surface) noexcept -> bool
+{
+  return SafeCall(
+    RequiresRenderable(), [&](const SafeCallState& state) noexcept -> bool {
+      return state.renderable->ClearCastsShadowsOverride(surface);
+    });
+}
+
+auto SceneNode::Renderable::IsSubmeshVisible(const data::LodIndex lod,
+  const data::SubmeshIndex submesh) const noexcept -> bool
+{
+  return SafeCall(
+    RequiresRenderable(), [&](const SafeCallState& state) noexcept -> bool {
+      return state.renderable->IsSubmeshVisible(lod, submesh);
+    });
+}
+
+auto SceneNode::Renderable::SubmeshCastsShadows(const data::LodIndex lod,
+  const data::SubmeshIndex submesh) const noexcept -> bool
+{
+  return SafeCall(
+    RequiresRenderable(), [&](const SafeCallState& state) noexcept -> bool {
+      return state.renderable->SubmeshCastsShadows(lod, submesh);
     });
 }
 

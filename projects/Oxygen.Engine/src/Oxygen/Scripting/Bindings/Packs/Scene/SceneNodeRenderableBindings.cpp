@@ -17,6 +17,7 @@
 #include <string_view>
 #include <unordered_map>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include <lua.h>
@@ -31,6 +32,7 @@
 #include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
+#include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Data/Vertex.h>
 #include <Oxygen/Scene/Types/RenderablePolicies.h>
 #include <Oxygen/Scripting/Bindings/BindingTable.h>
@@ -422,6 +424,122 @@ namespace {
     return PushGeometryAsset(state, std::move(geometry));
   }
 
+  //! The numbers of the list in field `name` of the table at `index`.
+  auto ReadFloatList(lua_State* state, const int index, const char* name)
+    -> std::vector<float>
+  {
+    auto values = std::vector<float> {};
+    lua_getfield(state, index, name);
+    if (lua_istable(state, -1) != 0) {
+      const auto n = lua_objlen(state, -1);
+      for (int i = 1; i <= n; ++i) {
+        lua_rawgeti(state, -1, i);
+        if (lua_isnumber(state, -1) != 0) {
+          values.push_back(static_cast<float>(lua_tonumber(state, -1)));
+        }
+        lua_pop(state, 1);
+      }
+    }
+    lua_pop(state, 1);
+    return values;
+  }
+
+  //! Sets field `name` of the table on top of the stack to `values`.
+  auto SetFloatListField(lua_State* state, const char* name,
+    const std::vector<float>& values) -> void
+  {
+    lua_createtable(state, static_cast<int>(values.size()), 0);
+    for (std::size_t i = 0; i < values.size(); ++i) {
+      lua_pushnumber(state, values[i]);
+      lua_rawseti(state, -2, static_cast<int>(i + 1));
+    }
+    lua_setfield(state, -2, name);
+  }
+
+  //! The LOD policy the table at `index` describes (`LodPolicy`).
+  auto ReadLodPolicy(lua_State* state, const int index)
+    -> std::optional<scene::LodPolicy>
+  {
+    if (lua_type(state, index) != LUA_TTABLE) {
+      return std::nullopt;
+    }
+    lua_getfield(state, index, "kind");
+    size_t len = 0;
+    const char* kind = lua_tolstring(state, -1, &len);
+    const auto kind_sv
+      = kind == nullptr ? std::string_view {} : std::string_view(kind, len);
+    lua_pop(state, 1);
+
+    if (kind_sv == "fixed") {
+      scene::FixedPolicy policy {};
+      lua_getfield(state, index, "index");
+      if (lua_isnumber(state, -1) != 0) {
+        policy.index
+          = ReadLuaIndexAs<data::LodIndex>(state, -1).value_or(policy.index);
+      }
+      lua_pop(state, 1);
+      return policy;
+    }
+    if (kind_sv == "distance") {
+      scene::DistancePolicy policy {};
+      lua_getfield(state, index, "hysteresis_ratio");
+      if (lua_isnumber(state, -1) != 0) {
+        policy.hysteresis_ratio = static_cast<float>(lua_tonumber(state, -1));
+      }
+      lua_pop(state, 1);
+      policy.thresholds = ReadFloatList(state, index, "thresholds");
+      return policy;
+    }
+    if (kind_sv == "screen_space_error") {
+      return scene::ScreenSpaceErrorPolicy {
+        .enter_finer_sse = ReadFloatList(state, index, "enter_finer_sse"),
+        .exit_coarser_sse = ReadFloatList(state, index, "exit_coarser_sse"),
+      };
+    }
+    return std::nullopt;
+  }
+
+  //! Pushes `policy` as a `LodPolicy` table.
+  auto PushLodPolicy(lua_State* state, const scene::LodPolicy& policy) -> void
+  {
+    lua_createtable(state, 0, 3);
+    if (const auto* fixed = std::get_if<scene::FixedPolicy>(&policy)) {
+      lua_pushliteral(state, "fixed");
+      lua_setfield(state, -2, "kind");
+      lua_pushinteger(state, static_cast<lua_Integer>(fixed->index.get() + 1));
+      lua_setfield(state, -2, "index");
+    } else if (const auto* distance
+      = std::get_if<scene::DistancePolicy>(&policy)) {
+      lua_pushliteral(state, "distance");
+      lua_setfield(state, -2, "kind");
+      lua_pushnumber(state, distance->hysteresis_ratio);
+      lua_setfield(state, -2, "hysteresis_ratio");
+      SetFloatListField(state, "thresholds", distance->thresholds);
+    } else if (const auto* sse
+      = std::get_if<scene::ScreenSpaceErrorPolicy>(&policy)) {
+      lua_pushliteral(state, "screen_space_error");
+      lua_setfield(state, -2, "kind");
+      SetFloatListField(state, "enter_finer_sse", sse->enter_finer_sse);
+      SetFloatListField(state, "exit_coarser_sse", sse->exit_coarser_sse);
+    }
+  }
+
+  //! The SurfaceId whose canonical UUID text is at `index`.
+  auto ReadSurfaceId(lua_State* state, const int index)
+    -> std::optional<data::SurfaceId>
+  {
+    if (lua_type(state, index) != LUA_TSTRING) {
+      return std::nullopt;
+    }
+    size_t len = 0;
+    const char* text = lua_tolstring(state, index, &len);
+    auto surface = data::SurfaceId::FromString(std::string_view(text, len));
+    if (!surface.has_value() || surface->IsNil()) {
+      return std::nullopt;
+    }
+    return *surface;
+  }
+
   auto SceneNodeRenderableGetLodPolicy(lua_State* state) -> int
   {
     auto* node = TryCheckSceneNode(state, 1);
@@ -429,27 +547,34 @@ namespace {
       lua_pushnil(state);
       return 1;
     }
-    const auto renderable = node->GetRenderable();
-    if (!renderable.HasGeometry()) {
+    const auto policy = node->GetRenderable().GetLodPolicy();
+    if (!policy.has_value()) {
       lua_pushnil(state);
       return 1;
     }
-
-    lua_createtable(state, 0, 1);
-    if (renderable.UsesFixedPolicy()) {
-      lua_pushliteral(state, "fixed");
-    } else if (renderable.UsesDistancePolicy()) {
-      lua_pushliteral(state, "distance");
-    } else if (renderable.UsesScreenSpaceErrorPolicy()) {
-      lua_pushliteral(state, "screen_space_error");
-    } else {
-      lua_pushliteral(state, "unknown");
-    }
-    lua_setfield(state, -2, "kind");
+    PushLodPolicy(state, *policy);
     return 1;
   }
 
-  auto SceneNodeRenderableSetLodPolicy(lua_State* state) -> int
+  auto SceneNodeRenderableSetLodPolicyOverride(lua_State* state) -> int
+  {
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
+    auto renderable = node->GetRenderable();
+    auto policy = ReadLodPolicy(state, 2);
+    if (!renderable.HasGeometry() || !policy.has_value()) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
+    renderable.SetLodPolicyOverride(std::move(*policy));
+    lua_pushboolean(state, 1);
+    return 1;
+  }
+
+  auto SceneNodeRenderableClearLodPolicyOverride(lua_State* state) -> int
   {
     auto* node = TryCheckSceneNode(state, 1);
     if (node == nullptr) {
@@ -461,98 +586,8 @@ namespace {
       lua_pushboolean(state, 0);
       return 1;
     }
-
-    if (lua_type(state, 2) != LUA_TTABLE) {
-      lua_pushboolean(state, 0);
-      return 1;
-    }
-    lua_getfield(state, 2, "kind");
-    size_t len = 0;
-    const char* kind = lua_tolstring(state, -1, &len);
-    if (kind == nullptr) {
-      lua_pop(state, 1);
-      lua_pushboolean(state, 0);
-      return 1;
-    }
-    const auto kind_sv = std::string_view(kind, len);
-    lua_pop(state, 1);
-
-    if (kind_sv == "fixed") {
-      scene::FixedPolicy policy {};
-      lua_getfield(state, 2, "index");
-      if (lua_isnumber(state, -1) != 0) {
-        policy.index
-          = ReadLuaIndexAs<data::LodIndex>(state, -1).value_or(policy.index);
-      }
-      lua_pop(state, 1);
-      renderable.SetLodPolicy(policy);
-      lua_pushboolean(state, 1);
-      return 1;
-    }
-
-    if (kind_sv == "distance") {
-      scene::DistancePolicy policy {};
-      lua_getfield(state, 2, "hysteresis_ratio");
-      if (lua_isnumber(state, -1) != 0) {
-        policy.hysteresis_ratio = static_cast<float>(lua_tonumber(state, -1));
-      }
-      lua_pop(state, 1);
-
-      lua_getfield(state, 2, "thresholds");
-      if (lua_istable(state, -1) != 0) {
-        const auto n = lua_objlen(state, -1);
-        for (int i = 1; i <= n; ++i) {
-          lua_rawgeti(state, -1, i);
-          if (lua_isnumber(state, -1) != 0) {
-            policy.thresholds.push_back(
-              static_cast<float>(lua_tonumber(state, -1)));
-          }
-          lua_pop(state, 1);
-        }
-      }
-      lua_pop(state, 1);
-      renderable.SetLodPolicy(std::move(policy));
-      lua_pushboolean(state, 1);
-      return 1;
-    }
-
-    if (kind_sv == "screen_space_error") {
-      scene::ScreenSpaceErrorPolicy policy {};
-
-      lua_getfield(state, 2, "enter_finer_sse");
-      if (lua_istable(state, -1) != 0) {
-        const auto n = lua_objlen(state, -1);
-        for (int i = 1; i <= n; ++i) {
-          lua_rawgeti(state, -1, i);
-          if (lua_isnumber(state, -1) != 0) {
-            policy.enter_finer_sse.push_back(
-              static_cast<float>(lua_tonumber(state, -1)));
-          }
-          lua_pop(state, 1);
-        }
-      }
-      lua_pop(state, 1);
-
-      lua_getfield(state, 2, "exit_coarser_sse");
-      if (lua_istable(state, -1) != 0) {
-        const auto n = lua_objlen(state, -1);
-        for (int i = 1; i <= n; ++i) {
-          lua_rawgeti(state, -1, i);
-          if (lua_isnumber(state, -1) != 0) {
-            policy.exit_coarser_sse.push_back(
-              static_cast<float>(lua_tonumber(state, -1)));
-          }
-          lua_pop(state, 1);
-        }
-      }
-      lua_pop(state, 1);
-
-      renderable.SetLodPolicy(std::move(policy));
-      lua_pushboolean(state, 1);
-      return 1;
-    }
-
-    lua_pushboolean(state, 0);
+    renderable.ClearLodPolicyOverride();
+    lua_pushboolean(state, 1);
     return 1;
   }
 
@@ -602,7 +637,7 @@ namespace {
     return 1;
   }
 
-  auto SceneNodeRenderableSetSubmeshVisible(lua_State* state) -> int
+  auto SceneNodeRenderableSubmeshCastsShadows(lua_State* state) -> int
   {
     auto* node = TryCheckSceneNode(state, 1);
     if (node == nullptr) {
@@ -611,73 +646,69 @@ namespace {
     }
     const auto lod = ReadLuaIndexAs<data::LodIndex>(state, 2);
     const auto submesh = ReadLuaIndexAs<data::SubmeshIndex>(state, 3);
-    if (lua_type(state, 4) != LUA_TBOOLEAN) {
-      lua_pushboolean(state, 0);
-      return 1;
-    }
-    const bool visible = lua_toboolean(state, 4) != 0;
     if (!lod.has_value() || !submesh.has_value()) {
       lua_pushboolean(state, 0);
       return 1;
     }
-    node->GetRenderable().SetSubmeshVisible(*lod, *submesh, visible);
-    lua_pushboolean(state, 1);
+    lua_pushboolean(
+      state, node->GetRenderable().SubmeshCastsShadows(*lod, *submesh) ? 1 : 0);
     return 1;
   }
 
-  auto SceneNodeRenderableSetAllSubmeshesVisible(lua_State* state) -> int
+  auto SceneNodeRenderableGetSurfaceIds(lua_State* state) -> int
   {
     auto* node = TryCheckSceneNode(state, 1);
     if (node == nullptr) {
-      lua_pushboolean(state, 0);
+      lua_pushnil(state);
       return 1;
     }
-    if (lua_type(state, 2) != LUA_TBOOLEAN) {
-      lua_pushboolean(state, 0);
+    const auto geometry = node->GetRenderable().GetGeometry();
+    if (!geometry) {
+      lua_pushnil(state);
       return 1;
     }
-    const bool visible = lua_toboolean(state, 2) != 0;
-    node->GetRenderable().SetAllSubmeshesVisible(visible);
-    lua_pushboolean(state, 1);
+    const auto& surfaces = geometry->Surfaces().surfaces;
+    lua_createtable(state, static_cast<int>(surfaces.size()), 0);
+    for (std::size_t i = 0; i < surfaces.size(); ++i) {
+      const auto text = data::to_string(surfaces[i].surface_id);
+      lua_pushlstring(state, text.data(), text.size());
+      lua_rawseti(state, -2, static_cast<int>(i + 1));
+    }
     return 1;
   }
 
   auto SceneNodeRenderableSetMaterialOverride(lua_State* state) -> int
   {
     auto* node = TryCheckSceneNode(state, 1);
-    if (node == nullptr) {
-      lua_pushboolean(state, 0);
-      return 1;
-    }
-    const auto lod = ReadLuaIndexAs<data::LodIndex>(state, 2);
-    const auto submesh = ReadLuaIndexAs<data::SubmeshIndex>(state, 3);
-    if (!lod.has_value() || !submesh.has_value()) {
+    const auto surface = ReadSurfaceId(state, 2);
+    if (node == nullptr || !surface.has_value()) {
       lua_pushboolean(state, 0);
       return 1;
     }
 
-    if (lua_isnil(state, 4) != 0) {
-      node->GetRenderable().ClearMaterialOverride(*lod, *submesh);
-      lua_pushboolean(state, 1);
+    if (lua_isnil(state, 3) != 0) {
+      lua_pushboolean(
+        state, node->GetRenderable().ClearMaterialOverride(*surface) ? 1 : 0);
       return 1;
     }
 
-    if (lua_type(state, 4) == LUA_TSTRING) {
+    if (lua_type(state, 3) == LUA_TSTRING) {
       size_t len = 0;
-      const char* token_raw = lua_tolstring(state, 4, &len);
+      const char* token_raw = lua_tolstring(state, 3, &len);
       if (token_raw == nullptr) {
         lua_pushboolean(state, 0);
         return 1;
       }
       const std::string token(token_raw, len);
       auto material = GetOrCreateMaterialByToken(token);
-      node->GetRenderable().SetMaterialOverride(
-        *lod, *submesh, std::move(material));
-      lua_pushboolean(state, 1);
+      lua_pushboolean(state,
+        node->GetRenderable().SetMaterialOverride(*surface, std::move(material))
+          ? 1
+          : 0);
       return 1;
     }
 
-    auto* asset_user_data = TryGetAssetUserdata(state, 4);
+    auto* asset_user_data = TryGetAssetUserdata(state, 3);
     if (asset_user_data == nullptr
       || asset_user_data->kind != AssetUserdataKind::kMaterial
       || asset_user_data->material == nullptr) {
@@ -688,27 +719,82 @@ namespace {
       return 1;
     }
 
-    auto material = asset_user_data->material;
-    node->GetRenderable().SetMaterialOverride(*lod, *submesh, material);
-    lua_pushboolean(state, 1);
+    lua_pushboolean(state,
+      node->GetRenderable().SetMaterialOverride(
+        *surface, asset_user_data->material)
+        ? 1
+        : 0);
     return 1;
   }
 
   auto SceneNodeRenderableClearMaterialOverride(lua_State* state) -> int
   {
     auto* node = TryCheckSceneNode(state, 1);
-    if (node == nullptr) {
+    const auto surface = ReadSurfaceId(state, 2);
+    if (node == nullptr || !surface.has_value()) {
       lua_pushboolean(state, 0);
       return 1;
     }
-    const auto lod = ReadLuaIndexAs<data::LodIndex>(state, 2);
-    const auto submesh = ReadLuaIndexAs<data::SubmeshIndex>(state, 3);
-    if (!lod.has_value() || !submesh.has_value()) {
+    lua_pushboolean(
+      state, node->GetRenderable().ClearMaterialOverride(*surface) ? 1 : 0);
+    return 1;
+  }
+
+  auto SceneNodeRenderableSetVisibilityOverride(lua_State* state) -> int
+  {
+    auto* node = TryCheckSceneNode(state, 1);
+    const auto surface = ReadSurfaceId(state, 2);
+    if (node == nullptr || !surface.has_value()
+      || lua_type(state, 3) != LUA_TBOOLEAN) {
       lua_pushboolean(state, 0);
       return 1;
     }
-    node->GetRenderable().ClearMaterialOverride(*lod, *submesh);
-    lua_pushboolean(state, 1);
+    const bool visible = lua_toboolean(state, 3) != 0;
+    lua_pushboolean(state,
+      node->GetRenderable().SetVisibilityOverride(*surface, visible) ? 1 : 0);
+    return 1;
+  }
+
+  auto SceneNodeRenderableClearVisibilityOverride(lua_State* state) -> int
+  {
+    auto* node = TryCheckSceneNode(state, 1);
+    const auto surface = ReadSurfaceId(state, 2);
+    if (node == nullptr || !surface.has_value()) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
+    lua_pushboolean(
+      state, node->GetRenderable().ClearVisibilityOverride(*surface) ? 1 : 0);
+    return 1;
+  }
+
+  auto SceneNodeRenderableSetCastsShadowsOverride(lua_State* state) -> int
+  {
+    auto* node = TryCheckSceneNode(state, 1);
+    const auto surface = ReadSurfaceId(state, 2);
+    if (node == nullptr || !surface.has_value()
+      || lua_type(state, 3) != LUA_TBOOLEAN) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
+    const bool casts_shadows = lua_toboolean(state, 3) != 0;
+    lua_pushboolean(state,
+      node->GetRenderable().SetCastsShadowsOverride(*surface, casts_shadows)
+        ? 1
+        : 0);
+    return 1;
+  }
+
+  auto SceneNodeRenderableClearCastsShadowsOverride(lua_State* state) -> int
+  {
+    auto* node = TryCheckSceneNode(state, 1);
+    const auto surface = ReadSurfaceId(state, 2);
+    if (node == nullptr || !surface.has_value()) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
+    lua_pushboolean(
+      state, node->GetRenderable().ClearCastsShadowsOverride(*surface) ? 1 : 0);
     return 1;
   }
 
@@ -822,9 +908,14 @@ namespace {
       .signature = "() -> LodPolicy?",
     },
     {
-      .name = "renderable_set_lod_policy",
-      .function = SceneNodeRenderableSetLodPolicy,
-      .signature = "(policy: LodPolicyInput) -> boolean",
+      .name = "renderable_set_lod_policy_override",
+      .function = SceneNodeRenderableSetLodPolicyOverride,
+      .signature = "(policy: LodPolicy) -> boolean",
+    },
+    {
+      .name = "renderable_clear_lod_policy_override",
+      .function = SceneNodeRenderableClearLodPolicyOverride,
+      .signature = "() -> boolean",
     },
     {
       .name = "renderable_get_active_lod_index",
@@ -837,31 +928,49 @@ namespace {
       .signature = "() -> number",
     },
     {
+      .name = "renderable_get_surface_ids",
+      .function = SceneNodeRenderableGetSurfaceIds,
+      .signature = "() -> { string }?",
+    },
+    {
+      .name = "renderable_set_material_override",
+      .function = SceneNodeRenderableSetMaterialOverride,
+      .signature
+      = "(surface: string, material: (string | MaterialAsset)?) -> boolean",
+    },
+    {
+      .name = "renderable_clear_material_override",
+      .function = SceneNodeRenderableClearMaterialOverride,
+      .signature = "(surface: string) -> boolean",
+    },
+    {
+      .name = "renderable_set_visibility_override",
+      .function = SceneNodeRenderableSetVisibilityOverride,
+      .signature = "(surface: string, visible: boolean) -> boolean",
+    },
+    {
+      .name = "renderable_clear_visibility_override",
+      .function = SceneNodeRenderableClearVisibilityOverride,
+      .signature = "(surface: string) -> boolean",
+    },
+    {
+      .name = "renderable_set_casts_shadows_override",
+      .function = SceneNodeRenderableSetCastsShadowsOverride,
+      .signature = "(surface: string, casts_shadows: boolean) -> boolean",
+    },
+    {
+      .name = "renderable_clear_casts_shadows_override",
+      .function = SceneNodeRenderableClearCastsShadowsOverride,
+      .signature = "(surface: string) -> boolean",
+    },
+    {
       .name = "renderable_is_submesh_visible",
       .function = SceneNodeRenderableIsSubmeshVisible,
       .signature = "(lod: number, submesh: number) -> boolean",
     },
     {
-      .name = "renderable_set_submesh_visible",
-      .function = SceneNodeRenderableSetSubmeshVisible,
-      .signature
-      = "(lod: number, submesh: number, visible: boolean) -> boolean",
-    },
-    {
-      .name = "renderable_set_all_submeshes_visible",
-      .function = SceneNodeRenderableSetAllSubmeshesVisible,
-      .signature = "(visible: boolean) -> boolean",
-    },
-    {
-      .name = "renderable_set_material_override",
-      .function = SceneNodeRenderableSetMaterialOverride,
-      .signature = "(lod: number, submesh: number, material: (string | "
-                   "MaterialAsset)?) -> "
-                   "boolean",
-    },
-    {
-      .name = "renderable_clear_material_override",
-      .function = SceneNodeRenderableClearMaterialOverride,
+      .name = "renderable_submesh_casts_shadows",
+      .function = SceneNodeRenderableSubmeshCastsShadows,
       .signature = "(lod: number, submesh: number) -> boolean",
     },
     {
@@ -896,10 +1005,6 @@ namespace {
     },
     {
       .name = "LodPolicy",
-      .definition = R"({ kind: LodPolicyKind | "unknown" })",
-    },
-    {
-      .name = "LodPolicyInput",
       .definition = "{ kind: LodPolicyKind, index: number?, "
                     "hysteresis_ratio: number?, thresholds: { number }?, "
                     "enter_finer_sse: { number }?, "

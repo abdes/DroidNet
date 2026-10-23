@@ -1,22 +1,30 @@
 # Renderable Component – Design & Integration Spec
 
-## Surface identity
+## Surface overrides
 
-`GeometryAsset` owns the immutable surface inventory. Authored changes use
-`SurfaceId`; the renderable resolves all of a surface's LOD/submesh bindings
-when an edit or geometry replacement occurs. Rendering continues to read the
-indexed per-submesh cache without hashing or identity lookup per draw.
+`GeometryAsset` owns the immutable surface inventory and, per surface, its
+defaults for Visibility and Cast Shadows; it also carries a default LOD policy.
+A geometry built at runtime declares none, and the renderable then takes the
+scene schema's defaults (`Scene/Schema/Generated.SceneComponents.h`).
 
-Geometry replacement retains assignments only for the same geometry identity
-and surviving SurfaceIds. Ordinal coincidence cannot transfer an override to a
-different surface. Clearing removes the assignment and restores each binding's
-own default. Missing authored identities remain repair state in the editor;
-runtime never guesses a replacement.
+A renderable stores this instance's overrides of those defaults, which are the
+scene schema's asset-sourced properties:
 
-Authored surface assignments have their own instance storage. Indexed binding
-overrides and per-binding visibility are transient geometry state; replacement
-rebuilds them and reapplies surviving authored surface assignments. A former first
-LOD binding cannot overwrite the state of every new binding.
+| Override     | API                                                          | Resolution                                      |
+| ------------ | ------------------------------------------------------------ | ----------------------------------------------- |
+| Material     | `SetMaterialOverride` / `ClearMaterialOverride(SurfaceId)`   | Binds to every submesh of the surface           |
+| Visibility   | `SetVisibilityOverride` / `ClearVisibilityOverride`          | A hidden surface neither draws nor casts        |
+| CastsShadows | `SetCastsShadowsOverride` / `ClearCastsShadowsOverride`      | Casts when the node casts and the surface shows |
+| LOD policy   | `SetLodPolicyOverride(LodPolicy)` / `ClearLodPolicyOverride` | Replaces the geometry's default policy          |
+
+Surface overrides are keyed by `SurfaceId`. Edits and geometry replacement
+resolve them into an indexed per-submesh state (`IsSubmeshVisible`,
+`SubmeshCastsShadows`, `ResolveSubmeshMaterial`), so drawing never looks up an
+identity. Replacement keeps the overrides of the surfaces the new geometry
+still declares when it has the same identity, and drops them otherwise;
+ordinal coincidence never transfers an override. The LOD policy override is
+kept across replacement. Missing authored identities remain repair state in
+the editor; runtime never guesses a replacement.
 
 This document defines the Renderable component for the Oxygen Scene system and describes how it integrates with Data and Renderer modules, migration from the current MeshData usage, update hooks, culling/LOD behavior, and submission.
 
@@ -31,16 +39,16 @@ This section summarizes what is implemented today versus the target design below
   - LOD policy enumeration and control: `LODPolicy { kFixed, kDistance, kScreenSpaceError }` with hysteresis helpers.
   - SceneNode::Renderable facade (typed, SafeCall-based) via `node.GetRenderable()` with:
     - `SetGeometry(...)`, `Detach()`, `GetGeometry()`, `HasGeometry()`
-    - LOD controls: `SetLodPolicy(...)`, `SelectActiveMesh(...)`, `GetActiveMesh()`
+    - LOD controls: `GetLodPolicy()`, `SetLodPolicyOverride(...)`, `ClearLodPolicyOverride()`, `SelectActiveMesh(...)`, `GetActiveMesh()`
   - Transform hook wired for Renderable: `OnWorldTransformUpdated(const glm::mat4&)` recomputes world-sphere and invalidates AABB cache (called from `SceneNodeImpl::UpdateTransforms`).
-  - `SetGeometry` rebuilds per-LOD/per-submesh local-bounds cache and clamps fixed LOD.
+  - `SetGeometry` rebuilds the per-LOD/per-submesh local-bounds cache and re-resolves the surface overrides and the LOD policy. A fixed LOD index is clamped when the LOD is resolved.
   - Aggregated world-sphere bounds computed from selected LOD (fallback to asset AABB-derived sphere).
   - On-demand per-submesh world AABB computation for current LOD via 8-corner transform.
   - LOD evaluation helpers and hysteresis:
     - Distance thresholds with simple hysteresis ratio.
     - SSE enter/exit thresholds with directional hysteresis.
   - Per-view dynamic LOD evaluation path: renderer extraction (`SceneExtraction`) computes distance/SSE per view and calls `Renderable::SelectActiveMesh(...)` to set the active LOD for the frame.
-  - Per-submesh visibility and material overrides storage + resolution.
+  - Surface overrides (material, visibility, shadow casting) and a LOD policy override, resolved per submesh.
 
 - Not yet implemented (planned; covered by design below)
   - Renderer submission façade and final bindless handle resolution.
@@ -82,8 +90,8 @@ Scope
 Inputs
 
 - Geometry: `std::shared_ptr<const data::GeometryAsset>` (full asset, not a single Mesh).
-- Materials: defaults are owned by SubMesh; Renderable exposes optional per-submesh overrides.
-- LOD policy: Fixed, Distance-based, or Screen-space error (SSE) with hysteresis.
+- Materials: defaults are owned by SubMesh; Renderable exposes optional per-surface overrides.
+- LOD policy: Fixed, Distance-based, or Screen-space error (SSE) with hysteresis; the geometry's default unless overridden.
 - Flags: visible/static/shadows via SceneFlags.
 - Transform: world matrix from TransformComponent.
 
@@ -164,10 +172,10 @@ Practical note (current behavior)
   - Policy is Distance/SSE and no evaluation has yet set the current LOD for the frame. Today, this evaluation happens during renderer scene extraction per-view, which computes normalized distance or SSE and calls `Renderable::SelectActiveMesh(...)` accordingly.
 - For Fixed policy, the requested LOD index is clamped to the available range.
 
-## 7) Submesh Controls
+## 7) Surface Controls
 
-- Per-submesh visibility bitset.
-- Per-submesh material overrides: nullptr means “use SubMesh material or fallback”.
+- Per-surface Visibility and Cast Shadows overrides, resolved into per-submesh flags.
+- Per-surface material overrides: nullptr means “use SubMesh material or fallback”.
 - Optional per-submesh culling using submesh AABB (off by default; enable for very large modular assets).
 
 ---
@@ -313,7 +321,7 @@ Unit tests (Scene/test)
 - LOD selection correctness + hysteresis with camera movement.
 - Submesh visibility toggles and overrides (including fallback to debug material).
 - Bounds propagation under uniform and non-uniform scale (sphere near-equality; AABB exact via corner-transform checks).
-- Geometry swap preserves overrides/visibility up to new submesh count (others cleared) and recomputes caches.
+- Geometry swap keeps surface overrides by SurfaceId for the same geometry identity, drops them otherwise, and recomputes caches.
 - Vertex-only/mixed-index meshes produce correct draw ranges.
 
 Examples

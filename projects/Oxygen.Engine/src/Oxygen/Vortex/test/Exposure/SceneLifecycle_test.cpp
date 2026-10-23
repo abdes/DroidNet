@@ -9,14 +9,17 @@
 #include <memory>
 #include <utility>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/EngineTag.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Core/Types/View.h>
+#include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Data/MaterialDomain.h>
+#include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Graphics/Common/FrameCaptureController.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Scene/Camera/CameraExposure.h>
@@ -36,8 +39,15 @@
 #include <Oxygen/Vortex/test/Exposure/Fixtures/ExposureLightingFixture.h>
 #include <Oxygen/Vortex/test/Exposure/Fixtures/ExposureTestTags.h>
 #include <Oxygen/Vortex/test/Fixtures/RendererPublicationProbe.h>
+#include <Oxygen/Vortex/test/Support/FirstSurface.h>
 
 namespace oxygen::vortex::testing::exposure {
+
+namespace {
+
+  using oxygen::vortex::testing::FirstSurfaceOf;
+
+} // namespace
 
 using graphics::FrameCaptureController;
 using graphics::ResourceStates;
@@ -94,13 +104,11 @@ NOLINT_TEST_F(
       surface_view_id = 9000;
       frame_delta_seconds = 0;
       // Asset readiness is established on another history before first use.
-      mesh_node.GetRenderable().SetMaterialOverride(
-        oxygen::data::LodIndex { 0 }, oxygen::data::SubmeshIndex { 0 },
-        changed_material);
+      ASSERT_TRUE(mesh_node.GetRenderable().SetMaterialOverride(
+        FirstSurfaceOf(mesh_node), changed_material));
       ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0, 4));
-      mesh_node.GetRenderable().SetMaterialOverride(
-        oxygen::data::LodIndex { 0 }, oxygen::data::SubmeshIndex { 0 },
-        initial_material);
+      ASSERT_TRUE(mesh_node.GetRenderable().SetMaterialOverride(
+        FirstSurfaceOf(mesh_node), initial_material));
       ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0, 4));
       surface_view_id = 1600 + cases;
       const auto handle = CompositionView::ViewStateHandle {
@@ -130,9 +138,8 @@ NOLINT_TEST_F(
                   *probe->exposure->buffer, ResourceStates::kShaderResource)
                   .pre_exposure,
         1);
-      mesh_node.GetRenderable().SetMaterialOverride(
-        oxygen::data::LodIndex { 0 }, oxygen::data::SubmeshIndex { 0 },
-        changed_material);
+      ASSERT_TRUE(mesh_node.GetRenderable().SetMaterialOverride(
+        FirstSurfaceOf(mesh_node), changed_material));
       ASSERT_NO_FATAL_FAILURE(render(changed, initial));
       EXPECT_NEAR(std::log2(static_cast<double>(state.target_scale)),
         std::log2(target), 4e-4);
@@ -866,8 +873,8 @@ NOLINT_TEST_F(
          true,
        }) {
     // Warm the texture binding without introducing persistent exposure history.
-    mesh_node.GetRenderable().SetMaterialOverride(
-      oxygen::data::LodIndex { 0 }, oxygen::data::SubmeshIndex { 0 }, bright);
+    ASSERT_TRUE(mesh_node.GetRenderable().SetMaterialOverride(
+      FirstSurfaceOf(mesh_node), bright));
     ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0));
     for (const float luminance : {
            0.0F,
@@ -878,9 +885,8 @@ NOLINT_TEST_F(
            1.0F,
          }) {
       if (luminance == 0x1p32F) {
-        mesh_node.GetRenderable().SetMaterialOverride(
-          oxygen::data::LodIndex { 0 }, oxygen::data::SubmeshIndex { 0 },
-          bright);
+        ASSERT_TRUE(mesh_node.GetRenderable().SetMaterialOverride(
+          FirstSurfaceOf(mesh_node), bright));
       } else {
         SetSurface(data::MaterialDomain::kOpaque, luminance);
       }

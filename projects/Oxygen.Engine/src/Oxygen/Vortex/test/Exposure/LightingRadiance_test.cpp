@@ -16,16 +16,19 @@
 #include <utility>
 #include <vector>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Core/Types/TextureType.h>
+#include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/MaterialDomain.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Data/ShaderReference.h>
+#include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Scene/Environment/Fog.h>
@@ -42,12 +45,15 @@
 #include <Oxygen/Vortex/test/Exposure/Fixtures/ExposureLightingFixture.h>
 #include <Oxygen/Vortex/test/Fakes/AssetLoader.h>
 #include <Oxygen/Vortex/test/Fixtures/TextureBinderPayloads.h>
+#include <Oxygen/Vortex/test/Support/FirstSurface.h>
 
 namespace oxygen::vortex::testing::exposure {
 
 using graphics::ResourceStates;
 
 namespace {
+  using oxygen::vortex::testing::FirstSurfaceOf;
+
   struct RoughWhiteResponse {
     double direct;
     double diffuse_environment;
@@ -432,10 +438,10 @@ NOLINT_TEST_F(
             0,
           });
           SetSurface(domain, negative_first ? -1.0F : 1.0F);
-          blocker.GetRenderable().SetMaterialOverride(
-            oxygen::data::LodIndex { 0 }, oxygen::data::SubmeshIndex { 0 },
+          ASSERT_TRUE(blocker.GetRenderable().SetMaterialOverride(
+            FirstSurfaceOf(blocker),
             mesh_node.GetRenderable().ResolveSubmeshMaterial(
-              oxygen::data::LodIndex { 0 }, oxygen::data::SubmeshIndex { 0 }));
+              oxygen::data::LodIndex { 0 }, oxygen::data::SubmeshIndex { 0 })));
           ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0));
           // Register one material first, then the other, to exercise each
           // actual material-sorted raster order; assert the resulting order.
@@ -455,12 +461,10 @@ NOLINT_TEST_F(
             const auto positive
               = blocker.GetRenderable().ResolveSubmeshMaterial(
                 oxygen::data::LodIndex { 0 }, oxygen::data::SubmeshIndex { 0 });
-            mesh_node.GetRenderable().SetMaterialOverride(
-              oxygen::data::LodIndex { 0 }, oxygen::data::SubmeshIndex { 0 },
-              positive);
-            blocker.GetRenderable().SetMaterialOverride(
-              oxygen::data::LodIndex { 0 }, oxygen::data::SubmeshIndex { 0 },
-              negative);
+            ASSERT_TRUE(mesh_node.GetRenderable().SetMaterialOverride(
+              FirstSurfaceOf(mesh_node), positive));
+            ASSERT_TRUE(blocker.GetRenderable().SetMaterialOverride(
+              FirstSurfaceOf(blocker), negative));
             mesh_node.GetTransform().SetLocalPosition({
               0,
               0,
@@ -676,12 +680,12 @@ NOLINT_TEST_F(ExposureLightingGpuTest,
       material.roughness = data::Unorm16 { 1.0F };
       material.ambient_occlusion = data::Unorm16 { 1.0F };
       material.normal_scale = 1.0F;
-      mesh_node.GetRenderable().SetMaterialOverride(
-        oxygen::data::LodIndex { 0U }, oxygen::data::SubmeshIndex { 0U },
-        std::make_shared<data::MaterialAsset>(
-          data::AssetKey::FromVirtualPath(
-            "/test/IBL/Unlit-" + std::to_string(++material_sequence) + ".omat"),
-          material, std::vector<data::ShaderReference> {}));
+      ASSERT_TRUE(
+        mesh_node.GetRenderable().SetMaterialOverride(FirstSurfaceOf(mesh_node),
+          std::make_shared<data::MaterialAsset>(
+            data::AssetKey::FromVirtualPath("/test/IBL/Unlit-"
+              + std::to_string(++material_sequence) + ".omat"),
+            material, std::vector<data::ShaderReference> {})));
       Pixel baseline {};
       if (unlit) {
         sky.SetEnabled(false);

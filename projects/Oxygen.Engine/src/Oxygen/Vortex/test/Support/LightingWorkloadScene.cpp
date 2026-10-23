@@ -16,6 +16,7 @@
 
 #include <glm/gtc/quaternion.hpp>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Core/Types/ViewPort.h>
@@ -25,6 +26,7 @@
 #include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Data/ShaderReference.h>
+#include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Data/Vertex.h>
 #include <Oxygen/Scene/Camera/Orthographic.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
@@ -34,11 +36,14 @@
 #include <Oxygen/Scene/Light/PointLight.h>
 #include <Oxygen/Scene/Light/SpotLight.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Vortex/test/Support/FirstSurface.h>
 #include <Oxygen/Vortex/test/Support/LightingWorkload.h>
 #include <Oxygen/Vortex/test/Support/LightingWorkloadScene.h>
 
 namespace oxygen::vortex::testing {
 namespace {
+  using oxygen::vortex::testing::FirstSurfaceOf;
+
   auto MakePlane(const float extent, const std::string& name)
     -> std::shared_ptr<data::GeometryAsset>
   {
@@ -118,8 +123,9 @@ auto CreateLightingWorkloadScene(const LightingWorkload& workload)
   result.floor = result.scene->CreateNode("Neutral receiver floor");
   result.floor.GetRenderable().SetGeometry(
     MakePlane(workload.floor_half_extent_m, "WorkloadFloor"));
-  result.floor.GetRenderable().SetMaterialOverride(
-    oxygen::data::LodIndex { 0 }, oxygen::data::SubmeshIndex { 0 }, material);
+  CHECK_F(result.floor.GetRenderable().SetMaterialOverride(
+            FirstSurfaceOf(result.floor), material),
+    "the workload geometry must declare the overridden surface");
   const auto caster_geometry = MakePlane(0.2F, "WorkloadOccluder");
   for (const auto& source : workload.lights) {
     auto node
@@ -160,8 +166,9 @@ auto CreateLightingWorkloadScene(const LightingWorkload& workload)
       auto caster = result.scene->CreateNode(
         "Occluder " + std::to_string(source.id.get()));
       caster.GetRenderable().SetGeometry(caster_geometry);
-      caster.GetRenderable().SetMaterialOverride(oxygen::data::LodIndex { 0 },
-        oxygen::data::SubmeshIndex { 0 }, material);
+      CHECK_F(caster.GetRenderable().SetMaterialOverride(
+                FirstSurfaceOf(caster), material),
+        "the workload geometry must declare the overridden surface");
       caster.GetTransform().SetLocalPosition(
         { source.position_ws.at(0) + 0.25F, source.position_ws.at(1), 0.5F });
       result.casters.push_back(caster);

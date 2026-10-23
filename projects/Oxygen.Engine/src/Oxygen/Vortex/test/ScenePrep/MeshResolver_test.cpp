@@ -110,7 +110,7 @@ NOLINT_TEST_F(MeshResolverTest, FixedPolicy_SelectsLOD0)
     });
   SetGeometry(geom);
   SeedVisibilityAndTransform();
-  Node().GetRenderable().SetLodPolicy(
+  Node().GetRenderable().SetLodPolicyOverride(
     FixedPolicy { .index = oxygen::data::LodIndex {} });
 
   // Act
@@ -138,7 +138,7 @@ NOLINT_TEST_F(MeshResolverTest, FixedPolicy_SelectsLOD2)
     });
   SetGeometry(geom);
   SeedVisibilityAndTransform();
-  Node().GetRenderable().SetLodPolicy(
+  Node().GetRenderable().SetLodPolicyOverride(
     FixedPolicy { .index = oxygen::data::LodIndex { 2U } });
 
   // Act
@@ -172,7 +172,7 @@ NOLINT_TEST_F(MeshResolverTest, DistancePolicy_Near_SelectsFineLOD)
     .thresholds = { 2.0F, 10.0F },
     .hysteresis_ratio = 0.1F,
   };
-  Node().GetRenderable().SetLodPolicy(dp);
+  Node().GetRenderable().SetLodPolicyOverride(dp);
 
   // Place camera at the world-sphere center to get distance ~ 0
   const auto center
@@ -207,7 +207,7 @@ NOLINT_TEST_F(MeshResolverTest, DistancePolicy_Far_SelectsCoarseLOD)
     .thresholds = { 2.0F, 10.0F },
     .hysteresis_ratio = 0.1F,
   };
-  Node().GetRenderable().SetLodPolicy(dp);
+  Node().GetRenderable().SetLodPolicyOverride(dp);
 
   // Far camera to make normalized distance >> thresholds
   const auto center = glm::vec3(glm::column(WorldMatrix(), 3));
@@ -243,7 +243,7 @@ NOLINT_TEST_F(MeshResolverTest, ScreenSpaceErrorPolicy_NearHighSSE_SelectsFine)
     .enter_finer_sse = { 50.0F, 25.0F },
     .exit_coarser_sse = { 40.0F, 20.0F },
   };
-  Node().GetRenderable().SetLodPolicy(sp);
+  Node().GetRenderable().SetLodPolicyOverride(sp);
 
   // Camera ~ at center -> z ~= 0 -> clamped to 1e-6 -> very large SSE
   const auto center = glm::vec3(glm::column(WorldMatrix(), 3));
@@ -277,7 +277,7 @@ NOLINT_TEST_F(MeshResolverTest, ScreenSpaceErrorPolicy_FarLowSSE_SelectsCoarse)
     .enter_finer_sse = { 50.0F, 25.0F },
     .exit_coarser_sse = { 40.0F, 20.0F },
   };
-  Node().GetRenderable().SetLodPolicy(sp);
+  Node().GetRenderable().SetLodPolicyOverride(sp);
 
   // Far camera -> small sse -> coarser LOD. The node is scaled by 3, so its
   // world radius is 3 * sqrt(3): at 1000 units the SSE is about 2.6.
@@ -317,7 +317,7 @@ NOLINT_TEST_F(MeshResolverTest, ScreenSpaceErrorPolicy_NoFocal_FallbackLOD0)
     .enter_finer_sse = { 10.0F, 5.0F },
     .exit_coarser_sse = { 8.0F, 4.0F },
   };
-  Node().GetRenderable().SetLodPolicy(sp);
+  Node().GetRenderable().SetLodPolicyOverride(sp);
   const auto center = glm::vec3(glm::column(WorldMatrix(), 3));
   ConfigureView(center + glm::vec3(10.0F, 0.0F, 0.0F), /*height*/ 0.0F);
 
@@ -348,7 +348,7 @@ NOLINT_TEST_F(MeshResolverTest, FixedPolicy_IndexBeyondRange_ClampsToLast)
     });
   SetGeometry(geom);
   SeedVisibilityAndTransform();
-  Node().GetRenderable().SetLodPolicy(
+  Node().GetRenderable().SetLodPolicyOverride(
     FixedPolicy { .index = oxygen::data::LodIndex { 10U } });
 
   // Act

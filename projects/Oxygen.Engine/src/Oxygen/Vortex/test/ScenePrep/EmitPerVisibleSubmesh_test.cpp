@@ -63,6 +63,7 @@ using oxygen::vortex::upload::StagingProvider;
 using oxygen::vortex::upload::internal::UploaderTagFactory;
 
 using oxygen::vortex::sceneprep::testing::MakeGeometryWithLods;
+using oxygen::vortex::sceneprep::testing::MakeGeometryWithLODSubmeshes;
 using oxygen::vortex::sceneprep::testing::ScenePrepTestFixture;
 
 namespace oxygen::content {
@@ -245,6 +246,35 @@ NOLINT_TEST_F(EmitPerVisibleSubmeshTest, EmptyVisibleList_NoEmission)
 
   // Assert
   EXPECT_TRUE(State().CollectedItems().empty());
+}
+
+//! An emitted item casts shadows only when its surface does.
+NOLINT_TEST_F(EmitPerVisibleSubmeshTest, SurfaceCastsShadowsGatesEachItem)
+{
+  // Arrange: one LOD with two submeshes, each its own surface
+  const auto geom = MakeGeometryWithLODSubmeshes({
+    2,
+  });
+  SetGeometry(geom);
+  SeedVisibilityAndTransform();
+  ConfigurePerspectiveView(glm::vec3(0, 0, 5), glm::vec3(0, 0, 0));
+  EmplaceContextWithView();
+  MeshResolver(Context(), State(), Proto());
+  const auto lod = Proto().ResolvedMeshIndex();
+  const auto surface = geom->MeshAt(lod)->SubMeshes()[1].SurfaceIdentity();
+  ASSERT_TRUE(Node().GetRenderable().SetCastsShadowsOverride(surface, false));
+  Proto().SetCastShadows(true);
+  Proto().SetVisibleSubmeshes(
+    { oxygen::data::SubmeshIndex { 0U }, oxygen::data::SubmeshIndex { 1U } });
+
+  // Act
+  EmitPerVisibleSubmesh(Context(), State(), Proto());
+
+  // Assert
+  const auto& items = State().CollectedItems();
+  ASSERT_EQ(items.size(), 2U);
+  EXPECT_TRUE(items[0].cast_shadows);
+  EXPECT_FALSE(items[1].cast_shadows);
 }
 
 NOLINT_TEST_F(EmitPerVisibleSubmeshTest,

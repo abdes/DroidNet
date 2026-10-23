@@ -13,6 +13,7 @@
 #include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/PakFormat_geometry.h>
+#include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Scene/Types/Flags.h>
@@ -37,6 +38,7 @@ using oxygen::data::GeometryAsset;
 using oxygen::data::LodIndex;
 using oxygen::data::MaterialAsset;
 using oxygen::data::SubmeshIndex;
+using oxygen::data::SurfaceId;
 using oxygen::scene::FixedPolicy;
 using oxygen::scene::Scene;
 using oxygen::scene::SceneNode;
@@ -54,6 +56,17 @@ protected:
   {
     ScenePrepTestFixture::SetUp();
     EmplaceContextWithView();
+  }
+
+  //! The surface bound to `submesh` of `lod` in the node's geometry.
+  auto SurfaceOf(const LodIndex lod, const SubmeshIndex submesh) -> SurfaceId
+  {
+    return Node()
+      .GetRenderable()
+      .GetGeometry()
+      ->MeshAt(lod)
+      ->SubMeshes()[submesh.get()]
+      .SurfaceIdentity();
   }
 };
 
@@ -160,11 +173,11 @@ NOLINT_TEST_F(SubMeshVisibilityFilterTest, SomeHidden_FiltersOutHidden)
   MeshResolver(Context(), State(), Proto());
 
   const auto lod = Proto().ResolvedMeshIndex();
-  // Hide 1 and 3
-  Node().GetRenderable().SetSubmeshVisible(
-    lod, oxygen::data::SubmeshIndex { 1 }, false);
-  Node().GetRenderable().SetSubmeshVisible(
-    lod, oxygen::data::SubmeshIndex { 3 }, false);
+  // Hide the surfaces of 1 and 3
+  ASSERT_TRUE(Node().GetRenderable().SetVisibilityOverride(
+    SurfaceOf(lod, SubmeshIndex { 1 }), false));
+  ASSERT_TRUE(Node().GetRenderable().SetVisibilityOverride(
+    SurfaceOf(lod, SubmeshIndex { 3 }), false));
 
   // Ensure scene reflects the renderable state changes before extraction
   UpdateScene();
@@ -198,7 +211,7 @@ NOLINT_TEST_F(SubMeshVisibilityFilterTest, MultiLOD_UsesActiveLODSubmeshes)
   SetGeometry(geom);
   SeedVisibilityAndTransform();
   // Force LOD1 (coarser) via fixed policy
-  Node().GetRenderable().SetLodPolicy(
+  Node().GetRenderable().SetLodPolicyOverride(
     FixedPolicy { .index = oxygen::data::LodIndex { 1U } });
   // Ensure LOD policy change is applied to the scene/component state
   UpdateScene();
@@ -233,7 +246,10 @@ NOLINT_TEST_F(SubMeshVisibilityFilterTest, AllHidden_ResultsInEmptyList)
   ConfigurePerspectiveView(glm::vec3(0, 0, 5), glm::vec3(0, 0, 0));
   MeshResolver(Context(), State(), Proto());
 
-  Node().GetRenderable().SetAllSubmeshesVisible(false);
+  for (const auto& surface : geom->Surfaces().surfaces) {
+    ASSERT_TRUE(
+      Node().GetRenderable().SetVisibilityOverride(surface.surface_id, false));
+  }
 
   // Ensure scene reflects the renderable state changes before extraction
   UpdateScene();
@@ -265,6 +281,38 @@ NOLINT_TEST_F(SubMeshVisibilityFilterTest, Frustum_AllOutside_RemovesAll)
 
   // Assert: all culled
   EXPECT_TRUE(Proto().VisibleSubmeshes().empty());
+}
+
+//! Culled submeshes stay shadow casters only when their surface casts.
+/*!
+ A surface whose CastsShadows is off, or whose Visibility is off, must not be
+ kept as an off-frustum shadow caster.
+*/
+NOLINT_TEST_F(
+  SubMeshVisibilityFilterTest, Frustum_AllOutside_KeepsCastingSurfacesOnly)
+{
+  // Arrange: 1 LOD with 3 submeshes, each its own surface
+  const auto geom = MakeGeometryWithLODSubmeshes({
+    3,
+  });
+  SetGeometry(geom);
+  SeedVisibilityAndTransform();
+  ConfigurePerspectiveView(glm::vec3(0, 0, 5), glm::vec3(0, 0, 10));
+  MeshResolver(Context(), State(), Proto());
+  const auto lod = Proto().ResolvedMeshIndex();
+  ASSERT_TRUE(Node().GetRenderable().SetCastsShadowsOverride(
+    SurfaceOf(lod, SubmeshIndex { 1 }), false));
+  ASSERT_TRUE(Node().GetRenderable().SetVisibilityOverride(
+    SurfaceOf(lod, SubmeshIndex { 2 }), false));
+  UpdateScene();
+
+  // Act
+  SubMeshVisibilityFilter(Context(), State(), Proto());
+
+  // Assert
+  EXPECT_TRUE(Proto().VisibleSubmeshes().empty());
+  EXPECT_THAT(
+    Proto().ShadowOnlySubmeshes(), ::testing::ElementsAre(SubmeshIndex {}));
 }
 
 //! Frustum: spread submeshes across X; only the center is visible

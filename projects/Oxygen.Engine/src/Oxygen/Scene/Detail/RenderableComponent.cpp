@@ -15,7 +15,6 @@
 #include <memory>
 #include <optional>
 #include <ranges>
-#include <stdexcept>
 #include <utility>
 #include <variant>
 
@@ -31,8 +30,10 @@
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Data/MaterialAsset.h>
+#include <Oxygen/Data/SurfaceInventory.h>
 #include <Oxygen/Scene/Detail/RenderableComponent.h>
 #include <Oxygen/Scene/Detail/TransformComponent.h>
+#include <Oxygen/Scene/Schema/Generated.SceneComponents.h>
 #include <Oxygen/Scene/Types/ActiveMesh.h>
 #include <Oxygen/Scene/Types/RenderablePolicies.h>
 #include <Oxygen/Scene/Types/Strong.h>
@@ -54,54 +55,46 @@ auto RenderableComponent::UsesScreenSpaceErrorPolicy() const noexcept -> bool
   return std::holds_alternative<ScreenSpaceErrorPolicy>(policy_);
 }
 
-void RenderableComponent::SetLodPolicy(FixedPolicy p)
+auto RenderableComponent::HasLodPolicyOverride() const noexcept -> bool
 {
-  // Clamp against current geometry lod count if available
-  if (geometry_asset_) {
-    const auto lc = geometry_asset_->LodCount();
-    p.index = p.Clamp(lc);
+  return lod_policy_override_.has_value();
+}
+
+void RenderableComponent::SetLodPolicyOverride(LodPolicy policy)
+{
+  lod_policy_override_ = std::move(policy);
+  ResolveLodPolicy();
+}
+
+void RenderableComponent::ClearLodPolicyOverride()
+{
+  lod_policy_override_.reset();
+  ResolveLodPolicy();
+}
+
+void RenderableComponent::ResolveLodPolicy()
+{
+  if (lod_policy_override_.has_value()) {
+    policy_ = *lod_policy_override_;
+  } else if (geometry_asset_ && geometry_asset_->DefaultLodPolicy()) {
+    policy_ = MakeLodPolicy(*geometry_asset_->DefaultLodPolicy());
+  } else {
+    policy_ = MakeLodPolicy(schema::geometry::kLodPolicyDefault);
   }
-  policy_ = p;
   current_lod_.reset();
   InvalidateWorldAabbCache();
   RecomputeWorldBoundingSphere();
 }
 
-void RenderableComponent::SetLodPolicy(DistancePolicy p)
-{
-  policy_ = std::move(p);
-  current_lod_.reset();
-  InvalidateWorldAabbCache();
-  RecomputeWorldBoundingSphere();
-}
-
-void RenderableComponent::SetLodPolicy(ScreenSpaceErrorPolicy p)
-{
-  if (!p.ValidateSizes(EffectiveLodCount())) {
-    throw std::invalid_argument(
-      "Invalid ScreenSpaceErrorPolicy: sizes are not valid");
-  }
-  policy_ = std::move(p);
-  current_lod_.reset();
-  InvalidateWorldAabbCache();
-  RecomputeWorldBoundingSphere();
-}
 RenderableComponent::RenderableComponent(
   std::shared_ptr<const data::GeometryAsset> geometry)
   : geometry_asset_(std::move(geometry))
 {
-  // When constructed with a geometry (AttachGeometry/AddComponent path),
-  // eagerly build caches and initialize per-submesh state so queries like
-  // IsSubmeshVisible() work immediately without requiring a SetGeometry()
-  // call. Clamp fixed LOD policy to the available range as well.
+  // Build the caches now, so queries like IsSubmeshVisible() work without a
+  // SetGeometry() call.
   RebuildLocalBoundsCache();
   RebuildSubmeshStateCache();
-  if (auto* fp = std::get_if<FixedPolicy>(&policy_)) {
-    const auto lc = geometry_asset_ ? geometry_asset_->LodCount() : 0U;
-    fp->index = fp->Clamp(lc);
-  }
-  RecomputeWorldBoundingSphere();
-  InvalidateWorldAabbCache();
+  ResolveLodPolicy();
 }
 
 /*!
@@ -175,24 +168,9 @@ void RenderableComponent::SetGeometry(
   const auto previous_geometry = std::move(geometry_asset_);
   geometry_asset_ = std::move(geometry);
 
-  // Reset/evaluate caches
   RebuildLocalBoundsCache();
   RebuildSubmeshStateCache(previous_geometry.get());
-
-  // Reset dynamic LOD selection when geometry changes
-  current_lod_.reset();
-
-  // Clamp fixed LOD index to available range
-  if (auto* fp = std::get_if<FixedPolicy>(&policy_)) {
-    const auto lc = geometry_asset_ ? geometry_asset_->LodCount() : 0U;
-    fp->index = fp->Clamp(lc);
-  }
-
-  // Recompute world bounds for current transform (if available)
-  RecomputeWorldBoundingSphere();
-
-  // Invalidate on-demand world AABB cache
-  InvalidateWorldAabbCache();
+  ResolveLodPolicy();
 }
 
 void RenderableComponent::RebuildLocalBoundsCache()
@@ -226,38 +204,55 @@ void RenderableComponent::RebuildLocalBoundsCache()
 void RenderableComponent::RebuildSubmeshStateCache(
   const data::GeometryAsset* previous_geometry)
 {
-  auto previous_materials = std::move(surface_materials_);
-  surface_materials_.clear();
+  auto previous_overrides = std::move(surface_overrides_);
+  surface_overrides_.clear();
   submesh_state_.clear();
   if (!geometry_asset_) {
     return;
   }
   const auto& surfaces = geometry_asset_->Surfaces().surfaces;
-  surface_materials_.resize(surfaces.size());
+  surface_overrides_.resize(surfaces.size());
   const auto meshes = geometry_asset_->Meshes();
   submesh_state_.resize(meshes.size());
   for (auto&& [lod_states, mesh] : std::views::zip(submesh_state_, meshes)) {
     lod_states.resize(mesh->SubMeshes().size());
   }
-  if (previous_geometry == nullptr || previous_geometry->GetAssetKey().IsNil()
-    || previous_geometry->GetAssetKey() != geometry_asset_->GetAssetKey()) {
-    return;
-  }
-  const auto& previous_surfaces = previous_geometry->Surfaces().surfaces;
+  const auto same_geometry = previous_geometry != nullptr
+    && !previous_geometry->GetAssetKey().IsNil()
+    && previous_geometry->GetAssetKey() == geometry_asset_->GetAssetKey();
+  const auto& previous_surfaces = same_geometry
+    ? previous_geometry->Surfaces().surfaces
+    : std::vector<data::Surface> {};
   for (std::size_t index = 0; index < surfaces.size(); ++index) {
     const auto previous = std::ranges::find(previous_surfaces,
       surfaces.at(index).surface_id, &data::Surface::surface_id);
-    if (previous == previous_surfaces.end()) {
-      continue;
+    if (previous != previous_surfaces.end()) {
+      surface_overrides_.at(index)
+        = std::move(previous_overrides.at(static_cast<std::size_t>(
+          std::distance(previous_surfaces.begin(), previous))));
     }
-    const auto previous_index = static_cast<std::size_t>(
-      std::distance(previous_surfaces.begin(), previous));
-    surface_materials_.at(index) = previous_materials.at(previous_index);
-    for (const auto& binding : surfaces.at(index).bindings) {
-      submesh_state_.at(binding.lod_index.get())
-        .at(binding.submesh_index.get())
-        .override_material = surface_materials_.at(index);
-    }
+    ResolveSurface(index);
+  }
+}
+
+void RenderableComponent::ResolveSurface(const std::size_t index) noexcept
+{
+  const auto& surface = geometry_asset_->Surfaces().surfaces.at(index);
+  const auto& overrides = surface_overrides_.at(index);
+  const auto defaults = surface.defaults.value_or(data::SurfaceDefaults {
+    .visible = schema::geometry::surface::kVisibilityDefault,
+    .casts_shadows = schema::geometry::surface::kCastsShadowsDefault,
+  });
+  const auto visible = overrides.visible.value_or(defaults.visible);
+  const auto casts_shadows
+    = visible && overrides.casts_shadows.value_or(defaults.casts_shadows);
+  for (const auto& binding : surface.bindings) {
+    submesh_state_.at(binding.lod_index.get()).at(binding.submesh_index.get())
+      = SubmeshState {
+          .visible = visible,
+          .casts_shadows = casts_shadows,
+          .override_material = overrides.material,
+        };
   }
 }
 
@@ -414,52 +409,36 @@ auto RenderableComponent::GetWorldSubMeshBoundingBox(
 
 //=== Submesh visibility and material overrides ==========================//
 
-auto RenderableComponent::IsSubmeshVisible(const data::LodIndex lod,
-  const data::SubmeshIndex submesh) const noexcept -> bool
+auto RenderableComponent::FindSubmeshState(const data::LodIndex lod,
+  const data::SubmeshIndex submesh) const noexcept -> const SubmeshState*
 {
   if (lod.get() >= submesh_state_.size()) {
-    return false;
+    return nullptr;
   }
   const auto& lod_states = submesh_state_.at(lod.get());
   if (submesh.get() >= lod_states.size()) {
-    return false;
+    return nullptr;
   }
-  return lod_states.at(submesh.get()).visible;
+  return &lod_states.at(submesh.get());
 }
 
-void RenderableComponent::SetSubmeshVisible(const data::LodIndex lod,
-  const data::SubmeshIndex submesh, bool visible) noexcept
+auto RenderableComponent::IsSubmeshVisible(const data::LodIndex lod,
+  const data::SubmeshIndex submesh) const noexcept -> bool
 {
-  if (lod.get() >= submesh_state_.size()) {
-    LOG_F(WARNING,
-      "RenderableComponent::SetSubmeshVisible: LOD index out of range (lod={}, "
-      "lod_count={})",
-      lod, submesh_state_.size());
-    return;
-  }
-  auto& lod_states = submesh_state_.at(lod.get());
-  if (submesh.get() >= lod_states.size()) {
-    LOG_F(WARNING,
-      "RenderableComponent::SetSubmeshVisible: Submesh index out of range "
-      "(lod={}, "
-      "sm={}, sm_count={})",
-      lod, submesh, lod_states.size());
-    return;
-  }
-  lod_states.at(submesh.get()).visible = visible;
+  const auto* state = FindSubmeshState(lod, submesh);
+  return state != nullptr && state->visible;
 }
 
-void RenderableComponent::SetAllSubmeshesVisible(bool visible) noexcept
+auto RenderableComponent::SubmeshCastsShadows(const data::LodIndex lod,
+  const data::SubmeshIndex submesh) const noexcept -> bool
 {
-  for (auto& lod_states : submesh_state_) {
-    for (auto& st : lod_states) {
-      st.visible = visible;
-    }
-  }
+  const auto* state = FindSubmeshState(lod, submesh);
+  return state != nullptr && state->casts_shadows;
 }
 
-auto RenderableComponent::SetMaterialOverride(const data::SurfaceId surface,
-  std::shared_ptr<const data::MaterialAsset> material) noexcept -> bool
+template <typename Edit>
+auto RenderableComponent::EditSurface(
+  const oxygen::data::SurfaceId surface, Edit edit) noexcept -> bool
 {
   if (!geometry_asset_) {
     return false;
@@ -472,13 +451,17 @@ auto RenderableComponent::SetMaterialOverride(const data::SurfaceId surface,
   }
   const auto index
     = static_cast<std::size_t>(std::distance(surfaces.begin(), declaration));
-  for (const auto& binding : declaration->bindings) {
-    submesh_state_.at(binding.lod_index.get())
-      .at(binding.submesh_index.get())
-      .override_material = material;
-  }
-  surface_materials_.at(index) = std::move(material);
+  edit(surface_overrides_.at(index));
+  ResolveSurface(index);
   return true;
+}
+
+auto RenderableComponent::SetMaterialOverride(const data::SurfaceId surface,
+  std::shared_ptr<const data::MaterialAsset> material) noexcept -> bool
+{
+  return EditSurface(surface, [&material](SurfaceOverrides& overrides) {
+    overrides.material = std::move(material);
+  });
 }
 
 auto RenderableComponent::ClearMaterialOverride(
@@ -487,51 +470,33 @@ auto RenderableComponent::ClearMaterialOverride(
   return SetMaterialOverride(surface, nullptr);
 }
 
-void RenderableComponent::SetMaterialOverride(const data::LodIndex lod,
-  const data::SubmeshIndex submesh,
-  std::shared_ptr<const data::MaterialAsset> material) noexcept
+auto RenderableComponent::SetVisibilityOverride(
+  const data::SurfaceId surface, const bool visible) noexcept -> bool
 {
-  if (lod.get() >= submesh_state_.size()) {
-    LOG_F(WARNING,
-      "RenderableComponent::SetMaterialOverride: LOD index out of range "
-      "(lod={}, "
-      "lod_count={})",
-      lod, submesh_state_.size());
-    return;
-  }
-  auto& lod_states = submesh_state_.at(lod.get());
-  if (submesh.get() >= lod_states.size()) {
-    LOG_F(WARNING,
-      "RenderableComponent::SetMaterialOverride: Submesh index out of range "
-      "(lod={}, "
-      "sm={}, sm_count={})",
-      lod, submesh, lod_states.size());
-    return;
-  }
-  lod_states.at(submesh.get()).override_material = std::move(material);
+  return EditSurface(surface,
+    [visible](SurfaceOverrides& overrides) { overrides.visible = visible; });
 }
 
-void RenderableComponent::ClearMaterialOverride(
-  const data::LodIndex lod, const data::SubmeshIndex submesh) noexcept
+auto RenderableComponent::ClearVisibilityOverride(
+  const data::SurfaceId surface) noexcept -> bool
 {
-  if (lod.get() >= submesh_state_.size()) {
-    LOG_F(WARNING,
-      "RenderableComponent::ClearMaterialOverride: LOD index out of range "
-      "(lod={}, "
-      "lod_count={})",
-      lod, submesh_state_.size());
-    return;
-  }
-  auto& lod_states = submesh_state_.at(lod.get());
-  if (submesh.get() >= lod_states.size()) {
-    LOG_F(WARNING,
-      "RenderableComponent::ClearMaterialOverride: Submesh index out of range "
-      "(lod={}, "
-      "sm={}, sm_count={})",
-      lod, submesh, lod_states.size());
-    return;
-  }
-  lod_states.at(submesh.get()).override_material.reset();
+  return EditSurface(
+    surface, [](SurfaceOverrides& overrides) { overrides.visible.reset(); });
+}
+
+auto RenderableComponent::SetCastsShadowsOverride(
+  const data::SurfaceId surface, const bool casts_shadows) noexcept -> bool
+{
+  return EditSurface(surface, [casts_shadows](SurfaceOverrides& overrides) {
+    overrides.casts_shadows = casts_shadows;
+  });
+}
+
+auto RenderableComponent::ClearCastsShadowsOverride(
+  const data::SurfaceId surface) noexcept -> bool
+{
+  return EditSurface(surface,
+    [](SurfaceOverrides& overrides) { overrides.casts_shadows.reset(); });
 }
 
 auto RenderableComponent::ResolveSubmeshMaterial(

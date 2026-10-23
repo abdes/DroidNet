@@ -54,6 +54,13 @@ local function node_tag(node)
   return string.format("%s[sid=%d idx=%d]", node:get_name() or "?", id.scene_id or -1, id.node_index or -1)
 end
 
+-- Binds `material` to the only surface of `node`'s procedural geometry.
+local function set_surface_material(node, material)
+  local surfaces = node:renderable_get_surface_ids()
+  return surfaces ~= nil
+    and node:renderable_set_material_override(surfaces[1], material)
+end
+
 local function parse_material_guids(text)
   local out = {}
   if type(text) ~= "string" then
@@ -374,7 +381,7 @@ local function spawn_batch(state, host_node)
             assets.load_material_async(chosen, function(m)
               pending_material_guids[chosen] = nil
               if m ~= nil and valid(node) then
-                node:renderable_set_material_override(1, 1, m)
+                set_surface_material(node, m)
               end
             end)
           end
@@ -412,8 +419,8 @@ local function spawn_batch(state, host_node)
       end
 
       if mat ~= nil then
-        if not node:renderable_set_material_override(1, 1, mat) then
-          log.error("proc_cubes: renderable_set_material_override returned false for node " .. node_tag(node))
+        if not set_surface_material(node, mat) then
+          log.error("proc_cubes: set_surface_material returned false for node " .. node_tag(node))
         end
       end
 

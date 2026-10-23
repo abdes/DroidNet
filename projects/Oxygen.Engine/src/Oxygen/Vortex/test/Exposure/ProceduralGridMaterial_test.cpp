@@ -9,21 +9,26 @@
 #include <string>
 #include <vector>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/PostProcess.h>
+#include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/MaterialDomain.h>
 #include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Data/ShaderReference.h>
+#include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Data/Unorm16.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/test/Exposure/Fixtures/ExposureGpuFixture.h>
 #include <Oxygen/Vortex/test/Exposure/Fixtures/ExposureLightingFixture.h>
+#include <Oxygen/Vortex/test/Support/FirstSurface.h>
 
 namespace oxygen::vortex::testing::exposure {
 
 namespace {
+  using oxygen::vortex::testing::FirstSurfaceOf;
 
   //! An opaque white surface, optionally with a procedural grid whose minor
   //! lines cover every pixel in pure red.
@@ -71,11 +76,11 @@ NOLINT_TEST_F(ExposureLightingGpuTest, ProceduralGridMaterialColorsTheSurface)
   for (const bool forward : { false, true }) {
     SCOPED_TRACE(forward);
     const auto render = [&](const bool with_grid) -> Pixel {
-      mesh_node.GetRenderable().SetMaterialOverride(data::LodIndex { 0 },
-        data::SubmeshIndex { 0 },
-        MakeGridSurfaceMaterial(with_grid,
-          std::string(with_grid ? "Grid" : "Plain")
-            + (forward ? "Forward" : "Deferred")));
+      EXPECT_TRUE(
+        mesh_node.GetRenderable().SetMaterialOverride(FirstSurfaceOf(mesh_node),
+          MakeGridSurfaceMaterial(with_grid,
+            std::string(with_grid ? "Grid" : "Plain")
+              + (forward ? "Forward" : "Deferred"))));
       RenderSurface(forward, 0.0F, 3U);
       return ReadFloatTexture(*probe->color).at(0);
     };

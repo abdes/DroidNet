@@ -123,7 +123,7 @@ public:
     auto renderable = far.GetRenderable();
     renderable.SetGeometry(MakeUnboundedCube());
     // A distance policy has no LOD until a view evaluates it.
-    renderable.SetLodPolicy(oxygen::scene::DistancePolicy {});
+    renderable.SetLodPolicyOverride(oxygen::scene::DistancePolicy {});
     scene->Update();
     const auto reported = renderable.GetWorldBoundingSphere();
     Assert::AreEqual(0.0F, reported.w, L"the renderable must report unavailable bounds");

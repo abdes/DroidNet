@@ -153,8 +153,11 @@ inline auto MakeMeshWithSubmeshes(const MeshLayout layout)
     glm::vec3(-1.0F, -1.0F, 0.0F), glm::vec3(1.0F, 1.0F, 0.0F));
   b.WithVertices(vertices).WithIndices(idx).WithDescriptor(mesh_desc);
   for (std::size_t s = 0; s < layout.submesh_count; ++s) {
+    // Each submesh is its own surface.
+    auto own_desc = submesh_desc;
+    own_desc.surface_id = data::SurfaceId::Generate();
     b.BeginSubMesh("SM", mat)
-      .WithDescriptor(submesh_desc)
+      .WithDescriptor(own_desc)
       .WithMeshView({
         .first_index = 0U,
         .index_count

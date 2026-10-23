@@ -7,11 +7,14 @@
 #include <memory>
 #include <utility>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Core/Types/View.h>
+#include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Data/MaterialDomain.h>
+#include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Scene/Camera/Orthographic.h>
@@ -25,8 +28,15 @@
 #include <Oxygen/Vortex/Types/Generated.ExposureContracts.h>
 #include <Oxygen/Vortex/test/Exposure/Fixtures/ExposureGpuFixture.h>
 #include <Oxygen/Vortex/test/Exposure/Fixtures/ExposureLightingFixture.h>
+#include <Oxygen/Vortex/test/Support/FirstSurface.h>
 
 namespace oxygen::vortex::testing::exposure {
+
+namespace {
+
+  using oxygen::vortex::testing::FirstSurfaceOf;
+
+} // namespace
 
 using graphics::FramebufferDesc;
 using graphics::ResourceStates;
@@ -97,10 +107,10 @@ NOLINT_TEST_F(ExposureLightingGpuTest,
   const auto ordinary = MakeEmissiveMaterial(.25F);
   const auto set_pair = [&](const auto& primary_material,
                           const auto& secondary_material) -> void {
-    mesh_node.GetRenderable().SetMaterialOverride(oxygen::data::LodIndex { 0 },
-      oxygen::data::SubmeshIndex { 0 }, primary_material);
-    dim.GetRenderable().SetMaterialOverride(oxygen::data::LodIndex { 0 },
-      oxygen::data::SubmeshIndex { 0 }, secondary_material);
+    ASSERT_TRUE(mesh_node.GetRenderable().SetMaterialOverride(
+      FirstSurfaceOf(mesh_node), primary_material));
+    ASSERT_TRUE(dim.GetRenderable().SetMaterialOverride(
+      FirstSurfaceOf(dim), secondary_material));
   };
   SceneTextureExtractRef current;
   probe->inspect = [&](const RenderContext& ctx,

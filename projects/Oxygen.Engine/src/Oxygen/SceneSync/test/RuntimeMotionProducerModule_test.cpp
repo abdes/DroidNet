@@ -28,6 +28,7 @@
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
 #include <Oxygen/Data/ShaderReference.h>
+#include <Oxygen/Data/SurfaceInventory.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/test/Utils/TestEventLoop.h>
@@ -215,8 +216,9 @@ NOLINT_TEST(RuntimeMotionProducerModuleTest,
   const auto before_key = before->material_motion_states.front().key;
   const auto before_hash = before->material_motion_states.front().contract_hash;
 
-  node.GetRenderable().SetMaterialOverride(oxygen::data::LodIndex { 0U },
-    oxygen::data::SubmeshIndex { 0U }, override_material);
+  ASSERT_FALSE(geometry->Surfaces().surfaces.empty());
+  ASSERT_TRUE(node.GetRenderable().SetMaterialOverride(
+    geometry->Surfaces().surfaces.front().surface_id, override_material));
   scene->Update();
 
   PublishSnapshot(module, frame, frame::SequenceNumber { 10U });

@@ -31,8 +31,10 @@
 #include <glm/matrix.hpp>
 #include <glm/trigonometric.hpp>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/EngineModule.h>
 #include <Oxygen/Core/PhaseRegistry.h>
+#include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Scene/Types/Flags.h>
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/quaternion.hpp>
@@ -84,9 +86,11 @@
 #include <Oxygen/Vortex/test/Fixtures/RendererPublicationProbe.h>
 #include <Oxygen/Vortex/test/Lighting/Reference/Photometry.h>
 #include <Oxygen/Vortex/test/Lighting/UnculledLightingFixture.h>
+#include <Oxygen/Vortex/test/Support/FirstSurface.h>
 
 namespace oxygen::vortex::testing {
 namespace {
+  using oxygen::vortex::testing::FirstSurfaceOf;
 
   //! Sets a node's local flag; fails the test when the node has no flags.
   auto SetNodeFlag(scene::SceneNode& node, const scene::SceneNodeFlags flag,
@@ -176,12 +180,12 @@ namespace {
         desc.ambient_occlusion = data::Unorm16 { 1.0F };
         desc.normal_scale = 1.0F;
         desc.uv_scale[0] = desc.uv_scale[1] = 1.0F;
-        mesh_node.GetRenderable().SetMaterialOverride(
-          oxygen::data::LodIndex { 0 }, oxygen::data::SubmeshIndex { 0 },
+        ASSERT_TRUE(mesh_node.GetRenderable().SetMaterialOverride(
+          FirstSurfaceOf(mesh_node),
           std::make_shared<data::MaterialAsset>(
             data::AssetKey::FromVirtualPath("/test/Lighting/Orthographic-"
               + std::to_string(++material_sequence) + ".omat"),
-            desc, std::vector<data::ShaderReference> {}));
+            desc, std::vector<data::ShaderReference> {})));
         for (unsigned variant = 0; variant < 4U; ++variant) {
           SCOPED_TRACE(forward);
           SCOPED_TRACE(static_cast<int>(domain));
@@ -462,8 +466,8 @@ namespace {
     auto blocker = scene->CreateNode("Off-camera shadow blocker");
     blocker.GetRenderable().SetGeometry(
       mesh_node.GetRenderable().GetGeometry());
-    blocker.GetRenderable().SetMaterialOverride(oxygen::data::LodIndex { 0 },
-      oxygen::data::SubmeshIndex { 0 }, MakeEmissiveMaterial(0.0F));
+    ASSERT_TRUE(blocker.GetRenderable().SetMaterialOverride(
+      FirstSurfaceOf(blocker), MakeEmissiveMaterial(0.0F)));
     blocker.GetTransform().SetLocalScale(glm::vec3 { 0.1F });
     blocker.GetTransform().SetLocalPosition(glm::vec3 { 0.5F, 0.0F, -0.4F });
     expected_draws = 2U;

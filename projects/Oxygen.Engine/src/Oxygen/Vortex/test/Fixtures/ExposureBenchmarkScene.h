@@ -29,6 +29,7 @@
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
+#include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Data/Unorm16.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Environment/Fog.h>
@@ -43,6 +44,7 @@
 #include <Oxygen/Scene/SceneFlags.h>
 #include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Scene/Types/Flags.h>
+#include <Oxygen/Vortex/test/Support/FirstSurface.h>
 
 namespace oxygen::vortex::testing {
 
@@ -257,36 +259,39 @@ struct MixedExposureBenchmarkScene {
     2000.0F,
     .1F,
   });
-  result.surfaces.at(1).GetRenderable().SetMaterialOverride(
-    oxygen::data::LodIndex { 0 }, oxygen::data::SubmeshIndex { 0 },
-    material("MixedExposureEmissive",
-      {
-        .7F,
-        .65F,
-        .5F,
-        1.0F,
-      },
-      data::MaterialDomain::kOpaque, true, 4096.0F));
-  result.surfaces.at(2).GetRenderable().SetMaterialOverride(
-    oxygen::data::LodIndex { 0 }, oxygen::data::SubmeshIndex { 0 },
-    material("MixedExposureTranslucent",
-      {
-        .3F,
-        .4F,
-        .9F,
-        .5F,
-      },
-      data::MaterialDomain::kAlphaBlended));
-  result.surfaces.at(3).GetRenderable().SetMaterialOverride(
-    oxygen::data::LodIndex { 0 }, oxygen::data::SubmeshIndex { 0 },
-    material("MixedExposureMasked",
-      {
-        .9F,
-        .4F,
-        .4F,
-        .8F,
-      },
-      data::MaterialDomain::kMasked));
+  CHECK_F(result.surfaces.at(1).GetRenderable().SetMaterialOverride(
+            FirstSurfaceOf(result.surfaces.at(1)),
+            material("MixedExposureEmissive",
+              {
+                .7F,
+                .65F,
+                .5F,
+                1.0F,
+              },
+              data::MaterialDomain::kOpaque, true, 4096.0F)),
+    "the benchmark geometry must declare the overridden surface");
+  CHECK_F(result.surfaces.at(2).GetRenderable().SetMaterialOverride(
+            FirstSurfaceOf(result.surfaces.at(2)),
+            material("MixedExposureTranslucent",
+              {
+                .3F,
+                .4F,
+                .9F,
+                .5F,
+              },
+              data::MaterialDomain::kAlphaBlended)),
+    "the benchmark geometry must declare the overridden surface");
+  CHECK_F(result.surfaces.at(3).GetRenderable().SetMaterialOverride(
+            FirstSurfaceOf(result.surfaces.at(3)),
+            material("MixedExposureMasked",
+              {
+                .9F,
+                .4F,
+                .4F,
+                .8F,
+              },
+              data::MaterialDomain::kMasked)),
+    "the benchmark geometry must declare the overridden surface");
 
   if (with_enclosure) {
     const auto enclosure_material = material("ExposureBenchmarkEnclosure",

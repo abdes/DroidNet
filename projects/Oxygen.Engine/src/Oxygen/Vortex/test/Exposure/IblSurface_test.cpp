@@ -44,6 +44,7 @@
 #include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Data/ShaderReference.h>
+#include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/Data/Vertex.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
@@ -83,9 +84,11 @@
 #include <Oxygen/Vortex/test/Fakes/AssetLoader.h>
 #include <Oxygen/Vortex/test/Fixtures/RendererPublicationProbe.h>
 #include <Oxygen/Vortex/test/Fixtures/TextureBinderPayloads.h>
+#include <Oxygen/Vortex/test/Support/FirstSurface.h>
 
 namespace oxygen::vortex::testing::exposure {
 namespace {
+  using oxygen::vortex::testing::FirstSurfaceOf;
 
   // Independent face basis; hardware cube Y is Oxygen world Z.
   auto WorldDirection(unsigned face, unsigned x, unsigned y, unsigned size)
@@ -257,12 +260,13 @@ namespace {
       desc.uv_scale[0] = desc.uv_scale[1] = 1.0F;
       std::vector<content::ResourceKey> keys(6);
       keys[1] = normal;
-      mesh_node.GetRenderable().SetMaterialOverride(
-        oxygen::data::LodIndex { 0U }, oxygen::data::SubmeshIndex { 0U },
-        std::make_shared<data::MaterialAsset>(
-          data::AssetKey::FromVirtualPath("/test/IBL/Material-"
-            + std::to_string(++material_sequence) + ".omat"),
-          desc, std::vector<data::ShaderReference> {}, std::move(keys)));
+      CHECK_F(
+        mesh_node.GetRenderable().SetMaterialOverride(FirstSurfaceOf(mesh_node),
+          std::make_shared<data::MaterialAsset>(
+            data::AssetKey::FromVirtualPath("/test/IBL/Material-"
+              + std::to_string(++material_sequence) + ".omat"),
+            desc, std::vector<data::ShaderReference> {}, std::move(keys))),
+        "the fixture mesh must declare the overridden surface");
     }
 
     std::array<std::uint32_t, 3> packed_input_slots {};

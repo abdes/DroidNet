@@ -377,7 +377,17 @@ auto LightScene::ApplySceneVisibility(
     return;
   }
 
-  node.GetRenderable().SetAllSubmeshesVisible(visible);
+  auto renderable = node.GetRenderable();
+  const auto geometry = renderable.GetGeometry();
+  if (!geometry) {
+    return;
+  }
+  for (const auto& surface : geometry->Surfaces().surfaces) {
+    if (!renderable.SetVisibilityOverride(surface.surface_id, visible)) {
+      LOG_F(WARNING, "Failed to set visibility override on surface '{}'",
+        surface.display_name);
+    }
+  }
 }
 
 auto LightScene::ApplySceneTransforms() -> void

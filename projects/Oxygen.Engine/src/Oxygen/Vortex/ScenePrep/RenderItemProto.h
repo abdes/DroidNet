@@ -78,6 +78,12 @@ struct RenderableFacade {
     return comp_->IsSubmeshVisible(lod, submesh);
   }
 
+  [[nodiscard]] auto SubmeshCastsShadows(
+    data::LodIndex lod, data::SubmeshIndex submesh) const noexcept -> bool
+  {
+    return comp_->SubmeshCastsShadows(lod, submesh);
+  }
+
   [[nodiscard]] auto ResolveSubmeshMaterial(
     data::LodIndex lod, data::SubmeshIndex submesh) const noexcept
     -> std::shared_ptr<const oxygen::data::MaterialAsset>

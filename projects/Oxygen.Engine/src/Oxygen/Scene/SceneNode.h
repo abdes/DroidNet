@@ -723,10 +723,13 @@ public:
   OXGN_SCN_NDAPI auto UsesDistancePolicy() const noexcept -> bool;
   OXGN_SCN_NDAPI auto UsesScreenSpaceErrorPolicy() const noexcept -> bool;
 
-  // LOD policy setters (mirror RenderableComponent)
-  OXGN_SCN_API void SetLodPolicy(FixedPolicy p);
-  OXGN_SCN_API void SetLodPolicy(DistancePolicy p);
-  OXGN_SCN_API void SetLodPolicy(ScreenSpaceErrorPolicy p);
+  //! The LOD policy in effect; empty without a RenderableComponent.
+  OXGN_SCN_NDAPI auto GetLodPolicy() const noexcept -> std::optional<LodPolicy>;
+  //! Selects LODs with `policy` instead of the geometry's default.
+  OXGN_SCN_API void SetLodPolicyOverride(LodPolicy policy);
+  //! Returns to the geometry's default LOD policy.
+  OXGN_SCN_API void ClearLodPolicyOverride();
+  OXGN_SCN_NDAPI auto HasLodPolicyOverride() const noexcept -> bool;
 
   // Select active LOD using strong types (mirror RenderableComponent)
   OXGN_SCN_API void SelectActiveMesh(NormalizedDistance d) const noexcept;
@@ -750,22 +753,25 @@ public:
     data::SubmeshIndex submesh) const noexcept
     -> std::optional<std::pair<Vec3, Vec3>>;
 
-  //=== Submesh visibility and materials ====================================//
+  //=== Surface overrides (mirror RenderableComponent) =======================//
 
-  OXGN_SCN_NDAPI auto IsSubmeshVisible(
-    data::LodIndex lod, data::SubmeshIndex submesh) const noexcept -> bool;
-  OXGN_SCN_API void SetSubmeshVisible(
-    data::LodIndex lod, data::SubmeshIndex submesh, bool visible) noexcept;
-  OXGN_SCN_API void SetAllSubmeshesVisible(bool visible) noexcept;
-
-  OXGN_SCN_API void SetMaterialOverride(data::LodIndex lod,
-    data::SubmeshIndex submesh, MaterialAssetPtr material) noexcept;
   OXGN_SCN_NDAPI auto SetMaterialOverride(
     data::SurfaceId surface, MaterialAssetPtr material) noexcept -> bool;
   OXGN_SCN_NDAPI auto ClearMaterialOverride(data::SurfaceId surface) noexcept
     -> bool;
-  OXGN_SCN_API void ClearMaterialOverride(
-    data::LodIndex lod, data::SubmeshIndex submesh) noexcept;
+  OXGN_SCN_NDAPI auto SetVisibilityOverride(
+    data::SurfaceId surface, bool visible) noexcept -> bool;
+  OXGN_SCN_NDAPI auto ClearVisibilityOverride(data::SurfaceId surface) noexcept
+    -> bool;
+  OXGN_SCN_NDAPI auto SetCastsShadowsOverride(
+    data::SurfaceId surface, bool casts_shadows) noexcept -> bool;
+  OXGN_SCN_NDAPI auto ClearCastsShadowsOverride(
+    data::SurfaceId surface) noexcept -> bool;
+
+  OXGN_SCN_NDAPI auto IsSubmeshVisible(
+    data::LodIndex lod, data::SubmeshIndex submesh) const noexcept -> bool;
+  OXGN_SCN_NDAPI auto SubmeshCastsShadows(
+    data::LodIndex lod, data::SubmeshIndex submesh) const noexcept -> bool;
   OXGN_SCN_NDAPI auto ResolveSubmeshMaterial(data::LodIndex lod,
     data::SubmeshIndex submesh) const noexcept -> MaterialAssetPtr;
 
