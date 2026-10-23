@@ -151,6 +151,7 @@ class Property:
     name: str
     key: str
     type: str
+    asset_type: str | None
     enum: str | None
     fields: tuple[str, ...]
     encoding: str | None
@@ -336,6 +337,7 @@ def _property(item: Mapping[str, Any]) -> Property:
         name=item["name"],
         key=item["key"],
         type=item["type"],
+        asset_type=item.get("asset_type"),
         enum=item.get("enum"),
         fields=tuple(item.get("fields", ())),
         encoding=item.get("encoding"),

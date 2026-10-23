@@ -17,15 +17,15 @@
 #include <Oxygen/Cooker/Import/Internal/GeometryDefaults.h>
 #include <Oxygen/Data/LodPolicyValidation.h>
 #include <Oxygen/Data/PakFormat_geometry.h>
+#include <Oxygen/Data/Schema/Generated.SceneComponents.h>
 #include <Oxygen/Data/SurfaceId.h>
-#include <Oxygen/Scene/Schema/Generated.SceneComponents.h>
 
 namespace oxygen::content::import::internal {
 namespace {
   using data::pak::geometry::LodPolicyRecord;
   using data::pak::geometry::LodPolicyType;
   using nlohmann::json;
-  namespace surface_schema = scene::schema::geometry::surface;
+  namespace surface_schema = data::schema::geometry::surface;
 
   //! Copies a schema-valid threshold list into `out`; returns its length.
   auto ReadBoundaries(const json& values, std::span<float> out) -> std::size_t
@@ -73,7 +73,7 @@ auto MakeSurfaceTable(const std::span<const data::SurfaceId> declared,
 auto MakeDefaultLodPolicy(const std::optional<LodPolicyRecord>& authored)
   -> LodPolicyRecord
 {
-  return authored.value_or(scene::schema::geometry::kLodPolicyDefault);
+  return authored.value_or(data::schema::geometry::kLodPolicyDefault);
 }
 
 auto ReadLodPolicy(const json& document) -> std::optional<LodPolicyRecord>

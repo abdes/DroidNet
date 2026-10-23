@@ -25,6 +25,7 @@
 #include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/PakFormatSerioLoaders.h>
+#include <Oxygen/Data/Schema/Generated.SceneComponents.h>
 #include <Oxygen/Data/api_export.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
@@ -40,8 +41,13 @@ template <> struct ComponentTraits<pak::world::RenderableRecord> {
   static constexpr ComponentType kType = ComponentType::kRenderable;
 };
 
-template <> struct ComponentTraits<pak::world::MaterialOverrideRecord> {
-  static constexpr ComponentType kType = ComponentType::kMaterialOverride;
+template <> struct ComponentTraits<pak::world::OverrideRecord> {
+  static constexpr ComponentType kType = ComponentType::kOverride;
+};
+
+//! The LOD policy values of the overrides, by `OverrideRecordIndex`.
+template <> struct ComponentTraits<pak::geometry::LodPolicyRecord> {
+  static constexpr ComponentType kType = ComponentType::kOverrideLodPolicy;
 };
 
 template <> struct ComponentTraits<pak::world::LocalFogVolumeRecord> {
@@ -383,6 +389,12 @@ private:
 
   // Validates offsets and sizes against the data buffer
   auto ParseAndValidate() -> void;
+
+  // Validates every override against the property its id names.
+  auto ValidateOverrides() const -> void;
+  auto ValidateOverrideValue(const schema::OverrideProperty& property,
+    const pak::world::OverrideValue& value,
+    std::vector<bool>& lod_policy_used) const -> void;
 
   std::shared_ptr<std::vector<std::byte>> owned_data_;
   std::span<const std::byte> data_;

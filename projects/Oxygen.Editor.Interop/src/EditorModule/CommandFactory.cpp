@@ -28,7 +28,7 @@
 #include <Commands/SetEnvironmentCommand.h>
 #include <Commands/SetGeometryCommand.h>
 #include <Commands/SetLocalTransformCommand.h>
-#include <Commands/SetMaterialOverrideCommand.h>
+#include <Commands/SetOverridesCommand.h>
 #include <Commands/SetPropertiesCommand.h>
 #include <Commands/UpdateTransformsForNodesCommand.h>
 #pragma managed(pop)
@@ -83,11 +83,12 @@ namespace Oxygen::Interop::World {
     return new SetGeometryCommand(handle, assetUri);
   }
 
-  SetMaterialOverrideCommand*
-    CommandFactory::CreateSetMaterialOverride(oxygen::scene::NodeHandle handle,
-      oxygen::interop::module::SurfaceTarget target, std::optional<std::string> materialUri,
-      oxygen::interop::module::SurfaceMaterialAssignmentIntent intent) {
-    return new SetMaterialOverrideCommand(handle, std::move(target), std::move(materialUri), intent);
+  SetOverridesCommand*
+    CommandFactory::CreateSetOverrides(oxygen::scene::NodeHandle handle,
+      oxygen::interop::module::OverrideTarget target,
+      std::vector<oxygen::interop::module::OverrideEntry> entries,
+      oxygen::interop::module::OverrideIntent intent) {
+    return new SetOverridesCommand(handle, std::move(target), std::move(entries), intent);
   }
 
   SetEnvironmentCommand* CommandFactory::CreateSetEnvironment(

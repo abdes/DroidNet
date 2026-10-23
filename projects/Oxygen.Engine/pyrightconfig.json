@@ -4,7 +4,7 @@
   "extraPaths": [
     "src/Oxygen/Core/Tools/BindlessCodeGen/src",
     "src/Oxygen/Content/Tools/UnicodeCodeGen/src",
-    "src/Oxygen/Scene/Tools/SceneSchemaCodeGen/src"
+    "src/Oxygen/Data/Tools/SceneSchemaCodeGen/src"
   ],
   "reportOptionalCall": "none"
 }

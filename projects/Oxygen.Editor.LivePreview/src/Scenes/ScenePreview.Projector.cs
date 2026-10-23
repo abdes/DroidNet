@@ -47,14 +47,14 @@ internal sealed partial class ScenePreview
         return [.. changes.Where(Releases), .. changes.Where(change => !Releases(change))];
     }
 
-    private static SourceOverride[] MaterialOverridesOf(SceneNode node)
-        => [.. node.Components.OfType<GeometryComponent>().SelectMany(static geometry => MaterialOverrides(geometry))];
+    private static OverridePart[] OverridePartsOf(SceneNode node)
+        => [.. node.Components.OfType<GeometryComponent>().SelectMany(static geometry => OverridePartsOf(geometry))];
 
-    private static void RecordMaterialOverrides(DocumentLifetime lifetime, IEnumerable<SceneNode> nodes)
+    private static void RecordOverrideParts(DocumentLifetime lifetime, IEnumerable<SceneNode> nodes)
     {
         foreach (var node in nodes)
         {
-            lifetime.MaterialOverrides[node.Id] = MaterialOverridesOf(node);
+            lifetime.OverrideParts[node.Id] = OverridePartsOf(node);
         }
     }
 
@@ -155,7 +155,7 @@ internal sealed partial class ScenePreview
             case SceneChange.NodesAdded added:
                 foreach (var node in added.Roots.Select(id => FindNode(scene, id)).OfType<SceneNode>())
                 {
-                    RecordMaterialOverrides(lifetime, [node, .. node.Descendants()]);
+                    RecordOverrideParts(lifetime, [node, .. node.Descendants()]);
                     await this.CreateSubtreeAsync(node, node.Hierarchy.Parent?.Id, cancellationToken).ConfigureAwait(true);
                 }
 
@@ -179,12 +179,12 @@ internal sealed partial class ScenePreview
                 await this.ProjectPropertiesAsync(lifetime, properties, revision, cancellationToken).ConfigureAwait(true);
                 break;
             case SceneChange.GeometryChanged geometry when FindNode(scene, geometry.Node) is { } node:
-                RecordMaterialOverrides(lifetime, [node]);
+                RecordOverrideParts(lifetime, [node]);
                 await this.AttachGeometryWhenMountedAsync(lifetime, node, cancellationToken).ConfigureAwait(true);
                 break;
             case SceneChange.OverridesChanged overrides
-                when overrides.Properties.Contains(SceneSchema.Geometry.Surface.Material.Id) && FindNode(scene, overrides.Node) is { } node:
-                await this.ProjectSurfacesAsync(lifetime, node, cancellationToken).ConfigureAwait(true);
+                when overrides.Properties.Any(static property => SceneWire.TryGetOverrideId(property, out _)) && FindNode(scene, overrides.Node) is { } node:
+                await this.ProjectOverridesAsync(lifetime, node, cancellationToken).ConfigureAwait(true);
                 break;
             default:
                 // Layout, editor visibility, play, references and scripts have no engine projection.
@@ -192,14 +192,14 @@ internal sealed partial class ScenePreview
         }
     }
 
-    // The engine keeps a surface's material until told otherwise: an override that went away is cleared, and the overrides
-    // the node has are sent once their materials are mounted. The geometry stays attached.
-    private async Task ProjectSurfacesAsync(DocumentLifetime lifetime, SceneNode node, CancellationToken cancellationToken)
+    // The engine keeps a part's overrides until told otherwise: a part whose overrides all went away is cleared, and the
+    // parts the node has are sent once their assets are mounted. The geometry stays attached.
+    private async Task ProjectOverridesAsync(DocumentLifetime lifetime, SceneNode node, CancellationToken cancellationToken)
     {
-        var current = MaterialOverridesOf(node);
-        SourceOverride[] cleared = [.. lifetime.MaterialOverrides.GetValueOrDefault(node.Id, [])
-            .Where(previous => !current.Any(entry => entry.Part == previous.Part))];
-        lifetime.MaterialOverrides[node.Id] = current;
+        var current = OverridePartsOf(node);
+        OverridePart[] cleared = [.. lifetime.OverrideParts.GetValueOrDefault(node.Id, [])
+            .Where(previous => !current.Any(part => part.Part == previous.Part))];
+        lifetime.OverrideParts[node.Id] = current;
         var mounted = this.IsMounted(SceneAssetReferences.Runtime(node));
         if (!mounted)
         {
@@ -208,7 +208,7 @@ internal sealed partial class ScenePreview
 
         if (mounted || cleared.Length > 0)
         {
-            this.Report(await this.UpdateSurfacesAsync(lifetime.Scene, node, cleared, overrides: mounted, cancellationToken).ConfigureAwait(true));
+            this.Report(await this.UpdateOverridesAsync(lifetime.Scene, node, cleared, overrides: mounted, cancellationToken).ConfigureAwait(true));
         }
     }
 

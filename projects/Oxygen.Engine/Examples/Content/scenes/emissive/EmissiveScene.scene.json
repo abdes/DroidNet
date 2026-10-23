@@ -1,5 +1,5 @@
 {
-  "version": 13,
+  "version": 14,
   "name": "EmissiveScene",
   "nodes": [
     {
@@ -112,33 +112,27 @@
   "renderables": [
     {
       "node": 1,
-      "geometry_ref": "/.cooked/Geometry/GeoEmissiveRed.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoEmissiveRed.ogeo"
     },
     {
       "node": 2,
-      "geometry_ref": "/.cooked/Geometry/GeoEmissiveGreen.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoEmissiveGreen.ogeo"
     },
     {
       "node": 3,
-      "geometry_ref": "/.cooked/Geometry/GeoEmissiveBlue.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoEmissiveBlue.ogeo"
     },
     {
       "node": 4,
-      "geometry_ref": "/.cooked/Geometry/GeoEmissiveTextured.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoEmissiveTextured.ogeo"
     },
     {
       "node": 5,
-      "geometry_ref": "/.cooked/Geometry/GeoEmissiveMasked.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoEmissiveMasked.ogeo"
     },
     {
       "node": 6,
-      "geometry_ref": "/.cooked/Geometry/GeoReference.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoReference.ogeo"
     }
   ],
   "cameras": {

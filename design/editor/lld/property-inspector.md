@@ -178,7 +178,7 @@ edit. The picker captures geometry/SurfaceId/revision before its asynchronous wo
 the command revalidates that target before mutating any selected instance.
 Unavailable inventories and unresolved assignments appear beside the picker. New
 edits use `ObservedEdit` validation; saved scene projection and history use
-`RetainedAssignment`, resolving the same geometry and surviving SurfaceId against
+`RetainedOverride`, resolving the same geometry and surviving SurfaceId against
 the current native inventory. This transport intent is not persisted authoring
 data. Missing or foreign identities remain unresolved; revision drift alone does
 not invalidate proven surface continuity. Every nonzero surface receives the same

@@ -14,12 +14,15 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <variant>
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Data/PakFormat_geometry.h>
+#include <Oxygen/Data/Schema/Generated.SceneComponents.h>
 #include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Scene/Types/NodeHandle.h>
 #include <api_export.h>
@@ -39,10 +42,10 @@ class Scene;
 
 namespace oxygen::interop::module {
 
-//! New edits validate their observed revision; saved assignments retain identity.
-enum class SurfaceMaterialAssignmentIntent : std::uint8_t {
+//! New edits validate their observed revision; saved overrides retain identity.
+enum class OverrideIntent : std::uint8_t {
   kObservedEdit = 0,
-  kRetainedAssignment = 1,
+  kRetainedOverride = 1,
 };
 
 //! Texture an environment edit binds. Each slot loads independently; the edit
@@ -65,11 +68,32 @@ using EnvironmentTextureSources
 using EnvironmentTextureKeys
   = std::array<content::ResourceKey, kEnvironmentTextureSlotCount>;
 
-//! Native target captured from the currently observed authored geometry.
-struct SurfaceTarget final {
+//! The part an override set addresses, captured from the currently observed
+//! authored geometry: one of its surfaces, or with a nil `surface_id` and a zero
+//! `layout_revision` the geometry component itself.
+struct OverrideTarget final {
   std::string geometry_uri;
   data::SurfaceId surface_id;
   base::Sha256Digest layout_revision {};
+};
+
+//! The virtual path of the asset an override names.
+struct OverrideAsset final {
+  std::string virtual_path;
+
+  auto operator==(const OverrideAsset&) const -> bool = default;
+};
+
+//! An override value, one alternative per value type the schema's override
+//! properties use.
+using OverrideValue
+  = std::variant<bool, OverrideAsset, data::pak::geometry::LodPolicyRecord>;
+
+//! One override: the property its id names and a value of that property's
+//! value type.
+struct OverrideEntry final {
+  data::schema::OverrideId id = data::schema::OverrideId::kInvalid;
+  OverrideValue value;
 };
 
 //! Scene-session request authority. Only completion callbacks are thread-safe;
@@ -117,8 +141,12 @@ public:
                      FailureCallback on_failure = {}, SuccessCallback on_success = {})
       -> GeometryCompletion;
   OXGN_EI_API void LoadGeometry(const std::string &uri, GeometryCompletion complete);
-  OXGN_EI_API void SetMaterial(scene::NodeHandle node, SurfaceTarget target,
-                   const std::optional<std::string>& uri, SurfaceMaterialAssignmentIntent intent,
+  //! Sets the whole override state of one part: a property of the part with
+  //! no entry takes the geometry's asset value. The entries were validated
+  //! against the schema at the command boundary. A material loads first; the
+  //! part applies once it has, and again whenever its geometry is replaced.
+  OXGN_EI_API void SetOverrides(scene::NodeHandle node, OverrideTarget target,
+                   std::vector<OverrideEntry> entries, OverrideIntent intent,
                    FailureCallback on_failure = {},
                    SuccessCallback on_success = {});
   OXGN_EI_API void Detach(scene::NodeHandle node);
@@ -145,9 +173,10 @@ public:
   OXGN_EI_API auto Drain(scene::Scene &scene) -> bool;
 
 private:
-  void QueueMaterial(scene::NodeHandle node, SurfaceTarget target,
-    const std::optional<std::string>& uri, SurfaceMaterialAssignmentIntent intent, FailureCallback on_failure,
-    SuccessCallback on_success, std::optional<data::AssetKey> accepted_geometry);
+  void QueueOverrides(scene::NodeHandle node, OverrideTarget target,
+    std::vector<OverrideEntry> entries, OverrideIntent intent,
+    FailureCallback on_failure, SuccessCallback on_success,
+    std::optional<data::AssetKey> accepted_geometry);
   struct State;
   std::unique_ptr<State> state_;
 };

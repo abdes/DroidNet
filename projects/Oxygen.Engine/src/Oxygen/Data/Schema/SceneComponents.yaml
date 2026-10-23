@@ -26,6 +26,7 @@
 # everything else rejects it. A rule relating two properties is not a range:
 # it stays in the component's rules. `unit` names the unit of the stored value;
 # `display_unit` the unit UIs show it in.
+# An asset property names the `asset_type` of the asset it references.
 #
 # A property with `sources` may be supplied by a geometry asset (`asset`) or a
 # model template (`model`); a scene stores only its overrides of it, addressed
@@ -333,6 +334,7 @@ components:
       - name: GeometryUri
         key: /geometry_uri
         type: asset
+        asset_type: geometry
       - name: LodPolicy
         key: /lod_policy
         type: lod-policy
@@ -346,6 +348,7 @@ components:
           - name: Material
             key: /material
             type: asset
+            asset_type: material
             sources: [asset]
             override_id: 1
           - name: Visibility

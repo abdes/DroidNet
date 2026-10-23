@@ -155,9 +155,46 @@ public sealed partial class ScenePreviewTests
 
         _ = (await fixture.Preview.SyncSceneAsync(PreviewFixture.SceneOf(document), this.TestContext.CancellationToken).ConfigureAwait(false)).Should().BeTrue();
 
-        var projected = fixture.World.Commands.OfType<RuntimeSetMaterialOverride>().Should().ContainSingle().Which;
-        _ = projected.Intent.Should().Be(SurfaceMaterialAssignmentIntent.RetainedAssignment);
-        _ = projected.SurfaceId.Should().Be(target.SurfaceId);
-        _ = projected.LayoutRevision.Should().Be(target.LayoutRevision);
+        var projected = fixture.World.Commands.OfType<RuntimeSetOverrides>().Should().ContainSingle().Which;
+        _ = projected.Intent.Should().Be(OverrideIntent.RetainedOverride);
+        _ = projected.Part.Should().Be(new RuntimeOverridePart(target.SurfaceId, target.LayoutRevision));
+    }
+
+    [TestMethod]
+    public async Task OverrideProjection_SendsEachPartWithItsWholeState()
+    {
+        using var fixture = new PreviewFixture();
+        var built = new Scene { Name = "Test Scene" };
+        var node = new SceneNode(built, "Overridden geometry");
+        built.RootNodes.Add(node);
+        var target = new SurfaceTarget(
+            EngineAssets.BasicShape("Cube"),
+            Guid.Parse("10000000-0000-0000-0000-000000000001"),
+            new string('a', 64));
+        var policy = new LodPolicy.Distance([12f, 30f], 0.1f);
+        var geometry = new GeometryComponent { Name = "Geometry", Geometry = target.Geometry };
+        geometry.Overrides = geometry.Overrides
+            .With(SceneSchema.Geometry.LodPolicy, (LodPolicy)policy)
+            .With(SceneSchema.Geometry.Surface.Visibility, target.Part, target.LayoutRevision, false)
+            .With(SceneSchema.Geometry.Surface.CastsShadows, target.Part, target.LayoutRevision, true)
+            .With(SceneSchema.Geometry.Surface.Material, target.Part, target.LayoutRevision, AssetPath.Parse("/Content/Materials/Saved.omat"));
+        node.Components.Add(geometry);
+        var document = await fixture.OpenAsync(built).ConfigureAwait(false);
+
+        _ = (await fixture.Preview.SyncSceneAsync(PreviewFixture.SceneOf(document), this.TestContext.CancellationToken).ConfigureAwait(false)).Should().BeTrue();
+
+        var sent = fixture.World.Commands.OfType<RuntimeSetOverrides>().ToList();
+        _ = sent.Should().HaveCount(2);
+        var component = sent.Should().ContainSingle(static command => command.Part == null).Which;
+        _ = component.Overrides.Should().Equal(
+            new RuntimeOverride(RuntimeOverrideId.GeometryLodPolicy, new RuntimeOverrideValue.LodPolicyValue(policy)));
+        var surface = sent.Should().ContainSingle(static command => command.Part != null).Which;
+        _ = surface.Part.Should().Be(new RuntimeOverridePart(target.SurfaceId, target.LayoutRevision));
+        _ = surface.Overrides.Should().BeEquivalentTo(
+        [
+            new RuntimeOverride(RuntimeOverrideId.GeometrySurfaceMaterial, new RuntimeOverrideValue.Asset("/Content/Materials/Saved.omat")),
+            new RuntimeOverride(RuntimeOverrideId.GeometrySurfaceVisibility, new RuntimeOverrideValue.Flag(false)),
+            new RuntimeOverride(RuntimeOverrideId.GeometrySurfaceCastsShadows, new RuntimeOverrideValue.Flag(true)),
+        ]);
     }
 }

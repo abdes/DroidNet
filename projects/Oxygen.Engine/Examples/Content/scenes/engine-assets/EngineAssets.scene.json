@@ -1,5 +1,5 @@
 {
-  "version": 13,
+  "version": 14,
   "name": "EngineAssets",
   "nodes": [
     {
@@ -224,93 +224,97 @@
   "renderables": [
     {
       "node": 1,
-      "geometry_ref": "/Engine/Generated/BasicShapes/Plane.ogeo",
-      "visible": true
+      "geometry_ref": "/Engine/Generated/BasicShapes/Plane.ogeo"
     },
     {
       "node": 2,
       "geometry_ref": "/Engine/Generated/BasicShapes/Cube.ogeo",
-      "visible": true,
-      "material_overrides": [
-        {
-          "surface_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
-          "material_ref": "/.cooked/Materials/MatCube.omat",
-          "layout_revision": "70d2458daeb2184329ef81aef4e913cb828e2494a8cd5eda069969aff3f64aa6"
-        }
-      ]
+      "overrides": {
+        "parts": [
+          {
+            "kind": "surface",
+            "id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+            "layout_revision": "70d2458daeb2184329ef81aef4e913cb828e2494a8cd5eda069969aff3f64aa6",
+            "values": { "/material": "/.cooked/Materials/MatCube.omat" }
+          }
+        ]
+      }
     },
     {
       "node": 3,
       "geometry_ref": "/Engine/Generated/BasicShapes/SubdividedCube.ogeo",
-      "visible": true,
-      "material_overrides": [
-        {
-          "surface_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
-          "material_ref": "/.cooked/Materials/MatCubeB.omat",
-          "layout_revision": "70d2458daeb2184329ef81aef4e913cb828e2494a8cd5eda069969aff3f64aa6"
-        }
-      ]
+      "overrides": {
+        "parts": [
+          {
+            "kind": "surface",
+            "id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+            "layout_revision": "70d2458daeb2184329ef81aef4e913cb828e2494a8cd5eda069969aff3f64aa6",
+            "values": { "/material": "/.cooked/Materials/MatCubeB.omat" }
+          }
+        ]
+      }
     },
     {
       "node": 4,
       "geometry_ref": "/Engine/Generated/BasicShapes/Sphere.ogeo",
-      "visible": true,
-      "material_overrides": [
-        {
-          "surface_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
-          "material_ref": "/.cooked/Materials/MatCubeC.omat",
-          "layout_revision": "70d2458daeb2184329ef81aef4e913cb828e2494a8cd5eda069969aff3f64aa6"
-        }
-      ]
+      "overrides": {
+        "parts": [
+          {
+            "kind": "surface",
+            "id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+            "layout_revision": "70d2458daeb2184329ef81aef4e913cb828e2494a8cd5eda069969aff3f64aa6",
+            "values": { "/material": "/.cooked/Materials/MatCubeC.omat" }
+          }
+        ]
+      }
     },
     {
       "node": 5,
       "geometry_ref": "/Engine/Generated/BasicShapes/Cylinder.ogeo",
-      "visible": true,
-      "material_overrides": [
-        {
-          "surface_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
-          "material_ref": "/.cooked/Materials/MatCubeD.omat",
-          "layout_revision": "70d2458daeb2184329ef81aef4e913cb828e2494a8cd5eda069969aff3f64aa6"
-        }
-      ]
+      "overrides": {
+        "parts": [
+          {
+            "kind": "surface",
+            "id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+            "layout_revision": "70d2458daeb2184329ef81aef4e913cb828e2494a8cd5eda069969aff3f64aa6",
+            "values": { "/material": "/.cooked/Materials/MatCubeD.omat" }
+          }
+        ]
+      }
     },
     {
       "node": 6,
       "geometry_ref": "/Engine/Generated/BasicShapes/Quad.ogeo",
-      "visible": true,
-      "material_overrides": [
-        {
-          "surface_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
-          "material_ref": "/.cooked/Materials/MatCubeD.omat",
-          "layout_revision": "70d2458daeb2184329ef81aef4e913cb828e2494a8cd5eda069969aff3f64aa6"
-        }
-      ]
+      "overrides": {
+        "parts": [
+          {
+            "kind": "surface",
+            "id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+            "layout_revision": "70d2458daeb2184329ef81aef4e913cb828e2494a8cd5eda069969aff3f64aa6",
+            "values": { "/material": "/.cooked/Materials/MatCubeD.omat" }
+          }
+        ]
+      }
     },
     {
       "node": 7,
-      "geometry_ref": "/Engine/Generated/BasicShapes/IcoSphere.ogeo",
-      "visible": true
+      "geometry_ref": "/Engine/Generated/BasicShapes/IcoSphere.ogeo"
     },
     {
       "node": 8,
-      "geometry_ref": "/Engine/Generated/BasicShapes/Cone.ogeo",
-      "visible": true
+      "geometry_ref": "/Engine/Generated/BasicShapes/Cone.ogeo"
     },
     {
       "node": 9,
-      "geometry_ref": "/Engine/Generated/BasicShapes/Capsule.ogeo",
-      "visible": true
+      "geometry_ref": "/Engine/Generated/BasicShapes/Capsule.ogeo"
     },
     {
       "node": 10,
-      "geometry_ref": "/Engine/Generated/BasicShapes/Torus.ogeo",
-      "visible": true
+      "geometry_ref": "/Engine/Generated/BasicShapes/Torus.ogeo"
     },
     {
       "node": 11,
-      "geometry_ref": "/Engine/Internal/ArrowGizmo.ogeo",
-      "visible": true
+      "geometry_ref": "/Engine/Internal/ArrowGizmo.ogeo"
     }
   ],
   "cameras": {

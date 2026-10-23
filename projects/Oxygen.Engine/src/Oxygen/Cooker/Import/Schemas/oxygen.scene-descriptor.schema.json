@@ -9,7 +9,7 @@
     },
     "version": {
       "type": "integer",
-      "const": 13
+      "const": 14
     },
     "name": {
       "$ref": "oxygen.name.schema.json#/definitions/segment"
@@ -238,28 +238,61 @@
         "geometry_ref": {
           "$ref": "#/definitions/canonical_ogeo_path"
         },
-        "material_overrides": {
+        "overrides": {
+          "$ref": "#/definitions/geometry_overrides"
+        }
+      }
+    },
+    "geometry_overrides": {
+      "description": "This instance's changes of its geometry's asset defaults, by scene schema property key. An absent value keeps the asset's.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "values": {
+          "description": "Overrides of the geometry component's own properties.",
+          "type": "object",
+          "additionalProperties": false,
+          "minProperties": 1,
+          "properties": {
+            "/lod_policy": {
+              "$ref": "oxygen.lod-policy.schema.json#/definitions/lod_policy"
+            }
+          }
+        },
+        "parts": {
+          "description": "Overrides of the properties of the geometry's surfaces, one entry per surface.",
           "type": "array",
           "maxItems": 65535,
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["surface_id", "material_ref", "layout_revision"],
+            "required": ["kind", "id", "layout_revision", "values"],
             "properties": {
-              "surface_id": {
+              "kind": {
+                "const": "surface"
+              },
+              "id": {
+                "description": "The SurfaceId of the surface.",
                 "type": "string",
                 "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
               },
-              "material_ref": { "$ref": "#/definitions/canonical_omat_path" },
               "layout_revision": {
+                "description": "The geometry layout revision the overrides were resolved against.",
                 "type": "string",
                 "pattern": "^[0-9a-f]{64}$"
+              },
+              "values": {
+                "type": "object",
+                "additionalProperties": false,
+                "minProperties": 1,
+                "properties": {
+                  "/material": { "$ref": "#/definitions/canonical_omat_path" },
+                  "/visible": { "type": "boolean" },
+                  "/casts_shadows": { "type": "boolean" }
+                }
               }
             }
           }
-        },
-        "visible": {
-          "type": "boolean"
         }
       }
     },

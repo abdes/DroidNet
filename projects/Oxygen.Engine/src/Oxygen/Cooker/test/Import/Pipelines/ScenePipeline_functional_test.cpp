@@ -228,12 +228,10 @@ NOLINT_TEST_F(ScenePipelineTest, CollectSortsRenderablesByNodeIndex)
     data::pak::world::RenderableRecord {
       .node_index = 1,
       .geometry_key = MakeFirstByteAssetKey(42U),
-      .visible = 1,
     },
     data::pak::world::RenderableRecord {
       .node_index = 0,
       .geometry_key = MakeFirstByteAssetKey(43U),
-      .visible = 1,
     },
   };
 

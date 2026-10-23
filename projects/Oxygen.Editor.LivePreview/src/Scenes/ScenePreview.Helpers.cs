@@ -7,6 +7,7 @@ using Oxygen.Editor.Runtime.Diagnostics;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
+using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Utils;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
@@ -254,26 +255,56 @@ internal sealed partial class ScenePreview
     private static void ApplyGeometry(WorldDispatch world, SceneNode node, GeometryComponent geometry)
     {
         world.Execute(new RuntimeSetGeometry(node.Id, GeometryPathMapper.ToEnginePath(geometry.Geometry)));
-        ApplyMaterialOverrides(world, node, geometry);
+        ApplyOverrides(world, node, geometry);
     }
 
-    // The engine takes a surface's material through its own command until the override command replaces it.
-    private static void ApplyMaterialOverrides(WorldDispatch world, SceneNode node, GeometryComponent geometry)
+    // The engine takes a geometry's overrides one part at a time, each with the part's whole state: the component's own
+    // values, then each surface's.
+    private static void ApplyOverrides(WorldDispatch world, SceneNode node, GeometryComponent geometry)
     {
-        foreach (var surface in MaterialOverrides(geometry))
+        foreach (var part in OverridePartsOf(geometry))
         {
-            world.Execute(new RuntimeSetMaterialOverride(
-                node.Id,
-                GeometryPathMapper.ToEnginePath(geometry.Geometry),
-                surface.Part!.Value.Id,
-                surface.LayoutRevision!,
-                MaterialOverridePathMapper.ToEnginePath((AssetPath)surface.Value),
-                SurfaceMaterialAssignmentIntent.RetainedAssignment));
+            world.Execute(SetOverrides(node.Id, geometry, part, geometry.Overrides.All.Where(entry => entry.Part == part.Part)));
         }
     }
 
-    private static IEnumerable<SourceOverride> MaterialOverrides(GeometryComponent geometry)
-        => geometry.Overrides.All.Where(static entry => entry.Property == SceneSchema.Geometry.Surface.Material.Id);
+    // A part with no values clears every override of the part.
+    private static RuntimeSetOverrides SetOverrides(NodeId node, GeometryComponent geometry, OverridePart part, IEnumerable<SourceOverride> values)
+        => new(
+            node,
+            GeometryPathMapper.ToEnginePath(geometry.Geometry),
+            part.Part is { } surface ? new RuntimeOverridePart(SurfaceIdOf(surface), part.LayoutRevision!) : null,
+            [.. values.Select(ToRuntimeOverride)],
+            OverrideIntent.RetainedOverride);
+
+    // Surfaces are the only part kind of a geometry.
+    private static Guid SurfaceIdOf(PartId part)
+        => string.Equals(part.Kind, SceneSchema.Geometry.Surface.Kind, StringComparison.Ordinal)
+            ? part.Id
+            : throw new InvalidOperationException($"Geometry part '{part}' is not a surface.");
+
+    // Each value is encoded once per value type of the schema; materials are the only asset overrides.
+    private static RuntimeOverride ToRuntimeOverride(SourceOverride entry)
+    {
+        if (!SceneWire.TryGetOverrideId(entry.Property, out var id))
+        {
+            throw new InvalidOperationException($"Property '{entry.Property}' is not an override the engine takes.");
+        }
+
+        RuntimeOverrideValue value = entry.Value switch
+        {
+            AssetPath material when entry.Property == SceneSchema.Geometry.Surface.Material.Id
+                => new RuntimeOverrideValue.Asset(MaterialOverridePathMapper.ToEnginePath(material)!),
+            bool flag => new RuntimeOverrideValue.Flag(flag),
+            LodPolicy policy => new RuntimeOverrideValue.LodPolicyValue(policy),
+            _ => throw new InvalidOperationException($"Override '{entry.Property}' holds a {entry.Value.GetType().Name}, which has no engine encoding."),
+        };
+        return new(id, value);
+    }
+
+    // The parts a geometry overrides: the component itself when it has values, and each surface with values.
+    private static OverridePart[] OverridePartsOf(GeometryComponent geometry)
+        => [.. geometry.Overrides.All.Select(static entry => new OverridePart(entry.Part, entry.LayoutRevision)).Distinct()];
 
     private static void ApplyLight(WorldDispatch world, SceneNode node, LightComponent light)
     {
@@ -459,4 +490,9 @@ internal sealed partial class ScenePreview
         // The node exists in the scene activation this preview still projects.
         return !cancellationToken.IsCancellationRequested && world.Commands.RunId == world.Target.RunId;
     }
+
+    /// <summary>One part of a geometry's overrides, as the engine takes them.</summary>
+    /// <param name="Part">The surface, or <see langword="null"/> for the geometry component's own properties.</param>
+    /// <param name="LayoutRevision">The layout revision a surface's overrides were resolved against; <see langword="null"/> without a part.</param>
+    internal sealed record OverridePart(PartId? Part, string? LayoutRevision);
 }

@@ -60,8 +60,8 @@ public sealed class RuntimeAssetFailureTests
         var target = new RuntimeSceneTarget(sut.RunId, SceneId.New(), Guid.NewGuid(), Guid.NewGuid());
         _ = await sut.ActivateSceneAsync(Guid.NewGuid(), target, "Scene", this.TestContext.CancellationToken).ConfigureAwait(false);
         var node = NodeId.New();
-        var first = new RuntimeWorldRequest(Guid.NewGuid(), target, new RuntimeSetMaterialOverride(node, "/Content/Mesh.ogeo", Guid.NewGuid(), new string('0', 64), "/Content/First.omat", SurfaceMaterialAssignmentIntent.ObservedEdit));
-        var otherSurface = new RuntimeWorldRequest(Guid.NewGuid(), target, new RuntimeSetMaterialOverride(node, "/Content/Mesh.ogeo", Guid.NewGuid(), new string('0', 64), "/Content/Other.omat", SurfaceMaterialAssignmentIntent.ObservedEdit));
+        var first = new RuntimeWorldRequest(Guid.NewGuid(), target, new RuntimeSetOverrides(node, "/Content/Mesh.ogeo", new RuntimeOverridePart(Guid.NewGuid(), new string('0', 64)), [new RuntimeOverride(RuntimeOverrideId.GeometrySurfaceMaterial, new RuntimeOverrideValue.Asset("/Content/First.omat"))], OverrideIntent.ObservedEdit));
+        var otherSurface = new RuntimeWorldRequest(Guid.NewGuid(), target, new RuntimeSetOverrides(node, "/Content/Mesh.ogeo", new RuntimeOverridePart(Guid.NewGuid(), new string('0', 64)), [new RuntimeOverride(RuntimeOverrideId.GeometrySurfaceMaterial, new RuntimeOverrideValue.Asset("/Content/Other.omat"))], OverrideIntent.ObservedEdit));
         _ = sut.Execute(first, this.TestContext.CancellationToken);
         _ = sut.Execute(otherSurface, this.TestContext.CancellationToken);
         _ = sut.Execute(first with { OperationId = Guid.NewGuid() }, this.TestContext.CancellationToken);
@@ -86,11 +86,11 @@ public sealed class RuntimeAssetFailureTests
         var current = new RuntimeWorldRequest(
             Guid.NewGuid(),
             target,
-            new RuntimeSetMaterialOverride(node, "/Content/Sphere.ogeo", surface, new string('a', 64), "/Content/Red.omat", SurfaceMaterialAssignmentIntent.RetainedAssignment));
+            new RuntimeSetOverrides(node, "/Content/Sphere.ogeo", new RuntimeOverridePart(surface, new string('a', 64)), [new RuntimeOverride(RuntimeOverrideId.GeometrySurfaceMaterial, new RuntimeOverrideValue.Asset("/Content/Red.omat"))], OverrideIntent.RetainedOverride));
         var foreign = new RuntimeWorldRequest(
             Guid.NewGuid(),
             target,
-            new RuntimeSetMaterialOverride(node, "/Content/Cube.ogeo", surface, new string('a', 64), "/Content/Blue.omat", SurfaceMaterialAssignmentIntent.RetainedAssignment));
+            new RuntimeSetOverrides(node, "/Content/Cube.ogeo", new RuntimeOverridePart(surface, new string('a', 64)), [new RuntimeOverride(RuntimeOverrideId.GeometrySurfaceMaterial, new RuntimeOverrideValue.Asset("/Content/Blue.omat"))], OverrideIntent.RetainedOverride));
         _ = sut.Execute(current, this.TestContext.CancellationToken);
         _ = sut.Execute(foreign, this.TestContext.CancellationToken);
         native.Raise(value => value.AssetLoadFailed += null, new RuntimeAssetLoadFailedEventArgs(foreign, 2, "Different geometry"));

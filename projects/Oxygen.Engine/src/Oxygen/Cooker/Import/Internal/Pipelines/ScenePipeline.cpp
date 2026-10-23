@@ -15,6 +15,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -38,6 +39,7 @@
 #include <Oxygen/Data/LightValidation.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/PakFormatSerioWriters.h> // IWYU pragma: keep
+#include <Oxygen/Data/Schema/Generated.SceneComponents.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/ThreadPool.h>
@@ -121,12 +123,10 @@ namespace {
 
   auto SortSceneComponents(SceneBuild& build) -> void
   {
-    std::ranges::sort(
-      build.material_overrides, [](const auto& lhs, const auto& rhs) -> auto {
-        if (lhs.node_index != rhs.node_index) {
-          return lhs.node_index < rhs.node_index;
-        }
-        return lhs.surface_id < rhs.surface_id;
+    // A LOD policy value is an index, so sorting keeps it valid.
+    std::ranges::sort(build.overrides, {},
+      [](const data::pak::world::OverrideRecord& record) -> auto {
+        return std::tie(record.node_index, record.override_id, record.part_id);
       });
     std::ranges::sort(build.renderables,
       [](const RenderableRecord& a, const RenderableRecord& b) -> bool {
@@ -213,8 +213,13 @@ namespace {
     for (const auto& renderable : build.renderables) {
       references.AddAsset(renderable.geometry_key, data::AssetType::kGeometry);
     }
-    for (const auto& assignment : build.material_overrides) {
-      references.AddAsset(assignment.material_key, data::AssetType::kMaterial);
+    for (const auto& record : build.overrides) {
+      const auto* property
+        = data::schema::FindOverrideProperty(record.override_id);
+      DCHECK_NOTNULL_F(property);
+      if (property->type == data::schema::ValueType::kAsset) {
+        references.AddAsset(record.value.as_asset, property->asset_type);
+      }
     }
     for (const auto& instance : build.instances) {
       references.AddAsset(instance.scene_key, data::AssetType::kScene);
@@ -342,9 +347,12 @@ namespace {
 
     add_component_table(ComponentType::kRenderable, sizeof(RenderableRecord),
       std::as_bytes(std::span(build.renderables)));
-    add_component_table(ComponentType::kMaterialOverride,
-      sizeof(data::pak::world::MaterialOverrideRecord),
-      std::as_bytes(std::span(build.material_overrides)));
+    add_component_table(ComponentType::kOverride,
+      sizeof(data::pak::world::OverrideRecord),
+      std::as_bytes(std::span(build.overrides)));
+    add_component_table(ComponentType::kOverrideLodPolicy,
+      sizeof(data::pak::geometry::LodPolicyRecord),
+      std::as_bytes(std::span(build.override_lod_policies)));
     add_component_table(ComponentType::kLocalFogVolume,
       sizeof(LocalFogVolumeRecord),
       std::as_bytes(std::span(build.local_fog_volumes)));

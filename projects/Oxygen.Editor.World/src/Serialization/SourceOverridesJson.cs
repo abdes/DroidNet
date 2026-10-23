@@ -87,20 +87,31 @@ public static class SourceOverridesJson
     public static object ReadValue(PropertyId property, JsonElement json)
     {
         ArgumentNullException.ThrowIfNull(property);
-        return SceneSchema.Overridable.TryGetValue(property, out var type)
-            ? json.Deserialize(TypeInfo(type)) ?? throw new JsonException($"The override of {property} has no value.")
-            : throw new JsonException($"{property} is not a property a source may supply.");
+        if (!SceneSchema.Overridable.TryGetValue(property, out var type))
+        {
+            throw new JsonException($"{property} is not a property a source may supply.");
+        }
+
+        var value = json.Deserialize(TypeInfo(type)) ?? throw new JsonException($"The override of {property} has no value.");
+        return value is LodPolicy policy && policy.FindProblem() is { } problem
+            ? throw new JsonException($"The override of {property} is invalid: {problem}")
+            : value;
     }
 
     /// <summary>
-    /// Writes an override value as its type's JSON.
+    /// Writes an override value as the JSON of its property's value type, the type <see cref="ReadValue"/> reads it as, so a
+    /// polymorphic value such as a LOD policy keeps its type discriminator.
     /// </summary>
-    /// <param name="value">The value, of an overridable property's type.</param>
+    /// <param name="property">The overridable property the value belongs to.</param>
+    /// <param name="value">The value, of the property's type.</param>
     /// <returns>The value's JSON.</returns>
-    public static JsonElement WriteValue(object value)
+    public static JsonElement WriteValue(PropertyId property, object value)
     {
+        ArgumentNullException.ThrowIfNull(property);
         ArgumentNullException.ThrowIfNull(value);
-        return JsonSerializer.SerializeToElement(value, TypeInfo(value.GetType()));
+        return SceneSchema.Overridable.TryGetValue(property, out var type)
+            ? JsonSerializer.SerializeToElement(value, TypeInfo(type))
+            : throw new ArgumentException($"{property} is not a property a source may supply.", nameof(property));
     }
 
     private static SourceOverrides Add(SourceOverrides overrides, PropertyId property, PartId? part, string? layoutRevision, JsonElement json)
@@ -115,7 +126,7 @@ public static class SourceOverridesJson
         }
     }
 
-    private static JsonElement Encode(SourceOverride entry) => WriteValue(entry.Value);
+    private static JsonElement Encode(SourceOverride entry) => WriteValue(entry.Property, entry.Value);
 
     // Every overridable value type needs a contract in the scene context; a missing one is a defect, not bad data.
     private static JsonTypeInfo TypeInfo(Type type)

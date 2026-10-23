@@ -34,13 +34,13 @@ auto Schema() -> const json&
   return schema;
 }
 
-// The documents in the table below spell out `"version": 13`; this test fails
+// The documents in the table below spell out `"version": 14`; this test fails
 // loudly when the schema and the scene asset version drift apart.
 NOLINT_TEST(SceneDescriptorSchemaTest, SchemaVersionMatchesSceneAssetVersion)
 {
   EXPECT_EQ(Schema().at("properties").at("version").at("const"),
     MakeCurrentSceneDescriptor("{}").at("version"));
-  EXPECT_EQ(Schema().at("properties").at("version").at("const"), 13);
+  EXPECT_EQ(Schema().at("properties").at("version").at("const"), 14);
 }
 
 class SceneDescriptorSchemaCaseTest
@@ -55,19 +55,19 @@ INSTANTIATE_TEST_SUITE_P(Cases, SceneDescriptorSchemaCaseTest,
   ::testing::Values(
     SchemaCase {
       "AcceptsNameFollowingTheSegmentRule",
-      R"j({ "version": 13, "name": "Level 1.v2 (copy)", "nodes": [{}] })j",
+      R"j({ "version": 14, "name": "Level 1.v2 (copy)", "nodes": [{}] })j",
       true,
       "",
     },
     SchemaCase {
       "RejectsNameWithReservedCharacter",
-      R"j({ "version": 13, "name": "Level:1", "nodes": [{}] })j",
+      R"j({ "version": 14, "name": "Level:1", "nodes": [{}] })j",
       false,
       "does not match regex pattern",
     },
     SchemaCase {
       "AcceptsCanonicalDocument",
-      R"({ "version": 13,
+      R"({ "version": 14,
     "$schema": "./src/Oxygen/Cooker/Import/Schemas/oxygen.scene-descriptor.schema.json",
     "name": "DemoScene",
     "nodes": [
@@ -76,11 +76,19 @@ INSTANTIATE_TEST_SUITE_P(Cases, SceneDescriptorSchemaCaseTest,
     ],
     "renderables": [
       { "node": 1, "geometry_ref": "/.cooked/Geometry/cube.ogeo",
-        "material_overrides": [{
-          "surface_id": "00000000-0000-0000-0000-000000000001",
-          "material_ref": "/.cooked/Materials/cube.omat",
-          "layout_revision": "0000000000000000000000000000000000000000000000000000000000000001"
-        }]
+        "overrides": {
+          "values": { "/lod_policy": { "type": "fixed", "lod_index": 1 } },
+          "parts": [{
+            "kind": "surface",
+            "id": "00000000-0000-0000-0000-000000000001",
+            "layout_revision": "0000000000000000000000000000000000000000000000000000000000000001",
+            "values": {
+              "/material": "/.cooked/Materials/cube.omat",
+              "/visible": false,
+              "/casts_shadows": true
+            }
+          }]
+        }
       }
     ],
     "cameras": {
@@ -104,8 +112,21 @@ INSTANTIATE_TEST_SUITE_P(Cases, SceneDescriptorSchemaCaseTest,
       "",
     },
     SchemaCase {
+      "RejectsAnOverrideKeyItsOwnerDoesNotHave",
+      R"({ "version": 14,
+    "name": "BadScene",
+    "nodes": [ { "name": "Root" } ],
+    "renderables": [
+      { "node": 0, "geometry_ref": "/.cooked/Geometry/cube.ogeo",
+        "overrides": { "values": { "/visible": false } } }
+    ]
+  })",
+      false,
+      "/renderables/0/overrides/values",
+    },
+    SchemaCase {
       "RejectsUnknownNestedFields",
-      R"({ "version": 13,
+      R"({ "version": 14,
     "name": "BadScene",
     "nodes": [ { "name": "Root", "unknown_field": true } ]
   })",
@@ -114,7 +135,7 @@ INSTANTIATE_TEST_SUITE_P(Cases, SceneDescriptorSchemaCaseTest,
     },
     SchemaCase {
       "AcceptsDirectionalShadowTuningFields",
-      R"({ "version": 13,
+      R"({ "version": 14,
     "name": "TunedScene",
     "nodes": [
       { "name": "Root" }
@@ -140,7 +161,7 @@ INSTANTIATE_TEST_SUITE_P(Cases, SceneDescriptorSchemaCaseTest,
     },
     SchemaCase {
       "AcceptsCurrentEnvironmentAndLocalFogShape",
-      R"({ "version": 13,
+      R"({ "version": 14,
     "name": "FogScene",
     "nodes": [
       { "name": "Root" },

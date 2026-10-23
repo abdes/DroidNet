@@ -35,11 +35,12 @@ internal sealed partial class SceneComponentsReader
     private static readonly string[] PartKeys = ["name", "kind", "properties"];
     private static readonly string[] PropertyKeys = ["name", "key", "type"];
     private static readonly string[] ValueKeys = ["default", "root_default", "range", "commit", "unit", "display_unit"];
-    private static readonly string[] PropertyOptionalKeys = ["enum", "fields", "encoding", "sources", "override_id", .. ValueKeys];
+    private static readonly string[] PropertyOptionalKeys = ["asset_type", "enum", "fields", "encoding", "sources", "override_id", .. ValueKeys];
     private static readonly string[] PartPropertyKeys = ["name", "key", "type", "sources", "override_id"];
-    private static readonly string[] PartPropertyOptionalKeys = ["enum", .. ValueKeys];
+    private static readonly string[] PartPropertyOptionalKeys = ["asset_type", "enum", .. ValueKeys];
     private static readonly string[] RangeKeys = ["min", "max", "min_exclusive", "max_exclusive", "nonzero"];
     private static readonly string[] Sources = ["asset", "model"];
+    private static readonly string[] AssetTypes = ["geometry", "material"];
     private static readonly string[] Cardinalities = ["required", "optional"];
     private static readonly string[] Commits = ["clamp", "reject"];
 
@@ -256,6 +257,7 @@ internal sealed partial class SceneComponentsReader
         var where = component + "." + (name ?? "?");
         var key = this.Scalar(map, "key", where);
         var type = this.Scalar(map, "type", where);
+        var assetType = Has(map, "asset_type") ? this.Scalar(map, "asset_type", where) : null;
         var enumeration = Has(map, "enum") ? this.Scalar(map, "enum", where) : null;
         var encoding = Has(map, "encoding") ? this.Scalar(map, "encoding", where) : null;
         var fields = Has(map, "fields")
@@ -265,7 +267,7 @@ internal sealed partial class SceneComponentsReader
         var values = this.ReadValues(map, where, type);
         return name is null || key is null || type is null || values is null
             ? null
-            : new SceneComponentsSchema.PropertyEntry(name, key, type, enumeration, fields, encoding, sources, values, this.LocationsOf(map));
+            : new SceneComponentsSchema.PropertyEntry(name, key, type, assetType, enumeration, fields, encoding, sources, values, this.LocationsOf(map));
     }
 
     private List<string> ReadSources(YamlMappingNode map, string where)

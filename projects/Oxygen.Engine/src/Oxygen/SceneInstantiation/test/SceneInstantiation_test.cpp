@@ -14,9 +14,11 @@
 #include <string_view>
 #include <unordered_map>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Content/test/Fakes/StubAssetLoader.h>
 #include <Oxygen/Core/FrameContext.h>
@@ -32,6 +34,7 @@
 #include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/Data/SceneAsset.h>
+#include <Oxygen/Data/Schema/Generated.SceneComponents.h>
 #include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Data/Vertex.h>
 #include <Oxygen/Data/test/Fixtures/SceneAssetBuilder.h>
@@ -59,6 +62,7 @@
 #include <Oxygen/Scene/Light/SpotLight.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
+#include <Oxygen/Scene/Types/RenderablePolicies.h>
 #include <Oxygen/SceneInstantiation/SceneInstantiation.h>
 #include <Oxygen/Testing/GTest.h>
 
@@ -80,6 +84,8 @@ namespace {
   constexpr float kSpotOuterCone = 0.7F;
   constexpr int32_t kFogSortPriority = 3;
   constexpr float kFogExtinction = 0.05F;
+  constexpr float kLodDistance = 12.0F;
+  constexpr float kLodHysteresis = 0.2F;
 
   auto Key(const std::string_view path) -> AssetKey
   {
@@ -369,6 +375,95 @@ NOLINT_TEST_F(SceneInstantiationTest, InstancedScenesLoadUnderTheirNodes)
   EXPECT_TRUE(HasIssue(instance, "is not available"));
 }
 
+namespace {
+  //! A surface material override of `surface` on `node`.
+  auto MaterialOverride(const uint32_t node, const data::SurfaceId surface,
+    const data::AssetKey& material, const base::Sha256Digest& layout_revision)
+    -> world::OverrideRecord
+  {
+    auto record = world::OverrideRecord {
+      .node_index = node,
+      .override_id = data::schema::OverrideId::kGeometrySurfaceMaterial,
+      .part_id = surface,
+      .layout_revision = layout_revision,
+    };
+    record.value.as_asset = material;
+    return record;
+  }
+} // namespace
+
+//! Surface Visibility and Cast Shadows overrides and the LOD policy override
+//! reach the renderable; the LOD policy value is read from its record table.
+NOLINT_TEST_F(SceneInstantiationTest, AppliesSurfaceAndLodPolicyOverrides)
+{
+  const auto surface = data::SurfaceId::FromStableIdentity("test/slot");
+  const auto geometry = MakeGeometry(Key("/test/Mesh.ogeo"), surface);
+  Loader().AddGeometry(geometry);
+  const auto revision = geometry->Surfaces().layout_revision;
+
+  auto builder = SceneAssetBuilder {};
+  const auto hidden = builder.AddNode("Hidden");
+  const auto unlit = builder.AddNode("Unlit");
+  auto renderables = std::vector<world::RenderableRecord> {};
+  for (const auto node : { hidden, unlit }) {
+    renderables.push_back({
+      .node_index = node,
+      .geometry_key = geometry->GetAssetKey(),
+    });
+  }
+  builder.AddComponents(ComponentType::kRenderable, std::move(renderables));
+  auto visibility = world::OverrideRecord {
+    .node_index = hidden,
+    .override_id = data::schema::OverrideId::kGeometrySurfaceVisibility,
+    .part_id = surface,
+    .layout_revision = revision,
+  };
+  visibility.value.as_bool = 0U;
+  auto shadows = world::OverrideRecord {
+    .node_index = unlit,
+    .override_id = data::schema::OverrideId::kGeometrySurfaceCastsShadows,
+    .part_id = surface,
+    .layout_revision = revision,
+  };
+  shadows.value.as_bool = 0U;
+  auto lod_policy = world::OverrideRecord {
+    .node_index = unlit,
+    .override_id = data::schema::OverrideId::kGeometryLodPolicy,
+  };
+  lod_policy.value.as_record_index = world::OverrideRecordIndex { 0U };
+  builder.AddComponents(
+    ComponentType::kOverride, std::vector { visibility, shadows, lod_policy });
+  auto distance = data::pak::geometry::LodPolicyRecord {
+    .type = data::pak::geometry::LodPolicyType::kDistance,
+    .boundary_count = 1U,
+  };
+  distance.thresholds[0] = kLodDistance;
+  distance.hysteresis_ratio = kLodHysteresis;
+  builder.AddComponents(
+    ComponentType::kOverrideLodPolicy, std::vector { distance });
+
+  const auto instance = Run(builder.Build());
+
+  // The scene has no camera, which is an issue of its own.
+  EXPECT_FALSE(HasIssue(instance, "override"));
+  const auto first = data::LodIndex { 0U };
+  const auto submesh = data::SubmeshIndex { 0U };
+  const auto hidden_renderable = instance.nodes.at(hidden).GetRenderable();
+  EXPECT_FALSE(hidden_renderable.IsSubmeshVisible(first, submesh));
+  EXPECT_FALSE(hidden_renderable.HasLodPolicyOverride());
+  const auto unlit_renderable = instance.nodes.at(unlit).GetRenderable();
+  EXPECT_TRUE(unlit_renderable.IsSubmeshVisible(first, submesh));
+  EXPECT_FALSE(unlit_renderable.SubmeshCastsShadows(first, submesh));
+  EXPECT_TRUE(unlit_renderable.HasLodPolicyOverride());
+  const auto policy = unlit_renderable.GetLodPolicy();
+  ASSERT_TRUE(policy.has_value());
+  // NOLINTNEXTLINE(bugprone-unchecked-optional-access) - asserted above
+  const auto* resolved = std::get_if<scene::DistancePolicy>(&policy.value());
+  ASSERT_NE(resolved, nullptr);
+  ASSERT_EQ(resolved->thresholds.size(), 1U);
+  EXPECT_FLOAT_EQ(resolved->thresholds.front(), kLodDistance);
+}
+
 //! Renderables with their material overrides, both camera kinds, every light
 //! kind and local fog volumes are attached with their authored values.
 NOLINT_TEST_F(SceneInstantiationTest, AttachesEveryNodeRecordFamily)
@@ -391,15 +486,9 @@ NOLINT_TEST_F(SceneInstantiationTest, AttachesEveryNodeRecordFamily)
   renderable.node_index = mesh;
   renderable.geometry_key = geometry->GetAssetKey();
   builder.AddComponents(ComponentType::kRenderable, std::vector { renderable });
-  builder.AddComponents(ComponentType::kMaterialOverride,
-    std::vector {
-      world::MaterialOverrideRecord {
-        .node_index = mesh,
-        .surface_id = surface,
-        .material_key = material_key,
-        .layout_revision = geometry->Surfaces().layout_revision,
-      },
-    });
+  builder.AddComponents(ComponentType::kOverride,
+    std::vector { MaterialOverride(
+      mesh, surface, material_key, geometry->Surfaces().layout_revision) });
   auto perspective = Camera(eye);
   perspective.fov_y = kFieldOfView;
   builder.AddComponents(
@@ -604,7 +693,6 @@ NOLINT_TEST_F(SceneInstantiationTest, MissingGeometryIsAnIssue)
   auto renderable = world::RenderableRecord {};
   renderable.node_index = 0U;
   renderable.geometry_key = Key("/test/Mesh.ogeo");
-  renderable.visible = 1U;
   builder.AddComponents(ComponentType::kRenderable, std::vector { renderable });
 
   const auto instance = Run(builder.Build());
@@ -634,15 +722,9 @@ NOLINT_TEST_F(SceneInstantiationTest, StaleMaterialOverrideIsAnIssue)
   auto renderable = world::RenderableRecord {};
   renderable.geometry_key = geometry->GetAssetKey();
   builder.AddComponents(ComponentType::kRenderable, std::vector { renderable });
-  builder.AddComponents(ComponentType::kMaterialOverride,
+  builder.AddComponents(ComponentType::kOverride,
     std::vector {
-      world::MaterialOverrideRecord {
-        .node_index = 0U,
-        .surface_id = surface,
-        .material_key = material_key,
-        .layout_revision = stale_revision,
-      },
-    });
+      MaterialOverride(0U, surface, material_key, stale_revision) });
 
   const auto instance = Run(builder.Build());
 
@@ -650,7 +732,7 @@ NOLINT_TEST_F(SceneInstantiationTest, StaleMaterialOverrideIsAnIssue)
   EXPECT_EQ(instance.nodes.at(0).GetRenderable().GetGeometry(), geometry);
   const auto stale = std::ranges::find_if(
     instance.issues, [](const SceneInstantiationIssue& issue) -> bool {
-      return issue.message.contains("material override");
+      return issue.message.contains("/material");
     });
   ASSERT_NE(stale, instance.issues.end());
   EXPECT_EQ(stale->node_index, 0U);

@@ -366,7 +366,6 @@ inline auto Load(AnyReader& reader, data::pak::world::RenderableRecord& record)
 
   CHECK_RESULT(reader.ReadInto(record.node_index));
   CHECK_RESULT(reader.ReadInto(record.geometry_key));
-  CHECK_RESULT(reader.ReadInto(record.visible));
 
   return {};
 }
@@ -389,17 +388,19 @@ inline auto Load(AnyReader& reader,
   return {};
 }
 
-inline auto Load(AnyReader& reader,
-  data::pak::world::MaterialOverrideRecord& record) -> Result<void>
+inline auto Load(AnyReader& reader, data::pak::world::OverrideRecord& record)
+  -> Result<void>
 {
   auto pack = reader.ScopedAlignment(1);
   CHECK_RESULT(reader.ReadInto(record.node_index));
+  CHECK_RESULT(reader.ReadInto(record.override_id));
   data::SurfaceId::ByteArray bytes {};
   CHECK_RESULT(reader.ReadBlobInto(std::as_writable_bytes(std::span(bytes))));
-  record.surface_id = data::SurfaceId::FromBytes(bytes);
-  CHECK_RESULT(reader.ReadInto(record.material_key));
+  record.part_id = data::SurfaceId::FromBytes(bytes);
   CHECK_RESULT(reader.ReadBlobInto(
     std::as_writable_bytes(std::span(record.layout_revision))));
+  CHECK_RESULT(reader.ReadBlobInto(
+    std::as_writable_bytes(std::span { &record.value, 1 })));
   return {};
 }
 

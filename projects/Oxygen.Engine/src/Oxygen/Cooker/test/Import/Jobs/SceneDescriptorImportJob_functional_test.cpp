@@ -753,12 +753,21 @@ namespace {
         {
           "node": 1,
           "geometry_ref": "/.cooked/Geometry/cube.ogeo",
-          "material_overrides": [{
-            "surface_id": "00000000-0000-0000-0000-000000000001",
-            "material_ref": "/.cooked/Materials/cube.omat",
-            "layout_revision": "0000000000000000000000000000000000000000000000000000000000000001"
-          }],
-          "visible": true
+          "overrides": {
+            "values": {
+              "/lod_policy": { "type": "distance", "thresholds": [8], "hysteresis_ratio": 0.1 }
+            },
+            "parts": [{
+              "kind": "surface",
+              "id": "00000000-0000-0000-0000-000000000001",
+              "layout_revision": "0000000000000000000000000000000000000000000000000000000000000001",
+              "values": {
+                "/material": "/.cooked/Materials/cube.omat",
+                "/visible": false,
+                "/casts_shadows": true
+              }
+            }]
+          }
         }
       ],
       "references": {
@@ -786,11 +795,28 @@ namespace {
     const auto renderables
       = scene.GetComponents<oxygen::data::pak::world::RenderableRecord>();
     ASSERT_EQ(renderables.size(), 1U);
-    const auto assignments
-      = scene.GetComponents<oxygen::data::pak::world::MaterialOverrideRecord>();
-    ASSERT_EQ(assignments.size(), 1U);
-    EXPECT_EQ(assignments.front().material_key,
+    // Sorted by override id: material, visibility, casts shadows, LOD policy.
+    using oxygen::data::schema::OverrideId;
+    const auto overrides
+      = scene.GetComponents<oxygen::data::pak::world::OverrideRecord>();
+    ASSERT_EQ(overrides.size(), 4U);
+    EXPECT_EQ(overrides[0].override_id, OverrideId::kGeometrySurfaceMaterial);
+    EXPECT_EQ(overrides[0].value.as_asset,
       oxygen::data::AssetKey::FromVirtualPath("/.cooked/Materials/cube.omat"));
+    EXPECT_EQ(overrides[1].override_id, OverrideId::kGeometrySurfaceVisibility);
+    EXPECT_EQ(overrides[1].value.as_bool, 0U);
+    EXPECT_EQ(
+      overrides[2].override_id, OverrideId::kGeometrySurfaceCastsShadows);
+    EXPECT_EQ(overrides[2].value.as_bool, 1U);
+    EXPECT_EQ(overrides[3].override_id, OverrideId::kGeometryLodPolicy);
+    EXPECT_TRUE(overrides[3].part_id.IsNil());
+    const auto policies
+      = scene.GetComponents<oxygen::data::pak::geometry::LodPolicyRecord>();
+    ASSERT_EQ(policies.size(), 1U);
+    EXPECT_EQ(overrides[3].value.as_record_index.get(), 0U);
+    EXPECT_EQ(
+      policies[0].type, oxygen::data::pak::geometry::LodPolicyType::kDistance);
+    EXPECT_FLOAT_EQ(policies[0].thresholds[0], 8.0F);
   }
 
   NOLINT_TEST_F(
@@ -1341,11 +1367,11 @@ namespace {
       "nodes":[{"name":"Mesh"}],
       "renderables":[{"node":0,
         "geometry_ref":"/Engine/Generated/BasicShapes/Cube.ogeo",
-        "material_overrides":[{"surface_id":")"
+        "overrides":{"parts":[{"kind":"surface","id":")"
         + surface + R"(",
-          "material_ref":"/Engine/Generated/Materials/Default.omat",
-          "layout_revision":"0000000000000000000000000000000000000000000000000000000000000001"
-        }]}]})");
+          "layout_revision":"0000000000000000000000000000000000000000000000000000000000000001",
+          "values":{"/material":"/Engine/Generated/Materials/Default.omat"}
+        }]}}]})");
     request.cooked_context_roots = { WriteEnginePak(TempDir()) };
 
     // Act

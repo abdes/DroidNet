@@ -139,6 +139,16 @@ internal sealed partial class SceneComponentsReader
             this.Invalid(property, values.OverrideId is null ? "sources" : "override_id", where, "a property has an override id exactly when it has sources");
         }
 
+        // The engine generator requires the asset type; the editor reads none.
+        if (property.AssetType is not null && !string.Equals(property.Type, "asset", StringComparison.Ordinal))
+        {
+            this.Invalid(property, "asset_type", where, $"{property.Type} values have no asset type");
+        }
+        else if (property.AssetType is not null && !AssetTypes.Contains(property.AssetType, StringComparer.Ordinal))
+        {
+            this.Invalid(property, "asset_type", where, $"unknown asset type '{property.AssetType}'");
+        }
+
         var valued = property.Type is not ("asset" or "string");
         if (valued != (values.Default is not null))
         {

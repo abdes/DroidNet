@@ -1,5 +1,5 @@
 {
-  "version": 13,
+  "version": 14,
   "name": "SurfaceOverrides",
   "starting_input_contexts": [
     {
@@ -249,7 +249,7 @@
       },
       "parent": 0,
       "transform": {
-        "translation": [-2.4, 21.6, 0.0],
+        "translation": [-2.4, 28.6, 0.0],
         "rotation": [0.0, 0.0, 0.0, 1.0],
         "scale": [1.0, 1.0, 1.0]
       }
@@ -263,7 +263,7 @@
       },
       "parent": 0,
       "transform": {
-        "translation": [3.0, 21.0, 0.5],
+        "translation": [3.0, 28.0, 0.5],
         "rotation": [0.0, 0.0, 0.0, 1.0],
         "scale": [1.0, 1.0, 1.0]
       }
@@ -309,124 +309,297 @@
         "rotation": [0.0, 0.0, 0.0, 1.0],
         "scale": [1.0, 1.0, 1.0]
       }
+    },
+    {
+      "name": "Lamp_SceneShadeHidden",
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      },
+      "parent": 0,
+      "transform": {
+        "translation": [-8.0, 21.0, 0.0],
+        "rotation": [0.0, 0.0, 0.0, 1.0],
+        "scale": [1.0, 1.0, 1.0]
+      }
+    },
+    {
+      "name": "Lamp_SceneMetalNoShadow",
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      },
+      "parent": 0,
+      "transform": {
+        "translation": [-3.0, 21.0, 0.0],
+        "rotation": [0.0, 0.0, 0.0, 1.0],
+        "scale": [1.0, 1.0, 1.0]
+      }
+    },
+    {
+      "name": "Pillar_SceneCast",
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      },
+      "parent": 0,
+      "transform": {
+        "translation": [2.0, 21.0, 1.0],
+        "rotation": [0.0, 0.0, 0.0, 1.0],
+        "scale": [1.0, 1.0, 1.0]
+      }
+    },
+    {
+      "name": "Ghost_SceneVisible",
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      },
+      "parent": 0,
+      "transform": {
+        "translation": [5.0, 21.0, 0.5],
+        "rotation": [0.0, 0.0, 0.0, 1.0],
+        "scale": [1.0, 1.0, 1.0]
+      }
+    },
+    {
+      "name": "Lod_SceneFixed",
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      },
+      "parent": 0,
+      "transform": {
+        "translation": [9.0, 21.0, 0.5],
+        "rotation": [0.0, 0.0, 0.0, 1.0],
+        "scale": [1.0, 1.0, 1.0]
+      }
+    },
+    {
+      "name": "Lod_SceneScreenSpaceError",
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      },
+      "parent": 0,
+      "transform": {
+        "translation": [12.0, 21.0, 0.5],
+        "rotation": [0.0, 0.0, 0.0, 1.0],
+        "scale": [1.0, 1.0, 1.0]
+      }
     }
   ],
   "renderables": [
     {
       "node": 1,
       "geometry_ref": "/Engine/Generated/BasicShapes/Plane.ogeo",
-      "visible": true,
-      "material_overrides": [
-        {
-          "surface_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
-          "material_ref": "/.cooked/Materials/SoFloor.omat",
-          "layout_revision": "70d2458daeb2184329ef81aef4e913cb828e2494a8cd5eda069969aff3f64aa6"
-        }
-      ]
+      "overrides": {
+        "parts": [
+          {
+            "kind": "surface",
+            "id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+            "layout_revision": "70d2458daeb2184329ef81aef4e913cb828e2494a8cd5eda069969aff3f64aa6",
+            "values": {
+              "/material": "/.cooked/Materials/SoFloor.omat"
+            }
+          }
+        ]
+      }
     },
     {
       "node": 2,
-      "geometry_ref": "/.cooked/fbx/showcase/lampRoundTable.fbx/Mesh_0__baked_1.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/fbx/showcase/lampRoundTable.fbx/Mesh_0__baked_1.ogeo"
     },
     {
       "node": 3,
       "geometry_ref": "/.cooked/fbx/showcase/lampRoundTable.fbx/Mesh_0__baked_1.ogeo",
-      "visible": true,
-      "material_overrides": [
-        {
-          "surface_id": "61fcfaeb-0ff4-a13e-0355-842dd715bdbb",
-          "material_ref": "/.cooked/Materials/SoShadeRed.omat",
-          "layout_revision": "323bf2b2f42400efee5ff51cbbb6a40915c56ff568f6750a7ea4beac3d6a8864"
-        }
-      ]
+      "overrides": {
+        "parts": [
+          {
+            "kind": "surface",
+            "id": "61fcfaeb-0ff4-a13e-0355-842dd715bdbb",
+            "layout_revision": "323bf2b2f42400efee5ff51cbbb6a40915c56ff568f6750a7ea4beac3d6a8864",
+            "values": {
+              "/material": "/.cooked/Materials/SoShadeRed.omat"
+            }
+          }
+        ]
+      }
     },
     {
       "node": 4,
-      "geometry_ref": "/.cooked/fbx/showcase/lampRoundTable.fbx/Mesh_0__baked_1.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/fbx/showcase/lampRoundTable.fbx/Mesh_0__baked_1.ogeo"
     },
     {
       "node": 5,
-      "geometry_ref": "/.cooked/fbx/showcase/lampRoundTable.fbx/Mesh_0__baked_1.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/fbx/showcase/lampRoundTable.fbx/Mesh_0__baked_1.ogeo"
     },
     {
       "node": 6,
-      "geometry_ref": "/.cooked/fbx/showcase/pottedPlant.fbx/Mesh_0.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/fbx/showcase/pottedPlant.fbx/Mesh_0.ogeo"
     },
     {
       "node": 7,
       "geometry_ref": "/.cooked/fbx/showcase/pottedPlant.fbx/Mesh_0.ogeo",
-      "visible": true,
-      "material_overrides": [
-        {
-          "surface_id": "15f61e58-02db-1303-d223-663d1e95110e",
-          "material_ref": "/.cooked/Materials/SoPotTeal.omat",
-          "layout_revision": "5936ed2604c9b4f26f4a706a257b45e1be9766b2d1152aefd88d7991adb7f0a8"
-        },
-        {
-          "surface_id": "5aac8d25-d9b8-dafb-0dfb-da32cd6051c1",
-          "material_ref": "/.cooked/Materials/SoPotGold.omat",
-          "layout_revision": "5936ed2604c9b4f26f4a706a257b45e1be9766b2d1152aefd88d7991adb7f0a8"
-        }
-      ]
+      "overrides": {
+        "parts": [
+          {
+            "kind": "surface",
+            "id": "15f61e58-02db-1303-d223-663d1e95110e",
+            "layout_revision": "5936ed2604c9b4f26f4a706a257b45e1be9766b2d1152aefd88d7991adb7f0a8",
+            "values": {
+              "/material": "/.cooked/Materials/SoPotTeal.omat"
+            }
+          },
+          {
+            "kind": "surface",
+            "id": "5aac8d25-d9b8-dafb-0dfb-da32cd6051c1",
+            "layout_revision": "5936ed2604c9b4f26f4a706a257b45e1be9766b2d1152aefd88d7991adb7f0a8",
+            "values": {
+              "/material": "/.cooked/Materials/SoPotGold.omat"
+            }
+          }
+        ]
+      }
     },
     {
       "node": 8,
-      "geometry_ref": "/.cooked/fbx/showcase/pottedPlant.fbx/Mesh_0.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/fbx/showcase/pottedPlant.fbx/Mesh_0.ogeo"
     },
     {
       "node": 9,
-      "geometry_ref": "/.cooked/Geometry/SoPillar.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/SoPillar.ogeo"
     },
     {
       "node": 10,
-      "geometry_ref": "/.cooked/Geometry/SoPillar.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/SoPillar.ogeo"
     },
     {
       "node": 11,
-      "geometry_ref": "/.cooked/Geometry/SoGhost.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/SoGhost.ogeo"
     },
     {
       "node": 12,
-      "geometry_ref": "/.cooked/Geometry/SoGhost.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/SoGhost.ogeo"
     },
     {
       "node": 13,
-      "geometry_ref": "/.cooked/Geometry/SoLodChain.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/SoLodChain.ogeo"
     },
     {
       "node": 14,
-      "geometry_ref": "/.cooked/Geometry/SoLodChain.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/SoLodChain.ogeo"
     },
     {
       "node": 15,
-      "geometry_ref": "/.cooked/Geometry/SoLodChain.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/SoLodChain.ogeo"
     },
     {
       "node": 16,
-      "geometry_ref": "/.cooked/Geometry/SoLodChain.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/SoLodChain.ogeo"
     },
     {
       "node": 17,
-      "geometry_ref": "/.cooked/fbx/showcase/lampRoundTable.fbx/Mesh_0__baked_1.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/fbx/showcase/lampRoundTable.fbx/Mesh_0__baked_1.ogeo"
     },
     {
       "node": 18,
+      "geometry_ref": "/.cooked/Geometry/SoLodChain.ogeo"
+    },
+    {
+      "node": 22,
+      "geometry_ref": "/.cooked/fbx/showcase/lampRoundTable.fbx/Mesh_0__baked_1.ogeo",
+      "overrides": {
+        "parts": [
+          {
+            "kind": "surface",
+            "id": "61fcfaeb-0ff4-a13e-0355-842dd715bdbb",
+            "layout_revision": "323bf2b2f42400efee5ff51cbbb6a40915c56ff568f6750a7ea4beac3d6a8864",
+            "values": {
+              "/visible": false
+            }
+          }
+        ]
+      }
+    },
+    {
+      "node": 23,
+      "geometry_ref": "/.cooked/fbx/showcase/lampRoundTable.fbx/Mesh_0__baked_1.ogeo",
+      "overrides": {
+        "parts": [
+          {
+            "kind": "surface",
+            "id": "87ce6cad-ae7e-905c-2284-14fb824f4a39",
+            "layout_revision": "323bf2b2f42400efee5ff51cbbb6a40915c56ff568f6750a7ea4beac3d6a8864",
+            "values": {
+              "/casts_shadows": false
+            }
+          }
+        ]
+      }
+    },
+    {
+      "node": 24,
+      "geometry_ref": "/.cooked/Geometry/SoPillar.ogeo",
+      "overrides": {
+        "parts": [
+          {
+            "kind": "surface",
+            "id": "48bdfd22-1873-48b5-8ae6-ef8495a77914",
+            "layout_revision": "fb10bbb2a9f48bd4e9ee05d36944193a1529573f51d6c9f364520c1a93d8e8f2",
+            "values": {
+              "/casts_shadows": true
+            }
+          }
+        ]
+      }
+    },
+    {
+      "node": 25,
+      "geometry_ref": "/.cooked/Geometry/SoGhost.ogeo",
+      "overrides": {
+        "parts": [
+          {
+            "kind": "surface",
+            "id": "c55f1e5d-2d5e-4de8-8b90-c397e355db55",
+            "layout_revision": "cb2172243e7bd41d9d2fd05d5f17a88dc1a4110a06147d3fa6942f5221e95d9a",
+            "values": {
+              "/visible": true
+            }
+          }
+        ]
+      }
+    },
+    {
+      "node": 26,
       "geometry_ref": "/.cooked/Geometry/SoLodChain.ogeo",
-      "visible": true
+      "overrides": {
+        "values": {
+          "/lod_policy": {
+            "type": "fixed",
+            "lod_index": 2
+          }
+        }
+      }
+    },
+    {
+      "node": 27,
+      "geometry_ref": "/.cooked/Geometry/SoLodChain.ogeo",
+      "overrides": {
+        "values": {
+          "/lod_policy": {
+            "type": "screen_space_error",
+            "enter_finer_sse": [120, 40],
+            "exit_coarser_sse": [100, 30]
+          }
+        }
+      }
     }
   ],
   "cameras": {

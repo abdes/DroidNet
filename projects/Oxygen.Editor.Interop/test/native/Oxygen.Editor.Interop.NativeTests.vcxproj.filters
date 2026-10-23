@@ -54,7 +54,7 @@
     <ClCompile Include="$(ProjectsRoot)\Oxygen.Editor.Interop\src\Commands\SetGeometryCommand.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="$(ProjectsRoot)\Oxygen.Editor.Interop\src\Commands\SetMaterialOverrideCommand.cpp">
+    <ClCompile Include="$(ProjectsRoot)\Oxygen.Editor.Interop\src\Commands\SetOverridesCommand.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

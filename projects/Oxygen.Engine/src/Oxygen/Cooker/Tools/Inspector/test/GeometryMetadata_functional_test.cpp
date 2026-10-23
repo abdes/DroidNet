@@ -278,9 +278,18 @@ auto ExpectedLayoutRevision() -> oxygen::base::Sha256Digest
 //! Rewrites the root with the geometry and a scene overriding one of its
 //! surfaces on the scene's only renderable node.
 auto WriteOverrideScene(const std::filesystem::path& root,
-  const oxygen::data::pak::world::MaterialOverrideRecord& assignment) -> void
+  const oxygen::data::SurfaceId surface,
+  const oxygen::base::Sha256Digest& layout_revision) -> void
 {
   namespace world = oxygen::data::pak::world;
+  auto assignment = world::OverrideRecord {
+    .node_index = 0,
+    .override_id = oxygen::data::schema::OverrideId::kGeometrySurfaceMaterial,
+    .part_id = surface,
+    .layout_revision = layout_revision,
+  };
+  assignment.value.as_asset
+    = AssetKey::FromVirtualPath("/Content/Materials/Override.omat");
   auto descriptor = world::SceneAssetDesc {};
   descriptor.header.asset_type
     = static_cast<uint8_t>(oxygen::data::AssetType::kScene);
@@ -309,10 +318,10 @@ auto WriteOverrideScene(const std::filesystem::path& root,
     },
     world::SceneComponentTableDesc {
       .component_type
-      = static_cast<uint32_t>(oxygen::data::ComponentType::kMaterialOverride),
+      = static_cast<uint32_t>(oxygen::data::ComponentType::kOverride),
       .table = { .offset = records_offset + sizeof(world::RenderableRecord),
         .count = 1,
-        .entry_size = sizeof(world::MaterialOverrideRecord), },
+        .entry_size = sizeof(world::OverrideRecord), },
     },
   };
   auto node = world::NodeRecord {};
@@ -320,7 +329,6 @@ auto WriteOverrideScene(const std::filesystem::path& root,
   const auto renderable = world::RenderableRecord {
     .node_index = 0,
     .geometry_key = AssetKey::FromVirtualPath(kGeometryPath),
-    .visible = 1,
   };
   auto environment = world::SceneEnvironmentBlockHeader {};
   environment.byte_size = sizeof(environment);
@@ -342,7 +350,7 @@ auto WriteOverrideScene(const std::filesystem::path& root,
         .expected_type = oxygen::data::AssetType::kGeometry,
       },
       {
-        .key = assignment.material_key,
+        .key = assignment.value.as_asset,
         .kind = oxygen::data::KeyReferenceKind::kAsset,
         .expected_type = oxygen::data::AssetType::kMaterial,
       },
@@ -464,28 +472,14 @@ NOLINT_TEST_F(InspectorGeometryMetadataTest, DoesNotOverwriteSourceDescriptor)
 NOLINT_TEST_F(InspectorGeometryMetadataTest, AcceptsLocalSurfaceOverride)
 {
   WriteGeometryRoot(Root());
-  WriteOverrideScene(Root(),
-    {
-      .node_index = 0,
-      .surface_id = MakeSurfaceId(2),
-      .material_key
-      = AssetKey::FromVirtualPath("/Content/Materials/Override.omat"),
-      .layout_revision = ExpectedLayoutRevision(),
-    });
+  WriteOverrideScene(Root(), MakeSurfaceId(2), ExpectedLayoutRevision());
   EXPECT_NO_THROW(ValidateRoot(Root()));
 }
 
 NOLINT_TEST_F(InspectorGeometryMetadataTest, RejectsUnknownLocalSurfaceOverride)
 {
   WriteGeometryRoot(Root());
-  WriteOverrideScene(Root(),
-    {
-      .node_index = 0,
-      .surface_id = MakeSurfaceId(3),
-      .material_key
-      = AssetKey::FromVirtualPath("/Content/Materials/Override.omat"),
-      .layout_revision = ExpectedLayoutRevision(),
-    });
+  WriteOverrideScene(Root(), MakeSurfaceId(3), ExpectedLayoutRevision());
   EXPECT_THROW(ValidateRoot(Root()), std::runtime_error);
 }
 
@@ -494,14 +488,7 @@ NOLINT_TEST_F(InspectorGeometryMetadataTest, RejectsStaleLocalSurfaceLayout)
   WriteGeometryRoot(Root());
   auto revision = ExpectedLayoutRevision();
   revision.front() ^= 1U;
-  WriteOverrideScene(Root(),
-    {
-      .node_index = 0,
-      .surface_id = MakeSurfaceId(2),
-      .material_key
-      = AssetKey::FromVirtualPath("/Content/Materials/Override.omat"),
-      .layout_revision = revision,
-    });
+  WriteOverrideScene(Root(), MakeSurfaceId(2), revision);
   EXPECT_THROW(ValidateRoot(Root()), std::runtime_error);
 }
 

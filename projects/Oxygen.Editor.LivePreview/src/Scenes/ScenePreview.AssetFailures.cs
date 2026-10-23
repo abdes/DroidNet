@@ -25,6 +25,10 @@ internal sealed partial class ScenePreview
         return loaded.Length == 1 ? loaded[0].ToUriString() : null;
     }
 
+    // The asset an override set loads: its material, if any.
+    private static string? AssetOf(RuntimeSetOverrides overrides)
+        => overrides.Overrides.Select(static entry => entry.Value).OfType<RuntimeOverrideValue.Asset>().FirstOrDefault()?.Path;
+
     private void ObserveWorld(IRuntimeWorldCommands commands)
     {
         if (ReferenceEquals(commands, this.observedWorld))
@@ -63,7 +67,7 @@ internal sealed partial class ScenePreview
         var (nodeId, assetPath, operationKind, code) = request.Command switch
         {
             RuntimeSetGeometry geometry => (geometry.NodeId, geometry.AssetPath, SceneOperationKinds.EditGeometry, LiveSyncDiagnosticCodes.GeometryUnresolvedAtRuntime),
-            RuntimeSetMaterialOverride material => (material.NodeId, material.MaterialPath, SceneOperationKinds.EditSurfaceMaterial, LiveSyncDiagnosticCodes.MaterialFailed),
+            RuntimeSetOverrides overrides => (overrides.NodeId, AssetOf(overrides), SceneOperationKinds.EditSurfaceMaterial, LiveSyncDiagnosticCodes.MaterialFailed),
             RuntimeSetEnvironment environment => (NodeId.Empty, SoleEnvironmentTexture(environment), SceneOperationKinds.EditEnvironment, LiveSyncDiagnosticCodes.EnvironmentFailed),
             _ => (NodeId.Empty, null, string.Empty, string.Empty),
         };

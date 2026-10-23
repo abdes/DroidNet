@@ -31,7 +31,7 @@ members = [
     "projects/Oxygen.Engine/tools/vortex",
     "projects/Oxygen.Engine/src/Oxygen/Core/Tools/BindlessCodeGen",
     "projects/Oxygen.Engine/src/Oxygen/Content/Tools/UnicodeCodeGen",
-    "projects/Oxygen.Engine/src/Oxygen/Scene/Tools/SceneSchemaCodeGen",
+    "projects/Oxygen.Engine/src/Oxygen/Data/Tools/SceneSchemaCodeGen",
 ]
 
 [tool.uv.sources]

@@ -1432,8 +1432,12 @@ adapters write the schema defaults.
 A scene stores its changes of these values as overrides of the geometry
 component (scene model 5.2). The cooked scene carries every override in one
 `kOverride` table of `OverrideRecord`s, addressed by node, the schema's
-`override_id`, the part ID and the witnessed layout revision; the scene
-descriptor spells them as a renderable's `overrides`:
+`override_id`, the part ID and the witnessed layout revision, and sorted by
+them. A value is typed by its property: a bool, an asset key of the property's
+asset type, or, for a LOD policy, the index of its `LodPolicyRecord` in the
+`kOverrideLodPolicy` table. An index rather than an offset keeps the value
+valid when a later cook step relocates the descriptor's tables. The scene
+descriptor (version 14) spells the overrides as a renderable's `overrides`:
 
 ```json
 "overrides": {

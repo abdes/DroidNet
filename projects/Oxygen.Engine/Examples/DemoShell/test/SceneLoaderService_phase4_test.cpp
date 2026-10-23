@@ -341,24 +341,24 @@ namespace {
       },
       pakw::SceneComponentTableDesc {
         .component_type
-        = static_cast<uint32_t>(data::ComponentType::kMaterialOverride),
+        = static_cast<uint32_t>(data::ComponentType::kOverride),
         .table = { .offset = record_offset + sizeof(pakw::RenderableRecord),
           .count = 1,
-          .entry_size = sizeof(pakw::MaterialOverrideRecord), },
+          .entry_size = sizeof(pakw::OverrideRecord), },
       },
     };
     const auto renderable = pakw::RenderableRecord {
       .node_index = 1,
       .geometry_key = keys.geometry,
-      .visible = 1,
     };
     const auto& inventory = geometry.Surfaces();
-    const auto assignment = pakw::MaterialOverrideRecord {
+    auto assignment = pakw::OverrideRecord {
       .node_index = 1,
-      .surface_id = inventory.surfaces.at(0).surface_id,
-      .material_key = keys.material,
+      .override_id = data::schema::OverrideId::kGeometrySurfaceMaterial,
+      .part_id = inventory.surfaces.at(0).surface_id,
       .layout_revision = inventory.layout_revision,
     };
+    assignment.value.as_asset = keys.material;
     auto environment = pakw::SceneEnvironmentBlockHeader {};
     environment.byte_size = sizeof(environment);
     auto bytes = std::vector<std::byte> {};

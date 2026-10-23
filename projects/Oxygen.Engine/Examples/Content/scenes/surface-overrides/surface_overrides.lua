@@ -1,6 +1,7 @@
 -- Applies the runtime surface and LOD overrides of the SurfaceOverrides scene,
--- checks every instance through the renderable API, and drives the playground
--- row from the keyboard. Results are logged as `[surface-overrides] PASS|FAIL`.
+-- checks every instance through the renderable API (the scene-authored rows
+-- prove the cooked overrides reached the renderables), and drives the
+-- playground row from the keyboard. Results are logged as `[surface-overrides] PASS|FAIL`.
 
 local script = oxygen.script {
   params = {
@@ -31,6 +32,18 @@ local script = oxygen.script {
       description = "LOD chain on a screen-space error policy" },
     lod_material = oxygen.param.node {
       description = "LOD chain with one material on every LOD" },
+    lamp_scene_shade_hidden = oxygen.param.node {
+      description = "Lamp whose shade the scene hides" },
+    lamp_scene_metal_no_shadow = oxygen.param.node {
+      description = "Lamp whose metal the scene stops casting" },
+    pillar_scene_cast = oxygen.param.node {
+      description = "Pillar the scene makes cast" },
+    ghost_scene_visible = oxygen.param.node {
+      description = "Ghost the scene shows" },
+    lod_scene_fixed = oxygen.param.node {
+      description = "LOD chain the scene fixes to its coarsest LOD" },
+    lod_scene_sse = oxygen.param.node {
+      description = "LOD chain on the scene's screen-space error policy" },
     play_lamp = oxygen.param.node { description = "Keyboard-driven lamp" },
     play_lod = oxygen.param.node { description = "Keyboard-driven LOD chain" },
     shade_red = oxygen.param.asset { kind = "material" },
@@ -215,9 +228,31 @@ local function validate_static(p)
   end
 end
 
+-- The same overrides as the static rows, authored in the scene: they arrive
+-- through the cooked override table, before the script runs.
+local function validate_scene_authored(p)
+  expect_surface("Lamp_SceneShadeHidden shade", p.lamp_scene_shade_hidden,
+    SHADE_SUBMESH, false, false)
+  expect_surface("Lamp_SceneShadeHidden metal", p.lamp_scene_shade_hidden,
+    METAL_SUBMESH, true, true)
+  expect_surface("Lamp_SceneMetalNoShadow metal", p.lamp_scene_metal_no_shadow,
+    METAL_SUBMESH, true, false)
+  expect_surface("Pillar_SceneCast", p.pillar_scene_cast, 1, true, true)
+  expect_surface("Ghost_SceneVisible", p.ghost_scene_visible, 1, true, true)
+  local fixed = p.lod_scene_fixed:renderable_get_lod_policy()
+  check(fixed ~= nil and fixed.kind == "fixed" and fixed.index == 3,
+    "Lod_SceneFixed policy is the scene's fixed LOD 3")
+  local sse = p.lod_scene_sse:renderable_get_lod_policy()
+  check(sse ~= nil and sse.kind == "screen_space_error"
+      and sse.enter_finer_sse[1] == 120 and sse.exit_coarser_sse[2] == 30,
+    "Lod_SceneScreenSpaceError policy is the scene's")
+end
+
 local function validate_lod_selection(p)
   check(p.lod_fixed:renderable_get_active_lod_index() == 3,
     "Lod_Fixed2 draws LOD 3")
+  check(p.lod_scene_fixed:renderable_get_active_lod_index() == 3,
+    "Lod_SceneFixed draws LOD 3")
   check(p.lod_asset:renderable_get_active_lod_index() ~= nil,
     "Lod_Asset selected a LOD by distance")
   check(p.lod_sse:renderable_get_active_lod_index() ~= nil,
@@ -306,6 +341,7 @@ end
 function script.on_scene_mutation(self, _dt_seconds)
   if not self.started then
     self.started = true
+    validate_scene_authored(self.params)
     apply_static_overrides(self.params)
     validate_static(self.params)
   end

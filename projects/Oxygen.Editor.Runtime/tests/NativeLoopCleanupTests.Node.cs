@@ -13,6 +13,10 @@ namespace Oxygen.Editor.Runtime.Tests;
 
 public sealed partial class NativeLoopCleanupTests
 {
+    // The wire values of the local source modes of a node flag.
+    private const float LocalOnMode = 1f;
+    private const float LocalOffMode = 2f;
+
     [TestMethod]
     public Task NodeObservationReadsPropertiesGeometryAndDeletion()
         => this.RunNativeCommandsAsync(this.CheckNativeNodeAsync);
@@ -63,15 +67,28 @@ public sealed partial class NativeLoopCleanupTests
         new(RuntimeComponentId.DirectionalLight, 27, 0.5f),
         new(RuntimeComponentId.DirectionalLight, 28, 1.25f),
         new(RuntimeComponentId.DirectionalLight, 29, 2f),
-        new(RuntimeComponentId.Node, 0, 1f),
-        new(RuntimeComponentId.Node, 1, 0f),
-        new(RuntimeComponentId.Node, 2, 1f),
+        // Visibility and the shadow flags take a source mode (Inherit 0, Shown/On 1, Hidden/Off 2).
+        new(RuntimeComponentId.Node, (ushort)NodeField.Visible, LocalOnMode),
+        new(RuntimeComponentId.Node, (ushort)NodeField.CastsShadows, LocalOffMode),
+        new(RuntimeComponentId.Node, (ushort)NodeField.ReceivesShadows, LocalOnMode),
 
         // A node created natively keeps the engine's creation defaults for the flags the test never sets.
         new(RuntimeComponentId.Node, 3, 0f),
         new(RuntimeComponentId.Node, 4, 0f),
         new(RuntimeComponentId.Node, 5, 0f),
     ];
+
+    // A node flag with a source mode is observed as its effective value; the others as the value sent.
+    private static float ObservedValue(RuntimePropertyValue sent)
+        => sent.ComponentId == RuntimeComponentId.Node
+            && (NodeField)sent.FieldId is NodeField.Visible or NodeField.CastsShadows or NodeField.ReceivesShadows
+                ? sent.Value switch
+                {
+                    LocalOnMode => 1f,
+                    LocalOffMode => 0f,
+                    _ => throw new ArgumentOutOfRangeException(nameof(sent), "The test sends local modes only."),
+                }
+                : sent.Value;
 
     private async Task CheckNativeNodeAsync(RuntimeCommandDispatcher commands)
     {
@@ -109,7 +126,7 @@ public sealed partial class NativeLoopCleanupTests
         foreach (var property in expected)
         {
             var actual = observed.State.Properties.Single(value => value.ComponentId == property.ComponentId && value.FieldId == property.FieldId);
-            _ = actual.Value.Should().BeApproximately(property.Value, 0.0001f, "component {0}, field {1}", property.ComponentId, property.FieldId);
+            _ = actual.Value.Should().BeApproximately(ObservedValue(property), 0.0001f, "component {0}, field {1}", property.ComponentId, property.FieldId);
         }
 
         _ = observed.State.GeometryName.Should().Be("Cube");

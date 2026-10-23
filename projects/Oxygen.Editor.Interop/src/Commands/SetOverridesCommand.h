@@ -7,10 +7,8 @@
 #pragma once
 #pragma managed(push, off)
 
-#include <cstddef>
-#include <optional>
-#include <string>
 #include <utility>
+#include <vector>
 
 #include <Oxygen/Core/PhaseRegistry.h>
 #include <Oxygen/Scene/Types/NodeHandle.h>
@@ -21,36 +19,38 @@
 
 namespace oxygen::interop::module {
 
-  class SetMaterialOverrideCommand final : public EditorCommand {
+  //! Sets the whole override state of one part of a node's geometry: a
+  //! surface, or the geometry component itself. A property of the part with no
+  //! entry takes the geometry's asset value.
+  class SetOverridesCommand final : public EditorCommand {
   public:
-    SetMaterialOverrideCommand(oxygen::scene::NodeHandle node,
-      SurfaceTarget target, std::optional<std::string> material_uri,
-      SurfaceMaterialAssignmentIntent intent)
+    SetOverridesCommand(oxygen::scene::NodeHandle node, OverrideTarget target,
+      std::vector<OverrideEntry> entries, OverrideIntent intent)
       : EditorCommand(oxygen::core::PhaseId::kSceneMutation)
       , node_(node)
       , target_(std::move(target))
-      , material_uri_(std::move(material_uri))
+      , entries_(std::move(entries))
       , intent_(intent)
     {
     }
 
     OXGN_EI_API void Execute(CommandContext& context) override;
 
-    //! Installs the observer carried by this specific surface material intent.
+    //! Installs the observer of this override set's failures.
     void SetFailureCallback(SceneAssetRequests::FailureCallback callback) {
       failure_callback_ = std::move(callback);
     }
 
-    //! Observes application of this material intent and its refreshes.
+    //! Observes application of this override set and its refreshes.
     void SetSuccessCallback(SceneAssetRequests::SuccessCallback callback) {
       success_callback_ = std::move(callback);
     }
 
   private:
     oxygen::scene::NodeHandle node_;
-    SurfaceTarget target_;
-    std::optional<std::string> material_uri_;
-    SurfaceMaterialAssignmentIntent intent_ = SurfaceMaterialAssignmentIntent::kObservedEdit;
+    OverrideTarget target_;
+    std::vector<OverrideEntry> entries_;
+    OverrideIntent intent_ = OverrideIntent::kObservedEdit;
     SceneAssetRequests::FailureCallback failure_callback_;
     SceneAssetRequests::SuccessCallback success_callback_;
   };

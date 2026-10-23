@@ -1,7 +1,7 @@
 # Oxygen.Editor.Schemas.Generators
 
 The engine declares the authored scene node components once, in
-`Oxygen/Scene/Schema/SceneComponents.yaml`: each component's kind and
+`Oxygen/Data/Schema/SceneComponents.yaml`: each component's kind and
 cardinality, its properties with their defaults, ranges and units, the override
 ids of the properties a scene stores as overrides, and the component and field
 ids the engine applies them by. The engine SDK installs the file in

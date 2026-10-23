@@ -38,6 +38,30 @@ value struct PropertyValueEntry {
   float Value;
 };
 
+  //! A LOD policy as the scene schema spells it. `Type` is the native
+  //! `LodPolicyType`: 0 fixed (`LodIndex`), 1 distance (`Thresholds`,
+  //! `HysteresisRatio`), 2 screen-space error (`EnterFinerSse`,
+  //! `ExitCoarserSse`). Members the type does not use are null or zero.
+  public value struct LodPolicyManaged {
+    System::Byte Type;
+    System::Byte LodIndex;
+    array<float>^ Thresholds;
+    float HysteresisRatio;
+    array<float>^ EnterFinerSse;
+    array<float>^ ExitCoarserSse;
+  };
+
+  //! One override of a geometry property. The property its `OverrideId` names
+  //! decides which value member holds the value: `Flag` for a bool,
+  //! `AssetPath` for an asset, `LodPolicy` for a LOD policy. The other members
+  //! stay at their defaults.
+  public value struct OverrideEntryManaged {
+    System::UInt16 OverrideId;
+    bool Flag;
+    System::String^ AssetPath;
+    LodPolicyManaged LodPolicy;
+  };
+
   //! How the engine reads a cooked content source.
   public enum class CookedRootKindManaged : System::Byte {
     //! A loose cooked root directory.
@@ -112,10 +136,14 @@ value struct PropertyValueEntry {
       Action<System::UInt64, String^>^ onFailure);
     void SetGeometry(System::Guid nodeId, String^ assetUri,
       Action<System::UInt64, String^>^ onFailure, Action<System::UInt64>^ onSuccess);
-    void SetMaterialOverride(System::Guid nodeId, String^ geometryUri,
-      System::Guid surfaceId, String^ layoutRevision, String^ materialUri, System::Byte intent, Action<System::UInt64, String^>^ onFailure);
-    void SetMaterialOverride(System::Guid nodeId, String^ geometryUri,
-      System::Guid surfaceId, String^ layoutRevision, String^ materialUri, System::Byte intent, Action<System::UInt64, String^>^ onFailure,
+    //! Sets the whole override state of one part of a node's geometry: the
+    //! surface `surfaceId` resolved at `layoutRevision`, or with an empty
+    //! `surfaceId` and a null `layoutRevision` the geometry component itself.
+    //! A property of the part with no entry takes the geometry's asset value.
+    void SetOverrides(System::Guid nodeId, String^ geometryUri,
+      System::Guid surfaceId, String^ layoutRevision,
+      array<OverrideEntryManaged>^ entries, System::Byte intent,
+      Action<System::UInt64, String^>^ onFailure,
       Action<System::UInt64>^ onSuccess);
 
     //! Reads native atmosphere and post-process values after preceding mutations.

@@ -7,7 +7,10 @@
 
 namespace Oxygen.Editor.LivePreview.Scenes;
 
-/// <content>The engine component, fields and encoding of each property the engine takes field by field.</content>
+/// <content>
+/// The engine component, fields and encoding of each property the engine takes field by field, and the override id of
+/// each property the engine takes as an override.
+/// </content>
 internal static partial class SceneWire
 {
     private static void AddSchemaMappings(global::System.Collections.Generic.Dictionary<global::Oxygen.Managed.Core.PropertyId, Mapping> map)
@@ -99,5 +102,13 @@ internal static partial class SceneWire
         map.Add(global::Oxygen.Editor.World.SceneSchema.LocalFogVolume.FogAlbedo.Id, new Mapping(global::Oxygen.Editor.Runtime.Engine.RuntimeComponentId.LocalFogVolume, [(ushort)global::Oxygen.Editor.Runtime.Engine.LocalFogVolumeField.FogAlbedoR, (ushort)global::Oxygen.Editor.Runtime.Engine.LocalFogVolumeField.FogAlbedoG, (ushort)global::Oxygen.Editor.Runtime.Engine.LocalFogVolumeField.FogAlbedoB]));
         map.Add(global::Oxygen.Editor.World.SceneSchema.LocalFogVolume.FogEmissive.Id, new Mapping(global::Oxygen.Editor.Runtime.Engine.RuntimeComponentId.LocalFogVolume, [(ushort)global::Oxygen.Editor.Runtime.Engine.LocalFogVolumeField.FogEmissiveR, (ushort)global::Oxygen.Editor.Runtime.Engine.LocalFogVolumeField.FogEmissiveG, (ushort)global::Oxygen.Editor.Runtime.Engine.LocalFogVolumeField.FogEmissiveB]));
         map.Add(global::Oxygen.Editor.World.SceneSchema.LocalFogVolume.SortPriority.Id, new Mapping(global::Oxygen.Editor.Runtime.Engine.RuntimeComponentId.LocalFogVolume, [(ushort)global::Oxygen.Editor.Runtime.Engine.LocalFogVolumeField.SortPriority]));
+    }
+
+    private static void AddSchemaOverrideIds(global::System.Collections.Generic.Dictionary<global::Oxygen.Managed.Core.PropertyId, global::Oxygen.Editor.Runtime.Engine.RuntimeOverrideId> map)
+    {
+        map.Add(global::Oxygen.Editor.World.SceneSchema.Geometry.Surface.Material.Id, global::Oxygen.Editor.Runtime.Engine.RuntimeOverrideId.GeometrySurfaceMaterial);
+        map.Add(global::Oxygen.Editor.World.SceneSchema.Geometry.Surface.Visibility.Id, global::Oxygen.Editor.Runtime.Engine.RuntimeOverrideId.GeometrySurfaceVisibility);
+        map.Add(global::Oxygen.Editor.World.SceneSchema.Geometry.Surface.CastsShadows.Id, global::Oxygen.Editor.Runtime.Engine.RuntimeOverrideId.GeometrySurfaceCastsShadows);
+        map.Add(global::Oxygen.Editor.World.SceneSchema.Geometry.LodPolicy.Id, global::Oxygen.Editor.Runtime.Engine.RuntimeOverrideId.GeometryLodPolicy);
     }
 }

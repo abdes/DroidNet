@@ -50,8 +50,40 @@ internal sealed partial class SceneDescriptorGeneratorTests
         var result = await generator.GenerateAsync(scene, CreateScope(workspace), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = result.Diagnostics.Should().BeEmpty();
         var descriptor = JsonNode.Parse(await File.ReadAllTextAsync(result.DescriptorPath, this.TestContext.CancellationToken).ConfigureAwait(false))!;
-        _ = descriptor["renderables"]![0]!["material_overrides"]![0]!["material_ref"]!.GetValue<string>().Should().Be(EngineAssets.DefaultMaterial.VirtualPath);
+        _ = descriptor["renderables"]![0]!["overrides"]!["parts"]![0]!["values"]!["/material"]!.GetValue<string>().Should().Be(EngineAssets.DefaultMaterial.VirtualPath);
         _ = result.Dependencies.Should().BeEmpty();
+    }
+
+    /// <summary>Spells every override kind as the descriptor's generic overrides: component values and surface parts.</summary>
+    /// <returns>The test task.</returns>
+    [TestMethod]
+    public async Task OverridesAreWrittenByPartAndSchemaKey()
+    {
+        using var workspace = new DescriptorWorkspace();
+        var scene = CreateScene();
+        var node = new SceneNode(scene, "Overridden mesh");
+        var surface = new PartId(SceneSchema.Geometry.Surface.Kind, Guid.Parse("146b1397-c3e0-bc20-fce3-c55e470b4086"));
+        var revision = new string('b', 64);
+        var geometry = new GeometryComponent { Name = "Geometry", Geometry = EngineAssets.BasicShape("Cube") };
+        geometry.Overrides = geometry.Overrides
+            .With(SceneSchema.Geometry.LodPolicy, (LodPolicy)new LodPolicy.Fixed(1))
+            .With(SceneSchema.Geometry.Surface.Visibility, surface, revision, false)
+            .With(SceneSchema.Geometry.Surface.CastsShadows, surface, revision, true);
+        _ = node.AddComponent(geometry);
+        scene.RootNodes.Add(node);
+
+        var result = await new SceneDescriptorGenerator().GenerateAsync(scene, CreateScope(workspace), this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        _ = result.Diagnostics.Should().BeEmpty();
+        var overrides = JsonNode.Parse(await File.ReadAllTextAsync(result.DescriptorPath, this.TestContext.CancellationToken).ConfigureAwait(false))!["renderables"]![0]!["overrides"]!;
+        _ = overrides["values"]!["/lod_policy"]!["type"]!.GetValue<string>().Should().Be("fixed");
+        _ = overrides["values"]!["/lod_policy"]!["lod_index"]!.GetValue<int>().Should().Be(1);
+        var part = overrides["parts"]![0]!;
+        _ = part["kind"]!.GetValue<string>().Should().Be(SceneSchema.Geometry.Surface.Kind);
+        _ = part["id"]!.GetValue<Guid>().Should().Be(surface.Id);
+        _ = part["layout_revision"]!.GetValue<string>().Should().Be(revision);
+        _ = part["values"]!["/visible"]!.GetValue<bool>().Should().BeFalse();
+        _ = part["values"]!["/casts_shadows"]!.GetValue<bool>().Should().BeTrue();
     }
 
     /// <summary>Emits the supported scene fields and geometry/material dependencies.</summary>
@@ -180,8 +212,8 @@ internal sealed partial class SceneDescriptorGeneratorTests
         _ = result.Diagnostics.Should().BeEmpty();
         using var document = JsonDocument.Parse(await File.ReadAllTextAsync(result.DescriptorPath, this.TestContext.CancellationToken).ConfigureAwait(false));
         var root = document.RootElement;
-        _ = root.GetProperty("$schema").GetString().Should().Be("oxygen.scene-descriptor.v13");
-        _ = root.GetProperty("version").GetInt32().Should().Be(13);
+        _ = root.GetProperty("$schema").GetString().Should().Be("oxygen.scene-descriptor.v14");
+        _ = root.GetProperty("version").GetInt32().Should().Be(14);
         var nodes = root.GetProperty("nodes");
         _ = nodes.GetArrayLength().Should().Be(2);
         _ = nodes[1].GetProperty("parent").GetInt32().Should().Be(0);
@@ -561,7 +593,7 @@ internal sealed partial class SceneDescriptorGeneratorTests
                 var result = await generator.GenerateAsync(savedScene, scope, this.TestContext.CancellationToken).ConfigureAwait(false);
                 _ = result.Diagnostics.Should().BeEmpty();
                 using var document = JsonDocument.Parse(await File.ReadAllTextAsync(result.DescriptorPath, this.TestContext.CancellationToken).ConfigureAwait(false));
-                _ = document.RootElement.GetProperty("version").GetInt32().Should().Be(13);
+                _ = document.RootElement.GetProperty("version").GetInt32().Should().Be(14);
                 var environment = document.RootElement.GetProperty("environment");
                 _ = environment.GetProperty("sky_atmosphere").GetProperty("enabled").GetBoolean().Should().BeFalse();
                 var post = environment.GetProperty("post_process_volume");
@@ -853,14 +885,15 @@ internal sealed partial class SceneDescriptorGeneratorTests
 
     private static void AssertSupportedSceneDescriptor(JsonElement root, Guid surfaceId)
     {
-        _ = root.GetProperty("version").GetInt32().Should().Be(13);
+        _ = root.GetProperty("version").GetInt32().Should().Be(14);
         _ = root.GetProperty("name").GetString().Should().Be("Main");
         _ = root.GetProperty("renderables")[0].GetProperty("geometry_ref").GetString()
             .Should().Be(EngineAssets.BasicShape("Cube").VirtualPath);
-        var assignments = root.GetProperty("renderables")[0].GetProperty("material_overrides");
-        _ = assignments.GetArrayLength().Should().Be(1);
-        _ = assignments[0].GetProperty("surface_id").GetGuid().Should().Be(surfaceId);
-        _ = assignments[0].GetProperty("material_ref").GetString()
+        var parts = root.GetProperty("renderables")[0].GetProperty("overrides").GetProperty("parts");
+        _ = parts.GetArrayLength().Should().Be(1);
+        _ = parts[0].GetProperty("kind").GetString().Should().Be(SceneSchema.Geometry.Surface.Kind);
+        _ = parts[0].GetProperty("id").GetGuid().Should().Be(surfaceId);
+        _ = parts[0].GetProperty("values").GetProperty("/material").GetString()
             .Should().Be("/Content/Materials/Red.omat");
         _ = root.GetProperty("references").GetProperty("materials")[0].GetString()
             .Should().Be("/Content/Materials/Red.omat");

@@ -96,8 +96,9 @@ public sealed partial class ScenePreviewTests
 
         _ = await PreviewFixture.AuthoringOf(document).ExecuteAsync(new SetOverrides([cube.Id], [new OverrideWrite(SceneSchema.Geometry.Surface.Material.Id, target.Part, target.LayoutRevision, null)], "Edit Surface Material")).ConfigureAwait(false);
 
-        var cleared = fixture.World.Commands.OfType<RuntimeSetMaterialOverride>().Should().ContainSingle().Subject;
-        _ = (cleared.SurfaceId, cleared.MaterialPath).Should().Be((target.SurfaceId, null));
+        var cleared = fixture.World.Commands.OfType<RuntimeSetOverrides>().Should().ContainSingle().Subject;
+        _ = cleared.Part.Should().Be(new RuntimeOverridePart(target.SurfaceId, target.LayoutRevision));
+        _ = cleared.Overrides.Should().BeEmpty();
     }
 
     [TestMethod]

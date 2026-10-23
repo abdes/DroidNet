@@ -10,11 +10,11 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
-#include <set>
 #include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -26,9 +26,12 @@
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/Asset.h>
 #include <Oxygen/Data/ComponentType.h>
+#include <Oxygen/Data/LodPolicyValidation.h>
+#include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/Data/SceneAsset.h>
+#include <Oxygen/Data/Schema/Generated.SceneComponents.h>
 #include <Oxygen/Data/SourceOrigin.h>
 #include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Serio/MemoryStream.h>
@@ -355,11 +358,14 @@ auto SceneAsset::ParseAndValidate() -> void
         && entry.table.entry_size != sizeof(pak::world::RenderableRecord)) {
         throw std::runtime_error("SceneAsset renderable record size mismatch");
       }
-      if (type == ComponentType::kMaterialOverride
-        && entry.table.entry_size
-          != sizeof(pak::world::MaterialOverrideRecord)) {
+      if (type == ComponentType::kOverride
+        && entry.table.entry_size != sizeof(pak::world::OverrideRecord)) {
+        throw std::runtime_error("SceneAsset override record size mismatch");
+      }
+      if (type == ComponentType::kOverrideLodPolicy
+        && entry.table.entry_size != sizeof(pak::geometry::LodPolicyRecord)) {
         throw std::runtime_error(
-          "SceneAsset material override record size mismatch");
+          "SceneAsset override LOD policy record size mismatch");
       }
       if (type == ComponentType::kLocalFogVolume
         && entry.table.entry_size != sizeof(pak::world::LocalFogVolumeRecord)) {
@@ -641,22 +647,105 @@ auto SceneAsset::ParseAndValidate() -> void
         "SceneAsset environment block contains trailing bytes");
     }
   }
-  std::set<std::pair<pak::world::SceneNodeIndexT, SurfaceId>> assignments;
+  ValidateOverrides();
+}
+
+auto SceneAsset::ValidateOverrides() const -> void
+{
   std::unordered_set<pak::world::SceneNodeIndexT> renderable_nodes;
   for (const auto& renderable : GetComponents<pak::world::RenderableRecord>()) {
     renderable_nodes.insert(renderable.node_index);
   }
-  for (const auto& assignment :
-    GetComponents<pak::world::MaterialOverrideRecord>()) {
-    if (!renderable_nodes.contains(assignment.node_index)
-      || assignment.surface_id.IsNil() || assignment.material_key.IsNil()
-      || base::IsAllZero(assignment.layout_revision)
-      || !assignments.emplace(assignment.node_index, assignment.surface_id)
-        .second) {
-      throw std::runtime_error(
-        "SceneAsset contains an invalid material assignment");
+  const auto lod_policies = GetComponents<pak::geometry::LodPolicyRecord>();
+  std::vector<bool> lod_policy_used(lod_policies.size(), false);
+  const pak::world::OverrideRecord* previous = nullptr;
+  for (const auto& record : GetComponents<pak::world::OverrideRecord>()) {
+    const auto* property = schema::FindOverrideProperty(record.override_id);
+    if (property == nullptr) {
+      throw std::runtime_error("SceneAsset override names an unknown property");
     }
+    // Every override property belongs to the geometry component today; a
+    // property of another component needs its own owner check here.
+    if (property->component_kind != std::string_view { "geometry" }) {
+      throw std::runtime_error(
+        "SceneAsset override component is not supported");
+    }
+    if (!renderable_nodes.contains(record.node_index)) {
+      throw std::runtime_error("SceneAsset override node has no renderable");
+    }
+    switch (property->part_kind) {
+    case schema::PartKind::kNone:
+      if (!record.part_id.IsNil() || !base::IsAllZero(record.layout_revision)) {
+        throw std::runtime_error(
+          "SceneAsset component override must not name a part");
+      }
+      break;
+    case schema::PartKind::kSurface:
+      if (record.part_id.IsNil() || base::IsAllZero(record.layout_revision)) {
+        throw std::runtime_error(
+          "SceneAsset surface override needs its surface and layout revision");
+      }
+      break;
+    }
+    if (previous != nullptr
+      && std::tie(
+           previous->node_index, previous->override_id, previous->part_id)
+        >= std::tie(record.node_index, record.override_id, record.part_id)) {
+      throw std::runtime_error(
+        "SceneAsset overrides must be sorted and unique per node, property "
+        "and part");
+    }
+    previous = &record;
+    ValidateOverrideValue(*property, record.value, lod_policy_used);
   }
+  if (std::ranges::find(lod_policy_used, false) != lod_policy_used.end()) {
+    throw std::runtime_error(
+      "SceneAsset override LOD policy table contains unused records");
+  }
+}
+
+auto SceneAsset::ValidateOverrideValue(const schema::OverrideProperty& property,
+  const pak::world::OverrideValue& value,
+  std::vector<bool>& lod_policy_used) const -> void
+{
+  const auto bytes = std::as_bytes(std::span { &value, 1 });
+  const auto unused_bytes_are_zero = [bytes](const std::size_t used) -> bool {
+    return std::ranges::all_of(bytes.subspan(used),
+      [](const std::byte byte) -> bool { return byte == std::byte { 0 }; });
+  };
+  switch (property.type) {
+  case schema::ValueType::kBool:
+    if (value.as_bool > 1U || !unused_bytes_are_zero(sizeof(value.as_bool))) {
+      throw std::runtime_error("SceneAsset override bool value is invalid");
+    }
+    return;
+  case schema::ValueType::kAsset:
+    if (value.as_asset.IsNil()) {
+      throw std::runtime_error("SceneAsset override asset value is nil");
+    }
+    return;
+  case schema::ValueType::kLodPolicy: {
+    const auto index = value.as_record_index.get();
+    const auto lod_policies = GetComponents<pak::geometry::LodPolicyRecord>();
+    if (!unused_bytes_are_zero(sizeof(value.as_record_index))
+      || index >= lod_policies.size() || lod_policy_used.at(index)
+      || !IsValidLodPolicy(lod_policies[index])) {
+      throw std::runtime_error(
+        "SceneAsset override LOD policy value is invalid");
+    }
+    lod_policy_used.at(index) = true;
+    return;
+  }
+  case schema::ValueType::kInt:
+  case schema::ValueType::kFloat:
+  case schema::ValueType::kVec3:
+  case schema::ValueType::kEnum:
+  case schema::ValueType::kString:
+    // No override property has these types yet; each needs its own check
+    // when the schema declares one.
+    throw std::runtime_error("SceneAsset override value type is not supported");
+  }
+  throw std::runtime_error("SceneAsset override value type is unknown");
 }
 
 template <typename RecordT>

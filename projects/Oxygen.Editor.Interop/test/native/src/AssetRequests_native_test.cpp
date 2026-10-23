@@ -24,14 +24,16 @@
 #include <Commands/RemoveSceneNodeCommand.h>
 #include <Commands/SetEnvironmentCommand.h>
 #include <Commands/SetGeometryCommand.h>
-#include <Commands/SetMaterialOverrideCommand.h>
+#include <Commands/SetOverridesCommand.h>
 #include <EditorModule/EditorModule.h>
 #include <EditorModule/SceneAssetRequests.h>
 #include <EditorModule/ThreadSafeQueue.h>
 
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
+#include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
+#include <Oxygen/Data/Schema/Generated.SceneComponents.h>
 #include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/Scene/Environment/PostProcessVolume.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
@@ -98,6 +100,35 @@ auto MakeMaterial(const std::string& name) -> Requests::Material
   return std::make_shared<oxygen::data::MaterialAsset>(
     oxygen::data::AssetKey::FromVirtualPath(name),
     oxygen::data::pak::render::MaterialAssetDesc {});
+}
+
+//! The override entries of a surface that carry only a material, or none.
+auto MaterialEntries(std::optional<std::string> uri)
+  -> std::vector<OverrideEntry>
+{
+  auto entries = std::vector<OverrideEntry> {};
+  if (uri) {
+    entries.push_back(OverrideEntry {
+      .id = oxygen::data::schema::OverrideId::kGeometrySurfaceMaterial,
+      .value = OverrideAsset { .virtual_path = std::move(*uri) } });
+  }
+  return entries;
+}
+
+auto BoolEntry(const oxygen::data::schema::OverrideId id, const bool value)
+  -> OverrideEntry
+{
+  return OverrideEntry { .id = id, .value = value };
+}
+
+auto FixedLodPolicyEntry(const std::uint8_t lod_index) -> OverrideEntry
+{
+  auto policy = oxygen::data::pak::geometry::LodPolicyRecord {};
+  policy.type = oxygen::data::pak::geometry::LodPolicyType::kFixed;
+  policy.lod_index = lod_index;
+  return OverrideEntry {
+    .id = oxygen::data::schema::OverrideId::kGeometryLodPolicy, .value = policy
+  };
 }
 
 struct Fixture {
@@ -170,7 +201,7 @@ struct Fixture {
     Execute(command);
   }
   auto Target(std::size_t surface, std::string geometry_uri = {}) const
-    -> SurfaceTarget
+    -> OverrideTarget
   {
     if (geometry_uri.empty()) {
       const auto found = geometry_uris.find(node.GetHandle());
@@ -182,16 +213,24 @@ struct Fixture {
       geometry = found->second;
     }
     const auto& inventory = geometry->Surfaces();
-    return SurfaceTarget { .geometry_uri = std::move(geometry_uri),
+    return OverrideTarget { .geometry_uri = std::move(geometry_uri),
       .surface_id = surface < inventory.surfaces.size()
         ? inventory.surfaces[surface].surface_id
         : TestSurfaceId(surface),
       .layout_revision = inventory.layout_revision };
   }
+  //! The geometry component itself: a nil surface and no layout revision.
+  auto ComponentTarget(std::string geometry_uri = {}) const -> OverrideTarget
+  {
+    auto target = Target(0, std::move(geometry_uri));
+    target.surface_id = {};
+    target.layout_revision = {};
+    return target;
+  }
   void Material(const std::optional<std::string>& uri, std::size_t surface = 0)
   {
-    SetMaterialOverrideCommand command(node.GetHandle(), Target(surface), uri,
-      SurfaceMaterialAssignmentIntent::kObservedEdit);
+    SetOverridesCommand command(node.GetHandle(), Target(surface),
+      MaterialEntries(uri), OverrideIntent::kObservedEdit);
     Execute(command);
   }
   void Detach()
@@ -562,9 +601,8 @@ void CorrelatedFailureDelivery()
   Require(generations.size() == 1 && generations[0] > 0,
     "native generation was lost or an obsolete failure was delivered");
 
-  SetMaterialOverrideCommand material(f.node.GetHandle(),
-    f.Target(0, "current"), "missing",
-    SurfaceMaterialAssignmentIntent::kObservedEdit);
+  SetOverridesCommand material(f.node.GetHandle(), f.Target(0, "current"),
+    MaterialEntries("missing"), OverrideIntent::kObservedEdit);
   material.SetFailureCallback(on_failure);
   f.Execute(material);
   f.material_loads[0]({}, "failed");
@@ -772,8 +810,8 @@ void SuccessfulRefreshAcknowledgesCurrentGeneration()
   f.Attach();
   uint64_t failed = 0;
   std::vector<uint64_t> applied;
-  SetMaterialOverrideCommand material(f.node.GetHandle(), f.Target(0), "retry",
-    SurfaceMaterialAssignmentIntent::kObservedEdit);
+  SetOverridesCommand material(f.node.GetHandle(), f.Target(0),
+    MaterialEntries("retry"), OverrideIntent::kObservedEdit);
   material.SetFailureCallback(
     [&](uint64_t generation, const std::string&) { failed = generation; });
   material.SetSuccessCallback([&](uint64_t generation) {
@@ -808,9 +846,8 @@ void SuccessWaitsForCurrentGeometryAndMaterialApplication()
     Require(f.Geometry() == f.a, "geometry success preceded application");
     ++geometry_count;
   });
-  SetMaterialOverrideCommand material(f.node.GetHandle(),
-    f.Target(0, "geometry"), "material",
-    SurfaceMaterialAssignmentIntent::kObservedEdit);
+  SetOverridesCommand material(f.node.GetHandle(), f.Target(0, "geometry"),
+    MaterialEntries("material"), OverrideIntent::kObservedEdit);
   material.SetSuccessCallback([&](uint64_t) {
     Require(
       f.CurrentMaterial() == f.red, "material success preceded application");
@@ -848,9 +885,9 @@ void MaterialRecoversAfterGeometryFailure(bool material_first)
       f.Geometry() == f.a, "geometry recovery acknowledged before application");
     geometry_successes.push_back(generation);
   });
-  SetMaterialOverrideCommand material(f.node.GetHandle(),
-    f.Target(0, "retry-geometry"), "red",
-    SurfaceMaterialAssignmentIntent::kObservedEdit);
+  SetOverridesCommand material(f.node.GetHandle(),
+    f.Target(0, "retry-geometry"), MaterialEntries("red"),
+    OverrideIntent::kObservedEdit);
   material.SetFailureCallback(
     [&](uint64_t, const std::string&) { ++material_failures; });
   material.SetSuccessCallback([&](uint64_t generation) {
@@ -930,8 +967,8 @@ void FailedReplacementDoesNotValidateSurfacesAgainstPreviousGeometry()
   int failures = 0;
   int successes = 0;
   f.Geometry("replacement");
-  SetMaterialOverrideCommand material(f.node.GetHandle(), f.Target(1), "blue",
-    SurfaceMaterialAssignmentIntent::kObservedEdit);
+  SetOverridesCommand material(f.node.GetHandle(), f.Target(1),
+    MaterialEntries("blue"), OverrideIntent::kObservedEdit);
   material.SetFailureCallback(
     [&](uint64_t, const std::string&) { ++failures; });
   material.SetSuccessCallback([&](uint64_t) {
@@ -964,8 +1001,8 @@ void LatestMaterialIntentWinsAfterGeometryFailure()
     Fixture f;
     f.Geometry("retry-geometry");
     int obsolete_successes = 0;
-    SetMaterialOverrideCommand original(f.node.GetHandle(), f.Target(0), "red",
-      SurfaceMaterialAssignmentIntent::kObservedEdit);
+    SetOverridesCommand original(f.node.GetHandle(), f.Target(0),
+      MaterialEntries("red"), OverrideIntent::kObservedEdit);
     original.SetSuccessCallback([&](uint64_t) { ++obsolete_successes; });
     f.Execute(original);
     const auto original_material = f.material_loads.back();
@@ -973,9 +1010,9 @@ void LatestMaterialIntentWinsAfterGeometryFailure()
     f.geometry_loads.back()({}, "temporary failure");
     f.Drain();
     int latest_successes = 0;
-    SetMaterialOverrideCommand latest(f.node.GetHandle(), f.Target(0),
-      clear ? std::nullopt : std::optional<std::string>("blue"),
-      SurfaceMaterialAssignmentIntent::kObservedEdit);
+    SetOverridesCommand latest(f.node.GetHandle(), f.Target(0),
+      MaterialEntries(clear ? std::nullopt : std::optional<std::string>("blue")),
+      OverrideIntent::kObservedEdit);
     latest.SetSuccessCallback([&](uint64_t) { ++latest_successes; });
     f.Execute(latest);
     if (!clear) {
@@ -1011,8 +1048,8 @@ void ConfirmedInvalidSurfaceRequiresNewExplicitAssignment()
   int failures = 0;
   int successes = 0;
   auto assign = [&] {
-    SetMaterialOverrideCommand material(f.node.GetHandle(), f.Target(1), "red",
-      SurfaceMaterialAssignmentIntent::kObservedEdit);
+    SetOverridesCommand material(f.node.GetHandle(), f.Target(1),
+      MaterialEntries("red"), OverrideIntent::kObservedEdit);
     material.SetFailureCallback([&](uint64_t generation, const std::string&) {
       failed_generation = generation;
       ++failures;
@@ -1065,8 +1102,8 @@ void StaleMaterialRevisionIsRejectedButAcceptedRefreshSurvives()
       && f.CurrentMaterial(SubmeshIndex { 1U }) == f.red,
     "compatible refresh discarded an accepted stable surface assignment");
   int failures = 0;
-  SetMaterialOverrideCommand stale(f.node.GetHandle(), old_target, "blue",
-    SurfaceMaterialAssignmentIntent::kObservedEdit);
+  SetOverridesCommand stale(f.node.GetHandle(), old_target,
+    MaterialEntries("blue"), OverrideIntent::kObservedEdit);
   stale.SetFailureCallback([&](uint64_t, const std::string&) { ++failures; });
   f.Execute(stale);
   f.material_loads.back()(f.blue, {});
@@ -1076,7 +1113,7 @@ void StaleMaterialRevisionIsRejectedButAcceptedRefreshSurvives()
 }
 
 void MaterialTargetCannotCrossGeometryIdentity(
-  const SurfaceMaterialAssignmentIntent intent)
+  const OverrideIntent intent)
 {
   Fixture f;
   f.Attach();
@@ -1086,14 +1123,14 @@ void MaterialTargetCannotCrossGeometryIdentity(
   f.Drain();
   int failures = 0;
   int successes = 0;
-  SetMaterialOverrideCommand valid(
-    f.node.GetHandle(), f.Target(0U), "red", intent);
+  SetOverridesCommand valid(
+    f.node.GetHandle(), f.Target(0U), MaterialEntries("red"), intent);
   valid.SetSuccessCallback([&](uint64_t) { ++successes; });
   f.Execute(valid);
   const auto valid_completion = f.material_loads.back();
   const auto pending_loads = f.material_loads.size();
-  SetMaterialOverrideCommand stale(
-    f.node.GetHandle(), old_target, "blue", intent);
+  SetOverridesCommand stale(
+    f.node.GetHandle(), old_target, MaterialEntries("blue"), intent);
   stale.SetFailureCallback([&](uint64_t, const std::string&) { ++failures; });
   f.Execute(stale);
   Require(f.material_loads.size() == pending_loads,
@@ -1118,14 +1155,14 @@ void RetainedMaterialIdentitySurvivesInventoryRevisionChange()
         != replacement->Surfaces().layout_revision,
     "retained assignment test requires a changed inventory");
   f.material_cache["blue"] = f.blue;
-  SetMaterialOverrideCommand retained(f.node.GetHandle(), original, "blue",
-    SurfaceMaterialAssignmentIntent::kRetainedAssignment);
+  SetOverridesCommand retained(f.node.GetHandle(), original,
+    MaterialEntries("blue"), OverrideIntent::kRetainedOverride);
   f.Execute(retained);
   f.Drain();
   Require(f.CurrentMaterial(SubmeshIndex { 1U }) == f.blue,
     "retained stable surface was rejected after compatible inventory change");
-  SetMaterialOverrideCommand clear(f.node.GetHandle(), original, std::nullopt,
-    SurfaceMaterialAssignmentIntent::kRetainedAssignment);
+  SetOverridesCommand clear(f.node.GetHandle(), original,
+    MaterialEntries(std::nullopt), OverrideIntent::kRetainedOverride);
   f.Execute(clear);
   f.Drain();
   Require(f.CurrentMaterial(SubmeshIndex { 1U }) != f.blue,
@@ -1140,8 +1177,8 @@ void RetainedMaterialMissingIdentityRemainsUnresolved()
   missing.surface_id = TestSurfaceId(9U);
   f.material_cache["blue"] = f.blue;
   int failures = 0;
-  SetMaterialOverrideCommand retained(f.node.GetHandle(), missing, "blue",
-    SurfaceMaterialAssignmentIntent::kRetainedAssignment);
+  SetOverridesCommand retained(f.node.GetHandle(), missing,
+    MaterialEntries("blue"), OverrideIntent::kRetainedOverride);
   retained.SetFailureCallback(
     [&](uint64_t, const std::string&) { ++failures; });
   f.Execute(retained);
@@ -1398,10 +1435,161 @@ void AppliedSkyCubemapStaysResidentUntilReplaced()
   Require(applied.expired(), "a removed sky cubemap was still held");
 }
 
+//! What one override command reported.
+struct OverrideOutcome {
+  int successes = 0;
+  std::vector<std::string> failures;
+};
+
+//! Executes one override set and records how its callbacks answered.
+auto ExecuteOverrides(Fixture& f, OverrideTarget target,
+  std::vector<OverrideEntry> entries,
+  const OverrideIntent intent = OverrideIntent::kObservedEdit)
+  -> std::shared_ptr<OverrideOutcome>
+{
+  auto outcome = std::make_shared<OverrideOutcome>();
+  SetOverridesCommand command(
+    f.node.GetHandle(), std::move(target), std::move(entries), intent);
+  command.SetFailureCallback([outcome](uint64_t, const std::string& error) {
+    outcome->failures.push_back(error);
+  });
+  command.SetSuccessCallback([outcome](uint64_t) { ++outcome->successes; });
+  f.Execute(command);
+  return outcome;
+}
+
+void SurfaceFlagOverridesApplyWithoutMaterial()
+{
+  using oxygen::data::schema::OverrideId;
+  Fixture f;
+  f.Attach();
+  const auto renderable = f.node.GetRenderable();
+  const auto first = SubmeshIndex { 0U };
+  const auto second = SubmeshIndex { 1U };
+  Require(renderable.IsSubmeshVisible(LodIndex {}, first)
+      && renderable.SubmeshCastsShadows(LodIndex {}, first),
+    "the asset surface should default to visible and shadow casting");
+  const auto outcome = ExecuteOverrides(f, f.Target(0),
+    { BoolEntry(OverrideId::kGeometrySurfaceVisibility, false),
+      BoolEntry(OverrideId::kGeometrySurfaceCastsShadows, false) });
+  f.Drain();
+  Require(f.material_loads.empty(), "flag overrides started a material load");
+  Require(outcome->successes == 1 && outcome->failures.empty(),
+    "flag overrides were not acknowledged exactly once");
+  Require(!renderable.IsSubmeshVisible(LodIndex {}, first),
+    "visibility override did not hide the surface");
+  Require(!renderable.SubmeshCastsShadows(LodIndex {}, first),
+    "cast shadows override did not apply");
+  Require(renderable.IsSubmeshVisible(LodIndex {}, second)
+      && renderable.SubmeshCastsShadows(LodIndex {}, second),
+    "overrides of one surface affected another");
+  Require(f.diagnostics.empty(), "flag overrides reported a failure");
+}
+
+void EmptyOverridesClearThePart()
+{
+  using oxygen::data::schema::OverrideId;
+  Fixture f;
+  f.Attach();
+  const auto renderable = f.node.GetRenderable();
+  const auto first = SubmeshIndex { 0U };
+  const auto hidden = ExecuteOverrides(f, f.Target(0),
+    { BoolEntry(OverrideId::kGeometrySurfaceVisibility, false),
+      BoolEntry(OverrideId::kGeometrySurfaceCastsShadows, false) });
+  f.Drain();
+  Require(!renderable.IsSubmeshVisible(LodIndex {}, first)
+      && !renderable.SubmeshCastsShadows(LodIndex {}, first),
+    "the overrides to clear were not applied");
+  const auto cleared = ExecuteOverrides(f, f.Target(0), {});
+  f.Drain();
+  Require(cleared->successes == 1 && cleared->failures.empty(),
+    "clearing the part was not acknowledged exactly once");
+  Require(renderable.IsSubmeshVisible(LodIndex {}, first)
+      && renderable.SubmeshCastsShadows(LodIndex {}, first),
+    "an empty override set did not restore the asset defaults");
+  Require(hidden->successes == 1, "the superseded set was acknowledged again");
+}
+
+void ComponentLodPolicySurvivesGeometryReplacement()
+{
+  using oxygen::data::schema::OverrideId;
+  Fixture f;
+  f.Attach();
+  const auto renderable = f.node.GetRenderable();
+  Require(!renderable.HasLodPolicyOverride(),
+    "the geometry should start on its default LOD policy");
+  const auto component
+    = ExecuteOverrides(f, f.ComponentTarget(), { FixedLodPolicyEntry(1U) });
+  const auto surface = ExecuteOverrides(f, f.Target(0),
+    { BoolEntry(OverrideId::kGeometrySurfaceVisibility, false) });
+  f.Drain();
+  Require(component->successes == 1 && component->failures.empty()
+      && surface->successes == 1 && surface->failures.empty(),
+    "component and surface overrides were not both applied");
+  Require(renderable.HasLodPolicyOverride(),
+    "the component LOD policy override was not applied");
+  Require(!renderable.IsSubmeshVisible(LodIndex {}, SubmeshIndex { 0U }),
+    "the surface override was not applied");
+
+  // A recook replaces the asset behind the same geometry path; a refresh
+  // reloads it and re-requests every part. A path change instead drops the
+  // parts, since the editor sends the new geometry's overrides itself.
+  f.geometry_cache["initial"] = f.b;
+  f.requests->Refresh(*f.scene);
+  f.Drain();
+  Require(f.Geometry() == f.b, "the replacement geometry was not applied");
+  Require(renderable.HasLodPolicyOverride(),
+    "the component LOD policy override did not survive the replacement");
+  Require(component->failures.empty(),
+    "the component overrides were rejected by a geometry replacement");
+  Require(surface->failures.size() == 1
+      && surface->failures[0].find(
+           "surface overrides require repair after geometry replacement")
+        != std::string::npos,
+    "the surface overrides of the previous geometry were not rejected");
+}
+
+void MalformedPartIdentityIsRejected()
+{
+  Fixture f;
+  f.Attach();
+  auto component = f.ComponentTarget();
+  component.layout_revision = f.Target(0).layout_revision;
+  auto surface = f.Target(0);
+  surface.layout_revision = {};
+  const auto component_outcome
+    = ExecuteOverrides(f, std::move(component), { FixedLodPolicyEntry(1U) });
+  const auto surface_outcome = ExecuteOverrides(f, std::move(surface),
+    { BoolEntry(
+      oxygen::data::schema::OverrideId::kGeometrySurfaceVisibility, false) });
+  f.Drain();
+  for (const auto& outcome : { component_outcome, surface_outcome }) {
+    Require(outcome->successes == 0 && outcome->failures.size() == 1
+        && outcome->failures[0].find("overrides require geometry identity")
+          != std::string::npos,
+      "a malformed part identity did not fail with the identities diagnostic");
+  }
+  Require(!f.node.GetRenderable().HasLodPolicyOverride()
+      && f.node.GetRenderable().IsSubmeshVisible(LodIndex {}, SubmeshIndex { 0U }),
+    "a malformed part identity changed the renderable");
+}
+
 auto RunScenario(int scenario) -> const char*
 {
   try {
     switch (scenario) {
+    case 45:
+      SurfaceFlagOverridesApplyWithoutMaterial();
+      break;
+    case 46:
+      EmptyOverridesClearThePart();
+      break;
+    case 47:
+      ComponentLodPolicySurvivesGeometryReplacement();
+      break;
+    case 48:
+      MalformedPartIdentityIsRejected();
+      break;
     case 42:
       SkyCubemapsApplyTogetherOrNotAtAll();
       break;
@@ -1416,7 +1604,7 @@ auto RunScenario(int scenario) -> const char*
       break;
     case 39:
       MaterialTargetCannotCrossGeometryIdentity(
-        SurfaceMaterialAssignmentIntent::kRetainedAssignment);
+        OverrideIntent::kRetainedOverride);
       break;
     case 40:
       RetainedMaterialMissingIdentityRemainsUnresolved();
@@ -1426,7 +1614,7 @@ auto RunScenario(int scenario) -> const char*
       break;
     case 36:
       MaterialTargetCannotCrossGeometryIdentity(
-        SurfaceMaterialAssignmentIntent::kObservedEdit);
+        OverrideIntent::kObservedEdit);
       break;
     case 37:
       MaterialRequestAppliesEveryDeclaredLodBinding();
@@ -1563,14 +1751,24 @@ private:
   }
 
 public:
-  [TestMethod] void RetainedAssignmentUsesCurrentStableSurface() { Check(38); }
+  [TestMethod] void SurfaceFlagOverridesApplyWithoutMaterial() { Check(45); }
 
-    [TestMethod] void RetainedAssignmentCannotCrossGeometry()
+  [TestMethod] void EmptyOverridesClearThePart() { Check(46); }
+
+  [TestMethod] void ComponentLodPolicySurvivesGeometryReplacement() {
+    Check(47);
+  }
+
+  [TestMethod] void MalformedPartIdentityIsRejected() { Check(48); }
+
+  [TestMethod] void RetainedOverrideUsesCurrentStableSurface() { Check(38); }
+
+    [TestMethod] void RetainedOverrideCannotCrossGeometry()
   {
     Check(39);
   }
 
-  [TestMethod] void RetainedAssignmentCannotGuessMissingSurface() { Check(40); }
+  [TestMethod] void RetainedOverrideCannotGuessMissingSurface() { Check(40); }
 
     [TestMethod] void StaleNewEditRejectsWhileAcceptedRefreshSurvives()
   {

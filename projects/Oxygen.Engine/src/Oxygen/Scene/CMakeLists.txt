@@ -65,8 +65,6 @@ set(
   "ScenePrettyPrinter.h"
   "ExposureSettings.h"
   "Scripting/ScriptingComponent.h"
-  "Schema/Generated.SceneComponents.h"
-  "Schema/PropertyRange.h"
   "SceneQuery.h"
   "SceneTraversal.h"
   "SceneTraversalAsync.h"
@@ -181,81 +179,11 @@ target_link_libraries(
 )
 
 # ------------------------------------------------------------------------------
-# Component and field ids of the scene components schema
-# ------------------------------------------------------------------------------
-
-# SceneSchemaCodeGen validates Schema/SceneComponents.yaml and writes
-# Schema/Generated.SceneComponents.h into the source tree, where it is
-# versioned. A stamp in the build tree is the only declared output, so Clean
-# never deletes the versioned header. The generator writes the header only when
-# its text changes, so a regeneration that changes nothing recompiles nothing.
-set(
-  _scene_schema_tool_dir
-  "${CMAKE_CURRENT_SOURCE_DIR}/Tools/SceneSchemaCodeGen"
-)
-set(_scene_schema_dir "${CMAKE_CURRENT_SOURCE_DIR}/Schema")
-set(_scene_schema_header "${_scene_schema_dir}/Generated.SceneComponents.h")
-file(
-  GLOB _scene_schema_tool_scripts
-  CONFIGURE_DEPENDS
-  "${_scene_schema_tool_dir}/src/scene_schema_codegen/*.py"
-)
-# MSBuild can already have loaded the old dependency list when ZERO_CHECK runs.
-# Track the scripts through CMake and expose one stable input to the build rule.
-set_property(
-  DIRECTORY
-  APPEND
-  PROPERTY
-    CMAKE_CONFIGURE_DEPENDS
-      ${_scene_schema_tool_scripts}
-)
-set(_scene_schema_tool_versions "")
-foreach(_script IN LISTS _scene_schema_tool_scripts)
-  file(SHA256 "${_script}" _script_hash)
-  string(APPEND _scene_schema_tool_versions "${_script} ${_script_hash}\n")
-endforeach()
-set(
-  _scene_schema_tool_inventory
-  "${CMAKE_CURRENT_BINARY_DIR}/scene_schema_generator_sources.txt"
-)
-file(
-  GENERATE
-  OUTPUT
-  "${_scene_schema_tool_inventory}"
-  CONTENT "${_scene_schema_tool_versions}"
-)
-set(_scene_schema_stamp "${CMAKE_CURRENT_BINARY_DIR}/scene_schema.stamp")
-add_custom_command(
-  OUTPUT
-    ${_scene_schema_stamp}
-  COMMAND
-    ${Python3_EXECUTABLE} -m scene_schema_codegen.cli --schema
-    "${_scene_schema_dir}/SceneComponents.yaml" --json-schema
-    "${_scene_schema_dir}/SceneComponents.schema.json" --cpp-out
-    "${_scene_schema_header}"
-  COMMAND
-    ${CMAKE_COMMAND} -E touch ${_scene_schema_stamp}
-  DEPENDS
-    "${_scene_schema_dir}/SceneComponents.yaml"
-    "${_scene_schema_dir}/SceneComponents.schema.json"
-    "${_scene_schema_tool_inventory}"
-    "${_scene_schema_tool_dir}/pyproject.toml"
-    "${OXYGEN_PYTHON_LOCKFILE}"
-  WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-  COMMENT
-    "[SceneSchemaCodeGen] Generating the scene component ids (source tree)"
-  VERBATIM
-)
-add_custom_target(oxygen-scene_schema_gen DEPENDS ${_scene_schema_stamp})
-add_dependencies(${META_MODULE_TARGET} oxygen-scene_schema_gen)
-
-# ------------------------------------------------------------------------------
 # Tests
 # ------------------------------------------------------------------------------
 
 if(OXYGEN_BUILD_TESTS)
   add_subdirectory("test")
-  add_subdirectory("Tools/SceneSchemaCodeGen")
 endif()
 if(OXYGEN_BUILD_BENCHMARKS)
   add_subdirectory("Benchmarks")
@@ -279,19 +207,6 @@ endif()
 # ==============================================================================
 # Deployment instructions
 # ==============================================================================
-
-if(OXYGEN_INSTALL)
-  # install-sdk: static
-  # The scene property schema ships with the SDK: consumers built on the
-  # installed SDK, such as the editor, generate their own code from it.
-  install(
-    FILES
-      "${_scene_schema_dir}/SceneComponents.yaml"
-      "${_scene_schema_dir}/SceneComponents.schema.json"
-    DESTINATION "${OXYGEN_INSTALL_SCHEMAS}"
-    COMPONENT Oxygen_data
-  )
-endif()
 
 oxygen_module_install(
   EXPORT ${META_MODULE_NAMESPACE}

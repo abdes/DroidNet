@@ -7,6 +7,7 @@ using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Edits;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World;
+using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 
@@ -21,6 +22,11 @@ internal static class OverrideRules
     private static readonly FrozenDictionary<PropertyId, Func<object, ValidationResult>> Rules = new Dictionary<PropertyId, Func<object, ValidationResult>>
     {
         [SceneSchema.Geometry.Surface.Material.Id] = static value => Asset((AssetPath)value, AssetFileTypes.Material),
+
+        // Any bool is a valid Visibility or Cast Shadows; the override's type is checked where it is stored.
+        [SceneSchema.Geometry.Surface.Visibility.Id] = static _ => ValidationResult.Ok,
+        [SceneSchema.Geometry.Surface.CastsShadows.Id] = static _ => ValidationResult.Ok,
+        [SceneSchema.Geometry.LodPolicy.Id] = static value => Policy((LodPolicy)value),
     }.ToFrozenDictionary();
 
     /// <summary>Gets the properties that have a rule.</summary>
@@ -33,6 +39,9 @@ internal static class OverrideRules
     /// <exception cref="InvalidOperationException">The property has no rule, a defect of this table.</exception>
     public static ValidationResult Check(PropertyId property, object value)
         => Rules.TryGetValue(property, out var rule) ? rule(value) : throw new InvalidOperationException($"{property} has no override rule.");
+
+    private static ValidationResult Policy(LodPolicy policy)
+        => policy.FindProblem() is { } problem ? ValidationResult.Fail(SceneEditCodes.PropertyOutOfRange, problem) : ValidationResult.Ok;
 
     private static ValidationResult Asset(AssetPath asset, string fileType)
         => AssetReferenceRules.Check([asset], fileType) is { } error ? ValidationResult.Fail(SceneEditCodes.AssetReferenceInvalid, error) : ValidationResult.Ok;

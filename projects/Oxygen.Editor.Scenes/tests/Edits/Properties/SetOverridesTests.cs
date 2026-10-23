@@ -125,6 +125,40 @@ public sealed class SetOverridesTests
     }
 
     [TestMethod]
+    public async Task ASurfaceFlagAndALodPolicy_AreOverridden()
+    {
+        using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
+        var policy = new LodPolicy.Distance([10f, 25f], 0.1f);
+        OverrideWrite[] writes =
+        [
+            new(SceneSchema.Geometry.Surface.Visibility.Id, CubeTarget.Part, CubeTarget.LayoutRevision, false) { PartOwner = CubeTarget.Geometry },
+            new(SceneSchema.Geometry.LodPolicy.Id, Part: null, LayoutRevision: null, policy),
+        ];
+
+        var result = await fixture.Authoring.ExecuteAsync(new SetOverrides([SampleScene.Mesh], writes, "Edit")).ConfigureAwait(false);
+
+        SceneAssert.Applied(result);
+        var overrides = Geometry(fixture, SampleScene.Mesh).Overrides;
+        _ = overrides.TryGet(SceneSchema.Geometry.Surface.Visibility, CubeTarget.Part, out var visible).Should().BeTrue();
+        _ = visible.Should().BeFalse();
+        _ = overrides.TryGet(SceneSchema.Geometry.LodPolicy, out var stored).Should().BeTrue();
+        _ = stored.Should().Be(policy);
+    }
+
+    [TestMethod]
+    public async Task ALodPolicyTheEngineRefuses_IsOutOfRange()
+    {
+        using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
+        var before = fixture.Snapshot();
+        var write = new OverrideWrite(SceneSchema.Geometry.LodPolicy.Id, Part: null, LayoutRevision: null, new LodPolicy.Distance([25f, 10f], 0.1f));
+
+        var result = await fixture.Authoring.ExecuteAsync(new SetOverrides([SampleScene.Mesh], [write], "Edit")).ConfigureAwait(false);
+
+        SceneAssert.Invalid(result, SceneEditCodes.PropertyOutOfRange, SampleScene.Mesh, SceneSchema.Geometry.LodPolicy.Id);
+        SceneAssert.Unchanged(fixture, before);
+    }
+
+    [TestMethod]
     public async Task APropertyWithoutASource_IsUnknown()
     {
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);

@@ -260,6 +260,36 @@
               "value": 16
             },
             {
+              "key": "lamp_scene_shade_hidden",
+              "type": "node",
+              "value": 22
+            },
+            {
+              "key": "lamp_scene_metal_no_shadow",
+              "type": "node",
+              "value": 23
+            },
+            {
+              "key": "pillar_scene_cast",
+              "type": "node",
+              "value": 24
+            },
+            {
+              "key": "ghost_scene_visible",
+              "type": "node",
+              "value": 25
+            },
+            {
+              "key": "lod_scene_fixed",
+              "type": "node",
+              "value": 26
+            },
+            {
+              "key": "lod_scene_sse",
+              "type": "node",
+              "value": 27
+            },
+            {
               "key": "play_lamp",
               "type": "node",
               "value": 17

@@ -30,10 +30,10 @@
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Data/MaterialAsset.h>
+#include <Oxygen/Data/Schema/Generated.SceneComponents.h>
 #include <Oxygen/Data/SurfaceInventory.h>
 #include <Oxygen/Scene/Detail/RenderableComponent.h>
 #include <Oxygen/Scene/Detail/TransformComponent.h>
-#include <Oxygen/Scene/Schema/Generated.SceneComponents.h>
 #include <Oxygen/Scene/Types/ActiveMesh.h>
 #include <Oxygen/Scene/Types/RenderablePolicies.h>
 #include <Oxygen/Scene/Types/Strong.h>
@@ -79,7 +79,7 @@ void RenderableComponent::ResolveLodPolicy()
   } else if (geometry_asset_ && geometry_asset_->DefaultLodPolicy()) {
     policy_ = MakeLodPolicy(*geometry_asset_->DefaultLodPolicy());
   } else {
-    policy_ = MakeLodPolicy(schema::geometry::kLodPolicyDefault);
+    policy_ = MakeLodPolicy(data::schema::geometry::kLodPolicyDefault);
   }
   current_lod_.reset();
   InvalidateWorldAabbCache();
@@ -240,8 +240,8 @@ void RenderableComponent::ResolveSurface(const std::size_t index) noexcept
   const auto& surface = geometry_asset_->Surfaces().surfaces.at(index);
   const auto& overrides = surface_overrides_.at(index);
   const auto defaults = surface.defaults.value_or(data::SurfaceDefaults {
-    .visible = schema::geometry::surface::kVisibilityDefault,
-    .casts_shadows = schema::geometry::surface::kCastsShadowsDefault,
+    .visible = data::schema::geometry::surface::kVisibilityDefault,
+    .casts_shadows = data::schema::geometry::surface::kCastsShadowsDefault,
   });
   const auto visible = overrides.visible.value_or(defaults.visible);
   const auto casts_shadows

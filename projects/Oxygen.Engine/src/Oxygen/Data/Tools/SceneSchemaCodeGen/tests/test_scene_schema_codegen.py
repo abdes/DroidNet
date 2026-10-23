@@ -90,7 +90,12 @@ def _minimal() -> dict[str, Any]:
                 "kind": "geometry",
                 "cardinality": "optional",
                 "properties": [
-                    {"name": "GeometryUri", "key": "/geometry_uri", "type": "asset"}
+                    {
+                        "name": "GeometryUri",
+                        "key": "/geometry_uri",
+                        "type": "asset",
+                        "asset_type": "geometry",
+                    }
                 ],
             },
         ],
@@ -206,9 +211,9 @@ def test_field_used_twice_in_a_component_is_refused() -> None:
 
 def test_fields_need_a_wire() -> None:
     document = _minimal()
-    document["components"][1]["properties"][0].update(
-        type="float", fields=["Range"], default=0
-    )
+    uri = document["components"][1]["properties"][0]
+    del uri["asset_type"]
+    uri.update(type="float", fields=["Range"], default=0)
     assert "Geometry.GeometryUri: fields without a wire" in _error_of(document)
 
 
@@ -218,6 +223,7 @@ def test_wired_asset_property_is_refused() -> None:
         "name": "Mesh",
         "key": "/mesh",
         "type": "asset",
+        "asset_type": "geometry",
     }
     assert "PointLight.Mesh: asset values have no fields" in _error_of(document)
 
@@ -238,6 +244,7 @@ def _with_surface(document: dict[str, Any]) -> dict[str, Any]:
                     "name": "Material",
                     "key": "/material",
                     "type": "asset",
+                    "asset_type": "material",
                     "sources": ["asset"],
                     "override_id": 1,
                 }
@@ -253,12 +260,19 @@ def test_schema_declares_the_surface_material() -> None:
     surface = geometry.parts[0]
     assert (surface.name, surface.kind) == ("Surface", "surface")
     assert [
-        (entry.key, entry.type, entry.sources, entry.override_id, entry.default)
+        (
+            entry.key,
+            entry.type,
+            entry.asset_type,
+            entry.sources,
+            entry.override_id,
+            entry.default,
+        )
         for entry in surface.properties
     ] == [
-        ("/material", "asset", ("asset",), 1, None),
-        ("/visible", "bool", ("asset",), 2, True),
-        ("/casts_shadows", "bool", ("asset",), 3, True),
+        ("/material", "asset", "material", ("asset",), 1, None),
+        ("/visible", "bool", None, ("asset",), 2, True),
+        ("/casts_shadows", "bool", None, ("asset",), 3, True),
     ]
 
 
@@ -272,9 +286,34 @@ def test_part_property_is_rendered_as_an_override() -> None:
         "    .part_kind = PartKind::kSurface,\n"
         '    .key = "/material",\n'
         "    .type = ValueType::kAsset,\n"
+        "    .asset_type = AssetType::kMaterial,\n"
         "  },\n"
     ) in text
+    assert "constexpr auto FindOverrideProperty(const OverrideId id)" in text
+    assert "  const std::string_view key) noexcept -> const OverrideProperty*" in text
     assert "namespace geometry::surface" not in text
+
+
+def test_asset_property_needs_its_asset_type() -> None:
+    document = _with_surface(_minimal())
+    del document["components"][1]["parts"][0]["properties"][0]["asset_type"]
+    assert "/components/1/parts/0/properties/0" in _error_of(document)
+
+
+def test_asset_type_on_a_value_property_is_refused() -> None:
+    document = _with_surface(_minimal())
+    document["components"][1]["parts"][0]["properties"].append(
+        {
+            "name": "Visibility",
+            "key": "/visible",
+            "type": "bool",
+            "asset_type": "material",
+            "sources": ["asset"],
+            "override_id": 2,
+            "default": True,
+        }
+    )
+    assert "/components/1/parts/0/properties/1" in _error_of(document)
 
 
 def test_part_property_needs_a_source() -> None:

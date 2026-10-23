@@ -2888,7 +2888,6 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
           .node_index = i,
           .geometry_key
           = oxygen::base::CheckedAt(input.geometry_keys, key_index),
-          .visible = 1,
         });
       }
     }

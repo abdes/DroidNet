@@ -1341,7 +1341,7 @@ private:
   auto BindDependenciesAsync(data::SceneAsset& asset,
     const internal::DependencyCollector& collector,
     internal::ContentBindingBuilder& bindings, LoadRequest request) -> co::Co<>;
-  auto BindScriptParamAssetAsync(const data::ScriptAssetParam& value,
+  auto BindSceneAssetValueAsync(const data::AssetKey& key, data::AssetType type,
     data::SceneAsset& asset, internal::ContentBindingBuilder& bindings,
     LoadRequest request) -> co::Co<>;
   auto BindDependenciesAsync(data::PhysicsSceneAsset& asset,

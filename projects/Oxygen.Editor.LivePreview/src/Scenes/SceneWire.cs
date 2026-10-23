@@ -16,12 +16,14 @@ namespace Oxygen.Editor.LivePreview.Scenes;
 /// <summary>Where each scene property goes in the engine: its component, its fields and how its value encodes.</summary>
 /// <remarks>
 /// The table is generated from the engine's scene components schema, which also gives the engine its component and
-/// field ids. Geometry and the scene environment have no entry: the engine takes a geometry asset with its component and
-/// the environment as a whole.
+/// field ids. Geometry and the scene environment have no field entry: the engine takes a geometry asset with its component
+/// and the environment as a whole. A property a source supplies goes as an override, by its override id.
 /// </remarks>
 internal static partial class SceneWire
 {
     private static readonly FrozenDictionary<PropertyId, Mapping> Mappings = Build();
+
+    private static readonly FrozenDictionary<PropertyId, RuntimeOverrideId> OverrideIds = BuildOverrideIds();
 
     /// <summary>Gets every property the engine takes as fields.</summary>
     public static IEnumerable<PropertyId> Properties => Mappings.Keys;
@@ -31,6 +33,12 @@ internal static partial class SceneWire
     /// <param name="mapping">The mapping, when the engine takes the property as fields.</param>
     /// <returns><see langword="true"/> when the property has a mapping.</returns>
     public static bool TryGet(PropertyId property, out Mapping mapping) => Mappings.TryGetValue(property, out mapping!);
+
+    /// <summary>Gets the override id of a property the engine takes as an override.</summary>
+    /// <param name="property">The property.</param>
+    /// <param name="id">The override id, when the property is one.</param>
+    /// <returns><see langword="true"/> when the engine takes the property as an override.</returns>
+    public static bool TryGetOverrideId(PropertyId property, out RuntimeOverrideId id) => OverrideIds.TryGetValue(property, out id);
 
     /// <summary>Gets a value indicating whether a node has the component that an engine component id addresses.</summary>
     /// <param name="node">The node.</param>
@@ -57,6 +65,13 @@ internal static partial class SceneWire
     {
         var map = new Dictionary<PropertyId, Mapping>();
         AddSchemaMappings(map);
+        return map.ToFrozenDictionary();
+    }
+
+    private static FrozenDictionary<PropertyId, RuntimeOverrideId> BuildOverrideIds()
+    {
+        var map = new Dictionary<PropertyId, RuntimeOverrideId>();
+        AddSchemaOverrideIds(map);
         return map.ToFrozenDictionary();
     }
 

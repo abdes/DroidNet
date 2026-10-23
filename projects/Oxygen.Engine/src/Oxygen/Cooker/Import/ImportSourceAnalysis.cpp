@@ -512,9 +512,13 @@ namespace {
         const auto location = "renderables[" + std::to_string(i) + "]";
         context.Reference(
           renderable.geometry, Kind::kGeometry, location + ".geometry_ref");
-        for (const auto& material : renderable.materials) {
-          context.Reference(material.material, Kind::kMaterial,
-            location + ".material_overrides");
+        for (const auto& entry : renderable.overrides) {
+          if (const auto* asset
+            = std::get_if<internal::SceneSource::AssetReference>(
+              &entry.value)) {
+            context.Reference(asset->virtual_path,
+              AssetKind(entry.property->asset_type), entry.object_path);
+          }
         }
       }
       for (const auto& reference : source->references) {

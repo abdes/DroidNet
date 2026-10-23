@@ -7,15 +7,16 @@ validating it against
 and checking that its names, ids, field uses, enumerations, units, defaults and
 ranges are consistent.
 
-The Scene build runs the generator before it compiles the module, when the
+The Data build runs the generator before it compiles the module, when the
 schema or the tool changes, and writes `Schema/Generated.SceneComponents.h`
 into the source tree, where it is versioned:
 
 - `ComponentId`: one id per component applied field by field;
 - one `<FieldSet>Field` enumeration per field set, with `kCount` one past its
   largest id;
-- `ValueType`, `PartKind`, `OverrideId` and `kOverrideProperties`: the
-  address and value type of every property a scene stores as overrides;
+- `ValueType`, `PartKind`, `OverrideId`, `kOverrideProperties` and
+  `FindOverrideProperty`: the address, value type and referenced asset type of
+  every property a scene stores as overrides;
 - `k<Enumeration>Members`: the wire values of each enumeration;
 - one namespace per component kind (and part kind) with each property's
   default and `PropertyRange` in field units, after the property's
@@ -33,4 +34,4 @@ Other consumers of the schema generate their own code from the YAML file; this
 tool produces engine output only.
 
 Tests: `python -m pytest tests/ -v`, registered with CTest as
-`Oxygen.Scene.SceneSchemaCodeGen.Tests`.
+`Oxygen.Data.SceneSchemaCodeGen.Tests`.

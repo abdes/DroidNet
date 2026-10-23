@@ -66,13 +66,14 @@ def render(schema: Schema, source: str) -> str:
         "#include <span>",
         "#include <string_view>",
         "",
+        "#include <Oxygen/Data/AssetType.h>",
         "#include <Oxygen/Data/PakFormat_geometry.h>",
-        "#include <Oxygen/Scene/Schema/PropertyRange.h>",
+        "#include <Oxygen/Data/Schema/PropertyRange.h>",
         "",
         "// The generator owns this layout.",
         "// clang-format off",
         "",
-        "namespace oxygen::scene::schema {",
+        "namespace oxygen::data::schema {",
         "",
         "//! The scene components applied field by field.",
         "enum class ComponentId : std::uint16_t {",
@@ -90,7 +91,7 @@ def render(schema: Schema, source: str) -> str:
     for component in schema.components:
         lines.extend(_component_values(schema, component))
     lines.extend(
-        ["", "} // namespace oxygen::scene::schema", "", "// clang-format on", ""]
+        ["", "} // namespace oxygen::data::schema", "", "// clang-format on", ""]
     )
     return "\n".join(lines)
 
@@ -137,6 +138,7 @@ def _override_table(schema: Schema) -> list[str]:
     rows: list[str] = []
     for entry in overrides:
         part = "kNone" if entry.part is None else f"k{_pascal(entry.part.kind)}"
+        asset_type = _pascal(entry.prop.asset_type or "unknown")
         rows.extend(
             [
                 "  OverrideProperty {",
@@ -145,6 +147,7 @@ def _override_table(schema: Schema) -> list[str]:
                 f"    .part_kind = PartKind::{part},",
                 f'    .key = "{entry.prop.key}",',
                 f"    .type = ValueType::k{types[entry.prop.type]},",
+                f"    .asset_type = AssetType::k{asset_type},",
                 "  },",
             ]
         )
@@ -156,13 +159,15 @@ def _override_table(schema: Schema) -> list[str]:
         *(f"  k{names[entry.id]} = {entry.id}," for entry in overrides),
         "};",
         "",
-        "//! The address and value type of a property stored as overrides.",
+        "//! The address and value type of a property stored as overrides;",
+        "//! `asset_type` is the type an asset value references (kUnknown otherwise).",
         "struct OverrideProperty {",
         "  OverrideId id;",
         "  std::string_view component_kind;",
         "  PartKind part_kind;",
         "  std::string_view key;",
         "  ValueType type;",
+        "  AssetType asset_type;",
         "};",
         "",
         "//! The properties stored as overrides, by override id.",
@@ -172,6 +177,34 @@ def _override_table(schema: Schema) -> list[str]:
         ),
         *rows,
         "};",
+        "",
+        "//! The override property `id` names, or null for an id the schema does not",
+        "//! declare.",
+        "[[nodiscard]] constexpr auto FindOverrideProperty(const OverrideId id)",
+        "  noexcept -> const OverrideProperty*",
+        "{",
+        "  for (const auto& property : kOverrideProperties) {",
+        "    if (property.id == id) {",
+        "      return &property;",
+        "    }",
+        "  }",
+        "  return nullptr;",
+        "}",
+        "",
+        "//! The override property of `component_kind` with `key` on `part_kind`, or",
+        "//! null when the schema declares none.",
+        "[[nodiscard]] constexpr auto FindOverrideProperty(",
+        "  const std::string_view component_kind, const PartKind part_kind,",
+        "  const std::string_view key) noexcept -> const OverrideProperty*",
+        "{",
+        "  for (const auto& property : kOverrideProperties) {",
+        "    if (property.component_kind == component_kind",
+        "      && property.part_kind == part_kind && property.key == key) {",
+        "      return &property;",
+        "    }",
+        "  }",
+        "  return nullptr;",
+        "}",
     ]
 
 

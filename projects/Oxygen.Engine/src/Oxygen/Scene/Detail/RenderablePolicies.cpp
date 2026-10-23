@@ -38,7 +38,7 @@ void DistancePolicy::NormalizeThresholds() noexcept
       thresholds[i] = (std::max)(thresholds[i], thresholds[i - 1]);
     }
   }
-  hysteresis_ratio = (std::clamp)(hysteresis_ratio, 0.0F, 0.99F);
+  hysteresis_ratio = std::clamp(hysteresis_ratio, 0.0F, 0.99F);
 }
 
 auto DistancePolicy::SelectBase(

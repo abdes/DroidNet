@@ -402,29 +402,28 @@ protected:
     if (has_override) {
       const oxygen::data::pak::world::SceneComponentTableDesc override_table {
         .component_type
-        = static_cast<uint32_t>(oxygen::data::ComponentType::kMaterialOverride),
+        = static_cast<uint32_t>(oxygen::data::ComponentType::kOverride),
         .table = { .offset = renderable_offset + sizeof(RenderableRecord),
           .count = 1,
-          .entry_size
-          = sizeof(oxygen::data::pak::world::MaterialOverrideRecord), },
+          .entry_size = sizeof(oxygen::data::pak::world::OverrideRecord), },
       };
       write_record(override_table);
     }
     const RenderableRecord renderable {
       .node_index = 0,
       .geometry_key = geometry_key,
-      .visible = 1,
     };
     write_record(renderable);
     if (has_override) {
-      auto assignment = oxygen::data::pak::world::MaterialOverrideRecord {
+      auto assignment = oxygen::data::pak::world::OverrideRecord {
         .node_index = 0,
-        .surface_id
+        .override_id
+        = oxygen::data::schema::OverrideId::kGeometrySurfaceMaterial,
+        .part_id
         = oxygen::data::SurfaceId::FromStableIdentity("SceneLoaderTest/slot"),
-        .material_key = material_key,
-        .layout_revision = {},
       };
       assignment.layout_revision.front() = 1;
+      assignment.value.as_asset = material_key;
       write_record(assignment);
     }
 

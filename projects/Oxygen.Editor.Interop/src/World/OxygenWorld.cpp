@@ -16,6 +16,7 @@
 #include <memory>
 #include <new>
 #include <optional>
+#include <ranges>
 #include <string>
 #include <utility>
 #include <vector>
@@ -27,6 +28,9 @@
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Light/PointLight.h>
 #include <Oxygen/Scene/Light/SpotLight.h>
+#include <Oxygen/Data/LodPolicyValidation.h>
+#include <Oxygen/Data/PakFormat_geometry.h>
+#include <Oxygen/Data/Schema/Generated.SceneComponents.h>
 #include <Oxygen/Scene/Types/NodeHandle.h>
 
 #include <Commands/DetachGeometryCommand.h>
@@ -40,7 +44,7 @@
 #include <Commands/SetEnvironmentCommand.h>
 #include <Commands/SetGeometryCommand.h>
 #include <Commands/SetLocalTransformCommand.h>
-#include <Commands/SetMaterialOverrideCommand.h>
+#include <Commands/SetOverridesCommand.h>
 #include <Commands/SetPropertiesCommand.h>
 #include <Commands/UpdateTransformsForNodesCommand.h>
 #include <EditorModule/EditorModule.h>
@@ -663,50 +667,168 @@ namespace Oxygen::Interop::World {
     editor_module->get().Enqueue(std::move(cmd));
   }
 
-  void OxygenWorld::SetMaterialOverride(
-    System::Guid nodeId, String^ geometryUri, System::Guid surfaceId,
-    String^ layoutRevision, String^ materialUri, System::Byte intent,
-    Action<System::UInt64, String^>^ onFailure) {
-    SetMaterialOverride(nodeId, geometryUri, surfaceId, layoutRevision, materialUri, intent,
-      onFailure, nullptr);
-  }
+  namespace {
+    //! Copies a managed threshold list into a record's fixed boundary array.
+    auto CopyBoundaries(array<float>^ source,
+      float (&destination)[oxygen::data::pak::geometry::kMaxLodBoundaryCount])
+      -> std::size_t {
+      if (source == nullptr) {
+        return 0U;
+      }
+      if (source->Length
+        > static_cast<int>(oxygen::data::pak::geometry::kMaxLodBoundaryCount)) {
+        throw gcnew ArgumentException("A LOD policy has at most 7 boundaries.", "entries");
+      }
+      for (int index = 0; index < source->Length; ++index) {
+        destination[index] = source[index];
+      }
+      return static_cast<std::size_t>(source->Length);
+    }
 
-  void OxygenWorld::SetMaterialOverride(
-    System::Guid nodeId, String^ geometryUri, System::Guid surfaceId,
-    String^ layoutRevision, String^ materialUri, System::Byte intent,
+    //! The native record of a managed LOD policy, rejected unless the data
+    //! rules hold: its type, counts, finite values and threshold order.
+    auto ToNativeLodPolicy(LodPolicyManaged policy)
+      -> oxygen::data::pak::geometry::LodPolicyRecord {
+      using oxygen::data::pak::geometry::LodPolicyType;
+      auto record = oxygen::data::pak::geometry::LodPolicyRecord {};
+      record.type = static_cast<LodPolicyType>(policy.Type);
+      record.lod_index = policy.LodIndex;
+      record.hysteresis_ratio = policy.HysteresisRatio;
+      const auto thresholds = CopyBoundaries(policy.Thresholds, record.thresholds);
+      const auto enter = CopyBoundaries(policy.EnterFinerSse, record.enter_finer_sse);
+      const auto exit = CopyBoundaries(policy.ExitCoarserSse, record.exit_coarser_sse);
+      if (record.type == LodPolicyType::kScreenSpaceError && enter != exit) {
+        throw gcnew ArgumentException(
+          "A screen-space error policy needs as many exit as enter thresholds.", "entries");
+      }
+      record.boundary_count = static_cast<std::uint8_t>(
+        record.type == LodPolicyType::kDistance ? thresholds : enter);
+      if (!oxygen::data::IsValidLodPolicy(record)) {
+        throw gcnew ArgumentException("The LOD policy is invalid.", "entries");
+      }
+      return record;
+    }
+
+    //! Validates each managed override against the schema property its id
+    //! names and the addressed part kind, and reads its value by that
+    //! property's value type.
+    auto ToNativeOverrides(array<OverrideEntryManaged>^ entries,
+      const oxygen::data::schema::PartKind part_kind)
+      -> std::vector<OverrideEntry> {
+      using oxygen::data::schema::ValueType;
+      if (entries == nullptr) {
+        throw gcnew ArgumentNullException("entries");
+      }
+      auto native = std::vector<OverrideEntry> {};
+      native.reserve(static_cast<std::size_t>(entries->Length));
+      for each (OverrideEntryManaged entry in entries) {
+        const auto id = static_cast<oxygen::data::schema::OverrideId>(entry.OverrideId);
+        const auto* property = oxygen::data::schema::FindOverrideProperty(id);
+        if (property == nullptr || property->part_kind != part_kind) {
+          throw gcnew ArgumentException(
+            "An override names a property the addressed part does not have.", "entries");
+        }
+        if (std::ranges::find(native, id, &OverrideEntry::id) != native.end()) {
+          throw gcnew ArgumentException(
+            "A part holds at most one override per property.", "entries");
+        }
+        const bool flag_unused = !entry.Flag;
+        const bool asset_unused = entry.AssetPath == nullptr;
+        const bool lod_unused = entry.LodPolicy.Thresholds == nullptr
+          && entry.LodPolicy.EnterFinerSse == nullptr
+          && entry.LodPolicy.ExitCoarserSse == nullptr && entry.LodPolicy.Type == 0
+          && entry.LodPolicy.LodIndex == 0 && entry.LodPolicy.HysteresisRatio == 0.0F;
+        switch (property->type) {
+        case ValueType::kBool:
+          if (!asset_unused || !lod_unused) {
+            throw gcnew ArgumentException("A bool override holds only its flag.", "entries");
+          }
+          native.push_back({ .id = id, .value = entry.Flag });
+          break;
+        case ValueType::kAsset:
+          // Materials are the only asset overrides, and the only assets the
+          // part loads.
+          if (property->asset_type != oxygen::data::AssetType::kMaterial) {
+            throw gcnew NotSupportedException("Only material asset overrides load at runtime.");
+          }
+          if (String::IsNullOrWhiteSpace(entry.AssetPath) || !flag_unused || !lod_unused) {
+            throw gcnew ArgumentException(
+              "An asset override holds only a nonempty asset path.", "entries");
+          }
+          native.push_back({ .id = id,
+            .value = OverrideAsset {
+              .virtual_path = msclr::interop::marshal_as<std::string>(entry.AssetPath) } });
+          break;
+        case ValueType::kLodPolicy:
+          if (!flag_unused || !asset_unused) {
+            throw gcnew ArgumentException(
+              "A LOD policy override holds only its policy.", "entries");
+          }
+          native.push_back({ .id = id, .value = ToNativeLodPolicy(entry.LodPolicy) });
+          break;
+        case ValueType::kInt:
+        case ValueType::kFloat:
+        case ValueType::kVec3:
+        case ValueType::kEnum:
+        case ValueType::kString:
+          // No override property has these types yet; each needs its reader
+          // here when the schema declares one.
+          throw gcnew NotSupportedException("The override value type is not supported.");
+        }
+      }
+      return native;
+    }
+  } // namespace
+
+  void OxygenWorld::SetOverrides(System::Guid nodeId, String^ geometryUri,
+    System::Guid surfaceId, String^ layoutRevision,
+    array<OverrideEntryManaged>^ entries, System::Byte intent,
     Action<System::UInt64, String^>^ onFailure,
     Action<System::UInt64>^ onSuccess) {
-    const auto native_intent = static_cast<SurfaceMaterialAssignmentIntent>(intent);
-    if (native_intent != SurfaceMaterialAssignmentIntent::kObservedEdit
-      && native_intent != SurfaceMaterialAssignmentIntent::kRetainedAssignment) {
+    const auto native_intent = static_cast<OverrideIntent>(intent);
+    if (native_intent != OverrideIntent::kObservedEdit
+      && native_intent != OverrideIntent::kRetainedOverride) {
       throw gcnew ArgumentOutOfRangeException("intent");
     }
     if (String::IsNullOrWhiteSpace(geometryUri)) {
-      throw gcnew ArgumentException("Material assignment requires geometry identity.", "geometryUri");
+      throw gcnew ArgumentException("Overrides require geometry identity.", "geometryUri");
     }
-    const auto native_surface = oxygen::data::SurfaceId::FromString(
-      msclr::interop::marshal_as<std::string>(surfaceId.ToString("D")));
-    if (!native_surface || native_surface.value().IsNil()) {
-      throw gcnew ArgumentException("Surface identity must not be empty.", "surfaceId");
-    }
-    SurfaceTarget target {
+    OverrideTarget target {
       .geometry_uri = msclr::interop::marshal_as<std::string>(geometryUri),
-      .surface_id = native_surface.value(),
+      .surface_id = {},
       .layout_revision = {},
     };
-    constexpr auto kHexCharactersPerByte = 2U;
-    if (layoutRevision == nullptr
-      || layoutRevision->Length != static_cast<int>(target.layout_revision.size() * kHexCharactersPerByte)
-      || !String::Equals(layoutRevision, layoutRevision->ToLowerInvariant(), StringComparison::Ordinal)) {
-      throw gcnew ArgumentException("Layout revision requires canonical SHA-256 text.", "layoutRevision");
+    const auto is_surface = surfaceId != System::Guid::Empty;
+    if (is_surface) {
+      const auto native_surface = oxygen::data::SurfaceId::FromString(
+        msclr::interop::marshal_as<std::string>(surfaceId.ToString("D")));
+      if (!native_surface || native_surface.value().IsNil()) {
+        throw gcnew ArgumentException("Surface identity is invalid.", "surfaceId");
+      }
+      target.surface_id = native_surface.value();
+      constexpr auto kHexCharactersPerByte = 2U;
+      if (layoutRevision == nullptr
+        || layoutRevision->Length
+          != static_cast<int>(target.layout_revision.size() * kHexCharactersPerByte)
+        || !String::Equals(layoutRevision, layoutRevision->ToLowerInvariant(),
+          StringComparison::Ordinal)) {
+        throw gcnew ArgumentException(
+          "Layout revision requires canonical SHA-256 text.", "layoutRevision");
+      }
+      const auto revision_bytes = Convert::FromHexString(layoutRevision);
+      for (std::size_t index = 0; index < target.layout_revision.size(); ++index) {
+        target.layout_revision.at(index) = revision_bytes[static_cast<int>(index)];
+      }
+      if (oxygen::base::IsAllZero(target.layout_revision)) {
+        throw gcnew ArgumentException("Layout revision must not be empty.", "layoutRevision");
+      }
+    } else if (layoutRevision != nullptr) {
+      throw gcnew ArgumentException(
+        "The component's own overrides carry no layout revision.", "layoutRevision");
     }
-    const auto revision_bytes = Convert::FromHexString(layoutRevision);
-    for (std::size_t index = 0; index < target.layout_revision.size(); ++index) {
-      target.layout_revision.at(index) = revision_bytes[static_cast<int>(index)];
-    }
-    if (oxygen::base::IsAllZero(target.layout_revision)) {
-      throw gcnew ArgumentException("Layout revision must not be empty.", "layoutRevision");
-    }
+    auto native_entries = ToNativeOverrides(entries,
+      is_surface ? oxygen::data::schema::PartKind::kSurface
+                 : oxygen::data::schema::PartKind::kNone);
 
     auto native_ctx = context_->NativePtr();
     if (!native_ctx || !native_ctx->engine) {
@@ -725,16 +847,9 @@ namespace Oxygen::Interop::World {
     if (!handle) {
       throw gcnew InvalidOperationException("Runtime asset target is no longer registered.");
     }
-    std::optional<std::string> native_material_uri;
-    if (materialUri != nullptr) {
-      if (String::IsNullOrWhiteSpace(materialUri)) {
-        throw gcnew ArgumentException("Material URI must be nonempty; use null to clear.", "materialUri");
-      }
-      native_material_uri = msclr::interop::marshal_as<std::string>(materialUri);
-    }
-    auto command = std::unique_ptr<SetMaterialOverrideCommand>(
-      commandFactory_->CreateSetMaterialOverride(
-        handle.value(), std::move(target), std::move(native_material_uri), native_intent));
+    auto command = std::unique_ptr<SetOverridesCommand>(
+      commandFactory_->CreateSetOverrides(handle.value(), std::move(target),
+        std::move(native_entries), native_intent));
     command->SetFailureCallback(MakeAssetFailureCallback(onFailure));
     command->SetSuccessCallback(MakeAssetSuccessCallback(onSuccess));
     editor_module->get().Enqueue(std::move(command));

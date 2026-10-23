@@ -7,6 +7,7 @@ using System.Numerics;
 using System.Text;
 using System.Text.Json;
 using AwesomeAssertions;
+using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Core;
 
@@ -66,6 +67,56 @@ public sealed class SceneJsonFormatTests
         using var output = JsonDocument.Parse(written);
         _ = JsonSerializer.Deserialize(written, SceneJsonContext.Default.LodPolicy).Should().Be(policy);
         _ = output.RootElement.GetProperty("type").GetString().Should().Be(source.RootElement.GetProperty("type").GetString());
+    }
+
+    /// <summary>A policy the engine accepts has no problem; each broken rule is reported.</summary>
+    [TestMethod]
+    public void LodPolicy_FindsTheRuleItBreaks()
+    {
+        _ = new LodPolicy.Fixed(7).FindProblem().Should().BeNull();
+        _ = new LodPolicy.Distance([10f, 10f, 30f], 0.99f).FindProblem().Should().BeNull();
+        _ = new LodPolicy.ScreenSpaceError([120f, 40f], [100f, 30f]).FindProblem().Should().BeNull();
+
+        _ = new LodPolicy.Fixed(8).FindProblem().Should().NotBeNull();
+        _ = new LodPolicy.Distance([30f, 10f], 0.1f).FindProblem().Should().Contain("must not decrease");
+        _ = new LodPolicy.Distance([10f, float.NaN], 0.1f).FindProblem().Should().Contain("finite");
+        _ = new LodPolicy.Distance([10f], 1f).FindProblem().Should().Contain("hysteresis");
+        _ = new LodPolicy.Distance([1f, 2f, 3f, 4f, 5f, 6f, 7f, 8f], 0.1f).FindProblem().Should().Contain("at most");
+        _ = new LodPolicy.ScreenSpaceError([40f, 120f], [30f, 100f]).FindProblem().Should().Contain("must not increase");
+        _ = new LodPolicy.ScreenSpaceError([120f, 40f], [100f]).FindProblem().Should().Contain("as many");
+    }
+
+    /// <summary>A saved LOD policy override the engine would refuse does not load.</summary>
+    [TestMethod]
+    public void InvalidLodPolicyOverride_DoesNotLoad()
+    {
+        using var policy = JsonDocument.Parse("""{ "type": "distance", "thresholds": [30, 10], "hysteresis_ratio": 0.1 }""");
+        var saved = new SourceOverridesData
+        {
+            Values = new Dictionary<string, JsonElement>(StringComparer.Ordinal)
+            {
+                [SceneSchema.Geometry.LodPolicy.Id.JsonPointer] = policy.RootElement.Clone(),
+            },
+        };
+
+        var read = () => SourceOverridesJson.Read(SceneSchema.Geometry.Kind, saved);
+
+        _ = read.Should().Throw<JsonException>().WithMessage("*must not decrease*");
+    }
+
+    /// <summary>A LOD policy override keeps its type discriminator when saved, so it loads back as the same policy.</summary>
+    [TestMethod]
+    public void LodPolicyOverride_RoundTripsThroughSavedOverrides()
+    {
+        var overrides = SourceOverrides.For(SceneSchema.Geometry.Kind)
+            .With(SceneSchema.Geometry.LodPolicy, (LodPolicy)new LodPolicy.Fixed(2));
+
+        var saved = SourceOverridesJson.Write(overrides);
+        var loaded = SourceOverridesJson.Read(SceneSchema.Geometry.Kind, saved);
+
+        _ = saved!.Values![SceneSchema.Geometry.LodPolicy.Id.JsonPointer].GetProperty("type").GetString().Should().Be("fixed");
+        _ = loaded.TryGet(SceneSchema.Geometry.LodPolicy, out var policy).Should().BeTrue();
+        _ = policy.Should().Be(new LodPolicy.Fixed(2));
     }
 
     [TestMethod]

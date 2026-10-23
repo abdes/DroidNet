@@ -40,13 +40,13 @@ internal sealed partial class NativeRuntimeCommandTransport(EngineContext contex
             case RuntimeSetGeometry value:
                 this.world.SetGeometry(value.NodeId.Value, value.AssetPath, (generation, message) => this.OnAssetLoadFailed(request, generation, message), generation => this.OnAssetLoadSucceeded(request, generation));
                 break;
-            case RuntimeSetMaterialOverride value:
+            case RuntimeSetOverrides value:
                 if (!Enum.IsDefined(value.Intent))
                 {
-                    throw new ArgumentOutOfRangeException(nameof(request), "Unknown material assignment intent.");
+                    throw new ArgumentOutOfRangeException(nameof(request), "Unknown override intent.");
                 }
 
-                this.world.SetMaterialOverride(value.NodeId.Value, value.GeometryPath, value.SurfaceId, value.LayoutRevision, value.MaterialPath, (byte)value.Intent, (generation, message) => this.OnAssetLoadFailed(request, generation, message), generation => this.OnAssetLoadSucceeded(request, generation));
+                this.world.SetOverrides(value.NodeId.Value, value.GeometryPath, value.Part?.SurfaceId ?? Guid.Empty, value.Part?.LayoutRevision, RuntimeTransportConversion.ToNative(value.Overrides), (byte)value.Intent, (generation, message) => this.OnAssetLoadFailed(request, generation, message), generation => this.OnAssetLoadSucceeded(request, generation));
                 break;
             case RuntimeSetEnvironment value:
                 this.world.SetEnvironment(value.AtmosphereEnabled, value.SunDiskEnabled, value.PlanetRadiusMeters, value.AtmosphereHeightMeters, value.GroundAlbedoRgb, value.RayleighScaleHeightMeters, value.MieScaleHeightMeters, value.MieAnisotropy, value.SkyLuminanceFactorRgb, value.AerialPerspectiveDistanceScale, value.AerialScatteringStrength, value.AerialPerspectiveStartDepthMeters, value.HeightFogContribution, value.ExposureMode, value.ExposureEnabled, value.ExposureKey, value.ManualExposureEv, value.ExposureCompensation, value.ToneMapping, value.AutoExposureMeteringMode, value.AutoExposureMinEv, value.AutoExposureMaxEv, value.AutoExposureSpeedUp, value.AutoExposureSpeedDown, value.AutoExposureLowPercentile, value.AutoExposureHighPercentile, value.AutoExposureMinLogLuminance, value.AutoExposureLogLuminanceRange, value.AutoExposureTargetLuminance, value.AutoExposureSpotMeterRadius, value.AutoExposureBlackInfluence, value.AutoExposureTransitionDistanceEv, [.. value.AutoExposureCompensationCurve.Select(static key => new ExposureCompensationKeyManaged { MeteredEv = key.MeteredEv, CompensationEv = key.CompensationEv })], value.AutoExposureMeteringMask?.VirtualPath, value.BloomIntensity, value.BloomThreshold, value.Saturation, value.Contrast, value.VignetteIntensity, value.DisplayGamma, RuntimeTransportConversion.ToNative(value.Fog), RuntimeTransportConversion.ToNative(value.SkySphere, value.SkySphereCubemap), RuntimeTransportConversion.ToNative(value.SkyLight, value.SkyLightCubemap), RuntimeTransportConversion.ToNative(value.Background), (generation, message) => this.OnAssetLoadFailed(request, generation, message), generation => this.OnAssetLoadSucceeded(request, generation));

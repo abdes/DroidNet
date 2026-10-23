@@ -18,12 +18,14 @@
 #include "AssetDumpHelpers.h"
 #include "AssetDumper.h"
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Base/Span.h>
 #include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Data/ComponentType.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/SceneAsset.h>
+#include <Oxygen/Data/Schema/Generated.SceneComponents.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
 
@@ -46,6 +48,7 @@ public:
     using oxygen::data::pak::world::LocalFogVolumeRecord;
     using oxygen::data::pak::world::NodeRecord;
     using oxygen::data::pak::world::OrthographicCameraRecord;
+    using oxygen::data::pak::world::OverrideRecord;
     using oxygen::data::pak::world::PerspectiveCameraRecord;
     using oxygen::data::pak::world::PointLightRecord;
     using oxygen::data::pak::world::RenderableRecord;
@@ -191,6 +194,8 @@ public:
     std::cout << "    Component Tables:\n";
     DumpComponentTableHeader(ComponentType::kRenderable,
       scene->GetComponents<RenderableRecord>().size());
+    DumpComponentTableHeader(
+      ComponentType::kOverride, scene->GetComponents<OverrideRecord>().size());
     DumpComponentTableHeader(ComponentType::kLocalFogVolume,
       scene->GetComponents<LocalFogVolumeRecord>().size());
     DumpComponentTableHeader(ComponentType::kPerspectiveCamera,
@@ -207,6 +212,53 @@ public:
       scene->GetComponents<ScriptingComponentRecord>().size());
     std::cout << "\n";
 
+    // Each override as its property key, part and value, decoded by the value
+    // type the schema gives its id; the scene validated them when it loaded.
+    const auto DumpOverrides
+      = [&](const oxygen::data::pak::world::SceneNodeIndexT node) -> void {
+      const auto policies
+        = scene->GetComponents<oxygen::data::pak::geometry::LodPolicyRecord>();
+      for (const auto& record : scene->GetComponents<OverrideRecord>()) {
+        if (record.node_index != node) {
+          continue;
+        }
+        const auto* property
+          = oxygen::data::schema::FindOverrideProperty(record.override_id);
+        DCHECK_NOTNULL_F(property);
+        auto label = std::string { "Override " } + std::string(property->key);
+        if (!record.part_id.IsNil()) {
+          label += " @" + oxygen::data::to_string(record.part_id);
+        }
+        using oxygen::data::schema::ValueType;
+        switch (property->type) {
+        case ValueType::kBool:
+          PrintUtils::Field(label, record.value.as_bool != 0U, 10);
+          break;
+        case ValueType::kAsset:
+          PrintUtils::Field(
+            label, oxygen::data::to_string(record.value.as_asset), 10);
+          break;
+        case ValueType::kLodPolicy: {
+          const auto& policy = oxygen::base::CheckedAt(
+            policies, record.value.as_record_index.get());
+          PrintUtils::Field(label,
+            "type=" + std::to_string(static_cast<int>(policy.type))
+              + " boundaries=" + std::to_string(policy.boundary_count),
+            10);
+          break;
+        }
+        case ValueType::kInt:
+        case ValueType::kFloat:
+        case ValueType::kVec3:
+        case ValueType::kEnum:
+        case ValueType::kString:
+          // No override property has these types yet.
+          PrintUtils::Field(label, std::string { "(not shown)" }, 10);
+          break;
+        }
+      }
+    };
+
     const auto DumpRenderables = [&]() -> void {
       const auto renderables = scene->GetComponents<RenderableRecord>();
       if (renderables.empty()) {
@@ -219,7 +271,7 @@ public:
         std::cout << "      [" << i << "] node=" << rec.node_index << "\n";
         PrintUtils::Field(
           "Geometry Key", oxygen::data::to_string(rec.geometry_key), 10);
-        PrintUtils::Field("Visible", rec.visible != 0U, 10);
+        DumpOverrides(rec.node_index);
       }
       std::cout << "\n";
     };

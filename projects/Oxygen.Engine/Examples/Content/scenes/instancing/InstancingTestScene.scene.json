@@ -1,5 +1,5 @@
 {
-  "version": 13,
+  "version": 14,
   "name": "InstancingTestScene",
   "nodes": [
     {
@@ -12719,5003 +12719,4003 @@
   "renderables": [
     {
       "node": 51,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 52,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 53,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 54,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 55,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 56,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 57,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 58,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 59,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 60,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 61,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 62,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 63,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 64,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 65,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 66,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 67,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 68,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 69,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 70,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 71,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 72,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 73,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 74,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 75,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 76,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 77,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 78,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 79,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 80,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 81,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 82,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 83,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 84,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 85,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 86,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 87,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 88,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 89,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 90,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 91,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 92,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 93,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 94,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 95,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 96,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 97,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 98,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 99,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 100,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 101,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 102,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 103,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 104,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 105,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 106,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 107,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 108,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 109,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 110,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 111,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 112,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 113,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 114,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 115,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 116,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 117,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 118,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 119,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 120,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 121,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 122,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 123,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 124,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 125,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 126,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 127,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 128,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 129,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 130,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 131,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 132,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 133,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 134,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 135,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 136,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 137,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 138,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 139,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 140,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 141,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 142,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 143,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 144,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 145,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 146,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 147,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 148,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 149,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 150,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 151,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 152,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 153,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 154,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 155,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 156,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 157,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 158,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 159,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 160,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 161,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 162,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 163,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 164,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 165,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 166,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 167,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 168,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 169,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 170,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 171,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 172,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 173,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 174,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 175,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 176,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 177,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 178,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 179,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 180,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 181,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 182,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 183,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 184,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 185,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 186,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 187,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 188,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 189,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 190,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 191,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 192,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 193,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 194,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 195,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 196,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 197,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 198,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 199,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 200,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 201,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 202,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 203,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 204,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 205,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 206,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 207,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 208,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 209,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 210,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 211,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 212,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 213,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 214,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 215,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 216,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 217,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 218,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 219,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 220,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 221,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 222,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 223,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 224,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 225,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 226,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 227,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 228,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 229,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 230,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 231,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 232,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 233,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 234,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 235,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 236,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 237,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 238,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 239,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 240,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 241,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 242,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 243,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 244,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 245,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 246,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 247,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 248,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 249,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 250,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 251,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 252,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 253,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 254,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 255,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 256,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 257,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 258,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 259,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 260,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 261,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 262,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 263,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 264,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 265,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 266,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 267,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 268,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 269,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 270,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 271,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 272,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 273,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 274,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 275,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 276,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 277,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 278,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 279,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 280,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 281,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 282,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 283,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 284,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 285,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 286,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 287,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 288,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 289,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 290,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 291,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 292,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 293,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 294,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 295,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 296,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 297,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 298,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 299,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 300,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 301,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 302,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 303,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 304,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 305,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 306,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 307,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 308,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 309,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 310,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 311,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 312,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 313,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 314,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 315,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 316,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 317,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 318,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 319,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 320,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 321,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 322,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 323,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 324,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 325,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 326,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 327,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 328,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 329,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 330,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 331,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 332,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 333,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 334,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 335,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 336,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 337,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 338,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 339,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 340,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 341,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 342,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 343,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 344,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 345,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 346,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 347,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 348,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 349,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 350,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 351,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 352,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 353,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 354,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 355,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 356,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 357,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 358,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 359,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 360,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 361,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 362,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 363,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 364,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 365,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 366,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 367,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 368,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 369,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 370,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 371,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 372,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 373,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 374,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 375,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 376,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 377,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 378,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 379,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 380,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 381,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 382,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 383,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 384,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 385,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 386,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 387,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 388,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 389,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 390,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 391,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 392,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 393,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 394,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 395,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 396,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 397,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 398,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 399,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 400,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 401,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 402,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 403,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 404,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 405,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 406,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 407,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 408,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 409,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 410,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 411,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 412,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 413,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 414,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 415,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 416,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 417,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 418,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 419,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 420,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 421,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 422,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 423,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 424,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 425,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 426,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 427,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 428,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 429,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 430,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 431,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 432,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 433,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 434,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 435,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 436,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 437,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 438,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 439,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 440,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 441,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 442,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 443,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 444,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 445,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 446,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 447,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 448,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 449,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 450,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 451,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 452,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 453,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 454,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 455,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 456,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 457,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 458,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 459,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 460,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 461,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 462,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 463,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 464,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 465,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 466,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 467,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 468,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 469,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 470,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 471,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 472,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 473,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 474,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 475,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 476,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 477,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 478,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 479,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 480,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 481,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 482,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 483,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 484,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 485,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 486,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 487,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 488,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 489,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 490,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 491,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 492,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 493,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 494,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 495,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 496,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 497,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 498,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 499,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 500,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 501,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 502,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 503,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 504,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 505,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 506,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 507,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 508,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 509,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 510,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 511,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 512,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 513,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 514,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 515,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 516,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 517,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 518,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 519,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 520,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 521,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 522,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 523,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 524,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 525,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 526,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 527,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 528,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 529,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 530,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 531,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 532,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 533,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 534,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 535,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 536,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 537,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 538,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 539,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 540,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 541,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 542,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 543,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 544,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 545,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 546,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 547,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 548,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 549,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 550,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 551,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 552,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 553,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 554,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 555,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 556,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 557,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 558,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 559,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 560,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 561,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 562,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 563,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 564,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 565,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 566,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 567,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 568,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 569,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 570,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 571,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 572,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 573,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 574,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 575,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 576,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 577,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 578,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 579,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 580,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 581,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 582,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 583,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 584,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 585,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 586,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 587,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 588,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 589,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 590,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 591,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 592,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 593,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 594,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 595,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 596,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 597,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 598,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 599,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 600,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 601,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 602,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 603,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 604,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 605,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 606,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 607,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 608,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 609,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 610,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 611,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 612,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 613,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 614,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 615,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 616,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 617,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 618,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 619,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 620,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 621,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 622,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 623,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 624,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 625,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 626,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 627,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 628,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 629,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 630,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 631,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 632,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 633,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 634,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 635,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 636,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 637,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 638,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 639,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 640,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 641,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 642,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 643,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 644,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 645,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 646,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 647,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 648,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 649,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 650,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 651,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 652,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 653,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 654,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 655,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 656,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 657,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 658,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 659,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 660,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 661,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 662,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 663,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 664,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 665,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 666,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 667,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 668,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 669,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 670,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 671,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 672,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 673,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 674,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 675,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 676,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 677,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 678,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 679,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 680,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 681,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 682,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 683,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 684,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 685,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 686,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 687,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 688,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 689,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 690,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 691,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 692,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 693,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 694,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 695,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 696,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 697,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 698,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 699,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 700,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 701,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 702,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 703,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 704,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 705,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 706,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 707,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 708,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 709,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 710,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 711,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 712,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 713,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 714,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 715,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 716,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 717,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 718,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 719,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 720,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 721,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 722,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 723,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 724,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 725,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 726,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 727,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 728,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 729,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 730,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 731,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 732,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 733,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 734,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 735,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 736,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 737,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 738,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 739,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 740,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 741,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 742,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 743,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 744,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 745,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 746,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 747,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 748,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 749,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 750,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 751,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 752,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 753,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 754,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 755,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 756,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 757,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 758,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 759,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 760,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 761,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 762,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 763,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 764,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 765,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 766,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 767,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 768,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 769,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 770,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 771,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 772,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 773,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 774,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 775,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 776,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 777,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 778,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 779,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 780,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 781,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 782,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 783,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 784,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 785,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 786,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 787,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 788,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 789,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 790,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 791,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 792,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 793,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 794,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 795,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 796,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 797,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 798,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 799,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 800,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 801,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 802,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 803,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 804,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 805,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 806,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 807,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 808,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 809,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 810,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 811,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 812,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 813,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 814,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 815,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 816,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 817,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 818,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 819,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 820,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 821,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 822,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 823,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 824,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 825,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 826,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 827,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 828,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 829,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 830,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 831,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 832,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 833,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 834,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 835,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 836,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 837,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 838,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 839,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 840,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 841,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 842,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 843,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 844,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 845,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 846,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 847,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 848,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 849,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 850,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 851,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 852,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 853,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 854,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 855,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 856,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 857,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 858,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 859,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 860,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 861,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 862,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 863,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 864,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 865,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 866,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 867,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 868,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 869,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 870,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 871,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 872,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 873,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 874,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 875,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 876,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 877,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 878,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 879,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 880,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 881,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 882,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 883,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 884,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 885,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 886,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 887,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 888,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 889,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 890,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 891,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 892,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 893,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 894,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 895,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 896,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 897,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 898,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 899,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 900,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 901,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 902,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 903,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 904,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 905,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 906,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 907,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 908,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 909,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 910,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 911,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 912,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 913,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 914,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 915,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 916,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 917,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 918,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 919,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 920,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 921,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 922,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 923,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 924,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 925,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 926,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 927,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 928,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 929,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 930,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 931,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 932,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 933,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 934,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 935,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 936,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 937,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 938,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 939,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 940,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 941,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 942,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 943,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 944,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 945,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 946,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 947,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 948,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 949,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 950,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 951,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 952,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 953,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 954,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 955,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 956,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 957,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 958,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 959,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 960,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 961,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 962,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 963,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 964,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 965,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 966,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 967,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 968,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 969,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 970,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 971,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 972,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 973,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 974,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 975,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 976,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 977,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 978,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 979,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 980,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 981,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 982,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 983,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 984,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 985,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 986,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 987,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 988,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 989,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 990,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 991,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 992,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 993,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 994,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 995,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 996,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 997,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 998,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 999,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 1000,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 1001,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 1002,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 1003,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 1004,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 1005,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 1006,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 1007,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 1008,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 1009,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 1010,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 1011,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 1012,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 1013,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 1014,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 1015,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 1016,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 1017,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 1018,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 1019,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 1020,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 1021,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 1022,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 1023,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 1024,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 1025,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 1026,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 1027,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 1028,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 1029,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 1030,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 1031,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 1032,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 1033,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 1034,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 1035,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 1036,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 1037,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 1038,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 1039,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 1040,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 1041,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 1042,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 1043,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 1044,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 1045,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 1046,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 1047,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 1048,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 1049,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     },
     {
       "node": 1050,
-      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/GeoInstancedCube.ogeo"
     }
   ],
   "cameras": {

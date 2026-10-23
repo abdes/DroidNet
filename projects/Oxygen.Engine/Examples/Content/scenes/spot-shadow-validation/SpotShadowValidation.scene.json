@@ -1,5 +1,5 @@
 {
-  "version": 13,
+  "version": 14,
   "name": "SpotShadowValidation",
   "nodes": [
     {
@@ -95,18 +95,15 @@
   "renderables": [
     {
       "geometry_ref": "/.cooked/Geometry/floor.ogeo",
-      "node": 1,
-      "visible": true
+      "node": 1
     },
     {
       "geometry_ref": "/.cooked/Geometry/cube.ogeo",
-      "node": 2,
-      "visible": true
+      "node": 2
     },
     {
       "geometry_ref": "/.cooked/Geometry/cube.ogeo",
-      "node": 3,
-      "visible": true
+      "node": 3
     }
   ],
   "cameras": {

@@ -16,15 +16,21 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include <EditorModule/EditorModule.h>
 #include <EditorModule/SceneAssetRequests.h>
 #include <EditorModule/ThreadSafeQueue.h>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Content/IAssetLoader.h>
+#include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
+#include <Oxygen/Data/Schema/Generated.SceneComponents.h>
 #include <Oxygen/Data/TextureResource.h>
+#include <Oxygen/Scene/SceneNode.h>
+#include <Oxygen/Scene/Types/RenderablePolicies.h>
 
 namespace oxygen::interop::module {
 namespace {
@@ -40,6 +46,71 @@ namespace {
       return "Sky light cubemap";
     }
     return "Environment texture";
+  }
+
+  //! The material an override set names, if any. The command boundary admits
+  //! only material assets, at most one per part.
+  [[nodiscard]] auto MaterialUri(const std::vector<OverrideEntry>& entries)
+    -> std::optional<std::string>
+  {
+    for (const auto& entry : entries) {
+      if (const auto* asset = std::get_if<OverrideAsset>(&entry.value)) {
+        DCHECK_F(entry.id == data::schema::OverrideId::kGeometrySurfaceMaterial);
+        return asset->virtual_path;
+      }
+    }
+    return std::nullopt;
+  }
+
+  //! Sets each property of the part that `entries` names and clears every other
+  //! property of the part's kind, so the renderable holds exactly this state.
+  //! `material` is the loaded asset of the material entry, if any.
+  [[nodiscard]] auto ApplyOverrides(scene::SceneNode::Renderable& renderable,
+    const data::SurfaceId part, const std::vector<OverrideEntry>& entries,
+    const std::shared_ptr<const data::MaterialAsset>& material) -> bool
+  {
+    using data::schema::OverrideId;
+    const auto kind = part.IsNil() ? data::schema::PartKind::kNone
+                                   : data::schema::PartKind::kSurface;
+    auto applied = true;
+    for (const auto& property : data::schema::kOverrideProperties) {
+      if (property.part_kind != kind) {
+        continue;
+      }
+      const auto entry = std::ranges::find(entries, property.id, &OverrideEntry::id);
+      const auto* value = entry == entries.end() ? nullptr : &entry->value;
+      switch (property.id) {
+      case OverrideId::kGeometrySurfaceMaterial:
+        DCHECK_F(value == nullptr || material != nullptr);
+        applied = (value != nullptr ? renderable.SetMaterialOverride(part, material)
+                                    : renderable.ClearMaterialOverride(part))
+          && applied;
+        break;
+      case OverrideId::kGeometrySurfaceVisibility:
+        applied = (value != nullptr
+                      ? renderable.SetVisibilityOverride(part, std::get<bool>(*value))
+                      : renderable.ClearVisibilityOverride(part))
+          && applied;
+        break;
+      case OverrideId::kGeometrySurfaceCastsShadows:
+        applied = (value != nullptr
+                      ? renderable.SetCastsShadowsOverride(part, std::get<bool>(*value))
+                      : renderable.ClearCastsShadowsOverride(part))
+          && applied;
+        break;
+      case OverrideId::kGeometryLodPolicy:
+        if (value != nullptr) {
+          renderable.SetLodPolicyOverride(scene::MakeLodPolicy(
+            std::get<data::pak::geometry::LodPolicyRecord>(*value)));
+        } else {
+          renderable.ClearLodPolicyOverride();
+        }
+        break;
+      case OverrideId::kInvalid:
+        ABORT_F("The schema table holds no invalid override id");
+      }
+    }
+    return applied;
   }
 
   //! Whether two sources name the same cooked texture.
@@ -97,13 +168,16 @@ struct SceneAssetRequests::State {
     Material material_asset;
     std::string error;
   };
-  struct SurfaceAssignment {
+  //! The requested override state of one part: a surface, or with a nil id
+  //! the geometry component itself.
+  struct PartAssignment {
     uint64_t generation = 0;
     uint64_t geometry_generation = 0;
-    SurfaceTarget target;
-    SurfaceMaterialAssignmentIntent intent
-      = SurfaceMaterialAssignmentIntent::kObservedEdit;
-    std::optional<std::string> uri;
+    OverrideTarget target;
+    OverrideIntent intent = OverrideIntent::kObservedEdit;
+    std::vector<OverrideEntry> entries;
+    //! The material entry's path, loaded before the part applies.
+    std::optional<std::string> material_uri;
     Material material;
     std::optional<data::AssetKey> accepted_geometry;
     bool ready = false;
@@ -119,7 +193,7 @@ struct SceneAssetRequests::State {
     bool geometry_failed = false;
     FailureCallback geometry_failure;
     SuccessCallback geometry_success;
-    std::unordered_map<data::SurfaceId, SurfaceAssignment> surfaces;
+    std::unordered_map<data::SurfaceId, PartAssignment> parts;
   };
 
   GeometryLoader geometry_loader;
@@ -253,7 +327,7 @@ auto SceneAssetRequests::BeginGeometry(scene::NodeHandle node,
 {
   auto& target = state_->targets[node];
   if (target.geometry_uri != uri) {
-    target.surfaces.clear();
+    target.parts.clear();
   }
   const auto generation = ++state_->generation;
   target.geometry_generation = generation;
@@ -291,36 +365,38 @@ void SceneAssetRequests::LoadGeometry(
   }
 }
 
-void SceneAssetRequests::SetMaterial(scene::NodeHandle node,
-  SurfaceTarget target, const std::optional<std::string>& uri,
-  const SurfaceMaterialAssignmentIntent intent, FailureCallback on_failure,
+void SceneAssetRequests::SetOverrides(scene::NodeHandle node,
+  OverrideTarget target, std::vector<OverrideEntry> entries,
+  const OverrideIntent intent, FailureCallback on_failure,
   SuccessCallback on_success)
 {
-  QueueMaterial(node, std::move(target), uri, intent, std::move(on_failure),
-    std::move(on_success), std::nullopt);
+  QueueOverrides(node, std::move(target), std::move(entries), intent,
+    std::move(on_failure), std::move(on_success), std::nullopt);
 }
 
-void SceneAssetRequests::QueueMaterial(scene::NodeHandle node,
-  SurfaceTarget target, const std::optional<std::string>& uri,
-  const SurfaceMaterialAssignmentIntent intent, FailureCallback on_failure,
+void SceneAssetRequests::QueueOverrides(scene::NodeHandle node,
+  OverrideTarget target, std::vector<OverrideEntry> entries,
+  const OverrideIntent intent, FailureCallback on_failure,
   SuccessCallback on_success, std::optional<data::AssetKey> accepted_geometry)
 {
   const auto generation = ++state_->generation;
   auto& node_target = state_->targets[node];
-  const auto surface_id = target.surface_id;
+  const auto part = target.surface_id;
+  auto material_uri = MaterialUri(entries);
   if (node_target.geometry_uri != target.geometry_uri) {
-    state_->Report(node, uri.value_or("geometry default"),
-      "surface target belongs to a different geometry", false, generation,
-      on_failure, surface_id);
+    state_->Report(node, material_uri.value_or("geometry default"),
+      "override target belongs to a different geometry", false, generation,
+      on_failure, part);
     return;
   }
-  node_target.surfaces.insert_or_assign(surface_id,
-    State::SurfaceAssignment {
+  node_target.parts.insert_or_assign(part,
+    State::PartAssignment {
       .generation = generation,
       .geometry_generation = node_target.geometry_generation,
       .target = std::move(target),
       .intent = intent,
-      .uri = uri,
+      .entries = std::move(entries),
+      .material_uri = material_uri,
       .material = {},
       .accepted_geometry = accepted_geometry,
       .ready = false,
@@ -329,13 +405,13 @@ void SceneAssetRequests::QueueMaterial(scene::NodeHandle node,
       .on_failure = std::move(on_failure),
       .on_success = std::move(on_success),
     });
-  auto complete = [inbox = std::weak_ptr(state_->inbox), node, surface_id,
+  auto complete = [inbox = std::weak_ptr(state_->inbox), node, part,
                     generation](Material asset, std::string error) {
     if (auto queue = inbox.lock()) {
       queue->Enqueue(State::Completion {
         .node = node,
         .generation = generation,
-        .surface = surface_id,
+        .surface = part,
         .geometry = false,
         .geometry_asset = {},
         .material_asset = std::move(asset),
@@ -343,24 +419,28 @@ void SceneAssetRequests::QueueMaterial(scene::NodeHandle node,
       });
     }
   };
-  const auto& requested = node_target.surfaces.at(surface_id).target;
-  if (surface_id.IsNil() || requested.geometry_uri.empty()
-    || base::IsAllZero(requested.layout_revision) || (uri && uri->empty())
-    || (intent != SurfaceMaterialAssignmentIntent::kObservedEdit
-      && intent != SurfaceMaterialAssignmentIntent::kRetainedAssignment)) {
-    complete(
-      {}, "material assignment requires geometry, surface and layout identities");
+  // A surface part carries the layout revision it was resolved against; the
+  // component's own part carries none.
+  const auto& requested = node_target.parts.at(part).target;
+  if (requested.geometry_uri.empty()
+    || part.IsNil() != base::IsAllZero(requested.layout_revision)
+    || (material_uri && material_uri->empty())
+    || (intent != OverrideIntent::kObservedEdit
+      && intent != OverrideIntent::kRetainedOverride)) {
+    complete({},
+      "overrides require geometry identity, and a surface's overrides its "
+      "layout revision");
     return;
   }
   if (state_->loads_paused) {
     return;
   }
-  if (!uri) {
+  if (!material_uri) {
     complete({}, {});
     return;
   }
   try {
-    state_->material_loader(*uri, complete);
+    state_->material_loader(*material_uri, complete);
   } catch (const std::exception& error) {
     complete({}, error.what());
   } catch (...) {
@@ -529,13 +609,13 @@ void SceneAssetRequests::Refresh(scene::Scene& scene)
       state_->refresh_requests.insert(state_->generation);
       LoadGeometry(target.geometry_uri, std::move(complete));
     }
-    // Copy the authored requests before SetMaterial replaces their surface state.
-    const auto surfaces = target.surfaces;
-    for (const auto& [index, surface] : surfaces) {
-      if (!surface.rejected_surface
-        && (!surface.uri || state_->CanRefresh(*surface.uri, true))) {
-        QueueMaterial(handle, surface.target, surface.uri, surface.intent,
-          surface.on_failure, surface.on_success, surface.accepted_geometry);
+    // Copy the authored requests before QueueOverrides replaces their state.
+    const auto parts = target.parts;
+    for (const auto& [id, part] : parts) {
+      if (!part.rejected_surface
+        && (!part.material_uri || state_->CanRefresh(*part.material_uri, true))) {
+        QueueOverrides(handle, part.target, part.entries, part.intent,
+          part.on_failure, part.on_success, part.accepted_geometry);
         state_->refresh_requests.insert(state_->generation);
       }
     }
@@ -562,12 +642,12 @@ void SceneAssetRequests::ResumeLoads(scene::Scene& scene)
         target.geometry_failure, target.geometry_success);
       LoadGeometry(target.geometry_uri, std::move(complete));
     }
-    const auto surfaces = target.surfaces;
-    for (const auto& [index, surface] : surfaces) {
-      if (!surface.ready && !surface.rejected_surface && surface.uri
-        && !state_->IsAvailable(*surface.uri, true)) {
-        QueueMaterial(handle, surface.target, surface.uri, surface.intent,
-          surface.on_failure, surface.on_success, surface.accepted_geometry);
+    const auto parts = target.parts;
+    for (const auto& [id, part] : parts) {
+      if (!part.ready && !part.rejected_surface && part.material_uri
+        && !state_->IsAvailable(*part.material_uri, true)) {
+        QueueOverrides(handle, part.target, part.entries, part.intent,
+          part.on_failure, part.on_success, part.accepted_geometry);
       }
     }
   }
@@ -585,8 +665,8 @@ auto SceneAssetRequests::IsRefreshPending() const -> bool
       && state_->refresh_requests.contains(target.geometry_generation)) {
       return true;
     }
-    for (const auto& [index, surface] : target.surfaces) {
-      if (!surface.ready && state_->refresh_requests.contains(surface.generation)) {
+    for (const auto& [id, part] : target.parts) {
+      if (!part.ready && state_->refresh_requests.contains(part.generation)) {
         return true;
       }
     }
@@ -649,86 +729,95 @@ auto SceneAssetRequests::Drain(scene::Scene& scene) -> bool
         target.geometry_success(result.generation);
       }
       const auto geometry = node->GetRenderable().GetGeometry();
-      for (auto& [id, surface] : target.surfaces) {
-        if (surface.accepted_geometry
-          && (*surface.accepted_geometry != geometry->GetAssetKey()
+      // A surface's overrides need repair when the geometry no longer has the
+      // surface they were resolved against; the component's own overrides
+      // survive any replacement.
+      for (auto& [id, part] : target.parts) {
+        if (!id.IsNil() && part.accepted_geometry
+          && (*part.accepted_geometry != geometry->GetAssetKey()
             || geometry->FindSurface(id) == nullptr)) {
-          surface.ready = true;
-          surface.apply = false;
-          surface.rejected_surface = true;
-          surface.material.reset();
-          state_->Report(result.node, surface.uri.value_or("geometry default"),
-            "material surface requires repair after geometry replacement", false,
-            surface.generation, surface.on_failure, id);
+          part.ready = true;
+          part.apply = false;
+          part.rejected_surface = true;
+          part.material.reset();
+          state_->Report(result.node, part.material_uri.value_or("geometry default"),
+            "surface overrides require repair after geometry replacement", false,
+            part.generation, part.on_failure, id);
         }
       }
     } else {
-      const auto surface_found = target.surfaces.find(result.surface);
-      if (surface_found == target.surfaces.end()
-        || surface_found->second.generation != result.generation
-        || surface_found->second.ready) {
+      const auto part_found = target.parts.find(result.surface);
+      if (part_found == target.parts.end()
+        || part_found->second.generation != result.generation
+        || part_found->second.ready) {
         return;
       }
-      auto& surface = surface_found->second;
+      auto& part = part_found->second;
       if (!result.error.empty()
-        || (!result.material_asset && surface.uri.has_value())) {
-        surface.ready = true;
-        state_->Report(result.node, surface.uri.value_or("geometry default"),
+        || (!result.material_asset && part.material_uri.has_value())) {
+        part.ready = true;
+        state_->Report(result.node, part.material_uri.value_or("geometry default"),
           result.error.empty() ? "asset load failed" : result.error, false,
-          result.generation, surface.on_failure, result.surface);
+          result.generation, part.on_failure, result.surface);
         return;
       }
-      surface.material = std::move(result.material_asset);
-      surface.ready = true;
-      surface.apply = true;
+      part.material = std::move(result.material_asset);
+      part.ready = true;
+      part.apply = true;
     }
   });
 
   for (auto& [handle, target] : state_->targets) {
     if (std::ranges::none_of(
-          target.surfaces, [](const auto& entry) { return entry.second.apply; })) {
+          target.parts, [](const auto& entry) { return entry.second.apply; })) {
       continue;
     }
     const auto node = scene.GetNode(handle);
     auto renderable = node->GetRenderable();
     const auto geometry = renderable.GetGeometry();
-    for (auto& [id, surface] : target.surfaces) {
-      if (!surface.apply || target.geometry_pending || target.geometry_failed
+    for (auto& [id, part] : target.parts) {
+      if (!part.apply || target.geometry_pending || target.geometry_failed
         || !geometry) {
         continue;
       }
-      surface.apply = false;
-      const bool same_target = target.geometry_uri == surface.target.geometry_uri
-        && surface.geometry_generation == target.geometry_generation;
-      const bool revision_valid = surface.accepted_geometry
-        ? *surface.accepted_geometry == geometry->GetAssetKey()
-        : surface.intent == SurfaceMaterialAssignmentIntent::kRetainedAssignment
-          || surface.target.layout_revision
-            == geometry->Surfaces().layout_revision;
-      const bool surface_exists = geometry->FindSurface(id) != nullptr;
-      if (!same_target || !revision_valid || (surface.material && !surface_exists)) {
-        state_->Report(handle, surface.uri.value_or("geometry default"),
-          "material surface target is stale or unavailable", false,
-          surface.generation, surface.on_failure, id);
-        surface.material.reset();
-        surface.rejected_surface = true;
+      part.apply = false;
+      const auto label = part.material_uri.value_or("geometry default");
+      const bool is_surface = !id.IsNil();
+      const bool same_target = target.geometry_uri == part.target.geometry_uri
+        && part.geometry_generation == target.geometry_generation;
+      const bool revision_valid = !is_surface
+        || (part.accepted_geometry
+            ? *part.accepted_geometry == geometry->GetAssetKey()
+            : part.intent == OverrideIntent::kRetainedOverride
+              || part.target.layout_revision
+                == geometry->Surfaces().layout_revision);
+      const bool surface_exists
+        = !is_surface || geometry->FindSurface(id) != nullptr;
+      if (!same_target || !revision_valid || (part.material && !surface_exists)) {
+        state_->Report(handle, label,
+          "override target is stale or unavailable", false, part.generation,
+          part.on_failure, id);
+        part.material.reset();
+        part.rejected_surface = true;
         continue;
       }
-      if (surface_exists && !renderable.SetMaterialOverride(id, surface.material)) {
-        state_->Report(handle, surface.uri.value_or("geometry default"),
-          "material surface assignment could not be applied", false,
-          surface.generation, surface.on_failure, id);
-        surface.material.reset();
-        surface.rejected_surface = true;
+      if (surface_exists
+        && !ApplyOverrides(renderable, id, part.entries, part.material)) {
+        state_->Report(handle, label, "overrides could not be applied", false,
+          part.generation, part.on_failure, id);
+        part.material.reset();
+        part.rejected_surface = true;
         continue;
       }
       changed = changed || surface_exists;
-      surface.accepted_geometry = geometry->GetAssetKey();
-      surface.target.layout_revision = geometry->Surfaces().layout_revision;
-      surface.material.reset();
-      surface.rejected_surface = !surface_exists;
-      if (surface.on_success) {
-        surface.on_success(surface.generation);
+      part.accepted_geometry = geometry->GetAssetKey();
+      if (is_surface) {
+        part.target.layout_revision = geometry->Surfaces().layout_revision;
+      }
+      part.material.reset();
+      part.rejected_surface = !surface_exists;
+      if (part.on_success) {
+        part.on_success(part.generation);
       }
     }
   }

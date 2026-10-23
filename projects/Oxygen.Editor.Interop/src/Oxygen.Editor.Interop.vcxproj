@@ -28,7 +28,7 @@
     <ClCompile Include="Commands\SetEnvironmentCommand.cpp">
       <CompileAsManaged>false</CompileAsManaged>
     </ClCompile>
-    <ClCompile Include="Commands\SetMaterialOverrideCommand.cpp">
+    <ClCompile Include="Commands\SetOverridesCommand.cpp">
       <CompileAsManaged>false</CompileAsManaged>
     </ClCompile>
     <ClCompile Include="EditorModule\ViewFraming.cpp">
@@ -196,7 +196,7 @@
     <ClInclude Include="Utils\Utf8Marshaling.h" />
     <ClInclude Include="World\EnvironmentStateManaged.h" />
     <ClInclude Include="Scripting\ScriptAnalysis.h" />
-    <ClInclude Include="Commands\SetMaterialOverrideCommand.h" />
+    <ClInclude Include="Commands\SetOverridesCommand.h" />
     <ClInclude Include="Commands\SetViewCameraControlModeCommand.h" />
     <ClInclude Include="Commands\SetViewCameraMovementSpeedCommand.h" />
     <ClInclude Include="Commands\SetGroundGridConfigCommand.h" />

@@ -5,7 +5,7 @@
 `GeometryAsset` owns the immutable surface inventory and, per surface, its
 defaults for Visibility and Cast Shadows; it also carries a default LOD policy.
 A geometry built at runtime declares none, and the renderable then takes the
-scene schema's defaults (`Scene/Schema/Generated.SceneComponents.h`).
+scene schema's defaults (`Data/Schema/Generated.SceneComponents.h`).
 
 A renderable stores this instance's overrides of those defaults, which are the
 scene schema's asset-sourced properties:

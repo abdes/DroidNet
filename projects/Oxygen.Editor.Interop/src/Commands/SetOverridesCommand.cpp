@@ -8,12 +8,12 @@
 
 #include <stdexcept>
 
-#include <Commands/SetMaterialOverrideCommand.h>
+#include <Commands/SetOverridesCommand.h>
 #include <EditorModule/SceneAssetRequests.h>
 
 namespace oxygen::interop::module {
 
-void SetMaterialOverrideCommand::Execute(CommandContext &context) {
+void SetOverridesCommand::Execute(CommandContext &context) {
   if (!context.Scene) {
     return;
   }
@@ -23,10 +23,10 @@ void SetMaterialOverrideCommand::Execute(CommandContext &context) {
   }
   if (!context.AssetRequests) {
     throw std::logic_error(
-        "Material command requires scene asset request state");
+        "Override command requires scene asset request state");
   }
-  context.AssetRequests->SetMaterial(
-      node_, std::move(target_), material_uri_, intent_, std::move(failure_callback_),
+  context.AssetRequests->SetOverrides(node_, std::move(target_),
+      std::move(entries_), intent_, std::move(failure_callback_),
       std::move(success_callback_));
 }
 

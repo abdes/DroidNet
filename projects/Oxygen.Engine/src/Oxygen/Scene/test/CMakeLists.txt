@@ -37,7 +37,6 @@ include(GTestHelpers)
 m_gtest_program(TransformComponent SOURCES "TransformComponent_test.cpp")
 m_gtest_program(ExposureSettings SOURCES "ExposureSettings_test.cpp")
 m_gtest_program(Surface SOURCES "Surface_test.cpp")
-m_gtest_program(SceneSchema SOURCES "SceneSchema_test.cpp")
 m_gtest_program(
   SceneFlags
   SOURCES

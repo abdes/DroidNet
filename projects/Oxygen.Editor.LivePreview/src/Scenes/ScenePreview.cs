@@ -131,20 +131,20 @@ internal sealed partial class ScenePreview : IScenePreview, IDisposable
     }
 
     /// <summary>
-    /// Sends a node's material overrides without attaching its geometry again: clears the surfaces whose overrides went away,
-    /// then, when asked, sets the overrides the node has.
+    /// Sends a node's overrides without attaching its geometry again: clears the parts whose overrides all went away, then,
+    /// when asked, sets each part the node overrides.
     /// </summary>
     /// <remarks>Attaching the geometry again would start a new geometry load and make the engine reject these as stale.</remarks>
     /// <param name="scene">The scene.</param>
     /// <param name="node">The node.</param>
-    /// <param name="cleared">The surfaces whose overrides went away.</param>
+    /// <param name="cleared">The parts whose overrides all went away.</param>
     /// <param name="overrides">Whether to send the overrides the node has.</param>
     /// <param name="cancellationToken">Cancels the projection.</param>
     /// <returns>The engine's outcome.</returns>
-    internal Task<SyncOutcome> UpdateSurfacesAsync(
+    internal Task<SyncOutcome> UpdateOverridesAsync(
         Scene scene,
         SceneNode node,
-        IReadOnlyCollection<SourceOverride> cleared,
+        IReadOnlyCollection<OverridePart> cleared,
         bool overrides,
         CancellationToken cancellationToken = default)
     {
@@ -175,20 +175,14 @@ internal sealed partial class ScenePreview : IScenePreview, IDisposable
                     return;
                 }
 
-                foreach (var surface in cleared)
+                foreach (var part in cleared)
                 {
-                    world.Execute(new RuntimeSetMaterialOverride(
-                        node.Id,
-                        GeometryPathMapper.ToEnginePath(geometry.Geometry),
-                        surface.Part!.Value.Id,
-                        surface.LayoutRevision!,
-                        MaterialPath: null,
-                        SurfaceMaterialAssignmentIntent.RetainedAssignment));
+                    world.Execute(SetOverrides(node.Id, geometry, part, []));
                 }
 
                 if (overrides)
                 {
-                    ApplyMaterialOverrides(world, node, geometry);
+                    ApplyOverrides(world, node, geometry);
                 }
             },
             cancellationToken);

@@ -57,6 +57,7 @@
 #include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/Data/PhysicsSceneAsset.h>
 #include <Oxygen/Data/SceneAsset.h>
+#include <Oxygen/Data/Schema/Generated.SceneComponents.h>
 #include <Oxygen/Data/ScriptAsset.h>
 #include <Oxygen/Data/SourceOrigin.h>
 #include <Oxygen/OxCo/Co.h>
@@ -452,10 +453,16 @@ auto AssetLoader::BindDependenciesAsync(data::SceneAsset& asset,
     static_cast<void>(co_await BindAssetAsync<data::GeometryAsset>(
       renderable.geometry_key, asset, bindings, request));
   }
-  for (const auto& assignment :
-    asset.GetComponents<data::pak::world::MaterialOverrideRecord>()) {
-    static_cast<void>(co_await BindAssetAsync<data::MaterialAsset>(
-      assignment.material_key, asset, bindings, request));
+  for (const auto& record :
+    asset.GetComponents<data::pak::world::OverrideRecord>()) {
+    const auto* property
+      = data::schema::FindOverrideProperty(record.override_id);
+    // The scene validated every override against the schema when it loaded.
+    DCHECK_NOTNULL_F(property);
+    if (property->type == data::schema::ValueType::kAsset) {
+      co_await BindSceneAssetValueAsync(
+        record.value.as_asset, property->asset_type, asset, bindings, request);
+    }
   }
   for (const auto& component :
     asset.GetComponents<data::pak::scripting::ScriptingComponentRecord>()) {
@@ -465,43 +472,44 @@ auto AssetLoader::BindDependenciesAsync(data::SceneAsset& asset,
         slot.script_asset_key, asset, bindings, request));
       for (const auto& value : slot.params | std::views::values) {
         if (const auto* param = std::get_if<data::ScriptAssetParam>(&value)) {
-          co_await BindScriptParamAssetAsync(*param, asset, bindings, request);
+          co_await BindSceneAssetValueAsync(
+            param->key, param->asset_type, asset, bindings, request);
         }
       }
     }
   }
 }
 
-auto AssetLoader::BindScriptParamAssetAsync(const data::ScriptAssetParam& value,
-  data::SceneAsset& asset, internal::ContentBindingBuilder& bindings,
-  LoadRequest request) -> co::Co<>
+auto AssetLoader::BindSceneAssetValueAsync(const data::AssetKey& key,
+  const data::AssetType type, data::SceneAsset& asset,
+  internal::ContentBindingBuilder& bindings, LoadRequest request) -> co::Co<>
 {
-  // An asset parameter keeps its asset resident with the scene, as the
-  // scene's own components do. Scenes and physics assets are not loaded as
-  // dependencies of another scene.
-  if (value.key.IsNil()) {
+  // An asset a script parameter or an override names stays resident with the
+  // scene, as the scene's own components do. Scenes and physics assets are not
+  // loaded as dependencies of another scene.
+  if (key.IsNil()) {
     co_return;
   }
-  switch (value.asset_type) {
+  switch (type) {
   case data::AssetType::kMaterial:
     static_cast<void>(co_await BindAssetAsync<data::MaterialAsset>(
-      value.key, asset, bindings, request));
+      key, asset, bindings, request));
     break;
   case data::AssetType::kGeometry:
     static_cast<void>(co_await BindAssetAsync<data::GeometryAsset>(
-      value.key, asset, bindings, request));
+      key, asset, bindings, request));
     break;
   case data::AssetType::kScript:
     static_cast<void>(co_await BindAssetAsync<data::ScriptAsset>(
-      value.key, asset, bindings, request));
+      key, asset, bindings, request));
     break;
   case data::AssetType::kInputAction:
     static_cast<void>(co_await BindAssetAsync<data::InputActionAsset>(
-      value.key, asset, bindings, request));
+      key, asset, bindings, request));
     break;
   case data::AssetType::kInputMappingContext:
     static_cast<void>(co_await BindAssetAsync<data::InputMappingContextAsset>(
-      value.key, asset, bindings, request));
+      key, asset, bindings, request));
     break;
   default:
     break;

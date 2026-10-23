@@ -72,7 +72,7 @@ internal sealed partial class ScenePreview
             RuntimeDetachLocalFogVolume detach when FindNode(scene, detach.NodeId)?.Components.Any(component => component is LocalFogVolumeComponent) == true => null,
             RuntimeDetachCamera detach when FindNode(scene, detach.NodeId)?.Components.Any(component => component is CameraComponent) == true => null,
             RuntimeSetGeometry geometry when FindNode(scene, geometry.NodeId)?.Components.Any(component => component is GeometryComponent) != true => null,
-            RuntimeSetMaterialOverride material when FindNode(scene, material.NodeId)?.Components.Any(component => component is GeometryComponent) != true => null,
+            RuntimeSetOverrides overrides when FindNode(scene, overrides.NodeId)?.Components.Any(component => component is GeometryComponent) != true => null,
             _ => command,
         };
 

@@ -31,9 +31,10 @@ class SetLocalTransformCommand;
 class SetPropertiesCommand;
 struct PropertyEntry;
 class SetGeometryCommand;
-class SetMaterialOverrideCommand;
-struct SurfaceTarget;
-enum class SurfaceMaterialAssignmentIntent : std::uint8_t;
+class SetOverridesCommand;
+struct OverrideTarget;
+struct OverrideEntry;
+enum class OverrideIntent : std::uint8_t;
 class ReparentSceneNodeCommand;
 class ReparentSceneNodesCommand;
 class UpdateTransformsForNodesCommand;
@@ -74,10 +75,11 @@ namespace Oxygen::Interop::World {
     oxygen::interop::module::SetGeometryCommand*
       CreateSetGeometry(oxygen::scene::NodeHandle handle, std::string assetUri);
 
-    oxygen::interop::module::SetMaterialOverrideCommand*
-      CreateSetMaterialOverride(oxygen::scene::NodeHandle handle,
-        oxygen::interop::module::SurfaceTarget target, std::optional<std::string> materialUri,
-        oxygen::interop::module::SurfaceMaterialAssignmentIntent intent);
+    oxygen::interop::module::SetOverridesCommand*
+      CreateSetOverrides(oxygen::scene::NodeHandle handle,
+        oxygen::interop::module::OverrideTarget target,
+        std::vector<oxygen::interop::module::OverrideEntry> entries,
+        oxygen::interop::module::OverrideIntent intent);
 
 
     oxygen::interop::module::SetEnvironmentCommand*

@@ -66,6 +66,10 @@ struct SceneBuild {
   std::vector<std::byte> strings; // string table bytes (must start with '\0')
 
   std::vector<data::pak::world::RenderableRecord> renderables;
+  // The renderables' overrides; a LOD policy value indexes
+  // override_lod_policies.
+  std::vector<data::pak::world::OverrideRecord> overrides;
+  std::vector<data::pak::geometry::LodPolicyRecord> override_lod_policies;
   std::vector<data::pak::world::PerspectiveCameraRecord> perspective_cameras;
   std::vector<data::pak::world::OrthographicCameraRecord> orthographic_cameras;
   std::vector<data::pak::world::DirectionalLightRecord> directional_lights;
@@ -389,7 +393,8 @@ Notes:
   - Provide a string table that starts with a leading NUL byte.
 
 - **Pipeline**:
-  - Sort component tables by `node_index`.
+  - Sort component tables by `node_index`; overrides by node, override id
+    and part.
   - Serialize `SceneAssetDesc` and trailing payload with packed alignment.
   - Validate and append the SceneEnvironment block; reject invalid system
     records.

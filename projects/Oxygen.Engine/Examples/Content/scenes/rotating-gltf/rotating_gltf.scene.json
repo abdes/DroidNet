@@ -1,5 +1,5 @@
 {
-  "version": 13,
+  "version": 14,
   "name": "rotating_gltf",
   "starting_camera": 3,
   "starting_input_contexts": [

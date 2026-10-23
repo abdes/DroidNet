@@ -124,7 +124,12 @@ The authoritative layout is defined in `Oxygen/Data/PakFormat.h`.
 - Component tables (optional)
   - component-table directory entries are `pak::SceneComponentTableDesc`
   - currently supported (when present): `pak::RenderableRecord` (geometry key
-    per node index)
+    per node index) and the renderables' `pak::OverrideRecord`s
+    (`ComponentType::kOverride`), whose LOD policy values are entries of the
+    `kOverrideLodPolicy` table; each override's value type and, for an asset,
+    its asset type come from the scene schema
+    (`Data/Schema/Generated.SceneComponents.h`), and its asset is a load
+    dependency of the scene
 
 - Scene string table (packed UTF-8, NUL-terminated)
   - referenced by `scene_name_offset`

@@ -10,13 +10,13 @@
 #include <numbers>
 
 #include <Oxygen/Data/PakFormat_geometry.h>
-#include <Oxygen/Scene/Schema/Generated.SceneComponents.h>
-#include <Oxygen/Scene/Schema/PropertyRange.h>
+#include <Oxygen/Data/Schema/Generated.SceneComponents.h>
+#include <Oxygen/Data/Schema/PropertyRange.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {
 
-namespace schema = oxygen::scene::schema;
+namespace schema = oxygen::data::schema;
 using oxygen::data::pak::geometry::LodPolicyType;
 using schema::PropertyRange;
 

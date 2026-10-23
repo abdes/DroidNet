@@ -248,6 +248,10 @@
             "lod-policy"
           ]
         },
+        "asset_type": {
+          "description": "The type of the asset an asset property references.",
+          "enum": ["geometry", "material"]
+        },
         "enum": {
           "description": "The enumeration of an enum property.",
           "$ref": "#/definitions/identifier"
@@ -305,6 +309,11 @@
           "if": { "properties": { "type": { "const": "enum" } } },
           "then": { "required": ["enum"] },
           "else": { "not": { "required": ["enum"] } }
+        },
+        {
+          "if": { "properties": { "type": { "const": "asset" } } },
+          "then": { "required": ["asset_type"] },
+          "else": { "not": { "required": ["asset_type"] } }
         },
         {
           "if": { "required": ["encoding"] },

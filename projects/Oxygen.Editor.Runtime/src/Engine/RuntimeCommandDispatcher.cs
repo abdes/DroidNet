@@ -27,7 +27,7 @@ internal sealed partial class RuntimeCommandDispatcher : IRuntimeWorldCommands, 
     private enum AssetRequestKind
     {
         Geometry,
-        Material,
+        Overrides,
         EnvironmentMask,
     }
 
@@ -169,7 +169,7 @@ internal sealed partial class RuntimeCommandDispatcher : IRuntimeWorldCommands, 
         => command switch
         {
             RuntimeSetGeometry geometry => new(geometry.NodeId, AssetRequestKind.Geometry),
-            RuntimeSetMaterialOverride material when material.SurfaceId != Guid.Empty => new(material.NodeId, AssetRequestKind.Material, material.SurfaceId, material.GeometryPath),
+            RuntimeSetOverrides overrides => new(overrides.NodeId, AssetRequestKind.Overrides, overrides.Part?.SurfaceId ?? Guid.Empty, overrides.GeometryPath),
             RuntimeSetEnvironment => new(NodeId.Empty, AssetRequestKind.EnvironmentMask),
             _ => null,
         };

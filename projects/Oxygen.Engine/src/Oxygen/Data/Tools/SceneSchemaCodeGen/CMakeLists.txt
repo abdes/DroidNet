@@ -8,16 +8,16 @@
 # SceneSchemaCodeGen tests
 # ------------------------------------------------------------------------------
 
-# Scene runs the generator; this file only registers the tool's own tests, with
+# Data runs the generator; this file only registers the tool's own tests, with
 # the interpreter verified by PythonTools.cmake.
 add_test(
-  NAME Oxygen.Scene.SceneSchemaCodeGen.Tests
+  NAME Oxygen.Data.SceneSchemaCodeGen.Tests
   COMMAND
     ${Python3_EXECUTABLE} -m pytest tests/ -v
   WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
 )
 set_tests_properties(
-  Oxygen.Scene.SceneSchemaCodeGen.Tests
+  Oxygen.Data.SceneSchemaCodeGen.Tests
   PROPERTIES
     LABELS
       "Tools;SceneSchemaCodeGen;Python"

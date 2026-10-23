@@ -17,6 +17,7 @@
 #include <vector>
 
 #include <Oxygen/Base/Filesystem.h>
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/AssetValidation.h>
@@ -37,6 +38,7 @@
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/PakFormatVersions.h>
 #include <Oxygen/Data/SceneAsset.h>
+#include <Oxygen/Data/Schema/Generated.SceneComponents.h>
 #include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Serio/FileStream.h>
 #include <Oxygen/Serio/Reader.h>
@@ -244,11 +246,18 @@ auto ValidateRoot(
       scene->GetComponents<data::pak::world::RenderableRecord>()) {
       geometry_by_node.emplace(renderable.node_index, renderable.geometry_key);
     }
-    for (const auto& assignment :
-      scene->GetComponents<data::pak::world::MaterialOverrideRecord>()) {
-      const auto node = geometry_by_node.find(assignment.node_index);
+    for (const auto& record :
+      scene->GetComponents<data::pak::world::OverrideRecord>()) {
+      const auto* property
+        = data::schema::FindOverrideProperty(record.override_id);
+      // The scene validated every override against the schema when it loaded.
+      DCHECK_NOTNULL_F(property);
+      if (property->part_kind != data::schema::PartKind::kSurface) {
+        continue;
+      }
+      const auto node = geometry_by_node.find(record.node_index);
       if (node == geometry_by_node.end()) {
-        throw std::runtime_error("material override has no renderable in scene "
+        throw std::runtime_error("override has no renderable in scene "
           + nostd::to_string(scene->GetAssetKey()));
       }
       const auto found = geometries.find(node->second);
@@ -256,12 +265,12 @@ auto ValidateRoot(
         continue; // Other mounted roots are outside this root's inventory.
       }
       const auto& geometry = *found->second;
-      if (geometry.FindSurface(assignment.surface_id) == nullptr) {
+      if (geometry.FindSurface(record.part_id) == nullptr) {
         throw std::runtime_error("unknown surface "
-          + data::to_string(assignment.surface_id) + " in scene "
+          + data::to_string(record.part_id) + " in scene "
           + nostd::to_string(scene->GetAssetKey()));
       }
-      if (geometry.Surfaces().layout_revision != assignment.layout_revision) {
+      if (geometry.Surfaces().layout_revision != record.layout_revision) {
         throw std::runtime_error("surface layout requires repair in scene "
           + nostd::to_string(scene->GetAssetKey()));
       }

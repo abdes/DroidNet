@@ -25,7 +25,7 @@ public sealed partial class ScenePreviewTests
         var current = true;
         fixture.World.IsCurrentFailure = _ => current;
         _ = await fixture.Preview.SyncSceneAsync(scene, this.TestContext.CancellationToken).ConfigureAwait(false);
-        var material = fixture.Requests.Last(static request => request.Command is RuntimeSetMaterialOverride);
+        var material = fixture.Requests.Last(static request => request.Command is RuntimeSetOverrides);
         var failure = new RuntimeAssetLoadFailedEventArgs(material, 71, "Asset path could not be resolved");
 
         fixture.World.RaiseAssetLoadFailed(failure);

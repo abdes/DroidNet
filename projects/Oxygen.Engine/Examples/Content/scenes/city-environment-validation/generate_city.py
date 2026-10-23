@@ -33,32 +33,40 @@ LAYOUT_REVISION = "5a938348d075862cca8af3cd4d64b76921951ae654ec8a9e4729f3904e069
 # --- Materials: muted, physically plausible albedos ------------------------
 
 MATERIALS = {
-    "MatCityAsphalt": dict(base_color=[0.05, 0.05, 0.055], roughness=0.9),
-    "MatCityPavement": dict(base_color=[0.34, 0.33, 0.31], roughness=0.85),
-    "MatCityConcreteWarm": dict(base_color=[0.48, 0.45, 0.40], roughness=0.75),
-    "MatCityConcreteCool": dict(base_color=[0.40, 0.42, 0.44], roughness=0.7),
-    "MatCityLimestone": dict(base_color=[0.62, 0.60, 0.55], roughness=0.65),
-    "MatCityBrickRed": dict(base_color=[0.33, 0.15, 0.10], roughness=0.85),
-    "MatCityBrickBuff": dict(base_color=[0.50, 0.40, 0.28], roughness=0.85),
-    "MatCityGlassBlue": dict(
-        base_color=[0.10, 0.13, 0.17], metalness=0.5, roughness=0.12
-    ),
-    "MatCityGlassTeal": dict(
-        base_color=[0.08, 0.12, 0.12], metalness=0.5, roughness=0.14
-    ),
-    "MatCityGlassBronze": dict(
-        base_color=[0.14, 0.11, 0.08], metalness=0.5, roughness=0.14
-    ),
-    "MatCityMetalPanel": dict(
-        base_color=[0.55, 0.56, 0.58], metalness=0.8, roughness=0.35
-    ),
-    "MatCitySlateDark": dict(base_color=[0.10, 0.10, 0.11], roughness=0.6),
-    "MatCityRoofGravel": dict(base_color=[0.20, 0.20, 0.19], roughness=0.95),
-    "MatCityGrass": dict(base_color=[0.07, 0.13, 0.05], roughness=0.95),
-    "MatCityTreeCanopy": dict(base_color=[0.05, 0.10, 0.035], roughness=0.9),
-    "MatCityBark": dict(base_color=[0.09, 0.07, 0.05], roughness=0.9),
-    "MatCityWater": dict(base_color=[0.02, 0.03, 0.035], roughness=0.06),
-    "MatCityWoodTank": dict(base_color=[0.25, 0.18, 0.12], roughness=0.85),
+    "MatCityAsphalt": {"base_color": [0.05, 0.05, 0.055], "roughness": 0.9},
+    "MatCityPavement": {"base_color": [0.34, 0.33, 0.31], "roughness": 0.85},
+    "MatCityConcreteWarm": {"base_color": [0.48, 0.45, 0.40], "roughness": 0.75},
+    "MatCityConcreteCool": {"base_color": [0.40, 0.42, 0.44], "roughness": 0.7},
+    "MatCityLimestone": {"base_color": [0.62, 0.60, 0.55], "roughness": 0.65},
+    "MatCityBrickRed": {"base_color": [0.33, 0.15, 0.10], "roughness": 0.85},
+    "MatCityBrickBuff": {"base_color": [0.50, 0.40, 0.28], "roughness": 0.85},
+    "MatCityGlassBlue": {
+        "base_color": [0.10, 0.13, 0.17],
+        "metalness": 0.5,
+        "roughness": 0.12,
+    },
+    "MatCityGlassTeal": {
+        "base_color": [0.08, 0.12, 0.12],
+        "metalness": 0.5,
+        "roughness": 0.14,
+    },
+    "MatCityGlassBronze": {
+        "base_color": [0.14, 0.11, 0.08],
+        "metalness": 0.5,
+        "roughness": 0.14,
+    },
+    "MatCityMetalPanel": {
+        "base_color": [0.55, 0.56, 0.58],
+        "metalness": 0.8,
+        "roughness": 0.35,
+    },
+    "MatCitySlateDark": {"base_color": [0.10, 0.10, 0.11], "roughness": 0.6},
+    "MatCityRoofGravel": {"base_color": [0.20, 0.20, 0.19], "roughness": 0.95},
+    "MatCityGrass": {"base_color": [0.07, 0.13, 0.05], "roughness": 0.95},
+    "MatCityTreeCanopy": {"base_color": [0.05, 0.10, 0.035], "roughness": 0.9},
+    "MatCityBark": {"base_color": [0.09, 0.07, 0.05], "roughness": 0.9},
+    "MatCityWater": {"base_color": [0.02, 0.03, 0.035], "roughness": 0.06},
+    "MatCityWoodTank": {"base_color": [0.25, 0.18, 0.12], "roughness": 0.85},
 }
 
 # --- Unit procedural geometries (centred, unit extents) --------------------
@@ -115,7 +123,7 @@ class Box:
     def d(self) -> float:
         return self.y1 - self.y0
 
-    def inset(self, m: float) -> "Box":
+    def inset(self, m: float) -> Box:
         return Box(self.x0 + m, self.y0 + m, self.x1 - m, self.y1 - m)
 
 
@@ -154,16 +162,18 @@ class SceneBuilder:
         renderable = {
             "node": index,
             "geometry_ref": f"/.cooked/Geometry/{geometry}.ogeo",
-            "visible": True,
         }
         if material != DEFAULT_MATERIAL:
-            renderable["material_overrides"] = [
-                {
-                    "surface_id": SURFACE_ID,
-                    "material_ref": f"/.cooked/Materials/{material}.omat",
-                    "layout_revision": LAYOUT_REVISION,
-                }
-            ]
+            renderable["overrides"] = {
+                "parts": [
+                    {
+                        "kind": "surface",
+                        "id": SURFACE_ID,
+                        "layout_revision": LAYOUT_REVISION,
+                        "values": {"/material": f"/.cooked/Materials/{material}.omat"},
+                    }
+                ]
+            }
         self.renderables.append(renderable)
         return index
 
@@ -217,7 +227,7 @@ class SceneBuilder:
 BLOCK_W, BLOCK_D = 150.0, 110.0
 AVENUE, STREET = 30.0, 20.0
 COLUMNS = range(-5, 6)
-ROWS = range(0, 16)
+ROWS = range(16)
 GRID_Y0 = -75.0
 KERB = 0.25
 DOWNTOWN = (90.0, 820.0)
@@ -633,7 +643,7 @@ def _matrix_to_quaternion(m):
 def _rotation_between(a, b):
     a, b = _normalize(a), _normalize(b)
     axis = _cross(a, b)
-    w = 1.0 + sum(x * y for x, y in zip(a, b))
+    w = 1.0 + sum(x * y for x, y in zip(a, b, strict=True))
     q = [axis[0], axis[1], axis[2], w]
     return _normalize(q)
 
@@ -740,7 +750,9 @@ def scene_document() -> dict:
     camera = s.node(
         "MainCamera",
         CAMERA_POSITION,
-        rotation=look_rotation([t - p for t, p in zip(CAMERA_TARGET, CAMERA_POSITION)]),
+        rotation=look_rotation(
+            [t - p for t, p in zip(CAMERA_TARGET, CAMERA_POSITION, strict=True)]
+        ),
         flags={"visible": "shown", "casts_shadows": "on", "receives_shadows": "on"},
     )
     el, az = math.radians(SUN_ELEVATION_DEG), math.radians(SUN_AZIMUTH_DEG)
@@ -758,7 +770,7 @@ def scene_document() -> dict:
         flags={"visible": "shown", "casts_shadows": "on", "receives_shadows": "on"},
     )
     return {
-        "version": 13,
+        "version": 14,
         "name": SCENE_NAME,
         "nodes": s.nodes,
         "renderables": s.renderables,
@@ -838,7 +850,7 @@ def material_document(name: str, params: dict) -> dict:
 
 
 def geometry_document(name: str, generator: str, params: dict | None, bounds) -> dict:
-    procedural = {"generator": generator, "mesh_name": name}
+    procedural: dict[str, object] = {"generator": generator, "mesh_name": name}
     if params:
         procedural["params"] = params
     lo, hi = bounds

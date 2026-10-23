@@ -29,8 +29,8 @@
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
+#include <Oxygen/Data/Schema/Generated.SceneComponents.h>
 #include <Oxygen/Data/SurfaceId.h>
-#include <Oxygen/Scene/Schema/Generated.SceneComponents.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
 #include <Oxygen/Testing/GTest.h>
@@ -390,7 +390,7 @@ NOLINT_TEST(GeometryDescriptorImportJobProceduralTest,
 NOLINT_TEST(GeometryDescriptorImportJobProceduralTest,
   AssetDefaultsReachTheCookedGeometry)
 {
-  namespace schema = scene::schema::geometry;
+  namespace schema = data::schema::geometry;
   struct Case {
     std::string_view name;
     json surfaces;

@@ -22,8 +22,8 @@
 #include <Oxygen/Cooker/Import/Internal/GeometryDefaults.h>
 #include <Oxygen/Cooker/Import/Internal/GeometrySource.h>
 #include <Oxygen/Data/PakFormat_geometry.h>
+#include <Oxygen/Data/Schema/Generated.SceneComponents.h>
 #include <Oxygen/Data/SurfaceId.h>
-#include <Oxygen/Scene/Schema/Generated.SceneComponents.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace oxygen::content::import::test {
@@ -318,7 +318,7 @@ namespace {
   {
     using data::pak::geometry::kSurfaceFlag_CastsShadows;
     using data::pak::geometry::kSurfaceFlag_Visible;
-    namespace surface_schema = scene::schema::geometry::surface;
+    namespace surface_schema = data::schema::geometry::surface;
 
     const auto first = data::SurfaceId::FromStableIdentity("first");
     const auto second = data::SurfaceId::FromStableIdentity("second");
@@ -354,7 +354,7 @@ namespace {
     ASSERT_HAS_VALUE(record) << "Expected a LOD policy";
     EXPECT_EQ(internal::WriteLodPolicy(*record), document);
     EXPECT_EQ(internal::MakeDefaultLodPolicy(std::nullopt).type,
-      scene::schema::geometry::kLodPolicyDefault.type);
+      data::schema::geometry::kLodPolicyDefault.type);
   }
 } // namespace
 } // namespace oxygen::content::import::test

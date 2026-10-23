@@ -56,6 +56,7 @@
 #include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/SceneAsset.h>
+#include <Oxygen/Data/Schema/Generated.SceneComponents.h>
 #include <Oxygen/Data/ScriptAsset.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
@@ -1374,9 +1375,14 @@ namespace {
       scene.GetComponents<world::RenderableRecord>()) {
       component_keys.insert(renderable.geometry_key);
     }
-    for (const auto& material_override :
-      scene.GetComponents<world::MaterialOverrideRecord>()) {
-      component_keys.insert(material_override.material_key);
+    for (const auto& record : scene.GetComponents<world::OverrideRecord>()) {
+      const auto* property
+        = data::schema::FindOverrideProperty(record.override_id);
+      // The scene validated every override against the schema when it loaded.
+      DCHECK_NOTNULL_F(property);
+      if (property->type == data::schema::ValueType::kAsset) {
+        component_keys.insert(record.value.as_asset);
+      }
     }
     for (const auto& instance :
       scene.GetComponents<world::SceneInstanceRecord>()) {

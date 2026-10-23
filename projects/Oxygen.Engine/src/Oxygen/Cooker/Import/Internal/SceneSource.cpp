@@ -20,8 +20,10 @@
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/Internal/GeometryDefaults.h>
 #include <Oxygen/Cooker/Import/Internal/ImportManifest_schema.h>
 #include <Oxygen/Cooker/Import/Internal/SceneSource.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
@@ -30,6 +32,7 @@
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_world.h>
+#include <Oxygen/Data/Schema/Generated.SceneComponents.h>
 #include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Scene/ExposureSettings.h>
 
@@ -100,6 +103,113 @@ namespace {
         + " is required; update the authored descriptor and re-cook the scene "
           "content.");
     return false;
+  }
+
+  //! Reads one authored override value as its property's value type.
+  auto ReadOverrideValue(SourceContext& context,
+    const data::schema::OverrideProperty& property, const json& document,
+    const std::string& object_path) -> std::optional<SceneSource::OverrideValue>
+  {
+    using data::schema::ValueType;
+    switch (property.type) {
+    case ValueType::kBool:
+      return document.get<bool>();
+    case ValueType::kAsset:
+      return SceneSource::AssetReference {
+        .virtual_path = document.get<std::string>(),
+      };
+    case ValueType::kLodPolicy:
+      if (auto policy = ReadLodPolicy(document)) {
+        return *policy;
+      }
+      AddDiagnostic(context, ImportSeverity::kError,
+        "scene.descriptor.lod_policy_invalid",
+        "LOD policy thresholds must be finite, distances must not decrease and "
+        "screen-space errors must not increase",
+        object_path);
+      return std::nullopt;
+    case ValueType::kInt:
+    case ValueType::kFloat:
+    case ValueType::kVec3:
+    case ValueType::kEnum:
+    case ValueType::kString:
+      // No override property has these types yet; the descriptor schema
+      // admits none, and each needs its reader when the schema declares one.
+      break;
+    }
+    AddDiagnostic(context, ImportSeverity::kError,
+      "scene.descriptor.override_unsupported",
+      "The override value type is not supported", object_path);
+    return std::nullopt;
+  }
+
+  //! Reads the `values` of one override owner into `overrides`.
+  auto ReadOverrideValues(SourceContext& context, const json& values,
+    const data::schema::PartKind part_kind, const data::SurfaceId part_id,
+    const std::string& object_path,
+    std::vector<SceneSource::Override>& overrides) -> bool
+  {
+    for (const auto& [key, document] : values.items()) {
+      const auto value_path = object_path + "[\"" + key + "\"]";
+      const auto* property
+        = data::schema::FindOverrideProperty("geometry", part_kind, key);
+      if (property == nullptr) {
+        AddDiagnostic(context, ImportSeverity::kError,
+          "scene.descriptor.override_unknown",
+          "The scene schema declares no override with this key", value_path);
+        return false;
+      }
+      auto value = ReadOverrideValue(context, *property, document, value_path);
+      if (!value) {
+        return false;
+      }
+      overrides.push_back({
+        .property = property,
+        .part_id = part_id,
+        .value = std::move(*value),
+        .object_path = value_path,
+      });
+    }
+    return true;
+  }
+
+  //! Reads a renderable's `overrides`; each surface is named once.
+  auto ReadOverrides(SourceContext& context, const json& document,
+    const std::string& object_path,
+    std::vector<SceneSource::Override>& overrides) -> bool
+  {
+    if (document.contains("values")
+      && !ReadOverrideValues(context, document.at("values"),
+        data::schema::PartKind::kNone, data::SurfaceId {},
+        object_path + ".values", overrides)) {
+      return false;
+    }
+    if (!document.contains("parts")) {
+      return true;
+    }
+    auto surfaces = std::unordered_set<data::SurfaceId> {};
+    const auto& parts = document.at("parts");
+    for (size_t i = 0; i < parts.size(); ++i) {
+      const auto& part = parts.at(i);
+      const auto part_path = object_path + ".parts[" + std::to_string(i) + "]";
+      // The descriptor schema admits surfaces only.
+      DCHECK_F(part.at("kind").get<std::string>() == "surface");
+      const auto surface
+        = data::SurfaceId::FromString(part.at("id").get<std::string>());
+      if (!surface || surface->IsNil() || !surfaces.insert(*surface).second) {
+        AddDiagnostic(context, ImportSeverity::kError,
+          "scene.descriptor.surface_invalid",
+          "A surface override requires a non-nil surface identity, named once",
+          part_path + ".id");
+        return false;
+      }
+      if (!ReadOverrideValues(context, part.at("values"),
+            data::schema::PartKind::kSurface, *surface, part_path + ".values",
+            overrides)) {
+        return false;
+      }
+    }
+    return true;
   }
 
   //! Copies the leading elements of a JSON number array into a fixed field.
@@ -638,36 +748,18 @@ namespace {
         const auto object_path = "renderables[" + std::to_string(i) + "]";
         auto renderable = SceneSource::Renderable {
           .node_index = document.at("node").get<uint32_t>(),
-          .visible = document.value("visible", true),
           .geometry = document.at("geometry_ref").get<std::string>(),
-          .materials = {},
+          .overrides = {},
         };
         if (!ValidateNodeIndex(context, renderable.node_index, node_count,
               "scene.descriptor.renderable_node_index_out_of_range",
               "Renderable node index is out of range", object_path + ".node")) {
           return std::nullopt;
         }
-        if (document.contains("material_overrides")) {
-          auto assigned = std::unordered_set<data::SurfaceId> {};
-          for (const auto& assignment : document.at("material_overrides")) {
-            const auto surface = data::SurfaceId::FromString(
-              assignment.at("surface_id").get<std::string>());
-            if (!surface || surface.value().IsNil()
-              || !assigned.insert(surface.value()).second) {
-              AddDiagnostic(context, ImportSeverity::kError,
-                "scene.descriptor.surface_invalid",
-                "Material assignment requires a non-nil, unique surface "
-                "identity",
-                object_path + ".material_overrides");
-              return std::nullopt;
-            }
-            renderable.materials.push_back({
-              .surface_id = surface.value(),
-              .material = assignment.at("material_ref").get<std::string>(),
-              .layout_revision
-              = assignment.at("layout_revision").get<std::string>(),
-            });
-          }
+        if (document.contains("overrides")
+          && !ReadOverrides(context, document.at("overrides"),
+            object_path + ".overrides", renderable.overrides)) {
+          return std::nullopt;
         }
         prepared.renderables.push_back(std::move(renderable));
       }

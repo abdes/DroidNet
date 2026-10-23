@@ -70,7 +70,7 @@ public sealed partial class AssetRuntimeStatusSource : IAssetRuntimeStatusSource
     private static string? EnginePath(RuntimeWorldCommand command) => command switch
     {
         RuntimeSetGeometry geometry => geometry.AssetPath,
-        RuntimeSetMaterialOverride material => material.MaterialPath,
+        RuntimeSetOverrides overrides => overrides.Overrides.Select(static entry => entry.Value).OfType<RuntimeOverrideValue.Asset>().FirstOrDefault()?.Path,
         _ => null,
     };
 

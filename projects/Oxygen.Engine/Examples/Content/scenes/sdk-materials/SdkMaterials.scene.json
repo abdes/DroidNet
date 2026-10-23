@@ -1,6 +1,6 @@
 {
   "$schema": "../../../../src/Oxygen/Cooker/Import/Schemas/oxygen.scene-descriptor.schema.json",
-  "version": 13,
+  "version": 14,
   "name": "SdkMaterials",
   "nodes": [
     {
@@ -158,23 +158,19 @@
   "renderables": [
     {
       "node": 1,
-      "geometry_ref": "/.cooked/Geometry/SdkCube.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/SdkCube.ogeo"
     },
     {
       "node": 2,
-      "geometry_ref": "/.cooked/Geometry/SdkCubeB.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/SdkCubeB.ogeo"
     },
     {
       "node": 3,
-      "geometry_ref": "/.cooked/Geometry/SdkCubeC.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/SdkCubeC.ogeo"
     },
     {
       "node": 10,
-      "geometry_ref": "/.cooked/Geometry/SdkCubeD.ogeo",
-      "visible": true
+      "geometry_ref": "/.cooked/Geometry/SdkCubeD.ogeo"
     }
   ],
   "cameras": {

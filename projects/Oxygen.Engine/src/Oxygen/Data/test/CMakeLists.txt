@@ -49,9 +49,12 @@ m_gtest_program(
     "MeshBuilder_test.cpp"
     "MeshView_test.cpp"
     "ProceduralMeshes_test.cpp"
+    "SceneOverrides_test.cpp"
     "SceneScriptLayout_test.cpp"
     "SubMesh_test.cpp"
     "TextureResource_test.cpp"
     "ToStringConverters_test.cpp"
     "Vertex_test.cpp"
 )
+
+m_gtest_program(SceneSchema SOURCES "SceneSchema_test.cpp")

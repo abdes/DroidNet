@@ -23,7 +23,7 @@ namespace Oxygen.Editor.ContentPipeline;
 /// </summary>
 public sealed partial class SceneDescriptorGenerator : ISceneDescriptorGenerator
 {
-    private const int NativeSceneDescriptorVersion = 13;
+    private const int NativeSceneDescriptorVersion = 14;
     private const double MaximumExposureLogLuminance = 32;
     private static readonly Lazy<EditorSchemaCatalog> SceneSchemas = new(() =>
         EditorSchemaCatalog.LoadFromDirectory(Path.Combine(
@@ -357,34 +357,65 @@ public sealed partial class SceneDescriptorGenerator : ISceneDescriptorGenerator
                 return;
             }
 
-            // The cooked scene takes surface materials as material overrides until the override table replaces them. The
-            // cooker refuses an override of a surface the geometry does not have.
-            var overrides = new List<NativeSurfaceMaterialOverride>();
-            foreach (var surface in geometry.Overrides.All.Where(static entry => entry.Property == SceneSchema.Geometry.Surface.Material.Id))
+            // The cooker refuses an override of a surface the geometry does not have.
+            var values = new SortedDictionary<string, JsonNode>(StringComparer.Ordinal);
+            var parts = new List<NativeOverridePart>();
+            foreach (var part in geometry.Overrides.All.GroupBy(static entry => entry.Part))
             {
-                var material = (AssetPath)surface.Value;
-                string materialRef;
-                try
+                var partValues = part.Key is null ? values : new SortedDictionary<string, JsonNode>(StringComparer.Ordinal);
+                foreach (var entry in part)
                 {
-                    materialRef = ContentPipelinePaths.ToNativeDescriptorPath(material, AssetFileTypes.Material);
-                }
-                catch (ArgumentException exception)
-                {
-                    diagnostics.Add(CreateDiagnostic(
-                        operationId,
-                        DiagnosticSeverity.Error,
-                        ContentPipelineDiagnosticCodes.SceneDescriptorGenerationFailed,
-                        $"Scene node '{node.Metadata.Name}' references invalid material '{material}': {exception.Message}",
-                        descriptorPath,
-                        descriptorVirtualPath));
-                    return;
+                    if (DescriptorValue(entry) is not { } value)
+                    {
+                        return;
+                    }
+
+                    partValues.Add(entry.Property.JsonPointer, value);
                 }
 
-                _ = materialRefs.Add(materialRef);
-                overrides.Add(new(surface.Part!.Value.Id, materialRef, surface.LayoutRevision!));
+                if (part.Key is { } surface)
+                {
+                    parts.Add(new NativeOverridePart(surface.Kind, surface.Id, part.First().LayoutRevision!, partValues));
+                }
             }
 
+            var overrides = values.Count == 0 && parts.Count == 0
+                ? null
+                : new NativeOverrides(values.Count == 0 ? null : values, parts.Count == 0 ? null : parts);
             renderables.Add(new NativeRenderable(nodeIndex, geometryRef, overrides));
+
+            // Each value is spelled once per value type of the schema; materials are the only asset overrides.
+            JsonNode? DescriptorValue(SourceOverride entry)
+            {
+                switch (entry.Value)
+                {
+                    case bool flag:
+                        return JsonValue.Create(flag);
+                    case LodPolicy policy:
+                        return JsonSerializer.SerializeToNode(policy, SceneDescriptorJson.Options);
+                    case AssetPath material when entry.Property == SceneSchema.Geometry.Surface.Material.Id:
+                        try
+                        {
+                            var materialRef = ContentPipelinePaths.ToNativeDescriptorPath(material, AssetFileTypes.Material);
+                            _ = materialRefs.Add(materialRef);
+                            return JsonValue.Create(materialRef);
+                        }
+                        catch (ArgumentException exception)
+                        {
+                            diagnostics.Add(CreateDiagnostic(
+                                operationId,
+                                DiagnosticSeverity.Error,
+                                ContentPipelineDiagnosticCodes.SceneDescriptorGenerationFailed,
+                                $"Scene node '{node.Metadata.Name}' references invalid material '{material}': {exception.Message}",
+                                descriptorPath,
+                                descriptorVirtualPath));
+                            return null;
+                        }
+
+                    default:
+                        throw new InvalidOperationException($"Override '{entry.Property}' holds a {entry.Value.GetType().Name}, which has no descriptor spelling.");
+                }
+            }
         }
     }
 

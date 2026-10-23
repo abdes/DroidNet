@@ -6,8 +6,10 @@
 
 // Covers: Import/Internal/SceneSource.cpp
 
+#include <algorithm>
 #include <string>
 #include <string_view>
+#include <variant>
 #include <vector>
 
 #include <nlohmann/json.hpp>
@@ -17,7 +19,10 @@
 #include <Oxygen/Cooker/Import/Internal/SceneSource.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Data/PakFormat_world.h>
+#include <Oxygen/Data/Schema/Generated.SceneComponents.h>
+#include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace oxygen::content::import::test {
@@ -73,11 +78,12 @@ namespace {
     document.at("nodes") = json::array({ json::object() });
     document.emplace("renderables", json::parse(R"([{
       "node":0,"geometry_ref":"/Content/Geometry/body.ogeo",
-      "material_overrides":[{
-        "surface_id":"018f8f8f-1111-7111-8111-111111111111",
-        "material_ref":"/Content/Materials/paint.omat",
-        "layout_revision":"0000000000000000000000000000000000000000000000000000000000000000"
-      }]
+      "overrides":{"parts":[{
+        "kind":"surface",
+        "id":"018f8f8f-1111-7111-8111-111111111111",
+        "layout_revision":"0000000000000000000000000000000000000000000000000000000000000000",
+        "values":{"/material":"/Content/Materials/paint.omat"}
+      }]}
     }])"));
     document.emplace("references", json::parse(R"({
       "materials":["/Content/Materials/extra.omat"],
@@ -95,11 +101,16 @@ namespace {
     ASSERT_EQ(source->renderables.size(), 1U);
     const auto& renderable = source->renderables.front();
     EXPECT_EQ(renderable.geometry, "/Content/Geometry/body.ogeo");
-    ASSERT_EQ(renderable.materials.size(), 1U);
-    EXPECT_EQ(
-      renderable.materials.front().material, "/Content/Materials/paint.omat");
-    EXPECT_EQ(
-      renderable.materials.front().layout_revision, std::string(64, '0'));
+    ASSERT_EQ(renderable.overrides.size(), 1U);
+    const auto& material = renderable.overrides.front();
+    EXPECT_EQ(material.property->id,
+      data::schema::OverrideId::kGeometrySurfaceMaterial);
+    EXPECT_EQ(data::to_string(material.part_id),
+      "018f8f8f-1111-7111-8111-111111111111");
+    const auto* path
+      = std::get_if<SceneSource::AssetReference>(&material.value);
+    ASSERT_NE(path, nullptr);
+    EXPECT_EQ(path->virtual_path, "/Content/Materials/paint.omat");
     ASSERT_EQ(source->references.size(), 6U);
     EXPECT_EQ(source->references.front().type, data::AssetType::kMaterial);
     EXPECT_EQ(
@@ -107,6 +118,85 @@ namespace {
     EXPECT_FALSE(source->references.back().type.has_value());
     EXPECT_EQ(
       source->references.back().object_path, "references.extra_assets[0]");
+  }
+
+  //! Every override value is read as its property's value type, and its
+  //! surface by id; the component's own properties name no part.
+  NOLINT_TEST(SceneSourceTest, ReadsEachOverrideAsItsValueType)
+  {
+    auto document = MakeScene();
+    document.at("nodes") = json::array({ json::object() });
+    document.emplace("renderables", json::parse(R"([{
+      "node":0,"geometry_ref":"/Content/Geometry/body.ogeo",
+      "overrides":{
+        "values":{"/lod_policy":{"type":"fixed","lod_index":2}},
+        "parts":[{
+          "kind":"surface",
+          "id":"018f8f8f-1111-7111-8111-111111111111",
+          "layout_revision":"0000000000000000000000000000000000000000000000000000000000000000",
+          "values":{"/visible":false,"/casts_shadows":true}
+        }]
+      }
+    }])"));
+    auto diagnostics = std::vector<ImportDiagnostic> {};
+    const auto source
+      = SceneSource::FromDescriptor(document.dump(), "scene.json", diagnostics);
+    ASSERT_HAS_VALUE(source) << "Expected source to contain a value";
+    EXPECT_TRUE(diagnostics.empty());
+    const auto& overrides = source->renderables.front().overrides;
+    ASSERT_EQ(overrides.size(), 3U);
+    using data::schema::OverrideId;
+    EXPECT_EQ(overrides.at(0).property->id, OverrideId::kGeometryLodPolicy);
+    EXPECT_TRUE(overrides.at(0).part_id.IsNil());
+    const auto* policy = std::get_if<data::pak::geometry::LodPolicyRecord>(
+      &overrides.at(0).value);
+    ASSERT_NE(policy, nullptr);
+    EXPECT_EQ(policy->type, data::pak::geometry::LodPolicyType::kFixed);
+    EXPECT_EQ(policy->lod_index, 2U);
+    const auto find = [&overrides](const OverrideId id) -> const auto& {
+      return *std::ranges::find_if(
+        overrides, [id](const SceneSource::Override& entry) -> bool {
+          return entry.property->id == id;
+        });
+    };
+    const auto& visible = find(OverrideId::kGeometrySurfaceVisibility);
+    EXPECT_FALSE(visible.part_id.IsNil());
+    EXPECT_EQ(std::get<bool>(visible.value), false);
+    EXPECT_EQ(
+      std::get<bool>(find(OverrideId::kGeometrySurfaceCastsShadows).value),
+      true);
+  }
+
+  //! A surface named by two parts, and a LOD policy whose distances
+  //! decrease, are both refused before cooked linking.
+  NOLINT_TEST(SceneSourceTest, RejectsRepeatedSurfacesAndInvalidLodPolicies)
+  {
+    const auto read = [](const std::string_view overrides) -> auto {
+      auto document = MakeScene();
+      document.at("nodes") = json::array({ json::object() });
+      auto renderable = json::object(
+        { { "node", 0 }, { "geometry_ref", "/Content/Geometry/body.ogeo" },
+          { "overrides", json::parse(overrides) } });
+      document.emplace("renderables", json::array({ renderable }));
+      auto diagnostics = std::vector<ImportDiagnostic> {};
+      const auto source = SceneSource::FromDescriptor(
+        document.dump(), "scene.json", diagnostics);
+      EXPECT_FALSE(source.has_value());
+      return diagnostics;
+    };
+    constexpr auto kRevision
+      = "0000000000000000000000000000000000000000000000000000000000000000";
+    const auto part = std::string(R"({"kind":"surface",
+      "id":"018f8f8f-1111-7111-8111-111111111111","layout_revision":")")
+      + kRevision + R"(","values":{"/visible":false}})";
+
+    EXPECT_TRUE(
+      HasDiagnosticCode(read(R"({"parts":[)" + part + "," + part + "]}"),
+        "scene.descriptor.surface_invalid"));
+    EXPECT_TRUE(HasDiagnosticCode(
+      read(
+        R"({"values":{"/lod_policy":{"type":"distance","thresholds":[9,4],"hysteresis_ratio":0.1}}})"),
+      "scene.descriptor.lod_policy_invalid"));
   }
 
   NOLINT_TEST(SceneSourceTest, DisabledSkyRetainsItsCubemapDependency)

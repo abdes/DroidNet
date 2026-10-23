@@ -6,6 +6,7 @@
 #pragma warning disable SA1402, SA1600
 
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 
 namespace Oxygen.Editor.ContentPipeline;
@@ -71,12 +72,18 @@ internal sealed record NativeNodeTransform(
 internal sealed record NativeRenderable(
     [property: JsonPropertyName("node")] int Node,
     [property: JsonPropertyName("geometry_ref")] string GeometryRef,
-    [property: JsonPropertyName("material_overrides")] IReadOnlyList<NativeSurfaceMaterialOverride> MaterialOverrides);
+    [property: JsonPropertyName("overrides")] NativeOverrides? Overrides);
 
-internal sealed record NativeSurfaceMaterialOverride(
-    [property: JsonPropertyName("surface_id")] Guid SurfaceId,
-    [property: JsonPropertyName("material_ref")] string MaterialRef,
-    [property: JsonPropertyName("layout_revision")] string LayoutRevision);
+// The overrides of a renderable's geometry, by scene schema key: the component's own values, then each surface's.
+internal sealed record NativeOverrides(
+    [property: JsonPropertyName("values")] IReadOnlyDictionary<string, JsonNode>? Values,
+    [property: JsonPropertyName("parts")] IReadOnlyList<NativeOverridePart>? Parts);
+
+internal sealed record NativeOverridePart(
+    [property: JsonPropertyName("kind")] string Kind,
+    [property: JsonPropertyName("id")] Guid Id,
+    [property: JsonPropertyName("layout_revision")] string LayoutRevision,
+    [property: JsonPropertyName("values")] IReadOnlyDictionary<string, JsonNode> Values);
 
 internal sealed record NativeCameras(
     [property: JsonPropertyName("perspective")] IReadOnlyList<NativePerspectiveCamera>? Perspective,

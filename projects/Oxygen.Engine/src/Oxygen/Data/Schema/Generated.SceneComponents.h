@@ -13,13 +13,14 @@
 #include <span>
 #include <string_view>
 
+#include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakFormat_geometry.h>
-#include <Oxygen/Scene/Schema/PropertyRange.h>
+#include <Oxygen/Data/Schema/PropertyRange.h>
 
 // The generator owns this layout.
 // clang-format off
 
-namespace oxygen::scene::schema {
+namespace oxygen::data::schema {
 
 //! The scene components applied field by field.
 enum class ComponentId : std::uint16_t {
@@ -183,13 +184,15 @@ enum class OverrideId : std::uint16_t {
   kGeometryLodPolicy = 4,
 };
 
-//! The address and value type of a property stored as overrides.
+//! The address and value type of a property stored as overrides;
+//! `asset_type` is the type an asset value references (kUnknown otherwise).
 struct OverrideProperty {
   OverrideId id;
   std::string_view component_kind;
   PartKind part_kind;
   std::string_view key;
   ValueType type;
+  AssetType asset_type;
 };
 
 //! The properties stored as overrides, by override id.
@@ -200,6 +203,7 @@ inline constexpr std::array<OverrideProperty, 4> kOverrideProperties {
     .part_kind = PartKind::kSurface,
     .key = "/material",
     .type = ValueType::kAsset,
+    .asset_type = AssetType::kMaterial,
   },
   OverrideProperty {
     .id = OverrideId::kGeometrySurfaceVisibility,
@@ -207,6 +211,7 @@ inline constexpr std::array<OverrideProperty, 4> kOverrideProperties {
     .part_kind = PartKind::kSurface,
     .key = "/visible",
     .type = ValueType::kBool,
+    .asset_type = AssetType::kUnknown,
   },
   OverrideProperty {
     .id = OverrideId::kGeometrySurfaceCastsShadows,
@@ -214,6 +219,7 @@ inline constexpr std::array<OverrideProperty, 4> kOverrideProperties {
     .part_kind = PartKind::kSurface,
     .key = "/casts_shadows",
     .type = ValueType::kBool,
+    .asset_type = AssetType::kUnknown,
   },
   OverrideProperty {
     .id = OverrideId::kGeometryLodPolicy,
@@ -221,8 +227,37 @@ inline constexpr std::array<OverrideProperty, 4> kOverrideProperties {
     .part_kind = PartKind::kNone,
     .key = "/lod_policy",
     .type = ValueType::kLodPolicy,
+    .asset_type = AssetType::kUnknown,
   },
 };
+
+//! The override property `id` names, or null for an id the schema does not
+//! declare.
+[[nodiscard]] constexpr auto FindOverrideProperty(const OverrideId id)
+  noexcept -> const OverrideProperty*
+{
+  for (const auto& property : kOverrideProperties) {
+    if (property.id == id) {
+      return &property;
+    }
+  }
+  return nullptr;
+}
+
+//! The override property of `component_kind` with `key` on `part_kind`, or
+//! null when the schema declares none.
+[[nodiscard]] constexpr auto FindOverrideProperty(
+  const std::string_view component_kind, const PartKind part_kind,
+  const std::string_view key) noexcept -> const OverrideProperty*
+{
+  for (const auto& property : kOverrideProperties) {
+    if (property.component_kind == component_kind
+      && property.part_kind == part_kind && property.key == key) {
+      return &property;
+    }
+  }
+  return nullptr;
+}
 
 //! The wire values of the VisibilitySource members.
 inline constexpr std::array<std::uint8_t, 3> kVisibilitySourceMembers { 0, 1, 2 };
@@ -475,6 +510,6 @@ inline constexpr std::int32_t kSortPriorityDefault = 0;
 inline constexpr PropertyRange<std::int32_t> kSortPriorityRange { .min = -127, .max = 127 };
 } // namespace local_fog_volume
 
-} // namespace oxygen::scene::schema
+} // namespace oxygen::data::schema
 
 // clang-format on

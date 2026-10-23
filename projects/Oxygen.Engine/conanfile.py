@@ -415,7 +415,7 @@ class OxygenConan(ConanFile):
                     "--editable",
                     str(source / "src/Oxygen/Content/Tools/UnicodeCodeGen"),
                     "--editable",
-                    str(source / "src/Oxygen/Scene/Tools/SceneSchemaCodeGen"),
+                    str(source / "src/Oxygen/Data/Tools/SceneSchemaCodeGen"),
                 ],
                 check=True,
             )
@@ -437,7 +437,7 @@ class OxygenConan(ConanFile):
                                 source
                                 / "src/Oxygen/Content/Tools/UnicodeCodeGen/pyproject.toml",
                                 source
-                                / "src/Oxygen/Scene/Tools/SceneSchemaCodeGen/pyproject.toml",
+                                / "src/Oxygen/Data/Tools/SceneSchemaCodeGen/pyproject.toml",
                             )
                         },
                     },

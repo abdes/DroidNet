@@ -165,7 +165,7 @@ public static class SceneEditJson
             }
             else
             {
-                SourceOverridesJson.WriteValue(value.Value).WriteTo(writer);
+                SourceOverridesJson.WriteValue(value.Property, value.Value).WriteTo(writer);
             }
 
             writer.WriteEndObject();

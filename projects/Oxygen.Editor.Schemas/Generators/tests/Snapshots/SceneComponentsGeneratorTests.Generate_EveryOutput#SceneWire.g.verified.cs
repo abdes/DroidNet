@@ -7,7 +7,10 @@
 
 namespace Oxygen.Editor.LivePreview.Scenes;
 
-/// <content>The engine component, fields and encoding of each property the engine takes field by field.</content>
+/// <content>
+/// The engine component, fields and encoding of each property the engine takes field by field, and the override id of
+/// each property the engine takes as an override.
+/// </content>
 internal static partial class SceneWire
 {
     private static void AddSchemaMappings(global::System.Collections.Generic.Dictionary<global::Oxygen.Managed.Core.PropertyId, Mapping> map)
@@ -16,5 +19,11 @@ internal static partial class SceneWire
         map.Add(global::Oxygen.Editor.World.SceneSchema.Lamp.Range.Id, new Mapping(global::Oxygen.Editor.Runtime.Engine.RuntimeComponentId.Lamp, [(ushort)global::Oxygen.Editor.Runtime.Engine.LampField.Range]));
         map.Add(global::Oxygen.Editor.World.SceneSchema.Lamp.FovDegrees.Id, new Mapping(global::Oxygen.Editor.Runtime.Engine.RuntimeComponentId.Lamp, [(ushort)global::Oxygen.Editor.Runtime.Engine.LampField.FovRadians]) { Encode = DegreesToRadians });
         map.Add(global::Oxygen.Editor.World.SceneSchema.Lamp.Mode.Id, new Mapping(global::Oxygen.Editor.Runtime.Engine.RuntimeComponentId.Lamp, [(ushort)global::Oxygen.Editor.Runtime.Engine.LampField.Mode]));
+    }
+
+    private static void AddSchemaOverrideIds(global::System.Collections.Generic.Dictionary<global::Oxygen.Managed.Core.PropertyId, global::Oxygen.Editor.Runtime.Engine.RuntimeOverrideId> map)
+    {
+        map.Add(global::Oxygen.Editor.World.SceneSchema.Geometry.Surface.Material.Id, global::Oxygen.Editor.Runtime.Engine.RuntimeOverrideId.GeometrySurfaceMaterial);
+        map.Add(global::Oxygen.Editor.World.SceneSchema.Geometry.LodPolicy.Id, global::Oxygen.Editor.Runtime.Engine.RuntimeOverrideId.GeometryLodPolicy);
     }
 }

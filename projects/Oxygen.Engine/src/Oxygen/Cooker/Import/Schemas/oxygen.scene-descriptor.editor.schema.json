@@ -460,12 +460,6 @@
           "x-editor-group": "Geometry",
           "x-editor-order": 0,
           "x-editor-renderer": "asset-picker"
-        },
-        "material_overrides": {
-          "x-editor-label": "Surface Materials",
-          "x-editor-group": "Geometry",
-          "x-editor-order": 10,
-          "x-editor-renderer": "surface-materials"
         }
       }
     },

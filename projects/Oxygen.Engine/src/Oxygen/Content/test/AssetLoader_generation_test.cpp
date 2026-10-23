@@ -129,7 +129,7 @@ namespace {
       = static_cast<data::pak::core::StringTableSizeT>(strings.size());
     std::array<SceneComponentTableDesc, 2> tables {};
     RenderableRecord renderable {};
-    MaterialOverrideRecord assignment {};
+    OverrideRecord assignment {};
     if (!material.IsNil()) {
       descriptor.component_table_count = static_cast<uint32_t>(tables.size());
       descriptor.component_table_directory_offset
@@ -141,18 +141,20 @@ namespace {
       tables.at(0).table.count = 1U;
       tables.at(0).table.entry_size = sizeof(renderable);
       tables.at(1).component_type
-        = static_cast<uint32_t>(data::ComponentType::kMaterialOverride);
+        = static_cast<uint32_t>(data::ComponentType::kOverride);
       tables.at(1).table.offset
         = tables.at(0).table.offset + sizeof(renderable);
       tables.at(1).table.count = 1U;
       tables.at(1).table.entry_size = sizeof(assignment);
       renderable.geometry_key
         = data::AssetKey::FromVirtualPath("/test/bound-cube.ogeo");
-      assignment.material_key = material;
-      assignment.surface_id
+      assignment.override_id
+        = data::schema::OverrideId::kGeometrySurfaceMaterial;
+      assignment.value.as_asset = material;
+      assignment.part_id
         = data::SurfaceId::FromStableIdentity("generation-test-slot");
       const std::array surfaces { data::Surface {
-        .surface_id = assignment.surface_id,
+        .surface_id = assignment.part_id,
         .display_name = "fixture",
         .bindings = { { .lod_index = oxygen::data::LodIndex {},
           .submesh_index = oxygen::data::SubmeshIndex {},

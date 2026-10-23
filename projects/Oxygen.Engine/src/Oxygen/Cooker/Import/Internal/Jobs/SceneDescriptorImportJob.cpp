@@ -18,6 +18,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
@@ -54,6 +55,7 @@
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/Data/SceneAsset.h>
+#include <Oxygen/Data/Schema/Generated.SceneComponents.h>
 #include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Serio/MemoryStream.h>
@@ -276,7 +278,11 @@ namespace {
     -> co::Co<bool>
   {
     for (const auto& renderable : source.renderables) {
-      if (renderable.materials.empty()) {
+      const auto names_a_surface = std::ranges::any_of(renderable.overrides,
+        [](const internal::SceneSource::Override& entry) -> bool {
+          return entry.property->part_kind == data::schema::PartKind::kSurface;
+        });
+      if (!names_a_surface) {
         continue;
       }
       const auto& path = renderable.geometry;
@@ -525,6 +531,60 @@ namespace {
     co_return true;
   }
 
+  //! Encodes one override as its property's value type, resolving its surface
+  //! against the geometry being cooked and its asset against the mounts.
+  auto LinkOverride(SceneDescriptorExecutionContext& context,
+    const internal::SceneSource::Renderable& renderable,
+    const internal::SceneSource::Override& source, SceneBuild& build) -> bool
+  {
+    const auto& property = *source.property;
+    auto record = data::pak::world::OverrideRecord {
+      .node_index = renderable.node_index,
+      .override_id = property.id,
+    };
+    switch (property.part_kind) {
+    case data::schema::PartKind::kNone:
+      DCHECK_F(source.part_id.IsNil());
+      break;
+    case data::schema::PartKind::kSurface: {
+      const auto& geometry = *context.geometries.at(renderable.geometry);
+      if (geometry.FindSurface(source.part_id) == nullptr) {
+        AddDiagnostic(context.session, context.request, ImportSeverity::kError,
+          "scene.descriptor.surface_invalid",
+          "The override targets a surface the geometry does not declare",
+          source.object_path);
+        return false;
+      }
+      record.part_id = source.part_id;
+      record.layout_revision = geometry.Surfaces().layout_revision;
+      break;
+    }
+    }
+    // SceneSource read each value as its property's value type.
+    if (const auto* flag = std::get_if<bool>(&source.value)) {
+      DCHECK_F(property.type == data::schema::ValueType::kBool);
+      record.value.as_bool = *flag ? 1U : 0U;
+    } else if (const auto* asset
+      = std::get_if<internal::SceneSource::AssetReference>(&source.value)) {
+      DCHECK_F(property.type == data::schema::ValueType::kAsset);
+      const auto resolved = ResolveAssetReference(
+        context, asset->virtual_path, property.asset_type, source.object_path);
+      if (!resolved.has_value()) {
+        return false;
+      }
+      record.value.as_asset = resolved->first;
+    } else {
+      DCHECK_F(property.type == data::schema::ValueType::kLodPolicy);
+      record.value.as_record_index = data::pak::world::OverrideRecordIndex {
+        static_cast<uint32_t>(build.override_lod_policies.size()),
+      };
+      build.override_lod_policies.push_back(
+        std::get<data::pak::geometry::LodPolicyRecord>(source.value));
+    }
+    build.overrides.push_back(record);
+    return true;
+  }
+
   auto LinkSceneDescriptor(SceneDescriptorExecutionContext& context,
     internal::SceneSource source, const EnvironmentTextureIndices& textures)
     -> std::optional<LinkedSceneDescriptor>
@@ -554,35 +614,15 @@ namespace {
       if (!resolved_geometry.has_value()) {
         return std::nullopt;
       }
-      if (!source_renderable.materials.empty()) {
-        const auto& geometry
-          = *context.geometries.at(source_renderable.geometry);
-        for (const auto& assignment : source_renderable.materials) {
-          if (geometry.FindSurface(assignment.surface_id) == nullptr) {
-            AddDiagnostic(context.session, context.request,
-              ImportSeverity::kError, "scene.descriptor.surface_invalid",
-              "Material assignment targets a missing surface",
-              object_path + ".material_overrides");
-            return std::nullopt;
-          }
-          const auto material
-            = ResolveAssetReference(context, assignment.material,
-              data::AssetType::kMaterial, object_path + ".material_overrides");
-          if (!material.has_value()) {
-            return std::nullopt;
-          }
-          prepared.build.material_overrides.push_back({
-            .node_index = source_renderable.node_index,
-            .surface_id = assignment.surface_id,
-            .material_key = material->first,
-            .layout_revision = geometry.Surfaces().layout_revision,
-          });
+      for (const auto& source_override : source_renderable.overrides) {
+        if (!LinkOverride(
+              context, source_renderable, source_override, prepared.build)) {
+          return std::nullopt;
         }
       }
       auto renderable = data::pak::world::RenderableRecord {};
       renderable.node_index = source_renderable.node_index;
       renderable.geometry_key = resolved_geometry->first;
-      renderable.visible = source_renderable.visible ? 1U : 0U;
       prepared.build.renderables.push_back(renderable);
       prepared.geometry_keys.push_back(renderable.geometry_key);
     }

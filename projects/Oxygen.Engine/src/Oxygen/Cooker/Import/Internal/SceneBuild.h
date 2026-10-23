@@ -28,7 +28,10 @@ struct SceneBuild final {
   data::DescriptorStringsBuilder strings;
 
   std::vector<data::pak::world::RenderableRecord> renderables;
-  std::vector<data::pak::world::MaterialOverrideRecord> material_overrides;
+  //! The renderables' overrides; a LOD policy value is an index into
+  //! `override_lod_policies`.
+  std::vector<data::pak::world::OverrideRecord> overrides;
+  std::vector<data::pak::geometry::LodPolicyRecord> override_lod_policies;
   std::vector<data::pak::world::LocalFogVolumeRecord> local_fog_volumes;
   std::vector<data::pak::world::PerspectiveCameraRecord> perspective_cameras;
   std::vector<data::pak::world::OrthographicCameraRecord> orthographic_cameras;

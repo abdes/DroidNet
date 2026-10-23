@@ -15,12 +15,14 @@
 
 #include <Oxygen/Base/Compilers.h>
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/NamedType.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Core/Types/CameraAspectMode.h>
 #include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/PakFormat_core.h>
+#include <Oxygen/Data/Schema/Generated.SceneComponents.h>
 #include <Oxygen/Data/SurfaceId.h>
 
 // packed structs intentionally embed unaligned NamedType ResourceIndexT fields
@@ -223,7 +225,8 @@ static_assert(sizeof(NodeRecord) == 72);
   ### Relationships
   - Links to a `NodeRecord` via `node_index`.
   - References a `GeometryAsset` via `geometry_key`.
-  - Material overrides are separate `MaterialOverrideRecord` entries.
+  - The scene's changes of the geometry's asset defaults are `OverrideRecord`
+    entries of the same node.
 
   @note Component tables are typically sorted by `node_index` for efficient
   loading.
@@ -231,10 +234,9 @@ static_assert(sizeof(NodeRecord) == 72);
 struct RenderableRecord {
   SceneNodeIndexT node_index = 0; // Index of the owner node
   AssetKey geometry_key; // Geometry asset to render
-  uint32_t visible = 1; // Visibility flag (boolean)
 };
 #pragma pack(pop)
-static_assert(sizeof(RenderableRecord) == 24);
+static_assert(sizeof(RenderableRecord) == 20);
 
 #pragma pack(push, 1)
 //! A model scene instanced under an authored node
@@ -260,16 +262,58 @@ struct StartingInputContextRecord {
 #pragma pack(pop)
 static_assert(sizeof(StartingInputContextRecord) == 20);
 
+//! Index of an entry of an override value record table, such as
+//! `ComponentType::kOverrideLodPolicy`.
+using OverrideRecordIndex = NamedType<uint32_t, struct OverrideRecordIndexTag,
+  Comparable, Hashable, Printable, DefaultInitialized>;
+static_assert(sizeof(OverrideRecordIndex) == sizeof(uint32_t));
+
 #pragma pack(push, 1)
-//! One instance assignment. Absence restores the geometry's binding defaults.
-struct MaterialOverrideRecord {
-  SceneNodeIndexT node_index = 0;
-  SurfaceId surface_id;
-  AssetKey material_key;
-  base::Sha256Digest layout_revision {};
+//! The value of one override; the property its `override_id` names decides
+//! which member holds it (the scene schema's `kOverrideProperties`).
+/*!
+ - `as_bool`: 0 or 1.
+ - `as_int32`: an int, or the wire value of an enum member.
+ - `as_asset`: the key of an asset of the property's asset type.
+ - `as_string_offset`: an offset into the descriptor string table.
+ - `as_record_index`: the index of an entry of the record table of the value
+   type, such as `ComponentType::kOverrideLodPolicy` for a LOD policy. An index
+   survives relocating the descriptor's tables.
+
+ Bytes the member does not use are zero.
+*/
+union OverrideValue {
+  uint8_t as_bool;
+  int32_t as_int32;
+  float as_float;
+  float as_vec3[3];
+  AssetKey as_asset {}; // Initializes every byte to zero.
+  core::StringTableOffsetT as_string_offset;
+  OverrideRecordIndex as_record_index;
 };
 #pragma pack(pop)
-static_assert(sizeof(MaterialOverrideRecord) == 68);
+static_assert(sizeof(OverrideValue) == 16);
+
+#pragma pack(push, 1)
+//! A scene's change of one asset-supplied property of a renderable node
+//! (`ComponentType::kOverride`); absence keeps the asset's value.
+/*!
+ `override_id` names the property. A part property names its part in
+ `part_id` (a surface's SurfaceId; surfaces are the only part kind) and carries
+ the geometry layout revision the override was resolved against; a property of
+ the component itself has a nil `part_id` and a zero `layout_revision`. A node
+ holds at most one override per property and part. The table is sorted by node,
+ override id and part.
+*/
+struct OverrideRecord {
+  SceneNodeIndexT node_index = 0;
+  schema::OverrideId override_id = schema::OverrideId::kInvalid;
+  SurfaceId part_id;
+  base::Sha256Digest layout_revision {};
+  OverrideValue value {};
+};
+#pragma pack(pop)
+static_assert(sizeof(OverrideRecord) == 70);
 
 #pragma pack(push, 1)
 

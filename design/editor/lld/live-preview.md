@@ -391,7 +391,7 @@ public interface IRuntimeProblemSource
 ### 5.8 Wire vocabulary
 
 The component and field ids of the property wire are declared once, in the
-engine's scene components schema (`Oxygen/Scene/Schema/SceneComponents.yaml`).
+engine's scene components schema (`Oxygen/Data/Schema/SceneComponents.yaml`).
 Each side generates its own code from it: the engine build generates
 `Generated.SceneComponents.h` (`ComponentId` and one field enum per field set),
 which Interop's property appliers include natively, and the editor's
@@ -410,8 +410,25 @@ LivePreview's internal `SceneWire` maps each `PropertyId` to a
 radians); the table is generated from the same schema, so it names only real
 properties and real fields. It drives component-existence checks, detach
 superseding and operation-kind mapping across all eight component ids. Geometry
-and the scene environment have no entry: the engine takes a geometry asset with
-its component and the environment as a whole.
+and the scene environment have no field entry: the engine takes a geometry asset
+with its component and the environment as a whole.
+
+A property a source supplies goes to the engine as an override. `SceneWire` maps
+each such `PropertyId` to its generated `RuntimeOverrideId`. LivePreview sends a
+geometry's overrides one part at a time with `RuntimeSetOverrides(NodeId,
+GeometryPath, Part, Overrides, Intent)`: the part is a surface
+(`RuntimeOverridePart`: SurfaceId and the layout revision it was resolved
+against) or, with no part, the geometry component itself, and `Overrides` is
+the part's whole state, one `RuntimeOverride(Id, Value)` per property. A
+property of the part with no entry takes the geometry's asset value, so a part
+whose overrides all went away is sent empty. Each value is encoded once per
+value type (`RuntimeOverrideValue.Asset`, `Flag`, `LodPolicyValue`). Interop's
+`SetOverridesCommand` validates each entry against the schema's override
+property table and the part kind, holds the part's state across geometry
+replacement and content refresh, loads a material entry before the part
+applies, and reports the part's failure or success once per command
+generation. A surface's overrides need repair when the geometry no longer has
+the surface; the component's own overrides survive any replacement.
 
 ## 6. Ownership
 

@@ -247,17 +247,21 @@ the same rules as surface IDs ([content-pipeline.md](content-pipeline.md)).
 One engine-owned schema declares every authored scene component once, with
 its cardinality (`required` or `optional`), its part kinds, and each property:
 name, key, value type, creation default, valid range, unit, the sources that
-may supply it, its wire fields and, for a sourced property, its override ID. It is
-a YAML file of the Scene module, `Oxygen/Scene/Schema/SceneComponents.yaml`,
-validated by its JSON Schema (`SceneComponents.schema.json`). Each platform
+may supply it, its wire fields, for a sourced property its override ID and, for
+an asset property, the `asset_type` it references. It is a YAML file of the Data
+module, `Oxygen/Data/Schema/SceneComponents.yaml`, since it defines the cooked
+scene format Data reads, validated by its JSON Schema
+(`SceneComponents.schema.json`). Each platform
 generates its own code from it, with its own tools, and none knows the others:
 
 - the engine build runs `SceneSchemaCodeGen` (Python, in the uv workspace)
-  before compiling Scene; it validates the file and generates
+  before compiling Data; it validates the file and generates
   `Generated.SceneComponents.h`: the component and field enums, the override
-  IDs and the override property table (ID, component, part kind, key, value
-  type), and each property's default and range in field units. Interop's
-  appliers, the cooker and `SceneInstantiation` include it. It validates the
+  IDs, the override property table (ID, component, part kind, key, value
+  type, asset type) with its lookups by ID and by address, and each
+  property's default and range in field units. Data's scene validation, the
+  content loader, Interop's appliers, the cooker and `SceneInstantiation`
+  include it. It validates the
   units and emits none, since no engine UI reads them;
 - the editor's Roslyn generator `SceneComponentsGenerator`
   (`Oxygen.Editor.Schemas/Generators`) reads the same file and generates

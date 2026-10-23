@@ -10,7 +10,7 @@
 #include <optional>
 #include <type_traits>
 
-namespace oxygen::scene::schema {
+namespace oxygen::data::schema {
 
 //! The valid values of a numeric scene property, as the scene property schema
 //! declares them.
@@ -49,4 +49,4 @@ struct PropertyRange {
   }
 };
 
-} // namespace oxygen::scene::schema
+} // namespace oxygen::data::schema

@@ -134,7 +134,7 @@ requires-dist = [
     { name = "droidnet-tooling-scripts", editable = "tooling/scripts" },
     { name = "oxygen-engine-tools", virtual = "projects/Oxygen.Engine" },
     { name = "oxygen-tools", extras = ["codemod"], editable = "projects/Oxygen.Engine/tools/oxytools" },
-    { name = "scene-schema-codegen", editable = "projects/Oxygen.Engine/src/Oxygen/Scene/Tools/SceneSchemaCodeGen" },
+    { name = "scene-schema-codegen", editable = "projects/Oxygen.Engine/src/Oxygen/Data/Tools/SceneSchemaCodeGen" },
     { name = "unicode-codegen", editable = "projects/Oxygen.Engine/src/Oxygen/Content/Tools/UnicodeCodeGen" },
 ]
 
@@ -148,7 +148,7 @@ dev = [
     { name = "pre-commit", specifier = ">=4.5,<5" },
     { name = "pyright", extras = ["nodejs"], specifier = ">=1.1.400,<2" },
     { name = "ruff", specifier = ">=0.15,<0.16" },
-    { name = "scene-schema-codegen", extras = ["test"], editable = "projects/Oxygen.Engine/src/Oxygen/Scene/Tools/SceneSchemaCodeGen" },
+    { name = "scene-schema-codegen", extras = ["test"], editable = "projects/Oxygen.Engine/src/Oxygen/Data/Tools/SceneSchemaCodeGen" },
     { name = "unicode-codegen", extras = ["test"], editable = "projects/Oxygen.Engine/src/Oxygen/Content/Tools/UnicodeCodeGen" },
 ]
 graphics = [
@@ -1045,7 +1045,7 @@ wheels = [
 [[package]]
 name = "scene-schema-codegen"
 version = "0.1.0"
-source = { editable = "projects/Oxygen.Engine/src/Oxygen/Scene/Tools/SceneSchemaCodeGen" }
+source = { editable = "projects/Oxygen.Engine/src/Oxygen/Data/Tools/SceneSchemaCodeGen" }
 dependencies = [
     { name = "jsonschema" },
     { name = "pyyaml" },

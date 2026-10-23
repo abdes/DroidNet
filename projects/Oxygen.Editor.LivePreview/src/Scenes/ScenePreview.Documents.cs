@@ -102,7 +102,7 @@ internal sealed partial class ScenePreview
             if (lifetime.Authoring is null)
             {
                 lifetime.Authoring = authoring;
-                RecordMaterialOverrides(lifetime, authoring.Scene.AllNodes);
+                RecordOverrideParts(lifetime, authoring.Scene.AllNodes);
                 lifetime.OnChanged = (_, args) => this.Project(lifetime, args.Changes);
                 authoring.Changed += lifetime.OnChanged;
             }
@@ -492,8 +492,8 @@ internal sealed partial class ScenePreview
 
         public bool EnvironmentAwaitsMount { get; set; }
 
-        // The surface material overrides each node had when the projector last saw it; an override that goes away is cleared.
-        public Dictionary<NodeId, SourceOverride[]> MaterialOverrides { get; } = [];
+        // The override parts each node had when the projector last saw it; a part that goes away is cleared.
+        public Dictionary<NodeId, OverridePart[]> OverrideParts { get; } = [];
     }
 
     private sealed record SceneProjection(DocumentLifetime Lifetime, Scene Snapshot, SceneSyncRevision Boundary)

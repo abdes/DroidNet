@@ -13,6 +13,23 @@ namespace Oxygen.Editor.Runtime.Engine;
 /// <summary>Pure conversions at the mixed-mode transport boundary.</summary>
 internal static class RuntimeTransportConversion
 {
+    // The native LodPolicyType values.
+    private const byte FixedLodPolicy = 0;
+    private const byte DistanceLodPolicy = 1;
+    private const byte ScreenSpaceErrorLodPolicy = 2;
+
+    /// <summary>Converts overrides to the native entries; each value fills the member of its kind.</summary>
+    /// <param name="overrides">The overrides.</param>
+    /// <returns>The native entries.</returns>
+    public static OverrideEntryManaged[] ToNative(ImmutableArray<RuntimeOverride> overrides)
+        => [.. overrides.Select(static entry => entry.Value switch
+        {
+            RuntimeOverrideValue.Flag flag => new OverrideEntryManaged { OverrideId = (ushort)entry.Id, Flag = flag.Value },
+            RuntimeOverrideValue.Asset asset => new OverrideEntryManaged { OverrideId = (ushort)entry.Id, AssetPath = asset.Path },
+            RuntimeOverrideValue.LodPolicyValue policy => new OverrideEntryManaged { OverrideId = (ushort)entry.Id, LodPolicy = ToNative(policy.Policy) },
+            _ => throw new ArgumentOutOfRangeException(nameof(overrides), entry.Value, "Unknown override value kind."),
+        })];
+
     /// <summary>Converts authored fog without changing its units.</summary>
     /// <param name="value">The authored fog.</param>
     /// <returns>The native transport value.</returns>
@@ -237,4 +254,27 @@ internal static class RuntimeTransportConversion
         RuntimeMouseButton.ExtButton2 => PlatformMouseButton.ExtButton2,
         _ => throw new ArgumentOutOfRangeException(nameof(value)),
     };
+
+    private static LodPolicyManaged ToNative(LodPolicy policy)
+        => policy switch
+        {
+            LodPolicy.Fixed fixedPolicy => new LodPolicyManaged
+            {
+                Type = FixedLodPolicy,
+                LodIndex = checked((byte)fixedPolicy.LodIndex),
+            },
+            LodPolicy.Distance distance => new LodPolicyManaged
+            {
+                Type = DistanceLodPolicy,
+                Thresholds = [.. distance.Thresholds],
+                HysteresisRatio = distance.HysteresisRatio,
+            },
+            LodPolicy.ScreenSpaceError error => new LodPolicyManaged
+            {
+                Type = ScreenSpaceErrorLodPolicy,
+                EnterFinerSse = [.. error.EnterFinerSse],
+                ExitCoarserSse = [.. error.ExitCoarserSse],
+            },
+            _ => throw new ArgumentOutOfRangeException(nameof(policy), policy, "Unknown LOD policy."),
+        };
 }

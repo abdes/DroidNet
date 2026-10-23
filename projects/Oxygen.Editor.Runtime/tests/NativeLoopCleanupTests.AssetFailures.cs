@@ -110,13 +110,7 @@ public sealed partial class NativeLoopCleanupTests
         var material = new RuntimeWorldRequest(
             Guid.NewGuid(),
             target,
-            new RuntimeSetMaterialOverride(
-                nodeId,
-                inventory.GeometryUri.VirtualPath,
-                surface.SurfaceId,
-                inventory.LayoutRevision,
-                EngineAssets.DefaultMaterial.VirtualPath,
-                SurfaceMaterialAssignmentIntent.ObservedEdit));
+            new RuntimeSetOverrides(nodeId, inventory.GeometryUri.VirtualPath, new RuntimeOverridePart(surface.SurfaceId, inventory.LayoutRevision), [new RuntimeOverride(RuntimeOverrideId.GeometrySurfaceMaterial, new RuntimeOverrideValue.Asset(EngineAssets.DefaultMaterial.VirtualPath))], OverrideIntent.ObservedEdit));
         _ = commands.Execute(material, this.TestContext.CancellationToken).Status.Should().Be(RuntimeCommandStatus.Accepted);
         await this.WaitForAppliedAssetAsync(commands, material).ConfigureAwait(false);
     }

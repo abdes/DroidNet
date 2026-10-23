@@ -30,6 +30,7 @@
 #include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/SceneAsset.h>
+#include <Oxygen/Data/Schema/Generated.SceneComponents.h>
 #include <Oxygen/Data/ScriptAsset.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
@@ -444,7 +445,9 @@ inline auto LoadSceneAsset(const LoaderContext& context)
   // Validate known component tables and (optionally) collect dependencies.
   const uint32_t node_count = desc.nodes.count;
   std::unordered_set<oxygen::data::AssetKey> geometry_deps;
-  std::unordered_set<oxygen::data::AssetKey> material_deps;
+  // Assets the overrides name, by the asset type of their property.
+  std::unordered_map<oxygen::data::AssetKey, oxygen::data::AssetType>
+    override_asset_deps;
   std::unordered_set<oxygen::data::AssetKey> script_deps;
   std::unordered_map<oxygen::data::AssetKey, oxygen::data::AssetType>
     param_asset_deps;
@@ -483,17 +486,25 @@ inline auto LoadSceneAsset(const LoaderContext& context)
           "scene renderable record");
         geometry_deps.insert(record.geometry_key);
       }
-    } else if (type == oxygen::data::ComponentType::kMaterialOverride) {
-      using Record = oxygen::data::pak::world::MaterialOverrideRecord;
+    } else if (type == oxygen::data::ComponentType::kOverride) {
+      using Record = oxygen::data::pak::world::OverrideRecord;
       detail::ValidateComponentTable<Record>(
         table_bytes, entry.table, node_count);
       for (uint32_t i = 0; i < entry.table.count; ++i) {
         const auto record = detail::ReadPackedRecord<Record>(
           table_bytes.subspan(
             static_cast<size_t>(i) * sizeof(Record), sizeof(Record)),
-          "scene material override");
-        if (record.material_key != oxygen::data::AssetKey {}) {
-          material_deps.insert(record.material_key);
+          "scene override");
+        const auto* property
+          = data::schema::FindOverrideProperty(record.override_id);
+        if (property == nullptr) {
+          throw std::runtime_error("scene override names an unknown property");
+        }
+        if (property->type == data::schema::ValueType::kAsset
+          && !record.value.as_asset.IsNil()) {
+          DCHECK_F(property->asset_type != data::AssetType::kUnknown);
+          override_asset_deps.insert_or_assign(
+            record.value.as_asset, property->asset_type);
         }
       }
     } else if (type == oxygen::data::ComponentType::kPerspectiveCamera) {
@@ -593,7 +604,7 @@ inline auto LoadSceneAsset(const LoaderContext& context)
     for (const auto& dep : geometry_deps) {
       context.dependency_collector->AddAssetDependency(dep);
     }
-    for (const auto& dep : material_deps) {
+    for (const auto& dep : override_asset_deps | std::views::keys) {
       context.dependency_collector->AddAssetDependency(dep);
     }
     if (has_scripting_table) {
@@ -625,8 +636,8 @@ inline auto LoadSceneAsset(const LoaderContext& context)
     for (const auto& key : geometry_deps) {
       add_asset(key, data::AssetType::kGeometry);
     }
-    for (const auto& key : material_deps) {
-      add_asset(key, data::AssetType::kMaterial);
+    for (const auto& [key, type] : override_asset_deps) {
+      add_asset(key, type);
     }
     for (const auto& key : script_deps) {
       add_asset(key, data::AssetType::kScript);

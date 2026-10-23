@@ -199,7 +199,10 @@ internal static partial class SceneComponentsEmitter
     {
         var source = Header("Oxygen.Editor.LivePreview.Scenes")
             .AppendLine()
-            .AppendLine("/// <content>The engine component, fields and encoding of each property the engine takes field by field.</content>")
+            .AppendLine("/// <content>")
+            .AppendLine("/// The engine component, fields and encoding of each property the engine takes field by field, and the override id of")
+            .AppendLine("/// each property the engine takes as an override.")
+            .AppendLine("/// </content>")
             .AppendLine("internal static partial class SceneWire")
             .AppendLine("{")
             .AppendLine("    private static void AddSchemaMappings(global::System.Collections.Generic.Dictionary<global::Oxygen.Managed.Core.PropertyId, Mapping> map)")
@@ -218,6 +221,17 @@ internal static partial class SceneComponentsEmitter
                     ? source.AppendLine(");")
                     : source.Append(" { Encode = ").Append(SceneComponentsTypes.EncodingMethod(property.Encoding)).AppendLine(" });");
             }
+        }
+
+        _ = source.AppendLine("    }")
+            .AppendLine()
+            .AppendLine("    private static void AddSchemaOverrideIds(global::System.Collections.Generic.Dictionary<global::Oxygen.Managed.Core.PropertyId, global::Oxygen.Editor.Runtime.Engine.RuntimeOverrideId> map)")
+            .AppendLine("    {");
+        foreach (var (path, property) in Overridable(schema).OrderBy(static entry => entry.Property.Values.OverrideId))
+        {
+            _ = source
+                .Append("        map.Add(global::Oxygen.Editor.World.SceneSchema.").Append(path)
+                .Append(".Id, global::Oxygen.Editor.Runtime.Engine.RuntimeOverrideId.").Append(path.Replace(".", string.Empty)).AppendLine(");");
         }
 
         return source.AppendLine("    }").AppendLine("}").ToString();

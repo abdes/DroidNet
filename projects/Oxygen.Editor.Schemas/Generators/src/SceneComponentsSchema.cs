@@ -7,7 +7,7 @@ using Microsoft.CodeAnalysis;
 namespace Oxygen.Editor.Schemas.Generators;
 
 /// <summary>
-/// The engine's scene components schema (<c>Oxygen/Scene/Schema/SceneComponents.yaml</c>), as the generator reads it.
+/// The engine's scene components schema (<c>Oxygen/Data/Schema/SceneComponents.yaml</c>), as the generator reads it.
 /// </summary>
 /// <remarks>
 /// Every entry keeps the location of its node in the schema file, so a diagnostic points at the entry it is about.
@@ -186,13 +186,14 @@ internal sealed class SceneComponentsSchema(
     /// <param name="name">The property name.</param>
     /// <param name="key">The property key, a JSON pointer.</param>
     /// <param name="type">The value type.</param>
+    /// <param name="assetType">The type of the asset an asset value references, or <see langword="null"/>.</param>
     /// <param name="enumeration">The enumeration of an enum value, or <see langword="null"/>.</param>
     /// <param name="fields">The fields that receive the value, in order.</param>
     /// <param name="encoding">The encoding applied before the value goes to its fields, or <see langword="null"/>.</param>
     /// <param name="sources">What may supply the value; a scene then stores only its overrides of it.</param>
     /// <param name="values">The property's override id, default, range and units.</param>
     /// <param name="locations">The entry's locations in the schema file.</param>
-    internal sealed class PropertyEntry(string name, string key, string type, string? enumeration, IReadOnlyList<string> fields, string? encoding, IReadOnlyList<string> sources, ValuesEntry values, SceneComponentsSchema.Locations locations)
+    internal sealed class PropertyEntry(string name, string key, string type, string? assetType, string? enumeration, IReadOnlyList<string> fields, string? encoding, IReadOnlyList<string> sources, ValuesEntry values, SceneComponentsSchema.Locations locations)
     {
         /// <summary>Gets the property name.</summary>
         public string Name { get; } = name;
@@ -202,6 +203,9 @@ internal sealed class SceneComponentsSchema(
 
         /// <summary>Gets the value type.</summary>
         public string Type { get; } = type;
+
+        /// <summary>Gets the type of the asset an asset value references, or <see langword="null"/>.</summary>
+        public string? AssetType { get; } = assetType;
 
         /// <summary>Gets the enumeration of an enum value, or <see langword="null"/>.</summary>
         public string? Enum { get; } = enumeration;

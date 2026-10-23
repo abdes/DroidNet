@@ -115,7 +115,7 @@
     <ClCompile Include="Commands\SetEnvironmentCommand.cpp">
       <Filter>Commands</Filter>
     </ClCompile>
-    <ClCompile Include="Commands\SetMaterialOverrideCommand.cpp">
+    <ClCompile Include="Commands\SetOverridesCommand.cpp">
       <Filter>Commands</Filter>
     </ClCompile>
   </ItemGroup>
@@ -368,7 +368,7 @@
     <ClInclude Include="World\EnvironmentStateManaged.h">
       <Filter>World</Filter>
     </ClInclude>
-    <ClInclude Include="Commands\SetMaterialOverrideCommand.h">
+    <ClInclude Include="Commands\SetOverridesCommand.h">
       <Filter>Commands</Filter>
     </ClInclude>
     <ClInclude Include="Commands\AttachCameraCommand.h">

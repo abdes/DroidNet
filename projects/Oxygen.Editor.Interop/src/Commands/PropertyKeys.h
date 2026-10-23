@@ -9,13 +9,13 @@
 
 #include <cstdint>
 
-#include <Oxygen/Scene/Schema/Generated.SceneComponents.h>
+#include <Oxygen/Data/Schema/Generated.SceneComponents.h>
 
 namespace oxygen::interop::module {
 
   //! Component and field ids of the engine's scene components schema.
   /*!
-   The ids are generated from `Oxygen/Scene/Schema/SceneComponents.yaml`; a
+   The ids are generated from `Oxygen/Data/Schema/SceneComponents.yaml`; a
    new component or field is a schema entry, never an edit here. `ComponentId`
    is the coarse dimension of the property-pipeline wire vocabulary; each
    `IComponentPropertyApplier` dispatches on its component's field enum.
@@ -26,14 +26,14 @@ namespace oxygen::interop::module {
                           └─► PropertyApplierRegistry.Find(component)
                               └─► applier.Apply(node, entries…)
   */
-  using scene::schema::ComponentId;
-  using scene::schema::DirectionalLightField;
-  using scene::schema::LocalFogVolumeField;
-  using scene::schema::LocalLightField;
-  using scene::schema::NodeField;
-  using scene::schema::OrthographicCameraField;
-  using scene::schema::PerspectiveCameraField;
-  using scene::schema::TransformField;
+  using data::schema::ComponentId;
+  using data::schema::DirectionalLightField;
+  using data::schema::LocalFogVolumeField;
+  using data::schema::LocalLightField;
+  using data::schema::NodeField;
+  using data::schema::OrthographicCameraField;
+  using data::schema::PerspectiveCameraField;
+  using data::schema::TransformField;
 
   //! One scalar entry on the property-pipeline wire.
   /*!
