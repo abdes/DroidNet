@@ -1,8 +1,8 @@
-"""Blender script: writes SurfaceCar_LODs.blend and SurfaceCar_LODs.fbx.
+"""Blender script: writes Vehicle.blend and Vehicle.fbx.
 
 A toy car with three LODs in an FBX LOD group. Run it from this directory:
 
-    blender --background --factory-startup --python SurfaceCar_LODs.py -- .
+    blender --background --factory-startup --python Vehicle.py -- .
 
 The car uses five materials (Paint, Glass, Interior, Rubber, Chrome) in every LOD,
 so each surface binds a submesh in each LOD. The LODs differ visibly:
@@ -12,7 +12,7 @@ so each surface binds a submesh in each LOD. The LODs differ visibly:
 - LOD2: sharp boxes, hexagonal wheels and one seat block.
 
 The root is an Empty whose 'fbx_type' custom property makes Blender's exporter write
-it as an FBX LodGroup. Its children are named SurfaceCar_LOD0..2, so the name
+it as an FBX LodGroup. Its children are named Vehicle_LOD0..2, so the name
 convention also holds. Blender is Z up with X forward here; the exporter converts to
 FBX's Y up.
 """
@@ -193,12 +193,12 @@ def build_lod(lod, materials, parent):
     bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
     uv_project(bm)
 
-    mesh = bpy.data.meshes.new(f"SurfaceCar_LOD{lod}")
+    mesh = bpy.data.meshes.new(f"Vehicle_LOD{lod}")
     bm.to_mesh(mesh)
     bm.free()
     for material in materials:
         mesh.materials.append(material)
-    obj = bpy.data.objects.new(f"SurfaceCar_LOD{lod}", mesh)
+    obj = bpy.data.objects.new(f"Vehicle_LOD{lod}", mesh)
     bpy.context.scene.collection.objects.link(obj)
     obj.parent = parent
     return obj, len(mesh.polygons)
@@ -208,7 +208,7 @@ def main(directory):
     bpy.ops.wm.read_factory_settings(use_empty=True)
     materials = [make_material(name, *values) for name, values in MATERIALS.items()]
 
-    group = bpy.data.objects.new("SurfaceCar", None)
+    group = bpy.data.objects.new("Vehicle", None)
     group["fbx_type"] = "LodGroup"
     bpy.context.scene.collection.objects.link(group)
 
@@ -219,15 +219,18 @@ def main(directory):
     folder = Path(directory).resolve()
     # Overwrite the .blend without leaving a .blend1 backup beside it.
     bpy.context.preferences.filepaths.save_version = 0
-    bpy.ops.wm.save_as_mainfile(
-        filepath=str(folder / "SurfaceCar_LODs.blend"), compress=True
-    )
-    output = str(folder / "SurfaceCar_LODs.fbx")
+    bpy.ops.wm.save_as_mainfile(filepath=str(folder / "Vehicle.blend"), compress=True)
+    output = str(folder / "Vehicle.fbx")
     bpy.ops.export_scene.fbx(
         filepath=output,
         use_selection=False,
         object_types={"EMPTY", "MESH"},
         mesh_smooth_type="FACE",
+        # Metres in the file's units and the axis change in the geometry, so
+        # the nodes carry no 100x scale or -90 degree turn: the geometry alone
+        # is the car at its size, as when a scene places it without its model.
+        apply_scale_options="FBX_SCALE_UNITS",
+        bake_space_transform=True,
         add_leaf_bones=False,
         bake_anim=False,
         path_mode="AUTO",
