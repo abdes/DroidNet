@@ -121,10 +121,13 @@ internal sealed class ComponentFeedbackTests : DroidNet.Tests.VisualUserInterfac
         _ = host.ComponentFilters.Single(option => option.ComponentType == typeof(PerspectiveCamera)).HasValidationErrors.Should().BeFalse();
     });
 
-    /// <summary>Old controls cannot edit or finish a new gesture after their section is recreated.</summary>
+    /// <summary>
+    /// Hiding a section cancels its control gesture: the section shows the same controls when it returns, and finishing
+    /// the cancelled drag commits nothing, while a new gesture commits as usual.
+    /// </summary>
     /// <returns>The asynchronous control-lifetime regression.</returns>
     [TestMethod]
-    public Task RemovedSectionControlsCannotChangeReactivatedEditor() => EnqueueAsync(async () =>
+    public Task HiddenSectionCancelsItsGestureAndKeepsItsControls() => EnqueueAsync(async () =>
     {
         using var fixture = new SceneAuthoringFixture();
         using var host = fixture.CreateInspectorHost("Camera", realizeViews: true);
@@ -138,22 +141,28 @@ internal sealed class ComponentFeedbackTests : DroidNet.Tests.VisualUserInterfac
         };
         await LoadTestContentAsync(view).ConfigureAwait(true);
         await WaitForRenderAsync().ConfigureAwait(true);
-        var oldNumber = view.FindDescendant<NumberBox>(control => Equals(control.Tag, "FieldOfView"))!;
+        var before = fixture.Camera.FieldOfView;
+        var number = view.FindDescendant<NumberBox>(control => Equals(control.Tag, "FieldOfView"))!;
+        RaiseNumberEvent(number, "OnEditSessionStarted", NumberBoxEditInteractionKind.PointerDrag);
+        number.NumberValue = 100;
+
         host.SelectComponentFilter(typeof(TransformComponent));
         await WaitForRenderAsync().ConfigureAwait(true);
         host.SelectComponentFilter(typeof(PerspectiveCamera));
         await WaitForRenderAsync().ConfigureAwait(true);
-        var current = view.FindDescendant<NumberBox>(control => Equals(control.Tag, "FieldOfView"))!;
-        _ = current.Should().NotBeSameAs(oldNumber);
-        RaiseNumberEvent(current, "OnEditSessionStarted", NumberBoxEditInteractionKind.PointerDrag);
-        current.NumberValue = 70;
-        oldNumber.NumberValue = 100;
-        RaiseNumberEvent(oldNumber, "OnEditSessionCompleted", NumberBoxEditInteractionKind.PointerDrag, NumberBoxEditCompletionKind.Commit);
+        RaiseNumberEvent(number, "OnEditSessionCompleted", NumberBoxEditInteractionKind.PointerDrag, NumberBoxEditCompletionKind.Commit);
         await camera.PendingEdits.ConfigureAwait(true);
-        _ = fixture.Camera.FieldOfView.Should().Be(70);
+
+        _ = view.FindDescendant<NumberBox>(control => Equals(control.Tag, "FieldOfView")).Should().BeSameAs(number, "a section keeps its view while hidden");
+        _ = fixture.Camera.FieldOfView.Should().Be(before, "hiding the section cancelled the drag");
         _ = fixture.Document.History.UndoStack.Should().BeEmpty();
-        RaiseNumberEvent(current, "OnEditSessionCompleted", NumberBoxEditInteractionKind.PointerDrag, NumberBoxEditCompletionKind.Commit);
+
+        RaiseNumberEvent(number, "OnEditSessionStarted", NumberBoxEditInteractionKind.PointerDrag);
+        number.NumberValue = 70;
+        RaiseNumberEvent(number, "OnEditSessionCompleted", NumberBoxEditInteractionKind.PointerDrag, NumberBoxEditCompletionKind.Commit);
         await camera.PendingEdits.ConfigureAwait(true);
+
+        _ = fixture.Camera.FieldOfView.Should().Be(70);
         _ = fixture.Document.History.UndoStack.Should().ContainSingle();
     });
 
