@@ -7,7 +7,6 @@ using System.Numerics;
 using System.Text;
 using System.Text.Json;
 using AwesomeAssertions;
-using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Core;
 
@@ -50,9 +49,29 @@ public sealed class SceneJsonFormatTests
 
     [TestMethod]
     public void EveryOverridableValueType_HasAJsonContract()
-        => _ = SceneSchema.Overridable.Values.Distinct()
-            .Where(static type => SceneJsonContext.Default.GetTypeInfo(type) is null)
-            .Should().BeEmpty("an override value is read and written as its property's type");
+        => _ = SceneSchema.Overridable.Values
+            .Should().NotContain(static type => SceneJsonContext.Default.GetTypeInfo(type) == null, "an override value is read and written as its property's type");
+
+    [TestMethod]
+    [DataRow("""{"type":"fixed","lod_index":2}""")]
+    [DataRow("""{"type":"distance","thresholds":[10,20],"hysteresis_ratio":0.1}""")]
+    [DataRow("""{"type":"screen_space_error","enter_finer_sse":[4,2],"exit_coarser_sse":[3,1]}""")]
+    public void LodPolicy_RoundTripsItsSchemaJson(string json)
+    {
+        var policy = JsonSerializer.Deserialize(json, SceneJsonContext.Default.LodPolicy);
+
+        var written = JsonSerializer.Serialize(policy, SceneJsonContext.Default.LodPolicy);
+
+        using var source = JsonDocument.Parse(json);
+        using var output = JsonDocument.Parse(written);
+        _ = JsonSerializer.Deserialize(written, SceneJsonContext.Default.LodPolicy).Should().Be(policy);
+        _ = output.RootElement.GetProperty("type").GetString().Should().Be(source.RootElement.GetProperty("type").GetString());
+    }
+
+    [TestMethod]
+    public void LodPolicy_ComparesThresholdsByValue()
+        => _ = new LodPolicy.Distance([10f, 20f], 0.1f).Should().Be(new LodPolicy.Distance([10f, 20f], 0.1f))
+            .And.NotBe(new LodPolicy.Distance([10f, 30f], 0.1f));
 
     [TestMethod]
     public void EveryAssetTypedOverridableProperty_IsAReferenceField()

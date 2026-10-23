@@ -5,3 +5,7 @@
 # ===-----------------------------------------------------------------------===#
 
 """Generates the component and field ids of the scene components schema."""
+
+# pyright: strict
+
+from __future__ import annotations

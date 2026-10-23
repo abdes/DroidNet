@@ -15,15 +15,16 @@
 
     <ItemGroup>
         <EmbeddedResource Include="Import\Schemas\*.schema.json" />
-        <EmbeddedResource Include="$(ProjectsRoot)\Oxygen.Engine\src\Oxygen\Cooker\Tools\Inspector\Schemas\oxygen.cooked-geometries.schema.json"
+        <!-- The cooker's schemas, as the installed engine SDK ships them. -->
+        <EmbeddedResource Include="$(OxygenSdkSchemasDir)\oxygen.cooked-geometries.schema.json"
                           LogicalName="oxygen.cooked-geometries.schema.json" />
-        <EmbeddedResource Include="$(ProjectsRoot)\Oxygen.Engine\src\Oxygen\Cooker\Import\Schemas\oxygen.surface-provenance.schema.json"
+        <EmbeddedResource Include="$(OxygenSdkSchemasDir)\oxygen.surface-provenance.schema.json"
                           LogicalName="oxygen.surface-provenance.schema.json" />
-        <EmbeddedResource Include="$(ProjectsRoot)\Oxygen.Engine\src\Oxygen\Cooker\Tools\Inspector\Schemas\oxygen.cooked-scripts.schema.json"
+        <EmbeddedResource Include="$(OxygenSdkSchemasDir)\oxygen.cooked-scripts.schema.json"
                           LogicalName="oxygen.cooked-scripts.schema.json" />
-        <EmbeddedResource Include="$(ProjectsRoot)\Oxygen.Engine\src\Oxygen\Cooker\Tools\Inspector\Schemas\oxygen.cooked-inventory.schema.json"
+        <EmbeddedResource Include="$(OxygenSdkSchemasDir)\oxygen.cooked-inventory.schema.json"
                           LogicalName="oxygen.cooked-inventory.schema.json" />
-        <EmbeddedResource Include="$(ProjectsRoot)\Oxygen.Engine\src\Oxygen\Cooker\Import\Schemas\oxygen.cooked-dependencies.schema.json"
+        <EmbeddedResource Include="$(OxygenSdkSchemasDir)\oxygen.cooked-dependencies.schema.json"
                           LogicalName="oxygen.cooked-dependencies.schema.json" />
         <PackageReference Include="DryIoc.dll" />
         <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />

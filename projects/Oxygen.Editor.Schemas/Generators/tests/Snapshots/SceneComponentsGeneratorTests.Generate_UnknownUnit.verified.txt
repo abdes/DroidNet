@@ -1,0 +1,17 @@
+﻿{
+  Diagnostics: [
+    {
+      Location: Schema\SceneComponents.yaml: (38,14)-(38,18),
+      Message: Lamp.Range: unit 'foot' is not declared,
+      Severity: Error,
+      Descriptor: {
+        Id: OXGNSC009,
+        Title: Invalid property value declaration,
+        MessageFormat: {0}: {1},
+        Category: Oxygen.Editor.Schemas.Generator,
+        DefaultSeverity: Error,
+        IsEnabledByDefault: true
+      }
+    }
+  ]
+}

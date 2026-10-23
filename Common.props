@@ -101,6 +101,13 @@
     <PropertyGroup>
         <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
 
+        <!--
+            The installed engine SDK of the configuration: the editor builds on it and reads every engine file from it,
+            never from the engine source tree.
+        -->
+        <OxygenSdkDir>$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)</OxygenSdkDir>
+        <OxygenSdkSchemasDir>$(OxygenSdkDir)\share\oxygen\schemas</OxygenSdkSchemasDir>
+
         <GenerateDocumentationFile>true</GenerateDocumentationFile>
         <ProduceReferenceAssembly>true</ProduceReferenceAssembly>
 

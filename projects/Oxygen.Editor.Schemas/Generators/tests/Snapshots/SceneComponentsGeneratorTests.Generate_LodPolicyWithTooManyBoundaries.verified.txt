@@ -1,0 +1,17 @@
+﻿{
+  Diagnostics: [
+    {
+      Location: Schema\SceneComponents.yaml: (66,17)-(66,94),
+      Message: Geometry.LodPolicy: a LOD policy addresses at most 8 LODs,
+      Severity: Error,
+      Descriptor: {
+        Id: OXGNSC009,
+        Title: Invalid property value declaration,
+        MessageFormat: {0}: {1},
+        Category: Oxygen.Editor.Schemas.Generator,
+        DefaultSeverity: Error,
+        IsEnabledByDefault: true
+      }
+    }
+  ]
+}

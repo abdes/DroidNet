@@ -66,6 +66,7 @@ set(
   "ExposureSettings.h"
   "Scripting/ScriptingComponent.h"
   "Schema/Generated.SceneComponents.h"
+  "Schema/PropertyRange.h"
   "SceneQuery.h"
   "SceneTraversal.h"
   "SceneTraversalAsync.h"
@@ -278,6 +279,19 @@ endif()
 # ==============================================================================
 # Deployment instructions
 # ==============================================================================
+
+if(OXYGEN_INSTALL)
+  # install-sdk: static
+  # The scene property schema ships with the SDK: consumers built on the
+  # installed SDK, such as the editor, generate their own code from it.
+  install(
+    FILES
+      "${_scene_schema_dir}/SceneComponents.yaml"
+      "${_scene_schema_dir}/SceneComponents.schema.json"
+    DESTINATION "${OXYGEN_INSTALL_SCHEMAS}"
+    COMPONENT Oxygen_data
+  )
+endif()
 
 oxygen_module_install(
   EXPORT ${META_MODULE_NAMESPACE}

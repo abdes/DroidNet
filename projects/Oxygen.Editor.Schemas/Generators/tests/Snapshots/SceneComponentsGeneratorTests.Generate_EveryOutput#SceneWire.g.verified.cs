@@ -15,5 +15,6 @@ internal static partial class SceneWire
         map.Add(global::Oxygen.Editor.World.SceneSchema.Lamp.Color.Id, new Mapping(global::Oxygen.Editor.Runtime.Engine.RuntimeComponentId.Lamp, [(ushort)global::Oxygen.Editor.Runtime.Engine.LampField.ColorR, (ushort)global::Oxygen.Editor.Runtime.Engine.LampField.ColorG, (ushort)global::Oxygen.Editor.Runtime.Engine.LampField.ColorB]));
         map.Add(global::Oxygen.Editor.World.SceneSchema.Lamp.Range.Id, new Mapping(global::Oxygen.Editor.Runtime.Engine.RuntimeComponentId.Lamp, [(ushort)global::Oxygen.Editor.Runtime.Engine.LampField.Range]));
         map.Add(global::Oxygen.Editor.World.SceneSchema.Lamp.FovDegrees.Id, new Mapping(global::Oxygen.Editor.Runtime.Engine.RuntimeComponentId.Lamp, [(ushort)global::Oxygen.Editor.Runtime.Engine.LampField.FovRadians]) { Encode = DegreesToRadians });
+        map.Add(global::Oxygen.Editor.World.SceneSchema.Lamp.Mode.Id, new Mapping(global::Oxygen.Editor.Runtime.Engine.RuntimeComponentId.Lamp, [(ushort)global::Oxygen.Editor.Runtime.Engine.LampField.Mode]));
     }
 }

@@ -1,0 +1,17 @@
+﻿{
+  Diagnostics: [
+    {
+      Location: Schema\SceneComponents.yaml: (53,17)-(53,24),
+      Message: Lamp.Mode: 'Stretch' is not a member of CameraAspectMode,
+      Severity: Error,
+      Descriptor: {
+        Id: OXGNSC009,
+        Title: Invalid property value declaration,
+        MessageFormat: {0}: {1},
+        Category: Oxygen.Editor.Schemas.Generator,
+        DefaultSeverity: Error,
+        IsEnabledByDefault: true
+      }
+    }
+  ]
+}

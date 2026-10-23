@@ -32,7 +32,21 @@ def _rules() -> object:
 
 def _minimal() -> dict[str, Any]:
     return {
-        "version": 1,
+        "version": 2,
+        "units": [
+            {"id": "metre", "abbreviation": "m", "name": "metres"},
+            {"id": "degree", "abbreviation": "°", "name": "degrees"},
+            {"id": "radian", "abbreviation": "rad", "name": "radians"},
+        ],
+        "enums": [
+            {
+                "name": "Mode",
+                "members": [
+                    {"name": "Auto", "value": 0},
+                    {"name": "Fixed", "value": 1},
+                ],
+            }
+        ],
         "field_sets": [
             {
                 "name": "Light",
@@ -48,6 +62,7 @@ def _minimal() -> dict[str, Any]:
             {
                 "name": "PointLight",
                 "kind": "point-light",
+                "cardinality": "optional",
                 "wire": {"id": 3, "field_set": "Light"},
                 "properties": [
                     {
@@ -55,18 +70,25 @@ def _minimal() -> dict[str, Any]:
                         "key": "/color",
                         "type": "vec3",
                         "fields": ["ColorR", "ColorG", "ColorB"],
+                        "default": [1, 1, 1],
+                        "range": {"min": 0, "max": 1},
+                        "commit": "clamp",
                     },
                     {
                         "name": "Range",
                         "key": "/range",
                         "type": "float",
                         "fields": ["Range"],
+                        "default": 20,
+                        "range": {"min": 0, "min_exclusive": True},
+                        "unit": "metre",
                     },
                 ],
             },
             {
                 "name": "Geometry",
                 "kind": "geometry",
+                "cardinality": "optional",
                 "properties": [
                     {"name": "GeometryUri", "key": "/geometry_uri", "type": "asset"}
                 ],
@@ -124,7 +146,12 @@ def test_render_orders_components_and_fields_by_id() -> None:
 def test_component_without_properties_is_valid_and_not_rendered() -> None:
     document = _minimal()
     document["components"].append(
-        {"name": "Scripting", "kind": "scripting", "properties": []}
+        {
+            "name": "Scripting",
+            "kind": "scripting",
+            "cardinality": "optional",
+            "properties": [],
+        }
     )
     text = cpp.render(model.parse(document, _rules()), "test.yaml")
     assert "Scripting" not in text
@@ -133,12 +160,14 @@ def test_component_without_properties_is_valid_and_not_rendered() -> None:
 def test_json_schema_violation_is_reported_with_its_path() -> None:
     document = _minimal()
     document["components"][0]["properties"][1]["type"] = "double"
-    assert "/components/0/properties/1/type" in _error_of(document)
+    assert "/components/0/properties/1" in _error_of(document)
 
 
 def test_enum_property_requires_its_enumeration() -> None:
     document = _minimal()
-    document["components"][0]["properties"][1]["type"] = "enum"
+    document["components"][0]["properties"][1].update(type="enum", default="Auto")
+    del document["components"][0]["properties"][1]["range"]
+    del document["components"][0]["properties"][1]["unit"]
     assert "/components/0/properties/1" in _error_of(document)
 
 
@@ -177,8 +206,9 @@ def test_field_used_twice_in_a_component_is_refused() -> None:
 
 def test_fields_need_a_wire() -> None:
     document = _minimal()
-    document["components"][1]["properties"][0]["type"] = "float"
-    document["components"][1]["properties"][0]["fields"] = ["Range"]
+    document["components"][1]["properties"][0].update(
+        type="float", fields=["Range"], default=0
+    )
     assert "Geometry.GeometryUri: fields without a wire" in _error_of(document)
 
 
@@ -209,6 +239,7 @@ def _with_surface(document: dict[str, Any]) -> dict[str, Any]:
                     "key": "/material",
                     "type": "asset",
                     "sources": ["asset"],
+                    "override_id": 1,
                 }
             ],
         }
@@ -221,15 +252,29 @@ def test_schema_declares_the_surface_material() -> None:
     geometry = next(entry for entry in schema.components if entry.kind == "geometry")
     surface = geometry.parts[0]
     assert (surface.name, surface.kind) == ("Surface", "surface")
-    assert [(entry.key, entry.type, entry.sources) for entry in surface.properties] == [
-        ("/material", "asset", ("asset",))
+    assert [
+        (entry.key, entry.type, entry.sources, entry.override_id, entry.default)
+        for entry in surface.properties
+    ] == [
+        ("/material", "asset", ("asset",), 1, None),
+        ("/visible", "bool", ("asset",), 2, True),
+        ("/casts_shadows", "bool", ("asset",), 3, True),
     ]
 
 
-def test_parts_are_not_rendered() -> None:
+def test_part_property_is_rendered_as_an_override() -> None:
     text = cpp.render(model.parse(_with_surface(_minimal()), _rules()), "test.yaml")
-    assert "Surface" not in text
-    assert "Material" not in text
+    assert "  kGeometrySurfaceMaterial = 1,\n" in text
+    assert (
+        "  OverrideProperty {\n"
+        "    .id = OverrideId::kGeometrySurfaceMaterial,\n"
+        '    .component_kind = "geometry",\n'
+        "    .part_kind = PartKind::kSurface,\n"
+        '    .key = "/material",\n'
+        "    .type = ValueType::kAsset,\n"
+        "  },\n"
+    ) in text
+    assert "namespace geometry::surface" not in text
 
 
 def test_part_property_needs_a_source() -> None:
@@ -246,7 +291,7 @@ def test_part_property_has_no_fields() -> None:
 
 def test_unknown_source_is_refused() -> None:
     document = _minimal()
-    document["components"][1]["properties"][0]["sources"] = ["prefab"]
+    document["components"][1]["properties"][0].update(sources=["prefab"], override_id=1)
     assert "/components/1/properties/0/sources/0" in _error_of(document)
 
 
@@ -260,6 +305,7 @@ def test_duplicate_part_kind_is_refused() -> None:
     document = _with_surface(_minimal())
     twin = copy.deepcopy(document["components"][1]["parts"][0])
     twin["name"] = "Section"
+    twin["properties"][0]["override_id"] = 2
     document["components"][1]["parts"].append(twin)
     assert "duplicate part kind in Geometry: surface" in _error_of(document)
 
@@ -268,6 +314,7 @@ def test_duplicate_key_in_a_part_is_refused() -> None:
     document = _with_surface(_minimal())
     twin = copy.deepcopy(document["components"][1]["parts"][0]["properties"][0])
     twin["name"] = "Shade"
+    twin["override_id"] = 2
     document["components"][1]["parts"][0]["properties"].append(twin)
     assert "duplicate key in Geometry.Surface: /material" in _error_of(document)
 
@@ -281,8 +328,298 @@ def test_cli_writes_once_and_refuses_an_invalid_schema(tmp_path: Path) -> None:
     assert out.stat().st_mtime_ns == written
 
     invalid = _minimal()
-    invalid["version"] = 2
+    invalid["version"] = 1
     bad = tmp_path / "bad.yaml"
     bad.write_text(yaml.safe_dump(invalid), encoding="utf-8")
     assert cli.main(["--schema", str(bad), *arguments]) == 1
     assert out.stat().st_mtime_ns == written
+
+
+def _text(document: dict[str, Any]) -> str:
+    return cpp.render(model.parse(document, _rules()), "test.yaml")
+
+
+def test_schema_declares_the_override_ids() -> None:
+    schema = model.load(_SCHEMA, _JSON_SCHEMA)
+    assert [
+        (entry.id, entry.component.kind, entry.part and entry.part.kind, entry.prop.key)
+        for entry in schema.overrides()
+    ] == [
+        (1, "geometry", "surface", "/material"),
+        (2, "geometry", "surface", "/visible"),
+        (3, "geometry", "surface", "/casts_shadows"),
+        (4, "geometry", None, "/lod_policy"),
+    ]
+
+
+def test_every_valued_property_declares_a_default() -> None:
+    schema = model.load(_SCHEMA, _JSON_SCHEMA)
+    for component in schema.components:
+        properties = [*component.properties]
+        for part in component.parts:
+            properties.extend(part.properties)
+        for entry in properties:
+            assert (entry.default is None) == (entry.type in ("asset", "string"))
+
+
+def test_required_components_are_the_node_core() -> None:
+    schema = model.load(_SCHEMA, _JSON_SCHEMA)
+    assert [
+        component.name
+        for component in schema.components
+        if component.cardinality == "required"
+    ] == ["Metadata", "Hierarchy", "Transform", "Node"]
+
+
+def test_defaults_and_ranges_are_rendered_per_field() -> None:
+    text = _text(_minimal())
+    assert "namespace point_light {" in text
+    assert "inline constexpr float kColorGDefault = 1.0F;" in text
+    assert (
+        "inline constexpr PropertyRange<float> kColorGRange "
+        "{ .min = 0.0F, .max = 1.0F };"
+    ) in text
+    assert "inline constexpr float kRangeDefault = 20.0F;" in text
+    assert (
+        "inline constexpr PropertyRange<float> kRangeRange "
+        "{ .min = 0.0F, .min_exclusive = true };"
+    ) in text
+
+
+def test_unbounded_numeric_property_renders_an_unlimited_range() -> None:
+    document = _minimal()
+    del document["components"][0]["properties"][1]["range"]
+    assert "inline constexpr PropertyRange<float> kRangeRange {};" in _text(document)
+
+
+def test_encoding_converts_default_and_range_into_field_units() -> None:
+    document = _minimal()
+    document["components"][0]["properties"][1].update(
+        encoding="degrees-to-radians",
+        unit="degree",
+        default=90,
+        range={"min": 0, "max": 180},
+    )
+    text = _text(document)
+    assert "inline constexpr float kRangeDefault = 1.5707964F;" in text
+    assert "{ .min = 0.0F, .max = 3.1415927F }" in text
+
+
+def test_encoding_needs_its_authored_unit() -> None:
+    document = _minimal()
+    document["components"][0]["properties"][1]["encoding"] = "degrees-to-radians"
+    assert "PointLight.Range: degrees-to-radians needs unit degree" in _error_of(
+        document
+    )
+
+
+def _as_int(document: dict[str, Any], **values: Any) -> dict[str, Any]:
+    entry = document["components"][0]["properties"][1]
+    entry.update(type="int", **values)
+    del entry["unit"]
+    return document
+
+
+def test_int_values_render_as_int32() -> None:
+    text = _text(_as_int(_minimal(), default=4, range={"min": 1, "max": 4}))
+    assert "inline constexpr std::int32_t kRangeDefault = 4;" in text
+    assert (
+        "inline constexpr PropertyRange<std::int32_t> kRangeRange "
+        "{ .min = 1, .max = 4 };"
+    ) in text
+
+
+def test_int_range_bounds_are_whole() -> None:
+    document = _as_int(_minimal(), default=1, range={"min": 0.5})
+    assert "PointLight.Range: int range with a fractional bound" in _error_of(document)
+
+
+def test_default_outside_its_range_is_refused() -> None:
+    document = _minimal()
+    document["components"][0]["properties"][1]["default"] = 0
+    assert "PointLight.Range: default 0 is outside its range" in _error_of(document)
+
+
+def test_vector_default_is_checked_per_component() -> None:
+    document = _minimal()
+    document["components"][0]["properties"][0]["default"] = [1, 2, 1]
+    assert "PointLight.Color: default 2 is outside its range" in _error_of(document)
+
+
+def test_empty_range_is_refused() -> None:
+    document = _minimal()
+    document["components"][0]["properties"][1]["range"] = {
+        "min": 1,
+        "max": 1,
+        "max_exclusive": True,
+    }
+    assert "PointLight.Range: empty range" in _error_of(document)
+
+
+def test_missing_default_is_refused() -> None:
+    document = _minimal()
+    del document["components"][0]["properties"][1]["default"]
+    assert "/components/0/properties/1" in _error_of(document)
+
+
+def test_commit_needs_a_range() -> None:
+    document = _minimal()
+    del document["components"][0]["properties"][0]["range"]
+    assert "/components/0/properties/0" in _error_of(document)
+
+
+def test_range_contains_honours_every_bound() -> None:
+    bounds = model.Range(0.0, 1.0, True, False, False)
+    assert not bounds.contains(0.0)
+    assert bounds.contains(1.0)
+    assert not bounds.contains(float("nan"))
+    assert not model.Range(None, None, False, False, True).contains(0.0)
+    assert model.UNLIMITED.contains(-1e30)
+    assert not model.UNLIMITED.contains(float("inf"))
+
+
+def _with_enum(document: dict[str, Any]) -> dict[str, Any]:
+    document["components"][0]["properties"][1] = {
+        "name": "Mode",
+        "key": "/mode",
+        "type": "enum",
+        "enum": "Mode",
+        "fields": ["Range"],
+        "default": "Fixed",
+    }
+    return document
+
+
+def test_enum_default_renders_its_wire_value_and_members() -> None:
+    text = _text(_with_enum(_minimal()))
+    assert "inline constexpr std::array<std::uint8_t, 2> kModeMembers { 0, 1 };" in text
+    assert "inline constexpr std::uint8_t kRangeDefault = 1; // Fixed" in text
+    assert (
+        "inline constexpr std::span<const std::uint8_t> kRangeValues { kModeMembers };"
+    ) in text
+
+
+def test_root_default_is_rendered() -> None:
+    document = _with_enum(_minimal())
+    document["components"][0]["properties"][1]["root_default"] = "Auto"
+    text = _text(document)
+    assert "inline constexpr std::uint8_t kRangeRootDefault = 0; // Auto" in text
+
+
+def test_enum_default_must_be_a_member() -> None:
+    document = _with_enum(_minimal())
+    document["components"][0]["properties"][1]["default"] = "Manual"
+    assert "PointLight.Mode: Manual is not a member of Mode" in _error_of(document)
+
+
+def test_unknown_enumeration_is_refused() -> None:
+    document = _with_enum(_minimal())
+    document["components"][0]["properties"][1]["enum"] = "Style"
+    assert "PointLight.Mode: unknown enumeration Style" in _error_of(document)
+
+
+def test_duplicate_member_value_is_refused() -> None:
+    document = _minimal()
+    document["enums"][0]["members"][1]["value"] = 0
+    assert "duplicate member value in Mode: 0" in _error_of(document)
+
+
+def test_root_default_belongs_to_enum_properties() -> None:
+    document = _minimal()
+    document["components"][0]["properties"][1]["root_default"] = "Auto"
+    assert "/components/0/properties/1" in _error_of(document)
+
+
+def test_unknown_unit_is_refused() -> None:
+    document = _minimal()
+    document["components"][0]["properties"][1]["unit"] = "foot"
+    assert "PointLight.Range: unknown unit foot" in _error_of(document)
+
+
+def test_display_unit_converts_radians_to_degrees_only() -> None:
+    document = _minimal()
+    document["components"][0]["properties"][1]["display_unit"] = "degree"
+    assert "PointLight.Range: metre values cannot be shown in degree" in _error_of(
+        document
+    )
+    document["components"][0]["properties"][1]["unit"] = "radian"
+    model.parse(document, _rules())
+
+
+def test_units_are_not_rendered() -> None:
+    assert "metre" not in _text(_minimal())
+
+
+def test_sourced_property_needs_an_override_id() -> None:
+    document = _with_surface(_minimal())
+    del document["components"][1]["parts"][0]["properties"][0]["override_id"]
+    assert "/components/1/parts/0/properties/0" in _error_of(document)
+
+
+def _with_lod_policy(document: dict[str, Any], **policy: Any) -> dict[str, Any]:
+    document["components"][1]["properties"].append(
+        {
+            "name": "LodPolicy",
+            "key": "/lod_policy",
+            "type": "lod-policy",
+            "sources": ["asset"],
+            "override_id": 4,
+            "default": policy,
+        }
+    )
+    return document
+
+
+def test_duplicate_override_id_is_refused() -> None:
+    document = _with_lod_policy(_with_surface(_minimal()), type="fixed", lod_index=0)
+    document["components"][1]["properties"][1]["override_id"] = 1
+    assert "duplicate override id: 1" in _error_of(document)
+
+
+def test_fixed_lod_policy_default_is_rendered_as_a_record() -> None:
+    text = _text(_with_lod_policy(_minimal(), type="fixed", lod_index=2))
+    assert (
+        "inline constexpr data::pak::geometry::LodPolicyRecord kLodPolicyDefault {\n"
+        "  .type = data::pak::geometry::LodPolicyType::kFixed,\n"
+        "  .lod_index = 2,\n"
+        "};"
+    ) in text
+    assert "  kGeometryLodPolicy = 4,\n" in text
+    assert "    .type = ValueType::kLodPolicy,\n" in text
+
+
+def test_distance_lod_policy_default_renders_its_thresholds() -> None:
+    text = _text(
+        _with_lod_policy(
+            _minimal(), type="distance", thresholds=[10, 20], hysteresis_ratio=0.1
+        )
+    )
+    assert "  .boundary_count = 2,\n" in text
+    assert "  .thresholds = { 10.0F, 20.0F },\n" in text
+    assert "  .hysteresis_ratio = 0.1F,\n" in text
+
+
+def test_lod_policy_with_too_many_thresholds_is_refused() -> None:
+    document = _with_lod_policy(
+        _minimal(), type="distance", thresholds=[1] * 8, hysteresis_ratio=0.1
+    )
+    assert "/thresholds: [1, 1, 1, 1, 1, 1, 1, 1] is too long" in _error_of(document)
+
+
+def test_screen_space_error_arrays_must_match() -> None:
+    document = _with_lod_policy(
+        _minimal(),
+        type="screen_space_error",
+        enter_finer_sse=[1, 2],
+        exit_coarser_sse=[1],
+    )
+    assert (
+        "Geometry.LodPolicy: enter_finer_sse and exit_coarser_sse differ in size"
+        in _error_of(document)
+    )
+
+
+def test_header_is_kept_out_of_clang_format() -> None:
+    text = _text(_minimal())
+    assert text.index("// clang-format off") < text.index("namespace oxygen")
+    assert text.rstrip().endswith("// clang-format on")

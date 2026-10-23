@@ -16,23 +16,32 @@ namespace Oxygen.Editor.Schemas.Generators;
 /// <remarks>
 /// The engine build validates the file against its JSON Schema. The reader checks the shape it reads and what the
 /// generated code relies on: names that are unique, field sets and fields that exist, value types and enumerations with
-/// an editor type, the number of fields of each value, encodings the editor implements, and parts whose properties each
-/// have a source and no fields.
+/// an editor type, the number of fields of each value, encodings the editor implements, parts whose properties each
+/// have a source and no fields, override ids, and defaults, ranges and units that fit their property.
 /// </remarks>
-internal sealed class SceneComponentsReader
+internal sealed partial class SceneComponentsReader
 {
-    private static readonly string[] RootKeys = ["version", "field_sets", "components"];
+    private const int SchemaVersion = 2;
+
+    private static readonly string[] RootKeys = ["version", "units", "enums", "field_sets", "components"];
+    private static readonly string[] UnitKeys = ["id", "abbreviation", "name"];
+    private static readonly string[] EnumKeys = ["name", "members"];
+    private static readonly string[] MemberKeys = ["name", "value"];
     private static readonly string[] FieldSetKeys = ["name", "fields"];
     private static readonly string[] FieldKeys = ["name", "id"];
-    private static readonly string[] ComponentKeys = ["name", "kind", "properties"];
+    private static readonly string[] ComponentKeys = ["name", "kind", "cardinality", "properties"];
     private static readonly string[] ComponentOptionalKeys = ["wire", "parts"];
     private static readonly string[] WireKeys = ["id", "field_set"];
     private static readonly string[] PartKeys = ["name", "kind", "properties"];
     private static readonly string[] PropertyKeys = ["name", "key", "type"];
-    private static readonly string[] PropertyOptionalKeys = ["enum", "fields", "encoding", "sources"];
-    private static readonly string[] PartPropertyKeys = ["name", "key", "type", "sources"];
-    private static readonly string[] PartPropertyOptionalKeys = ["enum"];
+    private static readonly string[] ValueKeys = ["default", "root_default", "range", "commit", "unit", "display_unit"];
+    private static readonly string[] PropertyOptionalKeys = ["enum", "fields", "encoding", "sources", "override_id", .. ValueKeys];
+    private static readonly string[] PartPropertyKeys = ["name", "key", "type", "sources", "override_id"];
+    private static readonly string[] PartPropertyOptionalKeys = ["enum", .. ValueKeys];
+    private static readonly string[] RangeKeys = ["min", "max", "min_exclusive", "max_exclusive", "nonzero"];
     private static readonly string[] Sources = ["asset", "model"];
+    private static readonly string[] Cardinalities = ["required", "optional"];
+    private static readonly string[] Commits = ["clamp", "reject"];
 
     private readonly string path;
     private readonly List<Diagnostic> diagnostics;
@@ -82,6 +91,8 @@ internal sealed class SceneComponentsReader
             _ => node,
         };
 
+    private static bool Has(YamlMappingNode map, string key) => map.Children.ContainsKey(new YamlScalarNode(key));
+
     private SceneComponentsSchema? ReadStream(string text)
     {
         var stream = new YamlStream();
@@ -102,14 +113,56 @@ internal sealed class SceneComponentsReader
         }
 
         this.CheckKeys(root, "The schema", RootKeys, []);
-        if (this.Integer(root, "version", "The schema") is int version && version != 1)
+        if (this.Integer(root, "version", "The schema") is int version && version != SchemaVersion)
         {
-            this.Report(SceneComponentsDiagnostics.InvalidShape, this.At(root.Children[new YamlScalarNode("version")]), $"Schema version {version} is not 1");
+            this.Report(SceneComponentsDiagnostics.InvalidShape, this.At(root.Children[new YamlScalarNode("version")]), $"Schema version {version.ToString(CultureInfo.InvariantCulture)} is not {SchemaVersion.ToString(CultureInfo.InvariantCulture)}");
         }
 
         return new SceneComponentsSchema(
-            this.Items(root, "field_sets", "The schema").Select(this.ReadFieldSet).OfType<SceneComponentsSchema.FieldSetEntry>().ToList(),
-            this.Items(root, "components", "The schema").Select(this.ReadComponent).OfType<SceneComponentsSchema.ComponentEntry>().ToList());
+            [.. this.Items(root, "units", "The schema").Select(this.ReadUnit).OfType<SceneComponentsSchema.UnitEntry>()],
+            [.. this.Items(root, "enums", "The schema").Select(this.ReadEnum).OfType<SceneComponentsSchema.EnumEntry>()],
+            [.. this.Items(root, "field_sets", "The schema").Select(this.ReadFieldSet).OfType<SceneComponentsSchema.FieldSetEntry>()],
+            [.. this.Items(root, "components", "The schema").Select(this.ReadComponent).OfType<SceneComponentsSchema.ComponentEntry>()]);
+    }
+
+    private SceneComponentsSchema.UnitEntry? ReadUnit(YamlNode node)
+    {
+        if (this.Mapping(node, "A unit") is not YamlMappingNode map)
+        {
+            return null;
+        }
+
+        this.CheckKeys(map, "A unit", UnitKeys, []);
+        var id = this.Scalar(map, "id", "A unit");
+        var abbreviation = this.Scalar(map, "abbreviation", id ?? "A unit");
+        var name = this.Scalar(map, "name", id ?? "A unit");
+        return id is null || abbreviation is null || name is null ? null : new SceneComponentsSchema.UnitEntry(id, abbreviation, name, this.LocationsOf(map));
+    }
+
+    private SceneComponentsSchema.EnumEntry? ReadEnum(YamlNode node)
+    {
+        if (this.Mapping(node, "An enumeration") is not YamlMappingNode map)
+        {
+            return null;
+        }
+
+        this.CheckKeys(map, "An enumeration", EnumKeys, []);
+        var name = this.Scalar(map, "name", "An enumeration");
+        var members = this.Items(map, "members", name ?? "An enumeration").Select(this.ReadMember).OfType<SceneComponentsSchema.MemberEntry>().ToList();
+        return name is null ? null : new SceneComponentsSchema.EnumEntry(name, members, this.LocationsOf(map));
+    }
+
+    private SceneComponentsSchema.MemberEntry? ReadMember(YamlNode node)
+    {
+        if (this.Mapping(node, "A member") is not YamlMappingNode map)
+        {
+            return null;
+        }
+
+        this.CheckKeys(map, "A member", MemberKeys, []);
+        var name = this.Scalar(map, "name", "A member");
+        var value = this.Integer(map, "value", name ?? "A member");
+        return name is null || value is null ? null : new SceneComponentsSchema.MemberEntry(name, value.Value, this.LocationsOf(map));
     }
 
     private SceneComponentsSchema.FieldSetEntry? ReadFieldSet(YamlNode node)
@@ -149,6 +202,7 @@ internal sealed class SceneComponentsReader
         var name = this.Scalar(map, "name", "A component");
         var where = name ?? "A component";
         var kind = this.Scalar(map, "kind", where);
+        var cardinality = this.Choice(map, "cardinality", where, Cardinalities);
         SceneComponentsSchema.WireEntry? wire = null;
         _ = map.Children.TryGetValue(new YamlScalarNode("wire"), out var wireNode);
         if (wireNode is not null && this.Mapping(wireNode, where + ".wire") is YamlMappingNode wireMap)
@@ -166,9 +220,9 @@ internal sealed class SceneComponentsReader
         var parts = this.Items(map, "parts", where).Select(item => this.ReadPart(item, where)).OfType<SceneComponentsSchema.PartEntry>().ToList();
 
         // A wire that could not be read is reported; checking the properties against no wire would only add noise.
-        return name is null || kind is null || (wireNode is not null && wire is null)
+        return name is null || kind is null || cardinality is null || (wireNode is not null && wire is null)
             ? null
-            : new SceneComponentsSchema.ComponentEntry(name, kind, wire, properties, parts, this.LocationsOf(map));
+            : new SceneComponentsSchema.ComponentEntry(name, kind, string.Equals(cardinality, "required", StringComparison.Ordinal), wire, properties, parts, this.LocationsOf(map));
     }
 
     // A part's properties always have a source and never take fields, so a key that breaks that is an unknown key.
@@ -202,15 +256,16 @@ internal sealed class SceneComponentsReader
         var where = component + "." + (name ?? "?");
         var key = this.Scalar(map, "key", where);
         var type = this.Scalar(map, "type", where);
-        var enumeration = map.Children.ContainsKey(new YamlScalarNode("enum")) ? this.Scalar(map, "enum", where) : null;
-        var encoding = map.Children.ContainsKey(new YamlScalarNode("encoding")) ? this.Scalar(map, "encoding", where) : null;
-        var fields = map.Children.ContainsKey(new YamlScalarNode("fields"))
+        var enumeration = Has(map, "enum") ? this.Scalar(map, "enum", where) : null;
+        var encoding = Has(map, "encoding") ? this.Scalar(map, "encoding", where) : null;
+        var fields = Has(map, "fields")
             ? this.Items(map, "fields", where).Select(item => this.ScalarValue(item, where + ".fields")).OfType<string>().ToList()
             : [];
         var sources = this.ReadSources(map, where);
-        return name is null || key is null || type is null
+        var values = this.ReadValues(map, where, type);
+        return name is null || key is null || type is null || values is null
             ? null
-            : new SceneComponentsSchema.PropertyEntry(name, key, type, enumeration, fields, encoding, sources, this.LocationsOf(map));
+            : new SceneComponentsSchema.PropertyEntry(name, key, type, enumeration, fields, encoding, sources, values, this.LocationsOf(map));
     }
 
     private List<string> ReadSources(YamlMappingNode map, string where)
@@ -249,94 +304,6 @@ internal sealed class SceneComponentsReader
         return sources;
     }
 
-    private void Check(SceneComponentsSchema schema)
-    {
-        this.CheckUnique(schema.FieldSets, static set => set.Name, static set => set.Locations.Of("name"), "field set");
-        foreach (var set in schema.FieldSets)
-        {
-            this.CheckUnique(set.Fields, static field => field.Name, static field => field.Locations.Of("name"), "field of " + set.Name);
-            this.CheckUnique(set.Fields, static field => field.Id.ToString(CultureInfo.InvariantCulture), static field => field.Locations.Of("id"), "field id of " + set.Name);
-        }
-
-        this.CheckUnique(schema.Components, static component => component.Name, static component => component.Locations.Of("name"), "component");
-        this.CheckUnique(schema.Components, static component => component.Kind, static component => component.Locations.Of("kind"), "component kind");
-        var wired = schema.Components.Where(static component => component.Wire is not null).ToList();
-        this.CheckUnique(wired, static component => component.Wire!.Id.ToString(CultureInfo.InvariantCulture), static component => component.Wire!.Locations.Of("id"), "component id");
-        foreach (var component in schema.Components)
-        {
-            this.CheckUnique(component.Properties, static property => property.Name, static property => property.Locations.Of("name"), "property of " + component.Name);
-            var fieldSet = component.Wire is null ? null : schema.FieldSets.FirstOrDefault(set => string.Equals(set.Name, component.Wire.FieldSet, StringComparison.Ordinal));
-            if (component.Wire is not null && fieldSet is null)
-            {
-                this.Report(SceneComponentsDiagnostics.UnknownField, component.Wire.Locations.Of("field_set"), component.Name, $"field set {component.Wire.FieldSet} does not exist");
-            }
-
-            foreach (var property in component.Properties)
-            {
-                this.CheckProperty(component, property, fieldSet);
-            }
-
-            this.CheckParts(component);
-        }
-    }
-
-    // A part's name scopes its properties' names in the generated code, so it cannot be a property's name.
-    private void CheckParts(SceneComponentsSchema.ComponentEntry component)
-    {
-        var names = component.Properties.Select(static property => (property.Name, Location: property.Locations.Of("name")))
-            .Concat(component.Parts.Select(static part => (part.Name, Location: part.Locations.Of("name"))));
-        this.CheckUnique(names, static entry => entry.Name, static entry => entry.Location, "part or property of " + component.Name);
-        this.CheckUnique(component.Parts, static part => part.Kind, static part => part.Locations.Of("kind"), "part kind of " + component.Name);
-        foreach (var part in component.Parts)
-        {
-            var where = component.Name + "." + part.Name;
-            this.CheckUnique(part.Properties, static property => property.Name, static property => property.Locations.Of("name"), "property of " + where);
-            this.CheckUnique(part.Properties, static property => property.Key, static property => property.Locations.Of("key"), "key of " + where);
-            foreach (var property in part.Properties.Where(static property => !SceneComponentsTypes.IsKnown(property)))
-            {
-                this.Report(SceneComponentsDiagnostics.UnknownType, property.Locations.Of(property.Enum is null ? "type" : "enum"), where + "." + property.Name, property.Enum ?? property.Type);
-            }
-        }
-    }
-
-    private void CheckProperty(SceneComponentsSchema.ComponentEntry component, SceneComponentsSchema.PropertyEntry property, SceneComponentsSchema.FieldSetEntry? fieldSet)
-    {
-        var where = component.Name + "." + property.Name;
-        if (!SceneComponentsTypes.IsKnown(property))
-        {
-            this.Report(SceneComponentsDiagnostics.UnknownType, property.Locations.Of(property.Enum is null ? "type" : "enum"), where, property.Enum ?? property.Type);
-        }
-
-        if (property.Encoding is not null && !string.Equals(property.Encoding, SceneComponentsTypes.DegreesToRadians, StringComparison.Ordinal))
-        {
-            this.Report(SceneComponentsDiagnostics.UnknownEncoding, property.Locations.Of("encoding"), where, property.Encoding);
-        }
-
-        if (component.Wire is null)
-        {
-            if (property.Fields.Count != 0)
-            {
-                this.Report(SceneComponentsDiagnostics.FieldMismatch, property.Locations.Of("fields"), where, "a component without a wire has no fields");
-            }
-
-            return;
-        }
-
-        if (property.Fields.Count != FieldCount(property.Type))
-        {
-            this.Report(SceneComponentsDiagnostics.FieldMismatch, property.Locations.Of("fields"), where, $"{property.Type} values go to {FieldCount(property.Type)} fields, not {property.Fields.Count}");
-        }
-
-        for (var index = 0; fieldSet is not null && index < property.Fields.Count; index++)
-        {
-            var field = property.Fields[index];
-            if (!fieldSet.Fields.Any(entry => string.Equals(entry.Name, field, StringComparison.Ordinal)))
-            {
-                this.Report(SceneComponentsDiagnostics.UnknownField, property.Locations.Of(ItemKey("fields", index)), where, $"field {field} is not in field set {fieldSet.Name}");
-            }
-        }
-    }
-
     private void CheckUnique<T>(IEnumerable<T> items, Func<T, string> key, Func<T, Location> location, string what)
     {
         var seen = new HashSet<string>(StringComparer.Ordinal);
@@ -348,7 +315,7 @@ internal sealed class SceneComponentsReader
 
     private void CheckKeys(YamlMappingNode map, string where, string[] required, string[] optional)
     {
-        foreach (var missing in required.Where(key => !map.Children.ContainsKey(new YamlScalarNode(key))))
+        foreach (var missing in required.Where(key => !Has(map, key)))
         {
             this.Report(SceneComponentsDiagnostics.InvalidShape, this.LocationsOf(map).Entry, $"{where} has no '{missing}'");
         }
@@ -401,6 +368,22 @@ internal sealed class SceneComponentsReader
         }
 
         this.Report(SceneComponentsDiagnostics.InvalidShape, this.At(node), $"{where} must be a non-empty scalar");
+        return null;
+    }
+
+    private string? Choice(YamlMappingNode map, string key, string where, string[] choices)
+    {
+        if (this.Scalar(map, key, where) is not string value)
+        {
+            return null;
+        }
+
+        if (choices.Contains(value, StringComparer.Ordinal))
+        {
+            return value;
+        }
+
+        this.Report(SceneComponentsDiagnostics.InvalidShape, this.At(map.Children[new YamlScalarNode(key)]), $"{where}.{key} must be one of {string.Join(", ", choices)}, not '{value}'");
         return null;
     }
 

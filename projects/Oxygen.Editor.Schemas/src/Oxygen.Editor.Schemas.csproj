@@ -24,8 +24,9 @@
     </ItemGroup>
 
     <!--
-      Bring the engine schemas (and editor overlays sitting next to them) into
-      this assembly's output without copying them in source control.
+      Bring the engine schemas (and editor overlays sitting next to them) that
+      the installed engine SDK ships into this assembly's output, without
+      copying them in source control.
 
       Engine schemas: *.schema.json (excluding *.editor.schema.json — handled by
       the second glob so we can give it a distinct link path / pattern).
@@ -33,14 +34,14 @@
     -->
     <ItemGroup>
         <Content
-            Include="..\..\Oxygen.Engine\src\Oxygen\Cooker\Import\Schemas\*.schema.json"
-            Exclude="..\..\Oxygen.Engine\src\Oxygen\Cooker\Import\Schemas\*.editor.schema.json"
+            Include="$(OxygenSdkSchemasDir)\*.schema.json"
+            Exclude="$(OxygenSdkSchemasDir)\*.editor.schema.json"
             Link="Schemas\%(FileName)%(Extension)"
             CopyToOutputDirectory="PreserveNewest"
             Visible="true" />
 
         <Content
-            Include="..\..\Oxygen.Engine\src\Oxygen\Cooker\Import\Schemas\*.editor.schema.json"
+            Include="$(OxygenSdkSchemasDir)\*.editor.schema.json"
             Link="Schemas\%(FileName)%(Extension)"
             CopyToOutputDirectory="PreserveNewest"
             Visible="true" />

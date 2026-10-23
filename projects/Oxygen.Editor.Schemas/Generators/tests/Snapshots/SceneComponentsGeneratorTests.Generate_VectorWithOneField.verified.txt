@@ -1,7 +1,7 @@
 ﻿{
   Diagnostics: [
     {
-      Location: Schema\SceneComponents.yaml: (17,16)-(17,23),
+      Location: Schema\SceneComponents.yaml: (28,16)-(28,23),
       Message: Lamp.Color: vec3 values go to 3 fields, not 1,
       Severity: Error,
       Descriptor: {

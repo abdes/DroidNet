@@ -1,0 +1,17 @@
+﻿{
+  Diagnostics: [
+    {
+      Location: Schema\SceneComponents.yaml: (37,15)-(37,44),
+      Message: Lamp.Range: bool values have no range or unit,
+      Severity: Error,
+      Descriptor: {
+        Id: OXGNSC009,
+        Title: Invalid property value declaration,
+        MessageFormat: {0}: {1},
+        Category: Oxygen.Editor.Schemas.Generator,
+        DefaultSeverity: Error,
+        IsEnabledByDefault: true
+      }
+    }
+  ]
+}

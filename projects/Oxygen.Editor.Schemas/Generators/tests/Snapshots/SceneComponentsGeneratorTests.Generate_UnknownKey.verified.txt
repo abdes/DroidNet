@@ -1,7 +1,7 @@
 ﻿{
   Diagnostics: [
     {
-      Location: Schema\SceneComponents.yaml: (12,4)-(12,10),
+      Location: Schema\SceneComponents.yaml: (22,4)-(22,10),
       Message: A component has an unknown key 'colour',
       Severity: Error,
       Descriptor: {

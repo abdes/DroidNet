@@ -23,8 +23,8 @@
         <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.Shell/testing/Oxygen.Editor.Shell.Testing.csproj" />
     </ItemGroup>
 
-    <ItemGroup Condition="Exists('$(ProjectsRoot)/Oxygen.Engine/out/install/$(Configuration)/bin')">
-        <None Include="$(ProjectsRoot)/Oxygen.Engine/out/install/$(Configuration)/bin/*.dll">
+    <ItemGroup Condition="Exists('$(OxygenSdkDir)/bin')">
+        <None Include="$(OxygenSdkDir)/bin/*.dll">
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
             <Link>%(Filename)%(Extension)</Link>
         </None>

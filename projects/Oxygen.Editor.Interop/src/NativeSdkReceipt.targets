@@ -11,7 +11,7 @@
     <NativeSdkCompileHeader>$(IntDir)NativeSdkCompile.h</NativeSdkCompileHeader>
     <NativeSdkReceiptHeader>$(IntDir)NativeSdkReceipt.h</NativeSdkReceiptHeader>
     <NativeSdkStampFile>$(IntDir)NativeSdkReceipt.stamp</NativeSdkStampFile>
-    <NativeSdkRoot>$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)</NativeSdkRoot>
+    <NativeSdkRoot>$(OxygenSdkDir)</NativeSdkRoot>
   </PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile>

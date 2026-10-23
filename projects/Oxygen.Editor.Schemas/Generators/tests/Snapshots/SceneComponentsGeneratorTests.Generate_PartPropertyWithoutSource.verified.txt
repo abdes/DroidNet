@@ -1,13 +1,26 @@
 ﻿{
   Diagnostics: [
     {
-      Location: Schema\SceneComponents.yaml: (37,18)-(37,26),
+      Location: Schema\SceneComponents.yaml: (71,18)-(71,26),
       Message: Geometry.Surface property has no 'sources',
       Severity: Error,
       Descriptor: {
         Id: OXGNSC004,
         Title: Scene components schema has an invalid entry,
         MessageFormat: {0},
+        Category: Oxygen.Editor.Schemas.Generator,
+        DefaultSeverity: Error,
+        IsEnabledByDefault: true
+      }
+    },
+    {
+      Location: Schema\SceneComponents.yaml: (74,25)-(74,26),
+      Message: Geometry.Surface.Material: a property has an override id exactly when it has sources,
+      Severity: Error,
+      Descriptor: {
+        Id: OXGNSC009,
+        Title: Invalid property value declaration,
+        MessageFormat: {0}: {1},
         Category: Oxygen.Editor.Schemas.Generator,
         DefaultSeverity: Error,
         IsEnabledByDefault: true

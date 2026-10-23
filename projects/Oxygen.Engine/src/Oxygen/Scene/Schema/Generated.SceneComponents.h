@@ -8,7 +8,16 @@
 
 #pragma once
 
+#include <array>
 #include <cstdint>
+#include <span>
+#include <string_view>
+
+#include <Oxygen/Data/PakFormat_geometry.h>
+#include <Oxygen/Scene/Schema/PropertyRange.h>
+
+// The generator owns this layout.
+// clang-format off
 
 namespace oxygen::scene::schema {
 
@@ -146,4 +155,326 @@ enum class LocalFogVolumeField : std::uint16_t {
   kCount = 13,
 };
 
+//! The value types of the schema properties.
+enum class ValueType : std::uint8_t {
+  kBool = 0,
+  kInt = 1,
+  kFloat = 2,
+  kVec3 = 3,
+  kEnum = 4,
+  kAsset = 5,
+  kString = 6,
+  kLodPolicy = 7,
+};
+
+//! The part kinds; kNone addresses the component itself.
+enum class PartKind : std::uint8_t {
+  kNone = 0,
+  kSurface = 1,
+};
+
+//! The ids of the properties a scene stores as overrides. Stable: never
+//! renumbered or reused.
+enum class OverrideId : std::uint16_t {
+  kInvalid = 0,
+  kGeometrySurfaceMaterial = 1,
+  kGeometrySurfaceVisibility = 2,
+  kGeometrySurfaceCastsShadows = 3,
+  kGeometryLodPolicy = 4,
+};
+
+//! The address and value type of a property stored as overrides.
+struct OverrideProperty {
+  OverrideId id;
+  std::string_view component_kind;
+  PartKind part_kind;
+  std::string_view key;
+  ValueType type;
+};
+
+//! The properties stored as overrides, by override id.
+inline constexpr std::array<OverrideProperty, 4> kOverrideProperties {
+  OverrideProperty {
+    .id = OverrideId::kGeometrySurfaceMaterial,
+    .component_kind = "geometry",
+    .part_kind = PartKind::kSurface,
+    .key = "/material",
+    .type = ValueType::kAsset,
+  },
+  OverrideProperty {
+    .id = OverrideId::kGeometrySurfaceVisibility,
+    .component_kind = "geometry",
+    .part_kind = PartKind::kSurface,
+    .key = "/visible",
+    .type = ValueType::kBool,
+  },
+  OverrideProperty {
+    .id = OverrideId::kGeometrySurfaceCastsShadows,
+    .component_kind = "geometry",
+    .part_kind = PartKind::kSurface,
+    .key = "/casts_shadows",
+    .type = ValueType::kBool,
+  },
+  OverrideProperty {
+    .id = OverrideId::kGeometryLodPolicy,
+    .component_kind = "geometry",
+    .part_kind = PartKind::kNone,
+    .key = "/lod_policy",
+    .type = ValueType::kLodPolicy,
+  },
+};
+
+//! The wire values of the VisibilitySource members.
+inline constexpr std::array<std::uint8_t, 3> kVisibilitySourceMembers { 0, 1, 2 };
+
+//! The wire values of the ShadowSource members.
+inline constexpr std::array<std::uint8_t, 3> kShadowSourceMembers { 0, 1, 2 };
+
+//! The wire values of the CameraAspectMode members.
+inline constexpr std::array<std::uint8_t, 2> kCameraAspectModeMembers { 0, 1 };
+
+//! The wire values of the AtmosphereLightSlot members.
+inline constexpr std::array<std::uint8_t, 3> kAtmosphereLightSlotMembers { 0, 1, 2 };
+
+//! The wire values of the ShadowResolutionHint members.
+inline constexpr std::array<std::uint8_t, 4> kShadowResolutionHintMembers { 0, 1, 2, 3 };
+
+//! The wire values of the DirectionalCsmSplitMode members.
+inline constexpr std::array<std::uint8_t, 2> kDirectionalCsmSplitModeMembers { 0, 1 };
+
+//! Defaults and ranges of Transform, in field units.
+namespace transform {
+inline constexpr float kPositionXDefault = 0.0F;
+inline constexpr PropertyRange<float> kPositionXRange {};
+inline constexpr float kPositionYDefault = 0.0F;
+inline constexpr PropertyRange<float> kPositionYRange {};
+inline constexpr float kPositionZDefault = 0.0F;
+inline constexpr PropertyRange<float> kPositionZRange {};
+inline constexpr float kRotationXDegreesDefault = 0.0F;
+inline constexpr PropertyRange<float> kRotationXDegreesRange {};
+inline constexpr float kRotationYDegreesDefault = 0.0F;
+inline constexpr PropertyRange<float> kRotationYDegreesRange {};
+inline constexpr float kRotationZDegreesDefault = 0.0F;
+inline constexpr PropertyRange<float> kRotationZDegreesRange {};
+inline constexpr float kScaleXDefault = 1.0F;
+inline constexpr PropertyRange<float> kScaleXRange { .nonzero = true };
+inline constexpr float kScaleYDefault = 1.0F;
+inline constexpr PropertyRange<float> kScaleYRange { .nonzero = true };
+inline constexpr float kScaleZDefault = 1.0F;
+inline constexpr PropertyRange<float> kScaleZRange { .nonzero = true };
+} // namespace transform
+
+//! Defaults and ranges of Node, in field units.
+namespace node_flags {
+inline constexpr std::uint8_t kVisibleDefault = 0; // Inherit
+inline constexpr std::uint8_t kVisibleRootDefault = 1; // Shown
+inline constexpr std::span<const std::uint8_t> kVisibleValues { kVisibilitySourceMembers };
+inline constexpr std::uint8_t kCastsShadowsDefault = 0; // Inherit
+inline constexpr std::uint8_t kCastsShadowsRootDefault = 1; // On
+inline constexpr std::span<const std::uint8_t> kCastsShadowsValues { kShadowSourceMembers };
+inline constexpr std::uint8_t kReceivesShadowsDefault = 0; // Inherit
+inline constexpr std::uint8_t kReceivesShadowsRootDefault = 1; // On
+inline constexpr std::span<const std::uint8_t> kReceivesShadowsValues { kShadowSourceMembers };
+inline constexpr bool kStaticDefault = false;
+inline constexpr bool kRayCastingSelectableDefault = true;
+inline constexpr bool kIgnoreParentTransformDefault = false;
+} // namespace node_flags
+
+//! Defaults and ranges of Geometry, in field units.
+namespace geometry {
+inline constexpr data::pak::geometry::LodPolicyRecord kLodPolicyDefault {
+  .type = data::pak::geometry::LodPolicyType::kFixed,
+  .lod_index = 0,
+};
+} // namespace geometry
+
+//! Defaults and ranges of the Geometry Surface part.
+namespace geometry::surface {
+inline constexpr bool kVisibilityDefault = true;
+inline constexpr bool kCastsShadowsDefault = true;
+} // namespace geometry::surface
+
+//! Defaults and ranges of PerspectiveCamera, in field units.
+namespace perspective_camera {
+inline constexpr float kFieldOfViewYRadiansDefault = 1.0471976F;
+inline constexpr PropertyRange<float> kFieldOfViewYRadiansRange { .min = 0.017453292F, .max = 3.1241393F };
+inline constexpr float kAspectRatioDefault = 1.7777778F;
+inline constexpr PropertyRange<float> kAspectRatioRange { .min = 0.0F, .min_exclusive = true };
+inline constexpr float kNearPlaneDefault = 0.1F;
+inline constexpr PropertyRange<float> kNearPlaneRange { .min = 0.0F, .min_exclusive = true };
+inline constexpr float kFarPlaneDefault = 1000.0F;
+inline constexpr PropertyRange<float> kFarPlaneRange { .min = 0.0F, .min_exclusive = true };
+inline constexpr float kApertureFDefault = 11.0F;
+inline constexpr PropertyRange<float> kApertureFRange { .min = 0.0F, .min_exclusive = true };
+inline constexpr float kShutterRateDefault = 125.0F;
+inline constexpr PropertyRange<float> kShutterRateRange { .min = 0.0F, .min_exclusive = true };
+inline constexpr float kIsoDefault = 100.0F;
+inline constexpr PropertyRange<float> kIsoRange { .min = 0.0F, .min_exclusive = true };
+inline constexpr std::uint8_t kAspectModeDefault = 0; // Auto
+inline constexpr std::span<const std::uint8_t> kAspectModeValues { kCameraAspectModeMembers };
+} // namespace perspective_camera
+
+//! Defaults and ranges of OrthographicCamera, in field units.
+namespace orthographic_camera {
+inline constexpr float kOrthographicSizeDefault = 10.0F;
+inline constexpr PropertyRange<float> kOrthographicSizeRange { .min = 0.0F, .min_exclusive = true };
+inline constexpr std::uint8_t kAspectModeDefault = 0; // Auto
+inline constexpr std::span<const std::uint8_t> kAspectModeValues { kCameraAspectModeMembers };
+inline constexpr float kAspectRatioDefault = 1.7777778F;
+inline constexpr PropertyRange<float> kAspectRatioRange { .min = 0.0F, .min_exclusive = true };
+inline constexpr float kNearPlaneDefault = 0.1F;
+inline constexpr PropertyRange<float> kNearPlaneRange { .min = 0.0F, .min_exclusive = true };
+inline constexpr float kFarPlaneDefault = 1000.0F;
+inline constexpr PropertyRange<float> kFarPlaneRange { .min = 0.0F, .min_exclusive = true };
+inline constexpr float kApertureFDefault = 11.0F;
+inline constexpr PropertyRange<float> kApertureFRange { .min = 0.0F, .min_exclusive = true };
+inline constexpr float kShutterRateDefault = 125.0F;
+inline constexpr PropertyRange<float> kShutterRateRange { .min = 0.0F, .min_exclusive = true };
+inline constexpr float kIsoDefault = 100.0F;
+inline constexpr PropertyRange<float> kIsoRange { .min = 0.0F, .min_exclusive = true };
+} // namespace orthographic_camera
+
+//! Defaults and ranges of DirectionalLight, in field units.
+namespace directional_light {
+inline constexpr float kColorRDefault = 1.0F;
+inline constexpr PropertyRange<float> kColorRRange { .min = 0.0F, .max = 1.0F };
+inline constexpr float kColorGDefault = 1.0F;
+inline constexpr PropertyRange<float> kColorGRange { .min = 0.0F, .max = 1.0F };
+inline constexpr float kColorBDefault = 1.0F;
+inline constexpr PropertyRange<float> kColorBRange { .min = 0.0F, .max = 1.0F };
+inline constexpr float kIntensityLuxDefault = 100000.0F;
+inline constexpr PropertyRange<float> kIntensityLuxRange { .min = 0.0F };
+inline constexpr std::uint8_t kAtmosphereLightSlotDefault = 0; // None
+inline constexpr std::span<const std::uint8_t> kAtmosphereLightSlotValues { kAtmosphereLightSlotMembers };
+inline constexpr bool kUsePerPixelAtmosphereTransmittanceDefault = false;
+inline constexpr bool kCastsShadowsDefault = true;
+inline constexpr bool kAffectsWorldDefault = true;
+inline constexpr float kAngularSizeRadiansDefault = 0.00935F;
+inline constexpr PropertyRange<float> kAngularSizeRadiansRange { .min = 0.0F, .max = 3.1415927F };
+inline constexpr float kExposureCompensationDefault = 0.0F;
+inline constexpr PropertyRange<float> kExposureCompensationRange { .min = -10.0F, .max = 10.0F };
+inline constexpr float kDiskScaleRDefault = 1.0F;
+inline constexpr PropertyRange<float> kDiskScaleRRange { .min = 0.0F };
+inline constexpr float kDiskScaleGDefault = 1.0F;
+inline constexpr PropertyRange<float> kDiskScaleGRange { .min = 0.0F };
+inline constexpr float kDiskScaleBDefault = 1.0F;
+inline constexpr PropertyRange<float> kDiskScaleBRange { .min = 0.0F };
+inline constexpr float kShadowBiasDefault = 0.0F;
+inline constexpr PropertyRange<float> kShadowBiasRange { .min = 0.0F, .max = 10.0F };
+inline constexpr float kShadowNormalBiasDefault = 0.02F;
+inline constexpr PropertyRange<float> kShadowNormalBiasRange { .min = 0.0F };
+inline constexpr bool kContactShadowsDefault = false;
+inline constexpr std::uint8_t kShadowResolutionHintDefault = 1; // Medium
+inline constexpr std::span<const std::uint8_t> kShadowResolutionHintValues { kShadowResolutionHintMembers };
+inline constexpr std::int32_t kCascadeCountDefault = 4;
+inline constexpr PropertyRange<std::int32_t> kCascadeCountRange { .min = 1, .max = 4 };
+inline constexpr std::uint8_t kSplitModeDefault = 0; // Generated
+inline constexpr std::span<const std::uint8_t> kSplitModeValues { kDirectionalCsmSplitModeMembers };
+inline constexpr float kMaxShadowDistanceDefault = 160.0F;
+inline constexpr PropertyRange<float> kMaxShadowDistanceRange { .min = 0.0F, .min_exclusive = true };
+inline constexpr float kCascadeDistance0Default = 8.0F;
+inline constexpr PropertyRange<float> kCascadeDistance0Range { .min = 0.0F, .min_exclusive = true };
+inline constexpr float kCascadeDistance1Default = 24.0F;
+inline constexpr PropertyRange<float> kCascadeDistance1Range { .min = 0.0F, .min_exclusive = true };
+inline constexpr float kCascadeDistance2Default = 64.0F;
+inline constexpr PropertyRange<float> kCascadeDistance2Range { .min = 0.0F, .min_exclusive = true };
+inline constexpr float kCascadeDistance3Default = 160.0F;
+inline constexpr PropertyRange<float> kCascadeDistance3Range { .min = 0.0F, .min_exclusive = true };
+inline constexpr float kDistributionExponentDefault = 3.0F;
+inline constexpr PropertyRange<float> kDistributionExponentRange { .min = 1.0F };
+inline constexpr float kTransitionFractionDefault = 0.1F;
+inline constexpr PropertyRange<float> kTransitionFractionRange { .min = 0.0F, .max = 1.0F };
+inline constexpr float kDistanceFadeoutFractionDefault = 0.1F;
+inline constexpr PropertyRange<float> kDistanceFadeoutFractionRange { .min = 0.0F, .max = 1.0F };
+} // namespace directional_light
+
+//! Defaults and ranges of PointLight, in field units.
+namespace point_light {
+inline constexpr float kColorRDefault = 1.0F;
+inline constexpr PropertyRange<float> kColorRRange { .min = 0.0F, .max = 1.0F };
+inline constexpr float kColorGDefault = 1.0F;
+inline constexpr PropertyRange<float> kColorGRange { .min = 0.0F, .max = 1.0F };
+inline constexpr float kColorBDefault = 1.0F;
+inline constexpr PropertyRange<float> kColorBRange { .min = 0.0F, .max = 1.0F };
+inline constexpr bool kAffectsWorldDefault = true;
+inline constexpr bool kCastsShadowsDefault = true;
+inline constexpr float kExposureCompensationDefault = 0.0F;
+inline constexpr PropertyRange<float> kExposureCompensationRange { .min = -10.0F, .max = 10.0F };
+inline constexpr float kShadowBiasDefault = 0.0F;
+inline constexpr PropertyRange<float> kShadowBiasRange { .min = 0.0F, .max = 10.0F };
+inline constexpr float kShadowNormalBiasDefault = 0.02F;
+inline constexpr PropertyRange<float> kShadowNormalBiasRange { .min = 0.0F };
+inline constexpr bool kContactShadowsDefault = false;
+inline constexpr std::uint8_t kShadowResolutionHintDefault = 1; // Medium
+inline constexpr std::span<const std::uint8_t> kShadowResolutionHintValues { kShadowResolutionHintMembers };
+inline constexpr float kLuminousFluxLmDefault = 1600.0F;
+inline constexpr PropertyRange<float> kLuminousFluxLmRange { .min = 0.0F, .min_exclusive = true };
+inline constexpr float kRangeDefault = 20.0F;
+inline constexpr PropertyRange<float> kRangeRange { .min = 0.0F, .min_exclusive = true };
+inline constexpr float kSourceRadiusDefault = 0.0F;
+inline constexpr PropertyRange<float> kSourceRadiusRange { .min = 0.0F };
+} // namespace point_light
+
+//! Defaults and ranges of SpotLight, in field units.
+namespace spot_light {
+inline constexpr float kColorRDefault = 1.0F;
+inline constexpr PropertyRange<float> kColorRRange { .min = 0.0F, .max = 1.0F };
+inline constexpr float kColorGDefault = 1.0F;
+inline constexpr PropertyRange<float> kColorGRange { .min = 0.0F, .max = 1.0F };
+inline constexpr float kColorBDefault = 1.0F;
+inline constexpr PropertyRange<float> kColorBRange { .min = 0.0F, .max = 1.0F };
+inline constexpr bool kAffectsWorldDefault = true;
+inline constexpr bool kCastsShadowsDefault = true;
+inline constexpr float kExposureCompensationDefault = 0.0F;
+inline constexpr PropertyRange<float> kExposureCompensationRange { .min = -10.0F, .max = 10.0F };
+inline constexpr float kShadowBiasDefault = 0.0F;
+inline constexpr PropertyRange<float> kShadowBiasRange { .min = 0.0F, .max = 10.0F };
+inline constexpr float kShadowNormalBiasDefault = 0.02F;
+inline constexpr PropertyRange<float> kShadowNormalBiasRange { .min = 0.0F };
+inline constexpr bool kContactShadowsDefault = false;
+inline constexpr std::uint8_t kShadowResolutionHintDefault = 1; // Medium
+inline constexpr std::span<const std::uint8_t> kShadowResolutionHintValues { kShadowResolutionHintMembers };
+inline constexpr float kLuminousFluxLmDefault = 1600.0F;
+inline constexpr PropertyRange<float> kLuminousFluxLmRange { .min = 0.0F, .min_exclusive = true };
+inline constexpr float kRangeDefault = 20.0F;
+inline constexpr PropertyRange<float> kRangeRange { .min = 0.0F, .min_exclusive = true };
+inline constexpr float kSourceRadiusDefault = 0.0F;
+inline constexpr PropertyRange<float> kSourceRadiusRange { .min = 0.0F };
+inline constexpr float kInnerConeAngleRadiansDefault = 0.3926991F;
+inline constexpr PropertyRange<float> kInnerConeAngleRadiansRange { .min = 0.0F, .max = 1.5707964F };
+inline constexpr float kOuterConeAngleRadiansDefault = 0.7853982F;
+inline constexpr PropertyRange<float> kOuterConeAngleRadiansRange { .min = 0.0F, .max = 1.5707964F };
+} // namespace spot_light
+
+//! Defaults and ranges of LocalFogVolume, in field units.
+namespace local_fog_volume {
+inline constexpr bool kEnabledDefault = true;
+inline constexpr float kRadialFogExtinctionDefault = 1.0F;
+inline constexpr PropertyRange<float> kRadialFogExtinctionRange { .min = 0.0F };
+inline constexpr float kHeightFogExtinctionDefault = 1.0F;
+inline constexpr PropertyRange<float> kHeightFogExtinctionRange { .min = 0.0F };
+inline constexpr float kHeightFogFalloffDefault = 1000.0F;
+inline constexpr PropertyRange<float> kHeightFogFalloffRange { .min = 0.0F };
+inline constexpr float kHeightFogOffsetDefault = 0.0F;
+inline constexpr PropertyRange<float> kHeightFogOffsetRange {};
+inline constexpr float kFogPhaseGDefault = 0.2F;
+inline constexpr PropertyRange<float> kFogPhaseGRange { .min = 0.0F, .max = 0.999F };
+inline constexpr float kFogAlbedoRDefault = 1.0F;
+inline constexpr PropertyRange<float> kFogAlbedoRRange { .min = 0.0F, .max = 1.0F };
+inline constexpr float kFogAlbedoGDefault = 1.0F;
+inline constexpr PropertyRange<float> kFogAlbedoGRange { .min = 0.0F, .max = 1.0F };
+inline constexpr float kFogAlbedoBDefault = 1.0F;
+inline constexpr PropertyRange<float> kFogAlbedoBRange { .min = 0.0F, .max = 1.0F };
+inline constexpr float kFogEmissiveRDefault = 0.0F;
+inline constexpr PropertyRange<float> kFogEmissiveRRange { .min = 0.0F };
+inline constexpr float kFogEmissiveGDefault = 0.0F;
+inline constexpr PropertyRange<float> kFogEmissiveGRange { .min = 0.0F };
+inline constexpr float kFogEmissiveBDefault = 0.0F;
+inline constexpr PropertyRange<float> kFogEmissiveBRange { .min = 0.0F };
+inline constexpr std::int32_t kSortPriorityDefault = 0;
+inline constexpr PropertyRange<std::int32_t> kSortPriorityRange { .min = -127, .max = 127 };
+} // namespace local_fog_volume
+
 } // namespace oxygen::scene::schema
+
+// clang-format on

@@ -51,6 +51,7 @@ namespace Oxygen.Editor.World.Serialization;
 // The value types of overridable properties (SceneSchema.Overridable).
 [JsonSerializable(typeof(AssetPath))]
 [JsonSerializable(typeof(Vector3))]
+[JsonSerializable(typeof(LodPolicy))]
 [JsonSourceGenerationOptions(
     WriteIndented = true,
     DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,

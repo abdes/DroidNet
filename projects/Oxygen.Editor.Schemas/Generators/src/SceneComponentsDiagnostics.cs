@@ -11,8 +11,6 @@ namespace Oxygen.Editor.Schemas.Generators;
 [SuppressMessage("RoslynDiagnostics", "RS2008", Justification = "A build-time generator of this repository, not a shipped analyzer package.")]
 internal static class SceneComponentsDiagnostics
 {
-    private const string Category = "Oxygen.Editor.Schemas.Generator";
-
     /// <summary>The project asks for an output the generator does not produce, or for none.</summary>
     public static readonly DiagnosticDescriptor UnknownOutput = Error(
         "OXGNSC001",
@@ -60,6 +58,20 @@ internal static class SceneComponentsDiagnostics
         "OXGNSC008",
         "Unknown encoding",
         "{0}: the editor implements no encoding '{1}'");
+
+    /// <summary>A property's override id, default, range, commit policy or unit does not fit it.</summary>
+    public static readonly DiagnosticDescriptor InvalidValue = Error(
+        "OXGNSC009",
+        "Invalid property value declaration",
+        "{0}: {1}");
+
+    /// <summary>An enumeration's members differ from those of its editor type.</summary>
+    public static readonly DiagnosticDescriptor EnumMismatch = Error(
+        "OXGNSC010",
+        "Enumeration differs from its editor type",
+        "{0}: {1}");
+
+    private const string Category = "Oxygen.Editor.Schemas.Generator";
 
     private static DiagnosticDescriptor Error(string id, string title, string message)
         => new(id, title, message, Category, DiagnosticSeverity.Error, isEnabledByDefault: true);

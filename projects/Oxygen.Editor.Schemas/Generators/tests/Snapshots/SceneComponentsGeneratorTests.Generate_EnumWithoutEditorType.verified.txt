@@ -1,13 +1,39 @@
 ﻿{
   Diagnostics: [
     {
-      Location: Schema\SceneComponents.yaml: (21,14)-(21,22),
+      Location: Schema\SceneComponents.yaml: (35,14)-(35,22),
       Message: Lamp.Range: 'LampMood' has no editor type,
       Severity: Error,
       Descriptor: {
         Id: OXGNSC006,
         Title: Unknown value type,
         MessageFormat: {0}: '{1}' has no editor type,
+        Category: Oxygen.Editor.Schemas.Generator,
+        DefaultSeverity: Error,
+        IsEnabledByDefault: true
+      }
+    },
+    {
+      Location: Schema\SceneComponents.yaml: (38,15)-(38,44),
+      Message: Lamp.Range: enum values have no range or unit,
+      Severity: Error,
+      Descriptor: {
+        Id: OXGNSC009,
+        Title: Invalid property value declaration,
+        MessageFormat: {0}: {1},
+        Category: Oxygen.Editor.Schemas.Generator,
+        DefaultSeverity: Error,
+        IsEnabledByDefault: true
+      }
+    },
+    {
+      Location: Schema\SceneComponents.yaml: (35,14)-(35,22),
+      Message: Lamp.Range: enumeration 'LampMood' is not declared,
+      Severity: Error,
+      Descriptor: {
+        Id: OXGNSC009,
+        Title: Invalid property value declaration,
+        MessageFormat: {0}: {1},
         Category: Oxygen.Editor.Schemas.Generator,
         DefaultSeverity: Error,
         IsEnabledByDefault: true

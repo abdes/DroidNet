@@ -14,6 +14,9 @@
         <PackageReference Include="Verify.SourceGenerators" />
         <PackageReference Include="Microsoft.CodeAnalysis.CSharp" PrivateAssets="all" />
         <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" PrivateAssets="all" />
+
+        <!-- The generator runs in the test process, which loads its YamlDotNet dependency like the compiler does. -->
+        <PackageReference Include="YamlDotNet" />
     </ItemGroup>
 
     <ItemGroup>
@@ -22,7 +25,7 @@
 
     <!-- The engine's schema, to check that the generator reads it without problems. -->
     <ItemGroup>
-        <Content Include="$(ProjectsRoot)\Oxygen.Engine\src\Oxygen\Scene\Schema\SceneComponents.yaml"
+        <Content Include="$(OxygenSdkSchemasDir)\SceneComponents.yaml"
             Link="Schema\SceneComponents.yaml" CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
 

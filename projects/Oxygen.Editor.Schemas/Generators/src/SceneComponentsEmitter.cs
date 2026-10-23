@@ -8,7 +8,7 @@ using System.Text;
 namespace Oxygen.Editor.Schemas.Generators;
 
 /// <summary>Renders the editor code of each output of the scene components schema.</summary>
-internal static class SceneComponentsEmitter
+internal static partial class SceneComponentsEmitter
 {
     /// <summary>The runtime's component and field ids.</summary>
     public const string WireIds = "WireIds";
@@ -80,85 +80,120 @@ internal static class SceneComponentsEmitter
             _ = source.AppendLine("}");
         }
 
-        return source.ToString();
+        return AppendOverrideIds(source, schema).ToString();
     }
 
-    private static string RenderPropertyIds(SceneComponentsSchema schema)
+    private static StringBuilder AppendOverrideIds(StringBuilder source, SceneComponentsSchema schema)
     {
-        const string PropertyId = "global::Oxygen.Managed.Core.PropertyId";
-        var source = Header("Oxygen.Editor.World")
-            .AppendLine()
-            .AppendLine("/// <summary>The scene components: each one's kind and the typed ids of its properties and of its parts' properties.</summary>")
-            .AppendLine("public static class SceneSchema")
+        _ = source.AppendLine()
+            .AppendLine("/// <summary>The ids of the properties a scene stores as overrides. Stable: never renumbered or reused.</summary>")
+            .AppendLine("public enum RuntimeOverrideId : ushort")
             .AppendLine("{")
-            .AppendLine("    /// <summary>Gets the value type of each property a source may supply; a scene stores only its overrides of them.</summary>")
-            .Append("    public static global::System.Collections.Frozen.FrozenDictionary<").Append(PropertyId).AppendLine(", global::System.Type> Overridable { get; } =")
-            .Append("        global::System.Collections.Frozen.FrozenDictionary.ToFrozenDictionary(new global::System.Collections.Generic.Dictionary<").Append(PropertyId).AppendLine(", global::System.Type>")
-            .AppendLine("        {");
+            .AppendLine("    /// <summary>Sentinel; not a valid override id.</summary>")
+            .AppendLine("    Invalid = 0,");
+        foreach (var (path, property) in Overridable(schema).OrderBy(static entry => entry.Property.Values.OverrideId))
+        {
+            _ = source.AppendLine()
+                .Append("    /// <summary>The overrides of <c>SceneSchema.").Append(path).Append("</c> (<c>").Append(property.Key).AppendLine("</c>).</summary>")
+                .Append("    ").Append(path.Replace(".", string.Empty)).Append(" = ").Append(Number(property.Values.OverrideId!.Value)).AppendLine(",");
+        }
+
+        return source.AppendLine("}");
+    }
+
+    // Each property a source may supply, with its path of component, part and property names.
+    private static IEnumerable<(string Path, SceneComponentsSchema.PropertyEntry Property)> Overridable(SceneComponentsSchema schema)
+    {
         foreach (var component in schema.Components)
         {
             foreach (var property in component.Properties.Where(static property => property.Sources.Count != 0))
             {
-                _ = AppendOverridable(source, component.Name + "." + property.Name, property);
+                yield return (component.Name + "." + property.Name, property);
             }
 
             foreach (var part in component.Parts)
             {
                 foreach (var property in part.Properties)
                 {
-                    _ = AppendOverridable(source, component.Name + "." + part.Name + "." + property.Name, property);
+                    yield return (component.Name + "." + part.Name + "." + property.Name, property);
                 }
             }
+        }
+    }
+
+    private static string RenderPropertyIds(SceneComponentsSchema schema)
+    {
+        var source = Header("Oxygen.Editor.World")
+            .AppendLine()
+            .AppendLine("/// <summary>")
+            .AppendLine("/// The scene components: each one's kind and cardinality, the typed ids of its properties and of its parts' properties,")
+            .AppendLine("/// and each property's default, range and units.")
+            .AppendLine("/// </summary>")
+            .AppendLine("public static class SceneSchema")
+            .AppendLine("{")
+            .AppendLine("    /// <summary>Gets the value type of each property a source may supply; a scene stores only its overrides of them.</summary>")
+            .Append("    public static global::System.Collections.Frozen.FrozenDictionary<").Append(PropertyIdType).AppendLine(", global::System.Type> Overridable { get; } =")
+            .Append("        global::System.Collections.Frozen.FrozenDictionary.ToFrozenDictionary(new global::System.Collections.Generic.Dictionary<").Append(PropertyIdType).AppendLine(", global::System.Type>")
+            .AppendLine("        {");
+        foreach (var (path, property) in Overridable(schema))
+        {
+            _ = source.Append("            [").Append(path).Append(".Id] = typeof(").Append(SceneComponentsTypes.ValueType(property)).AppendLine("),");
         }
 
         _ = source.AppendLine("        });");
+        _ = AppendLookups(source, schema);
         foreach (var component in schema.Components)
         {
-            _ = source.AppendLine()
-                .Append("    /// <summary>The <c>").Append(component.Kind).AppendLine("</c> component.</summary>")
-                .Append("    public static class ").AppendLine(component.Name)
-                .AppendLine("    {")
-                .AppendLine("        /// <summary>The component kind.</summary>")
-                .Append("        public const string Kind = \"").Append(component.Kind).AppendLine("\";");
-            foreach (var property in component.Properties)
-            {
-                _ = source.AppendLine()
-                    .Append("        /// <summary>Gets the <c>").Append(property.Key).AppendLine("</c> property.</summary>")
-                    .Append("        public static ").Append(PropertyId).Append('<').Append(IdType(property)).Append("> ").Append(property.Name)
-                    .Append(" { get; } = new(Kind, \"").Append(property.Key).AppendLine("\");");
-            }
-
-            foreach (var part in component.Parts)
-            {
-                _ = source.AppendLine()
-                    .Append("        /// <summary>The <c>").Append(part.Kind).Append("</c> part of the <c>").Append(component.Kind).AppendLine("</c> component.</summary>")
-                    .Append("        public static class ").AppendLine(part.Name)
-                    .AppendLine("        {")
-                    .AppendLine("            /// <summary>The part kind.</summary>")
-                    .Append("            public const string Kind = \"").Append(part.Kind).AppendLine("\";");
-                foreach (var property in part.Properties)
-                {
-                    _ = source.AppendLine()
-                        .Append("            /// <summary>Gets the <c>").Append(property.Key).AppendLine("</c> property.</summary>")
-                        .Append("            public static ").Append(PropertyId).Append('<').Append(IdType(property)).Append("> ").Append(property.Name)
-                        .Append(" { get; } = new(").Append(component.Name).Append(".Kind, Kind, \"").Append(property.Key).AppendLine("\");");
-                }
-
-                _ = source.AppendLine("        }");
-            }
-
-            _ = source.AppendLine("    }");
+            _ = AppendComponent(source, component);
         }
 
-        return source.AppendLine("}").ToString();
-
-        // An override always holds a value, so the id of a property a source supplies is not nullable.
-        static string IdType(SceneComponentsSchema.PropertyEntry property)
-            => property.Sources.Count != 0 ? SceneComponentsTypes.ValueType(property) : SceneComponentsTypes.EditorType(property);
-
-        static StringBuilder AppendOverridable(StringBuilder source, string path, SceneComponentsSchema.PropertyEntry property)
-            => source.Append("            [").Append(path).Append(".Id] = typeof(").Append(SceneComponentsTypes.ValueType(property)).AppendLine("),");
+        _ = source.AppendLine("}");
+        return AppendUnitTable(source, schema).ToString();
     }
+
+    private static StringBuilder AppendComponent(StringBuilder source, SceneComponentsSchema.ComponentEntry component)
+    {
+        _ = source.AppendLine()
+            .Append("    /// <summary>The <c>").Append(component.Kind).AppendLine("</c> component.</summary>")
+            .Append("    public static class ").AppendLine(component.Name)
+            .AppendLine("    {")
+            .AppendLine("        /// <summary>The component kind.</summary>")
+            .Append("        public const string Kind = \"").Append(component.Kind).AppendLine("\";")
+            .AppendLine()
+            .AppendLine("        /// <summary>A value indicating whether every node has the component; otherwise a node has at most one.</summary>")
+            .Append("        public const bool IsRequired = ").Append(component.IsRequired ? "true" : "false").AppendLine(";");
+        foreach (var property in component.Properties)
+        {
+            _ = AppendPropertyId(source, "        ", "new(Kind, \"" + property.Key + "\")", property);
+        }
+
+        _ = AppendValues(source, "        ", component.Properties);
+        foreach (var part in component.Parts)
+        {
+            _ = source.AppendLine()
+                .Append("        /// <summary>The <c>").Append(part.Kind).Append("</c> part of the <c>").Append(component.Kind).AppendLine("</c> component.</summary>")
+                .Append("        public static class ").AppendLine(part.Name)
+                .AppendLine("        {")
+                .AppendLine("            /// <summary>The part kind.</summary>")
+                .Append("            public const string Kind = \"").Append(part.Kind).AppendLine("\";");
+            foreach (var property in part.Properties)
+            {
+                _ = AppendPropertyId(source, "            ", "new(" + component.Name + ".Kind, Kind, \"" + property.Key + "\")", property);
+            }
+
+            _ = AppendValues(source, "            ", part.Properties).AppendLine("        }");
+        }
+
+        return source.AppendLine("    }");
+    }
+
+    // An override always holds a value, so the id of a property a source supplies is not nullable.
+    private static StringBuilder AppendPropertyId(StringBuilder source, string indent, string initializer, SceneComponentsSchema.PropertyEntry property)
+        => source.AppendLine()
+            .Append(indent).Append("/// <summary>Gets the <c>").Append(property.Key).AppendLine("</c> property.</summary>")
+            .Append(indent).Append("public static ").Append(PropertyIdType).Append('<')
+            .Append(property.Sources.Count != 0 ? SceneComponentsTypes.ValueType(property) : SceneComponentsTypes.EditorType(property))
+            .Append("> ").Append(property.Name).Append(" { get; } = ").Append(initializer).AppendLine(";");
 
     private static string RenderWireTable(SceneComponentsSchema schema)
     {

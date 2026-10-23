@@ -1,7 +1,7 @@
 ﻿{
   Diagnostics: [
     {
-      Location: Schema\SceneComponents.yaml: (4,22)-(4,23),
+      Location: Schema\SceneComponents.yaml: (13,22)-(13,23),
       Message: While parsing a node, did not find expected node content.,
       Severity: Error,
       Descriptor: {

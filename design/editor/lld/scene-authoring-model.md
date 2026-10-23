@@ -270,8 +270,9 @@ generates its own code from it, with its own tools, and none knows the others:
   ids; inspector labels, grouping, steps and soft drag ranges stay in the
   `.editor.schema.json` overlays.
 
-The engine never refers to an editor project; the editor reads the engine's
-file. Values are encoded once per value type (`bool`, `int`, `float`, `vec3`,
+The engine never refers to an editor project; the engine SDK installs the file
+(`share/oxygen/schemas`), and the editor reads that installed copy, never the
+engine source tree. Values are encoded once per value type (`bool`, `int`, `float`, `vec3`,
 `enum`, `asset`, `string`, `lod-policy`), never per property.
 
 The required components are `Metadata` (kind `metadata`, with `Name` of type

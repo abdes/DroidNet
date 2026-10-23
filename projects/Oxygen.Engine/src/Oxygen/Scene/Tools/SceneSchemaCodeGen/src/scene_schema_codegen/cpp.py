@@ -4,13 +4,26 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # ===-----------------------------------------------------------------------===#
 
-"""Renders the component and field ids as a C++ header."""
+"""Renders the schema's ids, defaults and ranges as a C++ header."""
 
 # pyright: strict
 
 from __future__ import annotations
 
-from .model import FieldSet, Schema
+import math
+import struct
+
+from .model import (
+    UNLIMITED,
+    Component,
+    Enumeration,
+    FieldSet,
+    LodPolicy,
+    Part,
+    Property,
+    Range,
+    Schema,
+)
 
 _LICENSE = """\
 //===----------------------------------------------------------------------===//
@@ -19,6 +32,25 @@ _LICENSE = """\
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 """
+
+_VALUE_TYPES = (
+    ("bool", "Bool"),
+    ("int", "Int"),
+    ("float", "Float"),
+    ("vec3", "Vec3"),
+    ("enum", "Enum"),
+    ("asset", "Asset"),
+    ("string", "String"),
+    ("lod-policy", "LodPolicy"),
+)
+
+_LOD_POLICY_TYPES = {
+    "fixed": "kFixed",
+    "distance": "kDistance",
+    "screen_space_error": "kScreenSpaceError",
+}
+
+_PAK = "data::pak::geometry"
 
 
 def render(schema: Schema, source: str) -> str:
@@ -29,7 +61,16 @@ def render(schema: Schema, source: str) -> str:
         "",
         "#pragma once",
         "",
+        "#include <array>",
         "#include <cstdint>",
+        "#include <span>",
+        "#include <string_view>",
+        "",
+        "#include <Oxygen/Data/PakFormat_geometry.h>",
+        "#include <Oxygen/Scene/Schema/PropertyRange.h>",
+        "",
+        "// The generator owns this layout.",
+        "// clang-format off",
         "",
         "namespace oxygen::scene::schema {",
         "",
@@ -41,7 +82,16 @@ def render(schema: Schema, source: str) -> str:
     ]
     for field_set in schema.field_sets:
         lines.extend(["", *_field_enum(field_set)])
-    lines.extend(["", "} // namespace oxygen::scene::schema", ""])
+    lines.extend(["", *_value_type_enum()])
+    lines.extend(["", *_part_kind_enum(schema)])
+    lines.extend(["", *_override_table(schema)])
+    for enumeration in schema.enums:
+        lines.extend(["", *_enumeration_values(enumeration)])
+    for component in schema.components:
+        lines.extend(_component_values(schema, component))
+    lines.extend(
+        ["", "} // namespace oxygen::scene::schema", "", "// clang-format on", ""]
+    )
     return "\n".join(lines)
 
 
@@ -53,3 +103,286 @@ def _field_enum(field_set: FieldSet) -> list[str]:
         f"  kCount = {field_set.count},",
         "};",
     ]
+
+
+def _value_type_enum() -> list[str]:
+    return [
+        "//! The value types of the schema properties.",
+        "enum class ValueType : std::uint8_t {",
+        *(f"  k{name} = {index}," for index, (_, name) in enumerate(_VALUE_TYPES)),
+        "};",
+    ]
+
+
+def _part_kind_enum(schema: Schema) -> list[str]:
+    return [
+        "//! The part kinds; kNone addresses the component itself.",
+        "enum class PartKind : std::uint8_t {",
+        "  kNone = 0,",
+        *(
+            f"  k{_pascal(kind)} = {index},"
+            for index, kind in enumerate(schema.part_kinds(), start=1)
+        ),
+        "};",
+    ]
+
+
+def _override_table(schema: Schema) -> list[str]:
+    overrides = schema.overrides()
+    names = {
+        entry.id: _override_name(entry.component, entry.part, entry.prop)
+        for entry in overrides
+    }
+    types = dict(_VALUE_TYPES)
+    rows: list[str] = []
+    for entry in overrides:
+        part = "kNone" if entry.part is None else f"k{_pascal(entry.part.kind)}"
+        rows.extend(
+            [
+                "  OverrideProperty {",
+                f"    .id = OverrideId::k{names[entry.id]},",
+                f'    .component_kind = "{entry.component.kind}",',
+                f"    .part_kind = PartKind::{part},",
+                f'    .key = "{entry.prop.key}",',
+                f"    .type = ValueType::k{types[entry.prop.type]},",
+                "  },",
+            ]
+        )
+    return [
+        "//! The ids of the properties a scene stores as overrides. Stable: never",
+        "//! renumbered or reused.",
+        "enum class OverrideId : std::uint16_t {",
+        "  kInvalid = 0,",
+        *(f"  k{names[entry.id]} = {entry.id}," for entry in overrides),
+        "};",
+        "",
+        "//! The address and value type of a property stored as overrides.",
+        "struct OverrideProperty {",
+        "  OverrideId id;",
+        "  std::string_view component_kind;",
+        "  PartKind part_kind;",
+        "  std::string_view key;",
+        "  ValueType type;",
+        "};",
+        "",
+        "//! The properties stored as overrides, by override id.",
+        (
+            f"inline constexpr std::array<OverrideProperty, {len(overrides)}> "
+            "kOverrideProperties {"
+        ),
+        *rows,
+        "};",
+    ]
+
+
+def _override_name(component: Component, part: Part | None, entry: Property) -> str:
+    return component.name + ("" if part is None else part.name) + entry.name
+
+
+def _enumeration_values(enumeration: Enumeration) -> list[str]:
+    values = ", ".join(str(member.value) for member in enumeration.members)
+    count = len(enumeration.members)
+    name = enumeration.name
+    return [
+        f"//! The wire values of the {name} members.",
+        (
+            f"inline constexpr std::array<std::uint8_t, {count}> "
+            f"k{name}Members {{ {values} }};"
+        ),
+    ]
+
+
+def _component_values(schema: Schema, component: Component) -> list[str]:
+    lines: list[str] = []
+    for entry in component.properties:
+        lines.extend(_property_values(schema, entry, component.wire is not None))
+    if lines:
+        lines = [
+            "",
+            f"//! Defaults and ranges of {component.name}, in field units.",
+            f"namespace {_snake(component.kind)} {{",
+            *lines,
+            f"}} // namespace {_snake(component.kind)}",
+        ]
+    for part in component.parts:
+        part_lines: list[str] = []
+        for entry in part.properties:
+            part_lines.extend(_property_values(schema, entry, wired=False))
+        if part_lines:
+            space = f"{_snake(component.kind)}::{_snake(part.kind)}"
+            lines.extend(
+                [
+                    "",
+                    (
+                        f"//! Defaults and ranges of the {component.name} "
+                        f"{part.name} part."
+                    ),
+                    f"namespace {space} {{",
+                    *part_lines,
+                    f"}} // namespace {space}",
+                ]
+            )
+    return lines
+
+
+def _property_values(schema: Schema, entry: Property, wired: bool) -> list[str]:
+    # A wired property's values are per field, after its encoding; any other
+    # property's values are the property's own.
+    if entry.default is None:
+        return []
+    names = list(entry.fields) if wired else [entry.name]
+    if entry.type == "bool":
+        return [_constant("bool", f"k{names[0]}Default", _bool(entry.default))]
+    if entry.type == "enum":
+        return _enum_values(schema, entry, names[0])
+    if isinstance(entry.default, LodPolicy):
+        return _lod_policy_value(names[0], entry.default)
+    return _numeric_values(entry, names)
+
+
+def _enum_values(schema: Schema, entry: Property, name: str) -> list[str]:
+    assert entry.enum is not None
+    enumeration = schema.enumeration(entry.enum)
+    lines = [
+        _constant(
+            "std::uint8_t",
+            f"k{name}Default",
+            f"{enumeration.value_of(str(entry.default))}; // {entry.default}",
+            terminate=False,
+        )
+    ]
+    if entry.root_default is not None:
+        lines.append(
+            _constant(
+                "std::uint8_t",
+                f"k{name}RootDefault",
+                f"{enumeration.value_of(entry.root_default)}; // {entry.root_default}",
+                terminate=False,
+            )
+        )
+    lines.append(
+        f"inline constexpr std::span<const std::uint8_t> k{name}Values "
+        f"{{ k{entry.enum}Members }};"
+    )
+    return lines
+
+
+def _numeric_values(entry: Property, names: list[str]) -> list[str]:
+    is_int = entry.type == "int"
+    value_type = "std::int32_t" if is_int else "float"
+    bounds = _encoded_range(entry)
+    defaults = [_encoded(entry, value) for value in entry.components()]
+    if not entry.fields:
+        names = (
+            [entry.name]
+            if len(defaults) == 1
+            else [f"{entry.name}{axis}" for axis in "XYZ"]
+        )
+    lines: list[str] = []
+    for name, value in zip(names, defaults, strict=True):
+        lines.append(
+            _constant(
+                value_type, f"k{name}Default", _int(value) if is_int else _float(value)
+            )
+        )
+        lines.append(
+            f"inline constexpr PropertyRange<{value_type}> k{name}Range "
+            f"{_range(bounds, is_int)};"
+        )
+    return lines
+
+
+def _lod_policy_value(name: str, policy: LodPolicy) -> list[str]:
+    members = [
+        f"  .type = {_PAK}::LodPolicyType::{_LOD_POLICY_TYPES[policy.type]},",
+        f"  .lod_index = {policy.lod_index},",
+    ]
+    boundaries = policy.thresholds or policy.enter_finer_sse
+    if boundaries:
+        members.append(f"  .boundary_count = {len(boundaries)},")
+    if policy.thresholds:
+        members.append(f"  .thresholds = {{ {_floats(policy.thresholds)} }},")
+        members.append(f"  .hysteresis_ratio = {_float(policy.hysteresis_ratio)},")
+    if policy.enter_finer_sse:
+        members.append(f"  .enter_finer_sse = {{ {_floats(policy.enter_finer_sse)} }},")
+        members.append(
+            f"  .exit_coarser_sse = {{ {_floats(policy.exit_coarser_sse)} }},"
+        )
+    return [
+        f"inline constexpr {_PAK}::LodPolicyRecord k{name}Default {{",
+        *members,
+        "};",
+    ]
+
+
+def _encoded(entry: Property, value: float) -> float:
+    if entry.encoding == "degrees-to-radians":
+        return math.radians(value)
+    return value
+
+
+def _encoded_range(entry: Property) -> Range:
+    bounds = entry.range or UNLIMITED
+    return Range(
+        min=None if bounds.min is None else _encoded(entry, bounds.min),
+        max=None if bounds.max is None else _encoded(entry, bounds.max),
+        min_exclusive=bounds.min_exclusive,
+        max_exclusive=bounds.max_exclusive,
+        nonzero=bounds.nonzero,
+    )
+
+
+def _range(bounds: Range, is_int: bool) -> str:
+    def number(value: float) -> str:
+        return _int(value) if is_int else _float(value)
+
+    members: list[str] = []
+    if bounds.min is not None:
+        members.append(f".min = {number(bounds.min)}")
+    if bounds.max is not None:
+        members.append(f".max = {number(bounds.max)}")
+    if bounds.min_exclusive:
+        members.append(".min_exclusive = true")
+    if bounds.max_exclusive:
+        members.append(".max_exclusive = true")
+    if bounds.nonzero:
+        members.append(".nonzero = true")
+    return "{ " + ", ".join(members) + " }" if members else "{}"
+
+
+def _constant(value_type: str, name: str, value: str, terminate: bool = True) -> str:
+    return f"inline constexpr {value_type} {name} = {value}{';' if terminate else ''}"
+
+
+def _bool(value: object) -> str:
+    return "true" if value else "false"
+
+
+def _int(value: float) -> str:
+    return str(int(value))
+
+
+def _float(value: float) -> str:
+    # The shortest decimal that reads back as the same float32.
+    single = struct.unpack("f", struct.pack("f", value))[0]
+    for digits in range(1, 10):
+        text = repr(float(f"{single:.{digits}g}"))
+        if struct.unpack("f", struct.pack("f", float(text)))[0] == single:
+            break
+    else:
+        text = repr(single)
+    if not any(marker in text for marker in ".en"):
+        text += ".0"
+    return f"{text}F"
+
+
+def _floats(values: tuple[float, ...]) -> str:
+    return ", ".join(_float(value) for value in values)
+
+
+def _snake(kind: str) -> str:
+    return kind.replace("-", "_")
+
+
+def _pascal(kind: str) -> str:
+    return "".join(word.capitalize() for word in kind.split("-"))

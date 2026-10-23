@@ -22,8 +22,8 @@
         <PackageReference Include="Testably.Abstractions.Testing" />
     </ItemGroup>
 
-    <ItemGroup Condition="Exists('$(ProjectsRoot)/Oxygen.Engine/out/install/$(Configuration)/bin')">
-        <None Include="$(ProjectsRoot)/Oxygen.Engine/out/install/$(Configuration)/bin/*.dll" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <ItemGroup Condition="Exists('$(OxygenSdkDir)/bin')">
+        <None Include="$(OxygenSdkDir)/bin/*.dll" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
 
     <ItemGroup>

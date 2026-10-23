@@ -1,7 +1,7 @@
 ﻿{
   Diagnostics: [
     {
-      Location: Schema\SceneComponents.yaml: (40,29)-(40,35),
+      Location: Schema\SceneComponents.yaml: (74,29)-(74,35),
       Message: Geometry.Surface.Material.sources has an unknown source 'prefab',
       Severity: Error,
       Descriptor: {

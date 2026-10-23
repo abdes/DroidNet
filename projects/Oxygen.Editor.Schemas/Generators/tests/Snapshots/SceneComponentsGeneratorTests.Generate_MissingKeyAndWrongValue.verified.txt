@@ -1,7 +1,7 @@
 ﻿{
   Diagnostics: [
     {
-      Location: Schema\SceneComponents.yaml: (12,16)-(12,20),
+      Location: Schema\SceneComponents.yaml: (23,16)-(23,20),
       Message: Lamp.wire.id must be a non-negative integer, not 'nine',
       Severity: Error,
       Descriptor: {
@@ -14,7 +14,7 @@
       }
     },
     {
-      Location: Schema\SceneComponents.yaml: (18,14)-(18,19),
+      Location: Schema\SceneComponents.yaml: (32,14)-(32,19),
       Message: Lamp property has no 'key',
       Severity: Error,
       Descriptor: {

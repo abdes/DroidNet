@@ -31,17 +31,22 @@
     </ItemGroup>
 
     <!--
-        YamlDotNet reads the schema. The compiler does not provide it, so the generator embeds its single
-        netstandard2.0 assembly and DependencyLoader loads it on demand; consumers never reference it.
+        YamlDotNet reads the schema. The compiler does not provide it, so GetTargetPath hands it out with the generator:
+        a project that references the generator as an analyzer passes both to the compiler, which loads YamlDotNet in
+        the generator's own load context. Consumers never reference it.
     -->
     <ItemGroup>
         <PackageReference Include="YamlDotNet" GeneratePathProperty="true" PrivateAssets="all" />
     </ItemGroup>
 
-    <ItemGroup Condition=" '$(PKGYamlDotNet)' != '' ">
-        <EmbeddedResource Include="$(PKGYamlDotNet)\lib\netstandard2.0\YamlDotNet.dll">
-            <LogicalName>Oxygen.Editor.Schemas.Generators.Dependencies.YamlDotNet.dll</LogicalName>
-        </EmbeddedResource>
-    </ItemGroup>
+    <PropertyGroup>
+        <GetTargetPathDependsOn>$(GetTargetPathDependsOn);GetDependencyTargetPaths</GetTargetPathDependsOn>
+    </PropertyGroup>
+
+    <Target Name="GetDependencyTargetPaths">
+        <ItemGroup>
+            <TargetPathWithTargetPlatformMoniker Include="$(PKGYamlDotNet)\lib\netstandard2.0\YamlDotNet.dll" IncludeRuntimeDependency="false" />
+        </ItemGroup>
+    </Target>
 
 </Project>

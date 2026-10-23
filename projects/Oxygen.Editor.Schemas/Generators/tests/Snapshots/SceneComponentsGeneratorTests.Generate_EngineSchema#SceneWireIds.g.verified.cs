@@ -323,3 +323,22 @@ public enum LocalFogVolumeField : ushort
     /// <summary>Field 12 of the LocalFogVolume field set.</summary>
     SortPriority = 12,
 }
+
+/// <summary>The ids of the properties a scene stores as overrides. Stable: never renumbered or reused.</summary>
+public enum RuntimeOverrideId : ushort
+{
+    /// <summary>Sentinel; not a valid override id.</summary>
+    Invalid = 0,
+
+    /// <summary>The overrides of <c>SceneSchema.Geometry.Surface.Material</c> (<c>/material</c>).</summary>
+    GeometrySurfaceMaterial = 1,
+
+    /// <summary>The overrides of <c>SceneSchema.Geometry.Surface.Visibility</c> (<c>/visible</c>).</summary>
+    GeometrySurfaceVisibility = 2,
+
+    /// <summary>The overrides of <c>SceneSchema.Geometry.Surface.CastsShadows</c> (<c>/casts_shadows</c>).</summary>
+    GeometrySurfaceCastsShadows = 3,
+
+    /// <summary>The overrides of <c>SceneSchema.Geometry.LodPolicy</c> (<c>/lod_policy</c>).</summary>
+    GeometryLodPolicy = 4,
+}

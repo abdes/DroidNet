@@ -18,7 +18,7 @@
         <Compile Include="../TestSupport/Native/*.cs" Link="TestSupport/Native/%(Filename)%(Extension)" />
     </ItemGroup>
     <Import Project="$(ProjectsRoot)/UITests.Shared/src/UITests.Shared.projitems" Label="Shared" />
-    <ItemGroup Condition="Exists('$(ProjectsRoot)/Oxygen.Engine/out/install/$(Configuration)/bin')">
-        <None Include="$(ProjectsRoot)/Oxygen.Engine/out/install/$(Configuration)/bin/*.dll" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <ItemGroup Condition="Exists('$(OxygenSdkDir)/bin')">
+        <None Include="$(OxygenSdkDir)/bin/*.dll" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
 </Project>

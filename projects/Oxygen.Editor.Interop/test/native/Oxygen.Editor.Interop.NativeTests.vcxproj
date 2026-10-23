@@ -92,7 +92,7 @@
     <IsTestProject>true</IsTestProject>
     <IsPackable>false</IsPackable>
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
-    <OxygenEngineInstallDir>$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)</OxygenEngineInstallDir>
+    <OxygenEngineInstallDir>$(OxygenSdkDir)</OxygenEngineInstallDir>
   </PropertyGroup>
   <!-- Debug Settings -->
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">

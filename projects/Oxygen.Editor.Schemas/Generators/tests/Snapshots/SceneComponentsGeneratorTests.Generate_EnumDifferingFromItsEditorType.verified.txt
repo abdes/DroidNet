@@ -1,0 +1,17 @@
+﻿{
+  Diagnostics: [
+    {
+      Location: Schema\SceneComponents.yaml: (8,6)-(9,31),
+      Message: CameraAspectMode: the schema declares Auto=0,Fixed=1 but global::Oxygen.Managed.Core.CameraAspectMode has Auto=0,Fixed=2,
+      Severity: Error,
+      Descriptor: {
+        Id: OXGNSC010,
+        Title: Enumeration differs from its editor type,
+        MessageFormat: {0}: {1},
+        Category: Oxygen.Editor.Schemas.Generator,
+        DefaultSeverity: Error,
+        IsEnabledByDefault: true
+      }
+    }
+  ]
+}

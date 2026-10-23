@@ -32,6 +32,22 @@ public enum LampField : ushort
     /// <summary>Field 3 of the Lamp field set.</summary>
     FovRadians = 3,
 
+    /// <summary>Field 4 of the Lamp field set.</summary>
+    Mode = 4,
+
     /// <summary>Field 5 of the Lamp field set.</summary>
     Range = 5,
+}
+
+/// <summary>The ids of the properties a scene stores as overrides. Stable: never renumbered or reused.</summary>
+public enum RuntimeOverrideId : ushort
+{
+    /// <summary>Sentinel; not a valid override id.</summary>
+    Invalid = 0,
+
+    /// <summary>The overrides of <c>SceneSchema.Geometry.Surface.Material</c> (<c>/material</c>).</summary>
+    GeometrySurfaceMaterial = 1,
+
+    /// <summary>The overrides of <c>SceneSchema.Geometry.LodPolicy</c> (<c>/lod_policy</c>).</summary>
+    GeometryLodPolicy = 2,
 }

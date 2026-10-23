@@ -252,6 +252,47 @@ struct MeshViewDesc {
 #pragma pack(pop)
 static_assert(sizeof(MeshViewDesc) == 40);
 
+//! The most LODs a geometry asset has.
+[[maybe_unused]] constexpr uint8_t kMaxLodCount = 8;
+
+//! The most LOD boundaries a policy has: boundary `i` lies between LOD `i` and
+//! LOD `i + 1`.
+[[maybe_unused]] constexpr uint8_t kMaxLodBoundaryCount = kMaxLodCount - 1;
+
+//! How a LOD policy selects the LOD shown per view.
+enum class LodPolicyType : uint8_t {
+  kFixed = 0, //!< Always `lod_index`, clamped to the LOD count.
+  kDistance = 1, //!< By normalized view distance, with symmetric hysteresis.
+  kScreenSpaceError = 2, //!< By screen-space error, with directional
+                         //!< hysteresis.
+};
+
+//! A geometry LOD policy, the value of the scene schema's `lod-policy` type.
+/*!
+  Each policy type reads only its own fields; the others are zero.
+
+  - `kFixed`: `lod_index`.
+  - `kDistance`: `thresholds[boundary_count]`, non-decreasing, and
+    `hysteresis_ratio` in [0, 0.99].
+  - `kScreenSpaceError`: `enter_finer_sse[boundary_count]` and
+    `exit_coarser_sse[boundary_count]`, each non-decreasing.
+
+  `boundary_count` is at most kMaxLodBoundaryCount, since a geometry has at most
+  kMaxLodCount LODs.
+*/
+#pragma pack(push, 1)
+struct LodPolicyRecord {
+  LodPolicyType type = LodPolicyType::kFixed;
+  uint8_t lod_index = 0;
+  uint8_t boundary_count = 0;
+  float thresholds[kMaxLodBoundaryCount] = {};
+  float hysteresis_ratio = 0.0F;
+  float enter_finer_sse[kMaxLodBoundaryCount] = {};
+  float exit_coarser_sse[kMaxLodBoundaryCount] = {};
+};
+#pragma pack(pop)
+static_assert(sizeof(LodPolicyRecord) == 91);
+
 } // namespace oxygen::data::pak::geometry
 
 // NOLINTEND(*-avoid-c-arrays)

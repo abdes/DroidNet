@@ -1,7 +1,7 @@
 ﻿{
   Diagnostics: [
     {
-      Location: Schema\SceneComponents.yaml: (12,30)-(12,35),
+      Location: Schema\SceneComponents.yaml: (23,30)-(23,35),
       Message: Lamp: field set Torch does not exist,
       Severity: Error,
       Descriptor: {

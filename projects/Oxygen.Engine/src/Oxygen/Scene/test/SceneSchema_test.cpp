@@ -1,0 +1,101 @@
+//===----------------------------------------------------------------------===//
+// Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
+// copy at https://opensource.org/licenses/BSD-3-Clause.
+// SPDX-License-Identifier: BSD-3-Clause
+//===----------------------------------------------------------------------===//
+
+#include <algorithm>
+#include <cstdint>
+#include <limits>
+#include <numbers>
+
+#include <Oxygen/Data/PakFormat_geometry.h>
+#include <Oxygen/Scene/Schema/Generated.SceneComponents.h>
+#include <Oxygen/Scene/Schema/PropertyRange.h>
+#include <Oxygen/Testing/GTest.h>
+
+namespace {
+
+namespace schema = oxygen::scene::schema;
+using oxygen::data::pak::geometry::LodPolicyType;
+using schema::PropertyRange;
+
+NOLINT_TEST(PropertyRangeTest, UnlimitedRangeAcceptsEveryFiniteValue)
+{
+  constexpr PropertyRange<float> kRange {};
+
+  EXPECT_TRUE(kRange.Contains(std::numeric_limits<float>::lowest()));
+  EXPECT_TRUE(kRange.Contains(0.0F));
+  EXPECT_FALSE(kRange.Contains(std::numeric_limits<float>::infinity()));
+  EXPECT_FALSE(kRange.Contains(std::numeric_limits<float>::quiet_NaN()));
+}
+
+NOLINT_TEST(PropertyRangeTest, HonoursExclusiveBoundsAndNonZero)
+{
+  constexpr PropertyRange<float> kPositive { .min = 0.0F,
+    .min_exclusive = true };
+  constexpr PropertyRange<float> kNonZero { .nonzero = true };
+  constexpr PropertyRange<std::int32_t> kCascades { .min = 1, .max = 4 };
+
+  EXPECT_FALSE(kPositive.Contains(0.0F));
+  EXPECT_TRUE(kPositive.Contains(0.001F));
+  EXPECT_FALSE(kNonZero.Contains(0.0F));
+  EXPECT_TRUE(kNonZero.Contains(-1.0F));
+  EXPECT_TRUE(kCascades.Contains(4));
+  EXPECT_FALSE(kCascades.Contains(5));
+}
+
+// The generator refuses a default outside its range; this checks the
+// rendering keeps that true in field units.
+NOLINT_TEST(SceneSchemaTest, DefaultsLieInsideTheirRangesInFieldUnits)
+{
+  namespace camera = schema::perspective_camera;
+  namespace spot = schema::spot_light;
+
+  EXPECT_FLOAT_EQ(
+    camera::kFieldOfViewYRadiansDefault, std::numbers::pi_v<float> / 3.0F);
+  EXPECT_TRUE(camera::kFieldOfViewYRadiansRange.Contains(
+    camera::kFieldOfViewYRadiansDefault));
+  EXPECT_TRUE(spot::kInnerConeAngleRadiansRange.Contains(
+    spot::kInnerConeAngleRadiansDefault));
+  EXPECT_TRUE(spot::kRangeRange.Contains(spot::kRangeDefault));
+  EXPECT_TRUE(schema::directional_light::kCascadeCountRange.Contains(
+    schema::directional_light::kCascadeCountDefault));
+  EXPECT_FALSE(schema::transform::kScaleXRange.Contains(0.0F));
+}
+
+NOLINT_TEST(SceneSchemaTest, NodeFlagDefaultsAreDeclaredMembers)
+{
+  namespace flags = schema::node_flags;
+
+  EXPECT_TRUE(
+    std::ranges::contains(flags::kVisibleValues, flags::kVisibleDefault));
+  EXPECT_TRUE(
+    std::ranges::contains(flags::kVisibleValues, flags::kVisibleRootDefault));
+  EXPECT_NE(flags::kVisibleDefault, flags::kVisibleRootDefault);
+}
+
+NOLINT_TEST(SceneSchemaTest, OverridePropertiesAreOrderedByStableId)
+{
+  const auto& table = schema::kOverrideProperties;
+
+  ASSERT_EQ(table.size(), 4U);
+  EXPECT_TRUE(std::ranges::is_sorted(table, {}, &schema::OverrideProperty::id));
+  EXPECT_EQ(table[0].id, schema::OverrideId::kGeometrySurfaceMaterial);
+  EXPECT_EQ(table[0].part_kind, schema::PartKind::kSurface);
+  EXPECT_EQ(table[0].key, "/material");
+  EXPECT_EQ(table[3].id, schema::OverrideId::kGeometryLodPolicy);
+  EXPECT_EQ(table[3].part_kind, schema::PartKind::kNone);
+  EXPECT_EQ(table[3].type, schema::ValueType::kLodPolicy);
+}
+
+NOLINT_TEST(SceneSchemaTest, AssetDefaultsShowEverySurfaceAndTheFinestLod)
+{
+  EXPECT_TRUE(schema::geometry::surface::kVisibilityDefault);
+  EXPECT_TRUE(schema::geometry::surface::kCastsShadowsDefault);
+  EXPECT_EQ(schema::geometry::kLodPolicyDefault.type, LodPolicyType::kFixed);
+  EXPECT_EQ(schema::geometry::kLodPolicyDefault.lod_index, 0U);
+  EXPECT_EQ(schema::geometry::kLodPolicyDefault.boundary_count, 0U);
+}
+
+} // namespace

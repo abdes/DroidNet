@@ -2,12 +2,22 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://oxygen.engine/schemas/SceneComponents.schema.json",
   "title": "Oxygen scene components",
-  "description": "The authored scene node components, their properties and the field ids that property edits address.",
+  "description": "The authored scene node components, their properties with their defaults, ranges and units, and the field and override ids that property edits address.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["version", "field_sets", "components"],
+  "required": ["version", "units", "enums", "field_sets", "components"],
   "properties": {
-    "version": { "const": 1 },
+    "version": { "const": 2 },
+    "units": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/definitions/unit" }
+    },
+    "enums": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/definitions/enumeration" }
+    },
     "field_sets": {
       "type": "array",
       "minItems": 1,
@@ -24,6 +34,51 @@
       "description": "A PascalCase name, used as is in generated code.",
       "type": "string",
       "pattern": "^[A-Z][A-Za-z0-9]*$"
+    },
+    "kebab_name": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$"
+    },
+    "unit": {
+      "description": "A unit that UIs show, declared once.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "abbreviation", "name"],
+      "properties": {
+        "id": { "$ref": "#/definitions/kebab_name" },
+        "abbreviation": {
+          "description": "The short form shown next to a value.",
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "description": "The full plural name, for tooltips and automation.",
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "enumeration": {
+      "description": "An enumeration with the wire value of each member.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "members"],
+      "properties": {
+        "name": { "$ref": "#/definitions/identifier" },
+        "members": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "value"],
+            "properties": {
+              "name": { "$ref": "#/definitions/identifier" },
+              "value": { "type": "integer", "minimum": 0, "maximum": 255 }
+            }
+          }
+        }
+      }
     },
     "field_set": {
       "description": "Component-local field ids, stable across versions.",
@@ -50,13 +105,16 @@
     "component": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["name", "kind", "properties"],
+      "required": ["name", "kind", "cardinality", "properties"],
       "properties": {
         "name": { "$ref": "#/definitions/identifier" },
         "kind": {
           "description": "The component kind that addresses the component's properties.",
-          "type": "string",
-          "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$"
+          "$ref": "#/definitions/kebab_name"
+        },
+        "cardinality": {
+          "description": "Whether every node has the component (required) or at most one (optional).",
+          "enum": ["required", "optional"]
         },
         "wire": {
           "description": "Present when the component is applied field by field.",
@@ -89,8 +147,7 @@
         "name": { "$ref": "#/definitions/identifier" },
         "kind": {
           "description": "The part kind that addresses the part's properties.",
-          "type": "string",
-          "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$"
+          "$ref": "#/definitions/kebab_name"
         },
         "properties": {
           "description": "The part's properties, each supplied by a source and stored as an override.",
@@ -108,6 +165,66 @@
         { "not": { "required": ["fields"] } }
       ]
     },
+    "range": {
+      "description": "The valid values of a numeric property, each component of a vec3 alike. An absent min or max is unlimited; bounds are inclusive unless marked exclusive.",
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "min": { "type": "number" },
+        "max": { "type": "number" },
+        "min_exclusive": { "type": "boolean" },
+        "max_exclusive": { "type": "boolean" },
+        "nonzero": { "type": "boolean" }
+      },
+      "dependencies": {
+        "min_exclusive": ["min"],
+        "max_exclusive": ["max"]
+      }
+    },
+    "lod_policy": {
+      "description": "A geometry LOD policy, with at most 7 thresholds for at most 8 LODs.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "lod_index"],
+          "properties": {
+            "type": { "const": "fixed" },
+            "lod_index": { "type": "integer", "minimum": 0, "maximum": 7 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "thresholds", "hysteresis_ratio"],
+          "properties": {
+            "type": { "const": "distance" },
+            "thresholds": { "$ref": "#/definitions/lod_thresholds" },
+            "hysteresis_ratio": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 0.99
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "enter_finer_sse", "exit_coarser_sse"],
+          "properties": {
+            "type": { "const": "screen_space_error" },
+            "enter_finer_sse": { "$ref": "#/definitions/lod_thresholds" },
+            "exit_coarser_sse": { "$ref": "#/definitions/lod_thresholds" }
+          }
+        }
+      ]
+    },
+    "lod_thresholds": {
+      "type": "array",
+      "maxItems": 7,
+      "items": { "type": "number", "minimum": 0 }
+    },
     "property": {
       "type": "object",
       "additionalProperties": false,
@@ -120,7 +237,16 @@
           "pattern": "^(/[a-z0-9_]+)+$"
         },
         "type": {
-          "enum": ["bool", "int", "float", "vec3", "enum", "asset"]
+          "enum": [
+            "bool",
+            "int",
+            "float",
+            "vec3",
+            "enum",
+            "asset",
+            "string",
+            "lod-policy"
+          ]
         },
         "enum": {
           "description": "The enumeration of an enum property.",
@@ -142,7 +268,37 @@
           "minItems": 1,
           "uniqueItems": true,
           "items": { "enum": ["asset", "model"] }
+        },
+        "override_id": {
+          "description": "The stable id of a sourced property's overrides, unique across the schema and never reused.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "default": {
+          "description": "The creation value, in authored units."
+        },
+        "root_default": {
+          "description": "The value of a node flag on a new root, and what an Inherit root resolves to.",
+          "$ref": "#/definitions/identifier"
+        },
+        "range": { "$ref": "#/definitions/range" },
+        "commit": {
+          "description": "What an inspector edit does with a finite value outside the range; loading, cooking and the runtime always reject it.",
+          "enum": ["clamp", "reject"]
+        },
+        "unit": {
+          "description": "The id of the unit of the stored value, the one its default and range use.",
+          "$ref": "#/definitions/kebab_name"
+        },
+        "display_unit": {
+          "description": "The id of the unit UIs show the value in.",
+          "$ref": "#/definitions/kebab_name"
         }
+      },
+      "dependencies": {
+        "commit": ["range"],
+        "display_unit": ["unit"]
       },
       "allOf": [
         {
@@ -153,6 +309,77 @@
         {
           "if": { "required": ["encoding"] },
           "then": { "required": ["fields"] }
+        },
+        {
+          "if": { "required": ["sources"] },
+          "then": { "required": ["override_id"] },
+          "else": { "not": { "required": ["override_id"] } }
+        },
+        {
+          "if": { "properties": { "type": { "enum": ["asset", "string"] } } },
+          "then": {
+            "not": {
+              "anyOf": [
+                { "required": ["default"] },
+                { "required": ["range"] },
+                { "required": ["unit"] }
+              ]
+            }
+          },
+          "else": { "required": ["default"] }
+        },
+        {
+          "if": { "properties": { "type": { "const": "enum" } } },
+          "else": { "not": { "required": ["root_default"] } }
+        },
+        {
+          "if": {
+            "properties": { "type": { "enum": ["int", "float", "vec3"] } }
+          },
+          "else": {
+            "not": {
+              "anyOf": [{ "required": ["range"] }, { "required": ["unit"] }]
+            }
+          }
+        },
+        {
+          "if": { "properties": { "type": { "const": "bool" } } },
+          "then": { "properties": { "default": { "type": "boolean" } } }
+        },
+        {
+          "if": { "properties": { "type": { "const": "int" } } },
+          "then": { "properties": { "default": { "type": "integer" } } }
+        },
+        {
+          "if": { "properties": { "type": { "const": "float" } } },
+          "then": { "properties": { "default": { "type": "number" } } }
+        },
+        {
+          "if": { "properties": { "type": { "const": "vec3" } } },
+          "then": {
+            "properties": {
+              "default": {
+                "type": "array",
+                "minItems": 3,
+                "maxItems": 3,
+                "items": { "type": "number" }
+              }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "type": { "const": "enum" } } },
+          "then": {
+            "properties": {
+              "default": { "$ref": "#/definitions/identifier" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "type": { "const": "lod-policy" } } },
+          "then": {
+            "properties": { "default": { "$ref": "#/definitions/lod_policy" } }
+          }
         }
       ]
     }

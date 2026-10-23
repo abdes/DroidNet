@@ -2,13 +2,14 @@
 
 <!--
     Generates code from the engine's scene components schema. A project sets SceneComponentsOutput to what it owns
-    (WireIds, PropertyIds or WireTable) before importing this file; SceneComponentsGenerator reads the schema the engine
-    keeps in its source tree and reports any problem in it as an error at its line.
+    (WireIds, PropertyIds or WireTable) before importing this file; SceneComponentsGenerator reads the schema the
+    installed engine SDK ships, like every other engine input of the editor, and reports any problem in it as an error
+    at its line.
 -->
 <Project>
 
     <PropertyGroup>
-        <SceneComponentsSchema>$(ProjectsRoot)\Oxygen.Engine\src\Oxygen\Scene\Schema\SceneComponents.yaml</SceneComponentsSchema>
+        <SceneComponentsSchema>$(OxygenSdkSchemasDir)\SceneComponents.yaml</SceneComponentsSchema>
     </PropertyGroup>
 
     <ItemGroup>
@@ -17,5 +18,9 @@
         <AdditionalFiles Include="$(SceneComponentsSchema)" Link="Schema\%(Filename)%(Extension)" />
         <CompilerVisibleProperty Include="SceneComponentsOutput" />
     </ItemGroup>
+
+    <Target Name="CheckSceneComponentsSchema" BeforeTargets="CoreCompile" Condition="!Exists('$(SceneComponentsSchema)')">
+        <Error Text="The scene components schema $(SceneComponentsSchema) is missing: install the engine SDK ($(Configuration)) first." />
+    </Target>
 
 </Project>

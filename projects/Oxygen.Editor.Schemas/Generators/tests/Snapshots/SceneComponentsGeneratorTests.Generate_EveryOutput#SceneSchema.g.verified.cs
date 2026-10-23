@@ -7,14 +7,58 @@
 
 namespace Oxygen.Editor.World;
 
-/// <summary>The scene components: each one's kind and the typed ids of its properties and of its parts' properties.</summary>
+/// <summary>
+/// The scene components: each one's kind and cardinality, the typed ids of its properties and of its parts' properties,
+/// and each property's default, range and units.
+/// </summary>
 public static class SceneSchema
 {
     /// <summary>Gets the value type of each property a source may supply; a scene stores only its overrides of them.</summary>
     public static global::System.Collections.Frozen.FrozenDictionary<global::Oxygen.Managed.Core.PropertyId, global::System.Type> Overridable { get; } =
         global::System.Collections.Frozen.FrozenDictionary.ToFrozenDictionary(new global::System.Collections.Generic.Dictionary<global::Oxygen.Managed.Core.PropertyId, global::System.Type>
         {
+            [Geometry.LodPolicy.Id] = typeof(global::Oxygen.Editor.World.Serialization.LodPolicy),
             [Geometry.Surface.Material.Id] = typeof(global::Oxygen.Managed.Core.AssetPath),
+        });
+
+    /// <summary>Gets the range of a numeric property; a vector property's range bounds each component.</summary>
+    /// <typeparam name="T">The bounded type: <see cref="int"/> or <see cref="float"/>.</typeparam>
+    /// <param name="id">The property id.</param>
+    /// <returns>The range, or <see langword="null"/> when the property has no range of that type.</returns>
+    public static global::Oxygen.Managed.Core.PropertyRange<T>? RangeOf<T>(global::Oxygen.Managed.Core.PropertyId id)
+        where T : struct, global::System.Numerics.INumber<T>
+        => RangesById.GetValueOrDefault(id) as global::Oxygen.Managed.Core.PropertyRange<T>;
+
+    /// <summary>Gets the unit of a property's stored value.</summary>
+    /// <param name="id">The property id.</param>
+    /// <returns>The unit, or <see langword="null"/> when the value has none.</returns>
+    public static global::Oxygen.Managed.Core.PropertyUnit? UnitOf(global::Oxygen.Managed.Core.PropertyId id) => UnitsById.GetValueOrDefault(id);
+
+    /// <summary>Gets the unit UIs show a property's value in.</summary>
+    /// <param name="id">The property id.</param>
+    /// <returns>The unit, or <see langword="null"/> when the value has none.</returns>
+    public static global::Oxygen.Managed.Core.PropertyUnit? DisplayUnitOf(global::Oxygen.Managed.Core.PropertyId id) => DisplayUnitsById.GetValueOrDefault(id);
+
+    private static global::System.Collections.Frozen.FrozenDictionary<global::Oxygen.Managed.Core.PropertyId, object> RangesById { get; } =
+        global::System.Collections.Frozen.FrozenDictionary.ToFrozenDictionary(new global::System.Collections.Generic.Dictionary<global::Oxygen.Managed.Core.PropertyId, object>
+        {
+            [Lamp.Color.Id] = Lamp.Ranges.Color,
+            [Lamp.Range.Id] = Lamp.Ranges.Range,
+            [Lamp.FovDegrees.Id] = Lamp.Ranges.FovDegrees,
+        });
+
+    private static global::System.Collections.Frozen.FrozenDictionary<global::Oxygen.Managed.Core.PropertyId, global::Oxygen.Managed.Core.PropertyUnit> UnitsById { get; } =
+        global::System.Collections.Frozen.FrozenDictionary.ToFrozenDictionary(new global::System.Collections.Generic.Dictionary<global::Oxygen.Managed.Core.PropertyId, global::Oxygen.Managed.Core.PropertyUnit>
+        {
+            [Lamp.Range.Id] = Lamp.Units.Range,
+            [Lamp.FovDegrees.Id] = Lamp.Units.FovDegrees,
+        });
+
+    private static global::System.Collections.Frozen.FrozenDictionary<global::Oxygen.Managed.Core.PropertyId, global::Oxygen.Managed.Core.PropertyUnit> DisplayUnitsById { get; } =
+        global::System.Collections.Frozen.FrozenDictionary.ToFrozenDictionary(new global::System.Collections.Generic.Dictionary<global::Oxygen.Managed.Core.PropertyId, global::Oxygen.Managed.Core.PropertyUnit>
+        {
+            [Lamp.Range.Id] = Lamp.DisplayUnits.Range,
+            [Lamp.FovDegrees.Id] = Lamp.DisplayUnits.FovDegrees,
         });
 
     /// <summary>The <c>lamp</c> component.</summary>
@@ -22,6 +66,9 @@ public static class SceneSchema
     {
         /// <summary>The component kind.</summary>
         public const string Kind = "lamp";
+
+        /// <summary>A value indicating whether every node has the component; otherwise a node has at most one.</summary>
+        public const bool IsRequired = false;
 
         /// <summary>Gets the <c>/color</c> property.</summary>
         public static global::Oxygen.Managed.Core.PropertyId<global::System.Numerics.Vector3> Color { get; } = new(Kind, "/color");
@@ -31,6 +78,58 @@ public static class SceneSchema
 
         /// <summary>Gets the <c>/fov_degrees</c> property.</summary>
         public static global::Oxygen.Managed.Core.PropertyId<float> FovDegrees { get; } = new(Kind, "/fov_degrees");
+
+        /// <summary>Gets the <c>/mode</c> property.</summary>
+        public static global::Oxygen.Managed.Core.PropertyId<global::Oxygen.Managed.Core.CameraAspectMode> Mode { get; } = new(Kind, "/mode");
+
+        /// <summary>The creation value of each property; an asset or string value is supplied by the command that creates it.</summary>
+        public static class Defaults
+        {
+            /// <summary>The default of <c>/color</c>.</summary>
+            public static global::System.Numerics.Vector3 Color { get; } = new(1f, 1f, 1f);
+
+            /// <summary>The default of <c>/range</c>.</summary>
+            public const float Range = 20f;
+
+            /// <summary>The default of <c>/fov_degrees</c>.</summary>
+            public const float FovDegrees = 60f;
+
+            /// <summary>The default of <c>/mode</c>.</summary>
+            public const global::Oxygen.Managed.Core.CameraAspectMode Mode = global::Oxygen.Managed.Core.CameraAspectMode.Auto;
+        }
+
+        /// <summary>The valid values of each numeric property; a vector property's range bounds each component.</summary>
+        public static class Ranges
+        {
+            /// <summary>The range of <c>/color</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyRange<float> Color { get; } = new(0f, 1f, false, false, false, global::Oxygen.Managed.Core.RangeCommit.Clamp);
+
+            /// <summary>The range of <c>/range</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyRange<float> Range { get; } = new(0f, null, true, false, false, global::Oxygen.Managed.Core.RangeCommit.Reject);
+
+            /// <summary>The range of <c>/fov_degrees</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyRange<float> FovDegrees { get; } = new(1f, 179f, false, false, false, global::Oxygen.Managed.Core.RangeCommit.Clamp);
+        }
+
+        /// <summary>The unit of each property's stored value, the one its default and range use.</summary>
+        public static class Units
+        {
+            /// <summary>The unit of <c>/range</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit Range => global::Oxygen.Editor.World.SceneUnits.Metre;
+
+            /// <summary>The unit of <c>/fov_degrees</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit FovDegrees => global::Oxygen.Editor.World.SceneUnits.Degree;
+        }
+
+        /// <summary>The unit UIs show each property's value in.</summary>
+        public static class DisplayUnits
+        {
+            /// <summary>The unit of <c>/range</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit Range => global::Oxygen.Editor.World.SceneUnits.Metre;
+
+            /// <summary>The unit of <c>/fov_degrees</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit FovDegrees => global::Oxygen.Editor.World.SceneUnits.Degree;
+        }
     }
 
     /// <summary>The <c>geometry</c> component.</summary>
@@ -39,8 +138,21 @@ public static class SceneSchema
         /// <summary>The component kind.</summary>
         public const string Kind = "geometry";
 
+        /// <summary>A value indicating whether every node has the component; otherwise a node has at most one.</summary>
+        public const bool IsRequired = true;
+
         /// <summary>Gets the <c>/geometry_uri</c> property.</summary>
         public static global::Oxygen.Managed.Core.PropertyId<global::Oxygen.Managed.Core.AssetPath?> GeometryUri { get; } = new(Kind, "/geometry_uri");
+
+        /// <summary>Gets the <c>/lod_policy</c> property.</summary>
+        public static global::Oxygen.Managed.Core.PropertyId<global::Oxygen.Editor.World.Serialization.LodPolicy> LodPolicy { get; } = new(Kind, "/lod_policy");
+
+        /// <summary>The creation value of each property; an asset or string value is supplied by the command that creates it.</summary>
+        public static class Defaults
+        {
+            /// <summary>The default of <c>/lod_policy</c>.</summary>
+            public static global::Oxygen.Editor.World.Serialization.LodPolicy LodPolicy { get; } = new global::Oxygen.Editor.World.Serialization.LodPolicy.Distance([10f, 20f], 0.1f);
+        }
 
         /// <summary>The <c>surface</c> part of the <c>geometry</c> component.</summary>
         public static class Surface
@@ -52,4 +164,17 @@ public static class SceneSchema
             public static global::Oxygen.Managed.Core.PropertyId<global::Oxygen.Managed.Core.AssetPath> Material { get; } = new(Geometry.Kind, Kind, "/material");
         }
     }
+}
+
+/// <summary>The units of the scene component properties; UIs take every unit string from here.</summary>
+public static class SceneUnits
+{
+    /// <summary>Gets the <c>metre</c> unit.</summary>
+    public static global::Oxygen.Managed.Core.PropertyUnit Metre { get; } = new("metre", "m", "metres");
+
+    /// <summary>Gets the <c>degree</c> unit.</summary>
+    public static global::Oxygen.Managed.Core.PropertyUnit Degree { get; } = new("degree", "°", "degrees");
+
+    /// <summary>Gets the <c>radian</c> unit.</summary>
+    public static global::Oxygen.Managed.Core.PropertyUnit Radian { get; } = new("radian", "rad", "radians");
 }

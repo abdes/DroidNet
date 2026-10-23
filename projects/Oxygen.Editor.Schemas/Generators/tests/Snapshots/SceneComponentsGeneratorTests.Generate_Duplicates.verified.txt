@@ -1,7 +1,7 @@
 ﻿{
   Diagnostics: [
     {
-      Location: Schema\SceneComponents.yaml: (8,32)-(8,33),
+      Location: Schema\SceneComponents.yaml: (17,32)-(17,33),
       Message: Duplicate field id of Lamp: 5,
       Severity: Error,
       Descriptor: {
@@ -14,7 +14,7 @@
       }
     },
     {
-      Location: Schema\SceneComponents.yaml: (27,10)-(27,14),
+      Location: Schema\SceneComponents.yaml: (54,10)-(54,14),
       Message: Duplicate component: Lamp,
       Severity: Error,
       Descriptor: {

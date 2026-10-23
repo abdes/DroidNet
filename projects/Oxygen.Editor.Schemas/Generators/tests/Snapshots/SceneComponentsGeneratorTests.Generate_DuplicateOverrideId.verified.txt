@@ -1,0 +1,17 @@
+﻿{
+  Diagnostics: [
+    {
+      Location: Schema\SceneComponents.yaml: (75,25)-(75,26),
+      Message: Duplicate override id: 1,
+      Severity: Error,
+      Descriptor: {
+        Id: OXGNSC004,
+        Title: Scene components schema has an invalid entry,
+        MessageFormat: {0},
+        Category: Oxygen.Editor.Schemas.Generator,
+        DefaultSeverity: Error,
+        IsEnabledByDefault: true
+      }
+    }
+  ]
+}

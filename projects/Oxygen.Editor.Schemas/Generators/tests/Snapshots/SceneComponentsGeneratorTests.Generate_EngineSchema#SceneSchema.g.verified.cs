@@ -7,21 +7,239 @@
 
 namespace Oxygen.Editor.World;
 
-/// <summary>The scene components: each one's kind and the typed ids of its properties and of its parts' properties.</summary>
+/// <summary>
+/// The scene components: each one's kind and cardinality, the typed ids of its properties and of its parts' properties,
+/// and each property's default, range and units.
+/// </summary>
 public static class SceneSchema
 {
     /// <summary>Gets the value type of each property a source may supply; a scene stores only its overrides of them.</summary>
     public static global::System.Collections.Frozen.FrozenDictionary<global::Oxygen.Managed.Core.PropertyId, global::System.Type> Overridable { get; } =
         global::System.Collections.Frozen.FrozenDictionary.ToFrozenDictionary(new global::System.Collections.Generic.Dictionary<global::Oxygen.Managed.Core.PropertyId, global::System.Type>
         {
+            [Geometry.LodPolicy.Id] = typeof(global::Oxygen.Editor.World.Serialization.LodPolicy),
             [Geometry.Surface.Material.Id] = typeof(global::Oxygen.Managed.Core.AssetPath),
+            [Geometry.Surface.Visibility.Id] = typeof(bool),
+            [Geometry.Surface.CastsShadows.Id] = typeof(bool),
         });
+
+    /// <summary>Gets the range of a numeric property; a vector property's range bounds each component.</summary>
+    /// <typeparam name="T">The bounded type: <see cref="int"/> or <see cref="float"/>.</typeparam>
+    /// <param name="id">The property id.</param>
+    /// <returns>The range, or <see langword="null"/> when the property has no range of that type.</returns>
+    public static global::Oxygen.Managed.Core.PropertyRange<T>? RangeOf<T>(global::Oxygen.Managed.Core.PropertyId id)
+        where T : struct, global::System.Numerics.INumber<T>
+        => RangesById.GetValueOrDefault(id) as global::Oxygen.Managed.Core.PropertyRange<T>;
+
+    /// <summary>Gets the unit of a property's stored value.</summary>
+    /// <param name="id">The property id.</param>
+    /// <returns>The unit, or <see langword="null"/> when the value has none.</returns>
+    public static global::Oxygen.Managed.Core.PropertyUnit? UnitOf(global::Oxygen.Managed.Core.PropertyId id) => UnitsById.GetValueOrDefault(id);
+
+    /// <summary>Gets the unit UIs show a property's value in.</summary>
+    /// <param name="id">The property id.</param>
+    /// <returns>The unit, or <see langword="null"/> when the value has none.</returns>
+    public static global::Oxygen.Managed.Core.PropertyUnit? DisplayUnitOf(global::Oxygen.Managed.Core.PropertyId id) => DisplayUnitsById.GetValueOrDefault(id);
+
+    private static global::System.Collections.Frozen.FrozenDictionary<global::Oxygen.Managed.Core.PropertyId, object> RangesById { get; } =
+        global::System.Collections.Frozen.FrozenDictionary.ToFrozenDictionary(new global::System.Collections.Generic.Dictionary<global::Oxygen.Managed.Core.PropertyId, object>
+        {
+            [Transform.PositionX.Id] = Transform.Ranges.PositionX,
+            [Transform.PositionY.Id] = Transform.Ranges.PositionY,
+            [Transform.PositionZ.Id] = Transform.Ranges.PositionZ,
+            [Transform.RotationX.Id] = Transform.Ranges.RotationX,
+            [Transform.RotationY.Id] = Transform.Ranges.RotationY,
+            [Transform.RotationZ.Id] = Transform.Ranges.RotationZ,
+            [Transform.ScaleX.Id] = Transform.Ranges.ScaleX,
+            [Transform.ScaleY.Id] = Transform.Ranges.ScaleY,
+            [Transform.ScaleZ.Id] = Transform.Ranges.ScaleZ,
+            [PerspectiveCamera.FieldOfViewDegrees.Id] = PerspectiveCamera.Ranges.FieldOfViewDegrees,
+            [PerspectiveCamera.AspectRatio.Id] = PerspectiveCamera.Ranges.AspectRatio,
+            [PerspectiveCamera.NearPlane.Id] = PerspectiveCamera.Ranges.NearPlane,
+            [PerspectiveCamera.FarPlane.Id] = PerspectiveCamera.Ranges.FarPlane,
+            [PerspectiveCamera.ApertureF.Id] = PerspectiveCamera.Ranges.ApertureF,
+            [PerspectiveCamera.ShutterRate.Id] = PerspectiveCamera.Ranges.ShutterRate,
+            [PerspectiveCamera.Iso.Id] = PerspectiveCamera.Ranges.Iso,
+            [OrthographicCamera.OrthographicSize.Id] = OrthographicCamera.Ranges.OrthographicSize,
+            [OrthographicCamera.AspectRatio.Id] = OrthographicCamera.Ranges.AspectRatio,
+            [OrthographicCamera.NearPlane.Id] = OrthographicCamera.Ranges.NearPlane,
+            [OrthographicCamera.FarPlane.Id] = OrthographicCamera.Ranges.FarPlane,
+            [OrthographicCamera.ApertureF.Id] = OrthographicCamera.Ranges.ApertureF,
+            [OrthographicCamera.ShutterRate.Id] = OrthographicCamera.Ranges.ShutterRate,
+            [OrthographicCamera.Iso.Id] = OrthographicCamera.Ranges.Iso,
+            [DirectionalLight.Color.Id] = DirectionalLight.Ranges.Color,
+            [DirectionalLight.IntensityLux.Id] = DirectionalLight.Ranges.IntensityLux,
+            [DirectionalLight.AngularSizeRadians.Id] = DirectionalLight.Ranges.AngularSizeRadians,
+            [DirectionalLight.ExposureCompensation.Id] = DirectionalLight.Ranges.ExposureCompensation,
+            [DirectionalLight.AtmosphereDiskLuminanceScaleRgb.Id] = DirectionalLight.Ranges.AtmosphereDiskLuminanceScaleRgb,
+            [DirectionalLight.ShadowBias.Id] = DirectionalLight.Ranges.ShadowBias,
+            [DirectionalLight.ShadowNormalBias.Id] = DirectionalLight.Ranges.ShadowNormalBias,
+            [DirectionalLight.CascadeCount.Id] = DirectionalLight.Ranges.CascadeCount,
+            [DirectionalLight.MaxShadowDistance.Id] = DirectionalLight.Ranges.MaxShadowDistance,
+            [DirectionalLight.CascadeDistance0.Id] = DirectionalLight.Ranges.CascadeDistance0,
+            [DirectionalLight.CascadeDistance1.Id] = DirectionalLight.Ranges.CascadeDistance1,
+            [DirectionalLight.CascadeDistance2.Id] = DirectionalLight.Ranges.CascadeDistance2,
+            [DirectionalLight.CascadeDistance3.Id] = DirectionalLight.Ranges.CascadeDistance3,
+            [DirectionalLight.DistributionExponent.Id] = DirectionalLight.Ranges.DistributionExponent,
+            [DirectionalLight.TransitionFraction.Id] = DirectionalLight.Ranges.TransitionFraction,
+            [DirectionalLight.DistanceFadeoutFraction.Id] = DirectionalLight.Ranges.DistanceFadeoutFraction,
+            [PointLight.Color.Id] = PointLight.Ranges.Color,
+            [PointLight.ExposureCompensation.Id] = PointLight.Ranges.ExposureCompensation,
+            [PointLight.ShadowBias.Id] = PointLight.Ranges.ShadowBias,
+            [PointLight.ShadowNormalBias.Id] = PointLight.Ranges.ShadowNormalBias,
+            [PointLight.LuminousFluxLumens.Id] = PointLight.Ranges.LuminousFluxLumens,
+            [PointLight.Range.Id] = PointLight.Ranges.Range,
+            [PointLight.SourceRadius.Id] = PointLight.Ranges.SourceRadius,
+            [SpotLight.Color.Id] = SpotLight.Ranges.Color,
+            [SpotLight.ExposureCompensation.Id] = SpotLight.Ranges.ExposureCompensation,
+            [SpotLight.ShadowBias.Id] = SpotLight.Ranges.ShadowBias,
+            [SpotLight.ShadowNormalBias.Id] = SpotLight.Ranges.ShadowNormalBias,
+            [SpotLight.LuminousFluxLumens.Id] = SpotLight.Ranges.LuminousFluxLumens,
+            [SpotLight.Range.Id] = SpotLight.Ranges.Range,
+            [SpotLight.SourceRadius.Id] = SpotLight.Ranges.SourceRadius,
+            [SpotLight.InnerConeAngleRadians.Id] = SpotLight.Ranges.InnerConeAngleRadians,
+            [SpotLight.OuterConeAngleRadians.Id] = SpotLight.Ranges.OuterConeAngleRadians,
+            [LocalFogVolume.RadialFogExtinction.Id] = LocalFogVolume.Ranges.RadialFogExtinction,
+            [LocalFogVolume.HeightFogExtinction.Id] = LocalFogVolume.Ranges.HeightFogExtinction,
+            [LocalFogVolume.HeightFogFalloff.Id] = LocalFogVolume.Ranges.HeightFogFalloff,
+            [LocalFogVolume.HeightFogOffset.Id] = LocalFogVolume.Ranges.HeightFogOffset,
+            [LocalFogVolume.FogPhaseG.Id] = LocalFogVolume.Ranges.FogPhaseG,
+            [LocalFogVolume.FogAlbedo.Id] = LocalFogVolume.Ranges.FogAlbedo,
+            [LocalFogVolume.FogEmissive.Id] = LocalFogVolume.Ranges.FogEmissive,
+            [LocalFogVolume.SortPriority.Id] = LocalFogVolume.Ranges.SortPriority,
+        });
+
+    private static global::System.Collections.Frozen.FrozenDictionary<global::Oxygen.Managed.Core.PropertyId, global::Oxygen.Managed.Core.PropertyUnit> UnitsById { get; } =
+        global::System.Collections.Frozen.FrozenDictionary.ToFrozenDictionary(new global::System.Collections.Generic.Dictionary<global::Oxygen.Managed.Core.PropertyId, global::Oxygen.Managed.Core.PropertyUnit>
+        {
+            [Transform.PositionX.Id] = Transform.Units.PositionX,
+            [Transform.PositionY.Id] = Transform.Units.PositionY,
+            [Transform.PositionZ.Id] = Transform.Units.PositionZ,
+            [Transform.RotationX.Id] = Transform.Units.RotationX,
+            [Transform.RotationY.Id] = Transform.Units.RotationY,
+            [Transform.RotationZ.Id] = Transform.Units.RotationZ,
+            [Transform.ScaleX.Id] = Transform.Units.ScaleX,
+            [Transform.ScaleY.Id] = Transform.Units.ScaleY,
+            [Transform.ScaleZ.Id] = Transform.Units.ScaleZ,
+            [PerspectiveCamera.FieldOfViewDegrees.Id] = PerspectiveCamera.Units.FieldOfViewDegrees,
+            [PerspectiveCamera.NearPlane.Id] = PerspectiveCamera.Units.NearPlane,
+            [PerspectiveCamera.FarPlane.Id] = PerspectiveCamera.Units.FarPlane,
+            [PerspectiveCamera.ApertureF.Id] = PerspectiveCamera.Units.ApertureF,
+            [PerspectiveCamera.ShutterRate.Id] = PerspectiveCamera.Units.ShutterRate,
+            [OrthographicCamera.OrthographicSize.Id] = OrthographicCamera.Units.OrthographicSize,
+            [OrthographicCamera.NearPlane.Id] = OrthographicCamera.Units.NearPlane,
+            [OrthographicCamera.FarPlane.Id] = OrthographicCamera.Units.FarPlane,
+            [OrthographicCamera.ApertureF.Id] = OrthographicCamera.Units.ApertureF,
+            [OrthographicCamera.ShutterRate.Id] = OrthographicCamera.Units.ShutterRate,
+            [DirectionalLight.IntensityLux.Id] = DirectionalLight.Units.IntensityLux,
+            [DirectionalLight.AngularSizeRadians.Id] = DirectionalLight.Units.AngularSizeRadians,
+            [DirectionalLight.ExposureCompensation.Id] = DirectionalLight.Units.ExposureCompensation,
+            [DirectionalLight.AtmosphereDiskLuminanceScaleRgb.Id] = DirectionalLight.Units.AtmosphereDiskLuminanceScaleRgb,
+            [DirectionalLight.ShadowNormalBias.Id] = DirectionalLight.Units.ShadowNormalBias,
+            [DirectionalLight.MaxShadowDistance.Id] = DirectionalLight.Units.MaxShadowDistance,
+            [DirectionalLight.CascadeDistance0.Id] = DirectionalLight.Units.CascadeDistance0,
+            [DirectionalLight.CascadeDistance1.Id] = DirectionalLight.Units.CascadeDistance1,
+            [DirectionalLight.CascadeDistance2.Id] = DirectionalLight.Units.CascadeDistance2,
+            [DirectionalLight.CascadeDistance3.Id] = DirectionalLight.Units.CascadeDistance3,
+            [PointLight.ExposureCompensation.Id] = PointLight.Units.ExposureCompensation,
+            [PointLight.ShadowNormalBias.Id] = PointLight.Units.ShadowNormalBias,
+            [PointLight.LuminousFluxLumens.Id] = PointLight.Units.LuminousFluxLumens,
+            [PointLight.Range.Id] = PointLight.Units.Range,
+            [PointLight.SourceRadius.Id] = PointLight.Units.SourceRadius,
+            [SpotLight.ExposureCompensation.Id] = SpotLight.Units.ExposureCompensation,
+            [SpotLight.ShadowNormalBias.Id] = SpotLight.Units.ShadowNormalBias,
+            [SpotLight.LuminousFluxLumens.Id] = SpotLight.Units.LuminousFluxLumens,
+            [SpotLight.Range.Id] = SpotLight.Units.Range,
+            [SpotLight.SourceRadius.Id] = SpotLight.Units.SourceRadius,
+            [SpotLight.InnerConeAngleRadians.Id] = SpotLight.Units.InnerConeAngleRadians,
+            [SpotLight.OuterConeAngleRadians.Id] = SpotLight.Units.OuterConeAngleRadians,
+            [LocalFogVolume.RadialFogExtinction.Id] = LocalFogVolume.Units.RadialFogExtinction,
+            [LocalFogVolume.HeightFogExtinction.Id] = LocalFogVolume.Units.HeightFogExtinction,
+            [LocalFogVolume.HeightFogFalloff.Id] = LocalFogVolume.Units.HeightFogFalloff,
+            [LocalFogVolume.HeightFogOffset.Id] = LocalFogVolume.Units.HeightFogOffset,
+        });
+
+    private static global::System.Collections.Frozen.FrozenDictionary<global::Oxygen.Managed.Core.PropertyId, global::Oxygen.Managed.Core.PropertyUnit> DisplayUnitsById { get; } =
+        global::System.Collections.Frozen.FrozenDictionary.ToFrozenDictionary(new global::System.Collections.Generic.Dictionary<global::Oxygen.Managed.Core.PropertyId, global::Oxygen.Managed.Core.PropertyUnit>
+        {
+            [Transform.PositionX.Id] = Transform.DisplayUnits.PositionX,
+            [Transform.PositionY.Id] = Transform.DisplayUnits.PositionY,
+            [Transform.PositionZ.Id] = Transform.DisplayUnits.PositionZ,
+            [Transform.RotationX.Id] = Transform.DisplayUnits.RotationX,
+            [Transform.RotationY.Id] = Transform.DisplayUnits.RotationY,
+            [Transform.RotationZ.Id] = Transform.DisplayUnits.RotationZ,
+            [Transform.ScaleX.Id] = Transform.DisplayUnits.ScaleX,
+            [Transform.ScaleY.Id] = Transform.DisplayUnits.ScaleY,
+            [Transform.ScaleZ.Id] = Transform.DisplayUnits.ScaleZ,
+            [PerspectiveCamera.FieldOfViewDegrees.Id] = PerspectiveCamera.DisplayUnits.FieldOfViewDegrees,
+            [PerspectiveCamera.NearPlane.Id] = PerspectiveCamera.DisplayUnits.NearPlane,
+            [PerspectiveCamera.FarPlane.Id] = PerspectiveCamera.DisplayUnits.FarPlane,
+            [PerspectiveCamera.ApertureF.Id] = PerspectiveCamera.DisplayUnits.ApertureF,
+            [PerspectiveCamera.ShutterRate.Id] = PerspectiveCamera.DisplayUnits.ShutterRate,
+            [OrthographicCamera.OrthographicSize.Id] = OrthographicCamera.DisplayUnits.OrthographicSize,
+            [OrthographicCamera.NearPlane.Id] = OrthographicCamera.DisplayUnits.NearPlane,
+            [OrthographicCamera.FarPlane.Id] = OrthographicCamera.DisplayUnits.FarPlane,
+            [OrthographicCamera.ApertureF.Id] = OrthographicCamera.DisplayUnits.ApertureF,
+            [OrthographicCamera.ShutterRate.Id] = OrthographicCamera.DisplayUnits.ShutterRate,
+            [DirectionalLight.IntensityLux.Id] = DirectionalLight.DisplayUnits.IntensityLux,
+            [DirectionalLight.AngularSizeRadians.Id] = DirectionalLight.DisplayUnits.AngularSizeRadians,
+            [DirectionalLight.ExposureCompensation.Id] = DirectionalLight.DisplayUnits.ExposureCompensation,
+            [DirectionalLight.AtmosphereDiskLuminanceScaleRgb.Id] = DirectionalLight.DisplayUnits.AtmosphereDiskLuminanceScaleRgb,
+            [DirectionalLight.ShadowNormalBias.Id] = DirectionalLight.DisplayUnits.ShadowNormalBias,
+            [DirectionalLight.MaxShadowDistance.Id] = DirectionalLight.DisplayUnits.MaxShadowDistance,
+            [DirectionalLight.CascadeDistance0.Id] = DirectionalLight.DisplayUnits.CascadeDistance0,
+            [DirectionalLight.CascadeDistance1.Id] = DirectionalLight.DisplayUnits.CascadeDistance1,
+            [DirectionalLight.CascadeDistance2.Id] = DirectionalLight.DisplayUnits.CascadeDistance2,
+            [DirectionalLight.CascadeDistance3.Id] = DirectionalLight.DisplayUnits.CascadeDistance3,
+            [PointLight.ExposureCompensation.Id] = PointLight.DisplayUnits.ExposureCompensation,
+            [PointLight.ShadowNormalBias.Id] = PointLight.DisplayUnits.ShadowNormalBias,
+            [PointLight.LuminousFluxLumens.Id] = PointLight.DisplayUnits.LuminousFluxLumens,
+            [PointLight.Range.Id] = PointLight.DisplayUnits.Range,
+            [PointLight.SourceRadius.Id] = PointLight.DisplayUnits.SourceRadius,
+            [SpotLight.ExposureCompensation.Id] = SpotLight.DisplayUnits.ExposureCompensation,
+            [SpotLight.ShadowNormalBias.Id] = SpotLight.DisplayUnits.ShadowNormalBias,
+            [SpotLight.LuminousFluxLumens.Id] = SpotLight.DisplayUnits.LuminousFluxLumens,
+            [SpotLight.Range.Id] = SpotLight.DisplayUnits.Range,
+            [SpotLight.SourceRadius.Id] = SpotLight.DisplayUnits.SourceRadius,
+            [SpotLight.InnerConeAngleRadians.Id] = SpotLight.DisplayUnits.InnerConeAngleRadians,
+            [SpotLight.OuterConeAngleRadians.Id] = SpotLight.DisplayUnits.OuterConeAngleRadians,
+            [LocalFogVolume.RadialFogExtinction.Id] = LocalFogVolume.DisplayUnits.RadialFogExtinction,
+            [LocalFogVolume.HeightFogExtinction.Id] = LocalFogVolume.DisplayUnits.HeightFogExtinction,
+            [LocalFogVolume.HeightFogFalloff.Id] = LocalFogVolume.DisplayUnits.HeightFogFalloff,
+            [LocalFogVolume.HeightFogOffset.Id] = LocalFogVolume.DisplayUnits.HeightFogOffset,
+        });
+
+    /// <summary>The <c>metadata</c> component.</summary>
+    public static class Metadata
+    {
+        /// <summary>The component kind.</summary>
+        public const string Kind = "metadata";
+
+        /// <summary>A value indicating whether every node has the component; otherwise a node has at most one.</summary>
+        public const bool IsRequired = true;
+
+        /// <summary>Gets the <c>/name</c> property.</summary>
+        public static global::Oxygen.Managed.Core.PropertyId<string> Name { get; } = new(Kind, "/name");
+    }
+
+    /// <summary>The <c>hierarchy</c> component.</summary>
+    public static class Hierarchy
+    {
+        /// <summary>The component kind.</summary>
+        public const string Kind = "hierarchy";
+
+        /// <summary>A value indicating whether every node has the component; otherwise a node has at most one.</summary>
+        public const bool IsRequired = true;
+    }
 
     /// <summary>The <c>transform</c> component.</summary>
     public static class Transform
     {
         /// <summary>The component kind.</summary>
         public const string Kind = "transform";
+
+        /// <summary>A value indicating whether every node has the component; otherwise a node has at most one.</summary>
+        public const bool IsRequired = true;
 
         /// <summary>Gets the <c>/local_position/0</c> property.</summary>
         public static global::Oxygen.Managed.Core.PropertyId<float> PositionX { get; } = new(Kind, "/local_position/0");
@@ -49,6 +267,130 @@ public static class SceneSchema
 
         /// <summary>Gets the <c>/local_scale/2</c> property.</summary>
         public static global::Oxygen.Managed.Core.PropertyId<float> ScaleZ { get; } = new(Kind, "/local_scale/2");
+
+        /// <summary>The creation value of each property; an asset or string value is supplied by the command that creates it.</summary>
+        public static class Defaults
+        {
+            /// <summary>The default of <c>/local_position/0</c>.</summary>
+            public const float PositionX = 0f;
+
+            /// <summary>The default of <c>/local_position/1</c>.</summary>
+            public const float PositionY = 0f;
+
+            /// <summary>The default of <c>/local_position/2</c>.</summary>
+            public const float PositionZ = 0f;
+
+            /// <summary>The default of <c>/local_rotation_euler_degrees/0</c>.</summary>
+            public const float RotationX = 0f;
+
+            /// <summary>The default of <c>/local_rotation_euler_degrees/1</c>.</summary>
+            public const float RotationY = 0f;
+
+            /// <summary>The default of <c>/local_rotation_euler_degrees/2</c>.</summary>
+            public const float RotationZ = 0f;
+
+            /// <summary>The default of <c>/local_scale/0</c>.</summary>
+            public const float ScaleX = 1f;
+
+            /// <summary>The default of <c>/local_scale/1</c>.</summary>
+            public const float ScaleY = 1f;
+
+            /// <summary>The default of <c>/local_scale/2</c>.</summary>
+            public const float ScaleZ = 1f;
+        }
+
+        /// <summary>The valid values of each numeric property; a vector property's range bounds each component.</summary>
+        public static class Ranges
+        {
+            /// <summary>The range of <c>/local_position/0</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyRange<float> PositionX { get; } = new(null, null, false, false, false, global::Oxygen.Managed.Core.RangeCommit.Reject);
+
+            /// <summary>The range of <c>/local_position/1</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyRange<float> PositionY { get; } = new(null, null, false, false, false, global::Oxygen.Managed.Core.RangeCommit.Reject);
+
+            /// <summary>The range of <c>/local_position/2</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyRange<float> PositionZ { get; } = new(null, null, false, false, false, global::Oxygen.Managed.Core.RangeCommit.Reject);
+
+            /// <summary>The range of <c>/local_rotation_euler_degrees/0</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyRange<float> RotationX { get; } = new(null, null, false, false, false, global::Oxygen.Managed.Core.RangeCommit.Reject);
+
+            /// <summary>The range of <c>/local_rotation_euler_degrees/1</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyRange<float> RotationY { get; } = new(null, null, false, false, false, global::Oxygen.Managed.Core.RangeCommit.Reject);
+
+            /// <summary>The range of <c>/local_rotation_euler_degrees/2</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyRange<float> RotationZ { get; } = new(null, null, false, false, false, global::Oxygen.Managed.Core.RangeCommit.Reject);
+
+            /// <summary>The range of <c>/local_scale/0</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyRange<float> ScaleX { get; } = new(null, null, false, false, true, global::Oxygen.Managed.Core.RangeCommit.Reject);
+
+            /// <summary>The range of <c>/local_scale/1</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyRange<float> ScaleY { get; } = new(null, null, false, false, true, global::Oxygen.Managed.Core.RangeCommit.Reject);
+
+            /// <summary>The range of <c>/local_scale/2</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyRange<float> ScaleZ { get; } = new(null, null, false, false, true, global::Oxygen.Managed.Core.RangeCommit.Reject);
+        }
+
+        /// <summary>The unit of each property's stored value, the one its default and range use.</summary>
+        public static class Units
+        {
+            /// <summary>The unit of <c>/local_position/0</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit PositionX => global::Oxygen.Editor.World.SceneUnits.Metre;
+
+            /// <summary>The unit of <c>/local_position/1</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit PositionY => global::Oxygen.Editor.World.SceneUnits.Metre;
+
+            /// <summary>The unit of <c>/local_position/2</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit PositionZ => global::Oxygen.Editor.World.SceneUnits.Metre;
+
+            /// <summary>The unit of <c>/local_rotation_euler_degrees/0</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit RotationX => global::Oxygen.Editor.World.SceneUnits.Degree;
+
+            /// <summary>The unit of <c>/local_rotation_euler_degrees/1</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit RotationY => global::Oxygen.Editor.World.SceneUnits.Degree;
+
+            /// <summary>The unit of <c>/local_rotation_euler_degrees/2</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit RotationZ => global::Oxygen.Editor.World.SceneUnits.Degree;
+
+            /// <summary>The unit of <c>/local_scale/0</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit ScaleX => global::Oxygen.Editor.World.SceneUnits.Multiplier;
+
+            /// <summary>The unit of <c>/local_scale/1</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit ScaleY => global::Oxygen.Editor.World.SceneUnits.Multiplier;
+
+            /// <summary>The unit of <c>/local_scale/2</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit ScaleZ => global::Oxygen.Editor.World.SceneUnits.Multiplier;
+        }
+
+        /// <summary>The unit UIs show each property's value in.</summary>
+        public static class DisplayUnits
+        {
+            /// <summary>The unit of <c>/local_position/0</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit PositionX => global::Oxygen.Editor.World.SceneUnits.Metre;
+
+            /// <summary>The unit of <c>/local_position/1</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit PositionY => global::Oxygen.Editor.World.SceneUnits.Metre;
+
+            /// <summary>The unit of <c>/local_position/2</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit PositionZ => global::Oxygen.Editor.World.SceneUnits.Metre;
+
+            /// <summary>The unit of <c>/local_rotation_euler_degrees/0</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit RotationX => global::Oxygen.Editor.World.SceneUnits.Degree;
+
+            /// <summary>The unit of <c>/local_rotation_euler_degrees/1</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit RotationY => global::Oxygen.Editor.World.SceneUnits.Degree;
+
+            /// <summary>The unit of <c>/local_rotation_euler_degrees/2</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit RotationZ => global::Oxygen.Editor.World.SceneUnits.Degree;
+
+            /// <summary>The unit of <c>/local_scale/0</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit ScaleX => global::Oxygen.Editor.World.SceneUnits.Multiplier;
+
+            /// <summary>The unit of <c>/local_scale/1</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit ScaleY => global::Oxygen.Editor.World.SceneUnits.Multiplier;
+
+            /// <summary>The unit of <c>/local_scale/2</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit ScaleZ => global::Oxygen.Editor.World.SceneUnits.Multiplier;
+        }
     }
 
     /// <summary>The <c>node-flags</c> component.</summary>
@@ -56,6 +398,9 @@ public static class SceneSchema
     {
         /// <summary>The component kind.</summary>
         public const string Kind = "node-flags";
+
+        /// <summary>A value indicating whether every node has the component; otherwise a node has at most one.</summary>
+        public const bool IsRequired = true;
 
         /// <summary>Gets the <c>/visible</c> property.</summary>
         public static global::Oxygen.Managed.Core.PropertyId<global::Oxygen.Editor.World.Serialization.VisibilitySource> Visibility { get; } = new(Kind, "/visible");
@@ -74,6 +419,41 @@ public static class SceneSchema
 
         /// <summary>Gets the <c>/ignore_parent_transform</c> property.</summary>
         public static global::Oxygen.Managed.Core.PropertyId<bool> IgnoreParentTransform { get; } = new(Kind, "/ignore_parent_transform");
+
+        /// <summary>The creation value of each property; an asset or string value is supplied by the command that creates it.</summary>
+        public static class Defaults
+        {
+            /// <summary>The default of <c>/visible</c>.</summary>
+            public const global::Oxygen.Editor.World.Serialization.VisibilitySource Visibility = global::Oxygen.Editor.World.Serialization.VisibilitySource.Inherit;
+
+            /// <summary>The default of <c>/casts_shadows</c>.</summary>
+            public const global::Oxygen.Editor.World.Serialization.ShadowSource CastsShadows = global::Oxygen.Editor.World.Serialization.ShadowSource.Inherit;
+
+            /// <summary>The default of <c>/receives_shadows</c>.</summary>
+            public const global::Oxygen.Editor.World.Serialization.ShadowSource ReceivesShadows = global::Oxygen.Editor.World.Serialization.ShadowSource.Inherit;
+
+            /// <summary>The default of <c>/static</c>.</summary>
+            public const bool IsStatic = false;
+
+            /// <summary>The default of <c>/ray_cast_selectable</c>.</summary>
+            public const bool IsRayCastingSelectable = true;
+
+            /// <summary>The default of <c>/ignore_parent_transform</c>.</summary>
+            public const bool IgnoreParentTransform = false;
+        }
+
+        /// <summary>The value of each node flag on a new root, and what an Inherit root resolves to.</summary>
+        public static class RootDefaults
+        {
+            /// <summary>The root default of <c>/visible</c>.</summary>
+            public const global::Oxygen.Editor.World.Serialization.VisibilitySource Visibility = global::Oxygen.Editor.World.Serialization.VisibilitySource.Shown;
+
+            /// <summary>The root default of <c>/casts_shadows</c>.</summary>
+            public const global::Oxygen.Editor.World.Serialization.ShadowSource CastsShadows = global::Oxygen.Editor.World.Serialization.ShadowSource.On;
+
+            /// <summary>The root default of <c>/receives_shadows</c>.</summary>
+            public const global::Oxygen.Editor.World.Serialization.ShadowSource ReceivesShadows = global::Oxygen.Editor.World.Serialization.ShadowSource.On;
+        }
     }
 
     /// <summary>The <c>geometry</c> component.</summary>
@@ -82,8 +462,21 @@ public static class SceneSchema
         /// <summary>The component kind.</summary>
         public const string Kind = "geometry";
 
+        /// <summary>A value indicating whether every node has the component; otherwise a node has at most one.</summary>
+        public const bool IsRequired = false;
+
         /// <summary>Gets the <c>/geometry_uri</c> property.</summary>
         public static global::Oxygen.Managed.Core.PropertyId<global::Oxygen.Managed.Core.AssetPath?> GeometryUri { get; } = new(Kind, "/geometry_uri");
+
+        /// <summary>Gets the <c>/lod_policy</c> property.</summary>
+        public static global::Oxygen.Managed.Core.PropertyId<global::Oxygen.Editor.World.Serialization.LodPolicy> LodPolicy { get; } = new(Kind, "/lod_policy");
+
+        /// <summary>The creation value of each property; an asset or string value is supplied by the command that creates it.</summary>
+        public static class Defaults
+        {
+            /// <summary>The default of <c>/lod_policy</c>.</summary>
+            public static global::Oxygen.Editor.World.Serialization.LodPolicy LodPolicy { get; } = new global::Oxygen.Editor.World.Serialization.LodPolicy.Fixed(0);
+        }
 
         /// <summary>The <c>surface</c> part of the <c>geometry</c> component.</summary>
         public static class Surface
@@ -93,6 +486,22 @@ public static class SceneSchema
 
             /// <summary>Gets the <c>/material</c> property.</summary>
             public static global::Oxygen.Managed.Core.PropertyId<global::Oxygen.Managed.Core.AssetPath> Material { get; } = new(Geometry.Kind, Kind, "/material");
+
+            /// <summary>Gets the <c>/visible</c> property.</summary>
+            public static global::Oxygen.Managed.Core.PropertyId<bool> Visibility { get; } = new(Geometry.Kind, Kind, "/visible");
+
+            /// <summary>Gets the <c>/casts_shadows</c> property.</summary>
+            public static global::Oxygen.Managed.Core.PropertyId<bool> CastsShadows { get; } = new(Geometry.Kind, Kind, "/casts_shadows");
+
+            /// <summary>The creation value of each property; an asset or string value is supplied by the command that creates it.</summary>
+            public static class Defaults
+            {
+                /// <summary>The default of <c>/visible</c>.</summary>
+                public const bool Visibility = true;
+
+                /// <summary>The default of <c>/casts_shadows</c>.</summary>
+                public const bool CastsShadows = true;
+            }
         }
     }
 
@@ -101,6 +510,9 @@ public static class SceneSchema
     {
         /// <summary>The component kind.</summary>
         public const string Kind = "perspective-camera";
+
+        /// <summary>A value indicating whether every node has the component; otherwise a node has at most one.</summary>
+        public const bool IsRequired = false;
 
         /// <summary>Gets the <c>/field_of_view_degrees</c> property.</summary>
         public static global::Oxygen.Managed.Core.PropertyId<float> FieldOfViewDegrees { get; } = new(Kind, "/field_of_view_degrees");
@@ -125,6 +537,97 @@ public static class SceneSchema
 
         /// <summary>Gets the <c>/aspect_mode</c> property.</summary>
         public static global::Oxygen.Managed.Core.PropertyId<global::Oxygen.Managed.Core.CameraAspectMode> AspectMode { get; } = new(Kind, "/aspect_mode");
+
+        /// <summary>The creation value of each property; an asset or string value is supplied by the command that creates it.</summary>
+        public static class Defaults
+        {
+            /// <summary>The default of <c>/field_of_view_degrees</c>.</summary>
+            public const float FieldOfViewDegrees = 60f;
+
+            /// <summary>The default of <c>/aspect_ratio</c>.</summary>
+            public const float AspectRatio = 1.7777778f;
+
+            /// <summary>The default of <c>/near_plane</c>.</summary>
+            public const float NearPlane = 0.1f;
+
+            /// <summary>The default of <c>/far_plane</c>.</summary>
+            public const float FarPlane = 1000f;
+
+            /// <summary>The default of <c>/aperture_f</c>.</summary>
+            public const float ApertureF = 11f;
+
+            /// <summary>The default of <c>/shutter_rate</c>.</summary>
+            public const float ShutterRate = 125f;
+
+            /// <summary>The default of <c>/iso</c>.</summary>
+            public const float Iso = 100f;
+
+            /// <summary>The default of <c>/aspect_mode</c>.</summary>
+            public const global::Oxygen.Managed.Core.CameraAspectMode AspectMode = global::Oxygen.Managed.Core.CameraAspectMode.Auto;
+        }
+
+        /// <summary>The valid values of each numeric property; a vector property's range bounds each component.</summary>
+        public static class Ranges
+        {
+            /// <summary>The range of <c>/field_of_view_degrees</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyRange<float> FieldOfViewDegrees { get; } = new(1f, 179f, false, false, false, global::Oxygen.Managed.Core.RangeCommit.Clamp);
+
+            /// <summary>The range of <c>/aspect_ratio</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyRange<float> AspectRatio { get; } = new(0f, null, true, false, false, global::Oxygen.Managed.Core.RangeCommit.Reject);
+
+            /// <summary>The range of <c>/near_plane</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyRange<float> NearPlane { get; } = new(0f, null, true, false, false, global::Oxygen.Managed.Core.RangeCommit.Reject);
+
+            /// <summary>The range of <c>/far_plane</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyRange<float> FarPlane { get; } = new(0f, null, true, false, false, global::Oxygen.Managed.Core.RangeCommit.Reject);
+
+            /// <summary>The range of <c>/aperture_f</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyRange<float> ApertureF { get; } = new(0f, null, true, false, false, global::Oxygen.Managed.Core.RangeCommit.Reject);
+
+            /// <summary>The range of <c>/shutter_rate</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyRange<float> ShutterRate { get; } = new(0f, null, true, false, false, global::Oxygen.Managed.Core.RangeCommit.Reject);
+
+            /// <summary>The range of <c>/iso</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyRange<float> Iso { get; } = new(0f, null, true, false, false, global::Oxygen.Managed.Core.RangeCommit.Reject);
+        }
+
+        /// <summary>The unit of each property's stored value, the one its default and range use.</summary>
+        public static class Units
+        {
+            /// <summary>The unit of <c>/field_of_view_degrees</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit FieldOfViewDegrees => global::Oxygen.Editor.World.SceneUnits.Degree;
+
+            /// <summary>The unit of <c>/near_plane</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit NearPlane => global::Oxygen.Editor.World.SceneUnits.Metre;
+
+            /// <summary>The unit of <c>/far_plane</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit FarPlane => global::Oxygen.Editor.World.SceneUnits.Metre;
+
+            /// <summary>The unit of <c>/aperture_f</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit ApertureF => global::Oxygen.Editor.World.SceneUnits.FNumber;
+
+            /// <summary>The unit of <c>/shutter_rate</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit ShutterRate => global::Oxygen.Editor.World.SceneUnits.PerSecond;
+        }
+
+        /// <summary>The unit UIs show each property's value in.</summary>
+        public static class DisplayUnits
+        {
+            /// <summary>The unit of <c>/field_of_view_degrees</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit FieldOfViewDegrees => global::Oxygen.Editor.World.SceneUnits.Degree;
+
+            /// <summary>The unit of <c>/near_plane</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit NearPlane => global::Oxygen.Editor.World.SceneUnits.Metre;
+
+            /// <summary>The unit of <c>/far_plane</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit FarPlane => global::Oxygen.Editor.World.SceneUnits.Metre;
+
+            /// <summary>The unit of <c>/aperture_f</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit ApertureF => global::Oxygen.Editor.World.SceneUnits.FNumber;
+
+            /// <summary>The unit of <c>/shutter_rate</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit ShutterRate => global::Oxygen.Editor.World.SceneUnits.PerSecond;
+        }
     }
 
     /// <summary>The <c>orthographic-camera</c> component.</summary>
@@ -132,6 +635,9 @@ public static class SceneSchema
     {
         /// <summary>The component kind.</summary>
         public const string Kind = "orthographic-camera";
+
+        /// <summary>A value indicating whether every node has the component; otherwise a node has at most one.</summary>
+        public const bool IsRequired = false;
 
         /// <summary>Gets the <c>/orthographic_size</c> property.</summary>
         public static global::Oxygen.Managed.Core.PropertyId<float> OrthographicSize { get; } = new(Kind, "/orthographic_size");
@@ -156,6 +662,97 @@ public static class SceneSchema
 
         /// <summary>Gets the <c>/iso</c> property.</summary>
         public static global::Oxygen.Managed.Core.PropertyId<float> Iso { get; } = new(Kind, "/iso");
+
+        /// <summary>The creation value of each property; an asset or string value is supplied by the command that creates it.</summary>
+        public static class Defaults
+        {
+            /// <summary>The default of <c>/orthographic_size</c>.</summary>
+            public const float OrthographicSize = 10f;
+
+            /// <summary>The default of <c>/aspect_mode</c>.</summary>
+            public const global::Oxygen.Managed.Core.CameraAspectMode AspectMode = global::Oxygen.Managed.Core.CameraAspectMode.Auto;
+
+            /// <summary>The default of <c>/aspect_ratio</c>.</summary>
+            public const float AspectRatio = 1.7777778f;
+
+            /// <summary>The default of <c>/near_plane</c>.</summary>
+            public const float NearPlane = 0.1f;
+
+            /// <summary>The default of <c>/far_plane</c>.</summary>
+            public const float FarPlane = 1000f;
+
+            /// <summary>The default of <c>/aperture_f</c>.</summary>
+            public const float ApertureF = 11f;
+
+            /// <summary>The default of <c>/shutter_rate</c>.</summary>
+            public const float ShutterRate = 125f;
+
+            /// <summary>The default of <c>/iso</c>.</summary>
+            public const float Iso = 100f;
+        }
+
+        /// <summary>The valid values of each numeric property; a vector property's range bounds each component.</summary>
+        public static class Ranges
+        {
+            /// <summary>The range of <c>/orthographic_size</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyRange<float> OrthographicSize { get; } = new(0f, null, true, false, false, global::Oxygen.Managed.Core.RangeCommit.Reject);
+
+            /// <summary>The range of <c>/aspect_ratio</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyRange<float> AspectRatio { get; } = new(0f, null, true, false, false, global::Oxygen.Managed.Core.RangeCommit.Reject);
+
+            /// <summary>The range of <c>/near_plane</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyRange<float> NearPlane { get; } = new(0f, null, true, false, false, global::Oxygen.Managed.Core.RangeCommit.Reject);
+
+            /// <summary>The range of <c>/far_plane</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyRange<float> FarPlane { get; } = new(0f, null, true, false, false, global::Oxygen.Managed.Core.RangeCommit.Reject);
+
+            /// <summary>The range of <c>/aperture_f</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyRange<float> ApertureF { get; } = new(0f, null, true, false, false, global::Oxygen.Managed.Core.RangeCommit.Reject);
+
+            /// <summary>The range of <c>/shutter_rate</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyRange<float> ShutterRate { get; } = new(0f, null, true, false, false, global::Oxygen.Managed.Core.RangeCommit.Reject);
+
+            /// <summary>The range of <c>/iso</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyRange<float> Iso { get; } = new(0f, null, true, false, false, global::Oxygen.Managed.Core.RangeCommit.Reject);
+        }
+
+        /// <summary>The unit of each property's stored value, the one its default and range use.</summary>
+        public static class Units
+        {
+            /// <summary>The unit of <c>/orthographic_size</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit OrthographicSize => global::Oxygen.Editor.World.SceneUnits.Metre;
+
+            /// <summary>The unit of <c>/near_plane</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit NearPlane => global::Oxygen.Editor.World.SceneUnits.Metre;
+
+            /// <summary>The unit of <c>/far_plane</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit FarPlane => global::Oxygen.Editor.World.SceneUnits.Metre;
+
+            /// <summary>The unit of <c>/aperture_f</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit ApertureF => global::Oxygen.Editor.World.SceneUnits.FNumber;
+
+            /// <summary>The unit of <c>/shutter_rate</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit ShutterRate => global::Oxygen.Editor.World.SceneUnits.PerSecond;
+        }
+
+        /// <summary>The unit UIs show each property's value in.</summary>
+        public static class DisplayUnits
+        {
+            /// <summary>The unit of <c>/orthographic_size</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit OrthographicSize => global::Oxygen.Editor.World.SceneUnits.Metre;
+
+            /// <summary>The unit of <c>/near_plane</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit NearPlane => global::Oxygen.Editor.World.SceneUnits.Metre;
+
+            /// <summary>The unit of <c>/far_plane</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit FarPlane => global::Oxygen.Editor.World.SceneUnits.Metre;
+
+            /// <summary>The unit of <c>/aperture_f</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit ApertureF => global::Oxygen.Editor.World.SceneUnits.FNumber;
+
+            /// <summary>The unit of <c>/shutter_rate</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit ShutterRate => global::Oxygen.Editor.World.SceneUnits.PerSecond;
+        }
     }
 
     /// <summary>The <c>directional-light</c> component.</summary>
@@ -163,6 +760,9 @@ public static class SceneSchema
     {
         /// <summary>The component kind.</summary>
         public const string Kind = "directional-light";
+
+        /// <summary>A value indicating whether every node has the component; otherwise a node has at most one.</summary>
+        public const bool IsRequired = false;
 
         /// <summary>Gets the <c>/color</c> property.</summary>
         public static global::Oxygen.Managed.Core.PropertyId<global::System.Numerics.Vector3> Color { get; } = new(Kind, "/color");
@@ -232,6 +832,199 @@ public static class SceneSchema
 
         /// <summary>Gets the <c>/csm/distance_fadeout_fraction</c> property.</summary>
         public static global::Oxygen.Managed.Core.PropertyId<float> DistanceFadeoutFraction { get; } = new(Kind, "/csm/distance_fadeout_fraction");
+
+        /// <summary>The creation value of each property; an asset or string value is supplied by the command that creates it.</summary>
+        public static class Defaults
+        {
+            /// <summary>The default of <c>/color</c>.</summary>
+            public static global::System.Numerics.Vector3 Color { get; } = new(1f, 1f, 1f);
+
+            /// <summary>The default of <c>/intensity_lux</c>.</summary>
+            public const float IntensityLux = 100000f;
+
+            /// <summary>The default of <c>/atmosphere_light_slot</c>.</summary>
+            public const global::Oxygen.Editor.World.Serialization.AtmosphereLightSlot AtmosphereSlot = global::Oxygen.Editor.World.Serialization.AtmosphereLightSlot.None;
+
+            /// <summary>The default of <c>/use_per_pixel_atmosphere_transmittance</c>.</summary>
+            public const bool UsePerPixelAtmosphereTransmittance = false;
+
+            /// <summary>The default of <c>/casts_shadows</c>.</summary>
+            public const bool CastsShadows = true;
+
+            /// <summary>The default of <c>/affects_world</c>.</summary>
+            public const bool AffectsWorld = true;
+
+            /// <summary>The default of <c>/angular_size_radians</c>.</summary>
+            public const float AngularSizeRadians = 0.00935f;
+
+            /// <summary>The default of <c>/exposure_compensation</c>.</summary>
+            public const float ExposureCompensation = 0f;
+
+            /// <summary>The default of <c>/atmosphere_disk_luminance_scale_rgb</c>.</summary>
+            public static global::System.Numerics.Vector3 AtmosphereDiskLuminanceScaleRgb { get; } = new(1f, 1f, 1f);
+
+            /// <summary>The default of <c>/shadow/bias</c>.</summary>
+            public const float ShadowBias = 0f;
+
+            /// <summary>The default of <c>/shadow/normal_bias</c>.</summary>
+            public const float ShadowNormalBias = 0.02f;
+
+            /// <summary>The default of <c>/shadow/contact_shadows</c>.</summary>
+            public const bool ContactShadows = false;
+
+            /// <summary>The default of <c>/shadow/resolution_hint</c>.</summary>
+            public const global::Oxygen.Editor.World.Serialization.ShadowResolutionHint ShadowResolutionHint = global::Oxygen.Editor.World.Serialization.ShadowResolutionHint.Medium;
+
+            /// <summary>The default of <c>/csm/cascade_count</c>.</summary>
+            public const int CascadeCount = 4;
+
+            /// <summary>The default of <c>/csm/split_mode</c>.</summary>
+            public const global::Oxygen.Editor.World.Serialization.DirectionalCsmSplitMode SplitMode = global::Oxygen.Editor.World.Serialization.DirectionalCsmSplitMode.Generated;
+
+            /// <summary>The default of <c>/csm/max_shadow_distance</c>.</summary>
+            public const float MaxShadowDistance = 160f;
+
+            /// <summary>The default of <c>/csm/cascade_distances/0</c>.</summary>
+            public const float CascadeDistance0 = 8f;
+
+            /// <summary>The default of <c>/csm/cascade_distances/1</c>.</summary>
+            public const float CascadeDistance1 = 24f;
+
+            /// <summary>The default of <c>/csm/cascade_distances/2</c>.</summary>
+            public const float CascadeDistance2 = 64f;
+
+            /// <summary>The default of <c>/csm/cascade_distances/3</c>.</summary>
+            public const float CascadeDistance3 = 160f;
+
+            /// <summary>The default of <c>/csm/distribution_exponent</c>.</summary>
+            public const float DistributionExponent = 3f;
+
+            /// <summary>The default of <c>/csm/transition_fraction</c>.</summary>
+            public const float TransitionFraction = 0.1f;
+
+            /// <summary>The default of <c>/csm/distance_fadeout_fraction</c>.</summary>
+            public const float DistanceFadeoutFraction = 0.1f;
+        }
+
+        /// <summary>The valid values of each numeric property; a vector property's range bounds each component.</summary>
+        public static class Ranges
+        {
+            /// <summary>The range of <c>/color</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyRange<float> Color { get; } = new(0f, 1f, false, false, false, global::Oxygen.Managed.Core.RangeCommit.Clamp);
+
+            /// <summary>The range of <c>/intensity_lux</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyRange<float> IntensityLux { get; } = new(0f, null, false, false, false, global::Oxygen.Managed.Core.RangeCommit.Clamp);
+
+            /// <summary>The range of <c>/angular_size_radians</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyRange<float> AngularSizeRadians { get; } = new(0f, 3.1415927f, false, false, false, global::Oxygen.Managed.Core.RangeCommit.Clamp);
+
+            /// <summary>The range of <c>/exposure_compensation</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyRange<float> ExposureCompensation { get; } = new(-10f, 10f, false, false, false, global::Oxygen.Managed.Core.RangeCommit.Clamp);
+
+            /// <summary>The range of <c>/atmosphere_disk_luminance_scale_rgb</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyRange<float> AtmosphereDiskLuminanceScaleRgb { get; } = new(0f, null, false, false, false, global::Oxygen.Managed.Core.RangeCommit.Reject);
+
+            /// <summary>The range of <c>/shadow/bias</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyRange<float> ShadowBias { get; } = new(0f, 10f, false, false, false, global::Oxygen.Managed.Core.RangeCommit.Clamp);
+
+            /// <summary>The range of <c>/shadow/normal_bias</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyRange<float> ShadowNormalBias { get; } = new(0f, null, false, false, false, global::Oxygen.Managed.Core.RangeCommit.Clamp);
+
+            /// <summary>The range of <c>/csm/cascade_count</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyRange<int> CascadeCount { get; } = new(1, 4, false, false, false, global::Oxygen.Managed.Core.RangeCommit.Reject);
+
+            /// <summary>The range of <c>/csm/max_shadow_distance</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyRange<float> MaxShadowDistance { get; } = new(0f, null, true, false, false, global::Oxygen.Managed.Core.RangeCommit.Reject);
+
+            /// <summary>The range of <c>/csm/cascade_distances/0</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyRange<float> CascadeDistance0 { get; } = new(0f, null, true, false, false, global::Oxygen.Managed.Core.RangeCommit.Reject);
+
+            /// <summary>The range of <c>/csm/cascade_distances/1</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyRange<float> CascadeDistance1 { get; } = new(0f, null, true, false, false, global::Oxygen.Managed.Core.RangeCommit.Reject);
+
+            /// <summary>The range of <c>/csm/cascade_distances/2</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyRange<float> CascadeDistance2 { get; } = new(0f, null, true, false, false, global::Oxygen.Managed.Core.RangeCommit.Reject);
+
+            /// <summary>The range of <c>/csm/cascade_distances/3</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyRange<float> CascadeDistance3 { get; } = new(0f, null, true, false, false, global::Oxygen.Managed.Core.RangeCommit.Reject);
+
+            /// <summary>The range of <c>/csm/distribution_exponent</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyRange<float> DistributionExponent { get; } = new(1f, null, false, false, false, global::Oxygen.Managed.Core.RangeCommit.Reject);
+
+            /// <summary>The range of <c>/csm/transition_fraction</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyRange<float> TransitionFraction { get; } = new(0f, 1f, false, false, false, global::Oxygen.Managed.Core.RangeCommit.Reject);
+
+            /// <summary>The range of <c>/csm/distance_fadeout_fraction</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyRange<float> DistanceFadeoutFraction { get; } = new(0f, 1f, false, false, false, global::Oxygen.Managed.Core.RangeCommit.Reject);
+        }
+
+        /// <summary>The unit of each property's stored value, the one its default and range use.</summary>
+        public static class Units
+        {
+            /// <summary>The unit of <c>/intensity_lux</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit IntensityLux => global::Oxygen.Editor.World.SceneUnits.Lux;
+
+            /// <summary>The unit of <c>/angular_size_radians</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit AngularSizeRadians => global::Oxygen.Editor.World.SceneUnits.Radian;
+
+            /// <summary>The unit of <c>/exposure_compensation</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit ExposureCompensation => global::Oxygen.Editor.World.SceneUnits.ExposureValue;
+
+            /// <summary>The unit of <c>/atmosphere_disk_luminance_scale_rgb</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit AtmosphereDiskLuminanceScaleRgb => global::Oxygen.Editor.World.SceneUnits.Multiplier;
+
+            /// <summary>The unit of <c>/shadow/normal_bias</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit ShadowNormalBias => global::Oxygen.Editor.World.SceneUnits.Metre;
+
+            /// <summary>The unit of <c>/csm/max_shadow_distance</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit MaxShadowDistance => global::Oxygen.Editor.World.SceneUnits.Metre;
+
+            /// <summary>The unit of <c>/csm/cascade_distances/0</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit CascadeDistance0 => global::Oxygen.Editor.World.SceneUnits.Metre;
+
+            /// <summary>The unit of <c>/csm/cascade_distances/1</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit CascadeDistance1 => global::Oxygen.Editor.World.SceneUnits.Metre;
+
+            /// <summary>The unit of <c>/csm/cascade_distances/2</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit CascadeDistance2 => global::Oxygen.Editor.World.SceneUnits.Metre;
+
+            /// <summary>The unit of <c>/csm/cascade_distances/3</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit CascadeDistance3 => global::Oxygen.Editor.World.SceneUnits.Metre;
+        }
+
+        /// <summary>The unit UIs show each property's value in.</summary>
+        public static class DisplayUnits
+        {
+            /// <summary>The unit of <c>/intensity_lux</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit IntensityLux => global::Oxygen.Editor.World.SceneUnits.Lux;
+
+            /// <summary>The unit of <c>/angular_size_radians</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit AngularSizeRadians => global::Oxygen.Editor.World.SceneUnits.Radian;
+
+            /// <summary>The unit of <c>/exposure_compensation</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit ExposureCompensation => global::Oxygen.Editor.World.SceneUnits.ExposureValue;
+
+            /// <summary>The unit of <c>/atmosphere_disk_luminance_scale_rgb</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit AtmosphereDiskLuminanceScaleRgb => global::Oxygen.Editor.World.SceneUnits.Multiplier;
+
+            /// <summary>The unit of <c>/shadow/normal_bias</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit ShadowNormalBias => global::Oxygen.Editor.World.SceneUnits.Metre;
+
+            /// <summary>The unit of <c>/csm/max_shadow_distance</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit MaxShadowDistance => global::Oxygen.Editor.World.SceneUnits.Metre;
+
+            /// <summary>The unit of <c>/csm/cascade_distances/0</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit CascadeDistance0 => global::Oxygen.Editor.World.SceneUnits.Metre;
+
+            /// <summary>The unit of <c>/csm/cascade_distances/1</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit CascadeDistance1 => global::Oxygen.Editor.World.SceneUnits.Metre;
+
+            /// <summary>The unit of <c>/csm/cascade_distances/2</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit CascadeDistance2 => global::Oxygen.Editor.World.SceneUnits.Metre;
+
+            /// <summary>The unit of <c>/csm/cascade_distances/3</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit CascadeDistance3 => global::Oxygen.Editor.World.SceneUnits.Metre;
+        }
     }
 
     /// <summary>The <c>point-light</c> component.</summary>
@@ -239,6 +1032,9 @@ public static class SceneSchema
     {
         /// <summary>The component kind.</summary>
         public const string Kind = "point-light";
+
+        /// <summary>A value indicating whether every node has the component; otherwise a node has at most one.</summary>
+        public const bool IsRequired = false;
 
         /// <summary>Gets the <c>/color</c> property.</summary>
         public static global::Oxygen.Managed.Core.PropertyId<global::System.Numerics.Vector3> Color { get; } = new(Kind, "/color");
@@ -272,6 +1068,106 @@ public static class SceneSchema
 
         /// <summary>Gets the <c>/source_radius</c> property.</summary>
         public static global::Oxygen.Managed.Core.PropertyId<float> SourceRadius { get; } = new(Kind, "/source_radius");
+
+        /// <summary>The creation value of each property; an asset or string value is supplied by the command that creates it.</summary>
+        public static class Defaults
+        {
+            /// <summary>The default of <c>/color</c>.</summary>
+            public static global::System.Numerics.Vector3 Color { get; } = new(1f, 1f, 1f);
+
+            /// <summary>The default of <c>/affects_world</c>.</summary>
+            public const bool AffectsWorld = true;
+
+            /// <summary>The default of <c>/casts_shadows</c>.</summary>
+            public const bool CastsShadows = true;
+
+            /// <summary>The default of <c>/exposure_compensation</c>.</summary>
+            public const float ExposureCompensation = 0f;
+
+            /// <summary>The default of <c>/shadow/bias</c>.</summary>
+            public const float ShadowBias = 0f;
+
+            /// <summary>The default of <c>/shadow/normal_bias</c>.</summary>
+            public const float ShadowNormalBias = 0.02f;
+
+            /// <summary>The default of <c>/shadow/contact_shadows</c>.</summary>
+            public const bool ContactShadows = false;
+
+            /// <summary>The default of <c>/shadow/resolution_hint</c>.</summary>
+            public const global::Oxygen.Editor.World.Serialization.ShadowResolutionHint ShadowResolutionHint = global::Oxygen.Editor.World.Serialization.ShadowResolutionHint.Medium;
+
+            /// <summary>The default of <c>/luminous_flux_lm</c>.</summary>
+            public const float LuminousFluxLumens = 1600f;
+
+            /// <summary>The default of <c>/range</c>.</summary>
+            public const float Range = 20f;
+
+            /// <summary>The default of <c>/source_radius</c>.</summary>
+            public const float SourceRadius = 0f;
+        }
+
+        /// <summary>The valid values of each numeric property; a vector property's range bounds each component.</summary>
+        public static class Ranges
+        {
+            /// <summary>The range of <c>/color</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyRange<float> Color { get; } = new(0f, 1f, false, false, false, global::Oxygen.Managed.Core.RangeCommit.Clamp);
+
+            /// <summary>The range of <c>/exposure_compensation</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyRange<float> ExposureCompensation { get; } = new(-10f, 10f, false, false, false, global::Oxygen.Managed.Core.RangeCommit.Clamp);
+
+            /// <summary>The range of <c>/shadow/bias</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyRange<float> ShadowBias { get; } = new(0f, 10f, false, false, false, global::Oxygen.Managed.Core.RangeCommit.Clamp);
+
+            /// <summary>The range of <c>/shadow/normal_bias</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyRange<float> ShadowNormalBias { get; } = new(0f, null, false, false, false, global::Oxygen.Managed.Core.RangeCommit.Clamp);
+
+            /// <summary>The range of <c>/luminous_flux_lm</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyRange<float> LuminousFluxLumens { get; } = new(0f, null, true, false, false, global::Oxygen.Managed.Core.RangeCommit.Reject);
+
+            /// <summary>The range of <c>/range</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyRange<float> Range { get; } = new(0f, null, true, false, false, global::Oxygen.Managed.Core.RangeCommit.Reject);
+
+            /// <summary>The range of <c>/source_radius</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyRange<float> SourceRadius { get; } = new(0f, null, false, false, false, global::Oxygen.Managed.Core.RangeCommit.Reject);
+        }
+
+        /// <summary>The unit of each property's stored value, the one its default and range use.</summary>
+        public static class Units
+        {
+            /// <summary>The unit of <c>/exposure_compensation</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit ExposureCompensation => global::Oxygen.Editor.World.SceneUnits.ExposureValue;
+
+            /// <summary>The unit of <c>/shadow/normal_bias</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit ShadowNormalBias => global::Oxygen.Editor.World.SceneUnits.Metre;
+
+            /// <summary>The unit of <c>/luminous_flux_lm</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit LuminousFluxLumens => global::Oxygen.Editor.World.SceneUnits.Lumen;
+
+            /// <summary>The unit of <c>/range</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit Range => global::Oxygen.Editor.World.SceneUnits.Metre;
+
+            /// <summary>The unit of <c>/source_radius</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit SourceRadius => global::Oxygen.Editor.World.SceneUnits.Metre;
+        }
+
+        /// <summary>The unit UIs show each property's value in.</summary>
+        public static class DisplayUnits
+        {
+            /// <summary>The unit of <c>/exposure_compensation</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit ExposureCompensation => global::Oxygen.Editor.World.SceneUnits.ExposureValue;
+
+            /// <summary>The unit of <c>/shadow/normal_bias</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit ShadowNormalBias => global::Oxygen.Editor.World.SceneUnits.Metre;
+
+            /// <summary>The unit of <c>/luminous_flux_lm</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit LuminousFluxLumens => global::Oxygen.Editor.World.SceneUnits.Lumen;
+
+            /// <summary>The unit of <c>/range</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit Range => global::Oxygen.Editor.World.SceneUnits.Metre;
+
+            /// <summary>The unit of <c>/source_radius</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit SourceRadius => global::Oxygen.Editor.World.SceneUnits.Metre;
+        }
     }
 
     /// <summary>The <c>spot-light</c> component.</summary>
@@ -279,6 +1175,9 @@ public static class SceneSchema
     {
         /// <summary>The component kind.</summary>
         public const string Kind = "spot-light";
+
+        /// <summary>A value indicating whether every node has the component; otherwise a node has at most one.</summary>
+        public const bool IsRequired = false;
 
         /// <summary>Gets the <c>/color</c> property.</summary>
         public static global::Oxygen.Managed.Core.PropertyId<global::System.Numerics.Vector3> Color { get; } = new(Kind, "/color");
@@ -318,6 +1217,130 @@ public static class SceneSchema
 
         /// <summary>Gets the <c>/outer_cone_angle_radians</c> property.</summary>
         public static global::Oxygen.Managed.Core.PropertyId<float> OuterConeAngleRadians { get; } = new(Kind, "/outer_cone_angle_radians");
+
+        /// <summary>The creation value of each property; an asset or string value is supplied by the command that creates it.</summary>
+        public static class Defaults
+        {
+            /// <summary>The default of <c>/color</c>.</summary>
+            public static global::System.Numerics.Vector3 Color { get; } = new(1f, 1f, 1f);
+
+            /// <summary>The default of <c>/affects_world</c>.</summary>
+            public const bool AffectsWorld = true;
+
+            /// <summary>The default of <c>/casts_shadows</c>.</summary>
+            public const bool CastsShadows = true;
+
+            /// <summary>The default of <c>/exposure_compensation</c>.</summary>
+            public const float ExposureCompensation = 0f;
+
+            /// <summary>The default of <c>/shadow/bias</c>.</summary>
+            public const float ShadowBias = 0f;
+
+            /// <summary>The default of <c>/shadow/normal_bias</c>.</summary>
+            public const float ShadowNormalBias = 0.02f;
+
+            /// <summary>The default of <c>/shadow/contact_shadows</c>.</summary>
+            public const bool ContactShadows = false;
+
+            /// <summary>The default of <c>/shadow/resolution_hint</c>.</summary>
+            public const global::Oxygen.Editor.World.Serialization.ShadowResolutionHint ShadowResolutionHint = global::Oxygen.Editor.World.Serialization.ShadowResolutionHint.Medium;
+
+            /// <summary>The default of <c>/luminous_flux_lm</c>.</summary>
+            public const float LuminousFluxLumens = 1600f;
+
+            /// <summary>The default of <c>/range</c>.</summary>
+            public const float Range = 20f;
+
+            /// <summary>The default of <c>/source_radius</c>.</summary>
+            public const float SourceRadius = 0f;
+
+            /// <summary>The default of <c>/inner_cone_angle_radians</c>.</summary>
+            public const float InnerConeAngleRadians = 0.3926991f;
+
+            /// <summary>The default of <c>/outer_cone_angle_radians</c>.</summary>
+            public const float OuterConeAngleRadians = 0.7853982f;
+        }
+
+        /// <summary>The valid values of each numeric property; a vector property's range bounds each component.</summary>
+        public static class Ranges
+        {
+            /// <summary>The range of <c>/color</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyRange<float> Color { get; } = new(0f, 1f, false, false, false, global::Oxygen.Managed.Core.RangeCommit.Clamp);
+
+            /// <summary>The range of <c>/exposure_compensation</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyRange<float> ExposureCompensation { get; } = new(-10f, 10f, false, false, false, global::Oxygen.Managed.Core.RangeCommit.Clamp);
+
+            /// <summary>The range of <c>/shadow/bias</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyRange<float> ShadowBias { get; } = new(0f, 10f, false, false, false, global::Oxygen.Managed.Core.RangeCommit.Clamp);
+
+            /// <summary>The range of <c>/shadow/normal_bias</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyRange<float> ShadowNormalBias { get; } = new(0f, null, false, false, false, global::Oxygen.Managed.Core.RangeCommit.Clamp);
+
+            /// <summary>The range of <c>/luminous_flux_lm</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyRange<float> LuminousFluxLumens { get; } = new(0f, null, true, false, false, global::Oxygen.Managed.Core.RangeCommit.Reject);
+
+            /// <summary>The range of <c>/range</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyRange<float> Range { get; } = new(0f, null, true, false, false, global::Oxygen.Managed.Core.RangeCommit.Reject);
+
+            /// <summary>The range of <c>/source_radius</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyRange<float> SourceRadius { get; } = new(0f, null, false, false, false, global::Oxygen.Managed.Core.RangeCommit.Reject);
+
+            /// <summary>The range of <c>/inner_cone_angle_radians</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyRange<float> InnerConeAngleRadians { get; } = new(0f, 1.5707964f, false, false, false, global::Oxygen.Managed.Core.RangeCommit.Reject);
+
+            /// <summary>The range of <c>/outer_cone_angle_radians</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyRange<float> OuterConeAngleRadians { get; } = new(0f, 1.5707964f, false, false, false, global::Oxygen.Managed.Core.RangeCommit.Reject);
+        }
+
+        /// <summary>The unit of each property's stored value, the one its default and range use.</summary>
+        public static class Units
+        {
+            /// <summary>The unit of <c>/exposure_compensation</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit ExposureCompensation => global::Oxygen.Editor.World.SceneUnits.ExposureValue;
+
+            /// <summary>The unit of <c>/shadow/normal_bias</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit ShadowNormalBias => global::Oxygen.Editor.World.SceneUnits.Metre;
+
+            /// <summary>The unit of <c>/luminous_flux_lm</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit LuminousFluxLumens => global::Oxygen.Editor.World.SceneUnits.Lumen;
+
+            /// <summary>The unit of <c>/range</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit Range => global::Oxygen.Editor.World.SceneUnits.Metre;
+
+            /// <summary>The unit of <c>/source_radius</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit SourceRadius => global::Oxygen.Editor.World.SceneUnits.Metre;
+
+            /// <summary>The unit of <c>/inner_cone_angle_radians</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit InnerConeAngleRadians => global::Oxygen.Editor.World.SceneUnits.Radian;
+
+            /// <summary>The unit of <c>/outer_cone_angle_radians</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit OuterConeAngleRadians => global::Oxygen.Editor.World.SceneUnits.Radian;
+        }
+
+        /// <summary>The unit UIs show each property's value in.</summary>
+        public static class DisplayUnits
+        {
+            /// <summary>The unit of <c>/exposure_compensation</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit ExposureCompensation => global::Oxygen.Editor.World.SceneUnits.ExposureValue;
+
+            /// <summary>The unit of <c>/shadow/normal_bias</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit ShadowNormalBias => global::Oxygen.Editor.World.SceneUnits.Metre;
+
+            /// <summary>The unit of <c>/luminous_flux_lm</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit LuminousFluxLumens => global::Oxygen.Editor.World.SceneUnits.Lumen;
+
+            /// <summary>The unit of <c>/range</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit Range => global::Oxygen.Editor.World.SceneUnits.Metre;
+
+            /// <summary>The unit of <c>/source_radius</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit SourceRadius => global::Oxygen.Editor.World.SceneUnits.Metre;
+
+            /// <summary>The unit of <c>/inner_cone_angle_radians</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit InnerConeAngleRadians => global::Oxygen.Editor.World.SceneUnits.Degree;
+
+            /// <summary>The unit of <c>/outer_cone_angle_radians</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit OuterConeAngleRadians => global::Oxygen.Editor.World.SceneUnits.Degree;
+        }
     }
 
     /// <summary>The <c>scripting</c> component.</summary>
@@ -325,6 +1348,9 @@ public static class SceneSchema
     {
         /// <summary>The component kind.</summary>
         public const string Kind = "scripting";
+
+        /// <summary>A value indicating whether every node has the component; otherwise a node has at most one.</summary>
+        public const bool IsRequired = false;
     }
 
     /// <summary>The <c>local-fog-volume</c> component.</summary>
@@ -332,6 +1358,9 @@ public static class SceneSchema
     {
         /// <summary>The component kind.</summary>
         public const string Kind = "local-fog-volume";
+
+        /// <summary>A value indicating whether every node has the component; otherwise a node has at most one.</summary>
+        public const bool IsRequired = false;
 
         /// <summary>Gets the <c>/enabled</c> property.</summary>
         public static global::Oxygen.Managed.Core.PropertyId<bool> Enabled { get; } = new(Kind, "/enabled");
@@ -359,5 +1388,130 @@ public static class SceneSchema
 
         /// <summary>Gets the <c>/sort_priority</c> property.</summary>
         public static global::Oxygen.Managed.Core.PropertyId<int> SortPriority { get; } = new(Kind, "/sort_priority");
+
+        /// <summary>The creation value of each property; an asset or string value is supplied by the command that creates it.</summary>
+        public static class Defaults
+        {
+            /// <summary>The default of <c>/enabled</c>.</summary>
+            public const bool Enabled = true;
+
+            /// <summary>The default of <c>/radial_fog_extinction</c>.</summary>
+            public const float RadialFogExtinction = 1f;
+
+            /// <summary>The default of <c>/height_fog_extinction</c>.</summary>
+            public const float HeightFogExtinction = 1f;
+
+            /// <summary>The default of <c>/height_fog_falloff</c>.</summary>
+            public const float HeightFogFalloff = 1000f;
+
+            /// <summary>The default of <c>/height_fog_offset</c>.</summary>
+            public const float HeightFogOffset = 0f;
+
+            /// <summary>The default of <c>/fog_phase_g</c>.</summary>
+            public const float FogPhaseG = 0.2f;
+
+            /// <summary>The default of <c>/fog_albedo</c>.</summary>
+            public static global::System.Numerics.Vector3 FogAlbedo { get; } = new(1f, 1f, 1f);
+
+            /// <summary>The default of <c>/fog_emissive</c>.</summary>
+            public static global::System.Numerics.Vector3 FogEmissive { get; } = new(0f, 0f, 0f);
+
+            /// <summary>The default of <c>/sort_priority</c>.</summary>
+            public const int SortPriority = 0;
+        }
+
+        /// <summary>The valid values of each numeric property; a vector property's range bounds each component.</summary>
+        public static class Ranges
+        {
+            /// <summary>The range of <c>/radial_fog_extinction</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyRange<float> RadialFogExtinction { get; } = new(0f, null, false, false, false, global::Oxygen.Managed.Core.RangeCommit.Reject);
+
+            /// <summary>The range of <c>/height_fog_extinction</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyRange<float> HeightFogExtinction { get; } = new(0f, null, false, false, false, global::Oxygen.Managed.Core.RangeCommit.Reject);
+
+            /// <summary>The range of <c>/height_fog_falloff</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyRange<float> HeightFogFalloff { get; } = new(0f, null, false, false, false, global::Oxygen.Managed.Core.RangeCommit.Reject);
+
+            /// <summary>The range of <c>/height_fog_offset</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyRange<float> HeightFogOffset { get; } = new(null, null, false, false, false, global::Oxygen.Managed.Core.RangeCommit.Reject);
+
+            /// <summary>The range of <c>/fog_phase_g</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyRange<float> FogPhaseG { get; } = new(0f, 0.999f, false, false, false, global::Oxygen.Managed.Core.RangeCommit.Reject);
+
+            /// <summary>The range of <c>/fog_albedo</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyRange<float> FogAlbedo { get; } = new(0f, 1f, false, false, false, global::Oxygen.Managed.Core.RangeCommit.Reject);
+
+            /// <summary>The range of <c>/fog_emissive</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyRange<float> FogEmissive { get; } = new(0f, null, false, false, false, global::Oxygen.Managed.Core.RangeCommit.Reject);
+
+            /// <summary>The range of <c>/sort_priority</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyRange<int> SortPriority { get; } = new(-127, 127, false, false, false, global::Oxygen.Managed.Core.RangeCommit.Reject);
+        }
+
+        /// <summary>The unit of each property's stored value, the one its default and range use.</summary>
+        public static class Units
+        {
+            /// <summary>The unit of <c>/radial_fog_extinction</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit RadialFogExtinction => global::Oxygen.Editor.World.SceneUnits.PerMetre;
+
+            /// <summary>The unit of <c>/height_fog_extinction</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit HeightFogExtinction => global::Oxygen.Editor.World.SceneUnits.PerMetre;
+
+            /// <summary>The unit of <c>/height_fog_falloff</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit HeightFogFalloff => global::Oxygen.Editor.World.SceneUnits.PerMetre;
+
+            /// <summary>The unit of <c>/height_fog_offset</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit HeightFogOffset => global::Oxygen.Editor.World.SceneUnits.Metre;
+        }
+
+        /// <summary>The unit UIs show each property's value in.</summary>
+        public static class DisplayUnits
+        {
+            /// <summary>The unit of <c>/radial_fog_extinction</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit RadialFogExtinction => global::Oxygen.Editor.World.SceneUnits.PerMetre;
+
+            /// <summary>The unit of <c>/height_fog_extinction</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit HeightFogExtinction => global::Oxygen.Editor.World.SceneUnits.PerMetre;
+
+            /// <summary>The unit of <c>/height_fog_falloff</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit HeightFogFalloff => global::Oxygen.Editor.World.SceneUnits.PerMetre;
+
+            /// <summary>The unit of <c>/height_fog_offset</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit HeightFogOffset => global::Oxygen.Editor.World.SceneUnits.Metre;
+        }
     }
+}
+
+/// <summary>The units of the scene component properties; UIs take every unit string from here.</summary>
+public static class SceneUnits
+{
+    /// <summary>Gets the <c>metre</c> unit.</summary>
+    public static global::Oxygen.Managed.Core.PropertyUnit Metre { get; } = new("metre", "m", "metres");
+
+    /// <summary>Gets the <c>degree</c> unit.</summary>
+    public static global::Oxygen.Managed.Core.PropertyUnit Degree { get; } = new("degree", "°", "degrees");
+
+    /// <summary>Gets the <c>radian</c> unit.</summary>
+    public static global::Oxygen.Managed.Core.PropertyUnit Radian { get; } = new("radian", "rad", "radians");
+
+    /// <summary>Gets the <c>lux</c> unit.</summary>
+    public static global::Oxygen.Managed.Core.PropertyUnit Lux { get; } = new("lux", "lx", "lux");
+
+    /// <summary>Gets the <c>lumen</c> unit.</summary>
+    public static global::Oxygen.Managed.Core.PropertyUnit Lumen { get; } = new("lumen", "lm", "lumens");
+
+    /// <summary>Gets the <c>exposure-value</c> unit.</summary>
+    public static global::Oxygen.Managed.Core.PropertyUnit ExposureValue { get; } = new("exposure-value", "EV", "exposure value");
+
+    /// <summary>Gets the <c>per-second</c> unit.</summary>
+    public static global::Oxygen.Managed.Core.PropertyUnit PerSecond { get; } = new("per-second", "1/s", "per second");
+
+    /// <summary>Gets the <c>per-metre</c> unit.</summary>
+    public static global::Oxygen.Managed.Core.PropertyUnit PerMetre { get; } = new("per-metre", "1/m", "per metre");
+
+    /// <summary>Gets the <c>f-number</c> unit.</summary>
+    public static global::Oxygen.Managed.Core.PropertyUnit FNumber { get; } = new("f-number", "f/", "f-number");
+
+    /// <summary>Gets the <c>multiplier</c> unit.</summary>
+    public static global::Oxygen.Managed.Core.PropertyUnit Multiplier { get; } = new("multiplier", "x", "multiplier");
 }
