@@ -22,6 +22,7 @@ Run the commands below from this **Content directory**:
 | ---------------------------------------- | ------------------------------------------------------------------------------- |
 | `scenes/<name>/import-manifest.json`     | Authored scene recipes and their source descriptors                             |
 | `imports/<name>.import.json`             | Native retained model recipe, source/surface identities and selected generation |
+| `models/SurfaceCar*`                     | Test cars for surfaces and LODs; each `.py` beside them regenerates its model   |
 | `.cooked/main/container.index.bin`       | Shared cooked scenes from `cook_scenes.ps1`                                     |
 | `.cooked/imports/<source>/<generation>/` | Immutable external glTF/GLB/FBX generations                                     |
 | `pak/`                                   | Packaged shared scenes, catalog and manifest                                    |
