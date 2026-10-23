@@ -1,16 +1,17 @@
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup>
     <!--
-      The installed engine SDK is an input of this project that Visual Studio's
-      fast up-to-date check cannot see: it tracks compiler and linker inputs, not
-      the SDK DLLs hashed into the receipt. Let MSBuild evaluate the project on
-      every build; RecordInteropNativeSdk rewrites its headers only when an SDK
-      hash changed, so an unchanged SDK costs no recompilation.
+      The installed engine SDK is an input of this project. Visual Studio's fast
+      up-to-date check sees its headers and import libraries through the
+      compiler and linker tracking logs, not the SDK DLLs hashed into the
+      receipt: WriteInteropNativeSdkTrackingLogs declares those in a tracking
+      log pair, so a changed DLL makes the project out of date.
     -->
-    <DisableFastUpToDateCheck>true</DisableFastUpToDateCheck>
     <NativeSdkCompileHeader>$(IntDir)NativeSdkCompile.h</NativeSdkCompileHeader>
     <NativeSdkReceiptHeader>$(IntDir)NativeSdkReceipt.h</NativeSdkReceiptHeader>
     <NativeSdkStampFile>$(IntDir)NativeSdkReceipt.stamp</NativeSdkStampFile>
+    <NativeSdkReadTrackingLog>$(TLogLocation)NativeSdkReceipt.read.1.tlog</NativeSdkReadTrackingLog>
+    <NativeSdkWriteTrackingLog>$(TLogLocation)NativeSdkReceipt.write.1.tlog</NativeSdkWriteTrackingLog>
     <NativeSdkRoot>$(OxygenSdkDir)</NativeSdkRoot>
   </PropertyGroup>
   <ItemDefinitionGroup>
@@ -37,6 +38,26 @@
     <Touch Files="$(NativeSdkStampFile)" AlwaysCreate="true" />
     <ItemGroup>
       <FileWrites Include="$(NativeSdkReceiptHeader);$(NativeSdkCompileHeader);$(NativeSdkStampFile)" />
+    </ItemGroup>
+  </Target>
+  <!--
+    The receipt's inputs Visual Studio's fast up-to-date check cannot otherwise
+    see: the SDK DLLs, this file and the receipt script. A tracking log pair
+    names them as the inputs of the stamp, under one root line. Written on every
+    build, so a DLL added to the SDK is tracked from that build on.
+  -->
+  <Target Name="WriteInteropNativeSdkTrackingLogs" AfterTargets="RecordInteropNativeSdk" Condition="'$(DesignTimeBuild)' != 'true'">
+    <ItemGroup>
+      <_NativeSdkTrackedInputs Include="$(MSBuildThisFileFullPath);$(MSBuildThisFileDirectory)..\tools\Write-NativeSdkReceipt.ps1" />
+      <_NativeSdkTrackedInputs Include="$(NativeSdkRoot)\bin\*.dll" Condition="Exists('$(NativeSdkRoot)')" />
+    </ItemGroup>
+    <PropertyGroup>
+      <_NativeSdkTrackingRoot>^$([System.IO.Path]::GetFullPath('$(NativeSdkStampFile)').ToUpperInvariant())</_NativeSdkTrackingRoot>
+    </PropertyGroup>
+    <WriteLinesToFile File="$(NativeSdkReadTrackingLog)" Lines="$(_NativeSdkTrackingRoot);@(_NativeSdkTrackedInputs->'%(FullPath)'->ToUpperInvariant())" Overwrite="true" WriteOnlyWhenDifferent="true" />
+    <WriteLinesToFile File="$(NativeSdkWriteTrackingLog)" Lines="$(_NativeSdkTrackingRoot);$([System.IO.Path]::GetFullPath('$(NativeSdkStampFile)').ToUpperInvariant())" Overwrite="true" WriteOnlyWhenDifferent="true" />
+    <ItemGroup>
+      <FileWrites Include="$(NativeSdkReadTrackingLog);$(NativeSdkWriteTrackingLog)" />
     </ItemGroup>
   </Target>
 </Project>

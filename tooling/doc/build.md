@@ -183,6 +183,9 @@ do not put certificate passwords in source-controlled files.
 - `NativeSdkReceipt.targets`: DLL identity for assembly metadata, and a separate
   header/library fingerprint for native compilation. Unchanged headers are not
   rewritten. DLL-only identity changes do not force every native source to compile.
+  The project keeps Visual Studio's fast up-to-date check: a tracking log pair
+  declares the SDK DLLs as inputs, and the compiler and linker logs cover the
+  headers and import libraries.
 
 Only ordinary non-WinUI SDK projects default to VS build acceleration. Projects
 with custom helper-process staging explicitly opt out. Actual source generation,
