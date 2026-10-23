@@ -66,6 +66,11 @@ settings instead of continuously analyzing the entire solution. Error List's
 **Build + IntelliSense** view can still show live warnings after a successful
 build; select **Build** to inspect compiler/build diagnostics alone.
 
+Ordinary Debug builds write no XML documentation files. The opt-in analyzer run
+(`RunAnalyzersDuringBuild=true`) and Release builds do, so doc-comment checks
+(CS1570–CS1574) and unnecessary-using checks (IDE0005) run there, and packed
+libraries keep their docs.
+
 `.editorconfig` owns diagnostic severities and style. IDE rules own language
 style; StyleCop retains documentation, ordering and layout checks. Confirmed
 cross-package duplicates are disabled individually. Distinct correctness rules
