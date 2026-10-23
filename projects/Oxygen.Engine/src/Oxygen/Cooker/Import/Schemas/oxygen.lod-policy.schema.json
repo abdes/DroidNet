@@ -5,7 +5,7 @@
   "description": "The JSON spelling of a geometry LOD policy, the scene schema's lod-policy value type, shared by the descriptors and reports that carry one.",
   "definitions": {
     "lod_thresholds": {
-      "description": "LOD boundaries, non-decreasing: boundary i lies between LOD i and LOD i + 1. A geometry has at most 8 LODs.",
+      "description": "LOD boundaries: boundary i lies between LOD i and LOD i + 1. Distance thresholds never decrease and screen-space errors never increase. A geometry has at most 8 LODs.",
       "type": "array",
       "maxItems": 7,
       "items": {

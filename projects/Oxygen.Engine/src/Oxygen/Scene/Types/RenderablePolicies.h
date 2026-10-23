@@ -47,7 +47,7 @@ struct ScreenSpaceErrorPolicy {
   //! SSE threshold to enter a coarser LOD (index increases) when SSE
   //! decreases.
   std::vector<float> exit_coarser_sse;
-  // Ensure arrays are non-decreasing
+  // Ensure arrays never increase: coarser LODs take smaller errors
   void NormalizeMonotonic() noexcept;
   // Validate sizes: if provided, expect at least lod_count-1 boundaries
   [[nodiscard]] bool ValidateSizes(std::size_t lod_count) const noexcept;

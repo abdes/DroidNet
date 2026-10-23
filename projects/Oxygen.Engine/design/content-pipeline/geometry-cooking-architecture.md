@@ -741,9 +741,11 @@ The descriptor spells them as the scene schema keys:
   `lod_index`, `distance` with `thresholds` and `hysteresis_ratio` (0 to
   0.99), or `screen_space_error` with `enter_finer_sse` and
   `exit_coarser_sse`. Each list holds at most 7 boundaries, one per pair of
-  the at most 8 LODs. The cooker rejects what the schema cannot state, a list
-  that decreases or two screen-space error lists of different lengths
-  (`geometry.descriptor.lod_policy_invalid`).
+  the at most 8 LODs. Boundary i lies between LOD i and LOD i + 1, so
+  distance thresholds never decrease and screen-space errors never increase:
+  a coarser LOD is further away and smaller on screen. The cooker rejects
+  what the schema cannot state, a list out of that order or two screen-space
+  error lists of different lengths (`geometry.descriptor.lod_policy_invalid`).
 - An absent surface, value or policy takes the scene schema's default
   (`Generated.SceneComponents.h`: `geometry::surface::kVisibilityDefault`,
   `kCastsShadowsDefault`, `geometry::kLodPolicyDefault`). Model imports have no
@@ -1022,7 +1024,7 @@ messages written to `error_stream`. Error codes follow the pattern
 | Schema     | `geometry.descriptor.view_count_overflow`      | Total mesh view count exceeds `uint32_t` range              |
 | Schema     | `geometry.descriptor.surface_unknown`          | `surfaces` names a surface no submesh declares              |
 | Schema     | `geometry.descriptor.surface_duplicate`        | `surfaces` names a surface more than once                   |
-| Schema     | `geometry.descriptor.lod_policy_invalid`       | Decreasing thresholds or unequal screen-space error lists   |
+| Schema     | `geometry.descriptor.lod_policy_invalid`       | Lists out of order or unequal screen-space error lists      |
 | I/O        | `geometry.descriptor.index_load_failed`        | `container.index.bin` could not be loaded                   |
 | Buffer     | `geometry.buffer.virtual_path_invalid`         | Non-canonical virtual path in `vb_ref`/`ib_ref`             |
 | Buffer     | `geometry.buffer.virtual_path_unmounted`       | Virtual path outside all mounted cooked roots               |

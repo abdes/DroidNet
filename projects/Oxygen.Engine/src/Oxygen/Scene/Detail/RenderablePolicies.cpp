@@ -35,8 +35,7 @@ void DistancePolicy::NormalizeThresholds() noexcept
 {
   if (!thresholds.empty()) {
     for (std::size_t i = 1; i < thresholds.size(); ++i) {
-      if (thresholds[i] < thresholds[i - 1])
-        thresholds[i] = thresholds[i - 1];
+      thresholds[i] = (std::max)(thresholds[i], thresholds[i - 1]);
     }
   }
   hysteresis_ratio = (std::clamp)(hysteresis_ratio, 0.0F, 0.99F);
@@ -86,13 +85,13 @@ void ScreenSpaceErrorPolicy::NormalizeMonotonic() noexcept
 {
   if (!enter_finer_sse.empty()) {
     for (std::size_t i = 1; i < enter_finer_sse.size(); ++i) {
-      if (enter_finer_sse[i] < enter_finer_sse[i - 1])
+      if (enter_finer_sse[i] > enter_finer_sse[i - 1])
         enter_finer_sse[i] = enter_finer_sse[i - 1];
     }
   }
   if (!exit_coarser_sse.empty()) {
     for (std::size_t i = 1; i < exit_coarser_sse.size(); ++i) {
-      if (exit_coarser_sse[i] < exit_coarser_sse[i - 1])
+      if (exit_coarser_sse[i] > exit_coarser_sse[i - 1])
         exit_coarser_sse[i] = exit_coarser_sse[i - 1];
     }
   }

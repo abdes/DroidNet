@@ -49,7 +49,8 @@ enum class LodPolicyType : uint8_t {
   - `kDistance`: `thresholds[boundary_count]`, non-decreasing, and
     `hysteresis_ratio` in [0, 0.99].
   - `kScreenSpaceError`: `enter_finer_sse[boundary_count]` and
-    `exit_coarser_sse[boundary_count]`, each non-decreasing.
+    `exit_coarser_sse[boundary_count]`, each non-increasing, since a coarser
+    LOD is selected at a smaller screen-space error.
 
   `boundary_count` is at most kMaxLodBoundaryCount, since a geometry has at most
   kMaxLodCount LODs. Every threshold is finite.

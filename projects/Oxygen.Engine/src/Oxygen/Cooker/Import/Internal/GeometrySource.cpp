@@ -257,8 +257,9 @@ namespace {
       if (!source.lod_policy.has_value()) {
         AddDiagnostic(diagnostics, source_path, ImportSeverity::kError,
           "geometry.descriptor.lod_policy_invalid",
-          "LOD policy thresholds must not decrease, and its screen-space "
-          "error lists must have equal lengths",
+          "LOD policy distance thresholds must not decrease, its "
+          "screen-space error lists must not increase and must have equal "
+          "lengths",
           "lod_policy");
         return false;
       }

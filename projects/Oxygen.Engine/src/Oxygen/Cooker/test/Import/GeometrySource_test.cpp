@@ -289,12 +289,24 @@ namespace {
     EXPECT_TRUE(HasCode(diagnostics, "geometry.descriptor.lod_policy_invalid"));
   }
 
+  NOLINT_TEST(GeometrySourceTest, RejectsIncreasingScreenSpaceErrors)
+  {
+    auto document = MakeDescriptor();
+    document.emplace(
+      "lod_policy", nlohmann::json::parse(R"({"type":"screen_space_error",
+        "enter_finer_sse":[1,2],"exit_coarser_sse":[0.5,1.5]})"));
+    auto diagnostics = std::vector<ImportDiagnostic> {};
+    EXPECT_FALSE(GeometrySource::FromDescriptor(
+      document.dump(), "geometry.json", diagnostics));
+    EXPECT_TRUE(HasCode(diagnostics, "geometry.descriptor.lod_policy_invalid"));
+  }
+
   NOLINT_TEST(GeometrySourceTest, RejectsScreenSpaceErrorListsOfDifferentLength)
   {
     auto document = MakeDescriptor();
     document.emplace(
       "lod_policy", nlohmann::json::parse(R"({"type":"screen_space_error",
-        "enter_finer_sse":[1,2],"exit_coarser_sse":[1]})"));
+        "enter_finer_sse":[2,1],"exit_coarser_sse":[1]})"));
     auto diagnostics = std::vector<ImportDiagnostic> {};
     EXPECT_FALSE(GeometrySource::FromDescriptor(
       document.dump(), "geometry.json", diagnostics));
@@ -337,7 +349,7 @@ namespace {
   NOLINT_TEST(GeometryDefaultsTest, LodPolicyRoundTripsThroughJson)
   {
     const auto document = nlohmann::json::parse(R"({"type":"screen_space_error",
-      "enter_finer_sse":[1,2],"exit_coarser_sse":[0.5,1.5]})");
+      "enter_finer_sse":[2,1],"exit_coarser_sse":[1.5,0.5]})");
     const auto record = internal::ReadLodPolicy(document);
     ASSERT_HAS_VALUE(record) << "Expected a LOD policy";
     EXPECT_EQ(internal::WriteLodPolicy(*record), document);

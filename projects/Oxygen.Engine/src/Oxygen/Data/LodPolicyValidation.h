@@ -15,11 +15,24 @@
 
 namespace oxygen::data {
 namespace detail {
-  //! True when `values` are finite and non-decreasing.
-  inline auto IsLodBoundaryList(std::span<const float> values) -> bool
+  //! True when `values` are finite and never decrease: distances grow
+  //! toward coarser LODs.
+  inline auto IsLodDistanceList(std::span<const float> values) -> bool
   {
     for (std::size_t i = 0; i < values.size(); ++i) {
       if (!std::isfinite(values[i]) || (i > 0 && values[i] < values[i - 1])) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  //! True when `values` are finite and never increase: screen-space errors
+  //! shrink toward coarser LODs.
+  inline auto IsLodErrorList(std::span<const float> values) -> bool
+  {
+    for (std::size_t i = 0; i < values.size(); ++i) {
+      if (!std::isfinite(values[i]) || (i > 0 && values[i] > values[i - 1])) {
         return false;
       }
     }
@@ -57,7 +70,7 @@ inline auto IsValidLodPolicy(const pak::geometry::LodPolicyRecord& record)
       && detail::IsZeroList(enter) && detail::IsZeroList(exit);
   case LodPolicyType::kDistance:
     return record.lod_index == 0
-      && detail::IsLodBoundaryList(thresholds.first(count))
+      && detail::IsLodDistanceList(thresholds.first(count))
       && detail::IsZeroList(thresholds.subspan(count))
       && record.hysteresis_ratio >= 0.0F
       && record.hysteresis_ratio <= kMaxHysteresisRatio
@@ -65,9 +78,9 @@ inline auto IsValidLodPolicy(const pak::geometry::LodPolicyRecord& record)
   case LodPolicyType::kScreenSpaceError:
     return record.lod_index == 0 && record.hysteresis_ratio == 0.0F
       && detail::IsZeroList(thresholds)
-      && detail::IsLodBoundaryList(enter.first(count))
+      && detail::IsLodErrorList(enter.first(count))
       && detail::IsZeroList(enter.subspan(count))
-      && detail::IsLodBoundaryList(exit.first(count))
+      && detail::IsLodErrorList(exit.first(count))
       && detail::IsZeroList(exit.subspan(count));
   }
   return false;
