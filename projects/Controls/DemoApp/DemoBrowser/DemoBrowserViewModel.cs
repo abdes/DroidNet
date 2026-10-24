@@ -8,11 +8,9 @@ using CommunityToolkit.Mvvm.Input;
 using DroidNet.Controls.Demo.InPlaceEdit;
 using DroidNet.Controls.Demo.Menus;
 using DroidNet.Controls.Demo.OutputConsole;
-using DroidNet.Controls.Demo.OutputLog;
 using DroidNet.Controls.Demo.TabStrip;
 using DroidNet.Controls.Demo.ToolBar;
 using DroidNet.Controls.Demo.Tree;
-using DroidNet.Controls.OutputLog;
 using DroidNet.Routing;
 using DroidNet.Routing.WinUI;
 
@@ -23,9 +21,8 @@ namespace DroidNet.Controls.Demo.DemoBrowser;
 /// in the project.
 /// </summary>
 /// <param name="router">The application router to use when navigating.</param>
-/// <param name="outputLogSink">A <see cref="DelegatingSink{T}"/> sink to be used for logs targeting the output log view.</param>
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "must be public due to soource generated ViewModel property")]
-public partial class DemoBrowserViewModel(IRouter router, DelegatingSink<RichTextBlockSink> outputLogSink)
+public partial class DemoBrowserViewModel(IRouter router)
     : ObservableObject, IOutletContainer, IRoutingAware
 {
     private const int InvalidItemIndex = -1;
@@ -62,7 +59,6 @@ public partial class DemoBrowserViewModel(IRouter router, DelegatingSink<RichTex
         new("numberbox", "Number Box", typeof(NumberBoxDemoViewModel)),
         new("vectorbox", "VectorBox", typeof(VectorBoxDemoViewModel)),
         new("colorbox", "ColorBox", typeof(ColorBoxDemoViewModel)),
-        new("output-log", "Output Log", typeof(OutputLogDemoViewModel)),
         new("output-console", "Output Console", typeof(OutputConsoleDemoViewModel)),
         new("dynamic-tree", "Dynamic Tree", typeof(DynamicTreeDemoViewModel)),
         new("menubar", "MenuBar Demo", typeof(MenuBarDemoViewModel)),
@@ -81,11 +77,6 @@ public partial class DemoBrowserViewModel(IRouter router, DelegatingSink<RichTex
     /// Gets a value indicating whether the settings item is selected.
     /// </summary>
     internal bool IsSettingsSelected => this.SelectedItemIndex == SettingsItemIndex;
-
-    /// <summary>
-    /// Gets the output log sink.
-    /// </summary>
-    internal DelegatingSink<RichTextBlockSink> OutputLogSink => outputLogSink;
 
     /// <inheritdoc/>
     public void LoadContent(object viewModel, OutletName? outletName = null)

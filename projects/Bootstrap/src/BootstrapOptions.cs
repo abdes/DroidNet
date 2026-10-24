@@ -20,36 +20,6 @@ public sealed class BootstrapOptions
     internal bool UseLoggingAbstraction { get; private set; }
 
     /// <summary>
-    ///     Gets a value indicating whether the <c>OutputLog</c> sink should be configured.
-    /// </summary>
-    internal bool RegisterOutputLog { get; private set; }
-
-    /// <summary>
-    ///     Gets the output template for formatting OutputLog events.
-    /// </summary>
-    internal string OutputLogTemplate { get; private set; } = "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}";
-
-    /// <summary>
-    ///     Gets the format provider for OutputLog values.
-    /// </summary>
-    internal IFormatProvider? OutputLogFormatProvider { get; private set; }
-
-    /// <summary>
-    ///     Gets the minimum log level for the OutputLog sink.
-    /// </summary>
-    internal LogEventLevel OutputLogMinimumLevel { get; private set; } = LogEventLevel.Verbose;
-
-    /// <summary>
-    ///     Gets the optional level switch for the OutputLog sink.
-    /// </summary>
-    internal LoggingLevelSwitch? OutputLogLevelSwitch { get; private set; }
-
-    /// <summary>
-    ///     Gets the theme ID for the OutputLog sink.
-    /// </summary>
-    internal uint? OutputLogThemeId { get; private set; }
-
-    /// <summary>
     ///     Gets a value indicating whether the <c>OutputConsole</c> sink should be configured.
     /// </summary>
     internal bool RegisterOutputConsole { get; private set; }
@@ -87,35 +57,6 @@ public sealed class BootstrapOptions
     public BootstrapOptions WithLoggingAbstraction()
     {
         this.UseLoggingAbstraction = true;
-        return this;
-    }
-
-    /// <summary>
-    ///     Registers a Logger sink for the <c>OutputLog</c> control.
-    /// </summary>
-    /// <param name="formatProvider">An optional provider to format values.</param>
-    /// <param name="outputTemplate">The output template to format log events.</param>
-    /// <param name="restrictedToMinimumLevel">Minimum level for this sink. Defaults to Verbose.</param>
-    /// <param name="levelSwitch">Optional level switch for dynamic level control.</param>
-    /// <param name="themeId">An optional theme to apply to the output. Defaults to Literate theme (ID: 1).</param>
-    /// <returns>This <see cref="BootstrapOptions"/> instance for method chaining.</returns>
-    public BootstrapOptions WithOutputLog(
-        IFormatProvider formatProvider,
-        string? outputTemplate = null,
-        LogEventLevel restrictedToMinimumLevel = LogEventLevel.Verbose,
-        LoggingLevelSwitch? levelSwitch = null,
-        uint? themeId = 0)
-    {
-        this.RegisterOutputLog = true;
-        if (outputTemplate is not null)
-        {
-            this.OutputLogTemplate = outputTemplate;
-        }
-
-        this.OutputLogFormatProvider = formatProvider;
-        this.OutputLogMinimumLevel = restrictedToMinimumLevel;
-        this.OutputLogLevelSwitch = levelSwitch;
-        this.OutputLogThemeId = themeId;
         return this;
     }
 

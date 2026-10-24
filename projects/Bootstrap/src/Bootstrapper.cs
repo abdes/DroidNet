@@ -66,8 +66,7 @@ namespace DroidNet.Bootstrap;
 ///     <code><![CDATA[
 ///     var bootstrap = new Bootstrapper(args)
 ///     .Configure(options => options
-///         .WithOutputConsole(subsystemMap)
-///         .WithOutputLog())
+///         .WithOutputConsole(subsystemMap))
 ///     .WithMvvm()
 ///     .WithRouting(routes)
 ///     .WithWinUI&lt;App&gt;()
@@ -138,7 +137,7 @@ public sealed partial class Bootstrapper(string[] args) : IDisposable
     /// </summary>
     /// <param name="configure">
     ///     Optional delegate to configure <see cref="BootstrapOptions" />. Use this to control logging sinks
-    ///     (OutputConsole, OutputLog), format providers, log levels, and other bootstrap-time settings.
+    ///     (OutputConsole), log levels, and other bootstrap-time settings.
     /// </param>
     /// <returns>The configured bootstrapper instance for method chaining.</returns>
     /// <remarks>
@@ -403,11 +402,6 @@ public sealed partial class Bootstrapper(string[] args) : IDisposable
 
         try
         {
-            if (options.RegisterOutputLog)
-            {
-                ConfigureOutputLog(loggerConfig, container, options);
-            }
-
             if (options.RegisterOutputConsole)
             {
                 ConfigureOutputConsole(loggerConfig, container, options);
@@ -417,77 +411,6 @@ public sealed partial class Bootstrapper(string[] args) : IDisposable
         catch
         {
             // Optional sinks are best-effort. Swallow any exception to avoid crashing the host bootstrap.
-        }
-#pragma warning restore CA1031 // Do not catch general exception types
-    }
-
-    [SuppressMessage("Design", "MA0051:Method is too long", Justification = "method is quite simple, but some calls have many arguments")]
-    private static void ConfigureOutputLog(LoggerConfiguration loggerConfig, IContainer container, BootstrapOptions options)
-    {
-        var assembly = TryLoadAssembly("DroidNet.Controls.OutputLog");
-        if (assembly is null)
-        {
-            return;
-        }
-
-        var extType = assembly.GetType(
-            "DroidNet.Controls.OutputLog.LoggerSinkConfigurationOutputLogExtensions",
-            throwOnError: false);
-
-        if (extType is null)
-        {
-            return;
-        }
-
-        var sinkType = assembly.GetType("DroidNet.Controls.OutputLog.RichTextBlockSink", throwOnError: false);
-        if (sinkType is null)
-        {
-            return;
-        }
-
-        try
-        {
-            var writeTo = GetWriteToConfiguration(loggerConfig);
-            if (writeTo is null)
-            {
-                return;
-            }
-
-            var method = extType.GetMethod(
-                "OutputLogView",
-                BindingFlags.Public | BindingFlags.Static,
-                binder: null,
-                [
-                    typeof(LoggerSinkConfiguration),
-                    typeof(IContainer),
-                    typeof(string),
-                    typeof(IFormatProvider),
-                    typeof(LogEventLevel),
-                    typeof(LoggingLevelSwitch),
-                    typeof(uint?),
-                ],
-                modifiers: null);
-
-            if (method is not null)
-            {
-                var genericMethod = method.MakeGenericMethod(sinkType);
-                _ = genericMethod.Invoke(
-                    null,
-                    [
-                        writeTo,
-                        container,
-                        options.OutputLogTemplate,
-                        options.OutputLogFormatProvider,
-                        options.OutputLogMinimumLevel,
-                        options.OutputLogLevelSwitch,
-                        options.OutputLogThemeId,
-                    ]);
-            }
-        }
-#pragma warning disable CA1031 // Do not catch general exception types
-        catch
-        {
-            // best-effort; ignore plugin failures
         }
 #pragma warning restore CA1031 // Do not catch general exception types
     }
@@ -707,7 +630,7 @@ public sealed partial class Bootstrapper(string[] args) : IDisposable
     /// <summary>
     ///     Creates and configures the global Serilog logger instance.
     /// </summary>
-    /// <param name="container">The IoC container, which can be used to register the OutputLog delegating sink.</param>
+    /// <param name="container">The IoC container, which the OutputConsole sink registers its buffer in.</param>
     /// <remarks>
     ///     Configuration behavior:
     ///     <list type="number">

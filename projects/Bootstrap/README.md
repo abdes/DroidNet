@@ -83,7 +83,6 @@ Package versions are centrally managed in `Directory.Packages.props`. Do not man
 Create a `Program.cs` file with the following bootstrap sequence:
 
 ```csharp
-using System.Globalization;
 using DroidNet.Bootstrap;
 using DroidNet.Controls.OutputConsole.Model;
 using DroidNet.Routing;
@@ -99,8 +98,7 @@ class Program
         var bootstrap = new Bootstrapper(args)
             .Configure(options => options
                 .WithLoggingAbstraction()
-                .WithOutputConsole(subsystems, capacity: 5000)
-                .WithOutputLog(CultureInfo.CurrentCulture))
+                .WithOutputConsole(subsystems, capacity: 5000))
             .WithMvvm()
             .WithRouting(new Routes())
             .WithWinUI<App>()
@@ -120,17 +118,14 @@ class Program
 
 ### Optional Logging Sinks
 
-To use the OutputConsole or OutputLog controls, ensure their NuGet packages are installed:
+To use the OutputConsole control, ensure its NuGet package is installed:
 
 ```xml
 <!-- Optional: For OutputConsole control integration -->
 <PackageReference Include="DroidNet.Controls.OutputConsole" />
-
-<!-- Optional: For OutputLog (rich text) control integration -->
-<PackageReference Include="DroidNet.Controls.OutputLog" />
 ```
 
-These packages are optional; the Bootstrap module gracefully handles missing sinks.
+The package is optional; the Bootstrap module gracefully handles a missing sink.
 
 ## Project Structure
 
@@ -440,7 +435,6 @@ Passed to `Configure()` method for logging customization:
 
 - **`WithLoggingAbstraction()`** - Integrate Serilog with MEL abstraction
 - **`WithOutputConsole(object subsystems, int capacity, LogEventLevel restrictedToMinimumLevel, LoggingLevelSwitch? levelSwitch)`** - Register OutputConsole sink; `subsystems` is the application's `SubsystemMap` (required, no default)
-- **`WithOutputLog(IFormatProvider provider, string? template, LogEventLevel level, LoggingLevelSwitch? switch, uint? themeId)`** - Register OutputLog sink
 
 ## Best Practices
 
@@ -472,7 +466,7 @@ bootstrap.Run();
 
 - Configure logging in the `Configure()` callback for bootstrap-time setup
 - Use `Microsoft.Extensions.Logging` abstractions in application code
-- Optional UI sinks (OutputConsole, OutputLog) gracefully degrade if packages are missing
+- The optional OutputConsole sink gracefully degrades if its package is missing
 
 ## Contributing
 

@@ -4,7 +4,6 @@
 
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
-using System.Globalization;
 using System.Runtime.InteropServices;
 using DroidNet.Aura;
 using DroidNet.Bootstrap;
@@ -13,7 +12,6 @@ using DroidNet.Controls.Demo.DemoBrowser;
 using DroidNet.Controls.Demo.InPlaceEdit;
 using DroidNet.Controls.Demo.Menus;
 using DroidNet.Controls.Demo.OutputConsole;
-using DroidNet.Controls.Demo.OutputLog;
 using DroidNet.Controls.Demo.TabStrip;
 using DroidNet.Controls.Demo.ToolBar;
 using DroidNet.Controls.Demo.Tree;
@@ -76,8 +74,7 @@ public static partial class Program
             // Configure aned Build the host so the final container is available.
             _ = bootstrap.Configure(
                 options => options
-                    .WithOutputConsole(OutputConsoleDemoViewModel.Subsystems)
-                    .WithOutputLog(formatProvider: CultureInfo.InvariantCulture))
+                    .WithOutputConsole(OutputConsoleDemoViewModel.Subsystems))
                 .WithMvvm()
                 .WithRouting(MakeRoutes())
                 .WithWinUI<App>()
@@ -166,8 +163,6 @@ public static partial class Program
 
         container.Register<DemoBrowserView>(Reuse.Singleton);
         container.Register<DemoBrowserViewModel>(Reuse.Singleton);
-        container.Register<OutputLogDemoView>(Reuse.Transient);
-        container.Register<OutputLogDemoViewModel>(Reuse.Transient);
         container.Register<OutputConsoleDemoView>(Reuse.Transient);
         container.Register<OutputConsoleDemoViewModel>(Reuse.Singleton);
         container.Register<DynamicTreeDemoView>(Reuse.Transient);
@@ -212,11 +207,6 @@ public static partial class Program
                     ViewModelType = typeof(DemoBrowserViewModel),
                     Children = new Routes(
                     [
-                        new Route()
-                        {
-                            Path = "output-log",
-                            ViewModelType = typeof(OutputLogDemoViewModel),
-                        },
                         new Route()
                         {
                             Path = "output-console",
