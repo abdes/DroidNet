@@ -82,8 +82,8 @@ public partial class MainShellViewModel : AbstractOutletContainer, IRoutingAware
         Debug.Assert(
             hostingContext.Dispatcher is not null,
             "DispatcherQueue in hosting context is not null when UI thread has been started");
-        this.logger = loggerFactory?.CreateLogger<MainShellViewModel>() ?? NullLoggerFactory.Instance.CreateLogger<MainShellViewModel>();
-        this.LoggerFactory = loggerFactory ?? NullLoggerFactory.Instance;
+        this.logger = loggerFactory?.CreateLogger<MainShellViewModel>() ?? NullLogger<MainShellViewModel>.Instance;
+        this.LoggerFactory = loggerFactory;
         this.dispatcherQueue = hostingContext.Dispatcher;
         this.assets = assets;
 
@@ -190,9 +190,9 @@ public partial class MainShellViewModel : AbstractOutletContainer, IRoutingAware
     public object? ContentViewModel => this.Outlets[OutletName.Primary].viewModel;
 
     /// <summary>
-    ///     Gets the <see cref="ILoggerFactory" /> instance. Exposed for use by the View, which is not created via DI."/>.
+    ///     Gets the logger factory, or <see langword="null" /> to log nothing. Exposed for the view, which is not created via DI.
     /// </summary>
-    internal ILoggerFactory LoggerFactory { get; }
+    internal ILoggerFactory? LoggerFactory { get; }
 
     /// <summary>
     /// Gets the appearance settings (the service implements IAppearanceSettings).

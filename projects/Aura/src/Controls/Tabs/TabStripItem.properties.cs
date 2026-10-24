@@ -111,8 +111,8 @@ public partial class TabStripItem
 
     private void OnLoggerFactoryChanged(ILoggerFactory? loggerFactory)
     {
-        this.logger = (loggerFactory ?? NullLoggerFactory.Instance).CreateLogger<TabStripItem>();
+        this.logger = loggerFactory?.CreateLogger<TabStripItem>() ?? NullLogger<TabStripItem>.Instance;
         var visual = typeof(TabStripItem).FullName + ".Visual";
-        this.visualLogger = (loggerFactory ?? NullLoggerFactory.Instance).CreateLogger(visual);
+        this.visualLogger = loggerFactory?.CreateLogger(visual) ?? NullLogger.Instance;
     }
 }

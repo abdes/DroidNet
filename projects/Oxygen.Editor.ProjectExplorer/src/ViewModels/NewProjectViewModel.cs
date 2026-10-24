@@ -30,7 +30,7 @@ public partial class NewProjectViewModel(
     ILoggerFactory? loggerFactory = null)
     : ObservableObject, IRoutingAware
 {
-    private readonly ILogger logger = loggerFactory?.CreateLogger<NewProjectViewModel>() ?? NullLoggerFactory.Instance.CreateLogger<NewProjectViewModel>();
+    private readonly ILogger logger = loggerFactory?.CreateLogger<NewProjectViewModel>() ?? NullLogger<NewProjectViewModel>.Instance;
 
     private bool preloaded;
 

@@ -43,7 +43,7 @@ public sealed partial class MaterialEdits(
 {
     private const string EditLabel = "Edit Material";
 
-    private readonly ILogger logger = (loggerFactory ?? NullLoggerFactory.Instance).CreateLogger<MaterialEdits>();
+    private readonly ILogger logger = loggerFactory?.CreateLogger<MaterialEdits>() ?? NullLogger<MaterialEdits>.Instance;
 
     private static MaterialEditResult Accepted { get; } = new(Succeeded: true, OperationId: null);
 

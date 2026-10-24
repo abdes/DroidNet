@@ -12,7 +12,7 @@ namespace DroidNet.Aura.Controls;
 /// </summary>
 public partial class TabStripLayoutManager : ITabStripLayoutManager
 {
-    private ILogger logger = NullLoggerFactory.Instance.CreateLogger<TabStripLayoutManager>();
+    private ILogger logger = NullLogger<TabStripLayoutManager>.Instance;
 
     /// <summary>
     /// Gets or sets the logger factory used to create the logger for this layout manager.
@@ -24,7 +24,7 @@ public partial class TabStripLayoutManager : ITabStripLayoutManager
         set
         {
             field = value;
-            this.logger = field?.CreateLogger<TabStripLayoutManager>() ?? NullLoggerFactory.Instance.CreateLogger<TabStripLayoutManager>();
+            this.logger = field?.CreateLogger<TabStripLayoutManager>() ?? NullLogger<TabStripLayoutManager>.Instance;
         }
     }
 

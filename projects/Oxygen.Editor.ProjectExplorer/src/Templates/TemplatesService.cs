@@ -82,7 +82,7 @@ public partial class TemplatesService(
     ];
 
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1823:Avoid unused private fields", Justification = "used by generated logging methods")]
-    private readonly ILogger logger = loggerFactory?.CreateLogger<TemplatesService>() ?? NullLoggerFactory.Instance.CreateLogger<TemplatesService>();
+    private readonly ILogger logger = loggerFactory?.CreateLogger<TemplatesService>() ?? NullLogger<TemplatesService>.Instance;
 
     private List<string> BuiltinTemplates { get; } = Templates.ConvertAll(
                 location => fs.Path.Combine(

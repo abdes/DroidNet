@@ -42,11 +42,11 @@ public sealed partial class SceneNodeDetailsViewModel : ObservableObject
     /// Initializes a new instance of the <see cref="SceneNodeDetailsViewModel"/> class.
     /// </summary>
     /// <param name="loggerFactory">Optional logger factory used to create an <see cref="ILogger"/>.
-    /// If <see langword="null"/>, a <see cref="NullLoggerFactory"/> is used.</param>
+    /// If <see langword="null"/>, nothing is logged.</param>
     public SceneNodeDetailsViewModel(ILoggerFactory? loggerFactory = null)
     {
         this.dispatcher = DispatcherQueue.GetForCurrentThread();
-        this.logger = NullLoggerFactory.Instance.CreateLogger<SceneNodeDetailsViewModel>();
+        this.logger = NullLogger<SceneNodeDetailsViewModel>.Instance;
         this.LoggerFactory = loggerFactory;
         this.LogConstructed(this.dispatcher is not null);
     }
@@ -69,7 +69,7 @@ public sealed partial class SceneNodeDetailsViewModel : ObservableObject
             }
 
             field = value;
-            this.logger = (value ?? NullLoggerFactory.Instance).CreateLogger<SceneNodeDetailsViewModel>();
+            this.logger = value?.CreateLogger<SceneNodeDetailsViewModel>() ?? NullLogger<SceneNodeDetailsViewModel>.Instance;
         }
     }
 

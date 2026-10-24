@@ -30,7 +30,6 @@ namespace Oxygen.Editor.SceneEditor;
 /// </summary>
 public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xaml.cs is doing too much instead of the view model
 {
-    private const string LoggerCategoryName = "Oxygen.Editor.SceneEditor.Viewport";
     private const uint MinimumPixelExtent = 2;
     private const double CompactWidth = 600;
     private const double NarrowWidth = 400;
@@ -71,7 +70,7 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
        oscillation. */
 
     private CancellationTokenSource? attachCancellationSource;
-    private ILogger logger = NullLoggerFactory.Instance.CreateLogger(LoggerCategoryName);
+    private ILogger logger = NullLogger<Viewport>.Instance;
     private ViewportViewModel? currentViewModel;
     private bool isDisposed;
     private long attachRequestId;
@@ -554,8 +553,7 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
 
     private void RefreshLogger(ViewportViewModel? viewModel)
     {
-        var factory = viewModel?.LoggerFactory ?? NullLoggerFactory.Instance;
-        this.logger = factory.CreateLogger(LoggerCategoryName);
+        this.logger = viewModel?.LoggerFactory?.CreateLogger<Viewport>() ?? NullLogger<Viewport>.Instance;
     }
 
     private void OnLoaded(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)

@@ -80,7 +80,7 @@ public sealed partial class DocumentService : IDocumentService, IDisposable
         this.inputCommitter = inputCommitter;
         this.relocations = relocations;
         this.hosting = hosting;
-        this.logger = (loggerFactory ?? NullLoggerFactory.Instance).CreateLogger<DocumentService>();
+        this.logger = loggerFactory?.CreateLogger<DocumentService>() ?? NullLogger<DocumentService>.Instance;
         this.closeCoordinator = closeCoordinator;
 
         this.tabs.DocumentOpened += this.OnTabOpened;

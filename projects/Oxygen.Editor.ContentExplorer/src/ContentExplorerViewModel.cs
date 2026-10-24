@@ -92,8 +92,7 @@ public sealed partial class ContentExplorerViewModel(
 
     private static readonly string[] AssetsViewPaths = ["assets/tiles", "assets/list", "assets/details"];
 
-    private readonly ILogger logger = loggerFactory?.CreateLogger<ContentExplorerViewModel>() ??
-                                      NullLoggerFactory.Instance.CreateLogger<ContentExplorerViewModel>();
+    private readonly ILogger logger = loggerFactory?.CreateLogger<ContentExplorerViewModel>() ?? NullLogger<ContentExplorerViewModel>.Instance;
 
     // Navigation history management
     private readonly List<string> navigationHistory = [];

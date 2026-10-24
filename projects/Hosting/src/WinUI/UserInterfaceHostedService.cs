@@ -46,7 +46,7 @@ public partial class UserInterfaceHostedService(
     ILoggerFactory? loggerFactory = null) : IHostedService
 {
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1823:Avoid unused private fields", Justification = "used by generated logging methods")]
-    private readonly ILogger logger = loggerFactory?.CreateLogger<UserInterfaceHostedService>() ?? NullLoggerFactory.Instance.CreateLogger<UserInterfaceHostedService>();
+    private readonly ILogger logger = loggerFactory?.CreateLogger<UserInterfaceHostedService>() ?? NullLogger<UserInterfaceHostedService>.Instance;
 
     /// <inheritdoc />
     public Task StartAsync(CancellationToken cancellationToken)

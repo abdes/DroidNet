@@ -126,7 +126,7 @@ public partial class DynamicTreeItem
     /// <summary>
     ///     Gets or sets the <see cref="ILoggerFactory" /> used to create a logger for this control.
     ///     Assigning the factory will initialize the internal logger to a non-null logger instance
-    ///     (falls back to <see cref="NullLoggerFactory.Instance"/> if null).
+    ///     (falls back to <see cref="NullLogger{T}.Instance"/> if null).
     /// </summary>
     public ILoggerFactory? LoggerFactory
     {
@@ -218,7 +218,7 @@ public partial class DynamicTreeItem
 
     // Initialize the logger for this NumberBox. Use the NumberBox type as the category.
     private void OnLoggerFactoryChanged(ILoggerFactory? loggerFactory) =>
-        this.logger = loggerFactory?.CreateLogger<DynamicTreeItem>() ?? NullLoggerFactory.Instance.CreateLogger<DynamicTreeItem>();
+        this.logger = loggerFactory?.CreateLogger<DynamicTreeItem>() ?? NullLogger<DynamicTreeItem>.Instance;
 
     private void OnItemIndentWidthChanged()
     {

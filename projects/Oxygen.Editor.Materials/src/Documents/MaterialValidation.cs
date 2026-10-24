@@ -32,7 +32,7 @@ public sealed partial class MaterialValidation
     /// <param name="loggerFactory">The logger factory, if any.</param>
     public MaterialValidation(ILoggerFactory? loggerFactory = null)
     {
-        this.logger = (loggerFactory ?? NullLoggerFactory.Instance).CreateLogger<MaterialValidation>();
+        this.logger = loggerFactory?.CreateLogger<MaterialValidation>() ?? NullLogger<MaterialValidation>.Instance;
         this.validator = new(this.LoadValidator);
     }
 

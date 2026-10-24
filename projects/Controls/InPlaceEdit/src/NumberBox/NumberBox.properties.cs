@@ -381,7 +381,7 @@ public partial class NumberBox
     /// <summary>
     ///     Gets or sets the <see cref="ILoggerFactory" /> used to create a logger for this control.
     ///     Assigning the factory will initialize the internal logger to a non-null logger instance
-    ///     (falls back to <see cref="NullLoggerFactory.Instance"/> if null).
+    ///     (falls back to <see cref="NullLogger{T}.Instance"/> if null).
     /// </summary>
     public ILoggerFactory? LoggerFactory
     {
@@ -476,5 +476,5 @@ public partial class NumberBox
 
     // Initialize the logger for this NumberBox. Use the NumberBox type as the category.
     private void OnLoggerFactoryChanged(ILoggerFactory? factory) =>
-        this.logger = factory?.CreateLogger<NumberBox>() ?? NullLoggerFactory.Instance.CreateLogger<NumberBox>();
+        this.logger = factory?.CreateLogger<NumberBox>() ?? NullLogger<NumberBox>.Instance;
 }

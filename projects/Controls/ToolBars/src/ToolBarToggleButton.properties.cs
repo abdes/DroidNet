@@ -141,7 +141,7 @@ public partial class ToolBarToggleButton
     /// <summary>
     ///     Gets or sets the <see cref="ILoggerFactory" /> used to create a logger for this control.
     ///     Assigning the factory will initialize the internal logger to a non-null logger instance
-    ///     (falls back to <see cref="NullLoggerFactory.Instance"/> if null).
+    ///     (falls back to <see cref="NullLogger{T}.Instance"/> if null).
     /// </summary>
     public ILoggerFactory? LoggerFactory
     {
@@ -206,5 +206,5 @@ public partial class ToolBarToggleButton
     /// </summary>
     /// <param name="loggerFactory">The new logger factory.</param>
     private void OnLoggerFactoryChanged(ILoggerFactory? loggerFactory)
-        => this.logger = loggerFactory?.CreateLogger<ToolBarToggleButton>() ?? NullLoggerFactory.Instance.CreateLogger<ToolBarToggleButton>();
+        => this.logger = loggerFactory?.CreateLogger<ToolBarToggleButton>() ?? NullLogger<ToolBarToggleButton>.Instance;
 }

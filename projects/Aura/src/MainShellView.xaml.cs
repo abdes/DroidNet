@@ -129,7 +129,7 @@ public sealed partial class MainShellView : INotifyPropertyChanged
             newViewModel.PropertyChanged += this.OnShellPropertyChanged;
         }
 
-        this.logger = this.ViewModel?.LoggerFactory.CreateLogger<MainShellView>() ?? NullLogger<MainShellView>.Instance;
+        this.logger = this.ViewModel?.LoggerFactory?.CreateLogger<MainShellView>() ?? NullLogger<MainShellView>.Instance;
 
         // Log that the instance logger was replaced (this helps track log sinks/lifetimes)
         this.LogLoggerInitialized();

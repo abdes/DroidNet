@@ -25,7 +25,7 @@ public partial class WorkSpaceView : UserControl
     /// <param name="loggerFactory">The factory to create logger instances.</param>
     public WorkSpaceView(ILoggerFactory? loggerFactory)
     {
-        this.logger = loggerFactory?.CreateLogger("Workspace") ?? NullLoggerFactory.Instance.CreateLogger("Workspace");
+        this.logger = loggerFactory?.CreateLogger<WorkSpaceView>() ?? NullLogger<WorkSpaceView>.Instance;
         this.Style = (Style)Application.Current.Resources[nameof(WorkSpaceView)];
 
         this.ViewModelChanged += (_, args) =>

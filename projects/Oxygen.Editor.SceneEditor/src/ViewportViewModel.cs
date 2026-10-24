@@ -84,7 +84,7 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
         ILoggerFactory? loggerFactory = null)
     {
         this.LoggerFactory = loggerFactory;
-        this.logger = (loggerFactory ?? NullLoggerFactory.Instance).CreateLogger("Oxygen.Editor.SceneEditor.ViewportViewModel");
+        this.logger = loggerFactory?.CreateLogger<ViewportViewModel>() ?? NullLogger<ViewportViewModel>.Instance;
 
         this.DocumentId = documentId;
         this.EngineService = engineService;

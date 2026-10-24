@@ -35,7 +35,7 @@ public sealed partial class CommandService(
     ContributionRegistry contributions,
     ILoggerFactory? loggerFactory = null) : ICommandService
 {
-    private readonly ILogger logger = (loggerFactory ?? NullLoggerFactory.Instance).CreateLogger<CommandService>();
+    private readonly ILogger logger = loggerFactory?.CreateLogger<CommandService>() ?? NullLogger<CommandService>.Instance;
     private readonly List<ICommandHandler> registered = [];
 
     /// <inheritdoc/>

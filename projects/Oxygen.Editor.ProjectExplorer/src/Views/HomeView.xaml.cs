@@ -40,7 +40,7 @@ public sealed partial class HomeView
     /// </param>
     public HomeView(IProjectExplorerService projectExplorer, IDialogService dialogService, ILoggerFactory? loggerFactory = null)
     {
-        this.logger = loggerFactory?.CreateLogger<HomeView>() ?? NullLoggerFactory.Instance.CreateLogger<HomeView>();
+        this.logger = loggerFactory?.CreateLogger<HomeView>() ?? NullLogger<HomeView>.Instance;
 
         this.projectExplorer = projectExplorer;
         this.dialogService = dialogService;

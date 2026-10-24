@@ -16,7 +16,7 @@ namespace Oxygen.Editor.Documents;
 public sealed partial class OpenDocuments : IDisposable
 {
     private readonly IAtomicFileStore files;
-    private readonly ILoggerFactory loggerFactory;
+    private readonly ILoggerFactory? loggerFactory;
     private readonly ILogger logger;
     private readonly List<Document> documents = [];
     private readonly Dictionary<FileSystemPath, Task<DocumentOpenResult>> opening = [];
@@ -32,8 +32,8 @@ public sealed partial class OpenDocuments : IDisposable
         ArgumentNullException.ThrowIfNull(files);
         this.Kinds = [.. kinds];
         this.files = files;
-        this.loggerFactory = loggerFactory ?? NullLoggerFactory.Instance;
-        this.logger = this.loggerFactory.CreateLogger<OpenDocuments>();
+        this.loggerFactory = loggerFactory;
+        this.logger = loggerFactory?.CreateLogger<OpenDocuments>() ?? NullLogger<OpenDocuments>.Instance;
         ValidateSuffixes(this.Kinds);
     }
 
@@ -178,7 +178,7 @@ public sealed partial class OpenDocuments : IDisposable
                 return this.OpenFailed(file, decoded.Problem!);
             }
 
-            var document = new Document(kind, file, context, content, snapshot.Version, this.files, this.loggerFactory.CreateLogger<Document>());
+            var document = new Document(kind, file, context, content, snapshot.Version, this.files, this.loggerFactory?.CreateLogger<Document>() ?? NullLogger<Document>.Instance);
             this.documents.Add(document);
             this.LogOpened(kind.Name, document.Title, file.Path);
             this.Opened?.Invoke(this, new DocumentEventArgs(document));

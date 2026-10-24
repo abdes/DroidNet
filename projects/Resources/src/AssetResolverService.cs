@@ -19,7 +19,7 @@ namespace DroidNet.Resources;
 /// </param>
 public partial class AssetResolverService(ILoggerFactory loggerFactory)
 {
-    private readonly ILogger logger = loggerFactory?.CreateLogger<AssetResolverService>() ?? NullLoggerFactory.Instance.CreateLogger<AssetResolverService>();
+    private readonly ILogger logger = loggerFactory?.CreateLogger<AssetResolverService>() ?? NullLogger<AssetResolverService>.Instance;
 
     /// <summary>
     ///     Resolves an asset URI from a relative path and the calling assembly context.

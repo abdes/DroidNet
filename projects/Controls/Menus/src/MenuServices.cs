@@ -23,7 +23,7 @@ public sealed class MenuServices
     /// </summary>
     /// <param name="lookupAccessor">A delegate that returns the latest lookup dictionary by menu item identifier.</param>
     /// <param name="groupSelectionHandler">A delegate that applies radio-group and toggle selection logic for a given item.</param>
-    /// <param name="loggerFactory">An optional factory used to create loggers for menu services. When not provided, a <see cref="NullLoggerFactory"/> will be used.</param>
+    /// <param name="loggerFactory">An optional factory used to create loggers for menu services. When not provided, nothing is logged.</param>
     internal MenuServices(
         Func<IReadOnlyDictionary<string, MenuItemData>> lookupAccessor,
         Action<MenuItemData> groupSelectionHandler,
@@ -35,7 +35,7 @@ public sealed class MenuServices
         this.lookupAccessor = lookupAccessor;
         this.groupSelectionHandler = groupSelectionHandler;
 
-        this.InitializeLoggers(loggerFactory ?? NullLoggerFactory.Instance);
+        this.InitializeLoggers(loggerFactory);
     }
 
     /// <summary>
@@ -135,12 +135,12 @@ public sealed class MenuServices
         nameof(VisualLogger),
         nameof(InteractionLogger),
         nameof(MiscLogger))]
-    private void InitializeLoggers(ILoggerFactory loggerFactory)
+    private void InitializeLoggers(ILoggerFactory? loggerFactory)
     {
-        this.AppLogger = loggerFactory.CreateLogger(LoggingCategories.App);
-        this.FocusLogger = loggerFactory.CreateLogger(LoggingCategories.Focus);
-        this.VisualLogger = loggerFactory.CreateLogger(LoggingCategories.Visual);
-        this.InteractionLogger = loggerFactory.CreateLogger(LoggingCategories.Interaction);
-        this.MiscLogger = loggerFactory.CreateLogger(LoggingCategories.Misc);
+        this.AppLogger = loggerFactory?.CreateLogger(LoggingCategories.App) ?? NullLogger.Instance;
+        this.FocusLogger = loggerFactory?.CreateLogger(LoggingCategories.Focus) ?? NullLogger.Instance;
+        this.VisualLogger = loggerFactory?.CreateLogger(LoggingCategories.Visual) ?? NullLogger.Instance;
+        this.InteractionLogger = loggerFactory?.CreateLogger(LoggingCategories.Interaction) ?? NullLogger.Instance;
+        this.MiscLogger = loggerFactory?.CreateLogger(LoggingCategories.Misc) ?? NullLogger.Instance;
     }
 }

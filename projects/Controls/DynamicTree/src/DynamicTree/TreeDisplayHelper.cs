@@ -27,7 +27,7 @@ internal sealed partial class TreeDisplayHelper(
     /// </summary>
     public const int DefaultMaxDepth = 32;
 
-    private readonly ILogger logger = loggerFactory?.CreateLogger<TreeDisplayHelper>() ?? NullLoggerFactory.Instance.CreateLogger<TreeDisplayHelper>();
+    private readonly ILogger logger = loggerFactory?.CreateLogger<TreeDisplayHelper>() ?? NullLogger<TreeDisplayHelper>.Instance;
     private readonly ObservableCollection<ITreeItem> shownItems = shownItems;
     private readonly Func<SelectionModel<ITreeItem>?> selectionModelProvider = selectionModelProvider;
     private readonly Func<ITreeItem, Task> expandItemAsync = expandItemAsync;

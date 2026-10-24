@@ -377,7 +377,7 @@ public partial class VectorBox
     private void OnLoggerFactoryChanged(ILoggerFactory? factory)
     {
         // Initialize the logger for this VectorBox and propagate the factory to child NumberBox instances.
-        this.logger = factory?.CreateLogger<VectorBox>() ?? NullLoggerFactory.Instance.CreateLogger<VectorBox>();
+        this.logger = factory?.CreateLogger<VectorBox>() ?? NullLogger<VectorBox>.Instance;
         this.LogLoggerFactoryChanged(factory is not null);
         this.ForEachEditor(static (owner, box) => box.LoggerFactory = owner.LoggerFactory);
     }

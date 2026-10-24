@@ -59,7 +59,7 @@ public sealed partial class WindowPlacementService : IWindowCloseParticipant, ID
     /// <param name="loggerFactory">An optional logger factory for logging.</param>
     public WindowPlacementService(IWindowManagerService windowManager, IRouter router, Func<PersistentState> contextFactory, HostingContext hosting, ILoggerFactory? loggerFactory = null)
     {
-        this.logger = loggerFactory?.CreateLogger<WindowPlacementService>() ?? NullLoggerFactory.Instance.CreateLogger<WindowPlacementService>();
+        this.logger = loggerFactory?.CreateLogger<WindowPlacementService>() ?? NullLogger<WindowPlacementService>.Instance;
 
         this.windowManager = windowManager;
         this.router = router;

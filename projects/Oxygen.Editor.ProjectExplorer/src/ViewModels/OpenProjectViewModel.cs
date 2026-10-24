@@ -64,7 +64,7 @@ public partial class OpenProjectViewModel : ObservableObject, IRoutingAware
         IProjectExplorerService projectExplorer,
         ILoggerFactory? loggerFactory = null)
     {
-        this.logger = loggerFactory?.CreateLogger<OpenProjectViewModel>() ?? NullLoggerFactory.Instance.CreateLogger<OpenProjectViewModel>();
+        this.logger = loggerFactory?.CreateLogger<OpenProjectViewModel>() ?? NullLogger<OpenProjectViewModel>.Instance;
         this.activationCoordinator = activationCoordinator;
 
         this.storageProvider = storageProvider;

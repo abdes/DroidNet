@@ -56,7 +56,7 @@ public sealed partial class Router : IRouter, IDisposable
         IUrlSerializer urlSerializer,
         ILoggerFactory? loggerFactory)
     {
-        this.logger = loggerFactory?.CreateLogger<Router>() ?? NullLoggerFactory.Instance.CreateLogger<Router>();
+        this.logger = loggerFactory?.CreateLogger<Router>() ?? NullLogger<Router>.Instance;
 
         this.routeActivationObserver = new RouteActivationObserver(container);
 

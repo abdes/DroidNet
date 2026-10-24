@@ -20,8 +20,7 @@ namespace DroidNet.Routing.Debugger.UI.Docks;
 /// </param>
 public partial class EmbeddedAppViewModel(object? appViewModel, IViewLocator viewLocator, ILoggerFactory loggerFactory)
 {
-    private readonly ILogger logger = loggerFactory?.CreateLogger(typeof(DefaultViewLocator).Namespace!) ??
-                                      NullLoggerFactory.Instance.CreateLogger(typeof(DefaultViewLocator).Namespace!);
+    private readonly ILogger logger = loggerFactory?.CreateLogger<EmbeddedAppViewModel>() ?? NullLogger<EmbeddedAppViewModel>.Instance;
 
     private UIElement? appView;
 

@@ -72,7 +72,7 @@ public partial class ProjectExplorerService : IProjectExplorerService
         IEditorSettingsManager settingsManager,
         ILoggerFactory? loggerFactory = null)
     {
-        this.logger = loggerFactory?.CreateLogger<ProjectExplorerService>() ?? NullLoggerFactory.Instance.CreateLogger<ProjectExplorerService>();
+        this.logger = loggerFactory?.CreateLogger<ProjectExplorerService>() ?? NullLogger<ProjectExplorerService>.Instance;
         this.projectCreation = projectCreation;
         this.recentProjects = recentProjects;
         this.finder = finder;

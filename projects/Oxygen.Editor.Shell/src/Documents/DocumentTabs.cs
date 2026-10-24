@@ -20,7 +20,7 @@ namespace Oxygen.Editor.Shell.Documents;
 /// </param>
 public partial class DocumentTabs(DocumentCloseCoordinator coordinator, ILoggerFactory? loggerFactory = null) : IDocumentTabs, IDocumentServiceState
 {
-    private readonly ILogger logger = (loggerFactory ?? NullLoggerFactory.Instance).CreateLogger<DocumentTabs>();
+    private readonly ILogger logger = loggerFactory?.CreateLogger<DocumentTabs>() ?? NullLogger<DocumentTabs>.Instance;
     private readonly DocumentCloseCoordinator coordinator = coordinator ?? throw new ArgumentNullException(nameof(coordinator));
 
     // Store documents per window

@@ -45,7 +45,7 @@ internal partial class RecentProjectsListViewModel : ObservableObject
     /// </param>
     public RecentProjectsListViewModel(IProjectExplorerService projectExplorer, string defaultThumbnailUri, ILoggerFactory? loggerFactory = null)
     {
-        this.logger = loggerFactory?.CreateLogger<RecentProjectsListViewModel>() ?? NullLoggerFactory.Instance.CreateLogger<RecentProjectsListViewModel>();
+        this.logger = loggerFactory?.CreateLogger<RecentProjectsListViewModel>() ?? NullLogger<RecentProjectsListViewModel>.Instance;
 
         this.projectExplorer = projectExplorer;
         this.DefaultThumbnailUri = defaultThumbnailUri;

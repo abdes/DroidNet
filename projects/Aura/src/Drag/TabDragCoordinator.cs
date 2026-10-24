@@ -63,7 +63,7 @@ public partial class TabDragCoordinator : ITabDragCoordinator
         IDragVisualService dragService,
         ILoggerFactory? loggerFactory = null)
     {
-        this.logger = loggerFactory?.CreateLogger<TabDragCoordinator>() ?? NullLoggerFactory.Instance.CreateLogger<TabDragCoordinator>();
+        this.logger = loggerFactory?.CreateLogger<TabDragCoordinator>() ?? NullLogger<TabDragCoordinator>.Instance;
         this.dispatcherQueue = hosting.Dispatcher;
         this.spatialMapperFactory = spatialMapperFactory;
         this.dragService = dragService;

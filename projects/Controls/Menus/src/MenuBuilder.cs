@@ -14,7 +14,7 @@ namespace DroidNet.Controls.Menus;
 /// <summary>
 ///     Provides functionality to build and manage menu data for custom controls.
 /// </summary>
-/// <param name="loggerFactory">An optional factory used to create loggers for menu services. When not provided, a <see cref="NullLoggerFactory"/> will be used.</param>
+/// <param name="loggerFactory">An optional factory used to create loggers for menu services. When not provided, nothing is logged.</param>
 /// <remarks>
 ///     The <see cref="MenuBuilder"/> class creates a hierarchical collection of <see cref="MenuItemData"/> items
 ///     that can be consumed by custom menu containers. It maintains a lookup dictionary for quick access to menu

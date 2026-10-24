@@ -90,8 +90,7 @@ internal sealed partial class Recognizer(
     IRoutes config,
     ILoggerFactory? loggerFactory)
 {
-    private readonly ILogger logger = loggerFactory?.CreateLogger<Recognizer>() ??
-                                      NullLoggerFactory.Instance.CreateLogger<Recognizer>();
+    private readonly ILogger logger = loggerFactory?.CreateLogger<Recognizer>() ?? NullLogger<Recognizer>.Instance;
 
     /// <summary>
     /// Represents the result of matching URL segments against a route's path configuration,

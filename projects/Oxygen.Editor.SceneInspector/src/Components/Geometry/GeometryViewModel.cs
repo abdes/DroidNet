@@ -67,7 +67,7 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
         Func<SceneAuthoring?>? authoringProvider = null,
         ILoggerFactory? loggerFactory = null)
     {
-        this.logger = (loggerFactory ?? NullLoggerFactory.Instance).CreateLogger<GeometryViewModel>();
+        this.logger = loggerFactory?.CreateLogger<GeometryViewModel>() ?? NullLogger<GeometryViewModel>.Instance;
         this.assetProvider = assetProvider;
         this.surfaces = surfaces;
         this.session = session;

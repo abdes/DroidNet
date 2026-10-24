@@ -6,6 +6,7 @@ using DroidNet.Composition;
 using DroidNet.Routing;
 using DryIoc;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.LivePreview.Play;
@@ -77,7 +78,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
         this.routes = CreateRoutes(this.modules);
         this.projectManager = projectManager;
         this.projectUsage = projectUsage;
-        this.logger = loggerFactory?.CreateLogger<WorkspaceViewModel>() ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<WorkspaceViewModel>.Instance;
+        this.logger = loggerFactory?.CreateLogger<WorkspaceViewModel>() ?? NullLogger<WorkspaceViewModel>.Instance;
     }
 
     /// <inheritdoc />

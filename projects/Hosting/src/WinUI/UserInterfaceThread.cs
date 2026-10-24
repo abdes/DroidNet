@@ -40,7 +40,7 @@ public partial class UserInterfaceThread(
     ILoggerFactory? loggerFactory) : BaseUserInterfaceThread<HostingContext>(
     lifetime,
     context,
-    loggerFactory?.CreateLogger<UserInterfaceThread>() ?? MakeNullLogger())
+    loggerFactory?.CreateLogger<UserInterfaceThread>() ?? NullLogger<UserInterfaceThread>.Instance)
 {
     /// <inheritdoc />
     public override Task StopUserInterfaceAsync()
@@ -91,6 +91,4 @@ public partial class UserInterfaceThread(
         this.HostingContext.Application?.Exit();
         this.HostingContext.IsRunning = false;
     }
-
-    private static ILogger MakeNullLogger() => NullLoggerFactory.Instance.CreateLogger<UserInterfaceThread>();
 }

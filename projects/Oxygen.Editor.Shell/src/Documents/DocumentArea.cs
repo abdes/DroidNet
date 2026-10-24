@@ -79,7 +79,7 @@ public sealed partial class DocumentArea : IDocumentArea, IDisposable
         this.operationResults = operationResults;
         this.window = window;
         this.bringForward = bringForward;
-        this.logger = (loggerFactory ?? NullLoggerFactory.Instance).CreateLogger<DocumentArea>();
+        this.logger = loggerFactory?.CreateLogger<DocumentArea>() ?? NullLogger<DocumentArea>.Instance;
 
         this.tabs.DocumentOpened += this.OnTabOpened;
         this.tabs.DocumentAttached += this.OnTabAttached;

@@ -33,8 +33,7 @@ public abstract partial class AbstractRouteActivator(ILoggerFactory? loggerFacto
     /// <summary>
     /// Gets the logger used by the activator.
     /// </summary>
-    protected ILogger Logger { get; } = loggerFactory?.CreateLogger<IRouteActivator>() ??
-                                        NullLoggerFactory.Instance.CreateLogger<IRouteActivator>();
+    protected ILogger Logger { get; } = loggerFactory?.CreateLogger<IRouteActivator>() ?? NullLogger<IRouteActivator>.Instance;
 
     /// <inheritdoc/>
     public async Task<bool> ActivateRoutesRecursiveAsync(IActiveRoute root, INavigationContext context)

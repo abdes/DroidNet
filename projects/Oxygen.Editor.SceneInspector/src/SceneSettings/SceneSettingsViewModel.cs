@@ -50,7 +50,6 @@ public sealed partial class SceneSettingsViewModel : InspectorSection, IDisposab
         IInputSources? inputSources = null,
         ILoggerFactory? loggerFactory = null)
     {
-        var loggers = loggerFactory ?? NullLoggerFactory.Instance;
         this.observeEnvironment = observeEnvironment;
         this.EditOwner = new(authoringProvider, this.RefreshFromScene, this.ValidationFeedback);
         var scheduler = observerScheduler ?? ImmediateScheduler.Instance;
@@ -59,10 +58,10 @@ public sealed partial class SceneSettingsViewModel : InspectorSection, IDisposab
         this.SkyLight = new(this.EditOwner, cubeTextures, scheduler);
         this.SkyAtmosphere = new(this.EditOwner);
         this.Fog = new(this.EditOwner);
-        this.Exposure = new(this.EditOwner, assetProvider, observerScheduler ?? ImmediateScheduler.Instance, loggers.CreateLogger<ExposureSectionViewModel>());
+        this.Exposure = new(this.EditOwner, assetProvider, observerScheduler ?? ImmediateScheduler.Instance, loggerFactory?.CreateLogger<ExposureSectionViewModel>() ?? NullLogger<ExposureSectionViewModel>.Instance);
         this.PostProcessing = new(this.EditOwner);
         this.AtmosphereLights = new(this.EditOwner, authoringProvider, inspectSceneNode);
-        this.SceneReferences = new(authoringProvider, assetProvider, observerScheduler ?? ImmediateScheduler.Instance, loggers.CreateLogger<SceneReferencesSectionViewModel>());
+        this.SceneReferences = new(authoringProvider, assetProvider, observerScheduler ?? ImmediateScheduler.Instance, loggerFactory?.CreateLogger<SceneReferencesSectionViewModel>() ?? NullLogger<SceneReferencesSectionViewModel>.Instance);
         this.Play = new(authoringProvider, assetProvider, scheduler, inputContextSource, inspectSceneNode, revealAsset, inputSources);
     }
 

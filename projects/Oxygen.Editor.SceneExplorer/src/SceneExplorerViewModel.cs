@@ -181,8 +181,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             service.StateChanged += this.OnInteractionStateChanged;
         }
 
-        this.logger = loggerFactory?.CreateLogger<SceneExplorerViewModel>() ??
-                      NullLoggerFactory.Instance.CreateLogger<SceneExplorerViewModel>();
+        this.logger = loggerFactory?.CreateLogger<SceneExplorerViewModel>() ?? NullLogger<SceneExplorerViewModel>.Instance;
         this.router = router;
         this.documentArea = documentArea;
         this.openDocuments = openDocuments;

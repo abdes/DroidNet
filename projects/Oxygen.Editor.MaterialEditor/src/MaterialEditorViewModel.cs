@@ -98,7 +98,7 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
         this.edits = edits ?? throw new ArgumentNullException(nameof(edits));
         this.cookService = cookService ?? throw new ArgumentNullException(nameof(cookService));
         this.session = session ?? throw new ArgumentNullException(nameof(session));
-        this.logger = (loggerFactory ?? NullLoggerFactory.Instance).CreateLogger<MaterialEditorViewModel>();
+        this.logger = loggerFactory?.CreateLogger<MaterialEditorViewModel>() ?? NullLogger<MaterialEditorViewModel>.Instance;
         this.assets = assetProvider ?? throw new ArgumentNullException(nameof(assetProvider));
         this.inputCommitter = inputCommitter;
         this.MaterialUriText = this.document.File.Asset.ToUriString();

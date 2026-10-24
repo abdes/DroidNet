@@ -36,7 +36,7 @@ public abstract partial class DockingWorkspaceViewModel(
     ILoggerFactory? loggerFactory = null)
     : ObservableObject, IRoutingAware, IOutletContainer, IDisposable
 {
-    private readonly ILogger logger = loggerFactory?.CreateLogger("WorkSpace") ?? NullLoggerFactory.Instance.CreateLogger("WorkSpace");
+    private readonly ILogger logger = loggerFactory?.CreateLogger<DockingWorkspaceViewModel>() ?? NullLogger<DockingWorkspaceViewModel>.Instance;
 
     private readonly List<RoutedDockable> deferredDockables = [];
 

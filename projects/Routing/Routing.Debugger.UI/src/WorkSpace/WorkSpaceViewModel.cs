@@ -38,7 +38,7 @@ public partial class WorkSpaceViewModel : IOutletContainer, IRoutingAware, IDisp
     /// <param name="loggerFactory">The factory for creating loggers. If null, a default logger will be used.</param>
     public WorkSpaceViewModel(HostingContext hostingContext, IRouter router, IDockViewFactory dockViewFactory, ILoggerFactory? loggerFactory)
     {
-        this.logger = loggerFactory?.CreateLogger("Workspace") ?? NullLoggerFactory.Instance.CreateLogger("Workspace");
+        this.logger = loggerFactory?.CreateLogger<WorkSpaceViewModel>() ?? NullLogger<WorkSpaceViewModel>.Instance;
 
         this.routerEventsSub = router.Events.OfType<ActivationComplete>()
             .Subscribe(

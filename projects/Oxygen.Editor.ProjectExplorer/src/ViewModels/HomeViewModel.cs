@@ -38,7 +38,7 @@ public partial class HomeViewModel(
     IProjectActivationCoordinator activationCoordinator,
     ILoggerFactory? loggerFactory = null) : ObservableObject, IRoutingAware
 {
-    private readonly ILogger logger = loggerFactory?.CreateLogger<HomeViewModel>() ?? NullLoggerFactory.Instance.CreateLogger<HomeViewModel>();
+    private readonly ILogger logger = loggerFactory?.CreateLogger<HomeViewModel>() ?? NullLogger<HomeViewModel>.Instance;
 
     private IActiveRoute? activeRoute;
     private bool preloadedTemplates;
@@ -68,11 +68,6 @@ public partial class HomeViewModel(
 
     [ObservableProperty]
     public partial InfoBarSeverity OperationResultSeverity { get; set; } = InfoBarSeverity.Informational;
-
-    /// <summary>
-    /// Gets the <see cref="ILoggerFactory"/> used to obtain an <see cref="ILogger"/> instance for logging.
-    /// </summary>
-    internal ILoggerFactory? LoggerFactory => loggerFactory;
 
     /// <inheritdoc/>
     public async Task OnNavigatedToAsync(IActiveRoute route, INavigationContext navigationContext)

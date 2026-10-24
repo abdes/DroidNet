@@ -225,7 +225,7 @@ public partial class TabStrip
     /// <summary>
     ///     Gets or sets the <see cref="ILoggerFactory"/> used to create a logger for this control.
     ///     Assigning the factory initializes the internal logger to a non-null instance
-    ///     (falls back to <see cref="NullLoggerFactory.Instance"/> if null).
+    ///     (falls back to <see cref="NullLogger{T}.Instance"/> if null).
     /// </summary>
     public ILoggerFactory? LoggerFactory
     {
@@ -267,8 +267,7 @@ public partial class TabStrip
 
     private void OnLoggerFactoryChanged(ILoggerFactory? loggerFactory)
     {
-        this.logger = loggerFactory?.CreateLogger<TabStrip>() ??
-                      NullLoggerFactory.Instance.CreateLogger<TabStrip>();
+        this.logger = loggerFactory?.CreateLogger<TabStrip>() ?? NullLogger<TabStrip>.Instance;
         this.LayoutManager.LoggerFactory = loggerFactory;
     }
 }

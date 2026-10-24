@@ -64,8 +64,7 @@ public partial class ContentFoldersViewModel(
     IAssetRelocationService? relocationService = null)
     : DynamicTreeViewModel(loggerFactory), IRoutingAware
 {
-    private readonly ILogger logger = loggerFactory?.CreateLogger<ContentFoldersViewModel>() ??
-                                      NullLoggerFactory.Instance.CreateLogger<ContentFoldersViewModel>();
+    private readonly ILogger logger = loggerFactory?.CreateLogger<ContentFoldersViewModel>() ?? NullLogger<ContentFoldersViewModel>.Instance;
 
     private readonly ViewModelToView vmToView = vmToView;
 

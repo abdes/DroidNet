@@ -93,8 +93,7 @@ public partial class DefaultViewLocator(
     ILoggerFactory? loggerFactory,
     Func<string, string>? viewModelToViewFunc = null) : IViewLocator
 {
-    private readonly ILogger logger = loggerFactory?.CreateLogger(typeof(DefaultViewLocator).Namespace!) ??
-                                      NullLoggerFactory.Instance.CreateLogger(typeof(DefaultViewLocator).Namespace!);
+    private readonly ILogger logger = loggerFactory?.CreateLogger<DefaultViewLocator>() ?? NullLogger<DefaultViewLocator>.Instance;
 
     /// <summary>
     /// Gets the function that is used to convert a view model name to a

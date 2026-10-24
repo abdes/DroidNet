@@ -38,7 +38,7 @@ namespace DroidNet.Controls;
 /// </remarks>
 public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory = null) : ObservableObject, IDisposable
 {
-    private readonly ILogger logger = loggerFactory?.CreateLogger<DynamicTreeViewModel>() ?? NullLoggerFactory.Instance.CreateLogger<DynamicTreeViewModel>();
+    private readonly ILogger logger = loggerFactory?.CreateLogger<DynamicTreeViewModel>() ?? NullLogger<DynamicTreeViewModel>.Instance;
     private readonly ObservableCollection<ITreeItem> shownItems = [];
 
     private TreeDisplayHelper? displayHelper;

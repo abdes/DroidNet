@@ -44,7 +44,7 @@ public sealed partial class SceneDocumentLifetime : ISceneAvailability, IDisposa
         IProjectUsageService projectUsage,
         ILoggerFactory? loggerFactory = null)
     {
-        this.logger = loggerFactory?.CreateLogger<SceneDocumentLifetime>() ?? NullLoggerFactory.Instance.CreateLogger<SceneDocumentLifetime>();
+        this.logger = loggerFactory?.CreateLogger<SceneDocumentLifetime>() ?? NullLogger<SceneDocumentLifetime>.Instance;
         this.area = area;
         this.session = session;
         this.projectUsage = projectUsage;

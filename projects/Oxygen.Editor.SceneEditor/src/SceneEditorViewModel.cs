@@ -46,6 +46,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
     public SceneEditorViewModel(DocumentTab tab, SceneEditorServices services)
     {
         ArgumentNullException.ThrowIfNull(services);
+        this.logger = services.LoggerFactory.CreateLogger<SceneEditorViewModel>();
         this.services = services;
 
         // The scene editor owns the preview preferences: they are restored when it opens and reach the engine once it runs.
@@ -54,7 +55,6 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         this.Tab = tab ?? throw new ArgumentNullException(nameof(tab));
         this.Document = tab.Document;
         this.scene = (tab.Document.Content as SceneContent)?.Scene;
-        this.logger = services.LoggerFactory.CreateLogger(nameof(SceneEditorViewModel));
         this.InitializeTransformTools();
 
         // The stored layout of the scene is restored with its viewports.

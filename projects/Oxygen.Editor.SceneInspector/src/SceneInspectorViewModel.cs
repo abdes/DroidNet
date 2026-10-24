@@ -121,7 +121,7 @@ public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNo
         IScriptCreation? scriptCreation = null,
         IProblemReveal? problems = null)
     {
-        this.logger = loggerFactory?.CreateLogger<SceneInspectorViewModel>() ?? NullLoggerFactory.Instance.CreateLogger<SceneInspectorViewModel>();
+        this.logger = loggerFactory?.CreateLogger<SceneInspectorViewModel>() ?? NullLogger<SceneInspectorViewModel>.Instance;
         this.LoggerFactory = loggerFactory;
 
         this.assetReveal = assetReveal;
@@ -311,9 +311,9 @@ public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNo
     /// <summary>
     /// Gets the <see cref="ILoggerFactory"/> used by this view model for creating loggers.
     /// The factory is provided via the constructor and may be <see langword="null"/>; when <see langword="null"/>
-    /// a <see cref="NullLoggerFactory"/> is used internally to disable logging.
+    /// nothing is logged.
     /// </summary>
-    public ILoggerFactory? LoggerFactory { get; private set; }
+    public ILoggerFactory? LoggerFactory { get; }
 
     /// <summary>
     ///     Gets a viewmodel to view converter provided by the local Ioc container, which can resolve
