@@ -169,6 +169,8 @@
             </ItemGroup>
             <ItemGroup>
                 <ProjectReference Include="$(ProjectsRoot)\TestHelpers\src\TestHelpers.csproj" />
+                <!-- MSTest.Sdk adds this implicit using only for VSTest; tests run on Microsoft.Testing.Platform. -->
+                <Using Include="Microsoft.VisualStudio.TestTools.UnitTesting" />
             </ItemGroup>
         </When>
     </Choose>

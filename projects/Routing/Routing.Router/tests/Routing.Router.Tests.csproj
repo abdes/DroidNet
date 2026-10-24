@@ -10,6 +10,7 @@
 
     <ItemGroup>
         <PackageReference Include="Moq" />
+        <PackageReference Include="Verify.MSTest" />
     </ItemGroup>
 
     <ItemGroup>

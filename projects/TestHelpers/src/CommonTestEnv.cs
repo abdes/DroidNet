@@ -16,11 +16,11 @@ using Serilog.Templates;
 namespace DroidNet.TestHelpers;
 
 /// <summary>
-///     Contains global initialization for Verify, the IoC container, and logging.
+///     Contains global initialization for the IoC container and logging.
 /// </summary>
 [ExcludeFromCodeCoverage]
 [TestCategory("Test Environment")]
-public class CommonTestEnv : VerifyBase
+public class CommonTestEnv
 {
     /// <summary>
     ///     Gets or sets the IoC container used for testing.
@@ -43,6 +43,11 @@ public class CommonTestEnv : VerifyBase
     /// ]]></code>
     /// </example>
     public static LoggingLevelSwitch LoggingLevelSwitch { get; } = new(LogEventLevel.Warning);
+
+    /// <summary>
+    ///     Gets or sets the context of the running test, set by MSTest.
+    /// </summary>
+    public TestContext TestContext { get; set; } = null!;
 
     /// <summary>
     ///     Gets the cancellation token for the current test context.

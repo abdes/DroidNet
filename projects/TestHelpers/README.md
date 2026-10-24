@@ -12,7 +12,6 @@ TestHelpers is a shared testing infrastructure module used across the DroidNet m
 - **Testing Framework:** MSTest 4.0
 - **Dependency Injection:** DryIoc 6.0 (preview)
 - **Logging:** Serilog with Console and Debug sinks
-- **Verification:** Verify.MSTest and Verify.DiffPlex
 - **Assertion Library:** AwesomeAssertions (via dependent test projects)
 - **Reflection & Destructuring:** Destructurama.Attributed
 
@@ -52,9 +51,11 @@ Provides a centralized, static test environment with:
 - **IoC Container:** DryIoc-backed `TestContainer` for dependency injection across test methods
 - **Logging Infrastructure:** Pre-configured Serilog pipeline with dynamic log-level control
 - **Cancellation Support:** Access to test context cancellation tokens
-- **Verify Framework Base:** Integration with the Verify library for snapshot/approval testing
+- **Test Context:** The MSTest `TestContext` of the running test
 
 **Use this** when you need consistent service registration and logging setup across related tests.
+
+TestHelpers does not reference Verify. Snapshot tests reference `Verify.MSTest` directly, so Verify's build targets apply only to the projects that use it.
 
 ### 2. Assertion Capture (`DebugAssertUnitTestTraceListener` & `TestSuiteWithAssertions`)
 
