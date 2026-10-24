@@ -38,9 +38,9 @@ internal sealed class StateTransition<T> : IDisposable
             this.previousState = target.State ?? throw new InvalidOperationException("State property cannot be null");
             target.State = newState ?? throw new InvalidOperationException($"{nameof(newState)} cannot be null");
         }
-        catch (RuntimeBinderException)
+        catch (RuntimeBinderException binderFailure)
         {
-            throw new InvalidOperationException("target must have a State property");
+            throw new InvalidOperationException("target must have a State property", binderFailure);
         }
     }
 

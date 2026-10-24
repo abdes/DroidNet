@@ -26,7 +26,7 @@ public partial class HistoryKeeperTests
 
         // Act
         Action();
-        historyKeeper.Undo();
+        _ = historyKeeper.Undo();
 
         // Assert
         _ = historyKeeper.RedoStack.Should().ContainSingle();
@@ -54,7 +54,7 @@ public partial class HistoryKeeperTests
         historyKeeper.AddChange(change.Object);
 
         // Act
-        historyKeeper.Undo();
+        _ = historyKeeper.Undo();
 
         // Assert
         change.Verify(cs => cs.Apply(), Times.Once);
@@ -83,7 +83,7 @@ public partial class HistoryKeeperTests
         historyKeeper.AddChange(new Mock<IChange>().Object);
 
         // Act
-        historyKeeper.Undo();
+        _ = historyKeeper.Undo();
 
         // Assert
         _ = historyKeeper.State.Should().Be(HistoryKeeper.States.Idle);

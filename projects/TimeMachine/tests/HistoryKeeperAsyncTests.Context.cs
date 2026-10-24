@@ -4,6 +4,7 @@
 
 using System.Collections.Concurrent;
 using System.Collections.Specialized;
+using System.Diagnostics.CodeAnalysis;
 using AwesomeAssertions;
 
 namespace DroidNet.TimeMachine.Tests;
@@ -29,17 +30,15 @@ public partial class HistoryKeeperAsyncTests
             var history = new HistoryKeeper(new object());
             ((INotifyCollectionChanged)history.UndoStack).CollectionChanged += (_, _) => stackThreads.Add(Environment.CurrentManagedThreadId);
             ((INotifyCollectionChanged)history.RedoStack).CollectionChanged += (_, _) => stackThreads.Add(Environment.CurrentManagedThreadId);
-            history.AddChange("rename", async () =>
-            {
-                await Task.Run(() =>
+            history.AddChange("rename", async () => await Task.Run(
+                () =>
                 {
                     if (fails)
                     {
                         throw new InvalidOperationException("Rejected on another thread.");
                     }
-                }).ConfigureAwait(false);
-            });
-
+                },
+                this.TestContext.CancellationToken).ConfigureAwait(false));
             try
             {
                 await history.UndoAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
@@ -80,19 +79,7 @@ public partial class HistoryKeeperAsyncTests
         public Task<T> RunAsync<T>(Func<Task<T>> work)
         {
             var completion = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
-            this.Post(
-                async _ =>
-                {
-                    try
-                    {
-                        completion.SetResult(await work().ConfigureAwait(true));
-                    }
-                    catch (Exception failure)
-                    {
-                        _ = completion.TrySetException(failure);
-                    }
-                },
-                state: null);
+            this.Post(callbackState => _ = CompleteAsync(work, completion), state: null);
             return completion.Task;
         }
 
@@ -101,6 +88,20 @@ public partial class HistoryKeeperAsyncTests
             this.queue.CompleteAdding();
             this.thread.Join();
             this.queue.Dispose();
+        }
+
+        // The work starts on this context and resumes on it; every failure goes to the caller through the completion.
+        [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The work's failure, whatever it is, is the awaited task's result; nothing is swallowed.")]
+        private static async Task CompleteAsync<T>(Func<Task<T>> work, TaskCompletionSource<T> completion)
+        {
+            try
+            {
+                completion.SetResult(await work().ConfigureAwait(true));
+            }
+            catch (Exception failure)
+            {
+                _ = completion.TrySetException(failure);
+            }
         }
     }
 }

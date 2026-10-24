@@ -35,6 +35,8 @@ public sealed class HistoryKeeperBusyTests
     /// </summary>
     /// <returns>The test task.</returns>
     [TestMethod]
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Usage", "CA1849:Call async methods when in an async method", Justification = "The synchronous Undo is the API under test: it must be ignored while an async undo runs.")]
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Usage", "MA0042:Do not use blocking calls in an async method", Justification = "The synchronous Undo is the API under test: it must be ignored while an async undo runs.")]
     public async Task AReplayIsIgnoredWhileAnotherRuns()
     {
         var history = new HistoryKeeper(new object());

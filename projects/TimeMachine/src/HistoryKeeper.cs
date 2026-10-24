@@ -4,6 +4,7 @@
 
 using System.Collections.ObjectModel;
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using DroidNet.TimeMachine.Changes;
 
 namespace DroidNet.TimeMachine;
@@ -49,6 +50,7 @@ public class HistoryKeeper
     private ChangeSet? currentChangeSet;
 
     private int isCollectingChangesCounter;
+    private bool isReplayingTo;
     private long lastPosition;
     private long emptyPosition;
 
@@ -113,7 +115,7 @@ public class HistoryKeeper
     public HistoryPosition Position => new(this.undoPositions.Count == 0 ? this.emptyPosition : this.undoPositions[^1]);
 
     /// <summary>Gets a value indicating whether replay or a change set is in progress.</summary>
-    public bool IsBusy => this.State != States.Idle || this.isCollectingChangesCounter != 0;
+    public bool IsBusy => this.State != States.Idle || this.isReplayingTo || this.isCollectingChangesCounter != 0;
 
     /// <summary>
     /// Gets the instance that represents the root (or document) for this set of changes.
@@ -136,7 +138,7 @@ public class HistoryKeeper
 
     // An undo or redo is running, maybe awaiting its change; another one would interleave with it and restore the state
     // out of order.
-    private bool IsReplaying => this.State is States.Undoing or States.Redoing;
+    private bool IsReplaying => this.State is States.Undoing or States.Redoing || this.isReplayingTo;
 
     /// <summary>
     /// Adds a change to the undo stack or the current change set.
@@ -176,36 +178,7 @@ public class HistoryKeeper
     /// the change threw, in which case it stays on the undo stack at its position, unless it recorded part of its
     /// inverse before it threw.
     /// </returns>
-    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "A change that fails to apply leaves the history as it was, and the result tells the caller.")]
-    public bool Undo()
-    {
-        if (this.IsReplaying || !this.TryPopUndoStack(out var lastChange, out var position))
-        {
-            return false;
-        }
-
-        this.replayPosition = position;
-        var inverseCount = this.redoStack.Count;
-        try
-        {
-            using (new StateTransition<States>(this, States.Undoing))
-            using (new ChangeSetUndoRedo(this, lastChange))
-            {
-                lastChange.Apply();
-            }
-
-            return true;
-        }
-        catch (Exception)
-        {
-            if (RemoveEmptyReplay(this.redoStack, this.redoPositions, inverseCount, this.redoStack.FirstOrDefault()))
-            {
-                this.PushToUndoStack(lastChange, position);
-            }
-
-            return false;
-        }
-    }
+    public bool Undo() => !this.IsReplaying && this.ReplayNext(States.Undoing);
 
     /// <summary>
     /// Undo the first available change asynchronously.
@@ -215,31 +188,9 @@ public class HistoryKeeper
     /// <returns>A task-like object that represents the asynchronous operation.</returns>
     public async ValueTask UndoAsync(CancellationToken cancellationToken = default)
     {
-        if (this.IsReplaying || !this.TryPopUndoStack(out var lastChange, out var position))
+        if (!this.IsReplaying)
         {
-            return;
-        }
-
-        this.replayPosition = position;
-        var inverseCount = this.redoStack.Count;
-        try
-        {
-            using (new StateTransition<States>(this, States.Undoing))
-            using (new ChangeSetUndoRedo(this, lastChange))
-            {
-                // The stacks are observable, and their observers, such as a view's Undo button, live on the caller's
-                // context; the history changes them only there, after a failed change as after a successful one.
-                await lastChange.ApplyAsync(cancellationToken).ConfigureAwait(true);
-            }
-        }
-        catch
-        {
-            if (RemoveEmptyReplay(this.redoStack, this.redoPositions, inverseCount, this.redoStack.FirstOrDefault()))
-            {
-                this.PushToUndoStack(lastChange, position);
-            }
-
-            throw;
+            await this.ReplayNextAsync(States.Undoing, cancellationToken).ConfigureAwait(true);
         }
     }
 
@@ -252,36 +203,7 @@ public class HistoryKeeper
     /// the change threw, in which case it stays on the redo stack at its position, unless it recorded part of its
     /// inverse before it threw.
     /// </returns>
-    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "A change that fails to apply leaves the history as it was, and the result tells the caller.")]
-    public bool Redo()
-    {
-        if (this.IsReplaying || !this.TryPopRedoStack(out var lastChange, out var position))
-        {
-            return false;
-        }
-
-        this.replayPosition = position;
-        var inverseCount = this.undoStack.Count;
-        try
-        {
-            using (new StateTransition<States>(this, States.Redoing))
-            using (new ChangeSetUndoRedo(this, lastChange))
-            {
-                lastChange.Apply();
-            }
-
-            return true;
-        }
-        catch (Exception)
-        {
-            if (RemoveEmptyReplay(this.undoStack, this.undoPositions, inverseCount, this.undoStack.LastOrDefault()))
-            {
-                this.PushToRedoStack(lastChange, position);
-            }
-
-            return false;
-        }
-    }
+    public bool Redo() => !this.IsReplaying && this.ReplayNext(States.Redoing);
 
     /// <summary>
     /// Redo the first available change asynchronously.
@@ -291,31 +213,99 @@ public class HistoryKeeper
     /// <returns>A task-like object that represents the asynchronous operation.</returns>
     public async ValueTask RedoAsync(CancellationToken cancellationToken = default)
     {
-        if (this.IsReplaying || !this.TryPopRedoStack(out var lastChange, out var position))
+        if (!this.IsReplaying)
+        {
+            await this.ReplayNextAsync(States.Redoing, cancellationToken).ConfigureAwait(true);
+        }
+    }
+
+    /// <summary>
+    /// Undoes or redoes entries, as one operation, until the undo stack holds <paramref name="undoCount"/> entries: the
+    /// state after the oldest <paramref name="undoCount"/> entries of the history.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A count below the undo stack's undoes, one above it redoes, and an equal one does nothing. <c>0</c> undoes everything,
+    /// and the entries of both stacks redo everything. Each entry replays as <see cref="UndoAsync"/> or
+    /// <see cref="RedoAsync"/> replays it.
+    /// </para>
+    /// <para>
+    /// The history is busy until the operation ends: <see cref="Undo"/>, <see cref="Redo"/>, <see cref="UndoAsync"/>,
+    /// <see cref="RedoAsync"/> and another <see cref="ReplayToAsync"/> do nothing meanwhile, and <see cref="Clear"/>
+    /// throws. Nothing runs while an undo or redo is still running.
+    /// </para>
+    /// <para>
+    /// A change that throws stops the operation where it is: that change stays on its stack, as after a failed
+    /// <see cref="UndoAsync"/> or <see cref="RedoAsync"/>, the entries replayed before it stay replayed, and the exception
+    /// propagates. Cancellation is checked before each entry and leaves the entries replayed so far replayed.
+    /// </para>
+    /// </remarks>
+    /// <param name="undoCount">The number of entries the undo stack holds when the operation ends.</param>
+    /// <param name="cancellationToken">A token that can be used to cancel the operation.</param>
+    /// <returns>A task-like object that represents the asynchronous operation.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <paramref name="undoCount"/> is negative, or more than the entries of both stacks. Nothing is replayed. The upper
+    /// bound is checked only when the history is not busy, since the stacks are between states then.
+    /// </exception>
+    /// <exception cref="OperationCanceledException">The operation was canceled before an entry replayed.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// An entry applied without recording exactly one inverse, so the operation cannot go on. The entry is no longer on either
+    /// stack.
+    /// </exception>
+    public async ValueTask ReplayToAsync(int undoCount, CancellationToken cancellationToken = default)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(undoCount);
+
+        // While an undo, a redo or a replay runs, the stacks are between states, so the upper bound means nothing yet.
+        if (this.IsReplaying)
         {
             return;
         }
 
-        this.replayPosition = position;
-        var inverseCount = this.undoStack.Count;
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(undoCount, this.undoStack.Count + this.redoStack.Count);
+        this.isReplayingTo = true;
         try
         {
-            using (new StateTransition<States>(this, States.Redoing))
-            using (new ChangeSetUndoRedo(this, lastChange))
+            while (this.undoStack.Count != undoCount)
             {
-                // Resumes on the caller's context, where the stacks' observers live; see UndoAsync.
-                await lastChange.ApplyAsync(cancellationToken).ConfigureAwait(true);
+                cancellationToken.ThrowIfCancellationRequested();
+                var undoing = this.undoStack.Count > undoCount;
+                var entry = undoing ? this.undoStack[^1] : this.redoStack[0];
+                var inverse = undoing ? this.redoStack : this.undoStack;
+                var inverseCount = inverse.Count;
+                await this.ReplayNextAsync(undoing ? States.Undoing : States.Redoing, cancellationToken).ConfigureAwait(true);
+                ThrowIfNoInverse(entry, undoing ? "undoing" : "redoing", inverse.Count - inverseCount);
             }
         }
-        catch
+        finally
         {
-            if (RemoveEmptyReplay(this.undoStack, this.undoPositions, inverseCount, this.undoStack.LastOrDefault()))
-            {
-                this.PushToRedoStack(lastChange, position);
-            }
-
-            throw;
+            this.isReplayingTo = false;
         }
+    }
+
+    /// <summary>Gets the position the history is at after its oldest <paramref name="undoCount"/> entries.</summary>
+    /// <remarks>
+    /// The positions are the ones <see cref="Position"/> reports when the history is at that count: <c>0</c> is the state
+    /// before the first entry, a count up to the undo stack's is the state an undo to it restores, and a count beyond it is
+    /// the state a redo to it restores.
+    /// </remarks>
+    /// <param name="undoCount">The number of oldest entries, from <c>0</c> to the entries of both stacks.</param>
+    /// <returns>The position of that state.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <paramref name="undoCount"/> is negative, or more than the entries of both stacks.
+    /// </exception>
+    public HistoryPosition PositionAfter(int undoCount)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(undoCount);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(undoCount, this.undoStack.Count + this.redoStack.Count);
+        if (undoCount == 0)
+        {
+            return new(this.emptyPosition);
+        }
+
+        return new(undoCount <= this.undoPositions.Count
+            ? this.undoPositions[undoCount - 1]
+            : this.redoPositions[undoCount - this.undoPositions.Count - 1]);
     }
 
     /// <summary>
@@ -324,7 +314,7 @@ public class HistoryKeeper
     /// <exception cref="InvalidOperationException">Thrown if the <see cref="HistoryKeeper"/> is not in the <see cref="States.Idle"/> state.</exception>
     public void Clear()
     {
-        if (this.State != States.Idle)
+        if (this.State != States.Idle || this.isReplayingTo)
         {
             throw new InvalidOperationException("unable to clear the undo history because we're not Idle");
         }
@@ -400,6 +390,100 @@ public class HistoryKeeper
         }
 
         return inverse.Count == previousCount;
+    }
+
+    // Every real change records its inverse when it applies; one that does not is a defect of that change, and the walk
+    // cannot tell where it stands once the entry is gone.
+    private static void ThrowIfNoInverse(IChange entry, string replay, int recorded)
+    {
+        if (recorded != 1)
+        {
+            throw new InvalidOperationException(
+                string.Create(CultureInfo.InvariantCulture, $"Replaying stopped: {replay} the history entry '{entry.Key}' ({entry.GetType().Name}) recorded {recorded} ")
+                + "inverse changes instead of one, so the entry is no longer on either stack.");
+        }
+    }
+
+    // Undoes or redoes the next entry: nothing happens when its stack is empty, and a change that throws goes back to its
+    // stack at its position, unless it recorded part of its inverse.
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "A change that fails to apply leaves the history as it was, and the result tells the caller.")]
+    private bool ReplayNext(States replay)
+    {
+        if (!this.TryBeginReplay(replay, out var change, out var position, out var inverseCount))
+        {
+            return false;
+        }
+
+        try
+        {
+            using (new StateTransition<States>(this, replay))
+            using (new ChangeSetUndoRedo(this, change))
+            {
+                change.Apply();
+            }
+
+            return true;
+        }
+        catch (Exception)
+        {
+            this.RollBackReplay(replay, change, position, inverseCount);
+            return false;
+        }
+    }
+
+    private async ValueTask ReplayNextAsync(States replay, CancellationToken cancellationToken)
+    {
+        if (!this.TryBeginReplay(replay, out var change, out var position, out var inverseCount))
+        {
+            return;
+        }
+
+        try
+        {
+            using (new StateTransition<States>(this, replay))
+            using (new ChangeSetUndoRedo(this, change))
+            {
+                // The stacks are observable, and their observers, such as a view's Undo button, live on the caller's
+                // context; the history changes them only there, after a failed change as after a successful one.
+                await change.ApplyAsync(cancellationToken).ConfigureAwait(true);
+            }
+        }
+        catch
+        {
+            this.RollBackReplay(replay, change, position, inverseCount);
+            throw;
+        }
+    }
+
+    // Takes the entry to replay off its stack: the last undo entry, or the next redo entry.
+    private bool TryBeginReplay(States replay, out IChange change, out long position, out int inverseCount)
+    {
+        var undoing = replay == States.Undoing;
+        if (!(undoing ? this.TryPopUndoStack(out change, out position) : this.TryPopRedoStack(out change, out position)))
+        {
+            inverseCount = 0;
+            return false;
+        }
+
+        this.replayPosition = position;
+        inverseCount = undoing ? this.redoStack.Count : this.undoStack.Count;
+        return true;
+    }
+
+    // Puts a change that threw back on its stack, unless it recorded part of its inverse on the other.
+    private void RollBackReplay(States replay, IChange change, long position, int inverseCount)
+    {
+        if (replay == States.Undoing)
+        {
+            if (RemoveEmptyReplay(this.redoStack, this.redoPositions, inverseCount, this.redoStack.FirstOrDefault()))
+            {
+                this.PushToUndoStack(change, position);
+            }
+        }
+        else if (RemoveEmptyReplay(this.undoStack, this.undoPositions, inverseCount, this.undoStack.LastOrDefault()))
+        {
+            this.PushToRedoStack(change, position);
+        }
     }
 
     private void ClearUndoStack()

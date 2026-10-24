@@ -335,6 +335,26 @@ if (historyKeeper.CanRedo)
 }
 ```
 
+### Undo or redo to an entry
+
+`ReplayToAsync(undoCount)` undoes or redoes, as one operation, until the undo
+stack holds `undoCount` entries: `0` undoes everything, and the count of both
+stacks redoes everything. The history stays busy until it ends, so no other
+undo or redo runs in between. A change that throws stops it there: that change
+stays on its stack, the entries replayed before it stay replayed, and the
+exception propagates. A change that applies without recording its inverse is a
+defect of that change: the walk stops and throws `InvalidOperationException`
+naming the entry.
+
+```csharp
+// Go back to the state after the first two entries.
+await historyKeeper.ReplayToAsync(2).ConfigureAwait(false);
+```
+
+`PositionAfter(undoCount)` gives the `HistoryPosition` the history is at after
+its oldest `undoCount` entries, from `0` to the entries of both stacks, so a
+caller can tell which entry, done or undone, matches a position it saved.
+
 ### Mixing synchronous and asynchronous changes
 
 You can mix synchronous and asynchronous changes in the same history (including

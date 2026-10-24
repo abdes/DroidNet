@@ -40,11 +40,11 @@ public class HistoryKeeperChangeSetTests
         // Arrange
         _ = this.historyKeeper.State.Should().Be(HistoryKeeper.States.Idle);
         this.ActionWithBatchReverseAction();
-        this.historyKeeper.Undo();
-        _ = this.historyKeeper.RedoStack.Should().HaveCount(1);
+        _ = this.historyKeeper.Undo();
+        _ = this.historyKeeper.RedoStack.Should().ContainSingle();
 
         // Act
-        this.historyKeeper.Redo();
+        _ = this.historyKeeper.Redo();
 
         // Assert
         _ = this.counter.Should().Be(3);
@@ -63,7 +63,7 @@ public class HistoryKeeperChangeSetTests
         this.BatchAction();
 
         // Act
-        this.historyKeeper.Undo();
+        _ = this.historyKeeper.Undo();
 
         // Assert
         _ = this.counter.Should().Be(0);

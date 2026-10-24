@@ -4,6 +4,7 @@
 
 using System.Collections.Specialized;
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using AwesomeAssertions;
 using DroidNet.TimeMachine.Changes;
 
@@ -43,13 +44,13 @@ public class HistoryKeeperPositionTests
         this.Set(history, 2);
         var second = history.Position;
 
-        history.Undo();
+        _ = history.Undo();
         _ = history.Position.Should().Be(first);
-        history.Undo();
+        _ = history.Undo();
         _ = history.Position.Should().Be(start);
-        history.Redo();
+        _ = history.Redo();
         _ = history.Position.Should().Be(first);
-        history.Redo();
+        _ = history.Redo();
         _ = history.Position.Should().Be(second);
         _ = this.value.Should().Be(2);
     }
@@ -59,7 +60,7 @@ public class HistoryKeeperPositionTests
     {
         var history = new HistoryKeeper(this);
         var start = history.Position;
-        this.SetAsync(history, 1);
+        this.SetWithAsyncInverse(history, 1);
         var first = history.Position;
 
         await history.UndoAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -77,14 +78,14 @@ public class HistoryKeeperPositionTests
         this.Set(history, 2);
         var second = history.Position;
 
-        history.Undo();
+        _ = history.Undo();
         this.Set(history, 3);
 
         _ = history.Position.Should().NotBe(second).And.NotBe(first);
-        history.Undo();
+        _ = history.Undo();
         _ = history.Position.Should().Be(first);
         _ = history.CanRedo.Should().BeTrue();
-        history.Redo();
+        _ = history.Redo();
         _ = history.Position.Should().NotBe(second);
     }
 
@@ -100,9 +101,9 @@ public class HistoryKeeperPositionTests
         history.EndChangeSet();
         var after = history.Position;
 
-        history.Undo();
+        _ = history.Undo();
         _ = history.Position.Should().Be(start);
-        history.Redo();
+        _ = history.Redo();
         _ = history.Position.Should().Be(after);
     }
 
@@ -129,7 +130,7 @@ public class HistoryKeeperPositionTests
         var seen = new List<HistoryPosition>();
         ((INotifyCollectionChanged)history.UndoStack).CollectionChanged += (_, _) => seen.Add(history.Position);
 
-        history.Undo();
+        _ = history.Undo();
 
         _ = seen.Should().NotBeEmpty().And.OnlyContain(position => position == first);
     }
@@ -155,36 +156,36 @@ public class HistoryKeeperPositionTests
         this.Set(history, 1);
         var first = history.Position;
 
-        this.Present(history, "Hide");
+        Present(history, "Hide");
         _ = history.Position.Should().Be(first);
-        history.Undo();
+        _ = history.Undo();
         _ = history.Position.Should().Be(first);
-        history.Redo();
+        _ = history.Redo();
         _ = history.Position.Should().Be(first);
-        history.Undo();
-        history.Undo();
+        _ = history.Undo();
+        _ = history.Undo();
 
         _ = history.Position.Should().NotBe(first);
     }
 
-    private void Present(HistoryKeeper history, string label)
-        => history.AddChange(new SimpleAction(() => this.Present(history, label)) { Key = label, ChangesState = false });
+    private static void Present(HistoryKeeper history, string label)
+        => history.AddChange(new SimpleAction(() => Present(history, label)) { Key = label, ChangesState = false });
 
     private void Set(HistoryKeeper history, int next)
     {
         var previous = this.value;
         this.value = next;
-        history.AddChange($"Set {next}", () => this.Set(history, previous));
+        history.AddChange(string.Create(CultureInfo.InvariantCulture, $"Set {next}"), () => this.Set(history, previous));
     }
 
-    private void SetAsync(HistoryKeeper history, int next)
+    private void SetWithAsyncInverse(HistoryKeeper history, int next)
     {
         var previous = this.value;
         this.value = next;
-        history.AddChange($"Set {next}", async () =>
+        history.AddChange(string.Create(CultureInfo.InvariantCulture, $"Set {next}"), async () =>
         {
             await Task.Yield();
-            this.SetAsync(history, previous);
+            this.SetWithAsyncInverse(history, previous);
         });
     }
 }
