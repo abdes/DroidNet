@@ -4,11 +4,8 @@
     <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
     <RootNamespace>Controls.OutputConsole.Tests</RootNamespace>
     <AssemblyName>Controls.OutputConsole.Tests</AssemblyName>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
-
-  <ItemGroup>
-    <PackageReference Include="Moq" />
-  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="$(ProjectsRoot)\Controls\OutputConsole\src\Controls.OutputConsole.csproj" />

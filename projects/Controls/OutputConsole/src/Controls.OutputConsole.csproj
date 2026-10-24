@@ -6,34 +6,25 @@
 
     <RootNamespace>DroidNet.Controls.OutputConsole</RootNamespace>
     <UseWinUI>true</UseWinUI>
-    <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
 
     <Title>OutputConsole Control</Title>
-    <Description>A high-performance, virtualized output console control for WinUI 3. Supports channels, level/text/regex filters, search and navigation, bookmarks, scroll lock/follow tail, retention via ring buffer, export, and clickable links.</Description>
+    <Description>A virtualized log console control for WinUI 3: a bounded ring buffer fed by Serilog, level and subsystem filters, search with filter and find modes, duplicate folding, a details pane, and copy and save.</Description>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageTags>winui;controls;logging;console;virtualized;logview;channels;search</PackageTags>
+    <PackageTags>winui;controls;logging;console;virtualized;logview;search</PackageTags>
     <PackageReleaseNotes>Initial preview.</PackageReleaseNotes>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
-    <PackageReference Include="CommunityToolkit.Mvvm" />
     <PackageReference Include="DryIoc.dll" />
-    <PackageReference Include="DryIoc.Microsoft.DependencyInjection" />
-    <PackageReference Include="Serilog.Expressions" />
-    <PackageReference Include="Serilog.Extensions.Logging" />
-    <PackageReference Include="Serilog.Sinks.Console" />
-    <PackageReference Include="Serilog.Sinks.Debug" />
+    <PackageReference Include="Serilog" />
     <PackageReference Include="Microsoft.WindowsAppSDK" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" />
-    <PackageReference Include="System.Reactive" />
+    <PackageReference Include="CommunityToolkit.WinUI.Controls.Sizers" />
+    <PackageReference Include="CommunityToolkit.WinUI.Extensions" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="$(ProjectsRoot)\Mvvm\src\Mvvm.csproj">
-      <Private>True</Private>
-    </ProjectReference>
-    <ProjectReference Include="$(ProjectsRoot)\Mvvm.Generators\src\Mvvm.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
-    <ProjectReference Include="$(ProjectsRoot)\Mvvm.Generators.Attributes\src\Mvvm.Generators.Attributes.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="true" />
+    <ProjectReference Include="$(ProjectsRoot)\Controls\ToolBars\src\Controls.ToolBars.csproj" />
   </ItemGroup>
 </Project>

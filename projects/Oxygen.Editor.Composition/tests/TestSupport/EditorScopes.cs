@@ -18,6 +18,7 @@ using Microsoft.UI;
 using Microsoft.UI.Xaml.Data;
 using Moq;
 using Oxygen.Editor.ContentExplorer;
+using Oxygen.Editor.Diagnostics;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Routing;
@@ -88,7 +89,7 @@ internal sealed class EditorScopes : IAsyncDisposable
 
         // The bootstrapper's early services (with the output console's log buffer), MVVM and the application's router.
         var fileSystem = new MockFileSystem();
-        host.RegisterInstance(new OutputLogBuffer());
+        host.RegisterInstance(new OutputLogBuffer(EditorOutputSubsystems.Map));
         host.RegisterInstance<IFileSystem>(fileSystem);
         host.RegisterInstance<IPathFinder>(new PathFinder(fileSystem, new PathFinderConfig(PathFinder.DevelopmentMode, "DroidNet", "Oxygen Editor Composition Tests")));
         host.Register<IViewLocator, DefaultViewLocator>(Reuse.Singleton);

@@ -13,6 +13,15 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
+        <StackPanel
+            HorizontalAlignment="Right"
+            VerticalAlignment="Center"
+            Orientation="Horizontal"
+            Spacing="8">
+            <Button Command="{x:Bind ViewModel.LogBurstCommand}" Content="Burst of 20,000" />
+            <Button Command="{x:Bind ViewModel.LogRepeatedCommand}" Content="Repeat 50" />
+            <Button Command="{x:Bind ViewModel.LogExceptionCommand}" Content="Exception" />
+        </StackPanel>
         <GridView
             Padding="0"
             Background="{ThemeResource SolidBackgroundFillColorSecondaryBrush}"
@@ -31,10 +40,15 @@
             Padding="4"
             Background="{ThemeResource LayerFillColorDefaultBrush}">
             <oc:OutputConsoleView
+                FoldDuplicates="{x:Bind ViewModel.FoldDuplicates, Mode=TwoWay}"
                 FollowTail="{x:Bind ViewModel.FollowTail, Mode=TwoWay}"
+                HiddenSubsystems="{x:Bind ViewModel.HiddenSubsystems, Mode=TwoWay}"
+                IsDetailsPaneOpen="{x:Bind ViewModel.IsDetailsPaneOpen, Mode=TwoWay}"
                 IsPaused="{x:Bind ViewModel.IsPaused, Mode=TwoWay}"
                 ItemsSource="{x:Bind ViewModel.Buffer}"
                 LevelFilter="{x:Bind ViewModel.LevelFilter, Mode=TwoWay}"
+                SearchMode="{x:Bind ViewModel.SearchMode, Mode=TwoWay}"
+                ShowSubsystem="{x:Bind ViewModel.ShowSubsystem, Mode=TwoWay}"
                 ShowTimestamps="{x:Bind ViewModel.ShowTimestamps, Mode=TwoWay}"
                 TextFilter="{x:Bind ViewModel.TextFilter, Mode=TwoWay}"
                 WordWrap="{x:Bind ViewModel.WordWrap, Mode=TwoWay}" />

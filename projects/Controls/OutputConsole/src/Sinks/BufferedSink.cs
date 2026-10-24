@@ -39,10 +39,10 @@ public sealed class BufferedSink(OutputLogBuffer buffer) : ILogEventSink
             Timestamp = logEvent.Timestamp,
             Level = logEvent.Level,
             Message = logEvent.RenderMessage(CultureInfo.CurrentCulture),
-            Source = logEvent.Properties.TryGetValue("SourceContext", out var sc)
+            Source = logEvent.Properties.TryGetValue(OutputLogEntry.SourcePropertyName, out var sc)
                 ? sc.ToString(format: null, CultureInfo.CurrentCulture).Trim('"')
                 : null,
-            Channel = logEvent.Properties.TryGetValue("Channel", out var ch)
+            Channel = logEvent.Properties.TryGetValue(OutputLogEntry.ChannelPropertyName, out var ch)
                 ? ch.ToString(format: null, CultureInfo.CurrentCulture).Trim('"')
                 : null,
             Exception = logEvent.Exception,

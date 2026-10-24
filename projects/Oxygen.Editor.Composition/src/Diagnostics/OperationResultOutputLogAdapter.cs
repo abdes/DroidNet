@@ -14,6 +14,9 @@ namespace Oxygen.Editor.Diagnostics;
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "Instantiated through the singleton registration of the editor module.")]
 internal sealed partial class OperationResultOutputLogAdapter : IObserver<OperationResult>, IDisposable
 {
+    /// <summary>The source of the operation results' entries.</summary>
+    internal const string Source = "OperationResult";
+
     private readonly OutputLogBuffer buffer;
     private readonly IDisposable subscription;
 
@@ -46,7 +49,7 @@ internal sealed partial class OperationResultOutputLogAdapter : IObserver<Operat
             {
                 Timestamp = value.CompletedAt ?? DateTimeOffset.Now,
                 Level = ToLogEventLevel(value.Severity),
-                Source = "OperationResult",
+                Source = Source,
                 Channel = "Operations",
                 Message = $"{value.OperationKind}: {value.Title} - {value.Message}",
                 Properties = new Dictionary<string, object?>(StringComparer.Ordinal)

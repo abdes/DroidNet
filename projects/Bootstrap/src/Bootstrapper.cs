@@ -66,7 +66,7 @@ namespace DroidNet.Bootstrap;
 ///     <code><![CDATA[
 ///     var bootstrap = new Bootstrapper(args)
 ///     .Configure(options => options
-///         .WithOutputConsole()
+///         .WithOutputConsole(subsystemMap)
 ///         .WithOutputLog())
 ///     .WithMvvm()
 ///     .WithRouting(routes)
@@ -509,6 +509,22 @@ public sealed partial class Bootstrapper(string[] args) : IDisposable
             return;
         }
 
+        var subsystemMapType = assembly.GetType(
+            "DroidNet.Controls.OutputConsole.Model.SubsystemMap",
+            throwOnError: false);
+
+        if (subsystemMapType is null)
+        {
+            return;
+        }
+
+        if (!subsystemMapType.IsInstanceOfType(options.OutputConsoleSubsystems))
+        {
+            throw new ArgumentException(
+                $"The {nameof(BootstrapOptions.WithOutputConsole)} subsystems option must be a {subsystemMapType.FullName}.",
+                nameof(options));
+        }
+
         try
         {
             var writeTo = GetWriteToConfiguration(loggerConfig);
@@ -524,6 +540,7 @@ public sealed partial class Bootstrapper(string[] args) : IDisposable
                 [
                     typeof(LoggerSinkConfiguration),
                     typeof(IContainer),
+                    subsystemMapType,
                     typeof(int),
                     typeof(LogEventLevel),
                     typeof(LoggingLevelSwitch),
@@ -537,6 +554,7 @@ public sealed partial class Bootstrapper(string[] args) : IDisposable
                     [
                         writeTo,
                         container,
+                        options.OutputConsoleSubsystems,
                         options.OutputConsoleCapacity,
                         options.OutputConsoleMinimumLevel,
                         options.OutputConsoleLevelSwitch,

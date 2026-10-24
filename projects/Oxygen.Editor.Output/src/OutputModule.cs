@@ -14,6 +14,9 @@ public sealed class OutputModule : IFeatureModule
     /// <summary>The Output panel's identity.</summary>
     public const string PanelId = "log";
 
+    /// <summary>The source of the player's entries in the output buffer.</summary>
+    public const string PlayerSource = "Player";
+
     /// <inheritdoc />
     public IReadOnlyList<PanelDescriptor> Panels { get; } = [new(PanelId, "Output", typeof(OutputViewModel))];
 

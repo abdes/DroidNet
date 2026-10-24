@@ -6,13 +6,13 @@ using Microsoft.Extensions.Logging;
 
 namespace Oxygen.Editor.LivePreview.Play;
 
-/// <summary>A line of the player's output, or the clear that starts a new session.</summary>
+/// <summary>A line of the player's output, or the mark that a new session starts.</summary>
 /// <param name="timestamp">When the editor received the line.</param>
 /// <param name="level">The line's severity.</param>
 /// <param name="channel">The player's log channel, if any.</param>
 /// <param name="message">The line.</param>
-/// <param name="clear">Whether the earlier output ends here: a new session started.</param>
-public sealed class PlayerLogEventArgs(DateTimeOffset timestamp, LogLevel level, string? channel, string message, bool clear = false) : EventArgs
+/// <param name="sessionStart">Whether a new session starts here.</param>
+public sealed class PlayerLogEventArgs(DateTimeOffset timestamp, LogLevel level, string? channel, string message, bool sessionStart = false) : EventArgs
 {
     /// <summary>Gets when the editor received the line.</summary>
     public DateTimeOffset Timestamp { get; } = timestamp;
@@ -23,13 +23,13 @@ public sealed class PlayerLogEventArgs(DateTimeOffset timestamp, LogLevel level,
     /// <summary>Gets the player's log channel, if any.</summary>
     public string? Channel { get; } = channel;
 
-    /// <summary>Gets the line; empty for a clear.</summary>
+    /// <summary>Gets the line; empty for a session start.</summary>
     public string Message { get; } = message;
 
-    /// <summary>Gets a value indicating whether the earlier output ends here because a new session started.</summary>
-    public bool Clear { get; } = clear;
+    /// <summary>Gets a value indicating whether a new session starts here.</summary>
+    public bool IsSessionStart { get; } = sessionStart;
 
-    /// <summary>Creates the clear that starts a new session's output.</summary>
-    /// <returns>The clear.</returns>
-    public static PlayerLogEventArgs SessionStarted() => new(DateTimeOffset.Now, LogLevel.None, channel: null, string.Empty, clear: true);
+    /// <summary>Creates the mark that a new session starts.</summary>
+    /// <returns>The session-start mark.</returns>
+    public static PlayerLogEventArgs SessionStarted() => new(DateTimeOffset.Now, LogLevel.None, channel: null, string.Empty, sessionStart: true);
 }

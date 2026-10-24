@@ -32,7 +32,7 @@ public sealed class OutputModuleTests
     public async Task ActivatedWindowFollowsThePlayerBeforeThePanelShows()
     {
         var log = new Mock<IPlayerLog>();
-        var buffer = new OutputLogBuffer();
+        var buffer = new OutputLogBuffer(new SubsystemMap([new(OutputModule.PlayerSource, "Player")]));
         using var host = HostContainer.Create();
         await using var root = ScopeFactory.CreateRoot(host);
 
@@ -46,6 +46,6 @@ public sealed class OutputModuleTests
             });
         log.Raise(player => player.LogReceived += null, new PlayerLogEventArgs(DateTimeOffset.Now, LogLevel.Information, channel: null, "started"));
 
-        _ = buffer.Should().ContainSingle().Which.Source.Should().Be(PlayerLogOutput.PlayerSource);
+        _ = buffer.Should().ContainSingle().Which.Source.Should().Be(OutputModule.PlayerSource);
     }
 }

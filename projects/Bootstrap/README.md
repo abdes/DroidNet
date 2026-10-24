@@ -85,6 +85,7 @@ Create a `Program.cs` file with the following bootstrap sequence:
 ```csharp
 using System.Globalization;
 using DroidNet.Bootstrap;
+using DroidNet.Controls.OutputConsole.Model;
 using DroidNet.Routing;
 
 class Program
@@ -92,10 +93,13 @@ class Program
     [STAThread]
     static void Main(string[] args)
     {
+        // The application supplies the map from log sources to subsystem names.
+        var subsystems = new SubsystemMap([new("MyApp", "App")]);
+
         var bootstrap = new Bootstrapper(args)
             .Configure(options => options
                 .WithLoggingAbstraction()
-                .WithOutputConsole(capacity: 5000)
+                .WithOutputConsole(subsystems, capacity: 5000)
                 .WithOutputLog(CultureInfo.CurrentCulture))
             .WithMvvm()
             .WithRouting(new Routes())
@@ -435,7 +439,7 @@ For comprehensive testing guidelines, see [`.github/prompts/csharp-mstest.prompt
 Passed to `Configure()` method for logging customization:
 
 - **`WithLoggingAbstraction()`** - Integrate Serilog with MEL abstraction
-- **`WithOutputConsole(int capacity, LogEventLevel level, LoggingLevelSwitch? switch)`** - Register OutputConsole sink
+- **`WithOutputConsole(object subsystems, int capacity, LogEventLevel restrictedToMinimumLevel, LoggingLevelSwitch? levelSwitch)`** - Register OutputConsole sink; `subsystems` is the application's `SubsystemMap` (required, no default)
 - **`WithOutputLog(IFormatProvider provider, string? template, LogEventLevel level, LoggingLevelSwitch? switch, uint? themeId)`** - Register OutputLog sink
 
 ## Best Practices

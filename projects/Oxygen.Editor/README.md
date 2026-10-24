@@ -194,7 +194,7 @@ through `Oxygen.Editor.Composition`'s `EditorModule`:
 
 ```csharp
 bootstrap
-    .Configure(options => options.WithOutputConsole())
+    .Configure(options => options.WithOutputConsole(EditorOutputSubsystems.Map))
     .WithMvvm()
     .WithRouting(EditorModule.CreateRoutes())
     .WithWinUI<App>()

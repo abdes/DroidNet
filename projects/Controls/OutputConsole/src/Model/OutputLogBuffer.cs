@@ -3,84 +3,72 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections;
-using System.Collections.Specialized;
-using System.ComponentModel;
+using Serilog.Events;
 
 namespace DroidNet.Controls.OutputConsole.Model;
 
 /// <summary>
-///     An observable, fixed-capacity ring buffer optimized for UI binding.
-///     When the buffer is paused via <see cref="IsPaused" />, change notifications are suppressed
-///     except for a <see cref="NotifyCollectionChangedAction.Reset" /> which is raised when unpausing
-///     to allow UI listeners to resynchronize.
+///     A thread-safe, fixed-capacity ring of log entries that producers append to from any thread and that
+///     views read from.
 /// </summary>
-public partial class OutputLogBuffer : INotifyCollectionChanged, INotifyPropertyChanged, IEnumerable<OutputLogEntry>
+/// <remarks>
+///     <para>
+///         Appending is O(1): it takes a short lock, writes the entry into the ring, overwriting the oldest one
+///         when the ring is full, and gives it the next <see cref="OutputLogEntry.Sequence" /> and its
+///         <see cref="OutputLogEntry.Subsystem" />. Producers never run view code: the buffer raises
+///         <see cref="EntriesAvailable" /> at most once until the next <see cref="ReadSince" />, and views pull the
+///         new entries on their own thread.
+///     </para>
+///     <para>
+///         Entries leave the buffer only when newer ones overwrite them, which <see cref="OutputLogStatistics.EvictedCount" />
+///         counts, or when <see cref="Clear" /> is called.
+///     </para>
+/// </remarks>
+public sealed partial class OutputLogBuffer : IEnumerable<OutputLogEntry>
 {
-    private const string IndexerPropertyName = "Item[]";
+    private const int LevelCount = (int)LogEventLevel.Fatal + 1;
+
     private readonly Lock syncLock = new();
-    private readonly List<OutputLogEntry> items;
-    private int updateDepth;
-    private bool isDirty;
-    private bool paused;
+    private readonly OutputLogEntry?[] items;
+    private readonly int[] countsByLevel = new int[LevelCount];
+    private readonly Dictionary<string, int> countsBySubsystem = [with(StringComparer.Ordinal)];
+    private int head;
+    private int count;
+    private int withoutSubsystem;
+    private long lastSequence;
+    private long evictedCount;
+    private int clearGeneration;
+    private int signaled;
 
     /// <summary>
-    ///     Initializes a new instance of the <see cref="OutputLogBuffer" /> class with the specified
-    ///     capacity. The capacity must be a positive integer.
+    ///     Initializes a new instance of the <see cref="OutputLogBuffer" /> class.
     /// </summary>
+    /// <param name="subsystems">The map that resolves each appended entry's subsystem from its source.</param>
     /// <param name="capacity">
-    ///     Maximum number of entries retained by the buffer. Older entries are discarded when the capacity
+    ///     Maximum number of entries retained by the buffer. The oldest entries are overwritten when the capacity
     ///     is exceeded.
     /// </param>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="capacity" /> is less than or equal to zero.</exception>
-    public OutputLogBuffer(int capacity = 10000)
+    public OutputLogBuffer(SubsystemMap subsystems, int capacity = 10000)
     {
+        ArgumentNullException.ThrowIfNull(subsystems);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(capacity);
+        this.Subsystems = subsystems;
         this.Capacity = capacity;
-        this.items = new List<OutputLogEntry>(capacity);
+        this.items = new OutputLogEntry?[capacity];
     }
-
-    /// <inheritdoc />
-    public event NotifyCollectionChangedEventHandler? CollectionChanged;
-
-    /// <inheritdoc />
-    public event PropertyChangedEventHandler? PropertyChanged;
 
     /// <summary>
-    ///     Gets or sets a value indicating whether change notifications are paused.
-    ///     When set to <see langword="true" />, property and collection change notifications
-    ///     (other than <see cref="NotifyCollectionChangedAction.Reset" />) are suppressed.
-    ///     When set back to <see langword="false" />, a Reset notification is raised so
-    ///     listeners can resynchronize their views.
+    ///     Occurs on the producer's thread when entries become available to read: at most once until the next
+    ///     <see cref="ReadSince" />, and after <see cref="Clear" />. Handlers must only schedule their read; they must
+    ///     not read the buffer or touch UI.
     /// </summary>
-    public bool IsPaused
-    {
-        get
-        {
-            lock (this.syncLock)
-            {
-                return this.paused;
-            }
-        }
+    public event EventHandler? EntriesAvailable;
 
-        set
-        {
-            lock (this.syncLock)
-            {
-                if (this.paused == value)
-                {
-                    return;
-                }
-
-                this.paused = value;
-            }
-
-            if (!value)
-            {
-                // After a pause, ensure listeners can resync
-                this.OnCollectionChanged(new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Reset));
-            }
-        }
-    }
+    /// <summary>
+    ///     Gets the map that resolves appended entries' subsystems.
+    /// </summary>
+    public SubsystemMap Subsystems { get; }
 
     /// <summary>
     ///     Gets the maximum number of entries retained by the buffer.
@@ -88,7 +76,7 @@ public partial class OutputLogBuffer : INotifyCollectionChanged, INotifyProperty
     public int Capacity { get; }
 
     /// <summary>
-    ///     Gets the current number of elements in the buffer.
+    ///     Gets the current number of retained entries.
     /// </summary>
     public int Count
     {
@@ -96,172 +84,188 @@ public partial class OutputLogBuffer : INotifyCollectionChanged, INotifyProperty
         {
             lock (this.syncLock)
             {
-                return this.items.Count;
+                return this.count;
             }
         }
     }
 
     /// <summary>
-    ///     Gets the element at the specified index.
+    ///     Gets the sequence of the newest entry ever appended, or <c>0</c> before the first append.
     /// </summary>
-    /// <param name="index">The zero-based index of the element to get.</param>
-    /// <returns>The element at the specified index.</returns>
-    public OutputLogEntry this[int index]
-    {
-        get
-        {
-            lock (this.syncLock)
-            {
-                return this.items[index];
-            }
-        }
-    }
+    public long LastSequence => Volatile.Read(ref this.lastSequence);
 
     /// <summary>
-    ///     Appends an <see cref="OutputLogEntry" /> to the end of the buffer.
-    ///     If the buffer exceeds <see cref="Capacity" />, the oldest entries are removed.
+    ///     Appends an entry, resolving its subsystem and giving it the next sequence. When the buffer is full,
+    ///     the oldest entry is overwritten.
     /// </summary>
     /// <param name="entry">The log entry to append.</param>
+    /// <exception cref="ArgumentException">The entry was already appended to a buffer.</exception>
     public void Append(OutputLogEntry entry)
     {
-        bool wasPaused;
-        bool isInBatch;
-        var wasRotation = false;
-        int newIndex;
+        ArgumentNullException.ThrowIfNull(entry);
+        if (entry.Sequence != 0)
+        {
+            throw new ArgumentException("The entry was already appended to a buffer.", nameof(entry));
+        }
+
+        // The map is immutable, so resolution needs no lock.
+        entry.Subsystem = this.Subsystems.Resolve(entry.Source);
 
         lock (this.syncLock)
         {
-            if (this.items.Count == this.Capacity)
+            if (this.count == this.Capacity)
             {
-                this.items.RemoveAt(0);
-                wasRotation = true;
+                this.Uncount(this.items[this.head]!);
+                this.items[this.head] = entry;
+                this.head = (this.head + 1) % this.Capacity;
+                this.evictedCount++;
+            }
+            else
+            {
+                this.items[(this.head + this.count) % this.Capacity] = entry;
+                this.count++;
             }
 
-            this.items.Add(entry);
-
-            // capture index while still holding the lock so callers reading by index
-            // from a CollectionChanged handler get a stable, correct reference
-            newIndex = this.items.Count - 1;
-            wasPaused = this.paused;
-            isInBatch = this.updateDepth > 0;
-
-            if (isInBatch)
-            {
-                this.isDirty = true;
-            }
+            this.CountIn(entry);
+            entry.Sequence = this.lastSequence + 1;
+            Volatile.Write(ref this.lastSequence, entry.Sequence);
         }
 
-        if (wasPaused || isInBatch)
-        {
-            return;
-        }
+        this.Signal();
+    }
 
-        // During rotation, use Reset to avoid per-item Remove events
-        if (wasRotation)
+    /// <summary>
+    ///     Reads the entries appended after a sequence, and re-arms <see cref="EntriesAvailable" />.
+    /// </summary>
+    /// <param name="afterSequence">The sequence of the last entry the reader has seen; <c>0</c> to read everything retained.</param>
+    /// <returns>The new entries, oldest first, with the buffer's retention state.</returns>
+    public OutputLogRead ReadSince(long afterSequence)
+    {
+        lock (this.syncLock)
         {
-            this.OnCollectionChanged(new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Reset));
-            this.OnPropertyChanged(nameof(this.Count));
-            this.OnPropertyChanged(IndexerPropertyName);
-        }
-        else
-        {
-            // use the index captured under the lock to avoid races where other
-            // threads mutated the list between the append and event creation
-            this.OnCollectionChanged(new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Add, entry, newIndex));
-            this.OnPropertyChanged(nameof(this.Count));
-            this.OnPropertyChanged(IndexerPropertyName);
+            Volatile.Write(ref this.signaled, 0);
+            return new OutputLogRead(this.CopySince(afterSequence), this.FirstRetainedSequence(), this.clearGeneration);
         }
     }
 
     /// <summary>
-    ///     Clears all entries from the buffer.
+    ///     Copies every retained entry, oldest first.
+    /// </summary>
+    /// <returns>The retained entries.</returns>
+    public IReadOnlyList<OutputLogEntry> Snapshot()
+    {
+        lock (this.syncLock)
+        {
+            return this.CopySince(0);
+        }
+    }
+
+    /// <summary>
+    ///     Removes every entry. Sequences keep increasing; readers see a new
+    ///     <see cref="OutputLogRead.ClearGeneration" />.
     /// </summary>
     public void Clear()
     {
         lock (this.syncLock)
         {
-            this.items.Clear();
+            Array.Clear(this.items);
+            Array.Clear(this.countsByLevel);
+            this.countsBySubsystem.Clear();
+            this.withoutSubsystem = 0;
+            this.head = 0;
+            this.count = 0;
+            this.evictedCount = 0;
+            this.clearGeneration++;
         }
 
-        this.OnCollectionChanged(new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Reset));
-        this.OnPropertyChanged(nameof(this.Count));
-        this.OnPropertyChanged(IndexerPropertyName);
+        this.Signal();
     }
 
     /// <summary>
-    ///     Begins a batch update operation. While in batch mode, collection change notifications
-    ///     are suppressed. Call <see cref="EndUpdate" /> to complete the batch and raise a single
-    ///     <see cref="NotifyCollectionChangedAction.Reset" /> notification.
+    ///     Gets a snapshot of what the buffer retains.
     /// </summary>
-    /// <remarks>
-    ///     This method supports nested calls. Notifications are only raised when the outermost
-    ///     batch is completed (when update depth returns to zero).
-    /// </remarks>
-    public void BeginUpdate()
+    /// <returns>The statistics.</returns>
+    public OutputLogStatistics GetStatistics()
     {
         lock (this.syncLock)
         {
-            this.updateDepth++;
-        }
-    }
-
-    /// <summary>
-    ///     Ends a batch update operation. If this completes the outermost batch (update depth
-    ///     reaches zero) and changes were made, a <see cref="NotifyCollectionChangedAction.Reset" />
-    ///     notification is raised.
-    /// </summary>
-    public void EndUpdate()
-    {
-        var shouldNotify = false;
-
-        lock (this.syncLock)
-        {
-            if (this.updateDepth > 0)
+            var subsystems = this.countsBySubsystem
+                .OrderBy(static pair => pair.Key, StringComparer.Ordinal)
+                .Select(static pair => new KeyValuePair<string?, int>(pair.Key, pair.Value))
+                .ToList();
+            if (this.withoutSubsystem > 0)
             {
-                this.updateDepth--;
+                subsystems.Add(new KeyValuePair<string?, int>(key: null, this.withoutSubsystem));
             }
 
-            if (this.updateDepth == 0 && this.isDirty)
-            {
-                shouldNotify = true;
-                this.isDirty = false;
-            }
-        }
-
-        if (shouldNotify)
-        {
-            this.OnCollectionChanged(new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Reset));
-            this.OnPropertyChanged(nameof(this.Count));
-            this.OnPropertyChanged(IndexerPropertyName);
+            return new OutputLogStatistics(
+                this.Capacity,
+                this.count,
+                this.evictedCount,
+                [.. this.countsByLevel],
+                subsystems);
         }
     }
 
     /// <inheritdoc />
-    public IEnumerator<OutputLogEntry> GetEnumerator()
-    {
-        List<OutputLogEntry> snapshot;
-        lock (this.syncLock)
-        {
-            snapshot = [.. this.items];
-        }
-
-        return snapshot.GetEnumerator();
-    }
+    public IEnumerator<OutputLogEntry> GetEnumerator() => this.Snapshot().GetEnumerator();
 
     /// <inheritdoc />
     IEnumerator IEnumerable.GetEnumerator() => this.GetEnumerator();
 
-    /// <summary>
-    ///     Raises the <see cref="CollectionChanged" /> event.
-    /// </summary>
-    /// <param name="e">The event data.</param>
-    protected virtual void OnCollectionChanged(NotifyCollectionChangedEventArgs e)
-        => this.CollectionChanged?.Invoke(this, e);
+    private long FirstRetainedSequence() => this.lastSequence - this.count + 1;
 
-    /// <summary>
-    ///     Raises the <see cref="PropertyChanged" /> event.
-    /// </summary>
-    /// <param name="propertyName">The name of the property that changed.</param>
-    protected virtual void OnPropertyChanged(string propertyName)
-        => this.PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+    private OutputLogEntry[] CopySince(long afterSequence)
+    {
+        var first = this.FirstRetainedSequence();
+        var start = Math.Max(afterSequence + 1, first);
+        var length = this.lastSequence - start + 1;
+        if (length <= 0)
+        {
+            return [];
+        }
+
+        var copy = new OutputLogEntry[length];
+        var offset = this.head + (int)(start - first);
+        for (var i = 0; i < copy.Length; i++)
+        {
+            copy[i] = this.items[(offset + i) % this.Capacity]!;
+        }
+
+        return copy;
+    }
+
+    private void CountIn(OutputLogEntry entry)
+    {
+        this.countsByLevel[(int)entry.Level]++;
+        if (entry.Subsystem is null)
+        {
+            this.withoutSubsystem++;
+        }
+        else
+        {
+            this.countsBySubsystem[entry.Subsystem] = this.countsBySubsystem.GetValueOrDefault(entry.Subsystem) + 1;
+        }
+    }
+
+    private void Uncount(OutputLogEntry entry)
+    {
+        this.countsByLevel[(int)entry.Level]--;
+        if (entry.Subsystem is null)
+        {
+            this.withoutSubsystem--;
+        }
+        else if (--this.countsBySubsystem[entry.Subsystem] == 0)
+        {
+            _ = this.countsBySubsystem.Remove(entry.Subsystem);
+        }
+    }
+
+    private void Signal()
+    {
+        if (Interlocked.Exchange(ref this.signaled, 1) == 0)
+        {
+            this.EntriesAvailable?.Invoke(this, EventArgs.Empty);
+        }
+    }
 }

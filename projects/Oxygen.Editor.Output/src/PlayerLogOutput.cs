@@ -10,13 +10,13 @@ using Serilog.Events;
 namespace Oxygen.Editor.Output;
 
 /// <summary>
-/// Adds the player's output to the output buffer, as the <see cref="PlayerSource"/> source; a new session's start
-/// clears the buffer.
+/// Adds the player's output to the output buffer, as the <see cref="OutputModule.PlayerSource"/> source; a new session's start is
+/// marked in the output by an entry, and earlier output stays.
 /// </summary>
 internal sealed partial class PlayerLogOutput : IDisposable
 {
-    /// <summary>The source of the player's entries.</summary>
-    public const string PlayerSource = "Player";
+    /// <summary>The message of the entry that marks a new play session's start.</summary>
+    internal const string SessionStartedMessage = "Play session started";
 
     private readonly IPlayerLog log;
     private readonly OutputLogBuffer buffer;
@@ -58,9 +58,15 @@ internal sealed partial class PlayerLogOutput : IDisposable
 
     private void OnLogReceived(object? sender, PlayerLogEventArgs args)
     {
-        if (args.Clear)
+        if (args.IsSessionStart)
         {
-            this.buffer.Clear();
+            this.buffer.Append(new OutputLogEntry
+            {
+                Timestamp = args.Timestamp,
+                Level = LogEventLevel.Information,
+                Source = OutputModule.PlayerSource,
+                Message = SessionStartedMessage,
+            });
             return;
         }
 
@@ -68,7 +74,7 @@ internal sealed partial class PlayerLogOutput : IDisposable
         {
             Timestamp = args.Timestamp,
             Level = LevelOf(args.Level),
-            Source = PlayerSource,
+            Source = OutputModule.PlayerSource,
             Channel = args.Channel,
             Message = args.Message,
         });

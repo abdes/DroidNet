@@ -23,6 +23,7 @@ public static class LoggerSinkConfigurationOutputConsoleExtensions
     /// </summary>
     /// <param name="sinkConfiguration">The Serilog sink configuration.</param>
     /// <param name="container">DryIoc container to register the shared buffer into.</param>
+    /// <param name="subsystems">The application-supplied map from log sources to subsystem names.</param>
     /// <param name="capacity">Max entries to retain in the ring buffer.</param>
     /// <param name="restrictedToMinimumLevel">Minimum level for this sink.</param>
     /// <param name="levelSwitch">Optional level switch.</param>
@@ -30,11 +31,14 @@ public static class LoggerSinkConfigurationOutputConsoleExtensions
     public static LoggerConfiguration OutputConsole(
         this LoggerSinkConfiguration sinkConfiguration,
         IContainer container,
+        SubsystemMap subsystems,
         int capacity,
         LogEventLevel restrictedToMinimumLevel,
         LoggingLevelSwitch? levelSwitch)
     {
-        var buffer = new OutputLogBuffer(capacity);
+        ArgumentNullException.ThrowIfNull(subsystems);
+
+        var buffer = new OutputLogBuffer(subsystems, capacity);
         var sink = new BufferedSink(buffer);
 
         // Make the buffer available to the UI via DI

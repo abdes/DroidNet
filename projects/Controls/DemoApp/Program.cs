@@ -76,7 +76,7 @@ public static partial class Program
             // Configure aned Build the host so the final container is available.
             _ = bootstrap.Configure(
                 options => options
-                    .WithOutputConsole()
+                    .WithOutputConsole(OutputConsoleDemoViewModel.Subsystems)
                     .WithOutputLog(formatProvider: CultureInfo.InvariantCulture))
                 .WithMvvm()
                 .WithRouting(MakeRoutes())
