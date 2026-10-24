@@ -8,6 +8,8 @@
         <Setter Property="Height" Value="20" />
         <Setter Property="Margin" Value="4,0" />
         <Setter Property="VerticalAlignment" Value="Center" />
+        <!--  As WinUI's AppBarSeparator: a separator is never a tab stop.  -->
+        <Setter Property="IsTabStop" Value="False" />
         <Setter Property="Background" Value="{ThemeResource DividerStrokeColorDefaultBrush}" />
         <Setter Property="Template">
             <Setter.Value>

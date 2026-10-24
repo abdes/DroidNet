@@ -18,6 +18,16 @@ namespace DroidNet.Controls.ToolBars.Tests;
 public class ToolBarToggleButtonTests : VisualUserInterfaceTests
 {
     [TestMethod]
+    public Task KeyboardFocus_ShowsTheSystemFocusVisual() => EnqueueAsync(async () =>
+    {
+        var (button, _) = await SetUpontrolForTesting().ConfigureAwait(true);
+
+        // A control's UseSystemFocusVisuals defaults to False; WinUI's own button styles turn it on.
+        _ = button.UseSystemFocusVisuals.Should().BeTrue();
+        _ = button.FocusVisualMargin.Should().Be(new Thickness(-3));
+    });
+
+    [TestMethod]
     public Task SetsTemplatePartsCorrectly() => EnqueueAsync(async () =>
     {
         var (button, _) = await SetUpontrolForTesting().ConfigureAwait(true);
