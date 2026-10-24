@@ -50,8 +50,8 @@ states, action labels, disabled reasons, progress, and keyboard/accessibility
 behavior. Full material thumbnails, a new asset management application, a
 generic settings panel, raw generated-file editing, scheduling beyond the
 existing cook queue, rename/move/reference repair, and a new drag/drop placement
-system are outside the general content-management workflow. M08's explicit
-surface repair is defined separately by content-pipeline section 20.
+system are outside the general content-management workflow. Kept surface changes
+and their Reassign and Remove commands are defined by content-pipeline section 20.
 Qualified formats/components remain those in PRD section 8 and pipeline
 section 17.
 

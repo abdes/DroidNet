@@ -41,14 +41,14 @@ struct SceneInstantiationRequest {
   observer_ptr<engine::InputSystem> input; // null: no starting contexts
 };
 
-struct SceneInstance {
+struct InstantiationResult {
   std::vector<scene::SceneNode> nodes; // index = cooked node index
   std::vector<SceneInstantiationIssue> issues;
   std::vector<scripting::SceneScriptSlotOutcome> scripts;
 };
 
 auto Instantiate(SceneInstantiationRequest, IAssetLoader&)
-  -> co::Co<SceneInstance>;
+  -> co::Co<InstantiationResult>;
 ```
 
 Instanced scenes and starting contexts are references, not dependencies, so
@@ -104,7 +104,7 @@ loaded. Oxygen follows the same model for both.
   cooked mapping context descriptor and every loader; RenderScene and DemoShell
   start the contexts of the scene they instantiate, like the player.
 
-Physics hydration stays in DemoShell, running on `SceneInstance::nodes`, until
+Physics hydration stays in DemoShell, running on `InstantiationResult::nodes`, until
 physics authoring is scheduled.
 
 ## 3. `Oxygen.Player`

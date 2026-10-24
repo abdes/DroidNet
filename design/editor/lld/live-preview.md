@@ -116,15 +116,19 @@ Actors:
 
 ### 5.3 Decisions
 
-1. **The engine shows the open scene document.** LivePreview follows the scene
-   document in `OpenDocuments`: a domain module never references the Shell, and
+1. **The engine shows the active scene or model document.** LivePreview
+   follows the scene document and the model documents
+   ([model editor](model-editor.md)) in `OpenDocuments`: a domain module never references the Shell, and
    one scene document is open at a time. The Shell's document service replaces
    the open scene in three steps: prepare its close (the unsaved edits prompt,
    `IDocumentArea.PrepareCloseAsync`), open the next scene in `OpenDocuments`,
    then commit the close. A cancelled prompt opens nothing, and a scene that
    fails to open (a decode problem) keeps the current one open and shown.
    LivePreview shows the scene document opened last; the old one is retired on
-   its `Closed`. The Scene Explorer, the scene editor and the Inspector follow
+   its `Closed`. When a model document's tab is active, LivePreview shows that
+   model's preview scene instead, and shows the scene again when its tab is
+   active: each switch rebuilds the shown engine scene from its document, and
+   the engine never holds two. The Scene Explorer, the scene editor and the Inspector follow
    the scene document through `OpenDocuments` (`Opened`, `Closed`) and
    `Document.ContentReplaced`, and only observe engine readiness on
    `IScenePreview`; they register and sync nothing. Opening another scene

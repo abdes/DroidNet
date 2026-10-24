@@ -24,7 +24,8 @@ inside placed models. Field rules stay in the
 6. **Five rocks, two with moss hidden.** Moss's Visible row is mixed and partly
    overridden. Setting it applies to all five; reset clears it on the two.
 7. **A surface lost on reimport.** The kept changes are listed with a choice of
-   target surface or removal; the scene does not cook until one is chosen.
+   target surface or removal; until then the change is inert and the scene
+   cooks with a warning ([scene instances](../lld/scene-instances.md) SI-8).
 
 ## 2. Presentation rules
 
@@ -58,10 +59,10 @@ selection header and the Scene Explorer.
   the schema's `Material`, `Visibility` and `CastsShadows` surface properties.
   Visibility and Cast Shadows are plain `ToggleSwitch`es: a surface has no
   hierarchy. No eye glyph is used: the eye is the editor Hide.
-- **Kept changes** for a surface or template node no longer proven use the
+- **Kept changes** for a surface or instanced node no longer proven use the
   caution box Scripting uses for values a script no longer declares.
 - **Model nodes.** The selection header adds "in Car (model)" and a button that
-  selects the instance node. The name, Add component and Remove component are
+  selects the instance root. The name, Add component and Remove component are
   disabled with tooltips naming the model; only schema-declared properties are
   editable.
 - **Consequence notices** use the secondary notice text Scripting uses, for
@@ -122,7 +123,7 @@ move to them, so no section keeps its own copy.
 | Source-mode field (`Oxygen.Editor.Controls`) | Wraps the toolkit `Segmented`: modes, mixed state (no selection) and a caption line                                                                                     |
 | Toggle field (`Oxygen.Editor.Controls`)      | `ToggleSwitch` with a mixed state; used by Rendering, surfaces and Scripting's toggle fields                                                                            |
 | Item card and caution box styles             | Scripting's slot card and "not declared" box become shared inspector styles, used by surfaces and kept changes                                                          |
-| `SceneNodeDetailsView`                       | Model-origin line, select-instance button and read-only structure for template nodes                                                                                    |
+| `SceneNodeDetailsView`                       | Model-origin line, select-instance button and read-only structure for instanced nodes                                                                                   |
 | Component list                               | Required components (Transform, Rendering) cannot be removed and show for every node                                                                                    |
 
 Unchanged and reused: `PropertiesExpander`, `QuietDisclosure`, `Thumbnail`,

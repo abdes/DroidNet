@@ -73,7 +73,10 @@ WorldEditor owns the typed `WorldEditor/SceneInteraction` setting through
 `WorkspaceInteractionService` and the existing `IEditorSettingsManager`. Use
 `SettingContext.Project` with the canonical project root. The versioned payload
 contains the project ID and a map of scene IDs to explicit hidden-node IDs and
-locked-node IDs. Identity is the stable authored node ID, not its name or row.
+locked-node IDs. Identity is the stable authored node ID, not its name or row;
+an instanced node, which has no node ID of the scene, is identified by its
+instance root's ID and its node path ([scene instances](scene-instances.md)
+section 6.2).
 One coordinated service serializes writes and suppresses stale project/scene
 restoration. The data store is user-local; no interaction state is written to
 scene documents, authoring mounts, cooked output or validation requests.

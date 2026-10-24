@@ -136,6 +136,7 @@ its own criterion:
 | Input    | Inspector (Play), Content Explorer, Problems, cook, the future Input Editor                     | Checks on every change, cook priorities | No                |
 | Texture  | Content Explorer import, environment cubemap picker, Material Editor, the future Texture Editor | Import authoring                        | No                |
 | Material | Material Editor, inspector surfaces and pickers, LivePreview overrides, relocation              | Relocation rewrites, cook dependencies  | No                |
+| Model    | Model Editor, Content Explorer import and reimport, scene instance pickers, cook                | Import settings checks, reimport        | No                |
 
 So the family modules are what decision 7 itself requires; editor-documents.md
 decisions 3 and 7 and the module catalogue of editor-module-architecture.md
@@ -326,7 +327,7 @@ flowchart LR
         T1 -->|cook| T2[".otex"]
     end
     subgraph geometry["Geometry (no family module)"]
-        G0["Ship.glb"] --- G1["Ship.glb.import.json<br/>NativeSceneImportSettings"]
+        G0["Ship.glb"] --- G1["imports/source-identity.import.json<br/>model import record"]
         G0 -->|cook| G2["Ship.glb/Hull.ogeo, Ship.glb/Paint.omat,<br/>Ship.glb/Ship.oscene"]
     end
     subgraph script["Script (Scripting)"]

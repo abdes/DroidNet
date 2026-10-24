@@ -154,12 +154,18 @@ cooking and publication for native hosts; DemoShell and CLI consume that same
 API and schema. The editor keeps its existing project coordinator and uses the
 shared native provenance value.
 
-`RetainedModelImport::SaveRecipe` creates or updates
-`Content/imports/<name>.import.json`; `Prepare` reserves one unique attempt,
-and `AsyncImportService::SubmitRetainedImport` executes it. The native
-`oxygen.retained-model-import.schema.json` record contains the recipe, native
-surface provenance, and selected generation ID/index digest. Generation
-paths are derived, never copied into the authored recipe. A prepared attempt is
+`ModelImportRecord` reads and writes a model's import record,
+`<content_root>/imports/<source_identity>.import.json`
+(`oxygen.model-import.schema.json`), the one store of a model's import state
+for the editor and the ImportTool: source, virtual path, settings, source
+identity, surface provenance, node continuity, published nodes and source
+fingerprint. `Prepare` reserves one unique attempt, and
+`AsyncImportService::SubmitRetainedImport` executes it. The selected
+generation is publication state, kept in
+`<content_root>/.cooked/imports/<source_identity>/head.json`, never in the
+record. See the editor's
+[scene instances](../../../../../../../design/editor/lld/scene-instances.md)
+NGN14. A prepared attempt is
 submitted once. Staging imports reject writes into marked generation roots.
 Source bytes consumed during import are checked again before publication.
 

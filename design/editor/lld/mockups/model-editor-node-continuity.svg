@@ -1,0 +1,196 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="900" viewBox="0 0 1440 900" font-family="Segoe UI Variable, Segoe UI, sans-serif" font-size="13">
+  <title>Model Editor: node continuity in the import settings (dark theme)</title>
+  <desc>The Car.glb model document after a reimport in which the artist renamed Door_FL to Door_Front_L and Headlight_R to Headlight_Right, and added a Spoiler. The import settings panel lists its groups in order (Source with Scene: Day, Units and axes, Geometry, Hierarchy), then the Node continuity group expanded: the nodes the last import reported vanished and new, as facts, and the list of continued nodes, each removable. Door_FL is already continued by Door_Front_L (unsaved). The user pressed Continue on Headlight_R; a flyout lists the nodes new in the last import first, then all nodes, with Headlight_Right chosen. No match is proposed. Settings apply on Save, which reimports.</desc>
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2f4f8f"/><stop offset="1" stop-color="#8a8fc6"/>
+    </linearGradient>
+    <linearGradient id="ground" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#6e6aa8"/><stop offset="1" stop-color="#3d3a72"/>
+    </linearGradient>
+  </defs>
+  <rect width="1440" height="900" fill="#1c1c1c"/>
+
+  <!-- Title bar with document tabs -->
+  <rect x="0" y="0" width="1440" height="44" fill="#1f1f1f"/>
+  <circle cx="26" cy="22" r="14" fill="none" stroke="#4cc2ff" stroke-width="2"/>
+  <text x="60" y="28" fill="#9e9e9e">Harbor</text>
+  <rect x="116" y="8" width="112" height="36" rx="6" fill="#2b2b2b"/>
+  <text x="130" y="31" fill="#ffffff">Car.glb</text>
+  <circle cx="186" cy="26" r="3" fill="#c5c5c5"><title>Unsaved import settings</title></circle>
+  <text x="206" y="31" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="10" fill="#c5c5c5">&#xE711;</text>
+
+  <!-- Document toolbar -->
+  <rect x="0" y="44" width="1000" height="46" fill="#202020"/>
+  <g font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="17" fill="#ffffff">
+    <text x="16" y="74">&#xE105;</text>
+    <text x="50" y="74" fill="#5d5d5d">&#xE895;</text>
+  </g>
+  <line x1="82" y1="54" x2="82" y2="80" stroke="#3a3a3a"/>
+  <rect x="92" y="52" width="122" height="30" rx="4" fill="#2b2b2b"/>
+  <text x="102" y="73" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#ffffff">&#xE710;</text>
+  <text x="122" y="72" fill="#ffffff">Add to scene</text>
+  <text x="228" y="74" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="17" fill="#ffffff">&#xE8B7;</text>
+  <line x1="260" y1="54" x2="260" y2="80" stroke="#3a3a3a"/>
+  <rect x="270" y="52" width="250" height="30" rx="4" fill="#262626"/>
+  <circle cx="284" cy="67" r="4" fill="#6ccb5f"/>
+  <text x="296" y="72" fill="#c5c5c5">Imported</text>
+  <text x="356" y="72" fill="#5d5d5d">·</text>
+  <text x="368" y="72" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="12" fill="#fce100">&#xE7BA;</text>
+  <text x="386" y="72" fill="#78c9e8">2 problems</text>
+  <text x="970" y="74" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="17" fill="#ffffff">&#xE713;</text>
+
+  <!-- Viewport (viewing profile), narrowed by the wider panel -->
+  <rect x="4" y="92" width="556" height="800" fill="url(#sky)" stroke="#4cc2ff" stroke-width="2"/>
+  <rect x="5" y="470" width="554" height="421" fill="url(#ground)"/>
+  <rect x="5" y="93" width="554" height="30" fill="#3a3220" opacity="0.95"/>
+  <text x="16" y="113" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="13" fill="#fce100">&#xE7BA;</text>
+  <text x="38" y="113" fill="#ffffff">Showing the last import. Save to reimport with your settings.</text>
+  <text x="550" y="113" text-anchor="end" fill="#78c9e8">Save</text>
+  <rect x="14" y="132" width="122" height="30" rx="4" fill="#202020" opacity="0.9" stroke="#3a3a3a"/>
+  <text x="24" y="152" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="13" fill="#ffffff">&#xE714;</text>
+  <text x="44" y="152" fill="#ffffff">Turntable</text>
+  <path d="M120 250 L156 200 L232 180 L352 180 L420 208 L468 224 L474 260 L120 262 Z" fill="#9b2f2f"/>
+  <path d="M176 204 L232 186 L298 186 L298 218 L168 220 Z" fill="#7aa3c4" opacity="0.85"/>
+  <path d="M306 186 L350 186 L396 214 L306 218 Z" fill="#7aa3c4" opacity="0.85"/>
+  <path d="M352 172 L440 172 L444 180 L350 180 Z" fill="#6b2222"/>
+  <circle cx="188" cy="264" r="26" fill="#1d1d1d" stroke="#555" stroke-width="3"/>
+  <circle cx="410" cy="264" r="26" fill="#1d1d1d" stroke="#555" stroke-width="3"/>
+  <rect x="458" y="228" width="14" height="9" rx="3" fill="#fff5c0" stroke="#ffb347" stroke-width="2"/>
+
+  <!-- Import settings panel -->
+  <rect x="564" y="92" width="436" height="800" fill="#252525"/>
+  <line x1="562" y1="92" x2="562" y2="892" stroke="#3a3a3a" stroke-width="3"/>
+  <text x="576" y="116" font-weight="600" fill="#ffffff">Import settings</text>
+  <text x="980" y="116" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="11" fill="#c5c5c5">&#xE89F;</text>
+  <g font-size="12">
+    <g font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="9" fill="#c5c5c5">
+      <text x="576" y="146">&#xE76C;</text><text x="576" y="168">&#xE76C;</text>
+      <text x="576" y="190">&#xE76C;</text><text x="576" y="212">&#xE76C;</text>
+    </g>
+    <text x="592" y="147" font-weight="600" fill="#ffffff">Source</text><text x="700" y="147" fill="#9e9e9e">Scene: Day</text>
+    <text x="592" y="169" font-weight="600" fill="#ffffff">Units and axes</text><text x="700" y="169" fill="#9e9e9e">Custom · 0.01</text>
+    <text x="592" y="191" font-weight="600" fill="#ffffff">Geometry</text>
+    <text x="592" y="213" font-weight="600" fill="#ffffff">Hierarchy</text>
+    <line x1="572" y1="228" x2="992" y2="228" stroke="#3a3a3a"/>
+
+    <!-- Node continuity group -->
+    <text x="576" y="246" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="9" fill="#c5c5c5">&#xE70D;</text>
+    <text x="592" y="247" font-weight="600" fill="#ffffff">Node continuity</text>
+    <text x="592" y="268" fill="#9e9e9e">The last import: 3 nodes vanished, 3 are new. No match is guessed.</text>
+
+    <!-- Vanished -->
+    <text x="592" y="296" font-size="11" font-weight="600" fill="#c5c5c5">VANISHED IN THE LAST IMPORT</text>
+    <rect x="566" y="306" width="3" height="24" fill="#4cc2ff"><title>Unsaved: continued in this session</title></rect>
+    <text x="592" y="323" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="13" fill="#9a9a9a">&#xF158;</text>
+    <text x="614" y="323" font-family="Cascadia Mono, Consolas, monospace" font-size="12" fill="#c5c5c5">Body/Door_FL</text>
+    <text x="800" y="323" fill="#9e9e9e">continued by</text><text x="878" y="323" fill="#78c9e8">Door_Front_L</text>
+
+    <text x="592" y="349" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="13" fill="#9a9a9a">&#xE706;</text>
+    <text x="614" y="349" font-family="Cascadia Mono, Consolas, monospace" font-size="12" fill="#c5c5c5">Body/Headlight_R</text>
+    <text x="800" y="349" fill="#9e9e9e">not continued</text>
+    <rect x="900" y="334" width="88" height="24" rx="4" fill="#3a3a3a" stroke="#4cc2ff"/>
+    <text x="912" y="350" fill="#ffffff">Continue…</text>
+
+    <text x="592" y="375" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="13" fill="#9a9a9a">&#xF158;</text>
+    <text x="614" y="375" font-family="Cascadia Mono, Consolas, monospace" font-size="12" fill="#c5c5c5">Body/Mirror[2]</text>
+    <text x="800" y="375" fill="#9e9e9e">not continued</text>
+    <rect x="900" y="360" width="88" height="24" rx="4" fill="#2b2b2b" stroke="#454545"/>
+    <text x="912" y="376" fill="#ffffff">Continue…</text>
+
+    <!-- New -->
+    <text x="592" y="408" font-size="11" font-weight="600" fill="#c5c5c5">NEW IN THE LAST IMPORT</text>
+    <text x="592" y="435" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="13" fill="#9a9a9a">&#xF158;</text>
+    <text x="614" y="435" font-family="Cascadia Mono, Consolas, monospace" font-size="12" fill="#c5c5c5">Body/Door_Front_L</text>
+    <text x="800" y="435" fill="#9e9e9e">continues</text><text x="860" y="435" fill="#78c9e8">Door_FL</text>
+    <text x="592" y="461" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="13" fill="#9a9a9a">&#xE706;</text>
+    <text x="614" y="461" font-family="Cascadia Mono, Consolas, monospace" font-size="12" fill="#c5c5c5">Body/Headlight_Right</text>
+    <text x="592" y="487" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="13" fill="#9a9a9a">&#xF158;</text>
+    <text x="614" y="487" font-family="Cascadia Mono, Consolas, monospace" font-size="12" fill="#c5c5c5">Body/Spoiler</text>
+
+    <!-- Continued nodes -->
+    <text x="592" y="520" font-size="11" font-weight="600" fill="#c5c5c5">CONTINUED NODES (2)</text>
+    <rect x="566" y="530" width="3" height="24" fill="#4cc2ff"/>
+    <text x="592" y="547" font-family="Cascadia Mono, Consolas, monospace" font-size="12" fill="#ffffff">Body/Door_Front_L</text>
+    <text x="748" y="547" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="11" fill="#c5c5c5">&#xE72B;</text>
+    <text x="766" y="547" font-family="Cascadia Mono, Consolas, monospace" font-size="12" fill="#ffffff">Body/Door_FL</text>
+    <text x="970" y="547" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="12" fill="#c5c5c5">&#xE711;<title>Remove: Door_Front_L gets its own ID again</title></text>
+    <text x="592" y="573" font-family="Cascadia Mono, Consolas, monospace" font-size="12" fill="#c5c5c5">Chassis</text>
+    <text x="748" y="573" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="11" fill="#c5c5c5">&#xE72B;</text>
+    <text x="766" y="573" font-family="Cascadia Mono, Consolas, monospace" font-size="12" fill="#c5c5c5">Frame</text>
+    <text x="970" y="573" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="12" fill="#c5c5c5">&#xE711;</text>
+    <text x="592" y="602" fill="#9e9e9e">Continued nodes apply on Save, which reimports.</text>
+    <line x1="572" y1="618" x2="992" y2="618" stroke="#3a3a3a"/>
+    <g font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="9" fill="#c5c5c5">
+      <text x="576" y="642">&#xE76C;</text><text x="576" y="664">&#xE76C;</text><text x="576" y="686">&#xE76C;</text>
+    </g>
+    <text x="592" y="643" font-weight="600" fill="#ffffff">Materials</text>
+    <text x="592" y="665" font-weight="600" fill="#ffffff">Textures</text><text x="700" y="665" fill="#9e9e9e">Source size · Default quality</text>
+    <text x="592" y="687" font-weight="600" fill="#ffffff">Lights and cameras</text>
+    <line x1="572" y1="702" x2="992" y2="702" stroke="#3a3a3a"/>
+    <text x="576" y="726" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="9" fill="#c5c5c5">&#xE76C;</text>
+    <text x="592" y="727" font-weight="600" fill="#ffffff">Selected mesh: Body</text>
+  </g>
+
+  <!-- Continue flyout, placed left of its button -->
+  <g>
+    <rect x="152" y="280" width="400" height="404" rx="8" fill="#2c2c2c" stroke="#4a4a4a"/>
+    <path d="M552 338 L566 346 L552 354 Z" fill="#2c2c2c" stroke="#4a4a4a"/>
+    <rect x="550" y="339" width="3" height="14" fill="#2c2c2c"/>
+    <text x="168" y="308" font-weight="600" fill="#ffffff">Continue Body/Headlight_R in</text>
+    <rect x="168" y="320" width="368" height="28" rx="4" fill="#1f1f1f" stroke="#454545"/>
+    <text x="178" y="339" fill="#9a9a9a">Find a node...</text>
+    <g font-size="12">
+      <text x="168" y="370" font-size="11" font-weight="600" fill="#c5c5c5">NEW IN THE LAST IMPORT</text>
+      <text x="176" y="394" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="13" fill="#5d5d5d">&#xF158;</text>
+      <text x="198" y="394" font-family="Cascadia Mono, Consolas, monospace" fill="#5d5d5d">Body/Door_Front_L</text>
+      <text x="420" y="394" fill="#5d5d5d">continues Door_FL</text>
+      <rect x="164" y="404" width="376" height="26" rx="4" fill="#2f4a5c"/>
+      <rect x="164" y="409" width="3" height="16" rx="1.5" fill="#4cc2ff"/>
+      <text x="176" y="422" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="13" fill="#e0e0e0">&#xE706;</text>
+      <text x="198" y="422" font-family="Cascadia Mono, Consolas, monospace" fill="#ffffff">Body/Headlight_Right</text>
+      <text x="176" y="450" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="13" fill="#9a9a9a">&#xF158;</text>
+      <text x="198" y="450" font-family="Cascadia Mono, Consolas, monospace" fill="#c5c5c5">Body/Spoiler</text>
+      <text x="168" y="480" font-size="11" font-weight="600" fill="#c5c5c5">ALL NODES</text>
+      <text x="198" y="504" font-family="Cascadia Mono, Consolas, monospace" fill="#c5c5c5">Body</text>
+      <text x="198" y="528" font-family="Cascadia Mono, Consolas, monospace" fill="#c5c5c5">Body/Door_FR</text>
+      <text x="198" y="552" font-family="Cascadia Mono, Consolas, monospace" fill="#c5c5c5">Body/Door_RL</text>
+      <text x="198" y="572" fill="#9a9a9a">…</text>
+      <line x1="168" y1="586" x2="536" y2="586" stroke="#3a3a3a"/>
+      <text x="168" y="606" fill="#c5c5c5">Headlight_Right takes the ID of Headlight_R: the changes</text>
+      <text x="168" y="622" fill="#c5c5c5">made on Headlight_R, in every scene, apply to it.</text>
+    </g>
+    <rect x="352" y="638" width="88" height="30" rx="4" fill="#4cc2ff"/>
+    <text x="368" y="658" fill="#000000">Continue</text>
+    <rect x="448" y="638" width="88" height="30" rx="4" fill="#3a3a3a"/>
+    <text x="470" y="658" fill="#ffffff">Cancel</text>
+  </g>
+
+  <!-- Annotations -->
+  <g font-size="11" fill="#e0e0e0">
+    <rect x="1012" y="100" width="418" height="456" rx="6" fill="#161616" stroke="#4a4a4a"/>
+    <text x="1024" y="122" font-weight="600" fill="#ffffff">What the mockup shows</text>
+    <text x="1024" y="146">1. Node continuity is a group of the import settings panel;</text>
+    <text x="1036" y="162">the rest of the workspace is as in model-editor.svg.</text>
+    <text x="1024" y="186">2. Vanished and New list what the last import reported</text>
+    <text x="1036" y="202">(import.nodes_changed): facts, never a proposed match.</text>
+    <text x="1036" y="218">Rows show anchors, the importer's name paths.</text>
+    <text x="1024" y="242">3. A vanished row says whether a node continues it; each row</text>
+    <text x="1036" y="258">not continued offers Continue…. The model cannot know which</text>
+    <text x="1036" y="274">scenes hold changes on it; their caution boxes show that.</text>
+    <text x="1024" y="298">4. The flyout lists the nodes new in the last import first,</text>
+    <text x="1036" y="314">then all nodes, with Find. A node that already continues</text>
+    <text x="1036" y="330">another is disabled. Choosing a node that existed before</text>
+    <text x="1036" y="346">adds the caution: its changes under its own ID become kept.</text>
+    <text x="1024" y="370">5. Continued nodes lists every entry, from this and earlier</text>
+    <text x="1036" y="386">imports (Chassis continues Frame); × removes one, and the</text>
+    <text x="1036" y="402">node gets its own ID again on Save.</text>
+    <text x="1024" y="426">6. Entries are import settings: the override bar marks the</text>
+    <text x="1036" y="442">unsaved one, the tab shows the unsaved dot, and the banner</text>
+    <text x="1036" y="458">says the view shows the last import until Save (ME-6).</text>
+    <text x="1024" y="482">7. Clicking an anchor selects that node in the Scene Explorer</text>
+    <text x="1036" y="498">and the viewport; a vanished anchor has no node to select.</text>
+    <text x="1024" y="522">8. Reassign in a scene's caution box opens the same flyout,</text>
+    <text x="1036" y="538">and writes the same entry (scene instances 6.4).</text>
+  </g>
+</svg>

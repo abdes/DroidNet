@@ -932,13 +932,13 @@ Content mount. Operation ownership and native query files survive a failed
 worker termination until native drain and cleanup complete. Query output remains
 in its operation directory and cannot overwrite an authored source.
 
-Native retained settings use the existing `<source>.import.json` naming
-convention with `SchemaVersion: 6` for new imports and
-`Importer: "Oxygen.Cooker.Scene/v1"`. The sidecar records the Content
-bundle/primary paths, initially discovered files and primary hash, output mount
-and exclusive destination, and explicit native
-unit/normal/tangent/transform policies. Retired sidecars require the
-one-time migration tool and cannot silently replace existing identities. Normals
+A model's import state is its model import record,
+`<ProjectRoot>/imports/<source_identity>.import.json`, the engine's
+`oxygen.model-import.schema.json` shared with the ImportTool
+([scene instances](scene-instances.md) NGN14): source, virtual path, settings,
+source identity, surface provenance, node continuity, published nodes and
+source fingerprint. The product reads no other format; older sidecars become
+records by hand, keeping their source identity. Normals
 and tangents use native generation of missing attributes, preserving authored
 values. This supplies the UV-derived tangent basis required by normal maps in
 FBX files that omit tangents. Canonical retained settings also carry the
@@ -953,16 +953,16 @@ the dialog shows all resulting paths before acceptance. Native mesh/material
 names already include the source-file namespace, which is not repeated when it
 matches the model folder. Bulk resource tables remain native-owned shared files.
 
-One-time migration normalizes useful older sidecars/output paths and their
+One-time migration normalizes useful older records/output paths and their
 authored references together, then rebuilds affected content. Production
 reimport accepts only the canonical settings/layout; it does not retain
-version-2 grouped path behavior. Changing a sidecar alone cannot relocate
+version-2 grouped path behavior. Changing a record alone cannot relocate
 content because native asset keys derive from virtual paths; output groups move
 only through the reference-aware relocation in
 [Content Explorer §9.5](content-explorer-asset-identity.md#95-asset-relocation),
-which rewrites the sidecar with the files. After a relocation or delete, a prior
+which rewrites the record's `source` with the files. After a relocation or delete, a prior
 product whose authored source is gone is retired for every asset kind (a model
-only when its import settings went with it), and only its outputs leave the
+only when its record no longer names it), and only its outputs leave the
 root, so its old native keys leave the index; this is not a forbidden identity
 change or a namespace overlap with the retired owner. Whether moving a model's
 outputs to another group retires its old outputs is to be verified
@@ -1358,46 +1358,27 @@ policy. Retained mappings prevent later producer changes from reallocating
 already established IDs. Any policy migration is explicit development tooling;
 no shipping legacy resolver remains.
 
-### 20.3 Repair state and affected publication
+### 20.3 Kept changes and publication
 
-Keep an unresolved scene override's GeometryUri, SurfaceId, values, previous
-layout revision and human-readable prior surface context. These are useful authored
-intent, not a hidden compatibility binding. Show Missing surface / Layout changed
-on the instance and provide explicit Reassign or Clear commands. Reassign
-chooses an existing candidate SurfaceId; clear removes the obsolete override.
-Neither changes mesh topology, another surface, another instance or the shared
-material. Both are ordinary undoable scene edits; failed validation changes no
-targets.
+An override of a surface that is no longer proven is a **kept change**
+([scene model 5.2](scene-authoring-model.md#52-parts-sources-and-overrides),
+[scene instances](scene-instances.md) SI-7, SI-8). The scene keeps its
+GeometryUri, SurfaceId, values, previous layout revision and human-readable
+prior surface context: authored intent, not a hidden compatibility binding. The
+instance shows Missing surface / Layout changed in the caution box with
+explicit Reassign and Remove commands. Reassign chooses an existing candidate
+SurfaceId; Remove deletes the obsolete override. Neither changes mesh
+topology, another surface, another instance or the shared material. Both are
+ordinary undoable scene edits; failed validation changes no targets.
 
-Before publishing changed geometry, inspect its known saved/published consumer
-closure and validate all preserved scene overrides against the candidate
-inventories. A root with internally valid file hashes can still be semantically
-invalid if a scene references a removed surface. Include compatible regenerated
-consumers in the same root transaction where needed.
-
-If a preserved consumer has unresolved assignments, retain the candidate as
-operation-owned evidence and end the attempt as Needs surface repair. Do not
-publish new geometry under an old scene's incompatible surface bindings. Do not
-mutate or save affected authoring documents to unblock publication. Release the
-project writer and native/read ownership after drain; waiting for a user repair
-must not hold the shared coordinator indefinitely. Unrelated scenes and later
-unrelated cooks continue against the previous valid generation.
-
-After explicit repair and Save, start a new owned cook of the affected source
-and dependent scene closure. Revalidate source/settings/layout baselines and the
-latest published root before reusing candidate work; never install a stale
-whole-root staging copy after another operation has published. Commit source
-surface provenance, changed geometry and compatible scene descriptors atomically
-under section 16. Cancel/failure/rollback restores the previous complete
-generation and identity provenance. Read-only external consumers that cannot be
-repaired are reported with their owning source; do not rewrite a library
-silently.
-
-Repair-needed scenes cannot pass development parity or report current runtime
-assignment. Their last valid published preview may remain visible with explicit
-stale/pending status. Transient geometry/material loading is a different
-condition and retains generation-checked recovery without demanding structural
-repair.
+A kept change never blocks anything. Changed geometry publishes with its new
+inventory; scenes that reference it keep their source unchanged. Their next
+cook reports each kept change as a warning
+(`scene.descriptor.surface_invalid`, Warning) and leaves it out of the cooked
+override table, so the runtime shows the geometry's default for that surface.
+A later reimport that proves the surface again makes the change apply again
+without any edit. Malformed overrides (a nil or duplicate SurfaceId, an unknown
+property) remain cook errors: they are invalid source, not lost continuity.
 
 ### 20.4 Required surface regressions
 
@@ -1411,11 +1392,10 @@ repair.
   derived-cache deletion and material/texture-only edits retain established
   SurfaceIds.
 - Proven durable-ID changes retain correct assignments through surface
-  reordering; unproven structural changes/removal produce repair state without
-  guessed remaps.
-- A failed/abandoned repair attempt does not block unrelated work or publish an
-  incompatible preserved scene. Repaired joint publication and rollback retain
-  source identity/provenance and all unaffected assets.
+  reordering; unproven structural changes/removal produce kept changes without
+  guessed remaps, and the scene still cooks with a warning.
+- Geometry publication with kept changes in consuming scenes succeeds; rollback
+  retains source identity/provenance and all unaffected assets.
 
 ### 20.5 Surface defaults and the default LOD policy
 

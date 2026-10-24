@@ -1,0 +1,225 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="900" viewBox="0 0 1440 900" font-family="Segoe UI Variable, Segoe UI, sans-serif" font-size="13">
+  <title>Model Editor in the project workspace (dark theme)</title>
+  <desc>The project workspace with the Car.glb model document active beside the Harbor scene tab. The layout is the scene editor's: document area on the left, Scene Explorer and Properties docked on the right, Content Explorer and its sibling panes docked below. The model document has the scene editor's toolbar with Save, Reimport, Add to scene, Browse to asset, the import status with its problem count, and Settings. Its viewport uses the viewing profile: view camera, view mode, Show and Frame stay, and the editing tools, snapping, layout and maximize controls are gone. The import settings panel sits right of the viewport: the Source group's Scene setting, shown because Car.glb holds two glTF scenes, set to Day over the default Night; Units and axes with the detected file facts and Units overridden to Custom; the other groups collapsed; and the selected mesh's geometry defaults. The Scene Explorer shows the car's nodes read-only with Body selected; Properties shows Body read-only with "in Car.glb (model)".</desc>
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2f4f8f"/><stop offset="1" stop-color="#8a8fc6"/>
+    </linearGradient>
+    <linearGradient id="ground" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#6e6aa8"/><stop offset="1" stop-color="#3d3a72"/>
+    </linearGradient>
+  </defs>
+  <rect width="1440" height="900" fill="#1c1c1c"/>
+
+  <!-- Title bar with document tabs -->
+  <rect x="0" y="0" width="1440" height="44" fill="#1f1f1f"/>
+  <circle cx="26" cy="22" r="14" fill="none" stroke="#4cc2ff" stroke-width="2"/>
+  <text x="60" y="28" fill="#9e9e9e">Harbor</text>
+  <rect x="116" y="8" width="112" height="36" rx="6" fill="#2b2b2b"/>
+  <text x="130" y="31" fill="#ffffff">Car.glb</text>
+  <circle cx="186" cy="26" r="3" fill="#c5c5c5"><title>Unsaved import settings</title></circle>
+  <text x="206" y="31" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="10" fill="#c5c5c5">&#xE711;</text>
+  <g font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="13" fill="#c5c5c5">
+    <text x="1300" y="28">&#xE713;</text><text x="1340" y="28">&#xE921;</text><text x="1374" y="28">&#xE922;</text><text x="1408" y="28">&#xE8BB;</text>
+  </g>
+
+  <!-- Document toolbar -->
+  <rect x="0" y="44" width="930" height="46" fill="#202020"/>
+  <g font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="17" fill="#ffffff">
+    <text x="16" y="74">&#xE105;</text>
+    <text x="50" y="74" fill="#5d5d5d">&#xE895;</text>
+  </g>
+  <line x1="82" y1="54" x2="82" y2="80" stroke="#3a3a3a"/>
+  <rect x="92" y="52" width="122" height="30" rx="4" fill="#2b2b2b"/>
+  <text x="102" y="73" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#ffffff">&#xE710;</text>
+  <text x="122" y="72" fill="#ffffff">Add to scene</text>
+  <text x="228" y="74" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="17" fill="#ffffff">&#xE8B7;</text>
+  <line x1="260" y1="54" x2="260" y2="80" stroke="#3a3a3a"/>
+  <rect x="270" y="52" width="250" height="30" rx="4" fill="#262626"/>
+  <circle cx="284" cy="67" r="4" fill="#6ccb5f"/>
+  <text x="296" y="72" fill="#c5c5c5">Imported</text>
+  <text x="356" y="72" fill="#5d5d5d">·</text>
+  <text x="368" y="72" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="12" fill="#fce100">&#xE7BA;</text>
+  <text x="386" y="72" fill="#78c9e8">3 problems</text>
+  <text x="900" y="74" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="17" fill="#ffffff">&#xE713;</text>
+
+  <!-- Viewport -->
+  <rect x="4" y="92" width="640" height="460" fill="url(#sky)" stroke="#4cc2ff" stroke-width="2"/>
+  <rect x="5" y="330" width="638" height="221" fill="url(#ground)"/>
+  <!-- banner -->
+  <rect x="5" y="93" width="638" height="30" fill="#3a3220" opacity="0.95"/>
+  <text x="16" y="113" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="13" fill="#fce100">&#xE7BA;</text>
+  <text x="38" y="113" fill="#ffffff">Showing the last import. Save to reimport with your settings.</text>
+  <text x="634" y="113" text-anchor="end" fill="#78c9e8">Save</text>
+  <!-- top-left overlay: view camera, view mode, show -->
+  <g>
+    <rect x="14" y="132" width="122" height="30" rx="4" fill="#202020" opacity="0.9" stroke="#3a3a3a"/>
+    <text x="24" y="152" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="13" fill="#ffffff">&#xE714;</text>
+    <text x="44" y="152" fill="#ffffff">Turntable</text>
+    <text x="118" y="151" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="9" fill="#c5c5c5">&#xE70D;</text>
+    <rect x="142" y="132" width="76" height="30" rx="4" fill="#202020" opacity="0.9" stroke="#3a3a3a"/>
+    <text x="152" y="152" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="13" fill="#ffffff">&#xE706;</text>
+    <text x="172" y="152" fill="#ffffff">Lit</text>
+    <text x="200" y="151" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="9" fill="#c5c5c5">&#xE70D;</text>
+    <rect x="224" y="132" width="86" height="30" rx="4" fill="#202020" opacity="0.9" stroke="#3a3a3a"/>
+    <text x="234" y="152" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="13" fill="#ffffff">&#xE7B3;</text>
+    <text x="254" y="152" fill="#ffffff">Show</text>
+    <text x="292" y="151" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="9" fill="#c5c5c5">&#xE70D;</text>
+  </g>
+  <!-- top-right overlay: viewport settings only -->
+  <rect x="602" y="132" width="32" height="30" rx="4" fill="#202020" opacity="0.9" stroke="#3a3a3a"/>
+  <text x="611" y="152" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="13" fill="#ffffff">&#xE713;</text>
+  <!-- left strip: Frame only -->
+  <rect x="14" y="176" width="32" height="32" rx="4" fill="#202020" opacity="0.9" stroke="#3a3a3a"/>
+  <text x="23" y="197" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="13" fill="#ffffff">&#xE71E;</text>
+  <!-- car -->
+  <path d="M190 400 L232 340 L320 316 L460 316 L540 350 L596 368 L604 410 L190 414 Z" fill="#9b2f2f" stroke="#ffb347" stroke-width="2.5"/>
+  <path d="M256 342 L320 322 L398 322 L398 360 L246 362 Z" fill="#7aa3c4" opacity="0.85"/>
+  <path d="M408 322 L458 322 L514 356 L408 360 Z" fill="#7aa3c4" opacity="0.85"/>
+  <circle cx="270" cy="416" r="30" fill="#1d1d1d" stroke="#555" stroke-width="3"/>
+  <circle cx="530" cy="416" r="30" fill="#1d1d1d" stroke="#555" stroke-width="3"/>
+  <rect x="586" y="374" width="16" height="10" rx="3" fill="#fff5c0"/>
+  <!-- axis -->
+  <text x="22" y="510" font-size="12" fill="#3b82f6">Z</text><text x="14" y="530" font-size="12" fill="#22c55e">Y</text><text x="40" y="530" font-size="12" fill="#ef4444">X</text>
+  <!-- bottom strips -->
+  <rect x="14" y="518" width="360" height="26" rx="4" fill="#202020" opacity="0.92" stroke="#3a3a3a"/>
+  <text x="24" y="535" font-size="11" font-weight="600" fill="#ffffff">Turntable</text>
+  <text x="84" y="535" font-size="11" fill="#c5c5c5">Alt+drag orbit · middle-drag pan · wheel zoom · F frame</text>
+  <rect x="440" y="518" width="194" height="26" rx="4" fill="#202020" opacity="0.92" stroke="#3a3a3a"/>
+  <text x="450" y="535" font-size="11" font-family="Cascadia Mono, Consolas, monospace" fill="#c5c5c5">120 fps · 3.9 ms · 14 nodes</text>
+
+  <!-- Import settings panel (in the document) -->
+  <rect x="648" y="92" width="282" height="460" fill="#252525"/>
+  <line x1="646" y1="92" x2="646" y2="552" stroke="#3a3a3a" stroke-width="3"/>
+  <text x="660" y="116" font-weight="600" fill="#ffffff">Import settings</text>
+  <text x="910" y="116" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="11" fill="#c5c5c5">&#xE89F;</text>
+  <g font-size="12">
+    <text x="660" y="146" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="9" fill="#c5c5c5">&#xE70D;</text>
+    <text x="676" y="147" font-weight="600" fill="#ffffff">Source</text>
+    <rect x="650" y="156" width="3" height="24" fill="#4cc2ff"/>
+    <text x="676" y="173" fill="#9e9e9e">Scene</text>
+    <rect x="770" y="157" width="122" height="22" rx="4" fill="#2b2b2b" stroke="#454545"/><text x="778" y="173" fill="#ffffff">Day</text>
+    <text x="878" y="172" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="9" fill="#c5c5c5">&#xE70D;</text>
+    <text x="902" y="173" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="12" fill="#c5c5c5">&#xE777;<title>Reset to the default scene, Night</title></text>
+
+    <text x="660" y="200" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="9" fill="#c5c5c5">&#xE70D;</text>
+    <text x="676" y="201" font-weight="600" fill="#ffffff">Units and axes</text>
+    <text x="676" y="227" fill="#9e9e9e">File</text>
+    <text x="770" y="227" fill="#c5c5c5">metres · +Y up (glTF)</text>
+    <rect x="650" y="236" width="3" height="24" fill="#4cc2ff"/>
+    <text x="676" y="253" fill="#9e9e9e">Units</text>
+    <rect x="770" y="237" width="122" height="22" rx="4" fill="#2b2b2b" stroke="#454545"/><text x="778" y="253" fill="#ffffff">Custom</text>
+    <text x="902" y="253" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="12" fill="#c5c5c5">&#xE777;</text>
+    <rect x="650" y="264" width="3" height="24" fill="#4cc2ff"/>
+    <text x="676" y="281" fill="#9e9e9e">Scale</text>
+    <rect x="770" y="265" width="122" height="22" rx="4" fill="#2b2b2b" stroke="#454545"/><text x="778" y="281" fill="#ffffff">0.01</text>
+    <text x="902" y="281" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="12" fill="#c5c5c5">&#xE777;</text>
+
+    <g font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="9" fill="#c5c5c5">
+      <text x="660" y="314">&#xE76C;</text><text x="660" y="338">&#xE76C;</text><text x="660" y="362">&#xE76C;</text>
+      <text x="660" y="386">&#xE76C;</text><text x="660" y="410">&#xE76C;</text><text x="660" y="434">&#xE76C;</text>
+    </g>
+    <text x="676" y="315" font-weight="600" fill="#ffffff">Geometry</text>
+    <text x="676" y="339" font-weight="600" fill="#ffffff">Hierarchy</text>
+    <text x="676" y="363" font-weight="600" fill="#ffffff">Node continuity</text>
+    <text x="676" y="387" font-weight="600" fill="#ffffff">Materials</text>
+    <text x="676" y="411" font-weight="600" fill="#ffffff">Textures</text>
+    <text x="770" y="411" fill="#9e9e9e">Source size · Default quality</text>
+    <text x="676" y="435" font-weight="600" fill="#ffffff">Lights and cameras</text>
+
+    <line x1="656" y1="448" x2="922" y2="448" stroke="#3a3a3a"/>
+    <text x="660" y="470" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="9" fill="#c5c5c5">&#xE70D;</text>
+    <text x="676" y="471" font-weight="600" fill="#ffffff">Selected mesh: Body</text>
+    <rect x="650" y="480" width="3" height="24" fill="#4cc2ff"/>
+    <text x="676" y="497" fill="#9e9e9e">LOD policy</text>
+    <rect x="770" y="481" width="122" height="22" rx="4" fill="#2b2b2b" stroke="#454545"/><text x="778" y="497" fill="#ffffff">Distance</text>
+    <text x="902" y="497" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="12" fill="#c5c5c5">&#xE777;</text>
+    <text x="676" y="525" fill="#c5c5c5">Paint</text><text x="770" y="525" fill="#9e9e9e">Visible · Casts shadows</text>
+    <rect x="650" y="532" width="3" height="20" fill="#4cc2ff"/>
+    <text x="676" y="547" fill="#c5c5c5">Glass</text><text x="770" y="547" fill="#ffffff">Visible · No shadows</text>
+  </g>
+
+  <!-- Bottom docked panes (unchanged) -->
+  <rect x="0" y="560" width="930" height="340" fill="#202020"/>
+  <line x1="0" y1="560" x2="930" y2="560" stroke="#3a3a3a"/>
+  <g font-size="12">
+    <text x="12" y="582" fill="#ffffff">Content Explorer</text><rect x="8" y="588" width="112" height="2" fill="#4cc2ff"/>
+    <text x="134" y="582" fill="#c5c5c5">Output</text><text x="190" y="582" fill="#c5c5c5">Cooking</text><text x="254" y="582" fill="#c5c5c5">Problems</text><text x="322" y="582" fill="#c5c5c5">Cooked Inspector</text>
+  </g>
+  <text x="20" y="622" fill="#c5c5c5">Content › Vehicles</text>
+  <rect x="220" y="640" width="150" height="170" rx="6" fill="#2b2b2b" stroke="#4cc2ff" stroke-width="2"/>
+  <text x="280" y="720" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="36" fill="#c5c5c5">&#xF158;</text>
+  <text x="232" y="776" font-weight="600" fill="#ffffff">Car.glb</text>
+  <text x="232" y="796" font-size="12" fill="#c5c5c5">Model · open in tab</text>
+
+  <!-- Scene Explorer (docked, unchanged position) -->
+  <rect x="934" y="44" width="506" height="410" fill="#202020"/>
+  <line x1="932" y1="44" x2="932" y2="900" stroke="#3a3a3a" stroke-width="3"/>
+  <text x="946" y="66" font-size="12" fill="#ffffff">Scene Explorer</text><rect x="942" y="72" width="106" height="2" fill="#4cc2ff"/>
+  <rect x="942" y="82" width="490" height="30" rx="4" fill="#2d2d2d" stroke="#3a3a3a"/><text x="952" y="102" fill="#9a9a9a">Find an object...</text>
+  <rect x="942" y="118" width="160" height="26" rx="4" fill="#33424d"/><text x="1000" y="135" font-size="12" fill="#ffffff">Meshes</text>
+  <rect x="1107" y="118" width="160" height="26" rx="4" fill="#33424d"/><text x="1168" y="135" font-size="12" fill="#ffffff">Lights</text>
+  <rect x="1272" y="118" width="160" height="26" rx="4" fill="#33424d"/><text x="1326" y="135" font-size="12" fill="#ffffff">Cameras</text>
+  <g>
+    <text x="950" y="172" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="10" fill="#c5c5c5">&#xE70D;</text>
+    <text x="968" y="173" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="15" fill="#ffffff">&#xF158;</text>
+    <text x="992" y="172" fill="#ffffff">Car.glb</text><text x="1050" y="172" font-size="11" fill="#9a9a9a">model · read-only</text>
+    <text x="972" y="200" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="10" fill="#c5c5c5">&#xE70D;</text>
+    <rect x="938" y="184" width="494" height="26" rx="4" fill="#2f4a5c"/>
+    <text x="990" y="201" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="15" fill="#e0e0e0">&#xF158;</text>
+    <text x="1014" y="200" fill="#e0e0e0">Body</text>
+    <g fill="#c5c5c5">
+      <text x="1012" y="229" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="15" fill="#9a9a9a">&#xF158;</text><text x="1036" y="228">Door_FL</text>
+      <text x="1012" y="255" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="15" fill="#9a9a9a">&#xF158;</text><text x="1036" y="254">Door_FR</text>
+      <text x="1012" y="281" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="15" fill="#9a9a9a">&#xF158;</text><text x="1036" y="280">Door_RL</text>
+      <text x="1012" y="307" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="15" fill="#9a9a9a">&#xF158;</text><text x="1036" y="306">Door_RR</text>
+      <text x="990" y="333" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="15" fill="#9a9a9a">&#xE706;</text><text x="1014" y="332">Headlight_L</text>
+      <text x="990" y="359" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="15" fill="#9a9a9a">&#xE706;</text><text x="1014" y="358">Headlight_R</text>
+      <text x="990" y="385" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="15" fill="#9a9a9a">&#xF158;</text><text x="1014" y="384">Wheel_FL</text>
+    </g>
+  </g>
+  <g font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="16" fill="#5d5d5d">
+    <text x="1210" y="436">&#xE710;</text><text x="1244" y="436">&#xE8B7;</text><text x="1286" y="436">&#xE8AC;</text><text x="1320" y="436">&#xE8C6;</text><text x="1354" y="436">&#xE8C8;</text><text x="1388" y="436">&#xE77F;</text><text x="1418" y="436">&#xE74D;</text>
+  </g>
+
+  <!-- Properties (docked, unchanged position) -->
+  <rect x="934" y="458" width="506" height="442" fill="#202020"/>
+  <line x1="934" y1="456" x2="1440" y2="456" stroke="#3a3a3a" stroke-width="3"/>
+  <text x="946" y="480" font-size="12" fill="#ffffff">Properties</text><rect x="942" y="486" width="76" height="2" fill="#4cc2ff"/>
+  <rect x="938" y="496" width="498" height="44" fill="#2a2a2a"/>
+  <text x="952" y="524" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="16" fill="#ffffff">&#xF158;</text>
+  <text x="978" y="523" font-weight="600" fill="#ffffff">Body</text>
+  <text x="1018" y="523" font-size="12" fill="#c5c5c5">in Car.glb (model) · read-only</text>
+  <g font-size="12">
+    <text x="952" y="568" font-weight="600" fill="#ffffff">Transform</text>
+    <text x="952" y="592" fill="#9e9e9e">Position</text><text x="1060" y="592" fill="#c5c5c5">0    0.42    0</text>
+    <text x="952" y="614" fill="#9e9e9e">Rotation</text><text x="1060" y="614" fill="#c5c5c5">0    0    0</text>
+    <text x="952" y="636" fill="#9e9e9e">Scale</text><text x="1060" y="636" fill="#c5c5c5">1    1    1</text>
+    <text x="952" y="672" font-weight="600" fill="#ffffff">Geometry</text>
+    <text x="952" y="696" fill="#9e9e9e">Mesh</text><text x="1060" y="696" fill="#78c9e8">Body.ogeo</text>
+    <text x="952" y="718" fill="#9e9e9e">Level of detail</text><text x="1060" y="718" fill="#c5c5c5">4 LODs · Distance, from the asset</text>
+    <text x="952" y="740" fill="#9e9e9e">Surfaces</text><text x="1060" y="740" fill="#c5c5c5">Paint · Glass · Chrome</text>
+    <text x="952" y="776" font-weight="600" fill="#ffffff">Rendering</text>
+    <text x="952" y="800" fill="#9e9e9e">Visibility</text><text x="1060" y="800" fill="#c5c5c5">Inherit (Shown)</text>
+  </g>
+
+  <!-- Annotations -->
+  <g font-size="11" fill="#e0e0e0">
+    <rect x="400" y="596" width="520" height="300" rx="6" fill="#161616" stroke="#4a4a4a"/>
+    <text x="412" y="616" font-weight="600" fill="#ffffff">What the mockup shows</text>
+    <text x="412" y="638">1. Tabs: Car.glb opens beside the Harbor scene tab; no pane moves or resizes (ME-3).</text>
+    <text x="412" y="658">2. Toolbar: the scene editor's ToolBar. Save (Ctrl+S) saves and reimports; Reimport is</text>
+    <text x="424" y="674">disabled while the source is unchanged; Add to scene; Browse to asset (Ctrl+B); the</text>
+    <text x="424" y="690">import status and problem count where the Play status sits; Settings (ME-8).</text>
+    <text x="412" y="710">3. Viewport, viewing profile: view camera, view mode, Show, Frame and the status strips</text>
+    <text x="424" y="726">stay; the tool strip, transform space, snapping, layout and Maximize are hidden (ME-9).</text>
+    <text x="412" y="746">4. Import settings: a panel of the document, beside the viewport. Set values carry the</text>
+    <text x="424" y="762">override bar and reset; the Selected mesh group follows the selection (ME-5).</text>
+    <text x="424" y="778">Source shows Scene only for a glTF file with several scenes (M11).</text>
+    <text x="412" y="798">5. Scene Explorer: the car's nodes, read-only; its foot buttons are disabled.</text>
+    <text x="412" y="818">6. Properties: the selected node, read-only, "in Car.glb (model)".</text>
+    <text x="412" y="838">7. Bottom panes unchanged; the Problems tab lists the import's problems when the</text>
+    <text x="424" y="854">status link is clicked.</text>
+    <text x="412" y="874">8. Activating Harbor shows the scene again; loaded assets stay loaded (ME-2).</text>
+  </g>
+</svg>

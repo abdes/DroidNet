@@ -1,0 +1,152 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="920" height="620" viewBox="0 0 920 620" font-family="Segoe UI Variable, Segoe UI, sans-serif" font-size="13">
+  <title>Scene Explorer with a car model instance and a watchtower scene instance (dark theme)</title>
+  <desc>The Scene Explorer of the Harbor scene. Car3 is an instance root of the Car.glb model: its row has the instance glyph and a caution glyph because the scene keeps two changes whose nodes are gone. Under it, the model's nodes are listed read-only in secondary text; Door_FL is selected and, like Door_FR, carries the override bar because the scene changes it. Tower2 is an instance of the authored Watchtower scene. The context menu of Door_FL offers Select instance, Frame selected, Reset changes and Unpack on the instance, while Rename, Delete and New child node are disabled with a tooltip naming the model. Annotations on the right explain each element.</desc>
+  <rect width="920" height="620" fill="#1c1c1c"/>
+
+  <!-- Pane -->
+  <rect x="16" y="16" width="380" height="590" fill="#202020" stroke="#2f2f2f"/>
+  <rect x="16" y="16" width="380" height="30" fill="#1b1b1b"/>
+  <text x="26" y="36" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="12" fill="#c5c5c5">&#xE8FD;</text>
+  <text x="44" y="35" font-size="12" fill="#ffffff">Scene Explorer</text>
+  <rect x="16" y="44" width="130" height="2" fill="#4cc2ff"/>
+
+  <!-- Search -->
+  <rect x="24" y="56" width="364" height="32" rx="4" fill="#2d2d2d" stroke="#3a3a3a"/>
+  <text x="34" y="77" fill="#9a9a9a">Find an object...</text>
+  <text x="366" y="77" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="13" fill="#c5c5c5">&#xE721;</text>
+
+  <!-- Category filters -->
+  <rect x="24" y="96" width="118" height="28" rx="4" fill="#33424d"/>
+  <text x="62" y="114" font-size="11" fill="#ffffff">Meshes</text>
+  <rect x="147" y="96" width="118" height="28" rx="4" fill="#33424d"/>
+  <text x="187" y="114" font-size="11" fill="#ffffff">Lights</text>
+  <rect x="270" y="96" width="118" height="28" rx="4" fill="#33424d"/>
+  <text x="304" y="114" font-size="11" fill="#ffffff">Cameras</text>
+
+  <!-- Tree rows: 30 px each, indent 20 px per level -->
+  <!-- Scene -->
+  <text x="30" y="155" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="10" fill="#c5c5c5">&#xE70D;</text>
+  <text x="46" y="156" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="15" fill="#ffffff">&#xE80F;</text>
+  <text x="70" y="155" fill="#ffffff">Harbor</text>
+
+  <!-- Floor -->
+  <text x="70" y="186" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="15" fill="#ffffff">&#xF158;</text>
+  <text x="94" y="185" fill="#ffffff">Quay</text>
+  <text x="330" y="185" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="13" fill="#8a8a8a">&#xE7B3;</text>
+  <text x="362" y="185" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="13" fill="#8a8a8a">&#xE785;</text>
+
+  <!-- Car3 instance root -->
+  <text x="50" y="215" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="10" fill="#c5c5c5">&#xE70D;</text>
+  <text x="70" y="216" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="15" fill="#ffffff">&#xF158;</text>
+  <text x="80" y="221" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="9" fill="#4cc2ff">&#xE71B;</text>
+  <text x="94" y="215" fill="#ffffff">Car3</text>
+  <text x="160" y="215" font-size="11" fill="#9a9a9a">Car.glb</text>
+  <text x="300" y="215" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="13" fill="#fce100">&#xE7BA;</text>
+  <text x="330" y="215" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="13" fill="#8a8a8a">&#xE7B3;</text>
+  <text x="362" y="215" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="13" fill="#8a8a8a">&#xE785;</text>
+
+  <!-- Body (instanced node) -->
+  <text x="70" y="245" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="10" fill="#c5c5c5">&#xE70D;</text>
+  <text x="90" y="246" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="15" fill="#9a9a9a">&#xF158;</text>
+  <text x="114" y="245" fill="#c5c5c5">Body</text>
+  <text x="330" y="245" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="13" fill="#8a8a8a">&#xE7B3;</text>
+  <text x="362" y="245" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="13" fill="#5d5d5d">&#xE785;</text>
+
+  <!-- Door_FL (instanced, changed, selected) -->
+  <rect x="20" y="256" width="372" height="28" rx="4" fill="#2f4a5c"/>
+  <rect x="20" y="258" width="3" height="24" fill="#4cc2ff"/>
+  <text x="110" y="276" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="15" fill="#c5c5c5">&#xF158;</text>
+  <text x="134" y="275" fill="#e0e0e0">Door_FL</text>
+  <text x="330" y="275" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="13" fill="#c5c5c5">&#xE7B3;</text>
+  <text x="362" y="275" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="13" fill="#5d5d5d">&#xE785;</text>
+
+  <!-- Door_FR (instanced, changed) -->
+  <rect x="20" y="288" width="3" height="24" fill="#4cc2ff"/>
+  <text x="110" y="306" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="15" fill="#9a9a9a">&#xF158;</text>
+  <text x="134" y="305" fill="#c5c5c5">Door_FR</text>
+  <text x="330" y="305" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="13" fill="#8a8a8a">&#xE7B3;</text>
+  <text x="362" y="305" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="13" fill="#5d5d5d">&#xE785;</text>
+
+  <!-- Door_RL, Door_RR -->
+  <text x="110" y="336" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="15" fill="#9a9a9a">&#xF158;</text>
+  <text x="134" y="335" fill="#c5c5c5">Door_RL</text>
+  <text x="330" y="335" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="13" fill="#8a8a8a">&#xE7B3;</text>
+  <text x="362" y="335" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="13" fill="#5d5d5d">&#xE785;</text>
+  <text x="110" y="366" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="15" fill="#9a9a9a">&#xF158;</text>
+  <text x="134" y="365" fill="#c5c5c5">Door_RR</text>
+  <text x="330" y="365" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="13" fill="#8a8a8a">&#xE7B3;</text>
+  <text x="362" y="365" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="13" fill="#4cc2ff">&#xE72E;</text>
+
+  <!-- Headlight_L (collapsed instanced node) -->
+  <text x="70" y="395" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="10" fill="#c5c5c5">&#xE76C;</text>
+  <text x="90" y="396" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="15" fill="#9a9a9a">&#xE8B7;</text>
+  <text x="114" y="395" fill="#c5c5c5">Headlight_L</text>
+  <text x="330" y="395" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="13" fill="#8a8a8a">&#xE7B3;</text>
+  <text x="362" y="395" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="13" fill="#5d5d5d">&#xE785;</text>
+
+  <!-- Tower2, instance of an authored scene (collapsed) -->
+  <text x="50" y="425" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="10" fill="#c5c5c5">&#xE76C;</text>
+  <text x="70" y="426" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="15" fill="#ffffff">&#xF158;</text>
+  <text x="80" y="431" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="9" fill="#4cc2ff">&#xE71B;</text>
+  <text x="94" y="425" fill="#ffffff">Tower2</text>
+  <text x="160" y="425" font-size="11" fill="#9a9a9a">Watchtower.oscene</text>
+  <text x="330" y="425" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="13" fill="#8a8a8a">&#xE7B3;</text>
+  <text x="362" y="425" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="13" fill="#8a8a8a">&#xE785;</text>
+
+  <!-- Sun -->
+  <text x="70" y="456" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="15" fill="#ffffff">&#xE706;</text>
+  <text x="94" y="455" fill="#ffffff">Sun</text>
+  <text x="330" y="455" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="13" fill="#8a8a8a">&#xE7B3;</text>
+  <text x="362" y="455" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="13" fill="#8a8a8a">&#xE785;</text>
+
+  <!-- Context menu on Door_FL -->
+  <rect x="190" y="282" width="196" height="292" rx="8" fill="#2c2c2c" stroke="#454545"/>
+  <text x="206" y="306" fill="#ffffff">Select instance</text>
+  <text x="206" y="334" fill="#ffffff">Frame selected</text>
+  <text x="206" y="362" fill="#ffffff">Copy</text>
+  <text x="206" y="390" fill="#ffffff">Reset changes</text>
+  <text x="206" y="418" fill="#5d5d5d">Apply to source</text>
+  <text x="370" y="418" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="10" fill="#5d5d5d">&#xE76C;</text>
+  <line x1="198" y1="430" x2="378" y2="430" stroke="#454545"/>
+  <text x="206" y="452" fill="#ffffff">Unpack Car3</text>
+  <text x="206" y="480" fill="#ffffff">Unpack Car3 completely</text>
+  <line x1="198" y1="492" x2="378" y2="492" stroke="#454545"/>
+  <text x="206" y="514" fill="#5d5d5d">Rename</text>
+  <text x="206" y="538" fill="#5d5d5d">Delete</text>
+  <text x="206" y="562" fill="#5d5d5d">New child node</text>
+
+  <!-- Tooltip on the disabled entries -->
+  <rect x="24" y="580" width="364" height="18" rx="4" fill="#2c2c2c" stroke="#454545"/>
+  <text x="32" y="593" font-size="11" fill="#e0e0e0">'Door_FL' comes from Car.glb. Unpack Car3 to change its structure.</text>
+
+  <!-- Annotations -->
+  <g font-size="12" fill="#c5c5c5">
+    <line x1="398" y1="214" x2="420" y2="214" stroke="#6a6a6a"/>
+    <text x="428" y="210">Instance root: an owned node with the link badge</text>
+    <text x="428" y="226">and its source's file name in secondary text.</text>
+    <text x="428" y="242" fill="#fce100">Caution glyph: kept changes (nodes gone on reimport).</text>
+
+    <line x1="398" y1="244" x2="420" y2="262" stroke="#6a6a6a"/>
+    <text x="428" y="268">Instanced nodes: secondary text and glyphs, lazily</text>
+    <text x="428" y="284">expanded: dimmed, the scene does not own them.</text>
+
+    <line x1="398" y1="300" x2="420" y2="304" stroke="#6a6a6a"/>
+    <text x="428" y="302">Override bar (3 px accent, as in the inspector):</text>
+    <text x="428" y="318">this scene changes a value of that node.</text>
+
+    <text x="428" y="350">Menu on an instanced node: selection, framing and</text>
+    <text x="428" y="366">change commands; Apply to source is disabled for a</text>
+    <text x="428" y="382">model (enabled on authored layers, per layer).</text>
+    <text x="428" y="398">Unpack acts on the outermost instance root.</text>
+
+    <text x="428" y="430">Eye and Lock keep their slots: Door_RR is locked by</text>
+    <text x="428" y="446">the user too. Refused commands stay, disabled.</text>
+
+    <line x1="398" y1="424" x2="420" y2="476" stroke="#6a6a6a"/>
+    <text x="428" y="482">Authored scene instance: the same row, its source</text>
+    <text x="428" y="498">is a .oscene; nested instances expand alike.</text>
+
+    <text x="428" y="530">Order and names are the source's, duplicate</text>
+    <text x="428" y="546">names included; nothing is sorted or renamed.</text>
+  </g>
+</svg>

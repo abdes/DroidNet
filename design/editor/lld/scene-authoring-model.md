@@ -51,7 +51,7 @@ Scene: Id, Name, ordered RootNodes, Environment
     Optional, zero or one each:
       GeometryComponent     asset URI, overrides      (engine RenderableComponent)
       CameraComponent, LightComponent, ScriptingComponent
-      ModelInstanceComponent  model scene URI, overrides (engine scene instance)
+      SceneInstanceComponent  model or scene URI, changes (engine scene instance)
   ExplorerLayout (editor layout, never native nodes)
 ```
 
@@ -125,7 +125,7 @@ The node flags are properties of the node's `NodeFlagsComponent` (section 3)
 and the only carriers of node visibility and shadow participation; no surface
 value or renderable record repeats them. Every node has them, including group
 nodes without geometry or light, whose values their Inherit children take. A
-template node's flags come from its model and may be overridden like any other
+instanced node's flags come from its source and may be overridden like any other
 property (section 5.2). Each flag preserves its source mode independently of
 its resolved value.
 
@@ -200,11 +200,11 @@ piece of a component defined by its asset, with a stable ID that asset owns. A
 property's address is node ID, component type, part ID when it has one, and
 property key.
 
-| Owner of the value             | Part ID     | ID owner                       | Value when not changed       |
-| ------------------------------ | ----------- | ------------------------------ | ---------------------------- |
-| A component of an owned node   | -           | The scene that authors it      | Its stored value             |
-| A surface of a geometry        | `SurfaceId` | The geometry asset             | The geometry asset's default |
-| A component of a template node | -           | The model scene (model import) | The model scene's value      |
+| Owner of the value               | Part ID     | ID owner                                         | Value when not changed       |
+| -------------------------------- | ----------- | ------------------------------------------------ | ---------------------------- |
+| A component of an owned node     | -           | The scene that authors it                        | Its stored value             |
+| A surface of a geometry          | `SurfaceId` | The geometry asset                               | The geometry asset's default |
+| A component of an instanced node | -           | Its source (an authored scene or a model import) | The source's value           |
 
 The schema states, per property, which **sources** may supply it. A property
 with no source stores its value. A property with a source stores only what this
@@ -213,34 +213,43 @@ There are two sources:
 
 - **Asset**: a geometry asset supplies the defaults of its surfaces and of the
   geometry component's LOD policy to every node that references it.
-- **Model template**: a node with a `ModelInstanceComponent` instances a model
-  scene (engine `kModelScene`, `SceneInstanceRecord`) and brings in its
-  hierarchy as template nodes. They are nodes with components like any other;
-  they follow the model on reimport, the instancing scene stores only its
-  overrides of the properties the schema marks overridable, and a template
-  node's geometry keeps its asset as the next source.
+- **Instance**: a node with a `SceneInstanceComponent` instances a model or an
+  authored scene (engine `SceneInstanceRecord`) and brings in its hierarchy as
+  instanced nodes. They are nodes with components like any other; they follow
+  their source on reimport, the instance root stores only its changes of any
+  property of their components (every schema property and every script
+  parameter), and an instanced node's
+  geometry keeps its asset as the next source. An instance source exists only
+  on instanced nodes: the same properties of an owned node store their values.
+  Instances, nesting, swap, Unpack and Apply to source are specified in
+  [scene instances](scene-instances.md).
 
 Overrides are stored by the component that brings in the source: a
 `GeometryComponent` stores the overrides of its asset-sourced properties, and a
-`ModelInstanceComponent` stores the overrides of its template nodes. An
-override's address is relative to that component: a surface ID, or a template
-node's source ID followed by component type and, when there is one, part ID.
+`SceneInstanceComponent` stores the overrides of its instanced nodes, however
+deep. An override's address is relative to that component: a surface ID, or a
+instanced node's node path (its source-owned node ID per nesting level, shallowest
+first) followed by component type and, when there is one, part ID.
 Surface addresses carry the geometry's witnessed layout revision.
 
 The authored value of a property is the first present of: this scene's
-override, the model template's value, the asset default, the schema default.
+override, each deeper nesting level's override, the source's
+value, the asset default, the schema default.
 Node flags keep **Inherit** as a value of their own: an override can set Inherit
-over a template's Hidden, so Inherit is never represented by an absent key.
+over a source's Hidden, so Inherit is never represented by an absent key.
 After this authored resolution the engine applies hierarchy inheritance
 (section 4). Reset on a property removes its override and shows the source's
 value; it never writes the source's value as an override.
 
 Overrides are retained across geometry replacement and reimport for the same
 part IDs. A part whose ID is no longer proven (a surface or source node lost on
-reimport) keeps its override as unresolved; it blocks only the affected cook
-until the author repairs or removes it, as material assignments do today.
-Model import therefore gives template nodes provenance-backed stable IDs, under
-the same rules as surface IDs ([content-pipeline.md](content-pipeline.md)).
+reimport) keeps its override as a **kept change**: stored, listed and
+removable, inert in the cook and the runtime, and active again if the part
+returns. It never blocks a cook or a publication; the cooker reports it as a
+warning. Model import therefore gives instanced nodes stable IDs, derived from
+each node's name path and the model's source identity as surface IDs are
+([content-pipeline.md](content-pipeline.md)), and an authored scene's nodes keep
+their editor `NodeId` as their cooked ID.
 
 ### 5.3 The scene property schema
 
@@ -407,9 +416,9 @@ component property, not an override.
 Material assignment affects one instance/surface only. Reset removes the
 Material override and uses the source's material. Engine Default is a separate
 explicit assignment. No surface/topology creation or deletion is offered.
-Reimport preserves proven continuity; an unproven mapping retains the
-unresolved override/old context and blocks only affected scene
-cook/qualification until explicit repair or clear. The detailed contract is
+Reimport preserves proven continuity; an unproven mapping keeps the override
+and its old context as a kept change (section 5.2), which never blocks a cook,
+until the author reassigns or removes it. The detailed contract is
 owned by [content-pipeline.md](content-pipeline.md).
 
 ### 5.6 Primitives
@@ -429,7 +438,7 @@ submesh binding of that surface. The schema is the only declaration of what a
 component, a part and an override can hold.
 
 **Schema.** A component may declare `parts`, each with a PascalCase name, a
-kind and its properties. A property may declare `sources` (`asset`, `model`):
+kind and its properties. A property may declare `sources` (`asset`, `instance`):
 the property is then stored as a sparse override and declares an
 `override_id`. A part property declares at least one source and has no
 `fields`; overrides reach the engine through the override table and command,
@@ -445,8 +454,9 @@ the cook and Live Preview address properties without a dependency on the
 editor's schema services. The generated `SceneSchema` belongs to
 `Oxygen.Editor.World`, next to the enumerations its ids are typed with. A part
 property is `SceneSchema.Geometry.Surface.Material`, typed
-`PropertyId<AssetPath>`. `SceneSchema.Overridable` maps every property with a
-source to its value type; nothing else may be overridden.
+`PropertyId<AssetPath>`. `SceneSchema.Overridable` maps every property that may
+be overridden to its value type: on an owned node the properties with an
+`asset` source, on an instanced node every property.
 
 **Values.** An override holds a value of its property's schema type, the CLR
 type of its typed id: `bool`, `int`, `float`, `Vector3`, a mapped enumeration,
@@ -616,7 +626,7 @@ Normal execution keeps no obsolete aliases, fallback readers or dual meanings.
 | Visibility in the renderable record and node flags     | Second carrier; a hidden node's geometry never loads and cannot be shown           |
 | A typed override record per part kind                  | Each new property is hand-written in every layer; drifts from the engine           |
 | A separate system for model instance overrides         | Two override models with two reset and origin rules                                |
-| Inherit stored as an absent override                   | Cannot override a template's local value back to Inherit                           |
+| Inherit stored as an absent override                   | Cannot override a source's local value back to Inherit                             |
 | "Material slot" for a part carrying more than material | The name hides visibility and shadow overrides of the same part                    |
 | Activation through IsActive                            | Confuses runtime presence with authored processing                                 |
 | Mixed/Baked choices without baking                     | Advertises nonfunctional lighting modes                                            |
@@ -654,8 +664,8 @@ entry meaning the asset default, and keeps per-section shadow casting on the
 asset; Oxygen uses the same asset-default/instance-override split, keyed by
 `SurfaceId` instead of slot index, and lets the instance override surface
 visibility and casting as well. Unreal's archetype delta (an instance saves only
-properties that differ from its template, with reset to default) is the model
-for template overrides; Oxygen declares which properties a source may supply in
+properties that differ from its prefab, with reset to default) is the model
+for instance overrides; Oxygen declares which properties a source may supply in
 one schema instead of per class.
 
 ## 11. Qualification
@@ -663,8 +673,8 @@ one schema instead of per class.
 Test identity/cardinality/finite constraints, duplicate names, hierarchy order,
 inherited reparenting, local overrides, all slots and reimport conflicts,
 surface Visibility/Cast Shadows against node flags, asset-default and instance LOD
-policies, retention across geometry replacement, template overrides through
-model reimport, Inherit over a template's local value, reset to each source,
+policies, retention across geometry replacement, instance overrides through
+model reimport, Inherit over a source's local value, reset to each source,
 camera
 Auto/Fixed projection, and new-object defaults against native recipes/system
 defaults. The qualification fixture's overrides do not redefine creation
@@ -688,8 +698,8 @@ envelope; the LLDs below own exact fields, defaults and conversions.
 | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
 | Hierarchy and transforms      | Stable IDs; create/delete/duplicate/rename/reparent; local position/rotation/scale; mixed selection; explicit handling of unrepresentable transforms                                      | This LLD, [property pipeline](property-pipeline.md)                                           |
 | Primitive creation            | Ten native recipes (section 5); SubdividedCube under Advanced                                                                                                                             | [Inspector](property-inspector.md#primitive-recipes), [content pipeline](content-pipeline.md) |
-| Mesh surfaces                 | Per-surface instance override of Material, Visibility and Cast Shadows over asset defaults; Reset restores the source value; stable SurfaceId and explicit repair of lost continuity      | Section 5, [content pipeline](content-pipeline.md), [material editor](material-editor.md)     |
-| Model instances               | A node instances a model scene; template nodes follow reimport; the scene stores only its overrides, with origin and reset per property                                                   | Section 5.2, [content pipeline](content-pipeline.md)                                          |
+| Mesh surfaces                 | Per-surface instance override of Material, Visibility and Cast Shadows over asset defaults; Reset restores the source value; stable SurfaceId; lost continuity kept as inert changes      | Section 5, [content pipeline](content-pipeline.md), [material editor](material-editor.md)     |
+| Scene instances               | A node instances a model or an authored scene, nested; instanced nodes follow reimport; the instance root stores only its changes, with origin and reset; swap, Unpack, Apply to source   | [Scene instances](scene-instances.md), section 5.2                                            |
 | Level of detail               | Fixed, Distance or Screen-space error policy per geometry asset, optionally replaced per instance                                                                                         | Section 5, [content pipeline](content-pipeline.md)                                            |
 | Scalar materials              | Base colour/opacity, metallic, roughness, alpha mode/cutoff, sidedness, emission colour and HDR intensity; texture-dependent controls only when meaningful                                | [Material editor](material-editor.md)                                                         |
 | Node visual state             | Inherit / local source modes; roots resolve Shown and casting/receiving On; children Inherit; explicit child overrides honored                                                            | Section 4, [inspector](property-inspector.md)                                                 |

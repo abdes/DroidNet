@@ -136,8 +136,9 @@ Consequences:
   explicit product rename ([#79](https://github.com/abdes/DroidNet/issues/79)).
   Moving, renaming or deleting one product of a model on its own is refused
   (`relocation.model_product`).
-- A model is imported when its import settings (`Ship.glb.import.json`) sit
-  beside it in an authoring mount; a model file without them produces nothing.
+- A model is imported when a model import record names it as its source
+  ([scene instances](scene-instances.md) NGN14); a model file without one
+  produces nothing.
 
 The cooked layout is the identity: the descriptor of `/Content/X/Y.ext` is the
 file `X/Y.ext` under the mount's cooked root, for single-asset sources and
@@ -377,9 +378,10 @@ virtual root and the resources directory.
 
 ### 7.4 Model import settings
 
-`Ship.glb.import.json` (`NativeSceneImportSettings`, schema version 5) holds the
-recipe of a retained import: importer, name, bundle root, primary file, source
-hash, bundle files and the surface provenance. It holds no mount and no
+The model import record (`<ProjectRoot>/imports/<source_identity>.import.json`,
+[scene instances](scene-instances.md) NGN14) holds a model's import state:
+source, virtual path, settings, source identity, surface provenance, node
+continuity, published nodes and source fingerprint. It holds no mount and no
 output folder: the model's identity is its path. Surface provenance is
 keyed by each geometry's name in the model (`source_geometry_anchor`). A surface id
 derives from the retained source identity, that anchor, the source layout

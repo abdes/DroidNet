@@ -258,7 +258,7 @@ current scene through the same projection and generation authority.
 
 Diagnostics carry scene/document lifetime, node/component identity, asset URI,
 SurfaceId and expected/actual geometry layout where relevant. Preserve native codes
-and context. Unresolved surface repair, missing asset, stale completion,
+and context. A kept surface change, missing asset, stale completion,
 incompatible schema and device/runtime failure are different conditions.
 
 ## 13. Dependency Rules
