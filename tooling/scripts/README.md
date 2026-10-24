@@ -22,8 +22,9 @@ default. It chooses MSTest executables or VSTest according to the project.
 Pass runner arguments after `--`. Failed processes and timeouts produce a failed
 traversal result; `--timeout` overrides the 300-second per-process limit.
 
-`New-Package` creates MSIX packages through Visual Studio MSBuild. It requires
-an absolute signing-certificate path and builds project references. NuGet library
+`New-Package` creates MSIX packages of Release builds through Visual Studio
+MSBuild, opting the build into packaging with `DroidNetMsixPackaging=true`. It
+requires an absolute signing-certificate path and builds project references. NuGet library
 packing is a separate MSBuild `Pack` operation.
 
 Shared implementation belongs in `msbuild.py`; traversal tasks remain under

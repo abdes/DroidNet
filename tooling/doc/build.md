@@ -168,13 +168,18 @@ ordinary builds have `GeneratePackageOnBuild=false`. To produce a Release packag
 NuGet packages go to `artifacts/package/Release`. Generator packages retain their
 analyzer assemblies and required dependencies. SDK packing is used directly.
 
-For MSIX applications, use Visual Studio's **Package and Publish** UI, or:
+WinUI applications build and run unpackaged: their MSIX packaging targets are
+not imported, and their **Package** launch profiles do not apply. Packaging is a
+Release opt-in, `DroidNetMsixPackaging=true`. `New-Package` sets it:
 
 ```powershell
-traverse New-Package --start projects/Oxygen.Editor --configuration Release --PackageCertificateKeyFile C:/certs/test.pfx
+traverse New-Package --start projects/Oxygen.Editor --PackageCertificateKeyFile C:/certs/test.pfx
 ```
 
-MSIX packaging builds its project references. Signing credentials remain local;
+For Visual Studio's **Package and Publish** UI or a **Package** launch profile,
+set the `DroidNetMsixPackaging` environment variable to `true` before starting
+Visual Studio, and select **Release**. Debug builds ignore the opt-in and warn
+(`DNBUILD004`). MSIX packaging builds its project references. Signing credentials remain local;
 do not put certificate passwords in source-controlled files.
 
 ## Shared configuration

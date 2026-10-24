@@ -1,11 +1,11 @@
 {
   "profiles": {
+    "DemoApp (Unpackaged)": {
+      "commandName": "Project"
+    },
     "DemoApp (Package)": {
       "commandName": "MsixPackage",
       "commandLineArgs": "--int-value=125 --string-value=\"just a string from the command line\" --boolean-flag=true"
-    },
-    "DemoApp (Unpackaged)": {
-      "commandName": "Project"
     }
   }
 }

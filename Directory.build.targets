@@ -33,6 +33,12 @@
                Text="DroidNet requires the x64-hosted MSVC toolset. Initialize vcvars64.bat or a VS developer shell with -arch=x64 -host_arch=x64." />
     </Target>
 
+    <Target Name="WarnDroidNetMsixPackagingOutsideRelease" BeforeTargets="PrepareForBuild"
+            Condition="'$(DroidNetMsixPackaging)' == 'true' And '$(Configuration)' != 'Release' And '$(OutputType)' == 'WinExe' And '$(DesignTimeBuild)' != 'true'">
+        <Warning Code="DNBUILD004"
+                 Text="DroidNetMsixPackaging applies to Release builds only; this $(Configuration) build of $(MSBuildProjectName) stays unpackaged." />
+    </Target>
+
     <!-- Read-only source tree (builds to top-level bin/obj folders) -->
     <PropertyGroup Condition="'$(UseArtifactsOutput)' != 'true'">
         <!-- Only set a custom package output path when the artifacts output layout is not enabled. -->

@@ -2,19 +2,27 @@
 
 from __future__ import annotations
 
+import contextlib
+import io
 import os
 import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
+from collections.abc import Mapping
 from pathlib import Path
 from unittest.mock import patch
 
 from tooling.scripts.msbuild import query_msbuild_properties, visual_studio_tool
 from tooling.scripts.traversal.runner import TraversalConfig, TraversalRunner
-from tooling.scripts.traversal.task_registry import TaskInvocation, TaskRegistry
+from tooling.scripts.traversal.task_registry import (
+    TaskInvocation,
+    TaskRegistry,
+    TraversalContext,
+)
 from tooling.scripts.traversal.tasks.invoke_tests import invoke_tests
+from tooling.scripts.traversal.tasks.new_package import new_package
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -44,20 +52,22 @@ class WindowsBuildTools(unittest.TestCase):
             executable.parent.mkdir()
             executable.touch()
             result = subprocess.CompletedProcess([], 0, stdout=str(executable))
-            with patch(
-                "tooling.scripts.msbuild.subprocess.run", return_value=result
-            ) as run:
-                with self.assertRaisesRegex(RuntimeError, "requires 64-bit MSBuild"):
-                    visual_studio_tool("msbuild")
+            with (
+                patch(
+                    "tooling.scripts.msbuild.subprocess.run", return_value=result
+                ) as run,
+                self.assertRaisesRegex(RuntimeError, "requires 64-bit MSBuild"),
+            ):
+                visual_studio_tool("msbuild")
             self.assertEqual(run.call_count, 1)
 
     def test_missing_64bit_msbuild_does_not_retry_32bit(self):
         result = subprocess.CompletedProcess([], 0, stdout="")
-        with patch(
-            "tooling.scripts.msbuild.subprocess.run", return_value=result
-        ) as run:
-            with self.assertRaisesRegex(RuntimeError, "not installed"):
-                visual_studio_tool("msbuild")
+        with (
+            patch("tooling.scripts.msbuild.subprocess.run", return_value=result) as run,
+            self.assertRaisesRegex(RuntimeError, "not installed"),
+        ):
+            visual_studio_tool("msbuild")
         self.assertEqual(run.call_count, 1)
 
     @unittest.skipUnless(
@@ -179,7 +189,7 @@ class TestFailurePropagation(unittest.TestCase):
     def test_nonzero_process_fails_the_traversal(self):
         result = self.run_process(["-c", "raise SystemExit(7)"])
         self.assertFalse(result.success)
-        self.assertEqual(result.failures[0].exception.returncode, 7)
+        self.assertExitCode(result.failures[0].exception, 7)
 
     @unittest.skipUnless(os.name == "nt", "Windows executable runner")
     def test_timeout_fails_the_traversal(self):
@@ -198,12 +208,61 @@ class TestFailurePropagation(unittest.TestCase):
             ["-c", "raise SystemExit(7)"], tier="Benchmarks", configuration="Release"
         )
         self.assertFalse(result.success)
-        self.assertEqual(result.failures[0].exception.returncode, 7)
+        self.assertExitCode(result.failures[0].exception, 7)
+
+    def assertExitCode(self, exception: Exception, code: int) -> None:
+        self.assertIsInstance(exception, subprocess.CalledProcessError)
+        assert isinstance(exception, subprocess.CalledProcessError)
+        self.assertEqual(exception.returncode, code)
+
+
+class NewPackage(unittest.TestCase):
+    def package(self, **arguments: object) -> str:
+        with tempfile.TemporaryDirectory() as directory:
+            project = Path(directory) / "Sample.App.csproj"
+            project.touch()
+            (Path(directory) / "Package.appxmanifest").touch()
+            certificate = Path(directory) / "test.pfx"
+            certificate.touch()
+            context = TraversalContext(
+                dry_run=True,
+                forwarded_arguments={
+                    "packagecertificatekeyfile": str(certificate),
+                    **arguments,
+                },
+            )
+            output = io.StringIO()
+            with (
+                patch(
+                    "tooling.scripts.traversal.tasks.new_package.visual_studio_tool",
+                    return_value=Path("MSBuild.exe"),
+                ),
+                contextlib.redirect_stdout(output),
+            ):
+                new_package(project, context)
+            return output.getvalue()
+
+    def test_packages_release_with_the_msix_opt_in(self):
+        command = self.package()
+        self.assertIn("-property:Configuration=Release", command)
+        self.assertIn("-property:DroidNetMsixPackaging=true", command)
+
+    def test_rejects_other_configurations(self):
+        with self.assertRaisesRegex(ValueError, "Release builds only"):
+            self.package(configuration="Debug")
 
 
 @unittest.skipUnless(os.name == "nt", "Visual Studio MSBuild required")
 class BuildConfiguration(unittest.TestCase):
-    def evaluate(self, path: str, **kwargs):
+    def evaluate(
+        self,
+        path: str,
+        *,
+        configuration: str | None = None,
+        target_framework: str | None = None,
+        runtime_identifier: str | None = None,
+        global_properties: Mapping[str, str] | None = None,
+    ) -> dict[str, str]:
         values, _ = query_msbuild_properties(
             ROOT / path,
             [
@@ -216,10 +275,39 @@ class BuildConfiguration(unittest.TestCase):
                 "TargetFrameworks",
                 "ArtifactsPivots",
                 "PublishDir",
+                "EnableMsixTooling",
+                "WindowsPackageType",
             ],
-            **kwargs,
+            configuration=configuration,
+            target_framework=target_framework,
+            runtime_identifier=runtime_identifier,
+            global_properties=global_properties,
         )
         return values
+
+    def test_apps_are_unpackaged_unless_release_opts_in(self):
+        for project in (
+            "projects/Oxygen.Editor/src/Oxygen.Editor.App.csproj",
+            "projects/Routing/Routing.Debugger/src/Routing.Debugger.csproj",
+        ):
+            for configuration, opt_in, packaged in (
+                ("Debug", None, False),
+                ("Release", None, False),
+                ("Debug", {"DroidNetMsixPackaging": "true"}, False),
+                ("Release", {"DroidNetMsixPackaging": "true"}, True),
+            ):
+                with self.subTest(
+                    project=project, configuration=configuration, opt_in=opt_in
+                ):
+                    values = self.evaluate(
+                        project, configuration=configuration, global_properties=opt_in
+                    )
+                    self.assertEqual(
+                        values["EnableMsixTooling"].lower(), str(packaged).lower()
+                    )
+                    self.assertEqual(
+                        values["WindowsPackageType"] == "None", not packaged
+                    )
 
     def test_editor_is_internal_and_build_does_not_pack_or_analyze(self):
         for configuration in ("Debug", "Release"):
@@ -275,13 +363,17 @@ class BuildConfiguration(unittest.TestCase):
             project = folder / "BuildWorkflowProbe.csproj"
             project.write_text(
                 '<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup>'
-                "<TargetFramework>net10.0</TargetFramework><EnableDefaultCompileItems>false</EnableDefaultCompileItems>"
-                '</PropertyGroup><ItemGroup><Compile Include="Probe.cs" /></ItemGroup></Project>',
+                "<TargetFramework>net10.0</TargetFramework>"
+                "<EnableDefaultCompileItems>false</EnableDefaultCompileItems>"
+                "</PropertyGroup><ItemGroup>"
+                '<Compile Include="Probe.cs" /></ItemGroup></Project>',
                 encoding="utf-8",
             )
             (folder / "Probe.cs").write_text(
-                'namespace BuildWorkflow; public sealed class Probe { private readonly string text = "x";'
-                " public string Read() { if (text.Length > 0) return text; return string.Empty; } }",
+                "namespace BuildWorkflow; public sealed class Probe {"
+                ' private readonly string text = "x";'
+                " public string Read() {"
+                " if (text.Length > 0) return text; return string.Empty; } }",
                 encoding="utf-8",
             )
             command = [

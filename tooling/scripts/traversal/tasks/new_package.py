@@ -12,7 +12,10 @@ from ..task_registry import TraversalContext, task
 @task(
     "New-Package",
     aliases=["new-package", "package"],
-    description="Create an AppX package using Visual Studio MSBuild for projects with Package.appxmanifest.",
+    description=(
+        "Create an AppX package of a Release build using Visual Studio MSBuild"
+        " for projects with Package.appxmanifest."
+    ),
 )
 def new_package(project: Path, context: TraversalContext) -> None:
     manifest = project.parent / "Package.appxmanifest"
@@ -36,7 +39,12 @@ def new_package(project: Path, context: TraversalContext) -> None:
     if not certificate_path.exists():
         raise FileNotFoundError(f"Certificate file not found: {certificate_path}")
 
-    configuration = str(params.get("configuration", "Debug"))
+    # Applications build unpackaged unless a Release build opts into MSIX packaging.
+    configuration = str(params.get("configuration", "Release"))
+    if configuration != "Release":
+        raise ValueError(
+            f"New-Package packages Release builds only, not {configuration}"
+        )
     platform = str(params.get("platform", "x64"))
     verbosity = str(params.get("verbosity", "minimal"))
 
@@ -57,6 +65,7 @@ def new_package(project: Path, context: TraversalContext) -> None:
         "Configuration": configuration,
         "Platform": platform,
         "PreferredToolArchitecture": "x64",
+        "DroidNetMsixPackaging": "true",
         "UapAppxPackageBuildMode": "SideloadOnly",
         "AppxBundle": "Never",
         "GenerateAppxPackageOnBuild": "true",

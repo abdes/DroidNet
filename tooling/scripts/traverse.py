@@ -5,14 +5,13 @@ import logging
 import re
 import sys
 from pathlib import Path
-from typing import List, Optional
 
 from rich.console import Console
 from rich.logging import RichHandler
 
 from .traversal.arguments import parse_forwarded_arguments
 from .traversal.runner import TraversalConfig, TraversalRunner
-from .traversal.task_registry import get_global_registry
+from .traversal.task_registry import TaskInvocation, get_global_registry
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -21,22 +20,25 @@ def build_parser() -> argparse.ArgumentParser:
 Examples:
   traverse Select-Path --start projects/Storage
   traverse Invoke-Tests --start projects/Storage/tests --configuration Release
-  traverse Invoke-Tests --start projects/Oxygen.Editor.ContentPipeline/tests --timeout 600
-  traverse Invoke-Tests --start projects/Aura/tests -- --filter FullyQualifiedName~Example
-  traverse New-Package --start projects/Oxygen.Editor --PackageCertificateKeyFile C:/certs/test.pfx
+  traverse Invoke-Tests --start projects/Oxygen.Editor.Scenes/tests --timeout 600
+  traverse Invoke-Tests --start projects/Aura/tests -- --filter Name~Example
+  traverse New-Package --start projects/Oxygen.Editor `
+    --PackageCertificateKeyFile C:/certs/test.pfx
 
 Invoke-Tests runs existing outputs; build first using Visual Studio or MSBuild.exe.
-All C# tests, including WinUI, use MSTest's executable runner; native C++ tests use VSTest. All declared
-frameworks are tested unless --framework/-f is supplied. Supported task options:
+All C# tests, including WinUI, use MSTest's executable runner; native C++ tests use
+VSTest. All declared frameworks are tested unless --framework/-f is supplied.
+Supported task options:
   --configuration/-c NAME   Configuration of existing outputs (default: Debug).
   --framework/-f TFM        Select one target framework.
   --timeout SECONDS        Per-process timeout (default: 300).
 Pass runner-specific arguments after --, using the selected runner's syntax.
 Failures and timeouts produce a nonzero final exit code.
 
-New-Package creates MSIX packages using Visual Studio MSBuild with references.
+New-Package creates MSIX packages of Release builds using Visual Studio MSBuild
+with references; it opts the build into packaging (DroidNetMsixPackaging=true).
 It requires --PackageCertificateKeyFile ABSOLUTE_PATH. Optional task settings:
-  --configuration NAME     Debug (default) or Release.
+  --configuration NAME     Release (default and only accepted value).
   --platform NAME          Target platform (default: x64).
   --verbosity LEVEL        MSBuild verbosity (default: minimal).
   --packagelocation PATH   Package destination (default: project/Packages).
@@ -91,7 +93,7 @@ Use the explicit MSBuild Pack target for NuGet libraries, not New-Package."""
     return parser
 
 
-def configure_console(color_flag: Optional[bool]) -> Console:
+def configure_console(color_flag: bool | None) -> Console:
     if color_flag is True:
         return Console()
     if color_flag is False:
@@ -120,7 +122,7 @@ def list_available_tasks(console: Console) -> None:
     registry.load_builtin()
     registry.load_local_packages(Path(__file__).resolve().parent / "traversal")
     registry.load_plugins()
-    rows = []
+    rows: list[tuple[str, str]] = []
     for task in sorted(registry.tasks(), key=lambda item: item.name.lower()):
         rows.append((task.name, task.description or ""))
     if not rows:
@@ -131,7 +133,7 @@ def list_available_tasks(console: Console) -> None:
         console.print(f"[bold]{name.ljust(width)}[/] {desc}")
 
 
-def main(argv: Optional[List[str]] = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args, forwarded = parser.parse_known_args(argv)
 
@@ -151,14 +153,14 @@ def main(argv: Optional[List[str]] = None) -> int:
     registry.load_local_packages(Path(__file__).resolve().parent / "traversal")
     registry.load_plugins()
 
-    resolved_tasks = []
+    resolved_tasks: list[TaskInvocation] = []
     for task_name in args.tasks:
         try:
             resolved_tasks.append(registry.resolve(task_name))
         except KeyError as exc:
             parser.error(str(exc))
 
-    extra_arguments: List[str] = []
+    extra_arguments: list[str] = []
     forwarded_tokens = list(forwarded)
     if "--" in forwarded_tokens:
         dash_index = forwarded_tokens.index("--")
@@ -203,7 +205,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         )
         for failure in result.failures:
             console.print(
-                f"[red]- Task '{failure.task}' failed for {failure.project}: {failure.exception}[/]"
+                f"[red]- Task '{failure.task}' failed for {failure.project}:"
+                f" {failure.exception}[/]"
             )
         return 1
 

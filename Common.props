@@ -135,6 +135,16 @@
         <EmbedUntrackedSources>true</EmbedUntrackedSources>
     </PropertyGroup>
 
+    <!--
+        WinUI applications build and run unpackaged, without the MSIX packaging targets. Release builds opt into
+        MSIX packaging with DroidNetMsixPackaging=true, as an MSBuild property or, for Visual Studio, an environment
+        variable set before it starts. Applications read DroidNetMsixPackagingEnabled.
+    -->
+    <PropertyGroup>
+        <DroidNetMsixPackagingEnabled>false</DroidNetMsixPackagingEnabled>
+        <DroidNetMsixPackagingEnabled Condition="'$(DroidNetMsixPackaging)' == 'true' And '$(Configuration)' == 'Release'">true</DroidNetMsixPackagingEnabled>
+    </PropertyGroup>
+
     <!-- Test Projects -->
     <Choose>
         <When Condition="'$(MSBuildProjectExtension)' == '.csproj' And $(MSBuildProjectName.EndsWith('.Tests'))">
@@ -197,8 +207,8 @@
                 <UseWinUI>true</UseWinUI>
 
                 <!-- Product application packaging is independent of the UI test host. -->
-                <WindowsPackageType Condition="'$(GITHUB_ACTIONS)'=='true' And $(MSBuildProjectName.EndsWith('.App'))">None</WindowsPackageType>
-                <EnableMsixTooling Condition="$(MSBuildProjectName.EndsWith('.App'))">true</EnableMsixTooling>
+                <WindowsPackageType Condition="'$(DroidNetMsixPackagingEnabled)' != 'true' And $(MSBuildProjectName.EndsWith('.App'))">None</WindowsPackageType>
+                <EnableMsixTooling Condition="$(MSBuildProjectName.EndsWith('.App'))">$(DroidNetMsixPackagingEnabled)</EnableMsixTooling>
                 <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
                 <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
                 <ApplicationManifest>Properties\app.manifest</ApplicationManifest>

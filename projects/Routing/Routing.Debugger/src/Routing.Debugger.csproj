@@ -9,11 +9,9 @@
 
         <IsPackable>false</IsPackable>
 
-        <!-- The App is Packaged, unless we're running a GitHub workflow -->
-        <WindowsPackageType Condition="'$(GITHUB_ACTIONS)'=='false'">None</WindowsPackageType>
-
-        <!-- Keep this for dotnet build CLI, although not needed for MSBuild -->
-        <EnableMsixTooling>true</EnableMsixTooling>
+        <!-- Unpackaged unless a Release build opts into MSIX packaging (DroidNetMsixPackaging in Common.props). -->
+        <WindowsPackageType Condition="'$(DroidNetMsixPackagingEnabled)' != 'true'">None</WindowsPackageType>
+        <EnableMsixTooling>$(DroidNetMsixPackagingEnabled)</EnableMsixTooling>
 
         <AssemblyName>DroidNet.Routing.Debugger</AssemblyName>
         <ApplicationManifest>app.manifest</ApplicationManifest>

@@ -1,12 +1,12 @@
 {
-    "profiles": {
-        "Routing Debugger (Package)": {
-            "commandName": "MsixPackage",
-            "commandLineArgs": "--mode dev"
-        },
-        "Routing Debugger (Unpackaged)": {
-            "commandName": "Project",
-            "commandLineArgs": "--mode dev"
-        }
+  "profiles": {
+    "Routing Debugger (Unpackaged)": {
+      "commandName": "Project",
+      "commandLineArgs": "--mode dev"
+    },
+    "Routing Debugger (Package)": {
+      "commandName": "MsixPackage",
+      "commandLineArgs": "--mode dev"
     }
+  }
 }
