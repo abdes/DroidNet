@@ -26,6 +26,12 @@ namespace Microsoft::Extensions::Logging {
 
 namespace Oxygen::Interop {
 
+  // A structured log property, and the state of one forwarded engine message:
+  // its properties, which the managed logger turns into event properties.
+  typedef System::Collections::Generic::KeyValuePair<String^, Object^>
+    LogProperty;
+  typedef System::Collections::Generic::List<LogProperty> LogState;
+
   // Managed helper that encapsulates all logging-related state and behavior so
   // the EngineRunner header doesn't need to include or reference native logging
   // internals.
@@ -46,7 +52,11 @@ namespace Oxygen::Interop {
   private:
     void RegisterCallbackIfNeeded();
     void ReleaseCallback();
-    static String^ Format(String^ state, System::Exception^ ex);
+    static auto MakeLogState(const loguru::Message& message, String^ text)
+      -> LogState^;
+    static String^ Format(LogState^ state, System::Exception^ ex);
+
+    literal String^ kMessageProperty = "Message";
 
     // Managed logger to forward native messages
     Microsoft::Extensions::Logging::ILogger^ logger_;

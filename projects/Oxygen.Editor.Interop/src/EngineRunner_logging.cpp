@@ -8,6 +8,7 @@
 
 #pragma managed(push, off)
 #include <string>
+#include <string_view>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/EditorInterface/Api.h>
@@ -164,13 +165,12 @@ namespace Oxygen::Interop {
   }
 
   // Invoked from native forwarder through the GCHandle.
+  // The thread, file and line that loguru's preamble would prepend go to the
+  // managed logger as structured properties, so the message stays the
+  // message.
   void LogHandler::HandleLog(const loguru::Message& message) {
     try {
       std::string composed;
-      if (message.preamble && *message.preamble) {
-        composed += message.preamble;
-        composed += ' ';
-      }
       if (message.indentation && *message.indentation) {
         std::string indent = message.indentation;
         size_t pos = 0;
@@ -202,9 +202,9 @@ namespace Oxygen::Interop {
       LogLevel lvlValue = MapVerbosityToManagedLevel(message.verbosity);
 
       if (logger_ != nullptr) {
-        logger_->Log<String^>(
-          lvlValue, EventId(0), managedMsg, nullptr,
-          gcnew Func<String^, Exception^, String^>(&LogHandler::Format));
+        logger_->Log<LogState^>(lvlValue, EventId(0),
+          MakeLogState(message, managedMsg), nullptr,
+          gcnew Func<LogState^, Exception^, String^>(&LogHandler::Format));
       }
     }
     catch (...) {
@@ -212,8 +212,32 @@ namespace Oxygen::Interop {
     }
   }
 
-  String^ LogHandler::Format(String^ state, System::Exception^ ex) {
+  // The text goes in the Message property, never in the template: engine text
+  // containing '{' would otherwise be parsed as a message template. ':l'
+  // renders the string without quotes.
+  auto LogHandler::MakeLogState(
+    const loguru::Message& message, String^ text) -> LogState^ {
+    char thread_name[32] = {};
+    loguru::get_thread_name(thread_name, sizeof(thread_name), false);
+
+    auto state = gcnew LogState(5);
+    state->Add(LogProperty(kMessageProperty, text));
+    state->Add(LogProperty("Thread", (gcnew String(thread_name))->Trim()));
+    if (message.filename != nullptr && *message.filename != '\0') {
+      const std::string_view path { message.filename };
+      const auto slash = path.find_last_of("/\\");
+      const auto file
+        = slash == std::string_view::npos ? path : path.substr(slash + 1);
+      state->Add(LogProperty("File",
+        gcnew String(file.data(), 0, static_cast<int>(file.size()))));
+      state->Add(LogProperty("Line", static_cast<int>(message.line)));
+    }
+    state->Add(LogProperty("{OriginalFormat}", "{Message:l}"));
     return state;
+  }
+
+  String^ LogHandler::Format(LogState^ state, System::Exception^ ex) {
+    return safe_cast<String^>(state[0].Value);
   }
 
   void LogHandler::RegisterCallbackIfNeeded() {
