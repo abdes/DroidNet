@@ -1,0 +1,363 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1640" height="960" viewBox="0 0 1640 960" font-family="Segoe UI Variable, Segoe UI, sans-serif" font-size="12">
+  <title>Output console mockup (dark theme)</title>
+  <desc>The Output panel docked with Problems and History. The toolbar holds the Levels and Subsystems dropdowns, the search box in Find mode with "3 of 3" and match arrows, Pause, Follow and Wrap toggles, Copy, Save and Clear, the View menu and the buffer ring. The list shows thirteen log lines with an exception glyph, time, level tag, subsystem token and message columns, a folded warning with a x14 badge, two find highlights and the selected error, whose details pane is open below. Below the panel: the Subsystems menu, the View menu, the row context menu and the buffer flyout. Numbered notes on the right explain each element.</desc>
+  <rect width="1640" height="960" fill="#1c1c1c"/>
+
+  <g transform="translate(16,16)">
+    <!-- Panel frame -->
+    <rect x="0" y="0" width="1200" height="600" rx="6" fill="#272727" stroke="#3a3a3a"/>
+
+    <!-- Dock tabs -->
+    <rect x="0" y="0" width="1200" height="34" rx="6" fill="#202020"/>
+    <rect x="0" y="28" width="1200" height="6" fill="#202020"/>
+    <line x1="0" y1="34" x2="1200" y2="34" stroke="#3a3a3a"/>
+    <rect x="8" y="6" width="70" height="29" rx="4" fill="#272727" stroke="#3a3a3a"/>
+    <rect x="9" y="30" width="68" height="6" fill="#272727"/>
+    <text x="22" y="25" font-size="13" fill="#ffffff">Output</text>
+    <text x="94" y="25" font-size="13" fill="#9e9e9e">Problems</text>
+    <text x="170" y="25" font-size="13" fill="#9e9e9e">History</text>
+
+    <!-- Command bar: content (left) -->
+    <rect x="8" y="42" width="196" height="32" rx="4" fill="#2d2d2d" stroke="#3a3a3a"/>
+    <text x="20" y="62" fill="#ffffff">Levels: Information (4/6)</text>
+    <text x="184" y="62" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="9" fill="#c5c5c5">&#xE70D;</text>
+
+    <rect x="210" y="42" width="146" height="32" rx="4" fill="#2d2d2d" stroke="#3a3a3a"/>
+    <text x="222" y="62" fill="#ffffff">Subsystems: All</text>
+    <text x="336" y="62" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="9" fill="#c5c5c5">&#xE70D;</text>
+
+    <!-- Search box, focused, Find mode -->
+    <rect x="364" y="42" width="200" height="32" rx="4" fill="#1e1e1e" stroke="#3a3a3a"/>
+    <rect x="365" y="72" width="198" height="2" fill="#4cc2ff"/>
+    <text x="376" y="62" fill="#ffffff">Corridor_A</text>
+    <text x="542" y="63" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="13" fill="#c5c5c5">&#xE721;</text>
+    <!-- Filter mode toggle (unchecked = Find mode) -->
+    <rect x="570" y="42" width="32" height="32" rx="4" fill="none"/>
+    <text x="579" y="63" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#c5c5c5">&#xE71C;<title>Hide lines that don't match</title></text>
+    <text x="610" y="62" fill="#c5c5c5">3 of 3</text>
+    <text x="656" y="62" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="11" fill="#c5c5c5">&#xE70E;<title>Previous match (Shift+F3)</title></text>
+    <text x="680" y="62" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="11" fill="#c5c5c5">&#xE70D;<title>Next match (F3)</title></text>
+
+    <!-- Command bar: primary commands (right) -->
+    <text x="734" y="63" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#ffffff">&#xE769;</text>
+    <text x="756" y="62" fill="#ffffff">Pause</text>
+    <text x="812" y="63" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#ffffff">&#xE74B;</text>
+    <text x="834" y="62" fill="#ffffff">Follow</text>
+    <text x="896" y="63" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#ffffff">&#xE8E4;</text>
+    <text x="918" y="62" fill="#ffffff">Wrap</text>
+    <line x1="960" y1="48" x2="960" y2="68" stroke="#3a3a3a"/>
+    <text x="981" y="63" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#ffffff">&#xE8C8;<title>Copy (Ctrl+C)</title></text>
+    <text x="1025" y="63" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#ffffff">&#xE74E;<title>Save output to a file</title></text>
+    <text x="1069" y="63" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#ffffff">&#xE74D;<title>Clear the output</title></text>
+    <line x1="1100" y1="48" x2="1100" y2="68" stroke="#3a3a3a"/>
+    <text x="1121" y="63" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#ffffff">&#xE890;<title>View options</title></text>
+    <!-- Buffer ring: 14.2% -->
+    <circle cx="1172" cy="58" r="7" fill="none" stroke="#3a3a3a" stroke-width="2"/>
+    <circle cx="1172" cy="58" r="7" fill="none" stroke="#4cc2ff" stroke-width="2" stroke-dasharray="6.25 43.98" transform="rotate(-90 1172 58)"><title>Buffer: 14% (1,420 of 10,000)</title></circle>
+
+    <!-- Rows: 22 px. Columns: gutter 8, time 26, level 113, subsystem 154, message 221 -->
+    <g font-family="Consolas, monospace" font-size="12">
+      <text x="26" y="101" fill="#9e9e9e">11:32:04.102</text>
+      <text x="113" y="101" fill="#c5c5c5">[INF]</text>
+      <text x="154" y="101" fill="#c5c5c5">[Engine]</text>
+      <text x="221" y="101" fill="#ffffff">Vortex: render device ready (D3D12, NVIDIA GeForce RTX 4090, 24 GB)</text>
+
+      <text x="26" y="123" fill="#9e9e9e">11:32:04.380</text>
+      <text x="113" y="123" fill="#c5c5c5">[INF]</text>
+      <text x="154" y="123" fill="#c5c5c5">[Engine]</text>
+      <text x="221" y="123" fill="#ffffff">Shader library loaded from cache: 1,420 permutations</text>
+
+      <text x="26" y="145" fill="#9e9e9e">11:32:04.511</text>
+      <text x="113" y="145" fill="#c5c5c5">[INF]</text>
+      <text x="154" y="145" fill="#c5c5c5">[Editor]</text>
+      <text x="221" y="145" fill="#ffffff">Scene 'Courtyard' opened: 312 nodes</text>
+
+      <!-- Find match (caution background) -->
+      <rect x="273.8" y="155" width="66" height="16" rx="2" fill="#433519"/>
+      <text x="26" y="167" fill="#9e9e9e">11:32:04.915</text>
+      <text x="113" y="167" fill="#fce100">[WRN]</text>
+      <text x="154" y="167" fill="#c5c5c5">[Content]</text>
+      <text x="221" y="167" fill="#fce100">'Meshes/Corridor_A.fbx': 2 materials have no base color texture; using defaults</text>
+
+      <text x="26" y="189" fill="#9e9e9e">11:32:05.020</text>
+      <text x="113" y="189" fill="#c5c5c5">[INF]</text>
+      <text x="154" y="189" fill="#c5c5c5">[Cooker]</text>
+      <text x="221" y="189" fill="#ffffff">Cooking 48 changed sources for 'Courtyard'</text>
+
+      <rect x="339.8" y="199" width="66" height="16" rx="2" fill="#433519"/>
+      <text x="26" y="211" fill="#9e9e9e">11:32:05.312</text>
+      <text x="113" y="211" fill="#c5c5c5">[INF]</text>
+      <text x="154" y="211" fill="#c5c5c5">[Content]</text>
+      <text x="221" y="211" fill="#ffffff">Importing 'Meshes/Corridor_A.fbx'</text>
+
+      <!-- Folded row: badge before the message -->
+      <text x="26" y="233" fill="#9e9e9e">11:32:05.716</text>
+      <text x="113" y="233" fill="#fce100">[WRN]</text>
+      <text x="154" y="233" fill="#c5c5c5">[Player]</text>
+      <g>
+        <title>14 occurrences from 11:32:05.390 to 11:32:05.716</title>
+        <rect x="221" y="221" width="32" height="16" rx="4" fill="#3a3a3a"/>
+        <text x="226" y="233" font-family="Segoe UI Variable, Segoe UI, sans-serif" font-size="11" fill="#c5c5c5">×14</text>
+      </g>
+      <text x="261" y="233" fill="#fce100">Frame time 18.4 ms exceeds the 16.7 ms target</text>
+
+      <!-- Selected row, current find match (matched in its exception) -->
+      <rect x="4" y="240" width="1192" height="22" rx="3" fill="#1f3340"/>
+      <rect x="4" y="244" width="3" height="14" rx="1.5" fill="#4cc2ff"/>
+      <text x="11" y="255" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="12" fill="#ff99a4">&#xEBE8;<title>Has an exception. Press Enter for details.</title></text>
+      <text x="26" y="255" fill="#9e9e9e">11:32:05.840</text>
+      <text x="113" y="255" fill="#ff99a4">[ERR]</text>
+      <text x="154" y="255" fill="#c5c5c5">[Cooker]</text>
+      <text x="221" y="255" fill="#ff99a4">Automatic cooking failed for 1 changed sources.</text>
+
+      <text x="26" y="277" fill="#9e9e9e">11:32:06.012</text>
+      <text x="113" y="277" fill="#c5c5c5">[INF]</text>
+      <text x="154" y="277" fill="#c5c5c5">[Cooker]</text>
+      <text x="221" y="277" fill="#ffffff">Cooked 47 of 48 sources in 1.17 s; 1 failed</text>
+
+      <text x="26" y="299" fill="#9e9e9e">11:32:06.500</text>
+      <text x="113" y="299" fill="#c5c5c5">[INF]</text>
+      <text x="154" y="299" fill="#c5c5c5">[Engine]</text>
+      <text x="221" y="299" fill="#ffffff">Swap chain presenting at 60.0 FPS</text>
+
+      <text x="26" y="321" fill="#9e9e9e">11:32:07.010</text>
+      <text x="113" y="321" fill="#c5c5c5">[INF]</text>
+      <text x="154" y="321" fill="#c5c5c5">[Player]</text>
+      <text x="221" y="321" fill="#ffffff">Play session started</text>
+
+      <text x="26" y="343" fill="#9e9e9e">11:32:07.233</text>
+      <text x="113" y="343" fill="#c5c5c5">[INF]</text>
+      <text x="154" y="343" fill="#c5c5c5">[Editor]</text>
+      <text x="221" y="343" fill="#ffffff">Saved 'Courtyard' (3 changes)</text>
+
+      <text x="26" y="365" fill="#9e9e9e">11:32:07.902</text>
+      <text x="113" y="365" fill="#c5c5c5">[INF]</text>
+      <text x="154" y="365" fill="#c5c5c5">[Engine]</text>
+      <text x="221" y="365" fill="#ffffff">Texture streaming: 12 textures resident, 184 MB</text>
+    </g>
+
+    <!-- Splitter -->
+    <line x1="0" y1="377" x2="1200" y2="377" stroke="#3a3a3a"/>
+    <rect x="580" y="375" width="40" height="4" rx="2" fill="#5a5a5a"/>
+
+    <!-- Details pane -->
+    <rect x="1" y="380" width="1198" height="32" fill="#202020"/>
+    <text x="12" y="401" font-family="Consolas, monospace" fill="#ff99a4">[ERR]</text>
+    <text x="52" y="401" font-family="Consolas, monospace" fill="#c5c5c5">[Cooker]</text>
+    <text x="116" y="401" font-family="Consolas, monospace" fill="#9e9e9e">11:32:05.840</text>
+    <rect x="1038" y="384" width="118" height="24" rx="4" fill="#2d2d2d" stroke="#3a3a3a"/>
+    <text x="1049" y="401" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="12" fill="#ffffff">&#xE8C8;</text>
+    <text x="1069" y="400" fill="#ffffff">Copy details</text>
+    <text x="1172" y="401" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="12" fill="#c5c5c5">&#xE711;<title>Close details (Esc)</title></text>
+    <line x1="0" y1="412" x2="1200" y2="412" stroke="#3a3a3a"/>
+
+    <g font-family="Consolas, monospace" font-size="12">
+      <text x="12" y="434" fill="#ffffff">Automatic cooking failed for 1 changed sources.</text>
+      <text x="12" y="458" fill="#ff99a4">System.IO.InvalidDataException: Vertex attribute TANGENT of 'Meshes/Corridor_A.fbx'</text>
+      <!-- Current match: accent -->
+      <rect x="460.8" y="446" width="66" height="16" rx="2" fill="#4cc2ff"/>
+      <text x="460.8" y="458" fill="#000000">Corridor_A</text>
+      <text x="12" y="476" fill="#ff99a4">&#160;&#160;uses R16G16B16A16_SNORM; the vertex layout expects R32G32B32A32_FLOAT.</text>
+      <text x="12" y="494" fill="#c5c5c5">&#160;&#160;&#160;at Oxygen.Editor.ContentPipeline.Cooking.AutomaticCookService.CookAsync(CookChanges changes,</text>
+      <text x="12" y="512" fill="#c5c5c5">&#160;&#160;&#160;&#160;&#160;&#160;CancellationToken cancellationToken)</text>
+      <text x="12" y="530" fill="#c5c5c5">&#160;&#160;&#160;at Oxygen.Editor.ContentPipeline.Cooking.AutomaticCookService.DrainAsync(CancellationToken</text>
+      <text x="12" y="548" fill="#c5c5c5">&#160;&#160;&#160;&#160;&#160;&#160;cancellationToken)</text>
+      <text x="12" y="566" fill="#9e9e9e">&#160;&#160;&#160;--- End of stack trace from previous location ---</text>
+    </g>
+    <line x1="860" y1="420" x2="860" y2="592" stroke="#3a3a3a"/>
+    <g font-size="12">
+      <text x="876" y="434" fill="#9e9e9e">Time</text>
+      <text x="956" y="434" fill="#ffffff">2026-10-24 11:32:05.840 +02:00</text>
+      <text x="876" y="456" fill="#9e9e9e">Source</text>
+      <text x="956" y="456" fill="#ffffff">Oxygen.Editor.ContentPipeline.Cooking.</text>
+      <text x="956" y="472" fill="#ffffff">AutomaticCookService</text>
+      <text x="876" y="494" fill="#9e9e9e">Count</text>
+      <text x="956" y="494" fill="#ffffff">1</text>
+    </g>
+
+    <!-- Note markers -->
+    <g font-size="11" font-weight="700" text-anchor="middle" fill="#ffffff">
+      <circle cx="204" cy="42" r="9" fill="#e3008c"/><text x="204" y="46">1</text>
+      <circle cx="356" cy="42" r="9" fill="#e3008c"/><text x="356" y="46">2</text>
+      <circle cx="602" cy="42" r="9" fill="#e3008c"/><text x="602" y="46">3</text>
+      <circle cx="872" cy="42" r="9" fill="#e3008c"/><text x="872" y="46">4</text>
+      <circle cx="1052" cy="42" r="9" fill="#e3008c"/><text x="1052" y="46">5</text>
+      <circle cx="1140" cy="42" r="9" fill="#e3008c"/><text x="1140" y="46">6</text>
+      <circle cx="1188" cy="42" r="9" fill="#e3008c"/><text x="1188" y="46">7</text>
+      <circle cx="-6" cy="97" r="9" fill="#e3008c"/><text x="-6" y="101">8</text>
+      <circle cx="-6" cy="229" r="9" fill="#e3008c"/><text x="-6" y="233">9</text>
+      <circle cx="-6" cy="251" r="9" fill="#e3008c"/><text x="-6" y="255">10</text>
+      <circle cx="-6" cy="396" r="9" fill="#e3008c"/><text x="-6" y="400">11</text>
+    </g>
+  </g>
+
+  <!-- Flyouts (one opens at a time; shown side by side) -->
+  <g font-size="12" font-weight="700" text-anchor="middle" fill="#ffffff">
+    <circle cx="25" cy="648" r="9" fill="#e3008c"/><text x="25" y="652">2</text>
+    <circle cx="269" cy="648" r="9" fill="#e3008c"/><text x="269" y="652">6</text>
+    <circle cx="525" cy="648" r="9" fill="#e3008c"/><text x="525" y="652">10</text>
+    <circle cx="821" cy="648" r="9" fill="#e3008c"/><text x="821" y="652">7</text>
+  </g>
+  <g font-weight="600" fill="#ffffff">
+    <text x="40" y="652">Subsystems menu</text>
+    <text x="284" y="652">View menu</text>
+    <text x="540" y="652">Row context menu</text>
+    <text x="836" y="652">Buffer flyout</text>
+  </g>
+
+  <!-- Subsystems menu -->
+  <g>
+    <rect x="16" y="668" width="220" height="196" rx="8" fill="#2c2c2c" stroke="#3f3f3f"/>
+    <text x="60" y="692" fill="#ffffff">Show all</text>
+    <line x1="24" y1="706" x2="228" y2="706" stroke="#3f3f3f"/>
+    <g font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="12" fill="#ffffff">
+      <text x="30" y="730">&#xE73E;</text>
+      <text x="30" y="760">&#xE73E;</text>
+      <text x="30" y="790">&#xE73E;</text>
+      <text x="30" y="820">&#xE73E;</text>
+      <text x="30" y="850">&#xE73E;</text>
+    </g>
+    <g fill="#ffffff">
+      <text x="60" y="730">Content</text>
+      <text x="60" y="760">Cooker</text>
+      <text x="60" y="790">Editor</text>
+      <text x="60" y="820">Engine</text>
+      <text x="60" y="850">Player</text>
+    </g>
+  </g>
+
+  <!-- View menu -->
+  <g>
+    <rect x="260" y="668" width="232" height="136" rx="8" fill="#2c2c2c" stroke="#3f3f3f"/>
+    <g font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="12" fill="#ffffff">
+      <text x="274" y="692">&#xE73E;</text>
+      <text x="274" y="722">&#xE73E;</text>
+      <text x="274" y="752">&#xE73E;</text>
+      <text x="274" y="790">&#xE73E;</text>
+    </g>
+    <g fill="#ffffff">
+      <text x="304" y="692">Show timestamps</text>
+      <text x="304" y="722">Show subsystems</text>
+      <text x="304" y="752">Fold repeated lines</text>
+      <text x="304" y="790">Show details pane</text>
+    </g>
+    <line x1="268" y1="766" x2="484" y2="766" stroke="#3f3f3f"/>
+  </g>
+
+  <!-- Row context menu -->
+  <g>
+    <rect x="516" y="668" width="272" height="264" rx="8" fill="#2c2c2c" stroke="#3f3f3f"/>
+    <rect x="520" y="672" width="264" height="28" rx="4" fill="#383838"/>
+    <text x="530" y="692" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="12" fill="#ffffff">&#xE8C8;</text>
+    <g fill="#ffffff">
+      <text x="560" y="692">Copy</text>
+      <text x="560" y="722">Copy message</text>
+      <text x="560" y="752">Copy visible</text>
+      <text x="560" y="782">Copy all retained</text>
+      <text x="560" y="820">Show only 'Cooker'</text>
+      <text x="560" y="850">Hide 'Cooker'</text>
+      <text x="560" y="888">Show details</text>
+      <text x="560" y="918">Select all</text>
+    </g>
+    <g fill="#9e9e9e" text-anchor="end">
+      <text x="772" y="692">Ctrl+C</text>
+      <text x="772" y="752">Ctrl+Shift+C</text>
+      <text x="772" y="888">Enter</text>
+      <text x="772" y="918">Ctrl+A</text>
+    </g>
+    <line x1="524" y1="796" x2="780" y2="796" stroke="#3f3f3f"/>
+    <line x1="524" y1="864" x2="780" y2="864" stroke="#3f3f3f"/>
+  </g>
+
+  <!-- Buffer flyout -->
+  <g>
+    <rect x="812" y="668" width="340" height="250" rx="8" fill="#2c2c2c" stroke="#3f3f3f"/>
+    <text x="828" y="694" font-size="14" font-weight="600" fill="#ffffff">Output buffer</text>
+    <text x="1136" y="694" font-size="14" font-weight="600" fill="#4cc2ff" text-anchor="end">14.2%</text>
+    <text x="828" y="714" fill="#c5c5c5">1,420 of 10,000 entries retained</text>
+    <rect x="828" y="722" width="308" height="4" rx="2" fill="#3a3a3a"/>
+    <rect x="828" y="722" width="43.7" height="4" rx="2" fill="#4cc2ff"/>
+    <text x="828" y="746" fill="#9e9e9e">8,580 entries until the oldest are overwritten</text>
+    <line x1="828" y1="760" x2="1136" y2="760" stroke="#3f3f3f"/>
+    <text x="828" y="782" font-weight="600" fill="#ffffff">Retained by level</text>
+    <circle cx="832" cy="800" r="4" fill="#ff99a4"/>
+    <text x="842" y="804" fill="#ffffff">1 error</text>
+    <circle cx="902" cy="800" r="4" fill="#fce100"/>
+    <text x="912" y="804" fill="#ffffff">16 warnings</text>
+    <circle cx="996" cy="800" r="4" fill="#c5c5c5"/>
+    <text x="1006" y="804" fill="#ffffff">114 info</text>
+    <circle cx="832" cy="822" r="4" fill="#9e9e9e"/>
+    <text x="842" y="826" fill="#ffffff">1,289 debug/verbose</text>
+    <line x1="828" y1="842" x2="1136" y2="842" stroke="#3f3f3f"/>
+    <text x="828" y="864" font-weight="600" fill="#ffffff">In this view</text>
+    <text x="828" y="884" fill="#c5c5c5">131 entries match the filters</text>
+    <text x="828" y="902" fill="#c5c5c5">118 rows (13 folded)</text>
+  </g>
+
+  <!-- Notes -->
+  <g font-size="12" fill="#c5c5c5">
+    <g font-size="11" font-weight="700" text-anchor="middle" fill="#ffffff">
+      <circle cx="1249" cy="36" r="9" fill="#e3008c"/><text x="1249" y="40">1</text>
+      <circle cx="1249" cy="100" r="9" fill="#e3008c"/><text x="1249" y="104">2</text>
+      <circle cx="1249" cy="164" r="9" fill="#e3008c"/><text x="1249" y="168">3</text>
+      <circle cx="1249" cy="244" r="9" fill="#e3008c"/><text x="1249" y="248">4</text>
+      <circle cx="1249" cy="324" r="9" fill="#e3008c"/><text x="1249" y="328">5</text>
+      <circle cx="1249" cy="388" r="9" fill="#e3008c"/><text x="1249" y="392">6</text>
+      <circle cx="1249" cy="436" r="9" fill="#e3008c"/><text x="1249" y="440">7</text>
+      <circle cx="1249" cy="516" r="9" fill="#e3008c"/><text x="1249" y="520">8</text>
+      <circle cx="1249" cy="596" r="9" fill="#e3008c"/><text x="1249" y="600">9</text>
+      <circle cx="1249" cy="676" r="9" fill="#e3008c"/><text x="1249" y="680">10</text>
+      <circle cx="1249" cy="756" r="9" fill="#e3008c"/><text x="1249" y="760">11</text>
+    </g>
+
+    <text x="1266" y="40" font-weight="600" fill="#ffffff">Levels</text>
+    <text x="1266" y="56">Level mask with its summary on the button.</text>
+    <text x="1266" y="71">Information and above by default.</text>
+
+    <text x="1266" y="104" font-weight="600" fill="#ffffff">Subsystems</text>
+    <text x="1266" y="120">Built from the subsystems seen; unchecking</text>
+    <text x="1266" y="135">hides one. New subsystems show by default.</text>
+
+    <text x="1266" y="168" font-weight="600" fill="#ffffff">Search: Find mode</text>
+    <text x="1266" y="184">Funnel off: every row stays, matches are</text>
+    <text x="1266" y="199">highlighted, F3 / Shift+F3 move between them.</text>
+    <text x="1266" y="214">Funnel on: Filter mode hides non-matching rows.</text>
+
+    <text x="1266" y="248" font-weight="600" fill="#ffffff">Pause, Follow, Wrap</text>
+    <text x="1266" y="264">Pause freezes this view only; capture goes on</text>
+    <text x="1266" y="279">and the label reads "Paused · 37 new". Jumping</text>
+    <text x="1266" y="294">to a match or scrolling up turned Follow off.</text>
+
+    <text x="1266" y="328" font-weight="600" fill="#ffffff">Copy, Save, Clear</text>
+    <text x="1266" y="344">Copy: the selection (Ctrl+C). Save: every</text>
+    <text x="1266" y="359">retained entry. Clear: empties the buffer.</text>
+
+    <text x="1266" y="392" font-weight="600" fill="#ffffff">View</text>
+    <text x="1266" y="408">Display toggles that rarely change.</text>
+
+    <text x="1266" y="440" font-weight="600" fill="#ffffff">Buffer ring</text>
+    <text x="1266" y="456">Ring buffer occupancy. Turns caution once older</text>
+    <text x="1266" y="471">entries are overwritten; never red, since a full</text>
+    <text x="1266" y="486">buffer is normal in a long session.</text>
+
+    <text x="1266" y="520" font-weight="600" fill="#ffffff">Columns</text>
+    <text x="1266" y="536">Exception glyph, time, level tag, subsystem</text>
+    <text x="1266" y="551">token: fixed widths, neutral colors. Only</text>
+    <text x="1266" y="566">severity colors the message.</text>
+
+    <text x="1266" y="600" font-weight="600" fill="#ffffff">Folded line</text>
+    <text x="1266" y="616">14 consecutive identical warnings, timed at the</text>
+    <text x="1266" y="631">latest; the tooltip gives the range. Copy and</text>
+    <text x="1266" y="646">Save write all 14; the buffer keeps all 14.</text>
+
+    <text x="1266" y="680" font-weight="600" fill="#ffffff">Current match</text>
+    <text x="1266" y="696">Selected by F3. It matched in its exception,</text>
+    <text x="1266" y="711">so the accent highlight is in Details; other</text>
+    <text x="1266" y="726">matches get the caution background.</text>
+
+    <text x="1266" y="760" font-weight="600" fill="#ffffff">Details pane</text>
+    <text x="1266" y="776">Follows the selection; resizable. Message and</text>
+    <text x="1266" y="791">exception on the left, properties on the right.</text>
+    <text x="1266" y="806">Copy details copies the full record. Esc closes.</text>
+  </g>
+</svg>
