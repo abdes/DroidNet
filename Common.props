@@ -144,6 +144,21 @@
                 <EnableMSTestV2CopyResources>false</EnableMSTestV2CopyResources>
                 <!-- Windows-only TFMs already prevent these tests from running on other OS families. -->
                 <NoWarn>$(NoWarn);MSTEST0084</NoWarn>
+                <!--
+                    The coverage extension resolves every referenced project's source roots before compiling, one
+                    serial MSBuild call per reference. Coverage runs opt in with
+                    /p:EnableMicrosoftTestingExtensionsCodeCoverage=true.
+                -->
+                <EnableMicrosoftTestingExtensionsCodeCoverage Condition="'$(EnableMicrosoftTestingExtensionsCodeCoverage)' == ''">false</EnableMicrosoftTestingExtensionsCodeCoverage>
+            </PropertyGroup>
+            <!--
+                Non-UI tests run without resources.pri or the expanded resource payloads of their references: missing
+                resources resolve to their keys. Tests that assert localized values set EnableCoreMrtTooling and
+                ExpandPriResources to true.
+            -->
+            <PropertyGroup Condition="!$(MSBuildProjectName.EndsWith('.UI.Tests'))">
+                <EnableCoreMrtTooling Condition="'$(EnableCoreMrtTooling)' == ''">false</EnableCoreMrtTooling>
+                <ExpandPriResources Condition="'$(ExpandPriResources)' == ''">false</ExpandPriResources>
             </PropertyGroup>
             <ItemGroup>
                 <PackageReference Include="AwesomeAssertions" />

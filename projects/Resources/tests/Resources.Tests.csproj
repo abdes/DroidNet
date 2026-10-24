@@ -11,6 +11,10 @@
 
         <!-- Ensure that the test loads the WinAppSDK runtime -->
         <WindowsAppSdkBootstrapInitialize>true</WindowsAppSdkBootstrapInitialize>
+
+        <!-- The tests resolve the project's localized resources from resources.pri. -->
+        <EnableCoreMrtTooling>true</EnableCoreMrtTooling>
+        <ExpandPriResources>true</ExpandPriResources>
     </PropertyGroup>
 
 
