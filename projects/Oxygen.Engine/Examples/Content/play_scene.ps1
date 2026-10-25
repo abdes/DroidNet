@@ -110,14 +110,16 @@ if (-not (Test-Path -LiteralPath $CookedDir -PathType Container)) {
     exit 1
 }
 
-# The generations retained imports publish: each imports/*.import.json record
-# names its published generation; older generations stay until reclaimed.
+# The generations model imports publish: each imports/*.import.json record's
+# head, .cooked/imports/<source_identity>/head.json, names its published
+# generation; older generations stay until reclaimed.
 function Get-PublishedImportGenerations([string]$ContentDir) {
     $records = Join-Path $ContentDir 'imports'
     if (-not (Test-Path -LiteralPath $records -PathType Container)) { return @() }
     @(Get-ChildItem -LiteralPath $records -Filter '*.import.json' -File | ForEach-Object {
-        $published = (Get-Content -LiteralPath $_.FullName -Raw | ConvertFrom-Json).published_generation
-        if ($published) { $published.id }
+        $identity = (Get-Content -LiteralPath $_.FullName -Raw | ConvertFrom-Json).source_identity
+        $head = Join-Path $ContentDir ".cooked/imports/$identity/head.json"
+        if (Test-Path -LiteralPath $head -PathType Leaf) { (Get-Content -LiteralPath $head -Raw | ConvertFrom-Json).id }
     })
 }
 

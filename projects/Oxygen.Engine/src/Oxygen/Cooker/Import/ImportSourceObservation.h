@@ -21,6 +21,8 @@ struct ImportSourceReadProof final {
   uint64_t offset = 0;
   uint64_t max_bytes = 0;
   base::Sha256Digest digest {};
+  //! The bytes the read returned, as verified before publication.
+  uint64_t size = 0;
 };
 
 //! Source facts owned by one analysis/import operation. Preparation supplies

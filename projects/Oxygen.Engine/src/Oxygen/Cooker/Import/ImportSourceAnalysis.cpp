@@ -613,15 +613,10 @@ namespace {
     if (job.job_type == "gltf" || job.job_type == "fbx") {
       const auto& settings = job.job_type == "gltf" ? job.gltf : job.fbx;
       report.source_path = settings.source_path;
-      auto provenance = std::string {};
-      if (!settings.surface_provenance_path.empty()) {
-        provenance
-          = co_await context.ReadText(settings.surface_provenance_path);
-      }
       auto errors = std::ostringstream {};
       auto request = settings.Prepare(
         job.job_type == "gltf" ? ImportFormat::kGltf : ImportFormat::kFbx,
-        provenance, errors);
+        errors);
       if (!request) {
         throw std::invalid_argument(errors.str());
       }

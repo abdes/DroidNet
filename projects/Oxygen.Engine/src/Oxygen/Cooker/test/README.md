@@ -73,7 +73,7 @@ rg "Covers:.*<Stem>" Test Tools
 
 The ImportTool CLI is also tested by two Python tests,
 `Oxygen.Cooker.ImportTool.SourceAnalysis.Cli` and
-`Oxygen.Cooker.ImportTool.RetainedImport.Cli`.
+`Oxygen.Cooker.ImportTool.ModelImportRecord.Cli`.
 
 ## Adding a test
 

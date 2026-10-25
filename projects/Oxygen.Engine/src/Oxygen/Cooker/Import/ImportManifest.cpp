@@ -43,6 +43,7 @@
 #include <Oxygen/Cooker/Import/Internal/TextureImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/MaterialDescriptorImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/MaterialDescriptorImportSettings.h>
+#include <Oxygen/Cooker/Import/ModelImportRecord.h>
 #include <Oxygen/Cooker/Import/PhysicsImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/PhysicsImportSettings.h>
 #include <Oxygen/Cooker/Import/PhysicsMaterialDescriptorImportRequestBuilder.h>
@@ -185,6 +186,47 @@ namespace {
       return source_path.string();
     }
     return (root / source_path).lexically_normal().string();
+  }
+
+  //! The model import record a `model` job names, resolved as its sources
+  //! are: against the manifest's root.
+  auto ReadModelRecord(const json& job, const std::filesystem::path& root,
+    std::ostream& errors) -> std::shared_ptr<const ModelImportRecordContent>
+  {
+    const auto path
+      = ResolveSourcePath(root, job.at("record").get<std::string>());
+    try {
+      return std::make_shared<const ModelImportRecordContent>(
+        ModelImportRecord::Read(path));
+    } catch (const std::exception& error) {
+      errors << "ERROR [import.model_record_invalid]: model import record '"
+             << path << "': " << error.what() << "\n";
+      return {};
+    }
+  }
+
+  //! The gltf or fbx job of a `model` job: its record's, with the manifest's
+  //! scheduling and output keys.
+  auto MakeModelJob(const json& job, const ModelImportRecordContent& record)
+    -> json
+  {
+    auto result = json::parse(ModelImportRecord::MakeJob(record));
+    for (const auto* key : {
+           "id",
+           "depends_on",
+           "output",
+           "layout",
+           "cooked_context_roots",
+           "source_key",
+         }) {
+      if (job.contains(key)) {
+        result[key] = job.at(key);
+      }
+    }
+    if (!job.contains("id")) {
+      result.erase("id");
+    }
+    return result;
   }
 
   template <typename T>
@@ -671,18 +713,6 @@ namespace {
   auto ApplySceneOverrides(const json& obj, SceneImportSettings& settings,
     std::ostream& errors) -> bool
   {
-    if (!ReadStringField(obj, "surface_source_identity",
-          settings.surface_source_identity, errors)) {
-      return false;
-    }
-    if (obj.contains("surface_provenance")) {
-      const auto& provenance = obj.at("surface_provenance");
-      if (!provenance.is_object()) {
-        errors << "ERROR: surface_provenance must be an object\n";
-        return false;
-      }
-      settings.surface_provenance_json = provenance.dump();
-    }
     ReadBoolField(
       obj, "content_hashing", settings.with_content_hashing, errors);
     if (obj.contains("content_flags")) {
@@ -1477,11 +1507,21 @@ auto ImportManifest::Parse(const std::string_view text,
     return std::nullopt;
   }
 
-  for (const auto& job : (*json_data).at("jobs")) {
-    if (!job.is_object()) {
+  for (const auto& entry : (*json_data).at("jobs")) {
+    if (!entry.is_object()) {
       error_stream << "ERROR: job entries must be objects\n";
       return std::nullopt;
     }
+    auto model_record = std::shared_ptr<const ModelImportRecordContent> {};
+    auto model_job = json {};
+    if (entry.value("type", std::string {}) == "model") {
+      model_record = ReadModelRecord(entry, root, error_stream);
+      if (!model_record) {
+        return std::nullopt;
+      }
+      model_job = MakeModelJob(entry, *model_record);
+    }
+    const auto& job = model_record ? model_job : entry;
 
     ImportManifestJob manifest_job {};
     manifest_job.source_key = manifest.defaults.source_key;
@@ -1753,6 +1793,8 @@ auto ImportManifest::Parse(const std::string_view text,
     if (!ApplySceneOverrides(job, manifest_job.gltf, error_stream)) {
       return std::nullopt;
     }
+    manifest_job.fbx.model_record = model_record;
+    manifest_job.gltf.model_record = model_record;
     if (!ApplyImportOptions(
           job, manifest_job.script.with_content_hashing, error_stream)) {
       return std::nullopt;

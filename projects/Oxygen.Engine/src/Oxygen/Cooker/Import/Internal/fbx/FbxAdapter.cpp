@@ -3246,6 +3246,17 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
     nodes.push_back(std::move(root));
   }
 
+  {
+    auto anchors = std::vector<std::string> {};
+    anchors.reserve(nodes.size());
+    for (const auto& node : nodes) {
+      anchors.push_back(node.anchor);
+    }
+    if (!identity.ResolveContinuity(anchors, input.source_id, diagnostics)) {
+      return result;
+    }
+  }
+
   std::vector<uint32_t> kept_indices;
   kept_indices.reserve(nodes.size());
 
@@ -3368,7 +3379,7 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
     const auto rotation = glm::quat_cast(basis);
     NodeRecord attachment {};
     attachment.node_id
-      = identity.IdOf(internal::ModelNodeIdentity::AddedAnchor({
+      = identity.Emit(internal::ModelNodeIdentity::AddedAnchor({
         .owner_anchor = owner.anchor,
         .role = role,
       }));
@@ -3405,7 +3416,7 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
     }
 
     NodeRecord rec {};
-    rec.node_id = identity.IdOf(node.anchor);
+    rec.node_id = identity.Emit(node.anchor);
     rec.scene_name_offset = build.strings.Add(name);
     rec.parent_index = node.parent_index;
     rec.node_flags = detail::BuildImportedNodeFlags(
@@ -3593,6 +3604,7 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
 
   build.nodes.insert(build.nodes.end(), component_attachments.begin(),
     component_attachments.end());
+  build.model_nodes = identity.TakePublishedNodes(input.source_id, diagnostics);
   result.build = std::move(build);
   result.success = true;
   return result;

@@ -15,6 +15,7 @@
 
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportSourceObservation.h>
+#include <Oxygen/Cooker/Import/ModelImportState.h>
 #include <Oxygen/Cooker/Import/PhysicsImportSettings.h>
 #include <Oxygen/Cooker/Import/TextureSourceAssembly.h>
 #include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
@@ -177,8 +178,12 @@ struct ImportRequest final {
   //! Optional explicit source GUID for the cooked container.
   std::optional<data::SourceKey> source_key {};
 
-  //! Validated retained source identity, shared across mesh work items.
+  //! Validated source identity, shared across mesh work items.
   std::shared_ptr<const SurfaceProvenance> surface_provenance {};
+
+  //! The node continuity and published nodes of the model's import record;
+  //! set when a model import runs from its record.
+  std::optional<ModelImportInputs> model_import {};
 
   //! Optional human-readable job name for logging and UI.
   std::optional<std::string> job_name {};

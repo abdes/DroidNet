@@ -4,8 +4,8 @@
 Packages this Content directory's loose-cooked output with Oxygen PakTool.
 
 .DESCRIPTION
-This script packages `.cooked/main` and the generation each retained import
-record under `imports` publishes into `pak`, all beside the script. An installed
+This script packages `.cooked/main` and the generation each model import record
+under `imports` publishes into `pak`, all beside the script. An installed
 SDK uses its bundled PakTool; a source checkout builds PakTool in the
 selected tree first, so a stale tool is rebuilt before packaging.
 
@@ -22,7 +22,7 @@ explicit replacement is intended.
 Base filename for emitted artifacts in the pak output directory.
 
 .PARAMETER CookedRoot
-Loose-cooked root to package with the published retained imports. Defaults to
+Loose-cooked root to package with the published model imports. Defaults to
 `ContentRoot/.cooked/main`.
 
 .PARAMETER ContentRoot
@@ -153,26 +153,29 @@ $PakPath = Join-Path $OutputDir ($BaseName + ".pak")
 $CatalogPath = Join-Path $OutputDir ($BaseName + ".catalog.json")
 $ManifestPath = Join-Path $OutputDir ($BaseName + ".manifest.json")
 
-# Each imports/*.import.json record names the generation it publishes under
-# .cooked/imports/<source>/<generation>; older generations stay until reclaimed.
+# Each imports/*.import.json record's generation head,
+# .cooked/imports/<source_identity>/head.json, names the generation it publishes
+# under .cooked/imports/<source_identity>/<generation>; older generations stay
+# until reclaimed.
 $ImportRoots = @()
 $Records = Join-Path $ContentRoot 'imports'
 $Generations = Join-Path $ContentRoot '.cooked/imports'
 if (Test-Path -LiteralPath $Records -PathType Container) {
     $ImportRoots = @(Get-ChildItem -LiteralPath $Records -Filter '*.import.json' -File | Sort-Object Name | ForEach-Object {
-        $published = (Get-Content -LiteralPath $_.FullName -Raw | ConvertFrom-Json).published_generation
-        if ($published) {
-            $root = @()
-            if (Test-Path -LiteralPath $Generations -PathType Container) {
-                $root = @(Get-ChildItem -LiteralPath $Generations -Directory -Filter $published.id -Recurse -Depth 1)
-            }
-            if ($root.Count -ne 1) {
-                # Imports are optional: pack without the ones not cooked here.
-                Write-Warning "Skipping $($_.Name): its published generation $($published.id) is not under $Generations."
-                return
-            }
-            $root[0].FullName
+        $identity = (Get-Content -LiteralPath $_.FullName -Raw | ConvertFrom-Json).source_identity
+        $head = Join-Path $Generations "$identity/head.json"
+        # A record that never published here, such as one cooked by a scene manifest into the main root, adds nothing.
+        if (-not (Test-Path -LiteralPath $head -PathType Leaf)) {
+            return
         }
+        $published = (Get-Content -LiteralPath $head -Raw | ConvertFrom-Json).id
+        $root = Join-Path $Generations "$identity/$published"
+        if (-not (Test-Path -LiteralPath $root -PathType Container)) {
+            # Imports are optional: pack without the ones not cooked here.
+            Write-Warning "Skipping $($_.Name): its published generation $published is not under $Generations."
+            return
+        }
+        $root
     })
 }
 

@@ -13,13 +13,16 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <ios>
 #include <iterator>
 #include <limits>
 #include <memory>
+#include <span>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -40,8 +43,9 @@
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/MeshBuildPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/SceneBuild.h>
-#include <Oxygen/Cooker/Import/Naming.h>
+#include <Oxygen/Cooker/Import/ModelImportState.h>
 #include <Oxygen/Cooker/Import/SurfaceProvenance.h>
+#include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
 #include <Oxygen/Cooker/test/Support/ImportHarness.h>
 #include <Oxygen/Cooker/test/Support/ModelImportTestBase.h>
 #include <Oxygen/Cooker/test/Support/TestPaths.h>
@@ -56,7 +60,15 @@
 #include <Oxygen/Testing/GTest.h>
 
 namespace {
-using namespace oxygen::content::import;
+using oxygen::content::import::AsyncImportService;
+using oxygen::content::import::CookedBufferPayload;
+using oxygen::content::import::ImportDiagnostic;
+using oxygen::content::import::ImportRequest;
+using oxygen::content::import::LooseCookedLayout;
+using oxygen::content::import::MeshBuildPipeline;
+using oxygen::content::import::SceneBuild;
+using oxygen::content::import::SurfaceProvenance;
+using oxygen::content::import::test::ModelImportTestBase;
 namespace data = oxygen::data;
 
 struct CookedImport {
@@ -123,11 +135,19 @@ auto GeometryFor(const CookedImport& imported, const data::AssetKey& key)
 using oxygen::cooker::test::ExpectVec3Near;
 using oxygen::cooker::test::SubmitAndWait;
 
-class MeshTransformBakeTest : public test::ModelImportTestBase {
+class MeshTransformBakeTest : public ModelImportTestBase {
 protected:
-  auto Cook(const std::string& source, const std::string& extension,
-    const bool bake) -> CookedImport
+  struct CookRequest final {
+    std::string_view source;
+    std::string_view extension;
+    bool bake;
+  };
+
+  auto Cook(const CookRequest& cook) -> CookedImport
   {
+    const auto source = cook.source;
+    const std::string extension(cook.extension);
+    const auto bake = cook.bake;
     CookedImport result;
     const auto test_name = std::string(
       testing::UnitTest::GetInstance()->current_test_info()->name());
@@ -135,6 +155,7 @@ protected:
       + (bake ? "_baked" : "_retained"));
     ImportRequest request;
     request.surface_provenance = source_provenance_;
+    request.model_import = oxygen::content::import::ModelImportInputs {};
     request.source_path = root / ("fixture." + extension);
     request.asset_virtual_path
       = oxygen::cooker::test::ModelVirtualPath(request.source_path);
@@ -154,8 +175,8 @@ protected:
       return result;
     }
     if (report->success && !report->surface_provenance_json.empty()) {
-      source_provenance_
-        = SurfaceProvenance::Parse(report->surface_provenance_json);
+      source_provenance_ = SurfaceProvenance::Parse(
+        report->surface_provenance_json, source_provenance_->SourceIdentity());
     }
     result.diagnostics = report->diagnostics;
     EXPECT_TRUE(report->success);
@@ -171,12 +192,12 @@ protected:
     const auto inspection = LoadInspection(report->cooked_root);
     const auto read_bytes
       = [](const std::filesystem::path& path) -> std::vector<std::byte> {
-      std::ifstream stream(path, std::ios::binary | std::ios::ate);
-      std::vector<std::byte> bytes(static_cast<size_t>(stream.tellg()));
-      stream.seekg(0);
-      stream.read(reinterpret_cast<char*>(bytes.data()),
-        static_cast<std::streamsize>(bytes.size()));
-      return bytes;
+      std::ifstream stream(path, std::ios::binary);
+      std::vector<char> raw(
+        static_cast<size_t>(std::filesystem::file_size(path)));
+      stream.read(raw.data(), static_cast<std::streamsize>(raw.size()));
+      const auto bytes = std::as_bytes(std::span(raw));
+      return { bytes.begin(), bytes.end() };
     };
     const auto table = read_bytes(
       report->cooked_root / LooseCookedLayout {}.BuffersTableRelPath());
@@ -185,11 +206,15 @@ protected:
     const auto read_buffer =
       [&](const data::pak::core::ResourceIndexT index) -> CookedBufferPayload {
       data::pak::core::BufferResourceDesc descriptor;
-      std::memcpy(&descriptor,
-        table.data() + (index.get() * sizeof(descriptor)), sizeof(descriptor));
+      const auto entry = std::span<const std::byte>(table).subspan(
+        static_cast<size_t>(index.get()) * sizeof(descriptor),
+        sizeof(descriptor));
+      std::memcpy(&descriptor, entry.data(), sizeof(descriptor));
       CookedBufferPayload payload;
-      payload.data.assign(buffers.begin() + descriptor.data_offset,
-        buffers.begin() + descriptor.data_offset + descriptor.size_bytes);
+      const auto content = std::span<const std::byte>(buffers).subspan(
+        static_cast<size_t>(descriptor.data_offset),
+        static_cast<size_t>(descriptor.size_bytes));
+      payload.data.assign(content.begin(), content.end());
       return payload;
     };
     for (const auto& asset : inspection.Assets()) {
@@ -203,8 +228,9 @@ protected:
         = read_bytes(report->cooked_root / asset.descriptor_relpath);
       data::pak::geometry::MeshDesc descriptor;
       std::memcpy(&descriptor,
-        geometry.descriptor_bytes.data()
-          + sizeof(data::pak::geometry::GeometryAssetDesc),
+        std::span<const std::byte>(geometry.descriptor_bytes)
+          .subspan(sizeof(data::pak::geometry::GeometryAssetDesc))
+          .data(),
         sizeof(descriptor));
       MeshBuildPipeline::CookedMeshPayload mesh;
       const auto resolve_buffer =
@@ -221,10 +247,10 @@ protected:
       mesh.vertex_buffer
         = resolve_buffer(descriptor.info.standard.vertex_buffer);
       mesh.index_buffer = resolve_buffer(descriptor.info.standard.index_buffer);
-      std::copy_n(
-        descriptor.info.standard.bounding_box_min, 3, mesh.bounds.min.begin());
-      std::copy_n(
-        descriptor.info.standard.bounding_box_max, 3, mesh.bounds.max.begin());
+      std::ranges::copy(
+        descriptor.info.standard.bounding_box_min, mesh.bounds.min.begin());
+      std::ranges::copy(
+        descriptor.info.standard.bounding_box_max, mesh.bounds.max.begin());
       geometry.lods.push_back(std::move(mesh));
       result.geometries.push_back(std::move(geometry));
     }
@@ -292,8 +318,10 @@ NOLINT_TEST_F(
     auto document = GltfFixture();
     document.at("nodes").at(0).at("scale").at(0) = scale_x;
     const auto source = document.dump();
-    const auto retained = Cook(source, "gltf", false);
-    const auto baked = Cook(source, "gltf", true);
+    const auto retained
+      = Cook({ .source = source, .extension = "gltf", .bake = false });
+    const auto baked
+      = Cook({ .source = source, .extension = "gltf", .bake = true });
     ASSERT_EQ(retained.scene.renderables.size(), 1U);
     EXPECT_EQ(glm::determinant(glm::mat3(LocalMatrix(retained.scene.nodes.at(
                 retained.scene.renderables.at(0).node_index))))
@@ -322,8 +350,10 @@ NOLINT_TEST_F(
       source.replace(
         position, std::string("\"A\",2,3,4").size(), "\"A\",-2,3,4");
     }
-    const auto retained = Cook(source, "fbx", false);
-    const auto baked = Cook(source, "fbx", true);
+    const auto retained
+      = Cook({ .source = source, .extension = "fbx", .bake = false });
+    const auto baked
+      = Cook({ .source = source, .extension = "fbx", .bake = true });
     ASSERT_EQ(retained.scene.renderables.size(), 1U);
     EXPECT_EQ(glm::determinant(glm::mat3(LocalMatrix(retained.scene.nodes.at(
                 retained.scene.renderables.at(0).node_index))))
@@ -355,8 +385,10 @@ NOLINT_TEST_F(
     { { "name", "Attachment" }, { "translation", { 0, 1, 0 } } });
   document.at("scenes").at(0).update({ { "nodes", { 0, 1, 2, 3 } } });
   const auto source = document.dump();
-  const auto retained = Cook(source, "gltf", false);
-  const auto baked = Cook(source, "gltf", true);
+  const auto retained
+    = Cook({ .source = source, .extension = "gltf", .bake = false });
+  const auto baked
+    = Cook({ .source = source, .extension = "gltf", .bake = true });
   ASSERT_EQ(retained.geometries.size(), 1U);
   ASSERT_EQ(baked.geometries.size(), 3U);
   ASSERT_EQ(baked.scene.renderables.size(), 4U);
@@ -442,8 +474,10 @@ NOLINT_TEST_F(MeshTransformBakeTest, GltfRetainsAnimatedAndMorphNodeTransforms)
       document.at("meshes").at(0).update({ { "weights", { 0 } } });
     }
     const auto source = document.dump();
-    const auto retained = Cook(source, "gltf", false);
-    const auto baked = Cook(source, "gltf", true);
+    const auto retained
+      = Cook({ .source = source, .extension = "gltf", .bake = false });
+    const auto baked
+      = Cook({ .source = source, .extension = "gltf", .bake = true });
     ASSERT_EQ(baked.scene.renderables.size(), 1U);
     const auto node = baked.scene.renderables.at(0).node_index;
     EXPECT_EQ(LocalMatrix(baked.scene.nodes.at(node)),
@@ -470,8 +504,10 @@ NOLINT_TEST_F(
   });
   document.at("scenes").at(0).update({ { "nodes", { 1 } } });
   const auto source = document.dump();
-  const auto retained = Cook(source, "gltf", false);
-  const auto baked = Cook(source, "gltf", true);
+  const auto retained
+    = Cook({ .source = source, .extension = "gltf", .bake = false });
+  const auto baked
+    = Cook({ .source = source, .extension = "gltf", .bake = true });
   ASSERT_EQ(baked.scene.renderables.size(), 1U);
   const auto index = baked.scene.renderables.at(0).node_index;
   EXPECT_GT(glm::determinant(glm::mat3(WorldMatrix(retained.scene, index))), 0);
@@ -513,8 +549,10 @@ NOLINT_TEST_F(MeshTransformBakeTest, FbxMapsSharedVariantsAndPerNodeMaterials)
     C: "OO",1005,0
     C: "OO",1006,1005
 )");
-  const auto retained = Cook(source, "fbx", false);
-  const auto baked = Cook(source, "fbx", true);
+  const auto retained
+    = Cook({ .source = source, .extension = "fbx", .bake = false });
+  const auto baked
+    = Cook({ .source = source, .extension = "fbx", .bake = true });
   ASSERT_EQ(baked.scene.renderables.size(), 3U);
   ASSERT_EQ(baked.geometries.size(), 2U);
   EXPECT_EQ(baked.scene.renderables.at(0).geometry_key,
@@ -530,9 +568,10 @@ NOLINT_TEST_F(MeshTransformBakeTest, FbxMapsSharedVariantsAndPerNodeMaterials)
     -> data::AssetKey {
     data::pak::geometry::SubMeshDesc submesh;
     std::memcpy(&submesh,
-      geometry.descriptor_bytes.data()
-        + sizeof(data::pak::geometry::GeometryAssetDesc)
-        + sizeof(data::pak::geometry::MeshDesc),
+      std::span<const std::byte>(geometry.descriptor_bytes)
+        .subspan(sizeof(data::pak::geometry::GeometryAssetDesc)
+          + sizeof(data::pak::geometry::MeshDesc))
+        .data(),
       sizeof(submesh));
     return submesh.material_asset_key;
   };

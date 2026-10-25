@@ -418,8 +418,8 @@ protected:
       return ImportReport {};
     }
     if (report->success && !report->surface_provenance_json.empty()) {
-      source_provenance_
-        = SurfaceProvenance::Parse(report->surface_provenance_json);
+      source_provenance_ = SurfaceProvenance::Parse(
+        report->surface_provenance_json, source_provenance_->SourceIdentity());
     }
     return *report;
   }
@@ -433,6 +433,7 @@ protected:
       = oxygen::cooker::test::ModelVirtualPath(spec.source_path);
     request.cooked_root = spec.cooked_root;
     request.surface_provenance = source_provenance_;
+    request.model_import = oxygen::content::import::ModelImportInputs {};
     return request;
   }
 

@@ -14,7 +14,7 @@ Engine. The design uses OxCo structured concurrency with a **dedicated import
 thread** running its own event loop and ThreadPool, completely decoupled from
 the main application thread.
 
-Retained model imports use [immutable publication](#retained-model-publication);
+Model imports use [immutable publication](#model-import-publication);
 the editor continues to own its broader project publication transaction.
 [Source analysis](#source-analysis-and-input-observations) shares preparation and
 input observation with native cooking.
@@ -132,24 +132,31 @@ and package/build dependencies), and `UAssetImportData` (reuse precomputed sourc
 hashes). Oxygen's coherent read and negative-probe checks remain explicit;
 filename-based cached hashes do not establish them.
 
-## Retained model publication
+## Model import publication
 
-Self-contained glTF/FBX imports have a Cooker-owned authored record in the
-existing Content import-record area. It retains the native model recipe, source
-namespace/provenance and selected cooked generation. Original external files are
-read inputs; importing never writes metadata beside them.
+A glTF or FBX model imported from its model import record
+(`Content/imports/<source_identity>.import.json`) holds its source, virtual
+path, settings and source identity there, and what its imports established:
+surface provenance, node continuity, published nodes and source fingerprint.
+Original external files are read inputs; importing never writes metadata beside
+them.
 
 Each attempt cooks into a new private directory under
 `Content/.cooked/imports/<source-id>/<generation-id>`. It neither modifies a
 published generation nor copies an earlier aggregate root. After successful
-native validation, one atomic authored-record replacement selects both the
-candidate provenance and generation. Record/settings changes or a competing
-publication fail the expected-revision check and leave the previous generation
-selected. Failed or interrupted attempts remain unselected and cannot affect
-subsequent source identity allocation.
+native validation and the check that the source bytes did not change, the
+publisher writes the record's new provenance, published nodes and fingerprint,
+then selects the generation in `Content/.cooked/imports/<source-id>/head.json`.
+Record changes or a competing publication fail the expected-revision check and
+leave the previous generation selected. Failed or interrupted attempts remain
+unselected and leave the record unchanged.
+
+A batch's `model` jobs run the same records but never write them: each report
+returns the fields the import established (`model_import`), and the host commits
+them with its own publication.
 
 `AsyncImportService::SubmitImport` is the staging primitive used by project
-transactions. The retained model entry point owns record preparation, isolated
+transactions. The model import entry point owns record preparation, isolated
 cooking and publication for native hosts; DemoShell and CLI consume that same
 API and schema. The editor keeps its existing project coordinator and uses the
 shared native provenance value.
@@ -160,7 +167,7 @@ shared native provenance value.
 for the editor and the ImportTool: source, virtual path, settings, source
 identity, surface provenance, node continuity, published nodes and source
 fingerprint. `Prepare` reserves one unique attempt, and
-`AsyncImportService::SubmitRetainedImport` executes it. The selected
+`AsyncImportService::SubmitModelImport` executes it. The selected
 generation is publication state, kept in
 `<content_root>/.cooked/imports/<source_identity>/head.json`, never in the
 record. See the editor's
@@ -175,7 +182,7 @@ keep their logical spelling. Emitter failures retain the original file error
 through session finalization, even when another emitter has flushed the shared
 writer.
 
-DemoShell persists retained record paths (`content.library.import_records`)
+DemoShell persists model import record paths (`content.library.import_records`)
 and the active scene's record (`content.active_scene.import_record`). It resolves
 the current generation when restoring the library, so external CLI reimports
 do not strand the UI on a historical directory. The source-browser folder is
@@ -187,7 +194,7 @@ reclamation requires the owning Content lifetime to release them.
 `ReclaimUnusedGenerations` checks selection under the record lock, then removes
 only UUID-named private generations for that source whose exclusive marker lock
 can be acquired. Import workers run this cleanup before new work; selected,
-mounted and in-flight generations remain. Retained jobs own existing native
+mounted and in-flight generations remain. Model import jobs own existing native
 file writers and registries per generation. Cancellation drains that writer
 before destroying its session/emitters, without cancelling or draining another
 job. One source namespace belongs to one authored record. Hosts expose
@@ -196,7 +203,7 @@ the selected generation without adding workspace-selection UI.
 Acceptance: interrupted/failed cooks preserve the selected record and all prior
 bytes; concurrent publishers cannot overwrite each other's accepted generation;
 source/settings edits invalidate an in-flight candidate; deleting derived
-generations preserves SurfaceIds after recook from retained provenance; old readers
+generations preserves SurfaceIds after recook from recorded provenance; old readers
 remain valid through generation replacement.
 
 ### Core Principles

@@ -18,7 +18,7 @@
 #include <Oxygen/Clap/Fluent/CommandBuilder.h>
 #include <Oxygen/Clap/Fluent/DSL.h>
 #include <Oxygen/Clap/Option.h>
-#include <Oxygen/Cooker/Import/RetainedModelImport.h>
+#include <Oxygen/Cooker/Import/ModelImportRecord.h>
 #include <Oxygen/Cooker/Tools/ImportTool/ReclaimCommand.h>
 
 namespace oxygen::content::import::tool {
@@ -30,19 +30,20 @@ auto ReclaimCommand::BuildCommand() -> std::shared_ptr<clap::Command>
   auto record
     = clap::Option::WithKey("record")
         .Long("record")
-        .About("Retained import record whose unused generations are reclaimed")
+        .About("Model import record whose unused generations are reclaimed")
         .Required()
         .WithValue<std::string>()
         .StoreTo(&record_path_)
         .Build();
   return clap::CommandBuilder("reclaim")
-    .About("Remove unselected, unleased retained generations without importing")
+    .About(
+      "Remove unselected, unleased model import generations without importing")
     .WithOption(std::move(record));
 }
 
 auto ReclaimCommand::Run() -> std::expected<void, std::error_code>
 {
-  const auto removed = RetainedModelImport::ReclaimUnusedGenerations(
+  const auto removed = ModelImportRecord::ReclaimUnusedGenerations(
     base::ToNativePath(record_path_));
   fmt::print("Reclaimed {} unused generation(s): {}\n", removed, record_path_);
   return {};

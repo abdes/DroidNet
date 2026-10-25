@@ -226,6 +226,8 @@ private:
   auto RequestProducerStop() -> void;
   [[nodiscard]] auto RunOwnedSessionToCompletion() -> co::Co<>;
   [[nodiscard]] auto ExecuteAndPublishAsync() -> co::Co<ImportReport>;
+  //! Adds what a model import from its record read, once verified.
+  auto AttachFingerprint(ImportReport& report) const -> void;
   [[nodiscard]] auto MainAsync() -> co::Co<>;
 
   [[nodiscard]] auto MakeCancelledReport(const ImportRequest& request) const
@@ -248,7 +250,7 @@ private:
   ImportConcurrency concurrency_ {};
   AsyncImportService::ScriptCompileCallback script_compile_callback_;
   std::stop_token stop_token_;
-  std::shared_ptr<RetainedModelImport> retained_import_;
+  std::shared_ptr<ModelImportRecord> model_import_record_;
   std::shared_ptr<ImportSourceSnapshot> source_snapshot_;
   std::unique_ptr<IAsyncFileWriter> generation_writer_;
   std::unique_ptr<ResourceTableRegistry> generation_tables_;

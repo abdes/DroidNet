@@ -64,7 +64,6 @@ namespace {
     job.gltf.source_path = source_path.string();
     job.virtual_path = oxygen::cooker::test::ModelVirtualPath(source_path);
     job.gltf.virtual_path = job.virtual_path;
-    job.gltf.surface_source_identity = "01990000-0000-7000-8000-000000000001";
     manifest.jobs.push_back(job);
     const auto analysis = manifest.AnalyzeSources();
     ASSERT_TRUE(analysis.complete) << analysis.ToJson();

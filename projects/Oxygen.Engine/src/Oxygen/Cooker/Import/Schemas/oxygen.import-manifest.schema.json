@@ -97,6 +97,30 @@
           "if": {
             "properties": {
               "type": {
+                "const": "model"
+              }
+            }
+          },
+          "then": {
+            "required": ["record"],
+            "propertyNames": {
+              "enum": [
+                "id",
+                "depends_on",
+                "type",
+                "record",
+                "output",
+                "layout",
+                "cooked_context_roots",
+                "source_key"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
                 "const": "texture-descriptor"
               }
             }
@@ -316,7 +340,16 @@
             ]
           },
           "else": {
-            "required": ["source"]
+            "if": {
+              "properties": {
+                "type": {
+                  "const": "model"
+                }
+              }
+            },
+            "else": {
+              "required": ["source"]
+            }
           }
         },
         {
@@ -610,14 +643,6 @@
           },
           "additionalProperties": false
         },
-        "surface_source_identity": {
-          "type": "string",
-          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
-        },
-        "surface_provenance": {
-          "type": "object",
-          "description": "Retained native provenance, validated against oxygen.surface-provenance.schema.json by the importer."
-        },
         "unit_policy": {
           "enum": ["normalize", "preserve", "custom"]
         },
@@ -847,6 +872,7 @@
             "scene-descriptor",
             "fbx",
             "gltf",
+            "model",
             "script",
             "script-sidecar",
             "physics-sidecar",
@@ -856,6 +882,11 @@
         "id": {
           "type": "string",
           "minLength": 1
+        },
+        "record": {
+          "type": "string",
+          "minLength": 1,
+          "description": "A model job's model import record (oxygen.model-import.schema.json), resolved as job sources are: against the manifest root, or beside the manifest."
         },
         "depends_on": {
           "type": "array",
@@ -994,14 +1025,6 @@
             }
           },
           "additionalProperties": false
-        },
-        "surface_source_identity": {
-          "type": "string",
-          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
-        },
-        "surface_provenance": {
-          "type": "object",
-          "description": "Retained native provenance, validated against oxygen.surface-provenance.schema.json by the importer."
         },
         "unit_policy": {
           "enum": ["normalize", "preserve", "custom"]

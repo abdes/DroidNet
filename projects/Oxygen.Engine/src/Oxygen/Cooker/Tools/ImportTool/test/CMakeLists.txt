@@ -42,14 +42,14 @@ set_tests_properties(
 )
 
 add_test(
-  NAME "Oxygen.Cooker.ImportTool.RetainedImport.Cli"
+  NAME "Oxygen.Cooker.ImportTool.ModelImportRecord.Cli"
   COMMAND
     "${Python3_EXECUTABLE}"
-    "${CMAKE_CURRENT_SOURCE_DIR}/retained_import_cli_test.py"
+    "${CMAKE_CURRENT_SOURCE_DIR}/model_import_record_cli_test.py"
     "$<TARGET_FILE:oxygen-cooker-importtool>"
 )
 set_tests_properties(
-  "Oxygen.Cooker.ImportTool.RetainedImport.Cli"
+  "Oxygen.Cooker.ImportTool.ModelImportRecord.Cli"
   PROPERTIES
     TIMEOUT
       300

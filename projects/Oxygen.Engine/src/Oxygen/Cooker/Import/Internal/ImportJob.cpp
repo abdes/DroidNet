@@ -4,14 +4,17 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <chrono>
 #include <exception>
 #include <filesystem>
 #include <memory>
+#include <optional>
 #include <stdexcept>
 #include <string_view>
 #include <system_error>
 #include <utility>
+#include <vector>
 
 #include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Base/Logging.h>
@@ -22,14 +25,16 @@
 #include <Oxygen/Cooker/Import/ImportProgress.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
+#include <Oxygen/Cooker/Import/ImportSourceObservation.h>
 #include <Oxygen/Cooker/Import/Internal/ImportJob.h>
 #include <Oxygen/Cooker/Import/Internal/ImportJobParams.h>
 #include <Oxygen/Cooker/Import/Internal/ImportSession.h>
 #include <Oxygen/Cooker/Import/Internal/ImportSourceSnapshot.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedIndexRegistry.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableRegistry.h>
+#include <Oxygen/Cooker/Import/ModelImportRecord.h>
+#include <Oxygen/Cooker/Import/ModelImportState.h>
 #include <Oxygen/Cooker/Import/Naming.h>
-#include <Oxygen/Cooker/Import/RetainedModelImport.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/OxCo/Algorithms.h>
 #include <Oxygen/OxCo/Awaitables.h>
@@ -72,6 +77,47 @@ namespace {
     };
   }
 
+  //! The files a model import read whole, once verified unchanged: its
+  //! primary source and, relative to the primary's folder, every other.
+  [[nodiscard]] auto MakeFingerprint(
+    const std::vector<ImportSourceObservation>& observations,
+    const std::filesystem::path& source_path)
+    -> std::optional<ModelSourceFingerprint>
+  {
+    const auto primary
+      = std::filesystem::absolute(source_path).lexically_normal();
+    auto fingerprint = std::optional<ModelSourceFingerprint> {};
+    auto files = std::vector<ModelSourceFile> {};
+    for (const auto& observation : observations) {
+      const auto whole = std::ranges::find_if(
+        observation.reads, [](const ImportSourceReadProof& read) -> bool {
+          return read.offset == 0U && read.max_bytes == 0U;
+        });
+      if (!observation.exists || whole == observation.reads.end()) {
+        continue;
+      }
+      if (observation.path == primary) {
+        fingerprint = ModelSourceFingerprint {
+          .size = whole->size,
+          .sha256 = whole->digest,
+          .files = {},
+        };
+        continue;
+      }
+      files.push_back({
+        .path = observation.path.lexically_relative(primary.parent_path())
+          .generic_string(),
+        .size = whole->size,
+        .sha256 = whole->digest,
+      });
+    }
+    if (fingerprint) {
+      std::ranges::sort(files, {}, &ModelSourceFile::path);
+      fingerprint->files = std::move(files);
+    }
+    return fingerprint;
+  }
+
 } // namespace
 
 ImportJob::ImportJob(ImportJobParams params)
@@ -89,11 +135,11 @@ ImportJob::ImportJob(ImportJobParams params)
   , concurrency_(params.concurrency)
   , script_compile_callback_(std::move(params.script_compile_callback))
   , stop_token_(std::move(params.stop_token))
-  , retained_import_(std::move(params.retained_import))
+  , model_import_record_(std::move(params.model_import_record))
 {
   CHECK_NOTNULL_F(thread_pool_, "ImportJob requires a non-null thread pool");
-  if (retained_import_ || request_.captured_inputs
-    || !request_.preparation_inputs.empty()) {
+  if (model_import_record_ || request_.captured_inputs
+    || !request_.preparation_inputs.empty() || request_.model_import) {
     CHECK_NOTNULL_F(file_reader_, "Observed imports require a source reader");
     source_snapshot_ = std::make_shared<ImportSourceSnapshot>(
       *file_reader_, *thread_pool_, request_.captured_inputs);
@@ -101,12 +147,12 @@ ImportJob::ImportJob(ImportJobParams params)
     source_snapshot_->RecordPreparation(preparation);
     file_reader_ = observer_ptr { source_snapshot_.get() };
   }
-  if (retained_import_) {
+  if (model_import_record_) {
     CHECK_NOTNULL_F(
-      file_writer_, "Retained imports require a generation writer");
+      file_writer_, "Model import records require a generation writer");
     generation_writer_ = std::move(params.generation_writer);
-    CHECK_NOTNULL_F(
-      generation_writer_, "Retained imports require an isolated native writer");
+    CHECK_NOTNULL_F(generation_writer_,
+      "Model import records require an isolated native writer");
     file_writer_ = observer_ptr { generation_writer_.get() };
     generation_tables_ = std::make_unique<ResourceTableRegistry>(*file_writer_);
     generation_index_ = std::make_unique<LooseCookedIndexRegistry>();
@@ -168,7 +214,7 @@ auto ImportJob::WritableCookedRoot() const -> std::filesystem::path
 {
   const auto root = request_.ResolveCookedRoot();
   if (HasGenerationMarker(root)
-    && (!retained_import_ || !retained_import_->AllowsWriting(root))) {
+    && (!model_import_record_ || !model_import_record_->AllowsWriting(root))) {
     throw std::invalid_argument(
       "Immutable import generations require their prepared write authority");
   }
@@ -257,6 +303,13 @@ auto ImportJob::Session() -> ImportSession&
     session_
       = std::make_unique<ImportSession>(request_, file_reader_, file_writer_,
         thread_pool_, table_registry_, index_registry_, cooked_reader_);
+    // What finding the model's record decided is part of the import's
+    // diagnostics, streamed and reported like the import's own.
+    if (model_import_record_) {
+      for (const auto& note : model_import_record_->Notes()) {
+        session_->AddDiagnostic(note);
+      }
+    }
   }
   return *session_;
 }
@@ -275,15 +328,15 @@ auto ImportJob::ExecuteAndPublishAsync() -> co::Co<ImportReport>
   if (table_registry_) {
     co_await table_registry_->WaitForFinalization(cooked_root);
   }
-  if (retained_import_) {
+  if (model_import_record_) {
     co_await thread_pool_->Run(
-      [publication = retained_import_](
+      [publication = model_import_record_](
         co::ThreadPool::CancelToken cancelled) -> void {
         if (!cancelled) {
           try {
             static_cast<void>(publication->ReclaimUnusedGenerations());
           } catch (const std::exception& error) {
-            LOG_F(WARNING, "Retained generation cleanup deferred: {}",
+            LOG_F(WARNING, "Model import generation cleanup deferred: {}",
               error.what());
           }
         }
@@ -293,15 +346,16 @@ auto ImportJob::ExecuteAndPublishAsync() -> co::Co<ImportReport>
   if (!report.success) {
     co_return report;
   }
-  if (!retained_import_) {
+  if (!model_import_record_) {
     if (source_snapshot_) {
       co_await source_snapshot_->Verify();
+      AttachFingerprint(report);
     }
     co_return report;
   }
   auto candidate = std::make_shared<ImportReport>(std::move(report));
   const bool validated = co_await thread_pool_->Run(
-    [publication = retained_import_, candidate](
+    [publication = model_import_record_, candidate](
       co::ThreadPool::CancelToken cancelled) -> bool {
       if (cancelled) {
         return false;
@@ -316,10 +370,19 @@ auto ImportJob::ExecuteAndPublishAsync() -> co::Co<ImportReport>
   if (IsStopped() || (cancel_event_ && cancel_event_->Triggered())) {
     co_return MakeCancelledReport(request_);
   }
+  AttachFingerprint(*candidate);
   // The short CAS/atomic-replace section does not suspend. Once it commits,
   // completion wins over a cancellation delivered afterward.
-  retained_import_->Publish(*candidate, StopToken());
+  model_import_record_->Publish(*candidate, StopToken());
   co_return std::move(*candidate);
+}
+
+auto ImportJob::AttachFingerprint(ImportReport& report) const -> void
+{
+  if (request_.model_import) {
+    report.source_fingerprint
+      = MakeFingerprint(source_snapshot_->Observations(), request_.source_path);
+  }
 }
 
 auto ImportJob::MainAsync() -> co::Co<>
@@ -327,7 +390,7 @@ auto ImportJob::MainAsync() -> co::Co<>
   // Cancellation stops producers. The owning orchestrator stays alive to join
   // them and then drain callbacks before destroying session-owned emitters.
   co_await co::AnyOf(co::NonCancellable(RunOwnedSessionToCompletion()),
-    co::UntilCancelledAnd([this]() -> co::Co<> {
+    co::UntilCancelledAnd([this] -> co::Co<> {
       RequestProducerStop();
       co_return;
     }));
@@ -336,7 +399,7 @@ auto ImportJob::MainAsync() -> co::Co<>
 auto ImportJob::RunOwnedSessionToCompletion() -> co::Co<>
 {
   const auto started = std::chrono::steady_clock::now();
-  const auto completion = ScopeGuard([this]() noexcept -> void {
+  const auto completion = ScopeGuard([this] noexcept -> void {
     completed_.Trigger();
     Stop();
   });
@@ -368,7 +431,7 @@ auto ImportJob::RunOwnedSessionToCompletion() -> co::Co<>
         co_return co::kCancel;
       }
       if (cancel_event_) {
-        producers.Start([this]() -> co::Co<> {
+        producers.Start([this] -> co::Co<> {
           co_await *cancel_event_;
           RequestProducerStop();
         });
@@ -382,7 +445,7 @@ auto ImportJob::RunOwnedSessionToCompletion() -> co::Co<>
   }
   producer_nursery_ = nullptr;
   pipelines_.clear();
-  const auto capture_session_timing = [&]() noexcept -> void {
+  const auto capture_session_timing = [&] noexcept -> void {
     if (!execution_completed && session_) {
       fallback_telemetry.io_duration = session_->IoDuration();
       fallback_telemetry.source_load_duration = session_->SourceLoadDuration();
@@ -421,6 +484,7 @@ auto ImportJob::RunOwnedSessionToCompletion() -> co::Co<>
     } catch (...) {
       // A minimal failed report still carries completion during memory
       // exhaustion.
+      report.success = false;
     }
   };
   if (execution_failure && !IsStopped()) {

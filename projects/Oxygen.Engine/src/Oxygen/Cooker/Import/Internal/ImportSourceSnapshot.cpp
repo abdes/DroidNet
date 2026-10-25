@@ -91,7 +91,7 @@ auto ImportSourceSnapshot::BeginParserRead(const std::filesystem::path& path)
       }
       physical = input->file->path;
     }
-    return ParserRead(*this, std::move(logical), std::move(physical));
+    return { *this, std::move(logical), std::move(physical) };
   } catch (...) {
     EndRead();
     throw;
@@ -114,7 +114,7 @@ auto ImportSourceSnapshot::RecordPreparation(
   for (const auto& input : inputs) {
     const auto path = NormalizePath(input.path);
     BeginRead(path);
-    auto release = ScopeGuard([this]() noexcept -> void { EndRead(); });
+    auto release = ScopeGuard([this] noexcept -> void { EndRead(); });
     if (!RecordObservation(path,
           Observation {
             .exists = input.exists,
@@ -493,7 +493,8 @@ auto ImportSourceSnapshot::VerifyCapturedFiles() -> co::Co<>
   if (!captured_inputs_) {
     co_return;
   }
-  constexpr uint64_t kVerificationChunkBytes = 1024U * 1024U;
+  constexpr uint64_t kVerificationChunkBytes
+    = uint64_t { 1024U } * uint64_t { 1024U };
   for (const auto& [path, observation] : observations_) {
     if (!observation.content_read) {
       continue;
@@ -610,6 +611,7 @@ auto ImportSourceSnapshot::Verify() -> co::Co<>
       throw std::runtime_error("Source became unavailable before publication: "
         + bytes.error().ToString());
     }
+    const auto size = static_cast<uint64_t>(bytes.value().size());
     const auto actual = co_await pool_->Run(
       [data = std::move(bytes).value()](
         co::ThreadPool::CancelToken) -> base::Sha256Digest {
@@ -619,6 +621,7 @@ auto ImportSourceSnapshot::Verify() -> co::Co<>
       throw std::runtime_error(
         "Source changed before publication: " + path.string());
     }
+    verified_sizes_.insert_or_assign(key, size);
   }
   co_await VerifyCapturedFiles();
   const std::scoped_lock lock(mutex_);
@@ -657,10 +660,12 @@ auto ImportSourceSnapshot::Observations() const
       .reads = {},
     });
     while (read != reads_.end() && std::get<0>(read->first) == path) {
+      const auto size = verified_sizes_.find(read->first);
       value.reads.push_back({
         .offset = std::get<1>(read->first),
         .max_bytes = std::get<2>(read->first),
         .digest = read->second,
+        .size = size != verified_sizes_.end() ? size->second : 0U,
       });
       ++read;
     }

@@ -24,6 +24,7 @@
 #include <Oxygen/Cooker/Import/CapturedInputSet.h>
 #include <Oxygen/Cooker/Import/FileInfo.h>
 #include <Oxygen/Cooker/Import/Internal/ImportManifest_schema.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
 
 namespace oxygen::content::import {
 namespace {
@@ -138,7 +139,7 @@ auto CapturedInputSet::Parse(const std::string_view json)
   const auto document = nlohmann::json::parse(json);
   auto validator = nlohmann::json_schema::json_validator {};
   validator.set_root_schema(nlohmann::json::parse(kCapturedInputsSchema));
-  validator.validate(document);
+  internal::ValidateJsonSchema(validator, document, "Captured input set");
   auto inputs = std::vector<CapturedInput> {};
   inputs.reserve(document.at("inputs").size());
   for (const auto& entry : document.at("inputs")) {

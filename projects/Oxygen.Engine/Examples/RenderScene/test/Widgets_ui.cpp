@@ -32,7 +32,7 @@
 
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Console/Console.h>
-#include <Oxygen/Cooker/Import/RetainedModelImport.h>
+#include <Oxygen/Cooker/Import/ModelImportRecord.h>
 #include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Engine/AsyncEngine.h>
 #include <Oxygen/Graphics/Common/FrameCaptureController.h>
@@ -220,10 +220,12 @@ auto MainModule::RegisterEmptySceneUiTest(ImGuiTestEngine* engine) -> void
   }
 }
 
-auto MainModule::RegisterRetainedLibraryUiTest(ImGuiTestEngine* engine) -> void
+auto MainModule::RegisterModelImportLibraryUiTest(ImGuiTestEngine* engine)
+  -> void
 {
   if (!ContentSettingsService {}.GetMountedImportRecords().empty()) {
-    auto* test = IM_REGISTER_TEST(engine, "renderscene", "retained_library");
+    auto* test
+      = IM_REGISTER_TEST(engine, "renderscene", "model_import_library");
     test->UserData = this;
     test->TestFunc = [](ImGuiTestContext* ctx) -> void {
       auto& app = *static_cast<MainModule*>(ctx->Test->UserData);
@@ -243,7 +245,7 @@ auto MainModule::RegisterRetainedLibraryUiTest(ImGuiTestEngine* engine) -> void
       IM_CHECK(vm);
       for (const auto& record : records) {
         const auto root
-          = content::import::RetainedModelImport::SelectedGeneration(record);
+          = content::import::ModelImportRecord::SelectedGeneration(record);
         IM_CHECK(root);
         const auto index = (*root / "container.index.bin").lexically_normal();
         const auto count = std::ranges::count_if(
@@ -831,7 +833,7 @@ auto MainModule::RegisterIblReopenUiTest(ImGuiTestEngine* engine) -> void
 auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
 {
   RegisterEmptySceneUiTest(engine);
-  RegisterRetainedLibraryUiTest(engine);
+  RegisterModelImportLibraryUiTest(engine);
   RegisterIblControlsUiTest(engine);
   RegisterIblSourceAndFogUiTest(engine);
   RegisterStartupSkyboxUiTest(engine);

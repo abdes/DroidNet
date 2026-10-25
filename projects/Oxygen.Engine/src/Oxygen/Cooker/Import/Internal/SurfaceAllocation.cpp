@@ -25,7 +25,7 @@ auto AllocateSurfaces(const MeshBuildPipeline::WorkItem& item)
 {
   const auto& retained = item.request.surface_provenance;
   if (!retained) {
-    throw std::invalid_argument("Surfaces require retained source provenance");
+    throw std::invalid_argument("Surfaces require recorded source provenance");
   }
   const auto geometry_key
     = data::AssetKey::FromVirtualPath(internal::PlaceModelProduct(
@@ -52,12 +52,12 @@ auto AllocateSurfaces(const MeshBuildPipeline::WorkItem& item)
   if (previous != nullptr && previous->source_layout_witness == witness) {
     if (previous->allocations.size() != result.allocations.size()) {
       throw std::invalid_argument(
-        "Retained declarations do not match the source witness");
+        "Recorded declarations do not match the source witness");
     }
     for (auto& [declaration, id] : result.allocations) {
       const auto found = previous->allocations.find(declaration);
       if (found == previous->allocations.end()) {
-        throw std::invalid_argument("Retained surface declaration is missing");
+        throw std::invalid_argument("Recorded surface declaration is missing");
       }
       id = found->second;
     }

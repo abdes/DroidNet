@@ -525,7 +525,8 @@ function.
 1. **Anchor.** The path of names in the source file's own hierarchy, from the
    model's root to the node, before node pruning (`NodePruningPolicy`):
    `Body/Door_FL`. Same-named siblings are numbered in file order from the
-   second: `Body/Mirror`, `Body/Mirror[2]`. A node the importer adds appends
+   second: `Body/Mirror`, `Body/Mirror[2]`; unnamed siblings are numbered
+   from the first: `Body/[1]`, `Body/[2]`. A node the importer adds appends
    its role: `Body/Headlight_L#light` for a light's attachment node, `#root`
    for a synthesized root. Within a name, `/`, `[`, `#` and `\` are escaped
    with `\`.

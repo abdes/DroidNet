@@ -22,6 +22,7 @@
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/ImportSessionToken.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
+#include <Oxygen/Cooker/Import/ModelImportState.h>
 #include <Oxygen/Cooker/Import/SurfaceProvenance.h>
 #include <Oxygen/Cooker/api_export.h>
 #include <Oxygen/OxCo/Co.h>
@@ -227,6 +228,12 @@ public:
   OXGN_COOK_API auto AddSurfaceProvenance(SurfaceGeometryProvenance geometry)
     -> void;
 
+  //! Sets the nodes the model scene emitted. Returned, like the surface
+  //! provenance, only with a successful final report of a model import from
+  //! its record.
+  OXGN_COOK_API auto SetPublishedNodes(std::vector<ModelPublishedNode> nodes)
+    -> void;
+
   //! The complete source geometry set was processed successfully, even if
   //! empty.
   auto MarkSurfaceSourceProcessed() noexcept -> void
@@ -288,6 +295,7 @@ private:
   mutable std::mutex diagnostics_mutex_;
   std::mutex surface_provenance_mutex_;
   std::vector<SurfaceGeometryProvenance> surface_provenance_;
+  std::vector<ModelPublishedNode> published_nodes_;
   bool surface_source_processed_ = false;
   std::optional<ImportSessionToken> table_participation_;
   std::optional<ImportSessionToken> index_participation_;

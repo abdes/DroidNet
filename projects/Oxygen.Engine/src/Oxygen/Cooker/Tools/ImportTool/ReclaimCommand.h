@@ -13,7 +13,7 @@
 
 namespace oxygen::content::import::tool {
 
-//! Reclaim retired generations through the native retained publication owner.
+//! Reclaim retired generations through the model import record publication.
 class ReclaimCommand final : public ImportCommand {
 public:
   ReclaimCommand() = default;

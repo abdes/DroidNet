@@ -11,6 +11,7 @@
 #include <vector>
 
 #include <Oxygen/Cooker/Import/Internal/NodePathTable.h>
+#include <Oxygen/Cooker/Import/ModelImportState.h>
 #include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/PakFormat.h>
 
@@ -52,6 +53,8 @@ struct SceneBuild final {
   //! In activation order.
   std::vector<data::pak::world::StartingInputContextRecord>
     starting_input_contexts;
+  //! For a model scene: the anchor and ID of each node emitted.
+  std::vector<ModelPublishedNode> model_nodes;
 };
 
 } // namespace oxygen::content::import

@@ -145,7 +145,7 @@ auto MakeModelFileBrowserConfig(const ContentRootPaths& roots)
 auto MakeModelDirectoryBrowserConfig(const ContentRootPaths& roots)
   -> FileBrowserConfig;
 
-//! Creates a browser for retained import records and loose cooked indexes.
+//! Creates a browser for model import records and loose cooked indexes.
 auto MakeLibraryBrowserConfig(const ContentRootPaths& roots)
   -> FileBrowserConfig;
 

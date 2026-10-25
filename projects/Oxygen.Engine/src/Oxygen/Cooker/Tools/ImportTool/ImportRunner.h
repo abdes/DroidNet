@@ -16,7 +16,7 @@
 
 namespace oxygen::content::import {
 class AsyncImportService; // forward-declared
-class RetainedModelImport;
+class ModelImportRecord;
 struct SceneImportSettings;
 } // namespace oxygen::content::import
 
@@ -29,7 +29,7 @@ struct GlobalOptions;
   oxygen::observer_ptr<IMessageWriter> writer, std::string_view report_path,
   std::string_view command_line, bool enable_tui,
   oxygen::observer_ptr<oxygen::content::import::AsyncImportService> service,
-  std::shared_ptr<RetainedModelImport> publication = {})
+  std::shared_ptr<ModelImportRecord> publication = {})
   -> std::expected<void, std::error_code>;
 
 [[nodiscard]] auto RunSceneImportJob(const SceneImportSettings& settings,

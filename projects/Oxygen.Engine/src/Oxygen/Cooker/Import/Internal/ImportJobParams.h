@@ -26,7 +26,7 @@ class IAsyncFileReader;
 class IAsyncFileWriter;
 class ResourceTableRegistry;
 class LooseCookedIndexRegistry;
-class RetainedModelImport;
+class ModelImportRecord;
 
 namespace detail {
 
@@ -45,7 +45,7 @@ namespace detail {
     ImportConcurrency concurrency;
     AsyncImportService::ScriptCompileCallback script_compile_callback;
     std::stop_token stop_token;
-    std::shared_ptr<RetainedModelImport> retained_import {};
+    std::shared_ptr<ModelImportRecord> model_import_record {};
     std::unique_ptr<IAsyncFileWriter> generation_writer {};
   };
 

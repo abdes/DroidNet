@@ -17,6 +17,7 @@
 
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportProgress.h>
+#include <Oxygen/Cooker/Import/ModelImportState.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/SourceKey.h>
@@ -128,11 +129,16 @@ struct ImportReport final {
   data::SourceKey source_key {};
 
   //! Candidate native provenance. Publish with successful geometry output;
-  //! never overwrite retained source settings before the enclosing transaction.
+  //! never overwrite the model import record before the enclosing transaction.
   std::string surface_provenance_json;
-  //! Set only after retained-record publication; staging reports leave these
-  //! unset.
-  std::optional<std::filesystem::path> retained_record_path {};
+  //! For a model import from its record: the nodes it emitted, and the files
+  //! it read once they were verified unchanged. Committed with the
+  //! provenance.
+  std::vector<ModelPublishedNode> published_nodes;
+  std::optional<ModelSourceFingerprint> source_fingerprint;
+  //! Set only after model import record publication; staging reports leave
+  //! it unset.
+  std::optional<std::filesystem::path> model_record_path {};
   std::optional<std::filesystem::path> previous_cooked_root {};
 
   //! Diagnostics (warnings/errors) emitted during import.

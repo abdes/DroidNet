@@ -448,7 +448,6 @@ class CapturedInputBatchCliTests(unittest.TestCase):
                             "type": extension,
                             "source": name,
                             "virtual_path": f"/.cooked/{name}",
-                            "surface_source_identity": "01990000-0000-7000-8000-000000000001",
                         }
                     ]
                 )

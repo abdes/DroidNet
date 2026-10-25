@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "source": "../fbx/showcase/tableRound.fbx",
+  "virtual_path": "/.cooked/fbx/showcase/tableRound.fbx",
+  "settings": {
+    "content_hashing": true,
+    "name": "tableRound"
+  },
+  "source_identity": "01a0e7c7-f432-7586-8f04-212e9ac8d964",
+  "surface_provenance": {
+    "geometries": [
+      {
+        "allocations": [
+          {
+            "declaration_key": 0,
+            "surface_id": "1e907460-519d-7091-1164-a8b690900d6c"
+          }
+        ],
+        "geometry_asset_key": "6a53ce2e-9725-f686-db75-368d00d4b65c",
+        "layout_revision": "b57d3a5e2fd250a90038731295d0aa6c1e4191b6d58d26d513b8aace1d046275",
+        "source_geometry_anchor": "Mesh_0",
+        "source_layout_witness": "61a20e8f1e4d8bdbee31895281ef19cc00f05b49c77505a6295f9effea1a6797",
+        "surfaces": [
+          {
+            "bindings": [
+              {
+                "default_material_key": "537c5cf8-6d3e-dd81-ba96-650b28b655ac",
+                "lod_index": 0,
+                "submesh_index": 0
+              }
+            ],
+            "display_name": "wood",
+            "surface_id": "1e907460-519d-7091-1164-a8b690900d6c"
+          }
+        ]
+      }
+    ],
+    "schema_version": 2
+  },
+  "node_continuity": [],
+  "published_nodes": [
+    {
+      "anchor": "#root",
+      "node_id": "b2ecd9bb-4e10-ce4c-7b67-e6b68333e4fd"
+    },
+    {
+      "anchor": "tableRound",
+      "node_id": "c390412a-6bf4-77cd-6fd3-366b9d6484f7"
+    }
+  ],
+  "source_fingerprint": {
+    "size": 19706,
+    "sha256": "2e024db523150e4661a58012ca063c22a73724e004d1805ad2ed2fc88cd03563",
+    "files": []
+  }
+}

@@ -43,6 +43,7 @@
 #include <Oxygen/Cooker/Import/Internal/LooseCookedIndexRegistry.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableRegistry.h>
+#include <Oxygen/Cooker/Import/ModelImportState.h>
 #include <Oxygen/Cooker/Import/SurfaceProvenance.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
@@ -547,6 +548,13 @@ auto ImportSession::AddSurfaceProvenance(SurfaceGeometryProvenance geometry)
   surface_provenance_.push_back(std::move(geometry));
 }
 
+auto ImportSession::SetPublishedNodes(std::vector<ModelPublishedNode> nodes)
+  -> void
+{
+  const std::scoped_lock lock(surface_provenance_mutex_);
+  published_nodes_ = std::move(nodes);
+}
+
 auto ImportSession::AddDiagnostic(ImportDiagnostic diagnostic) -> void
 {
   auto added = ImportDiagnostic {};
@@ -962,6 +970,10 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
       } else {
         report.surface_provenance_json
           = request_.surface_provenance->Serialize();
+      }
+      if (request_.model_import) {
+        const std::scoped_lock lock(surface_provenance_mutex_);
+        report.published_nodes = std::move(published_nodes_);
       }
     }
     report.packaging = BuildPackagingSummary(report, write_result);

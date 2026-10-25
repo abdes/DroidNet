@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <functional>
 #include <memory>
 #include <optional>
 #include <span>
@@ -110,15 +111,38 @@ private:
     -> std::optional<uint32_t>;
 
   //! Emits the descriptor of a model's texture, named `name` in the model.
+  struct TextureSidecarDescriptor final {
+    data::pak::core::ResourceIndexT resource_index;
+    std::string_view source_id;
+    std::string_view name;
+  };
+
   [[nodiscard]] auto EmitTextureSidecarDescriptor(
-    data::pak::core::ResourceIndexT resource_index, std::string_view source_id,
-    std::string_view name) -> bool;
+    const TextureSidecarDescriptor& sidecar) -> bool;
 
   //! Emits the descriptor file of a model's buffer at `relpath`; a buffer is
   //! a file, not an asset.
+  struct BufferSidecarDescriptor final {
+    data::pak::core::ResourceIndexT resource_index;
+    std::string_view source_id;
+    std::string_view relpath;
+  };
+
   [[nodiscard]] auto EmitBufferSidecarDescriptor(
-    data::pak::core::ResourceIndexT resource_index, std::string_view source_id,
-    std::string_view relpath) -> bool;
+    const BufferSidecarDescriptor& sidecar) -> bool;
+
+  //! Progress hooks used while emitting a mesh's buffers.
+  struct MeshBufferProgress final {
+    std::function<std::function<void()>(PlanItemKind, std::string_view)>
+      make_started;
+    std::function<void(PlanItemKind, std::string_view)> report_finished;
+  };
+
+  //! Emits every buffer of a cooked mesh and returns the per-LOD bindings, or
+  //! `std::nullopt` after reporting a failure.
+  [[nodiscard]] auto EmitMeshBuffers(
+    MeshBuildPipeline::WorkResult& result, const MeshBufferProgress& progress)
+    -> std::optional<std::vector<MeshBufferBindings>>;
 
   [[nodiscard]] auto EmitMaterialPayload(MaterialPipeline::WorkResult result)
     -> bool;

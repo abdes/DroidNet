@@ -25,7 +25,7 @@
 #include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
-#include <Oxygen/Cooker/Import/RetainedModelImport.h>
+#include <Oxygen/Cooker/Import/ModelImportRecord.h>
 #include <Oxygen/Cooker/Import/SceneImportSettings.h>
 #include <Oxygen/Core/EngineTag.h>
 #include <Oxygen/Testing/GTest.h>
@@ -113,21 +113,24 @@ namespace {
       content::import::SceneImportSettings recipe {};
       recipe.source_path = source.string();
       recipe.virtual_path = "/.cooked/" + source.filename().generic_string();
-      record_ = root_ / "imports" / "source.import.json";
-      using content::import::RetainedModelImport;
-      RetainedModelImport::SaveRecipe(
-        record_, root_, RetainedModelImport::MakeRecipe(recipe, {}));
+      using content::import::ModelImportRecord;
+      record_ = ModelImportRecord::PathFor(root_, Uuid::Generate());
+      ModelImportRecord::Save({
+        .record_path = record_,
+        .content_root = root_,
+        .source = source,
+        .virtual_path = recipe.virtual_path,
+        .settings_json = ModelImportRecord::MakeSettings(recipe),
+      });
       std::promise<content::import::ImportReport> completed;
       auto future = completed.get_future();
       content::import::AsyncImportService service(
         content::import::AsyncImportService::Config { .thread_pool_size = 2 });
       const auto stop
         = ScopeGuard([&service] noexcept -> void { service.Stop(); });
-      ASSERT_TRUE(
-        service.SubmitRetainedImport(RetainedModelImport::Prepare(record_),
-          [&completed](auto, const auto& report) -> auto {
-            completed.set_value(report);
-          }));
+      ASSERT_TRUE(service.SubmitModelImport(ModelImportRecord::Prepare(record_),
+        [&completed](
+          auto, const auto& report) -> auto { completed.set_value(report); }));
       ASSERT_EQ(
         future.wait_for(std::chrono::seconds(15)), std::future_status::ready);
       const auto report = future.get();
@@ -206,7 +209,7 @@ namespace {
     ui::ContentVm vm(
       observer_ptr { &settings_ }, observer_ptr { &browser_ }, nullptr);
     vm.SetOnIndexLoaded([](const auto&) -> auto {
-      ADD_FAILURE() << "A retained generation must use its authored record";
+      ADD_FAILURE() << "A model import generation must use its authored record";
     });
     vm.LoadIndex(generation_ / "container.index.bin");
     EXPECT_TRUE(settings_.records.empty());
@@ -216,7 +219,7 @@ namespace {
       std::string::npos);
   }
 
-  NOLINT_TEST_F(ContentVmTest, FailedRetainedMountPreservesRecordForRetry)
+  NOLINT_TEST_F(ContentVmTest, FailedModelImportMountPreservesRecordForRetry)
   {
     settings_.records = { record_ };
     ui::ContentVm vm(

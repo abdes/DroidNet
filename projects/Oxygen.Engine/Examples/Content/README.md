@@ -18,19 +18,19 @@ Run the commands below from this **Content directory**:
 - Checkout: `projects/Oxygen.Engine/Examples/Content`.
 - Installed SDK: `share/oxygen/Content`.
 
-| Path under Content                       | Owner and purpose                                                               |
-| ---------------------------------------- | ------------------------------------------------------------------------------- |
-| `scenes/<name>/import-manifest.json`     | Authored scene recipes and their source descriptors                             |
-| `imports/<name>.import.json`             | Native retained model recipe, source/surface identities and selected generation |
-| `models/SurfaceCar.*`                    | Test car for geometry surfaces; `SurfaceCar.py` regenerates the glTF            |
-| `models/Vehicle.*`                       | Test car with three LODs; `Vehicle.py` (Blender) regenerates the FBX and blend  |
-| `.cooked/main/container.index.bin`       | Shared cooked scenes from `cook_scenes.ps1`                                     |
-| `.cooked/imports/<source>/<generation>/` | Immutable external glTF/GLB/FBX generations                                     |
-| `pak/`                                   | Packaged shared scenes, catalog and manifest                                    |
-| `import-sources.local.json`              | Optional ignored list of original model paths for applying new recipes          |
+| Path under Content                       | Owner and purpose                                                              |
+| ---------------------------------------- | ------------------------------------------------------------------------------ |
+| `scenes/<name>/import-manifest.json`     | Authored scene recipes and their source descriptors                            |
+| `imports/<source_identity>.import.json`  | Model import records: source, settings, identity and what imports established  |
+| `models/SurfaceCar.*`                    | Test car for geometry surfaces; `SurfaceCar.py` regenerates the glTF           |
+| `models/Vehicle.*`                       | Test car with three LODs; `Vehicle.py` (Blender) regenerates the FBX and blend |
+| `.cooked/main/container.index.bin`       | Shared cooked scenes from `cook_scenes.ps1`                                    |
+| `.cooked/imports/<source>/<generation>/` | Immutable external glTF/GLB/FBX generations                                    |
+| `pak/`                                   | Packaged shared scenes, catalog and manifest                                   |
+| `import-sources.local.json`              | Optional ignored list of original model paths for applying new recipes         |
 
 `.cooked` itself is a container directory, **not a cooked root**. Mount the main
-index or a retained `.import.json` record. Never mount old generation indexes
+index or a model import record (`imports/*.import.json`). Never mount old generation indexes
 alongside their records. Records follow successful publication on the next
 mount; existing readers retain their current generation until they switch.
 
@@ -79,7 +79,7 @@ cooks, which `-All` cooks first.
 
 `-All` processes each `scenes/*/import-manifest.json` in name order, including
 its materials, geometry, textures, scripts, inputs and physics sidecars. It does
-not reimport retained external models or build PAKs. The checkout has eighteen
+not reimport external models or build PAKs. The checkout has eighteen
 scene manifests; the SDK ships a smaller selection. Unreferenced raw models and
 images are imported explicitly by their consumers.
 
@@ -115,7 +115,7 @@ For existing registered models, replay their saved recipes and identities:
 
 ```powershell
 ./import_models.cmd -All
-./import_models.cmd -Record ./imports/town4new.import.json
+./import_models.cmd -Record ./imports/<source_identity>.import.json
 ```
 
 For a new model, copy the [source-list example](import-sources.example.json),
@@ -131,7 +131,7 @@ Relative paths resolve beside the source list. Keep glTF external buffers and
 images alongside their original model. Originals may live outside Content and
 are never modified. Records and cooked generations are owned by Content. The
 machine-local list is only for creating or deliberately changing recipes;
-`-Record` and `-All` replay the retained recipes without applying new defaults.
+`-Record` and `-All` replay the saved settings without applying new defaults.
 
 New/applied recipes default to fast BC7, box-filtered full mip chains, sRGB
 color textures and linear data textures. They import all content, normalize
@@ -184,9 +184,9 @@ Verify the shared library; keep reports outside its cooked root:
 Require successful exit codes **and an empty `issues` array** in the inventory.
 `validate` checks native structural contracts; `inventory` also verifies every
 owned file's size and SHA-256 and rejects unexpected files. Use the same
-commands with a selected retained generation when inspecting it directly.
+commands with a selected model import generation when inspecting it directly.
 
-Packaging reads `.cooked/main` and the generation each retained import record
+Packaging reads `.cooked/main` and the generation each model import record
 publishes, so one PAK holds the scenes and every imported model, and resolves
 external script sources against Content. Default outputs are `pak/all.pak`,
 `all.catalog.json` and `all.manifest.json`. `-ContentRoot` selects another
@@ -196,7 +196,7 @@ a mounted PAK; compare one representation of the assets at a time.
 
 ## Cleanup and format changes
 
-Remove unused retained generations through the native owner:
+Remove unused model import generations through the native owner:
 
 ```powershell
 ./import_models.cmd -All -Reclaim
@@ -207,11 +207,11 @@ Native record locks and exclusive generation leases protect selected, mounted
 and in-flight generations. Repeat after old readers close if necessary. It does
 not remove authored records or originals, and it never deletes `.cooked/main`.
 
-After a cooked-format change, recook maintained scenes and replay retained
-records with current tools, verify them, then reclaim old generations. If main
+After a cooked-format change, recook maintained scenes and replay model
+import records with current tools, verify them, then reclaim old generations. If main
 itself has an incompatible index or stale files, close its readers and remove
 **only `.cooked/main`**, then recook all manifests and verify again. Never
-delete the enclosing `.cooked` directory: it also owns retained libraries.
+delete the enclosing `.cooked` directory: it also owns model import generations.
 Rebuild PAKs when their inputs or format change.
 
 Failures and diagnostics belong to the native tools. Missing-source errors need

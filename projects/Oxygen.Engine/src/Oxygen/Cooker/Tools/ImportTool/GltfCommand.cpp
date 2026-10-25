@@ -82,38 +82,22 @@ auto GltfCommand::BuildCommand() -> std::shared_ptr<clap::Command>
 
   auto record = Option::WithKey("record")
                   .Long("record")
-                  .About("Authored retained import record; omit source to "
-                         "replay its saved recipe")
+                  .About("Model import record; omit source to replay its saved "
+                         "settings")
                   .WithValue<std::string>()
-                  .StoreTo(&options_.retained_record_path)
+                  .StoreTo(&options_.model_record_path)
                   .Build();
-  auto content_root
-    = Option::WithKey("content-root")
-        .Long("content-root")
-        .About(
-          "Owned Content area for retained records and immutable generations")
-        .WithValue<std::string>()
-        .StoreTo(&options_.content_root)
-        .Build();
-
-  auto source_identity
-    = Option::WithKey("surface-source-identity")
-        .Long("surface-source-identity")
-        .About("Retained UUIDv7 namespace; required when importing geometry")
-        .WithValue<std::string>()
-        .StoreTo(&options_.surface_source_identity)
-        .Build();
-  auto provenance = Option::WithKey("surface-provenance")
-                      .Long("surface-provenance")
-                      .About("JSON file containing retained surface "
-                             "provenance from an earlier import")
-                      .WithValue<std::string>()
-                      .StoreTo(&options_.surface_provenance_path)
-                      .Build();
+  auto content_root = Option::WithKey("content-root")
+                        .Long("content-root")
+                        .About("Owned Content area for model import records "
+                               "and immutable generations")
+                        .WithValue<std::string>()
+                        .StoreTo(&options_.content_root)
+                        .Build();
 
   auto recipe
     = Option::WithKey("recipe")
-        .About("Apply a single-job native manifest to a retained record")
+        .About("Apply a single-job native manifest to a model import record")
         .Long("recipe")
         .WithValue<std::string>()
         .StoreTo(&options_.recipe_path)
@@ -214,8 +198,6 @@ auto GltfCommand::BuildCommand() -> std::shared_ptr<clap::Command>
     .WithOption(std::move(record))
     .WithOption(std::move(recipe))
     .WithOption(std::move(content_root))
-    .WithOption(std::move(source_identity))
-    .WithOption(std::move(provenance))
     .WithOption(std::move(no_import_textures))
     .WithOption(std::move(no_import_materials))
     .WithOption(std::move(no_import_geometry))

@@ -38,7 +38,7 @@
 #include <Oxygen/Cooker/Import/ImportProgress.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
-#include <Oxygen/Cooker/Import/RetainedModelImport.h>
+#include <Oxygen/Cooker/Import/ModelImportRecord.h>
 #include <Oxygen/Cooker/Import/SceneImportSettings.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
 #include <Oxygen/Core/Types/AssetKey.h>
@@ -185,6 +185,11 @@ auto ContentVm::Update() -> void
       report->success, report->materials_written, report->geometry_written,
       report->scenes_written);
 
+    {
+      std::scoped_lock lock(import_state_.progress_mutex);
+      import_state_.diagnostics.insert(import_state_.diagnostics.end(),
+        report->diagnostics.begin(), report->diagnostics.end());
+    }
     std::string label = "Import: " + import_path;
     AddDiagnosticMarker(
       label + (report->success ? " (Completed)" : " (Failed)"), false);
@@ -210,11 +215,11 @@ auto ContentVm::Update() -> void
         };
         {
           std::scoped_lock data_lock(data_mutex_);
-          if (report->retained_record_path
+          if (report->model_record_path
             && std::ranges::find(
-                 loaded_import_records_, *report->retained_record_path)
+                 loaded_import_records_, *report->model_record_path)
               == loaded_import_records_.end()) {
-            loaded_import_records_.push_back(*report->retained_record_path);
+            loaded_import_records_.push_back(*report->model_record_path);
             settings_->SetMountedImportRecords(loaded_import_records_);
           }
           if (report->previous_cooked_root) {
@@ -254,7 +259,7 @@ auto ContentVm::Update() -> void
             loaded_indices_.push_back(index_path);
           }
         }
-        if (report->retained_record_path) {
+        if (report->model_record_path) {
           MountGeneration(GenerationPublication {
             .cooked_root = report->cooked_root,
             .previous_root = report->previous_cooked_root,
@@ -321,14 +326,21 @@ auto ContentVm::StartImport(const std::filesystem::path& source_path) -> void
     model.virtual_path = layout.virtual_mount_root + "/"
       + source_path.filename().generic_string();
     const auto content_root = file_browser_->GetContentRoots().content_root;
-    const auto record = content::import::RetainedModelImport::RecordPath(
-      content_root, source_path);
-    const auto recipe
-      = content::import::RetainedModelImport::MakeRecipe(model, layout);
-    content::import::RetainedModelImport::SaveRecipe(
-      record, content_root, recipe);
-    auto publication = content::import::RetainedModelImport::Prepare(record);
-    const auto job_id = import_service_->SubmitRetainedImport(
+    auto location = content::import::ModelImportRecord::LocateRecord({
+      .content_root = content_root,
+      .source = source_path,
+      .virtual_path = model.virtual_path,
+    });
+    content::import::ModelImportRecord::Save({
+      .record_path = location.record_path,
+      .content_root = content_root,
+      .source = source_path,
+      .virtual_path = model.virtual_path,
+      .settings_json = content::import::ModelImportRecord::MakeSettings(model),
+    });
+    auto publication = content::import::ModelImportRecord::Prepare(
+      location.record_path, std::move(location.diagnostics));
+    const auto job_id = import_service_->SubmitModelImport(
       std::move(publication),
       [this](content::import::ImportJobId id,
         const content::import::ImportReport& report) -> void {
@@ -605,7 +617,7 @@ auto ContentVm::LoadIndex(const std::filesystem::path& path) -> void
     }
     if (std::filesystem::exists(base::ToNativePath(index_path.parent_path()
           / data::loose_cooked::kGenerationLeaseFileName))) {
-      if (const auto record = FindRetainedRecord(index_path)) {
+      if (const auto record = FindModelImportRecord(index_path)) {
         LoadImportRecord(*record);
       } else {
         AddDiagnosticMarker(
@@ -670,12 +682,12 @@ auto ContentVm::LoadImportRecord(const std::filesystem::path& path) -> void
   try {
     const auto record = runtime::NormalizePath(path);
     const auto root
-      = content::import::RetainedModelImport::SelectedGeneration(record);
+      = content::import::ModelImportRecord::SelectedGeneration(record);
     if (!root
       || !std::filesystem::exists(
         base::ToNativePath(*root / "container.index.bin"))) {
       AddDiagnosticMarker(
-        "Retained import needs recooking: " + record.string(), false);
+        "Model import needs recooking: " + record.string(), false);
       return;
     }
     MountGeneration(
@@ -687,7 +699,7 @@ auto ContentVm::LoadImportRecord(const std::filesystem::path& path) -> void
     settings_->SetMountedImportRecords(loaded_import_records_);
   } catch (const std::exception& error) {
     AddDiagnosticMarker(
-      std::string("Retained import unavailable: ") + error.what(), false);
+      std::string("Model import unavailable: ") + error.what(), false);
   }
 }
 
@@ -757,7 +769,7 @@ auto ContentVm::RestorePersistedLibraryState() -> void
   if (!pending_scene_selection_restore_->import_record_path.empty()) {
     try {
       if (const auto root
-        = content::import::RetainedModelImport::SelectedGeneration(
+        = content::import::ModelImportRecord::SelectedGeneration(
           pending_scene_selection_restore_->import_record_path)) {
         pending_scene_selection_restore_->source_path
           = *root / "container.index.bin";
@@ -765,7 +777,7 @@ auto ContentVm::RestorePersistedLibraryState() -> void
       }
     } catch (const std::exception& error) {
       AddDiagnosticMarker(
-        std::string("Retained scene needs attention: ") + error.what(), false);
+        std::string("Model import needs attention: ") + error.what(), false);
     }
   }
   TryResolvePendingSceneSelection();
@@ -781,9 +793,10 @@ auto ContentVm::PrunePersistedMountedSource(
   }
 
   // A failed generation mount does not remove the authored library intent.
-  // Retained records remain retryable until the user explicitly clears them.
+  // Model import records remain retryable until the user explicitly clears
+  // them.
   if (source_kind == SceneSourceKind::kLooseIndex
-    && FindRetainedRecord(path).has_value()) {
+    && FindModelImportRecord(path).has_value()) {
     return;
   }
 
@@ -923,7 +936,7 @@ auto ContentVm::PersistMountedSources() -> void
   settings_->SetMountedImportRecords(loaded_import_records_);
 }
 
-auto ContentVm::FindRetainedRecord(const std::filesystem::path& index_path)
+auto ContentVm::FindModelImportRecord(const std::filesystem::path& index_path)
   -> std::optional<std::filesystem::path>
 {
   const auto generation_parent
@@ -931,7 +944,7 @@ auto ContentVm::FindRetainedRecord(const std::filesystem::path& index_path)
   for (const auto& record : loaded_import_records_) {
     try {
       const auto selected
-        = content::import::RetainedModelImport::SelectedGeneration(record);
+        = content::import::ModelImportRecord::SelectedGeneration(record);
       if (selected
         && runtime::NormalizePath(*selected).parent_path()
           == generation_parent) {
@@ -939,7 +952,7 @@ auto ContentVm::FindRetainedRecord(const std::filesystem::path& index_path)
       }
     } catch (const std::exception& error) {
       AddDiagnosticMarker(
-        std::string("Retained import unavailable: ") + error.what(), false);
+        std::string("Model import unavailable: ") + error.what(), false);
     }
   }
   return std::nullopt;
@@ -952,7 +965,7 @@ auto ContentVm::PersistActiveSceneSelection(const SceneEntry& entry) -> void
   }
 
   const auto import_record = entry.source.kind == SceneSourceKind::kLooseIndex
-    ? FindRetainedRecord(entry.source.path)
+    ? FindModelImportRecord(entry.source.path)
     : std::nullopt;
   settings_->SetActiveSceneSelection(ContentActiveSceneSelection {
     .scene_name = entry.name,
@@ -1281,11 +1294,6 @@ auto ContentVm::OnImportProgress(const content::import::ProgressEvent& progress)
 {
   std::scoped_lock lock(import_state_.progress_mutex);
   import_state_.progress = progress;
-  if (!progress.header.new_diagnostics.empty()) {
-    import_state_.diagnostics.insert(import_state_.diagnostics.end(),
-      progress.header.new_diagnostics.begin(),
-      progress.header.new_diagnostics.end());
-  }
 }
 
 auto ContentVm::GetFileBrowser() const -> observer_ptr<FileBrowserService>

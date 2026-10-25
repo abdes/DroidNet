@@ -4,3 +4,13 @@ pak/
 glb/
 scripts.bin
 import-sources.local.json
+# Importing a model in RenderScene makes its record here; it is the user's.
+# Only the records the scene manifests name are tracked.
+imports/*.import.json
+!imports/01a0e7c7-f432-7586-8f04-212e9ac8d964.import.json
+!imports/01a0e7c7-f432-7586-8f04-212fc6337efe.import.json
+!imports/01a0e7c7-f432-7586-8f04-2130dca8d325.import.json
+!imports/01a0e7c7-f432-7586-8f04-21318d102e68.import.json
+!imports/01a0e7c7-f432-7586-8f04-21328dd4fe6f.import.json
+!imports/01a0e7c7-f432-7586-8f04-2133688a61d0.import.json
+!imports/01a0e7c7-f432-7586-8f04-213466d9981f.import.json

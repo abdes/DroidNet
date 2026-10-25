@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "source": "../fbx/showcase/chair.fbx",
+  "virtual_path": "/.cooked/fbx/showcase/chair.fbx",
+  "settings": {
+    "content_hashing": true,
+    "name": "chair"
+  },
+  "source_identity": "01a0e7c7-f432-7586-8f04-212fc6337efe",
+  "surface_provenance": {
+    "geometries": [
+      {
+        "allocations": [
+          {
+            "declaration_key": 0,
+            "surface_id": "4711dffc-4ddf-a956-737a-bc8d5c4b6e16"
+          }
+        ],
+        "geometry_asset_key": "bf0c1efd-4efc-e2c4-c7ea-4a60e09322b1",
+        "layout_revision": "6ce9330fe030b060c0ea8101153950b968069e85534ec04ea6104f50e444a746",
+        "source_geometry_anchor": "Mesh_0",
+        "source_layout_witness": "d7bae8c769860cc395afd1507a87676cfae09009079146c1dda6e231bd0adea6",
+        "surfaces": [
+          {
+            "bindings": [
+              {
+                "default_material_key": "2924e1dc-e646-305b-a168-d30b61a9fdba",
+                "lod_index": 0,
+                "submesh_index": 0
+              }
+            ],
+            "display_name": "wood",
+            "surface_id": "4711dffc-4ddf-a956-737a-bc8d5c4b6e16"
+          }
+        ]
+      }
+    ],
+    "schema_version": 2
+  },
+  "node_continuity": [],
+  "published_nodes": [
+    {
+      "anchor": "#root",
+      "node_id": "40009110-15a7-ff24-6a7e-7455f2c25322"
+    },
+    {
+      "anchor": "chair",
+      "node_id": "5347e5c7-b437-c902-d194-8193c6bf077e"
+    }
+  ],
+  "source_fingerprint": {
+    "size": 25130,
+    "sha256": "e7b7be9a7f4220db05a1bddd0cfa595e1d816e7446545223b3b04f6cdc566ca5",
+    "files": []
+  }
+}

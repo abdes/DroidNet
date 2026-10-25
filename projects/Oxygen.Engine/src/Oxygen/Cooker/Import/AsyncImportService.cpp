@@ -58,7 +58,7 @@
 #include <Oxygen/Cooker/Import/Internal/Jobs/TextureImportJob.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedIndexRegistry.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableRegistry.h>
-#include <Oxygen/Cooker/Import/RetainedModelImport.h>
+#include <Oxygen/Cooker/Import/ModelImportRecord.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Event.h>
 #include <Oxygen/OxCo/Nursery.h>
@@ -434,8 +434,8 @@ AsyncImportService::~AsyncImportService()
     "Call Stop() and wait for IsStopped() before destruction.");
 }
 
-auto AsyncImportService::SubmitRetainedImport(
-  std::shared_ptr<RetainedModelImport> publication,
+auto AsyncImportService::SubmitModelImport(
+  std::shared_ptr<ModelImportRecord> publication,
   const ImportCompletionCallback& on_complete,
   const ProgressEventCallback& on_progress) const -> std::optional<ImportJobId>
 {
@@ -449,7 +449,7 @@ auto AsyncImportService::SubmitRetainedImport(
       loop = observer_ptr(impl_->event_loop_.get())](
       detail::ImportJobParams params) -> std::shared_ptr<detail::ImportJob> {
       publication->ClaimSubmission();
-      params.retained_import = publication;
+      params.model_import_record = publication;
       params.generation_writer = CreateAsyncFileWriter(*loop);
       return CreateJobForFormat(format, std::move(params));
     });

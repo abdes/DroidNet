@@ -1,7 +1,7 @@
 #requires -Version 7.4
 <#
 .SYNOPSIS
-Imports or reimports Content models through native retained publication.
+Imports or reimports Content models through their model import records.
 .DESCRIPTION
 Each source has an authored record under imports. Native publication
 selects a validated immutable generation; failures retain the prior selection.
@@ -14,7 +14,7 @@ modified. Temporary recipes and reports are deleted on exit.
 Apply sources/settings from a list matching import-sources.schema.json. Relative
 sources resolve beside the list. -Record and -All replay saved settings unchanged.
 .PARAMETER Record
-Replay one retained .import.json record without changing its saved recipe.
+Replay one model import record without changing its saved settings.
 .PARAMETER All
 Replay every imports/*.import.json record under ContentRoot in name order.
 .PARAMETER Reclaim
@@ -151,28 +151,26 @@ if ($SourceList) {
     } else {
         @(Get-AbsolutePath $Record)
     }
-    if (@($recordPaths).Count -eq 0) { throw "No retained records under $ContentRoot/imports." }
+    if (@($recordPaths).Count -eq 0) { throw "No model import records under $ContentRoot/imports." }
     $recordSchema = if ($installedSdk) {
-        Join-Path $PSScriptRoot '../schemas/oxygen.retained-model-import.schema.json'
+        Join-Path $PSScriptRoot '../schemas/oxygen.model-import.schema.json'
     } else {
-        Join-Path $engineRoot 'src/Oxygen/Cooker/Import/Schemas/oxygen.retained-model-import.schema.json'
+        Join-Path $engineRoot 'src/Oxygen/Cooker/Import/Schemas/oxygen.model-import.schema.json'
     }
     $jobs = foreach ($recordPath in $recordPaths) {
         $recordJson = Get-Content -LiteralPath $recordPath -Raw
         if (-not (Test-Json -Json $recordJson -SchemaFile $recordSchema)) {
-            throw "Invalid retained record: $recordPath"
+            throw "Invalid model import record: $recordPath"
         }
         $saved = $recordJson | ConvertFrom-Json -AsHashtable
-        if ($saved.recipe.jobs.Count -ne 1 -or $saved.recipe.jobs[0].type -notin @('fbx', 'gltf')) {
-            throw "Expected one FBX or glTF job in retained record: $recordPath"
-        }
-        @{ name = [IO.Path]::GetFileName($recordPath); type = $saved.recipe.jobs[0].type; record = $recordPath }
+        $type = if ([IO.Path]::GetExtension($saved.source) -ieq '.fbx') { 'fbx' } else { 'gltf' }
+        @{ name = [IO.Path]::GetFileName($recordPath); type = $type; record = $recordPath }
     }
 }
 
 $action = if ($Reclaim) { 'Reclaim unused generations for' } else { 'Publish' }
 $target = if ($Record) { Get-AbsolutePath $Record } else { $ContentRoot }
-if (-not $PSCmdlet.ShouldProcess($target, "$action $(@($jobs).Count) retained model imports")) {
+if (-not $PSCmdlet.ShouldProcess($target, "$action $(@($jobs).Count) model imports")) {
     return
 }
 $targets = @('oxygen-cooker-importtool', 'oxygen-cooker-inspector')
@@ -205,24 +203,21 @@ try {
         }
         $reportPath = [IO.Path]::GetTempFileName()
         $temporaryFiles.Add($reportPath)
-        $recordPath = if ($SourceList) { Join-Path $ContentRoot "imports/$($job.name).import.json" } else { $job.record }
-        $recipeArguments = @()
+        # A new model's record is found, or made, from its source and virtual path; it is named by its identity.
+        $recordArguments = @('--record', $job.record)
         if ($SourceList) {
             $recipePath = [IO.Path]::GetTempFileName()
             $temporaryFiles.Add($recipePath)
-            @{
-                version = 1
-                layout = @{ virtual_mount_root = '/.cooked' }
-                defaults = @{ texture = $texture }
-                jobs = @($job)
-            } | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $recipePath -Encoding utf8NoBOM
-            $recipeArguments = @('--recipe', $recipePath, '--content-root', $ContentRoot)
+            $recipeJob = $job.Clone()
+            foreach ($setting in $texture.GetEnumerator()) { $recipeJob[$setting.Key] = $setting.Value }
+            @{ version = 1; jobs = @($recipeJob) } | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $recipePath -Encoding utf8NoBOM
+            $recordArguments = @('--recipe', $recipePath, '--content-root', $ContentRoot)
         }
         Write-Host "Importing $($job.name)..."
         $importArguments = @(
             '--no-tui', '--thread-pool-size', "$ThreadPoolSize", '--concurrency', $concurrency,
-            $job.type, '--record', $recordPath, '--report', $reportPath
-        ) + $recipeArguments
+            $job.type, '--report', $reportPath
+        ) + $recordArguments
         Invoke-OxygenTool -Context $tools -Target 'oxygen-cooker-importtool' -Arguments $importArguments -CheckExitCode
         $report = Get-Content -LiteralPath $reportPath -Raw | ConvertFrom-Json
         $publishedRoot = $report.session.cooked_root
@@ -231,7 +226,7 @@ try {
         Invoke-OxygenTool -Context $tools -Target 'oxygen-cooker-inspector' -Arguments @('inventory', $publishedRoot, '--output', $inventoryPath) -CheckExitCode
         $inventory = Get-Content -LiteralPath $inventoryPath -Raw | ConvertFrom-Json
         if (@($inventory.issues).Count -ne 0) { throw "Cooked inventory contains integrity failures: $publishedRoot" }
-        Write-Host "Record: $recordPath"
+        Write-Host "Record: $($report.jobs[0].model_record_path)"
         Write-Host "Published: $publishedRoot"
     }
 } finally {

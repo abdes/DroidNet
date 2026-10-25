@@ -1,0 +1,71 @@
+{
+  "schema_version": 1,
+  "source": "../fbx/showcase/lampRoundTable.fbx",
+  "virtual_path": "/.cooked/fbx/showcase/lampRoundTable.fbx",
+  "settings": {
+    "content_hashing": true,
+    "name": "lampRoundTable"
+  },
+  "source_identity": "01a0e7c7-f432-7586-8f04-2130dca8d325",
+  "surface_provenance": {
+    "geometries": [
+      {
+        "allocations": [
+          {
+            "declaration_key": 0,
+            "surface_id": "d7f5a78e-b92f-4d10-b287-5ca6ba9428b8"
+          },
+          {
+            "declaration_key": 1,
+            "surface_id": "914071b0-c22f-f08b-ea6d-33dd2cec5584"
+          }
+        ],
+        "geometry_asset_key": "44b0bcb3-51d8-8b09-4317-026bad7e30a9",
+        "layout_revision": "e3c225623d3dc9c308622770e45e068174145d4525914fc02f9cb41efab0db82",
+        "source_geometry_anchor": "Mesh_0",
+        "source_layout_witness": "2508857ac48251cc9d83ac0a182733b5c52e98b761e01ff36909d4bae534d799",
+        "surfaces": [
+          {
+            "bindings": [
+              {
+                "default_material_key": "3723ea61-e5b8-4ebe-e3ab-6d60a27db85d",
+                "lod_index": 0,
+                "submesh_index": 0
+              }
+            ],
+            "display_name": "metal",
+            "surface_id": "d7f5a78e-b92f-4d10-b287-5ca6ba9428b8"
+          },
+          {
+            "bindings": [
+              {
+                "default_material_key": "13caa92a-7908-2f77-5fb0-4b8e323c9d5d",
+                "lod_index": 0,
+                "submesh_index": 1
+              }
+            ],
+            "display_name": "lamp",
+            "surface_id": "914071b0-c22f-f08b-ea6d-33dd2cec5584"
+          }
+        ]
+      }
+    ],
+    "schema_version": 2
+  },
+  "node_continuity": [],
+  "published_nodes": [
+    {
+      "anchor": "#root",
+      "node_id": "d78330f1-b39d-e2e6-6736-fc56d43a403d"
+    },
+    {
+      "anchor": "lampRoundTable",
+      "node_id": "85faae49-2d79-ead8-bade-9ad82e85fb3b"
+    }
+  ],
+  "source_fingerprint": {
+    "size": 21261,
+    "sha256": "5bbe92f7b42614d166ba6070fbca5cd2dfaacbf9ae96d3dd97a50df3d08bf65c",
+    "files": []
+  }
+}

@@ -276,7 +276,7 @@ private:
   auto PersistMountedSources() -> void;
   auto MountGeneration(const GenerationPublication& publication) -> void;
   auto PersistActiveSceneSelection(const SceneEntry& entry) -> void;
-  auto FindRetainedRecord(const std::filesystem::path& index_path)
+  auto FindModelImportRecord(const std::filesystem::path& index_path)
     -> std::optional<std::filesystem::path>;
   auto PruneActiveSceneSelectionForSource(
     SceneSourceKind source_kind, const std::filesystem::path& path) -> void;

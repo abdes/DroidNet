@@ -4,22 +4,14 @@
   "output": "../../.cooked/main",
   "jobs": [
     {
-      "type": "gltf",
-      "source": "../../glb/backpack.glb",
-      "virtual_path": "/.cooked/glb/backpack.glb",
-      "surface_source_identity": "01a0e7c7-f432-7586-8f04-2133688a61d0",
-      "name": "backpack_scene",
-      "content_hashing": true,
-      "id": "scene.backpack"
+      "id": "scene.backpack",
+      "type": "model",
+      "record": "../../imports/01a0e7c7-f432-7586-8f04-2133688a61d0.import.json"
     },
     {
-      "type": "gltf",
-      "source": "../../glb/chest.glb",
-      "virtual_path": "/.cooked/glb/chest.glb",
-      "surface_source_identity": "01a0e7c7-f432-7586-8f04-213466d9981f",
-      "name": "chest_scene",
-      "content_hashing": true,
-      "id": "scene.chest"
+      "id": "scene.chest",
+      "type": "model",
+      "record": "../../imports/01a0e7c7-f432-7586-8f04-213466d9981f.import.json"
     },
     {
       "type": "script",

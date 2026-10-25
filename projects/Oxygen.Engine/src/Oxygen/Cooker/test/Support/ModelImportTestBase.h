@@ -146,6 +146,10 @@ protected:
     if (!request.surface_provenance) {
       request.surface_provenance = source_provenance_;
     }
+    // As a model import from its record.
+    if (!request.model_import) {
+      request.model_import = ModelImportInputs {};
+    }
     AsyncImportService service(MakeMaxConcurrencyConfig());
     ImportRunResult result {};
 
@@ -168,7 +172,8 @@ protected:
     if (result.report.success
       && !result.report.surface_provenance_json.empty()) {
       source_provenance_
-        = SurfaceProvenance::Parse(result.report.surface_provenance_json);
+        = SurfaceProvenance::Parse(result.report.surface_provenance_json,
+          source_provenance_->SourceIdentity());
     }
 
     return result;

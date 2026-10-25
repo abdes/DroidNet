@@ -1,0 +1,97 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://oxygen-engine.org/schemas/oxygen.model-import.schema.json",
+  "title": "Oxygen model import record",
+  "description": "A model's import state: what to import and what earlier imports established. Lives at <content_root>/imports/<source_identity>.import.json; the editor and the ImportTool share it.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "source",
+    "virtual_path",
+    "settings",
+    "source_identity"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "source": {
+      "description": "The primary source file, relative to the record's folder or absolute.",
+      "type": "string",
+      "minLength": 1
+    },
+    "virtual_path": {
+      "description": "The model's identity, under which its products are named.",
+      "type": "string",
+      "pattern": "^/.+"
+    },
+    "settings": {
+      "description": "The model import settings, in the vocabulary of a gltf or fbx import manifest job, without its id, type, source, virtual path or output.",
+      "type": "object"
+    },
+    "source_identity": {
+      "description": "From which node and surface IDs are derived; never changes.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "surface_provenance": {
+      "description": "oxygen.surface-provenance.schema.json, the identity left out.",
+      "type": "object"
+    },
+    "node_continuity": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["anchor", "continues"],
+        "properties": {
+          "anchor": { "type": "string", "minLength": 1 },
+          "continues": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "published_nodes": {
+      "description": "The anchor and ID of each node the last import emitted.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["anchor", "node_id"],
+        "properties": {
+          "anchor": { "type": "string", "minLength": 1 },
+          "node_id": { "$ref": "#/definitions/key" }
+        }
+      }
+    },
+    "source_fingerprint": {
+      "description": "The files the last import read: the primary source, and every other file relative to the primary's folder.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["size", "sha256", "files"],
+      "properties": {
+        "size": { "type": "integer", "minimum": 0 },
+        "sha256": { "$ref": "#/definitions/digest" },
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path", "size", "sha256"],
+            "properties": {
+              "path": { "type": "string", "minLength": 1 },
+              "size": { "type": "integer", "minimum": 0 },
+              "sha256": { "$ref": "#/definitions/digest" }
+            }
+          }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "key": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "not": { "const": "00000000-0000-0000-0000-000000000000" }
+    },
+    "digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+  }
+}

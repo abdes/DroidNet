@@ -5,8 +5,10 @@
 //===----------------------------------------------------------------------===//
 
 #include <array>
+#include <memory>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <Oxygen/Base/Uuid.h>
@@ -14,6 +16,8 @@
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/ModelNodeIdentity.h>
 #include <Oxygen/Cooker/Import/Internal/NodePathTable.h>
+#include <Oxygen/Cooker/Import/ModelImportState.h>
+#include <Oxygen/Cooker/Import/SurfaceProvenance.h>
 #include <Oxygen/Data/SceneIds.h>
 #include <Oxygen/Testing/GTest.h>
 
@@ -21,6 +25,9 @@ namespace {
 using oxygen::Uuid;
 using oxygen::content::import::ImportDiagnostic;
 using oxygen::content::import::ImportRequest;
+using oxygen::content::import::ModelImportInputs;
+using oxygen::content::import::ModelNodeContinuity;
+using oxygen::content::import::SurfaceProvenance;
 using oxygen::content::import::internal::ModelNodeIdentity;
 using oxygen::content::import::internal::NodePathTable;
 using oxygen::data::NodeId;
@@ -36,7 +43,8 @@ auto Identity() -> Uuid
 }
 
 //! An anchor is the path of names from the model's roots; same-named siblings
-//! are numbered from the second, and separators in a name are escaped.
+//! are numbered from the second, unnamed ones from the first, and separators
+//! in a name are escaped.
 NOLINT_TEST(ModelNodeIdentityTest, AnchorsFollowTheSourceNamePath)
 {
   auto identity = ModelNodeIdentity(Identity());
@@ -55,10 +63,16 @@ NOLINT_TEST(ModelNodeIdentityTest, AnchorsFollowTheSourceNamePath)
     .name = "Mirror",
   });
   const auto escaped = identity.SourceAnchor({ .name = "a/b[c]#d\\e" });
+  const auto unnamed_root = identity.SourceAnchor({});
+  const auto unnamed = identity.SourceAnchor({ .parent_anchor = body });
+  const auto unnamed_second = identity.SourceAnchor({ .parent_anchor = body });
 
   EXPECT_EQ(door, "Body/Door_FL");
   EXPECT_EQ(first, "Body/Mirror");
   EXPECT_EQ(second, "Body/Mirror[2]");
+  EXPECT_EQ(unnamed_root, "[1]");
+  EXPECT_EQ(unnamed, "Body/[1]");
+  EXPECT_EQ(unnamed_second, "Body/[2]");
   EXPECT_EQ(escaped, "a\\/b\\[c]\\#d\\\\e");
   EXPECT_EQ(ModelNodeIdentity::AddedAnchor({
               .owner_anchor = door,
@@ -81,17 +95,146 @@ NOLINT_TEST(ModelNodeIdentityTest, IdsAreStablePerSourceAndAnchor)
   EXPECT_FALSE(first.IdOf("Body").IsNil());
 }
 
-//! An import without a source identity still has node IDs, but they change
-//! on every import, which it reports.
+//! An import without a record still has node IDs, but they change on every
+//! import, which it reports. With a record, it reports nothing.
 NOLINT_TEST(ModelNodeIdentityTest, ReportsAMissingSourceIdentity)
 {
   auto diagnostics = std::vector<ImportDiagnostic> {};
-
   static_cast<void>(
     ModelNodeIdentity::ForRequest(ImportRequest {}, "model.glb", diagnostics));
-
   ASSERT_EQ(diagnostics.size(), 1U);
   EXPECT_EQ(diagnostics.front().code, "import.source_identity_missing");
+
+  auto request = ImportRequest {};
+  request.surface_provenance
+    = std::make_shared<const SurfaceProvenance>(Identity());
+  request.model_import = ModelImportInputs {};
+  diagnostics.clear();
+  const auto identity
+    = ModelNodeIdentity::ForRequest(request, "model.glb", diagnostics);
+  EXPECT_TRUE(diagnostics.empty());
+  EXPECT_EQ(identity.IdOf("Body"), ModelNodeIdentity(Identity()).IdOf("Body"));
+}
+
+//! The codes of `diagnostics`, in order.
+auto Codes(const std::vector<ImportDiagnostic>& diagnostics)
+  -> std::vector<std::string>
+{
+  auto codes = std::vector<std::string> {};
+  for (const auto& diagnostic : diagnostics) {
+    codes.push_back(diagnostic.code);
+  }
+  return codes;
+}
+
+auto WithContinuity(std::vector<ModelNodeContinuity> entries)
+  -> ModelNodeIdentity
+{
+  return ModelNodeIdentity(Identity(),
+    ModelImportInputs {
+      .node_continuity = std::move(entries),
+      .published_nodes = {},
+    });
+}
+
+//! A continuing node has the ID of the anchor it continues, following chains
+//! to the first; a node the importer adds follows its owner.
+NOLINT_TEST(ModelNodeIdentityTest, ContinuityKeepsTheEarlierAnchorsId)
+{
+  const auto plain = ModelNodeIdentity(Identity());
+  auto identity = WithContinuity({
+    { .anchor = "Chassis/Door_FL", .continues = "Body/Door_Front_L" },
+    { .anchor = "Body/Door_Front_L", .continues = "Body/Door_FL" },
+  });
+  auto diagnostics = std::vector<ImportDiagnostic> {};
+
+  const auto anchors
+    = std::vector<std::string> { "Chassis", "Chassis/Door_FL" };
+  ASSERT_TRUE(identity.ResolveContinuity(anchors, "car.glb", diagnostics));
+
+  EXPECT_TRUE(diagnostics.empty());
+  EXPECT_EQ(identity.IdOf("Chassis/Door_FL"), plain.IdOf("Body/Door_FL"));
+  EXPECT_EQ(
+    identity.IdOf("Chassis/Door_FL#light"), plain.IdOf("Body/Door_FL#light"));
+  EXPECT_EQ(identity.IdOf("Chassis"), plain.IdOf("Chassis"));
+}
+
+//! An entry that would give two nodes one ID is dropped with a warning: its
+//! continued anchor is in the file again, or another entry continues it.
+NOLINT_TEST(ModelNodeIdentityTest, ConflictingContinuityIsDropped)
+{
+  const auto plain = ModelNodeIdentity(Identity());
+  auto identity = WithContinuity({
+    { .anchor = "Door_New", .continues = "Door" },
+    { .anchor = "Mirror_A", .continues = "Mirror" },
+    { .anchor = "Mirror_B", .continues = "Mirror" },
+  });
+  auto diagnostics = std::vector<ImportDiagnostic> {};
+
+  const auto anchors
+    = std::vector<std::string> { "Door", "Door_New", "Mirror_A", "Mirror_B" };
+  ASSERT_TRUE(identity.ResolveContinuity(anchors, "car.glb", diagnostics));
+
+  EXPECT_THAT(Codes(diagnostics),
+    testing::ElementsAre(
+      "import.node_continuity_conflict", "import.node_continuity_conflict"));
+  EXPECT_EQ(identity.IdOf("Door_New"), plain.IdOf("Door_New"));
+  EXPECT_EQ(identity.IdOf("Mirror_A"), plain.IdOf("Mirror"));
+  EXPECT_EQ(identity.IdOf("Mirror_B"), plain.IdOf("Mirror_B"));
+}
+
+//! Entries that continue each other in a circle are an error.
+NOLINT_TEST(ModelNodeIdentityTest, AContinuityCycleIsAnError)
+{
+  auto identity = WithContinuity({
+    { .anchor = "A", .continues = "B" },
+    { .anchor = "B", .continues = "A" },
+  });
+  auto diagnostics = std::vector<ImportDiagnostic> {};
+
+  EXPECT_FALSE(identity.ResolveContinuity(
+    std::vector<std::string> { "A" }, "car.glb", diagnostics));
+
+  ASSERT_EQ(diagnostics.size(), 1U);
+  EXPECT_EQ(diagnostics.front().code, "import.node_continuity_cycle");
+  EXPECT_EQ(diagnostics.front().severity,
+    oxygen::content::import::ImportSeverity::kError);
+}
+
+//! The emitted nodes are published with their IDs; against the previous
+//! publication, the vanished and new anchors are reported, and a node that
+//! comes back has its old ID.
+NOLINT_TEST(ModelNodeIdentityTest, PublishedNodesReportWhatChanged)
+{
+  auto first = ModelNodeIdentity(Identity());
+  static_cast<void>(first.Emit("Body"));
+  static_cast<void>(first.Emit("Body/Headlight_R"));
+  auto diagnostics = std::vector<ImportDiagnostic> {};
+  const auto published = first.TakePublishedNodes("car.glb", diagnostics);
+  ASSERT_EQ(published.size(), 2U);
+  EXPECT_EQ(published[1].anchor, "Body/Headlight_R");
+  EXPECT_EQ(published[1].node_id, first.IdOf("Body/Headlight_R"));
+  EXPECT_TRUE(diagnostics.empty()) << "a first import has nothing to compare";
+
+  auto second = ModelNodeIdentity(Identity(),
+    ModelImportInputs { .node_continuity = {}, .published_nodes = published });
+  static_cast<void>(second.Emit("Body"));
+  static_cast<void>(second.Emit("Body/Spoiler"));
+  const auto next = second.TakePublishedNodes("car.glb", diagnostics);
+
+  ASSERT_EQ(diagnostics.size(), 1U);
+  EXPECT_EQ(diagnostics.front().code, "import.nodes_changed");
+  EXPECT_EQ(diagnostics.front().severity,
+    oxygen::content::import::ImportSeverity::kInfo);
+  EXPECT_THAT(diagnostics.front().message,
+    testing::AllOf(testing::HasSubstr("Vanished: 'Body/Headlight_R'"),
+      testing::HasSubstr("New: 'Body/Spoiler'")));
+  EXPECT_EQ(next.front().node_id, published.front().node_id);
+
+  auto third = ModelNodeIdentity(Identity(),
+    ModelImportInputs { .node_continuity = {}, .published_nodes = next });
+  EXPECT_EQ(third.Emit("Body/Headlight_R"), published[1].node_id)
+    << "a node that comes back has its old ID";
 }
 
 //! Identical paths share one record; records follow the order paths are

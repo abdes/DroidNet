@@ -21,6 +21,7 @@
 #include <Oxygen/Clap/Fluent/CommandBuilder.h>
 #include <Oxygen/Clap/Fluent/DSL.h>
 #include <Oxygen/Clap/Option.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
 #include <Oxygen/Cooker/Tools/Inspector/AssetKeyMap_schema.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 
@@ -57,7 +58,8 @@ auto RunAssetKeyMap(const AssetKeyMapOptions& options) -> int
     const auto request = nlohmann::json::parse(input);
     nlohmann::json_schema::json_validator validator;
     validator.set_root_schema(nlohmann::json::parse(kAssetKeyRequestSchema));
-    validator.validate(request);
+    import::internal::ValidateJsonSchema(
+      validator, request, "Asset key request " + options.input);
     auto assets = nlohmann::json::array();
     for (const auto& entry : request.at("virtual_paths")) {
       const auto path = entry.get<std::string>();

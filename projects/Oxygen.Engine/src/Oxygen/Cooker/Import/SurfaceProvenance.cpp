@@ -22,6 +22,7 @@
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Base/Uuid.h>
 #include <Oxygen/Cooker/Import/Internal/ImportManifest_schema.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
 #include <Oxygen/Cooker/Import/SurfaceProvenance.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/StableId.h>
@@ -144,7 +145,7 @@ SurfaceProvenance::SurfaceProvenance(
   , geometries_(std::move(geometries))
 {
   if (!source_identity_.IsValidV7()) {
-    throw std::invalid_argument("Surfaces require a retained source UUIDv7");
+    throw std::invalid_argument("Surfaces require a UUIDv7 source identity");
   }
   std::ranges::sort(geometries_, {}, [](const auto& geometry) -> auto {
     return std::string_view(geometry.source_geometry_anchor);
@@ -184,16 +185,13 @@ SurfaceProvenance::SurfaceProvenance(
   }
 }
 
-auto SurfaceProvenance::Parse(const std::string_view json)
-  -> std::shared_ptr<const SurfaceProvenance>
+auto SurfaceProvenance::Parse(const std::string_view json,
+  const Uuid source_identity) -> std::shared_ptr<const SurfaceProvenance>
 {
   const auto document = nlohmann::json::parse(json);
   nlohmann::json_schema::json_validator validator;
   validator.set_root_schema(nlohmann::json::parse(kSurfaceProvenanceSchema));
-  validator.validate(document);
-  const auto source_identity
-    = Uuid::FromString(document.at("source_identity").get<std::string>())
-        .value();
+  internal::ValidateJsonSchema(validator, document, "Surface provenance");
   std::vector<SurfaceGeometryProvenance> geometries;
   geometries.reserve(document.at("geometries").size());
   for (const auto& geometry : document.at("geometries")) {
@@ -210,8 +208,7 @@ auto SurfaceProvenance::Serialize() const -> std::string
     geometries.push_back(WriteGeometry(geometry));
   }
   return nlohmann::json {
-    { "schema_version", 1 },
-    { "source_identity", source_identity_.ToString() },
+    { "schema_version", kSchemaVersion },
     { "geometries", std::move(geometries) },
   }
     .dump();

@@ -67,7 +67,7 @@ namespace {
     }
     if (tuning.placeholder_on_failure) {
       throw std::invalid_argument(
-        "Retained model imports require successful texture cooking");
+        "Model import records require successful texture cooking");
     }
     settings.intent
       = TokenFor(tuning.intent, "texture_intent", internal::ParseIntent);

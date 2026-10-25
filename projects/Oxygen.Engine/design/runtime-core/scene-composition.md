@@ -148,7 +148,7 @@ once:
 | NGN10 | The starting camera can name an instanced camera                                                                                                                                                                                          |
 | NGN11 | The Inspector's `scenes` verb reports a composed scene (`oxygen.cooked-scenes.v2`)                                                                                                                                                        |
 | NGN12 | The user chooses a glTF file's source scene; the others are reported; the source analysis lists the scenes from the JSON alone                                                                                                            |
-| NGN13 | The ImportTool finds a moved, re-exported or copied source's retained record by virtual path, then by fingerprint; one record per virtual path                                                                                            |
+| NGN13 | The ImportTool finds a moved, re-exported or copied source's model import record by virtual path, then by fingerprint; one record per virtual path                                                                                        |
 | NGN14 | One model import record (`oxygen.model-import.schema.json`, `<content_root>/imports/<source_identity>.import.json`) shared by the editor and the ImportTool, run by a `model` import job                                                  |
 
 ## 6. Editor

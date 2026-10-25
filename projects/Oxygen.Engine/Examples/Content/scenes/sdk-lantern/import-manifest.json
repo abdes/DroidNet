@@ -6,12 +6,8 @@
   "jobs": [
     {
       "id": "lantern",
-      "type": "gltf",
-      "source": "../../models/Lantern.glb",
-      "virtual_path": "/.cooked/models/Lantern.glb",
-      "surface_source_identity": "01a0e7c7-f432-7586-8f04-21328dd4fe6f",
-      "name": "Lantern",
-      "content_hashing": true
+      "type": "model",
+      "record": "../../imports/01a0e7c7-f432-7586-8f04-21328dd4fe6f.import.json"
     }
   ]
 }

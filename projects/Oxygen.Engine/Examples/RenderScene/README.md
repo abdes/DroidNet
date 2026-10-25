@@ -44,8 +44,8 @@ cleanup. All content scripts live there.
 
 1. Open **Content Loader → Library** in the side panel.
 2. Use **Unload All** to remove previous mounts when isolating a source.
-3. Choose **Select Library** for the shared main index or a retained `.import.json`
-   record, or **Select PAK** for a packaged library. Paths are in the Content guide.
+3. Choose **Select Library** for the shared main index or a model import record
+   (`imports/*.import.json`), or **Select PAK** for a packaged library. Paths are in the Content guide.
 4. Check **Mounted Items**, then use **Search scenes...** under **Library Scenes**
    and click a scene. Hover its entry for the path, key, and source details.
 5. Review **Diagnostics** and progress. **Cancel Scene Load** cancels an active
@@ -65,7 +65,7 @@ versions of the same asset out of a baseline test.
    **Sources → Workflow Settings → Auto-load scene after import** controls
    whether a scene is requested automatically.
 
-Interactive model imports publish retained records and immutable generations
+Interactive model imports publish model import records and immutable generations
 under the shared Content directory. The [Content workflow](../Content/README.md)
 owns the paths, replay settings and cleanup rules.
 
@@ -281,13 +281,13 @@ A build configured with `OXYGEN_BUILD_UI_TESTS` supports isolated settings:
 1. Copy `demo_settings.json` into a fresh directory under `out`.
 2. Set `OXYGEN_UI_TEST_OUTPUT` to that directory and `OXYGEN_UI_TEST_SETTINGS` to
    the copied file. Set `OXYGEN_UI_TEST_FILTER` to a test name, such as
-   `retained_library` for a settings file with retained records configured.
+   `model_import_library` for a settings file with model import records configured.
 3. Run the existing executable with `--cvars-archive` pointing into that directory.
 4. Require a successful exit and a nonempty, passing `results.xml`. Remove those
    environment variables from the shell after the run.
 
-`retained_library` checks the restored scene, one mounted generation per retained
-record, renderer availability and usable sky lighting. `ibl_persist_and_replace`
+`model_import_library` checks the restored scene, one mounted generation per model
+import record, renderer availability and usable sky lighting. `ibl_persist_and_replace`
 and `ibl_reopen` run as separate processes against the same copied settings; the
 second restores the saved scene/profile without CLI overrides. Without an isolated
 settings override, widget runs disable settings writes.

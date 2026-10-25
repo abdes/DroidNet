@@ -41,8 +41,7 @@
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/SceneImportRequestBuilder.h>
-#include <Oxygen/Cooker/Import/RetainedModelImport.h>
-#include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
+#include <Oxygen/Cooker/Import/ModelImportRecord.h>
 #include <Oxygen/Cooker/Tools/ImportTool/GlobalOptions.h>
 #include <Oxygen/Cooker/Tools/ImportTool/ImportRunner.h>
 #include <Oxygen/Cooker/Tools/ImportTool/MessageWriter.h>
@@ -136,7 +135,7 @@ auto RunImportJob(const ImportRequest& request,
   oxygen::observer_ptr<IMessageWriter> writer,
   const std::string_view report_path, const std::string_view command_line,
   const bool enable_tui, oxygen::observer_ptr<AsyncImportService> service,
-  std::shared_ptr<RetainedModelImport> publication)
+  std::shared_ptr<ModelImportRecord> publication)
   -> std::expected<void, std::error_code>
 {
   const auto start_time = std::chrono::steady_clock::now();
@@ -212,7 +211,7 @@ auto RunImportJob(const ImportRequest& request,
     LOG_F(INFO, "ImportTool submit job: source='{}' with_content_hashing={}",
       request.source_path.string(), request.options.with_content_hashing);
     const auto job_id = publication
-      ? service->SubmitRetainedImport(
+      ? service->SubmitModelImport(
           std::move(publication), on_complete, on_progress)
       : service->SubmitImport(request, on_complete, on_progress);
     if (!job_id) {
@@ -346,11 +345,11 @@ auto RunImportJob(const ImportRequest& request,
     job.update({ { "outputs", BuildOutputsJson(report_copy.outputs) } });
     job.update({ { "products", BuildProductsJson(report_copy.products) } });
     job.update({ { "cooked_root", report_copy.cooked_root.generic_string() } });
-    if (report_copy.retained_record_path) {
+    if (report_copy.model_record_path) {
       job.update({
         {
-          "retained_record_path",
-          report_copy.retained_record_path->generic_string(),
+          "model_record_path",
+          report_copy.model_record_path->generic_string(),
         },
       });
     }
@@ -362,13 +361,10 @@ auto RunImportJob(const ImportRequest& request,
         },
       });
     }
-    if (report_copy.success && !report_copy.surface_provenance_json.empty()) {
-      job.update({
-        {
-          "surface_provenance",
-          ordered_json::parse(report_copy.surface_provenance_json),
-        },
-      });
+    if (const auto update
+      = ModelImportRecord::SerializeImportUpdate(request, report_copy);
+      !update.empty()) {
+      job.update({ { "model_import", ordered_json::parse(update) } });
     }
     job.update({ { "stats", stats_json } });
     job.update(
@@ -419,13 +415,11 @@ auto RunSceneImportJob(const SceneImportSettings& settings,
   try {
     const auto apply_recipe = !settings.recipe_path.empty();
     const auto replay = settings.source_path.empty()
-      && !settings.retained_record_path.empty() && !apply_recipe;
+      && !settings.model_record_path.empty() && !apply_recipe;
     if (apply_recipe
-      && (!settings.source_path.empty() || settings.retained_record_path.empty()
-        || settings.content_root.empty())) {
+      && (!settings.source_path.empty() || settings.content_root.empty())) {
       throw std::invalid_argument(
-        "--recipe requires --record and --content-root, without a positional "
-        "source");
+        "--recipe requires --content-root, without a positional source");
     }
     if (replay && !settings.content_root.empty()) {
       throw std::invalid_argument("Record replay uses its saved Content root");
@@ -433,14 +427,12 @@ auto RunSceneImportJob(const SceneImportSettings& settings,
     if (apply_recipe || replay) {
       if (!globals.parsed_options) {
         throw std::logic_error(
-          "Retained CLI validation requires parsed option presence");
+          "Model import CLI validation requires parsed option presence");
       }
       constexpr auto kContentOverrides = std::array {
         "source",
         "output",
         "name",
-        "surface-source-identity",
-        "surface-provenance",
         "no-import-textures",
         "no-import-materials",
         "no-import-geometry",
@@ -468,28 +460,41 @@ auto RunSceneImportJob(const SceneImportSettings& settings,
           "Record replay uses its saved Content root");
       }
     }
-    auto record_path = std::filesystem::path(settings.retained_record_path);
+    auto record_path = std::filesystem::path(settings.model_record_path);
+    auto notes = std::vector<ImportDiagnostic> {};
     if (record_path.empty() && !settings.content_root.empty()
       && !settings.source_path.empty()) {
-      record_path = RetainedModelImport::RecordPath(
-        settings.content_root, settings.source_path);
+      if (settings.virtual_path.empty()) {
+        throw std::invalid_argument(
+          "--content-root imports need --virtual-path, the model's identity");
+      }
+      auto location = ModelImportRecord::LocateRecord({
+        .content_root = settings.content_root,
+        .source = settings.source_path,
+        .virtual_path = settings.virtual_path,
+      });
+      record_path = std::move(location.record_path);
+      notes = std::move(location.diagnostics);
+    }
+    if (apply_recipe) {
+      auto location = ModelImportRecord::SaveRecipeFile(
+        {
+          .record_path = record_path,
+          .content_root = settings.content_root,
+          .source = {},
+          .virtual_path = {},
+          .settings_json = std::nullopt,
+        },
+        settings.recipe_path, format);
+      record_path = std::move(location.record_path);
+      notes = std::move(location.diagnostics);
     }
     if (!record_path.empty()) {
-      if (!settings.surface_source_identity.empty()
-        || !settings.surface_provenance_json.empty()
-        || !settings.surface_provenance_path.empty()) {
-        throw std::invalid_argument(
-          "Retained identity belongs to the record; omit source identity and "
-          "provenance options");
-      }
       if (!settings.cooked_root.empty()) {
         throw std::invalid_argument(
-          "Retained output is derived from Content; do not specify --output");
+          "Record output is derived from Content; do not specify --output");
       }
-      if (apply_recipe) {
-        RetainedModelImport::SaveRecipeFile(
-          record_path, settings.content_root, settings.recipe_path, format);
-      } else if (!settings.source_path.empty()) {
+      if (!settings.source_path.empty()) {
         ImportRequest source;
         source.source_path = settings.source_path;
         if (source.GetFormat() != format) {
@@ -497,18 +502,22 @@ auto RunSceneImportJob(const SceneImportSettings& settings,
             "Source format does not match the import command");
         }
         if (settings.content_root.empty()) {
-          throw std::invalid_argument(
-            "Creating or updating a retained recipe requires --content-root");
+          throw std::invalid_argument("Creating or updating a model import "
+                                      "record requires --content-root");
         }
-        const auto recipe
-          = RetainedModelImport::MakeRecipe(settings, LooseCookedLayout {});
-        RetainedModelImport::SaveRecipe(
-          record_path, settings.content_root, recipe);
+        ModelImportRecord::Save({
+          .record_path = record_path,
+          .content_root = settings.content_root,
+          .source = settings.source_path,
+          .virtual_path = settings.virtual_path,
+          .settings_json = ModelImportRecord::MakeSettings(settings),
+        });
       }
-      const auto publication = RetainedModelImport::Prepare(record_path);
+      const auto publication
+        = ModelImportRecord::Prepare(record_path, std::move(notes));
       if (publication->Request().GetFormat() != format) {
         throw std::invalid_argument(
-          "Retained recipe format does not match this command");
+          "The record's source format does not match this command");
       }
       return RunImportJob(publication->Request(), globals.writer,
         settings.report_path, globals.command_line, !globals.no_tui,

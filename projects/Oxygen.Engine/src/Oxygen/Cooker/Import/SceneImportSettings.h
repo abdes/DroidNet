@@ -7,6 +7,7 @@
 #pragma once
 
 #include <map>
+#include <memory>
 #include <optional>
 #include <ostream>
 #include <string>
@@ -19,17 +20,17 @@
 namespace oxygen::content::import {
 
 struct ImportOptions;
+struct ModelImportRecordContent;
 
 struct SceneImportSettings {
   //! Converts persisted native options to the canonical model-recipe
   //! vocabulary.
   OXGN_COOK_NDAPI static auto FromOptions(const ImportOptions& options)
     -> SceneImportSettings;
-  //! Interpret a model recipe and supplied provenance bytes without file I/O.
-  //! The resulting request has no cooked destination; execution attaches it.
+  //! Interpret the settings without file I/O. The resulting request has no
+  //! cooked destination; execution attaches it.
   OXGN_COOK_NDAPI auto Prepare(ImportFormat expected_format,
-    std::string_view external_provenance, std::ostream& error_stream) const
-    -> std::optional<ImportRequest>;
+    std::ostream& error_stream) const -> std::optional<ImportRequest>;
 
   std::string source_path;
   //! The model's identity, the virtual path of its source file
@@ -38,15 +39,13 @@ struct SceneImportSettings {
   std::string cooked_root;
   std::string job_name;
   std::string report_path;
-  std::string retained_record_path;
+  std::string model_record_path;
   std::string recipe_path;
   std::string content_root;
-  //! Retained UUIDv7 namespace for native surface allocation.
-  std::string surface_source_identity;
-  //! Retained provenance supplied by a manifest or an API caller.
-  std::string surface_provenance_json;
-  //! Optional CLI input file, mutually exclusive with inline provenance.
-  std::string surface_provenance_path;
+  //! The model import record the settings come from: its source identity,
+  //! surface provenance, node continuity and published nodes. Without one,
+  //! the import has a fresh identity on every run.
+  std::shared_ptr<const ModelImportRecordContent> model_record;
   bool verbose = false;
 
   bool import_textures = true;

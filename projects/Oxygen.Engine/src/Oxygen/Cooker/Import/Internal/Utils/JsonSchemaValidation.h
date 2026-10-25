@@ -183,6 +183,38 @@ inline auto CollectJsonSchemaIssues(
   return true;
 }
 
+//! Validates `instance` against `validator`'s schema.
+/*!
+ @throw std::invalid_argument naming `what` and the path and message of the
+ first issues; never the document, which can be large.
+*/
+inline auto ValidateJsonSchema(nlohmann::json_schema::json_validator& validator,
+  const nlohmann::json& instance, const std::string_view what) -> void
+{
+  constexpr size_t kShownIssues = 3;
+  auto issues = std::vector<JsonSchemaIssue> {};
+  auto internal_error = std::string {};
+  if (!CollectJsonSchemaIssues(validator, instance, issues, internal_error)) {
+    throw std::invalid_argument(
+      std::string(what) + " could not be validated: " + internal_error);
+  }
+  if (issues.empty()) {
+    return;
+  }
+  auto message = std::string(what) + " is invalid";
+  const auto shown = std::min(issues.size(), kShownIssues);
+  for (size_t i = 0; i < shown; ++i) {
+    const auto& issue = issues[i];
+    message += (i == 0 ? ": " : "; ")
+      + (issue.object_path.empty() ? std::string("(root)") : issue.object_path)
+      + ": " + issue.message;
+  }
+  if (issues.size() > shown) {
+    message += "; and " + std::to_string(issues.size() - shown) + " more";
+  }
+  throw std::invalid_argument(message);
+}
+
 template <typename EmitDiagnosticFn>
 inline auto EmitCollectedJsonSchemaIssues(
   const std::vector<JsonSchemaIssue>& issues, const std::string_view code,

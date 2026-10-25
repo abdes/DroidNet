@@ -48,6 +48,7 @@
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/ImportedPropertyCommit.h>
+#include <Oxygen/Cooker/Import/ModelImportState.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
 #include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
 #include <Oxygen/Cooker/test/Support/DescriptorFixtures.h>
@@ -183,6 +184,10 @@ protected:
     if (!request.surface_provenance) {
       request.surface_provenance = provenance;
     }
+    // As a model import from its record.
+    if (!request.model_import) {
+      request.model_import = oxygen::content::import::ModelImportInputs {};
+    }
     oxygen::content::import::AsyncImportService service(
       MakeMaxConcurrencyConfig());
     const auto report
@@ -197,7 +202,7 @@ protected:
     if (result.report.success
       && !result.report.surface_provenance_json.empty()) {
       provenance = oxygen::content::import::SurfaceProvenance::Parse(
-        result.report.surface_provenance_json);
+        result.report.surface_provenance_json, provenance->SourceIdentity());
     }
     return result;
   }

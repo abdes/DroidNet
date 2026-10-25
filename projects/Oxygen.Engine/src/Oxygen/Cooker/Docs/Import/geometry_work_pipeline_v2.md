@@ -25,7 +25,7 @@ their payloads match. Unassigned primitives use a separate default declaration.
 FBX retains its mesh-local declarations before resolving global material
 references.
 
-The native importer allocates opaque SurfaceIds from a versioned retained geometry
+The native importer allocates opaque SurfaceIds from a versioned recorded geometry
 namespace and durable declaration identity, or the complete source-layout
 witness when durable identity is unavailable. Witnesses cover source surface
 ownership, positions and connectivity before optimization; material parameters,
@@ -51,7 +51,7 @@ therefore change their geometry identities and SurfaceIds. Equal raw witnesses d
 not alias distinct output geometry. Unassigned surfaces use a dedicated
 declaration sentinel, independent of the number of imported material payloads.
 
-Retained import settings own provenance. Cooking returns candidate provenance to
+The model import record owns provenance. Cooking returns candidate provenance to
 the publication owner and never overwrites source settings itself. The owner
 commits provenance and compatible geometry/scene outputs together. Runtime
 geometry stores SurfaceIds and bindings, not source witnesses.

@@ -31,6 +31,7 @@
 #include <Oxygen/Cooker/Import/Internal/SceneBuild.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
+#include <Oxygen/Cooker/Import/ModelImportState.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/DescriptorExtensions.h>
 #include <Oxygen/Data/AssetReferences.h>
@@ -698,6 +699,7 @@ auto ScenePipeline::Worker() -> co::Co<>
     const auto cook_start = std::chrono::steady_clock::now();
     std::vector<ImportDiagnostic> diagnostics;
     BuildOutcome outcome;
+    std::vector<ModelPublishedNode> model_nodes;
 
     if (item.adapter_owner == nullptr || item.build_stage == nullptr) {
       diagnostics.push_back(MakeErrorDiagnostic("scene.adapter_missing",
@@ -736,6 +738,7 @@ auto ScenePipeline::Worker() -> co::Co<>
       if (stage_outcome.result.success) {
         DLOG_F(2, "Serialize scene on import thread source={}", item.source_id);
         SortSceneComponents(stage_outcome.result.build);
+        model_nodes = std::move(stage_outcome.result.build.model_nodes);
 
         const auto scene_name = item.request.GetSceneName();
         const auto scene_key
@@ -794,6 +797,7 @@ auto ScenePipeline::Worker() -> co::Co<>
         .descriptor_relpath = relpath,
         .descriptor_bytes = std::move(outcome.bytes),
         .references = std::move(outcome.references),
+        .model_nodes = std::move(model_nodes),
       };
     }
     if (item.on_finished) {

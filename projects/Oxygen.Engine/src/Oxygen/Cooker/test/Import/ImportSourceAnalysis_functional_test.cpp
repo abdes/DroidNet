@@ -436,7 +436,6 @@ namespace {
       job.virtual_path
         = std::string("/.cooked/Props/static_scalar_triangle.") + type;
       settings.virtual_path = job.virtual_path;
-      settings.surface_source_identity = "01990000-0000-7000-8000-000000000001";
       manifest.jobs.push_back(job);
     }
     const auto report = manifest.AnalyzeSources();
@@ -486,7 +485,6 @@ namespace {
       job.gltf.source_path = source.string();
       job.virtual_path = identity;
       job.gltf.virtual_path = identity;
-      job.gltf.surface_source_identity = "01990000-0000-7000-8000-000000000001";
       manifest.jobs.push_back(job);
       const auto report = manifest.AnalyzeSources();
       EXPECT_FALSE(report.complete);

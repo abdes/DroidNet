@@ -701,10 +701,10 @@ Invoke-OxygenTool -Context $tools -Target oxygen-cooker-importtool
 """)
         self.assertIn("FRESH_RELEASE", output)
 
-    def retained_record(self):
+    def model_import_record(self):
         self.copy_workflow("Examples/Content/import_models.ps1")
         self.copy_workflow(
-            "src/Oxygen/Cooker/Import/Schemas/oxygen.retained-model-import.schema.json"
+            "src/Oxygen/Cooker/Import/Schemas/oxygen.model-import.schema.json"
         )
         record = self.root / "Examples/Content/imports/model.import.json"
         record.parent.mkdir(parents=True)
@@ -712,18 +712,18 @@ Invoke-OxygenTool -Context $tools -Target oxygen-cooker-importtool
             json.dumps(
                 {
                     "schema_version": 1,
-                    "content_root": "..",
-                    "recipe": {"jobs": [{"type": "gltf", "source": "original.gltf"}]},
-                    "surface_provenance": {},
-                    "published_generation": None,
+                    "source": "original.gltf",
+                    "virtual_path": "/.cooked/gltf/original.gltf",
+                    "settings": {},
+                    "source_identity": "01a0e7c7-f432-7586-8f04-212e9ac8d964",
                 }
             ),
             encoding="utf-8",
         )
         return record
 
-    def test_retained_record_preflight_needs_no_tools_and_preserves_record(self):
-        record = self.retained_record()
+    def test_model_import_record_preflight_needs_no_tools_and_preserves_record(self):
+        record = self.model_import_record()
         before = record.read_bytes()
         output = self.command("""
 $script = Join-Path $PSScriptRoot 'Examples/Content/import_models.ps1'
@@ -731,12 +731,12 @@ $script = Join-Path $PSScriptRoot 'Examples/Content/import_models.ps1'
 & $script -All -Reclaim -WhatIf
 & $script -Record (Join-Path $PSScriptRoot 'Examples/Content/imports/model.import.json') -WhatIf
 """)
-        self.assertIn("Publish 1 retained model imports", output)
-        self.assertIn("Reclaim unused generations for 1 retained model imports", output)
+        self.assertIn("Publish 1 model imports", output)
+        self.assertIn("Reclaim unused generations for 1 model imports", output)
         self.assertEqual(record.read_bytes(), before)
 
     def test_record_replay_with_explicit_tool_propagates_failure_without_build(self):
-        record = self.retained_record()
+        record = self.model_import_record()
         before = record.read_bytes()
         directory = self.root / "bin/Release"
         importer = self.fake_tool(directory, "Oxygen.Cooker.ImportTool", 23)

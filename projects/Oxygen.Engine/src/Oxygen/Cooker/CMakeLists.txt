@@ -75,8 +75,8 @@ oxygen_embed_json_schemas(
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.material-descriptor.schema.json"
     kSurfaceProvenanceSchema
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.surface-provenance.schema.json"
-    kRetainedModelImportSchema
-    "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.retained-model-import.schema.json"
+    kModelImportSchema
+    "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.model-import.schema.json"
     kGeometryDescriptorSchema
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.geometry-descriptor.schema.json"
     kSceneDescriptorSchema
@@ -132,7 +132,8 @@ set(
   "Loose/Validation.h"
   "Import/ImportReport.h"
   "Import/SurfaceProvenance.h"
-  "Import/RetainedModelImport.h"
+  "Import/ModelImportRecord.h"
+  "Import/ModelImportState.h"
   "Import/ImportRequest.h"
   "Import/InputImportRequestBuilder.h"
   "Import/InputImportSettings.h"
@@ -350,7 +351,7 @@ set(
   "Import/Internal/ModelNodeIdentity.cpp"
   "Import/Internal/SurfaceAllocation.cpp"
   "Import/SurfaceProvenance.cpp"
-  "Import/RetainedModelImport.cpp"
+  "Import/ModelImportRecord.cpp"
   "Import/SceneImportSettings.cpp"
   "Import/Internal/ImportSourceSnapshot.cpp"
   "Import/Internal/BufferSource.cpp"

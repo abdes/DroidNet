@@ -54,6 +54,7 @@
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/ImportSourceDocument.h>
+#include <Oxygen/Cooker/Import/ModelImportRecord.h>
 #include <Oxygen/Cooker/Import/SceneImportSettings.h>
 #include <Oxygen/Cooker/Tools/ImportTool/BatchCommand.h>
 #include <Oxygen/Cooker/Tools/ImportTool/MessageWriter.h>
@@ -1765,14 +1766,11 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
             { { "outputs", BuildOutputsJson(report_value.outputs) } });
           job_json.update(
             { { "products", BuildProductsJson(report_value.products) } });
-          if (report_value.success
-            && !report_value.surface_provenance_json.empty()) {
-            job_json.update({
-              {
-                "surface_provenance",
-                ordered_json::parse(report_value.surface_provenance_json),
-              },
-            });
+          if (const auto update = ModelImportRecord::SerializeImportUpdate(
+                job.request, report_value);
+            !update.empty()) {
+            job_json.update(
+              { { "model_import", ordered_json::parse(update) } });
           }
           job_json.update(
             { { "stats", BuildStatsJson(report_value.telemetry) } });

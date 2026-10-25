@@ -21,7 +21,7 @@
 
 namespace oxygen::content::import {
 
-//! Retained identity evidence for one source geometry.
+//! Recorded identity evidence for one source geometry.
 /*!
  A geometry is found by its anchor, its name inside its model (`Hull`), so its
  surface ids survive moving or renaming the model. The inventory's geometry key
@@ -35,17 +35,22 @@ struct SurfaceGeometryProvenance final {
 };
 
 //! Immutable, validated identity provenance shared by all meshes in an import.
-//! Retain its serialized form with source settings; publish a replacement only
-//! together with the corresponding cooked geometry generation.
+//! Its serialized form lives in the model import record; publish a replacement
+//! only together with the corresponding cooked geometry generation.
 class SurfaceProvenance final {
 public:
+  //! The `schema_version` of the serialized form.
+  static constexpr uint32_t kSchemaVersion = 2;
+
   //! An empty geometry list establishes a first-import source namespace.
   //! Throws std::invalid_argument for inconsistent identity/inventory data.
   OXGN_COOK_API explicit SurfaceProvenance(Uuid source_identity,
     std::vector<SurfaceGeometryProvenance> geometries = {});
 
   //! Validates schema and all recorded layouts once at the request boundary.
-  OXGN_COOK_NDAPI static auto Parse(std::string_view json)
+  //! The serialized form holds no identity: the model import record keeps it
+  //! beside the provenance.
+  OXGN_COOK_NDAPI static auto Parse(std::string_view json, Uuid source_identity)
     -> std::shared_ptr<const SurfaceProvenance>;
 
   OXGN_COOK_NDAPI auto Serialize() const -> std::string;

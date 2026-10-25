@@ -5,7 +5,6 @@
 //===----------------------------------------------------------------------===//
 
 #include <cmath>
-#include <exception>
 #include <filesystem>
 #include <memory>
 #include <optional>
@@ -20,7 +19,8 @@
 #include <Oxygen/Cooker/Import/ImportSourceDocument.h>
 #include <Oxygen/Cooker/Import/Internal/SceneImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ImportSettingsUtils.h>
-#include <Oxygen/Cooker/Import/Naming.h>
+#include <Oxygen/Cooker/Import/ModelImportRecord.h>
+#include <Oxygen/Cooker/Import/ModelImportState.h>
 #include <Oxygen/Cooker/Import/SceneImportSettings.h>
 #include <Oxygen/Cooker/Import/SurfaceProvenance.h>
 
@@ -116,8 +116,7 @@ namespace {
 } // namespace
 
 auto SceneImportSettings::Prepare(const ImportFormat expected_format,
-  const std::string_view external_provenance, std::ostream& error_stream) const
-  -> std::optional<ImportRequest>
+  std::ostream& error_stream) const -> std::optional<ImportRequest>
 {
   const auto& settings = *this;
   ImportRequest request {};
@@ -129,46 +128,15 @@ auto SceneImportSettings::Prepare(const ImportFormat expected_format,
     return std::nullopt;
   }
   request.asset_virtual_path = settings.virtual_path;
-  auto provenance_json = settings.surface_provenance_json;
-  if (!settings.surface_provenance_path.empty()) {
-    if (!provenance_json.empty()) {
-      error_stream << "ERROR: supply surface provenance inline or by "
-                      "file, not both\n";
-      return std::nullopt;
-    }
-    provenance_json = std::string(external_provenance);
-  }
-  try {
-    if (!provenance_json.empty()) {
-      request.surface_provenance = SurfaceProvenance::Parse(provenance_json);
-    }
-    if (!settings.surface_source_identity.empty()) {
-      const auto identity = Uuid::FromString(settings.surface_source_identity);
-      if (!identity) {
-        error_stream << "ERROR: surface_source_identity must be a "
-                        "canonical UUIDv7\n";
-        return std::nullopt;
-      }
-      if (request.surface_provenance
-        && request.surface_provenance->SourceIdentity() != identity.value()) {
-        error_stream << "ERROR: surface provenance belongs to another "
-                        "source identity\n";
-        return std::nullopt;
-      }
-      if (!request.surface_provenance) {
-        request.surface_provenance
-          = std::make_shared<const SurfaceProvenance>(identity.value());
-      }
-    }
-    if (!request.surface_provenance) {
-      error_stream << "ERROR: model import requires retained surface "
-                      "provenance or source identity\n";
-      return std::nullopt;
-    }
-  } catch (const std::exception& error) {
-    error_stream << "ERROR: invalid surface provenance: " << error.what()
-                 << '\n';
-    return std::nullopt;
+  if (settings.model_record) {
+    request.surface_provenance = settings.model_record->surface_provenance;
+    request.model_import = ModelImportInputs {
+      .node_continuity = settings.model_record->node_continuity,
+      .published_nodes = settings.model_record->published_nodes,
+    };
+  } else {
+    request.surface_provenance
+      = std::make_shared<const SurfaceProvenance>(Uuid::Generate());
   }
 
   if (!settings.job_name.empty()) {
@@ -275,24 +243,7 @@ namespace internal {
       error_stream << "ERROR: --output or --cooked-root is required\n";
       return std::nullopt;
     }
-    auto provenance = std::optional<ImportSourceDocument> {};
-    if (!settings.surface_provenance_path.empty()) {
-      if (!settings.surface_provenance_json.empty()) {
-        error_stream << "ERROR: supply surface provenance inline or by "
-                        "file, not both\n";
-        return std::nullopt;
-      }
-      provenance = ImportSourceDocument::Load(settings.surface_provenance_path,
-        "surface provenance", error_stream, captured_inputs.get());
-      if (!provenance.has_value()) {
-        return std::nullopt;
-      }
-    }
-    const auto provenance_text = provenance.has_value()
-      ? std::string_view(provenance->text)
-      : std::string_view {};
-    auto request
-      = settings.Prepare(expected_format, provenance_text, error_stream);
+    auto request = settings.Prepare(expected_format, error_stream);
     if (!request.has_value()) {
       return std::nullopt;
     }
@@ -303,9 +254,6 @@ namespace internal {
     }
     request->cooked_root = std::move(root);
     request->captured_inputs = std::move(captured_inputs);
-    if (provenance.has_value()) {
-      request->preparation_inputs.push_back(provenance->Observation());
-    }
     return request;
   }
 } // namespace internal

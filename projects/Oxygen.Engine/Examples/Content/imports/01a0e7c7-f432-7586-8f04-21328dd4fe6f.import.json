@@ -1,0 +1,114 @@
+{
+  "schema_version": 1,
+  "source": "../models/Lantern.glb",
+  "virtual_path": "/.cooked/models/Lantern.glb",
+  "settings": {
+    "content_hashing": true,
+    "name": "Lantern"
+  },
+  "source_identity": "01a0e7c7-f432-7586-8f04-21328dd4fe6f",
+  "surface_provenance": {
+    "geometries": [
+      {
+        "allocations": [
+          {
+            "declaration_key": 0,
+            "surface_id": "9f2bc66a-4f4a-5ae4-c7d9-40e635fe20fe"
+          }
+        ],
+        "geometry_asset_key": "1c43a3b2-d0ec-8369-5fd9-864d4fa0f059",
+        "layout_revision": "6092073a0fdfa75b801d1efe7901d4e3bf52a3034f82465b257d94f8edb24ac4",
+        "source_geometry_anchor": "LanternPole_Body",
+        "source_layout_witness": "c10856668814e8e204df32172a2676fe3b9ab65a609c026539026b0600b256ed",
+        "surfaces": [
+          {
+            "bindings": [
+              {
+                "default_material_key": "b3226a26-25a5-ffa5-338d-e40526d61d21",
+                "lod_index": 0,
+                "submesh_index": 0
+              }
+            ],
+            "display_name": "LanternPost_Mat",
+            "surface_id": "9f2bc66a-4f4a-5ae4-c7d9-40e635fe20fe"
+          }
+        ]
+      },
+      {
+        "allocations": [
+          {
+            "declaration_key": 0,
+            "surface_id": "15b1c068-65f0-f52b-be4d-e11438e24df1"
+          }
+        ],
+        "geometry_asset_key": "7bae9117-be6e-8ae2-507e-f62a1622b530",
+        "layout_revision": "7ec7969b30410a4b58a6e804970eed96fbd0751e9c6f54e7c71f6ac5fe165d0b",
+        "source_geometry_anchor": "LanternPole_Chain",
+        "source_layout_witness": "f4504470dab45e0be117d7b05a9783787a69b3ec858079b90022c4df7d159acb",
+        "surfaces": [
+          {
+            "bindings": [
+              {
+                "default_material_key": "b3226a26-25a5-ffa5-338d-e40526d61d21",
+                "lod_index": 0,
+                "submesh_index": 0
+              }
+            ],
+            "display_name": "LanternPost_Mat",
+            "surface_id": "15b1c068-65f0-f52b-be4d-e11438e24df1"
+          }
+        ]
+      },
+      {
+        "allocations": [
+          {
+            "declaration_key": 0,
+            "surface_id": "49e41f7d-86c0-8353-82ea-e7f927ac5a39"
+          }
+        ],
+        "geometry_asset_key": "c6cf6620-bdb2-c9d3-786e-a01207614175",
+        "layout_revision": "cfd68a58863240744496b2ec50469bd62c753ef28c53ff3fd24ce2c42d9b0316",
+        "source_geometry_anchor": "LanternPole_Lantern",
+        "source_layout_witness": "752c303c00db59495fae76a73d9d56f68e0eada4739968a5aacae809815e94a4",
+        "surfaces": [
+          {
+            "bindings": [
+              {
+                "default_material_key": "b3226a26-25a5-ffa5-338d-e40526d61d21",
+                "lod_index": 0,
+                "submesh_index": 0
+              }
+            ],
+            "display_name": "LanternPost_Mat",
+            "surface_id": "49e41f7d-86c0-8353-82ea-e7f927ac5a39"
+          }
+        ]
+      }
+    ],
+    "schema_version": 2
+  },
+  "node_continuity": [],
+  "published_nodes": [
+    {
+      "anchor": "Lantern",
+      "node_id": "daa2c441-458b-3f85-05f0-9446fd8a8e16"
+    },
+    {
+      "anchor": "Lantern/LanternPole_Body",
+      "node_id": "14ff818c-9264-5da8-4fb0-e913ab1c6fcc"
+    },
+    {
+      "anchor": "Lantern/LanternPole_Chain",
+      "node_id": "926829b3-74ae-96ec-aa54-89b30cf6ec5e"
+    },
+    {
+      "anchor": "Lantern/LanternPole_Lantern",
+      "node_id": "67c96b1e-3e40-2f67-28df-ea16c6a1d837"
+    }
+  ],
+  "source_fingerprint": {
+    "size": 9564264,
+    "sha256": "a79458c4b02d695187a952f23a63b8bf278e7bc3d316a3c2a314f2d6974181f1",
+    "files": []
+  }
+}

@@ -511,7 +511,7 @@ item).
 - A model node's `node_id` derives from the model's source identity and the
   node's anchor (`ModelNodeIdentity`): the path of authored names from the
   model's roots, with same-named siblings numbered from the second
-  (`Body/Mirror[2]`) and a node the importer adds named by its owner and role
+  (`Body/Mirror[2]`), unnamed ones from the first (`Body/[1]`), and a node the importer adds named by its owner and role
   (`Body/Lamp#light`). Moving or renaming the model keeps every node ID.
 - A scene descriptor's node takes the `id` the descriptor gives it.
 

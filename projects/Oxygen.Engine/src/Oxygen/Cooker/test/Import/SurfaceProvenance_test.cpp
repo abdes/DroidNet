@@ -41,6 +41,11 @@ using oxygen::data::SurfaceId;
 
 constexpr auto kSourceIdentity = "01900000-0000-7000-8000-000000000001";
 
+auto Identity() -> oxygen::Uuid
+{
+  return oxygen::Uuid::FromString(kSourceIdentity).value();
+}
+
 struct Source final {
   std::array<glm::vec3, 3> positions {
     glm::vec3 { 0.0F, 0.0F, 0.0F },
@@ -131,7 +136,8 @@ NOLINT_TEST(SurfaceProvenanceTest,
   auto recreated = source.MakeRequest();
   recreated.source_id = "different-machine-and-producer";
   recreated.mesh_name = "renamed-display-label";
-  recreated.request.surface_provenance = SurfaceProvenance::Parse(persisted);
+  recreated.request.surface_provenance
+    = SurfaceProvenance::Parse(persisted, Identity());
   const auto result = AllocateSurfaces(recreated);
   EXPECT_EQ(result.allocations.at(1U), retained_id);
 }
@@ -207,7 +213,8 @@ NOLINT_TEST(
     .at("bindings")
     .at(0)
     .update({ { "submesh_index", 7U } });
-  EXPECT_THROW(static_cast<void>(SurfaceProvenance::Parse(document.dump())),
+  EXPECT_THROW(
+    static_cast<void>(SurfaceProvenance::Parse(document.dump(), Identity())),
     std::invalid_argument);
 }
 
@@ -218,7 +225,8 @@ NOLINT_TEST(
   const auto first = AllocateSurfaces(source.MakeRequest());
   auto document = nlohmann::json::parse(Publish(first)->Serialize());
   document.at("geometries").push_back(document.at("geometries").at(0));
-  EXPECT_THROW(static_cast<void>(SurfaceProvenance::Parse(document.dump())),
+  EXPECT_THROW(
+    static_cast<void>(SurfaceProvenance::Parse(document.dump(), Identity())),
     std::invalid_argument);
   auto other = source.MakeRequest();
   other.request.surface_provenance = std::make_shared<const SurfaceProvenance>(
@@ -231,9 +239,14 @@ NOLINT_TEST(SurfaceProvenanceTest, EmptySourceRecordRoundTrips)
 {
   const SurfaceProvenance initial(
     oxygen::Uuid::FromString(kSourceIdentity).value());
-  const auto parsed = SurfaceProvenance::Parse(initial.Serialize());
+  const auto serialized = nlohmann::json::parse(initial.Serialize());
+  const auto parsed
+    = SurfaceProvenance::Parse(serialized.dump(), initial.SourceIdentity());
   EXPECT_TRUE(parsed->Geometries().empty());
   EXPECT_EQ(parsed->SourceIdentity(), initial.SourceIdentity());
+  // The record keeps the identity; the provenance does not repeat it.
+  EXPECT_FALSE(serialized.contains("source_identity"));
+  EXPECT_EQ(serialized.at("schema_version"), SurfaceProvenance::kSchemaVersion);
 }
 
 } // namespace

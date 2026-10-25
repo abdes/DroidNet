@@ -8,10 +8,8 @@
 
 #include <filesystem>
 #include <fstream>
-#include <ios>
 #include <memory>
 #include <optional>
-#include <span>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -19,36 +17,38 @@
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
-#include <Oxygen/Base/Sha256.h>
-#include <Oxygen/Cooker/Import/CapturedInputSet.h>
-#include <Oxygen/Cooker/Import/FileInfo.h>
+#include <Oxygen/Base/Uuid.h>
 #include <Oxygen/Cooker/Import/ImportManifest.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/SceneImportRequestBuilder.h>
+#include <Oxygen/Cooker/Import/ModelImportRecord.h>
+#include <Oxygen/Cooker/Import/ModelImportState.h>
 #include <Oxygen/Cooker/Import/SceneImportSettings.h>
 #include <Oxygen/Cooker/Import/SurfaceProvenance.h>
 #include <Oxygen/Cooker/test/Pak/PakTestSupport.h>
 #include <Oxygen/Core/Types/DescriptorExtensions.h>
+#include <Oxygen/Data/SceneIds.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {
 
 using nlohmann::json;
+using oxygen::Uuid;
 using oxygen::content::import::ImportFormat;
 using oxygen::content::import::ImportManifest;
+using oxygen::content::import::ModelImportRecord;
+using oxygen::content::import::ModelImportRecordContent;
+using oxygen::content::import::ModelNodeContinuity;
+using oxygen::content::import::ModelPublishedNode;
 using oxygen::content::import::SceneImportSettings;
+using oxygen::content::import::SurfaceProvenance;
 using oxygen::content::import::internal::BuildSceneRequest;
+using oxygen::data::NodeId;
+
 constexpr std::string_view kSourceIdentity
   = "01990000-0000-7000-8000-000000000001";
 
-auto RetainedProvenance() -> json
-{
-  return {
-    { "schema_version", 1 },
-    { "source_identity", kSourceIdentity },
-    { "geometries", json::array() },
-  };
-}
+auto Identity() -> Uuid { return Uuid::FromString(kSourceIdentity).value(); }
 
 class SceneImportRequestBuilderTest
   : public oxygen::content::pak::test::TempDirFixture {
@@ -59,20 +59,43 @@ protected:
     settings.source_path = Path("model.gltf").string();
     settings.virtual_path = "/.cooked/model.gltf";
     settings.cooked_root = Path("cooked").string();
-    settings.surface_source_identity = kSourceIdentity;
     return settings;
+  }
+
+  //! A record of `source` named by `identity`, in the temp content root.
+  auto SaveRecord(const std::string_view source,
+    const std::string_view virtual_path, const Uuid& identity,
+    const json& settings = json::object()) -> std::filesystem::path
+  {
+    const auto path = ModelImportRecord::PathFor(Root(), identity);
+    ModelImportRecord::Save({
+      .record_path = path,
+      .content_root = Root(),
+      .source = Path(source),
+      .virtual_path = std::string(virtual_path),
+      .settings_json = settings.dump(),
+    });
+    return path;
   }
 };
 
-NOLINT_TEST_F(
-  SceneImportRequestBuilderTest, RequiresRetainedModelSourceIdentity)
+//! Without a record, an import has an identity of its own, fresh on every
+//! run, and no node history.
+NOLINT_TEST_F(SceneImportRequestBuilderTest, WithoutARecordTheIdentityIsFresh)
 {
-  auto settings = Settings();
-  settings.surface_source_identity.clear();
   std::ostringstream errors;
-  EXPECT_FALSE(
-    BuildSceneRequest(settings, ImportFormat::kGltf, errors).has_value());
-  EXPECT_THAT(errors.str(), testing::HasSubstr("requires retained surface"));
+  const auto first = BuildSceneRequest(Settings(), ImportFormat::kGltf, errors);
+  const auto second
+    = BuildSceneRequest(Settings(), ImportFormat::kGltf, errors);
+
+  ASSERT_HAS_VALUE(first) << errors.str();
+  ASSERT_HAS_VALUE(second) << errors.str();
+  ASSERT_NE(first->surface_provenance, nullptr);
+  ASSERT_NE(second->surface_provenance, nullptr);
+  EXPECT_TRUE(first->surface_provenance->SourceIdentity().IsValidV7());
+  EXPECT_NE(first->surface_provenance->SourceIdentity(),
+    second->surface_provenance->SourceIdentity());
+  EXPECT_FALSE(first->model_import.has_value());
 }
 
 //! A job's source sits in the folder of what it cooks: the index records it as
@@ -116,105 +139,78 @@ NOLINT_TEST_F(SceneImportRequestBuilderTest, CarriesTheModelIdentity)
     refused.str(), testing::HasSubstr("import.asset_virtual_path_missing"));
 }
 
-NOLINT_TEST_F(SceneImportRequestBuilderTest, ForwardsCanonicalProvenance)
+//! The record supplies the identity, the provenance and what node continuity
+//! needs: the continuity entries and the previously published nodes.
+NOLINT_TEST_F(SceneImportRequestBuilderTest, TheRecordSuppliesTheModelsHistory)
 {
+  auto record = std::make_shared<ModelImportRecordContent>();
+  record->source_identity = Identity();
+  record->surface_provenance
+    = std::make_shared<const SurfaceProvenance>(Identity());
+  record->node_continuity = {
+    ModelNodeContinuity {
+      .anchor = "Body/Door_Front_L",
+      .continues = "Body/Door_FL",
+    },
+  };
+  record->published_nodes = {
+    ModelPublishedNode {
+      .anchor = "Body",
+      .node_id = NodeId::FromStableIdentity("Body"),
+    },
+  };
   auto settings = Settings();
-  settings.surface_provenance_json = RetainedProvenance().dump();
+  settings.model_record = record;
+
   std::ostringstream errors;
   const auto request = BuildSceneRequest(settings, ImportFormat::kGltf, errors);
-  ASSERT_HAS_VALUE(request)
-    << "Expected request to contain a value" << errors.str();
-  EXPECT_EQ(
-    request->surface_provenance->SourceIdentity().ToString(), kSourceIdentity);
-  EXPECT_EQ(json::parse(request->surface_provenance->Serialize()),
-    RetainedProvenance());
+
+  ASSERT_HAS_VALUE(request) << errors.str();
+  EXPECT_EQ(request->surface_provenance, record->surface_provenance);
+  const auto& model_import = request->model_import;
+  ASSERT_HAS_VALUE(model_import);
+  EXPECT_EQ(model_import->node_continuity, record->node_continuity);
+  EXPECT_EQ(model_import->published_nodes, record->published_nodes);
 }
 
-NOLINT_TEST_F(SceneImportRequestBuilderTest, ReadsExplicitProvenanceFile)
+//! Preparing a request reads no file and attaches no destination.
+NOLINT_TEST_F(SceneImportRequestBuilderTest, PreparesWithoutDestinationOrFileIo)
 {
   auto settings = Settings();
-  settings.surface_provenance_path = Path("surfaces.json").string();
-  {
-    std::ofstream output(settings.surface_provenance_path);
-    output << RetainedProvenance().dump();
-    ASSERT_TRUE(output.good());
-  }
+  settings.cooked_root.clear();
   std::ostringstream errors;
-  const auto request = BuildSceneRequest(settings, ImportFormat::kGltf, errors);
-  ASSERT_HAS_VALUE(request)
-    << "Expected request to contain a value" << errors.str();
-  EXPECT_EQ(json::parse(request->surface_provenance->Serialize()),
-    RetainedProvenance());
+  const auto request = settings.Prepare(ImportFormat::kGltf, errors);
+  ASSERT_HAS_VALUE(request) << errors.str();
+  EXPECT_FALSE(request->cooked_root.has_value());
+  EXPECT_EQ(request->source_path, std::filesystem::path(settings.source_path));
 }
 
-NOLINT_TEST_F(SceneImportRequestBuilderTest, RejectsCompetingProvenanceInputs)
+//! A `model` job runs its record as a gltf or fbx job, by the source's
+//! extension: the record's settings, source, virtual path and identity.
+NOLINT_TEST_F(SceneImportRequestBuilderTest, AModelJobRunsItsRecord)
 {
-  auto settings = Settings();
-  settings.surface_provenance_json = RetainedProvenance().dump();
-  settings.surface_provenance_path = Path("surfaces.json").string();
-  std::ostringstream errors;
-  EXPECT_FALSE(
-    BuildSceneRequest(settings, ImportFormat::kGltf, errors).has_value());
-  EXPECT_THAT(errors.str(), testing::HasSubstr("not both"));
-}
-
-NOLINT_TEST_F(SceneImportRequestBuilderTest, RejectsProvenanceFromAnotherSource)
-{
-  auto settings = Settings();
-  auto provenance = RetainedProvenance();
-  provenance.update(
-    { { "source_identity", "01990000-0000-7000-8000-000000000002" } });
-  settings.surface_provenance_json = provenance.dump();
-  std::ostringstream errors;
-  EXPECT_FALSE(
-    BuildSceneRequest(settings, ImportFormat::kGltf, errors).has_value());
-  EXPECT_THAT(errors.str(), testing::HasSubstr("another source identity"));
-}
-
-NOLINT_TEST_F(SceneImportRequestBuilderTest, RejectsMalformedProvenanceShape)
-{
-  auto settings = Settings();
-  auto provenance = RetainedProvenance();
-  provenance.update({ { "geometries", { { "unexpected", true } } } });
-  settings.surface_provenance_json = provenance.dump();
-  std::ostringstream errors;
-  EXPECT_FALSE(
-    BuildSceneRequest(settings, ImportFormat::kGltf, errors).has_value());
-  EXPECT_THAT(errors.str(), testing::HasSubstr("invalid surface provenance"));
-}
-
-NOLINT_TEST_F(SceneImportRequestBuilderTest,
-  ManifestForwardsRetainedProvenanceToBothFormats)
-{
+  const auto gltf_identity = Identity();
+  const auto fbx_identity
+    = Uuid::FromString("01990000-0000-7000-8000-000000000002").value();
+  const auto gltf = SaveRecord("model.gltf", "/.cooked/model.gltf",
+    gltf_identity, json { { "name", "the_gltf" } });
+  const auto fbx = SaveRecord("model.fbx", "/.cooked/model.fbx", fbx_identity);
   const auto manifest_path = Path("import-manifest.json");
   {
     const auto document = json {
       { "version", 1 },
       { "output", Path("cooked").string() },
       {
-        "defaults",
-        {
-          {
-            "scene",
-            {
-              { "surface_source_identity", kSourceIdentity },
-              { "surface_provenance", RetainedProvenance() },
-            },
-          },
-        },
-      },
-      {
         "jobs",
         json::array({
           {
-            { "type", "gltf" },
-            { "source", "model.gltf" },
-            { "virtual_path", "/.cooked/model.gltf" },
+            { "type", "model" },
+            { "record", gltf.lexically_relative(Root()).generic_string() },
           },
           {
-            { "type", "fbx" },
-            { "source", "model.fbx" },
-            { "virtual_path", "/.cooked/model.fbx" },
+            { "id", "the-fbx" },
+            { "type", "model" },
+            { "record", fbx.generic_string() },
           },
         }),
       },
@@ -223,94 +219,63 @@ NOLINT_TEST_F(SceneImportRequestBuilderTest,
     output << document.dump();
     ASSERT_TRUE(output.good());
   }
+
   std::ostringstream errors;
   const auto manifest
     = ImportManifest::Load(manifest_path, std::nullopt, errors);
-  ASSERT_HAS_VALUE(manifest)
-    << "Expected manifest to contain a value" << errors.str();
+
+  ASSERT_HAS_VALUE(manifest) << errors.str();
   ASSERT_EQ(manifest->jobs.size(), 2U);
-  for (const auto& job : manifest->jobs) {
-    const auto request = job.BuildRequest(errors);
-    ASSERT_HAS_VALUE(request)
-      << "Expected request to contain a value" << errors.str();
-    EXPECT_EQ(request->surface_provenance->SourceIdentity().ToString(),
-      kSourceIdentity);
-    EXPECT_EQ(json::parse(request->surface_provenance->Serialize()),
-      RetainedProvenance());
-  }
+  EXPECT_EQ(manifest->jobs[0].job_type, "gltf");
+  EXPECT_EQ(manifest->jobs[1].job_type, "fbx");
+  EXPECT_EQ(manifest->jobs[1].id, "the-fbx");
+  const auto first = manifest->jobs[0].BuildRequest(errors);
+  const auto second = manifest->jobs[1].BuildRequest(errors);
+  ASSERT_HAS_VALUE(first) << errors.str();
+  ASSERT_HAS_VALUE(second) << errors.str();
+  EXPECT_EQ(first->asset_virtual_path, "/.cooked/model.gltf");
+  EXPECT_EQ(first->job_name, "the_gltf");
+  EXPECT_EQ(first->surface_provenance->SourceIdentity(), gltf_identity);
+  EXPECT_TRUE(first->model_import.has_value());
+  EXPECT_EQ(second->GetFormat(), ImportFormat::kFbx);
+  EXPECT_EQ(second->surface_provenance->SourceIdentity(), fbx_identity);
 }
 
-NOLINT_TEST_F(
-  SceneImportRequestBuilderTest, ContentFlagsDoNotWaiveModelIdentity)
+//! Identity and provenance belong to the record: a job cannot carry them, and
+//! a `model` job carries nothing of the record's.
+NOLINT_TEST_F(SceneImportRequestBuilderTest, JobsCarryNoIdentityOfTheirOwn)
 {
-  auto settings = Settings();
-  settings.import_geometry = false;
-  settings.surface_source_identity.clear();
-  std::ostringstream errors;
-  EXPECT_FALSE(BuildSceneRequest(settings, ImportFormat::kGltf, errors));
-  EXPECT_THAT(
-    errors.str(), testing::HasSubstr("model import requires retained"));
-}
-
-NOLINT_TEST_F(SceneImportRequestBuilderTest,
-  PreparesObservedProvenanceWithoutDestinationOrFileIo)
-{
-  auto settings = Settings();
-  settings.cooked_root.clear();
-  settings.surface_provenance_path = Path("not-on-disk.json").string();
-  std::ostringstream errors;
-  const auto request = settings.Prepare(
-    ImportFormat::kGltf, RetainedProvenance().dump(), errors);
-  ASSERT_HAS_VALUE(request) << errors.str();
-  EXPECT_FALSE(request->cooked_root.has_value());
-  EXPECT_EQ(request->source_path, std::filesystem::path(settings.source_path));
-  ASSERT_NE(request->surface_provenance, nullptr);
-  EXPECT_EQ(
-    request->surface_provenance->SourceIdentity().ToString(), kSourceIdentity);
-}
-
-NOLINT_TEST_F(
-  SceneImportRequestBuilderTest, CapturedProvenanceDoesNotRequireTheOriginal)
-{
-  auto settings = Settings();
-  const auto logical = Path("authored-surfaces.json");
-  const auto physical = Path("captured-surfaces.json");
-  settings.surface_provenance_path = logical.string();
-  const auto text = RetainedProvenance().dump();
-  {
-    std::ofstream output(physical, std::ios::binary);
-    output << text;
-    ASSERT_TRUE(output.good());
-  }
-  const auto digest
-    = oxygen::base::ComputeSha256(std::as_bytes(std::span(text)));
-  const auto input = oxygen::content::import::CapturedInput {
-    .logical_path = logical,
-    .exists = true,
-    .metadata = oxygen::content::import::FileInfo { .size = text.size(),
-      .last_modified = {},
-      .is_directory = false,
-      .is_symlink = false, },
-    .file = oxygen::content::import::CapturedInputFile { .path = physical,
-      .size = text.size(),
-      .digest = digest, },
+  const auto record
+    = SaveRecord("model.gltf", "/.cooked/model.gltf", Identity());
+  const auto refused = [](const json& job) -> std::string {
+    const auto document = json {
+      { "version", 1 },
+      { "jobs", json::array({ job }) },
+    };
+    std::ostringstream errors;
+    EXPECT_FALSE(ImportManifest::Parse(
+      document.dump(), std::filesystem::current_path(), std::nullopt, errors)
+        .has_value())
+      << job.dump();
+    return errors.str();
   };
-  const auto captures
-    = std::make_shared<const oxygen::content::import::CapturedInputSet>(
-      std::span(&input, 1));
-  auto errors = std::ostringstream {};
-  const auto request
-    = BuildSceneRequest(settings, ImportFormat::kGltf, errors, captures);
-  ASSERT_HAS_VALUE(request) << errors.str();
-  EXPECT_EQ(request->captured_inputs, captures);
-  ASSERT_EQ(request->preparation_inputs.size(), 1U);
-  const auto& proof = request->preparation_inputs.front();
-  EXPECT_EQ(proof.path, logical);
-  ASSERT_EQ(proof.reads.size(), 1U);
-  EXPECT_EQ(proof.reads.front().digest, digest);
-  ASSERT_NE(request->surface_provenance, nullptr);
-  EXPECT_EQ(
-    request->surface_provenance->SourceIdentity().ToString(), kSourceIdentity);
-  EXPECT_FALSE(std::filesystem::exists(logical));
+
+  static_cast<void>(refused({
+    { "type", "gltf" },
+    { "source", "model.gltf" },
+    { "virtual_path", "/.cooked/model.gltf" },
+    { "surface_source_identity", kSourceIdentity },
+  }));
+  static_cast<void>(refused({
+    { "type", "model" },
+    { "record", record.generic_string() },
+    { "unit_policy", "preserve" },
+  }));
+  EXPECT_THAT(refused({
+                { "type", "model" },
+                { "record", Path("missing.import.json").generic_string() },
+              }),
+    testing::HasSubstr("import.model_record_invalid"));
 }
+
 } // namespace

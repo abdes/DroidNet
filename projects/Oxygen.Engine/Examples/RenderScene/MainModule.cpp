@@ -445,9 +445,11 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
               pending_source_requests_.push_front(request);
               break;
             }
-            LOG_F(ERROR, "Retained generation mount failed: {}", error.what());
+            LOG_F(
+              ERROR, "Model import generation mount failed: {}", error.what());
           } catch (const std::exception& error) {
-            LOG_F(ERROR, "Retained generation mount failed: {}", error.what());
+            LOG_F(
+              ERROR, "Model import generation mount failed: {}", error.what());
           }
         } else if (action == PendingSourceAction::kMountPak) {
           const auto normalized = runtime::NormalizePath(path);

@@ -10,9 +10,7 @@
 #include <functional>
 #include <string>
 #include <variant>
-#include <vector>
 
-#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportJobId.h>
 
 namespace oxygen::content::import {
@@ -90,7 +88,6 @@ struct ProgressHeader {
   ProgressEventKind kind = ProgressEventKind::kPhaseUpdate;
   float overall_progress = 0.0F;
   std::string message;
-  std::vector<ImportDiagnostic> new_diagnostics;
 };
 
 //! Payload for item progress updates.

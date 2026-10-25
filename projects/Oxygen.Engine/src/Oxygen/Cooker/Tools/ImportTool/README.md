@@ -111,13 +111,15 @@ Imports one FBX scene.
 
 Required:
 
-- positional `source`, or `--record <path>` to replay a retained recipe
+- positional `source`, or `--record <path>` to replay a model import record
 - `--virtual-path <path>` with `source`: the model's identity, the virtual path
   of its source file (`/Content/Ship/Ship.glb`). Its materials, geometry,
   textures and scene are named flat under it (`/Content/Ship/Ship.glb/Paint.omat`,
   `/Content/Ship/Ship.glb/Ship.oscene`); its buffers are files beside its
   geometry (`Ship.glb/Hull.lod0.vertex.obuf`).
-- raw staging imports require `--surface-source-identity <uuid-v7>`
+- an import without a record (`--output`) gets a fresh source identity and
+  reports `import.source_identity_missing`: its node and surface IDs change on
+  every import
 
 Common options:
 
@@ -128,8 +130,6 @@ Common options:
 
 Scene controls:
 
-- `--surface-provenance <json-file>` (retained candidate from a prior
-  import)
 - `--no-import-textures`
 - `--no-import-materials`
 - `--no-import-geometry`
@@ -151,69 +151,85 @@ Required:
 - positional `source`
 - `--virtual-path <path>`, as for `fbx`
 
-Options are the same shape as `fbx`. A retained record can be replayed without
-supplying `source`.
+Options are the same shape as `fbx`. A record can be replayed without supplying
+`source`.
 
-### Retained model imports
+### Model import records
 
-Use the shared retained workflow for independently imported models:
+A model's import state lives in its model import record,
+`<content_root>/imports/<source_identity>.import.json`
+(`oxygen.model-import.schema.json`), which the editor reads and writes too: the
+source, the model's virtual path, its settings, and what earlier imports
+established (source identity, surface provenance, node continuity, published
+nodes, source fingerprint). The source identity names the record and never
+changes; node and surface IDs derive from it, so they survive moving or
+renaming the model.
 
 ```powershell
-Oxygen.Cooker.ImportTool gltf model.glb --content-root H:/Game/Content
-Oxygen.Cooker.ImportTool fbx model.fbx --content-root H:/Game/Content --record H:/Game/Content/imports/model.import.json
-Oxygen.Cooker.ImportTool fbx --record H:/Game/Content/imports/model.import.json
-Oxygen.Cooker.ImportTool fbx --recipe model.recipe.json --record H:/Game/Content/imports/model.import.json --content-root H:/Game/Content
+Oxygen.Cooker.ImportTool gltf model.glb --content-root H:/Game/Content --virtual-path /Content/model.glb
+Oxygen.Cooker.ImportTool fbx model.fbx --content-root H:/Game/Content --record H:/Game/Content/imports/<source_identity>.import.json
+Oxygen.Cooker.ImportTool fbx --record H:/Game/Content/imports/<source_identity>.import.json
+Oxygen.Cooker.ImportTool fbx --recipe model.recipe.json --record H:/Game/Content/imports/<source_identity>.import.json --content-root H:/Game/Content
 ```
 
-The record owns recipe and surface identity; do not combine retained options with
-`--output`, `--surface-source-identity` or `--surface-provenance`.
-The native publisher selects a validated immutable generation and its provenance
-in one atomic record replacement. Failed or interrupted attempts keep the prior
-selection. External raw sources are read only. Records follow
-`oxygen.retained-model-import.schema.json`; generated directories belong under
-`Content/.cooked/imports`. The
-[pipeline owner](../../Docs/Import/async_import_pipeline_v2.md#retained-model-publication)
+With `--content-root` and a source but no `--record`, the tool finds the
+record; the first step that matches decides:
+
+| Step | Finds                                                                | Result                                                                                                                                     |
+| ---- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1    | A record with this virtual path                                      | That record; a different source is rebound to this file (`import.source_rebound`)                                                          |
+| 2    | A record whose source is this file, under another virtual path       | A new record, another model from the same file (`import.source_has_model`)                                                                 |
+| 3    | A record whose source is missing and whose fingerprint is the file's | That record, its source and virtual path rewritten (`import.source_relocated`); several match: none (`import.source_relocation_ambiguous`) |
+| 4    | Nothing                                                              | A new record, with the hints `import.source_copy` and `import.source_relocation_candidate`                                                 |
+
+Two records with one virtual path, or one source identity, are refused.
+`--record <record> <source>` rebinds that record to the source. A replay whose
+source is gone fails with `import.source_missing`, which names the command that
+rebinds it. Record imports derive their output from Content: do not combine
+them with `--output`.
+
+The publisher commits the import's surface provenance, published nodes and
+source fingerprint to the record together with the validated immutable
+generation, which it selects in
+`Content/.cooked/imports/<source_identity>/head.json`. Failed or interrupted
+attempts leave the record and the selection unchanged. External raw sources are
+read only. The
+[pipeline owner](../../Docs/Import/async_import_pipeline_v2.md#model-import-publication)
 defines publication and lifetime.
 
-`--recipe` applies a single-job native import manifest, including texture
-defaults and mesh settings. Relative sources resolve beside that manifest. The
-command validates format and conflicting options before changing the retained
-record. Recipe application and record replay accept reporting and execution
-options; content overrides require a direct source or an updated recipe. Worker
-budgets belong to `--thread-pool-size`/`--concurrency`, outside retained
-recipes.
+`--recipe` saves the settings of a single-job gltf or fbx manifest, without
+`defaults`, into the record. Relative sources resolve beside that manifest. The
+command validates format and conflicting options before changing the record.
+Recipe application and record replay accept reporting and execution options;
+content overrides require a direct source or an updated recipe. Worker budgets
+belong to `--thread-pool-size`/`--concurrency`, outside records.
 
 Reclaim unused generations without another import:
 
 ```powershell
-Oxygen.Cooker.ImportTool reclaim --record H:/Game/Content/imports/model.import.json
+Oxygen.Cooker.ImportTool reclaim --record H:/Game/Content/imports/<source_identity>.import.json
 ```
 
-This uses the retained publisher's record lock and generation leases. It keeps
-the selected generation and any active reader/writer generations, and leaves the
-authored record and original sources unchanged. Repeat after readers release
-their old generations. The
+This uses the publisher's record lock and generation leases. It keeps the
+selected generation and any active reader/writer generations, and leaves the
+record and original sources unchanged. Repeat after readers release their old
+generations. The
 [Content workflow](../../../../../Examples/Content/README.md) owns the example
 import, recook, packaging and cleanup commands.
 
-### Staged model imports
+### Model jobs in manifests
 
-Project transactions and SDK batches may use explicit output roots. Their host
-owns publication of cooked output together with the returned provenance.
+A manifest job `{ "type": "model", "record": "imports/<source_identity>.import.json" }`
+runs a record as the gltf or fbx job its source names, with the record's
+settings, virtual path and identity. The record resolves as job sources do,
+against `--root` or beside the manifest. The job may add `id`, `depends_on`,
+`output`, `layout`, `cooked_context_roots` and `source_key`; settings stay in
+the record. Jobs carry no source identity or surface provenance of their own.
 
-Keep the source identity with the source asset and reuse it on every reimport.
-Successful single and batch job reports include `surface_provenance` when
-the importer allocates surfaces. Preserve that object in the host-owned source
-metadata; pass it through the CLI file option or a manifest's
-`surface_provenance` property. The file contains the object itself, not
-the surrounding job report. Failed or canceled jobs do not publish a candidate.
-Clearing cooked output does not erase this retained authoring data. The object
-follows the installed `oxygen.surface-provenance.schema.json` schema.
-
-Manifest scene defaults and individual FBX/glTF jobs accept
-`surface_source_identity` and `surface_provenance`. Job values
-override defaults. Give independent source assets independent identities; do not
-derive identities from machine-local paths.
+A batch never writes records. Each successful model job's report holds
+`model_import`, the record fields the import established
+(`surface_provenance`, `published_nodes` and `source_fingerprint`); the host
+commits them with its own publication, as the editor does.
 
 ### `script`
 

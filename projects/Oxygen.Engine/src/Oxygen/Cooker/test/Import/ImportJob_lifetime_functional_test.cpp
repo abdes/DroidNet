@@ -287,7 +287,7 @@ NOLINT_TEST(ImportJobLifetimeTest, ExceptionPreservesDrainedSessionTelemetry)
     .concurrency = {},
     .script_compile_callback = {},
     .stop_token = {},
-    .retained_import = {},
+    .model_import_record = {},
     .generation_writer = {},
   });
   co::Run(loop, RunFailingJob(&job));
@@ -341,7 +341,7 @@ NOLINT_TEST(
       .concurrency = {},
       .script_compile_callback = {},
       .stop_token = {},
-      .retained_import = {},
+      .model_import_record = {},
       .generation_writer = {},
     };
   };

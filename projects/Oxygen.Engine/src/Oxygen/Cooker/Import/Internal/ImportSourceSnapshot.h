@@ -71,8 +71,14 @@ public:
   OXYGEN_MAKE_NON_COPYABLE(ImportSourceSnapshot)
   OXYGEN_MAKE_NON_MOVABLE(ImportSourceSnapshot)
 
-  auto ReadFile(const std::filesystem::path& path, ReadOptions options = {})
+  auto ReadFile(const std::filesystem::path& path, ReadOptions options)
     -> co::Co<Result<std::vector<std::byte>, FileErrorInfo>> override;
+  //! Read with default options; the override above cannot carry the default.
+  auto ReadFile(const std::filesystem::path& path)
+    -> co::Co<Result<std::vector<std::byte>, FileErrorInfo>>
+  {
+    return ReadFile(path, ReadOptions {});
+  }
   auto GetFileInfo(const std::filesystem::path& path)
     -> co::Co<Result<FileInfo, FileErrorInfo>> override;
   auto Exists(const std::filesystem::path& path)
@@ -136,6 +142,8 @@ private:
   std::shared_ptr<const CapturedInputSet> captured_inputs_;
   mutable std::mutex mutex_;
   std::map<ReadKey, base::Sha256Digest> reads_;
+  //! The size of each read, as Verify read it again.
+  std::map<ReadKey, uint64_t> verified_sizes_;
   std::map<std::filesystem::path, Observation> observations_;
   std::set<std::filesystem::path> accessed_paths_;
   std::size_t active_reads_ = 0;

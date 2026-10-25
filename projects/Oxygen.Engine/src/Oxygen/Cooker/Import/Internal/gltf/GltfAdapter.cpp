@@ -304,10 +304,13 @@ namespace {
         return cgltf_result_io_error;
       }
       if (observed) {
+        // A read of the whole file is recorded as one, so the import's source
+        // fingerprint lists the file.
         observed->Record(std::as_bytes(std::span(bytes.get(), requested)),
           ReadOptions {
             .offset = 0U,
-            .max_bytes = requested_maximum,
+            .max_bytes
+            = std::cmp_equal(requested, length) ? 0U : requested_maximum,
             .size_hint = 0U,
             .alignment = 0U,
           });
@@ -2694,6 +2697,17 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
     nodes.push_back(std::move(root));
   }
 
+  {
+    auto anchors = std::vector<std::string> {};
+    anchors.reserve(nodes.size());
+    for (const auto& node : nodes) {
+      anchors.push_back(node.anchor);
+    }
+    if (!identity.ResolveContinuity(anchors, input.source_id, diagnostics)) {
+      return result;
+    }
+  }
+
   std::vector<uint32_t> kept_indices;
   kept_indices.reserve(nodes.size());
 
@@ -2810,7 +2824,7 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
       owner.base_name + "_" + std::string(role), context);
     NodeRecord attachment {};
     attachment.node_id
-      = identity.IdOf(internal::ModelNodeIdentity::AddedAnchor({
+      = identity.Emit(internal::ModelNodeIdentity::AddedAnchor({
         .owner_anchor = owner.anchor,
         .role = role,
       }));
@@ -2861,7 +2875,7 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
     }
 
     NodeRecord rec {};
-    rec.node_id = identity.IdOf(node.anchor);
+    rec.node_id = identity.Emit(node.anchor);
     rec.scene_name_offset = build.strings.Add(name);
     rec.parent_index = node.parent_index;
     rec.node_flags = detail::BuildImportedNodeFlags(
@@ -3060,6 +3074,7 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
 
   build.nodes.insert(build.nodes.end(), component_attachments.begin(),
     component_attachments.end());
+  build.model_nodes = identity.TakePublishedNodes(input.source_id, diagnostics);
   result.build = std::move(build);
   result.success = true;
   return result;
