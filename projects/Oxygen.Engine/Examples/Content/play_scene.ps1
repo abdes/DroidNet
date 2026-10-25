@@ -25,10 +25,12 @@ first unless -NoBuild is given. No reconfiguration is run.
 Usage: play_scene.ps1 <scene> [options] [-- <player options>]
        play_scene.ps1 -List
 
-  <scene>              Cooked scene name (camera_switch,
-                       NewSponza_Main_glTF_003; case-insensitive) or its
-                       source folder under scenes/ (camera-switch).
-  -List                List the cooked scenes and exit.
+  <scene>              Cooked scene name (camera_switch, rotating_gltf;
+                       case-insensitive) or its source folder under scenes/
+                       (camera-switch). Model scenes are not playable: play
+                       a scene that instances them.
+  -List                List the playable scenes, then the model scenes, and
+                       exit.
   -NoBuild             Source checkouts only: run the selected player without
                        building it first.
   -Preset <name>       Source checkouts only: exact CMake build preset.
@@ -46,7 +48,7 @@ Usage: play_scene.ps1 <scene> [options] [-- <player options>]
 .\play_scene.ps1 camera-switch -Config Debug -- -w 1600x900 -s false -r 0
 
 .EXAMPLE
-.\play_scene.ps1 NewSponza_Main_glTF_003 -NoBuild -- -c vtx.occlusion.enable=true
+.\play_scene.ps1 rotating_gltf -NoBuild -- -c vtx.occlusion.enable=true
 
 .EXAMPLE
 .\play_scene.ps1 -List
@@ -119,6 +121,20 @@ function Get-PublishedImportGenerations([string]$ContentDir) {
     })
 }
 
+# True when a cooked scene is a model import's output, which authored scenes
+# instance and the player refuses: SceneAssetDesc.flags (a little-endian
+# uint32 at byte 95 of the packed descriptor, Data/PakFormat_world.h) has
+# SceneAssetFlags::kModelScene (bit 0) set.
+function Test-ModelScene([string]$Path) {
+    $flagsOffset = 95
+    $buffer = [byte[]]::new($flagsOffset + 4)
+    $stream = [IO.File]::OpenRead($Path)
+    try { $read = $stream.Read($buffer, 0, $buffer.Length) }
+    finally { $stream.Dispose() }
+    if ($read -lt $buffer.Length) { return $false }
+    ([BitConverter]::ToUInt32($buffer, $flagsOffset) -band 1) -ne 0
+}
+
 # Every cooked root: .cooked/main and the published .cooked/imports/<source>/<import>.
 function Get-CookedScenes([string]$CookedDir, [string]$ContentDir) {
     $imports = Join-Path $CookedDir 'imports'
@@ -135,6 +151,7 @@ function Get-CookedScenes([string]$CookedDir, [string]$ContentDir) {
                 Name        = $file.BaseName
                 Root        = $root.FullName
                 VirtualPath = "/.cooked/$relative"
+                IsModel     = Test-ModelScene $file.FullName
             }
         }
     }
@@ -144,10 +161,21 @@ $scenes = @(Get-CookedScenes $CookedDir $ContentDir | Sort-Object Name)
 
 if ($List) {
     $mainRoot = Join-Path $CookedDir 'main'
-    foreach ($entry in $scenes) {
+    $show = {
+        param($entry)
         $origin = if ($entry.Root -eq $mainRoot) { 'main' }
         else { [IO.Path]::GetRelativePath($CookedDir, $entry.Root) }
         Write-Host ('{0,-40} {1}' -f $entry.Name, $origin)
+    }
+    Write-Host '-- Playable scenes'
+    Write-Host ''
+    $scenes | Where-Object { -not $_.IsModel } | ForEach-Object { & $show $_ }
+    $models = @($scenes | Where-Object { $_.IsModel })
+    if ($models.Count -gt 0) {
+        Write-Host ''
+        Write-Host '-- Unplayable model scenes'
+    Write-Host ''
+        $models | ForEach-Object { & $show $_ }
     }
     exit 0
 }
@@ -171,6 +199,10 @@ if ($found.Count -gt 1) {
     exit 1
 }
 $target = $found[0]
+if ($target.IsModel) {
+    Write-Error "'$($target.Name)' is a model scene, which the player refuses: play a scene that instances it."
+    exit 1
+}
 
 $mounts = @()
 $mainRoot = Join-Path $CookedDir 'main'

@@ -96,10 +96,13 @@ would: through the scene's own camera, with its scripts and input contexts.
 ```powershell
 ./play_scene.ps1 -List
 ./play_scene.ps1 camera-switch
-./play_scene.ps1 NewSponza_Main_glTF_003 -NoBuild -- -w 1600x900 -r 60
+./play_scene.ps1 rotating_gltf -NoBuild -- -w 1600x900 -r 60
 ```
 
-The scene is its cooked name or its folder under `scenes/`. The script writes a
+The scene is its cooked name or its folder under `scenes/`. `-List` shows the
+playable scenes, then the model scenes an import produced: the player refuses
+a model scene, which plays only through a scene that instances it. The script
+writes a
 launch file to `%TEMP%/oxygen-player` that mounts `.cooked/main` and, for an
 imported scene, its import root, with this folder as the script source root, so
 editing a scene's script reloads it while it plays. Arguments after `--` go to
