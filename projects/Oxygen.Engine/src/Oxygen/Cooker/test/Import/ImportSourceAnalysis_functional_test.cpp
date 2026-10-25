@@ -766,5 +766,54 @@ namespace {
       EXPECT_TRUE(observation.reads.empty());
     }
   }
+
+  //! The analysis plans what the settings ask: a remapped material is an
+  //! output only when its target is missing, and a setting keyed to a part
+  //! the file lacks warns.
+  NOLINT_TEST_F(ImportSourceAnalysisTest, GltfJobPlansTheModelSettings)
+  {
+    const auto source = Write("remapped.gltf", R"({
+      "asset": {"version": "2.0"},
+      "materials": [{"name": "Paint"}, {"name": "Glass"}],
+      "nodes": [{"name": "Car"}],
+      "scenes": [{"nodes": [0]}], "scene": 0
+    })");
+    auto manifest = ImportManifest {};
+    auto job = ImportManifestJob {};
+    job.id = "remapped";
+    job.job_type = "gltf";
+    job.gltf.source_path = source.string();
+    job.virtual_path = "/.cooked/remapped.gltf";
+    job.gltf.virtual_path = job.virtual_path;
+    job.gltf.material_remap = {
+      { "Paint", "/Content/Materials/Red.omat" },
+      { "Chrome", "/Content/Materials/Chrome.omat" },
+    };
+    manifest.jobs.push_back(job);
+    const auto report = manifest.AnalyzeSources();
+    ASSERT_EQ(report.jobs.size(), 1U);
+    const auto& result = report.jobs.front();
+    const auto required = [&](const std::string_view name) -> bool {
+      const auto it = std::ranges::find_if(
+        result.outputs, [&](const ImportLogicalDependency& output) -> bool {
+          return output.kind == ImportDependencyKind::kMaterial
+            && output.virtual_path.ends_with(
+              std::string("/") + std::string(name) + ".omat");
+        });
+      EXPECT_NE(it, result.outputs.end()) << name;
+      return it != result.outputs.end() && it->required;
+    };
+    EXPECT_FALSE(required("Paint"));
+    EXPECT_TRUE(required("Glass"));
+    EXPECT_TRUE(std::ranges::any_of(
+      result.diagnostics, [](const auto& diagnostic) -> bool {
+        return diagnostic.code == "import.setting_target_missing"
+          && diagnostic.object_path == "material_remap/Chrome";
+      }));
+    EXPECT_FALSE(std::ranges::any_of(
+      result.diagnostics, [](const auto& diagnostic) -> bool {
+        return diagnostic.object_path == "material_remap/Paint";
+      }));
+  }
 } // namespace
 } // namespace oxygen::content::import::test

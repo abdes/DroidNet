@@ -14,6 +14,7 @@
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/AdapterTypes.h>
 #include <Oxygen/Cooker/Import/Internal/ImportJob.h>
+#include <Oxygen/Cooker/Import/Internal/ModelSettings.h>
 
 namespace oxygen::content::import {
 class ImportSession;
@@ -67,8 +68,8 @@ private:
     -> co::Co<ParsedFbxScene>;
 
   [[nodiscard]] auto BuildPlan(ParsedFbxScene& scene,
-    const ImportRequest& request, std::stop_token stop_token)
-    -> PlanBuildOutcome;
+    const ImportRequest& request, const internal::MaterialRemapKeys& remap,
+    std::stop_token stop_token) -> PlanBuildOutcome;
 
   [[nodiscard]] auto ExecutePlan(PlannedFbxImport& plan, ImportSession& session)
     -> co::Co<bool>;

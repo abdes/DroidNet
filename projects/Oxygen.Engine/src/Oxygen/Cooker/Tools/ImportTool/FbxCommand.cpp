@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstdint>
 #include <expected>
 #include <memory>
 #include <string>
@@ -180,6 +181,52 @@ auto FbxCommand::BuildCommand() -> std::shared_ptr<clap::Command>
                        .StoreTo(&options_.node_pruning)
                        .Build();
 
+  auto smoothing_angle
+    = Option::WithKey("smoothing-angle")
+        .About("Largest angle in degrees between faces that share a generated "
+               "normal (default 60)")
+        .Long("smoothing-angle")
+        .WithValue<float>()
+        .StoreTo(&options_.normals_smoothing_angle_deg)
+        .Build();
+
+  auto no_import_lights = Option::WithKey("no-import-lights")
+                            .About("Disable light import")
+                            .Long("no-import-lights")
+                            .WithValue<bool>()
+                            .StoreTo(&no_import_lights_)
+                            .Build();
+
+  auto no_import_cameras = Option::WithKey("no-import-cameras")
+                             .About("Disable camera import")
+                             .Long("no-import-cameras")
+                             .WithValue<bool>()
+                             .StoreTo(&no_import_cameras_)
+                             .Build();
+
+  auto light_intensity_scale
+    = Option::WithKey("light-intensity-scale")
+        .About("Factor applied to every imported light's intensity (default 1)")
+        .Long("light-intensity-scale")
+        .WithValue<float>()
+        .StoreTo(&options_.light_intensity_scale)
+        .Build();
+
+  auto max_texture_size
+    = Option::WithKey("max-texture-size")
+        .About("Largest stored texture width or height (default: source size)")
+        .Long("max-texture-size")
+        .WithValue<uint32_t>()
+        .StoreTo(&options_.texture_defaults.max_size)
+        .Build();
+
+  auto up_axis = Option::WithKey("up-axis")
+                   .About("Source up axis (from-file, y, z)")
+                   .Long("up-axis")
+                   .WithValue<std::string>()
+                   .StoreTo(&options_.up_axis)
+                   .Build();
+
   return CommandBuilder("fbx")
     .About("Import a standalone FBX scene")
     .WithPositionalArguments(source_path)
@@ -200,6 +247,12 @@ auto FbxCommand::BuildCommand() -> std::shared_ptr<clap::Command>
     .WithOption(std::move(normals))
     .WithOption(std::move(tangents))
     .WithOption(std::move(prune_nodes))
+    .WithOption(std::move(smoothing_angle))
+    .WithOption(std::move(no_import_lights))
+    .WithOption(std::move(no_import_cameras))
+    .WithOption(std::move(light_intensity_scale))
+    .WithOption(std::move(max_texture_size))
+    .WithOption(std::move(up_axis))
     .WithOption(std::move(with_content_hashing));
 }
 
@@ -217,6 +270,8 @@ auto FbxCommand::Run() -> std::expected<void, std::error_code>
   settings.import_geometry = !no_import_geometry_;
   settings.import_scene = !no_import_scene_;
   settings.bake_transforms = bake_transforms_;
+  settings.import_lights = !no_import_lights_;
+  settings.import_cameras = !no_import_cameras_;
 
   return RunSceneImportJob(settings, ImportFormat::kFbx, *global_options_);
 }

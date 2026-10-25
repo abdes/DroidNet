@@ -8,6 +8,9 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <functional>
+#include <map>
+#include <optional>
 #include <stop_token>
 #include <string>
 #include <unordered_map>
@@ -20,6 +23,8 @@
 #include <Oxygen/Core/Meta/Scripting/ScriptCompileMode.h>
 #include <Oxygen/Core/Types/ColorSpace.h>
 #include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Data/PakFormat_geometry.h>
+#include <Oxygen/Data/SurfaceId.h>
 
 namespace oxygen::content::import {
 
@@ -241,6 +246,19 @@ OXGN_COOK_API auto to_string(ScriptingImportKind value) -> std::string;
 }
 
 //! Coordinate conversion policy.
+//! The up axis an FBX import reads its source in.
+/*!
+ The import always produces Oxygen's +Z up; this names the source's axes.
+ `kFromFile` takes the axes the file states, or FBX's default, right-handed Y
+ up, when they are incomplete. `kY` and `kZ` read the source as right-handed Y
+ up or Z up, whatever the file states, for exporters that write wrong axes.
+*/
+enum class SourceUpAxis : uint8_t {
+  kFromFile = 0,
+  kY,
+  kZ,
+};
+
 /*!
  This policy configures how source authoring data is converted into Oxygen's
  fixed coordinate-space conventions.
@@ -294,7 +312,28 @@ struct CoordinateConversionPolicy final {
   */
   float unit_scale = 1.0F;
 
+  //! The source's up axis; FBX only, a glTF file is Y up by specification.
+  SourceUpAxis up_axis = SourceUpAxis::kFromFile;
+
   //! Importers must always output Oxygen world coordinates.
+};
+
+//! The asset defaults a model import writes into one surface of a geometry.
+/*!
+ An absent value takes the scene schema's default.
+*/
+struct SurfaceImportDefaults final {
+  std::optional<bool> visible;
+  std::optional<bool> casts_shadows;
+};
+
+//! The asset defaults a model import writes into one geometry.
+struct GeometryImportDefaults final {
+  //! The default LOD policy; absent takes the import's rule.
+  std::optional<data::pak::geometry::LodPolicyRecord> lod_policy;
+
+  //! The defaults of the geometry's surfaces, by surface ID.
+  std::map<data::SurfaceId, SurfaceImportDefaults> surfaces;
 };
 
 //! Import tuning options.
@@ -386,6 +425,28 @@ struct ImportOptions final {
   //! The glTF scene that becomes the model scene: a scene's name, or `#N` for
   //! the scene at index N. Empty selects the default scene, else the first.
   std::string gltf_scene;
+
+  //! Whether a model import imports the source's lights.
+  bool import_lights = true;
+
+  //! Whether a model import imports the source's cameras.
+  bool import_cameras = true;
+
+  //! The factor every imported light's intensity is multiplied by.
+  float light_intensity_scale = 1.0F;
+
+  //! The largest angle, in degrees, between two faces that share a smoothed
+  //! normal where a model import generates or recalculates normals.
+  float normals_smoothing_angle_deg = 60.0F;
+
+  //! Source materials replaced by existing materials, from a material's name
+  //! in the import (its storage name) to the replacing material's virtual
+  //! path. A replaced material is not produced.
+  std::map<std::string, std::string, std::less<>> material_remap;
+
+  //! The asset defaults of a model's geometries, by geometry anchor (the
+  //! geometry's storage name).
+  std::map<std::string, GeometryImportDefaults, std::less<>> geometry_defaults;
 
   //! Cooperative cancellation token for long-running imports.
   /*! Importers should periodically check this token and abort promptly. */
@@ -544,6 +605,10 @@ struct ImportOptions final {
 
     //! Maximum mip levels when @p mip_policy is `MipPolicy::kMaxCount`.
     uint8_t max_mip_levels = 1;
+
+    //! Largest width or height of the stored texture; 0 keeps the source
+    //! size. Applies whether or not `enabled` is set.
+    uint32_t max_size = 0;
 
     //! Mip filter kernel used when generating mips.
     MipFilter mip_filter = MipFilter::kKaiser;

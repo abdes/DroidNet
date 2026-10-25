@@ -141,6 +141,36 @@ Scene controls:
 - `--normals <none|preserve|generate|recalculate>`
 - `--tangents <none|preserve|generate|recalculate>`
 - `--prune-nodes <keep|drop-empty>`
+- `--up-axis <from-file|y|z>` (`fbx` only): the axes the source is read in;
+  the import always produces Oxygen's +Z up. `from-file` (default) takes the
+  file's axes, or FBX's default right-handed Y up when they are incomplete
+  (`fbx.axis_unknown`); `y` and `z` read the source as right-handed Y up or Z
+  up, whatever the file states
+- `--smoothing-angle <degrees>` (default 60): faces that meet at a larger angle
+  keep separate normals wherever the import generates or recalculates normals
+- `--no-import-lights`, `--no-import-cameras`
+- `--light-intensity-scale <float>` (default 1): multiplies every imported
+  light's intensity
+- `--max-texture-size <pixels>`: a larger texture drops its largest mips before
+  compression
+
+The manifest job and the model import record also hold settings keyed by parts
+of the file, by the names `analyze-sources` reports:
+
+- `material_remap`: a material's name to the virtual path of an existing
+  material its surfaces use instead; the replaced material is not produced. A
+  target that does not exist warns (`import.material_remap_target_missing`) and
+  the source material is produced.
+- `texture_overrides`: texture settings by texture name, over the job's.
+- `geometry_defaults`: by geometry anchor, the asset defaults the geometry
+  carries: `lod_policy`, and by surface ID `visible` and `casts_shadows`.
+
+A key the file no longer has is kept and warns (`import.setting_target_missing`).
+`up_axis` on a glTF job warns (`import.setting_not_applicable`) and is ignored.
+A glTF primitive without normals stays faceted, as its specification requires,
+unless normals are recalculated; an FBX mesh without normals takes its smoothing
+groups when it has them, else the smoothing angle. An FBX camera that states its film height and
+focal length takes its vertical field of view from them.
 
 ### `gltf`
 

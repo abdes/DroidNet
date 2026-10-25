@@ -34,6 +34,8 @@ private:
   bool no_import_materials_ = false;
   bool no_import_geometry_ = false;
   bool no_import_scene_ = false;
+  bool no_import_lights_ = false;
+  bool no_import_cameras_ = false;
 };
 
 } // namespace oxygen::content::import::tool

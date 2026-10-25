@@ -83,7 +83,6 @@
 #include <Oxygen/Core/Transforms/Decompose.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/CameraAspectMode.h>
-#include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Data/LightValidation.h>
 #include <Oxygen/Data/MaterialDomain.h>
 #include <Oxygen/Data/MeshType.h>
@@ -416,6 +415,19 @@ namespace {
   //! The scene imported as the model scene: the requested one, else the
   //! default. A requested scene the file lacks warns, and every other scene is
   //! reported as dropped.
+  //! Warns of the settings a glTF import ignores: the up axis, since glTF is
+  //! +Y up by specification.
+  auto ReportInapplicableSettings(const AdapterInput& input,
+    std::vector<ImportDiagnostic>& diagnostics) -> void
+  {
+    if (input.request.options.coordinate.up_axis != SourceUpAxis::kFromFile) {
+      diagnostics.push_back(
+        MakeWarningDiagnostic("import.setting_not_applicable",
+          "up_axis applies to FBX sources only; a glTF source is +Y up",
+          input.source_id_prefix, "up_axis"));
+    }
+  }
+
   [[nodiscard]] auto ChooseGltfScene(const cgltf_data& data,
     const AdapterInput& input, std::vector<ImportDiagnostic>& diagnostics)
     -> std::optional<size_t>
@@ -856,11 +868,6 @@ namespace {
     id.append("::");
     id.append(UsageLabel(usage));
     return id;
-  }
-
-  [[nodiscard]] constexpr auto IsBc7Format(const Format format) noexcept -> bool
-  {
-    return format == Format::kBC7UNorm || format == Format::kBC7UNormSRGB;
   }
 
   [[nodiscard]] auto ResolveUvSet(const cgltf_texture_view& view) -> uint8_t
@@ -1696,6 +1703,13 @@ namespace {
         item.request.options.normal_policy
           = GeometryAttributePolicy::kGenerateMissing;
       }
+      // glTF gives a primitive without normals flat ones; only a recalculation
+      // smooths them.
+      if (!all_normals
+        && item.request.options.normal_policy
+          != GeometryAttributePolicy::kAlwaysRecalculate) {
+        item.request.options.normals_smoothing_angle_deg = 0.0F;
+      }
       if (!all_tangents
         && item.request.options.tangent_policy
           == GeometryAttributePolicy::kPreserveIfPresent) {
@@ -2173,6 +2187,7 @@ auto GltfAdapter::Parse(const std::filesystem::path& source_path,
   internal::ReportDroppedSourceFeatures(
     *data, input.source_id_prefix, result.diagnostics);
   impl_->scene_index = ChooseGltfScene(*data, input, result.diagnostics);
+  ReportInapplicableSettings(input, result.diagnostics);
 
   impl_->data_owner
     = std::shared_ptr<const cgltf_data>(data.release(), &cgltf_free);
@@ -2203,6 +2218,7 @@ auto GltfAdapter::Parse(const std::span<const std::byte> source_bytes,
   internal::ReportDroppedSourceFeatures(
     *data, input.source_id_prefix, result.diagnostics);
   impl_->scene_index = ChooseGltfScene(*data, input, result.diagnostics);
+  ReportInapplicableSettings(input, result.diagnostics);
 
   impl_->data_owner
     = std::shared_ptr<const cgltf_data>(data.release(), &cgltf_free);
@@ -2547,35 +2563,11 @@ auto GltfAdapter::PrepareTextures(const AdapterInput& input) const
     if (usage == TextureUsage::kSpecular) {
       desc.value_channel = TextureChannel::kAlpha;
     }
-    const auto& tuning = input.request.options.texture_tuning;
-    if (tuning.enabled) {
-      desc.flip_y_on_decode = tuning.flip_y_on_decode;
-      desc.force_rgba_on_decode = tuning.force_rgba_on_decode;
-      desc.mip_policy = tuning.mip_policy;
-      desc.max_mip_levels = tuning.max_mip_levels;
-      desc.mip_filter = tuning.mip_filter;
-      desc.output_format = (usage == TextureUsage::kBaseColor
-                             || usage == TextureUsage::kEmissive)
-        ? tuning.color_output_format
-        : tuning.data_output_format;
-      desc.bc7_quality = IsBc7Format(desc.output_format) ? tuning.bc7_quality
-                                                         : Bc7Quality::kNone;
-    }
-
     ModelTextureSource item {};
     item.source_id = source_id;
     item.external_texture_id = source_id;
     item.source_key = view.texture;
     item.desc = std::move(desc);
-    item.packing_policy_id
-      = tuning.enabled ? tuning.packing_policy_id : "d3d12";
-    item.output_format_policy = tuning.enabled
-      ? TexturePipeline::OutputFormatPolicy::kExplicit
-      : TexturePipeline::OutputFormatPolicy::kMaterialPreset;
-    item.failure_policy
-      = input.request.options.texture_tuning.placeholder_on_failure
-      ? TexturePipeline::FailurePolicy::kPlaceholder
-      : TexturePipeline::FailurePolicy::kStrict;
     if (image != nullptr) {
       const auto uri = image->uri != nullptr ? std::string_view(image->uri)
                                              : std::string_view {};
@@ -2626,6 +2618,7 @@ auto GltfAdapter::PrepareTextures(const AdapterInput& input) const
     result.sources.push_back(std::move(item));
   }
   NameModelTextures(result.sources);
+  TuneModelTextures(result.sources, input.request.options);
   return result;
 }
 
@@ -2832,8 +2825,10 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
     node_input.local_matrix = local_matrix;
     node_input.world_matrix = world_matrix;
     node_input.visible = true;
-    node_input.has_camera = node->camera != nullptr;
-    node_input.has_light = node->light != nullptr;
+    node_input.has_camera
+      = node->camera != nullptr && request.options.import_cameras;
+    node_input.has_light
+      = node->light != nullptr && request.options.import_lights;
     node_input.has_renderable
       = node->mesh != nullptr && geometry_key_of(*node).has_value();
     node_input.source_node = node;
@@ -3082,7 +3077,8 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
       }
     }
 
-    if (gltf_node != nullptr && gltf_node->camera != nullptr) {
+    if (gltf_node != nullptr && gltf_node->camera != nullptr
+      && request.options.import_cameras) {
       const auto& cam = *gltf_node->camera;
       uint32_t camera_node_index = i;
       if (cam.type == cgltf_camera_type_perspective
@@ -3149,7 +3145,8 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
       commit.Report(input.source_id, name, diagnostics);
     }
 
-    if (gltf_node != nullptr && gltf_node->light != nullptr) {
+    if (gltf_node != nullptr && gltf_node->light != nullptr
+      && request.options.import_lights) {
       const auto node_light_semantics
         = ReadImportedLightSemantics(gltf_node->extras);
       const auto& light = *gltf_node->light;
@@ -3175,6 +3172,8 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
       auto commit = detail::ImportedPropertyCommit {};
       const auto color
         = std::array { light.color[0], light.color[1], light.color[2] };
+      const auto intensity
+        = light.intensity * request.options.light_intensity_scale;
       // An omitted glTF range takes the importer's policy, not the schema's.
       const auto local_range = light.has_range != 0
         ? light.range * ComputeUnitScale(request.options.coordinate)
@@ -3187,9 +3186,8 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
         rec_light.common = resolve_common(rec_light.common);
         detail::CommitImportedLightColor(
           commit, data::kDirectionalLightCommonRanges, color, rec_light.common);
-        rec_light.intensity_lux
-          = commit("intensity_lux", light_schema::kIntensityLuxRange,
-            light.intensity, rec_light.intensity_lux);
+        rec_light.intensity_lux = commit("intensity_lux",
+          light_schema::kIntensityLuxRange, intensity, rec_light.intensity_lux);
         build.directional_lights.push_back(rec_light);
         break;
       }
@@ -3204,7 +3202,7 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
           "range", light_schema::kRangeRange, local_range, rec_light.range);
         rec_light.luminous_flux_lm
           = commit("luminous_flux_lm", light_schema::kLuminousFluxLmRange,
-            CandelaToLumens(light.intensity, 4.0 * std::numbers::pi),
+            CandelaToLumens(intensity, 4.0 * std::numbers::pi),
             rec_light.luminous_flux_lm);
         build.point_lights.push_back(rec_light);
         break;
@@ -3238,7 +3236,7 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
         }
         rec_light.luminous_flux_lm
           = commit("luminous_flux_lm", light_schema::kLuminousFluxLmRange,
-            CandelaToLumens(light.intensity, cone->solid_angle_sr),
+            CandelaToLumens(intensity, cone->solid_angle_sr),
             rec_light.luminous_flux_lm);
         build.spot_lights.push_back(rec_light);
         break;

@@ -14,6 +14,7 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <variant>
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
@@ -29,6 +30,7 @@
 #include <Oxygen/Cooker/Import/Internal/Pipelines/ScenePipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/TexturePipeline.h>
 #include <Oxygen/Cooker/Import/Internal/WorkPayloadStore.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/OxCo/Co.h>
 
 namespace oxygen::co {
@@ -61,12 +63,16 @@ public:
       float input_queue_load, float output_queue_load) const -> void;
   };
 
+  //! The material a source surface binds: one the plan produces, or an
+  //! existing material that replaces the source's.
+  using PlanSurface = std::variant<PlanItemId, data::AssetKey>;
+
   //! Context required to execute a plan.
   struct PlanContext final {
     ImportPlanner& planner;
     WorkPayloadStore& payloads;
     std::vector<PlanStep>& steps;
-    std::span<const PlanItemId> surfaces;
+    std::span<const PlanSurface> surfaces;
     std::span<const PlanItemId> geometry_items;
   };
 

@@ -35,12 +35,15 @@
 #include <Oxygen/Cooker/Import/GeometryDescriptorImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/ImportConcurrency.h>
 #include <Oxygen/Cooker/Import/ImportManifest.h>
+#include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/InputImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/InputImportSettings.h>
+#include <Oxygen/Cooker/Import/Internal/GeometryDefaults.h>
 #include <Oxygen/Cooker/Import/Internal/ImportManifest_schema.h>
 #include <Oxygen/Cooker/Import/Internal/SceneImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/Internal/TextureImportRequestBuilder.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
 #include <Oxygen/Cooker/Import/MaterialDescriptorImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/MaterialDescriptorImportSettings.h>
 #include <Oxygen/Cooker/Import/ModelImportRecord.h>
@@ -58,6 +61,7 @@
 #include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
 #include <Oxygen/Core/Meta/Physics/Backend.h>
 #include <Oxygen/Data/SourceKey.h>
+#include <Oxygen/Data/SurfaceId.h>
 
 namespace oxygen::content::import {
 
@@ -129,9 +133,9 @@ namespace {
   class SchemaValidator {
   public:
     SchemaValidator()
+      : validator_(
+          internal::MakeJsonSchemaValidator(json::parse(kImportManifestSchema)))
     {
-      auto schema_json = json::parse(kImportManifestSchema);
-      validator_.set_root_schema(schema_json);
     }
 
     auto Validate(const json& instance) const -> std::optional<std::string>
@@ -679,6 +683,9 @@ namespace {
     if (!ReadUIntField(obj, "max_mips", settings.max_mip_levels, errors)) {
       return false;
     }
+    if (!ReadUIntField(obj, "max_size", settings.max_size, errors)) {
+      return false;
+    }
     if (!ReadUIntField(
           obj, "cube_face_size", settings.cube_face_size, errors)) {
       return false;
@@ -706,6 +713,47 @@ namespace {
     if (!ReadBoolField(
           obj, "equirect_to_cube", settings.equirect_to_cube, errors)) {
       return false;
+    }
+    return true;
+  }
+
+  // The schema has checked the types; the rules it cannot state are checked
+  // here.
+  auto ReadGeometryDefaults(const json& obj, SceneImportSettings& settings,
+    std::ostream& errors) -> bool
+  {
+    if (!obj.contains("geometry_defaults")) {
+      return true;
+    }
+    for (const auto& [anchor, entry] : obj.at("geometry_defaults").items()) {
+      auto defaults = GeometryImportDefaults {};
+      if (entry.contains("lod_policy")) {
+        defaults.lod_policy = internal::ReadLodPolicy(entry.at("lod_policy"));
+        if (!defaults.lod_policy.has_value()) {
+          errors << "ERROR: geometry_defaults '" << anchor
+                 << "': lod_policy thresholds decrease or its screen-space "
+                    "error lists differ in length\n";
+          return false;
+        }
+      }
+      if (entry.contains("surfaces")) {
+        for (const auto& [id, values] : entry.at("surfaces").items()) {
+          const auto surface_id = data::SurfaceId::FromString(id);
+          if (!surface_id.has_value() || surface_id.value().IsNil()) {
+            errors << "ERROR: geometry_defaults '" << anchor
+                   << "': invalid surface ID '" << id << "'\n";
+            return false;
+          }
+          auto& surface = defaults.surfaces[surface_id.value()];
+          if (values.contains("visible")) {
+            surface.visible = values.at("visible").get<bool>();
+          }
+          if (values.contains("casts_shadows")) {
+            surface.casts_shadows = values.at("casts_shadows").get<bool>();
+          }
+        }
+      }
+      settings.geometry_defaults.insert_or_assign(anchor, std::move(defaults));
     }
     return true;
   }
@@ -740,6 +788,26 @@ namespace {
       return false;
     }
     if (!ReadStringField(obj, "gltf_scene", settings.gltf_scene, errors)) {
+      return false;
+    }
+    if (!ReadStringField(obj, "up_axis", settings.up_axis, errors)) {
+      return false;
+    }
+    if (!ReadBoolField(obj, "import_lights", settings.import_lights, errors)
+      || !ReadBoolField(obj, "import_cameras", settings.import_cameras, errors)
+      || !ReadFloatField(
+        obj, "light_intensity_scale", settings.light_intensity_scale, errors)
+      || !ReadFloatField(obj, "normals_smoothing_angle_deg",
+        settings.normals_smoothing_angle_deg, errors)) {
+      return false;
+    }
+    if (obj.contains("material_remap")) {
+      for (const auto& [name, target] : obj.at("material_remap").items()) {
+        settings.material_remap.insert_or_assign(
+          name, target.get<std::string>());
+      }
+    }
+    if (!ReadGeometryDefaults(obj, settings, errors)) {
       return false;
     }
     if (obj.contains("bake_transforms")

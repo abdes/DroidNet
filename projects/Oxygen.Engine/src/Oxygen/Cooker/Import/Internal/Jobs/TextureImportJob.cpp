@@ -41,25 +41,21 @@
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Data/PakFormat.h>
-#include <Oxygen/OxCo/Algorithms.h>
 #include <Oxygen/OxCo/Co.h>
 
 namespace {
 
 using oxygen::Format;
 using oxygen::TextureType;
-using oxygen::co::AllOf;
 using oxygen::content::import::Bc7Quality;
 using oxygen::content::import::CubeFace;
 using oxygen::content::import::CubeMapImageLayout;
-using oxygen::content::import::DetectCubeMapLayout;
 using oxygen::content::import::ImportOptions;
 using oxygen::content::import::ImportTelemetry;
 using oxygen::content::import::IsHdrFormat;
 using oxygen::content::import::kCubeFaceCount;
 using oxygen::content::import::MipFilter;
 using oxygen::content::import::ScratchImage;
-using oxygen::content::import::ScratchImageMeta;
 using oxygen::content::import::TextureImportDesc;
 using oxygen::content::import::TextureImportError;
 using oxygen::content::import::TextureIntent;
@@ -125,6 +121,7 @@ auto IsColorIntent(const TextureIntent intent) -> bool
   desc.exposure_ev = tuning.exposure_ev;
   desc.hdr_handling = tuning.hdr_handling;
   desc.bake_hdr_to_ldr = tuning.bake_hdr_to_ldr;
+  desc.max_size = tuning.max_size;
 
   if (tuning.enabled) {
     desc.mip_policy = tuning.mip_policy;
@@ -664,6 +661,7 @@ auto TextureImportJob::CookTexture(
     desc.exposure_ev = tuning.exposure_ev;
     desc.hdr_handling = tuning.hdr_handling;
     desc.bake_hdr_to_ldr = tuning.bake_hdr_to_ldr;
+    desc.max_size = tuning.max_size;
 
     if (tuning.enabled) {
       desc.mip_policy = tuning.mip_policy;
@@ -815,7 +813,7 @@ auto TextureImportJob::CookTexture(
   }
 
   co_return {
-    .payload = std::move(result.cooked.value()),
+    .payload = std::move(result.cooked),
     .telemetry = result.telemetry,
     .used_fallback = false,
   };

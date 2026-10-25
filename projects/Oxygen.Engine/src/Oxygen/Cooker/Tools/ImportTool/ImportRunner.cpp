@@ -446,6 +446,12 @@ auto RunSceneImportJob(const SceneImportSettings& settings,
         "content-hashing",
         "omitted-light-range",
         "gltf-scene",
+        "up-axis",
+        "smoothing-angle",
+        "no-import-lights",
+        "no-import-cameras",
+        "light-intensity-scale",
+        "max-texture-size",
       };
       for (const auto* option : kContentOverrides) {
         if (globals.parsed_options->HasOption(option)

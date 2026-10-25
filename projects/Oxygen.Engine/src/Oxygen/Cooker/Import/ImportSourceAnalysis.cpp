@@ -47,6 +47,7 @@
 #include <Oxygen/Cooker/Import/Internal/ImportEventLoop.h>
 #include <Oxygen/Cooker/Import/Internal/ImportSourceSnapshot.h>
 #include <Oxygen/Cooker/Import/Internal/MaterialSource.h>
+#include <Oxygen/Cooker/Import/Internal/ModelSettings.h>
 #include <Oxygen/Cooker/Import/Internal/ModelTextureSource.h>
 #include <Oxygen/Cooker/Import/Internal/SceneSource.h>
 #include <Oxygen/Cooker/Import/Internal/SourceAnalysisRunner.h>
@@ -253,13 +254,15 @@ namespace {
       return internal::PlaceModelProduct(input.request, name, extension)
         .virtual_path;
     };
+    // A remapped material is produced only when its target is missing.
+    const auto& remap = input.request.options.material_remap;
     for (const auto& material : materials.sources) {
       report.outputs.push_back({
         .virtual_path = product(
           material.material.storage_name, data::kMaterialDescriptorExtension),
         .kind = Kind::kMaterial,
         .object_path = {},
-        .required = true,
+        .required = !remap.contains(material.material.storage_name),
       });
     }
     for (const auto& source : geometry.sources) {
@@ -302,12 +305,21 @@ namespace {
       .required = true,
     });
     auto facts = adapter.DescribeSource();
+    auto names = internal::ModelProductNames {};
     for (const auto& material : materials.sources) {
       facts.materials.push_back(material.material.storage_name);
+      names.materials.insert(material.material.storage_name);
     }
     for (const auto& texture : textures.sources) {
       facts.textures.push_back(texture.name);
+      names.textures.insert(texture.name);
     }
+    for (const auto& source : geometry.sources) {
+      names.geometries.insert(source.name);
+    }
+    AppendDiagnostics(report.diagnostics,
+      internal::ReportMissingSettingTargets(
+        input.request.options, names, source_id));
     report.model = std::move(facts);
     report.complete = materials.success && geometry.success && textures.success;
     return report;

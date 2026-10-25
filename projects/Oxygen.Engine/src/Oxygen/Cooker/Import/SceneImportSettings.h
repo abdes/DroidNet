@@ -13,13 +13,13 @@
 #include <string>
 #include <string_view>
 
+#include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/TextureImportSettings.h>
 #include <Oxygen/Cooker/api_export.h>
 
 namespace oxygen::content::import {
 
-struct ImportOptions;
 struct ModelImportRecordContent;
 
 struct SceneImportSettings {
@@ -61,6 +61,13 @@ struct SceneImportSettings {
   bool bake_transforms = false;
   float gltf_omitted_light_range_m = 4096.0F;
   std::string gltf_scene;
+  std::string up_axis;
+  bool import_lights = true;
+  bool import_cameras = true;
+  float light_intensity_scale = 1.0F;
+  float normals_smoothing_angle_deg = 60.0F;
+  std::map<std::string, std::string> material_remap;
+  std::map<std::string, GeometryImportDefaults> geometry_defaults;
 
   std::string normals_policy;
   std::string tangents_policy;

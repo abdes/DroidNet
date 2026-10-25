@@ -52,11 +52,13 @@ namespace {
    the largest finite half, store non-finite values as zero and, for radiance,
    store negative values as zero. Alpha is never treated as radiance.
   */
-  inline void ConvertRgba32FloatToRgba16Float(std::span<const float> src,
-    std::span<uint16_t> dst, const bool radiance, HalfNarrowingStats& stats)
+  inline void ConvertRgba32FloatToRgba16Float(std::span<const std::byte> src,
+    std::span<std::byte> dst, const bool radiance, HalfNarrowingStats& stats)
   {
-    for (size_t i = 0; i < src.size(); ++i) {
-      auto value = src[i];
+    const auto count = src.size() / sizeof(float);
+    for (size_t i = 0; i < count; ++i) {
+      auto value = 0.0F;
+      std::memcpy(&value, src.subspan(i * sizeof(float)).data(), sizeof(value));
       if (!std::isfinite(value)) {
         ++stats.non_finite;
         value = 0.0F;
@@ -70,7 +72,9 @@ namespace {
           value = std::copysign(kHalfMaxFinite, value);
         }
       }
-      dst[i] = glm::packHalf1x16(value);
+      const auto half = glm::packHalf1x16(value);
+      std::memcpy(
+        dst.subspan(i * sizeof(uint16_t)).data(), &half, sizeof(half));
     }
   }
 
@@ -167,16 +171,15 @@ namespace {
     }
 
     // If the user provided explicit dimensions, require them to match.
-    if (desc.width != 0 && desc.height != 0) {
-      if (decoded_meta.width != desc.width
-        || decoded_meta.height != desc.height) {
-        LOG_F(WARNING,
-          "Dimension mismatch - descriptor specifies {}x{} but decoded image "
-          "is {}x{} for '{}'",
-          desc.width, desc.height, decoded_meta.width, decoded_meta.height,
-          desc.source_id);
-        return TextureImportError::kDimensionMismatch;
-      }
+    if (desc.width != 0 && desc.height != 0
+      && (decoded_meta.width != desc.width
+        || decoded_meta.height != desc.height)) {
+      LOG_F(WARNING,
+        "Dimension mismatch - descriptor specifies {}x{} but decoded image "
+        "is {}x{} for '{}'",
+        desc.width, desc.height, decoded_meta.width, decoded_meta.height,
+        desc.source_id);
+      return TextureImportError::kDimensionMismatch;
     }
 
     // Validate the fully-resolved descriptor using decoded metadata.
@@ -408,18 +411,15 @@ namespace {
         const auto src_view = source.GetImage(layer, mip);
         auto dst_pixels = result.GetMutablePixels(layer, mip);
 
-        const auto* src_ptr
-          = reinterpret_cast<const float*>(src_view.pixels.data());
-        auto* dst_ptr = reinterpret_cast<uint8_t*>(dst_pixels.data());
-
-        const size_t pixel_count = src_view.width * src_view.height;
-        for (size_t i = 0; i < pixel_count; ++i) {
-          for (size_t c = 0; c < 4; ++c) {
-            const float value = src_ptr[(i * 4) + c];
-            const float clamped = (std::max)(0.0F, (std::min)(1.0F, value));
-            dst_ptr[(i * 4) + c]
-              = static_cast<uint8_t>((clamped * 255.0F) + 0.5F);
-          }
+        const auto src_bytes = src_view.pixels;
+        const size_t value_count
+          = static_cast<size_t>(src_view.width) * src_view.height * 4U;
+        for (size_t i = 0; i < value_count; ++i) {
+          float value = 0.0F;
+          std::memcpy(
+            &value, src_bytes.subspan(i * sizeof(float)).data(), sizeof(float));
+          const float clamped = (std::max)(0.0F, (std::min)(1.0F, value));
+          dst_pixels[i] = static_cast<std::byte>(std::lround(clamped * 255.0F));
         }
       }
     }
@@ -462,15 +462,14 @@ namespace {
         const auto src_view = source.GetImage(layer, mip);
         auto dst_pixels = result.GetMutablePixels(layer, mip);
 
-        const auto* src_ptr = src_view.pixels.data();
-        auto* dst_ptr = reinterpret_cast<float*>(dst_pixels.data());
-
-        const size_t pixel_count = src_view.width * src_view.height;
-        for (size_t i = 0; i < pixel_count; ++i) {
-          for (size_t c = 0; c < 4; ++c) {
-            const uint8_t byte_val = static_cast<uint8_t>(src_ptr[(i * 4) + c]);
-            dst_ptr[(i * 4) + c] = static_cast<float>(byte_val) / 255.0F;
-          }
+        const auto src_bytes = src_view.pixels;
+        const size_t value_count
+          = static_cast<size_t>(src_view.width) * src_view.height * 4U;
+        for (size_t i = 0; i < value_count; ++i) {
+          const auto byte_val = static_cast<uint8_t>(src_bytes[i]);
+          const float value = static_cast<float>(byte_val) / 255.0F;
+          std::memcpy(dst_pixels.subspan(i * sizeof(float)).data(), &value,
+            sizeof(float));
         }
       }
     }
@@ -535,13 +534,11 @@ namespace {
         const auto src_view = source.GetImage(layer, mip);
         auto dst_pixels = result.GetMutablePixels(layer, mip);
 
-        const auto* src_ptr
-          = reinterpret_cast<const float*>(src_view.pixels.data());
-        auto* dst_ptr = reinterpret_cast<uint16_t*>(dst_pixels.data());
-
-        const size_t pixel_count = src_view.width * src_view.height;
-        ConvertRgba32FloatToRgba16Float(std::span { src_ptr, pixel_count * 4 },
-          std::span { dst_ptr, pixel_count * 4 }, radiance, stats);
+        const size_t value_count
+          = static_cast<size_t>(src_view.width) * src_view.height * 4U;
+        ConvertRgba32FloatToRgba16Float(
+          src_view.pixels.first(value_count * sizeof(float)),
+          dst_pixels.first(value_count * sizeof(uint16_t)), radiance, stats);
       }
     }
 
@@ -676,10 +673,8 @@ namespace detail {
     }
 
     // Normal map processing
-    if (desc.intent == TextureIntent::kNormalTS) {
-      if (desc.flip_normal_green) {
-        image::content::FlipNormalGreen(result);
-      }
+    if (desc.intent == TextureIntent::kNormalTS && desc.flip_normal_green) {
+      image::content::FlipNormalGreen(result);
     }
 
     if (desc.value_channel.has_value()) {
@@ -910,8 +905,8 @@ namespace detail {
         const auto src_view = image.GetImage(layer, mip);
 
         // Get source and destination pointers
-        const auto* src_ptr = src_view.pixels.data();
-        auto* dst_ptr = payload.data() + layout.offset;
+        const auto src_bytes = src_view.pixels;
+        const auto dst_bytes = std::span { payload }.subspan(layout.offset);
 
         // Copy row by row with potential padding
         const auto& format_info = graphics::detail::GetFormatInfo(meta.format);
@@ -921,16 +916,28 @@ namespace detail {
         if (format_info.block_size == 1) {
           // Uncompressed format
           for (uint32_t row = 0; row < layout.height; ++row) {
-            std::memcpy(dst_ptr + (row * layout.row_pitch),
-              src_ptr + (row * src_view.row_pitch_bytes), src_row_bytes);
+            std::memcpy(
+              dst_bytes.subspan(static_cast<size_t>(row) * layout.row_pitch)
+                .data(),
+              src_bytes
+                .subspan(static_cast<size_t>(row) * src_view.row_pitch_bytes)
+                .data(),
+              src_row_bytes);
           }
         } else {
           // Block-compressed format
           const uint32_t blocks_y = (layout.height + format_info.block_size - 1)
             / format_info.block_size;
           for (uint32_t block_row = 0; block_row < blocks_y; ++block_row) {
-            std::memcpy(dst_ptr + (block_row * layout.row_pitch),
-              src_ptr + (block_row * src_view.row_pitch_bytes), src_row_bytes);
+            std::memcpy(
+              dst_bytes
+                .subspan(static_cast<size_t>(block_row) * layout.row_pitch)
+                .data(),
+              src_bytes
+                .subspan(
+                  static_cast<size_t>(block_row) * src_view.row_pitch_bytes)
+                .data(),
+              src_row_bytes);
           }
         }
       }
@@ -952,6 +959,121 @@ namespace detail {
 //===----------------------------------------------------------------------===//
 
 namespace {
+
+  //! The halvings that bring the larger of `meta`'s width and height to at
+  //! most `max_size`; none when `max_size` is 0.
+  [[nodiscard]] auto MipsAboveMaxSize(
+    const ScratchImageMeta& meta, const uint32_t max_size) noexcept -> uint16_t
+  {
+    if (max_size == 0U) {
+      return 0;
+    }
+    auto dropped = uint16_t { 0 };
+    while ((std::max)(ScratchImage::ComputeMipDimension(meta.width, dropped),
+             ScratchImage::ComputeMipDimension(meta.height, dropped))
+      > max_size) {
+      ++dropped;
+    }
+    return dropped;
+  }
+
+  //! A run of mip levels: `count` levels from level `first`.
+  struct MipRange final {
+    uint16_t first = 0;
+    uint16_t count = 0;
+  };
+
+  //! The image made of the mips of `image` that `range` names.
+  /*!
+   Returns an invalid image when a kept mip's size differs from the one its
+   dimensions give.
+  */
+  [[nodiscard]] auto DropLeadingMips(
+    const ScratchImage& image, const MipRange& range) -> ScratchImage
+  {
+    auto meta = image.Meta();
+    meta.width = ScratchImage::ComputeMipDimension(meta.width, range.first);
+    meta.height = ScratchImage::ComputeMipDimension(meta.height, range.first);
+    if (meta.texture_type == TextureType::kTexture3D) {
+      meta.depth = static_cast<uint16_t>(
+        ScratchImage::ComputeMipDimension(meta.depth, range.first));
+    }
+    meta.mip_levels = range.count;
+    auto result = ScratchImage::Create(meta);
+    if (!result.IsValid()) {
+      return {};
+    }
+    for (uint16_t layer = 0; layer < meta.array_layers; ++layer) {
+      for (uint16_t mip = 0; mip < range.count; ++mip) {
+        const auto source
+          = image.GetImage(layer, static_cast<uint16_t>(mip + range.first))
+              .pixels;
+        const auto target = result.GetMutablePixels(layer, mip);
+        if (source.size() != target.size()) {
+          return {};
+        }
+        std::ranges::copy(source, target.begin());
+      }
+    }
+    return result;
+  }
+
+  //! Prepares `image` for filtering: float when its content or output needs
+  //! it, and linear light.
+  [[nodiscard]] auto PrepareForFiltering(ScratchImage& image,
+    const TextureImportDesc& desc, ColorSpace& working_space) -> bool
+  {
+    const bool color_content = desc.intent == TextureIntent::kAlbedo
+      || desc.intent == TextureIntent::kEmissive || IsHdrIntent(desc.intent);
+    if ((IsFloatFormat(desc.output_format) || color_content)
+      && image.Meta().format != Format::kRGBA32Float) {
+      image = ConvertRgba8ToFloat32(image);
+      if (!image.IsValid()) {
+        return false;
+      }
+    }
+    image = ConvertTransferEncoding(
+      std::move(image), working_space, ColorSpace::kLinear);
+    working_space = ColorSpace::kLinear;
+    return image.IsValid();
+  }
+
+  //! Reduces `image`, larger than the maximum size, by `dropped` halvings.
+  /*!
+   A source that carries the mips keeps them from the first that fits;
+   otherwise the halvings are filtered as its mips would be. Done before
+   content processing, so the later stages process only what is stored.
+  */
+  [[nodiscard]] auto FitToMaxSize(ScratchImage&& image,
+    const TextureImportDesc& desc, const uint16_t dropped,
+    ColorSpace& working_space) -> Result<ScratchImage, TextureImportError>
+  {
+    if (image.Meta().mip_levels <= dropped) {
+      if (!PrepareForFiltering(image, desc, working_space)) {
+        return Err(TextureImportError::kOutputFormatInvalid);
+      }
+      auto chain_desc = desc;
+      chain_desc.mip_policy = MipPolicy::kMaxCount;
+      chain_desc.max_mip_levels = static_cast<uint8_t>(dropped + 1U);
+      auto chain = detail::GenerateMips(std::move(image), chain_desc);
+      if (!chain) {
+        return Err(chain.error());
+      }
+      image = std::move(*chain);
+    }
+    if (image.Meta().mip_levels <= dropped) {
+      return Err(TextureImportError::kMipGenerationFailed);
+    }
+    auto fitted = DropLeadingMips(image,
+      {
+        .first = dropped,
+        .count = static_cast<uint16_t>(image.Meta().mip_levels - dropped),
+      });
+    if (!fitted.IsValid()) {
+      return Err(TextureImportError::kMipGenerationFailed);
+    }
+    return Ok(std::move(fitted));
+  }
 
   //! Common implementation for cooking from an already-decoded ScratchImage.
   /*!
@@ -1008,6 +1130,18 @@ namespace {
       working_space = ColorSpace::kLinear;
     }
 
+    // A source larger than the maximum size is reduced first.
+    if (const auto dropped
+      = MipsAboveMaxSize(working->Meta(), resolved_desc.max_size);
+      dropped > 0U) {
+      auto fitted = FitToMaxSize(
+        std::move(*working), resolved_desc, dropped, working_space);
+      if (!fitted) {
+        return Err(fitted.error());
+      }
+      *working = std::move(*fitted);
+    }
+
     // Stage 3: Apply content-specific processing
     auto processed
       = detail::ApplyContentProcessing(std::move(*working), resolved_desc);
@@ -1025,23 +1159,9 @@ namespace {
       target_mips = (std::min)(target_mips,
         static_cast<std::uint32_t>(resolved_desc.max_mip_levels));
     }
-    if (target_mips > processed->Meta().mip_levels) {
-      const bool color_content = resolved_desc.intent == TextureIntent::kAlbedo
-        || resolved_desc.intent == TextureIntent::kEmissive
-        || IsHdrIntent(resolved_desc.intent);
-      if ((IsFloatFormat(resolved_desc.output_format) || color_content)
-        && processed->Meta().format != Format::kRGBA32Float) {
-        *processed = ConvertRgba8ToFloat32(*processed);
-        if (!processed->IsValid()) {
-          return Err(TextureImportError::kOutputFormatInvalid);
-        }
-      }
-      *processed = ConvertTransferEncoding(
-        std::move(*processed), working_space, ColorSpace::kLinear);
-      if (!processed->IsValid()) {
-        return Err(TextureImportError::kOutputFormatInvalid);
-      }
-      working_space = ColorSpace::kLinear;
+    if (target_mips > processed->Meta().mip_levels
+      && !PrepareForFiltering(*processed, resolved_desc, working_space)) {
+      return Err(TextureImportError::kOutputFormatInvalid);
     }
 
     // Stage 4: Generate mips
@@ -1165,10 +1285,11 @@ namespace {
 
     std::vector final_payload(total_payload_size, std::byte { 0 });
     std::memcpy(final_payload.data(), &header, sizeof(header));
-    std::memcpy(
-      final_payload.data() + layouts_offset, layouts.data(), layouts_bytes);
-    std::memcpy(final_payload.data() + data_offset_bytes, payload_data.data(),
-      payload_data.size());
+    const auto final_bytes = std::span { final_payload };
+    std::memcpy(final_bytes.subspan(layouts_offset).data(), layouts.data(),
+      layouts_bytes);
+    std::memcpy(final_bytes.subspan(data_offset_bytes).data(),
+      payload_data.data(), payload_data.size());
 
     if (with_content_hashing) {
       header.content_hash = detail::ComputeContentHash(final_payload);

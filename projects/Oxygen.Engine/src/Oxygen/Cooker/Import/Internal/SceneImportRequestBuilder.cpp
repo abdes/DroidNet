@@ -32,6 +32,7 @@ namespace {
   using import::ImportContentFlags;
   using import::ImportFormat;
   using import::NodePruningPolicy;
+  using import::SourceUpAxis;
   using import::UnitNormalizationPolicy;
 
   auto ParseUnitPolicy(std::string_view value)
@@ -63,6 +64,20 @@ namespace {
     }
     if (value == "recalculate") {
       return GeometryAttributePolicy::kAlwaysRecalculate;
+    }
+    return std::nullopt;
+  }
+
+  auto ParseUpAxis(std::string_view value) -> std::optional<SourceUpAxis>
+  {
+    if (value == "from-file") {
+      return SourceUpAxis::kFromFile;
+    }
+    if (value == "y") {
+      return SourceUpAxis::kY;
+    }
+    if (value == "z") {
+      return SourceUpAxis::kZ;
     }
     return std::nullopt;
   }
@@ -166,6 +181,14 @@ auto SceneImportSettings::Prepare(const ImportFormat expected_format,
   auto options = request.options;
   options.gltf_omitted_light_range_m = settings.gltf_omitted_light_range_m;
   options.gltf_scene = settings.gltf_scene;
+  options.import_lights = settings.import_lights;
+  options.import_cameras = settings.import_cameras;
+  options.light_intensity_scale = settings.light_intensity_scale;
+  options.normals_smoothing_angle_deg = settings.normals_smoothing_angle_deg;
+  options.material_remap.insert(
+    settings.material_remap.begin(), settings.material_remap.end());
+  options.geometry_defaults.insert(
+    settings.geometry_defaults.begin(), settings.geometry_defaults.end());
   options.import_content = BuildContentFlags(settings);
   options.coordinate.bake_transforms_into_meshes = settings.bake_transforms;
   options.with_content_hashing
@@ -187,6 +210,30 @@ auto SceneImportSettings::Prepare(const ImportFormat expected_format,
       return std::nullopt;
     }
     options.coordinate.unit_scale = settings.unit_scale;
+  }
+
+  if (!settings.up_axis.empty()) {
+    const auto parsed = ParseUpAxis(settings.up_axis);
+    if (!parsed.has_value()) {
+      error_stream << "ERROR: invalid --up-axis value\n";
+      return std::nullopt;
+    }
+    options.coordinate.up_axis = *parsed;
+  }
+
+  if (!std::isfinite(settings.light_intensity_scale)
+    || settings.light_intensity_scale < 0.0F) {
+    error_stream
+      << "ERROR: light intensity scale must be finite and not negative\n";
+    return std::nullopt;
+  }
+
+  if (!std::isfinite(settings.normals_smoothing_angle_deg)
+    || settings.normals_smoothing_angle_deg < 0.0F
+    || settings.normals_smoothing_angle_deg > 180.0F) {
+    error_stream << "ERROR: normals smoothing angle must be from 0 to 180 "
+                    "degrees\n";
+    return std::nullopt;
   }
 
   if (!settings.normals_policy.empty()) {

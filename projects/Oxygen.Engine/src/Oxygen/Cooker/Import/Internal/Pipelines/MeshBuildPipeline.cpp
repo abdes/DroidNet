@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <bit>
 #include <chrono>
 #include <cmath>
 #include <cstddef>
@@ -28,6 +29,7 @@
 #include <glm/ext/vector_uint4.hpp>
 #include <glm/geometric.hpp>
 #include <glm/matrix.hpp>
+#include <glm/trigonometric.hpp>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Span.h>
@@ -54,6 +56,7 @@
 #include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/MeshType.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Data/StableId.h>
 #include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Data/Vertex.h>
 #include <Oxygen/OxCo/Co.h>
@@ -243,15 +246,34 @@ namespace {
     return buckets;
   }
 
+  //! A position's bits, with negative zero as zero, so equal positions sort
+  //! together.
+  [[nodiscard]] auto PositionBits(const glm::vec3& position)
+    -> std::array<uint32_t, 3>
+  {
+    const auto bits = [](const float value) -> uint32_t {
+      return std::bit_cast<uint32_t>(value == 0.0F ? 0.0F : value);
+    };
+    return { bits(position.x), bits(position.y), bits(position.z) };
+  }
+
+  //! Generates the normals of `vertices`, one vertex per triangle corner.
+  /*!
+   A corner's normal is the area-weighted sum of the face normals of the
+   triangles at its position whose face normal is within
+   `smoothing_angle_deg` of its own triangle's, so a sharper edge stays hard.
+   A corner of a degenerate triangle sums every triangle at its position.
+  */
   auto ComputeNormalsFromTriangles(std::vector<data::Vertex>& vertices,
-    const std::span<const SubmeshBucket> buckets) -> void
+    const std::span<const SubmeshBucket> buckets,
+    const float smoothing_angle_deg) -> void
   {
     if (vertices.empty()) {
       return;
     }
 
-    std::vector normals(vertices.size(), glm::vec3(0.0F));
-
+    // Each corner's face normal, weighted by twice the triangle's area.
+    std::vector faces(vertices.size(), glm::vec3(0.0F));
     for (const auto& bucket : buckets) {
       const auto tri_count = bucket.indices.size() / 3;
       for (size_t tri = 0; tri < tri_count; ++tri) {
@@ -264,28 +286,52 @@ namespace {
         }
 
         const auto& v0 = vertices.at(i0).position;
-        const auto& v1 = vertices.at(i1).position;
-        const auto& v2 = vertices.at(i2).position;
-
-        const auto e1 = v1 - v0;
-        const auto e2 = v2 - v0;
-        const auto n = glm::cross(e1, e2);
-
-        normals.at(i0) += n;
-        normals.at(i1) += n;
-        normals.at(i2) += n;
+        const auto n = glm::cross(
+          vertices.at(i1).position - v0, vertices.at(i2).position - v0);
+        faces.at(i0) = n;
+        faces.at(i1) = n;
+        faces.at(i2) = n;
       }
     }
 
-    for (size_t i = 0; i < vertices.size(); ++i) {
-      auto n = normals.at(i);
-      const auto len = glm::length(n);
-      if (len > kMinNormalLength) {
-        n /= len;
-      } else {
-        n = glm::vec3(0.0F, 1.0F, 0.0F);
+    auto units = std::vector<glm::vec3>(faces.size());
+    std::ranges::transform(faces, units.begin(), [](const glm::vec3& face) {
+      const auto len = glm::length(face);
+      return len > kMinNormalLength ? face / len : glm::vec3(0.0F);
+    });
+    const auto min_cos = std::cos(glm::radians(smoothing_angle_deg));
+
+    // Corners sorted by position, so the corners of one position are a run.
+    using Keyed = std::pair<std::array<uint32_t, 3>, uint32_t>;
+    auto corners = std::vector<Keyed>(vertices.size());
+    for (uint32_t corner = 0; corner < corners.size(); ++corner) {
+      corners.at(corner)
+        = { PositionBits(vertices.at(corner).position), corner };
+    }
+    std::ranges::sort(corners);
+    for (size_t first = 0; first < corners.size();) {
+      auto last = first + 1;
+      while (last < corners.size()
+        && corners.at(last).first == corners.at(first).first) {
+        ++last;
       }
-      vertices.at(i).normal = n;
+      const auto shared = std::span(corners).subspan(first, last - first);
+      for (const auto& entry : shared) {
+        const auto corner = entry.second;
+        const auto& own = units.at(corner);
+        const bool degenerate = own == glm::vec3(0.0F);
+        auto n = glm::vec3(0.0F);
+        for (const auto& other_entry : shared) {
+          const auto other = other_entry.second;
+          if (degenerate || glm::dot(own, units.at(other)) >= min_cos) {
+            n += faces.at(other);
+          }
+        }
+        const auto len = glm::length(n);
+        vertices.at(corner).normal
+          = len > kMinNormalLength ? n / len : glm::vec3(0.0F, 1.0F, 0.0F);
+      }
+      first = last;
     }
   }
 
@@ -334,9 +380,37 @@ namespace {
     }
   }
 
+  //! The surface defaults `defaults` sets on the surfaces `declared` lists;
+  //! each other surface it names is reported as missing.
+  [[nodiscard]] auto AuthoredSurfaces(const GeometryImportDefaults& defaults,
+    std::span<const data::SurfaceId> declared,
+    std::vector<ImportDiagnostic>& diagnostics, std::string_view source_id,
+    std::string_view mesh_name)
+    -> std::vector<internal::AuthoredSurfaceDefaults>
+  {
+    auto authored = std::vector<internal::AuthoredSurfaceDefaults> {};
+    for (const auto& [surface_id, surface] : defaults.surfaces) {
+      if (std::ranges::find(declared, surface_id) == declared.end()) {
+        diagnostics.push_back(
+          MakeWarningDiagnostic("import.setting_target_missing",
+            "Geometry defaults name a surface the geometry no longer has; the "
+            "setting is kept and not applied",
+            source_id,
+            std::string(mesh_name) + "/" + data::to_string(surface_id)));
+        continue;
+      }
+      authored.push_back({
+        .surface_id = surface_id,
+        .visible = surface.visible,
+        .casts_shadows = surface.casts_shadows,
+      });
+    }
+    return authored;
+  }
+
   [[nodiscard]] auto BuildDescriptorBytes(const std::string_view mesh_name,
     const std::vector<LodBuildData>& lods, const Bounds3& bounds,
-    const uint32_t attr_mask,
+    const GeometryImportDefaults* defaults, const uint32_t attr_mask,
     std::vector<MeshBuildPipeline::SurfacePatchOffset>& material_patch_offsets,
     std::vector<ImportDiagnostic>& diagnostics, std::string_view source_id)
     -> std::vector<std::byte>
@@ -357,9 +431,9 @@ namespace {
     std::ranges::copy(bounds.min, std::begin(asset_desc.bounding_box_min));
     std::ranges::copy(bounds.max, std::begin(asset_desc.bounding_box_max));
 
-    // Model imports have no authored surface defaults or LOD policy yet: the
-    // surfaces take the scene schema's, and several LODs a policy that
-    // switches them.
+    // The import settings' geometry defaults, when they name this geometry;
+    // otherwise the surfaces take the scene schema's, and several LODs a policy
+    // that switches them.
     auto declared = std::vector<data::SurfaceId> {};
     for (const auto& lod : lods) {
       for (const auto& submesh : lod.submeshes) {
@@ -368,10 +442,15 @@ namespace {
         }
       }
     }
-    const auto surface_table = internal::MakeSurfaceTable(declared, {});
+    const auto authored = defaults != nullptr
+      ? AuthoredSurfaces(*defaults, declared, diagnostics, source_id, mesh_name)
+      : std::vector<internal::AuthoredSurfaceDefaults> {};
+    const auto surface_table = internal::MakeSurfaceTable(declared, authored);
     asset_desc.surface_count = static_cast<uint32_t>(surface_table.size());
     asset_desc.default_lod_policy
-      = internal::MakeImportedLodPolicy(lods.size());
+      = defaults != nullptr && defaults->lod_policy.has_value()
+      ? *defaults->lod_policy
+      : internal::MakeImportedLodPolicy(lods.size());
 
     serio::MemoryStream stream;
     serio::Writer writer(stream);
@@ -502,6 +581,15 @@ namespace {
     auto bytes = std::vector<std::byte> { data.begin(), data.end() };
     data::AppendDescriptorStrings(bytes, strings);
     return bytes;
+  }
+
+  //! The import settings' defaults for `item`'s geometry, keyed by its anchor.
+  [[nodiscard]] auto GeometryDefaultsOf(const MeshBuildPipeline::WorkItem& item)
+    -> const GeometryImportDefaults*
+  {
+    const auto& all = item.request.options.geometry_defaults;
+    const auto it = all.find(item.storage_mesh_name);
+    return it != all.end() ? &it->second : nullptr;
   }
 
   [[nodiscard]] auto ResolveGeometryKey(const ImportRequest& request,
@@ -1008,7 +1096,8 @@ namespace {
     // kNone keeps the defaults; the mask will not include normals.
     if (normal_policy == GeometryAttributePolicy::kAlwaysRecalculate
       || (!has_normals && should_generate_normals)) {
-      ComputeNormalsFromTriangles(lod.vertices, buckets);
+      ComputeNormalsFromTriangles(lod.vertices, buckets,
+        item.request.options.normals_smoothing_angle_deg);
     }
 
     const bool final_has_normals
@@ -1379,9 +1468,9 @@ namespace {
 
     auto material_patch_offsets
       = std::vector<MeshBuildPipeline::SurfacePatchOffset> {};
-    auto descriptor_bytes
-      = BuildDescriptorBytes(item.mesh_name, lods, geom_bounds, attr_mask,
-        material_patch_offsets, diagnostics, item.source_id);
+    auto descriptor_bytes = BuildDescriptorBytes(item.mesh_name, lods,
+      geom_bounds, GeometryDefaultsOf(item), attr_mask, material_patch_offsets,
+      diagnostics, item.source_id);
     if (HasAnyError(diagnostics)) {
       return std::nullopt;
     }

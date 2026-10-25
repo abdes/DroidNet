@@ -86,6 +86,7 @@ namespace {
     settings.hdr_handling = TokenFor(
       tuning.hdr_handling, "hdr_handling", internal::ParseHdrHandling);
     settings.max_mip_levels = tuning.max_mip_levels;
+    settings.max_size = tuning.max_size;
     settings.packing_policy = tuning.packing_policy_id;
     settings.exposure_ev = tuning.exposure_ev;
     settings.flip_y = tuning.flip_y_on_decode;
@@ -125,6 +126,26 @@ auto SceneImportSettings::FromOptions(const ImportOptions& options)
   settings.bake_transforms = options.coordinate.bake_transforms_into_meshes;
   settings.gltf_omitted_light_range_m = options.gltf_omitted_light_range_m;
   settings.gltf_scene = options.gltf_scene;
+  switch (options.coordinate.up_axis) {
+  case SourceUpAxis::kFromFile:
+    break;
+  case SourceUpAxis::kY:
+    settings.up_axis = "y";
+    break;
+  case SourceUpAxis::kZ:
+    settings.up_axis = "z";
+    break;
+  default:
+    throw std::invalid_argument("Invalid source up axis");
+  }
+  settings.import_lights = options.import_lights;
+  settings.import_cameras = options.import_cameras;
+  settings.light_intensity_scale = options.light_intensity_scale;
+  settings.normals_smoothing_angle_deg = options.normals_smoothing_angle_deg;
+  settings.material_remap.insert(
+    options.material_remap.begin(), options.material_remap.end());
+  settings.geometry_defaults.insert(
+    options.geometry_defaults.begin(), options.geometry_defaults.end());
   switch (options.coordinate.unit_normalization) {
   case UnitNormalizationPolicy::kNormalizeToMeters:
     settings.unit_policy = "normalize";

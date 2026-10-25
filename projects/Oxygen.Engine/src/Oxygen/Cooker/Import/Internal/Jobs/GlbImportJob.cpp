@@ -13,6 +13,7 @@
 #include <string_view>
 #include <unordered_map>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
@@ -27,6 +28,7 @@
 #include <Oxygen/Cooker/Import/Internal/ImportSession.h>
 #include <Oxygen/Cooker/Import/Internal/Jobs/GlbImportJob.h>
 #include <Oxygen/Cooker/Import/Internal/MaterialSource.h>
+#include <Oxygen/Cooker/Import/Internal/ModelSettings.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/BufferPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/GeometryPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/MaterialPipeline.h>
@@ -52,8 +54,14 @@ struct GlbImportJob::PlannedGlbImport final {
   std::unordered_map<std::string, PlanItemId> texture_by_source_id;
   std::vector<PlanItemId> texture_items;
   std::vector<PlanItemId> material_items;
-  std::vector<PlanItemId> surfaces;
+  std::vector<WorkDispatcher::PlanSurface> surfaces;
   std::vector<PlanItemId> geometry_items;
+
+  // Textures and materials wait for the material remap, which decides what
+  // the plan produces.
+  std::vector<TexturePipeline::WorkItem> pending_textures;
+  std::vector<MaterialPipeline::WorkItem> pending_materials;
+  internal::ModelProductNames product_names;
   std::vector<PlanItemId> scene_items;
 };
 
@@ -174,10 +182,10 @@ auto GlbImportJob::ExecuteSessionAsync(ImportSession& session)
 
   ReportPhaseProgress(ImportPhase::kPlanning, 0.1F, "Building import plan...");
   const auto request_copy = Request();
+  const auto remap = internal::ResolveMaterialRemap(session, request_copy);
   const auto stop_token = StopToken();
-  const auto plan_start = std::chrono::steady_clock::now();
   auto plan_outcome = co_await ThreadPool()->Run(
-    [this, &asset, request_copy, stop_token](
+    [this, &asset, &request_copy, &remap, stop_token](
       co::ThreadPool::CancelToken canceled) -> PlanBuildOutcome {
       DLOG_F(1, "Build plan task begin");
       if (canceled || stop_token.stop_requested()) {
@@ -185,7 +193,7 @@ auto GlbImportJob::ExecuteSessionAsync(ImportSession& session)
         canceled_outcome.canceled = true;
         return canceled_outcome;
       }
-      return BuildPlan(asset, request_copy, stop_token);
+      return BuildPlan(asset, request_copy, remap, stop_token);
     });
   AddDiagnostics(session, std::move(plan_outcome.diagnostics));
   if (plan_outcome.canceled || !plan_outcome.plan) {
@@ -287,7 +295,8 @@ auto GlbImportJob::ParseAsset(ImportSession& session) -> co::Co<ParsedGlbAsset>
 
 //! Build the planner-driven execution plan for this import.
 auto GlbImportJob::BuildPlan(ParsedGlbAsset& asset,
-  const ImportRequest& request, std::stop_token stop_token) -> PlanBuildOutcome
+  const ImportRequest& request, const internal::MaterialRemapKeys& remap,
+  std::stop_token stop_token) -> PlanBuildOutcome
 {
   PlanBuildOutcome outcome;
   if (!asset.success || asset.adapter == nullptr) {
@@ -315,159 +324,201 @@ auto GlbImportJob::BuildPlan(ParsedGlbAsset& asset,
     .default_material_key = DefaultMaterialKey(),
     .request = request,
     .naming_service = observer_ptr { &GetNamingService() },
-    .stop_token = stop_token,
+    .stop_token = std::move(stop_token),
     .external_texture_bytes = {},
   };
 
   struct PlannerTextureSink final : adapters::TextureWorkItemSink {
     explicit PlannerTextureSink(PlannedGlbImport& plan)
-      : plan_(plan)
+      : plan_(&plan)
     {
     }
 
     auto Consume(TexturePipeline::WorkItem item) -> bool override
     {
-      const auto handle = plan_.payloads.Store(std::move(item));
-      auto& payload = plan_.payloads.Texture(handle);
-      const auto id
-        = plan_.planner.AddTextureResource(payload.item.source_id, handle);
-      plan_.texture_by_source_id.emplace(payload.item.source_id, id);
-      plan_.texture_items.push_back(id);
+      plan_->pending_textures.push_back(std::move(item));
       return true;
     }
 
-    PlannedGlbImport& plan_;
+    observer_ptr<PlannedGlbImport> plan_;
   };
 
   struct PlannerMaterialSink final : adapters::MaterialWorkItemSink {
-    explicit PlannerMaterialSink(
-      PlannedGlbImport& plan, std::vector<ImportDiagnostic>& diagnostics)
-      : plan_(plan)
-      , diagnostics_(diagnostics)
+    explicit PlannerMaterialSink(PlannedGlbImport& plan)
+      : plan_(&plan)
     {
     }
 
     auto Consume(MaterialPipeline::WorkItem item) -> bool override
     {
-      const auto handle = plan_.payloads.Store(std::move(item));
-      auto& payload = plan_.payloads.Material(handle);
-      const auto id
-        = plan_.planner.AddMaterialAsset(payload.item.material.name, handle);
-      plan_.material_items.push_back(id);
-      plan_.surfaces.push_back(id);
-
-      auto add_dep = [&](const MaterialTextureBinding& binding) -> void {
-        if (!binding.assigned || binding.source_id.empty()) {
-          return;
-        }
-
-        const auto it = plan_.texture_by_source_id.find(binding.source_id);
-        if (it == plan_.texture_by_source_id.end()) {
-          diagnostics_.push_back(
-            MakeWarningDiagnostic("material.texture_missing",
-              "Material texture is missing; it binds the error texture",
-              payload.item.source_id, binding.source_id));
-          return;
-        }
-
-        plan_.planner.AddDependency(id, it->second);
-      };
-
-      for (const auto& slot : MaterialSource::TextureSlots()) {
-        add_dep(payload.item.material.textures.*slot.binding);
-      }
-
+      plan_->pending_materials.push_back(std::move(item));
       return true;
     }
 
-    PlannedGlbImport& plan_;
-    std::vector<ImportDiagnostic>& diagnostics_;
+    observer_ptr<PlannedGlbImport> plan_;
+  };
+
+  const auto add_texture = [&](TexturePipeline::WorkItem item) -> void {
+    const auto handle = plan->payloads.Store(std::move(item));
+    auto& payload = plan->payloads.Texture(handle);
+    const auto id
+      = plan->planner.AddTextureResource(payload.item.source_id, handle);
+    plan->texture_by_source_id.emplace(payload.item.source_id, id);
+    plan->texture_items.push_back(id);
+  };
+
+  const auto add_material = [&](MaterialPipeline::WorkItem item) -> PlanItemId {
+    const auto handle = plan->payloads.Store(std::move(item));
+    auto& payload = plan->payloads.Material(handle);
+    const auto id
+      = plan->planner.AddMaterialAsset(payload.item.material.name, handle);
+    plan->material_items.push_back(id);
+
+    auto add_dep = [&](const MaterialTextureBinding& binding) -> void {
+      if (!binding.assigned || binding.source_id.empty()) {
+        return;
+      }
+
+      const auto it = plan->texture_by_source_id.find(binding.source_id);
+      if (it == plan->texture_by_source_id.end()) {
+        outcome.diagnostics.push_back(
+          MakeWarningDiagnostic("material.texture_missing",
+            "Material texture is missing; it binds the error texture",
+            payload.item.source_id, binding.source_id));
+        return;
+      }
+
+      plan->planner.AddDependency(id, it->second);
+    };
+
+    for (const auto& slot : MaterialSource::TextureSlots()) {
+      add_dep(payload.item.material.textures.*slot.binding);
+    }
+    return id;
   };
 
   struct PlannerGeometrySink final : adapters::GeometryWorkItemSink {
     explicit PlannerGeometrySink(PlannedGlbImport& plan)
-      : plan_(plan)
+      : plan_(&plan)
     {
     }
 
     auto Consume(MeshBuildPipeline::WorkItem item) -> bool override
     {
-      const auto handle = plan_.payloads.Store(std::move(item));
-      auto& payload = plan_.payloads.MeshBuild(handle);
+      const auto handle = plan_->payloads.Store(std::move(item));
+      auto& payload = plan_->payloads.MeshBuild(handle);
       const auto mesh_build_id
-        = plan_.planner.AddMeshBuild(payload.item.mesh_name, handle);
+        = plan_->planner.AddMeshBuild(payload.item.mesh_name, handle);
 
-      const auto geometry_handle = plan_.payloads.Store(
+      const auto geometry_handle = plan_->payloads.Store(
         GeometryFinalizeWorkItem { .mesh_build_item = mesh_build_id });
-      const auto geometry_id = plan_.planner.AddGeometryAsset(
+      const auto geometry_id = plan_->planner.AddGeometryAsset(
         payload.item.mesh_name, geometry_handle);
-      plan_.planner.AddDependency(geometry_id, mesh_build_id);
+      plan_->planner.AddDependency(geometry_id, mesh_build_id);
+      plan_->product_names.geometries.insert(payload.item.storage_mesh_name);
       for (const auto surface : payload.item.surfaces_used) {
-        if (surface < plan_.surfaces.size()) {
-          plan_.planner.AddDependency(geometry_id, plan_.surfaces.at(surface));
+        if (surface >= plan_->surfaces.size()) {
+          continue;
+        }
+        if (const auto* material
+          = std::get_if<PlanItemId>(&plan_->surfaces.at(surface))) {
+          plan_->planner.AddDependency(geometry_id, *material);
         }
       }
-      plan_.geometry_items.push_back(geometry_id);
+      plan_->geometry_items.push_back(geometry_id);
       return true;
     }
 
-    PlannedGlbImport& plan_;
+    observer_ptr<PlannedGlbImport> plan_;
   };
 
   struct PlannerSceneSink final : adapters::SceneWorkItemSink {
     explicit PlannerSceneSink(PlannedGlbImport& plan)
-      : plan_(plan)
+      : plan_(&plan)
     {
     }
 
     auto Consume(ScenePipeline::WorkItem item) -> bool override
     {
-      const auto handle = plan_.payloads.Store(std::move(item));
-      auto& payload = plan_.payloads.Scene(handle);
+      const auto handle = plan_->payloads.Store(std::move(item));
+      auto& payload = plan_->payloads.Scene(handle);
       const auto id
-        = plan_.planner.AddSceneAsset(payload.item.source_id, handle);
-      plan_.scene_items.push_back(id);
+        = plan_->planner.AddSceneAsset(payload.item.source_id, handle);
+      plan_->scene_items.push_back(id);
       return true;
     }
 
-    PlannedGlbImport& plan_;
+    observer_ptr<PlannedGlbImport> plan_;
   };
 
   PlannerTextureSink texture_sink(*plan);
   const auto texture_result = asset.adapter->BuildWorkItems(
     adapters::TextureWorkTag {}, texture_sink, input);
-  for (auto& diagnostic : texture_result.diagnostics) {
-    outcome.diagnostics.push_back(std::move(diagnostic));
+  for (const auto& diagnostic : texture_result.diagnostics) {
+    outcome.diagnostics.push_back(diagnostic);
   }
   if (!texture_result.success) {
     return outcome;
   }
 
-  PlannerMaterialSink material_sink(*plan, outcome.diagnostics);
+  PlannerMaterialSink material_sink(*plan);
   const auto material_result = asset.adapter->BuildWorkItems(
     adapters::MaterialWorkTag {}, material_sink, input);
-  for (auto& diagnostic : material_result.diagnostics) {
-    outcome.diagnostics.push_back(std::move(diagnostic));
+  for (const auto& diagnostic : material_result.diagnostics) {
+    outcome.diagnostics.push_back(diagnostic);
   }
   if (!material_result.success) {
     return outcome;
   }
 
+  // A remapped source material binds the existing material and is not
+  // produced, nor are the textures only it binds.
+  auto produced = std::vector<const MaterialSource*> {};
+  auto replaced = std::vector<const MaterialSource*> {};
+  for (const auto& item : plan->pending_materials) {
+    auto& group
+      = remap.contains(item.material.storage_name) ? replaced : produced;
+    group.push_back(&item.material);
+  }
+  const auto dropped
+    = internal::TexturesOnlyReplacedMaterialsUse(produced, replaced);
+  for (auto& item : plan->pending_textures) {
+    plan->product_names.textures.insert(item.name);
+    if (!dropped.contains(item.source_id)) {
+      add_texture(std::move(item));
+    }
+  }
+  for (auto& item : plan->pending_materials) {
+    plan->product_names.materials.insert(item.material.storage_name);
+    if (const auto it = remap.find(item.material.storage_name);
+      it != remap.end()) {
+      plan->surfaces.emplace_back(it->second);
+    } else {
+      plan->surfaces.emplace_back(add_material(std::move(item)));
+    }
+  }
+  plan->pending_textures.clear();
+  plan->pending_materials.clear();
+
   PlannerGeometrySink geometry_sink(*plan);
   const auto geometry_result = asset.adapter->BuildWorkItems(
     adapters::GeometryWorkTag {}, geometry_sink, input);
-  for (auto& diagnostic : geometry_result.diagnostics) {
-    outcome.diagnostics.push_back(std::move(diagnostic));
+  for (const auto& diagnostic : geometry_result.diagnostics) {
+    outcome.diagnostics.push_back(diagnostic);
   }
   if (!geometry_result.success) {
     return outcome;
+  }
+  for (auto& diagnostic : internal::ReportMissingSettingTargets(
+         request.options, plan->product_names, source_id_prefix)) {
+    outcome.diagnostics.push_back(std::move(diagnostic));
   }
 
   PlannerSceneSink scene_sink(*plan);
   const auto scene_result = asset.adapter->BuildWorkItems(
     adapters::SceneWorkTag {}, scene_sink, input);
-  for (auto& diagnostic : scene_result.diagnostics) {
-    outcome.diagnostics.push_back(std::move(diagnostic));
+  for (const auto& diagnostic : scene_result.diagnostics) {
+    outcome.diagnostics.push_back(diagnostic);
   }
   if (!scene_result.success) {
     return outcome;

@@ -67,11 +67,9 @@
 #include <Oxygen/Cooker/Import/Naming.h>
 #include <Oxygen/Cooker/Import/SceneSourceInspection.h>
 #include <Oxygen/Cooker/Import/TextureImportPresets.h>
-#include <Oxygen/Cooker/Import/TextureImportTypes.h>
 #include <Oxygen/Core/Transforms/Decompose.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/CameraAspectMode.h>
-#include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Data/LightValidation.h>
 #include <Oxygen/Data/MaterialDomain.h>
 #include <Oxygen/Data/MeshType.h>
@@ -166,6 +164,37 @@ namespace {
   [[nodiscard]] auto ToStringView(const ufbx_string& s) -> std::string_view
   {
     return { s.data, s.length };
+  }
+
+  //! Whether the file states `name` on `props`, rather than ufbx taking the
+  //! property's default.
+  [[nodiscard]] auto StatesProperty(
+    const ufbx_props& props, const std::string_view name) -> bool
+  {
+    return std::ranges::any_of(
+      Items(props.props), [&](const ufbx_prop& prop) -> bool {
+        return ToStringView(prop.name) == name;
+      });
+  }
+
+  //! A perspective FBX camera's vertical field of view, in radians.
+  /*!
+   A camera that states its film height and focal length takes the angle they
+   span, `2 atan(h / 2f)` with the film height in millimetres; any other takes
+   the angle ufbx derives from its field of view properties.
+  */
+  [[nodiscard]] auto FbxCameraFovY(const ufbx_camera& camera) -> float
+  {
+    constexpr auto kMillimetresPerInch = 25.4;
+    const auto film_height_mm = camera.film_size_inch.y * kMillimetresPerInch;
+    if (StatesProperty(camera.props, "FilmHeight")
+      && StatesProperty(camera.props, "FocalLength") && film_height_mm > 0.0
+      && camera.focal_length_mm > 0.0) {
+      return static_cast<float>(
+        2.0 * std::atan(film_height_mm / (2.0 * camera.focal_length_mm)));
+    }
+    return static_cast<float>(camera.field_of_view_deg.y)
+      * (std::numbers::pi_v<float> / 180.0F);
   }
 
   [[nodiscard]] auto ResolveFileTexture(const ufbx_texture* texture)
@@ -563,6 +592,37 @@ namespace {
     }
   }
 
+  //! The normals of a mesh without normals that marks hard edges with
+  //! smoothing groups, per mesh index; empty for any other mesh.
+  /*!
+   ufbx generates them from the authored smoothing, which an angle would only
+   approximate; the mesh build gives the other meshes without normals normals
+   from the smoothing angle.
+  */
+  [[nodiscard]] auto AuthoredSmoothingNormals(const ufbx_mesh& mesh)
+    -> std::vector<glm::vec3>
+  {
+    if (HasAttribute(mesh.vertex_normal)
+      || (mesh.edge_smoothing.count == 0 && mesh.face_smoothing.count == 0)) {
+      return {};
+    }
+    auto topology = std::vector<ufbx_topo_edge>(mesh.num_indices);
+    ufbx_compute_topology(&mesh, topology.data(), topology.size());
+    auto normal_indices = std::vector<uint32_t>(mesh.num_indices);
+    const auto normal_count
+      = ufbx_generate_normal_mapping(&mesh, topology.data(), topology.size(),
+        normal_indices.data(), normal_indices.size(), /*assume_smooth=*/false);
+    auto normals = std::vector<ufbx_vec3>(normal_count);
+    ufbx_compute_normals(&mesh, &mesh.vertex_position, normal_indices.data(),
+      normal_indices.size(), normals.data(), normals.size());
+    auto result = std::vector<glm::vec3> {};
+    result.reserve(mesh.num_indices);
+    for (const auto index : normal_indices) {
+      result.push_back(ToVec3(base::CheckedAt(std::span(normals), index)));
+    }
+    return result;
+  }
+
   [[nodiscard]] auto BuildTriangleBuffers(const ufbx_mesh& mesh,
     const glm::mat4& basis, const ufbx_node* material_node,
     const std::unordered_map<const ufbx_material*, uint32_t>&
@@ -604,6 +664,7 @@ namespace {
     tri_indices.resize(static_cast<size_t>(mesh.max_face_triangles) * 3U);
     size_t triangulated_faces = 0;
     size_t out_of_range_faces = 0;
+    const auto smoothing_normals = AuthoredSmoothingNormals(mesh);
 
     for (size_t idx = 0; idx < mesh.num_indices; ++idx) {
       out.positions.push_back(
@@ -612,6 +673,8 @@ namespace {
       if (HasAttribute(mesh.vertex_normal)) {
         out.normals.push_back(
           ToVec3(ufbx_get_vertex_vec3(&mesh.vertex_normal, idx)));
+      } else if (!smoothing_normals.empty()) {
+        out.normals.push_back(smoothing_normals.at(idx));
       }
       if (HasAttribute(mesh.vertex_uv)) {
         out.texcoords.push_back(
@@ -966,11 +1029,6 @@ namespace {
     return TexturePreset::kData;
   }
 
-  [[nodiscard]] constexpr auto IsBc7Format(const Format format) noexcept -> bool
-  {
-    return format == Format::kBC7UNorm || format == Format::kBC7UNormSRGB;
-  }
-
   [[nodiscard]] auto BuildTextureSourceId(std::string_view prefix,
     std::string_view texture_id, const TextureUsage usage) -> std::string
   {
@@ -1223,15 +1281,40 @@ namespace {
     return coord::ToGlmMat4(matrix);
   }
 
-  //! The rotation from the source's axes to Oxygen's, as ufbx found it.
+  //! The rotation from the source's axes to Oxygen's.
   /*!
    ufbx converts units in the geometry but leaves the axis change as a rotation
    on the top-level nodes (`metadata.root_rotation`). The adapter moves it into
    the geometry, as the glTF adapter does, so a geometry is in Oxygen axes on
    its own, such as when a scene places it without its model's nodes.
+
+   A chosen up axis replaces the file's axes: ufbx then changes no axes, and the
+   basis is the rotation from right-handed Y up or Z up to Oxygen's Z up. A file
+   with incomplete axes is read as FBX's default, right-handed Y up.
   */
-  [[nodiscard]] auto OxygenBasis(const ufbx_scene& scene) -> glm::mat4
+  [[nodiscard]] auto OxygenBasis(
+    const ufbx_scene& scene, const SourceUpAxis up_axis) -> glm::mat4
   {
+    // ufbx changes no axes of a file whose axes are incomplete; FBX's default
+    // applies.
+    const auto effective = up_axis == SourceUpAxis::kFromFile
+        && !ufbx_coordinate_axes_valid(scene.settings.axes)
+      ? SourceUpAxis::kY
+      : up_axis;
+    switch (effective) {
+    case SourceUpAxis::kFromFile:
+      break;
+    case SourceUpAxis::kY:
+      // A quarter turn about +X: +Y up becomes +Z up, +Z front becomes -Y.
+      return glm::mat4 {
+        glm::vec4 { 1.0F, 0.0F, 0.0F, 0.0F },
+        glm::vec4 { 0.0F, 0.0F, 1.0F, 0.0F },
+        glm::vec4 { 0.0F, -1.0F, 0.0F, 0.0F },
+        glm::vec4 { 0.0F, 0.0F, 0.0F, 1.0F },
+      };
+    case SourceUpAxis::kZ:
+      return glm::mat4 { 1.0F };
+    }
     const auto& rotation = scene.metadata.root_rotation;
     return glm::mat4_cast(
       glm::quat(static_cast<float>(rotation.w), static_cast<float>(rotation.x),
@@ -1240,10 +1323,11 @@ namespace {
 
   //! A node's local transform in Oxygen axes, for geometry rotated by `basis`.
   /*!
-   With `C` the basis and `L` ufbx's local transform, a top-level node, whose
-   `L` ends with `C`, takes `L * inverse(C)` and any deeper node
-   `C * L * inverse(C)`. Each node's world transform is then ufbx's times
-   `inverse(C)`, so geometry rotated by `C` lands where ufbx places it.
+   With `C` the basis and `L` ufbx's local transform, a top-level node whose
+   `L` starts with ufbx's axis rotation, which is `C`, takes `L * inverse(C)`,
+   and any other node `C * L * inverse(C)`. Each node's world transform is then
+   ufbx's times `inverse(C)` (`C` times that when ufbx changed no axes), so
+   geometry rotated by `C` lands where the node places it.
   */
   [[nodiscard]] auto LocalTransform(
     const ufbx_node& node, const glm::mat4& basis) -> glm::mat4
@@ -1253,7 +1337,10 @@ namespace {
     }
     const auto local = MakeLocalTransformMatrix(node.local_transform);
     const auto to_source = glm::transpose(basis);
-    return node.node_depth <= 1 ? local * to_source : basis * local * to_source;
+    const auto& axes = node.adjust_pre_rotation;
+    const bool axes_in_local = node.node_depth <= 1
+      && (axes.x != 0.0 || axes.y != 0.0 || axes.z != 0.0);
+    return axes_in_local ? local * to_source : basis * local * to_source;
   }
 
   [[nodiscard]] auto MakeSceneLoadError(std::string_view source_id,
@@ -1323,30 +1410,72 @@ namespace {
    recovers the metallic and roughness maps Blender writes to the FBX
    reflection and shininess channels.
   */
+  //! Axes that ask ufbx for no axis change.
+  constexpr auto kUnknownAxes = ufbx_coordinate_axes {
+    .right = UFBX_COORDINATE_AXIS_UNKNOWN,
+    .up = UFBX_COORDINATE_AXIS_UNKNOWN,
+    .front = UFBX_COORDINATE_AXIS_UNKNOWN,
+  };
+
   [[nodiscard]] auto MakeLoadOptions(UfbxCancelContext& cancel_ctx,
-    const std::optional<ufbx_real> target_unit_meters,
-    const ModelParseMode mode) -> ufbx_load_opts
+    const CoordinateConversionPolicy& policy) -> ufbx_load_opts
   {
     auto opts = ufbx_load_opts {};
     opts.progress_cb.fn = &UfbxProgressCallback;
     opts.progress_cb.user = &cancel_ctx;
 
-    opts.target_axes = coord::EngineWorldTargetAxes();
+    // A chosen up axis replaces the file's axes, so ufbx changes none and the
+    // adapter's basis does (OxygenBasis).
+    opts.target_axes = policy.up_axis == SourceUpAxis::kFromFile
+      ? coord::EngineWorldTargetAxes()
+      : kUnknownAxes;
     opts.target_camera_axes = coord::EngineCameraTargetAxes();
     opts.geometry_transform_handling
       = UFBX_GEOMETRY_TRANSFORM_HANDLING_HELPER_NODES;
     opts.space_conversion = UFBX_SPACE_CONVERSION_MODIFY_GEOMETRY;
-    // Default to mirroring along engine forward/back, then refine using
-    // FBX axis metadata if available.
+    // ufbx mirrors only a left-handed file, along Oxygen's forward axis.
     opts.handedness_conversion_axis = UFBX_MIRROR_AXIS_Y;
-    if (target_unit_meters.has_value()) {
+    if (const auto target_unit_meters = coord::ComputeTargetUnitMeters(policy);
+      target_unit_meters.has_value()) {
       opts.target_unit_meters = target_unit_meters.value();
     }
-    opts.generate_missing_normals = mode == ModelParseMode::kGeometry;
+    // The mesh build generates missing normals, with the smoothing angle.
+    opts.generate_missing_normals = false;
     opts.skip_skin_vertices = false;
     opts.clean_skin_weights = true;
     opts.use_blender_pbr_material = true;
     return opts;
+  }
+
+  //! The options of the load that reads the file's own geometry layouts,
+  //! before ufbx converts units and axes.
+  [[nodiscard]] auto MakeProbeOptions(ufbx_load_opts opts) -> ufbx_load_opts
+  {
+    opts.target_axes = kUnknownAxes;
+    opts.target_camera_axes = kUnknownAxes;
+    opts.target_unit_meters = 0.0;
+    opts.generate_missing_normals = false;
+    opts.handedness_conversion_axis = UFBX_MIRROR_AXIS_NONE;
+    opts.handedness_conversion_retain_winding = false;
+    opts.reverse_winding = false;
+    // The layouts need geometry only.
+    opts.ignore_animation = true;
+    opts.ignore_embedded = true;
+    opts.skip_skin_vertices = true;
+    return opts;
+  }
+
+  //! Warns of a file whose axes are incomplete, read as FBX's default.
+  auto ReportUnknownAxes(const ufbx_scene& scene, const AdapterInput& input,
+    std::vector<ImportDiagnostic>& diagnostics) -> void
+  {
+    if (input.request.options.coordinate.up_axis == SourceUpAxis::kFromFile
+      && !ufbx_coordinate_axes_valid(scene.settings.axes)) {
+      diagnostics.push_back(MakeWarningDiagnostic("fbx.axis_unknown",
+        "FBX axis metadata is incomplete; the source is read as right-handed "
+        "Y up, FBX's default (set up_axis to choose)",
+        input.source_id_prefix, input.object_path_prefix));
+    }
   }
 
   [[nodiscard]] auto LoadSceneFromFile(const std::filesystem::path& path,
@@ -1375,44 +1504,18 @@ namespace {
     FbxSceneSource loaded;
     ufbx_error error {};
     UfbxCancelContext cancel_ctx { .stop_token = input.stop_token };
-    auto opts = MakeLoadOptions(
-      cancel_ctx, coord::ComputeTargetUnitMeters(coordinate_policy), mode);
+    auto opts = MakeLoadOptions(cancel_ctx, coordinate_policy);
 
-    {
-      ufbx_load_opts probe_opts = opts;
-      probe_opts.target_axes = ufbx_coordinate_axes {
-        .right = UFBX_COORDINATE_AXIS_UNKNOWN,
-        .up = UFBX_COORDINATE_AXIS_UNKNOWN,
-        .front = UFBX_COORDINATE_AXIS_UNKNOWN,
-      };
-      probe_opts.target_camera_axes = probe_opts.target_axes;
-      probe_opts.target_unit_meters = 0.0;
-      probe_opts.generate_missing_normals = false;
-      probe_opts.handedness_conversion_axis = UFBX_MIRROR_AXIS_NONE;
-      probe_opts.handedness_conversion_retain_winding = false;
-      probe_opts.reverse_winding = false;
-
+    // Surface identity hashes the source layout before conversion, which only
+    // a second load sees; a metadata parse needs none.
+    if (mode == ModelParseMode::kGeometry) {
+      const auto probe_opts = MakeProbeOptions(opts);
       ufbx_error probe_error {};
       std::unique_ptr<ufbx_scene, decltype(&ufbx_free_scene)> probe_scene(
         ufbx_load_file(path.string().c_str(), &probe_opts, &probe_error),
         &ufbx_free_scene);
       if (probe_scene != nullptr) {
-        const auto handedness = IsLeftHandedAxes(probe_scene->settings.axes);
-        if (mode == ModelParseMode::kGeometry) {
-          loaded.source_layout_witnesses
-            = CaptureFbxSourceLayouts(*probe_scene);
-        }
-
-        if (!handedness.has_value()) {
-          diagnostics.push_back(MakeWarningDiagnostic("fbx.axis_unknown",
-            "FBX axis metadata is incomplete; using default handedness "
-            "conversion",
-            input.source_id_prefix, input.object_path_prefix));
-        } else if (*handedness) {
-          opts.handedness_conversion_axis = UFBX_MIRROR_AXIS_Y;
-        } else {
-          opts.handedness_conversion_axis = UFBX_MIRROR_AXIS_NONE;
-        }
+        loaded.source_layout_witnesses = CaptureFbxSourceLayouts(*probe_scene);
       }
     }
 
@@ -1433,6 +1536,7 @@ namespace {
 
     loaded.scene = std::shared_ptr<const ufbx_scene>(
       scene, [](ufbx_scene* value) -> void { ufbx_free_scene(value); });
+    ReportUnknownAxes(*scene, input, diagnostics);
     if (mode == ModelParseMode::kGeometry
       && loaded.source_layout_witnesses.size() != scene->meshes.count) {
       diagnostics.push_back(MakeErrorDiagnostic(
@@ -1470,44 +1574,18 @@ namespace {
     FbxSceneSource loaded;
     ufbx_error error {};
     UfbxCancelContext cancel_ctx { .stop_token = input.stop_token };
-    auto opts = MakeLoadOptions(
-      cancel_ctx, coord::ComputeTargetUnitMeters(coordinate_policy), mode);
+    auto opts = MakeLoadOptions(cancel_ctx, coordinate_policy);
 
-    {
-      ufbx_load_opts probe_opts = opts;
-      probe_opts.target_axes = ufbx_coordinate_axes {
-        .right = UFBX_COORDINATE_AXIS_UNKNOWN,
-        .up = UFBX_COORDINATE_AXIS_UNKNOWN,
-        .front = UFBX_COORDINATE_AXIS_UNKNOWN,
-      };
-      probe_opts.target_camera_axes = probe_opts.target_axes;
-      probe_opts.target_unit_meters = 0.0;
-      probe_opts.generate_missing_normals = false;
-      probe_opts.handedness_conversion_axis = UFBX_MIRROR_AXIS_NONE;
-      probe_opts.handedness_conversion_retain_winding = false;
-      probe_opts.reverse_winding = false;
-
+    // Surface identity hashes the source layout before conversion, which only
+    // a second load sees; a metadata parse needs none.
+    if (mode == ModelParseMode::kGeometry) {
+      const auto probe_opts = MakeProbeOptions(opts);
       ufbx_error probe_error {};
       std::unique_ptr<ufbx_scene, decltype(&ufbx_free_scene)> probe_scene(
         ufbx_load_memory(bytes.data(), bytes.size(), &probe_opts, &probe_error),
         &ufbx_free_scene);
       if (probe_scene != nullptr) {
-        const auto handedness = IsLeftHandedAxes(probe_scene->settings.axes);
-        if (mode == ModelParseMode::kGeometry) {
-          loaded.source_layout_witnesses
-            = CaptureFbxSourceLayouts(*probe_scene);
-        }
-
-        if (!handedness.has_value()) {
-          diagnostics.push_back(MakeWarningDiagnostic("fbx.axis_unknown",
-            "FBX axis metadata is incomplete; using default handedness "
-            "conversion",
-            input.source_id_prefix, input.object_path_prefix));
-        } else if (*handedness) {
-          opts.handedness_conversion_axis = UFBX_MIRROR_AXIS_Y;
-        } else {
-          opts.handedness_conversion_axis = UFBX_MIRROR_AXIS_NONE;
-        }
+        loaded.source_layout_witnesses = CaptureFbxSourceLayouts(*probe_scene);
       }
     }
 
@@ -1530,6 +1608,7 @@ namespace {
 
     loaded.scene = std::shared_ptr<const ufbx_scene>(
       scene, [](ufbx_scene* value) -> void { ufbx_free_scene(value); });
+    ReportUnknownAxes(*scene, input, diagnostics);
     if (mode == ModelParseMode::kGeometry
       && loaded.source_layout_witnesses.size() != scene->meshes.count) {
       diagnostics.push_back(MakeErrorDiagnostic(
@@ -1677,9 +1756,10 @@ namespace {
    usable LOD0, and named siblings without usable LOD0 and LOD1, are no group:
    their nodes import as authored.
   */
-  [[nodiscard]] auto FindFbxLodGroups(const ufbx_scene& scene) -> FbxLodGroups
+  [[nodiscard]] auto FindFbxLodGroups(
+    const ufbx_scene& scene, const SourceUpAxis up_axis) -> FbxLodGroups
   {
-    const auto basis = OxygenBasis(scene);
+    const auto basis = OxygenBasis(scene, up_axis);
     auto result = FbxLodGroups {
       .groups = {},
       .host_group = std::vector(scene.nodes.count, internal::kNoBakeIndex),
@@ -1884,8 +1964,8 @@ namespace {
   [[nodiscard]] auto BuildFbxBakePlan(const ufbx_scene& scene,
     const CoordinateConversionPolicy& policy) -> FbxBakePlan
   {
-    auto lods = FindFbxLodGroups(scene);
-    const auto basis = OxygenBasis(scene);
+    auto lods = FindFbxLodGroups(scene, policy.up_axis);
+    const auto basis = OxygenBasis(scene, policy.up_axis);
     std::vector<internal::MeshBakeNode> nodes(scene.nodes.count);
     std::vector<uint8_t> emit_mesh(scene.meshes.count, 1);
     std::unordered_map<const ufbx_mesh*, size_t> mesh_indices;
@@ -2151,7 +2231,8 @@ namespace {
       return result;
     }
     const auto bake = BuildFbxBakePlan(scene, input.request.options.coordinate);
-    const auto basis = OxygenBasis(scene);
+    const auto basis
+      = OxygenBasis(scene, input.request.options.coordinate.up_axis);
     std::unordered_map<const ufbx_mesh*, size_t> mesh_indices;
     mesh_indices.reserve(scene.meshes.count);
     for (size_t index = 0; index < scene.meshes.count; ++index) {
@@ -2947,35 +3028,11 @@ auto FbxAdapter::PrepareTextures(const AdapterInput& input) const
     auto desc = MakeDescFromPreset(PresetForUsage(usage));
     desc.source_id = tex_source_id;
     desc.stop_token = input.stop_token;
-    const auto& tuning = input.request.options.texture_tuning;
-    if (tuning.enabled) {
-      desc.flip_y_on_decode = tuning.flip_y_on_decode;
-      desc.force_rgba_on_decode = tuning.force_rgba_on_decode;
-      desc.mip_policy = tuning.mip_policy;
-      desc.max_mip_levels = tuning.max_mip_levels;
-      desc.mip_filter = tuning.mip_filter;
-      desc.output_format = (usage == TextureUsage::kBaseColor
-                             || usage == TextureUsage::kEmissive)
-        ? tuning.color_output_format
-        : tuning.data_output_format;
-      desc.bc7_quality = IsBc7Format(desc.output_format) ? tuning.bc7_quality
-                                                         : Bc7Quality::kNone;
-    }
-
     ModelTextureSource item {};
     item.source_id = tex_source_id;
     item.external_texture_id = identity->texture_id;
     item.source_key = identity->file_texture;
     item.desc = std::move(desc);
-    item.packing_policy_id
-      = tuning.enabled ? tuning.packing_policy_id : "d3d12";
-    item.output_format_policy = tuning.enabled
-      ? TexturePipeline::OutputFormatPolicy::kExplicit
-      : TexturePipeline::OutputFormatPolicy::kMaterialPreset;
-    item.failure_policy
-      = input.request.options.texture_tuning.placeholder_on_failure
-      ? TexturePipeline::FailurePolicy::kPlaceholder
-      : TexturePipeline::FailurePolicy::kStrict;
     item.source_path = identity->resolved_path;
     item.embedded = identity->embedded;
     item.image_key = identity->texture_id;
@@ -3042,6 +3099,7 @@ auto FbxAdapter::PrepareTextures(const AdapterInput& input) const
     result.sources.push_back(std::move(item));
   }
   NameModelTextures(result.sources);
+  TuneModelTextures(result.sources, input.request.options);
   return result;
 }
 
@@ -3143,7 +3201,7 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
 
   const auto bake = BuildFbxBakePlan(scene, request.options.coordinate);
   const auto& bake_plan = bake.plan;
-  const auto basis = OxygenBasis(scene);
+  const auto basis = OxygenBasis(scene, request.options.coordinate.up_axis);
   std::unordered_map<const ufbx_node*, size_t> source_node_indices;
   source_node_indices.reserve(scene.nodes.count);
   for (size_t index = 0; index < scene.nodes.count; ++index) {
@@ -3218,8 +3276,10 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
     node_input.local_matrix = local_matrix;
     node_input.world_matrix = world_matrix;
     node_input.visible = node->visible;
-    node_input.has_camera = node->camera != nullptr;
-    node_input.has_light = node->light != nullptr;
+    node_input.has_camera
+      = node->camera != nullptr && request.options.import_cameras;
+    node_input.has_light
+      = node->light != nullptr && request.options.import_lights;
     node_input.has_renderable = false;
     node_input.source_node = node;
 
@@ -3456,7 +3516,8 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
       }
     }
 
-    if (ufbx_node != nullptr && ufbx_node->camera != nullptr) {
+    if (ufbx_node != nullptr && ufbx_node->camera != nullptr
+      && request.options.import_cameras) {
       const auto& cam = *ufbx_node->camera;
       const auto camera_node
         = cam.projection_mode == UFBX_PROJECTION_MODE_PERSPECTIVE
@@ -3469,9 +3530,7 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
         auto camera = MakeDefaultRecord<PerspectiveCameraRecord>();
         camera.node_index = camera_node;
         camera.fov_y = commit("fov_y", camera_schema::kFieldOfViewYRadiansRange,
-          static_cast<float>(cam.field_of_view_deg.y)
-            * (std::numbers::pi_v<float> / 180.0F),
-          camera.fov_y);
+          FbxCameraFovY(cam), camera.fov_y);
         camera.aspect_ratio
           = commit("aspect_ratio", camera_schema::kAspectRatioRange,
             static_cast<float>(cam.aspect_ratio), camera.aspect_ratio);
@@ -3520,7 +3579,8 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
       commit.Report(input.source_id, name, diagnostics);
     }
 
-    if (ufbx_node != nullptr && ufbx_node->light != nullptr) {
+    if (ufbx_node != nullptr && ufbx_node->light != nullptr
+      && request.options.import_lights) {
       const auto node_light_semantics = ReadImportedLightSemantics(
         ufbx_node != nullptr ? &ufbx_node->props : nullptr);
       const auto& light = *ufbx_node->light;
@@ -3544,7 +3604,10 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
         static_cast<float>(light.color.y),
         static_cast<float>(light.color.z),
       };
+      // The scale corrects the converted intensity, so it applies after the
+      // FBX rule.
       const auto intensity = static_cast<float>(light.intensity);
+      const auto intensity_scale = request.options.light_intensity_scale;
       switch (light.type) {
       case UFBX_LIGHT_DIRECTIONAL: {
         namespace light_schema = data::schema::directional_light;
@@ -3553,8 +3616,9 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
         rec_light.common = resolve_common(rec_light.common);
         detail::CommitImportedLightColor(
           commit, data::kDirectionalLightCommonRanges, color, rec_light.common);
-        rec_light.intensity_lux = commit("intensity_lux",
-          light_schema::kIntensityLuxRange, intensity, rec_light.intensity_lux);
+        rec_light.intensity_lux
+          = commit("intensity_lux", light_schema::kIntensityLuxRange,
+            intensity * intensity_scale, rec_light.intensity_lux);
         build.directional_lights.push_back(rec_light);
         break;
       }
@@ -3569,7 +3633,8 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
           commit, data::kPointLightCommonRanges, color, rec_light.common);
         rec_light.luminous_flux_lm
           = commit("luminous_flux_lm", light_schema::kLuminousFluxLmRange,
-            FbxIntensityToLumens(intensity), rec_light.luminous_flux_lm);
+            FbxIntensityToLumens(intensity) * intensity_scale,
+            rec_light.luminous_flux_lm);
         build.point_lights.push_back(rec_light);
         if (light.type != UFBX_LIGHT_POINT) {
           diagnostics.push_back(
@@ -3588,7 +3653,8 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
           commit, data::kSpotLightCommonRanges, color, rec_light.common);
         rec_light.luminous_flux_lm
           = commit("luminous_flux_lm", light_schema::kLuminousFluxLmRange,
-            FbxIntensityToLumens(intensity), rec_light.luminous_flux_lm);
+            FbxIntensityToLumens(intensity) * intensity_scale,
+            rec_light.luminous_flux_lm);
         // FBX spot angles are full cone angles in degrees; the record holds
         // the angle from the axis in radians.
         constexpr auto kHalfConeRadiansPerDegree

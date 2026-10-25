@@ -41,6 +41,7 @@
 #include <Oxygen/Cooker/Import/ImportManifest.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
+#include <Oxygen/Cooker/Import/Internal/GeometryDefaults.h>
 #include <Oxygen/Cooker/Import/Internal/ImportManifest_schema.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
 #include <Oxygen/Cooker/Import/ModelImportRecord.h>
@@ -458,6 +459,9 @@ namespace {
     if (settings.max_mip_levels > 0U) {
       result.update({ { "max_mips", settings.max_mip_levels } });
     }
+    if (settings.max_size > 0U) {
+      result.update({ { "max_size", settings.max_size } });
+    }
     if (settings.cube_face_size > 0U) {
       result.update({ { "cube_face_size", settings.cube_face_size } });
     }
@@ -666,6 +670,10 @@ auto ModelImportRecord::MakeSettings(const SceneImportSettings& settings)
     },
     { "bake_transforms", settings.bake_transforms },
     { "gltf_omitted_light_range_m", settings.gltf_omitted_light_range_m },
+    { "import_lights", settings.import_lights },
+    { "import_cameras", settings.import_cameras },
+    { "light_intensity_scale", settings.light_intensity_scale },
+    { "normals_smoothing_angle_deg", settings.normals_smoothing_angle_deg },
   });
   const auto add = [&](const char* name, const std::string& value) -> void {
     if (!value.empty()) {
@@ -678,6 +686,36 @@ auto ModelImportRecord::MakeSettings(const SceneImportSettings& settings)
   add("tangents_policy", settings.tangents_policy);
   add("node_pruning", settings.node_pruning);
   add("gltf_scene", settings.gltf_scene);
+  add("up_axis", settings.up_axis);
+  if (!settings.material_remap.empty()) {
+    job.update({ { "material_remap", settings.material_remap } });
+  }
+  if (!settings.geometry_defaults.empty()) {
+    auto geometries = json::object();
+    for (const auto& [anchor, defaults] : settings.geometry_defaults) {
+      auto entry = json::object();
+      if (defaults.lod_policy.has_value()) {
+        entry.emplace(
+          "lod_policy", internal::WriteLodPolicy(*defaults.lod_policy));
+      }
+      if (!defaults.surfaces.empty()) {
+        auto surfaces = json::object();
+        for (const auto& [id, surface] : defaults.surfaces) {
+          auto values = json::object();
+          if (surface.visible.has_value()) {
+            values.emplace("visible", *surface.visible);
+          }
+          if (surface.casts_shadows.has_value()) {
+            values.emplace("casts_shadows", *surface.casts_shadows);
+          }
+          surfaces.emplace(data::to_string(id), std::move(values));
+        }
+        entry.emplace("surfaces", std::move(surfaces));
+      }
+      geometries.emplace(anchor, std::move(entry));
+    }
+    job.update({ { "geometry_defaults", std::move(geometries) } });
+  }
   if (settings.unit_scale_set) {
     job.update({ { "unit_scale", settings.unit_scale } });
   }

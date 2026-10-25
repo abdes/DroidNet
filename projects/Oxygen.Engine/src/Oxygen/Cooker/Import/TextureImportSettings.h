@@ -50,6 +50,8 @@ struct TextureImportSettings {
   std::string hdr_handling;
   float exposure_ev = 0.0F;
   uint32_t max_mip_levels = 0;
+  //! Largest width or height of the stored texture; 0 keeps the source size.
+  uint32_t max_size = 0;
   uint32_t cube_face_size = 0;
   bool flip_y = false;
   bool force_rgba = true;

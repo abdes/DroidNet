@@ -17,9 +17,12 @@
 
 #include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/TexturePipeline.h>
 #include <Oxygen/Cooker/Import/Naming.h>
 #include <Oxygen/Cooker/Import/TextureImportDesc.h>
+#include <Oxygen/Cooker/Import/TextureImportTypes.h>
+#include <Oxygen/Core/Types/Format.h>
 
 namespace oxygen::content::import::adapters {
 
@@ -105,6 +108,52 @@ inline auto NameModelTextures(std::span<ModelTextureSource> sources) -> void
         });
     }
     source.name = it->second + "." + source.usage;
+  }
+}
+
+//! Applies the import's texture settings to named textures.
+/*!
+ A texture takes the override its name keys in `texture_overrides`, else the
+ job's settings. The maximum size and the green flip of normal maps apply
+ whether or not the settings enable the other cooking choices; color textures
+ (albedo and emissive) take the color output format, the others the data one.
+*/
+inline auto TuneModelTextures(
+  std::span<ModelTextureSource> sources, const ImportOptions& options) -> void
+{
+  for (auto& source : sources) {
+    const auto it = options.texture_overrides.find(source.name);
+    const auto& tuning = it != options.texture_overrides.end()
+      ? it->second
+      : options.texture_tuning;
+    auto& desc = source.desc;
+    desc.max_size = tuning.max_size;
+    if (desc.intent == TextureIntent::kNormalTS) {
+      desc.flip_normal_green = tuning.flip_normal_green;
+    }
+    if (tuning.enabled) {
+      desc.flip_y_on_decode = tuning.flip_y_on_decode;
+      desc.force_rgba_on_decode = tuning.force_rgba_on_decode;
+      desc.mip_policy = tuning.mip_policy;
+      desc.max_mip_levels = tuning.max_mip_levels;
+      desc.mip_filter = tuning.mip_filter;
+      desc.output_format = desc.intent == TextureIntent::kAlbedo
+          || desc.intent == TextureIntent::kEmissive
+        ? tuning.color_output_format
+        : tuning.data_output_format;
+      desc.bc7_quality = desc.output_format == Format::kBC7UNorm
+          || desc.output_format == Format::kBC7UNormSRGB
+        ? tuning.bc7_quality
+        : Bc7Quality::kNone;
+    }
+    source.packing_policy_id
+      = tuning.enabled ? tuning.packing_policy_id : "d3d12";
+    source.output_format_policy = tuning.enabled
+      ? TexturePipeline::OutputFormatPolicy::kExplicit
+      : TexturePipeline::OutputFormatPolicy::kMaterialPreset;
+    source.failure_policy = tuning.placeholder_on_failure
+      ? TexturePipeline::FailurePolicy::kPlaceholder
+      : TexturePipeline::FailurePolicy::kStrict;
   }
 }
 

@@ -145,6 +145,13 @@ struct TextureImportDesc {
   //! Filter kernel for mip generation.
   MipFilter mip_filter = MipFilter::kBox;
 
+  //! Largest width or height of the stored texture; 0 keeps the source size.
+  /*!
+   A larger source is halved, through its mip chain, until it fits; the
+   mips above the limit are dropped before compression.
+  */
+  uint32_t max_size = 0;
+
   //=== Output Format ===-----------------------------------------------------//
 
   //! Final stored format for the texture data.

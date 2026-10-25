@@ -464,6 +464,7 @@ auto MapSettingsToTuning(const TextureImportSettings& settings,
   if (settings.max_mip_levels > 0U) {
     tuning.max_mip_levels = static_cast<uint8_t>(settings.max_mip_levels);
   }
+  tuning.max_size = settings.max_size;
 
   if (settings.cubemap || settings.equirect_to_cube
     || !settings.cube_layout.empty()) {

@@ -789,6 +789,19 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
 
   std::unordered_map<std::string, uint32_t> texture_indices;
   std::unordered_map<PlanItemId, data::AssetKey> material_keys;
+  // A surface's material key: the existing material's, or the planned
+  // material's once it is cooked.
+  const auto surface_material_key
+    = [&](const PlanSurface& surface) -> std::optional<data::AssetKey> {
+    if (const auto* key = std::get_if<data::AssetKey>(&surface)) {
+      return *key;
+    }
+    const auto it = material_keys.find(std::get<PlanItemId>(surface));
+    if (it == material_keys.end()) {
+      return std::nullopt;
+    }
+    return it->second;
+  };
   std::unordered_map<PlanItemId, data::AssetKey> geometry_keys;
   std::unordered_map<std::string, PlanItemId> texture_item_ids;
   std::unordered_map<std::string, PlanItemId> texture_item_ids_by_source;
@@ -1679,13 +1692,9 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
     auto& payload = context.payloads.MeshBuild(item.work_handle);
     payload.item.material_keys.clear();
     payload.item.material_keys.reserve(context.surfaces.size());
-    for (const auto material_item : context.surfaces) {
-      const auto it = material_keys.find(material_item);
-      if (it != material_keys.end()) {
-        payload.item.material_keys.push_back(it->second);
-      } else {
-        payload.item.material_keys.push_back(DefaultMaterialKey());
-      }
+    for (const auto& surface : context.surfaces) {
+      payload.item.material_keys.push_back(
+        surface_material_key(surface).value_or(DefaultMaterialKey()));
     }
 
     if (!payload.item.source_id.empty()) {
@@ -1761,10 +1770,9 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
         continue;
       }
 
-      const auto material_item
-        = oxygen::base::CheckedAt(context.surfaces, surface);
-      const auto it = material_keys.find(material_item);
-      if (it == material_keys.end()) {
+      const auto key = surface_material_key(
+        oxygen::base::CheckedAt(context.surfaces, surface));
+      if (!key.has_value()) {
         session_.AddDiagnostic(
           MakeErrorDiagnostic("import.plan.material_key_missing",
             "Missing material key for geometry patch", item.debug_name,
@@ -1776,7 +1784,7 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
       geometry_item.material_patches.push_back(
         GeometryPipeline::MaterialKeyPatch {
           .material_key_offset = patch_offset.material_key_offset,
-          .key = it->second,
+          .key = *key,
         });
     }
     if (missing_material) {

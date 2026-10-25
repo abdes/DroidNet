@@ -235,6 +235,7 @@ set(
   "Import/Internal/LooseCookedIndexRegistry.h"
   "Import/Internal/LooseCookedWriter.h"
   "Import/Internal/ModelNodeIdentity.h"
+  "Import/Internal/ModelSettings.h"
   "Import/Internal/SurfaceAllocation.h"
   "Import/Internal/Pipelines/BufferPipeline.h"
   "Import/Internal/Pipelines/CollisionShapeImportPipeline.h"

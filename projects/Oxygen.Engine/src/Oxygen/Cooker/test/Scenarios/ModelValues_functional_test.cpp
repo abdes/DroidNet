@@ -20,11 +20,15 @@
 #include <ios>
 #include <iterator>
 #include <limits>
+#include <map>
 #include <memory>
 #include <numbers>
 #include <optional>
 #include <ostream>
+#include <ranges>
+#include <span>
 #include <string>
+#include <string_view>
 #include <tuple>
 #include <utility>
 #include <vector>
@@ -40,14 +44,17 @@
 #include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Base/Span.h>
+#include <Oxygen/Base/Uuid.h>
 #include <Oxygen/Content/LoaderContext.h>
 #include <Oxygen/Content/Loaders/GeometryLoader.h>
 #include <Oxygen/Content/Loaders/MaterialLoader.h>
 #include <Oxygen/Content/Loaders/SceneLoader.h>
 #include <Oxygen/Content/LooseCookedIndex.h>
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
+#include <Oxygen/Cooker/Import/SurfaceProvenance.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
 #include <Oxygen/Cooker/Loose/Types.h>
 #include <Oxygen/Cooker/Loose/Validation.h>
@@ -63,8 +70,11 @@
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/PakFormat_core.h>
+#include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/Data/SceneAsset.h>
+#include <Oxygen/Data/StableId.h>
+#include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Data/Vertex.h>
 #include <Oxygen/Serio/FileStream.h>
 #include <Oxygen/Serio/Reader.h>
@@ -75,7 +85,10 @@ namespace {
 using oxygen::data::GeometryAsset;
 using oxygen::data::MaterialAsset;
 using oxygen::data::SceneAsset;
-using namespace oxygen::data::pak::world;
+using oxygen::data::pak::world::DirectionalLightRecord;
+using oxygen::data::pak::world::PerspectiveCameraRecord;
+using oxygen::data::pak::world::RenderableRecord;
+using oxygen::data::pak::world::SceneNodeIndexT;
 
 auto WorldTransform(const SceneAsset& scene, SceneNodeIndexT index) -> glm::mat4
 {
@@ -188,11 +201,15 @@ auto ReadCookedMeshBuffers(const std::filesystem::path& cooked_root,
   model.vertices.resize(
     vertex_buffer.size_bytes / sizeof(oxygen::data::Vertex));
   std::memcpy(model.vertices.data(),
-    data_bytes.data() + static_cast<std::ptrdiff_t>(vertex_buffer.data_offset),
+    std::span(data_bytes)
+      .subspan(static_cast<std::size_t>(vertex_buffer.data_offset))
+      .data(),
     vertex_buffer.size_bytes);
   model.indices.resize(index_buffer.size_bytes / sizeof(uint32_t));
   std::memcpy(model.indices.data(),
-    data_bytes.data() + static_cast<std::ptrdiff_t>(index_buffer.data_offset),
+    std::span(data_bytes)
+      .subspan(static_cast<std::size_t>(index_buffer.data_offset))
+      .data(),
     index_buffer.size_bytes);
 }
 
@@ -382,7 +399,9 @@ protected:
       = FindAssetOfType(inspection, oxygen::data::AssetType::kGeometry);
     const auto material_entry
       = FindAssetOfType(inspection, oxygen::data::AssetType::kMaterial);
-    ASSERT_TRUE(scene_entry && geometry_entry && material_entry);
+    ASSERT_HAS_VALUE(scene_entry);
+    ASSERT_HAS_VALUE(geometry_entry);
+    ASSERT_HAS_VALUE(material_entry);
     auto model = CookedModel {};
     model.scene = DecodeParseOnly(
       report.cooked_root, *scene_entry, [](const auto& context) -> auto {
@@ -594,8 +613,11 @@ NOLINT_TEST_F(ModelValuesTest, FbxCookPreservesUnitsHandednessAndValues)
             // Z up, and its nodes carry no axis rotation, so a scene that
             // places the geometry without the model's nodes shows it upright.
             if (!reflected) {
-              for (const auto expected : { glm::vec3(0, 0, 0),
-                     glm::vec3(1, 0, 0), glm::vec3(0, 0, 1) }) {
+              for (const auto expected : {
+                     glm::vec3(0, 0, 0),
+                     glm::vec3(1, 0, 0),
+                     glm::vec3(0, 0, 1),
+                   }) {
                 EXPECT_TRUE(std::ranges::any_of(model.vertices,
                   [&](const oxygen::data::Vertex& vertex) -> bool {
                     return glm::distance(vertex.position, expected * units)
@@ -638,6 +660,413 @@ NOLINT_TEST_F(ModelValuesTest, FbxCookPreservesUnitsHandednessAndValues)
           });
       }
     }
+  }
+}
+
+//! Whether `report` holds a warning of `code` at `object_path`.
+auto Warns(const oxygen::content::import::ImportReport& report,
+  const std::string_view code, const std::string_view object_path) -> bool
+{
+  return std::ranges::any_of(
+    report.diagnostics, [&](const auto& diagnostic) -> bool {
+      return diagnostic.severity
+        == oxygen::content::import::ImportSeverity::kWarning
+        && diagnostic.code == code && diagnostic.object_path == object_path;
+    });
+}
+
+//! Whether `report` holds any diagnostic of `code`.
+auto Reports(const oxygen::content::import::ImportReport& report,
+  const std::string_view code) -> bool
+{
+  return std::ranges::any_of(report.diagnostics,
+    [&](const auto& diagnostic) -> bool { return diagnostic.code == code; });
+}
+
+//! The geometry anchor of the one geometry `inspection` lists: its storage
+//! name.
+auto GeometryAnchor(const oxygen::content::lc::Inspection& inspection)
+  -> std::string
+{
+  for (const auto& entry : inspection.Assets()) {
+    if (entry.asset_type
+      == static_cast<uint8_t>(oxygen::data::AssetType::kGeometry)) {
+      return std::filesystem::path(entry.virtual_path).stem().string();
+    }
+  }
+  return {};
+}
+
+//! The record's geometry defaults become the cooked geometry's asset
+//! defaults; keys the file no longer has warn, and settings the format
+//! ignores warn. Light and camera settings shape the scene.
+NOLINT_TEST_F(ModelValuesTest, GltfSettingsShapeTheCookedModel)
+{
+  using oxygen::content::import::GeometryImportDefaults;
+  using oxygen::content::import::SourceUpAxis;
+  using oxygen::content::import::SurfaceImportDefaults;
+  using oxygen::data::pak::geometry::LodPolicyType;
+  const auto root = MakeTempDir("gltf_settings");
+  const auto source = root / "scene.gltf";
+  std::ifstream input(
+    TestModelsDirFromFile() / "static_scalar_camera_sun.gltf");
+  WriteGltfSource(source, nlohmann::json::parse(input));
+  auto request = oxygen::content::import::ImportRequest {};
+  request.source_path = source;
+  request.asset_virtual_path = oxygen::cooker::test::ModelVirtualPath(source);
+  request.cooked_root = root / "cooked";
+
+  // A first import, as the source analysis would, names the parts.
+  const auto first = RunImport(request);
+  ASSERT_TRUE(first.report.success);
+  auto surface = oxygen::data::SurfaceId {};
+  auto first_lux = 0.0F;
+  LoadAndVerify(first.report, [&](const CookedModel& model) -> void {
+    ASSERT_EQ(model.geometry->Surfaces().surfaces.size(), 1U);
+    surface = model.geometry->Surfaces().surfaces.front().surface_id;
+    const auto lights = model.scene->GetComponents<DirectionalLightRecord>();
+    ASSERT_EQ(lights.size(), 1U);
+    first_lux = lights.front().intensity_lux;
+    EXPECT_EQ(model.scene->GetComponents<PerspectiveCameraRecord>().size(), 1U);
+  });
+  const auto anchor = GeometryAnchor(LoadInspection(first.report.cooked_root));
+  ASSERT_FALSE(anchor.empty());
+
+  auto& options = request.options;
+  auto lod = oxygen::data::pak::geometry::LodPolicyRecord {};
+  lod.type = LodPolicyType::kFixed;
+  lod.lod_index = 3;
+  const auto gone = oxygen::data::SurfaceId::Generate();
+  options.geometry_defaults.emplace(anchor,
+    GeometryImportDefaults {
+      .lod_policy = lod,
+      .surfaces = {
+        { surface, SurfaceImportDefaults { .visible = false, .casts_shadows = false } },
+        { gone, SurfaceImportDefaults { .visible = true, .casts_shadows = {} } },
+      },
+    });
+  options.geometry_defaults.emplace("Gone", GeometryImportDefaults {});
+  options.texture_overrides.emplace("Gone.base_color", options.texture_tuning);
+  options.coordinate.up_axis = SourceUpAxis::kZ;
+  options.light_intensity_scale = 2.0F;
+  options.import_cameras = false;
+  const auto second = RunImport(request);
+  ASSERT_TRUE(second.report.success);
+  EXPECT_TRUE(Warns(
+    second.report, "import.setting_target_missing", "geometry_defaults/Gone"));
+  EXPECT_TRUE(Warns(second.report, "import.setting_target_missing",
+    "texture_overrides/Gone.base_color"));
+  EXPECT_TRUE(Warns(second.report, "import.setting_target_missing",
+    anchor + "/" + oxygen::data::to_string(gone)));
+  EXPECT_TRUE(Warns(second.report, "import.setting_not_applicable", "up_axis"));
+  LoadAndVerify(second.report, [&](const CookedModel& model) -> void {
+    const auto& policy = model.geometry->DefaultLodPolicy();
+    ASSERT_HAS_VALUE(policy);
+    EXPECT_EQ(policy->type, LodPolicyType::kFixed);
+    EXPECT_EQ(policy->lod_index, 3U);
+    const auto& surfaces = model.geometry->Surfaces().surfaces;
+    ASSERT_EQ(surfaces.size(), 1U);
+    EXPECT_EQ(surfaces.front().surface_id, surface);
+    ASSERT_HAS_VALUE(surfaces.front().defaults);
+    EXPECT_FALSE(surfaces.front().defaults->visible);
+    EXPECT_FALSE(surfaces.front().defaults->casts_shadows);
+    const auto lights = model.scene->GetComponents<DirectionalLightRecord>();
+    ASSERT_EQ(lights.size(), 1U);
+    EXPECT_FLOAT_EQ(lights.front().intensity_lux, 2.0F * first_lux);
+    EXPECT_TRUE(model.scene->GetComponents<PerspectiveCameraRecord>().empty());
+  });
+
+  options = {};
+  options.import_lights = false;
+  const auto third = RunImport(request);
+  ASSERT_TRUE(third.report.success);
+  LoadAndVerify(third.report, [](const CookedModel& model) -> void {
+    EXPECT_TRUE(model.scene->GetComponents<DirectionalLightRecord>().empty());
+    EXPECT_EQ(model.scene->GetComponents<PerspectiveCameraRecord>().size(), 1U);
+  });
+}
+
+//! A remapped source material binds the existing material and is not
+//! produced; a target that does not exist warns and the source material is
+//! produced; a key the file lacks warns.
+NOLINT_TEST_F(ModelValuesTest, GltfMaterialRemapBindsTheExistingMaterial)
+{
+  using oxygen::data::AssetType;
+  const auto root = MakeTempDir("gltf_material_remap");
+  std::ifstream input(
+    TestModelsDirFromFile() / "static_scalar_camera_sun.gltf");
+  const auto document = nlohmann::json::parse(input);
+  const auto import_model
+    = [&](const std::string& name,
+        const std::map<std::string, std::string, std::less<>>& remap) -> auto {
+    std::filesystem::create_directories(root / name);
+    const auto source = root / name / (name + ".gltf");
+    WriteGltfSource(source, document);
+    auto request = oxygen::content::import::ImportRequest {};
+    request.source_path = source;
+    request.asset_virtual_path = oxygen::cooker::test::ModelVirtualPath(source);
+    request.cooked_root = root / "cooked";
+    request.surface_provenance
+      = std::make_shared<const oxygen::content::import::SurfaceProvenance>(
+        oxygen::Uuid::Generate());
+    request.options.material_remap = remap;
+    auto result = RunImport(std::move(request));
+    return std::pair { result.report,
+      oxygen::cooker::test::ModelVirtualPath(source) };
+  };
+  const auto entries_under = [&](const std::string& prefix,
+                               const AssetType type) {
+    auto entries = std::vector<oxygen::content::lc::Inspection::AssetEntry> {};
+    for (const auto& entry : LoadInspection(root / "cooked").Assets()) {
+      if (entry.asset_type == static_cast<uint8_t>(type)
+        && entry.virtual_path.starts_with(prefix + "/")) {
+        entries.push_back(entry);
+      }
+    }
+    return entries;
+  };
+
+  const auto [first, first_path] = import_model("first", {});
+  ASSERT_TRUE(first.success);
+  const auto existing = entries_under(first_path, AssetType::kMaterial);
+  ASSERT_EQ(existing.size(), 1U);
+
+  const auto [second, second_path] = import_model("second",
+    {
+      { "Scalar", existing.front().virtual_path },
+      { "Ghost", "/Content/Ghost.omat" },
+    });
+  ASSERT_TRUE(second.success);
+  EXPECT_TRUE(
+    Warns(second, "import.setting_target_missing", "material_remap/Ghost"));
+  EXPECT_TRUE(entries_under(second_path, AssetType::kMaterial).empty());
+  const auto geometries = entries_under(second_path, AssetType::kGeometry);
+  ASSERT_EQ(geometries.size(), 1U);
+  const auto geometry = DecodeParseOnly(
+    root / "cooked", geometries.front(), [](const auto& context) -> auto {
+      return oxygen::content::loaders::LoadGeometryAsset(context);
+    });
+  ASSERT_TRUE(geometry);
+  const auto& surfaces = geometry->Surfaces().surfaces;
+  ASSERT_EQ(surfaces.size(), 1U);
+  ASSERT_FALSE(surfaces.front().bindings.empty());
+  EXPECT_EQ(surfaces.front().bindings.front().default_material_key,
+    existing.front().key);
+
+  const auto [third, third_path]
+    = import_model("third", { { "Scalar", "/Content/Missing.omat" } });
+  ASSERT_TRUE(third.success);
+  EXPECT_TRUE(Warns(
+    third, "import.material_remap_target_missing", "material_remap/Scalar"));
+  EXPECT_EQ(entries_under(third_path, AssetType::kMaterial).size(), 1U);
+}
+
+//! Generated normals smooth across an edge whose faces meet within the
+//! smoothing angle and keep it hard beyond it; a glTF primitive without
+//! normals stays faceted unless they are recalculated.
+NOLINT_TEST_F(ModelValuesTest, GeneratedNormalsFollowTheSmoothingAngle)
+{
+  using oxygen::content::import::GeometryAttributePolicy;
+  // Two triangles folded 90 degrees about their shared edge.
+  auto document = nlohmann::json::parse(R"({
+    "asset": {"version": "2.0"},
+    "buffers": [{"uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAACAPwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIA/", "byteLength": 72}],
+    "bufferViews": [{"buffer": 0, "byteLength": 72}],
+    "accessors": [{"bufferView": 0, "componentType": 5126, "count": 6,
+      "type": "VEC3", "min": [0, 0, 0], "max": [1, 1, 1]}],
+    "materials": [{"name": "Fold"}],
+    "meshes": [{"name": "Fold", "primitives": [
+      {"attributes": {"POSITION": 0}, "material": 0}]}],
+    "nodes": [{"name": "Fold", "mesh": 0}],
+    "scenes": [{"nodes": [0]}], "scene": 0
+  })");
+  struct Case final {
+    GeometryAttributePolicy normals;
+    float angle;
+    bool smooth;
+  };
+  for (const auto& [index, item] : std::views::enumerate(std::array {
+         Case {
+           .normals = GeometryAttributePolicy::kAlwaysRecalculate,
+           .angle = 60.0F,
+           .smooth = false,
+         },
+         Case {
+           .normals = GeometryAttributePolicy::kAlwaysRecalculate,
+           .angle = 120.0F,
+           .smooth = true,
+         },
+         Case {
+           .normals = GeometryAttributePolicy::kGenerateMissing,
+           .angle = 120.0F,
+           .smooth = false,
+         },
+       })) {
+    SCOPED_TRACE(index);
+    const auto root = MakeTempDir("smoothing_" + std::to_string(index));
+    const auto source = root / "fold.gltf";
+    {
+      std::ofstream output(source);
+      output << document.dump();
+    }
+    auto request = oxygen::content::import::ImportRequest {};
+    request.source_path = source;
+    request.asset_virtual_path = oxygen::cooker::test::ModelVirtualPath(source);
+    request.cooked_root = root / "cooked";
+    request.options.normal_policy = item.normals;
+    request.options.normals_smoothing_angle_deg = item.angle;
+    const auto imported = RunImport(std::move(request));
+    ASSERT_TRUE(imported.report.success);
+    LoadAndVerify(imported.report, [&](const CookedModel& model) -> void {
+      // The shared edge's corners: one normal per position when smooth.
+      auto shared_normals = std::vector<glm::vec3> {};
+      for (const auto& vertex : model.vertices) {
+        if (glm::distance(vertex.position, glm::vec3(0.0F)) < 0.0001F) {
+          shared_normals.push_back(vertex.normal);
+        }
+      }
+      ASSERT_FALSE(shared_normals.empty());
+      const auto all_equal = std::ranges::all_of(
+        shared_normals, [&](const glm::vec3& normal) -> bool {
+          return glm::distance(normal, shared_normals.front()) < 0.001F;
+        });
+      EXPECT_EQ(all_equal && shared_normals.size() >= 1U, item.smooth)
+        << shared_normals.size() << " corners";
+      if (!item.smooth) {
+        EXPECT_GE(shared_normals.size(), 2U);
+      }
+    });
+  }
+}
+
+//! The scalar FBX scene, with a material, and with its axes or a film back
+//! as asked.
+auto ScalarFbxText(const std::filesystem::path& models, const bool axes,
+  const bool film_back) -> std::string
+{
+  std::ifstream input(models / "static_scalar_camera_sun.fbx");
+  std::string text((std::istreambuf_iterator<char>(input)), {});
+  if (!axes) {
+    for (const auto* property : {
+           "UpAxis\"",
+           "UpAxisSign\"",
+           "FrontAxis\"",
+           "FrontAxisSign\"",
+           "CoordAxis\"",
+           "CoordAxisSign\"",
+         }) {
+      const auto at = text.find(std::string("P: \"") + property);
+      if (at != std::string::npos) {
+        text.erase(at, text.find('\n', at) - at);
+      }
+    }
+  }
+  if (film_back) {
+    const auto properties = text.find(R"(P: "FieldOfView")");
+    text.insert(properties, R"(P: "FilmHeight", "double", "Number", "",0.9
+            P: "FocalLength", "double", "Number", "",35
+            )");
+  }
+  const auto objects
+    = text.find("Objects: {") + std::string("Objects: {").size();
+  text.insert(objects, R"(
+    Material: 1007, "Material::Scalar", "" {
+        Version: 102
+        ShadingModel: "lambert"
+        Properties70: {
+            P: "DiffuseColor", "Color", "", "A",0.8,0.2,0.1
+        }
+    }
+)");
+  const auto connections
+    = text.find("Connections: {") + std::string("Connections: {").size();
+  text.insert(connections, "\n    C: \"OO\",1007,1002\n");
+  return text;
+}
+
+//! FBX import settings: incomplete axes read as FBX's default, Y up, with a
+//! warning; a chosen up axis replaces the file's; a stated film back sets the
+//! field of view; lights scale and lights and cameras can be left out.
+NOLINT_TEST_F(ModelValuesTest, FbxSettingsShapeTheCookedModel)
+{
+  using oxygen::content::import::SourceUpAxis;
+  struct Case final {
+    std::string name;
+    bool axes = true;
+    bool film_back = false;
+    SourceUpAxis up_axis = SourceUpAxis::kFromFile;
+    bool lights = true;
+    bool cameras = true;
+    glm::vec3 source_up {};
+    bool axis_unknown = false;
+  };
+  for (const auto& item :
+    {
+      Case {
+        .name = "no_axes",
+        .axes = false,
+        .source_up = { 0, 0, 1 },
+        .axis_unknown = true,
+      },
+      Case {
+        .name = "no_axes_z",
+        .axes = false,
+        .up_axis = SourceUpAxis::kZ,
+        .source_up = { 0, 1, 0 },
+      },
+      Case {
+        .name = "y_file_z",
+        .up_axis = SourceUpAxis::kZ,
+        .source_up = { 0, 1, 0 },
+      },
+      Case {
+        .name = "film_back",
+        .film_back = true,
+        .lights = false,
+        .source_up = { 0, 0, 1 },
+      },
+      Case { .name = "no_cameras", .cameras = false, .source_up = { 0, 0, 1 } },
+    }) {
+    SCOPED_TRACE(item.name);
+    const auto root = MakeTempDir("fbx_settings_" + item.name);
+    const auto source = root / "scene.fbx";
+    {
+      std::ofstream output(source);
+      output << ScalarFbxText(
+        TestModelsDirFromFile(), item.axes, item.film_back);
+    }
+    auto request = oxygen::content::import::ImportRequest {};
+    request.source_path = source;
+    request.asset_virtual_path = oxygen::cooker::test::ModelVirtualPath(source);
+    request.cooked_root = root / "cooked";
+    request.options.coordinate.up_axis = item.up_axis;
+    request.options.import_lights = item.lights;
+    request.options.import_cameras = item.cameras;
+    request.options.light_intensity_scale = 3.0F;
+    const auto imported = RunImport(std::move(request));
+    ASSERT_TRUE(imported.report.success);
+    EXPECT_EQ(Reports(imported.report, "fbx.axis_unknown"), item.axis_unknown);
+    LoadAndVerify(imported.report, [&](const CookedModel& model) -> void {
+      // The source's (0,1,0) corner, in Oxygen axes.
+      EXPECT_TRUE(std::ranges::any_of(
+        model.vertices, [&](const oxygen::data::Vertex& vertex) -> bool {
+          return glm::distance(vertex.position, item.source_up) < 0.0001F;
+        }));
+      const auto cameras
+        = model.scene->GetComponents<PerspectiveCameraRecord>();
+      const auto lights = model.scene->GetComponents<DirectionalLightRecord>();
+      EXPECT_EQ(cameras.size(), item.cameras ? 1U : 0U);
+      EXPECT_EQ(lights.size(), item.lights ? 1U : 0U);
+      if (!lights.empty()) {
+        EXPECT_FLOAT_EQ(lights.front().intensity_lux, 3.0F);
+      }
+      if (!cameras.empty()) {
+        const auto expected = item.film_back
+          ? static_cast<float>(2.0 * std::atan((0.9 * 25.4) / (2.0 * 35.0)))
+          : std::numbers::pi_v<float> / 3.0F;
+        EXPECT_NEAR(cameras.front().fov_y, expected, 0.0001F);
+      }
+    });
   }
 }
 

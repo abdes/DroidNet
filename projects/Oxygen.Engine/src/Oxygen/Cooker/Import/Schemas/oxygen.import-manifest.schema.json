@@ -151,6 +151,7 @@
                 "hdr_handling",
                 "exposure_ev",
                 "max_mips",
+                "max_size",
                 "cube_face_size",
                 "flip_y",
                 "flip_normal_green",
@@ -579,6 +580,11 @@
           "type": "integer",
           "minimum": 1
         },
+        "max_size": {
+          "description": "The largest width or height of the stored texture; a larger source drops its largest mips. Absent: the source size.",
+          "type": "integer",
+          "minimum": 1
+        },
         "cube_face_size": {
           "type": "integer",
           "minimum": 1
@@ -659,6 +665,36 @@
           "description": "The glTF scene imported as the model scene: its name, or #N for the scene at index N. Absent: the default scene, else the first.",
           "type": "string",
           "minLength": 1
+        },
+        "up_axis": {
+          "$ref": "#/definitions/source_up_axis"
+        },
+        "normals_smoothing_angle_deg": {
+          "description": "The largest angle between two faces that share a smoothed normal, wherever the import generates or recalculates normals.",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 180,
+          "default": 60
+        },
+        "import_lights": {
+          "type": "boolean",
+          "default": true
+        },
+        "import_cameras": {
+          "type": "boolean",
+          "default": true
+        },
+        "light_intensity_scale": {
+          "description": "The factor every imported light's intensity is multiplied by.",
+          "type": "number",
+          "minimum": 0,
+          "default": 1
+        },
+        "material_remap": {
+          "$ref": "#/definitions/material_remap"
+        },
+        "geometry_defaults": {
+          "$ref": "#/definitions/geometry_import_defaults"
         },
         "bake_transforms": {
           "type": "boolean"
@@ -985,6 +1021,11 @@
           "type": "integer",
           "minimum": 1
         },
+        "max_size": {
+          "description": "The largest width or height of the stored texture; a larger source drops its largest mips. Absent: the source size.",
+          "type": "integer",
+          "minimum": 1
+        },
         "cube_face_size": {
           "type": "integer",
           "minimum": 1
@@ -1047,6 +1088,36 @@
           "description": "The glTF scene imported as the model scene: its name, or #N for the scene at index N. Absent: the default scene, else the first.",
           "type": "string",
           "minLength": 1
+        },
+        "up_axis": {
+          "$ref": "#/definitions/source_up_axis"
+        },
+        "normals_smoothing_angle_deg": {
+          "description": "The largest angle between two faces that share a smoothed normal, wherever the import generates or recalculates normals.",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 180,
+          "default": 60
+        },
+        "import_lights": {
+          "type": "boolean",
+          "default": true
+        },
+        "import_cameras": {
+          "type": "boolean",
+          "default": true
+        },
+        "light_intensity_scale": {
+          "description": "The factor every imported light's intensity is multiplied by.",
+          "type": "number",
+          "minimum": 0,
+          "default": 1
+        },
+        "material_remap": {
+          "$ref": "#/definitions/material_remap"
+        },
+        "geometry_defaults": {
+          "$ref": "#/definitions/geometry_import_defaults"
         },
         "bake_transforms": {
           "type": "boolean"
@@ -1187,6 +1258,58 @@
     },
     "hdr_handling": {
       "enum": ["error", "tonemap", "auto", "keep", "float"]
+    },
+    "source_up_axis": {
+      "description": "The up axis an FBX source is read in; the import always produces Oxygen's +Z up. from-file takes the file's axes, or FBX's default (right-handed Y up) when they are incomplete; y and z read the source as right-handed Y up or Z up whatever the file states. A glTF source is Y up by specification and ignores it.",
+      "enum": ["from-file", "y", "z"],
+      "default": "from-file"
+    },
+    "material_remap": {
+      "description": "Source materials replaced by existing materials: a material's name in the import to the virtual path of the material its surfaces use instead. A replaced material is not produced.",
+      "type": "object",
+      "propertyNames": {
+        "minLength": 1
+      },
+      "additionalProperties": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "geometry_import_defaults": {
+      "description": "Asset defaults written into the model's geometries, by geometry anchor (the geometry's storage name).",
+      "type": "object",
+      "propertyNames": {
+        "minLength": 1
+      },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "lod_policy": {
+            "description": "The geometry's default LOD policy; absent takes the import's rule.",
+            "$ref": "oxygen.lod-policy.schema.json#/definitions/lod_policy"
+          },
+          "surfaces": {
+            "description": "Surface defaults by surface ID; an absent value takes the scene schema's default.",
+            "type": "object",
+            "propertyNames": {
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+            },
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "visible": {
+                  "type": "boolean"
+                },
+                "casts_shadows": {
+                  "type": "boolean"
+                }
+              }
+            }
+          }
+        }
+      }
     },
     "cooked_context_roots": {
       "type": "array",

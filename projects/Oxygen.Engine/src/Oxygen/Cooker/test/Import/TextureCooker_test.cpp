@@ -65,13 +65,6 @@ using oxygen::cooker::test::MakeBmp;
   return { kTestBmp.data(), kTestBmp.size() };
 }
 
-//! Returns the 1x1 BMP test image as a span of bytes.
-[[nodiscard]] auto GetTestImageBytes1x1() -> std::span<const std::byte>
-{
-  static const auto kTestBmp = MakeBmp(1, 1);
-  return { kTestBmp.data(), kTestBmp.size() };
-}
-
 //! Creates a minimal 2x2 RGBA32Float ScratchImage.
 /*!
 
@@ -153,8 +146,8 @@ NOLINT_TEST(
       EXPECT_EQ(cooked->desc.format, output);
       oxygen::data::pak::render::TexturePayloadHeader header {};
       std::memcpy(&header, cooked->payload.data(), sizeof(header));
-      const auto* data = cooked->payload.data() + header.data_offset_bytes
-        + cooked->layouts.at(0).offset_bytes;
+      const auto data = std::span { cooked->payload }.subspan(
+        header.data_offset_bytes + cooked->layouts.at(0).offset_bytes);
       for (unsigned c = 0; c < 4; ++c) {
         const double normalized = static_cast<double>(source.at(c)) / 255;
         const double linear = c < 3 && source_space == ColorSpace::kSRGB
@@ -167,11 +160,13 @@ NOLINT_TEST(
         double tolerance = 2e-6;
         if (output == Format::kRGBA32Float) {
           float value = NAN;
-          std::memcpy(&value, data + (c * 4), 4);
+          std::memcpy(
+            &value, data.subspan(static_cast<std::size_t>(c) * 4).data(), 4);
           actual = value;
         } else if (output == Format::kRGBA16Float) {
           std::uint16_t bits = 0;
-          std::memcpy(&bits, data + (c * 2), 2);
+          std::memcpy(
+            &bits, data.subspan(static_cast<std::size_t>(c) * 2).data(), 2);
           actual = oxygen::data::HalfFloat { bits }.ToFloat();
           tolerance = (expected * .0006) + 0x1p-24;
         } else {
@@ -225,13 +220,17 @@ NOLINT_TEST(TextureCookerColorTransferTest, FiltersColorMipsInLinearLight)
       std::memcpy(&header, cooked->payload.data(), sizeof(header));
       std::array<float, 4> actual {};
       std::memcpy(actual.data(),
-        cooked->payload.data() + header.data_offset_bytes
-          + cooked->layouts.at(1).offset_bytes,
+        std::span { cooked->payload }
+          .subspan(
+            header.data_offset_bytes + cooked->layouts.at(1).offset_bytes)
+          .data(),
         sizeof(actual));
       const double code = static_cast<double>(dark) / 255;
-      const double linear = source_space == ColorSpace::kLinear ? code
-        : code <= .04045                                        ? code / 12.92
-                         : std::pow((code + .055) / 1.055, 2.4);
+      double linear = code;
+      if (source_space != ColorSpace::kLinear) {
+        linear = code <= .04045 ? code / 12.92
+                                : std::pow((code + .055) / 1.055, 2.4);
+      }
       const double expected = .5 * (linear + 1);
       for (unsigned c = 0; c < 3; ++c) {
         EXPECT_NEAR(actual.at(c), expected, 2e-6);
@@ -274,11 +273,13 @@ NOLINT_TEST(
       EXPECT_GT(expected, 0U);
       const auto width = size >> mip;
       const auto& layout = cooked->layouts.at(mip);
-      const auto* data = cooked->payload.data() + header.data_offset_bytes
-        + layout.offset_bytes;
+      const auto data = std::span { cooked->payload }.subspan(
+        header.data_offset_bytes + layout.offset_bytes);
       for (unsigned y = 0; y < width; ++y) {
         for (unsigned x = 0; x < width; ++x) {
-          const auto* pixel = data + (y * layout.row_pitch_bytes) + (x * 4);
+          const auto pixel = data.subspan(
+            (static_cast<std::size_t>(y) * layout.row_pitch_bytes)
+            + (static_cast<std::size_t>(x) * 4));
           for (unsigned c = 0; c < 3; ++c) {
             EXPECT_EQ(std::to_integer<unsigned>(pixel[c]),
               x == 0 && y == 0 ? expected : 0U);
@@ -680,8 +681,9 @@ NOLINT_TEST(TextureCookerHdrTest, HalfOutputClampsOutOfRangeRadiance)
     std::memcpy(&header, cooked.payload.data(), sizeof(header));
     std::array<std::uint16_t, 8> bits {};
     std::memcpy(bits.data(),
-      cooked.payload.data() + header.data_offset_bytes
-        + cooked.layouts.at(0).offset_bytes,
+      std::span { cooked.payload }
+        .subspan(header.data_offset_bytes + cooked.layouts.at(0).offset_bytes)
+        .data(),
       sizeof(bits));
     std::array<float, 8> values {};
     for (std::size_t i = 0; i < bits.size(); ++i) {
@@ -741,6 +743,130 @@ NOLINT_TEST(TextureCookerDetailTest, ContentHashVariesWithData)
   auto hash2 = oxygen::content::import::detail::ComputeContentHash(data2);
 
   EXPECT_NE(hash1, hash2);
+}
+
+//===----------------------------------------------------------------------===//
+// Maximum Size Tests
+//===----------------------------------------------------------------------===//
+
+//! An RGBA8 image of `width` by `height` whose left half is white and right
+//! half black, with `mips` levels (only the first filled).
+[[nodiscard]] auto MakeHalvesImage(const uint32_t width, const uint32_t height,
+  const uint16_t mips = 1) -> ScratchImage
+{
+  auto image = ScratchImage::Create({
+    .width = width,
+    .height = height,
+    .mip_levels = mips,
+    .format = Format::kRGBA8UNorm,
+  });
+  auto pixels = image.GetMutablePixels(0, 0);
+  for (uint32_t y = 0; y < height; ++y) {
+    for (uint32_t x = 0; x < width; ++x) {
+      const auto value = x < width / 2 ? std::byte { 255 } : std::byte { 0 };
+      const auto offset = static_cast<size_t>((y * width) + x) * 4U;
+      for (size_t c = 0; c < 3; ++c) {
+        pixels[offset + c] = value;
+      }
+      pixels[offset + 3] = std::byte { 255 };
+    }
+  }
+  return image;
+}
+
+[[nodiscard]] auto MakeDataDesc(const MipPolicy policy, const uint32_t max_size)
+  -> TextureImportDesc
+{
+  auto desc = TextureImportDesc {};
+  desc.intent = TextureIntent::kRoughness;
+  desc.source_color_space = ColorSpace::kLinear;
+  desc.output_format = Format::kRGBA8UNorm;
+  desc.mip_policy = policy;
+  desc.max_size = max_size;
+  return desc;
+}
+
+//! A texture larger than the maximum size is stored at the largest halving
+//! that fits, filtered, with the mip chain of that size; a texture that fits
+//! keeps its size.
+NOLINT_TEST(TextureCookerMaxSizeTest, LargerTexturesAreHalvedUntilTheyFit)
+{
+  struct Case final {
+    MipPolicy policy;
+    uint32_t max_size;
+    uint32_t width;
+    uint32_t height;
+    uint32_t mips;
+  };
+  for (const auto& item : {
+         Case {
+           .policy = MipPolicy::kNone,
+           .max_size = 2,
+           .width = 2,
+           .height = 1,
+           .mips = 1,
+         },
+         Case {
+           .policy = MipPolicy::kFullChain,
+           .max_size = 2,
+           .width = 2,
+           .height = 1,
+           .mips = 2,
+         },
+         Case {
+           .policy = MipPolicy::kNone,
+           .max_size = 3,
+           .width = 2,
+           .height = 1,
+           .mips = 1,
+         },
+         Case {
+           .policy = MipPolicy::kNone,
+           .max_size = 8,
+           .width = 8,
+           .height = 4,
+           .mips = 1,
+         },
+         Case {
+           .policy = MipPolicy::kNone,
+           .max_size = 0,
+           .width = 8,
+           .height = 4,
+           .mips = 1,
+         },
+       }) {
+    SCOPED_TRACE(item.max_size);
+    SCOPED_TRACE(static_cast<int>(item.policy));
+    const auto cooked = CookTexture(MakeHalvesImage(8, 4),
+      MakeDataDesc(item.policy, item.max_size), TightPackedPolicy::Instance());
+    ASSERT_HAS_VALUE(cooked) << static_cast<int>(cooked.error());
+    EXPECT_EQ(cooked->desc.width, item.width);
+    EXPECT_EQ(cooked->desc.height, item.height);
+    EXPECT_EQ(cooked->desc.mip_levels, item.mips);
+  }
+
+  // The 2x1 result filters the halves: white on the left, black on the right.
+  const auto cooked = CookTexture(MakeHalvesImage(8, 4),
+    MakeDataDesc(MipPolicy::kNone, 2), TightPackedPolicy::Instance());
+  ASSERT_HAS_VALUE(cooked);
+  oxygen::data::pak::render::TexturePayloadHeader header {};
+  std::memcpy(&header, cooked->payload.data(), sizeof(header));
+  const auto data = std::span { cooked->payload }.subspan(
+    header.data_offset_bytes + cooked->layouts.at(0).offset_bytes);
+  EXPECT_GT(std::to_integer<int>(data[0]), 200);
+  EXPECT_LT(std::to_integer<int>(data[4]), 55);
+}
+
+//! A source that carries mips keeps them from the first that fits, without
+//! filtering again.
+NOLINT_TEST(TextureCookerMaxSizeTest, CarriedMipsAreKeptFromTheFirstThatFits)
+{
+  const auto cooked = CookTexture(MakeHalvesImage(8, 4, 4),
+    MakeDataDesc(MipPolicy::kNone, 4), TightPackedPolicy::Instance());
+  ASSERT_HAS_VALUE(cooked) << static_cast<int>(cooked.error());
+  EXPECT_EQ(cooked->desc.width, 4U);
+  EXPECT_EQ(cooked->desc.height, 2U);
+  EXPECT_EQ(cooked->desc.mip_levels, 3U);
 }
 
 } // namespace
