@@ -11,7 +11,6 @@ using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Assets.Catalog;
-using Oxygen.Managed.Assets.Catalog.LooseCooked;
 using Oxygen.Managed.Assets.Catalog.Pak;
 using Oxygen.Managed.Assets.Persistence.Pak;
 using Oxygen.Managed.Core;
@@ -109,7 +108,7 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
         }
 
         var selected = this.FindKey(asset.Cooked!.AssetKey.ToString());
-        return new(selected.root.Path, selected.asset);
+        return new(selected.Root.Path, selected.Asset, selected.Root.Fingerprint);
     }
 
     /// <summary>Resolves embedded keys separately from authored virtual-path references.</summary>
@@ -122,10 +121,8 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
     /// <returns>Exact project and library identities required by this consumer.</returns>
     public async Task<CookReferenceExpansion> ExpandReferencesAsync(ContentCookInput consumer, IReadOnlyList<AssetPath> references, ICookedDependencyInspector? inspector, string operationRoot, Oxygen.Managed.Core.Compatibility.NativeArtifactLease? artifacts, CancellationToken cancellationToken)
     {
-        var projects = new Dictionary<AssetPath, ContentCookInput>();
-        var importedOutputs = new HashSet<AssetPath>();
+        var expansion = new ReferenceExpansion(consumer, inspector, operationRoot, artifacts);
         var libraries = new List<CookedDependencySnapshot>();
-        var diagnostics = new List<DiagnosticRecord>();
         var pending = this.CreateReferenceQueue(references);
         var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         while (pending.TryDequeue(out var current))
@@ -147,45 +144,17 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
             var metadata = await this.GetDependencyMetadataAsync(root, key, inspector, operationRoot, artifacts, cancellationToken).ConfigureAwait(false);
             if (metadata?.Complete != true)
             {
-                diagnostics.Add(IncompleteInspectionIssue(consumer, metadata));
+                expansion.Diagnostics.Add(IncompleteInspectionIssue(consumer, metadata));
                 continue;
             }
 
             foreach (var reference in metadata.KeyReferences.Where(static reference => reference.TargetKind is CookedKeyReferenceTargetKind.Asset or CookedKeyReferenceTargetKind.Texture))
             {
-                var dependency = reference.AssetKey;
-                var found = this.FindKey(dependency);
-                if (found.asset?.Cooked is { } target && !MatchesExpectedAssetType(reference, target))
-                {
-                    diagnostics.Add(TypeMismatchIssue(consumer, reference, target));
-                    continue;
-                }
-
-                var candidate = found.asset is null || this.ProjectSourceWins(found.asset.Identity, found.root)
-                    ? await this.ResolveProjectKeyAsync(dependency, inspector as ICookedAssetKeyProvider, operationRoot, artifacts, cancellationToken).ConfigureAwait(false) : null;
-                if (candidate is not null && (found.asset is null || this.ProjectHasPriority(found.root)))
-                {
-                    this.AddProjectSource(candidate, projects, importedOutputs);
-                }
-                else if (found.asset is not null)
-                {
-                    if (this.projectIdentities?.IsPending == true && this.ProjectSourceWins(found.asset.Identity, found.root))
-                    {
-                        diagnostics.Add(PendingIdentitiesIssue(consumer));
-                    }
-
-                    pending.Enqueue(found);
-                }
-                else
-                {
-                    diagnostics.Add(this.projectIdentities?.IsPending == true
-                        ? PendingIdentitiesIssue(consumer)
-                        : Issue(consumer, "asset_cook.library_dependency_missing", $"Library asset '{asset.Identity}' requires missing asset '{dependency}'."));
-                }
+                await this.ExpandReferenceAsync(expansion, asset, reference, pending, cancellationToken).ConfigureAwait(false);
             }
         }
 
-        return new([.. projects.Values], [.. libraries], [.. diagnostics]) { ImportedOutputs = [.. importedOutputs] };
+        return new([.. expansion.Projects.Values], [.. libraries], [.. expansion.Diagnostics]) { ImportedOutputs = [.. expansion.ImportedOutputs] };
     }
 
     /// <summary>Attaches selected library inputs and reports required references that remain unavailable.</summary>
@@ -251,7 +220,7 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
         var declared = this.order.SelectMany(source => source.Kind == CookedContentSourceKind.ProjectOutput ? projectRoots.Order(StringComparer.Ordinal)
             : this.roots.Where(root => !root.IsEngineContent && string.Equals(root.Name, source.Name, StringComparison.Ordinal)).Select(static root => root.Path));
         var paths = this.roots.Where(static root => root.IsEngineContent).Select(static root => root.Path).Concat(declared);
-        return paths.Reverse().DistinctBy(FileSystemPath.From).Reverse().ToArray();
+        return [.. paths.Reverse().DistinctBy(FileSystemPath.From).Reverse()];
     }
 
     /// <summary>Validates native container structure before consumers can use library data.</summary>
@@ -340,9 +309,44 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
     private static DiagnosticRecord Issue(ContentCookInput consumer, string code, string message)
         => new() { OperationId = Guid.Empty, Domain = FailureDomain.AssetCook, Severity = DiagnosticSeverity.Error, Code = code, Message = message, AffectedPath = consumer.SourceAbsolutePath.FullPath, AffectedVirtualPath = consumer.AssetUri.VirtualPath };
 
-    private Queue<(Root root, AssetRecord asset)> CreateReferenceQueue(IReadOnlyList<AssetPath> references)
+    // A library asset's reference selects the project's source, queues the library asset it names, or is reported.
+    private async Task ExpandReferenceAsync(ReferenceExpansion expansion, AssetRecord asset, CookedKeyReference reference, Queue<(Root Root, AssetRecord Asset)> pending, CancellationToken cancellationToken)
     {
-        var pending = new Queue<(Root root, AssetRecord asset)>();
+        var consumer = expansion.Consumer;
+        var dependency = reference.AssetKey;
+        var found = this.FindKey(dependency);
+        if (found.Asset?.Cooked is { } target && !MatchesExpectedAssetType(reference, target))
+        {
+            expansion.Diagnostics.Add(TypeMismatchIssue(consumer, reference, target));
+            return;
+        }
+
+        var candidate = found.Asset is null || this.ProjectSourceWins(found.Asset.Identity, found.Root)
+            ? await this.ResolveProjectKeyAsync(dependency, expansion.Inspector as ICookedAssetKeyProvider, expansion.OperationRoot, expansion.Artifacts, cancellationToken).ConfigureAwait(false) : null;
+        if (candidate is not null && (found.Asset is null || this.ProjectHasPriority(found.Root)))
+        {
+            this.AddProjectSource(candidate, expansion.Projects, expansion.ImportedOutputs);
+        }
+        else if (found.Asset is not null)
+        {
+            if (this.projectIdentities?.IsPending == true && this.ProjectSourceWins(found.Asset.Identity, found.Root))
+            {
+                expansion.Diagnostics.Add(PendingIdentitiesIssue(consumer));
+            }
+
+            pending.Enqueue(found);
+        }
+        else
+        {
+            expansion.Diagnostics.Add(this.projectIdentities?.IsPending == true
+                ? PendingIdentitiesIssue(consumer)
+                : Issue(consumer, "asset_cook.library_dependency_missing", $"Library asset '{asset.Identity}' requires missing asset '{dependency}'."));
+        }
+    }
+
+    private Queue<(Root Root, AssetRecord Asset)> CreateReferenceQueue(IReadOnlyList<AssetPath> references)
+    {
+        var pending = new Queue<(Root Root, AssetRecord Asset)>();
         foreach (var uri in references)
         {
             var (root, asset) = this.FindUri(uri);
@@ -395,22 +399,11 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
         => this.ProjectHasPriority(root) && (this.resolveImported?.Invoke(uri) is not null
             || CookInputResolver.HasProjectSource(this.project, uri));
 
-    private (Root root, AssetRecord asset) FindUri(AssetPath uri)
+    private (Root Root, AssetRecord Asset) FindUri(AssetPath uri)
         => this.roots.AsEnumerable().Reverse().SelectMany(root => root.Assets.Where(asset => asset.Identity == uri).Select(asset => (root, asset))).FirstOrDefault();
 
-    private (Root root, AssetRecord asset) FindKey(string key)
+    private (Root Root, AssetRecord Asset) FindKey(string key)
         => this.roots.AsEnumerable().Reverse().SelectMany(root => root.Assets.Where(asset => string.Equals(asset.Cooked?.AssetKey.ToString(), key, StringComparison.OrdinalIgnoreCase)).Select(asset => (root, asset))).FirstOrDefault();
-
-    /// <summary>A declared library that could not be read.</summary>
-    /// <param name="Name">The library's mount name.</param>
-    /// <param name="Path">The library's folder or pak file.</param>
-    /// <param name="Reason">Why it could not be read.</param>
-    public sealed record UnreadableLibrary(string Name, string Path, string Reason);
-
-    /// <summary>A library asset preferred over the project's source, in the root that holds it.</summary>
-    /// <param name="CookedRoot">The physical cooked root.</param>
-    /// <param name="Asset">The asset's index entry.</param>
-    public sealed record PreferredLibraryAsset(string CookedRoot, AssetRecord Asset);
 
     // Every runtime mounts the engine content pak as its permanent base, so it never joins publication bindings.
     private async Task AddEngineContentAsync(IEngineContentPak engineContent, CancellationToken cancellationToken)
@@ -498,6 +491,18 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
         return new(name, path.FullPath, records, document.CatalogDigest, Reader: null) { SourceKey = document.SourceIdentity, Dependencies = metadata };
     }
 
+    /// <summary>A declared library that could not be read.</summary>
+    /// <param name="Name">The library's mount name.</param>
+    /// <param name="Path">The library's folder or pak file.</param>
+    /// <param name="Reason">Why it could not be read.</param>
+    public sealed record UnreadableLibrary(string Name, string Path, string Reason);
+
+    /// <summary>A library asset preferred over the project's source, in the root that holds it.</summary>
+    /// <param name="CookedRoot">The physical cooked root.</param>
+    /// <param name="Asset">The asset's index entry.</param>
+    /// <param name="Fingerprint">The digest of the root's index, which identifies its content.</param>
+    public sealed record PreferredLibraryAsset(string CookedRoot, AssetRecord Asset, string Fingerprint);
+
     /// <summary>One library: a declared loose cooked folder, a declared pak file, or the engine content pak.</summary>
     /// <param name="Name">The library's name: a declared mount, or the engine mount.</param>
     /// <param name="Path">The physical container.</param>
@@ -518,5 +523,22 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
         public PakReadLease? PakLease { get; init; }
 
         public CookedDependencyReport? Dependencies { get; set; }
+    }
+
+    /// <summary>What one reference expansion has selected so far, and how it inspects libraries.</summary>
+    /// <param name="Consumer">The source whose dependency closure is being captured.</param>
+    /// <param name="Inspector">The owned cook's native decoder, or null for cached status reads.</param>
+    /// <param name="OperationRoot">Private native scratch space.</param>
+    /// <param name="Artifacts">Borrowed native artifact ownership.</param>
+    private sealed record ReferenceExpansion(ContentCookInput Consumer, ICookedDependencyInspector? Inspector, string OperationRoot, Oxygen.Managed.Core.Compatibility.NativeArtifactLease? Artifacts)
+    {
+        /// <summary>Gets the project sources the references select.</summary>
+        public Dictionary<AssetPath, ContentCookInput> Projects { get; } = [];
+
+        /// <summary>Gets the imported outputs among those sources.</summary>
+        public HashSet<AssetPath> ImportedOutputs { get; } = [];
+
+        /// <summary>Gets the references that could not be satisfied.</summary>
+        public List<DiagnosticRecord> Diagnostics { get; } = [];
     }
 }

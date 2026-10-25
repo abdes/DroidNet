@@ -37,67 +37,13 @@ public sealed partial class ContentPipelineService : IGeometrySurfaceProvider
         }
 
         using var publicationRead = await this.publication.AcquireReadAsync(project, token).ConfigureAwait(false);
-        var prior = publicationRead.ProductState;
-
-        using var libraries = await CookedLibraryReadSet.AcquireAsync(project, this.engineContent, token, uri => ImportedOutputs.ResolveOutput(project, uri, ContentCookInputRole.Dependency), [.. prior.ProducedAssets]).ConfigureAwait(false);
-        var operationRoot = Path.Combine(project.ProjectRoot.FullPath, ".build", "inspection");
+        using var libraries = await CookedLibraryReadSet.AcquireAsync(project, this.engineContent, token, uri => ImportedOutputs.ResolveOutput(project, uri, ContentCookInputRole.Dependency), [.. publicationRead.ProductState.ProducedAssets]).ConfigureAwait(false);
+        var read = new GeometryRead(project, geometryUri, inspector, Path.Combine(project.ProjectRoot.FullPath, ".build", "inspection"));
         try
         {
-            if (libraries.FindPreferredAsset(geometryUri) is { } library)
-            {
-                await libraries.ValidateNativeAsync(this.engineContentPipelineApi, token).ConfigureAwait(false);
-                var native = library.Asset.Cooked;
-                if (native is null || native.AssetType != 2 || native.VirtualPath is not { } virtualPath)
-                {
-                    return null;
-                }
-
-                var report = await inspector.InspectGeometryAsync(operationRoot, library.CookedRoot, virtualPath.VirtualPath, token).ConfigureAwait(false);
-                token.ThrowIfCancellationRequested();
-                return VerifyInventoryKey(report.SingleOrDefault(geometryUri), native.AssetKey.ToString());
-            }
-
-            var status = (await this.statusReader.ReadAsync(project, publicationRead, [geometryUri], token).ConfigureAwait(false)).Single();
-            if (!HasCurrentGeometryOutput(status))
-            {
-                return null;
-            }
-
-            var matches = status.Outputs.Where(output => output.Kind == ContentCookAssetKind.Geometry
-                && (output.CookedAssetUri == geometryUri || output.SourceAssetUri == geometryUri)).Take(2).ToArray();
-            if (matches.Length != 1)
-            {
-                return null;
-            }
-
-            var selected = matches[0];
-            var owner = prior.Products.SelectMany(static product => product.Outputs).SingleOrDefault(output => output.Asset == selected);
-            var expectedRoot = owner is null ? null : prior.Roots.FirstOrDefault(root => string.Equals(root.Mount, owner.RootMount, StringComparison.Ordinal));
-            if (owner is null || expectedRoot is null) { return null; }
-            var cookedRoot = publicationRead.FindProjectRoot(owner.RootMount)?.FullPath
-                ?? throw new InvalidDataException("Geometry output has no selected generation.");
-            await using var files = await CookOutputReadLease.AcquireAsync(cookedRoot, token).ConfigureAwait(false);
-            var inventory = await files.ReadInventoryAsync(this.engineContentPipelineApi, token).ConfigureAwait(false);
-            if (!expectedRoot.Matches(inventory) || !inventory.IsValid) { return null; }
-            var indexed = inventory.Assets.SingleOrDefault(asset => string.Equals(asset.VirtualPath, selected.VirtualPath, StringComparison.Ordinal));
-            if (indexed is null) { return null; }
-            var expectedKey = indexed.Key.ToString();
-            CookedGeometryReport geometryReport;
-            try
-            {
-                geometryReport = await inspector.InspectGeometryAsync(operationRoot, cookedRoot, selected.VirtualPath, token).ConfigureAwait(false);
-            }
-            catch (ContentPipelineTerminationException failure)
-            {
-                await failure.DrainCompletion.ConfigureAwait(false);
-                throw;
-            }
-
-            _ = files.GetFiles();
-            var latest = (await this.statusReader.ReadAsync(project, publicationRead, [geometryUri], token).ConfigureAwait(false)).Single();
-            token.ThrowIfCancellationRequested();
-            return HasCurrentGeometryOutput(latest) && latest.Outputs.Contains(selected)
-                ? VerifyInventoryKey(geometryReport.SingleOrDefault(geometryUri), expectedKey) : null;
+            return libraries.FindPreferredAsset(geometryUri) is { } library
+                ? await this.ReadLibraryGeometryAsync(read, libraries, library, token).ConfigureAwait(false)
+                : await this.ReadProjectGeometryAsync(read, publicationRead, token).ConfigureAwait(false);
         }
         catch (ContentPipelineTerminationException failure)
         {
@@ -106,7 +52,7 @@ public sealed partial class ContentPipelineService : IGeometrySurfaceProvider
         }
     }
 
-    private static bool HasCurrentGeometryOutput(AssetCookStatus status)
+    private static bool HasCurrentOutput(AssetCookStatus status)
         => status.Freshness == AssetCookFreshness.Current && status.HasAvailableOutput && !status.HasUnsavedChanges;
 
     private static GeometrySurfaceMetadata? VerifyInventoryKey(GeometrySurfaceMetadata? metadata, string expectedIndexKey)
@@ -118,4 +64,73 @@ public sealed partial class ContentPipelineService : IGeometrySurfaceProvider
 
         return metadata;
     }
+
+    private async Task<GeometrySurfaceMetadata?> ReadLibraryGeometryAsync(GeometryRead read, CookedLibraryReadSet libraries, CookedLibraryReadSet.PreferredLibraryAsset library, CancellationToken token)
+    {
+        await libraries.ValidateNativeAsync(this.engineContentPipelineApi, token).ConfigureAwait(false);
+        var native = library.Asset.Cooked;
+        if (native is null || native.AssetType != 2 || native.VirtualPath is not { } virtualPath)
+        {
+            return null;
+        }
+
+        var report = await read.Inspector.InspectGeometryAsync(read.OperationRoot, library.CookedRoot, virtualPath.VirtualPath, token).ConfigureAwait(false);
+        token.ThrowIfCancellationRequested();
+        return VerifyInventoryKey(report.SingleOrDefault(read.GeometryUri), native.AssetKey.ToString());
+    }
+
+    private async Task<GeometrySurfaceMetadata?> ReadProjectGeometryAsync(GeometryRead read, CookPublicationReadLease publicationRead, CancellationToken token)
+    {
+        var status = (await this.statusReader.ReadAsync(read.Project, publicationRead, [read.GeometryUri], token).ConfigureAwait(false)).Single();
+        if (!HasCurrentOutput(status))
+        {
+            return null;
+        }
+
+        var matches = status.Outputs.Where(output => output.Kind == ContentCookAssetKind.Geometry
+            && (output.CookedAssetUri == read.GeometryUri || output.SourceAssetUri == read.GeometryUri)).Take(2).ToArray();
+        var prior = publicationRead.ProductState;
+        var owner = matches.Length == 1 ? prior.Products.SelectMany(static product => product.Outputs).SingleOrDefault(output => output.Asset == matches[0]) : null;
+        var expectedRoot = owner is null ? null : prior.Roots.FirstOrDefault(root => string.Equals(root.Mount, owner.RootMount, StringComparison.Ordinal));
+        if (owner is null || expectedRoot is null)
+        {
+            return null;
+        }
+
+        var selected = matches[0];
+        var cookedRoot = publicationRead.FindProjectRoot(owner.RootMount)?.FullPath
+            ?? throw new InvalidDataException("Geometry output has no selected generation.");
+        var outputs = await CookOutputReadLease.AcquireAsync(cookedRoot, token).ConfigureAwait(false);
+        await using var lifetime = outputs.ConfigureAwait(false);
+        var inventory = await outputs.ReadInventoryAsync(this.engineContentPipelineApi, token).ConfigureAwait(false);
+        var indexed = expectedRoot.Matches(inventory) && inventory.IsValid
+            ? inventory.Assets.SingleOrDefault(asset => string.Equals(asset.VirtualPath, selected.VirtualPath, StringComparison.Ordinal))
+            : null;
+        if (indexed is null)
+        {
+            return null;
+        }
+
+        CookedGeometryReport geometryReport;
+        try
+        {
+            geometryReport = await read.Inspector.InspectGeometryAsync(read.OperationRoot, cookedRoot, selected.VirtualPath, token).ConfigureAwait(false);
+        }
+        catch (ContentPipelineTerminationException failure)
+        {
+            // The native reader drains before the read lease releases the root's files.
+            await failure.DrainCompletion.ConfigureAwait(false);
+            throw;
+        }
+
+        _ = outputs.GetFiles();
+        var latest = (await this.statusReader.ReadAsync(read.Project, publicationRead, [read.GeometryUri], token).ConfigureAwait(false)).Single();
+        token.ThrowIfCancellationRequested();
+        return HasCurrentOutput(latest) && latest.Outputs.Contains(selected)
+            ? VerifyInventoryKey(geometryReport.SingleOrDefault(read.GeometryUri), indexed.Key.ToString())
+            : null;
+    }
+
+    /// <summary>One surface read: the geometry and the native reader.</summary>
+    private sealed record GeometryRead(ProjectContext Project, AssetPath GeometryUri, ICookedGeometryInspector Inspector, string OperationRoot);
 }

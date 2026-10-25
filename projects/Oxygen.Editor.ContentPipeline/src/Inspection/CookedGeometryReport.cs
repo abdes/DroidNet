@@ -14,8 +14,6 @@ namespace Oxygen.Editor.ContentPipeline.Inspection;
 /// <summary>Schema-validated native inventories, without managed identity or hash generation.</summary>
 public sealed class CookedGeometryReport
 {
-    private const string LodPolicySchemaFileName = "oxygen.lod-policy.schema.json";
-
     private static readonly Lazy<JsonSchema> Schema = new(LoadSchema);
     private readonly ImmutableDictionary<Guid, Inventory> geometries;
 
@@ -32,12 +30,12 @@ public sealed class CookedGeometryReport
             throw new InvalidDataException("The native geometry report does not match its schema.");
         }
 
-        var geometries = ImmutableDictionary.CreateBuilder<Guid, Inventory>();
+        var inventories = ImmutableDictionary.CreateBuilder<Guid, Inventory>();
         foreach (var row in document.RootElement.GetProperty("geometries").EnumerateArray())
         {
             var key = row.GetProperty("geometry_asset_key").GetGuid();
             var ids = new HashSet<Guid>();
-            var locations = new HashSet<(uint lod, uint submesh)>();
+            var locations = new HashSet<(uint Lod, uint Submesh)>();
             var surfaces = ImmutableArray.CreateBuilder<GeometrySurface>();
             foreach (var surface in row.GetProperty("surfaces").EnumerateArray())
             {
@@ -62,13 +60,13 @@ public sealed class CookedGeometryReport
                     bindings));
             }
 
-            if (!geometries.TryAdd(key, new(row.GetProperty("layout_revision").GetString()!, surfaces.ToImmutable(), ReadLodPolicy(row.GetProperty("lod_policy")))))
+            if (!inventories.TryAdd(key, new(row.GetProperty("layout_revision").GetString()!, surfaces.ToImmutable(), ReadLodPolicy(row.GetProperty("lod_policy")))))
             {
                 throw new InvalidDataException("The native geometry report contains duplicate asset keys.");
             }
         }
 
-        return new(geometries.ToImmutable());
+        return new(inventories.ToImmutable());
     }
 
     /// <summary>Finds the exact native key while preserving the requested authored URI.</summary>
@@ -102,25 +100,7 @@ public sealed class CookedGeometryReport
         }
     }
 
-    // The report's schemas live in their own registry: the process-wide one may already hold another build of the LOD
-    // policy schema under its URI, and a second registration there is refused.
-    private static JsonSchema LoadSchema()
-    {
-        var options = new BuildOptions { SchemaRegistry = new SchemaRegistry() };
-        options.SchemaRegistry.Fetch = static (uri, _) =>
-            string.Equals(Path.GetFileName(uri.LocalPath), LodPolicySchemaFileName, StringComparison.Ordinal)
-                ? JsonSchema.FromText(ReadSchemaResource(LodPolicySchemaFileName), new BuildOptions { SchemaRegistry = new SchemaRegistry() })
-                : null;
-        return JsonSchema.FromText(ReadSchemaResource("oxygen.cooked-geometries.schema.json"), options);
-    }
-
-    private static string ReadSchemaResource(string fileName)
-    {
-        using var stream = typeof(CookedGeometryReport).Assembly.GetManifestResourceStream(fileName)
-            ?? throw new InvalidOperationException($"The native geometry metadata schema '{fileName}' is missing.");
-        using var reader = new StreamReader(stream);
-        return reader.ReadToEnd();
-    }
+    private static JsonSchema LoadSchema() => CookedReportSchemas.Load("oxygen.cooked-geometries.schema.json");
 
     private sealed record Inventory(string LayoutRevision, ImmutableArray<GeometrySurface> Surfaces, LodPolicy LodPolicy);
 }
