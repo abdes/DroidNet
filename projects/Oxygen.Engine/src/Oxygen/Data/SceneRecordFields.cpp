@@ -6,15 +6,19 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <concepts>
 #include <cstdint>
 #include <iterator>
+#include <optional>
 #include <utility>
 #include <variant>
 
 #include <glm/gtc/quaternion.hpp>
+#include <glm/mat3x3.hpp>
 #include <glm/vec3.hpp>
 
+#include <Oxygen/Core/Types/CameraAspectMode.h>
 #include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/Data/SceneRecordFields.h>
 #include <Oxygen/Data/Schema/Generated.SceneComponents.h>
@@ -136,6 +140,70 @@ namespace {
       return SetFloat(common.exposure_compensation_ev, value);
     }
     return false;
+  }
+
+  //! A bool stored as 0 or 1.
+  template <std::unsigned_integral T> auto Flag(const T stored) -> FieldValue
+  {
+    return stored != T { 0 };
+  }
+
+  //! An int32, or an enum member's wire value, stored in a field of type `T`.
+  template <std::integral T> auto Integer(const T stored) -> FieldValue
+  {
+    return static_cast<std::int32_t>(stored);
+  }
+
+  //! The source mode of an inheritable flag: Inherit, a local on (Shown, On)
+  //! or a local off (Hidden, Off).
+  auto FlagSource(const NodeRecord& record, const uint32_t mask) -> FieldValue
+  {
+    using schema::VisibilitySource;
+    if ((record.inherited_flags & mask) != 0U) {
+      return Integer(std::to_underlying(VisibilitySource::kInherit));
+    }
+    return Integer(std::to_underlying((record.node_flags & mask) != 0U
+        ? VisibilitySource::kShown
+        : VisibilitySource::kHidden));
+  }
+
+  //! Reads a field every light kind shares; `Field` is a light field set,
+  //! whose shared fields have the same names and ids.
+  template <typename Field>
+  auto ReadLightCommon(const LightCommonRecord& common, const Field field)
+    -> std::optional<FieldValue>
+  {
+    if (field == Field::kColorR) {
+      return common.color_rgb[0];
+    }
+    if (field == Field::kColorG) {
+      return common.color_rgb[1];
+    }
+    if (field == Field::kColorB) {
+      return common.color_rgb[2];
+    }
+    if (field == Field::kAffectsWorld) {
+      return Flag(common.affects_world);
+    }
+    if (field == Field::kCastsShadows) {
+      return Flag(common.casts_shadows);
+    }
+    if (field == Field::kShadowBias) {
+      return common.shadow.bias;
+    }
+    if (field == Field::kShadowNormalBias) {
+      return common.shadow.normal_bias;
+    }
+    if (field == Field::kContactShadows) {
+      return Flag(common.shadow.contact_shadows);
+    }
+    if (field == Field::kShadowResolutionHint) {
+      return Integer(common.shadow.resolution_hint);
+    }
+    if (field == Field::kExposureCompensation) {
+      return common.exposure_compensation_ev;
+    }
+    return std::nullopt;
   }
 
 } // namespace
@@ -444,6 +512,271 @@ auto WriteField(LocalFogVolumeRecord& record,
   return false;
 }
 
+auto ReadField(const NodeRecord& record, const schema::TransformField field)
+  -> std::optional<FieldValue>
+{
+  using schema::TransformField;
+  switch (field) {
+  case TransformField::kPositionX:
+    return record.translation[0];
+  case TransformField::kPositionY:
+    return record.translation[1];
+  case TransformField::kPositionZ:
+    return record.translation[2];
+  case TransformField::kRotationXDegrees:
+  case TransformField::kRotationYDegrees:
+  case TransformField::kRotationZDegrees:
+    // The record holds a quaternion: QuaternionToEulerYxzDegrees reads it
+    // whole.
+    return std::nullopt;
+  case TransformField::kScaleX:
+    return record.scale[0];
+  case TransformField::kScaleY:
+    return record.scale[1];
+  case TransformField::kScaleZ:
+    return record.scale[2];
+  case TransformField::kCount:
+    break;
+  }
+  return std::nullopt;
+}
+
+auto ReadField(const NodeRecord& record, const schema::NodeField field)
+  -> std::optional<FieldValue>
+{
+  using schema::NodeField;
+  switch (field) {
+  case NodeField::kVisible:
+    return FlagSource(record, kSceneNodeFlag_Visible);
+  case NodeField::kCastsShadows:
+    return FlagSource(record, kSceneNodeFlag_CastsShadows);
+  case NodeField::kReceivesShadows:
+    return FlagSource(record, kSceneNodeFlag_ReceivesShadows);
+  case NodeField::kStatic:
+    return Flag(record.node_flags & kSceneNodeFlag_Static);
+  case NodeField::kRayCastingSelectable:
+    return Flag(record.node_flags & kSceneNodeFlag_RayCastingSelectable);
+  case NodeField::kIgnoreParentTransform:
+    return Flag(record.node_flags & kSceneNodeFlag_IgnoreParentTransform);
+  case NodeField::kCount:
+    break;
+  }
+  return std::nullopt;
+}
+
+auto ReadField(const PerspectiveCameraRecord& record,
+  const schema::PerspectiveCameraField field) -> std::optional<FieldValue>
+{
+  using schema::PerspectiveCameraField;
+  switch (field) {
+  case PerspectiveCameraField::kFieldOfViewYRadians:
+    return record.fov_y;
+  case PerspectiveCameraField::kAspectRatio:
+    return record.aspect_ratio;
+  case PerspectiveCameraField::kNearPlane:
+    return record.near_plane;
+  case PerspectiveCameraField::kFarPlane:
+    return record.far_plane;
+  case PerspectiveCameraField::kApertureF:
+    return record.aperture_f;
+  case PerspectiveCameraField::kShutterRate:
+    return record.shutter_rate;
+  case PerspectiveCameraField::kIso:
+    return record.iso;
+  case PerspectiveCameraField::kAspectMode:
+    return Integer(std::to_underlying(record.aspect_mode));
+  case PerspectiveCameraField::kCount:
+    break;
+  }
+  return std::nullopt;
+}
+
+auto ReadField(const OrthographicCameraRecord& record,
+  const schema::OrthographicCameraField field) -> std::optional<FieldValue>
+{
+  using schema::OrthographicCameraField;
+  // The volume is a half height and an aspect ratio around its centre.
+  const auto half_height = (0.5F * record.top) - (0.5F * record.bottom);
+  const auto half_width = (0.5F * record.right) - (0.5F * record.left);
+  switch (field) {
+  case OrthographicCameraField::kOrthographicSize:
+    return half_height;
+  case OrthographicCameraField::kAspectRatio:
+    return half_width / half_height;
+  case OrthographicCameraField::kNearPlane:
+    return record.near_plane;
+  case OrthographicCameraField::kFarPlane:
+    return record.far_plane;
+  case OrthographicCameraField::kApertureF:
+    return record.aperture_f;
+  case OrthographicCameraField::kShutterRate:
+    return record.shutter_rate;
+  case OrthographicCameraField::kIso:
+    return record.iso;
+  case OrthographicCameraField::kAspectMode:
+    return Integer(std::to_underlying(record.aspect_mode));
+  case OrthographicCameraField::kCount:
+    break;
+  }
+  return std::nullopt;
+}
+
+auto ReadField(const DirectionalLightRecord& record,
+  const schema::DirectionalLightField field) -> std::optional<FieldValue>
+{
+  using schema::DirectionalLightField;
+  switch (field) {
+  case DirectionalLightField::kColorR:
+  case DirectionalLightField::kColorG:
+  case DirectionalLightField::kColorB:
+  case DirectionalLightField::kAffectsWorld:
+  case DirectionalLightField::kCastsShadows:
+  case DirectionalLightField::kShadowBias:
+  case DirectionalLightField::kShadowNormalBias:
+  case DirectionalLightField::kContactShadows:
+  case DirectionalLightField::kShadowResolutionHint:
+  case DirectionalLightField::kExposureCompensation:
+    return ReadLightCommon(record.common, field);
+  case DirectionalLightField::kIntensityLux:
+    return record.intensity_lux;
+  case DirectionalLightField::kAngularSizeRadians:
+    return record.angular_size_radians;
+  case DirectionalLightField::kCascadeCount:
+    return Integer(record.cascade_count);
+  case DirectionalLightField::kSplitMode:
+    return Integer(record.split_mode);
+  case DirectionalLightField::kMaxShadowDistance:
+    return record.max_shadow_distance;
+  case DirectionalLightField::kCascadeDistance0:
+    return record.cascade_distances[0];
+  case DirectionalLightField::kCascadeDistance1:
+    return record.cascade_distances[1];
+  case DirectionalLightField::kCascadeDistance2:
+    return record.cascade_distances[2];
+  case DirectionalLightField::kCascadeDistance3:
+    return record.cascade_distances[3];
+  case DirectionalLightField::kDistributionExponent:
+    return record.distribution_exponent;
+  case DirectionalLightField::kTransitionFraction:
+    return record.transition_fraction;
+  case DirectionalLightField::kDistanceFadeoutFraction:
+    return record.distance_fadeout_fraction;
+  case DirectionalLightField::kAtmosphereLightSlot:
+    return Integer(record.atmosphere_light_slot);
+  case DirectionalLightField::kUsePerPixelAtmosphereTransmittance:
+    return Flag(record.use_per_pixel_atmosphere_transmittance);
+  case DirectionalLightField::kDiskScaleR:
+    return record.atmosphere_disk_luminance_scale_rgb[0];
+  case DirectionalLightField::kDiskScaleG:
+    return record.atmosphere_disk_luminance_scale_rgb[1];
+  case DirectionalLightField::kDiskScaleB:
+    return record.atmosphere_disk_luminance_scale_rgb[2];
+  case DirectionalLightField::kCount:
+    break;
+  }
+  return std::nullopt;
+}
+
+auto ReadField(const PointLightRecord& record,
+  const schema::LocalLightField field) -> std::optional<FieldValue>
+{
+  using schema::LocalLightField;
+  switch (field) {
+  case LocalLightField::kColorR:
+  case LocalLightField::kColorG:
+  case LocalLightField::kColorB:
+  case LocalLightField::kAffectsWorld:
+  case LocalLightField::kCastsShadows:
+  case LocalLightField::kShadowBias:
+  case LocalLightField::kShadowNormalBias:
+  case LocalLightField::kContactShadows:
+  case LocalLightField::kShadowResolutionHint:
+  case LocalLightField::kExposureCompensation:
+    return ReadLightCommon(record.common, field);
+  case LocalLightField::kLuminousFluxLm:
+    return record.luminous_flux_lm;
+  case LocalLightField::kRange:
+    return record.range;
+  case LocalLightField::kSourceRadius:
+    return record.source_radius;
+  case LocalLightField::kInnerConeAngleRadians:
+  case LocalLightField::kOuterConeAngleRadians:
+    // A point light has no cone.
+  case LocalLightField::kCount:
+    break;
+  }
+  return std::nullopt;
+}
+
+auto ReadField(const SpotLightRecord& record,
+  const schema::LocalLightField field) -> std::optional<FieldValue>
+{
+  using schema::LocalLightField;
+  switch (field) {
+  case LocalLightField::kColorR:
+  case LocalLightField::kColorG:
+  case LocalLightField::kColorB:
+  case LocalLightField::kAffectsWorld:
+  case LocalLightField::kCastsShadows:
+  case LocalLightField::kShadowBias:
+  case LocalLightField::kShadowNormalBias:
+  case LocalLightField::kContactShadows:
+  case LocalLightField::kShadowResolutionHint:
+  case LocalLightField::kExposureCompensation:
+    return ReadLightCommon(record.common, field);
+  case LocalLightField::kLuminousFluxLm:
+    return record.luminous_flux_lm;
+  case LocalLightField::kRange:
+    return record.range;
+  case LocalLightField::kSourceRadius:
+    return record.source_radius;
+  case LocalLightField::kInnerConeAngleRadians:
+    return record.inner_cone_angle_radians;
+  case LocalLightField::kOuterConeAngleRadians:
+    return record.outer_cone_angle_radians;
+  case LocalLightField::kCount:
+    break;
+  }
+  return std::nullopt;
+}
+
+auto ReadField(const LocalFogVolumeRecord& record,
+  const schema::LocalFogVolumeField field) -> std::optional<FieldValue>
+{
+  using schema::LocalFogVolumeField;
+  switch (field) {
+  case LocalFogVolumeField::kEnabled:
+    return Flag(record.enabled);
+  case LocalFogVolumeField::kRadialFogExtinction:
+    return record.radial_fog_extinction;
+  case LocalFogVolumeField::kHeightFogExtinction:
+    return record.height_fog_extinction;
+  case LocalFogVolumeField::kHeightFogFalloff:
+    return record.height_fog_falloff;
+  case LocalFogVolumeField::kHeightFogOffset:
+    return record.height_fog_offset;
+  case LocalFogVolumeField::kFogPhaseG:
+    return record.fog_phase_g;
+  case LocalFogVolumeField::kFogAlbedoR:
+    return record.fog_albedo[0];
+  case LocalFogVolumeField::kFogAlbedoG:
+    return record.fog_albedo[1];
+  case LocalFogVolumeField::kFogAlbedoB:
+    return record.fog_albedo[2];
+  case LocalFogVolumeField::kFogEmissiveR:
+    return record.fog_emissive[0];
+  case LocalFogVolumeField::kFogEmissiveG:
+    return record.fog_emissive[1];
+  case LocalFogVolumeField::kFogEmissiveB:
+    return record.fog_emissive[2];
+  case LocalFogVolumeField::kSortPriority:
+    return Integer(record.sort_priority);
+  case LocalFogVolumeField::kCount:
+    break;
+  }
+  return std::nullopt;
+}
+
 auto WriteRotation(NodeRecord& record, const Quaternion& rotation) noexcept
   -> void
 {
@@ -460,6 +793,29 @@ auto EulerYxzDegreesToQuaternion(const std::array<float, 3>& degrees) noexcept
     * glm::angleAxis(radians.x, glm::vec3 { 1.0F, 0.0F, 0.0F })
     * glm::angleAxis(radians.z, glm::vec3 { 0.0F, 0.0F, 1.0F });
   return { rotation.x, rotation.y, rotation.z, rotation.w };
+}
+
+auto QuaternionToEulerYxzDegrees(const Quaternion& rotation) noexcept
+  -> std::array<float, 3>
+{
+  // R = Ry(yaw) * Rx(pitch) * Rz(roll); glm matrices index [column][row].
+  const auto matrix = glm::mat3_cast(
+    glm::quat { rotation[3], rotation[0], rotation[1], rotation[2] });
+  // The pitch from its sine and cosine: asin loses precision near ±90°.
+  const auto cos_pitch = std::hypot(matrix[0][1], matrix[1][1]);
+  const auto pitch = std::atan2(-matrix[2][1], cos_pitch);
+  auto yaw = 0.0F;
+  auto roll = 0.0F;
+  // Within 0.1° of ±90° pitch, float noise outweighs the yaw and roll split.
+  constexpr auto kGimbalLock = 0.0015F;
+  if (cos_pitch > kGimbalLock) {
+    yaw = std::atan2(matrix[2][0], matrix[2][2]);
+    roll = std::atan2(matrix[0][1], matrix[1][1]);
+  } else {
+    yaw = std::atan2(-matrix[0][2], matrix[0][0]);
+  }
+  const auto degrees = glm::degrees(glm::vec3 { pitch, yaw, roll });
+  return { degrees.x, degrees.y, degrees.z };
 }
 
 } // namespace oxygen::data::pak::world

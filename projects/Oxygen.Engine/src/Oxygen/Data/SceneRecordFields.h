@@ -8,6 +8,7 @@
 
 #include <array>
 #include <cstdint>
+#include <optional>
 #include <variant>
 
 #include <Oxygen/Data/PakFormat_world.h>
@@ -55,6 +56,34 @@ OXGN_DATA_NDAPI auto WriteField(SpotLightRecord& record,
 OXGN_DATA_NDAPI auto WriteField(LocalFogVolumeRecord& record,
   schema::LocalFogVolumeField field, const FieldValue& value) -> bool;
 
+//! Reads one field of a scene component record.
+/*!
+ The inverse of `WriteField`: each cooked component record has one reader per
+ field set its components use, so a value reported from a record is the value
+ an authored property or a change wrote into it.
+
+ A reader returns nullopt when the record holds no such field (a point light
+ has no cone, the rotation fields reach the record only as a quaternion). A
+ node flag source reads as its `VisibilitySource` or `ShadowSource` wire
+ value, from the tri-state rule of `NodeRecord`.
+*/
+OXGN_DATA_NDAPI auto ReadField(const NodeRecord& record,
+  schema::TransformField field) -> std::optional<FieldValue>;
+OXGN_DATA_NDAPI auto ReadField(const NodeRecord& record,
+  schema::NodeField field) -> std::optional<FieldValue>;
+OXGN_DATA_NDAPI auto ReadField(const PerspectiveCameraRecord& record,
+  schema::PerspectiveCameraField field) -> std::optional<FieldValue>;
+OXGN_DATA_NDAPI auto ReadField(const OrthographicCameraRecord& record,
+  schema::OrthographicCameraField field) -> std::optional<FieldValue>;
+OXGN_DATA_NDAPI auto ReadField(const DirectionalLightRecord& record,
+  schema::DirectionalLightField field) -> std::optional<FieldValue>;
+OXGN_DATA_NDAPI auto ReadField(const PointLightRecord& record,
+  schema::LocalLightField field) -> std::optional<FieldValue>;
+OXGN_DATA_NDAPI auto ReadField(const SpotLightRecord& record,
+  schema::LocalLightField field) -> std::optional<FieldValue>;
+OXGN_DATA_NDAPI auto ReadField(const LocalFogVolumeRecord& record,
+  schema::LocalFogVolumeField field) -> std::optional<FieldValue>;
+
 //! A rotation quaternion, (x, y, z, w).
 using Quaternion = std::array<float, 4>;
 
@@ -68,5 +97,12 @@ OXGN_DATA_API auto WriteRotation(
 //! `euler-yxz-degrees-to-quat` encoding).
 OXGN_DATA_NDAPI auto EulerYxzDegreesToQuaternion(
   const std::array<float, 3>& degrees) noexcept -> Quaternion;
+
+//! The editor's Y-X-Z Euler angles of `rotation`, in degrees, ordered as
+//! `EulerYxzDegreesToQuaternion` takes them: pitch about X, yaw about Y, roll
+//! about Z. At ±90° pitch, where yaw and roll turn about one axis, the roll is
+//! zero.
+OXGN_DATA_NDAPI auto QuaternionToEulerYxzDegrees(
+  const Quaternion& rotation) noexcept -> std::array<float, 3>;
 
 } // namespace oxygen::data::pak::world

@@ -1,12 +1,13 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://oxygen-engine.org/schemas/oxygen.cooked-scenes.schema.json",
-  "title": "Oxygen Cooked Scene Metadata",
+  "title": "Oxygen Composed Cooked Scenes",
+  "description": "Each cooked scene composed: every node, owned and instanced, with its values in the scene schema's units and the occurrence that supplies each value.",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema", "source_key", "complete", "scenes"],
   "properties": {
-    "schema": { "const": "oxygen.cooked-scenes.v1" },
+    "schema": { "const": "oxygen.cooked-scenes.v2" },
     "source_key": { "$ref": "#/definitions/key" },
     "complete": { "type": "boolean" },
     "scenes": {
@@ -19,8 +20,10 @@
           "virtual_path",
           "descriptor_version",
           "complete",
+          "occurrences",
           "nodes",
-          "perspective_cameras"
+          "unresolved",
+          "issues"
         ],
         "properties": {
           "asset_key": { "$ref": "#/definitions/key" },
@@ -32,59 +35,33 @@
           },
           "complete": { "type": "boolean" },
           "diagnostic": { "type": "string", "minLength": 1 },
-          "perspective_cameras": {
+          "occurrences": {
+            "description": "The scene itself, then one per instance, depth first.",
             "type": "array",
-            "items": {
-              "type": "object",
-              "additionalProperties": false,
-              "required": [
-                "node_index",
-                "aspect_mode",
-                "aspect_ratio",
-                "fov_y",
-                "near_plane",
-                "far_plane"
-              ],
-              "properties": {
-                "node_index": { "type": "integer", "minimum": 0 },
-                "aspect_mode": { "enum": ["auto", "fixed"] },
-                "aspect_ratio": { "type": "number", "exclusiveMinimum": 0 },
-                "fov_y": { "type": "number", "exclusiveMinimum": 0 },
-                "near_plane": { "type": "number", "exclusiveMinimum": 0 },
-                "far_plane": { "type": "number", "exclusiveMinimum": 0 }
-              }
-            }
+            "items": { "$ref": "#/definitions/occurrence" }
           },
           "nodes": {
+            "description": "The composed tree's nodes, by occurrence, then by index in the defining scene.",
             "type": "array",
-            "items": {
-              "type": "object",
-              "additionalProperties": false,
-              "required": ["index", "node_id", "name", "parent_index", "flags"],
-              "properties": {
-                "index": { "type": "integer", "minimum": 0 },
-                "node_id": { "$ref": "#/definitions/key" },
-                "name": { "type": "string" },
-                "parent_index": { "type": "integer", "minimum": 0 },
-                "flags": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "required": ["visible", "casts_shadows", "receives_shadows"],
-                  "properties": {
-                    "visible": { "enum": ["inherit", "shown", "hidden"] },
-                    "casts_shadows": { "enum": ["inherit", "on", "off"] },
-                    "receives_shadows": { "enum": ["inherit", "on", "off"] }
-                  }
-                }
-              }
-            }
+            "items": { "$ref": "#/definitions/node" }
+          },
+          "unresolved": {
+            "type": "array",
+            "items": { "$ref": "#/definitions/unresolved_change" }
+          },
+          "issues": {
+            "type": "array",
+            "items": { "$ref": "#/definitions/issue" }
           }
         },
         "allOf": [
           {
             "if": { "properties": { "complete": { "const": true } } },
             "then": {
-              "properties": { "descriptor_version": { "type": "integer" } },
+              "properties": {
+                "descriptor_version": { "type": "integer" },
+                "occurrences": { "minItems": 1 }
+              },
               "not": { "required": ["diagnostic"] }
             },
             "else": { "required": ["diagnostic"] }
@@ -97,6 +74,275 @@
     "key": {
       "type": "string",
       "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "position": {
+      "description": "A position in this scene's `nodes` array.",
+      "type": "integer",
+      "minimum": 0
+    },
+    "occurrence_index": {
+      "description": "A position in this scene's `occurrences` array.",
+      "type": "integer",
+      "minimum": 0
+    },
+    "node_path": {
+      "description": "Node IDs below an instance root, shallowest first.",
+      "type": "array",
+      "items": { "$ref": "#/definitions/key" }
+    },
+    "schema_value": {
+      "description": "A value in the scene schema's units: a bool, an integer (an enum is its member's wire value), a number, a vec3, or an asset key.",
+      "oneOf": [
+        { "type": "boolean" },
+        { "type": "number" },
+        {
+          "type": "array",
+          "items": { "type": "number" },
+          "minItems": 3,
+          "maxItems": 3
+        },
+        { "$ref": "#/definitions/key" }
+      ]
+    },
+    "occurrence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scene", "virtual_path", "parent", "instance_root"],
+      "properties": {
+        "scene": { "$ref": "#/definitions/key" },
+        "virtual_path": { "type": ["string", "null"], "pattern": "^/" },
+        "parent": {
+          "oneOf": [
+            { "$ref": "#/definitions/occurrence_index" },
+            { "type": "null" }
+          ]
+        },
+        "instance_root": {
+          "description": "The node of the parent occurrence this occurrence's roots hang under.",
+          "oneOf": [{ "$ref": "#/definitions/position" }, { "type": "null" }]
+        }
+      }
+    },
+    "property": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "override_id", "value", "supplier"],
+      "properties": {
+        "key": { "type": "string", "pattern": "^/" },
+        "override_id": { "type": "integer", "minimum": 1 },
+        "value": { "$ref": "#/definitions/schema_value" },
+        "supplier": { "$ref": "#/definitions/occurrence_index" }
+      }
+    },
+    "component": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "properties"],
+      "properties": {
+        "kind": {
+          "enum": [
+            "transform",
+            "node-flags",
+            "perspective-camera",
+            "orthographic-camera",
+            "directional-light",
+            "point-light",
+            "spot-light",
+            "local-fog-volume"
+          ]
+        },
+        "properties": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/property" }
+        }
+      }
+    },
+    "geometry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["asset_key", "overrides"],
+      "properties": {
+        "asset_key": { "$ref": "#/definitions/key" },
+        "overrides": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["key", "override_id", "part_id", "value", "supplier"],
+            "properties": {
+              "key": { "type": "string", "pattern": "^/" },
+              "override_id": { "type": "integer", "minimum": 1 },
+              "part_id": {
+                "oneOf": [{ "$ref": "#/definitions/key" }, { "type": "null" }]
+              },
+              "value": {
+                "oneOf": [
+                  { "type": "boolean" },
+                  { "$ref": "#/definitions/key" },
+                  {
+                    "$ref": "oxygen.lod-policy.schema.json#/definitions/lod_policy"
+                  }
+                ]
+              },
+              "supplier": { "$ref": "#/definitions/occurrence_index" }
+            }
+          }
+        }
+      }
+    },
+    "script_value": {
+      "oneOf": [
+        { "type": "boolean" },
+        { "type": "number" },
+        { "type": "string" },
+        { "type": "null" },
+        {
+          "type": "array",
+          "items": { "type": "number" },
+          "minItems": 2,
+          "maxItems": 4
+        },
+        {
+          "description": "A node of the supplying scene and the path below it.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["node", "node_path"],
+          "properties": {
+            "node": { "$ref": "#/definitions/key" },
+            "node_path": { "$ref": "#/definitions/node_path" }
+          }
+        }
+      ]
+    },
+    "script": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["slot_id", "script", "execution_order", "parameters"],
+      "properties": {
+        "slot_id": { "$ref": "#/definitions/key" },
+        "script": { "$ref": "#/definitions/key" },
+        "execution_order": { "type": "integer" },
+        "parameters": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["key", "value", "supplier"],
+            "properties": {
+              "key": { "type": "string", "minLength": 1 },
+              "value": { "$ref": "#/definitions/script_value" },
+              "supplier": { "$ref": "#/definitions/occurrence_index" }
+            }
+          }
+        }
+      }
+    },
+    "node": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "occurrence",
+        "index",
+        "node_id",
+        "root",
+        "node_path",
+        "name",
+        "parent",
+        "defining_scene",
+        "components",
+        "scripts"
+      ],
+      "properties": {
+        "occurrence": { "$ref": "#/definitions/occurrence_index" },
+        "index": {
+          "description": "The node's index in its defining scene.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "node_id": { "$ref": "#/definitions/key" },
+        "root": {
+          "description": "The composed scene's node: the node itself, or its outermost instance root.",
+          "$ref": "#/definitions/key"
+        },
+        "node_path": {
+          "description": "Empty for a node of the composed scene.",
+          "$ref": "#/definitions/node_path"
+        },
+        "name": { "type": "string" },
+        "parent": {
+          "oneOf": [{ "$ref": "#/definitions/position" }, { "type": "null" }]
+        },
+        "defining_scene": { "$ref": "#/definitions/key" },
+        "instance": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["source"],
+          "properties": { "source": { "$ref": "#/definitions/key" } }
+        },
+        "components": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/component" }
+        },
+        "geometry": { "$ref": "#/definitions/geometry" },
+        "scripts": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/script" }
+        }
+      }
+    },
+    "unresolved_change": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["supplier", "instance_root", "node_path"],
+      "properties": {
+        "supplier": { "$ref": "#/definitions/occurrence_index" },
+        "instance_root": { "$ref": "#/definitions/position" },
+        "node_path": { "$ref": "#/definitions/node_path" },
+        "property": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["override_id", "key", "part_id"],
+          "properties": {
+            "override_id": { "type": "integer", "minimum": 0 },
+            "key": { "type": ["string", "null"] },
+            "part_id": {
+              "oneOf": [{ "$ref": "#/definitions/key" }, { "type": "null" }]
+            }
+          }
+        },
+        "parameter": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["slot_id", "key"],
+          "properties": {
+            "slot_id": { "$ref": "#/definitions/key" },
+            "key": { "type": "string" }
+          }
+        }
+      },
+      "oneOf": [{ "required": ["property"] }, { "required": ["parameter"] }]
+    },
+    "issue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "occurrence", "node", "scene"],
+      "properties": {
+        "code": {
+          "enum": [
+            "scene.instance.missing",
+            "scene.instance.cycle",
+            "scene.instance.change_invalid",
+            "scene.instance.record_invalid"
+          ]
+        },
+        "occurrence": { "$ref": "#/definitions/occurrence_index" },
+        "node": {
+          "oneOf": [{ "$ref": "#/definitions/position" }, { "type": "null" }]
+        },
+        "scene": {
+          "oneOf": [{ "$ref": "#/definitions/key" }, { "type": "null" }]
+        }
+      }
     }
   }
 }

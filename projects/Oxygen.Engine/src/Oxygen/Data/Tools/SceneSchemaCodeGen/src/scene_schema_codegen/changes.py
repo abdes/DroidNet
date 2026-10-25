@@ -4,7 +4,8 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # ===-----------------------------------------------------------------------===#
 
-"""Renders the encoder and the record appliers of scene changes."""
+"""Renders the encoder, the record appliers and the record readers of scene
+changes."""
 
 # pyright: strict
 
@@ -50,19 +51,12 @@ def render(schema: Schema, source: str) -> str:
     ]
     for record in dict.fromkeys(RECORDS.values()):
         kinds = {kind for kind, name in RECORDS.items() if name == record}
-        lines.extend(
-            [
-                "",
-                *_applier(
-                    record,
-                    [
-                        entry
-                        for entry in overrides
-                        if entry.component.kind in kinds and entry.part is None
-                    ],
-                ),
-            ]
-        )
+        held = [
+            entry
+            for entry in overrides
+            if entry.component.kind in kinds and entry.part is None
+        ]
+        lines.extend(["", *_applier(record, held), "", *_reader(record, held)])
     lines.extend(
         ["", "} // namespace oxygen::data::schema", "", "// clang-format on", ""]
     )
@@ -165,6 +159,41 @@ def _apply(entry: Override) -> str:
         "float": "value.as_float",
     }[prop.type]
     return f"return pak::world::WriteField(record, {fields[0]}, {member});"
+
+
+def _reader(record: str, overrides: list[Override]) -> list[str]:
+    return [
+        f"//! The value of the property `id` names in a {record}, in the",
+        "//! property's schema units; nullopt when the property is not one the",
+        "//! record holds.",
+        "[[nodiscard]] inline auto ReadProperty(",
+        f"  const pak::world::{record}& record, const OverrideId id)",
+        "  -> std::optional<SchemaValue>",
+        "{",
+        "  switch (id) {",
+        *(
+            f"  case OverrideId::k{_name(entry)}: return {_read(entry)};"
+            for entry in overrides
+        ),
+        "  default: break;",
+        "  }",
+        "  return std::nullopt;",
+        "}",
+    ]
+
+
+def _read(entry: Override) -> str:
+    prop = entry.prop
+    wire = entry.component.wire
+    assert wire is not None
+    fields = [f"{wire.field_set}Field::k{field}" for field in prop.fields]
+    if prop.encoding == "euler-yxz-degrees-to-quat":
+        return "detail::ReadRotation(record)"
+    if prop.type == "vec3":
+        return f"detail::ReadVec3(record, std::array {{ {', '.join(fields)} }})"
+    if prop.encoding == "degrees-to-radians":
+        return f"detail::ReadValue(record, {fields[0]}, true)"
+    return f"detail::ReadValue(record, {fields[0]})"
 
 
 def _name(entry: Override) -> str:

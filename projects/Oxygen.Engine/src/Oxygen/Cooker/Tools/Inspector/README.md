@@ -115,15 +115,34 @@ require validation with those roots available; this command does not invent
 missing inventories.
 
 ```powershell
-Oxygen.Cooker.Inspector.exe scenes <cooked_root> --output <scenes.json>
+Oxygen.Cooker.Inspector.exe scenes <cooked_root> --output <scenes.json> [--virtual-path <scene>]
 ```
 
-Writes `oxygen.cooked-scenes.v1` metadata with source identity, scene asset
-keys, virtual paths, descriptor versions, and node identities/names/parent
-indices. The three node flags report authored source choices: visibility is
-`inherit|shown|hidden`; Cast/Receive Shadows are `inherit|on|off`. Root parents
-refer to their own index. These are stored source modes, not runtime-effective
-visibility, lighting eligibility, or rendered results.
+Writes `oxygen.cooked-scenes.v2`: each scene of the root composed, or only the
+scene `--virtual-path` names (an unknown path reports no scene). A scene follows
+its instances through the root's other scenes; a scene without instances
+composes to itself, so every row has one shape:
+
+- `occurrences`: the scene, then one per instance, depth first, each with its
+  parent occurrence and the instance root it hangs under.
+- `nodes`: every node of the composed tree, owned and instanced, with its
+  defining scene and index there, its node ID, the composed scene's node it
+  sits under (`root`, itself for an owned node) and the node path below it,
+  its parent and, on an instance root, the instance's `source`.
+- Per node, each component with every changeable property's value in the scene
+  schema's units (degrees; Euler angles from the cooked quaternion; an enum is
+  its member's wire value, so a flag source is Inherit, Shown/On or
+  Hidden/Off), the geometry with the values it replaces, and the script slots
+  with their parameters. Each value names the `supplier` occurrence: the scene
+  whose change wins, or the defining scene.
+- `unresolved`: the changes whose node path names no node, addressed as their
+  scene made them, and `issues`: missing or unreadable instanced scenes,
+  cycles and changes whose value fails validation.
+
+Values are cooked records with every change applied, not runtime-effective
+visibility, lighting eligibility or rendered results. Composition is the
+engine's own (`Data/SceneComposition.h`), the one the runtime instantiates
+with.
 
 Every scene is parsed with the native loader, without resource loading or
 renderer startup. A malformed or incomplete scene adds a diagnostic scoped to

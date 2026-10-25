@@ -26,8 +26,9 @@ they are versioned. `Schema/Generated.SceneComponents.h` holds:
 
 `Schema/Generated.SceneChanges.h` holds `EncodeChange`, which turns a value in
 schema units into a change value (degrees to radians, Euler angles to a
-quaternion), and one `ApplyChange` per cooked component record, which writes a
-change through the record's hand-written field writer
+quaternion), and, per cooked component record, one `ApplyChange`, which writes a
+change through the record's hand-written field writer, and one `ReadProperty`,
+which reads a property back in schema units through the record's field reader
 ([SceneRecordFields.h](../../SceneRecordFields.h)). The generator maps each
 wired component kind to its record and refuses a wired component without one.
 

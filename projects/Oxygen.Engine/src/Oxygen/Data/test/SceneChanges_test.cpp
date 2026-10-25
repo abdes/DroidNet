@@ -9,9 +9,11 @@
 #include <cstdint>
 #include <numbers>
 #include <optional>
+#include <variant>
 #include <vector>
 
 #include <Oxygen/Data/PakFormat_world.h>
+#include <Oxygen/Data/SceneChangeValues.h>
 #include <Oxygen/Data/SceneRecordDefaults.h>
 #include <Oxygen/Data/SceneRecordFields.h>
 #include <Oxygen/Data/Schema/Generated.SceneChanges.h>
@@ -47,69 +49,88 @@ auto Candidates(const schema::ValueMember member) -> std::vector<SchemaValue>
   return {};
 }
 
-//! Applies `value` to a default record of the wired `component`.
-auto ApplyToRecordOf(const schema::ComponentId component, const OverrideId id,
-  const world::OverrideValue& value) -> bool
+//! Applies `value` to a default record of the wired `component` and reads the
+//! property back; nullopt when the record does not apply it.
+auto ApplyAndRead(const schema::ComponentId component, const OverrideId id,
+  const world::OverrideValue& value) -> std::optional<SchemaValue>
 {
+  const auto round_trip
+    = [&]<typename Record>(Record record) -> std::optional<SchemaValue> {
+    if (!schema::ApplyChange(record, id, value)) {
+      return std::nullopt;
+    }
+    return schema::ReadProperty(record, id);
+  };
   switch (component) {
   case schema::ComponentId::kTransform:
-  case schema::ComponentId::kNode: {
-    auto record = world::NodeRecord {};
-    return schema::ApplyChange(record, id, value);
-  }
-  case schema::ComponentId::kPerspectiveCamera: {
-    auto record = world::MakeDefaultRecord<world::PerspectiveCameraRecord>();
-    return schema::ApplyChange(record, id, value);
-  }
-  case schema::ComponentId::kOrthographicCamera: {
-    auto record = world::MakeDefaultRecord<world::OrthographicCameraRecord>();
-    return schema::ApplyChange(record, id, value);
-  }
-  case schema::ComponentId::kDirectionalLight: {
-    auto record = world::MakeDefaultRecord<world::DirectionalLightRecord>();
-    return schema::ApplyChange(record, id, value);
-  }
-  case schema::ComponentId::kPointLight: {
-    auto record = world::MakeDefaultRecord<world::PointLightRecord>();
-    return schema::ApplyChange(record, id, value);
-  }
-  case schema::ComponentId::kSpotLight: {
-    auto record = world::MakeDefaultRecord<world::SpotLightRecord>();
-    return schema::ApplyChange(record, id, value);
-  }
-  case schema::ComponentId::kLocalFogVolume: {
-    auto record = world::MakeDefaultRecord<world::LocalFogVolumeRecord>();
-    return schema::ApplyChange(record, id, value);
-  }
+  case schema::ComponentId::kNode:
+    return round_trip(world::NodeRecord {});
+  case schema::ComponentId::kPerspectiveCamera:
+    return round_trip(
+      world::MakeDefaultRecord<world::PerspectiveCameraRecord>());
+  case schema::ComponentId::kOrthographicCamera:
+    return round_trip(
+      world::MakeDefaultRecord<world::OrthographicCameraRecord>());
+  case schema::ComponentId::kDirectionalLight:
+    return round_trip(
+      world::MakeDefaultRecord<world::DirectionalLightRecord>());
+  case schema::ComponentId::kPointLight:
+    return round_trip(world::MakeDefaultRecord<world::PointLightRecord>());
+  case schema::ComponentId::kSpotLight:
+    return round_trip(world::MakeDefaultRecord<world::SpotLightRecord>());
+  case schema::ComponentId::kLocalFogVolume:
+    return round_trip(world::MakeDefaultRecord<world::LocalFogVolumeRecord>());
   case schema::ComponentId::kInvalid:
     break;
   }
-  return false;
+  return std::nullopt;
 }
 
-//! Encodes a valid value of `property` and applies it to its record.
-auto ExpectApplied(const schema::OverrideProperty& property) -> void
+//! Expects `actual` to be `expected`, floats within `tolerance`.
+auto ExpectSameValue(const SchemaValue& expected, const SchemaValue& actual,
+  const float tolerance) -> void
 {
-  auto encoded = std::optional<world::OverrideValue> {};
-  for (const auto& candidate : Candidates(property.member)) {
-    encoded = schema::EncodeChange(property.id, candidate);
-    if (encoded.has_value()) {
-      break;
+  ASSERT_EQ(expected.index(), actual.index());
+  if (const auto* number = std::get_if<float>(&expected)) {
+    EXPECT_NEAR(std::get<float>(actual), *number, tolerance);
+  } else if (const auto* vector
+    = std::get_if<std::array<float, 3>>(&expected)) {
+    const auto& read = std::get<std::array<float, 3>>(actual);
+    for (auto i = 0U; i < vector->size(); ++i) {
+      EXPECT_NEAR(read.at(i), vector->at(i), tolerance);
     }
+  } else {
+    EXPECT_EQ(actual, expected);
   }
-  if (!encoded.has_value()) {
-    FAIL() << "no candidate value encodes";
-  }
-  EXPECT_TRUE(ApplyToRecordOf(property.component, property.id, *encoded));
 }
 
-//! Every wired property encodes a valid value and its record applies it: a
-//! field the schema adds without a writer fails here.
-NOLINT_TEST(SceneChangesTest, EveryWiredPropertyIsAppliedByItsRecord)
+//! Encodes a valid value of `property`, applies it to its record and reads
+//! the same value back.
+auto ExpectAppliedAndRead(const schema::OverrideProperty& property) -> void
+{
+  for (const auto& candidate : Candidates(property.member)) {
+    const auto encoded = schema::EncodeChange(property.id, candidate);
+    if (!encoded.has_value()) {
+      continue;
+    }
+    const auto read = ApplyAndRead(property.component, property.id, *encoded);
+    if (!read.has_value()) {
+      FAIL() << "the record does not apply or read the value";
+    }
+    ExpectSameValue(candidate, *read, 1e-4F);
+    return;
+  }
+  FAIL() << "no candidate value encodes";
+}
+
+//! Every wired property encodes a valid value, its record applies it and reads
+//! it back in the schema's units: a field the schema adds without a writer or
+//! a reader fails here.
+NOLINT_TEST(SceneChangesTest, EveryWiredPropertyIsAppliedAndReadByItsRecord)
 {
   for (const auto& property : schema::kOverrideProperties) {
     if (property.component != schema::ComponentId::kInvalid) {
-      TRACE_GCHECK_F(ExpectApplied(property), property.key);
+      TRACE_GCHECK_F(ExpectAppliedAndRead(property), property.key);
     }
   }
 }
@@ -150,6 +171,37 @@ NOLINT_TEST(SceneChangesTest, EulerAnglesComposeYawPitchRoll)
   EXPECT_NEAR(yaw_pitch[1], 0.5F, 1e-6F);
   EXPECT_NEAR(yaw_pitch[2], -0.5F, 1e-6F);
   EXPECT_NEAR(yaw_pitch[3], 0.5F, 1e-6F);
+}
+
+//! A quaternion reads back as the Y-X-Z angles that made it.
+NOLINT_TEST(SceneChangesTest, QuaternionReadsBackItsEulerAngles)
+{
+  constexpr auto angles = std::array { 20.0F, -130.0F, 45.0F };
+
+  const auto read = world::QuaternionToEulerYxzDegrees(
+    world::EulerYxzDegreesToQuaternion(angles));
+
+  for (auto i = 0U; i < angles.size(); ++i) {
+    EXPECT_NEAR(read.at(i), angles.at(i), 1e-3F);
+  }
+}
+
+//! At 90° pitch yaw and roll turn about one axis: the angles read back have
+//! no roll and give the same rotation.
+NOLINT_TEST(SceneChangesTest, GimbalLockedQuaternionReadsWithoutRoll)
+{
+  const auto rotation
+    = world::EulerYxzDegreesToQuaternion({ 90.0F, 30.0F, 20.0F });
+
+  const auto read = world::QuaternionToEulerYxzDegrees(rotation);
+  const auto again = world::EulerYxzDegreesToQuaternion(read);
+
+  EXPECT_NEAR(read[0], 90.0F, 1e-2F);
+  EXPECT_FLOAT_EQ(read[2], 0.0F);
+  // q and -q are one rotation.
+  const auto dot = (rotation[0] * again[0]) + (rotation[1] * again[1])
+    + (rotation[2] * again[2]) + (rotation[3] * again[3]);
+  EXPECT_NEAR(std::abs(dot), 1.0F, 1e-5F);
 }
 
 //! An angle in degrees reaches its field in radians.

@@ -883,6 +883,26 @@ def test_changes_encode_and_apply_each_wired_property() -> None:
     assert "pak::world::PointLightRecord& record" in rendered
 
 
+def test_changes_read_each_wired_property_in_schema_units() -> None:
+    document = _with_rotation(_minimal())
+    document["components"][0]["properties"][1].update(
+        encoding="degrees-to-radians", unit="degree", range={"min": 0, "max": 180}
+    )
+    rendered = changes.render(model.parse(document, _rules()), "test.yaml")
+    assert (
+        "[[nodiscard]] inline auto ReadProperty(\n"
+        "  const pak::world::PointLightRecord& record, const OverrideId id)\n"
+        "  -> std::optional<SchemaValue>"
+    ) in rendered
+    assert (
+        "  case OverrideId::kPointLightRange: return detail::ReadValue(record, "
+        "LightField::kRange, true);"
+    ) in rendered
+    assert (
+        "  case OverrideId::kPointLightRotation: return detail::ReadRotation(record);"
+    ) in rendered
+
+
 def test_asset_sourced_property_encodes_without_a_record() -> None:
     rendered = changes.render(
         model.parse(_with_surface(_minimal()), _rules()), "test.yaml"

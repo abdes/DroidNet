@@ -25,13 +25,14 @@ namespace oxygen::data::schema {
 using SchemaValue
   = std::variant<bool, std::int32_t, float, std::array<float, 3>, AssetKey>;
 
-//! The pieces `EncodeChange` and `ApplyChange` (Generated.SceneChanges.h) are
-//! made of.
+//! The pieces `EncodeChange`, `ApplyChange` and `ReadProperty`
+//! (Generated.SceneChanges.h) are made of.
 /*!
  An encoder returns the change value of one property, or nothing when `value`
  is of another type or a field it reaches would not hold it
  (`IsValidFieldValue`). Bytes of the change value its member does not use are
- zero.
+ zero. A reader returns the value of one property of a record in the schema's
+ units, or nothing when the record holds no such field.
 */
 namespace detail {
 
@@ -144,6 +145,58 @@ namespace detail {
     return pak::world::WriteField(record, fields[0], vector[0])
       && pak::world::WriteField(record, fields[1], vector[1])
       && pak::world::WriteField(record, fields[2], vector[2]);
+  }
+
+  //! The value of `field` of `record`, in radians read as degrees when
+  //! `radians_to_degrees` is set.
+  template <typename Record, typename Field>
+  [[nodiscard]] auto ReadValue(const Record& record, const Field field,
+    const bool radians_to_degrees = false) -> std::optional<SchemaValue>
+  {
+    const auto value = pak::world::ReadField(record, field);
+    if (!value.has_value()) {
+      return std::nullopt;
+    }
+    if (const auto* number = std::get_if<float>(&*value);
+      number != nullptr && radians_to_degrees) {
+      return SchemaValue {
+        static_cast<float>(
+          static_cast<double>(*number) * 180.0 / std::numbers::pi),
+      };
+    }
+    return std::visit(
+      [](const auto field_value) -> SchemaValue { return field_value; },
+      *value);
+  }
+
+  //! The three floats of `fields` of `record`.
+  template <typename Record, typename Field>
+  [[nodiscard]] auto ReadVec3(const Record& record,
+    const std::array<Field, 3>& fields) -> std::optional<SchemaValue>
+  {
+    auto vector = std::array<float, 3> {};
+    for (auto i = 0U; i < fields.size(); ++i) {
+      const auto value = pak::world::ReadField(record, fields.at(i));
+      const auto* number
+        = value.has_value() ? std::get_if<float>(&*value) : nullptr;
+      if (number == nullptr) {
+        return std::nullopt;
+      }
+      vector.at(i) = *number;
+    }
+    return vector;
+  }
+
+  //! The node's local rotation as Y-X-Z Euler angles in degrees.
+  [[nodiscard]] inline auto ReadRotation(const pak::world::NodeRecord& record)
+    -> SchemaValue
+  {
+    return pak::world::QuaternionToEulerYxzDegrees({
+      record.rotation[0],
+      record.rotation[1],
+      record.rotation[2],
+      record.rotation[3],
+    });
   }
 
 } // namespace detail

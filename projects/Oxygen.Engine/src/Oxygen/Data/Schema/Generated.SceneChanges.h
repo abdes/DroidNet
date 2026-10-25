@@ -151,6 +151,32 @@ namespace oxygen::data::schema {
   return false;
 }
 
+//! The value of the property `id` names in a NodeRecord, in the
+//! property's schema units; nullopt when the property is not one the
+//! record holds.
+[[nodiscard]] inline auto ReadProperty(
+  const pak::world::NodeRecord& record, const OverrideId id)
+  -> std::optional<SchemaValue>
+{
+  switch (id) {
+  case OverrideId::kTransformPositionX: return detail::ReadValue(record, TransformField::kPositionX);
+  case OverrideId::kTransformPositionY: return detail::ReadValue(record, TransformField::kPositionY);
+  case OverrideId::kTransformPositionZ: return detail::ReadValue(record, TransformField::kPositionZ);
+  case OverrideId::kTransformRotation: return detail::ReadRotation(record);
+  case OverrideId::kTransformScaleX: return detail::ReadValue(record, TransformField::kScaleX);
+  case OverrideId::kTransformScaleY: return detail::ReadValue(record, TransformField::kScaleY);
+  case OverrideId::kTransformScaleZ: return detail::ReadValue(record, TransformField::kScaleZ);
+  case OverrideId::kNodeVisibility: return detail::ReadValue(record, NodeField::kVisible);
+  case OverrideId::kNodeCastsShadows: return detail::ReadValue(record, NodeField::kCastsShadows);
+  case OverrideId::kNodeReceivesShadows: return detail::ReadValue(record, NodeField::kReceivesShadows);
+  case OverrideId::kNodeIsStatic: return detail::ReadValue(record, NodeField::kStatic);
+  case OverrideId::kNodeIsRayCastingSelectable: return detail::ReadValue(record, NodeField::kRayCastingSelectable);
+  case OverrideId::kNodeIgnoreParentTransform: return detail::ReadValue(record, NodeField::kIgnoreParentTransform);
+  default: break;
+  }
+  return std::nullopt;
+}
+
 //! Writes the change `value` of the property `id` names into a PerspectiveCameraRecord;
 //! false, leaving the record unchanged, when the property is not one the
 //! record holds.
@@ -172,6 +198,27 @@ namespace oxygen::data::schema {
   return false;
 }
 
+//! The value of the property `id` names in a PerspectiveCameraRecord, in the
+//! property's schema units; nullopt when the property is not one the
+//! record holds.
+[[nodiscard]] inline auto ReadProperty(
+  const pak::world::PerspectiveCameraRecord& record, const OverrideId id)
+  -> std::optional<SchemaValue>
+{
+  switch (id) {
+  case OverrideId::kPerspectiveCameraFieldOfViewDegrees: return detail::ReadValue(record, PerspectiveCameraField::kFieldOfViewYRadians, true);
+  case OverrideId::kPerspectiveCameraAspectRatio: return detail::ReadValue(record, PerspectiveCameraField::kAspectRatio);
+  case OverrideId::kPerspectiveCameraNearPlane: return detail::ReadValue(record, PerspectiveCameraField::kNearPlane);
+  case OverrideId::kPerspectiveCameraFarPlane: return detail::ReadValue(record, PerspectiveCameraField::kFarPlane);
+  case OverrideId::kPerspectiveCameraApertureF: return detail::ReadValue(record, PerspectiveCameraField::kApertureF);
+  case OverrideId::kPerspectiveCameraShutterRate: return detail::ReadValue(record, PerspectiveCameraField::kShutterRate);
+  case OverrideId::kPerspectiveCameraIso: return detail::ReadValue(record, PerspectiveCameraField::kIso);
+  case OverrideId::kPerspectiveCameraAspectMode: return detail::ReadValue(record, PerspectiveCameraField::kAspectMode);
+  default: break;
+  }
+  return std::nullopt;
+}
+
 //! Writes the change `value` of the property `id` names into a OrthographicCameraRecord;
 //! false, leaving the record unchanged, when the property is not one the
 //! record holds.
@@ -191,6 +238,27 @@ namespace oxygen::data::schema {
   default: break;
   }
   return false;
+}
+
+//! The value of the property `id` names in a OrthographicCameraRecord, in the
+//! property's schema units; nullopt when the property is not one the
+//! record holds.
+[[nodiscard]] inline auto ReadProperty(
+  const pak::world::OrthographicCameraRecord& record, const OverrideId id)
+  -> std::optional<SchemaValue>
+{
+  switch (id) {
+  case OverrideId::kOrthographicCameraOrthographicSize: return detail::ReadValue(record, OrthographicCameraField::kOrthographicSize);
+  case OverrideId::kOrthographicCameraAspectMode: return detail::ReadValue(record, OrthographicCameraField::kAspectMode);
+  case OverrideId::kOrthographicCameraAspectRatio: return detail::ReadValue(record, OrthographicCameraField::kAspectRatio);
+  case OverrideId::kOrthographicCameraNearPlane: return detail::ReadValue(record, OrthographicCameraField::kNearPlane);
+  case OverrideId::kOrthographicCameraFarPlane: return detail::ReadValue(record, OrthographicCameraField::kFarPlane);
+  case OverrideId::kOrthographicCameraApertureF: return detail::ReadValue(record, OrthographicCameraField::kApertureF);
+  case OverrideId::kOrthographicCameraShutterRate: return detail::ReadValue(record, OrthographicCameraField::kShutterRate);
+  case OverrideId::kOrthographicCameraIso: return detail::ReadValue(record, OrthographicCameraField::kIso);
+  default: break;
+  }
+  return std::nullopt;
 }
 
 //! Writes the change `value` of the property `id` names into a DirectionalLightRecord;
@@ -229,6 +297,42 @@ namespace oxygen::data::schema {
   return false;
 }
 
+//! The value of the property `id` names in a DirectionalLightRecord, in the
+//! property's schema units; nullopt when the property is not one the
+//! record holds.
+[[nodiscard]] inline auto ReadProperty(
+  const pak::world::DirectionalLightRecord& record, const OverrideId id)
+  -> std::optional<SchemaValue>
+{
+  switch (id) {
+  case OverrideId::kDirectionalLightColor: return detail::ReadVec3(record, std::array { DirectionalLightField::kColorR, DirectionalLightField::kColorG, DirectionalLightField::kColorB });
+  case OverrideId::kDirectionalLightIntensityLux: return detail::ReadValue(record, DirectionalLightField::kIntensityLux);
+  case OverrideId::kDirectionalLightAtmosphereSlot: return detail::ReadValue(record, DirectionalLightField::kAtmosphereLightSlot);
+  case OverrideId::kDirectionalLightUsePerPixelAtmosphereTransmittance: return detail::ReadValue(record, DirectionalLightField::kUsePerPixelAtmosphereTransmittance);
+  case OverrideId::kDirectionalLightCastsShadows: return detail::ReadValue(record, DirectionalLightField::kCastsShadows);
+  case OverrideId::kDirectionalLightAffectsWorld: return detail::ReadValue(record, DirectionalLightField::kAffectsWorld);
+  case OverrideId::kDirectionalLightAngularSizeRadians: return detail::ReadValue(record, DirectionalLightField::kAngularSizeRadians);
+  case OverrideId::kDirectionalLightExposureCompensation: return detail::ReadValue(record, DirectionalLightField::kExposureCompensation);
+  case OverrideId::kDirectionalLightAtmosphereDiskLuminanceScaleRgb: return detail::ReadVec3(record, std::array { DirectionalLightField::kDiskScaleR, DirectionalLightField::kDiskScaleG, DirectionalLightField::kDiskScaleB });
+  case OverrideId::kDirectionalLightShadowBias: return detail::ReadValue(record, DirectionalLightField::kShadowBias);
+  case OverrideId::kDirectionalLightShadowNormalBias: return detail::ReadValue(record, DirectionalLightField::kShadowNormalBias);
+  case OverrideId::kDirectionalLightContactShadows: return detail::ReadValue(record, DirectionalLightField::kContactShadows);
+  case OverrideId::kDirectionalLightShadowResolutionHint: return detail::ReadValue(record, DirectionalLightField::kShadowResolutionHint);
+  case OverrideId::kDirectionalLightCascadeCount: return detail::ReadValue(record, DirectionalLightField::kCascadeCount);
+  case OverrideId::kDirectionalLightSplitMode: return detail::ReadValue(record, DirectionalLightField::kSplitMode);
+  case OverrideId::kDirectionalLightMaxShadowDistance: return detail::ReadValue(record, DirectionalLightField::kMaxShadowDistance);
+  case OverrideId::kDirectionalLightCascadeDistance0: return detail::ReadValue(record, DirectionalLightField::kCascadeDistance0);
+  case OverrideId::kDirectionalLightCascadeDistance1: return detail::ReadValue(record, DirectionalLightField::kCascadeDistance1);
+  case OverrideId::kDirectionalLightCascadeDistance2: return detail::ReadValue(record, DirectionalLightField::kCascadeDistance2);
+  case OverrideId::kDirectionalLightCascadeDistance3: return detail::ReadValue(record, DirectionalLightField::kCascadeDistance3);
+  case OverrideId::kDirectionalLightDistributionExponent: return detail::ReadValue(record, DirectionalLightField::kDistributionExponent);
+  case OverrideId::kDirectionalLightTransitionFraction: return detail::ReadValue(record, DirectionalLightField::kTransitionFraction);
+  case OverrideId::kDirectionalLightDistanceFadeoutFraction: return detail::ReadValue(record, DirectionalLightField::kDistanceFadeoutFraction);
+  default: break;
+  }
+  return std::nullopt;
+}
+
 //! Writes the change `value` of the property `id` names into a PointLightRecord;
 //! false, leaving the record unchanged, when the property is not one the
 //! record holds.
@@ -251,6 +355,30 @@ namespace oxygen::data::schema {
   default: break;
   }
   return false;
+}
+
+//! The value of the property `id` names in a PointLightRecord, in the
+//! property's schema units; nullopt when the property is not one the
+//! record holds.
+[[nodiscard]] inline auto ReadProperty(
+  const pak::world::PointLightRecord& record, const OverrideId id)
+  -> std::optional<SchemaValue>
+{
+  switch (id) {
+  case OverrideId::kPointLightColor: return detail::ReadVec3(record, std::array { LocalLightField::kColorR, LocalLightField::kColorG, LocalLightField::kColorB });
+  case OverrideId::kPointLightAffectsWorld: return detail::ReadValue(record, LocalLightField::kAffectsWorld);
+  case OverrideId::kPointLightCastsShadows: return detail::ReadValue(record, LocalLightField::kCastsShadows);
+  case OverrideId::kPointLightExposureCompensation: return detail::ReadValue(record, LocalLightField::kExposureCompensation);
+  case OverrideId::kPointLightShadowBias: return detail::ReadValue(record, LocalLightField::kShadowBias);
+  case OverrideId::kPointLightShadowNormalBias: return detail::ReadValue(record, LocalLightField::kShadowNormalBias);
+  case OverrideId::kPointLightContactShadows: return detail::ReadValue(record, LocalLightField::kContactShadows);
+  case OverrideId::kPointLightShadowResolutionHint: return detail::ReadValue(record, LocalLightField::kShadowResolutionHint);
+  case OverrideId::kPointLightLuminousFluxLumens: return detail::ReadValue(record, LocalLightField::kLuminousFluxLm);
+  case OverrideId::kPointLightRange: return detail::ReadValue(record, LocalLightField::kRange);
+  case OverrideId::kPointLightSourceRadius: return detail::ReadValue(record, LocalLightField::kSourceRadius);
+  default: break;
+  }
+  return std::nullopt;
 }
 
 //! Writes the change `value` of the property `id` names into a SpotLightRecord;
@@ -279,6 +407,32 @@ namespace oxygen::data::schema {
   return false;
 }
 
+//! The value of the property `id` names in a SpotLightRecord, in the
+//! property's schema units; nullopt when the property is not one the
+//! record holds.
+[[nodiscard]] inline auto ReadProperty(
+  const pak::world::SpotLightRecord& record, const OverrideId id)
+  -> std::optional<SchemaValue>
+{
+  switch (id) {
+  case OverrideId::kSpotLightColor: return detail::ReadVec3(record, std::array { LocalLightField::kColorR, LocalLightField::kColorG, LocalLightField::kColorB });
+  case OverrideId::kSpotLightAffectsWorld: return detail::ReadValue(record, LocalLightField::kAffectsWorld);
+  case OverrideId::kSpotLightCastsShadows: return detail::ReadValue(record, LocalLightField::kCastsShadows);
+  case OverrideId::kSpotLightExposureCompensation: return detail::ReadValue(record, LocalLightField::kExposureCompensation);
+  case OverrideId::kSpotLightShadowBias: return detail::ReadValue(record, LocalLightField::kShadowBias);
+  case OverrideId::kSpotLightShadowNormalBias: return detail::ReadValue(record, LocalLightField::kShadowNormalBias);
+  case OverrideId::kSpotLightContactShadows: return detail::ReadValue(record, LocalLightField::kContactShadows);
+  case OverrideId::kSpotLightShadowResolutionHint: return detail::ReadValue(record, LocalLightField::kShadowResolutionHint);
+  case OverrideId::kSpotLightLuminousFluxLumens: return detail::ReadValue(record, LocalLightField::kLuminousFluxLm);
+  case OverrideId::kSpotLightRange: return detail::ReadValue(record, LocalLightField::kRange);
+  case OverrideId::kSpotLightSourceRadius: return detail::ReadValue(record, LocalLightField::kSourceRadius);
+  case OverrideId::kSpotLightInnerConeAngleRadians: return detail::ReadValue(record, LocalLightField::kInnerConeAngleRadians);
+  case OverrideId::kSpotLightOuterConeAngleRadians: return detail::ReadValue(record, LocalLightField::kOuterConeAngleRadians);
+  default: break;
+  }
+  return std::nullopt;
+}
+
 //! Writes the change `value` of the property `id` names into a LocalFogVolumeRecord;
 //! false, leaving the record unchanged, when the property is not one the
 //! record holds.
@@ -299,6 +453,28 @@ namespace oxygen::data::schema {
   default: break;
   }
   return false;
+}
+
+//! The value of the property `id` names in a LocalFogVolumeRecord, in the
+//! property's schema units; nullopt when the property is not one the
+//! record holds.
+[[nodiscard]] inline auto ReadProperty(
+  const pak::world::LocalFogVolumeRecord& record, const OverrideId id)
+  -> std::optional<SchemaValue>
+{
+  switch (id) {
+  case OverrideId::kLocalFogVolumeEnabled: return detail::ReadValue(record, LocalFogVolumeField::kEnabled);
+  case OverrideId::kLocalFogVolumeRadialFogExtinction: return detail::ReadValue(record, LocalFogVolumeField::kRadialFogExtinction);
+  case OverrideId::kLocalFogVolumeHeightFogExtinction: return detail::ReadValue(record, LocalFogVolumeField::kHeightFogExtinction);
+  case OverrideId::kLocalFogVolumeHeightFogFalloff: return detail::ReadValue(record, LocalFogVolumeField::kHeightFogFalloff);
+  case OverrideId::kLocalFogVolumeHeightFogOffset: return detail::ReadValue(record, LocalFogVolumeField::kHeightFogOffset);
+  case OverrideId::kLocalFogVolumeFogPhaseG: return detail::ReadValue(record, LocalFogVolumeField::kFogPhaseG);
+  case OverrideId::kLocalFogVolumeFogAlbedo: return detail::ReadVec3(record, std::array { LocalFogVolumeField::kFogAlbedoR, LocalFogVolumeField::kFogAlbedoG, LocalFogVolumeField::kFogAlbedoB });
+  case OverrideId::kLocalFogVolumeFogEmissive: return detail::ReadVec3(record, std::array { LocalFogVolumeField::kFogEmissiveR, LocalFogVolumeField::kFogEmissiveG, LocalFogVolumeField::kFogEmissiveB });
+  case OverrideId::kLocalFogVolumeSortPriority: return detail::ReadValue(record, LocalFogVolumeField::kSortPriority);
+  default: break;
+  }
+  return std::nullopt;
 }
 
 } // namespace oxygen::data::schema

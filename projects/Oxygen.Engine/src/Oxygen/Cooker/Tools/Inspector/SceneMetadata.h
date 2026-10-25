@@ -18,6 +18,8 @@ namespace oxygen::content::inspection {
 struct SceneMetadataOptions {
   std::string cooked_root;
   std::string output;
+  //! The one scene to compose; empty composes every scene of the root.
+  std::string virtual_path;
 };
 
 auto BuildSceneMetadataCommand(SceneMetadataOptions& options)
