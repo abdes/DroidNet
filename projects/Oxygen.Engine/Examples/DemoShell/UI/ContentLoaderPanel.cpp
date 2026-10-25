@@ -94,6 +94,13 @@ namespace {
     = "demo.content.import.normal_policy";
   constexpr std::string_view kTangentPolicy
     = "demo.content.import.tangent_policy";
+  constexpr std::string_view kUpAxis = "demo.content.import.up_axis";
+  constexpr std::string_view kSmoothingAngle
+    = "demo.content.import.smoothing_angle";
+  constexpr std::string_view kImportLights = "demo.content.import.lights";
+  constexpr std::string_view kImportCameras = "demo.content.import.cameras";
+  constexpr std::string_view kLightScale
+    = "demo.content.import.light_intensity_scale";
 
   // Texture tuning.
   constexpr std::string_view kTuning = "demo.content.texture.enabled";
@@ -101,6 +108,7 @@ namespace {
   constexpr std::string_view kColorSpace = "demo.content.texture.color_space";
   constexpr std::string_view kMipPolicy = "demo.content.texture.mip_policy";
   constexpr std::string_view kMaxMips = "demo.content.texture.max_mips";
+  constexpr std::string_view kMaxSize = "demo.content.texture.max_size";
   constexpr std::string_view kMipFilter = "demo.content.texture.mip_filter";
   constexpr std::string_view kColorFormat = "demo.content.texture.color_format";
   constexpr std::string_view kDataFormat = "demo.content.texture.data_format";
@@ -129,6 +137,14 @@ namespace {
     content::import::UnitNormalizationPolicy::kPreserveSource,
     content::import::UnitNormalizationPolicy::kApplyCustomFactor,
   };
+  constexpr auto kUpAxes = std::array {
+    content::import::SourceUpAxis::kFromFile,
+    content::import::SourceUpAxis::kY,
+    content::import::SourceUpAxis::kZ,
+  };
+  //! Texture size limits offered by the combo; 0 keeps the source size.
+  constexpr auto kMaxSizes
+    = std::array<uint32_t, 5> { 0U, 4096U, 2048U, 1024U, 512U };
   constexpr auto kGeometryPolicies = std::array {
     content::import::GeometryAttributePolicy::kNone,
     content::import::GeometryAttributePolicy::kPreserveIfPresent,
@@ -266,6 +282,45 @@ namespace {
       .member = &LooseCookedLayout::resources_dir,
     },
   };
+
+  auto UpAxisLabel(const content::import::SourceUpAxis axis) -> std::string
+  {
+    switch (axis) {
+    case content::import::SourceUpAxis::kFromFile:
+      return "From file";
+    case content::import::SourceUpAxis::kY:
+      return "Y up";
+    case content::import::SourceUpAxis::kZ:
+      return "Z up";
+    }
+    return "Unknown";
+  }
+
+  auto MaxSizeLabel(const uint32_t size) -> std::string
+  {
+    if (size == 0U) {
+      return "Source size (0)";
+    }
+    return std::to_string(size);
+  }
+
+  auto UpAxisLabels() -> std::vector<std::string>
+  {
+    std::vector<std::string> labels;
+    for (const auto axis : kUpAxes) {
+      labels.push_back(UpAxisLabel(axis));
+    }
+    return labels;
+  }
+
+  auto MaxSizeLabels() -> std::vector<std::string>
+  {
+    std::vector<std::string> labels;
+    for (const auto size : kMaxSizes) {
+      labels.push_back(MaxSizeLabel(size));
+    }
+    return labels;
+  }
 
   auto Name(const std::string_view name) -> std::string
   {
@@ -468,6 +523,35 @@ namespace {
         EditImport(vm, [v](auto& o) -> void { o.coordinate.unit_scale = v; });
       },
       0.001F, 1000.0F);
+    commands.AddEnum(Name(kUpAxis), "Up Axis", "Up axis of an FBX source",
+      UpAxisLabels(), [vm](const std::size_t i) -> void {
+        EditImport(vm, [axis = kUpAxes.at(i)](auto& o) -> void {
+          o.coordinate.up_axis = axis;
+        });
+      });
+    commands.AddFloat(
+      Name(kSmoothingAngle), "Normals Smoothing Angle",
+      "Largest angle in degrees between faces sharing a smoothed normal",
+      [vm](const float v) -> void {
+        EditImport(
+          vm, [v](auto& o) -> void { o.normals_smoothing_angle_deg = v; });
+      },
+      0.0F, 180.0F);
+    commands.AddBool(Name(kImportLights), "Import Lights",
+      "Import the source's lights", [vm](const bool v) -> void {
+        EditImport(vm, [v](auto& o) -> void { o.import_lights = v; });
+      });
+    commands.AddBool(Name(kImportCameras), "Import Cameras",
+      "Import the source's cameras", [vm](const bool v) -> void {
+        EditImport(vm, [v](auto& o) -> void { o.import_cameras = v; });
+      });
+    commands.AddFloat(
+      Name(kLightScale), "Light Intensity Scale",
+      "Factor every imported light's intensity is multiplied by",
+      [vm](const float v) -> void {
+        EditImport(vm, [v](auto& o) -> void { o.light_intensity_scale = v; });
+      },
+      0.0F, 1000.0F);
     AddEnum<content::import::GeometryAttributePolicy>(commands, kNormalPolicy,
       "Normal Policy", "How normals are imported", kGeometryPolicies,
       [vm](const auto v) -> void {
@@ -527,6 +611,12 @@ namespace {
           [v](auto& t) -> void { t.max_mip_levels = static_cast<uint8_t>(v); });
       },
       1, 16);
+    commands.AddEnum(Name(kMaxSize), "Max Texture Size",
+      "Largest width or height of a stored texture", MaxSizeLabels(),
+      [vm](const std::size_t i) -> void {
+        EditTuning(
+          vm, [size = kMaxSizes.at(i)](auto& t) -> void { t.max_size = size; });
+      });
     AddEnum<content::import::MipFilter>(commands, kMipFilter, "Mip Filter",
       "Downsampling filter", kMipFilters, [vm](const auto v) -> void {
         EditTuning(vm, [v](auto& t) -> void { t.mip_filter = v; });
@@ -660,6 +750,26 @@ namespace {
     for (const auto candidate : items) {
       const bool is_selected = candidate == value;
       const std::string item(nostd::to_string(candidate));
+      if (ImGui::Selectable(item.c_str(), is_selected) && !is_selected) {
+        commands.RunText(name, item);
+      }
+      if (is_selected) {
+        ImGui::SetItemDefaultFocus();
+      }
+    }
+    ImGui::EndCombo();
+  }
+
+  //! Draws a combo of labeled choices and posts `name` with the one picked.
+  auto LabeledCombo(const PanelCommands& commands, const std::string_view name,
+    const char* label, const std::string& current,
+    const std::vector<std::string>& items) -> void
+  {
+    if (!ImGui::BeginCombo(label, current.c_str())) {
+      return;
+    }
+    for (const auto& item : items) {
+      const bool is_selected = item == current;
       if (ImGui::Selectable(item.c_str(), is_selected) && !is_selected) {
         commands.RunText(name, item);
       }
@@ -1040,10 +1150,29 @@ auto ContentLoaderPanel::DrawImportSettings() -> void
         commands_->RunFloat(kUnitScale, scale);
       }
     }
+    LabeledCombo(*commands_, kUpAxis, "Up Axis",
+      UpAxisLabel(options.coordinate.up_axis), UpAxisLabels());
+    float smoothing = options.normals_smoothing_angle_deg;
+    if (ImGui::DragFloat("Smoothing Angle", &smoothing, 1.0F, 0.0F, 180.0F)) {
+      commands_->RunFloat(kSmoothingAngle, smoothing);
+    }
     EnumCombo(*commands_, kNormalPolicy, "Normal Policy", options.normal_policy,
       kGeometryPolicies);
     EnumCombo(*commands_, kTangentPolicy, "Tangent Policy",
       options.tangent_policy, kGeometryPolicies);
+    ImGui::TreePop();
+  }
+
+  if (ImGui::TreeNodeEx("Lights and Cameras", ImGuiTreeNodeFlags_DefaultOpen)) {
+    Checkbox(*commands_, kImportLights, "Import Lights", options.import_lights);
+    ImGui::SameLine();
+    Checkbox(
+      *commands_, kImportCameras, "Import Cameras", options.import_cameras);
+    float scale = options.light_intensity_scale;
+    if (ImGui::DragFloat(
+          "Light Intensity Scale", &scale, 0.05F, 0.0F, 1000.0F)) {
+      commands_->RunFloat(kLightScale, scale);
+    }
     ImGui::TreePop();
   }
 }
@@ -1055,6 +1184,9 @@ auto ContentLoaderPanel::DrawTextureTuningSettings() -> void
   }
   const auto tuning = vm_->GetTextureTuning();
 
+  // The size limit applies whether or not tuning is enabled.
+  LabeledCombo(*commands_, kMaxSize, "Max Size", MaxSizeLabel(tuning.max_size),
+    MaxSizeLabels());
   Checkbox(*commands_, kTuning, "Enabled", tuning.enabled);
   EnumCombo(*commands_, kIntent, "Intent", tuning.intent, kIntents);
   EnumCombo(*commands_, kColorSpace, "Source Color Space",

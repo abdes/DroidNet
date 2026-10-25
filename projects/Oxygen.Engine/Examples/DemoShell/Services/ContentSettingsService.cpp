@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
@@ -76,6 +77,11 @@ namespace {
   constexpr auto kWithHashingKey = "content.import.with_hashing";
   constexpr auto kNormalPolicyKey = "content.import.normal_policy";
   constexpr auto kTangentPolicyKey = "content.import.tangent_policy";
+  constexpr auto kUpAxisKey = "content.import.up_axis";
+  constexpr auto kSmoothingAngleKey = "content.import.smoothing_angle";
+  constexpr auto kImportLightsKey = "content.import.lights";
+  constexpr auto kImportCamerasKey = "content.import.cameras";
+  constexpr auto kLightScaleKey = "content.import.light_intensity_scale";
 
   // Paths
   constexpr auto kMountedPaksKey = "content.library.mounted_paks";
@@ -96,6 +102,7 @@ namespace {
   constexpr auto kTexTuningColorSpaceKey = "content.import.tuning.color_space";
   constexpr auto kTexTuningMipPolicyKey = "content.import.tuning.mip_policy";
   constexpr auto kTexTuningMaxMipsKey = "content.import.tuning.max_mips";
+  constexpr auto kTexTuningMaxSizeKey = "content.import.tuning.max_size";
   constexpr auto kTexTuningMipFilterKey = "content.import.tuning.mip_filter";
   constexpr auto kTexTuningColorFormatKey
     = "content.import.tuning.color_format";
@@ -176,6 +183,25 @@ auto ContentSettingsService::GetImportOptions() const
     o.tangent_policy = static_cast<content::import::GeometryAttributePolicy>(
       static_cast<int>(*val));
   }
+  if (auto val = settings->GetFloat(kUpAxisKey)) {
+    const auto axis = static_cast<int>(*val);
+    if (axis >= static_cast<int>(content::import::SourceUpAxis::kFromFile)
+      && axis <= static_cast<int>(content::import::SourceUpAxis::kZ)) {
+      o.coordinate.up_axis = static_cast<content::import::SourceUpAxis>(axis);
+    }
+  }
+  if (auto val = settings->GetFloat(kSmoothingAngleKey)) {
+    o.normals_smoothing_angle_deg = std::clamp(*val, 0.0F, 180.0F);
+  }
+  if (auto val = settings->GetBool(kImportLightsKey)) {
+    o.import_lights = *val;
+  }
+  if (auto val = settings->GetBool(kImportCamerasKey)) {
+    o.import_cameras = *val;
+  }
+  if (auto val = settings->GetFloat(kLightScaleKey)) {
+    o.light_intensity_scale = std::max(*val, 0.0F);
+  }
 
   return o;
 }
@@ -195,6 +221,12 @@ auto ContentSettingsService::SetImportOptions(
     static_cast<float>(static_cast<int>(options.normal_policy)));
   settings->SetFloat(kTangentPolicyKey,
     static_cast<float>(static_cast<int>(options.tangent_policy)));
+  settings->SetFloat(kUpAxisKey,
+    static_cast<float>(static_cast<int>(options.coordinate.up_axis)));
+  settings->SetFloat(kSmoothingAngleKey, options.normals_smoothing_angle_deg);
+  settings->SetBool(kImportLightsKey, options.import_lights);
+  settings->SetBool(kImportCamerasKey, options.import_cameras);
+  settings->SetFloat(kLightScaleKey, options.light_intensity_scale);
   ++epoch_;
 }
 
@@ -227,6 +259,9 @@ auto ContentSettingsService::GetTextureTuning() const
   }
   if (auto val = settings->GetFloat(kTexTuningMaxMipsKey)) {
     t.max_mip_levels = static_cast<uint8_t>(*val);
+  }
+  if (auto val = settings->GetFloat(kTexTuningMaxSizeKey)) {
+    t.max_size = static_cast<uint32_t>(std::max(*val, 0.0F));
   }
   if (auto val = settings->GetFloat(kTexTuningMipFilterKey)) {
     t.mip_filter
@@ -264,6 +299,7 @@ auto ContentSettingsService::SetTextureTuning(
   settings->SetFloat(
     kTexTuningMipPolicyKey, static_cast<float>(static_cast<int>(t.mip_policy)));
   settings->SetFloat(kTexTuningMaxMipsKey, t.max_mip_levels);
+  settings->SetFloat(kTexTuningMaxSizeKey, static_cast<float>(t.max_size));
   settings->SetFloat(
     kTexTuningMipFilterKey, static_cast<float>(static_cast<int>(t.mip_filter)));
   settings->SetFloat(kTexTuningColorFormatKey,
