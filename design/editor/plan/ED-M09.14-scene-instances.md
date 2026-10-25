@@ -2,7 +2,7 @@
 
 Status: `in_progress`
 
-Last Updated: 2026-10-24
+Last Updated: 2026-10-25
 
 **Summary:** the implementation plan of
 [ED-M09](ED-M09-v01-gaps-and-blocking-issues.md) item 14, #77 slice 77.8:
@@ -161,7 +161,7 @@ ED-M09 item 14 points here and is `done` when every slice below is.
 | Slice | State | Commit    |
 | ----- | ----- | --------- |
 | E1    | done  | 37285ea2b |
-| E2    | open  | -         |
+| E2    | done  | 701dc3ef8 |
 | E3    | open  | -         |
 | E4    | open  | -         |
 | E5    | open  | -         |
