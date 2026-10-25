@@ -1,6 +1,6 @@
 # ED-M09.14 - Scene Instances And The Model Editor
 
-Status: `planned`
+Status: `in_progress`
 
 Last Updated: 2026-10-24
 
@@ -158,26 +158,26 @@ The last slice's commit carries `Fixes #77`.
 
 ED-M09 item 14 points here and is `done` when every slice below is.
 
-| Slice | State | Commit |
-| ----- | ----- | ------ |
-| E1    | open  | -      |
-| E2    | open  | -      |
-| E3    | open  | -      |
-| E4    | open  | -      |
-| E5    | open  | -      |
-| E6    | open  | -      |
-| E7    | open  | -      |
-| E8    | open  | -      |
-| E9    | open  | -      |
-| E10   | open  | -      |
-| D1    | open  | -      |
-| D2    | open  | -      |
-| D3    | open  | -      |
-| D4    | open  | -      |
-| D5    | open  | -      |
-| D6    | open  | -      |
-| D7    | open  | -      |
-| D8    | open  | -      |
-| D9    | open  | -      |
-| D10   | open  | -      |
-| D11   | open  | -      |
+| Slice | State | Commit    |
+| ----- | ----- | --------- |
+| E1    | done  | 37285ea2b |
+| E2    | open  | -         |
+| E3    | open  | -         |
+| E4    | open  | -         |
+| E5    | open  | -         |
+| E6    | open  | -         |
+| E7    | open  | -         |
+| E8    | open  | -         |
+| E9    | open  | -         |
+| E10   | open  | -         |
+| D1    | open  | -         |
+| D2    | open  | -         |
+| D3    | open  | -         |
+| D4    | open  | -         |
+| D5    | open  | -         |
+| D6    | open  | -         |
+| D7    | open  | -         |
+| D8    | open  | -         |
+| D9    | open  | -         |
+| D10   | open  | -         |
+| D11   | open  | -         |
