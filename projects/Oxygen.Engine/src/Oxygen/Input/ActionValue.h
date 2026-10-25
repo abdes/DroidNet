@@ -102,6 +102,23 @@ public:
   {
     return std::get<T>(value_);
   }
+
+  //! The type of the value it holds, which selects the `GetAs` type.
+  [[nodiscard]] auto GetType() const noexcept -> ActionValueType
+  {
+    return std::visit(
+      [](const auto& cur) noexcept -> ActionValueType {
+        using T = std::remove_cvref_t<decltype(cur)>;
+        if constexpr (std::is_same_v<T, bool>) {
+          return ActionValueType::kBool;
+        } else if constexpr (std::is_same_v<T, Axis1D>) {
+          return ActionValueType::kAxis1D;
+        } else /* Axis2D */ {
+          return ActionValueType::kAxis2D;
+        }
+      },
+      value_);
+  }
   [[nodiscard]] auto IsActuated(float threshold) const -> bool
   {
     return std::visit(

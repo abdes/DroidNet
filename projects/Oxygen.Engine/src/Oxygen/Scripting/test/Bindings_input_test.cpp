@@ -4,10 +4,10 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <algorithm>
 #include <chrono>
 #include <memory>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "ScriptingModule_test_fixture.h"
@@ -314,6 +314,91 @@ if jump_b_count ~= 0 then
 end
 )lua" },
     .chunk_name = ScriptChunkName { "input_on_action_by_asset_check" },
+  });
+  EXPECT_TRUE(checked.ok) << checked.message;
+}
+
+//! `oxygen.input.value` gives an action's value this frame by its type: a
+//! vector for a 2D axis, a boolean for a button, and nil for an action the
+//! frame does not have.
+NOLINT_TEST_F(InputBindingsTest, ValueReadsTheFrameValueOfAnAction)
+{
+  auto module = MakeModule();
+  ASSERT_TRUE(AttachModule(module));
+
+  const auto look_key = data::AssetKey::FromVirtualPath("/Content/Look.oiact");
+  const auto aim_key = data::AssetKey::FromVirtualPath("/Content/Aim.oiact");
+  const auto absent_key
+    = data::AssetKey::FromVirtualPath("/Content/Absent.oiact");
+  const auto registered = module.ExecuteScript(ScriptExecutionRequest {
+    .source_text = ScriptSourceText { fmt::format(R"lua(
+function on_gameplay()
+  look_value = oxygen.input.value("{}")
+  aim_value = oxygen.input.value("{}")
+  absent_value = oxygen.input.value("{}")
+end
+)lua",
+      data::to_string(look_key), data::to_string(aim_key),
+      data::to_string(absent_key)) },
+    .chunk_name = ScriptChunkName { "input_value" },
+  });
+  ASSERT_TRUE(registered.ok) << registered.message;
+
+  using platform::InputSlots;
+  const auto look = std::make_shared<oxygen::input::Action>(
+    "Look", oxygen::input::ActionValueType::kAxis2D, look_key);
+  const auto aim = std::make_shared<oxygen::input::Action>(
+    "Aim", oxygen::input::ActionValueType::kBool, aim_key);
+  const auto gameplay_owner
+    = oxygen::input::MakeCodeContext("Test/Scripting", "gameplay");
+  auto& gameplay = *gameplay_owner;
+  for (const auto& [action, slot] : {
+         std::pair { look, InputSlots::MouseXY },
+         std::pair { aim, InputSlots::LeftMouseButton },
+       }) {
+    auto mapping
+      = std::make_shared<oxygen::input::InputActionMapping>(action, slot);
+    auto trigger = std::make_shared<oxygen::input::ActionTriggerDown>();
+    trigger->MakeExplicit();
+    mapping->AddTrigger(trigger);
+    gameplay.AddMapping(mapping);
+  }
+  const auto now = time::PhysicalTime { std::chrono::steady_clock::now() };
+  gameplay.HandleInput(InputSlots::MouseXY,
+    platform::MouseMotionEvent(now, platform::kInvalidWindowId,
+      { .x = 0, .y = 0 }, { .dx = 3.0F, .dy = -2.0F }));
+  gameplay.HandleInput(InputSlots::LeftMouseButton,
+    platform::MouseButtonEvent(now, platform::kInvalidWindowId,
+      { .x = 0, .y = 0 }, platform::MouseButton::kLeft,
+      platform::ButtonState::kPressed));
+  static_cast<void>(gameplay.Update(time::CanonicalDuration {}));
+
+  engine::FrameContext context;
+  context.SetCurrentPhase(
+    core::PhaseId::kInput, engine::internal::EngineTagFactory::Get());
+  context.SetInputSnapshot(std::make_shared<const oxygen::input::InputSnapshot>(
+                             std::vector { look, aim }),
+    engine::internal::EngineTagFactory::Get());
+  context.SetCurrentPhase(
+    core::PhaseId::kGameplay, engine::internal::EngineTagFactory::Get());
+  co::testing::TestEventLoop loop;
+  co::Run(loop, [&module, &context] -> co::Co<> {
+    co_await module.OnGameplay(observer_ptr { &context });
+  });
+
+  const auto checked = module.ExecuteScript(ScriptExecutionRequest {
+    .source_text = ScriptSourceText { R"lua(
+if type(look_value) ~= "vector" or look_value.x ~= 3 or look_value.y ~= -2 then
+  error("look is " .. tostring(look_value) .. ", expected (3, -2)")
+end
+if aim_value ~= true then
+  error("aim is " .. tostring(aim_value) .. ", expected true")
+end
+if absent_value ~= nil then
+  error("an action the frame does not have must read nil")
+end
+)lua" },
+    .chunk_name = ScriptChunkName { "input_value_check" },
   });
   EXPECT_TRUE(checked.ok) << checked.message;
 }

@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <array>
+#include <memory>
 #include <span>
 #include <string>
 #include <string_view>
@@ -15,11 +16,15 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Base/Types/Geometry.h>
 #include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Content/InputContextHydration.h>
+#include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/InputMappingContextAsset.h>
 #include <Oxygen/Engine/IAsyncEngine.h>
+#include <Oxygen/Input/ActionValue.h>
+#include <Oxygen/Input/InputSnapshot.h>
 #include <Oxygen/Input/InputSystem.h>
 #include <Oxygen/Scripting/Bindings/BindingTable.h>
 #include <Oxygen/Scripting/Bindings/Contracts/BindingDescription.h>
@@ -247,6 +252,38 @@ namespace {
     return kLuaSingleResult;
   }
 
+  //! The value an action has this frame: a boolean, a number (axis1d) or a
+  //! vector whose z is 0 (axis2d); nil when the frame has no input or the
+  //! action is not in it.
+  auto LuaInputValue(lua_State* state) -> int
+  {
+    const auto key
+      = RequireAssetArg(state, "oxygen.input.value expects an input action");
+    const auto frame = GetActiveFrameContext(state);
+    const auto blob = frame != nullptr ? frame->GetInputSnapshot() : nullptr;
+    const auto snapshot
+      = std::static_pointer_cast<const oxygen::input::InputSnapshot>(blob);
+    if (!snapshot || !std::ranges::contains(snapshot->GetActionKeys(), key)) {
+      lua_pushnil(state);
+      return kLuaSingleResult;
+    }
+    const auto value = snapshot->GetActionValue(key);
+    switch (value.GetType()) {
+    case oxygen::input::ActionValueType::kBool:
+      lua_pushboolean(state, value.GetAs<bool>() ? 1 : 0);
+      break;
+    case oxygen::input::ActionValueType::kAxis1D:
+      lua_pushnumber(state, value.GetAs<Axis1D>().x);
+      break;
+    case oxygen::input::ActionValueType::kAxis2D: {
+      const auto& axis = value.GetAs<Axis2D>();
+      lua_pushvector(state, axis.x, axis.y, 0.0F);
+      break;
+    }
+    }
+    return kLuaSingleResult;
+  }
+
   auto LuaInputOnAction(lua_State* state) -> int
   {
     return LuaInputOnActionImpl(state);
@@ -272,6 +309,11 @@ namespace {
       .name = "deactivate_context",
       .function = LuaInputDeactivateContext,
       .signature = "(context: string) -> boolean",
+    },
+    {
+      .name = "value",
+      .function = LuaInputValue,
+      .signature = "(action: string) -> (boolean | number | vector)?",
     },
   });
 
