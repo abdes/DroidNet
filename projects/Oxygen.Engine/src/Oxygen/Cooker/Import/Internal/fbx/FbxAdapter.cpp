@@ -1148,19 +1148,38 @@ namespace {
     return placeholder;
   }
 
-  [[nodiscard]] auto IsLambertMaterial(const ufbx_material& material) -> bool
+  //! The material's specular level: F0 = 0.08 x level, 0.5 by default.
+  /*!
+   With a specular texture, the level is the factor times the texture, so the
+   factor scales the texture's meaning into the level.
+  */
+  [[nodiscard]] auto SpecularLevel(
+    const ufbx_material& material, const bool textured) -> float
   {
-    if (material.shader_type == UFBX_SHADER_FBX_LAMBERT) {
-      return true;
+    constexpr auto kDefaultLevel = 0.5F;
+    switch (SpecularOf(material)) {
+    case FbxSpecular::kLevel:
+      // Blender's level; a texture holds it whole.
+      if (textured) {
+        return 1.0F;
+      }
+      return material.fbx.specular_factor.has_value
+        ? Clamp01(static_cast<float>(material.fbx.specular_factor.value_real))
+        : kDefaultLevel;
+    case FbxSpecular::kWeight: {
+      if (!material.features.specular.enabled) {
+        return kDefaultLevel;
+      }
+      // A weight of 1.0 is the default reflectance, the level's 0.5.
+      const auto weight = material.pbr.specular_factor.has_value
+        ? static_cast<float>(material.pbr.specular_factor.value_real)
+        : 1.0F;
+      return Clamp01(kDefaultLevel * weight);
     }
-
-    const auto shading_model = ToStringView(material.shading_model_name);
-    if (shading_model == "Lambert" || shading_model == "lambert") {
-      return true;
+    case FbxSpecular::kHighlight:
+      break;
     }
-
-    const auto name = ToStringView(material.name);
-    return StartsWithIgnoreCase(name, "lambert");
+    return kDefaultLevel;
   }
 
   [[nodiscard]] auto HasMaterialTextures(const ufbx_material* material) -> bool
@@ -1297,6 +1316,38 @@ namespace {
     return witnesses;
   }
 
+  //! The options every FBX import loads its scene with.
+  /*!
+   A file Blender exported is read with ufbx's Blender material model, which
+   recovers the metallic and roughness maps Blender writes to the FBX
+   reflection and shininess channels.
+  */
+  [[nodiscard]] auto MakeLoadOptions(UfbxCancelContext& cancel_ctx,
+    const std::optional<ufbx_real> target_unit_meters,
+    const ModelParseMode mode) -> ufbx_load_opts
+  {
+    auto opts = ufbx_load_opts {};
+    opts.progress_cb.fn = &UfbxProgressCallback;
+    opts.progress_cb.user = &cancel_ctx;
+
+    opts.target_axes = coord::EngineWorldTargetAxes();
+    opts.target_camera_axes = coord::EngineCameraTargetAxes();
+    opts.geometry_transform_handling
+      = UFBX_GEOMETRY_TRANSFORM_HANDLING_HELPER_NODES;
+    opts.space_conversion = UFBX_SPACE_CONVERSION_MODIFY_GEOMETRY;
+    // Default to mirroring along engine forward/back, then refine using
+    // FBX axis metadata if available.
+    opts.handedness_conversion_axis = UFBX_MIRROR_AXIS_Y;
+    if (target_unit_meters.has_value()) {
+      opts.target_unit_meters = target_unit_meters.value();
+    }
+    opts.generate_missing_normals = mode == ModelParseMode::kGeometry;
+    opts.skip_skin_vertices = false;
+    opts.clean_skin_weights = true;
+    opts.use_blender_pbr_material = true;
+    return opts;
+  }
+
   [[nodiscard]] auto LoadSceneFromFile(const std::filesystem::path& path,
     const AdapterInput& input, std::vector<ImportDiagnostic>& diagnostics,
     const ModelParseMode mode = ModelParseMode::kGeometry) -> FbxSceneSource
@@ -1321,29 +1372,10 @@ namespace {
     }
 
     FbxSceneSource loaded;
-    ufbx_load_opts opts {};
     ufbx_error error {};
-
     UfbxCancelContext cancel_ctx { .stop_token = input.stop_token };
-    opts.progress_cb.fn = &UfbxProgressCallback;
-    opts.progress_cb.user = &cancel_ctx;
-
-    opts.target_axes = coord::EngineWorldTargetAxes();
-    opts.target_camera_axes = coord::EngineCameraTargetAxes();
-    opts.geometry_transform_handling
-      = UFBX_GEOMETRY_TRANSFORM_HANDLING_HELPER_NODES;
-    opts.space_conversion = UFBX_SPACE_CONVERSION_MODIFY_GEOMETRY;
-    // Default to mirroring along engine forward/back, then refine using
-    // FBX axis metadata if available.
-    opts.handedness_conversion_axis = UFBX_MIRROR_AXIS_Y;
-    if (const auto target_unit_meters
-      = coord::ComputeTargetUnitMeters(coordinate_policy);
-      target_unit_meters.has_value()) {
-      opts.target_unit_meters = *target_unit_meters;
-    }
-    opts.generate_missing_normals = mode == ModelParseMode::kGeometry;
-    opts.skip_skin_vertices = false;
-    opts.clean_skin_weights = true;
+    auto opts = MakeLoadOptions(
+      cancel_ctx, coord::ComputeTargetUnitMeters(coordinate_policy), mode);
 
     {
       ufbx_load_opts probe_opts = opts;
@@ -1435,29 +1467,10 @@ namespace {
     }
 
     FbxSceneSource loaded;
-    ufbx_load_opts opts {};
     ufbx_error error {};
-
     UfbxCancelContext cancel_ctx { .stop_token = input.stop_token };
-    opts.progress_cb.fn = &UfbxProgressCallback;
-    opts.progress_cb.user = &cancel_ctx;
-
-    opts.target_axes = coord::EngineWorldTargetAxes();
-    opts.target_camera_axes = coord::EngineCameraTargetAxes();
-    opts.geometry_transform_handling
-      = UFBX_GEOMETRY_TRANSFORM_HANDLING_HELPER_NODES;
-    opts.space_conversion = UFBX_SPACE_CONVERSION_MODIFY_GEOMETRY;
-    // Default to mirroring along engine forward/back, then refine using
-    // FBX axis metadata if available.
-    opts.handedness_conversion_axis = UFBX_MIRROR_AXIS_Y;
-    if (const auto target_unit_meters
-      = coord::ComputeTargetUnitMeters(coordinate_policy);
-      target_unit_meters.has_value()) {
-      opts.target_unit_meters = *target_unit_meters;
-    }
-    opts.generate_missing_normals = mode == ModelParseMode::kGeometry;
-    opts.skip_skin_vertices = false;
-    opts.clean_skin_weights = true;
+    auto opts = MakeLoadOptions(
+      cancel_ctx, coord::ComputeTargetUnitMeters(coordinate_policy), mode);
 
     {
       ufbx_load_opts probe_opts = opts;
@@ -2673,27 +2686,6 @@ auto FbxAdapter::PrepareMaterials(const AdapterInput& input)
           = (std::max)(0.0F, material->fbx.bump_factor.value_real);
       }
 
-      float specular_factor = 1.0F;
-      if (IsLambertMaterial(*material)) {
-        specular_factor = 0.5F;
-      } else if (material->pbr.specular_factor.has_value) {
-        specular_factor = Clamp01(material->pbr.specular_factor.value_real);
-      } else if (material->fbx.specular_factor.has_value) {
-        specular_factor = Clamp01(material->fbx.specular_factor.value_real);
-      }
-
-      if (material->pbr.specular_color.has_value) {
-        const auto& c = material->pbr.specular_color.value_vec4;
-        const float intensity = (std::max)({ c.x, c.y, c.z });
-        specular_factor *= intensity;
-      } else if (material->fbx.specular_color.has_value) {
-        const auto& c = material->fbx.specular_color.value_vec4;
-        const float intensity = (std::max)({ c.x, c.y, c.z });
-        specular_factor *= intensity;
-      }
-
-      item.material.inputs.specular_factor = Clamp01(specular_factor);
-
       item.material.inputs.double_sided
         = material->features.double_sided.enabled;
       item.material.inputs.unlit = material->features.unlit.enabled;
@@ -2754,17 +2746,24 @@ auto FbxAdapter::PrepareMaterials(const AdapterInput& input)
       apply_binding(item.material.textures.emissive,
         resolve_texture_id(emissive_tex), TextureUsage::kEmissive);
 
-      if (material->features.specular.enabled) {
-        if (material->pbr.specular_factor.has_value) {
-          item.material.inputs.specular_factor
-            = static_cast<float>(material->pbr.specular_factor.value_real);
-        }
-        if (material->pbr.specular_color.texture_enabled) {
-          apply_binding(item.material.textures.specular,
-            resolve_texture_id(material->pbr.specular_color.texture),
-            TextureUsage::kSpecular);
-        }
-      }
+      apply_binding(item.material.textures.specular,
+        resolve_texture_id(textures.specular.Texture()),
+        TextureUsage::kSpecular);
+      apply_binding(item.material.textures.sheen_color,
+        resolve_texture_id(textures.sheen_color.Texture()),
+        TextureUsage::kSheenColor);
+      apply_binding(item.material.textures.clearcoat,
+        resolve_texture_id(textures.clearcoat.Texture()),
+        TextureUsage::kClearcoat);
+      apply_binding(item.material.textures.clearcoat_normal,
+        resolve_texture_id(textures.clearcoat_normal.Texture()),
+        TextureUsage::kClearcoatNormal);
+      apply_binding(item.material.textures.transmission,
+        resolve_texture_id(textures.transmission.Texture()),
+        TextureUsage::kTransmission);
+
+      item.material.inputs.specular_factor
+        = SpecularLevel(*material, textures.specular.Texture() != nullptr);
 
       if (material->features.sheen.enabled) {
         if (material->pbr.sheen_color.has_value) {
@@ -2772,11 +2771,6 @@ auto FbxAdapter::PrepareMaterials(const AdapterInput& input)
           item.material.inputs.sheen_color_factor[0] = static_cast<float>(sc.x);
           item.material.inputs.sheen_color_factor[1] = static_cast<float>(sc.y);
           item.material.inputs.sheen_color_factor[2] = static_cast<float>(sc.z);
-        }
-        if (material->pbr.sheen_color.texture_enabled) {
-          apply_binding(item.material.textures.sheen_color,
-            resolve_texture_id(material->pbr.sheen_color.texture),
-            TextureUsage::kSheenColor);
         }
       }
 
@@ -2789,32 +2783,12 @@ auto FbxAdapter::PrepareMaterials(const AdapterInput& input)
           item.material.inputs.clearcoat_roughness
             = static_cast<float>(material->pbr.coat_roughness.value_real);
         }
-        if (material->pbr.coat_color
-              .texture_enabled) { // coat_color is often used for weight/factor
-                                  // map
-          apply_binding(item.material.textures.clearcoat,
-            resolve_texture_id(material->pbr.coat_factor.texture),
-            TextureUsage::kClearcoat);
-        }
-        if (material->pbr.coat_normal.texture_enabled) {
-          apply_binding(item.material.textures.clearcoat_normal,
-            resolve_texture_id(material->pbr.coat_normal.texture),
-            TextureUsage::kClearcoatNormal);
-        }
       }
 
       if (material->features.transmission.enabled) {
         if (material->pbr.transmission_factor.has_value) {
           item.material.inputs.transmission_factor
             = static_cast<float>(material->pbr.transmission_factor.value_real);
-        }
-        if (material->pbr.transmission_color.texture_enabled) {
-          const auto* tex = material->pbr.transmission_color.texture;
-          if (tex == nullptr) {
-            tex = material->pbr.transmission_factor.texture;
-          }
-          apply_binding(item.material.textures.transmission,
-            resolve_texture_id(tex), TextureUsage::kTransmission);
         }
 
         if (material->pbr.transmission_scatter.has_value) {
@@ -3024,6 +2998,13 @@ auto FbxAdapter::PrepareTextures(const AdapterInput& input) const
       register_texture(roughness_tex, TextureUsage::kRoughness);
       register_texture(ao_tex, TextureUsage::kOcclusion);
     }
+    register_texture(textures.specular.Texture(), TextureUsage::kSpecular);
+    register_texture(textures.sheen_color.Texture(), TextureUsage::kSheenColor);
+    register_texture(textures.clearcoat.Texture(), TextureUsage::kClearcoat);
+    register_texture(
+      textures.clearcoat_normal.Texture(), TextureUsage::kClearcoatNormal);
+    register_texture(
+      textures.transmission.Texture(), TextureUsage::kTransmission);
   }
 
   result.sources.reserve(work_items.size());

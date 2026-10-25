@@ -123,6 +123,13 @@ struct TextureImportDesc {
 
   //! Flip the green (Y) channel for normal maps (DirectX vs OpenGL convention).
   bool flip_normal_green = false;
+  /*!
+    The channel a single-value map is read from. Its value is copied into the
+    red, green and blue channels, and alpha is made opaque, so every
+    single-value slot reads it from red. Empty keeps the source channels.
+    glTF stores its specular in alpha, for instance.
+  */
+  std::optional<TextureChannel> value_channel {};
 
   //! Renormalize normals in each mip level after downsampling.
   bool renormalize_normals_in_mips = true;

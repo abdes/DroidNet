@@ -415,9 +415,10 @@ namespace {
         const size_t pixel_count = src_view.width * src_view.height;
         for (size_t i = 0; i < pixel_count; ++i) {
           for (size_t c = 0; c < 4; ++c) {
-            const float value = src_ptr[i * 4 + c];
+            const float value = src_ptr[(i * 4) + c];
             const float clamped = (std::max)(0.0F, (std::min)(1.0F, value));
-            dst_ptr[i * 4 + c] = static_cast<uint8_t>(clamped * 255.0F + 0.5F);
+            dst_ptr[(i * 4) + c]
+              = static_cast<uint8_t>((clamped * 255.0F) + 0.5F);
           }
         }
       }
@@ -467,8 +468,8 @@ namespace {
         const size_t pixel_count = src_view.width * src_view.height;
         for (size_t i = 0; i < pixel_count; ++i) {
           for (size_t c = 0; c < 4; ++c) {
-            const uint8_t byte_val = static_cast<uint8_t>(src_ptr[i * 4 + c]);
-            dst_ptr[i * 4 + c] = static_cast<float>(byte_val) / 255.0F;
+            const uint8_t byte_val = static_cast<uint8_t>(src_ptr[(i * 4) + c]);
+            dst_ptr[(i * 4) + c] = static_cast<float>(byte_val) / 255.0F;
           }
         }
       }
@@ -679,6 +680,14 @@ namespace detail {
       if (desc.flip_normal_green) {
         image::content::FlipNormalGreen(result);
       }
+    }
+
+    if (desc.value_channel.has_value()) {
+      const auto format = result.Meta().format;
+      if (format != Format::kRGBA8UNorm && format != Format::kRGBA32Float) {
+        return Err(TextureImportError::kUnsupportedFormat);
+      }
+      image::content::MoveValueToRed(result, desc.value_channel.value());
     }
 
     return Ok(std::move(result));
@@ -912,16 +921,16 @@ namespace detail {
         if (format_info.block_size == 1) {
           // Uncompressed format
           for (uint32_t row = 0; row < layout.height; ++row) {
-            std::memcpy(dst_ptr + row * layout.row_pitch,
-              src_ptr + row * src_view.row_pitch_bytes, src_row_bytes);
+            std::memcpy(dst_ptr + (row * layout.row_pitch),
+              src_ptr + (row * src_view.row_pitch_bytes), src_row_bytes);
           }
         } else {
           // Block-compressed format
           const uint32_t blocks_y = (layout.height + format_info.block_size - 1)
             / format_info.block_size;
           for (uint32_t block_row = 0; block_row < blocks_y; ++block_row) {
-            std::memcpy(dst_ptr + block_row * layout.row_pitch,
-              src_ptr + block_row * src_view.row_pitch_bytes, src_row_bytes);
+            std::memcpy(dst_ptr + (block_row * layout.row_pitch),
+              src_ptr + (block_row * src_view.row_pitch_bytes), src_row_bytes);
           }
         }
       }

@@ -142,7 +142,7 @@
           "x-editor-soft-min": 0.0,
           "x-editor-soft-max": 1.0,
           "x-editor-advanced": true,
-          "x-editor-tooltip": "Dielectric specular reflection factor."
+          "x-editor-tooltip": "Specular level of dielectrics: F0 = 0.08 x level, 0.5 by default (F0 = 0.04)."
         },
         "sheen_color_factor": {
           "x-editor-label": "Sheen Color",

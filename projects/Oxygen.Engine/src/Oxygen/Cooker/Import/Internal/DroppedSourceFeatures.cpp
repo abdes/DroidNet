@@ -264,20 +264,27 @@ auto ReportDroppedSourceFeatures(const ufbx_scene& source,
     const auto path = "/Materials/" + std::to_string(index);
     const auto& pbr = material->pbr;
     const auto mapped = adapters::FbxMaterialTextures::From(*material);
+    // A file binds one texture to several channels, such as a legacy FBX
+    // channel and the PBR channel ufbx derives from it. A texture a slot
+    // imports is carried; any other is reported once, at its first channel.
+    auto reported = std::set<const ufbx_texture*> {};
     const auto report_maps
       = [&](const auto& maps, const std::string_view group) -> auto {
       for (const auto& [slot_index, map] :
         std::views::enumerate(std::span(maps))) {
-        if (adapters::FbxTextureSlot::Active(map) && !mapped.Supports(map)) {
-          const auto name
-            = std::string(map.texture->name.data, map.texture->name.length);
-          Drop(true,
-            "texture '" + name + "' on a " + std::string(group)
-              + " material channel the material format has no slot for",
-            source_path,
-            path + "/" + std::string(group) + "/" + std::to_string(slot_index),
-            diagnostics);
+        if (!adapters::FbxTextureSlot::Active(map)
+          || mapped.Carries(*map.texture)
+          || !reported.insert(map.texture).second) {
+          continue;
         }
+        const auto name
+          = std::string(map.texture->name.data, map.texture->name.length);
+        Drop(true,
+          "texture '" + name + "' on a " + std::string(group)
+            + " material channel the material format has no slot for",
+          source_path,
+          path + "/" + std::string(group) + "/" + std::to_string(slot_index),
+          diagnostics);
       }
     };
     report_maps(material->pbr.maps, "pbr");

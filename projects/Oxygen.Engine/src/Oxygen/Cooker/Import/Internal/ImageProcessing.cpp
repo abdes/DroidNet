@@ -41,7 +41,7 @@ namespace image::color {
     if (linear <= 0.0031308F) {
       return linear * 12.92F;
     }
-    return 1.055F * std::pow(linear, 1.0F / 2.4F) - 0.055F;
+    return (1.055F * std::pow(linear, 1.0F / 2.4F)) - 0.055F;
   }
 
   auto SrgbToLinear(const std::array<float, 4> rgba) noexcept
@@ -163,8 +163,8 @@ namespace image::hdr {
     const auto tonemap = [](float x) noexcept -> float {
       // Clamp negative values
       x = (std::max)(x, 0.0F);
-      const float numerator = x * (kA * x + kB);
-      const float denominator = x * (kC * x + kD) + kE;
+      const float numerator = x * ((kA * x) + kB);
+      const float denominator = (x * ((kC * x) + kD)) + kE;
       return std::clamp(numerator / denominator, 0.0F, 1.0F);
     };
 
@@ -257,31 +257,35 @@ namespace image::mip {
       const float t = x / 3.75F;
       const float t2 = t * t;
       return 1.0F
-        + t2
-        * (3.5156229F
-          + t2
-            * (3.0899424F
-              + t2
-                * (1.2067492F
-                  + t2 * (0.2659732F + t2 * (0.0360768F + t2 * 0.0045813F)))));
+        + (t2
+          * (3.5156229F
+            + (t2
+              * (3.0899424F
+                + (t2
+                  * (1.2067492F
+                    + (t2
+                      * (0.2659732F
+                        + (t2 * (0.0360768F + (t2 * 0.0045813F)))))))))));
     }
 
     const float t = 3.75F / ax;
     return (std::exp(ax) / std::sqrt(ax))
       * (0.39894228F
-        + t
+        + (t
           * (0.01328592F
-            + t
+            + (t
               * (0.00225319F
-                + t
+                + (t
                   * (-0.00157565F
-                    + t
+                    + (t
                       * (0.00916281F
-                        + t
+                        + (t
                           * (-0.02057706F
-                            + t
+                            + (t
                               * (0.02635537F
-                                + t * (-0.01647633F + t * 0.00392377F))))))));
+                                + (t
+                                  * (-0.01647633F
+                                    + (t * 0.00392377F))))))))))))))));
   }
 
   auto KaiserWindow(const float x, const float alpha) noexcept -> float
@@ -290,7 +294,7 @@ namespace image::mip {
       return 0.0F;
     }
 
-    const float arg = alpha * std::sqrt(1.0F - x * x);
+    const float arg = alpha * std::sqrt(1.0F - (x * x));
     return BesselI0(arg) / BesselI0(alpha);
   }
 
@@ -357,8 +361,8 @@ namespace image::mip {
             // Sample 2x2 block
             for (uint32_t py : { sy, sy1 }) {
               for (uint32_t px : { sx, sx1 }) {
-                const size_t src_offset = static_cast<size_t>(py) * src_stride
-                  + static_cast<size_t>(px) * 4;
+                const size_t src_offset = (static_cast<size_t>(py) * src_stride)
+                  + (static_cast<size_t>(px) * 4);
                 for (int c = 0; c < 4; ++c) {
                   sum[c] += src_data[src_offset + c];
                 }
@@ -367,7 +371,7 @@ namespace image::mip {
 
             // Average
             const size_t dst_offset
-              = (static_cast<size_t>(y) * dst_width + x) * 4;
+              = ((static_cast<size_t>(y) * dst_width) + x) * 4;
             for (int c = 0; c < 4; ++c) {
               dst_data[dst_offset + c] = sum[c] * 0.25F;
             }
@@ -392,7 +396,7 @@ namespace image::mip {
             for (uint32_t py : { sy, sy1 }) {
               for (uint32_t px : { sx, sx1 }) {
                 const size_t src_offset
-                  = static_cast<size_t>(py) * src_stride + px * 4;
+                  = (static_cast<size_t>(py) * src_stride) + (px * 4);
                 for (int c = 0; c < 4; ++c) {
                   sum[c] += src_data[src_offset + c];
                 }
@@ -400,7 +404,7 @@ namespace image::mip {
             }
 
             const size_t dst_offset
-              = (static_cast<size_t>(y) * dst_width + x) * 4;
+              = ((static_cast<size_t>(y) * dst_width) + x) * 4;
             for (int c = 0; c < 4; ++c) {
               dst_data[dst_offset + c] = static_cast<uint8_t>((sum[c] + 2) / 4);
             }
@@ -505,16 +509,16 @@ namespace image::mip {
           [&](uint32_t src_x, std::array<float, 4>& out) -> void {
             size_t offset = 0;
             if (format == Format::kRGBA32Float) {
-              offset = static_cast<size_t>(y) * src.row_pitch_bytes
-                + static_cast<size_t>(src_x) * 16;
+              offset = (static_cast<size_t>(y) * src.row_pitch_bytes)
+                + (static_cast<size_t>(src_x) * 16);
               const auto* p
                 = reinterpret_cast<const float*>(src.pixels.data() + offset);
               for (int c = 0; c < 4; ++c) {
                 out[c] = p[c];
               }
             } else { // RGBA8
-              offset = static_cast<size_t>(y) * src.row_pitch_bytes
-                + static_cast<size_t>(src_x) * 4;
+              offset = (static_cast<size_t>(y) * src.row_pitch_bytes)
+                + (static_cast<size_t>(src_x) * 4);
               const auto* p
                 = reinterpret_cast<const uint8_t*>(src.pixels.data() + offset);
               for (int c = 0; c < 4; ++c) {
@@ -525,7 +529,7 @@ namespace image::mip {
           },
           [&](uint32_t dst_x, const std::array<float, 4>& in) -> void {
             const size_t offset
-              = (static_cast<size_t>(y) * temp_width + dst_x) * 4;
+              = ((static_cast<size_t>(y) * temp_width) + dst_x) * 4;
             float* p = temp_buffer.data() + offset;
             for (int c = 0; c < 4; ++c) {
               p[c] = in[c];
@@ -540,7 +544,7 @@ namespace image::mip {
           temp_height, dst_height,
           [&](uint32_t src_y, std::array<float, 4>& out) -> void {
             const size_t offset
-              = (static_cast<size_t>(src_y) * temp_width + x) * 4;
+              = ((static_cast<size_t>(src_y) * temp_width) + x) * 4;
             const float* p = temp_buffer.data() + offset;
             for (int c = 0; c < 4; ++c) {
               out[c] = p[c];
@@ -549,7 +553,7 @@ namespace image::mip {
           [&](uint32_t dst_y, const std::array<float, 4>& in) -> void {
             if (format == Format::kRGBA32Float) {
               const size_t offset
-                = (static_cast<size_t>(dst_y) * dst_width + x) * 4;
+                = ((static_cast<size_t>(dst_y) * dst_width) + x) * 4;
               auto* p = reinterpret_cast<float*>(dst.data())
                 + offset; // tight packing assumed
               for (int c = 0; c < 4; ++c) {
@@ -557,7 +561,7 @@ namespace image::mip {
               }
             } else { // RGBA8
               const size_t offset
-                = (static_cast<size_t>(dst_y) * dst_width + x) * 4;
+                = ((static_cast<size_t>(dst_y) * dst_width) + x) * 4;
               auto* p = reinterpret_cast<uint8_t*>(dst.data()) + offset;
               for (int c = 0; c < 4; ++c) {
                 p[c] = static_cast<uint8_t>(
@@ -670,12 +674,12 @@ namespace image::content {
     -> std::array<float, 4>
   {
     // Unpack from [0,1] to [-1,1]
-    const float nx = rgba[0] * 2.0F - 1.0F;
-    const float ny = rgba[1] * 2.0F - 1.0F;
-    const float nz = rgba[2] * 2.0F - 1.0F;
+    const float nx = (rgba[0] * 2.0F) - 1.0F;
+    const float ny = (rgba[1] * 2.0F) - 1.0F;
+    const float nz = (rgba[2] * 2.0F) - 1.0F;
 
     // Normalize
-    const float len = std::sqrt(nx * nx + ny * ny + nz * nz);
+    const float len = std::sqrt((nx * nx) + (ny * ny) + (nz * nz));
     if (len < 1e-6F) {
       return { 0.5F, 0.5F, 1.0F, rgba[3] }; // Default up normal
     }
@@ -684,9 +688,9 @@ namespace image::content {
 
     // Pack back to [0,1]
     return {
-      (nx * inv_len + 1.0F) * 0.5F,
-      (ny * inv_len + 1.0F) * 0.5F,
-      (nz * inv_len + 1.0F) * 0.5F,
+      ((nx * inv_len) + 1.0F) * 0.5F,
+      ((ny * inv_len) + 1.0F) * 0.5F,
+      ((nz * inv_len) + 1.0F) * 0.5F,
       rgba[3],
     };
   }
@@ -777,15 +781,52 @@ namespace image::content {
         if (is_float) {
           auto* float_data = reinterpret_cast<float*>(pixels.data());
           for (size_t i = 0; i < pixel_count; ++i) {
-            const size_t offset = i * 4 + 1; // Green channel
+            const size_t offset = (i * 4) + 1; // Green channel
             // Flip: [0,1] -> [1,0]
             float_data[offset] = 1.0F - float_data[offset];
           }
         } else { // RGBA8
           auto* byte_data = reinterpret_cast<uint8_t*>(pixels.data());
           for (size_t i = 0; i < pixel_count; ++i) {
-            const size_t offset = i * 4 + 1; // Green channel
+            const size_t offset = (i * 4) + 1; // Green channel
             byte_data[offset] = 255 - byte_data[offset];
+          }
+        }
+      }
+    }
+  }
+
+  void MoveValueToRed(ScratchImage& image, const TextureChannel channel)
+  {
+    const auto& meta = image.Meta();
+    const bool is_float = (meta.format == Format::kRGBA32Float);
+    const auto source = static_cast<size_t>(channel);
+
+    for (uint16_t layer = 0; layer < meta.array_layers; ++layer) {
+      for (uint16_t mip = 0; mip < meta.mip_levels; ++mip) {
+        auto pixels = image.GetMutablePixels(layer, mip);
+        const auto view = image.GetImage(layer, mip);
+        const auto pixel_count = static_cast<size_t>(view.width) * view.height;
+
+        if (is_float) {
+          auto* float_data = reinterpret_cast<float*>(pixels.data());
+          for (size_t i = 0; i < pixel_count; ++i) {
+            auto* pixel = float_data + (i * 4);
+            const auto value = pixel[source];
+            pixel[0] = value;
+            pixel[1] = value;
+            pixel[2] = value;
+            pixel[3] = 1.0F;
+          }
+        } else { // RGBA8
+          auto* byte_data = reinterpret_cast<uint8_t*>(pixels.data());
+          for (size_t i = 0; i < pixel_count; ++i) {
+            auto* pixel = byte_data + (i * 4);
+            const auto value = pixel[source];
+            pixel[0] = value;
+            pixel[1] = value;
+            pixel[2] = value;
+            pixel[3] = 255;
           }
         }
       }

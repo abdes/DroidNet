@@ -2197,7 +2197,10 @@ auto GltfAdapter::PrepareMaterials(const AdapterInput& input)
     }
 
     if (material.has_specular != 0) {
-      item.material.inputs.specular_factor = material.specular.specular_factor;
+      // KHR_materials_specular's 1.0 is the default reflectance, the level's
+      // 0.5; its texture holds the factor in alpha, cooked into red.
+      item.material.inputs.specular_factor
+        = 0.5F * material.specular.specular_factor;
       if (material.specular.specular_texture.texture != nullptr) {
         ApplyTextureBinding(item.material.textures.specular,
           material.specular.specular_texture,
@@ -2379,6 +2382,9 @@ auto GltfAdapter::PrepareTextures(const AdapterInput& input) const
     auto desc = MakeDescFromPreset(PresetForUsage(usage));
     desc.source_id = source_id;
     desc.stop_token = input.stop_token;
+    if (usage == TextureUsage::kSpecular) {
+      desc.value_channel = TextureChannel::kAlpha;
+    }
     const auto& tuning = input.request.options.texture_tuning;
     if (tuning.enabled) {
       desc.flip_y_on_decode = tuning.flip_y_on_decode;

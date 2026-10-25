@@ -26,6 +26,7 @@ using oxygen::Format;
 using oxygen::content::import::MipFilter;
 using oxygen::content::import::ScratchImage;
 using oxygen::content::import::ScratchImageMeta;
+using oxygen::content::import::TextureChannel;
 
 namespace color = oxygen::content::import::image::color;
 namespace hdr = oxygen::content::import::image::hdr;
@@ -303,6 +304,34 @@ NOLINT_TEST(ContentProcessingTest, FlipNormalGreenInvertsGreenChannel)
     EXPECT_EQ(data[offset + 1], 191U); // G flipped: 255 - 64 = 191
     EXPECT_EQ(data[offset + 2], 255U); // B unchanged
     EXPECT_EQ(data[offset + 3], 255U); // A unchanged
+  }
+}
+
+NOLINT_TEST(
+  ContentProcessingTest, MoveValueToRedCopiesTheChannelAndOpaquesAlpha)
+{
+  std::vector<std::byte> pixels(2 * 2 * 4);
+  for (size_t i = 0; i < 4; ++i) {
+    const size_t offset = i * 4;
+    pixels.at(offset + 0) = std::byte { 10 };
+    pixels.at(offset + 1) = std::byte { 20 };
+    pixels.at(offset + 2) = std::byte { 30 };
+    pixels.at(offset + 3) = std::byte { 77 }; // the value, as glTF stores it
+  }
+  auto image = ScratchImage::CreateFromData(
+    2, 2, Format::kRGBA8UNorm, 8, std::move(pixels));
+  ASSERT_TRUE(image.IsValid());
+
+  content::MoveValueToRed(image, TextureChannel::kAlpha);
+
+  const auto view = image.GetImage(0, 0);
+  const auto* data = reinterpret_cast<const uint8_t*>(view.pixels.data());
+  for (size_t i = 0; i < 4; ++i) {
+    const size_t offset = i * 4;
+    EXPECT_EQ(data[offset + 0], 77U);
+    EXPECT_EQ(data[offset + 1], 77U);
+    EXPECT_EQ(data[offset + 2], 77U);
+    EXPECT_EQ(data[offset + 3], 255U);
   }
 }
 

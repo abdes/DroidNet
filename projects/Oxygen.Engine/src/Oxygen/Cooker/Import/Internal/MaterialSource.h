@@ -82,7 +82,8 @@ struct MaterialInputs {
   float emissive_factor[3] = { 0.0F, 0.0F, 0.0F };
   float alpha_cutoff = 0.5F;
   float ior = 1.5F;
-  float specular_factor = 1.0F;
+  //! Specular level: F0 = 0.08 x level (see `MaterialAssetDesc`).
+  float specular_factor = 0.5F;
   float sheen_color_factor[3] = { 0.0F, 0.0F, 0.0F };
   float clearcoat_factor = 0.0F;
   float clearcoat_roughness = 0.0F;

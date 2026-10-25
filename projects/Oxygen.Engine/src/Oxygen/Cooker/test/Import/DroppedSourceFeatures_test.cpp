@@ -94,6 +94,145 @@ NOLINT_TEST(DroppedSourceFeaturesTest, ActiveUnmappedFbxChannelsAreReported)
   }));
 }
 
+//! A file texture that repeats, so its own import reports nothing.
+auto FileTexture(const char* name) -> ufbx_texture
+{
+  auto texture = ufbx_texture {};
+  texture.name = {
+    .data = name,
+    .length = std::char_traits<char>::length(name),
+  };
+  texture.type = UFBX_TEXTURE_FILE;
+  texture.wrap_u = UFBX_WRAP_REPEAT;
+  texture.wrap_v = UFBX_WRAP_REPEAT;
+  return texture;
+}
+
+auto Bind(ufbx_material_map& map, ufbx_texture& texture) -> void
+{
+  map.texture = &texture;
+  map.texture_enabled = true;
+}
+
+auto Report(ufbx_material& material) -> std::vector<ImportDiagnostic>
+{
+  auto* material_pointer = &material;
+  auto source = ufbx_scene {};
+  source.materials = { .data = &material_pointer, .count = 1 };
+  auto diagnostics = std::vector<ImportDiagnostic> {};
+  ReportDroppedSourceFeatures(source, "material.fbx", diagnostics);
+  return diagnostics;
+}
+
+//! The dropped-feature warnings that name `texture`.
+auto Naming(const std::vector<ImportDiagnostic>& diagnostics,
+  const std::string& texture) -> std::ptrdiff_t
+{
+  return std::ranges::count_if(diagnostics, [&](const auto& issue) -> bool {
+    return issue.code == kDropped && issue.severity == ImportSeverity::kWarning
+      && issue.message.contains("'" + texture + "'");
+  });
+}
+
+//! A legacy FBX channel that binds a texture a PBR slot imports drops nothing:
+//! the texture is imported, so nothing is reported for it.
+NOLINT_TEST(
+  DroppedSourceFeaturesTest, ChannelsOfAnImportedTextureAreNotReported)
+{
+  auto roughness = FileTexture("Rough");
+  auto specular = FileTexture("Spec");
+  auto material = ufbx_material {};
+  Bind(material.pbr.roughness, roughness);
+  Bind(material.fbx.specular_exponent, roughness);
+  // Blender's specular level, which the specular slot takes as it is.
+  material.shader_type = UFBX_SHADER_BLENDER_PHONG;
+  Bind(material.fbx.specular_factor, specular);
+
+  const auto diagnostics = Report(material);
+
+  EXPECT_EQ(Naming(diagnostics, "Rough"), 0);
+  EXPECT_EQ(Naming(diagnostics, "Spec"), 0);
+}
+
+//! A texture no slot imports is reported once, at its first channel, however
+//! many channels bind it.
+NOLINT_TEST(DroppedSourceFeaturesTest, AnUnimportedTextureIsReportedOnce)
+{
+  auto opacity = FileTexture("Cutout");
+  auto material = ufbx_material {};
+  Bind(material.pbr.opacity, opacity);
+  Bind(material.fbx.transparency_factor, opacity);
+
+  const auto diagnostics = Report(material);
+
+  EXPECT_EQ(Naming(diagnostics, "Cutout"), 1);
+}
+
+//! A PBR shader's specular and clear coat import their weight maps, never
+//! their colour maps; transmission falls back to its colour map when a file
+//! has only that.
+NOLINT_TEST(DroppedSourceFeaturesTest, FeatureSlotsReadTheirOwnMapsFirst)
+{
+  auto weight = FileTexture("Weight");
+  auto colour = FileTexture("Colour");
+  auto material = ufbx_material {};
+  material.shader_type = UFBX_SHADER_OSL_STANDARD_SURFACE;
+  material.features.specular.enabled = true;
+  material.features.transmission.enabled = true;
+  material.features.coat.enabled = true;
+  Bind(material.pbr.specular_color, colour);
+  Bind(material.pbr.transmission_color, colour);
+  Bind(material.pbr.coat_color, colour);
+  const auto colour_only
+    = oxygen::content::import::adapters::FbxMaterialTextures::From(material);
+  EXPECT_EQ(colour_only.specular.Texture(), nullptr);
+  EXPECT_EQ(colour_only.transmission.Texture(), &colour);
+  EXPECT_EQ(colour_only.clearcoat.Texture(), nullptr);
+
+  Bind(material.pbr.specular_factor, weight);
+  Bind(material.pbr.transmission_factor, weight);
+  Bind(material.pbr.coat_factor, weight);
+  const auto both
+    = oxygen::content::import::adapters::FbxMaterialTextures::From(material);
+  EXPECT_EQ(both.specular.Texture(), &weight);
+  EXPECT_EQ(both.transmission.Texture(), &weight);
+  EXPECT_EQ(both.clearcoat.Texture(), &weight);
+}
+
+//! An FBX Phong material's specular shapes a highlight; it is no reflectance,
+//! so its texture is not imported and is reported.
+NOLINT_TEST(DroppedSourceFeaturesTest, PhongSpecularIsReported)
+{
+  auto highlight = FileTexture("Highlight");
+  auto material = ufbx_material {};
+  material.shader_type = UFBX_SHADER_FBX_PHONG;
+  material.features.specular.enabled = true;
+  Bind(material.pbr.specular_factor, highlight);
+  Bind(material.fbx.specular_factor, highlight);
+
+  EXPECT_EQ(
+    oxygen::content::import::adapters::FbxMaterialTextures::From(material)
+      .specular.Texture(),
+    nullptr);
+  EXPECT_EQ(Naming(Report(material), "Highlight"), 1);
+}
+
+//! A material feature the material does not use imports none of its
+//! textures, so they are reported.
+NOLINT_TEST(DroppedSourceFeaturesTest, ADisabledFeatureImportsNoTexture)
+{
+  auto sheen = FileTexture("Sheen");
+  auto material = ufbx_material {};
+  Bind(material.pbr.sheen_color, sheen);
+  material.features.sheen.enabled = false;
+
+  EXPECT_EQ(
+    oxygen::content::import::adapters::FbxMaterialTextures::From(material)
+      .sheen_color.Texture(),
+    nullptr);
+  EXPECT_EQ(Naming(Report(material), "Sheen"), 1);
+}
+
 NOLINT_TEST(DroppedSourceFeaturesTest, FbxTextureWrapModesAreReported)
 {
   auto texture = ufbx_texture {};

@@ -133,6 +133,7 @@ struct MaterialAssetDesc {
 
   // --- Additional texture references (optional, Tier 1/2) ---
   ResourceReferenceIndex emissive_texture = kNoResourceReference;
+  //! Specular level map: one linear value in red (see `specular_factor`).
   ResourceReferenceIndex specular_texture = kNoResourceReference;
   ResourceReferenceIndex sheen_color_texture = kNoResourceReference;
   ResourceReferenceIndex clearcoat_texture = kNoResourceReference;
@@ -147,7 +148,10 @@ struct MaterialAssetDesc {
   Unorm16 alpha_cutoff = Unorm16 { 0.5F };
   // Dielectric response
   float ior = 1.5F;
-  Unorm16 specular_factor = Unorm16 { 1.0F };
+  //! Specular level L of dielectrics: F0 = 0.08 x L, so the default 0.5 gives
+  //! F0 = 0.04. L = specular_factor x the red of `specular_texture`, or
+  //! specular_factor alone without a texture.
+  Unorm16 specular_factor = Unorm16 { 0.5F };
   // Sheen (KHR_materials_sheen)
   HalfFloat sheen_color_factor[3]
     = { HalfFloat { 0.0F }, HalfFloat { 0.0F }, HalfFloat { 0.0F } };

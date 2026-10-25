@@ -109,7 +109,7 @@ struct MaterialInputs {
   float emissive_factor[3] = { 0.0f, 0.0f, 0.0f }; // HDR allowed
   float alpha_cutoff = 0.5f;
   float ior = 1.5f;
-  float specular_factor = 1.0f;
+  float specular_factor = 0.5f; // specular level: F0 = 0.08 x level
   float sheen_color_factor[3] = { 0.0f, 0.0f, 0.0f };
   float clearcoat_factor = 0.0f;
   float clearcoat_roughness = 0.0f;
@@ -464,7 +464,8 @@ Importer/orchestrator responsibilities:
 - **glTF extensions**:
   - `KHR_materials_unlit` → `unlit`
   - `KHR_materials_ior` → `ior`
-  - `KHR_materials_specular` → `specular_factor` + `specular_texture`
+  - `KHR_materials_specular` → `specular_factor` = 0.5 × its factor, and
+    `specular_texture` cooked from its alpha channel into red
   - `KHR_materials_sheen` → `sheen_color_factor` + `sheen_color_texture`
   - `KHR_materials_clearcoat` → `clearcoat_factor`, `clearcoat_roughness`,
     `clearcoat_texture`, `clearcoat_normal_texture`
@@ -475,7 +476,10 @@ Importer/orchestrator responsibilities:
 - **FBX**:
   - Diffuse/albedo → `base_color`
   - Emissive → `emissive_factor`
-  - Specular color/texture → `specular_factor` + `specular_texture`
+  - Specular by shader: Blender's specular level (`SpecularFactor`) as it is;
+    a PBR shader's specular weight as 0.5 × weight; FBX Phong or Lambert
+    specular shapes a highlight, so it is not imported and its texture is
+    reported
   - Shininess/glossiness → `roughness` (invert and clamp to [0,1])
   - Transparency → `alpha_mode` + `alpha_cutoff` when masked
 

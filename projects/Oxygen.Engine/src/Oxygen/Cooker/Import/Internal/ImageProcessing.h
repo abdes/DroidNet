@@ -230,6 +230,17 @@ namespace image::content {
   */
   OXGN_COOK_API void FlipNormalGreen(ScratchImage& image);
 
+  //! Moves a single-value map stored in `channel` into red.
+  /*!
+    Copies `channel` into the red, green and blue channels and makes alpha
+    opaque. Operates in-place on an RGBA8 or RGBA32Float image.
+
+    @param image Single-value map (modified in-place)
+    @param channel The channel that holds the value
+  */
+  OXGN_COOK_API void MoveValueToRed(
+    ScratchImage& image, TextureChannel channel);
+
 } // namespace image::content
 
 } // namespace oxygen::content::import

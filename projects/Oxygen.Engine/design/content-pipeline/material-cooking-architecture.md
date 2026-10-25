@@ -538,7 +538,7 @@ ORM packing uses glTF convention: R=AO, G=Roughness, B=Metalness (stored in
 | `emissive_factor`         | `vec3`   | (HDR, ≥0) | `MaterialAssetDesc::emissive_factor[3]` (HalfFloat)    | `[0,0,0]`   |
 | `alpha_cutoff`            | `number` | [0,1]     | `MaterialAssetDesc::alpha_cutoff` (Unorm16)            | `0.5`       |
 | `ior`                     | `number` | ≥1.0      | `MaterialAssetDesc::ior`                               | `1.5`       |
-| `specular_factor`         | `number` | [0,1]     | `MaterialAssetDesc::specular_factor` (Unorm16)         | `1.0`       |
+| `specular_factor`         | `number` | [0,1]     | `MaterialAssetDesc::specular_factor` (Unorm16)         | `0.5`       |
 | `sheen_color_factor`      | `vec3`   | [0,1]×3   | `MaterialAssetDesc::sheen_color_factor[3]` (HalfFloat) | `[0,0,0]`   |
 | `clearcoat_factor`        | `number` | [0,1]     | `MaterialAssetDesc::clearcoat_factor` (Unorm16)        | `0.0`       |
 | `clearcoat_roughness`     | `number` | [0,1]     | `MaterialAssetDesc::clearcoat_roughness` (Unorm16)     | `0.0`       |
@@ -549,6 +549,10 @@ ORM packing uses glTF convention: R=AO, G=Roughness, B=Metalness (stored in
 | `double_sided`            | `bool`   | —         | `kMaterialFlag_DoubleSided`                            | `false`     |
 | `unlit`                   | `bool`   | —         | `kMaterialFlag_Unlit`                                  | `false`     |
 | `roughness_as_glossiness` | `bool`   | —         | inverts roughness: `roughness = 1 - value`             | `false`     |
+
+`specular_factor` is the dielectric specular level L, as in Blender and Unreal:
+F0 = 0.08 × L, so the default 0.5 gives F0 = 0.04. With a `specular` texture,
+L is the factor times the texture's red channel.
 
 #### 7.2.6 `textures` Settings
 
@@ -576,7 +580,7 @@ Valid slot names:
 | `roughness`         | `roughness_texture`         | Linear roughness; may be packed (ORM) |
 | `ambient_occlusion` | `ambient_occlusion_texture` | Linear AO; may be packed (ORM)        |
 | `emissive`          | `emissive_texture`          | HDR-capable emissive                  |
-| `specular`          | `specular_texture`          | Specular color/factor                 |
+| `specular`          | `specular_texture`          | Specular level, linear, in red        |
 | `sheen_color`       | `sheen_color_texture`       | Sheen extension                       |
 | `clearcoat`         | `clearcoat_texture`         | Clearcoat factor                      |
 | `clearcoat_normal`  | `clearcoat_normal_texture`  | Clearcoat normal map                  |

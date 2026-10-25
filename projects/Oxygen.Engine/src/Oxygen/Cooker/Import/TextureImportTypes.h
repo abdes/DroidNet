@@ -19,6 +19,14 @@
 
 namespace oxygen::content::import {
 
+//! A channel of a texture's pixels.
+enum class TextureChannel : uint8_t {
+  kRed = 0,
+  kGreen = 1,
+  kBlue = 2,
+  kAlpha = 3,
+};
+
 //! Content-semantic intent for texture import.
 /*!
   Specifies how the texture content should be interpreted during import and

@@ -244,9 +244,11 @@
           "minimum": 1.0
         },
         "specular_factor": {
+          "description": "Specular level of dielectrics: F0 = 0.08 x level. 0.5, the default, gives F0 = 0.04; with a specular texture, the level is this factor times the texture's red channel.",
           "type": "number",
           "minimum": 0.0,
-          "maximum": 1.0
+          "maximum": 1.0,
+          "default": 0.5
         },
         "sheen_color_factor": {
           "$ref": "#/definitions/vec3_01"
