@@ -40,6 +40,9 @@ public static class SceneComponents
     /// <summary>The kind of a Scripting component, with one empty script slot.</summary>
     public const string Scripting = SceneSchema.Scripting.Kind;
 
+    /// <summary>The kind of a scene instance. It is placed with its source; <see cref="Create"/> makes none.</summary>
+    public const string SceneInstance = SceneSchema.SceneInstance.Kind;
+
     /// <summary>Builds the edit for the inspector's "add component": the component, then the edits its kind requires.</summary>
     /// <param name="authoring">The scene's authoring, to read the node from.</param>
     /// <param name="node">The node.</param>
@@ -76,13 +79,14 @@ public static class SceneComponents
             SpotLight => new SpotLightComponent { Name = "Spot Light" },
             LocalFogVolume => new LocalFogVolumeComponent { Name = "Local Fog Volume" },
             Scripting => new ScriptingComponent { Name = ScriptingComponent.DefaultName, Slots = [new ScriptSlot()] },
+            SceneInstance => throw new ArgumentException("A scene instance has no default source; it is placed with one.", nameof(kind)),
             _ => throw new ArgumentException($"Component kind '{kind}' is not supported.", nameof(kind)),
         };
 
-    /// <summary>Gets the kind of a component, as <see cref="Add"/> takes it.</summary>
+    /// <summary>Gets the kind of a component a node can lose, as <see cref="Add"/> takes it.</summary>
     /// <param name="component">The component, such as one a menu offers.</param>
     /// <returns>The kind.</returns>
-    /// <exception cref="ArgumentException">The component's kind cannot be added.</exception>
+    /// <exception cref="ArgumentException">The component's kind cannot be added or removed.</exception>
     public static string KindOf(GameComponent component)
     {
         ArgumentNullException.ThrowIfNull(component);
@@ -96,6 +100,7 @@ public static class SceneComponents
             SpotLightComponent => SpotLight,
             LocalFogVolumeComponent => LocalFogVolume,
             ScriptingComponent => Scripting,
+            SceneInstanceComponent => SceneInstance,
             _ => throw new ArgumentException($"A {component.GetType().Name} cannot be added.", nameof(component)),
         };
     }

@@ -179,6 +179,18 @@ public sealed class SceneComponentsTests
     }
 
     [TestMethod]
+    public void KindOf_SceneInstance_IsTheSchemaKindAndCreateRefusesIt()
+    {
+        var instance = new SceneInstanceComponent { Name = "Scene Instance", Source = AssetPath.Parse("/Content/Vehicles/Car.glb") };
+
+        var kind = SceneComponents.KindOf(instance);
+        var create = () => SceneComponents.Create(SceneComponents.SceneInstance);
+
+        _ = kind.Should().Be(SceneSchema.SceneInstance.Kind);
+        _ = create.Should().Throw<ArgumentException>("a scene instance is placed with its source");
+    }
+
+    [TestMethod]
     public async Task KindOf_Transform_ThrowsArgumentException()
     {
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
