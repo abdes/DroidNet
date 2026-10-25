@@ -3,7 +3,7 @@
 Status: **design for owner review** (ED-M09 item 14, with
 [scene instances](scene-instances.md)).
 
-Last Updated: 2026-10-24
+Last Updated: 2026-10-25
 
 ## 1. Purpose
 
@@ -66,8 +66,7 @@ import dialog [model-import-dialog.svg](mockups/model-import-dialog.svg).
 Models are an asset family with an editor, so they get a family module, as
 Materials has ([asset family modules](asset-family-modules.md) section 5.1):
 `Oxygen.Editor.Models` owns the model's import settings (`ModelImportSettings`,
-the editor's side of the model import record, replacing
-`NativeSceneImportSettings` in ContentPipeline, which cooks and
+the editor's side of the model import record; ContentPipeline cooks and
 imports but states no family rule), `ModelDocumentKind`, `ModelContent` and the
 model's problems; `Oxygen.Editor.ModelEditor` holds the document's view and
 view model, as `Oxygen.Editor.MaterialEditor` does for materials.
@@ -275,10 +274,9 @@ is already right instead of fixed by a second one.
 (`AssetsView.xaml:92-107`) picks a file and opens `SceneImportDialog`
 (`Oxygen.Editor.ContentExplorer/src/Importing/SceneImportDialogViewModel.cs:27`),
 which asks only the name, the content folder and whether to replace an
-existing model. `NativeSceneImportSettings.Create` then writes fixed settings:
-its schema pins every policy to one value
-(`native-scene-import.schema.json`), so no setting can be chosen at import or
-after.
+existing model. `ModelImportSettings.Create` then writes the model import
+record with the default settings (`ModelImportSettings.DefaultSettings`); no
+surface offers a setting, so none can be chosen at import or after.
 
 **The dialog.** It replaces `SceneImportDialog` and opens on the same
 gestures: _Import > Source model…_ (several files may be picked) and invoking
@@ -320,7 +318,7 @@ the model family's UI project. The Content Explorer opens the dialog through
 the Model Editor: a UI surface calls family modules only
 ([asset family modules](asset-family-modules.md) section 9). The prompt
 returns the chosen settings, which `ContentPipelineService.ImportSourceAsync`
-writes into the model's new import record instead of today's fixed sidecar.
+writes into the model's import record instead of the default settings.
 
 ## 8. Capabilities
 
@@ -347,7 +345,7 @@ reimport of every model.
 | M-ED1   | Model document               | Double-click reimports a model ([AssetsViewModel.cs:369](../../../projects/Oxygen.Editor.ContentExplorer/src/Panes/Assets/AssetsViewModel.cs))                                                                         | `Oxygen.Editor.Models` (family module: import settings, `ModelDocumentKind`, `ModelContent`, problems) and `Oxygen.Editor.ModelEditor` (UI); opening a model opens it; _Reimport_ becomes a command (ME-7)                                                                                                                                     |
 | M-ED2   | Shown document               | Live Preview shows the scene document opened last                                                                                                                                                                      | Live Preview shows the active scene or model document and rebuilds on activation (section 6)                                                                                                                                                                                                                                                   |
 | M-ED3   | Panes follow the document    | The Scene Explorer and the Properties pane follow the scene document                                                                                                                                                   | They follow the active scene or model document, with the read-only model presentation of section 5.4; no layout change (ME-3)                                                                                                                                                                                                                  |
-| M-ED4   | Every import setting         | The sidecar holds unit policy, bake transforms, normals and tangents, each pinned to one value by its schema (version 6), and an older version is refused (`NativeSceneImportSettings.cs:105-108`)                     | `ModelImportSettings` reads and writes the model import record (scene instances NGN14), with the settings of section 5.3, the node continuity and the published anchors. The product reads no older format: the few existing sidecars become records by hand outside the product, keeping their source identity (scene instances section 7.15) |
+| M-ED4   | Every import setting         | The model import record holds the import settings, written with defaults (`ModelImportSettings.DefaultSettings`); no surface chooses them                                                                              | `ModelImportSettings` reads and writes the model import record (scene instances NGN14), with the settings of section 5.3, the node continuity and the published anchors. The product reads no older format: the few existing sidecars become records by hand outside the product, keeping their source identity (scene instances section 7.15) |
 | M-ED5   | Kept import problems         | Import diagnostics reach the operation results and the Problems pane once                                                                                                                                              | The last import's diagnostics are retained with the model's publication and read when the document opens                                                                                                                                                                                                                                       |
 | M-ED6   | Viewport viewing profile     | The `Viewport` control shows every editing overlay                                                                                                                                                                     | `Viewport` gains its `Editing` and `Viewing` profiles (section 5.2), with their own tests; the scene editor keeps `Editing`                                                                                                                                                                                                                    |
 | M-ED7   | Tab stays in its window      | Documents other than the scene can be torn out                                                                                                                                                                         | `DocumentEditorDescriptor` (`Oxygen.Editor.Shell/src/Documents/DocumentEditorDescriptor.cs`) gains `CanTearOut`; the model document's provider sets it false                                                                                                                                                                                   |

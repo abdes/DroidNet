@@ -9,10 +9,10 @@ using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentExplorer.Panes.Assets;
 using Oxygen.Editor.ContentExplorer.Panes.Assets.Layouts;
 using Oxygen.Editor.ContentExplorer.Relocation;
-using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.ContentPipeline.Relocation;
-using Oxygen.Managed.Assets.Catalog;
+using Oxygen.Editor.Models;
 using Oxygen.Managed.Assets;
+using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentExplorer;
@@ -180,7 +180,8 @@ public partial class AssetsViewModel
             return new(VirtualPath: null, PhysicalPath: null, IsFolder: false, IsImportedOutput: asset.ImportSource is not null, ModelSourcePath: asset.ImportSourcePath);
         }
 
-        var isModel = AssetFileTypes.Is(path.Name, AssetFileCategory.Model) && fileSystem.File.Exists(path.FullPath + NativeSceneImportSettings.SidecarSuffix);
+        var isModel = AssetFileTypes.Is(path.Name, AssetFileCategory.Model)
+            && new ModelImportRecords(fileSystem, project.ProjectRoot.FullPath).IsImported(path.FullPath);
         return new(
             RelocationPaths.ToVirtual(project, path),
             path,

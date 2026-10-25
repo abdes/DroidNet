@@ -6,11 +6,11 @@ using System.Collections.Immutable;
 using System.Security.Cryptography;
 using System.Text.Json;
 using AwesomeAssertions;
-using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.ContentPipeline.Incremental;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.ContentPipeline.TestSupport;
+using Oxygen.Editor.Models;
 using Oxygen.Managed.Core;
 using static Oxygen.Editor.ContentPipeline.TestSupport.PublicationScenario;
 
@@ -46,16 +46,17 @@ public sealed class ProducedSourceMetadataTests
         project.AssertNew();
     }
 
-    /// <summary>Explicit replacement stages produced settings separately without installing the same file twice.</summary>
+    /// <summary>Explicit replacement installs the produced record apart from the bundle: the record lives outside it.</summary>
     /// <returns>The asynchronous replacement regression.</returns>
     [TestMethod]
-    public async Task ProducedSettingsJoinExplicitBundleReplacement()
+    public async Task ProducedSettingsAreCommittedApartFromExplicitBundleReplacement()
     {
         using var project = new PublicationProject(hadPrevious: true);
         var staging = await project.StageAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         await using var stagingLifetime = staging.ConfigureAwait(false);
         var update = await this.CreateSourceUpdateAsync(project, "Model").ConfigureAwait(false);
         var published = Path.Combine(project.Root, SourceBundle);
+        _ = Directory.CreateDirectory(published);
         await File.WriteAllTextAsync(Path.Combine(published, "model.gltf"), "source", this.TestContext.CancellationToken).ConfigureAwait(false);
         var captured = Path.Combine(project.Root, ".build/cook", project.Operation.OperationId.ToString("N"), "inputs", SourceBundle);
         var before = await CookRootImage.CaptureAsync(published, captured, this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -65,8 +66,9 @@ public sealed class ProducedSourceMetadataTests
             sourceReplacement: new(SourceBundle, before),
             producedSourceFiles: [update]).ConfigureAwait(false);
         using var accepted = await transaction.PublishAsync(preview: null, project.Baseline, static () => { }, this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = (await File.ReadAllBytesAsync(Path.Combine(captured, "model.gltf.import.json"), this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Equal(update.Before);
-        _ = (await File.ReadAllBytesAsync(Path.Combine(published, "model.gltf.import.json"), this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Equal(update.After);
+        _ = (await File.ReadAllBytesAsync(Path.Combine(project.Root, update.RelativePath), this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Equal(update.After);
+        _ = Directory.EnumerateFiles(published, "*", SearchOption.AllDirectories).Select(Path.GetFileName).Should().Equal("model.gltf");
+        _ = Directory.EnumerateFiles(captured, "*", SearchOption.AllDirectories).Select(Path.GetFileName).Should().Equal("model.gltf");
         project.AssertNew();
     }
 
@@ -203,37 +205,40 @@ public sealed class ProducedSourceMetadataTests
     private async Task<CookProducedSourceFile> CreateSourceUpdateAsync(PublicationProject project, string bundle, bool projectOwned = false)
     {
         var primary = projectOwned ? bundle + ".gltf" : "model.gltf";
-        var root = projectOwned ? "Content/Models" : "Content/Models/" + bundle;
-        var source = new RetainedImportSource(root, primary, [new(primary, Convert.ToHexString(SHA256.HashData("source"u8)))]);
-        var settings = NativeSceneImportSettings.Create(source, bundle);
-        var candidate = NativeSurfaceProvenance.Parse(JsonSerializer.SerializeToElement(new
+        var folder = projectOwned ? "Content/Models" : "Content/Models/" + bundle;
+        var recordPath = ModelImportSettings.PathFor(project.Root, Guid.CreateVersion7());
+        var record = ModelImportSettings.Create(recordPath, Path.Combine(project.Root, folder, primary), "/" + folder + "/" + primary, ModelImportSettings.DefaultSettings(bundle));
+        var established = JsonSerializer.SerializeToElement(new
         {
-            schema_version = 1,
-            source_identity = settings.SurfaceProvenance.SourceIdentity,
-            geometries = new[]
+            surface_provenance = new
             {
-                new
+                schema_version = 2,
+                geometries = new[]
                 {
-                    geometry_asset_key = "10000000-0000-0000-0000-000000000001", source_geometry_anchor = "mesh0",
-                    source_layout_witness = new string('a', 64), layout_revision = new string('b', 64),
-                    surfaces = new[]
+                    new
                     {
-                        new
+                        geometry_asset_key = "10000000-0000-0000-0000-000000000001", source_geometry_anchor = "mesh0",
+                        source_layout_witness = new string('a', 64), layout_revision = new string('b', 64),
+                        surfaces = new[]
                         {
-                            surface_id = "20000000-0000-0000-0000-000000000001",
-                            display_name = "Surface",
-                            bindings = new[] { new { lod_index = 0, submesh_index = 0, default_material_key = "30000000-0000-0000-0000-000000000001" } },
+                            new
+                            {
+                                surface_id = "20000000-0000-0000-0000-000000000001",
+                                display_name = "Surface",
+                                bindings = new[] { new { lod_index = 0, submesh_index = 0, default_material_key = "30000000-0000-0000-0000-000000000001" } },
+                            },
                         },
+                        allocations = new[] { new { declaration_key = 0, surface_id = "20000000-0000-0000-0000-000000000001" } },
                     },
-                    allocations = new[] { new { declaration_key = 0, surface_id = "20000000-0000-0000-0000-000000000001" } },
                 },
             },
-        }));
-        var relative = settings.BundleRoot + "/" + settings.PrimaryRelativePath + ".import.json";
-        var update = new CookProducedSourceFile(relative, settings.ToBytes(), (settings with { SurfaceProvenance = candidate }).ToBytes());
-        var path = Path.Combine(project.Root, relative);
-        _ = Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        await File.WriteAllBytesAsync(path, update.Before, this.TestContext.CancellationToken).ConfigureAwait(false);
+            published_nodes = new[] { new { anchor = "Body", node_id = "40000000-0000-0000-0000-000000000001" } },
+            source_fingerprint = new { size = 6, sha256 = Convert.ToHexStringLower(SHA256.HashData("source"u8)), files = Array.Empty<object>() },
+        });
+        var relative = Path.GetRelativePath(project.Root, recordPath).Replace('\\', '/');
+        var update = new CookProducedSourceFile(relative, record.ToBytes(), record.WithImportUpdate(established).ToBytes());
+        _ = Directory.CreateDirectory(Path.GetDirectoryName(recordPath)!);
+        await File.WriteAllBytesAsync(recordPath, update.Before, this.TestContext.CancellationToken).ConfigureAwait(false);
         return update;
     }
 }

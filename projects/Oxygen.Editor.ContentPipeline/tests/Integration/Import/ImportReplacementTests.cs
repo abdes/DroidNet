@@ -60,13 +60,8 @@ public sealed class ImportReplacementTests
                 await File.WriteAllBytesAsync(Path.Combine(workspace.Root, "Content/Models/Model/retired.bin"), buffer, this.TestContext.CancellationToken).ConfigureAwait(false);
                 retained["buffers"]![0]!["uri"] = "retired.bin";
                 workspace.WriteText(retainedPath, retained.ToJsonString());
-                var settingsPath = Path.Combine(workspace.Root, retainedPath + NativeSceneImportSettings.SidecarSuffix);
-                var settings = NativeSceneImportSettings.Parse(await File.ReadAllBytesAsync(settingsPath, this.TestContext.CancellationToken).ConfigureAwait(false)) with
-                {
-                    Files = ["model.gltf", "retired.bin"],
-                    SourceHash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(await File.ReadAllBytesAsync(Path.Combine(workspace.Root, retainedPath), this.TestContext.CancellationToken).ConfigureAwait(false))),
-                };
-                await File.WriteAllBytesAsync(settingsPath, settings.ToBytes(), this.TestContext.CancellationToken).ConfigureAwait(false);
+
+                // The first cook reads retired.bin, so the record's fingerprint makes the model its owner.
                 var geometry = System.Text.Json.Nodes.JsonNode.Parse(workspace.ReadText("Content/Geometry/AuthoredCube.ogeo.json"))!;
                 geometry["buffers"]![0]!["uri"] = "../Models/Model/retired.bin";
                 workspace.WriteText("Content/Geometry/AuthoredCube.ogeo.json", geometry.ToJsonString());

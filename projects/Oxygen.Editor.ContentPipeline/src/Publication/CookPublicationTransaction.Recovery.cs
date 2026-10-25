@@ -55,7 +55,7 @@ internal sealed partial class CookPublicationTransaction
 
             ValidateImage(source.Before);
             ValidateImage(source.After);
-            if (!source.Before.Exists || source.Before.Files.IsEmpty || !source.After.Exists || source.After.Files.IsEmpty)
+            if (!source.Before.Exists || !source.After.Exists || source.After.Files.IsEmpty)
             {
                 throw new InvalidDataException("A source replacement lacks its before/after identities.");
             }

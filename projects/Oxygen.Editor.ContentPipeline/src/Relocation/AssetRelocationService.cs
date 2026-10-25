@@ -308,14 +308,12 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
 
     private static void RejectImportContent(ProjectContext project, AuthoredReferenceIndex index, FileSystemPath path, bool isDirectory, string advice)
     {
-        var root = project.ProjectRoot;
         foreach (var import in index.Imports)
         {
-            var bundle = root.Combine(import.Settings.BundleRoot);
+            var folder = import.Folder;
             var owned = isDirectory
-                ? bundle.IsSameOrInside(path) || path.IsSameOrInside(bundle)
-                : path == import.SidecarPath
-                    || import.Settings.Files.Any(file => FileSystemPath.From(import.Settings.ResolveFile(project.ProjectRoot.FullPath, file)) == path);
+                ? folder.IsSameOrInside(path) || path.IsSameOrInside(folder)
+                : import.Files.Contains(path);
             if (owned)
             {
                 throw new AssetRelocationException($"'{path.Name}' belongs to the imported model '{import.PrimaryVirtualPath.Name}'. {advice}");
@@ -327,37 +325,39 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
     {
         var fileSystem = project.FileSystem;
         var root = project.ProjectRoot;
+        var records = new List<FileSystemPath>();
         foreach (var import in index.Imports)
         {
-            var bundle = root.Combine(import.Settings.BundleRoot);
+            var modelFolder = import.Folder;
             var model = import.PrimaryVirtualPath.Name;
-            if (isDirectory && path != bundle && path.IsSameOrInside(bundle))
+            if (isDirectory && path != modelFolder && path.IsSameOrInside(modelFolder))
             {
                 throw new AssetRelocationException($"'{path.Name}' is part of the imported model '{model}'. Delete the model instead.");
             }
 
             if (isDirectory)
             {
+                // A model deleted with its folder takes its record with it.
+                if (import.PrimaryPath.IsSameOrInside(path))
+                {
+                    records.Add(import.RecordPath);
+                }
+
                 continue;
             }
 
-            if (path == import.SidecarPath)
-            {
-                throw new AssetRelocationException($"'{path.Name}' holds the import settings of '{model}'. Delete the model instead.");
-            }
-
-            var bundleFiles = import.Settings.Files.Select(file => FileSystemPath.From(import.Settings.ResolveFile(project.ProjectRoot.FullPath, file))).ToArray();
+            var files = import.Files;
             if (path == import.PrimaryPath)
             {
-                var owned = bundleFiles.Append(import.SidecarPath).ToHashSet();
-                var onlyThisModel = fileSystem.Directory.Exists(bundle.FullPath)
-                    && fileSystem.Directory.EnumerateFiles(bundle.FullPath, "*", SearchOption.AllDirectories).All(file => owned.Contains(FileSystemPath.From(file)));
-                return onlyThisModel && bundle != root
-                    ? [bundle]
-                    : owned.Where(file => fileSystem.File.Exists(file.FullPath));
+                var owned = files.ToHashSet();
+                var onlyThisModel = fileSystem.Directory.Exists(modelFolder.FullPath)
+                    && fileSystem.Directory.EnumerateFiles(modelFolder.FullPath, "*", SearchOption.AllDirectories).All(file => owned.Contains(FileSystemPath.From(file)));
+                return onlyThisModel && modelFolder != root
+                    ? [modelFolder, import.RecordPath]
+                    : [.. owned.Where(file => fileSystem.File.Exists(file.FullPath)), import.RecordPath];
             }
 
-            if (bundleFiles.Contains(path))
+            if (files.Contains(path))
             {
                 throw new AssetRelocationException($"'{path.Name}' is part of the imported model '{model}'. Delete the model instead.");
             }
@@ -369,7 +369,7 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
                 && descriptor.Location.Parent == path.Parent
                 && AuthoredReferenceFormat.ReadTextureSources(project, descriptor.Location, fileSystem.File.ReadAllBytes(descriptor.Location.FullPath)).Contains(path))
                 .Select(static descriptor => descriptor.Location);
-            return [path, .. descriptors];
+            return [path, .. descriptors, .. records];
         }
 
         // An image another texture still uses stays; only this texture's own images go with it.

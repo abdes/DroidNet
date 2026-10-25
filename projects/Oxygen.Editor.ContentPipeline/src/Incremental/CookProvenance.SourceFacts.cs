@@ -48,7 +48,8 @@ internal sealed partial record CookProvenance
                 SourceAbsolutePath = project.ProjectRoot.Combine(product.SourceInput.SourceRelativePath),
                 Role = ContentCookInputRole.Dependency,
             }))
-            .Where(product => project.FileSystem.File.Exists(product.Input.SourceAbsolutePath.FullPath))
+            // A source renamed only in case no longer produces under its old name, though the file system still finds it.
+            .Where(product => ExactSourcePath.Exists(project.FileSystem, project.ProjectRoot.FullPath, product.Input.SourceRelativePath))
             .SelectMany(static product => product.DeclaredOutputs.Select(output => (output.VirtualPath, product.Input)))
             .GroupBy(static item => item.VirtualPath, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(static group => group.Key, static group => group.Select(static item => item.Input).DistinctBy(static input => input.AssetUri).ToArray(), StringComparer.OrdinalIgnoreCase);

@@ -4,6 +4,7 @@
 
 using DroidNet.Storage;
 using Oxygen.Editor.Input;
+using Oxygen.Editor.Models;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Assets.Diagnostics;
@@ -77,21 +78,16 @@ internal static class AssetRelocationPlanner
         var root = project.ProjectRoot;
         foreach (var import in index.Imports)
         {
-            var bundle = root.Combine(import.Settings.BundleRoot);
+            var folder = import.Folder;
             var model = import.PrimaryVirtualPath.Name;
             if (isDirectory)
             {
-                if (source != bundle && source.IsSameOrInside(bundle))
+                if (source != folder && source.IsSameOrInside(folder))
                 {
                     throw new AssetRelocationException($"'{name}' is part of the imported model '{model}'. Move the model's folder instead.");
                 }
 
                 continue;
-            }
-
-            if (source == import.SidecarPath)
-            {
-                throw new AssetRelocationException($"'{name}' holds the import settings of '{model}'. Rename the model instead.");
             }
 
             if (source == import.PrimaryPath)
@@ -100,10 +96,8 @@ internal static class AssetRelocationPlanner
                 {
                     throw new AssetRelocationException($"'{model}' references its other files by relative path. Move the model's folder to move it.");
                 }
-
-                AddFile(project, map, import.SidecarPath, FileSystemPath.From(target.FullPath + Import.NativeSceneImportSettings.SidecarSuffix));
             }
-            else if (import.Settings.Files.Any(file => FileSystemPath.From(import.Settings.ResolveFile(project.ProjectRoot.FullPath, file)) == source))
+            else if (import.Files.Contains(source))
             {
                 throw new AssetRelocationException($"'{name}' is part of the imported model '{model}'. Move the model's folder instead.");
             }
@@ -321,22 +315,32 @@ internal static class AssetRelocationPlanner
 
         foreach (var import in index.Imports)
         {
-            var snapshot = await files.ReadAsync(import.SidecarPath.FullPath, cancellationToken).ConfigureAwait(false);
-            var content = snapshot.Content.ToArray();
-            byte[]? rewritten;
-            try
+            // The record stays where it is, named by the model's source identity; its source and virtual path follow
+            // the model, so its products are named under the model's new path.
+            var target = map.MapPath(import.PrimaryPath);
+            var folder = target.Parent!;
+            // The primary may be renamed in its folder; the files it reads must keep their place beside it.
+            if (import.Files.Where(file => file != import.PrimaryPath).Any(file => !string.Equals(
+                Path.GetRelativePath(import.Folder.FullPath, file.FullPath),
+                Path.GetRelativePath(folder.FullPath, map.MapPath(file).FullPath),
+                StringComparison.OrdinalIgnoreCase)))
             {
-                rewritten = AuthoredReferenceFormat.RewriteImportSettings(project.ProjectRoot.FullPath, content, map);
-            }
-            catch (InvalidDataException error)
-            {
-                throw new AssetRelocationException($"The move would separate '{import.PrimaryVirtualPath.Name}' from its files. Move the model's folder instead.", error);
+                throw new AssetRelocationException($"The move would separate '{import.PrimaryVirtualPath.Name}' from its files. Move the model's folder instead.");
             }
 
-            if (rewritten is not null)
+            // Paths compare without case on Windows; a rename that changes only case still renames the model.
+            if (string.Equals(target.FullPath, import.PrimaryPath.FullPath, StringComparison.Ordinal))
             {
-                edits.Add(new(import.SidecarPath, map.MapPath(import.SidecarPath), snapshot.Version, content, rewritten));
+                continue;
             }
+
+            var snapshot = await files.ReadAsync(import.RecordPath.FullPath, cancellationToken).ConfigureAwait(false);
+            var content = snapshot.Content.ToArray();
+            var virtualPath = RelocationPaths.ToVirtual(project, target)
+                ?? throw new AssetRelocationException($"'{import.PrimaryVirtualPath.Name}' would leave the project's authoring mounts.");
+            var rewritten = (ModelImportSettings.Parse(import.RecordPath.FullPath, content)
+                .WithSource(import.RecordPath.FullPath, target.FullPath) with { VirtualPath = virtualPath.VirtualPath }).ToBytes();
+            edits.Add(new(import.RecordPath, import.RecordPath, snapshot.Version, content, rewritten));
         }
 
         return edits;

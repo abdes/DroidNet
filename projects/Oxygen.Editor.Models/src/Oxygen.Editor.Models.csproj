@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+
+        <Title>Oxygen Editor Models</Title>
+        <Description>Model family module: a model's import record and the index of a project's records, without any UI.</Description>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
+        <PackageTags>oxygen;editor;models</PackageTags>
+        <PackageReleaseNotes>Initial version.</PackageReleaseNotes>
+        <RootNamespace>Oxygen.Editor.Models</RootNamespace>
+        <AssemblyName>$(MSBuildProjectName)</AssemblyName>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <!-- The engine owns the record's schema; the editor reads it as the installed SDK ships it. -->
+        <EmbeddedResource Include="$(OxygenSdkSchemasDir)\oxygen.model-import.schema.json"
+                          LogicalName="oxygen.model-import.schema.json" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="JsonSchema.Net" />
+        <PackageReference Include="Testably.Abstractions.FileSystem.Interface" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Managed.Assets\src\Oxygen.Managed.Assets.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Managed.Core\src\Oxygen.Managed.Core.csproj" />
+    </ItemGroup>
+
+</Project>

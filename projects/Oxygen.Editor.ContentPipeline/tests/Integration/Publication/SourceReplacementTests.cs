@@ -181,7 +181,7 @@ public sealed class SourceReplacementTests
 
     private static void AssertSource(string projectRoot, string expected)
     {
-        foreach (var file in new[] { "model.glb", "model.glb.import.json", "buffers/data.bin" })
+        foreach (var file in new[] { "model.glb", "model.bin", "buffers/data.bin" })
         {
             _ = File.ReadAllText(Path.Combine(projectRoot, SourceBundle, file)).Should().Be(expected + ":" + file);
         }
@@ -193,7 +193,7 @@ public sealed class SourceReplacementTests
         var staged = Path.Combine(project.Root, ".build/cook", project.Operation.OperationId.ToString("N"), "inputs", SourceBundle);
         foreach (var (root, prefix) in new[] { (published, "old"), (staged, "new") })
         {
-            foreach (var file in new[] { "model.glb", "model.glb.import.json", "buffers/data.bin" })
+            foreach (var file in new[] { "model.glb", "model.bin", "buffers/data.bin" })
             {
                 var path = Path.Combine(root, file);
                 _ = Directory.CreateDirectory(Path.GetDirectoryName(path)!);

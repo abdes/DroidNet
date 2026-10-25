@@ -38,13 +38,6 @@ internal static class AuthoredReferenceFormat
     public static bool IsReferencingSource(string path)
         => AssetFileTypes.Find(path)?.Category is AssetFileCategory.Descriptor or AssetFileCategory.Input;
 
-    /// <summary>Tests whether a file is a model import sidecar.</summary>
-    /// <param name="path">The file path.</param>
-    /// <returns>Whether the file is <c>&lt;model&gt;.import.json</c> for a glTF, GLB or FBX source.</returns>
-    public static bool IsImportSettings(string path)
-        => AssetFileTypes.Is(path, AssetFileCategory.ImportSettings)
-            && AssetFileTypes.Is(path[..^AssetFileTypes.ImportSettings.Length], AssetFileCategory.Model);
-
     /// <summary>Reads the asset identities a descriptor references in its reference fields.</summary>
     /// <param name="path">The descriptor.</param>
     /// <param name="content">The descriptor bytes.</param>
@@ -95,42 +88,6 @@ internal static class AuthoredReferenceFormat
         var changed = RewriteReferences(IdentityField(path).Concat(ReferenceFields(path)).SelectMany(field => field.Select(root)), map);
         changed |= RewriteFileReferences(root, path, map);
         return changed ? Serialize(root!, content.Span) : null;
-    }
-
-    /// <summary>Rewrites a model import sidecar for a relocation.</summary>
-    /// <param name="projectRoot">The owning project.</param>
-    /// <param name="content">The sidecar bytes.</param>
-    /// <param name="map">The relocation.</param>
-    /// <returns>The rewritten bytes, or null when nothing changes.</returns>
-    public static byte[]? RewriteImportSettings(string projectRoot, ReadOnlyMemory<byte> content, RelocationMap map)
-    {
-        var settings = NativeSceneImportSettings.Parse(content);
-        var updated = Relocate(projectRoot, settings, map);
-        return updated == settings ? null : updated.ToBytes();
-    }
-
-    /// <summary>Returns the sidecar settings after a relocation.</summary>
-    /// <param name="projectRoot">The owning project.</param>
-    /// <param name="settings">The current settings.</param>
-    /// <param name="map">The relocation.</param>
-    /// <returns>The relocated settings; the same instance when nothing changes.</returns>
-    public static NativeSceneImportSettings Relocate(string projectRoot, NativeSceneImportSettings settings, RelocationMap map)
-    {
-        var root = FileSystemPath.From(projectRoot);
-        var bundle = root.Combine(settings.BundleRoot);
-        var newBundle = map.MapPath(bundle);
-        string Remap(string relative) => map.MapPath(FileSystemPath.From(settings.ResolveFile(projectRoot, relative))).GetPathBelow(newBundle);
-
-        var files = settings.Files.Select(Remap).ToArray();
-        var primary = Remap(settings.PrimaryRelativePath);
-        var bundleRoot = string.Equals(newBundle.FullPath, bundle.FullPath, StringComparison.Ordinal)
-            ? settings.BundleRoot
-            : newBundle.GetPathBelow(root);
-        return string.Equals(bundleRoot, settings.BundleRoot, StringComparison.Ordinal)
-            && string.Equals(primary, settings.PrimaryRelativePath, StringComparison.Ordinal)
-            && files.SequenceEqual(settings.Files, StringComparer.Ordinal)
-            ? settings
-            : settings with { BundleRoot = bundleRoot, PrimaryRelativePath = primary, Files = [.. files] };
     }
 
     /// <summary>Reads the images a texture descriptor reads, resolved against its folder; a six-face cube's are its six

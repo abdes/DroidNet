@@ -91,6 +91,32 @@ public sealed class CookRepairTests
         _ = (await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false)).IsUpToDate.Should().BeTrue();
     }
 
+    /// <summary>
+    /// A material renamed only in case leaves the cooked index under its old identity, although the file system still
+    /// finds its file by the old name.
+    /// </summary>
+    /// <returns>The asynchronous native retirement regression.</returns>
+    [TestMethod]
+    [TestCategory("NativeContent")]
+    public async Task RenamingCookedMaterialCaseRetiresOldOutput()
+    {
+        using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
+        workspace.WriteMaterial("Content/Materials/Blue.omat.json", "Blue");
+        using var compatibility = EditorNativeCompatibilityService.ForCooking();
+        var api = CreateRecordingApi(compatibility);
+        var pipeline = CreateIncrementalService(workspace, api, compatibility);
+        AssertCookSucceeded(await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false));
+        File.Move(Path.Combine(workspace.Root, "Content/Materials/Blue.omat.json"), Path.Combine(workspace.Root, "Content/Materials/blue.omat.json"));
+
+        var result = await pipeline.CookAssetAsync(AssetPath.Parse("/Content/Materials/blue.omat.json"), this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        AssertCookSucceeded(result);
+        _ = api.Removed.Should().ContainSingle().Which.VirtualPaths.Should().Equal("/Content/Materials/Blue.omat");
+        var inventory = await api.ReadInventoryAsync(workspace.CookedRoot("Content"), artifacts: null, this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = inventory.Assets.Select(static asset => asset.VirtualPath).Should()
+            .Contain("/Content/Materials/blue.omat").And.NotContain("/Content/Materials/Blue.omat");
+    }
+
     /// <summary>A material in a folder named as the editor names copies, with a space and parentheses, cooks.</summary>
     /// <returns>The asynchronous native regression.</returns>
     [TestMethod]

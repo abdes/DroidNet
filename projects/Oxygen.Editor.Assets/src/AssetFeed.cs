@@ -256,8 +256,10 @@ public sealed partial class AssetFeed : IAssetFeed, IDisposable, IAsyncDisposabl
         Oxygen.Editor.ContentPipeline.Publication.ICookPublicationReadLease? publication = null,
         string? publicationError = null)
     {
+        // A model is imported when a record names it.
+        var records = new Oxygen.Editor.Models.ModelImportRecords(project.FileSystem, project.ProjectRoot.FullPath);
         source = [.. source.Select(item => item.Kind == AssetKind.ForeignSource && item.SourcePath is { } path
-            && project.FileSystem.File.Exists(path.FullPath + Oxygen.Editor.ContentPipeline.Import.NativeSceneImportSettings.SidecarSuffix)
+            && records.IsImported(path.FullPath)
                 ? item with { ImportSource = item.Identity, ImportSourcePath = path } : item)];
         var candidates = source.Where(item => item.ImportSource is not null
             || (item.DescriptorPath is not null && item.Kind is AssetKind.Material or AssetKind.Geometry or AssetKind.Scene or AssetKind.Texture)

@@ -9,6 +9,7 @@ using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Managed.Assets.Persistence.LooseCooked;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
+using Testably.Abstractions;
 
 namespace Oxygen.Editor.ContentPipeline.Incremental;
 
@@ -91,8 +92,8 @@ internal sealed record CookRootRepair(ImmutableHashSet<string> EmptyRoots, Immut
 
     /// <summary>Tests whether a prior product's authored source was moved or deleted.</summary>
     /// <remarks>
-    /// A model is retired only when its import settings went with it; a model file missing beside its
-    /// settings is damage that cooking reports instead.
+    /// A model is retired only when no import record names it any more; a model file missing while its
+    /// record remains is damage that cooking reports instead.
     /// </remarks>
     /// <param name="projectRoot">The project root.</param>
     /// <param name="product">The prior product.</param>
@@ -105,9 +106,10 @@ internal sealed record CookRootRepair(ImmutableHashSet<string> EmptyRoots, Immut
             return false;
         }
 
-        var path = Path.Combine(projectRoot, source.SourceRelativePath);
-        return !CookSavedSourceReader.Exists(path)
-            && (product.ImportedSource is null || !CookSavedSourceReader.Exists(path + Import.NativeSceneImportSettings.SidecarSuffix));
+        var fileSystem = new RealFileSystem();
+        return !ExactSourcePath.Exists(fileSystem, projectRoot, source.SourceRelativePath)
+            && (product.ImportedSource is null
+                || !new Models.ModelImportRecords(fileSystem, projectRoot).IsImported(Path.Combine(projectRoot, source.SourceRelativePath)));
     }
 
     /// <summary>Finds the remaining products that use a removed product, so that cooking them again reports what they lost.</summary>

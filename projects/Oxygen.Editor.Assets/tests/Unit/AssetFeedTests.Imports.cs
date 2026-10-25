@@ -9,6 +9,7 @@ using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.ContentPipeline.Testing;
+using Oxygen.Editor.Models;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
 using Oxygen.Editor.Assets.TestSupport;
@@ -151,7 +152,11 @@ public sealed partial class AssetFeedTests
         await File.WriteAllTextAsync(path, "{}", cancellationToken).ConfigureAwait(false);
         if (configured)
         {
-            await File.WriteAllTextAsync(path + ".import.json", "{}", cancellationToken).ConfigureAwait(false);
+            // A model is imported when a record under the project's imports folder names it.
+            var recordPath = ModelImportSettings.PathFor(workspace.Root.FullPath, Guid.CreateVersion7());
+            _ = Directory.CreateDirectory(Path.GetDirectoryName(recordPath)!);
+            var record = ModelImportSettings.Create(recordPath, path, identity.VirtualPath, ModelImportSettings.DefaultSettings("Crate"));
+            await File.WriteAllBytesAsync(recordPath, record.ToBytes(), cancellationToken).ConfigureAwait(false);
         }
 
         return identity;

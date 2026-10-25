@@ -45,14 +45,14 @@ internal static class NativeImportReportReader
         var outputsBySource = ImmutableDictionary.CreateBuilder<string, ImmutableArray<string>>(StringComparer.Ordinal);
         var productsBySource = ImmutableDictionary.CreateBuilder<string, ImmutableHashSet<string>>(StringComparer.Ordinal);
         var diagnostics = new List<DiagnosticRecord>();
-        var provenance = ImmutableDictionary.CreateBuilder<string, NativeSurfaceProvenance>(StringComparer.Ordinal);
+        var modelImports = ImmutableDictionary.CreateBuilder<string, JsonElement>(StringComparer.Ordinal);
         var succeeded = exitCode == 0;
         var indices = new HashSet<int>();
         foreach (var job in jobs)
         {
             var index = job.GetProperty("index").GetInt32() - 1;
             if (!indices.Add(index) || index < 0 || index >= execution.Manifest.Jobs.Count
-                || !string.Equals(job.GetProperty("type").GetString(), execution.Manifest.Jobs[index].Type, StringComparison.Ordinal))
+                || !string.Equals(job.GetProperty("type").GetString(), execution.Manifest.Jobs[index].ReportedType, StringComparison.Ordinal))
             {
                 throw new InvalidDataException("The native report identifies an unexpected job.");
             }
@@ -70,21 +70,20 @@ internal static class NativeImportReportReader
                 productsBySource.Add(source, ReadProducts(job));
             }
 
-            if (requested.SurfaceProvenance is { } previous
+            if (requested.Record is not null
                 && string.Equals(job.GetProperty("status").GetString(), "succeeded", StringComparison.Ordinal))
             {
-                if (!job.TryGetProperty("surface_provenance", out var candidate))
+                if (!job.TryGetProperty("model_import", out var update))
                 {
-                    throw new InvalidDataException("Successful model import omitted its surface provenance.");
+                    throw new InvalidDataException("A successful model import omitted what it established.");
                 }
 
-                var retained = NativeSurfaceProvenance.Parse(candidate);
-                if (requested.Source is null || retained.SourceIdentity != previous.SourceIdentity || provenance.ContainsKey(requested.Source))
+                if (requested.Source is null || modelImports.ContainsKey(requested.Source))
                 {
-                    throw new InvalidDataException("Native surface provenance does not identify the requested source uniquely.");
+                    throw new InvalidDataException("A model import does not identify the requested source uniquely.");
                 }
 
-                provenance.Add(requested.Source, retained);
+                modelImports.Add(requested.Source, update.Clone());
             }
 
             foreach (var issue in job.GetProperty("diagnostics").EnumerateArray())
@@ -118,7 +117,7 @@ internal static class NativeImportReportReader
         {
             OutputsBySource = outputsBySource.ToImmutable(),
             ProductsBySource = productsBySource.ToImmutable(),
-            SurfaceProvenance = succeeded ? provenance.ToImmutable() : ImmutableDictionary<string, NativeSurfaceProvenance>.Empty,
+            ModelImports = succeeded ? modelImports.ToImmutable() : ImmutableDictionary<string, JsonElement>.Empty,
         };
     }
 

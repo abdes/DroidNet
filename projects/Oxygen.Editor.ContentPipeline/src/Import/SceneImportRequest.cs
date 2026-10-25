@@ -17,8 +17,9 @@ public sealed record SceneImportRequest(ProjectContext Project, string SourcePat
     /// <summary>Gets the existing source explicitly reviewed for replacement, or null for a new import.</summary>
     public SceneImportReplacement? Replacement { get; init; }
 
-    /// <summary>Gets the source identity retained from initial analysis through settings publication and retries.</summary>
-    internal NativeSurfaceProvenance Provenance { get; init; } = NativeSurfaceProvenance.Create();
+    /// <summary>Gets the source identity kept from the first attempt through the record's creation and retries; it names
+    /// the model's import record.</summary>
+    internal Guid SourceIdentity { get; init; } = Guid.CreateVersion7();
 
     /// <summary>Gets private incoming source preserved by a previous failed replacement attempt.</summary>
     internal string? ReplacementCandidatePath { get; init; }

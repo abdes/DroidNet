@@ -2,15 +2,14 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Collections.Immutable;
 using System.Reactive.Subjects;
 using System.Text.Json.Nodes;
 using DroidNet.Storage.Native;
 using Moq;
-using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.ContentPipeline.Testing;
 using Oxygen.Editor.Documents;
+using Oxygen.Editor.Models;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Projects.Testing;
 using Oxygen.Managed.Assets.Catalog;
@@ -94,30 +93,41 @@ internal sealed class RelocationWorkspace : IDisposable
             .Where(static file => !file.Relative.StartsWith(".build", StringComparison.Ordinal))
             .ToDictionary(static file => file.Relative, file => this.FileSystem.File.ReadAllText(file.Path), StringComparer.Ordinal);
 
-    /// <summary>Writes a retained model bundle with its import sidecar.</summary>
-    /// <param name="bundle">The bundle folder, relative to the project.</param>
-    /// <param name="primary">The primary source file inside the bundle.</param>
-    /// <returns>The import settings written to the sidecar.</returns>
-    public NativeSceneImportSettings WriteModel(string bundle, string primary)
+    /// <summary>Writes an imported model: its files, and its import record, which fingerprints the files it read.</summary>
+    /// <param name="bundle">The folder that holds the model, relative to the project.</param>
+    /// <param name="primary">The primary source file inside the folder.</param>
+    /// <returns>The model's import record.</returns>
+    public ModelImportSettings WriteModel(string bundle, string primary)
     {
-        _ = this.Write(bundle + "/" + primary, "{\"asset\":{\"version\":\"2.0\"},\"buffers\":[{\"uri\":\"mesh.bin\"}]}");
+        var source = this.Write(bundle + "/" + primary, "{\"asset\":{\"version\":\"2.0\"},\"buffers\":[{\"uri\":\"mesh.bin\"}]}");
         _ = this.Write(bundle + "/mesh.bin", "bin");
-        var settings = new NativeSceneImportSettings(
-            NativeSceneImportSettings.CurrentSchemaVersion,
-            NativeSceneImportSettings.ImporterIdentity,
-            Path.GetFileNameWithoutExtension(primary),
-            bundle,
-            primary,
-            new string('A', 64),
-            ImmutableArray.Create(primary, "mesh.bin"))
+        var recordPath = ModelImportSettings.PathFor(this.Root, Guid.CreateVersion7());
+        var record = ModelImportSettings.Create(
+            recordPath,
+            source,
+            "/" + bundle + "/" + primary,
+            ModelImportSettings.DefaultSettings(Path.GetFileNameWithoutExtension(primary))) with
         {
-            SurfaceProvenance = NativeSurfaceProvenance.Create(),
+            SourceFingerprint = new(2, new string('a', 64), [new("mesh.bin", 3, new string('b', 64))]),
         };
-        this.FileSystem.File.WriteAllBytes(this.PathOf(bundle + "/" + primary + NativeSceneImportSettings.SidecarSuffix), settings.ToBytes());
-        return settings;
+        _ = this.FileSystem.Directory.CreateDirectory(this.FileSystem.Path.GetDirectoryName(recordPath)!);
+        this.FileSystem.File.WriteAllBytes(recordPath, record.ToBytes());
+        return record;
     }
 
-    public NativeSceneImportSettings ReadSettings(string relative) => NativeSceneImportSettings.Parse(this.FileSystem.File.ReadAllBytes(this.PathOf(relative)));
+    /// <summary>Gets the path of a model's import record, which never moves.</summary>
+    /// <param name="record">The model's record.</param>
+    /// <returns>The record's relative path in the project.</returns>
+    public string RecordOf(ModelImportSettings record)
+        => this.FileSystem.Path.GetRelativePath(this.Root, ModelImportSettings.PathFor(this.Root, record.SourceIdentity));
+
+    /// <summary>Reads a model's import record from its place in the project.</summary>
+    /// <param name="record">The model's record as written.</param>
+    /// <returns>The record as it is now.</returns>
+    public ModelImportSettings ReadRecord(ModelImportSettings record)
+        => ModelImportSettings.Parse(
+            ModelImportSettings.PathFor(this.Root, record.SourceIdentity),
+            this.FileSystem.File.ReadAllBytes(ModelImportSettings.PathFor(this.Root, record.SourceIdentity)));
 
     public void Dispose()
     {

@@ -105,19 +105,25 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
     }
 
     /// <inheritdoc />
-    public ContentImportJob BuildJob(ContentCookInput input, IReadOnlyList<string> dependsOn, Import.NativeSceneImportSettings? modelSettings = null)
+    public ContentImportJob BuildJob(ContentCookInput input, IReadOnlyList<string> dependsOn, string? modelRecordPath = null)
     {
         ArgumentNullException.ThrowIfNull(input);
         ArgumentNullException.ThrowIfNull(dependsOn);
         if (input.Kind == ContentCookAssetKind.ForeignSource)
         {
-            ArgumentNullException.ThrowIfNull(modelSettings);
-            return this.BuildModelJob(input.SourceRelativePath, dependsOn, modelSettings.Name, input.AssetUri, modelSettings.SurfaceProvenance) with
+            ArgumentException.ThrowIfNullOrEmpty(modelRecordPath);
+
+            // The record holds the model's source, identity and settings; the job only schedules it.
+            return new(
+                BuildJobId(input),
+                "model",
+                NormalizeSource(input.SourceRelativePath),
+                dependsOn,
+                Output: null,
+                Name: null)
             {
-                UnitPolicy = modelSettings.UnitPolicy,
-                BakeTransforms = modelSettings.BakeTransforms,
-                NormalsPolicy = modelSettings.NormalsPolicy,
-                TangentsPolicy = modelSettings.TangentsPolicy,
+                Record = NormalizeSource(modelRecordPath),
+                Layout = new ContentImportLayout(AssetPath.Create(input.MountName).VirtualPath),
             };
         }
 
@@ -150,7 +156,7 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
     }
 
     /// <inheritdoc />
-    public ContentImportJob BuildModelJob(string sourceRelativePath, IReadOnlyList<string> dependsOn, string name, AssetPath identity, Import.NativeSurfaceProvenance provenance)
+    public ContentImportJob BuildModelJob(string sourceRelativePath, IReadOnlyList<string> dependsOn, string name, AssetPath identity)
         => new(
             BuildJobId(ContentCookAssetKind.ForeignSource, sourceRelativePath),
             Path.GetExtension(sourceRelativePath).Equals(".fbx", StringComparison.OrdinalIgnoreCase) ? "fbx" : "gltf",
@@ -162,12 +168,6 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
             // The model names its products under its identity, the virtual path of its source file.
             Layout = new ContentImportLayout(AssetPath.Create(identity.Mount).VirtualPath),
             VirtualPath = identity.VirtualPath,
-            UnitPolicy = Import.NativeSceneImportSettings.DefaultUnitPolicy,
-            BakeTransforms = false,
-            NormalsPolicy = Import.NativeSceneImportSettings.DefaultNormalsPolicy,
-            TangentsPolicy = Import.NativeSceneImportSettings.DefaultTangentsPolicy,
-            SurfaceSourceIdentity = provenance.SourceIdentity.ToString("D"),
-            SurfaceProvenance = provenance,
         };
 
     /// <summary>Builds the job that attaches a scene's script slots to its cooked scene.</summary>

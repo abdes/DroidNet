@@ -8,6 +8,7 @@ using DroidNet.Storage.Native;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.ContentPipeline.TestSupport;
+using Oxygen.Editor.Models;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Compatibility;
 using Oxygen.Managed.Core.Diagnostics;
@@ -23,7 +24,7 @@ public sealed class ImportWorkflowTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    /// <summary>One explicit import retains source, creates settings and publishes through one coordinator run.</summary>
+    /// <summary>One explicit import retains source, creates its import record and publishes through one coordinator run.</summary>
     /// <returns>The asynchronous complete import test.</returns>
     [TestMethod]
     [TestCategory("NativeContent")]
@@ -181,7 +182,7 @@ public sealed class ImportWorkflowTests
         _ = api.ImportedManifest.Should().BeNull();
     }
 
-    /// <summary>Retry after settings persistence fails keeps the retained source instead of repeating the copy.</summary>
+    /// <summary>Retry after the import record cannot be written keeps the retained source instead of repeating the copy.</summary>
     /// <returns>The asynchronous partial-retention recovery test.</returns>
     [TestMethod]
     [TestCategory("NativeContent")]
@@ -238,7 +239,7 @@ public sealed class ImportWorkflowTests
         public Task<FileSnapshot> ReadAsync(string path, CancellationToken cancellationToken = default) => this.inner.ReadAsync(path, cancellationToken);
 
         public Task<FileVersion> WriteAsync(string path, ReadOnlyMemory<byte> content, FileVersion expected, CancellationToken cancellationToken = default)
-            => this.Fail && path.EndsWith(NativeSceneImportSettings.SidecarSuffix, StringComparison.Ordinal)
+            => this.Fail && path.EndsWith(ModelImportSettings.RecordSuffix, StringComparison.Ordinal)
                 ? Task.FromException<FileVersion>(new IOException("Settings write failed"))
                 : this.inner.WriteAsync(path, content, expected, cancellationToken);
     }

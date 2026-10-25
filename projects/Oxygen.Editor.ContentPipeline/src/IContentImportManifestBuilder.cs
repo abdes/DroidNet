@@ -16,16 +16,15 @@ public interface IContentImportManifestBuilder
     /// <param name="dependsOn">Other jobs required in the batch.</param>
     /// <param name="name">The reviewed model name.</param>
     /// <param name="identity">The model's identity, the virtual path of its file; its products are named under it.</param>
-    /// <param name="provenance">The source's stable native surface identity.</param>
-    /// <returns>The native recipe shared with retained-source cooking.</returns>
-    public ContentImportJob BuildModelJob(string sourceRelativePath, IReadOnlyList<string> dependsOn, string name, AssetPath identity, Import.NativeSurfaceProvenance provenance);
+    /// <returns>The native recipe that discovers the model's files; a record does not exist yet.</returns>
+    public ContentImportJob BuildModelJob(string sourceRelativePath, IReadOnlyList<string> dependsOn, string name, AssetPath identity);
 
     /// <summary>Builds one destination-free native recipe for discovery and execution.</summary>
     /// <param name="input">The logical source and output identity.</param>
     /// <param name="dependsOn">Other jobs required in the same batch.</param>
-    /// <param name="modelSettings">Retained native settings for a foreign model source.</param>
+    /// <param name="modelRecordPath">For a foreign model source, its model import record, relative to the project.</param>
     /// <returns>The native job with its complete recipe and layout.</returns>
-    public ContentImportJob BuildJob(ContentCookInput input, IReadOnlyList<string> dependsOn, Import.NativeSceneImportSettings? modelSettings = null);
+    public ContentImportJob BuildJob(ContentCookInput input, IReadOnlyList<string> dependsOn, string? modelRecordPath = null);
 
     /// <summary>
     /// Builds the manifest for the resolved inputs in a single cook scope.

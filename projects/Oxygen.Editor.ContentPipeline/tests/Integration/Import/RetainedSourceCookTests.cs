@@ -7,6 +7,7 @@ using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.ContentPipeline.TestSupport;
+using Oxygen.Editor.Models;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Compatibility;
 using Oxygen.Managed.Core.Diagnostics;
@@ -167,6 +168,14 @@ public sealed class RetainedSourceCookTests
         foreach (var file in Directory.EnumerateFiles(sourceRoot))
         {
             File.Copy(file, Path.Combine(copyRoot, Path.GetFileName(file)));
+        }
+
+        // The model's record goes with it: it holds the identity the clean project reproduces.
+        var records = Path.Combine(second.Root, ModelImportSettings.RecordsFolder);
+        _ = Directory.CreateDirectory(records);
+        foreach (var record in Directory.EnumerateFiles(Path.Combine(first.Root, ModelImportSettings.RecordsFolder), "*" + ModelImportSettings.RecordSuffix))
+        {
+            File.Copy(record, Path.Combine(records, Path.GetFileName(record)));
         }
 
         var two = await CreateService(second, api, compatibility: compatibility).CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false);

@@ -4,6 +4,7 @@
 
 using System.Collections.Immutable;
 using Oxygen.Editor.ContentPipeline.Import;
+using Oxygen.Editor.Models;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
@@ -31,7 +32,9 @@ internal sealed partial class CookPublicationTransaction
     {
         var published = ImportSourceRetention.ResolveBundleRoot(operation.Project, source.BundleRoot);
         ValidateImage(source.Before);
-        if (!source.Before.Exists || source.Before.Files.IsEmpty)
+        // The reviewed folder may hold no file: a replacement can stand in for a model whose source is missing. Its
+        // record, outside the folder, names it.
+        if (!source.Before.Exists)
         {
             throw new InvalidDataException("Source replacement requires the reviewed existing bundle.");
         }
@@ -89,18 +92,16 @@ internal sealed partial class CookPublicationTransaction
             throw new InvalidDataException("Produced source settings contain an invalid path or byte payload.");
         }
 
-        var before = NativeSceneImportSettings.Parse(file.Before);
-        var after = NativeSceneImportSettings.Parse(file.After);
-        var expected = before.BundleRoot + "/" + before.PrimaryRelativePath + NativeSceneImportSettings.SidecarSuffix;
-        var permitted = before with { SurfaceProvenance = after.SurfaceProvenance };
-        if (!string.Equals(file.RelativePath, expected, StringComparison.Ordinal)
-            || before.SurfaceProvenance.SourceIdentity != after.SurfaceProvenance.SourceIdentity
-            || !permitted.ToBytes().AsSpan().SequenceEqual(after.ToBytes()))
+        var recordPath = project.ProjectRoot.Combine(file.RelativePath).FullPath;
+        var before = ModelImportSettings.Parse(recordPath, file.Before);
+        var after = ModelImportSettings.Parse(recordPath, file.After);
+        var expected = ModelImportSettings.RecordsFolder + "/" + before.SourceIdentity.ToString("D") + ModelImportSettings.RecordSuffix;
+        if (!string.Equals(file.RelativePath, expected, StringComparison.Ordinal) || !before.DiffersOnlyByImport(after))
         {
-            throw new InvalidDataException("Native publication may update only its retained surface provenance.");
+            throw new InvalidDataException("A publication may update only what an import establishes in its model import record.");
         }
 
-        var primary = project.ProjectRoot.Combine(Path.Combine(before.BundleRoot, before.PrimaryRelativePath));
+        var primary = FileSystemPath.From(before.ResolveSource(recordPath));
         var sourceUri = CookInputResolver.FindAuthoringSourceUri(project, primary)
             ?? throw new InvalidDataException("Produced metadata does not belong to a project authoring source.");
         var source = CookInputResolver.Resolve(project, sourceUri, ContentCookInputRole.Dependency);

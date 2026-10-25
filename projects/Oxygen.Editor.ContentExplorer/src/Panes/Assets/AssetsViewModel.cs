@@ -21,7 +21,7 @@ using Oxygen.Editor.ContentExplorer.Panes.Assets.Layouts;
 using Oxygen.Editor.ContentExplorer.Panes.ContentFolders;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Cooking;
-using Oxygen.Editor.ContentPipeline.Import;
+using Oxygen.Editor.Models;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Shell.Desktop;
 using Oxygen.Editor.Shell.Documents;
@@ -371,7 +371,7 @@ public partial class AssetsViewModel(
         else if (args.InvokedItem is { Kind: AssetKind.ForeignSource, SourcePath: { } sourcePath })
         {
             var project = session.Context;
-            if (project.FileSystem.File.Exists(sourcePath.FullPath + NativeSceneImportSettings.SidecarSuffix))
+            if (new ModelImportRecords(project.FileSystem, project.ProjectRoot.FullPath).IsImported(sourcePath.FullPath))
             {
                 await this.RunSourceImportAsync(project, () => contentPipelineService.ReimportSourceAsync(args.InvokedItem.Identity, project, CancellationToken.None)).ConfigureAwait(true);
             }

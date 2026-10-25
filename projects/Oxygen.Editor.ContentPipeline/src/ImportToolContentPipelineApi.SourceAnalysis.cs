@@ -81,7 +81,7 @@ public sealed partial class ImportToolContentPipelineApi
             var observed = report.Jobs[index];
             var submitted = execution.Jobs[index];
             if (!string.Equals(observed.Id, submitted.Id, StringComparison.Ordinal)
-                || !string.Equals(observed.JobType, submitted.Type, StringComparison.Ordinal)
+                || !string.Equals(observed.JobType, submitted.ReportedType, StringComparison.Ordinal)
                 || !Path.IsPathFullyQualified(observed.SourcePath)
                 || FileSystemPath.From(observed.SourcePath) != FileSystemPath.From(Path.GetFullPath(submitted.AttributedSource, execution.InputRoot)))
             {

@@ -81,7 +81,7 @@ internal static class CookInputResolver
     /// <param name="uri">The product's identity.</param>
     /// <param name="role">The container's role in the requested closure.</param>
     /// <returns>The container's input, or null when the identity is not a product of a container with its source in
-    /// an authoring mount. A model produces nothing until it is imported, its import settings beside it.</returns>
+    /// an authoring mount. A model produces nothing until a model import record names it.</returns>
     public static ContentCookInput? ResolveContainer(ProjectContext project, AssetPath uri, ContentCookInputRole role)
     {
         if (AssetFileTypes.ContainerOf(uri) is not { } container || !HasAuthoringMount(project, container.Mount)
@@ -92,7 +92,7 @@ internal static class CookInputResolver
 
         var source = Resolve(project, container, role);
         return source.Kind != ContentCookAssetKind.ForeignSource
-            || project.FileSystem.File.Exists(source.SourceAbsolutePath.FullPath + Import.NativeSceneImportSettings.SidecarSuffix) ? source : null;
+            || Import.ModelRecordLookup.TryFind(project, source.SourceAbsolutePath) is not null ? source : null;
     }
 
     /// <summary>Resolves a script to its source: <c>/Content/Player/move.oscript</c> cooks from

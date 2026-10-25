@@ -22,7 +22,7 @@ namespace Oxygen.Editor.Cooking.Unit.UI.Tests;
 internal sealed class CookRetryViewModelTests : DroidNet.Tests.VisualUserInterfaceTests
 {
     /// <summary>Retry dispatches initial imports and retained sources to their respective shared entry points.</summary>
-    /// <param name="retained">Whether the earlier operation already saved its source settings.</param>
+    /// <param name="retained">Whether the earlier operation already saved its import record.</param>
     /// <returns>The asynchronous Cooking recovery command test.</returns>
     [TestMethod]
     [DataRow(true)]

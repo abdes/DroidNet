@@ -6,6 +6,7 @@ using System.Collections.Immutable;
 using System.Security.Cryptography;
 using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.ContentPipeline.Publication;
+using Oxygen.Editor.Models;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
@@ -23,28 +24,23 @@ public sealed partial class ContentPipelineService
         var outputs = ImmutableArray.CreateBuilder<CookProducedSourceFile>();
         var sources = graph.Assets.Where(static input => input.Kind == ContentCookAssetKind.ForeignSource)
             .ToDictionary(static input => input.SourceRelativePath, StringComparer.Ordinal);
-        foreach (var (sourcePath, provenance) in result.SurfaceProvenance)
+        foreach (var (sourcePath, update) in result.ModelImports)
         {
             if (!sources.TryGetValue(sourcePath, out var source))
             {
-                throw new InvalidDataException("Native surface provenance names a source outside this cook.");
+                throw new InvalidDataException("A model import names a source outside this cook.");
             }
 
-            var relative = source.SourceRelativePath + NativeSceneImportSettings.SidecarSuffix;
+            var record = ModelRecordLookup.Find(snapshot.Operation.Project, source.SourceAbsolutePath);
+            var relative = ModelRecordLookup.RelativePath(snapshot.Operation.Project, record);
             var input = snapshot.Inputs.Single(file => string.Equals(file.RelativePath, relative, StringComparison.Ordinal));
             var before = await File.ReadAllBytesAsync(Path.Combine(snapshot.InputRoot, relative), cancellationToken).ConfigureAwait(false);
             if (input.IsAbsent || !string.Equals(Convert.ToHexString(SHA256.HashData(before)), input.DiscoveryHash, StringComparison.Ordinal))
             {
-                throw new InvalidDataException("Captured source settings changed during native cooking.");
+                throw new InvalidDataException("The captured model import record changed during native cooking.");
             }
 
-            var settings = NativeSceneImportSettings.Parse(before);
-            if (settings.SurfaceProvenance.SourceIdentity != provenance.SourceIdentity)
-            {
-                throw new InvalidDataException("Native surface provenance changed the retained source identity.");
-            }
-
-            var after = (settings with { SurfaceProvenance = provenance }).ToBytes();
+            var after = ModelImportSettings.Parse(record.RecordPath, before).WithImportUpdate(update).ToBytes();
             if (!before.AsSpan().SequenceEqual(after))
             {
                 outputs.Add(new(relative, before, after));
@@ -140,15 +136,16 @@ public sealed partial class ContentPipelineService
             ],
         };
 
+    // The incoming file has no record yet: its files are discovered as a new model's are.
     private Task<ImportSourceBundle> DiscoverChangedImportedSourceAsync(
         ContentCookOperation operation,
         ContentCookInput input,
-        NativeSceneImportSettings settings,
         NativeArtifactLease? artifacts,
         CancellationToken cancellationToken)
     {
         this.cookCoordinator.VerifyWriter(operation);
-        var recipe = this.manifestBuilder.BuildJob(input, [], settings);
+        var file = input.SourceAbsolutePath.Name;
+        var recipe = this.manifestBuilder.BuildModelJob(file, [], Path.GetFileNameWithoutExtension(file), input.AssetUri);
         return new SceneImportSourceDiscovery(this.cookCoordinator, this.engineContentPipelineApi)
             .DiscoverAsync(operation, input.SourceAbsolutePath.FullPath, recipe, cancellationToken, artifacts);
     }
@@ -158,10 +155,10 @@ public sealed partial class ContentPipelineService
         var results = new List<ContentCookResult>();
         foreach (var input in scope.Inputs.Where(static input => input.Kind == ContentCookAssetKind.ForeignSource))
         {
-            var settingsPath = Path.Combine(scope.Snapshot!.InputRoot, input.SourceRelativePath + NativeSceneImportSettings.SidecarSuffix);
-            var settings = NativeSceneImportSettings.Parse(await File.ReadAllBytesAsync(settingsPath, cancellationToken).ConfigureAwait(false));
+            var record = ModelRecordLookup.Find(scope.Project, input.SourceAbsolutePath);
             var sourceScope = scope with { Inputs = [input] };
-            var job = scope.NativeJobs.GetValueOrDefault(input.AssetUri) ?? this.manifestBuilder.BuildJob(input, [], settings);
+            var job = scope.NativeJobs.GetValueOrDefault(input.AssetUri)
+                ?? this.manifestBuilder.BuildJob(input, [], ModelRecordLookup.RelativePath(scope.Project, record));
             var manifest = new ContentImportManifest(
                 1,
                 (scope.Output ?? throw new InvalidOperationException("The import has no generation owner.")).Path,

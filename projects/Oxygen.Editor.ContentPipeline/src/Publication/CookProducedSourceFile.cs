@@ -10,7 +10,7 @@ using Oxygen.Editor.ContentPipeline.Snapshots;
 namespace Oxygen.Editor.ContentPipeline.Publication;
 
 /// <summary>Producer-owned source metadata emitted from, and committed after, immutable cook inputs.</summary>
-/// <param name="RelativePath">The retained source settings path within the project.</param>
+/// <param name="RelativePath">The model import record path within the project.</param>
 /// <param name="Before">The exact settings consumed by the native producer.</param>
 /// <param name="After">The validated settings containing the returned native provenance.</param>
 internal sealed record CookProducedSourceFile(string RelativePath, byte[] Before, byte[] After)

@@ -2,6 +2,8 @@
 
 Status: `ED-M06 review-ready`
 
+Last Updated: 2026-10-25
+
 ## 1. Purpose
 
 Define the content explorer UX, asset identity model, asset-state reducer, typed
@@ -317,8 +319,8 @@ identity and must update every authored referrer in one transaction.
   (component and targeted overrides), the exposure metering mask and
   `ExtraAssets`; material texture paths; geometry descriptor material, buffer
   and skeleton paths; texture descriptor `source`, `sources[].file` and
-  `virtual_path`; import sidecar `BundleRoot`, `PrimaryRelativePath`, `Files`
-  and `OutputDirectory`; input file action references (mapping `action`,
+  `virtual_path`; model import record `source` and `virtual_path`; input file
+  action references (mapping `action`,
   `linked_action` and combo step `action` virtual paths), scene Play-section
   starting input contexts and script parameter overrides of input kinds.
   Identities compare without the scheme and `.json` suffix; a rewrite keeps the
@@ -330,28 +332,24 @@ identity and must update every authored referrer in one transaction.
   folder; renaming an action or context is a relocation request of its own
   (`InputProductRename`) that rewrites the source and every referrer
   ([content pipeline §24](content-pipeline.md#24-input-sources)).
-- **Plan.** Source moves with their companion files (a texture's image, a
-  model's sidecar), a folder prefix mapping and the rewritten references of
+- **Plan.** Source moves with their companion files (a texture's image, the
+  files a model's import read), a folder prefix mapping and the rewritten
+  references of
   every referrer, including a moved descriptor's own `virtual_path`. Rejected:
   collisions, invalid names, read-only or derived targets, moves out of
-  authoring mounts or into the moved folder, renaming or moving a mount root or
-  the importer's fixed type folders (`Materials`, `Geometry`, `Scenes`), moving
-  a model file out of its bundle folder, and cooked-only imported outputs.
+  authoring mounts or into the moved folder, renaming or moving a mount root,
+  moving a model away from the files its import read, and cooked-only imported
+  outputs.
   Rename and move ask no confirmation, only to save unsaved documents first
   (Transaction); the result reports what moved and how many referrers were
   updated, and offers Undo and Redo.
-- **Imported outputs.** A model import owns one output group in its mount,
-  `Materials/<group>`, `Geometry/<group>` and `Scenes/<group>`, where the group
-  is the sidecar's `OutputDirectory` and may be nested. Import creates no
-  folders there, so **Rename output group…** on the model source or any of its
-  outputs relocates the group; a real folder inside a type folder that is, or
-  contains, a group expands the same way. The plan applies one prefix mapping
-  under all three type folders, rewrites `OutputDirectory` in every affected
-  sidecar and checks collisions in all three, including other imports' groups;
-  the result reports the moved group folders. This is also how an import's
-  destination changes. Moving a group to another mount is rejected. Renaming or
-  moving the bundle folder rewrites `BundleRoot`; renaming the model file
-  renames its sidecar and rewrites `PrimaryRelativePath` and `Files`.
+- **Imported outputs.** A model is a container: its scene, geometries,
+  materials and textures are named under the model's identity
+  (`/Content/Ship/Ship.glb/Paint.omat`), so moving or renaming the model or its
+  folder relocates them all. The model's import record stays in
+  `<ProjectRoot>/imports/`, named by its source identity; the plan rewrites its
+  `source` and `virtual_path`, so the identity, and every node and surface it
+  names, survives the move. Deleting a model recycles its record.
 - **Scenes.** A scene is renamed, moved and duplicated like any asset. Deleting
   the project's start scene, or a folder that holds it, is rejected until
   another scene is the start scene.

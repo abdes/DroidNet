@@ -6,6 +6,7 @@ using System.Collections.Immutable;
 using System.Security.Cryptography;
 using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.ContentPipeline.Incremental;
+using Oxygen.Editor.Models;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
@@ -192,26 +193,21 @@ internal sealed partial class CookSourceAnalyzer(
 
         var managed = ImmutableArray.CreateBuilder<CookSnapshotInput>();
 
-        NativeSceneImportSettings? settings = null;
-        var settingsPath = input.SourceAbsolutePath + NativeSceneImportSettings.SidecarSuffix;
-        if (CookSavedSourceReader.Exists(settingsPath))
+        // A model cooks from its import record, which the snapshot captures with the model's files.
+        string? recordPath = null;
+        if (input.Kind == ContentCookAssetKind.ForeignSource)
         {
-            var bytes = await CookSavedSourceReader.ReadAsync(settingsPath, cancellationToken).ConfigureAwait(false);
-            managed.Add(new(AssetUri: null, FileSystemPath.From(settingsPath), input.SourceRelativePath + NativeSceneImportSettings.SidecarSuffix, Convert.ToHexString(SHA256.HashData(bytes))));
-            if (input.Kind == ContentCookAssetKind.ForeignSource)
-            {
-                settings = NativeSceneImportSettings.Parse(bytes);
-            }
-        }
-        else
-        {
-            managed.Add(new(AssetUri: null, FileSystemPath.From(settingsPath), input.SourceRelativePath + NativeSceneImportSettings.SidecarSuffix, string.Empty, CookSnapshotInputKind.Absent));
+            var record = ModelRecordLookup.Find(operation.Project, input.SourceAbsolutePath);
+            recordPath = ModelRecordLookup.RelativePath(operation.Project, record);
+            var bytes = await CookSavedSourceReader.ReadAsync(record.RecordPath, cancellationToken).ConfigureAwait(false);
+            _ = ModelImportSettings.Parse(record.RecordPath, bytes);
+            managed.Add(new(AssetUri: null, FileSystemPath.From(record.RecordPath), recordPath, Convert.ToHexString(SHA256.HashData(bytes))));
         }
 
         var textureDiagnostics = input.Kind == ContentCookAssetKind.Material
             ? await this.ValidateMaterialTextureSourcesAsync(input, cancellationToken).ConfigureAwait(false)
             : [];
-        return new(input, recipes.BuildJob(input, [], settings), managed.ToImmutable(), Scene: null) { Diagnostics = textureDiagnostics };
+        return new(input, recipes.BuildJob(input, [], recordPath), managed.ToImmutable(), Scene: null) { Diagnostics = textureDiagnostics };
     }
 
     // A scene is projected to the descriptor the engine cooks.

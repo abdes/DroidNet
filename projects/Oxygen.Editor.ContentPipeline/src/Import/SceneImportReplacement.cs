@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using Oxygen.Editor.ContentPipeline.Publication;
+using Oxygen.Editor.Models;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Core;
 
@@ -11,20 +12,28 @@ namespace Oxygen.Editor.ContentPipeline.Import;
 /// <summary>The existing retained source and byte baseline explicitly reviewed for replacement.</summary>
 public sealed class SceneImportReplacement
 {
-    private SceneImportReplacement(AssetPath sourceUri, NativeSceneImportSettings settings, CookRootImage before)
+    private SceneImportReplacement(AssetPath sourceUri, string bundleRoot, string primaryRelativePath, ModelImportRecord record, CookRootImage before)
     {
         this.SourceUri = sourceUri;
-        this.Settings = settings;
+        this.BundleRoot = bundleRoot;
+        this.PrimaryRelativePath = primaryRelativePath;
+        this.Record = record;
         this.Before = before;
     }
 
     /// <summary>Gets the stable source identity preserved by replacement.</summary>
     public AssetPath SourceUri { get; }
 
-    /// <summary>Gets the existing import settings, which name the bundle.</summary>
-    public NativeSceneImportSettings Settings { get; }
+    /// <summary>Gets the project-relative folder that holds the model and its files.</summary>
+    public string BundleRoot { get; }
 
-    /// <summary>Gets the reviewed source and settings byte identities.</summary>
+    /// <summary>Gets the model's primary source file, relative to <see cref="BundleRoot"/>.</summary>
+    public string PrimaryRelativePath { get; }
+
+    /// <summary>Gets the model's import record, which the replacement keeps.</summary>
+    public ModelImportRecord Record { get; }
+
+    /// <summary>Gets the reviewed source byte identities.</summary>
     internal CookRootImage Before { get; }
 
     /// <summary>Identifies one exclusively owned retained model without changing any source or output.</summary>
@@ -37,21 +46,21 @@ public sealed class SceneImportReplacement
     {
         ArgumentNullException.ThrowIfNull(project);
         var root = ImportSourceRetention.ResolveDestination(project, folder, bundleName);
+        var bundle = FileSystemPath.From(root);
         var before = await CookRootImage.CaptureAsync(root, copyTo: null, cancellationToken).ConfigureAwait(false);
-        var sidecars = before.Files.Keys.Where(static path => path.EndsWith(NativeSceneImportSettings.SidecarSuffix, StringComparison.Ordinal)).ToArray();
-        if (!before.Exists || sidecars.Length != 1)
+        var records = new ModelImportRecords(project.FileSystem, project.ProjectRoot.FullPath).All
+            .Where(record => FileSystemPath.From(record.SourcePath) is var source && source != bundle && source.IsSameOrInside(bundle))
+            .ToArray();
+        if (!before.Exists || records.Length != 1)
         {
             throw new InvalidDataException("The existing folder must contain one configured model. Choose another name or import the existing source in place.");
         }
 
-        var settings = NativeSceneImportSettings.Parse(await File.ReadAllBytesAsync(Path.Combine(root, sidecars[0]), cancellationToken).ConfigureAwait(false));
-        if (FileSystemPath.From(root) != project.ProjectRoot.Combine(settings.BundleRoot)
-            || !string.Equals(sidecars[0], settings.PrimaryRelativePath + NativeSceneImportSettings.SidecarSuffix, FileSystemPath.NameComparison))
-        {
-            throw new InvalidDataException("The existing import settings do not own this retained source and destination.");
-        }
+        var record = records[0];
+        var primary = FileSystemPath.From(record.SourcePath).GetPathBelow(bundle);
 
-        var owned = settings.Files.Append(sidecars[0]).ToHashSet(FileSystemPath.NameComparer);
+        // The model owns what its last import read: its primary and every file beside it that the import used.
+        var owned = OwnedFiles(record, bundle).ToHashSet(FileSystemPath.NameComparer);
         var unrelated = before.Files.Keys.FirstOrDefault(path => !owned.Contains(path));
         if (unrelated is not null)
         {
@@ -64,7 +73,17 @@ public sealed class SceneImportReplacement
             throw new IOException("The retained source changed during review. Review it again.");
         }
 
-        var primary = folder.Combine(bundleName + "/" + settings.PrimaryRelativePath);
-        return new(primary, settings, before);
+        return new(folder.Combine(bundleName + "/" + primary), bundle.GetPathBelow(project.ProjectRoot), primary, record, before);
+    }
+
+    private static IEnumerable<string> OwnedFiles(ModelImportRecord record, FileSystemPath bundle)
+    {
+        var folder = Path.GetDirectoryName(record.SourcePath)!;
+        return record.Settings.SourceFingerprint?.Files
+            .Select(file => FileSystemPath.From(Path.GetFullPath(Path.Combine(folder, file.Path))))
+            .Where(path => path != bundle && path.IsSameOrInside(bundle))
+            .Select(path => path.GetPathBelow(bundle))
+            .Append(FileSystemPath.From(record.SourcePath).GetPathBelow(bundle))
+            ?? [FileSystemPath.From(record.SourcePath).GetPathBelow(bundle)];
     }
 }

@@ -16,8 +16,7 @@ namespace Oxygen.Editor.ContentPipeline;
 public sealed record ContentImportJob(
     [property: JsonPropertyName("id")] string Id,
     [property: JsonPropertyName("type")] string Type,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    [property: JsonPropertyName("source")] string? Source,
+    [property: JsonIgnore] string? Source,
     [property: JsonPropertyName("depends_on")] IReadOnlyList<string> DependsOn,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     [property: JsonPropertyName("output")] string? Output,
@@ -29,15 +28,23 @@ public sealed record ContentImportJob(
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? VirtualPath { get; init; }
 
-    /// <summary>Gets the retained source namespace used by native surface allocation.</summary>
-    [JsonPropertyName("surface_source_identity")]
+    /// <summary>Gets the model import record a <c>model</c> job runs, relative to the folder sources resolve from.</summary>
+    /// <remarks>The record holds the model's source, virtual path, settings and identity; the job carries none of them.</remarks>
+    [JsonPropertyName("record")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? SurfaceSourceIdentity { get; init; }
+    public string? Record { get; init; }
 
-    /// <summary>Gets the native record carried unchanged between successful imports.</summary>
-    [JsonPropertyName("surface_provenance")]
+    /// <summary>Gets the type the engine reports for this job: a <c>model</c> job runs, and reports, as the <c>gltf</c> or
+    /// <c>fbx</c> job its source's format makes it.</summary>
+    [JsonIgnore]
+    public string ReportedType => this.Record is null
+        ? this.Type
+        : string.Equals(Path.GetExtension(this.Source), ".fbx", StringComparison.OrdinalIgnoreCase) ? "fbx" : "gltf";
+
+    /// <summary>Gets the source the manifest names: none for a <c>model</c> job, whose record names it.</summary>
+    [JsonPropertyName("source")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public Import.NativeSurfaceProvenance? SurfaceProvenance { get; init; }
+    public string? ManifestSource => this.Record is null ? this.Source : null;
 
     /// <summary>Gets per-job descriptor folders while retaining the manifest's shared cooked root.</summary>
     [JsonPropertyName("layout")]
@@ -86,24 +93,4 @@ public sealed record ContentImportJob(
     /// <summary>Gets the source this job is attributed to: its own, or its owner's.</summary>
     [JsonIgnore]
     public string AttributedSource => this.Source ?? this.OwnerSource ?? string.Empty;
-
-    /// <summary>Gets whether source transforms are baked into vertices.</summary>
-    [JsonPropertyName("bake_transforms")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public bool? BakeTransforms { get; init; }
-
-    /// <summary>Gets the native coordinate-unit policy.</summary>
-    [JsonPropertyName("unit_policy")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? UnitPolicy { get; init; }
-
-    /// <summary>Gets the native normal policy.</summary>
-    [JsonPropertyName("normals_policy")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? NormalsPolicy { get; init; }
-
-    /// <summary>Gets the native tangent policy.</summary>
-    [JsonPropertyName("tangents_policy")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? TangentsPolicy { get; init; }
 }

@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.Immutable;
+using System.Text.Json;
 using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -23,7 +24,8 @@ public sealed record NativeImportResult(bool Succeeded, IReadOnlyList<Diagnostic
     public ImmutableDictionary<string, ImmutableHashSet<string>> ProductsBySource { get; init; }
         = ImmutableDictionary<string, ImmutableHashSet<string>>.Empty;
 
-    /// <summary>Gets native allocation records keyed by their captured source-relative paths.</summary>
-    public ImmutableDictionary<string, NativeSurfaceProvenance> SurfaceProvenance { get; init; }
-        = ImmutableDictionary<string, NativeSurfaceProvenance>.Empty;
+    /// <summary>Gets what each model import established, the report's <c>model_import</c>, keyed by the model's captured
+    /// source-relative path; the publication commits it to the model's import record.</summary>
+    public ImmutableDictionary<string, JsonElement> ModelImports { get; init; }
+        = ImmutableDictionary<string, JsonElement>.Empty;
 }

@@ -4,7 +4,7 @@
 
 using System.IO.Abstractions;
 using System.Text.Json;
-using Oxygen.Editor.ContentPipeline.Import;
+using Oxygen.Editor.Models;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Assets.Diagnostics;
@@ -34,7 +34,8 @@ internal sealed class AuthoredReferenceIndex
     /// <summary>Gets the descriptors and sidecars that could not be read or parsed; their references are unknown.</summary>
     public IReadOnlyList<FileSystemPath> Unreadable { get; }
 
-    /// <summary>Reads every authored descriptor and model import sidecar in the project's writable mounts.</summary>
+    /// <summary>Reads every authored descriptor in the project's writable mounts, and the model import records of the
+    /// models in them.</summary>
     /// <param name="project">The project.</param>
     /// <param name="cancellationToken">Cancels the scan.</param>
     /// <returns>The index.</returns>
@@ -50,7 +51,7 @@ internal sealed class AuthoredReferenceIndex
         {
             cancellationToken.ThrowIfCancellationRequested();
             var isDescriptor = AuthoredReferenceFormat.IsReferencingSource(path.FullPath);
-            if ((!isDescriptor && !AuthoredReferenceFormat.IsImportSettings(path.FullPath)) || RelocationPaths.ToVirtual(project, path) is not { } virtualPath)
+            if (!isDescriptor || RelocationPaths.ToVirtual(project, path) is not { } virtualPath)
             {
                 continue;
             }
@@ -68,24 +69,23 @@ internal sealed class AuthoredReferenceIndex
 
             try
             {
-                if (isDescriptor)
-                {
-                    descriptors.Add(new(path, virtualPath, AssetFileTypes.ToIdentity(virtualPath), AuthoredReferenceFormat.ReadReferences(path, content)));
-                }
-                else
-                {
-                    var settings = NativeSceneImportSettings.Parse(content);
-                    var primary = FileSystemPath.From(path.FullPath[..^NativeSceneImportSettings.SidecarSuffix.Length]);
-                    if (FileSystemPath.From(settings.ResolveFile(project.ProjectRoot.FullPath, settings.PrimaryRelativePath)) == primary)
-                    {
-                        imports.Add(new(path, primary, virtualPath.WithName(primary.Name), settings));
-                    }
-                }
+                descriptors.Add(new(path, virtualPath, AssetFileTypes.ToIdentity(virtualPath), AuthoredReferenceFormat.ReadReferences(path, content)));
             }
             catch (Exception error) when (error is JsonException or AssetFormatException or InvalidDataException or InvalidOperationException)
             {
                 // A file the editor cannot parse contributes no references; changes that run on the index report it.
                 unreadable.Add(path);
+            }
+        }
+
+        var records = new ModelImportRecords(project.FileSystem, root.FullPath);
+        unreadable.AddRange(records.Problems.Select(static problem => FileSystemPath.From(problem.RecordPath)));
+        foreach (var record in records.All)
+        {
+            var primary = FileSystemPath.From(record.SourcePath);
+            if (RelocationPaths.ToVirtual(project, primary) is { } virtualPath)
+            {
+                imports.Add(new(FileSystemPath.From(record.RecordPath), primary, virtualPath, record.Settings));
             }
         }
 
@@ -126,10 +126,19 @@ internal sealed class AuthoredReferenceIndex
     /// <param name="References">The identities it references.</param>
     internal sealed record Descriptor(FileSystemPath Location, AssetPath VirtualPath, AssetPath Identity, IReadOnlyList<AssetPath> References);
 
-    /// <summary>A retained model import.</summary>
-    /// <param name="SidecarPath">The <c>.import.json</c> file.</param>
+    /// <summary>An imported model in a writable mount.</summary>
+    /// <param name="RecordPath">The model's import record.</param>
     /// <param name="PrimaryPath">The model's primary source file.</param>
     /// <param name="PrimaryVirtualPath">The primary source's virtual path.</param>
-    /// <param name="Settings">The saved import settings.</param>
-    internal sealed record ImportSource(FileSystemPath SidecarPath, FileSystemPath PrimaryPath, AssetPath PrimaryVirtualPath, NativeSceneImportSettings Settings);
+    /// <param name="Settings">The record's content.</param>
+    internal sealed record ImportSource(FileSystemPath RecordPath, FileSystemPath PrimaryPath, AssetPath PrimaryVirtualPath, ModelImportSettings Settings)
+    {
+        /// <summary>Gets the model's folder: it references its other files relative to it.</summary>
+        public FileSystemPath Folder => this.PrimaryPath.Parent!;
+
+        /// <summary>Gets the files the model owns: its primary and every file its last import read.</summary>
+        public IReadOnlyList<FileSystemPath> Files
+            => [this.PrimaryPath, .. (this.Settings.SourceFingerprint?.Files ?? [])
+                .Select(file => FileSystemPath.From(Path.GetFullPath(Path.Combine(this.Folder.FullPath, file.Path))))];
+    }
 }

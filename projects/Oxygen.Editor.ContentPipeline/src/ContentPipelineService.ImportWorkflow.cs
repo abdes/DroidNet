@@ -6,6 +6,7 @@ using System.Collections.Immutable;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.ContentPipeline.Snapshots;
+using Oxygen.Editor.Models;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Compatibility;
@@ -13,10 +14,10 @@ using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.ContentPipeline;
 
-/// <summary>Owns explicit source retention, settings and cooking as one visible operation.</summary>
+/// <summary>Owns explicit source retention, model import records and cooking as one visible operation.</summary>
 public sealed partial class ContentPipelineService
 {
-    private readonly DroidNet.Storage.IAtomicFileStore importSettingsFiles = files;
+    private readonly DroidNet.Storage.IAtomicFileStore importRecordFiles = files;
 
     /// <inheritdoc />
     public Task<ContentCookResult> ImportSourceAsync(SceneImportRequest request, CancellationToken cancellationToken)
@@ -68,7 +69,7 @@ public sealed partial class ContentPipelineService
             {
                 RecoveryRequest = new(CookTargetKind.Asset, retainedUri) { Import = recovery, OriginContext = operation.Project },
             });
-            await this.CreateImportSettingsAsync(operation, retained, request.Name, request.Provenance, cancellationToken).ConfigureAwait(false);
+            await this.CreateImportRecordAsync(operation, primary, retainedUri, request, cancellationToken).ConfigureAwait(false);
             CookRunContext.Report(new(Message: "Import settings saved. Cooking retained source.")
             {
                 RecoveryRequest = new(CookTargetKind.Asset, retainedUri) { IsReimport = true, OriginContext = operation.Project },
@@ -97,7 +98,7 @@ public sealed partial class ContentPipelineService
         var source = Path.GetFullPath(request.SourcePath);
         var inProject = CookInputResolver.FindAuthoringSourceUri(operation.Project, FileSystemPath.From(source));
         var identity = inProject ?? request.DestinationFolder.Combine(request.Name + "/" + Path.GetFileName(source));
-        var recipe = this.manifestBuilder.BuildModelJob(Path.GetFileName(source), [], request.Name, identity, request.Provenance);
+        var recipe = this.manifestBuilder.BuildModelJob(Path.GetFileName(source), [], request.Name, identity);
         var discovery = new SceneImportSourceDiscovery(this.cookCoordinator, this.engineContentPipelineApi);
         if (inProject is not null)
         {
@@ -114,24 +115,25 @@ public sealed partial class ContentPipelineService
             operation, request.DestinationFolder, request.Name, token => discovery.DiscoverAsync(operation, source, recipe, token), cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task CreateImportSettingsAsync(ContentCookOperation operation, RetainedImportSource source, string name, NativeSurfaceProvenance provenance, CancellationToken cancellationToken)
+    private async Task CreateImportRecordAsync(ContentCookOperation operation, FileSystemPath primary, AssetPath identity, SceneImportRequest request, CancellationToken cancellationToken)
     {
         this.cookCoordinator.VerifyWriter(operation);
-        var settings = NativeSceneImportSettings.Create(source, name) with { SurfaceProvenance = provenance };
-        var path = settings.ResolveFile(operation.Project.ProjectRoot.FullPath, settings.PrimaryRelativePath) + NativeSceneImportSettings.SidecarSuffix;
-        var existing = await this.importSettingsFiles.ReadAsync(path, cancellationToken).ConfigureAwait(false);
-        var bytes = settings.ToBytes();
-        if (existing.Version.Exists)
+        var project = operation.Project;
+        if (ModelRecordLookup.TryFind(project, primary) is { } existing)
         {
-            if (!existing.Content.AsSpan().SequenceEqual(bytes))
+            // A retry finds the record its first attempt wrote.
+            if (!string.Equals(existing.Settings.VirtualPath, identity.VirtualPath, StringComparison.Ordinal))
             {
-                throw new InvalidOperationException("This source already has import settings. Use Reimport to keep its existing destination and asset identities.");
+                throw new InvalidOperationException("This source already has an import record. Use Reimport to keep its existing destination and asset identities.");
             }
 
             return;
         }
 
+        var path = ModelImportSettings.PathFor(project.ProjectRoot.FullPath, request.SourceIdentity);
+        var record = ModelImportSettings.Create(path, primary.FullPath, identity.VirtualPath, ModelImportSettings.DefaultSettings(request.Name));
+        _ = project.FileSystem.Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         this.cookCoordinator.VerifyWriter(operation);
-        _ = await this.importSettingsFiles.WriteAsync(path, bytes, existing.Version, cancellationToken).ConfigureAwait(false);
+        _ = await this.importRecordFiles.WriteAsync(path, record.ToBytes(), DroidNet.Storage.FileVersion.Missing, cancellationToken).ConfigureAwait(false);
     }
 }

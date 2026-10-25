@@ -29,6 +29,45 @@ public sealed class NativeImportReportReaderTests
             && issue.AffectedPath == Path.Combine(execution.InputRoot, "model.gltf"));
     }
 
+    /// <summary>A model import reports what it established, which the publication commits to the model's record.</summary>
+    [TestMethod]
+    public void ReadsWhatAModelImportEstablished()
+    {
+        var (execution, report) = CreateModelReport(includeUpdate: true);
+
+        var result = NativeImportReportReader.Read(report.ToJsonString(), execution, 0);
+
+        _ = result.Succeeded.Should().BeTrue();
+        var update = result.ModelImports["model.gltf"];
+        _ = update.GetProperty("surface_provenance").GetProperty("schema_version").GetInt32().Should().Be(2);
+        _ = update.GetProperty("published_nodes").GetArrayLength().Should().Be(1);
+        _ = update.GetProperty("source_fingerprint").GetProperty("files").GetArrayLength().Should().Be(0);
+    }
+
+    /// <summary>A successful model import that omits what it established cannot update the model's record.</summary>
+    [TestMethod]
+    public void RejectsASuccessfulModelImportWithoutItsUpdate()
+    {
+        var (execution, report) = CreateModelReport(includeUpdate: false);
+
+        Action read = () => _ = NativeImportReportReader.Read(report.ToJsonString(), execution, 0);
+
+        _ = read.Should().Throw<InvalidDataException>();
+    }
+
+    /// <summary>A failed model import establishes nothing.</summary>
+    [TestMethod]
+    public void ReportsNoModelImportWhenTheBatchFails()
+    {
+        var (execution, report) = CreateModelReport(includeUpdate: true);
+        report["jobs"]![0]!["status"] = "failed";
+
+        var result = NativeImportReportReader.Read(report.ToJsonString(), execution, 1);
+
+        _ = result.Succeeded.Should().BeFalse();
+        _ = result.ModelImports.Should().BeEmpty();
+    }
+
     /// <summary>Malformed versions, job identity, escaped paths and products that are not identities cannot become authoritative output ownership.</summary>
     /// <param name="invalid">The invalid report field.</param>
     [TestMethod]
@@ -76,6 +115,31 @@ public sealed class NativeImportReportReaderTests
                  {"kind":"texture","virtual_path":"/Content/Models/Model/Textures/Albedo.otex","descriptor_relative_path":"Models/Model/Textures/Albedo.otex"}],
                "diagnostics":[{"severity":"warning","code":"source.warning","message":"Source warning."}]}]}
             """)!;
+        report["session"]!["cooked_root"] = output;
+        return (execution, report);
+    }
+
+    private static (ContentImportExecution execution, JsonNode report) CreateModelReport(bool includeUpdate)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "NativeReport", Guid.NewGuid().ToString("N"));
+        var output = Path.Combine(root, "output");
+        var execution = new ContentImportExecution(
+            Guid.NewGuid(),
+            Path.Combine(root, "inputs"),
+            root,
+            new(1, output, new("/Content"), [new("model", "model", "model.gltf", [], Output: null, Name: null) { Record = "imports/00000000-0000-7000-8000-000000000001.import.json" }]));
+        var update = includeUpdate
+            ? """
+              ,"model_import":{"surface_provenance":{"schema_version":2,"geometries":[]},
+                "published_nodes":[{"anchor":"Body","node_id":"00000000-0000-7000-8000-000000000002"}],
+                "source_fingerprint":{"size":2,"sha256":"%HASH%","files":[]}}
+              """.Replace("%HASH%", new string('a', 64), StringComparison.Ordinal)
+            : string.Empty;
+        // The engine reports a model job as the gltf or fbx job its record runs.
+        var report = JsonNode.Parse("""
+            {"report_version":"3","session":{"cooked_root":""},"jobs":[
+              {"index":1,"type":"gltf","status":"succeeded","outputs":[],"products":[],"diagnostics":[]
+            """ + update + "}]}")!;
         report["session"]!["cooked_root"] = output;
         return (execution, report);
     }

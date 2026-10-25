@@ -2,8 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Oxygen.Editor.ContentPipeline.Publication;
@@ -26,7 +24,7 @@ public sealed class SourceDependencyDiscoveryTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    /// <summary>Discovers shared scene dependencies, geometry buffers and settings without unrelated consuming scenes.</summary>
+    /// <summary>Discovers shared scene dependencies and geometry buffers without unrelated consuming scenes.</summary>
     /// <returns>The asynchronous test operation.</returns>
     [TestMethod]
     public async Task DiscoveryIncludesTransitiveMaterialAndBufferInputsOnce()
@@ -37,7 +35,6 @@ public sealed class SourceDependencyDiscoveryTests
         var materialSource = AssetPath.Parse("/Content/Materials/Red.omat");
         WriteAuthoredGeometry(workspace, withBuffer: true);
         workspace.WriteMaterial("Content/Materials/Red.omat.json", "Red");
-        workspace.WriteText("Content/Geometry/AuthoredCube.ogeo.json.import.json", "{\"Version\":1}");
         AddGeometryNode(workspace, geometryAsset, "First");
         AddGeometryNode(workspace, geometryAsset, "Second");
         await workspace.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
@@ -51,8 +48,6 @@ public sealed class SourceDependencyDiscoveryTests
         _ = graph.Dependencies[sceneUri].Should().Equal(geometrySource);
         _ = graph.Dependencies[geometrySource].Should().Equal(materialSource);
         _ = graph.Files.Should().ContainSingle(input => input.RelativePath == "Content/Geometry/mesh.bin" && !input.IsAbsent);
-        _ = graph.Files.Should().ContainSingle(input => input.RelativePath == "Content/Geometry/AuthoredCube.ogeo.json.import.json" && !input.IsAbsent);
-        _ = graph.Files.Should().ContainSingle(input => input.RelativePath == "Content/Materials/Red.omat.json.import.json" && input.IsAbsent);
         _ = graph.PublishedReferences.Should().BeEmpty();
 
         var capture = new CookInputSnapshotCapture(workspace.CookCoordinator);
@@ -62,7 +57,6 @@ public sealed class SourceDependencyDiscoveryTests
         workspace.WriteText("Content/Geometry/mesh.bin", "changed buffer bytes");
         var capturedBuffer = await File.ReadAllTextAsync(Path.Combine(result.InputRoot, "Content", "Geometry", "mesh.bin"), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = capturedBuffer.Should().Be("saved buffer bytes");
-        _ = File.Exists(Path.Combine(result.InputRoot, "Content", "Materials", "Red.omat.json.import.json")).Should().BeFalse();
 
         var materialOnly = await discovery.DiscoverAsync(workspace.ProjectContext, [CookInputResolver.Resolve(workspace.ProjectContext, materialSource, ContentCookInputRole.Primary)], this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = materialOnly.Assets.Should().ContainSingle().Which.AssetUri.Should().Be(materialSource);
@@ -150,46 +144,6 @@ public sealed class SourceDependencyDiscoveryTests
             knownOutputs: [AssetPath.Parse("/Content/Scripts/Orbit.lua")]).ConfigureAwait(false);
         _ = sourceOnly.Apply(graph).Diagnostics
             .Should().Contain(issue => issue.Code == "asset_cook.library_reference_missing" && issue.Message.Contains(scriptOutputUri.VirtualPath, StringComparison.Ordinal));
-    }
-
-    /// <summary>Settings created after discovery force rediscovery instead of silently disappearing from the input set.</summary>
-    /// <returns>The asynchronous test operation.</returns>
-    [TestMethod]
-    public async Task DiscoveryAndCaptureRetryWhenOptionalSettingsAppear()
-    {
-        using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
-        workspace.WriteMaterial("Content/Materials/Red.omat.json", "Red");
-        var input = CookInputResolver.Resolve(workspace.ProjectContext, AssetPath.Parse("/Content/Materials/Red.omat"), ContentCookInputRole.Primary);
-        var discovery = NativeSourceFactsFixture.CreateDiscovery(workspace);
-        var capture = new CookInputSnapshotCapture(workspace.CookCoordinator);
-        var attempts = 0;
-        var snapshot = await workspace.CookCoordinator.RunAsync(
-            (operation, token) => capture.CaptureAsync(
-            operation,
-            async cancellationToken =>
-            {
-                var graph = await discovery.DiscoverAsync(workspace.ProjectContext, [input], cancellationToken).ConfigureAwait(false);
-                if (++attempts == 1)
-                {
-                    workspace.WriteText("Content/Materials/Red.omat.json.import.json", "{\"Version\":1}");
-                }
-
-                return graph.Files;
-            },
-            "compatible-fixture-artifacts",
-            token),
-            this.TestContext.CancellationToken).ConfigureAwait(false);
-
-        _ = attempts.Should().Be(2);
-        var settings = snapshot.Inputs.Single(file => file.RelativePath.EndsWith(".import.json", StringComparison.Ordinal));
-        _ = settings.IsAbsent.Should().BeFalse();
-        var savedSettings = await File.ReadAllTextAsync(Path.Combine(snapshot.InputRoot, settings.RelativePath), this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = savedSettings.Should().Be("{\"Version\":1}");
-        workspace.WriteMaterial("Content/Materials/Red.omat.json", "Changed later");
-        var savedMaterial = snapshot.Inputs.Single(file => file.AssetUri == input.AssetUri);
-        var savedBytes = await File.ReadAllBytesAsync(Path.Combine(snapshot.InputRoot, savedMaterial.RelativePath), this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = Convert.ToHexString(SHA256.HashData(savedBytes)).Should().Be(savedMaterial.DiscoveryHash);
-        _ = Encoding.UTF8.GetString(savedBytes).Should().Contain("\"Red\"").And.NotContain("Changed later");
     }
 
     /// <summary>Cooked references remain distinct from source inputs and cannot be claimed fresh by discovery.</summary>

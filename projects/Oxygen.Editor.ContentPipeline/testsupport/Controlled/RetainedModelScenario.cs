@@ -2,17 +2,14 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Security.Cryptography;
-using DroidNet.Storage.Native;
-using Oxygen.Editor.ContentPipeline.Import;
+using Oxygen.Editor.Models;
 using Oxygen.Managed.Core;
-using Testably.Abstractions;
 
 namespace Oxygen.Editor.ContentPipeline.TestSupport;
 
 internal static class RetainedModelScenario
 {
-    /// <summary>Writes an imported model and its settings at <c>/{mount}/Models/{name}/model.{extension}</c>.</summary>
+    /// <summary>Writes an imported model and its import record at <c>/{mount}/Models/{name}/model.{extension}</c>.</summary>
     /// <param name="workspace">The workspace; <paramref name="mount"/> is one of its authoring mounts, kept in a folder of the same name.</param>
     /// <param name="name">The model's bundle folder and import name.</param>
     /// <param name="extension">The model format.</param>
@@ -27,10 +24,14 @@ internal static class RetainedModelScenario
         var filename = "model." + extension;
         var bytes = await File.ReadAllBytesAsync(Path.Combine(AppContext.BaseDirectory, "Fixtures", "static_scalar_triangle." + extension), cancellationToken).ConfigureAwait(false);
         await File.WriteAllBytesAsync(Path.Combine(directory, filename), bytes, cancellationToken).ConfigureAwait(false);
-        var retained = new RetainedImportSource(relative, filename, [new(filename, Convert.ToHexString(SHA256.HashData(bytes)))]);
 
-        var settings = NativeSceneImportSettings.Create(retained, name);
-        _ = await settings.SaveNewAsync(workspace.Root, new NativeAtomicFileStore(new RealFileSystem()), cancellationToken).ConfigureAwait(false);
-        return AssetPath.Parse("/" + relative + "/" + filename);
+        // The model is imported when its record names it; the record keeps the source's identity, and the first cook fills
+        // in what the import establishes.
+        var identity = "/" + relative + "/" + filename;
+        var recordPath = ModelImportSettings.PathFor(workspace.Root, Guid.CreateVersion7());
+        _ = Directory.CreateDirectory(Path.GetDirectoryName(recordPath)!);
+        var record = ModelImportSettings.Create(recordPath, Path.Combine(directory, filename), identity, ModelImportSettings.DefaultSettings(name));
+        await File.WriteAllBytesAsync(recordPath, record.ToBytes(), cancellationToken).ConfigureAwait(false);
+        return AssetPath.Parse(identity);
     }
 }

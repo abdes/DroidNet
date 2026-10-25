@@ -390,9 +390,9 @@ public sealed class CookOrchestrationTests
 
     private sealed class InvalidManifestBuilder : IContentImportManifestBuilder
     {
-        public ContentImportJob BuildModelJob(string sourceRelativePath, IReadOnlyList<string> dependsOn, string name, AssetPath identity, ContentPipeline.Import.NativeSurfaceProvenance provenance) => new ContentImportManifestBuilder().BuildModelJob(sourceRelativePath, dependsOn, name, identity, provenance);
+        public ContentImportJob BuildModelJob(string sourceRelativePath, IReadOnlyList<string> dependsOn, string name, AssetPath identity) => new ContentImportManifestBuilder().BuildModelJob(sourceRelativePath, dependsOn, name, identity);
 
-        public ContentImportJob BuildJob(ContentCookInput input, IReadOnlyList<string> dependsOn, ContentPipeline.Import.NativeSceneImportSettings? modelSettings = null) => new ContentImportManifestBuilder().BuildJob(input, dependsOn, modelSettings);
+        public ContentImportJob BuildJob(ContentCookInput input, IReadOnlyList<string> dependsOn, string? modelRecordPath = null) => new ContentImportManifestBuilder().BuildJob(input, dependsOn, modelRecordPath);
 
         public ContentImportManifest BuildManifest(ContentCookScope scope)
             => CreateInvalid();

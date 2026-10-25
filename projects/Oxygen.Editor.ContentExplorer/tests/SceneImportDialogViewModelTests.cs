@@ -6,6 +6,7 @@ using AwesomeAssertions;
 using DroidNet.Aura.Dialogs;
 using Moq;
 using Oxygen.Editor.ContentExplorer.Importing;
+using Oxygen.Editor.Models;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Projects.Testing;
 using Oxygen.Managed.Core;
@@ -127,10 +128,10 @@ public sealed class SceneImportDialogViewModelTests
             _ = Directory.CreateDirectory(root);
             var bytes = System.Text.Encoding.UTF8.GetBytes("original source");
             await File.WriteAllBytesAsync(Path.Combine(root, "model.gltf"), bytes, this.TestContext.CancellationToken).ConfigureAwait(false);
-            var settings = Oxygen.Editor.ContentPipeline.Import.NativeSceneImportSettings.Create(
-                new("Content/Models/Crate", "model.gltf", [new("model.gltf", Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes)))]),
-                "Crate");
-            await File.WriteAllBytesAsync(Path.Combine(root, "model.gltf.import.json"), settings.ToBytes(), this.TestContext.CancellationToken).ConfigureAwait(false);
+            var recordPath = ModelImportSettings.PathFor(project.ProjectRoot.FullPath, Guid.CreateVersion7());
+            _ = Directory.CreateDirectory(Path.GetDirectoryName(recordPath)!);
+            var record = ModelImportSettings.Create(recordPath, Path.Combine(root, "model.gltf"), "/Content/Models/Crate/model.gltf", ModelImportSettings.DefaultSettings("Crate"));
+            await File.WriteAllBytesAsync(recordPath, record.ToBytes(), this.TestContext.CancellationToken).ConfigureAwait(false);
             var model = new SceneImportDialogViewModel(project, Path.Combine(Path.GetTempPath(), "Crate.gltf"), "/Content/Models", Mock.Of<IDialogService>());
             _ = model.CanAccept.Should().BeFalse();
             _ = model.Request.Should().BeNull();

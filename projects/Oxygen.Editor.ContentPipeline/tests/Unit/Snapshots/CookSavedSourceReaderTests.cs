@@ -19,7 +19,7 @@ public sealed class CookSavedSourceReaderTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    /// <summary>Missing settings and a first cook's missing provenance are ordinary absence, without a thrown exception.</summary>
+    /// <summary>A missing import record or optional input is ordinary absence, without a thrown exception.</summary>
     /// <param name="missingParent">Whether the parent directory is also absent.</param>
     /// <returns>The asynchronous read regression.</returns>
     [TestMethod]

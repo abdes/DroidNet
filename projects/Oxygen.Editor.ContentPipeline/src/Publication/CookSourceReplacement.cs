@@ -5,6 +5,6 @@
 namespace Oxygen.Editor.ContentPipeline.Publication;
 
 /// <summary>A reviewed retained source whose private replacement participates in cook publication.</summary>
-/// <param name="BundleRoot">The existing bundle's project-relative folder, as its import settings record it.</param>
+/// <param name="BundleRoot">The existing bundle's project-relative folder, as its import record names it.</param>
 /// <param name="Before">The complete source and settings baseline accepted by the user.</param>
 internal sealed record CookSourceReplacement(string BundleRoot, CookRootImage Before);

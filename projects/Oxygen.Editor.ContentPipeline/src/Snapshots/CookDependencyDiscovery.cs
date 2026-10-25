@@ -193,7 +193,7 @@ internal sealed class CookDependencyDiscovery(
                 var primary = source.Files.Single(file => file.AssetUri == input.AssetUri);
                 this.imported[input.AssetUri] = new(
                     primary.DiscoveryHash,
-                    [.. source.Files.Where(file => !string.Equals(file.RelativePath, input.SourceRelativePath + NativeSceneImportSettings.SidecarSuffix, FileSystemPath.NameComparison))
+                    [.. source.Files.Where(static file => !file.RelativePath.StartsWith(Models.ModelImportSettings.RecordsFolder + "/", StringComparison.OrdinalIgnoreCase))
                         .Select(static file => file.RelativePath).Order(StringComparer.Ordinal)])
                 {
                     ContentFingerprint = FingerprintImportedContent(source.Files),

@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Text.Json;
 using AwesomeAssertions;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Projects.Testing;
@@ -64,11 +65,11 @@ internal sealed partial class ContentImportManifestBuilderTests
     }
 
     /// <summary>
-    /// Model queries and cooking retain one complete native recipe, which names the model's identity: the virtual path
-    /// of its file, under which its products are named.
+    /// A model job only schedules the model's import record, which holds its source, identity and settings: the
+    /// manifest names the record and the mount, and none of what the record owns.
     /// </summary>
     [TestMethod]
-    public void BuildJobPreservesRetainedModelOptionsAndIdentity()
+    public void BuildJobSchedulesAModelByItsRecord()
     {
         var input = new ContentCookInput(
             AssetPath.Parse("/Content/Vehicles/Ship/model.gltf"),
@@ -77,23 +78,51 @@ internal sealed partial class ContentImportManifestBuilderTests
             "Content/Vehicles/Ship/model.gltf",
             FileSystemPath.From(Path.GetFullPath("model.gltf")),
             ContentCookInputRole.Primary);
-        var settings = new ContentPipeline.Import.NativeSceneImportSettings(global::Oxygen.Editor.ContentPipeline.Import.NativeSceneImportSettings.CurrentSchemaVersion, global::Oxygen.Editor.ContentPipeline.Import.NativeSceneImportSettings.ImporterIdentity, "RetainedName", "Content/Vehicles/Ship", "model.gltf", new string('a', 64), ["model.gltf"])
-        {
-            SurfaceProvenance = global::Oxygen.Editor.ContentPipeline.Import.NativeSurfaceProvenance.Create(),
-            BakeTransforms = true,
-            NormalsPolicy = "preserve",
-            TangentsPolicy = "generate",
-        };
-        var job = new ContentImportManifestBuilder().BuildJob(input, ["prior"], settings);
-        _ = job.Type.Should().Be("gltf");
-        _ = job.Name.Should().Be(settings.Name);
+        var recordPath = $"imports/{Guid.CreateVersion7():D}.import.json";
+
+        var job = new ContentImportManifestBuilder().BuildJob(input, ["prior"], recordPath);
+
+        _ = job.Type.Should().Be("model");
+        _ = job.Record.Should().Be(recordPath);
+        _ = job.ManifestSource.Should().BeNull("the record names the model's source");
+        _ = job.Source.Should().Be("Content/Vehicles/Ship/model.gltf", "the job stays attributed to the model's file");
         _ = job.Layout.Should().Be(new ContentImportLayout("/Content"));
-        _ = job.VirtualPath.Should().Be("/Content/Vehicles/Ship/model.gltf");
         _ = job.DependsOn.Should().Equal("prior");
-        _ = job.BakeTransforms.Should().BeTrue();
-        _ = job.NormalsPolicy.Should().Be(settings.NormalsPolicy);
-        _ = job.TangentsPolicy.Should().Be(settings.TangentsPolicy);
-        _ = job.SurfaceProvenance.Should().BeSameAs(settings.SurfaceProvenance);
+        _ = job.VirtualPath.Should().BeNull("the record holds the model's identity");
+        var json = JsonSerializer.Serialize(job);
+        _ = json.Should().Contain("\"record\"").And.NotContain("\"source\"").And.NotContain("unit_policy");
+    }
+
+    /// <summary>A model job is scheduled by its record; the model's input has no job without one.</summary>
+    [TestMethod]
+    public void BuildJobRefusesAModelWithoutARecord()
+    {
+        var input = new ContentCookInput(
+            AssetPath.Parse("/Content/Vehicles/Ship/model.gltf"),
+            ContentCookAssetKind.ForeignSource,
+            "Content",
+            "Content/Vehicles/Ship/model.gltf",
+            FileSystemPath.From(Path.GetFullPath("model.gltf")),
+            ContentCookInputRole.Primary);
+
+        var build = () => new ContentImportManifestBuilder().BuildJob(input, []);
+
+        _ = build.Should().Throw<ArgumentException>();
+    }
+
+    /// <summary>The first import of a model discovers its files before its record exists: a format job at its identity.</summary>
+    [TestMethod]
+    public void BuildModelJobNamesTheIdentityBeforeARecordExists()
+    {
+        var job = new ContentImportManifestBuilder().BuildModelJob(
+            "Content/Vehicles/Ship/model.fbx", ["prior"], "Ship", AssetPath.Parse("/Content/Vehicles/Ship/model.fbx"));
+
+        _ = job.Type.Should().Be("fbx");
+        _ = job.Name.Should().Be("Ship");
+        _ = job.Source.Should().Be("Content/Vehicles/Ship/model.fbx");
+        _ = job.VirtualPath.Should().Be("/Content/Vehicles/Ship/model.fbx");
+        _ = job.Layout.Should().Be(new ContentImportLayout("/Content"));
+        _ = job.Record.Should().BeNull();
     }
 
     /// <summary>Scene exposure masks cook before the scene, at their own identity.</summary>

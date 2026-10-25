@@ -20,6 +20,7 @@ public sealed class ContentImportManifestValidator : IContentImportManifestValid
         "scene-descriptor",
         "gltf",
         "fbx",
+        "model",
         "input",
         "script",
         "script-sidecar",
@@ -107,6 +108,10 @@ public sealed class ContentImportManifestValidator : IContentImportManifestValid
         else if (string.IsNullOrWhiteSpace(job.Source))
         {
             diagnostics.Add(CreateDiagnostic(operationId, $"Import manifest job '{job.Id}' source is required."));
+        }
+        else if (string.Equals(job.Type, "model", StringComparison.Ordinal) && string.IsNullOrWhiteSpace(job.Record))
+        {
+            diagnostics.Add(CreateDiagnostic(operationId, $"Import manifest model job '{job.Id}' needs its model import record."));
         }
 
         if (job.DependsOn.Any(string.IsNullOrWhiteSpace))

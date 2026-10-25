@@ -78,7 +78,7 @@ public sealed class ImportSourceRetention(IContentCookCoordinator coordinator)
 
     /// <summary>Resolves the folder of an existing retained bundle from its project-relative path.</summary>
     /// <param name="project">The project owning the source bundle.</param>
-    /// <param name="bundleRoot">The bundle's project-relative folder, as its import settings record it.</param>
+    /// <param name="bundleRoot">The bundle's project-relative folder, as its import record names it.</param>
     /// <returns>The contained absolute bundle directory.</returns>
     internal static string ResolveBundleRoot(ProjectContext project, string bundleRoot)
     {

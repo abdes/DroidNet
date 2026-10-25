@@ -27,7 +27,7 @@ namespace Oxygen.Editor.ContentPipeline;
 /// <param name="manifestValidator">The import manifest validator.</param>
 /// <param name="engineContentPipelineApi">The engine content-pipeline adapter.</param>
 /// <param name="nativeCompatibility">The compatible producer identity and file ownership.</param>
-/// <param name="files">Atomic storage for retained source settings.</param>
+/// <param name="files">Atomic storage for model import records.</param>
 /// <param name="publication">The shared journal and runtime-publication owner.</param>
 public sealed partial class ContentPipelineService(
     IProjectSession session,
@@ -126,7 +126,7 @@ public sealed partial class ContentPipelineService(
         {
             // A script is a source, not a descriptor: it cooks with the scenes that use it, or on its own when it changes.
             ContentCookAssetKind.Unknown or ContentCookAssetKind.Script => false,
-            ContentCookAssetKind.ForeignSource => project.FileSystem.File.Exists(path + AssetFileTypes.ImportSettings),
+            ContentCookAssetKind.ForeignSource => Import.ModelRecordLookup.TryFind(project, FileSystemPath.From(path)) is not null,
             _ => !AssetFileTypes.Is(path, AssetFileCategory.Cooked),
         };
 
@@ -167,7 +167,7 @@ public sealed partial class ContentPipelineService(
             inspection,
             validation)
         {
-            SurfaceProvenance = results.SelectMany(static result => result.SurfaceProvenance)
+            ModelImports = results.SelectMany(static result => result.ModelImports)
                 .ToImmutableDictionary(static entry => entry.Key, static entry => entry.Value, StringComparer.Ordinal),
             AuxiliaryFilesBySource = results.SelectMany(static result => result.AuxiliaryFilesBySource)
                 .ToImmutableDictionary(static entry => entry.Key, static entry => entry.Value),
@@ -194,7 +194,7 @@ public sealed partial class ContentPipelineService(
         Guid operationId,
         IEnumerable<ContentCookInput> inputs)
         => inputs
-            .Where(input => !project.FileSystem.File.Exists(input.SourceAbsolutePath.FullPath))
+            .Where(input => IsGone(project, input))
             .Select(input => new DiagnosticRecord
             {
                 OperationId = operationId,
@@ -381,7 +381,7 @@ public sealed partial class ContentPipelineService(
             .Select(static file => file.Key).ToHashSet(StringComparer.Ordinal) ?? new HashSet<string>(StringComparer.Ordinal);
         return validated with
         {
-            SurfaceProvenance = importResult.SurfaceProvenance,
+            ModelImports = importResult.ModelImports,
             AuxiliaryFilesBySource = scope.Inputs.Where(input => importResult.OutputsBySource.ContainsKey(input.SourceRelativePath))
                 .ToImmutableDictionary(
                     static input => input.AssetUri,

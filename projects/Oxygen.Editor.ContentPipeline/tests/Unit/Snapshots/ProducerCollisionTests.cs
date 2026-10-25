@@ -84,6 +84,20 @@ internal sealed partial class ProducerCollisionTests : IDisposable
     }
 
     [TestMethod]
+    public async Task AnIdentityOfASourceRenamedOnlyInCaseIsFree()
+    {
+        var box = AssetPath.Parse("/Content/Geometry/box.ogeo");
+        var accepted = this.Accepted(Box, "/Content/Geometry/Box.obuf");
+        File.Move(Path.Combine(this.root, "Content", "Geometry", "Box.ogeo.json"), Path.Combine(this.root, "Content", "Geometry", "box.ogeo.json"));
+        var facts = new Facts(new Dictionary<AssetPath, string> { [box] = "/Content/Geometry/box.obuf" });
+
+        var graph = await new CookDependencyDiscovery(facts, resolveProducer: accepted.CreateProducerLookup(this.project))
+            .DiscoverAsync(this.project, [this.Input(box)], this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        _ = graph.Diagnostics.Should().BeEmpty("the file system still finds the old name, but no source has it any more");
+    }
+
+    [TestMethod]
     public async Task ASourceRecookingItsOwnIdentityIsNotACollision()
     {
         var facts = new Facts(new Dictionary<AssetPath, string> { [Box] = "/Content/Geometry/Box.obuf" });
