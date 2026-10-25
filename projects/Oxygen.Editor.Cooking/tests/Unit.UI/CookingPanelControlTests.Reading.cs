@@ -35,14 +35,14 @@ public sealed partial class CookingPanelControlTests
         console.ItemsSource = second;
         second.Add(new() { Message = "Current source message", Level = Serilog.Events.LogEventLevel.Information });
         await this.WaitForReadingAsync(() => list.Items.Count == 1).ConfigureAwait(true);
-        _ = list.Items.Cast<OutputLogEntry>().Should().Equal(second);
+        _ = ShownMessages(list).Should().Contain(second.Select(static entry => entry.Message)).And.NotContain("Old source queued message");
         await LoadTestContentAsync(new Grid()).ConfigureAwait(true);
         second.Add(new() { Message = "While hidden", Level = Serilog.Events.LogEventLevel.Information });
         await LoadTestContentAsync(console).ConfigureAwait(true);
         await this.WaitForReadingAsync(() => list.Items.Count == 2).ConfigureAwait(true);
         second.Add(new() { Message = "After reopening", Level = Serilog.Events.LogEventLevel.Information });
         await this.WaitForReadingAsync(() => list.Items.Count == 3).ConfigureAwait(true);
-        _ = list.Items.Cast<OutputLogEntry>().Should().Equal(second);
+        _ = ShownMessages(list).Should().Contain(second.Select(static entry => entry.Message));
         var clear = console.FindDescendant<Button>(button => string.Equals(button.Name, "ClearButton", StringComparison.Ordinal))!;
         ((IInvokeProvider)new ButtonAutomationPeer(clear).GetPattern(PatternInterface.Invoke)).Invoke();
         _ = clears.Should().Be(1);
@@ -119,6 +119,10 @@ public sealed partial class CookingPanelControlTests
         await this.WaitForReadingAsync(() => scroll.ScrollableHeight > oldExtent).ConfigureAwait(true);
         _ = scroll.VerticalOffset.Should().BeApproximately(120, 1);
     }
+
+    // The console shows each message in its own text block; its rows are the console's own model.
+    private static List<string> ShownMessages(ListView list)
+        => [.. list.FindDescendants().OfType<TextBlock>().Select(static block => block.Text)];
 
     private async Task WaitForReadingAsync(Func<bool> condition, [System.Runtime.CompilerServices.CallerArgumentExpression(nameof(condition))] string? expression = null)
     {
