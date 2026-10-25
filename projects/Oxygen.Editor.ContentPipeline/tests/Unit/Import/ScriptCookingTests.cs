@@ -123,6 +123,23 @@ internal sealed partial class ScriptCookingTests : IDisposable
     }
 
     [TestMethod]
+    public async Task GenerateAsyncProjectsANodeAnInstanceBringsInAsItsRootAndPath()
+    {
+        var scene = CreateScene(out var target, out var player);
+        var instanced = NodeId.New();
+        var slot = new ScriptSlot { Script = MoveScript }
+            .WithOverride("follow", ScriptValue.FromNode(new NodeReference(target.Id, NodePath.Of(instanced))));
+        _ = player.AddComponent(new ScriptingComponent { Name = ScriptingComponent.DefaultName, Slots = [slot] });
+
+        var result = await this.GenerateAsync(scene).ConfigureAwait(false);
+
+        var follow = result.ScriptBindings.Should().ContainSingle().Subject.Params.Should().ContainSingle().Subject;
+        var node = follow.Value.Should().BeOfType<ScriptSidecarNodeRef>().Subject;
+        _ = node.Node.Should().Be(0u);
+        _ = node.Path.Should().Equal(instanced.ToString());
+    }
+
+    [TestMethod]
     public async Task GenerateAsyncFailsForAMissingNodeOrScript()
     {
         var scene = CreateScene(out _, out var player);

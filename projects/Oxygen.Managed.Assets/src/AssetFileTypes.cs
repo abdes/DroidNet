@@ -197,6 +197,25 @@ public static class AssetFileTypes
                 : null;
     }
 
+    /// <summary>
+    /// Gets the scene a source instances as: an authored scene is its own, and a model's is named after the model under
+    /// it, <c>/Content/Ship/Ship.glb/Ship.oscene</c> for <c>/Content/Ship/Ship.glb</c>.
+    /// </summary>
+    /// <param name="source">The source's identity: a model's source file or an authored scene.</param>
+    /// <returns>The scene's identity, or <see langword="null"/> when the source is neither a model nor a scene.</returns>
+    public static AssetPath? SceneProductOf(AssetPath source)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        if (source.Name.EndsWith(Scene, StringComparison.Ordinal))
+        {
+            return source;
+        }
+
+        return Find(source.Name) is { Category: AssetFileCategory.Model } && source.TryCombine(Path.GetFileNameWithoutExtension(source.Name) + Scene, out var scene)
+            ? scene
+            : null;
+    }
+
     /// <summary>Gets the suffixes of every file type of a category, such as the image formats textures import from.</summary>
     /// <param name="category">The category.</param>
     /// <returns>The suffixes, each with its leading dot.</returns>

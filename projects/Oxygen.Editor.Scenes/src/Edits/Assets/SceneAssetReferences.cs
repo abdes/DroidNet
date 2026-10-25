@@ -21,6 +21,15 @@ public static class SceneAssetReferences
         return node.Components.OfType<GeometryComponent>().SelectMany(static geometry => geometry.Overrides.Assets.Prepend(geometry.Geometry));
     }
 
+    /// <summary>Gets the asset references a node's scene instance holds.</summary>
+    /// <param name="node">The node.</param>
+    /// <returns>The instanced source, then the assets its changes name, such as surface materials.</returns>
+    public static IEnumerable<AssetPath> Instances(SceneNode node)
+    {
+        ArgumentNullException.ThrowIfNull(node);
+        return node.Components.OfType<SceneInstanceComponent>().SelectMany(static instance => instance.Changes.Assets.Prepend(instance.Source));
+    }
+
     /// <summary>Gets the asset references a node's script slots hold.</summary>
     /// <param name="node">The node.</param>
     /// <returns>The scripts and asset parameter values.</returns>

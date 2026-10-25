@@ -246,7 +246,8 @@ public sealed partial class SceneDescriptorGenerator : ISceneDescriptorGenerator
                 new NativeNodeTransform(
                     ToArray(transform.LocalPosition),
                     ToArray(transform.LocalRotation),
-                    ToArray(transform.LocalScale))));
+                    ToArray(transform.LocalScale)),
+                node.Components.OfType<SceneInstanceComponent>().FirstOrDefault() is { } instance ? CreateInstance(node, instance) : null));
 
             foreach (var geometry in node.Components.OfType<GeometryComponent>())
             {
@@ -363,16 +364,74 @@ public sealed partial class SceneDescriptorGenerator : ISceneDescriptorGenerator
             }
 
             // The cooker refuses an override of a surface the geometry does not have.
+            if (!TryWriteOverrides(node, geometry.Overrides, out var overrides))
+            {
+                return;
+            }
+
+            renderables.Add(new NativeRenderable(nodeIndex, geometryRef, overrides));
+        }
+
+        // An instance root writes the scene its source instances as, and every change by node path and component kind.
+        NativeSceneInstance? CreateInstance(SceneNode node, SceneInstanceComponent instance)
+        {
+            string sceneRef;
+            try
+            {
+                sceneRef = AssetFileTypes.SceneProductOf(instance.Source) is { } scene
+                    ? ContentPipelinePaths.ToCookedScenePath(scene)
+                    : throw new ArgumentException($"'{instance.Source}' is neither a model nor a scene.", nameof(instance));
+            }
+            catch (ArgumentException exception)
+            {
+                diagnostics.Add(CreateDiagnostic(
+                    operationId,
+                    DiagnosticSeverity.Error,
+                    ContentPipelineDiagnosticCodes.SceneDescriptorGenerationFailed,
+                    $"Scene node '{node.Metadata.Name}' instances '{instance.Source}', which cannot be instanced: {exception.Message}",
+                    descriptorPath,
+                    descriptorVirtualPath));
+                return null;
+            }
+
+            var changes = new List<NativeInstanceOverride>();
+            foreach (var (path, nodeChanges) in instance.Changes.Ordered)
+            {
+                var components = new SortedDictionary<string, NativeOverrides>(StringComparer.Ordinal);
+                foreach (var (kind, overrides) in nodeChanges.Components)
+                {
+                    if (!TryWriteOverrides(node, overrides, out var written))
+                    {
+                        return null;
+                    }
+
+                    if (written is not null)
+                    {
+                        components.Add(kind, written);
+                    }
+                }
+
+                changes.Add(new NativeInstanceOverride([.. path.Nodes.Select(static id => id.ToString())], components));
+            }
+
+            return new NativeSceneInstance(sceneRef, changes.Count == 0 ? null : changes);
+        }
+
+        // Writes a component's overrides or an instanced node's changes by scene schema key: the component's own
+        // values, then each surface's. A value that cannot be written is reported and nothing is written.
+        bool TryWriteOverrides(SceneNode node, SourceOverrides source, out NativeOverrides? written)
+        {
+            written = null;
             var values = new SortedDictionary<string, JsonNode>(StringComparer.Ordinal);
             var parts = new List<NativeOverridePart>();
-            foreach (var part in geometry.Overrides.All.GroupBy(static entry => entry.Part))
+            foreach (var part in source.All.GroupBy(static entry => entry.Part))
             {
                 var partValues = part.Key is null ? values : new SortedDictionary<string, JsonNode>(StringComparer.Ordinal);
                 foreach (var entry in part)
                 {
-                    if (DescriptorValue(entry) is not { } value)
+                    if (DescriptorValue(node, entry) is not { } value)
                     {
-                        return;
+                        return false;
                     }
 
                     partValues.Add(entry.Property.JsonPointer, value);
@@ -384,42 +443,51 @@ public sealed partial class SceneDescriptorGenerator : ISceneDescriptorGenerator
                 }
             }
 
-            var overrides = values.Count == 0 && parts.Count == 0
+            written = values.Count == 0 && parts.Count == 0
                 ? null
                 : new NativeOverrides(values.Count == 0 ? null : values, parts.Count == 0 ? null : parts);
-            renderables.Add(new NativeRenderable(nodeIndex, geometryRef, overrides));
+            return true;
+        }
 
-            // Each value is spelled once per value type of the schema; materials are the only asset overrides.
-            JsonNode? DescriptorValue(SourceOverride entry)
+        // Each value is spelled once per value type of the schema, in the schema's units; an enum is its member's wire
+        // value; materials are the only asset values.
+        JsonNode? DescriptorValue(SceneNode node, SourceOverride entry)
+        {
+            switch (entry.Value)
             {
-                switch (entry.Value)
-                {
-                    case bool flag:
-                        return JsonValue.Create(flag);
-                    case LodPolicy policy:
-                        return JsonSerializer.SerializeToNode(policy, SceneDescriptorJson.Options);
-                    case AssetPath material when entry.Property == SceneSchema.Geometry.Surface.Material.Id:
-                        try
-                        {
-                            var materialRef = ContentPipelinePaths.ToNativeDescriptorPath(material, AssetFileTypes.Material);
-                            _ = materialRefs.Add(materialRef);
-                            return JsonValue.Create(materialRef);
-                        }
-                        catch (ArgumentException exception)
-                        {
-                            diagnostics.Add(CreateDiagnostic(
-                                operationId,
-                                DiagnosticSeverity.Error,
-                                ContentPipelineDiagnosticCodes.SceneDescriptorGenerationFailed,
-                                $"Scene node '{node.Metadata.Name}' references invalid material '{material}': {exception.Message}",
-                                descriptorPath,
-                                descriptorVirtualPath));
-                            return null;
-                        }
+                case bool flag:
+                    return JsonValue.Create(flag);
+                case int number:
+                    return JsonValue.Create(number);
+                case float number:
+                    return JsonValue.Create(number);
+                case Vector3 vector:
+                    return new JsonArray(vector.X, vector.Y, vector.Z);
+                case Enum member:
+                    return JsonValue.Create(Convert.ToInt32(member, CultureInfo.InvariantCulture));
+                case LodPolicy policy:
+                    return JsonSerializer.SerializeToNode(policy, SceneDescriptorJson.Options);
+                case AssetPath material when entry.Property == SceneSchema.Geometry.Surface.Material.Id:
+                    try
+                    {
+                        var materialRef = ContentPipelinePaths.ToNativeDescriptorPath(material, AssetFileTypes.Material);
+                        _ = materialRefs.Add(materialRef);
+                        return JsonValue.Create(materialRef);
+                    }
+                    catch (ArgumentException exception)
+                    {
+                        diagnostics.Add(CreateDiagnostic(
+                            operationId,
+                            DiagnosticSeverity.Error,
+                            ContentPipelineDiagnosticCodes.SceneDescriptorGenerationFailed,
+                            $"Scene node '{node.Metadata.Name}' references invalid material '{material}': {exception.Message}",
+                            descriptorPath,
+                            descriptorVirtualPath));
+                        return null;
+                    }
 
-                    default:
-                        throw new InvalidOperationException($"Override '{entry.Property}' holds a {entry.Value.GetType().Name}, which has no descriptor spelling.");
-                }
+                default:
+                    throw new InvalidOperationException($"Override '{entry.Property}' holds a {entry.Value.GetType().Name}, which has no descriptor spelling.");
             }
         }
     }

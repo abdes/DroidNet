@@ -29,16 +29,33 @@ public sealed partial class SceneDescriptorGenerator
     {
         if (scene.StartingCamera is { } authored && scene.EffectiveStartingCamera is null)
         {
-            var name = scene.AllNodes.FirstOrDefault(node => node.Id == authored)?.Metadata.Name;
-            var message = name is null
-                                ? "The starting camera was deleted. Pick another camera in the scene's Play section, or return it to Automatic."
-                                : $"The starting camera '{name}' is no longer a camera. Pick another camera in the scene's Play section, or return it to Automatic.";
+            var name = scene.AllNodes.FirstOrDefault(node => node.Id == authored.Node)?.Metadata.Name;
+            var message = (name, authored.IsOwned) switch
+            {
+                (null, _) => "The starting camera was deleted. Pick another camera in the scene's Play section, or return it to Automatic.",
+                (_, true) => $"The starting camera '{name}' is no longer a camera. Pick another camera in the scene's Play section, or return it to Automatic.",
+                _ => $"The starting camera's instance root '{name}' no longer instances a scene. Pick another camera in the scene's Play section, or return it to Automatic.",
+            };
             site.Report(SceneStartingPropertyPaths.StartingCamera, message);
             return null;
         }
 
-        return scene.EffectiveStartingCamera is { } camera ? new NativeNodeRef(nodeIndices[camera.Id]) : null;
+        return scene.EffectiveStartingCamera is { } camera ? NodeRef(camera, nodeIndices) : null;
     }
+
+    /// <summary>Writes a node reference as the cooked scene names a node: its index, and the path below it when an
+    /// instance brings the node in.</summary>
+    /// <param name="reference">The reference; its node is in <paramref name="nodeIndices"/>.</param>
+    /// <param name="nodeIndices">Each node's index in the cooked scene.</param>
+    /// <returns>The cooked reference.</returns>
+    private static NativeNodeRef NodeRef(NodeReference reference, IReadOnlyDictionary<NodeId, int> nodeIndices)
+        => new(nodeIndices[reference.Node], NodePathOf(reference.Path));
+
+    /// <summary>Writes a node path as the cooked scene does, or <see langword="null"/> for the empty path.</summary>
+    /// <param name="path">The path.</param>
+    /// <returns>Each node ID in lowercase canonical form.</returns>
+    private static IReadOnlyList<string>? NodePathOf(NodePath path)
+        => path.IsEmpty ? null : [.. path.Nodes.Select(static node => node.ToString())];
 
     /// <summary>Resolves the input mapping contexts the cooked scene activates when it starts.</summary>
     /// <param name="scene">The scene.</param>

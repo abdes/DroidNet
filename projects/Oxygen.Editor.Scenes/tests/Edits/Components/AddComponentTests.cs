@@ -84,6 +84,21 @@ public sealed class AddComponentTests
     }
 
     [TestMethod]
+    public async Task SecondSceneInstance_IsInvalid()
+    {
+        using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
+        var instance = new SceneInstanceComponentData { Name = "Scene Instance", Source = AssetPath.Parse("/Content/Vehicles/Car.glb") };
+
+        var first = await fixture.Authoring.ExecuteAsync(new AddComponent(SampleScene.B, instance with { Id = ComponentId.New() }, index: SceneBuilder.RequiredComponentCount)).ConfigureAwait(false);
+        var before = fixture.Snapshot();
+        var second = await fixture.Authoring.ExecuteAsync(new AddComponent(SampleScene.B, instance with { Id = ComponentId.New() }, index: SceneBuilder.RequiredComponentCount)).ConfigureAwait(false);
+
+        SceneAssert.Applied(first);
+        SceneAssert.Invalid(second, SceneEditCodes.ComponentDuplicate, SampleScene.B);
+        SceneAssert.Unchanged(fixture, before);
+    }
+
+    [TestMethod]
     public async Task ExistingComponentId_IsInvalid()
     {
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);

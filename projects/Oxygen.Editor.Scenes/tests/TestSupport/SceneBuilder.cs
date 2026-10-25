@@ -4,6 +4,7 @@
 
 using System.Text.Json;
 using Oxygen.Editor.Scenes.Layout;
+using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Core;
@@ -26,7 +27,7 @@ public sealed class SceneBuilder
     private SceneId id = SceneId.New();
     private string name = "Scene";
     private SceneEnvironmentData environment = new();
-    private NodeId? startingCamera;
+    private NodeReference? startingCamera;
     private IList<StartingInputContextData>? startingInputContexts;
     private SceneReferencesData? references;
 
@@ -242,7 +243,7 @@ public sealed class SceneBuilder
     /// <returns>This builder.</returns>
     public SceneBuilder StartingCamera(NodeId value)
     {
-        this.startingCamera = value;
+        this.startingCamera = NodeReference.To(value);
         return this;
     }
 

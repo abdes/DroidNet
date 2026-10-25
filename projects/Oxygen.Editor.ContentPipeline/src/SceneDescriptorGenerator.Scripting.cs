@@ -63,7 +63,9 @@ public sealed partial class SceneDescriptorGenerator
                         ScriptValueKind.StringValue => value.StringValue,
                         ScriptValueKind.Vec2Value or ScriptValueKind.Vec3Value or ScriptValueKind.Vec4Value => value.GetVectorComponents(),
                         ScriptValueKind.AssetValue => value.Asset!.VirtualPath,
-                        ScriptValueKind.NodeValue => nodeIndices.TryGetValue(value.NodeId, out var index) ? new ScriptSidecarNodeRef((uint)index) : null,
+                        ScriptValueKind.NodeValue => value.Node is { } reference && nodeIndices.TryGetValue(reference.Node, out var index)
+                            ? new ScriptSidecarNodeRef((uint)index, NodePathOf(reference.Path))
+                            : null,
                         _ => null,
                     };
                     if (cooked is null)

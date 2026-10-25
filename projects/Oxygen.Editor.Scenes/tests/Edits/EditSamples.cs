@@ -387,7 +387,7 @@ public static class EditSamples
     private static EditSample SetStartingCameraSample =>
         new(
             nameof(SetStartingCamera),
-            static _ => new SetStartingCamera(SampleScene.Cam),
+            static _ => new SetStartingCamera(NodeReference.To(SampleScene.Cam)),
             [new SceneChange.StartingCameraChanged()],
             [new SceneChange.StartingCameraChanged()]);
 

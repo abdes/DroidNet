@@ -53,7 +53,7 @@ public sealed class ScriptingComponentTests
 
         var slots = reopened.AllNodes.Single(node => node.Id == player.Id).Components.OfType<ScriptingComponent>().Single().Slots;
         _ = slots.Should().Equal(second, first, unassigned);
-        _ = slots[1].Overrides["follow"].NodeId.Should().Be(target.Id);
+        _ = slots[1].Overrides["follow"].Node.Should().Be(NodeReference.To(target.Id));
         _ = slots[1].Overrides["offset"].GetVectorComponents().Should().Equal(1f, 2f);
     }
 

@@ -163,6 +163,17 @@ internal static partial class SceneComponentsEmitter
             _ = source.Append("            [").Append(path).Append(".Id] = typeof(").Append(SceneComponentsTypes.ValueType(property)).AppendLine("),");
         }
 
+        _ = source.AppendLine("        });")
+            .AppendLine()
+            .AppendLine("    /// <summary>Gets the value type of each property a scene may change on a node an instance brings in: every property with an override id.</summary>")
+            .Append("    public static global::System.Collections.Frozen.FrozenDictionary<").Append(PropertyIdType).AppendLine(", global::System.Type> Changeable { get; } =")
+            .Append("        global::System.Collections.Frozen.FrozenDictionary.ToFrozenDictionary(new global::System.Collections.Generic.Dictionary<").Append(PropertyIdType).AppendLine(", global::System.Type>")
+            .AppendLine("        {");
+        foreach (var (path, property) in Changeable(schema))
+        {
+            _ = source.Append("            [").Append(path).Append(".Id] = typeof(").Append(SceneComponentsTypes.ValueType(property)).AppendLine("),");
+        }
+
         _ = source.AppendLine("        });");
         _ = AppendLookups(source, schema);
         foreach (var component in schema.Components)

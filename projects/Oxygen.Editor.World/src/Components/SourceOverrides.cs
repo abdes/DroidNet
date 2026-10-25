@@ -20,14 +20,26 @@ namespace Oxygen.Editor.World.Components;
 /// witnessed in. A part left without values is removed.
 /// </para>
 /// <para>
+/// The changes a scene makes of one component of a node an instance brings in are the same store (<see
+/// cref="ChangesOf"/>), over the instanced node's values: any property <see cref="SceneSchema.Changeable"/> lists may be
+/// changed.
+/// </para>
+/// <para>
 /// Overrides of a part the current asset no longer has are kept, unresolved, until they are removed.
 /// </para>
 /// </remarks>
 public sealed class SourceOverrides : IEquatable<SourceOverrides>
 {
-    private SourceOverrides(string componentKind, ImmutableDictionary<PropertyId, object> values, ImmutableDictionary<PartId, PartOverrides> parts)
+    private readonly IReadOnlyDictionary<PropertyId, Type> valueTypes;
+
+    private SourceOverrides(
+        string componentKind,
+        IReadOnlyDictionary<PropertyId, Type> valueTypes,
+        ImmutableDictionary<PropertyId, object> values,
+        ImmutableDictionary<PartId, PartOverrides> parts)
     {
         this.ComponentKind = componentKind;
+        this.valueTypes = valueTypes;
         this.Values = values;
         this.Parts = parts;
     }
@@ -46,6 +58,12 @@ public sealed class SourceOverrides : IEquatable<SourceOverrides>
     /// Gets the overrides of each part that has any.
     /// </summary>
     public ImmutableDictionary<PartId, PartOverrides> Parts { get; }
+
+    /// <summary>
+    /// Gets a value indicating whether these are the changes of an instanced node (<see cref="ChangesOf"/>) rather than a
+    /// source's overrides (<see cref="For"/>).
+    /// </summary>
+    public bool IsInstanceChanges => ReferenceEquals(this.valueTypes, SceneSchema.Changeable);
 
     /// <summary>
     /// Gets a value indicating whether no value is overridden.
@@ -78,7 +96,31 @@ public sealed class SourceOverrides : IEquatable<SourceOverrides>
     public static SourceOverrides For(string componentKind)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(componentKind);
-        return new(componentKind, ImmutableDictionary<PropertyId, object>.Empty, ImmutableDictionary<PartId, PartOverrides>.Empty);
+        return new(componentKind, SceneSchema.Overridable, ImmutableDictionary<PropertyId, object>.Empty, ImmutableDictionary<PartId, PartOverrides>.Empty);
+    }
+
+    /// <summary>
+    /// Creates the changes of one component of an instanced node that change nothing.
+    /// </summary>
+    /// <param name="componentKind">The component kind.</param>
+    /// <returns>The empty changes.</returns>
+    public static SourceOverrides ChangesOf(string componentKind)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(componentKind);
+        return new(componentKind, SceneSchema.Changeable, ImmutableDictionary<PropertyId, object>.Empty, ImmutableDictionary<PartId, PartOverrides>.Empty);
+    }
+
+    /// <summary>
+    /// Gets the value type of a property these overrides may hold.
+    /// </summary>
+    /// <param name="property">The property.</param>
+    /// <param name="type">The value type.</param>
+    /// <returns>Whether the property may be overridden here.</returns>
+    public bool TryGetValueType(PropertyId property, [NotNullWhen(true)] out Type? type)
+    {
+        ArgumentNullException.ThrowIfNull(property);
+        return this.valueTypes.TryGetValue(property, out type)
+            && string.Equals(property.ComponentKind, this.ComponentKind, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -180,12 +222,12 @@ public sealed class SourceOverrides : IEquatable<SourceOverrides>
         this.Check(entry);
         if (entry.Part is not { } part)
         {
-            return new(this.ComponentKind, this.Values.SetItem(entry.Property, entry.Value), this.Parts);
+            return new(this.ComponentKind, this.valueTypes, this.Values.SetItem(entry.Property, entry.Value), this.Parts);
         }
 
         var values = this.Parts.GetValueOrDefault(part)?.Values ?? ImmutableDictionary<PropertyId, object>.Empty;
         var updated = new PartOverrides(entry.LayoutRevision!, values.SetItem(entry.Property, entry.Value));
-        return new(this.ComponentKind, this.Values, this.Parts.SetItem(part, updated));
+        return new(this.ComponentKind, this.valueTypes, this.Values, this.Parts.SetItem(part, updated));
     }
 
     /// <summary>
@@ -199,7 +241,7 @@ public sealed class SourceOverrides : IEquatable<SourceOverrides>
         ArgumentNullException.ThrowIfNull(property);
         if (part is not { } id)
         {
-            return this.Values.ContainsKey(property) ? new(this.ComponentKind, this.Values.Remove(property), this.Parts) : this;
+            return this.Values.ContainsKey(property) ? new(this.ComponentKind, this.valueTypes, this.Values.Remove(property), this.Parts) : this;
         }
 
         if (this.Parts.GetValueOrDefault(id) is not { } overrides || !overrides.Values.ContainsKey(property))
@@ -208,7 +250,7 @@ public sealed class SourceOverrides : IEquatable<SourceOverrides>
         }
 
         var values = overrides.Values.Remove(property);
-        return new(this.ComponentKind, this.Values, values.IsEmpty ? this.Parts.Remove(id) : this.Parts.SetItem(id, overrides with { Values = values }));
+        return new(this.ComponentKind, this.valueTypes, this.Values, values.IsEmpty ? this.Parts.Remove(id) : this.Parts.SetItem(id, overrides with { Values = values }));
     }
 
     /// <summary>
@@ -233,6 +275,7 @@ public sealed class SourceOverrides : IEquatable<SourceOverrides>
     public bool Equals(SourceOverrides? other)
         => other is not null
             && string.Equals(this.ComponentKind, other.ComponentKind, StringComparison.Ordinal)
+            && ReferenceEquals(this.valueTypes, other.valueTypes)
             && this.All.SequenceEqual(other.All);
 
     /// <inheritdoc/>
@@ -262,9 +305,13 @@ public sealed class SourceOverrides : IEquatable<SourceOverrides>
             throw new ArgumentException($"{property} is not a property of a {this.ComponentKind} component.", nameof(entry));
         }
 
-        if (!SceneSchema.Overridable.TryGetValue(property, out var type))
+        if (!this.valueTypes.TryGetValue(property, out var type))
         {
-            throw new ArgumentException($"{property} has no source, so it cannot be overridden.", nameof(entry));
+            throw new ArgumentException(
+                this.IsInstanceChanges
+                    ? $"{property} cannot be changed on an instanced node."
+                    : $"{property} has no source, so it cannot be overridden.",
+                nameof(entry));
         }
 
         if (!type.IsInstanceOfType(entry.Value))

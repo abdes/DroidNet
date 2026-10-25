@@ -61,7 +61,7 @@ public sealed record InsertNodes : ISceneEdit
             _ = SceneReferenceRetargeting.RetargetSubtree(node, scope.Moved);
             foreach (var held in node.DescendantsAndSelf())
             {
-                scope.WarnIfDeleted(SceneAssetReferences.Runtime(held).Concat(SceneAssetReferences.Scripts(held)), held.Id);
+                scope.WarnIfDeleted(SceneAssetReferences.Runtime(held).Concat(SceneAssetReferences.Instances(held)).Concat(SceneAssetReferences.Scripts(held)), held.Id);
             }
         }
 

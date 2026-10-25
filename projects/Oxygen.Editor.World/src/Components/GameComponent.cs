@@ -133,5 +133,6 @@ public abstract class GameComponent : ScopedObservableObject, INamed, IPersisten
         RuntimeHelpers.RunClassConstructor(typeof(SpotLightComponent).TypeHandle);
         RuntimeHelpers.RunClassConstructor(typeof(LocalFogVolumeComponent).TypeHandle);
         RuntimeHelpers.RunClassConstructor(typeof(ScriptingComponent).TypeHandle);
+        RuntimeHelpers.RunClassConstructor(typeof(SceneInstanceComponent).TypeHandle);
     }
 }

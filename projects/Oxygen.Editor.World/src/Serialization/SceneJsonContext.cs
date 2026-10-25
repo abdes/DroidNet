@@ -47,11 +47,19 @@ namespace Oxygen.Editor.World.Serialization;
 [JsonSerializable(typeof(TransformData))]
 [JsonSerializable(typeof(SourceOverridesData))]
 [JsonSerializable(typeof(PartOverridesData))]
+[JsonSerializable(typeof(SceneInstanceComponentData))]
+[JsonSerializable(typeof(InstancedNodeChangesData))]
 
 // The value types of overridable properties (SceneSchema.Overridable).
 [JsonSerializable(typeof(AssetPath))]
 [JsonSerializable(typeof(Vector3))]
 [JsonSerializable(typeof(LodPolicy))]
+[JsonSerializable(typeof(CameraAspectMode))]
+[JsonSerializable(typeof(VisibilitySource))]
+[JsonSerializable(typeof(ShadowSource))]
+[JsonSerializable(typeof(AtmosphereLightSlot))]
+[JsonSerializable(typeof(DirectionalCsmSplitMode))]
+[JsonSerializable(typeof(ShadowResolutionHint))]
 
 // A LOD policy's "type" may follow its fields, as in the engine's reports, whose JSON objects sort their keys.
 [JsonSourceGenerationOptions(

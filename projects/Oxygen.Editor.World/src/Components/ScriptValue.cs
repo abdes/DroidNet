@@ -43,8 +43,8 @@ public sealed record ScriptValue
     /// <summary>Gets the referenced asset.</summary>
     public AssetPath? Asset { get; private init; }
 
-    /// <summary>Gets the referenced node.</summary>
-    public NodeId NodeId { get; private init; }
+    /// <summary>Gets the referenced node: a node of the scene or one an instance brings in; set for a node value.</summary>
+    public NodeReference? Node { get; private init; }
 
     /// <summary>Creates a boolean value.</summary>
     /// <param name="value">The value.</param>
@@ -108,11 +108,20 @@ public sealed record ScriptValue
         return new(ScriptValueKind.AssetValue) { Asset = asset };
     }
 
-    /// <summary>Creates a node reference value.</summary>
+    /// <summary>Creates a node reference value of a node of the scene.</summary>
     /// <param name="node">The node identity.</param>
     /// <returns>The script value.</returns>
     public static ScriptValue FromNode(NodeId node)
-        => node.IsEmpty ? throw new ArgumentException("A node reference needs a node.", nameof(node)) : new(ScriptValueKind.NodeValue) { NodeId = node };
+        => node.IsEmpty ? throw new ArgumentException("A node reference needs a node.", nameof(node)) : FromNode(NodeReference.To(node));
+
+    /// <summary>Creates a node reference value.</summary>
+    /// <param name="node">The node: a node of the scene or one an instance brings in.</param>
+    /// <returns>The script value.</returns>
+    public static ScriptValue FromNode(NodeReference node)
+    {
+        ArgumentNullException.ThrowIfNull(node);
+        return new(ScriptValueKind.NodeValue) { Node = node };
+    }
 
     /// <summary>Gets the number of vector components of a kind.</summary>
     /// <param name="kind">The kind.</param>
@@ -142,7 +151,7 @@ public sealed record ScriptValue
             ScriptValueKind.Vec2Value or ScriptValueKind.Vec3Value or ScriptValueKind.Vec4Value
                 => "(" + string.Join(", ", this.GetVectorComponents().Select(static component => component.ToString(CultureInfo.InvariantCulture))) + ")",
             ScriptValueKind.AssetValue => this.Asset?.ToUriString() ?? string.Empty,
-            ScriptValueKind.NodeValue => this.NodeId.ToString(),
+            ScriptValueKind.NodeValue => this.Node?.ToString() ?? string.Empty,
             _ => string.Empty,
         };
 }

@@ -41,7 +41,11 @@ public sealed record ScriptSidecarParam(
 /// <summary>
 /// A node value of a script parameter, as the cooked scene names a node.
 /// </summary>
-/// <param name="Node">The node's index in the cooked scene.</param>
-public sealed record ScriptSidecarNodeRef([property: JsonPropertyName("node")] uint Node);
+/// <param name="Node">The node's index in the cooked scene; an instance root when <paramref name="Path"/> is set.</param>
+/// <param name="Path">The node an instance brings in below that root, one node ID per nesting level, or
+/// <see langword="null"/> for the node itself.</param>
+public sealed record ScriptSidecarNodeRef(
+    [property: JsonPropertyName("node")] uint Node,
+    [property: JsonPropertyName("path"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? Path = null);
 
 #pragma warning restore SA1402 // File may only contain a single type

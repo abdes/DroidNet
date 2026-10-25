@@ -355,10 +355,10 @@ public sealed class InspectorSceneEditingTests
         _ = play.SelectedCamera!.Id.Should().BeNull();
         _ = (play.ShowsAutomaticCamera, play.AutomaticCameraName).Should().Be((true, "Overview"));
 
-        play.SelectedCamera = play.CameraChoices.Single(choice => choice.Id == second.Id);
+        play.SelectedCamera = play.CameraChoices.Single(choice => choice.Id == NodeReference.To(second.Id));
         await play.Pending.ConfigureAwait(false);
 
-        _ = testScene.Scene.StartingCamera.Should().Be(second.Id);
+        _ = testScene.Scene.StartingCamera.Should().Be(NodeReference.To(second.Id));
         _ = play.ShowsAutomaticCamera.Should().BeFalse("a chosen camera needs no explanation");
         _ = await testScene.Authoring.UndoAsync().ConfigureAwait(false);
         _ = play.SelectedCamera!.Id.Should().BeNull();
@@ -372,7 +372,7 @@ public sealed class InspectorSceneEditingTests
         using var editor = new SceneSettingsViewModel(() => testScene.Authoring);
         editor.SetScene(testScene.Scene);
         var play = editor.Play;
-        play.SelectedCamera = play.CameraChoices.Single(choice => choice.Id == second.Id);
+        play.SelectedCamera = play.CameraChoices.Single(choice => choice.Id == NodeReference.To(second.Id));
         await play.Pending.ConfigureAwait(false);
         var entries = play.CameraChoices.ToArray();
         var selected = play.SelectedCamera;
@@ -398,7 +398,7 @@ public sealed class InspectorSceneEditingTests
         var scene = CreateScene();
         var camera = CameraNode(scene, 60);
         scene.RootNodes.Add(camera);
-        scene.SetStartingCamera(camera.Id);
+        scene.SetStartingCamera(NodeReference.To(camera.Id));
         _ = scene.RootNodes.Remove(camera);
         using var editor = new SceneSettingsViewModel();
 
@@ -469,12 +469,12 @@ public sealed class InspectorSceneEditingTests
 
         secondToggle.IsChecked = true;
         await secondToggle.Pending.ConfigureAwait(false);
-        _ = testScene.Scene.StartingCamera.Should().Be(second.Id);
+        _ = testScene.Scene.StartingCamera.Should().Be(NodeReference.To(second.Id));
         _ = (firstToggle.IsAutomatic, secondToggle.IsChecked).Should().Be((false, true));
 
         firstToggle.IsChecked = true;
         await firstToggle.Pending.ConfigureAwait(false);
-        _ = testScene.Scene.StartingCamera.Should().Be(first.Id);
+        _ = testScene.Scene.StartingCamera.Should().Be(NodeReference.To(first.Id));
         _ = (firstToggle.IsChecked, secondToggle.IsChecked).Should().Be((true, false));
 
         firstToggle.IsChecked = false;

@@ -21,6 +21,18 @@ public static class SceneSchema
             [Geometry.Surface.Material.Id] = typeof(global::Oxygen.Managed.Core.AssetPath),
         });
 
+    /// <summary>Gets the value type of each property a scene may change on a node an instance brings in: every property with an override id.</summary>
+    public static global::System.Collections.Frozen.FrozenDictionary<global::Oxygen.Managed.Core.PropertyId, global::System.Type> Changeable { get; } =
+        global::System.Collections.Frozen.FrozenDictionary.ToFrozenDictionary(new global::System.Collections.Generic.Dictionary<global::Oxygen.Managed.Core.PropertyId, global::System.Type>
+        {
+            [Lamp.Color.Id] = typeof(global::System.Numerics.Vector3),
+            [Lamp.Range.Id] = typeof(float),
+            [Lamp.FovDegrees.Id] = typeof(float),
+            [Lamp.Mode.Id] = typeof(global::Oxygen.Managed.Core.CameraAspectMode),
+            [Geometry.LodPolicy.Id] = typeof(global::Oxygen.Editor.World.Serialization.LodPolicy),
+            [Geometry.Surface.Material.Id] = typeof(global::Oxygen.Managed.Core.AssetPath),
+        });
+
     /// <summary>Gets the range of a numeric property; a vector property's range bounds each component.</summary>
     /// <typeparam name="T">The bounded type: <see cref="int"/> or <see cref="float"/>.</typeparam>
     /// <param name="id">The property id.</param>

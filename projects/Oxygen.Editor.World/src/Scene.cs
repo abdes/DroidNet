@@ -47,10 +47,10 @@ public partial class Scene : GameObject, IPersistent<Serialization.SceneData>
     public Serialization.SceneReferencesData References { get; private set; } = NormalizeReferences(references: null);
 
     /// <summary>
-    /// Gets the camera node the scene starts viewing through, or <see langword="null"/> for the first camera in
-    /// hierarchy order.
+    /// Gets the camera node the scene starts viewing through, a node of the scene or one an instance brings in, or
+    /// <see langword="null"/> for the first camera in hierarchy order.
     /// </summary>
-    public NodeId? StartingCamera { get; private set; }
+    public NodeReference? StartingCamera { get; private set; }
 
     /// <summary>
     /// Gets the input mapping contexts that are active when the scene starts, in order.
@@ -63,13 +63,28 @@ public partial class Scene : GameObject, IPersistent<Serialization.SceneData>
     /// </summary>
     /// <remarks>
     /// An authored starting camera that is missing or no longer a camera is returned as <see langword="null"/>;
-    /// the cook reports it.
+    /// the cook reports it. One an instance brings in is returned while its instance root is in the scene: whether the
+    /// node it names is a camera is known from the instanced source, which the cook checks.
     /// </remarks>
     [JsonIgnore]
-    public SceneNode? EffectiveStartingCamera
-        => this.StartingCamera is { } id
-            ? this.AllNodes.FirstOrDefault(node => node.Id == id && node.Components.OfType<CameraComponent>().Any())
-            : this.AllNodes.FirstOrDefault(static node => node.Components.OfType<CameraComponent>().Any());
+    public NodeReference? EffectiveStartingCamera
+    {
+        get
+        {
+            if (this.StartingCamera is not { } authored)
+            {
+                return this.AllNodes.FirstOrDefault(static node => node.Components.OfType<CameraComponent>().Any()) is { } first
+                    ? NodeReference.To(first.Id)
+                    : null;
+            }
+
+            var node = this.AllNodes.FirstOrDefault(node => node.Id == authored.Node);
+            var resolves = authored.IsOwned
+                ? node?.Components.OfType<CameraComponent>().Any() == true
+                : node?.Components.OfType<SceneInstanceComponent>().Any() == true;
+            return resolves ? authored : null;
+        }
+    }
 
     /// <summary>
     ///     Gets all nodes in the scene (flattened).
@@ -121,7 +136,7 @@ public partial class Scene : GameObject, IPersistent<Serialization.SceneData>
 
             this.Environment = NormalizeEnvironment(data.Environment);
             this.References = NormalizeReferences(data.References);
-            this.StartingCamera = NormalizeCamera(data.StartingCamera);
+            this.StartingCamera = data.StartingCamera;
             this.StartingInputContexts = NormalizeContexts(data.StartingInputContexts);
         }
     }
@@ -180,9 +195,9 @@ public partial class Scene : GameObject, IPersistent<Serialization.SceneData>
     /// Replaces the camera node the scene starts viewing through.
     /// </summary>
     /// <param name="camera">The camera node, or <see langword="null"/> for the first camera in hierarchy order.</param>
-    public void SetStartingCamera(NodeId? camera)
+    public void SetStartingCamera(NodeReference? camera)
     {
-        var normalized = NormalizeCamera(camera);
+        var normalized = camera;
         if (this.StartingCamera != normalized)
         {
             this.OnPropertyChanging(nameof(this.StartingCamera));
@@ -243,8 +258,6 @@ public partial class Scene : GameObject, IPersistent<Serialization.SceneData>
             ExtraAssets = new List<AssetPath>(references.ExtraAssets).AsReadOnly(),
         };
     }
-
-    private static NodeId? NormalizeCamera(NodeId? camera) => camera is { IsEmpty: true } ? null : camera;
 
     private static ReadOnlyCollection<Serialization.StartingInputContextData> NormalizeContexts(IEnumerable<Serialization.StartingInputContextData>? contexts)
         => new List<Serialization.StartingInputContextData>(contexts ?? []).AsReadOnly();

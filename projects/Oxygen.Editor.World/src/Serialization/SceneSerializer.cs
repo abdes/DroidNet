@@ -30,6 +30,7 @@ public static class SceneSerializer
         RuntimeHelpers.RunClassConstructor(typeof(SpotLightComponent).TypeHandle);
         RuntimeHelpers.RunClassConstructor(typeof(LocalFogVolumeComponent).TypeHandle);
         RuntimeHelpers.RunClassConstructor(typeof(ScriptingComponent).TypeHandle);
+        RuntimeHelpers.RunClassConstructor(typeof(SceneInstanceComponent).TypeHandle);
 
         // Add other types as needed
         return true;

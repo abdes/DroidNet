@@ -325,12 +325,12 @@ public sealed partial class PlaySectionViewModel : ObservableObject, IDisposable
     {
         var cameras = this.scene?.AllNodes.Where(IsCamera).ToArray() ?? [];
         var authored = this.scene?.StartingCamera;
-        var gone = authored is { } id && cameras.All(camera => camera.Id != id);
-        var goneName = gone ? this.scene?.AllNodes.FirstOrDefault(node => node.Id == authored)?.Metadata.Name : null;
+        var gone = authored is { } id && cameras.All(camera => NodeReference.To(camera.Id) != id);
+        var goneName = gone ? this.scene?.AllNodes.FirstOrDefault(node => authored is { IsOwned: true } && node.Id == authored.Node)?.Metadata.Name : null;
 
         // Automatic, every camera, and the authored camera when it is gone, so the list shows what is authored.
-        var wanted = new List<(NodeId? Id, string Name)> { (null, "Automatic") };
-        wanted.AddRange(cameras.Select(static camera => ((NodeId?)camera.Id, camera.Metadata.Name)));
+        var wanted = new List<(NodeReference? Id, string Name)> { (null, "Automatic") };
+        wanted.AddRange(cameras.Select(static camera => ((NodeReference?)NodeReference.To(camera.Id), camera.Metadata.Name)));
         if (gone)
         {
             wanted.Add((authored, goneName ?? "Missing camera"));

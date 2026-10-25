@@ -438,7 +438,7 @@ public sealed partial class ScriptParameterFieldViewModel : ObservableObject
                     this.ReferenceText = asset is null ? "None" : picked?.Name ?? ("Missing: " + asset.VirtualPath);
                     break;
                 case ScriptFieldKind.Node:
-                    var node = shown?.NodeId;
+                    var node = shown?.Node?.Node;
                     var name = node is { } id ? this.card.Owner.DescribeNode(id) : null;
                     this.IsReferenceMissing = node is not null && name is null;
                     this.ReferenceText = node is null ? "None" : name ?? "Missing node";

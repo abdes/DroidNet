@@ -50,15 +50,29 @@ internal sealed record NativeLocalFogVolume(
     [property: JsonPropertyName("fog_emissive")] float[] FogEmissive,
     [property: JsonPropertyName("sort_priority")] int SortPriority);
 
-// A node of the scene by its index, as the cooked scene names a node.
-internal sealed record NativeNodeRef([property: JsonPropertyName("node")] int Node);
+// A node of the scene by its index, as the cooked scene names a node; with a path, the node an instance brings in
+// below that instance root, one node ID per nesting level.
+internal sealed record NativeNodeRef(
+    [property: JsonPropertyName("node")] int Node,
+    [property: JsonPropertyName("path")] IReadOnlyList<string>? Path = null);
 
 internal sealed record NativeSceneNode(
     [property: JsonPropertyName("id")] string Id,
     [property: JsonPropertyName("name")] string Name,
     [property: JsonPropertyName("parent")] int? Parent,
     [property: JsonPropertyName("flags")] NativeNodeFlags Flags,
-    [property: JsonPropertyName("transform")] NativeNodeTransform Transform);
+    [property: JsonPropertyName("transform")] NativeNodeTransform Transform,
+    [property: JsonPropertyName("instance")] NativeSceneInstance? Instance = null);
+
+// The scene a node instances and the changes the scene makes below it.
+internal sealed record NativeSceneInstance(
+    [property: JsonPropertyName("scene_ref")] string SceneRef,
+    [property: JsonPropertyName("overrides")] IReadOnlyList<NativeInstanceOverride>? Overrides);
+
+// The changes of one instanced node, by component kind, in the scene schema's units.
+internal sealed record NativeInstanceOverride(
+    [property: JsonPropertyName("path")] IReadOnlyList<string> Path,
+    [property: JsonPropertyName("components")] IReadOnlyDictionary<string, NativeOverrides> Components);
 
 internal sealed record NativeNodeFlags(
     [property: JsonPropertyName("visible")] string Visible,

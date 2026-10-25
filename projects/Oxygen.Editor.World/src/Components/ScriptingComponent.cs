@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.Immutable;
-using System.Globalization;
 using System.Numerics;
 using System.Text.Json;
 using Oxygen.Editor.World.Serialization;
@@ -128,7 +127,7 @@ public sealed partial class ScriptingComponent : GameComponent
                 "vec3" => ScriptValue.FromVector(ScriptValueKind.Vec3Value, ReadVector(value, 3)),
                 "vec4" => ScriptValue.FromVector(ScriptValueKind.Vec4Value, ReadVector(value, 4)),
                 ScriptValueData.AssetType => ScriptValue.FromAsset(AssetPath.TryParseUri(value.GetString(), out var asset) ? asset : throw new JsonException($"'{value.GetString()}' is not an asset URI.")),
-                "node" => ScriptValue.FromNode(NodeId.FromValue(Guid.Parse(value.GetString() ?? throw new JsonException(), CultureInfo.InvariantCulture))),
+                "node" => ScriptValue.FromNode(NodeReference.TryParse(value.GetString(), out var node) ? node : throw new JsonException($"'{value.GetString()}' is not a node reference.")),
                 _ => throw new JsonException(),
             };
         }
@@ -168,7 +167,7 @@ public sealed partial class ScriptingComponent : GameComponent
                 ScriptValueKind.Vec2Value or ScriptValueKind.Vec3Value or ScriptValueKind.Vec4Value
                     => JsonSerializer.SerializeToElement(value.GetVectorComponents(), SceneJsonContext.Default.SingleArray),
                 ScriptValueKind.AssetValue => JsonSerializer.SerializeToElement(value.Asset!.ToUriString(), SceneJsonContext.Default.String),
-                ScriptValueKind.NodeValue => JsonSerializer.SerializeToElement(value.NodeId.ToString(), SceneJsonContext.Default.String),
+                ScriptValueKind.NodeValue => JsonSerializer.SerializeToElement(value.Node!.ToString(), SceneJsonContext.Default.String),
                 _ => throw new InvalidOperationException($"Unknown script value kind {value.Kind}."),
             },
         };

@@ -45,9 +45,9 @@ internal static class CopiedNodeReferences
             var updated = slot;
             foreach (var (name, value) in slot.Overrides)
             {
-                if (value.Kind == ScriptValueKind.NodeValue && copies.TryGetValue(value.NodeId, out var copy))
+                if (value.Kind == ScriptValueKind.NodeValue && value.Node is { } reference && copies.TryGetValue(reference.Node, out var copy))
                 {
-                    updated = updated.WithOverride(name, ScriptValue.FromNode(copy));
+                    updated = updated.WithOverride(name, ScriptValue.FromNode(reference with { Node = copy }));
                 }
             }
 

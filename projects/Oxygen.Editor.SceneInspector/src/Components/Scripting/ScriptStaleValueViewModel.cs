@@ -54,7 +54,7 @@ public sealed partial class ScriptStaleValueViewModel : ObservableObject
             ScriptValueKind.Vec2Value or ScriptValueKind.Vec3Value or ScriptValueKind.Vec4Value => "("
                 + string.Join(", ", value.GetVectorComponents().Select(static component => component.ToString("0.###", CultureInfo.CurrentCulture))) + ")",
             ScriptValueKind.AssetValue => value.Asset is { } asset ? Path.GetFileNameWithoutExtension(asset.VirtualPath) : "None",
-            ScriptValueKind.NodeValue => card.Owner.DescribeNode(value.NodeId) ?? "Missing node",
+            ScriptValueKind.NodeValue => (value.Node is { } reference ? card.Owner.DescribeNode(reference.Node) : null) ?? "Missing node",
             _ => value.ToString(),
         };
 

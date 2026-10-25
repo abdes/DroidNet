@@ -45,6 +45,22 @@ internal static class SceneReferenceRetargeting
             }
         }
 
+        foreach (var instance in node.Components.OfType<SceneInstanceComponent>())
+        {
+            if (map(instance.Source) is { } source)
+            {
+                instance.Source = source;
+                changed = true;
+            }
+
+            var changes = instance.Changes.MapAssets(asset => map(asset) ?? asset);
+            if (!changes.Equals(instance.Changes))
+            {
+                instance.Changes = changes;
+                changed = true;
+            }
+        }
+
         foreach (var scripting in node.Components.OfType<ScriptingComponent>())
         {
             if (Retarget(scripting.Slots, map) is { } slots)

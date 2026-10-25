@@ -81,6 +81,7 @@ public sealed partial class SceneInspectorViewModel
             nameof(SpotLightComponent) => "Spot Light",
             nameof(LocalFogVolumeComponent) => "Local Fog Volume",
             nameof(ScriptingComponent) => ScriptingComponent.DefaultName,
+            nameof(SceneInstanceComponent) => "Scene Instance",
             _ => type.Name,
         };
 

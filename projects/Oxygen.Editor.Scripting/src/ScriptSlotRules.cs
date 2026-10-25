@@ -98,7 +98,7 @@ public static class ScriptSlotRules
         var problems = new List<ScriptSlotProblem>();
         foreach (var (name, value) in slot.Overrides)
         {
-            if (value.Kind == ScriptValueKind.NodeValue && !hasNode(value.NodeId))
+            if (value.Kind == ScriptValueKind.NodeValue && value.Node is { } node && !hasNode(node.Node))
             {
                 problems.Add(new ScriptSlotProblem(DiagnosticSeverity.Error, ScriptDiagnosticCodes.SlotNodeMissing, $"Parameter '{name}' refers to a node the scene no longer has. Pick another node or clear it.", new ScriptFieldAddress(slot.Id, name)));
             }

@@ -30,6 +30,9 @@ public static class ComponentFamilies
     /// <summary>The family of a node's Scripting component.</summary>
     public const string Scripting = SceneSchema.Scripting.Kind;
 
+    /// <summary>The family of a node's scene instance: the source it brings in.</summary>
+    public const string SceneInstance = SceneSchema.SceneInstance.Kind;
+
     /// <summary>Gets a component's family.</summary>
     /// <param name="component">The component.</param>
     /// <returns>The family.</returns>
@@ -42,6 +45,7 @@ public static class ComponentFamilies
             LightComponent => Light,
             LocalFogVolumeComponent => LocalFogVolume,
             ScriptingComponent => Scripting,
+            SceneInstanceComponent => SceneInstance,
             _ => throw new ArgumentOutOfRangeException(nameof(component), component.GetType().Name, "Unknown component family."),
         };
 
@@ -58,7 +62,8 @@ public static class ComponentFamilies
             LightComponentData when node.Components.OfType<LightComponent>().Any() => Duplicate("This node already has a light component."),
             LocalFogVolumeData when node.Components.OfType<LocalFogVolumeComponent>().Any() => Duplicate("This node already has a local fog volume."),
             ScriptingData when node.Components.OfType<ScriptingComponent>().Any() => Duplicate("This node already has a Scripting component; add a script slot to it instead."),
-            GeometryComponentData or CameraComponentData or LightComponentData or LocalFogVolumeData or ScriptingData => null,
+            SceneInstanceComponentData when node.Components.OfType<SceneInstanceComponent>().Any() => Duplicate("This node already instances a source; change its source instead."),
+            GeometryComponentData or CameraComponentData or LightComponentData or LocalFogVolumeData or ScriptingData or SceneInstanceComponentData => null,
             _ => SceneDiagnostic.Error(SceneEditCodes.ComponentUnsupported, $"Component type '{component.GetType().Name}' cannot be added."),
         };
 

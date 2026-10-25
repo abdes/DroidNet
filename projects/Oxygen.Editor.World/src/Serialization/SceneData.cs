@@ -35,11 +35,11 @@ public record SceneData : NamedData
     public SceneReferencesData? References { get; init; }
 
     /// <summary>
-    /// Gets the camera node the scene starts viewing through, or <see langword="null"/> for the first camera in
-    /// hierarchy order.
+    /// Gets the camera node the scene starts viewing through, a node of the scene or one an instance brings in, or
+    /// <see langword="null"/> for the first camera in hierarchy order.
     /// </summary>
     [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
-    public NodeId? StartingCamera { get; init; }
+    public NodeReference? StartingCamera { get; init; }
 
     /// <summary>
     /// Gets the input mapping contexts that are active when the scene starts, in order, or <see langword="null"/> for

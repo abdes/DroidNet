@@ -153,7 +153,7 @@ public sealed class SceneTests
     {
         var scene = new Scene { Name = "Scene" };
         var recorder = new PropertyChangeRecorder(scene);
-        var cameraId = NodeId.New();
+        var cameraId = NodeReference.To(NodeId.New());
 
         scene.SetStartingCamera(cameraId);
 
@@ -166,7 +166,7 @@ public sealed class SceneTests
     public void SetStartingCamera_WhenValueIsEqual_RaisesNoNotifications()
     {
         var scene = new Scene { Name = "Scene" };
-        var cameraId = NodeId.New();
+        var cameraId = NodeReference.To(NodeId.New());
         scene.SetStartingCamera(cameraId);
         var recorder = new PropertyChangeRecorder(scene);
 
@@ -177,12 +177,12 @@ public sealed class SceneTests
     }
 
     [TestMethod]
-    public void SetStartingCamera_WithEmptyNodeId_StoresNull()
+    public void SetStartingCamera_WithNull_StoresNull()
     {
         var scene = new Scene { Name = "Scene" };
-        scene.SetStartingCamera(NodeId.New());
+        scene.SetStartingCamera(NodeReference.To(NodeId.New()));
 
-        scene.SetStartingCamera(NodeId.Empty);
+        scene.SetStartingCamera(null);
 
         _ = scene.StartingCamera.Should().BeNull();
     }
@@ -224,7 +224,7 @@ public sealed class SceneTests
         scene.RootNodes.Add(cameraNode);
         var nonExistentNodeId = NodeId.New();
 
-        scene.SetStartingCamera(nonExistentNodeId);
+        scene.SetStartingCamera(NodeReference.To(nonExistentNodeId));
 
         _ = scene.EffectiveStartingCamera.Should().BeNull();
     }
@@ -236,7 +236,7 @@ public sealed class SceneTests
         var nodeWithoutCamera = new SceneNode(scene, "NodeWithoutCamera");
         scene.RootNodes.Add(nodeWithoutCamera);
 
-        scene.SetStartingCamera(nodeWithoutCamera.Id);
+        scene.SetStartingCamera(NodeReference.To(nodeWithoutCamera.Id));
 
         _ = scene.EffectiveStartingCamera.Should().BeNull();
     }

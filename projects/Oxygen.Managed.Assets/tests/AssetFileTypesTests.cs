@@ -72,6 +72,15 @@ public sealed class AssetFileTypesTests
         => _ = (AssetFileTypes.ContainerOf(AssetPath.Parse(product))?.VirtualPath).Should().Be(container);
 
     [TestMethod]
+    [DataRow("/Content/Vehicles/Car.glb", "/Content/Vehicles/Car.glb/Car.oscene")]
+    [DataRow("/Content/Props/Crate.fbx", "/Content/Props/Crate.fbx/Crate.oscene")]
+    [DataRow("/Content/Prefabs/Watchtower.oscene", "/Content/Prefabs/Watchtower.oscene")]
+    [DataRow("/Content/Textures/Brick.png", null)]
+    [DataRow("/Content/Materials/Red.omat", null)]
+    public void SourceInstancesAsItsSceneProduct(string source, string? scene)
+        => _ = (AssetFileTypes.SceneProductOf(AssetPath.Parse(source))?.VirtualPath).Should().Be(scene);
+
+    [TestMethod]
     [DataRow("/Content/Materials/Red.omat.json")]
     [DataRow("/Content/Scripts/Door.lua")]
     [DataRow("/Content/Textures/Sky.otex.json")]

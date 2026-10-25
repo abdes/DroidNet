@@ -29,6 +29,8 @@ public static class SceneReferenceFields
     [
         new(Components + nameof(GeometryComponentData.GeometryUri)),
         .. OverrideFields(),
+        new(Components + nameof(SceneInstanceComponentData.Source)),
+        .. InstanceChangeFields(),
         new(Components + ScriptSlots + nameof(ScriptSlotData.Script)),
         new(Components + ScriptSlots + nameof(ScriptSlotData.Overrides) + "/*/" + nameof(ScriptValueData.Value))
         {
@@ -44,6 +46,18 @@ public static class SceneReferenceFields
         new(References + nameof(SceneReferencesData.ExtraAssets) + "/*"),
         new(nameof(SceneData.StartingInputContexts) + "/*/" + nameof(StartingInputContextData.Context)),
     ];
+
+    // One field per asset-typed property an instance may change, under its component kind, as for overrides.
+    private static IEnumerable<AssetReferenceField> InstanceChangeFields()
+        => SceneSchema.Changeable
+            .Where(static entry => entry.Value == typeof(AssetPath))
+            .Select(static entry => entry.Key)
+            .OrderBy(static property => property.Qualified(), StringComparer.Ordinal)
+            .Select(static property => new AssetReferenceField(
+                Components + nameof(SceneInstanceComponentData.Changes) + "/*/" + nameof(InstancedNodeChangesData.Components)
+                + "/" + AssetReferenceField.Escape(property.ComponentKind) + "/"
+                + (property.PartKind is null ? string.Empty : nameof(SourceOverridesData.Parts) + "/*/")
+                + nameof(SourceOverridesData.Values) + "/" + AssetReferenceField.Escape(property.JsonPointer)));
 
     // One field per asset-typed overridable property, so that a string value of another property is never taken for
     // an asset reference. The property's key is a JSON pointer, escaped as one path segment.

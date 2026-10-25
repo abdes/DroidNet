@@ -27,7 +27,7 @@ public class SceneStartingTests
             new StartingInputContextData(AssetPath.Parse("/Content/Input/Gameplay.oimap"), Priority: 5),
             new StartingInputContextData(AssetPath.Parse("/Content/Input/Menu.oimap")),
         ];
-        scene.SetStartingCamera(camera.Id);
+        scene.SetStartingCamera(NodeReference.To(camera.Id));
         scene.SetStartingInputContexts(contexts);
         var stream = new MemoryStream();
         await using var streamLifetime = stream.ConfigureAwait(false);
@@ -36,7 +36,7 @@ public class SceneStartingTests
         stream.Position = 0;
         var restored = await SceneSerializer.DeserializeAsync(stream).ConfigureAwait(false);
 
-        _ = restored.StartingCamera.Should().Be(camera.Id);
+        _ = restored.StartingCamera.Should().Be(NodeReference.To(camera.Id));
         _ = restored.StartingInputContexts.Should().Equal(contexts);
         _ = restored.StartingInputContexts[1].Priority.Should().BeNull();
         var defaultStream = new MemoryStream();
@@ -61,10 +61,10 @@ public class SceneStartingTests
 
         _ = EffectiveCameraName(scene).Should().Be("Nested Camera");
 
-        scene.SetStartingCamera(later.Id);
+        scene.SetStartingCamera(NodeReference.To(later.Id));
         _ = EffectiveCameraName(scene).Should().Be("Later Camera");
 
-        scene.SetStartingCamera(group.Id);
+        scene.SetStartingCamera(NodeReference.To(group.Id));
         _ = scene.EffectiveStartingCamera.Should().BeNull("an authored node without a camera starts nothing, and the cook reports it");
     }
 
@@ -88,5 +88,5 @@ public class SceneStartingTests
         return node;
     }
 
-    private static string? EffectiveCameraName(Scene scene) => scene.EffectiveStartingCamera?.Metadata.Name;
+    private static string? EffectiveCameraName(Scene scene) => scene.EffectiveStartingCamera is { } camera ? scene.AllNodes.First(node => node.Id == camera.Node).Metadata.Name : null;
 }

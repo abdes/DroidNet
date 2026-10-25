@@ -37,7 +37,7 @@ internal sealed partial class SceneDescriptorGeneratorTests
         _ = AddNode(scene, "Ground", camera: false);
         _ = AddNode(scene, "Overview", camera: true);
         var gameplay = AddNode(scene, "Gameplay", camera: true);
-        scene.SetStartingCamera(gameplay.Id);
+        scene.SetStartingCamera(NodeReference.To(gameplay.Id));
 
         using var descriptor = await this.GenerateDescriptorAsync(workspace, scene).ConfigureAwait(false);
 
@@ -79,7 +79,7 @@ internal sealed partial class SceneDescriptorGeneratorTests
         var scope = CreateScope(workspace);
         var scene = CreateScene();
         var camera = AddNode(scene, "Gameplay", camera: true);
-        scene.SetStartingCamera(camera.Id);
+        scene.SetStartingCamera(NodeReference.To(camera.Id));
         _ = scene.RootNodes.Remove(camera);
         var generator = new SceneDescriptorGenerator();
 

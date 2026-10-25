@@ -82,7 +82,7 @@ internal static class SceneTestSupport
 
         var cameraNode = CreateCameraNode(scene);
         scene.RootNodes.Add(cameraNode);
-        scene.SetStartingCamera(cameraNode.Id);
+        scene.SetStartingCamera(NodeReference.To(cameraNode.Id));
 
         var heroNode = CreateHeroNode(scene, cameraNode.Id);
         heroNode.Hierarchy.AddChild(CreateChildNode(scene));

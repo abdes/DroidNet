@@ -93,7 +93,7 @@ public sealed partial class StartingCameraToggle(Func<SceneAuthoring?>? authorin
             return;
         }
 
-        NodeId? camera = isStartingCamera ? node.Id : null;
+        NodeReference? camera = isStartingCamera ? NodeReference.To(node.Id) : null;
         if (camera != current.StartingCamera)
         {
             _ = await authoring.ExecuteAsync(new SetStartingCamera(camera)).ConfigureAwait(true);
@@ -108,9 +108,9 @@ public sealed partial class StartingCameraToggle(Func<SceneAuthoring?>? authorin
         try
         {
             this.IsAvailable = this.camera is not null;
-            this.IsChecked = this.camera is { } node && this.scene?.StartingCamera == node.Id;
+            this.IsChecked = this.camera is { } node && this.scene?.StartingCamera == NodeReference.To(node.Id);
             this.IsAutomatic = this.camera is { } automatic && this.scene is { StartingCamera: null } current
-                && ReferenceEquals(current.EffectiveStartingCamera, automatic);
+                && current.EffectiveStartingCamera == NodeReference.To(automatic.Id);
         }
         finally
         {

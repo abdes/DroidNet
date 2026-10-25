@@ -141,7 +141,13 @@ namespace {
       "thickness":{"virtual_path":"/.cooked/Textures/thickness.otex"}}})");
       const auto scene = WriteFile("scene.json",
         R"({"version":)" + std::to_string(internal::kSceneDescriptorVersion)
-          + R"(,"name":"Scene.v2","nodes":[{"id":"00000000-0000-4000-8000-000000000001"}],
+          + R"(,"name":"Scene.v2","nodes":[{"id":"00000000-0000-4000-8000-000000000001"},
+      {"id":"00000000-0000-4000-8000-000000000002","parent":0,"instance":{
+        "scene_ref":"/.cooked/Props/Crate.glb/Crate.oscene",
+        "overrides":[{"path":["00000000-0000-4000-8000-000000000003"],"components":{"geometry":{"parts":[{
+          "kind":"surface","id":"00000000-0000-4000-8000-000000000004",
+          "layout_revision":"0000000000000000000000000000000000000000000000000000000000000000",
+          "values":{"/material":"/.cooked/Materials/Red.omat"}}]}}}]}}],
       "renderables":[{"node":0,"geometry_ref":"/.cooked/Geometry/body.ogeo"}],
       "starting_input_contexts":[{"context_ref":"/.cooked/Input/Gameplay.oimap","priority":2}],
       "references":{"scripts":["/.cooked/Scripts/move.oscript"]},
@@ -178,7 +184,7 @@ namespace {
     ASSERT_TRUE(report.complete) << report.ToJson();
     ASSERT_EQ(report.jobs.size(), 2U);
     EXPECT_EQ(report.jobs.front().references.size(), 2U);
-    EXPECT_EQ(report.jobs.back().references.size(), 4U);
+    EXPECT_EQ(report.jobs.back().references.size(), 6U);
     EXPECT_EQ(report.jobs.back().outputs.front().virtual_path,
       "/.cooked/Scenes/Scene.oscene");
   }
@@ -203,6 +209,36 @@ namespace {
     EXPECT_EQ(context->kind, ImportDependencyKind::kInputMappingContext);
     EXPECT_EQ(context->object_path, "starting_input_contexts[0].context_ref");
     EXPECT_TRUE(context->required);
+  }
+
+  //! A scene's instanced scenes must be cooked before it, since its cook
+  //! composes them, and the assets its instance changes name are references
+  //! like its renderables' overrides.
+  NOLINT_TEST_F(MixedDescriptorAnalysisTest,
+    SceneInstancesAndTheirChangedAssetsAreRequiredReferences)
+  {
+    ASSERT_TRUE(error_.empty()) << error_;
+    if (!report_.has_value()) {
+      FAIL() << "Suite setup produced no report";
+    }
+    const auto& report = report_.value();
+    ASSERT_TRUE(report.complete) << report.ToJson();
+    const auto& references = report.jobs.back().references;
+    const auto find = [&references](const std::string_view path) -> auto {
+      return std::ranges::find_if(
+        references, [path](const auto& reference) -> bool {
+          return reference.virtual_path == path;
+        });
+    };
+    const auto scene = find("/.cooked/Props/Crate.glb/Crate.oscene");
+    ASSERT_NE(scene, references.end()) << report.ToJson();
+    EXPECT_EQ(scene->kind, ImportDependencyKind::kScene);
+    EXPECT_EQ(scene->object_path, "nodes[1].instance.scene_ref");
+    EXPECT_TRUE(scene->required);
+    const auto material = find("/.cooked/Materials/Red.omat");
+    ASSERT_NE(material, references.end()) << report.ToJson();
+    EXPECT_EQ(material->kind, ImportDependencyKind::kMaterial);
+    EXPECT_TRUE(material->required);
   }
 
   NOLINT_TEST_F(

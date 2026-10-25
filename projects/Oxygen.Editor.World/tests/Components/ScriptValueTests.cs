@@ -61,7 +61,7 @@ public sealed class ScriptValueTests
         var nodeId = NodeId.New();
         var nodeVal = ScriptValue.FromNode(nodeId);
         _ = nodeVal.Kind.Should().Be(ScriptValueKind.NodeValue);
-        _ = nodeVal.NodeId.Should().Be(nodeId);
+        _ = nodeVal.Node.Should().Be(NodeReference.To(nodeId));
     }
 
     [TestMethod]

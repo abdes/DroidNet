@@ -66,6 +66,20 @@ public sealed class SceneNodeCopiesTests
     }
 
     [TestMethod]
+    public void Remap_NodeValueWithAPath_KeepsThePathOnTheCopy()
+    {
+        var instance = NodeId.New();
+        var copy = NodeId.New();
+        var path = NodePath.Of(NodeId.New());
+        var slot = new ScriptSlot { Script = SampleScene.MoveScript }.WithOverride("target", ScriptValue.FromNode(new NodeReference(instance, path)));
+
+        var remapped = CopiedNodeReferences.Remap([slot], new Dictionary<NodeId, NodeId> { [instance] = copy });
+
+        _ = remapped.Should().NotBeNull();
+        _ = remapped!.Value.Single().Overrides["target"].Node.Should().Be(new NodeReference(copy, path));
+    }
+
+    [TestMethod]
     public async Task Copy_DirectionalLight_ClearsTheSlot()
     {
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);

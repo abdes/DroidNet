@@ -11,7 +11,7 @@ namespace Oxygen.Editor.World.Serialization;
 
 /// <summary>
 /// Converts <see cref="SourceOverrides"/> and override values to and from their data: a value is read as the type
-/// <see cref="SceneSchema.Overridable"/> gives its property.
+/// <see cref="SceneSchema.Changeable"/> gives its property, and the store checks the property may be held.
 /// </summary>
 public static class SourceOverridesJson
 {
@@ -23,28 +23,17 @@ public static class SourceOverridesJson
     /// <returns>The overrides.</returns>
     /// <exception cref="JsonException">A key is not an overridable property of the component or part, or a value does not fit it.</exception>
     public static SourceOverrides Read(string componentKind, SourceOverridesData? data)
-    {
-        var overrides = SourceOverrides.For(componentKind);
-        foreach (var (key, value) in data?.Values ?? new Dictionary<string, JsonElement>(StringComparer.Ordinal))
-        {
-            overrides = Add(overrides, new PropertyId(componentKind, key), part: null, layoutRevision: null, value);
-        }
+        => Read(SourceOverrides.For(componentKind), data);
 
-        foreach (var part in data?.Parts ?? [])
-        {
-            if (part.Values.Count == 0)
-            {
-                throw new JsonException($"The overrides of {part.Kind} {part.Id} hold no value.");
-            }
-
-            foreach (var (key, value) in part.Values)
-            {
-                overrides = Add(overrides, new PropertyId(componentKind, part.Kind, key), new PartId(part.Kind, part.Id), part.LayoutRevision, value);
-            }
-        }
-
-        return overrides;
-    }
+    /// <summary>
+    /// Reads the changes of one component of an instanced node.
+    /// </summary>
+    /// <param name="componentKind">The component kind.</param>
+    /// <param name="data">The stored changes, or <see langword="null"/> when there are none.</param>
+    /// <returns>The changes.</returns>
+    /// <exception cref="JsonException">A change does not fit the schema.</exception>
+    public static SourceOverrides ReadChanges(string componentKind, SourceOverridesData? data)
+        => Read(SourceOverrides.ChangesOf(componentKind), data);
 
     /// <summary>
     /// Writes the overrides of a component.
@@ -87,9 +76,9 @@ public static class SourceOverridesJson
     public static object ReadValue(PropertyId property, JsonElement json)
     {
         ArgumentNullException.ThrowIfNull(property);
-        if (!SceneSchema.Overridable.TryGetValue(property, out var type))
+        if (!SceneSchema.Changeable.TryGetValue(property, out var type))
         {
-            throw new JsonException($"{property} is not a property a source may supply.");
+            throw new JsonException($"{property} is not a property a source may supply or an instance may change.");
         }
 
         var value = json.Deserialize(TypeInfo(type)) ?? throw new JsonException($"The override of {property} has no value.");
@@ -109,9 +98,34 @@ public static class SourceOverridesJson
     {
         ArgumentNullException.ThrowIfNull(property);
         ArgumentNullException.ThrowIfNull(value);
-        return SceneSchema.Overridable.TryGetValue(property, out var type)
+        return SceneSchema.Changeable.TryGetValue(property, out var type)
             ? JsonSerializer.SerializeToElement(value, TypeInfo(type))
-            : throw new ArgumentException($"{property} is not a property a source may supply.", nameof(property));
+            : throw new ArgumentException($"{property} is not a property a source may supply or an instance may change.", nameof(property));
+    }
+
+    private static SourceOverrides Read(SourceOverrides empty, SourceOverridesData? data)
+    {
+        var componentKind = empty.ComponentKind;
+        var overrides = empty;
+        foreach (var (key, value) in data?.Values ?? new Dictionary<string, JsonElement>(StringComparer.Ordinal))
+        {
+            overrides = Add(overrides, new PropertyId(componentKind, key), part: null, layoutRevision: null, value);
+        }
+
+        foreach (var part in data?.Parts ?? [])
+        {
+            if (part.Values.Count == 0)
+            {
+                throw new JsonException($"The overrides of {part.Kind} {part.Id} hold no value.");
+            }
+
+            foreach (var (key, value) in part.Values)
+            {
+                overrides = Add(overrides, new PropertyId(componentKind, part.Kind, key), new PartId(part.Kind, part.Id), part.LayoutRevision, value);
+            }
+        }
+
+        return overrides;
     }
 
     private static SourceOverrides Add(SourceOverrides overrides, PropertyId property, PartId? part, string? layoutRevision, JsonElement json)

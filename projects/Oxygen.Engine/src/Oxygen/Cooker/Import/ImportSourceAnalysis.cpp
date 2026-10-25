@@ -527,6 +527,19 @@ namespace {
           }
         }
       }
+      // The scene cook composes each instanced scene, so each is cooked first.
+      for (const auto& instance : source->instances) {
+        context.Reference(instance.scene, Kind::kScene, instance.object_path);
+        for (const auto& entry : instance.changes) {
+          if (const auto* asset
+            = std::get_if<internal::SceneSource::AssetReference>(
+              &entry.change.value)) {
+            context.Reference(asset->virtual_path,
+              AssetKind(entry.change.property->asset_type),
+              entry.change.object_path);
+          }
+        }
+      }
       for (const auto& reference : source->references) {
         context.Reference(reference.virtual_path, AssetKind(reference.type),
           reference.object_path);

@@ -47,7 +47,7 @@ public sealed class SceneIdentityJsonTests
         _ = data.Id.Should().Be(Scene);
         _ = data.RootNodes[0].Id.Should().Be(Camera);
         _ = data.RootNodes[0].Components[0].Id.Should().Be(Transform);
-        _ = data.StartingCamera.Should().Be(Camera);
+        _ = data.StartingCamera.Should().Be(NodeReference.To(Camera));
     }
 
     private static SceneData CreateScene() => new()
@@ -68,6 +68,6 @@ public sealed class SceneIdentityJsonTests
                 ],
             },
         ],
-        StartingCamera = Camera,
+        StartingCamera = NodeReference.To(Camera),
     };
 }
