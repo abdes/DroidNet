@@ -137,7 +137,6 @@ public partial class App
 
         var activationArgs = AppInstance.GetCurrent()
             .GetActivatedEventArgs();
-#pragma warning disable IDE0072 // Add missing cases
 
         var activationData = activationArgs.Kind switch
         {
@@ -153,7 +152,6 @@ public partial class App
             // Any other activation kind is not supported for now
             _ => throw new NotSupportedException($"Activation kind {activationArgs.Kind} is not supported"),
         };
-#pragma warning restore IDE0072 // Add missing cases
 
         // Activate the application.
         this.activationService.ActivateAsync(activationData).GetAwaiter().GetResult();
@@ -173,9 +171,9 @@ public partial class App
             // If we reached here, log a diagnostic dump similar to the previous
             // implementation for E_INVALIDARG but for a broader set of cases.
             parts.Add("--------- FIRST-CHANCE (DIAGNOSTIC) ---------\n");
-            parts.Add(string.Create(CultureInfo.InvariantCulture, $"Timestamp: {DateTimeOffset.UtcNow:O} (UTC)\n"));
+            parts.Add($"Timestamp: {DateTimeOffset.UtcNow:O} (UTC)\n");
             parts.Add(string.Create(CultureInfo.InvariantCulture, $"ThreadId: {Environment.CurrentManagedThreadId}\n"));
-            parts.Add(string.Create(CultureInfo.InvariantCulture, $"Type: {ex.GetType().FullName}\n"));
+            parts.Add($"Type: {ex.GetType().FullName}\n");
             parts.Add(string.Create(CultureInfo.InvariantCulture, $"HRESULT: {ex.HResult}\n"));
             parts.Add("--- MESSAGE ---\n");
             parts.Add(ex.Message + "\n");
@@ -197,7 +195,7 @@ public partial class App
         catch (Exception logEx)
         {
             // never let logging of first-chance exceptions crash the process
-            Debug.WriteLine(string.Create(CultureInfo.InvariantCulture, $"Failed to log first-chance exception: {logEx}\n"));
+            Debug.WriteLine($"Failed to log first-chance exception: {logEx}\n");
         }
 #pragma warning restore CA1031 // Do not catch general exception types
 
@@ -210,7 +208,7 @@ public partial class App
             }
 
             parts.Add(string.Create(CultureInfo.InvariantCulture, $"--- INNER ({index}) ---\n"));
-            parts.Add(string.Create(CultureInfo.InvariantCulture, $"Type: {inner.GetType().FullName}\n"));
+            parts.Add($"Type: {inner.GetType().FullName}\n");
             parts.Add(inner.Message + "\n");
             if (!string.IsNullOrWhiteSpace(inner.StackTrace))
             {
