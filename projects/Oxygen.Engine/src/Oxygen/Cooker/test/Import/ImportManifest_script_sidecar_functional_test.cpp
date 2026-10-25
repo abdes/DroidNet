@@ -74,6 +74,57 @@ NOLINT_TEST(ImportManifestScriptSidecarTest, AcceptsInlineBindingsForSidecarJob)
   EXPECT_FALSE(request->options.scripting.inline_bindings_json.empty());
 }
 
+//! A script sidecar job's instance bindings reach the sidecar beside its
+//! bindings; a job with a source cannot hold them.
+NOLINT_TEST(ImportManifestScriptSidecarTest, ForwardsInlineInstanceBindings)
+{
+  const ScopedTempDir temp;
+  const auto cooked_root_json
+    = JsonPath(temp.Path() / "oxygen_manifest_sidecar_root");
+  const auto job = [&cooked_root_json](const std::string& binding) {
+    return R"({
+      "version": 1,
+      "jobs": [
+        {
+          "type": "script-sidecar",
+          "output": ")"
+      + cooked_root_json + R"(",
+          "target_scene_virtual_path": "/Scenes/TestScene.oscene",
+          )"
+      + binding + R"(,
+          "instance_bindings": [
+            {
+              "node_index": 0,
+              "node_path": ["00000000-0000-4000-8000-00000000000b"],
+              "slot_id": "00000000-0000-4000-8000-00000000000a",
+              "params": [{ "key": "speed", "type": "float", "value": 2.5 }]
+            }
+          ]
+        }
+      ]
+    })";
+  };
+  const auto inline_path = temp.Path() / "inline" / "import_manifest.json";
+  const auto source_path = temp.Path() / "source" / "import_manifest.json";
+  WriteText(inline_path, job(R"("bindings": [])"));
+  WriteText(source_path, job(R"("source": "Scenes/TestScene.sidecar.json")"));
+
+  std::ostringstream errors;
+  const auto manifest = ImportManifest::Load(inline_path, std::nullopt, errors);
+  std::ostringstream refused_errors;
+  const auto refused
+    = ImportManifest::Load(source_path, std::nullopt, refused_errors);
+
+  ASSERT_HAS_VALUE(manifest) << errors.str();
+  ASSERT_EQ(manifest->jobs.size(), 1U);
+  const auto& sidecar
+    = manifest->jobs.at(0).scripting_sidecar.inline_bindings_json;
+  EXPECT_NE(sidecar.find("instance_bindings"), std::string::npos);
+  EXPECT_NE(
+    sidecar.find("00000000-0000-4000-8000-00000000000b"), std::string::npos);
+  EXPECT_FALSE(refused.has_value());
+}
+
 //! Published roots resolve scripts and asset parameters cooked earlier.
 NOLINT_TEST(ImportManifestScriptSidecarTest,
   SidecarCookedContextRootsResolveFromManifestDirectory)

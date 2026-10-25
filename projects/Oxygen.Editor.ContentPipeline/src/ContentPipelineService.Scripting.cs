@@ -32,17 +32,18 @@ public sealed partial class ContentPipelineService
         }
 
         // The cooker reports against the scene job's descriptor; a manifest cooks each scene from its own descriptor.
-        var scripted = descriptors.Where(static descriptor => descriptor.ScriptBindings.Count > 0).ToArray();
+        var scripted = descriptors.Where(static descriptor => descriptor.HasScriptSidecar).ToArray();
         var descriptor = scripted.FirstOrDefault(candidate => issue.AffectedPath is { } affected && FileSystemPath.From(candidate.DescriptorPath) == FileSystemPath.From(affected))
             ?? (scripted.Length == 1 ? scripted[0] : null);
+        var sites = match.Groups["instance"].Success ? descriptor?.ScriptInstanceBindingSites : descriptor?.ScriptBindingSites;
         var binding = int.Parse(match.Groups["binding"].Value, CultureInfo.InvariantCulture);
-        if (descriptor is null || binding >= descriptor.ScriptBindingSites.Count
+        if (descriptor is null || sites is null || binding >= sites.Count
             || scope.Inputs.FirstOrDefault(input => input.AssetUri == descriptor.SceneAssetUri) is not { } scene)
         {
             return issue;
         }
 
-        var site = descriptor.ScriptBindingSites[binding];
+        var site = sites[binding];
         var parameter = match.Groups["param"].Success && int.Parse(match.Groups["param"].Value, CultureInfo.InvariantCulture) is var index
             && index < site.ParameterNames.Count ? site.ParameterNames[index] : null;
         var subject = parameter is null ? ScriptSlotDiagnostics.Describe(site) : $"parameter '{parameter}' of {ScriptSlotDiagnostics.Describe(site)}";
@@ -59,6 +60,6 @@ public sealed partial class ContentPipelineService
             technicalMessage: location);
     }
 
-    [GeneratedRegex(@"^bindings\[(?<binding>\d+)\](?:\.params\[(?<param>\d+)\])?", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
+    [GeneratedRegex(@"^(?<instance>instance_)?bindings\[(?<binding>\d+)\](?:\.params\[(?<param>\d+)\])?", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
     private static partial Regex BindingLocation();
 }

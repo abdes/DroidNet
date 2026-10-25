@@ -140,6 +140,60 @@ internal sealed partial class ScriptCookingTests : IDisposable
     }
 
     [TestMethod]
+    public async Task GenerateAsyncProjectsTheParameterChangesOfAnInstance()
+    {
+        var scene = CreateScene(out var target, out var player);
+        var guard = NodeId.New();
+        var slot = Guid.NewGuid();
+        var changes = InstancedNodeChanges.None
+            .WithParameter(slot, "speed", ScriptValue.FromFloat(4f))
+            .WithParameter(slot, "follow", ScriptValue.FromNode(player.Id));
+        _ = target.AddComponent(new SceneInstanceComponent
+        {
+            Name = "Scene Instance",
+            Source = AssetPath.Parse("/Content/Prefabs/Watchtower.oscene"),
+            Changes = InstanceChanges.None.With(NodePath.Of(guard), changes),
+        });
+
+        var result = await this.GenerateAsync(scene).ConfigureAwait(false);
+
+        _ = result.ScriptBindings.Should().BeEmpty();
+        _ = result.HasScriptSidecar.Should().BeTrue();
+        var row = result.ScriptInstanceBindings.Should().ContainSingle().Subject;
+        _ = row.NodeIndex.Should().Be(0u);
+        _ = row.NodePath.Should().Equal(guard.ToString());
+        _ = row.SlotId.Should().Be(slot.ToString("D"));
+        _ = row.Params.Select(static param => (param.Key, param.Type)).Should().Equal(("follow", "node"), ("speed", "float"));
+        _ = row.Params[0].Value.Should().Be(new ScriptSidecarNodeRef(1u));
+    }
+
+    [TestMethod]
+    public void BuildSceneManifestsAddsASidecarForInstanceParameterChangesAlone()
+    {
+        var row = new ScriptSidecarInstanceBinding(0, [Guid.NewGuid().ToString("D")], Guid.NewGuid().ToString("D"), [new ScriptSidecarParam("speed", "float", 4f)]);
+        var descriptor = new SceneDescriptorGenerationResult(
+            AssetPath.Parse("/Content/Scenes/Main.oscene"),
+            Path.Combine(this.root, ".pipeline", "Scenes", "Main.oscene.json"),
+            "/Content/Scenes/Main.oscene",
+            Dependencies: [],
+            Diagnostics: [])
+        {
+            ScriptInstanceBindings = [row],
+        };
+
+        var manifest = new ContentImportManifestBuilder().BuildSceneManifests(this.CreateScope(), [descriptor]);
+
+        var sidecar = manifest.Jobs.Should().ContainSingle(static job => job.Type == "script-sidecar").Subject;
+        _ = sidecar.InstanceBindings.Should().Equal(row);
+        using var json = JsonDocument.Parse(JsonSerializer.Serialize(sidecar));
+        _ = json.RootElement.GetProperty("bindings").GetArrayLength().Should().Be(0, "the cooker takes the instance rows beside inline bindings");
+        var written = json.RootElement.GetProperty("instance_bindings")[0];
+        _ = written.GetProperty("node_path")[0].GetString().Should().Be(row.NodePath[0]);
+        _ = written.GetProperty("slot_id").GetString().Should().Be(row.SlotId);
+        _ = new ContentImportManifestValidator().Validate(Guid.NewGuid(), manifest).Should().BeEmpty();
+    }
+
+    [TestMethod]
     public async Task GenerateAsyncFailsForAMissingNodeOrScript()
     {
         var scene = CreateScene(out _, out var player);
@@ -225,6 +279,43 @@ internal sealed partial class ScriptCookingTests : IDisposable
         _ = mapped.Message.Should().StartWith("Parameter 'speed' of slot 1 of 'Player': ");
         _ = mapped.AffectedEntity!.NodeId.Should().Be(site.NodeId);
         _ = mapped.SuggestedAction!.Payload["PropertyPath"].Should().Be(new ScriptFieldAddress(site.SlotId, "speed").ToString());
+    }
+
+    [TestMethod]
+    public void InstanceSidecarDiagnosticsPointAtTheInstanceRootAndTheInstancedSlot()
+    {
+        var path = NodePath.Of(NodeId.New());
+        var site = new ScriptBindingSite(NodeId.New(), "Tower", Guid.NewGuid(), SlotNumber: 0, ["speed"]) { Path = path, InstancedNames = "Guard" };
+        var descriptor = new SceneDescriptorGenerationResult(
+            AssetPath.Parse("/Content/Scenes/Main.oscene"),
+            Path.Combine(this.root, ".pipeline", "Scenes", "Main.oscene.json"),
+            "/Content/Scenes/Main.oscene",
+            Dependencies: [],
+            Diagnostics: [])
+        {
+            SceneId = SceneId.New(),
+            SceneName = "Main",
+            ScriptInstanceBindings = [new ScriptSidecarInstanceBinding(0, [path.ToString()], site.SlotId.ToString("D"), [])],
+            ScriptInstanceBindingSites = [site],
+        };
+        var issue = new DiagnosticRecord
+        {
+            OperationId = Guid.NewGuid(),
+            Domain = FailureDomain.AssetImport,
+            Severity = DiagnosticSeverity.Error,
+            Code = "script.sidecar.param_undeclared",
+            Message = "The slot's script declares no parameter 'speed'",
+            TechnicalMessage = "instance_bindings[0].params[0].key",
+            AffectedPath = descriptor.DescriptorPath,
+        };
+
+        var mapped = ContentPipelineService.MapScriptSidecarDiagnostic(this.CreateScope(), [descriptor], issue);
+
+        _ = mapped.Message.Should().StartWith("Parameter 'speed' of a script slot of 'Guard' in the instance under 'Tower': ");
+        _ = mapped.AffectedEntity!.NodeId.Should().Be(site.NodeId);
+        _ = mapped.AffectedEntity.ComponentName.Should().Be("Scene Instance");
+        _ = mapped.SuggestedAction!.Payload["NodeReference"].Should().Be(new NodeReference(site.NodeId, path).ToString());
+        _ = mapped.SuggestedAction.Payload["PropertyPath"].Should().Be(new ScriptFieldAddress(site.SlotId, "speed").ToString());
     }
 
     private static Scene CreateScene(out SceneNode target, out SceneNode player)

@@ -368,6 +368,12 @@
                 "items": {
                   "type": "object"
                 }
+              },
+              "instance_bindings": {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                }
               }
             }
           }
@@ -1161,6 +1167,13 @@
               "type": "object"
             }
           ]
+        },
+        "instance_bindings": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          },
+          "description": "A script sidecar's script parameter changes of the scene's instances; only with inline bindings."
         },
         "cooked_context_roots": {
           "$ref": "#/definitions/cooked_context_roots"

@@ -1743,6 +1743,15 @@ auto ImportManifest::Parse(const std::string_view text,
       return std::nullopt;
     }
 
+    const auto has_instance_bindings = job.contains("instance_bindings");
+    if (has_instance_bindings
+      && (!is_script_sidecar_job || !has_bindings
+        || !job.at("instance_bindings").is_array())) {
+      error_stream << "ERROR: job.instance_bindings is only valid as an array "
+                      "of a 'script-sidecar' job with inline bindings\n";
+      return std::nullopt;
+    }
+
     if (has_bindings) {
       if (is_script_sidecar_job && !job.at("bindings").is_array()) {
         error_stream << "ERROR: script-sidecar job.bindings must be an array\n";
@@ -1795,6 +1804,10 @@ auto ImportManifest::Parse(const std::string_view text,
     if (has_bindings && is_script_sidecar_job) {
       auto sidecar_doc = json::object();
       sidecar_doc.update({ { "bindings", job.at("bindings") } });
+      if (has_instance_bindings) {
+        sidecar_doc.update(
+          { { "instance_bindings", job.at("instance_bindings") } });
+      }
       manifest_job.scripting_sidecar.inline_bindings_json = sidecar_doc.dump();
       manifest_job.physics_sidecar.inline_bindings_json.clear();
     } else if (has_bindings && is_physics_sidecar_job) {

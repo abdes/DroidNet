@@ -1416,7 +1416,9 @@ of its asset's surfaces rather than the asset.
     (`asset:///Content/Vehicles/Car.glb`) or an authored scene
     (`asset:///Content/Prefabs/Watchtower.oscene`);
   - `Changes`, an immutable `InstanceChanges`: per `NodePath`, an
-    `InstancedNodeChanges` with the node's `SourceOverrides`, its last known
+    `InstancedNodeChanges` with the node's `SourceOverrides`, its script
+    parameter changes (`Parameters`: per slot ID, per parameter name, a
+    `ScriptValue`; they cook as the sidecar's `instance_bindings`), its last known
     name path (`Names`), in the anchor notation of section 7.2 and refreshed
     from the structure whenever the change resolves, which a kept change shows
     and swap matches (section 6.5), and `CarriedFrom`, the source a swap

@@ -35,4 +35,11 @@ public record InstancedNodeChangesData
     /// Gets or initializes the changes of each changed component, by component kind.
     /// </summary>
     public required IDictionary<string, SourceOverridesData> Components { get; init; }
+
+    /// <summary>
+    /// Gets the script parameter values the scene changes, by the identity of the instanced node's script slot and the
+    /// parameter's name; <see langword="null"/> when it changes none.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IDictionary<Guid, IDictionary<string, ScriptValueData>>? Parameters { get; init; }
 }

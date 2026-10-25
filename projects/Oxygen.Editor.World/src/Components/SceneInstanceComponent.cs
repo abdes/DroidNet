@@ -108,8 +108,21 @@ public partial class SceneInstanceComponent : GameComponent
                     : entry.With(componentChanges);
             }
 
+            foreach (var (slot, values) in node.Parameters ?? new Dictionary<Guid, IDictionary<string, ScriptValueData>>())
+            {
+                if (slot == Guid.Empty || values.Count == 0)
+                {
+                    throw new JsonException($"The parameter changes of node {path} name a script slot and hold a value.");
+                }
+
+                foreach (var (name, value) in values)
+                {
+                    entry = entry.WithParameter(slot, name, ScriptValueJson.Read(name, value));
+                }
+            }
+
             changes = entry.IsEmpty
-                ? throw new JsonException($"The changes of node {path} change no component.")
+                ? throw new JsonException($"The changes of node {path} change no component and no script parameter.")
                 : changes.With(path, entry);
         }
 
@@ -125,5 +138,10 @@ public partial class SceneInstanceComponent : GameComponent
             Components = changes.Components
                 .OrderBy(static entry => entry.Key, StringComparer.Ordinal)
                 .ToDictionary(static entry => entry.Key, static entry => SourceOverridesJson.Write(entry.Value)!, StringComparer.Ordinal),
+            Parameters = changes.Parameters.IsEmpty
+                ? null
+                : changes.Parameters.ToDictionary(
+                    static slot => slot.Key,
+                    static slot => (IDictionary<string, ScriptValueData>)slot.Value.ToDictionary(static value => value.Key, static value => ScriptValueJson.Write(value.Value), StringComparer.Ordinal)),
         };
 }

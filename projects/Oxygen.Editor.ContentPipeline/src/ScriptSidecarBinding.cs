@@ -26,6 +26,20 @@ public sealed record ScriptSidecarBinding(
     [property: JsonPropertyName("params")] IReadOnlyList<ScriptSidecarParam> Params);
 
 /// <summary>
+/// The script parameter changes a scene makes of one script slot of a node an instance brings in, as the cooker's script
+/// sidecar job takes them.
+/// </summary>
+/// <param name="NodeIndex">The instance root's index in the cooked scene.</param>
+/// <param name="NodePath">The node below the instance root, one node ID per nesting level, shallowest first.</param>
+/// <param name="SlotId">The identity of the instanced node's slot.</param>
+/// <param name="Params">The parameter values the scene changes.</param>
+public sealed record ScriptSidecarInstanceBinding(
+    [property: JsonPropertyName("node_index")] uint NodeIndex,
+    [property: JsonPropertyName("node_path")] IReadOnlyList<string> NodePath,
+    [property: JsonPropertyName("slot_id")] string SlotId,
+    [property: JsonPropertyName("params")] IReadOnlyList<ScriptSidecarParam> Params);
+
+/// <summary>
 /// One parameter value of a script slot.
 /// </summary>
 /// <param name="Key">The parameter name.</param>

@@ -90,7 +90,7 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
                 ContentCookInputRole.GeneratedDescriptor);
             var sceneJob = scope.NativeJobs.GetValueOrDefault(descriptor.SceneAssetUri) ?? this.BuildJob(sceneDescriptorInput, dependencyIds);
             jobs.Add(sceneJob with { DependsOn = dependencyIds });
-            if (descriptor.ScriptBindings.Count > 0)
+            if (descriptor.HasScriptSidecar)
             {
                 jobs.Add(BuildScriptSidecarJob(sceneJob, descriptor, jobIdsBySource));
             }
@@ -189,6 +189,7 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
         {
             TargetSceneVirtualPath = descriptor.DescriptorVirtualPath,
             Bindings = descriptor.ScriptBindings,
+            InstanceBindings = descriptor.ScriptInstanceBindings.Count == 0 ? null : descriptor.ScriptInstanceBindings,
             OwnerSource = sceneJob.Source,
         };
 

@@ -31,6 +31,11 @@ public static class SceneReferenceFields
         .. OverrideFields(),
         new(Components + nameof(SceneInstanceComponentData.Source)),
         .. InstanceChangeFields(),
+        new(Components + nameof(SceneInstanceComponentData.Changes) + "/*/" + nameof(InstancedNodeChangesData.Parameters) + "/*/*/" + nameof(ScriptValueData.Value))
+        {
+            WhenProperty = nameof(ScriptValueData.Type),
+            WhenValue = ScriptValueData.AssetType,
+        },
         new(Components + ScriptSlots + nameof(ScriptSlotData.Script)),
         new(Components + ScriptSlots + nameof(ScriptSlotData.Overrides) + "/*/" + nameof(ScriptValueData.Value))
         {

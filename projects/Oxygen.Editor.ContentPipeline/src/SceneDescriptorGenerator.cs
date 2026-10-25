@@ -134,7 +134,7 @@ public sealed partial class SceneDescriptorGenerator : ISceneDescriptorGenerator
             AddNode(root, parentIndex: null);
         }
 
-        var (scriptBindings, scriptSites, scriptReferences) = CreateScriptBindings(scene, scope, sceneInput, nodeIndices, operationId, diagnostics);
+        var scripts = CreateScriptBindings(scene, scope, sceneInput, nodeIndices, operationId, diagnostics);
         var startingCamera = CreateStartingCamera(scene, nodeIndices, site);
         var startingInputContexts = CreateStartingInputContexts(scene, scope, site);
         if (diagnostics.Exists(static issue => issue.Severity >= DiagnosticSeverity.Error))
@@ -219,9 +219,11 @@ public sealed partial class SceneDescriptorGenerator : ISceneDescriptorGenerator
         {
             SceneId = scene.Id,
             SceneName = scene.Name,
-            ScriptBindings = scriptBindings,
-            ScriptBindingSites = scriptSites,
-            ScriptReferences = scriptReferences,
+            ScriptBindings = scripts.Bindings,
+            ScriptInstanceBindings = scripts.InstanceBindings,
+            ScriptInstanceBindingSites = scripts.InstanceSites,
+            ScriptBindingSites = scripts.Sites,
+            ScriptReferences = scripts.References,
         };
 
         void AddNode(SceneNode node, int? parentIndex)
@@ -394,8 +396,9 @@ public sealed partial class SceneDescriptorGenerator : ISceneDescriptorGenerator
                 return null;
             }
 
+            // Script parameter changes cook in the script sidecar.
             var changes = new List<NativeInstanceOverride>();
-            foreach (var (path, nodeChanges) in instance.Changes.Ordered)
+            foreach (var (path, nodeChanges) in instance.Changes.Ordered.Where(static entry => !entry.Value.Components.IsEmpty))
             {
                 var components = new SortedDictionary<string, NativeOverrides>(StringComparer.Ordinal);
                 foreach (var (kind, overrides) in nodeChanges.Components)

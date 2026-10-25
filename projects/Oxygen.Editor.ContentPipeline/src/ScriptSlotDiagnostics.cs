@@ -4,6 +4,7 @@
 
 using System.Globalization;
 using Oxygen.Editor.Scripting;
+using Oxygen.Editor.World;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
@@ -11,7 +12,8 @@ using Oxygen.Managed.Core.Diagnostics;
 namespace Oxygen.Editor.ContentPipeline;
 
 /// <summary>
-/// Cook diagnostics about a script slot or one of its parameter values, with Go To Property to the slot.
+/// Cook diagnostics about a script slot or one of its parameter values, with Go To Property to the slot. A slot of an
+/// instanced node is reported on its instance root, the node the scene holds, with the instanced node's reference.
 /// </summary>
 public static class ScriptSlotDiagnostics
 {
@@ -72,7 +74,7 @@ public static class ScriptSlotDiagnostics
                 SceneName = sceneName,
                 NodeId = site.NodeId,
                 NodeName = site.NodeName,
-                ComponentName = "Scripting",
+                ComponentName = site.Path.IsEmpty ? "Scripting" : "Scene Instance",
                 AssetVirtualPath = scene.AssetUri.VirtualPath,
             },
             SuggestedAction = new PrimaryAction
@@ -84,18 +86,24 @@ public static class ScriptSlotDiagnostics
                 {
                     ["AssetUri"] = scene.AssetUri.ToUriString(),
                     ["NodeId"] = site.NodeId.ToString(),
+                    ["NodeReference"] = new NodeReference(site.NodeId, site.Path).ToString(),
                     ["PropertyPath"] = new ScriptFieldAddress(site.SlotId, parameter).ToString(),
                 },
             },
         };
     }
 
-    /// <summary>Names a slot for messages, such as <c>slot 2 of 'Player'</c>.</summary>
+    /// <summary>
+    /// Names a slot for messages, such as <c>slot 2 of 'Player'</c>, or <c>a script slot of 'Body/Guard' in the instance
+    /// under 'Tower'</c> for a slot of an instanced node.
+    /// </summary>
     /// <param name="site">The node and slot.</param>
     /// <returns>The description.</returns>
     public static string Describe(ScriptBindingSite site)
     {
         ArgumentNullException.ThrowIfNull(site);
-        return string.Create(CultureInfo.CurrentCulture, $"slot {site.SlotNumber} of '{site.NodeName}'");
+        return site.Path.IsEmpty
+            ? string.Create(CultureInfo.CurrentCulture, $"slot {site.SlotNumber} of '{site.NodeName}'")
+            : string.Create(CultureInfo.CurrentCulture, $"a script slot of '{site.InstancedNames ?? site.Path.ToString()}' in the instance under '{site.NodeName}'");
     }
 }

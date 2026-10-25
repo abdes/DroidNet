@@ -30,6 +30,20 @@ internal static class CopiedNodeReferences
                 scripting.Slots = slots;
             }
         }
+
+        foreach (var instance in root.DescendantsAndSelf().SelectMany(static node => node.Components.OfType<SceneInstanceComponent>()))
+        {
+            var changes = instance.Changes;
+            foreach (var (path, node) in instance.Changes.Nodes)
+            {
+                changes = changes.With(path, node.MapNodes(copies));
+            }
+
+            if (!changes.Equals(instance.Changes))
+            {
+                instance.Changes = changes;
+            }
+        }
     }
 
     /// <summary>Re-points the node values of script slots.</summary>

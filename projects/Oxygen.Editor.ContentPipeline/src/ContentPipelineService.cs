@@ -445,7 +445,7 @@ public sealed partial class ContentPipelineService(
             manifest,
             descriptors.SelectMany(static descriptor => descriptor.Diagnostics).ToArray(),
             cancellationToken).ConfigureAwait(false);
-        return descriptors.Any(static descriptor => descriptor.ScriptBindings.Count > 0)
+        return descriptors.Any(static descriptor => descriptor.HasScriptSidecar)
             ? result with { Diagnostics = [.. result.Diagnostics.Select(issue => MapScriptSidecarDiagnostic(scope, descriptors, issue))] }
             : result;
     }

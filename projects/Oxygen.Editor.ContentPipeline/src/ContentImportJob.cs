@@ -86,6 +86,11 @@ public sealed record ContentImportJob(
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<ScriptSidecarBinding>? Bindings { get; init; }
 
+    /// <summary>Gets a script sidecar's script parameter changes of the scene's instances.</summary>
+    [JsonPropertyName("instance_bindings")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<ScriptSidecarInstanceBinding>? InstanceBindings { get; init; }
+
     /// <summary>Gets the source of the job that owns this one's output, for a job without its own source.</summary>
     [JsonIgnore]
     public string? OwnerSource { get; init; }

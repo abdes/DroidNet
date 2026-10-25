@@ -27,6 +27,7 @@ public sealed class SceneInstanceComponentTests
     private static readonly NodeId Body = NodeId.FromValue(Guid.Parse("91aa0000-0000-4000-8000-000000000001"));
     private static readonly NodeId Door = NodeId.FromValue(Guid.Parse("5d0c0000-0000-4000-8000-000000000002"));
     private static readonly Guid Paint = Guid.Parse("7e570000-0000-4000-8000-000000000003");
+    private static readonly Guid Guard = Guid.Parse("9a4d0000-0000-4000-8000-000000000004");
 
     /// <summary>A scene with an instance and its changes saves and loads with its source and every change.</summary>
     /// <returns>The asynchronous test operation.</returns>
@@ -116,6 +117,64 @@ public sealed class SceneInstanceComponentTests
 
         _ = mapped.Assets.Should().Equal(blue);
         _ = instance.Changes.Assets.Should().Equal(Red);
+    }
+
+    /// <summary>A script parameter change of an instanced node saves and loads by slot and name, and its asset is a
+    /// reference relocation reaches.</summary>
+    /// <returns>The asynchronous test operation.</returns>
+    [TestMethod]
+    public async Task ParameterChanges_RoundTripAndReachRelocation()
+    {
+        var scene = CreateSceneWithCar(out var instance);
+        var horn = AssetPath.Parse("/Content/Audio/Horn.oaudio");
+        var body = instance.Changes.Of(NodePath.Of(Body))
+            .WithParameter(Guard, "speed", ScriptValue.FromFloat(4f))
+            .WithParameter(Guard, "horn", ScriptValue.FromAsset(horn))
+            .WithParameter(Guard, "target", ScriptValue.FromNode(new NodeReference(Body, NodePath.Of(Door))));
+        instance.Changes = instance.Changes.With(NodePath.Of(Body), body);
+
+        var restored = await SceneTestSupport.RoundTripAsync(scene).ConfigureAwait(false);
+        var json = await SaveAsync(scene).ConfigureAwait(false);
+
+        var loaded = restored.RootNodes.Single().Components.OfType<SceneInstanceComponent>().Single();
+        _ = loaded.Changes.Should().Be(instance.Changes);
+        _ = loaded.Changes.Of(NodePath.Of(Body)).Parameters[Guard].Keys.Should().Equal("horn", "speed", "target");
+        _ = SceneReferenceFields.All.SelectMany(field => field.Select(json)).Select(static value => value.GetValue<string>())
+            .Should().Contain(horn.ToUriString());
+        _ = instance.Changes.Assets.Should().Contain(horn);
+    }
+
+    /// <summary>Removing a slot's last parameter change removes the slot, and a node left with no change is empty.</summary>
+    [TestMethod]
+    public void ParameterChanges_RemoveEmptySlots()
+    {
+        var changes = InstancedNodeChanges.None.WithParameter(Guard, "speed", ScriptValue.FromFloat(4f));
+
+        var cleared = changes.WithoutParameter(Guard, "speed");
+
+        _ = changes.IsEmpty.Should().BeFalse();
+        _ = cleared.Parameters.Should().BeEmpty();
+        _ = cleared.IsEmpty.Should().BeTrue();
+        _ = cleared.Should().Be(InstancedNodeChanges.None);
+    }
+
+    /// <summary>Relocation and copies rewrite the asset and node values of parameter changes.</summary>
+    [TestMethod]
+    public void ParameterChanges_MapAssetsAndNodes()
+    {
+        var horn = AssetPath.Parse("/Content/Audio/Horn.oaudio");
+        var bell = AssetPath.Parse("/Content/Audio/Bell.oaudio");
+        var original = NodeId.New();
+        var copy = NodeId.New();
+        var changes = InstancedNodeChanges.None
+            .WithParameter(Guard, "horn", ScriptValue.FromAsset(horn))
+            .WithParameter(Guard, "target", ScriptValue.FromNode(original));
+
+        var mapped = changes.MapAssets(asset => asset.Equals(horn) ? bell : asset).MapNodes(new Dictionary<NodeId, NodeId> { [original] = copy });
+
+        _ = mapped.Parameters[Guard]["horn"].Asset.Should().Be(bell);
+        _ = mapped.Parameters[Guard]["target"].Node.Should().Be(NodeReference.To(copy));
+        _ = changes.MapNodes(new Dictionary<NodeId, NodeId>()).Should().BeSameAs(changes);
     }
 
     private static Scene CreateSceneWithCar(out SceneInstanceComponent instance)
