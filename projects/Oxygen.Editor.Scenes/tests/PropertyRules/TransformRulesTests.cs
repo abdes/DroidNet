@@ -37,7 +37,7 @@ public sealed class TransformRulesTests
     [
         PropertyCase.Of("PositionX_Large", SampleScene.A1, SceneSchema.Transform.PositionX, 1e6f),
         PropertyCase.Of("PositionY_Negative", SampleScene.A1, SceneSchema.Transform.PositionY, -1e6f),
-        PropertyCase.Of("RotationZ_FullTurn", SampleScene.A1, SceneSchema.Transform.RotationZ, 360f),
+        PropertyCase.Of("Rotation_FullTurn", SampleScene.A1, SceneSchema.Transform.Rotation, new Vector3(0, 0, 360)),
         PropertyCase.Of("ScaleX_Negative", SampleScene.A1, SceneSchema.Transform.ScaleX, -2f),
         PropertyCase.Of("ScaleY_Tiny", SampleScene.A1, SceneSchema.Transform.ScaleY, 1e-4f),
     ];
@@ -46,7 +46,7 @@ public sealed class TransformRulesTests
     [
         PropertyCase.Of("PositionX_NaN", SampleScene.A1, SceneSchema.Transform.PositionX, float.NaN),
         PropertyCase.Of("PositionZ_Infinity", SampleScene.A1, SceneSchema.Transform.PositionZ, float.PositiveInfinity),
-        PropertyCase.Of("RotationY_NaN", SampleScene.A1, SceneSchema.Transform.RotationY, float.NaN),
+        PropertyCase.Of("Rotation_NaN", SampleScene.A1, SceneSchema.Transform.Rotation, new Vector3(0, float.NaN, 30)),
         PropertyCase.Of("ScaleX_Zero", SampleScene.A1, SceneSchema.Transform.ScaleX, 0f),
         PropertyCase.Of("ScaleZ_Infinity", SampleScene.A1, SceneSchema.Transform.ScaleZ, float.PositiveInfinity),
     ];
@@ -60,12 +60,11 @@ public sealed class TransformRulesTests
 
         var result = await fixture.Authoring.ExecuteAsync(row.Edit()).ConfigureAwait(false);
 
-        // A rotation edit also reports the axes it couples to, so the edited property is contained, not alone.
         SceneAssert.Applied(result);
         var raised = fixture.Changes.Only().Should().ContainSingle().Which.Should().BeOfType<SceneChange.PropertiesChanged>().Which;
         _ = raised.Node.Should().Be(row.Node);
         _ = raised.Phase.Should().Be(EditPhase.Commit);
-        _ = raised.Properties.Should().Contain(row.Property);
+        _ = raised.Properties.Should().BeEquivalentTo([row.Property]);
     }
 
     [TestMethod]
@@ -110,7 +109,7 @@ public sealed class TransformRulesTests
     [DataRow(0, DisplayName = "X")]
     [DataRow(1, DisplayName = "Y")]
     [DataRow(2, DisplayName = "Z")]
-    public async Task RotationAxis_Edit_RaisesAllThreeAxes(int axis)
+    public async Task RotationAxis_Edit_RaisesTheRotation(int axis)
     {
         using var fixture = await AuthoringFixture.CreateAsync(SceneWithA1(GimbalOrientation)).ConfigureAwait(false);
 
@@ -120,8 +119,9 @@ public sealed class TransformRulesTests
         var raised = fixture.Changes.Only().Should().ContainSingle().Which.Should().BeOfType<SceneChange.PropertiesChanged>().Which;
         _ = raised.Node.Should().Be(SampleScene.A1);
 
-        // The axes are coupled (3.10): at gimbal lock an edit of one moves the reading of another.
-        _ = raised.Properties.Should().BeEquivalentTo([SceneSchema.Transform.RotationX.Id, SceneSchema.Transform.RotationY.Id, SceneSchema.Transform.RotationZ.Id]);
+        // The rotation is one property: at gimbal lock an edit of one angle moves the reading of another, and the
+        // change names the whole rotation.
+        _ = raised.Properties.Should().BeEquivalentTo([SceneSchema.Transform.Rotation.Id]);
     }
 
     private static SceneFileData SceneWithA1(Vector3 eulerDegrees)
@@ -138,15 +138,12 @@ public sealed class TransformRulesTests
     private static Quaternion OrientationOfA1(AuthoringFixture fixture)
         => fixture.Node(SampleScene.A1).Transform.LocalRotation;
 
+    // An edit of one angle of A1's gimbal-lock rotation; the edit writes the whole rotation.
     private static SetProperties SetAxis(int axis, float degrees)
     {
-        var property = axis switch
-        {
-            0 => SceneSchema.Transform.RotationX,
-            1 => SceneSchema.Transform.RotationY,
-            _ => SceneSchema.Transform.RotationZ,
-        };
-        var edit = new PropertyEdit.Builder().Set(property, degrees).Build();
+        var angles = GimbalOrientation;
+        angles[axis] = degrees;
+        var edit = new PropertyEdit.Builder().Set(SceneSchema.Transform.Rotation, angles).Build();
         return new SetProperties(new Dictionary<NodeId, PropertyEdit> { [SampleScene.A1] = edit }, "Rotate A1");
     }
 }

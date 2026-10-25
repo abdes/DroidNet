@@ -428,8 +428,9 @@ namespace {
           scene::MakeLodPolicy(policies[record.value.as_record_index.get()]));
         break;
       }
-      case OverrideId::kInvalid:
-        ABORT_F("A validated scene has no invalid override id");
+      default:
+        // Loading admits overrides of asset-sourced properties only.
+        ABORT_F("A validated scene overrides only its assets' values");
       }
       if (!applied) {
         Issue(asset, record.node_index,

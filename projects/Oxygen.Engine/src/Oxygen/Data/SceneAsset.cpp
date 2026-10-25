@@ -678,7 +678,13 @@ auto SceneAsset::ValidateOverrides() const -> void
     if (property == nullptr) {
       throw std::runtime_error("SceneAsset override names an unknown property");
     }
-    // Every override property belongs to the geometry component today; a
+    // A node of this scene stores only its overrides of its asset's values;
+    // every other value lives in the node's own records.
+    if (!property->asset_sourced) {
+      throw std::runtime_error(
+        "SceneAsset override names a property the node's records hold");
+    }
+    // Every asset-sourced property belongs to the geometry component today; a
     // property of another component needs its own owner check here.
     if (property->component_kind != std::string_view { "geometry" }) {
       throw std::runtime_error(

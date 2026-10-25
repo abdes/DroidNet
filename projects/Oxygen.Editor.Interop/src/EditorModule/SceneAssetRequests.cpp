@@ -74,7 +74,7 @@ namespace {
                                    : data::schema::PartKind::kSurface;
     auto applied = true;
     for (const auto& property : data::schema::kOverrideProperties) {
-      if (property.part_kind != kind) {
+      if (!property.asset_sourced || property.part_kind != kind) {
         continue;
       }
       const auto entry = std::ranges::find(entries, property.id, &OverrideEntry::id);
@@ -106,8 +106,8 @@ namespace {
           renderable.ClearLodPolicyOverride();
         }
         break;
-      case OverrideId::kInvalid:
-        ABORT_F("The schema table holds no invalid override id");
+      default:
+        ABORT_F("Every asset-sourced property has its case above");
       }
     }
     return applied;

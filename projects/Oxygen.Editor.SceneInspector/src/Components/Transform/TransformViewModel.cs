@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Numerics;
 using CommunityToolkit.Mvvm.ComponentModel;
 using DroidNet.Controls;
 using Microsoft.Extensions.Logging;
@@ -27,9 +28,6 @@ public sealed partial class TransformViewModel : ComponentPropertyEditor, IDispo
     private readonly NumberBinding<float> positionXBinding = new(SceneProperties.Transform.PositionXDescriptor);
     private readonly NumberBinding<float> positionYBinding = new(SceneProperties.Transform.PositionYDescriptor);
     private readonly NumberBinding<float> positionZBinding = new(SceneProperties.Transform.PositionZDescriptor);
-    private readonly NumberBinding<float> rotationXBinding = new(SceneProperties.Transform.RotationXDescriptor);
-    private readonly NumberBinding<float> rotationYBinding = new(SceneProperties.Transform.RotationYDescriptor);
-    private readonly NumberBinding<float> rotationZBinding = new(SceneProperties.Transform.RotationZDescriptor);
     private readonly NumberBinding<float> scaleXBinding = new(SceneProperties.Transform.ScaleXDescriptor);
     private readonly NumberBinding<float> scaleYBinding = new(SceneProperties.Transform.ScaleYDescriptor);
     private readonly NumberBinding<float> scaleZBinding = new(SceneProperties.Transform.ScaleZDescriptor);
@@ -135,14 +133,8 @@ public sealed partial class TransformViewModel : ComponentPropertyEditor, IDispo
     /// <summary>Gets per-axis position feedback.</summary>
     public InspectorFieldDiagnostic PositionZDiagnostic => this.diagnostics.Get(this.positionZBinding.Id.Id);
 
-    /// <summary>Gets per-axis rotation feedback.</summary>
-    public InspectorFieldDiagnostic RotationXDiagnostic => this.diagnostics.Get(this.rotationXBinding.Id.Id);
-
-    /// <summary>Gets per-axis rotation feedback.</summary>
-    public InspectorFieldDiagnostic RotationYDiagnostic => this.diagnostics.Get(this.rotationYBinding.Id.Id);
-
-    /// <summary>Gets per-axis rotation feedback.</summary>
-    public InspectorFieldDiagnostic RotationZDiagnostic => this.diagnostics.Get(this.rotationZBinding.Id.Id);
+    /// <summary>Gets the rotation feedback: the rotation is one property, whose message names the axis.</summary>
+    public InspectorFieldDiagnostic RotationDiagnostic => this.diagnostics.Get(SceneProperties.Transform.RotationDescriptor.Id);
 
     /// <summary>Gets per-axis scale feedback.</summary>
     public InspectorFieldDiagnostic ScaleXDiagnostic => this.diagnostics.Get(this.scaleXBinding.Id.Id);
@@ -181,9 +173,7 @@ public sealed partial class TransformViewModel : ComponentPropertyEditor, IDispo
             this.UpdateBindingValue(this.positionXBinding, items, value => this.PositionX = value, mixed => this.PositionXIsIndeterminate = mixed);
             this.UpdateBindingValue(this.positionYBinding, items, value => this.PositionY = value, mixed => this.PositionYIsIndeterminate = mixed);
             this.UpdateBindingValue(this.positionZBinding, items, value => this.PositionZ = value, mixed => this.PositionZIsIndeterminate = mixed);
-            this.UpdateBindingValue(this.rotationXBinding, items, value => this.RotationX = value, mixed => this.RotationXIsIndeterminate = mixed);
-            this.UpdateBindingValue(this.rotationYBinding, items, value => this.RotationY = value, mixed => this.RotationYIsIndeterminate = mixed);
-            this.UpdateBindingValue(this.rotationZBinding, items, value => this.RotationZ = value, mixed => this.RotationZIsIndeterminate = mixed);
+            this.UpdateRotationValues(items);
             this.UpdateBindingValue(this.scaleXBinding, items, value => this.ScaleX = value, mixed => this.ScaleXIsIndeterminate = mixed);
             this.UpdateBindingValue(this.scaleYBinding, items, value => this.ScaleY = value, mixed => this.ScaleYIsIndeterminate = mixed);
             this.UpdateBindingValue(this.scaleZBinding, items, value => this.ScaleZ = value, mixed => this.ScaleZIsIndeterminate = mixed);
@@ -269,11 +259,29 @@ public sealed partial class TransformViewModel : ComponentPropertyEditor, IDispo
         }
     }
 
+    // The rotation is one property; each axis shows the first node's angle and is mixed when the nodes' angles differ.
+    private void UpdateRotationValues(ICollection<SceneNode> items)
+    {
+        var descriptor = SceneProperties.Transform.RotationDescriptor;
+        var targets = items.ToDictionary(static node => node.Id, static node => (object?)node.Transform);
+        this.RefreshSourceFeedback(descriptor, targets);
+        var angles = items.Select(node => descriptor.Read(node.Transform)).ToList();
+        var first = angles.Count > 0 ? angles[0] : Vector3.Zero;
+        this.RotationX = first.X;
+        this.RotationXIsIndeterminate = Mixed(0);
+        this.RotationY = first.Y;
+        this.RotationYIsIndeterminate = Mixed(1);
+        this.RotationZ = first.Z;
+        this.RotationZIsIndeterminate = Mixed(2);
+
+        bool Mixed(int axis) => angles.Exists(value => !value[axis].Equals(angles[0][axis]));
+    }
+
     private void UpdateBindingValue(NumberBinding<float> binding, ICollection<SceneNode> items, Action<float> setValue, Action<bool> setMixed)
     {
         var nodes = items.Select(static node => node.Id).ToArray();
         var targets = items.ToDictionary(static node => node.Id, static node => (object?)node.Transform);
-        this.RefreshSourceFeedback(binding, targets);
+        this.RefreshSourceFeedback(binding.Descriptor, targets);
         binding.UpdateFromModel(nodes, id => targets.GetValueOrDefault(id));
         var value = binding.HasValue ? binding.Value : 0;
         if (binding.IsMixed && (binding.Id.Id == this.scaleXBinding.Id.Id || binding.Id.Id == this.scaleYBinding.Id.Id || binding.Id.Id == this.scaleZBinding.Id.Id))

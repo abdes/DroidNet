@@ -1,7 +1,7 @@
 ﻿{
   Diagnostics: [
     {
-      Location: Schema\SceneComponents.yaml: (61,16)-(61,22),
+      Location: Schema\SceneComponents.yaml: (65,16)-(65,22),
       Message: Geometry.GeometryUri: a component without a wire has no fields,
       Severity: Error,
       Descriptor: {
@@ -14,7 +14,7 @@
       }
     },
     {
-      Location: Schema\SceneComponents.yaml: (58,14)-(58,25),
+      Location: Schema\SceneComponents.yaml: (62,14)-(62,25),
       Message: Geometry.GeometryUri: a default is required,
       Severity: Error,
       Descriptor: {

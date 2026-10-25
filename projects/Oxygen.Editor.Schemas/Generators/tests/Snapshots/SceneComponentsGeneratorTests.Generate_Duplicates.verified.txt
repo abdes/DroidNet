@@ -14,7 +14,7 @@
       }
     },
     {
-      Location: Schema\SceneComponents.yaml: (54,10)-(54,14),
+      Location: Schema\SceneComponents.yaml: (58,10)-(58,14),
       Message: Duplicate component: Lamp,
       Severity: Error,
       Descriptor: {

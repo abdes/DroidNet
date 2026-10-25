@@ -157,7 +157,7 @@ public sealed class InspectorSearchModelTests
         {
             var direction = fields.Where(entry => entry.Role == role && entry.Key.StartsWith("Sun", StringComparison.Ordinal)).ToArray();
             _ = direction.Should().HaveCount(2);
-            _ = direction.Should().OnlyContain(entry => entry.Properties.Length == 3);
+            _ = direction.Should().OnlyContain(entry => entry.Properties.SequenceEqual(new[] { SceneSchema.Transform.Rotation.Id }));
             _ = direction[0].Properties.Should().Equal(direction[1].Properties);
             _ = fields.Single(entry => entry.Role == role && string.Equals(entry.Key, "AngularSizeRadians", StringComparison.Ordinal))
                 .Properties.Should().Equal(SceneSchema.DirectionalLight.AngularSizeRadians.Id);

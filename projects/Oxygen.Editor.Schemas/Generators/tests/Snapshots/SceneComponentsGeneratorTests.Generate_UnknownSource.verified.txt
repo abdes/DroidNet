@@ -1,8 +1,8 @@
 ﻿{
   Diagnostics: [
     {
-      Location: Schema\SceneComponents.yaml: (74,29)-(74,35),
-      Message: Geometry.Surface.Material.sources has an unknown source 'prefab',
+      Location: Schema\SceneComponents.yaml: (68,25)-(68,31),
+      Message: Geometry.LodPolicy.sources has an unknown source 'prefab',
       Severity: Error,
       Descriptor: {
         Id: OXGNSC004,

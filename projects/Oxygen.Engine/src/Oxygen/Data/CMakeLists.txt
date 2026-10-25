@@ -93,6 +93,8 @@ set(
   "ProceduralMeshes.h"
   "ProceduralMeshDefaults.h"
   "SceneAsset.h"
+  "SceneChangeValues.h"
+  "SceneRecordFields.h"
   "ScriptAsset.h"
   "ScriptResource.h"
   "ShaderReference.h"
@@ -102,6 +104,7 @@ set(
   "TextureResourceDescriptor.h"
   "Unorm16.h"
   "Vertex.h"
+  "Schema/Generated.SceneChanges.h"
   "Schema/Generated.SceneComponents.h"
   "Schema/PropertyRange.h"
 )
@@ -122,6 +125,7 @@ set(
   "PhysicsSceneAsset.cpp"
   "ProceduralMeshes.cpp"
   "SceneAsset.cpp"
+  "SceneRecordFields.cpp"
   "ScriptAsset.cpp"
   "ScriptResource.cpp"
   "ShaderReference.cpp"
@@ -177,16 +181,19 @@ target_link_libraries(
 # ------------------------------------------------------------------------------
 
 # SceneSchemaCodeGen validates Schema/SceneComponents.yaml and writes
-# Schema/Generated.SceneComponents.h into the source tree, where it is
-# versioned. A stamp in the build tree is the only declared output, so Clean
-# never deletes the versioned header. The generator writes the header only when
-# its text changes, so a regeneration that changes nothing recompiles nothing.
+# Schema/Generated.SceneComponents.h (the ids, defaults and ranges) and
+# Schema/Generated.SceneChanges.h (the change encoder and record appliers) into
+# the source tree, where they are versioned. A stamp in the build tree is the
+# only declared output, so Clean never deletes the versioned headers. The
+# generator writes a header only when its text changes, so a regeneration that
+# changes nothing recompiles nothing.
 set(
   _scene_schema_tool_dir
   "${CMAKE_CURRENT_SOURCE_DIR}/Tools/SceneSchemaCodeGen"
 )
 set(_scene_schema_dir "${CMAKE_CURRENT_SOURCE_DIR}/Schema")
 set(_scene_schema_header "${_scene_schema_dir}/Generated.SceneComponents.h")
+set(_scene_changes_header "${_scene_schema_dir}/Generated.SceneChanges.h")
 file(
   GLOB _scene_schema_tool_scripts
   CONFIGURE_DEPENDS
@@ -224,7 +231,7 @@ add_custom_command(
     ${Python3_EXECUTABLE} -m scene_schema_codegen.cli --schema
     "${_scene_schema_dir}/SceneComponents.yaml" --json-schema
     "${_scene_schema_dir}/SceneComponents.schema.json" --cpp-out
-    "${_scene_schema_header}"
+    "${_scene_schema_header}" --changes-out "${_scene_changes_header}"
   COMMAND
     ${CMAKE_COMMAND} -E touch ${_scene_schema_stamp}
   DEPENDS

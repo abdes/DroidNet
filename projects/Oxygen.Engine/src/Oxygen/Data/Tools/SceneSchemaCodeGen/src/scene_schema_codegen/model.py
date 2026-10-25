@@ -42,8 +42,11 @@ NUMERIC_TYPES = frozenset({"int", "float", "vec3"})
 # The units a property may be shown in other than its own, by stored unit.
 _DISPLAY_UNITS = {"radian": frozenset({"degree"})}
 
-# The unit of the authored value an encoding converts.
-_ENCODING_UNITS = {"degrees-to-radians": "degree"}
+# The value type and unit of the authored value an encoding converts.
+_ENCODINGS = {
+    "degrees-to-radians": ("float", "degree"),
+    "euler-yxz-degrees-to-quat": ("vec3", "degree"),
+}
 
 
 class SchemaError(ValueError):
@@ -209,7 +212,7 @@ class Component:
 
 @dataclass(frozen=True)
 class Override:
-    """A property a scene stores as overrides, with its address."""
+    """A property a scene can change, with its address."""
 
     component: Component
     part: Part | None
@@ -572,11 +575,13 @@ def _check_units(schema: Schema, where: str, entry: Property) -> None:
             f"{where}: {entry.unit} values cannot be shown in {entry.display_unit}"
         )
     if entry.encoding is not None:
-        if entry.type != "float":
-            raise SchemaError(f"{where}: {entry.encoding} encodes float values only")
-        if entry.unit != _ENCODING_UNITS[entry.encoding]:
-            expected = _ENCODING_UNITS[entry.encoding]
-            raise SchemaError(f"{where}: {entry.encoding} needs unit {expected}")
+        value_type, unit = _ENCODINGS[entry.encoding]
+        if entry.type != value_type:
+            raise SchemaError(
+                f"{where}: {entry.encoding} encodes {value_type} values only"
+            )
+        if entry.unit != unit:
+            raise SchemaError(f"{where}: {entry.encoding} needs unit {unit}")
 
 
 def _check_enum(schema: Schema, where: str, entry: Property) -> None:

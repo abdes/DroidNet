@@ -1,7 +1,7 @@
 ﻿{
   Diagnostics: [
     {
-      Location: Schema\SceneComponents.yaml: (35,17)-(35,22),
+      Location: Schema\SceneComponents.yaml: (36,17)-(36,22),
       Message: Lamp.Range: field Reach is not in field set Lamp,
       Severity: Error,
       Descriptor: {

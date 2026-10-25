@@ -106,7 +106,7 @@ internal sealed partial class TransformEditController(
     /// <param name="value">The value the control holds.</param>
     /// <returns>The result of the check; a value no float holds is out of range.</returns>
     internal static RangeCheck CheckValue(TransformEditFieldGroup group, Component component, double value)
-        => PropertyChecks.Check(TransformDescriptor(ToPropertyName(group, component)).TypedId, value);
+        => Axis(ToPropertyName(group, component)).Check(value);
 
     /// <summary>Rebinds selection, cancelling captured old-target gestures before accepting later input.</summary>
     /// <param name="items">The new selection.</param>
@@ -149,12 +149,12 @@ internal sealed partial class TransformEditController(
         }
 
         var nodes = this.selectedItems.ToList();
-        var descriptor = TransformDescriptor(property);
+        var axis = Axis(property);
         var originalValues = nodes.ToDictionary(
             static node => node.Id,
-            node => descriptor.Read(node.Transform));
+            node => axis.Read(node.Transform));
         this.activeSessions[property] = new TransformEditSession(
-            authoring.BeginGestureAsync([.. nodes.Select(static node => node.Id)], [descriptor.Id], Label),
+            authoring.BeginGestureAsync([.. nodes.Select(static node => node.Id)], [axis.Id], Label),
             nodes,
             originalValues,
             args.InteractionKind);
@@ -235,7 +235,7 @@ internal sealed partial class TransformEditController(
             }
         }
 
-        var property = TransformDescriptor(field).Id;
+        var property = Axis(field).Id;
         var ticket = this.diagnostics.Begin([property]);
         var check = CheckValue(group, component, args.NewValue);
         Debug.Assert(args.IsValid == (check == RangeCheck.InRange), "The Transform view validates an axis by its schema range alone.");
@@ -263,23 +263,28 @@ internal sealed partial class TransformEditController(
             return;
         }
 
-        if (!this.TryAxisEdit(property, value, out var edit))
+        var hasSession = this.activeSessions.TryGetValue(property, out var session);
+        var nodes = hasSession ? session!.Nodes : this.selectedItems.ToList();
+        var edits = new Dictionary<NodeId, PropertyEdit>();
+        foreach (var node in nodes)
         {
-            return;
+            if (!this.TryAxisEdit(property, node, value, out var edit))
+            {
+                return;
+            }
+
+            edits[node.Id] = edit;
         }
 
         this.LogApplyingChange(property, (float)value, this.selectedItems.Count);
-        if (this.activeSessions.TryGetValue(property, out var session))
+        if (hasSession)
         {
-            var edits = session.Nodes.ToDictionary(static node => node.Id, _ => edit);
-            _ = this.RequestAsync(property, session.Nodes, validates: true, async () =>
-                await (await session.Gesture.ConfigureAwait(true)).PreviewAsync(new SetProperties(edits, Label)).ConfigureAwait(true));
+            _ = this.RequestAsync(property, nodes, validates: true, async () =>
+                await (await session!.Gesture.ConfigureAwait(true)).PreviewAsync(new SetProperties(edits, Label)).ConfigureAwait(true));
             return;
         }
 
-        var nodes = this.selectedItems.ToList();
-        var oneShot = nodes.ToDictionary(static node => node.Id, _ => edit);
-        _ = this.RequestAsync(property, nodes, validates: true, () => authoring.ExecuteAsync(new SetProperties(oneShot, Label)));
+        _ = this.RequestAsync(property, nodes, validates: true, () => authoring.ExecuteAsync(new SetProperties(edits, Label)));
     }
 
     /// <summary>Settles hidden drafts, cancelling pointer/wheel work and committing text by existing policy.</summary>
@@ -324,23 +329,23 @@ internal sealed partial class TransformEditController(
     // The refusal of a value the edit never received, worded as the scene refuses one.
     private static SceneEditResult Refusal(string property, RangeCheck check)
     {
-        var id = TransformDescriptor(property).Id;
+        var id = Axis(property).Id;
         var label = $"{property[..^1]} {property[^1]}";
         return new(SceneEditOutcome.Invalid, [SceneDiagnostic.Error(SceneEditCodes.PropertyOutOfRange, PropertyChecks.Describe(id, check, label), property: id)]);
     }
 
-    private static PropertyDescriptor<float> TransformDescriptor(string property)
+    private static AxisField Axis(string property)
         => property switch
         {
-            "PositionX" => SceneProperties.Transform.PositionXDescriptor,
-            "PositionY" => SceneProperties.Transform.PositionYDescriptor,
-            "PositionZ" => SceneProperties.Transform.PositionZDescriptor,
-            "RotationX" => SceneProperties.Transform.RotationXDescriptor,
-            "RotationY" => SceneProperties.Transform.RotationYDescriptor,
-            "RotationZ" => SceneProperties.Transform.RotationZDescriptor,
-            "ScaleX" => SceneProperties.Transform.ScaleXDescriptor,
-            "ScaleY" => SceneProperties.Transform.ScaleYDescriptor,
-            "ScaleZ" => SceneProperties.Transform.ScaleZDescriptor,
+            "PositionX" => AxisField.Of(SceneProperties.Transform.PositionXDescriptor),
+            "PositionY" => AxisField.Of(SceneProperties.Transform.PositionYDescriptor),
+            "PositionZ" => AxisField.Of(SceneProperties.Transform.PositionZDescriptor),
+            "RotationX" => AxisField.OfRotation(0),
+            "RotationY" => AxisField.OfRotation(1),
+            "RotationZ" => AxisField.OfRotation(2),
+            "ScaleX" => AxisField.Of(SceneProperties.Transform.ScaleXDescriptor),
+            "ScaleY" => AxisField.Of(SceneProperties.Transform.ScaleYDescriptor),
+            "ScaleZ" => AxisField.Of(SceneProperties.Transform.ScaleZDescriptor),
             _ => throw new ArgumentOutOfRangeException(nameof(property)),
         };
 
@@ -421,7 +426,7 @@ internal sealed partial class TransformEditController(
     // Runs a request after the previous one, then refreshes the fields and reports the result.
     private async Task RequestAsync(string property, IReadOnlyList<SceneNode> nodes, bool validates, Func<Task<SceneEditResult>> request)
     {
-        var diagnostic = this.diagnostics.Begin([TransformDescriptor(property).Id]);
+        var diagnostic = this.diagnostics.Begin([Axis(property).Id]);
         _ = Interlocked.Increment(ref this.inFlightEdits);
         var previous = this.lastRequest;
         var current = RunAfterAsync(previous, request);
@@ -486,7 +491,7 @@ internal sealed partial class TransformEditController(
         var edits = new Dictionary<NodeId, PropertyEdit>();
         foreach (var node in session.Nodes)
         {
-            if (!this.TryAxisEdit(property, expression.Apply(session.OriginalValues[node.Id]), out var edit))
+            if (!this.TryAxisEdit(property, node, expression.Apply(session.OriginalValues[node.Id]), out var edit))
             {
                 await this.EndAsync(property, session, NumberBoxEditCompletionKind.Cancel).ConfigureAwait(true);
                 return;
@@ -500,19 +505,19 @@ internal sealed partial class TransformEditController(
         await this.EndAsync(property, session, NumberBoxEditCompletionKind.Commit).ConfigureAwait(true);
     }
 
-    // The edit of an axis value as the inspector commits it. A finite value no float holds cannot reach the edit, so it
-    // is refused here, out of range, instead of narrowing to an infinity the scene would call not finite.
-    private bool TryAxisEdit(string property, double value, out PropertyEdit edit)
+    // The edit of a node's axis value as the inspector commits it. A finite value no float holds cannot reach the edit,
+    // so it is refused here, out of range, instead of narrowing to an infinity the scene would call not finite.
+    private bool TryAxisEdit(string property, SceneNode node, double value, out PropertyEdit edit)
     {
-        var descriptor = TransformDescriptor(property);
+        var axis = Axis(property);
         if (double.IsFinite(value) && Math.Abs(value) > float.MaxValue)
         {
-            this.diagnostics.Complete(this.diagnostics.Begin([descriptor.Id]), Refusal(property, RangeCheck.OutOfRange));
+            this.diagnostics.Complete(this.diagnostics.Begin([axis.Id]), Refusal(property, RangeCheck.OutOfRange));
             edit = PropertyEdit.Empty;
             return false;
         }
 
-        edit = InspectorCommits.Commit(PropertyEdit.SingleEdit(descriptor.TypedId, (float)value));
+        edit = InspectorCommits.Commit(axis.Edit(node.Transform, (float)value));
         return true;
     }
 
@@ -521,6 +526,40 @@ internal sealed partial class TransformEditController(
         while (Volatile.Read(ref this.inFlightEdits) > 0)
         {
             await Task.Yield();
+        }
+    }
+
+    // One axis of the section: a position or scale axis is a property of its own; a rotation axis is a component of the
+    // one rotation property, so its edit writes the node's whole rotation with its other two angles kept.
+    private sealed record AxisField(
+        PropertyId Id,
+        Func<TransformComponent, float> Read,
+        Func<TransformComponent, float, PropertyEdit> Edit,
+        Func<double, RangeCheck> Check)
+    {
+        public static AxisField Of(PropertyDescriptor<float> descriptor)
+            => new(
+                descriptor.Id,
+                transform => descriptor.Read(transform),
+                (_, value) => PropertyEdit.SingleEdit(descriptor.TypedId, value),
+                value => PropertyChecks.Check(descriptor.TypedId, value));
+
+        public static AxisField OfRotation(int axis)
+        {
+            var descriptor = SceneProperties.Transform.RotationDescriptor;
+            var range = PropertyChecks.RangeOf(descriptor.TypedId);
+            return new(
+                descriptor.Id,
+                transform => descriptor.Read(transform)[axis],
+                (transform, value) =>
+                {
+                    var angles = descriptor.Read(transform);
+                    angles[axis] = value;
+                    return PropertyEdit.SingleEdit(descriptor.TypedId, angles);
+                },
+                value => !double.IsFinite(value) ? RangeCheck.NotFinite
+                    : Math.Abs(value) > float.MaxValue ? RangeCheck.OutOfRange
+                    : range.Check((float)value));
         }
     }
 

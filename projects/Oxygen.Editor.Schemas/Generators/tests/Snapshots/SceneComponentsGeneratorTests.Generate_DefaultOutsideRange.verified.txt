@@ -1,7 +1,7 @@
 ﻿{
   Diagnostics: [
     {
-      Location: Schema\SceneComponents.yaml: (36,17)-(36,18),
+      Location: Schema\SceneComponents.yaml: (38,17)-(38,18),
       Message: Lamp.Range: the default 0 is outside its range,
       Severity: Error,
       Descriptor: {

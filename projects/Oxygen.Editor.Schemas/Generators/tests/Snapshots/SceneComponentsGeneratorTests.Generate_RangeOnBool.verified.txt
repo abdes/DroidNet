@@ -1,7 +1,7 @@
 ﻿{
   Diagnostics: [
     {
-      Location: Schema\SceneComponents.yaml: (37,15)-(37,44),
+      Location: Schema\SceneComponents.yaml: (39,15)-(39,44),
       Message: Lamp.Range: bool values have no range or unit,
       Severity: Error,
       Descriptor: {

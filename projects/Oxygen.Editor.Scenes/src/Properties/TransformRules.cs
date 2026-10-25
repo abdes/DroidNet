@@ -19,21 +19,4 @@ internal sealed class TransformRules : IComponentRules
 
     /// <inheritdoc/>
     public object? TargetOf(Scene scene, SceneNode? node) => node?.Transform;
-
-    /// <inheritdoc/>
-    /// <remarks>
-    /// Euler normalization can change another displayed axis while keeping one rotation, so an edit of one axis captures
-    /// all three.
-    /// </remarks>
-    public IReadOnlySet<PropertyId> Coupled(IEnumerable<PropertyId> edited)
-    {
-        var ids = edited.ToHashSet();
-        PropertyId[] rotation = [SceneSchema.Transform.RotationX.Id, SceneSchema.Transform.RotationY.Id, SceneSchema.Transform.RotationZ.Id];
-        if (ids.Overlaps(rotation))
-        {
-            ids.UnionWith(rotation);
-        }
-
-        return ids;
-    }
 }

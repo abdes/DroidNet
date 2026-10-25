@@ -61,7 +61,7 @@ public sealed class PropertyScenarioTests
             .Set(SceneSchema.Transform.PositionX, 3f)
             .Set(SceneSchema.Transform.PositionY, 2f)
             .Set(SceneSchema.Transform.PositionZ, -5f)
-            .Set(SceneSchema.Transform.RotationY, 30f)
+            .Set(SceneSchema.Transform.Rotation, new Vector3(0f, 30f, 0f))
             .Build();
 
         var result = await fixture.Authoring.ExecuteAsync(new SetProperties(new Dictionary<NodeId, PropertyEdit> { [SampleScene.Cam] = move }, "Move camera")).ConfigureAwait(false);

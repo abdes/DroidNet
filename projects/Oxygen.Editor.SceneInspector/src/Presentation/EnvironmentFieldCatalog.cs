@@ -121,12 +121,7 @@ internal static class EnvironmentFieldCatalog
         var fields = new List<AtmosphereSourceFieldIdentity>(10);
         foreach (var role in new[] { AtmosphereLightSlot.Primary, AtmosphereLightSlot.Secondary })
         {
-            ImmutableArray<PropertyId> rotation =
-            [
-                SceneSchema.Transform.RotationX.Id,
-                SceneSchema.Transform.RotationY.Id,
-                SceneSchema.Transform.RotationZ.Id,
-            ];
+            ImmutableArray<PropertyId> rotation = [SceneSchema.Transform.Rotation.Id];
             fields.Add(new(role, "SunAzimuth", rotation));
             fields.Add(new(role, "SunElevation", rotation));
             fields.Add(new(role, "AngularSizeRadians", [SceneSchema.DirectionalLight.AngularSizeRadians.Id]));

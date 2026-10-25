@@ -1,7 +1,7 @@
 ﻿{
   Diagnostics: [
     {
-      Location: Schema\SceneComponents.yaml: (66,17)-(66,94),
+      Location: Schema\SceneComponents.yaml: (70,17)-(70,94),
       Message: Geometry.LodPolicy: a LOD policy addresses at most 8 LODs,
       Severity: Error,
       Descriptor: {

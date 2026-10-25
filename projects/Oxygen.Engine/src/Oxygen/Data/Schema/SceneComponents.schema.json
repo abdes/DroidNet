@@ -250,7 +250,7 @@
         },
         "asset_type": {
           "description": "The type of the asset an asset property references.",
-          "enum": ["geometry", "material"]
+          "enum": ["geometry", "material", "scene"]
         },
         "enum": {
           "description": "The enumeration of an enum property.",
@@ -263,18 +263,18 @@
           "items": { "$ref": "#/definitions/identifier" }
         },
         "encoding": {
-          "description": "A unit conversion applied before the value goes to its fields.",
-          "enum": ["degrees-to-radians"]
+          "description": "A unit conversion applied before the value goes to its fields; a rotation's change holds its quaternion while its fields receive the angles.",
+          "enum": ["degrees-to-radians", "euler-yxz-degrees-to-quat"]
         },
         "sources": {
           "description": "What may supply the value; a scene then stores only its overrides of it.",
           "type": "array",
           "minItems": 1,
           "uniqueItems": true,
-          "items": { "enum": ["asset", "model"] }
+          "items": { "enum": ["asset"] }
         },
         "override_id": {
-          "description": "The stable id of a sourced property's overrides, unique across the schema and never reused.",
+          "description": "The stable id of the property's changes and overrides, unique across the schema and never reused.",
           "type": "integer",
           "minimum": 1,
           "maximum": 65535
@@ -320,7 +320,9 @@
           "then": { "required": ["fields"] }
         },
         {
-          "if": { "required": ["sources"] },
+          "if": {
+            "anyOf": [{ "required": ["sources"] }, { "required": ["fields"] }]
+          },
           "then": { "required": ["override_id"] },
           "else": { "not": { "required": ["override_id"] } }
         },

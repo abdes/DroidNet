@@ -47,9 +47,7 @@ public static class SceneSchema
             [Transform.PositionX.Id] = Transform.Ranges.PositionX,
             [Transform.PositionY.Id] = Transform.Ranges.PositionY,
             [Transform.PositionZ.Id] = Transform.Ranges.PositionZ,
-            [Transform.RotationX.Id] = Transform.Ranges.RotationX,
-            [Transform.RotationY.Id] = Transform.Ranges.RotationY,
-            [Transform.RotationZ.Id] = Transform.Ranges.RotationZ,
+            [Transform.Rotation.Id] = Transform.Ranges.Rotation,
             [Transform.ScaleX.Id] = Transform.Ranges.ScaleX,
             [Transform.ScaleY.Id] = Transform.Ranges.ScaleY,
             [Transform.ScaleZ.Id] = Transform.Ranges.ScaleZ,
@@ -115,9 +113,7 @@ public static class SceneSchema
             [Transform.PositionX.Id] = Transform.Units.PositionX,
             [Transform.PositionY.Id] = Transform.Units.PositionY,
             [Transform.PositionZ.Id] = Transform.Units.PositionZ,
-            [Transform.RotationX.Id] = Transform.Units.RotationX,
-            [Transform.RotationY.Id] = Transform.Units.RotationY,
-            [Transform.RotationZ.Id] = Transform.Units.RotationZ,
+            [Transform.Rotation.Id] = Transform.Units.Rotation,
             [Transform.ScaleX.Id] = Transform.Units.ScaleX,
             [Transform.ScaleY.Id] = Transform.Units.ScaleY,
             [Transform.ScaleZ.Id] = Transform.Units.ScaleZ,
@@ -165,9 +161,7 @@ public static class SceneSchema
             [Transform.PositionX.Id] = Transform.DisplayUnits.PositionX,
             [Transform.PositionY.Id] = Transform.DisplayUnits.PositionY,
             [Transform.PositionZ.Id] = Transform.DisplayUnits.PositionZ,
-            [Transform.RotationX.Id] = Transform.DisplayUnits.RotationX,
-            [Transform.RotationY.Id] = Transform.DisplayUnits.RotationY,
-            [Transform.RotationZ.Id] = Transform.DisplayUnits.RotationZ,
+            [Transform.Rotation.Id] = Transform.DisplayUnits.Rotation,
             [Transform.ScaleX.Id] = Transform.DisplayUnits.ScaleX,
             [Transform.ScaleY.Id] = Transform.DisplayUnits.ScaleY,
             [Transform.ScaleZ.Id] = Transform.DisplayUnits.ScaleZ,
@@ -250,14 +244,8 @@ public static class SceneSchema
         /// <summary>Gets the <c>/local_position/2</c> property.</summary>
         public static global::Oxygen.Managed.Core.PropertyId<float> PositionZ { get; } = new(Kind, "/local_position/2");
 
-        /// <summary>Gets the <c>/local_rotation_euler_degrees/0</c> property.</summary>
-        public static global::Oxygen.Managed.Core.PropertyId<float> RotationX { get; } = new(Kind, "/local_rotation_euler_degrees/0");
-
-        /// <summary>Gets the <c>/local_rotation_euler_degrees/1</c> property.</summary>
-        public static global::Oxygen.Managed.Core.PropertyId<float> RotationY { get; } = new(Kind, "/local_rotation_euler_degrees/1");
-
-        /// <summary>Gets the <c>/local_rotation_euler_degrees/2</c> property.</summary>
-        public static global::Oxygen.Managed.Core.PropertyId<float> RotationZ { get; } = new(Kind, "/local_rotation_euler_degrees/2");
+        /// <summary>Gets the <c>/local_rotation_euler_degrees</c> property.</summary>
+        public static global::Oxygen.Managed.Core.PropertyId<global::System.Numerics.Vector3> Rotation { get; } = new(Kind, "/local_rotation_euler_degrees");
 
         /// <summary>Gets the <c>/local_scale/0</c> property.</summary>
         public static global::Oxygen.Managed.Core.PropertyId<float> ScaleX { get; } = new(Kind, "/local_scale/0");
@@ -280,14 +268,8 @@ public static class SceneSchema
             /// <summary>The default of <c>/local_position/2</c>.</summary>
             public const float PositionZ = 0f;
 
-            /// <summary>The default of <c>/local_rotation_euler_degrees/0</c>.</summary>
-            public const float RotationX = 0f;
-
-            /// <summary>The default of <c>/local_rotation_euler_degrees/1</c>.</summary>
-            public const float RotationY = 0f;
-
-            /// <summary>The default of <c>/local_rotation_euler_degrees/2</c>.</summary>
-            public const float RotationZ = 0f;
+            /// <summary>The default of <c>/local_rotation_euler_degrees</c>.</summary>
+            public static global::System.Numerics.Vector3 Rotation { get; } = new(0f, 0f, 0f);
 
             /// <summary>The default of <c>/local_scale/0</c>.</summary>
             public const float ScaleX = 1f;
@@ -311,14 +293,8 @@ public static class SceneSchema
             /// <summary>The range of <c>/local_position/2</c>.</summary>
             public static global::Oxygen.Managed.Core.PropertyRange<float> PositionZ { get; } = new(null, null, false, false, false, global::Oxygen.Managed.Core.RangeCommit.Reject);
 
-            /// <summary>The range of <c>/local_rotation_euler_degrees/0</c>.</summary>
-            public static global::Oxygen.Managed.Core.PropertyRange<float> RotationX { get; } = new(null, null, false, false, false, global::Oxygen.Managed.Core.RangeCommit.Reject);
-
-            /// <summary>The range of <c>/local_rotation_euler_degrees/1</c>.</summary>
-            public static global::Oxygen.Managed.Core.PropertyRange<float> RotationY { get; } = new(null, null, false, false, false, global::Oxygen.Managed.Core.RangeCommit.Reject);
-
-            /// <summary>The range of <c>/local_rotation_euler_degrees/2</c>.</summary>
-            public static global::Oxygen.Managed.Core.PropertyRange<float> RotationZ { get; } = new(null, null, false, false, false, global::Oxygen.Managed.Core.RangeCommit.Reject);
+            /// <summary>The range of <c>/local_rotation_euler_degrees</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyRange<float> Rotation { get; } = new(null, null, false, false, false, global::Oxygen.Managed.Core.RangeCommit.Reject);
 
             /// <summary>The range of <c>/local_scale/0</c>.</summary>
             public static global::Oxygen.Managed.Core.PropertyRange<float> ScaleX { get; } = new(null, null, false, false, true, global::Oxygen.Managed.Core.RangeCommit.Reject);
@@ -342,14 +318,8 @@ public static class SceneSchema
             /// <summary>The unit of <c>/local_position/2</c>.</summary>
             public static global::Oxygen.Managed.Core.PropertyUnit PositionZ => global::Oxygen.Editor.World.SceneUnits.Metre;
 
-            /// <summary>The unit of <c>/local_rotation_euler_degrees/0</c>.</summary>
-            public static global::Oxygen.Managed.Core.PropertyUnit RotationX => global::Oxygen.Editor.World.SceneUnits.Degree;
-
-            /// <summary>The unit of <c>/local_rotation_euler_degrees/1</c>.</summary>
-            public static global::Oxygen.Managed.Core.PropertyUnit RotationY => global::Oxygen.Editor.World.SceneUnits.Degree;
-
-            /// <summary>The unit of <c>/local_rotation_euler_degrees/2</c>.</summary>
-            public static global::Oxygen.Managed.Core.PropertyUnit RotationZ => global::Oxygen.Editor.World.SceneUnits.Degree;
+            /// <summary>The unit of <c>/local_rotation_euler_degrees</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit Rotation => global::Oxygen.Editor.World.SceneUnits.Degree;
 
             /// <summary>The unit of <c>/local_scale/0</c>.</summary>
             public static global::Oxygen.Managed.Core.PropertyUnit ScaleX => global::Oxygen.Editor.World.SceneUnits.Multiplier;
@@ -373,14 +343,8 @@ public static class SceneSchema
             /// <summary>The unit of <c>/local_position/2</c>.</summary>
             public static global::Oxygen.Managed.Core.PropertyUnit PositionZ => global::Oxygen.Editor.World.SceneUnits.Metre;
 
-            /// <summary>The unit of <c>/local_rotation_euler_degrees/0</c>.</summary>
-            public static global::Oxygen.Managed.Core.PropertyUnit RotationX => global::Oxygen.Editor.World.SceneUnits.Degree;
-
-            /// <summary>The unit of <c>/local_rotation_euler_degrees/1</c>.</summary>
-            public static global::Oxygen.Managed.Core.PropertyUnit RotationY => global::Oxygen.Editor.World.SceneUnits.Degree;
-
-            /// <summary>The unit of <c>/local_rotation_euler_degrees/2</c>.</summary>
-            public static global::Oxygen.Managed.Core.PropertyUnit RotationZ => global::Oxygen.Editor.World.SceneUnits.Degree;
+            /// <summary>The unit of <c>/local_rotation_euler_degrees</c>.</summary>
+            public static global::Oxygen.Managed.Core.PropertyUnit Rotation => global::Oxygen.Editor.World.SceneUnits.Degree;
 
             /// <summary>The unit of <c>/local_scale/0</c>.</summary>
             public static global::Oxygen.Managed.Core.PropertyUnit ScaleX => global::Oxygen.Editor.World.SceneUnits.Multiplier;
@@ -1351,6 +1315,19 @@ public static class SceneSchema
 
         /// <summary>A value indicating whether every node has the component; otherwise a node has at most one.</summary>
         public const bool IsRequired = false;
+    }
+
+    /// <summary>The <c>scene-instance</c> component.</summary>
+    public static class SceneInstance
+    {
+        /// <summary>The component kind.</summary>
+        public const string Kind = "scene-instance";
+
+        /// <summary>A value indicating whether every node has the component; otherwise a node has at most one.</summary>
+        public const bool IsRequired = false;
+
+        /// <summary>Gets the <c>/source</c> property.</summary>
+        public static global::Oxygen.Managed.Core.PropertyId<global::Oxygen.Managed.Core.AssetPath?> Source { get; } = new(Kind, "/source");
     }
 
     /// <summary>The <c>local-fog-volume</c> component.</summary>

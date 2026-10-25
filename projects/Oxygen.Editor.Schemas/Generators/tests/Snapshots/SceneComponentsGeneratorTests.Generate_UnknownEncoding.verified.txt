@@ -1,7 +1,7 @@
 ﻿{
   Diagnostics: [
     {
-      Location: Schema\SceneComponents.yaml: (43,18)-(43,34),
+      Location: Schema\SceneComponents.yaml: (45,18)-(45,34),
       Message: Lamp.FovDegrees: the editor implements no encoding 'turns-to-radians',
       Severity: Error,
       Descriptor: {

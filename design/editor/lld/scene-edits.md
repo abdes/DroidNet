@@ -449,8 +449,9 @@ public interface ISceneNodeInteraction
 - One `IComponentRules` per component kind holds the kind's descriptors and its
   domain rules:
   - **coupling** (`Coupled`): the properties whose before state must be captured
-    with an edited one (editing `Transform.RotationX` captures all three Euler
-    axes, because normalization can change the other displayed axes);
+    with an edited one (an environment backdrop edit captures the flags it
+    rewrites); the transform's rotation needs none, since its three Euler
+    angles are one property;
   - **validation** (`Validate`): cross-field and cross-node rules against the
     candidate state (camera near < far, directional light cascades, the single
     atmosphere sun, the environment constraints), written against

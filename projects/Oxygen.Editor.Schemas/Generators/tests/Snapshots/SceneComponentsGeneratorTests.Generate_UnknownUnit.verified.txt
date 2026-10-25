@@ -1,7 +1,7 @@
 ﻿{
   Diagnostics: [
     {
-      Location: Schema\SceneComponents.yaml: (38,14)-(38,18),
+      Location: Schema\SceneComponents.yaml: (40,14)-(40,18),
       Message: Lamp.Range: unit 'foot' is not declared,
       Severity: Error,
       Descriptor: {

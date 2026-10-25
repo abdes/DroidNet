@@ -136,9 +136,7 @@ public sealed partial class AtmosphereLightsSectionViewModel : ObservableObject,
         }
 
         var rotationMask = new PropertyEdit.Builder()
-            .Set(SceneSchema.Transform.RotationX, 0f)
-            .Set(SceneSchema.Transform.RotationY, 0f)
-            .Set(SceneSchema.Transform.RotationZ, 0f)
+            .Set(SceneSchema.Transform.Rotation, Vector3.Zero)
             .Build();
         var lightMask = new PropertyEdit.Builder()
             .Set(SceneSchema.DirectionalLight.AtmosphereSlot, AtmosphereLightSlot.None)
@@ -146,7 +144,7 @@ public sealed partial class AtmosphereLightsSectionViewModel : ObservableObject,
             .Set(SceneSchema.DirectionalLight.UsePerPixelAtmosphereTransmittance, value: false)
             .Set(SceneSchema.DirectionalLight.AtmosphereDiskLuminanceScaleRgb, Vector3.One)
             .Build();
-        var rotations = edits.Where(pair => pair.Value.Contains(SceneSchema.Transform.RotationX.Id))
+        var rotations = edits.Where(pair => pair.Value.Contains(SceneSchema.Transform.Rotation.Id))
             .ToDictionary(pair => pair.Key, pair => pair.Value.IntersectIds(rotationMask));
         List<ISceneEdit> steps = [new SetProperties(edits.ToDictionary(pair => pair.Key, pair => pair.Value.IntersectIds(lightMask)), ResetLabel)];
         if (rotations.Count > 0)
@@ -199,9 +197,7 @@ public sealed partial class AtmosphereLightsSectionViewModel : ObservableObject,
                 .Set(SceneSchema.DirectionalLight.AngularSizeRadians, light.AngularSizeRadians)
                 .Set(SceneSchema.DirectionalLight.UsePerPixelAtmosphereTransmittance, light.UsePerPixelAtmosphereTransmittance)
                 .Set(SceneSchema.DirectionalLight.AtmosphereDiskLuminanceScaleRgb, light.AtmosphereDiskLuminanceScaleRgb)
-                .Set(SceneSchema.Transform.RotationX, rotation.X)
-                .Set(SceneSchema.Transform.RotationY, rotation.Y)
-                .Set(SceneSchema.Transform.RotationZ, rotation.Z)
+                .Set(SceneSchema.Transform.Rotation, rotation)
                 .Build());
         }
 

@@ -1,7 +1,7 @@
 ﻿{
   Diagnostics: [
     {
-      Location: Schema\SceneComponents.yaml: (68,14)-(68,25),
+      Location: Schema\SceneComponents.yaml: (72,14)-(72,25),
       Message: Duplicate part or property of Geometry: GeometryUri,
       Severity: Error,
       Descriptor: {

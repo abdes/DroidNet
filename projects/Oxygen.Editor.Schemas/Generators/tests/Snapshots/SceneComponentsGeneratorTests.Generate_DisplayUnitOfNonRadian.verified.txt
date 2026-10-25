@@ -1,7 +1,7 @@
 ﻿{
   Diagnostics: [
     {
-      Location: Schema\SceneComponents.yaml: (39,22)-(39,28),
+      Location: Schema\SceneComponents.yaml: (41,22)-(41,28),
       Message: Lamp.Range: metre values cannot be shown in degree,
       Severity: Error,
       Descriptor: {

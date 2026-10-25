@@ -99,7 +99,7 @@ internal sealed partial class SceneComponentsReader
             this.Report(SceneComponentsDiagnostics.UnknownType, property.Locations.Of(property.Enum is null ? "type" : "enum"), where, property.Enum ?? property.Type);
         }
 
-        if (property.Encoding is not null && !string.Equals(property.Encoding, SceneComponentsTypes.DegreesToRadians, StringComparison.Ordinal))
+        if (property.Encoding is not null && !SceneComponentsTypes.IsEncoding(property.Encoding))
         {
             this.Report(SceneComponentsDiagnostics.UnknownEncoding, property.Locations.Of("encoding"), where, property.Encoding);
         }
@@ -132,11 +132,11 @@ internal sealed partial class SceneComponentsReader
     private void CheckValues(SceneComponentsSchema schema, string where, SceneComponentsSchema.PropertyEntry property)
     {
         var values = property.Values;
-        var sourced = property.Sources.Count != 0;
+        var changeable = property.Sources.Count != 0 || property.Fields.Count != 0;
         var overridden = values.OverrideId is not null;
-        if (sourced != overridden)
+        if (changeable != overridden)
         {
-            this.Invalid(property, values.OverrideId is null ? "sources" : "override_id", where, "a property has an override id exactly when it has sources");
+            this.Invalid(property, values.OverrideId is null ? "fields" : "override_id", where, "a property has an override id exactly when it has sources or fields");
         }
 
         // The engine generator requires the asset type; the editor reads none.

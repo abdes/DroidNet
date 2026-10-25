@@ -39,15 +39,30 @@ public enum LampField : ushort
     Range = 5,
 }
 
-/// <summary>The ids of the properties a scene stores as overrides. Stable: never renumbered or reused.</summary>
+/// <summary>
+/// The ids of the properties a scene can change, and of those it stores as overrides of an asset's values. Stable:
+/// never renumbered or reused.
+/// </summary>
 public enum RuntimeOverrideId : ushort
 {
     /// <summary>Sentinel; not a valid override id.</summary>
     Invalid = 0,
 
-    /// <summary>The overrides of <c>SceneSchema.Geometry.Surface.Material</c> (<c>/material</c>).</summary>
+    /// <summary>The changes of <c>SceneSchema.Geometry.Surface.Material</c> (<c>/material</c>).</summary>
     GeometrySurfaceMaterial = 1,
 
-    /// <summary>The overrides of <c>SceneSchema.Geometry.LodPolicy</c> (<c>/lod_policy</c>).</summary>
+    /// <summary>The changes of <c>SceneSchema.Geometry.LodPolicy</c> (<c>/lod_policy</c>).</summary>
     GeometryLodPolicy = 2,
+
+    /// <summary>The changes of <c>SceneSchema.Lamp.Color</c> (<c>/color</c>).</summary>
+    LampColor = 3,
+
+    /// <summary>The changes of <c>SceneSchema.Lamp.Range</c> (<c>/range</c>).</summary>
+    LampRange = 4,
+
+    /// <summary>The changes of <c>SceneSchema.Lamp.FovDegrees</c> (<c>/fov_degrees</c>).</summary>
+    LampFovDegrees = 5,
+
+    /// <summary>The changes of <c>SceneSchema.Lamp.Mode</c> (<c>/mode</c>).</summary>
+    LampMode = 6,
 }

@@ -18,12 +18,13 @@ from typing import Any
 import pytest
 import yaml
 
-from scene_schema_codegen import cli, cpp, model
+from scene_schema_codegen import changes, cli, cpp, model
 
 _SCHEMA_DIR = Path(__file__).resolve().parents[3] / "Schema"
 _SCHEMA = _SCHEMA_DIR / "SceneComponents.yaml"
 _JSON_SCHEMA = _SCHEMA_DIR / "SceneComponents.schema.json"
 _HEADER = _SCHEMA_DIR / "Generated.SceneComponents.h"
+_CHANGES = _SCHEMA_DIR / "Generated.SceneChanges.h"
 
 
 def _rules() -> object:
@@ -70,6 +71,7 @@ def _minimal() -> dict[str, Any]:
                         "key": "/color",
                         "type": "vec3",
                         "fields": ["ColorR", "ColorG", "ColorB"],
+                        "override_id": 5,
                         "default": [1, 1, 1],
                         "range": {"min": 0, "max": 1},
                         "commit": "clamp",
@@ -79,6 +81,7 @@ def _minimal() -> dict[str, Any]:
                         "key": "/range",
                         "type": "float",
                         "fields": ["Range"],
+                        "override_id": 6,
                         "default": 20,
                         "range": {"min": 0, "min_exclusive": True},
                         "unit": "metre",
@@ -112,6 +115,12 @@ def test_committed_header_matches_the_schema() -> None:
     schema = model.load(_SCHEMA, _JSON_SCHEMA)
     expected = cpp.render(schema, _SCHEMA.name)
     assert _HEADER.read_bytes() == expected.encode("utf-8")
+
+
+def test_committed_changes_header_matches_the_schema() -> None:
+    schema = model.load(_SCHEMA, _JSON_SCHEMA)
+    expected = changes.render(schema, _SCHEMA.name)
+    assert _CHANGES.read_bytes() == expected.encode("utf-8")
 
 
 def test_schema_keeps_the_published_component_ids() -> None:
@@ -213,7 +222,7 @@ def test_fields_need_a_wire() -> None:
     document = _minimal()
     uri = document["components"][1]["properties"][0]
     del uri["asset_type"]
-    uri.update(type="float", fields=["Range"], default=0)
+    uri.update(type="float", fields=["Range"], override_id=7, default=0)
     assert "Geometry.GeometryUri: fields without a wire" in _error_of(document)
 
 
@@ -244,6 +253,7 @@ def test_field_types_follow_the_properties_they_receive() -> None:
             "type": "enum",
             "enum": "Mode",
             "fields": ["Mode"],
+            "override_id": 7,
             "default": "Auto",
         }
     )
@@ -269,7 +279,8 @@ def test_field_receiving_two_value_types_is_refused() -> None:
     twin.update(
         name="SpotLight", kind="spot-light", wire={"id": 4, "field_set": "Light"}
     )
-    twin["properties"][1].update(type="int", default=20)
+    twin["properties"][0]["override_id"] = 7
+    twin["properties"][1].update(type="int", default=20, override_id=8)
     document["components"].append(twin)
     assert "Light.Range: receives float and int32 values" in _error_of(document)
 
@@ -323,10 +334,14 @@ def test_part_property_is_rendered_as_an_override() -> None:
         "  OverrideProperty {\n"
         "    .id = OverrideId::kGeometrySurfaceMaterial,\n"
         '    .component_kind = "geometry",\n'
+        "    .component = ComponentId::kInvalid,\n"
         "    .part_kind = PartKind::kSurface,\n"
         '    .key = "/material",\n'
         "    .type = ValueType::kAsset,\n"
         "    .asset_type = AssetType::kMaterial,\n"
+        "    .encoding = Encoding::kNone,\n"
+        "    .member = ValueMember::kAsset,\n"
+        "    .asset_sourced = true,\n"
         "  },\n"
     ) in text
     assert "constexpr auto FindOverrideProperty(const OverrideId id)" in text
@@ -368,9 +383,10 @@ def test_part_property_has_no_fields() -> None:
     assert "/components/1/parts/0/properties/0" in _error_of(document)
 
 
-def test_unknown_source_is_refused() -> None:
+@pytest.mark.parametrize("source", ["prefab", "model"])
+def test_unknown_source_is_refused(source: str) -> None:
     document = _minimal()
-    document["components"][1]["properties"][0].update(sources=["prefab"], override_id=1)
+    document["components"][1]["properties"][0].update(sources=[source], override_id=1)
     assert "/components/1/properties/0/sources/0" in _error_of(document)
 
 
@@ -400,7 +416,14 @@ def test_duplicate_key_in_a_part_is_refused() -> None:
 
 def test_cli_writes_once_and_refuses_an_invalid_schema(tmp_path: Path) -> None:
     out = tmp_path / "Generated.h"
-    arguments = ["--json-schema", str(_JSON_SCHEMA), "--cpp-out", str(out)]
+    arguments = [
+        "--json-schema",
+        str(_JSON_SCHEMA),
+        "--cpp-out",
+        str(out),
+        "--changes-out",
+        str(tmp_path / "Changes.h"),
+    ]
     assert cli.main(["--schema", str(_SCHEMA), *arguments]) == 0
     written = out.stat().st_mtime_ns
     assert cli.main(["--schema", str(_SCHEMA), *arguments]) == 0
@@ -422,12 +445,13 @@ def test_schema_declares_the_override_ids() -> None:
     schema = model.load(_SCHEMA, _JSON_SCHEMA)
     assert [
         (entry.id, entry.component.kind, entry.part and entry.part.kind, entry.prop.key)
-        for entry in schema.overrides()
+        for entry in schema.overrides()[:5]
     ] == [
         (1, "geometry", "surface", "/material"),
         (2, "geometry", "surface", "/visible"),
         (3, "geometry", "surface", "/casts_shadows"),
         (4, "geometry", None, "/lod_policy"),
+        (5, "transform", None, "/local_position/0"),
     ]
 
 
@@ -603,6 +627,7 @@ def _with_enum(document: dict[str, Any]) -> dict[str, Any]:
         "type": "enum",
         "enum": "Mode",
         "fields": ["Range"],
+        "override_id": 6,
         "default": "Fixed",
     }
     return document
@@ -752,3 +777,126 @@ def test_header_is_kept_out_of_clang_format() -> None:
     text = _text(_minimal())
     assert text.index("// clang-format off") < text.index("namespace oxygen")
     assert text.rstrip().endswith("// clang-format on")
+
+
+def test_every_wired_property_is_changeable() -> None:
+    schema = model.load(_SCHEMA, _JSON_SCHEMA)
+    for component, _ in schema.wired():
+        for entry in component.properties:
+            assert entry.override_id is not None, f"{component.name}.{entry.name}"
+
+
+def test_rotation_is_one_property_of_three_angles() -> None:
+    schema = model.load(_SCHEMA, _JSON_SCHEMA)
+    transform = next(entry for entry in schema.components if entry.kind == "transform")
+    rotation = next(entry for entry in transform.properties if entry.name == "Rotation")
+    assert (rotation.key, rotation.type, rotation.encoding) == (
+        "/local_rotation_euler_degrees",
+        "vec3",
+        "euler-yxz-degrees-to-quat",
+    )
+    assert rotation.fields == (
+        "RotationXDegrees",
+        "RotationYDegrees",
+        "RotationZDegrees",
+    )
+
+
+def test_wired_property_needs_an_override_id() -> None:
+    document = _minimal()
+    del document["components"][0]["properties"][1]["override_id"]
+    assert "/components/0/properties/1" in _error_of(document)
+
+
+def test_override_id_without_fields_or_sources_is_refused() -> None:
+    document = _minimal()
+    document["components"][1]["properties"][0]["override_id"] = 7
+    assert "/components/1/properties/0" in _error_of(document)
+
+
+def test_rotation_encoding_needs_three_angles() -> None:
+    document = _minimal()
+    document["components"][0]["properties"][1].update(
+        encoding="euler-yxz-degrees-to-quat", unit="degree"
+    )
+    assert (
+        "PointLight.Range: euler-yxz-degrees-to-quat encodes vec3 values only"
+        in _error_of(document)
+    )
+
+
+def _with_rotation(document: dict[str, Any]) -> dict[str, Any]:
+    entry = document["components"][0]["properties"][0]
+    entry.update(
+        name="Rotation",
+        key="/rotation",
+        encoding="euler-yxz-degrees-to-quat",
+        unit="degree",
+        default=[0, 0, 0],
+    )
+    del entry["range"]
+    del entry["commit"]
+    return document
+
+
+def test_rotation_keeps_its_angles_in_its_fields_and_changes_whole() -> None:
+    document = _with_rotation(_minimal())
+    text = _text(document)
+    assert "inline constexpr float kColorRDefault = 0.0F;" in text
+    assert "    .encoding = Encoding::kEulerYxzDegreesToQuat,\n" in text
+    assert "    .member = ValueMember::kQuat,\n" in text
+    rendered = changes.render(model.parse(document, _rules()), "test.yaml")
+    assert (
+        "  case OverrideId::kPointLightRotation: return detail::EncodeRotation("
+        "value, ComponentId::kPointLight, { static_cast<std::uint16_t>"
+        "(LightField::kColorR), static_cast<std::uint16_t>(LightField::kColorG), "
+        "static_cast<std::uint16_t>(LightField::kColorB) });"
+    ) in rendered
+    assert (
+        "  case OverrideId::kPointLightRotation: pak::world::WriteRotation(record, "
+        "{ value.as_quat[0], value.as_quat[1], value.as_quat[2], value.as_quat[3] "
+        "}); return true;"
+    ) in rendered
+
+
+def test_changes_encode_and_apply_each_wired_property() -> None:
+    document = _minimal()
+    document["components"][0]["properties"][1].update(
+        encoding="degrees-to-radians", unit="degree", range={"min": 0, "max": 180}
+    )
+    rendered = changes.render(model.parse(document, _rules()), "test.yaml")
+    assert (
+        "  case OverrideId::kPointLightRange: return detail::EncodeFloat(value, "
+        "ComponentId::kPointLight, static_cast<std::uint16_t>(LightField::kRange), "
+        "true);"
+    ) in rendered
+    assert (
+        "  case OverrideId::kPointLightColor: return detail::WriteVec3(record, "
+        "std::array { LightField::kColorR, LightField::kColorG, "
+        "LightField::kColorB }, std::array { value.as_vec3[0], value.as_vec3[1], "
+        "value.as_vec3[2] });"
+    ) in rendered
+    assert (
+        "  case OverrideId::kPointLightRange: return pak::world::WriteField("
+        "record, LightField::kRange, value.as_float);"
+    ) in rendered
+    assert "pak::world::PointLightRecord& record" in rendered
+
+
+def test_asset_sourced_property_encodes_without_a_record() -> None:
+    rendered = changes.render(
+        model.parse(_with_surface(_minimal()), _rules()), "test.yaml"
+    )
+    assert (
+        "  case OverrideId::kGeometrySurfaceMaterial: "
+        "return detail::EncodeAsset(value);"
+    ) in rendered
+    assert "kGeometrySurfaceMaterial: return pak::world" not in rendered
+
+
+def test_wired_component_without_a_record_is_refused() -> None:
+    document = _minimal()
+    document["components"][0]["kind"] = "lamp"
+    with pytest.raises(model.SchemaError) as raised:
+        changes.render(model.parse(document, _rules()), "test.yaml")
+    assert "no cooked record for lamp" in str(raised.value)

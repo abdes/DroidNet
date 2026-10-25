@@ -1,7 +1,7 @@
 ﻿{
   Diagnostics: [
     {
-      Location: Schema\SceneComponents.yaml: (75,12)-(75,18),
+      Location: Schema\SceneComponents.yaml: (79,12)-(79,18),
       Message: Geometry.Surface property has an unknown key 'fields',
       Severity: Error,
       Descriptor: {

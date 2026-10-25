@@ -20,9 +20,7 @@ public sealed class TransformDescriptors
         PropertyDescriptor<float> positionX,
         PropertyDescriptor<float> positionY,
         PropertyDescriptor<float> positionZ,
-        PropertyDescriptor<float> rotationX,
-        PropertyDescriptor<float> rotationY,
-        PropertyDescriptor<float> rotationZ,
+        PropertyDescriptor<Vector3> rotation,
         PropertyDescriptor<float> scaleX,
         PropertyDescriptor<float> scaleY,
         PropertyDescriptor<float> scaleZ)
@@ -30,9 +28,7 @@ public sealed class TransformDescriptors
         this.PositionXDescriptor = positionX;
         this.PositionYDescriptor = positionY;
         this.PositionZDescriptor = positionZ;
-        this.RotationXDescriptor = rotationX;
-        this.RotationYDescriptor = rotationY;
-        this.RotationZDescriptor = rotationZ;
+        this.RotationDescriptor = rotation;
         this.ScaleXDescriptor = scaleX;
         this.ScaleYDescriptor = scaleY;
         this.ScaleZDescriptor = scaleZ;
@@ -41,9 +37,7 @@ public sealed class TransformDescriptors
             [positionX.Id] = positionX,
             [positionY.Id] = positionY,
             [positionZ.Id] = positionZ,
-            [rotationX.Id] = rotationX,
-            [rotationY.Id] = rotationY,
-            [rotationZ.Id] = rotationZ,
+            [rotation.Id] = rotation,
             [scaleX.Id] = scaleX,
             [scaleY.Id] = scaleY,
             [scaleZ.Id] = scaleZ,
@@ -59,14 +53,11 @@ public sealed class TransformDescriptors
     /// <summary>Gets the position Z descriptor.</summary>
     public PropertyDescriptor<float> PositionZDescriptor { get; }
 
-    /// <summary>Gets the rotation X descriptor (Euler degrees).</summary>
-    public PropertyDescriptor<float> RotationXDescriptor { get; }
-
-    /// <summary>Gets the rotation Y descriptor (Euler degrees).</summary>
-    public PropertyDescriptor<float> RotationYDescriptor { get; }
-
-    /// <summary>Gets the rotation Z descriptor (Euler degrees).</summary>
-    public PropertyDescriptor<float> RotationZDescriptor { get; }
+    /// <summary>
+    /// Gets the rotation descriptor: the three Y-X-Z Euler angles in degrees, one property, since the stored rotation is
+    /// one quaternion and an angle alone exists only through its decomposition.
+    /// </summary>
+    public PropertyDescriptor<Vector3> RotationDescriptor { get; }
 
     /// <summary>Gets the scale X descriptor.</summary>
     public PropertyDescriptor<float> ScaleXDescriptor { get; }
@@ -90,9 +81,7 @@ public sealed class TransformDescriptors
             positionX: BuildPositionAxis(SceneSchema.Transform.PositionX, static t => t.LocalPosition.X, static (t, v) => t.LocalPosition = new Vector3(v, t.LocalPosition.Y, t.LocalPosition.Z)),
             positionY: BuildPositionAxis(SceneSchema.Transform.PositionY, static t => t.LocalPosition.Y, static (t, v) => t.LocalPosition = new Vector3(t.LocalPosition.X, v, t.LocalPosition.Z)),
             positionZ: BuildPositionAxis(SceneSchema.Transform.PositionZ, static t => t.LocalPosition.Z, static (t, v) => t.LocalPosition = new Vector3(t.LocalPosition.X, t.LocalPosition.Y, v)),
-            rotationX: BuildRotationAxis(SceneSchema.Transform.RotationX, 0),
-            rotationY: BuildRotationAxis(SceneSchema.Transform.RotationY, 1),
-            rotationZ: BuildRotationAxis(SceneSchema.Transform.RotationZ, 2),
+            rotation: BuildRotation(),
             scaleX: BuildScaleAxis(SceneSchema.Transform.ScaleX, static t => t.LocalScale.X, static (t, v) => t.LocalScale = new Vector3(v, t.LocalScale.Y, t.LocalScale.Z)),
             scaleY: BuildScaleAxis(SceneSchema.Transform.ScaleY, static t => t.LocalScale.Y, static (t, v) => t.LocalScale = new Vector3(t.LocalScale.X, v, t.LocalScale.Z)),
             scaleZ: BuildScaleAxis(SceneSchema.Transform.ScaleZ, static t => t.LocalScale.Z, static (t, v) => t.LocalScale = new Vector3(t.LocalScale.X, t.LocalScale.Y, v)));
@@ -108,12 +97,12 @@ public sealed class TransformDescriptors
             validator: PropertyValidators.Of(id, "Position"),
             annotation: new EditorAnnotation { Group = "Transform", Renderer = "vector3-box", Step = 0.01 });
 
-    private static PropertyDescriptor<float> BuildRotationAxis(PropertyId<float> id, int axisIndex)
+    private static PropertyDescriptor<Vector3> BuildRotation()
         => new(
-            id: id,
-            reader: target => ReadRotationAxis((TransformComponent)target, axisIndex),
-            writer: (target, value) => WriteRotationAxis((TransformComponent)target, axisIndex, value),
-            validator: PropertyValidators.Of(id, "Rotation"),
+            id: SceneSchema.Transform.Rotation,
+            reader: static target => TransformConverter.QuaternionToEulerDegrees(((TransformComponent)target).LocalRotation),
+            writer: static (target, value) => ((TransformComponent)target).LocalRotation = TransformConverter.EulerDegreesToQuaternion(value),
+            validator: PropertyValidators.Of(SceneSchema.Transform.Rotation, "Rotation"),
             annotation: new EditorAnnotation { Group = "Transform", Renderer = "vector3-box", Step = 0.5 });
 
     private static PropertyDescriptor<float> BuildScaleAxis(
@@ -126,27 +115,4 @@ public sealed class TransformDescriptors
             writer: (target, value) => write((TransformComponent)target, value),
             validator: PropertyValidators.Of(id, "Scale"),
             annotation: new EditorAnnotation { Group = "Transform", Renderer = "vector3-box", Step = 0.01 });
-
-    private static float ReadRotationAxis(TransformComponent component, int axisIndex)
-    {
-        var euler = TransformConverter.QuaternionToEulerDegrees(component.LocalRotation);
-        return axisIndex switch
-        {
-            0 => euler.X,
-            1 => euler.Y,
-            _ => euler.Z,
-        };
-    }
-
-    private static void WriteRotationAxis(TransformComponent component, int axisIndex, float value)
-    {
-        var euler = TransformConverter.QuaternionToEulerDegrees(component.LocalRotation);
-        var updated = axisIndex switch
-        {
-            0 => new Vector3(value, euler.Y, euler.Z),
-            1 => new Vector3(euler.X, value, euler.Z),
-            _ => new Vector3(euler.X, euler.Y, value),
-        };
-        component.LocalRotation = TransformConverter.EulerDegreesToQuaternion(updated);
-    }
 }

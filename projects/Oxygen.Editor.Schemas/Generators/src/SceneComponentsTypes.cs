@@ -10,6 +10,12 @@ internal static class SceneComponentsTypes
     /// <summary>The encoding from degrees, as the editor edits a value, to radians, as the engine takes it.</summary>
     public const string DegreesToRadians = "degrees-to-radians";
 
+    /// <summary>
+    /// The encoding of three Y-X-Z Euler angles in degrees as one rotation: a change holds its quaternion, and the
+    /// fields receive the angles unchanged.
+    /// </summary>
+    public const string EulerYxzDegreesToQuat = "euler-yxz-degrees-to-quat";
+
     private static readonly Dictionary<string, string> Values = new(StringComparer.Ordinal)
     {
         ["bool"] = "bool",
@@ -76,8 +82,15 @@ internal static class SceneComponentsTypes
     public static string Pascal(string id)
         => string.Concat(id.Split('-').Select(static part => char.ToUpperInvariant(part[0]) + part.Substring(1)));
 
-    /// <summary>Gets the name of the editor method that implements an encoding.</summary>
+    /// <summary>Gets a value indicating whether the editor implements an encoding.</summary>
     /// <param name="encoding">The schema's encoding name.</param>
-    /// <returns>The method name, in PascalCase.</returns>
-    public static string EncodingMethod(string encoding) => Pascal(encoding);
+    /// <returns><see langword="true"/> for <see cref="DegreesToRadians"/> and <see cref="EulerYxzDegreesToQuat"/>.</returns>
+    public static bool IsEncoding(string encoding)
+        => encoding is DegreesToRadians or EulerYxzDegreesToQuat;
+
+    /// <summary>Gets the name of the editor method that converts a value before it goes to its fields.</summary>
+    /// <param name="encoding">An encoding <see cref="IsEncoding"/> accepts.</param>
+    /// <returns>The method name, in PascalCase, or <see langword="null"/> when the fields receive the value unchanged.</returns>
+    public static string? FieldEncodingMethod(string encoding)
+        => string.Equals(encoding, EulerYxzDegreesToQuat, StringComparison.Ordinal) ? null : Pascal(encoding);
 }

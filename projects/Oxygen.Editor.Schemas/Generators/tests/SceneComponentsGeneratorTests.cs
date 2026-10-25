@@ -50,6 +50,7 @@ public sealed class SceneComponentsGeneratorTests : VerifyBase
                 key: /color
                 type: vec3
                 fields: [ColorR, ColorG, ColorB]
+                override_id: 3
                 default: [1, 1, 1]
                 range: { min: 0, max: 1 }
                 commit: clamp
@@ -57,6 +58,7 @@ public sealed class SceneComponentsGeneratorTests : VerifyBase
                 key: /range
                 type: float
                 fields: [Range]
+                override_id: 4
                 default: 20
                 range: { min: 0, min_exclusive: true }
                 unit: metre
@@ -65,6 +67,7 @@ public sealed class SceneComponentsGeneratorTests : VerifyBase
                 type: float
                 fields: [FovRadians]
                 encoding: degrees-to-radians
+                override_id: 5
                 default: 60
                 range: { min: 1, max: 179 }
                 commit: clamp
@@ -74,6 +77,7 @@ public sealed class SceneComponentsGeneratorTests : VerifyBase
                 type: enum
                 enum: CameraAspectMode
                 fields: [Mode]
+                override_id: 6
                 default: Auto
           - name: Geometry
             kind: geometry
@@ -85,7 +89,7 @@ public sealed class SceneComponentsGeneratorTests : VerifyBase
               - name: LodPolicy
                 key: /lod_policy
                 type: lod-policy
-                sources: [asset, model]
+                sources: [asset]
                 override_id: 2
                 default: { type: distance, thresholds: [10, 20], hysteresis_ratio: 0.1 }
             parts:
@@ -151,7 +155,7 @@ public sealed class SceneComponentsGeneratorTests : VerifyBase
 
     [TestMethod]
     public Task Generate_FieldsWithoutWire()
-        => this.Check(AllOutputs, Minimal.Replace("key: /geometry_uri\n        type: asset", "key: /geometry_uri\n        type: float\n        fields: [Range]", StringComparison.Ordinal));
+        => this.Check(AllOutputs, Minimal.Replace("key: /geometry_uri\n        type: asset", "key: /geometry_uri\n        type: float\n        fields: [Range]\n        override_id: 7", StringComparison.Ordinal));
 
     [TestMethod]
     public Task Generate_UnknownEncoding()
@@ -167,11 +171,11 @@ public sealed class SceneComponentsGeneratorTests : VerifyBase
 
     [TestMethod]
     public Task Generate_PartPropertyWithFields()
-        => this.Check(AllOutputs, Minimal.Replace("sources: [asset]", "sources: [asset]\n            fields: [Range]", StringComparison.Ordinal));
+        => this.Check(AllOutputs, Minimal.Replace("            sources: [asset]\n            override_id: 1", "            sources: [asset]\n            fields: [Range]\n            override_id: 1", StringComparison.Ordinal));
 
     [TestMethod]
     public Task Generate_UnknownSource()
-        => this.Check(AllOutputs, Minimal.Replace("sources: [asset]", "sources: [asset, prefab]", StringComparison.Ordinal));
+        => this.Check(AllOutputs, Minimal.Replace("sources: [asset]\n        override_id: 2", "sources: [asset, prefab]\n        override_id: 2", StringComparison.Ordinal));
 
     [TestMethod]
     public Task Generate_PartNamedLikeProperty()
@@ -187,7 +191,7 @@ public sealed class SceneComponentsGeneratorTests : VerifyBase
 
     [TestMethod]
     public Task Generate_RangeOnBool()
-        => this.Check(AllOutputs, Minimal.Replace("type: float\n        fields: [Range]\n        default: 20", "type: bool\n        fields: [Range]\n        default: true", StringComparison.Ordinal));
+        => this.Check(AllOutputs, Minimal.Replace("type: float\n        fields: [Range]\n        override_id: 4\n        default: 20", "type: bool\n        fields: [Range]\n        override_id: 4\n        default: true", StringComparison.Ordinal));
 
     [TestMethod]
     public Task Generate_UnknownUnit()
@@ -203,7 +207,15 @@ public sealed class SceneComponentsGeneratorTests : VerifyBase
 
     [TestMethod]
     public Task Generate_OverrideIdWithoutSources()
-        => this.Check(AllOutputs, Minimal.Replace("type: asset\n      - name: LodPolicy", "type: asset\n        override_id: 3\n      - name: LodPolicy", StringComparison.Ordinal));
+        => this.Check(AllOutputs, Minimal.Replace("type: asset\n      - name: LodPolicy", "type: asset\n        override_id: 9\n      - name: LodPolicy", StringComparison.Ordinal));
+
+    [TestMethod]
+    public Task Generate_WiredPropertyWithoutOverrideId()
+        => this.Check(AllOutputs, Minimal.Replace("        override_id: 4\n", string.Empty, StringComparison.Ordinal));
+
+    [TestMethod]
+    public Task Generate_RotationEncoding()
+        => this.Check("WireTable", Minimal.Replace("fields: [ColorR, ColorG, ColorB]", "fields: [ColorR, ColorG, ColorB]\n        encoding: euler-yxz-degrees-to-quat", StringComparison.Ordinal));
 
     [TestMethod]
     public Task Generate_DuplicateOverrideId()

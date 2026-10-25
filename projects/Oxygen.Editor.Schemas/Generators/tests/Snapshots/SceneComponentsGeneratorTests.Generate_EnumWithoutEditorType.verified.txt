@@ -1,7 +1,7 @@
 ﻿{
   Diagnostics: [
     {
-      Location: Schema\SceneComponents.yaml: (35,14)-(35,22),
+      Location: Schema\SceneComponents.yaml: (36,14)-(36,22),
       Message: Lamp.Range: 'LampMood' has no editor type,
       Severity: Error,
       Descriptor: {
@@ -14,7 +14,7 @@
       }
     },
     {
-      Location: Schema\SceneComponents.yaml: (38,15)-(38,44),
+      Location: Schema\SceneComponents.yaml: (40,15)-(40,44),
       Message: Lamp.Range: enum values have no range or unit,
       Severity: Error,
       Descriptor: {
@@ -27,7 +27,7 @@
       }
     },
     {
-      Location: Schema\SceneComponents.yaml: (35,14)-(35,22),
+      Location: Schema\SceneComponents.yaml: (36,14)-(36,22),
       Message: Lamp.Range: enumeration 'LampMood' is not declared,
       Severity: Error,
       Descriptor: {

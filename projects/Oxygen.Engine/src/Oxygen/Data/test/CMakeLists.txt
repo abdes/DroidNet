@@ -59,4 +59,9 @@ m_gtest_program(
     "Vertex_test.cpp"
 )
 
-m_gtest_program(SceneSchema SOURCES "SceneSchema_test.cpp")
+m_gtest_program(
+  SceneSchema
+  SOURCES
+    "SceneChanges_test.cpp"
+    "SceneSchema_test.cpp"
+)

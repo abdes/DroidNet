@@ -12,15 +12,17 @@
 #include <glm/gtc/constants.hpp>
 #include <glm/gtc/quaternion.hpp>
 
+#include <Oxygen/Data/SceneRecordFields.h>
+
 namespace oxygen::interop::rotation {
 
-//! Matches the editor's Y-X-Z authoring convention (X pitch, Y yaw, Z roll).
+//! The editor's Y-X-Z authoring convention (X pitch, Y yaw, Z roll), which the
+//! scene schema's rotation encoding owns.
 inline auto ToQuaternion(const glm::vec3& degrees) -> glm::quat
 {
-  const auto radians = glm::radians(degrees);
-  return glm::angleAxis(radians.y, glm::vec3(0.0F, 1.0F, 0.0F))
-    * glm::angleAxis(radians.x, glm::vec3(1.0F, 0.0F, 0.0F))
-    * glm::angleAxis(radians.z, glm::vec3(0.0F, 0.0F, 1.0F));
+  const auto rotation = oxygen::data::pak::world::EulerYxzDegreesToQuaternion(
+    { degrees.x, degrees.y, degrees.z });
+  return { rotation[3], rotation[0], rotation[1], rotation[2] };
 }
 
 //! Normalizes one authored angle to [-180, 180).

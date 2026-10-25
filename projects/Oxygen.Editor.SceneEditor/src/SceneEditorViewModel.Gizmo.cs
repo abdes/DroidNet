@@ -58,7 +58,7 @@ public partial class SceneEditorViewModel
             if (tool == RuntimeTransformTool.Rotate)
             {
                 var euler = TransformConverter.QuaternionToEulerDegrees(target.Rotation);
-                _ = edit.Set(SceneSchema.Transform.RotationX, euler.X).Set(SceneSchema.Transform.RotationY, euler.Y).Set(SceneSchema.Transform.RotationZ, euler.Z);
+                _ = edit.Set(SceneSchema.Transform.Rotation, euler);
             }
             else if (tool == RuntimeTransformTool.Scale)
             {

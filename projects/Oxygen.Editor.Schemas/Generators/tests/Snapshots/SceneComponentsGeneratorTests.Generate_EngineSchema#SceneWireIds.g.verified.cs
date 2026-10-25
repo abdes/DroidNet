@@ -324,21 +324,279 @@ public enum LocalFogVolumeField : ushort
     SortPriority = 12,
 }
 
-/// <summary>The ids of the properties a scene stores as overrides. Stable: never renumbered or reused.</summary>
+/// <summary>
+/// The ids of the properties a scene can change, and of those it stores as overrides of an asset's values. Stable:
+/// never renumbered or reused.
+/// </summary>
 public enum RuntimeOverrideId : ushort
 {
     /// <summary>Sentinel; not a valid override id.</summary>
     Invalid = 0,
 
-    /// <summary>The overrides of <c>SceneSchema.Geometry.Surface.Material</c> (<c>/material</c>).</summary>
+    /// <summary>The changes of <c>SceneSchema.Geometry.Surface.Material</c> (<c>/material</c>).</summary>
     GeometrySurfaceMaterial = 1,
 
-    /// <summary>The overrides of <c>SceneSchema.Geometry.Surface.Visibility</c> (<c>/visible</c>).</summary>
+    /// <summary>The changes of <c>SceneSchema.Geometry.Surface.Visibility</c> (<c>/visible</c>).</summary>
     GeometrySurfaceVisibility = 2,
 
-    /// <summary>The overrides of <c>SceneSchema.Geometry.Surface.CastsShadows</c> (<c>/casts_shadows</c>).</summary>
+    /// <summary>The changes of <c>SceneSchema.Geometry.Surface.CastsShadows</c> (<c>/casts_shadows</c>).</summary>
     GeometrySurfaceCastsShadows = 3,
 
-    /// <summary>The overrides of <c>SceneSchema.Geometry.LodPolicy</c> (<c>/lod_policy</c>).</summary>
+    /// <summary>The changes of <c>SceneSchema.Geometry.LodPolicy</c> (<c>/lod_policy</c>).</summary>
     GeometryLodPolicy = 4,
+
+    /// <summary>The changes of <c>SceneSchema.Transform.PositionX</c> (<c>/local_position/0</c>).</summary>
+    TransformPositionX = 5,
+
+    /// <summary>The changes of <c>SceneSchema.Transform.PositionY</c> (<c>/local_position/1</c>).</summary>
+    TransformPositionY = 6,
+
+    /// <summary>The changes of <c>SceneSchema.Transform.PositionZ</c> (<c>/local_position/2</c>).</summary>
+    TransformPositionZ = 7,
+
+    /// <summary>The changes of <c>SceneSchema.Transform.Rotation</c> (<c>/local_rotation_euler_degrees</c>).</summary>
+    TransformRotation = 8,
+
+    /// <summary>The changes of <c>SceneSchema.Transform.ScaleX</c> (<c>/local_scale/0</c>).</summary>
+    TransformScaleX = 9,
+
+    /// <summary>The changes of <c>SceneSchema.Transform.ScaleY</c> (<c>/local_scale/1</c>).</summary>
+    TransformScaleY = 10,
+
+    /// <summary>The changes of <c>SceneSchema.Transform.ScaleZ</c> (<c>/local_scale/2</c>).</summary>
+    TransformScaleZ = 11,
+
+    /// <summary>The changes of <c>SceneSchema.Node.Visibility</c> (<c>/visible</c>).</summary>
+    NodeVisibility = 12,
+
+    /// <summary>The changes of <c>SceneSchema.Node.CastsShadows</c> (<c>/casts_shadows</c>).</summary>
+    NodeCastsShadows = 13,
+
+    /// <summary>The changes of <c>SceneSchema.Node.ReceivesShadows</c> (<c>/receives_shadows</c>).</summary>
+    NodeReceivesShadows = 14,
+
+    /// <summary>The changes of <c>SceneSchema.Node.IsStatic</c> (<c>/static</c>).</summary>
+    NodeIsStatic = 15,
+
+    /// <summary>The changes of <c>SceneSchema.Node.IsRayCastingSelectable</c> (<c>/ray_cast_selectable</c>).</summary>
+    NodeIsRayCastingSelectable = 16,
+
+    /// <summary>The changes of <c>SceneSchema.Node.IgnoreParentTransform</c> (<c>/ignore_parent_transform</c>).</summary>
+    NodeIgnoreParentTransform = 17,
+
+    /// <summary>The changes of <c>SceneSchema.PerspectiveCamera.FieldOfViewDegrees</c> (<c>/field_of_view_degrees</c>).</summary>
+    PerspectiveCameraFieldOfViewDegrees = 18,
+
+    /// <summary>The changes of <c>SceneSchema.PerspectiveCamera.AspectRatio</c> (<c>/aspect_ratio</c>).</summary>
+    PerspectiveCameraAspectRatio = 19,
+
+    /// <summary>The changes of <c>SceneSchema.PerspectiveCamera.NearPlane</c> (<c>/near_plane</c>).</summary>
+    PerspectiveCameraNearPlane = 20,
+
+    /// <summary>The changes of <c>SceneSchema.PerspectiveCamera.FarPlane</c> (<c>/far_plane</c>).</summary>
+    PerspectiveCameraFarPlane = 21,
+
+    /// <summary>The changes of <c>SceneSchema.PerspectiveCamera.ApertureF</c> (<c>/aperture_f</c>).</summary>
+    PerspectiveCameraApertureF = 22,
+
+    /// <summary>The changes of <c>SceneSchema.PerspectiveCamera.ShutterRate</c> (<c>/shutter_rate</c>).</summary>
+    PerspectiveCameraShutterRate = 23,
+
+    /// <summary>The changes of <c>SceneSchema.PerspectiveCamera.Iso</c> (<c>/iso</c>).</summary>
+    PerspectiveCameraIso = 24,
+
+    /// <summary>The changes of <c>SceneSchema.PerspectiveCamera.AspectMode</c> (<c>/aspect_mode</c>).</summary>
+    PerspectiveCameraAspectMode = 25,
+
+    /// <summary>The changes of <c>SceneSchema.OrthographicCamera.OrthographicSize</c> (<c>/orthographic_size</c>).</summary>
+    OrthographicCameraOrthographicSize = 26,
+
+    /// <summary>The changes of <c>SceneSchema.OrthographicCamera.AspectMode</c> (<c>/aspect_mode</c>).</summary>
+    OrthographicCameraAspectMode = 27,
+
+    /// <summary>The changes of <c>SceneSchema.OrthographicCamera.AspectRatio</c> (<c>/aspect_ratio</c>).</summary>
+    OrthographicCameraAspectRatio = 28,
+
+    /// <summary>The changes of <c>SceneSchema.OrthographicCamera.NearPlane</c> (<c>/near_plane</c>).</summary>
+    OrthographicCameraNearPlane = 29,
+
+    /// <summary>The changes of <c>SceneSchema.OrthographicCamera.FarPlane</c> (<c>/far_plane</c>).</summary>
+    OrthographicCameraFarPlane = 30,
+
+    /// <summary>The changes of <c>SceneSchema.OrthographicCamera.ApertureF</c> (<c>/aperture_f</c>).</summary>
+    OrthographicCameraApertureF = 31,
+
+    /// <summary>The changes of <c>SceneSchema.OrthographicCamera.ShutterRate</c> (<c>/shutter_rate</c>).</summary>
+    OrthographicCameraShutterRate = 32,
+
+    /// <summary>The changes of <c>SceneSchema.OrthographicCamera.Iso</c> (<c>/iso</c>).</summary>
+    OrthographicCameraIso = 33,
+
+    /// <summary>The changes of <c>SceneSchema.DirectionalLight.Color</c> (<c>/color</c>).</summary>
+    DirectionalLightColor = 34,
+
+    /// <summary>The changes of <c>SceneSchema.DirectionalLight.IntensityLux</c> (<c>/intensity_lux</c>).</summary>
+    DirectionalLightIntensityLux = 35,
+
+    /// <summary>The changes of <c>SceneSchema.DirectionalLight.AtmosphereSlot</c> (<c>/atmosphere_light_slot</c>).</summary>
+    DirectionalLightAtmosphereSlot = 36,
+
+    /// <summary>The changes of <c>SceneSchema.DirectionalLight.UsePerPixelAtmosphereTransmittance</c> (<c>/use_per_pixel_atmosphere_transmittance</c>).</summary>
+    DirectionalLightUsePerPixelAtmosphereTransmittance = 37,
+
+    /// <summary>The changes of <c>SceneSchema.DirectionalLight.CastsShadows</c> (<c>/casts_shadows</c>).</summary>
+    DirectionalLightCastsShadows = 38,
+
+    /// <summary>The changes of <c>SceneSchema.DirectionalLight.AffectsWorld</c> (<c>/affects_world</c>).</summary>
+    DirectionalLightAffectsWorld = 39,
+
+    /// <summary>The changes of <c>SceneSchema.DirectionalLight.AngularSizeRadians</c> (<c>/angular_size_radians</c>).</summary>
+    DirectionalLightAngularSizeRadians = 40,
+
+    /// <summary>The changes of <c>SceneSchema.DirectionalLight.ExposureCompensation</c> (<c>/exposure_compensation</c>).</summary>
+    DirectionalLightExposureCompensation = 41,
+
+    /// <summary>The changes of <c>SceneSchema.DirectionalLight.AtmosphereDiskLuminanceScaleRgb</c> (<c>/atmosphere_disk_luminance_scale_rgb</c>).</summary>
+    DirectionalLightAtmosphereDiskLuminanceScaleRgb = 42,
+
+    /// <summary>The changes of <c>SceneSchema.DirectionalLight.ShadowBias</c> (<c>/shadow/bias</c>).</summary>
+    DirectionalLightShadowBias = 43,
+
+    /// <summary>The changes of <c>SceneSchema.DirectionalLight.ShadowNormalBias</c> (<c>/shadow/normal_bias</c>).</summary>
+    DirectionalLightShadowNormalBias = 44,
+
+    /// <summary>The changes of <c>SceneSchema.DirectionalLight.ContactShadows</c> (<c>/shadow/contact_shadows</c>).</summary>
+    DirectionalLightContactShadows = 45,
+
+    /// <summary>The changes of <c>SceneSchema.DirectionalLight.ShadowResolutionHint</c> (<c>/shadow/resolution_hint</c>).</summary>
+    DirectionalLightShadowResolutionHint = 46,
+
+    /// <summary>The changes of <c>SceneSchema.DirectionalLight.CascadeCount</c> (<c>/csm/cascade_count</c>).</summary>
+    DirectionalLightCascadeCount = 47,
+
+    /// <summary>The changes of <c>SceneSchema.DirectionalLight.SplitMode</c> (<c>/csm/split_mode</c>).</summary>
+    DirectionalLightSplitMode = 48,
+
+    /// <summary>The changes of <c>SceneSchema.DirectionalLight.MaxShadowDistance</c> (<c>/csm/max_shadow_distance</c>).</summary>
+    DirectionalLightMaxShadowDistance = 49,
+
+    /// <summary>The changes of <c>SceneSchema.DirectionalLight.CascadeDistance0</c> (<c>/csm/cascade_distances/0</c>).</summary>
+    DirectionalLightCascadeDistance0 = 50,
+
+    /// <summary>The changes of <c>SceneSchema.DirectionalLight.CascadeDistance1</c> (<c>/csm/cascade_distances/1</c>).</summary>
+    DirectionalLightCascadeDistance1 = 51,
+
+    /// <summary>The changes of <c>SceneSchema.DirectionalLight.CascadeDistance2</c> (<c>/csm/cascade_distances/2</c>).</summary>
+    DirectionalLightCascadeDistance2 = 52,
+
+    /// <summary>The changes of <c>SceneSchema.DirectionalLight.CascadeDistance3</c> (<c>/csm/cascade_distances/3</c>).</summary>
+    DirectionalLightCascadeDistance3 = 53,
+
+    /// <summary>The changes of <c>SceneSchema.DirectionalLight.DistributionExponent</c> (<c>/csm/distribution_exponent</c>).</summary>
+    DirectionalLightDistributionExponent = 54,
+
+    /// <summary>The changes of <c>SceneSchema.DirectionalLight.TransitionFraction</c> (<c>/csm/transition_fraction</c>).</summary>
+    DirectionalLightTransitionFraction = 55,
+
+    /// <summary>The changes of <c>SceneSchema.DirectionalLight.DistanceFadeoutFraction</c> (<c>/csm/distance_fadeout_fraction</c>).</summary>
+    DirectionalLightDistanceFadeoutFraction = 56,
+
+    /// <summary>The changes of <c>SceneSchema.PointLight.Color</c> (<c>/color</c>).</summary>
+    PointLightColor = 57,
+
+    /// <summary>The changes of <c>SceneSchema.PointLight.AffectsWorld</c> (<c>/affects_world</c>).</summary>
+    PointLightAffectsWorld = 58,
+
+    /// <summary>The changes of <c>SceneSchema.PointLight.CastsShadows</c> (<c>/casts_shadows</c>).</summary>
+    PointLightCastsShadows = 59,
+
+    /// <summary>The changes of <c>SceneSchema.PointLight.ExposureCompensation</c> (<c>/exposure_compensation</c>).</summary>
+    PointLightExposureCompensation = 60,
+
+    /// <summary>The changes of <c>SceneSchema.PointLight.ShadowBias</c> (<c>/shadow/bias</c>).</summary>
+    PointLightShadowBias = 61,
+
+    /// <summary>The changes of <c>SceneSchema.PointLight.ShadowNormalBias</c> (<c>/shadow/normal_bias</c>).</summary>
+    PointLightShadowNormalBias = 62,
+
+    /// <summary>The changes of <c>SceneSchema.PointLight.ContactShadows</c> (<c>/shadow/contact_shadows</c>).</summary>
+    PointLightContactShadows = 63,
+
+    /// <summary>The changes of <c>SceneSchema.PointLight.ShadowResolutionHint</c> (<c>/shadow/resolution_hint</c>).</summary>
+    PointLightShadowResolutionHint = 64,
+
+    /// <summary>The changes of <c>SceneSchema.PointLight.LuminousFluxLumens</c> (<c>/luminous_flux_lm</c>).</summary>
+    PointLightLuminousFluxLumens = 65,
+
+    /// <summary>The changes of <c>SceneSchema.PointLight.Range</c> (<c>/range</c>).</summary>
+    PointLightRange = 66,
+
+    /// <summary>The changes of <c>SceneSchema.PointLight.SourceRadius</c> (<c>/source_radius</c>).</summary>
+    PointLightSourceRadius = 67,
+
+    /// <summary>The changes of <c>SceneSchema.SpotLight.Color</c> (<c>/color</c>).</summary>
+    SpotLightColor = 68,
+
+    /// <summary>The changes of <c>SceneSchema.SpotLight.AffectsWorld</c> (<c>/affects_world</c>).</summary>
+    SpotLightAffectsWorld = 69,
+
+    /// <summary>The changes of <c>SceneSchema.SpotLight.CastsShadows</c> (<c>/casts_shadows</c>).</summary>
+    SpotLightCastsShadows = 70,
+
+    /// <summary>The changes of <c>SceneSchema.SpotLight.ExposureCompensation</c> (<c>/exposure_compensation</c>).</summary>
+    SpotLightExposureCompensation = 71,
+
+    /// <summary>The changes of <c>SceneSchema.SpotLight.ShadowBias</c> (<c>/shadow/bias</c>).</summary>
+    SpotLightShadowBias = 72,
+
+    /// <summary>The changes of <c>SceneSchema.SpotLight.ShadowNormalBias</c> (<c>/shadow/normal_bias</c>).</summary>
+    SpotLightShadowNormalBias = 73,
+
+    /// <summary>The changes of <c>SceneSchema.SpotLight.ContactShadows</c> (<c>/shadow/contact_shadows</c>).</summary>
+    SpotLightContactShadows = 74,
+
+    /// <summary>The changes of <c>SceneSchema.SpotLight.ShadowResolutionHint</c> (<c>/shadow/resolution_hint</c>).</summary>
+    SpotLightShadowResolutionHint = 75,
+
+    /// <summary>The changes of <c>SceneSchema.SpotLight.LuminousFluxLumens</c> (<c>/luminous_flux_lm</c>).</summary>
+    SpotLightLuminousFluxLumens = 76,
+
+    /// <summary>The changes of <c>SceneSchema.SpotLight.Range</c> (<c>/range</c>).</summary>
+    SpotLightRange = 77,
+
+    /// <summary>The changes of <c>SceneSchema.SpotLight.SourceRadius</c> (<c>/source_radius</c>).</summary>
+    SpotLightSourceRadius = 78,
+
+    /// <summary>The changes of <c>SceneSchema.SpotLight.InnerConeAngleRadians</c> (<c>/inner_cone_angle_radians</c>).</summary>
+    SpotLightInnerConeAngleRadians = 79,
+
+    /// <summary>The changes of <c>SceneSchema.SpotLight.OuterConeAngleRadians</c> (<c>/outer_cone_angle_radians</c>).</summary>
+    SpotLightOuterConeAngleRadians = 80,
+
+    /// <summary>The changes of <c>SceneSchema.LocalFogVolume.Enabled</c> (<c>/enabled</c>).</summary>
+    LocalFogVolumeEnabled = 81,
+
+    /// <summary>The changes of <c>SceneSchema.LocalFogVolume.RadialFogExtinction</c> (<c>/radial_fog_extinction</c>).</summary>
+    LocalFogVolumeRadialFogExtinction = 82,
+
+    /// <summary>The changes of <c>SceneSchema.LocalFogVolume.HeightFogExtinction</c> (<c>/height_fog_extinction</c>).</summary>
+    LocalFogVolumeHeightFogExtinction = 83,
+
+    /// <summary>The changes of <c>SceneSchema.LocalFogVolume.HeightFogFalloff</c> (<c>/height_fog_falloff</c>).</summary>
+    LocalFogVolumeHeightFogFalloff = 84,
+
+    /// <summary>The changes of <c>SceneSchema.LocalFogVolume.HeightFogOffset</c> (<c>/height_fog_offset</c>).</summary>
+    LocalFogVolumeHeightFogOffset = 85,
+
+    /// <summary>The changes of <c>SceneSchema.LocalFogVolume.FogPhaseG</c> (<c>/fog_phase_g</c>).</summary>
+    LocalFogVolumeFogPhaseG = 86,
+
+    /// <summary>The changes of <c>SceneSchema.LocalFogVolume.FogAlbedo</c> (<c>/fog_albedo</c>).</summary>
+    LocalFogVolumeFogAlbedo = 87,
+
+    /// <summary>The changes of <c>SceneSchema.LocalFogVolume.FogEmissive</c> (<c>/fog_emissive</c>).</summary>
+    LocalFogVolumeFogEmissive = 88,
+
+    /// <summary>The changes of <c>SceneSchema.LocalFogVolume.SortPriority</c> (<c>/sort_priority</c>).</summary>
+    LocalFogVolumeSortPriority = 89,
 }

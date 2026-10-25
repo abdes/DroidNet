@@ -64,7 +64,7 @@ internal static class NativeFieldCases
     internal static readonly NodeFieldCase[] NativeNodeFields =
     [
         new("Transform", "PositionX", 1, 0, Set(SceneSchema.Transform.PositionX, 12f), Scalar(12f)),
-        new("Transform", "RotationY", 1, 4, Set(SceneSchema.Transform.RotationY, 30f), Scalar(30f)),
+        new("Transform", "RotationY", 1, 4, static node => PropertyEdit.SingleEdit(SceneSchema.Transform.Rotation, TransformConverter.QuaternionToEulerDegrees(node.Transform.LocalRotation) with { Y = 30f }), Scalar(30f)),
         new("Camera", "FieldOfView", 2, 0, Set(SceneSchema.PerspectiveCamera.FieldOfViewDegrees, 75f), Scalar(75f * MathF.PI / 180f)),
         new("Light", "ColorR", 3, 0, static node => PropertyEdit.SingleEdit(SceneSchema.DirectionalLight.Color, LightOf(node).Color with { X = 0.2f }), Scalar(0.2f)),
         new("Light", "CastsShadows", 3, 5, Set(SceneSchema.DirectionalLight.CastsShadows, value: false), Flag(value: false)),

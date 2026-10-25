@@ -157,9 +157,7 @@ public partial class SceneEditorViewModel
                 .Set(SceneSchema.Transform.PositionX, pose.Position.X)
                 .Set(SceneSchema.Transform.PositionY, pose.Position.Y)
                 .Set(SceneSchema.Transform.PositionZ, pose.Position.Z)
-                .Set(SceneSchema.Transform.RotationX, pose.RotationEulerDegrees.X)
-                .Set(SceneSchema.Transform.RotationY, pose.RotationEulerDegrees.Y)
-                .Set(SceneSchema.Transform.RotationZ, pose.RotationEulerDegrees.Z)
+                .Set(SceneSchema.Transform.Rotation, pose.RotationEulerDegrees)
                 .Build();
             edits.Add(new SetProperties(new Dictionary<NodeId, PropertyEdit> { [nodeId] = values }, "Move Camera"));
         }

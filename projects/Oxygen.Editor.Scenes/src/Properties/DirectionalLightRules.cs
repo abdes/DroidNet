@@ -60,9 +60,7 @@ internal sealed class DirectionalLightRules : IComponentRules
 
         var euler = TransformConverter.QuaternionToEulerDegrees(DirectionalLightComponent.DefaultLocalRotation);
         var rotation = new PropertyEdit.Builder()
-            .Set(SceneSchema.Transform.RotationX, euler.X)
-            .Set(SceneSchema.Transform.RotationY, euler.Y)
-            .Set(SceneSchema.Transform.RotationZ, euler.Z)
+            .Set(SceneSchema.Transform.Rotation, euler)
             .Build();
         return [new SetProperties(new Dictionary<NodeId, PropertyEdit> { [node.Id] = rotation }, "Point Light Down")];
     }

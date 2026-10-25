@@ -7,7 +7,6 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
-#include <concepts>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -16,7 +15,6 @@
 #include <span>
 #include <string>
 #include <string_view>
-#include <type_traits>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -34,11 +32,10 @@
 #include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
 #include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Data/AssetType.h>
-#include <Oxygen/Data/LightValidation.h>
 #include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/Data/SceneRecordDefaults.h>
+#include <Oxygen/Data/SceneRecordFields.h>
 #include <Oxygen/Data/Schema/Generated.SceneComponents.h>
-#include <Oxygen/Data/Schema/PropertyRange.h>
 #include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Scene/ExposureSettings.h>
 
@@ -111,17 +108,19 @@ namespace {
     return false;
   }
 
-  using data::schema::PropertyRange;
+  using data::schema::ComponentId;
   namespace world = data::pak::world;
 
-  //! Reads the properties of one authored object as the scene schema declares
-  //! them.
+  //! Reads the properties of one authored object into its cooked record, as
+  //! the scene schema declares them.
   /*!
-   An omitted property keeps the value the caller holds, which is the schema's
-   default. A present one must be a finite value inside the generated range of
-   the property, or a declared member of its enum. A violation is reported as
-   `kScenePropertyOutOfRangeCode` at the property's path and keeps the caller's
-   value; the shared validity flag then reads false.
+   Each value goes to its field through the record's field writer
+   (`SceneRecordFields.h`), as a scene change does. An omitted property keeps
+   the value the record holds, which is the schema's default. A present one
+   must be a finite value inside the generated range of its field, or a
+   declared member of its enum. A violation is reported as
+   `kScenePropertyOutOfRangeCode` at the property's path and keeps the
+   record's value; the shared validity flag then reads false.
   */
   class PropertyReader final {
   public:
@@ -144,120 +143,100 @@ namespace {
         PathOf(key), *valid_ };
     }
 
-    [[nodiscard]] auto Bool(
-      const std::string_view key, const bool current) const -> bool
+    //! Whether the object holds `key`.
+    [[nodiscard]] auto Contains(const std::string_view key) const -> bool
     {
-      const auto found = document_->find(key);
-      return found == document_->end() ? current : found->get<bool>();
+      return document_->contains(key);
     }
 
-    //! A boolean stored as 0 or 1.
-    template <std::unsigned_integral T>
-    [[nodiscard]] auto Flag(const std::string_view key, const T current) const
-      -> T
-    {
-      return Bool(key, current != T { 0 }) ? T { 1 } : T { 0 };
-    }
-
-    [[nodiscard]] auto Float(const std::string_view key, const float current,
-      const PropertyRange<float>& range) const -> float
+    //! Writes the value of `key` into `field` of `record`, a field of
+    //! `component`.
+    template <typename Record, typename Field>
+    auto Read(const std::string_view key, Record& record,
+      const ComponentId component, const Field field) const -> void
     {
       const auto found = document_->find(key);
       if (found == document_->end()) {
-        return current;
+        return;
       }
-      if (const auto value = ToFloat(found->get<double>());
-        value && range.Contains(*value)) {
-        return *value;
+      const auto value
+        = ToFieldValue(*found, component, static_cast<std::uint16_t>(field));
+      if (!value.has_value() || !world::WriteField(record, field, *value)) {
+        Reject(key, PathOf(key));
       }
-      Reject(key, PathOf(key));
-      return current;
     }
 
-    //! An integer stored in a field of type `T`, which holds every value of
-    //! the property's range.
-    template <std::integral T>
-    [[nodiscard]] auto Integer(const std::string_view key, const T current,
-      const PropertyRange<std::int32_t>& range) const -> T
-    {
-      DCHECK_F(std::in_range<T>(range.min.value_or(
-                 std::numeric_limits<std::int32_t>::lowest()))
-          && std::in_range<T>(
-            range.max.value_or(std::numeric_limits<std::int32_t>::max())),
-        "the field of property '{}' does not hold its range", key);
-      const auto found = document_->find(key);
-      if (found == document_->end()) {
-        return current;
-      }
-      const auto value = found->get<std::int64_t>();
-      if (std::in_range<std::int32_t>(value) && std::in_range<T>(value)
-        && range.Contains(static_cast<std::int32_t>(value))) {
-        return static_cast<T>(value);
-      }
-      Reject(key, PathOf(key));
-      return current;
-    }
-
-    //! An enum member by its wire value.
-    [[nodiscard]] auto Member(const std::string_view key, const uint8_t current,
-      const std::span<const uint8_t> members) const -> uint8_t
-    {
-      const auto found = document_->find(key);
-      if (found == document_->end()) {
-        return current;
-      }
-      const auto value = found->get<std::int64_t>();
-      const auto member = std::ranges::find_if(
-        members, [value](const uint8_t candidate) -> bool {
-          return std::cmp_equal(candidate, value);
-        });
-      if (member != members.end()) {
-        return *member;
-      }
-      Reject(key, PathOf(key));
-      return current;
-    }
-
-    //! A member of `E` by the key the descriptor spells for it; `members`
-    //! holds the wire values of `E` and `keys` the key of each, in the same
-    //! order.
-    template <typename E>
-      requires std::is_enum_v<E>
-    [[nodiscard]] auto Named(const std::string_view key, const E current,
-      const std::span<const uint8_t> members,
-      const std::span<const std::string_view> keys) const -> E
+    //! Writes the member of an enum the descriptor spells by its key into
+    //! `field` of `record`; `members` holds the wire values and `keys` the key
+    //! of each, in the same order.
+    template <typename Record, typename Field>
+    auto ReadNamed(const std::string_view key, Record& record,
+      const Field field, const std::span<const uint8_t> members,
+      const std::span<const std::string_view> keys) const -> void
     {
       DCHECK_EQ_F(members.size(), keys.size());
       const auto found = document_->find(key);
       if (found == document_->end()) {
-        return current;
+        return;
       }
-      const auto& text = found->get_ref<const std::string&>();
-      const auto member = std::ranges::find(keys, text);
-      if (member != keys.end()) {
-        return static_cast<E>(
-          members[static_cast<size_t>(member - keys.begin())]);
+      const auto member
+        = std::ranges::find(keys, found->get_ref<const std::string&>());
+      if (member == keys.end()
+        || !world::WriteField(record, field,
+          static_cast<std::int32_t>(
+            members[static_cast<size_t>(member - keys.begin())]))) {
+        Reject(key, PathOf(key));
       }
-      Reject(key, PathOf(key));
-      return current;
     }
 
-    //! An array of numbers, each inside its own range; unchanged unless every
-    //! element is valid.
-    auto FloatArray(const std::string_view key, const std::span<float> field,
-      const std::span<const PropertyRange<float>> ranges) const -> void
+    //! Writes an array of numbers into `fields` of `record`, one element
+    //! each; unchanged unless every element is valid.
+    template <typename Record, typename Field, size_t N>
+    auto ReadArray(const std::string_view key, Record& record,
+      const ComponentId component, const std::array<Field, N>& fields) const
+      -> void
     {
       const auto found = document_->find(key);
       if (found == document_->end()) {
         return;
       }
       // The descriptor schema fixes the length of each array.
-      DCHECK_EQ_F(found->size(), field.size());
-      DCHECK_EQ_F(ranges.size(), field.size());
+      DCHECK_EQ_F(found->size(), N);
+      auto values = std::array<world::FieldValue, N> {};
       auto elements_valid = true;
-      for (size_t i = 0; i < field.size(); ++i) {
-        const auto value = ToFloat(found->at(i).get<double>());
-        if (!value || !ranges[i].Contains(*value)) {
+      for (size_t i = 0; i < N; ++i) {
+        const auto value = ToFieldValue(
+          found->at(i), component, static_cast<std::uint16_t>(fields.at(i)));
+        if (!value.has_value()) {
+          Reject(key, PathOf(key) + "[" + std::to_string(i) + "]");
+          elements_valid = false;
+          continue;
+        }
+        values.at(i) = *value;
+      }
+      if (!elements_valid) {
+        return;
+      }
+      for (size_t i = 0; i < N; ++i) {
+        [[maybe_unused]] const auto written
+          = world::WriteField(record, fields.at(i), values.at(i));
+        DCHECK_F(written, "the record holds every field of '{}'", key);
+      }
+    }
+
+    //! An array of finite numbers with no field of its own, such as a
+    //! quaternion; unchanged unless every element is finite.
+    auto ReadFloats(
+      const std::string_view key, const std::span<float> out) const -> void
+    {
+      const auto found = document_->find(key);
+      if (found == document_->end()) {
+        return;
+      }
+      DCHECK_EQ_F(found->size(), out.size());
+      auto elements_valid = true;
+      for (size_t i = 0; i < out.size(); ++i) {
+        if (!ToFloat(found->at(i).get<double>()).has_value()) {
           Reject(key, PathOf(key) + "[" + std::to_string(i) + "]");
           elements_valid = false;
         }
@@ -265,8 +244,8 @@ namespace {
       if (!elements_valid) {
         return;
       }
-      for (size_t i = 0; i < field.size(); ++i) {
-        field[i] = static_cast<float>(found->at(i).get<double>());
+      for (size_t i = 0; i < out.size(); ++i) {
+        out[i] = static_cast<float>(found->at(i).get<double>());
       }
     }
 
@@ -280,6 +259,41 @@ namespace {
         return std::nullopt;
       }
       return static_cast<float>(value);
+    }
+
+    //! The value of `field` of `component` that `document` holds, by the
+    //! field's value type, or nothing when the field would not hold it.
+    [[nodiscard]] static auto ToFieldValue(const json& document,
+      const ComponentId component, const std::uint16_t field)
+      -> std::optional<world::FieldValue>
+    {
+      const auto type = data::schema::FindFieldType(component, field);
+      DCHECK_F(type.has_value(), "field {} is not one of its component", field);
+      if (!type.has_value()) {
+        return std::nullopt;
+      }
+      switch (*type) {
+      case data::schema::FieldType::kBool:
+        return document.get<bool>();
+      case data::schema::FieldType::kInt32: {
+        const auto value = document.get<std::int64_t>();
+        if (!std::in_range<std::int32_t>(value)
+          || !data::schema::IsValidFieldValue(
+            component, field, static_cast<std::int32_t>(value))) {
+          return std::nullopt;
+        }
+        return static_cast<std::int32_t>(value);
+      }
+      case data::schema::FieldType::kFloat: {
+        const auto value = ToFloat(document.get<double>());
+        if (!value.has_value()
+          || !data::schema::IsValidFieldValue(component, field, *value)) {
+          return std::nullopt;
+        }
+        return *value;
+      }
+      }
+      return std::nullopt;
     }
 
     [[nodiscard]] auto PathOf(const std::string_view key) const -> std::string
@@ -332,8 +346,9 @@ namespace {
     case ValueType::kVec3:
     case ValueType::kEnum:
     case ValueType::kString:
-      // No override property has these types yet; the descriptor schema
-      // admits none, and each needs its reader when the schema declares one.
+      // No geometry override property has these types yet; the descriptor
+      // schema admits none, and each needs its reader when the schema
+      // declares one.
       break;
     }
     AddDiagnostic(context, ImportSeverity::kError,
@@ -765,27 +780,26 @@ namespace {
     return false;
   }
 
-  //! Reads a light's `common` object over the defaults `common` holds.
-  auto ReadLightCommon(const PropertyReader& light,
-    const data::LightCommonRanges& ranges,
-    data::pak::world::LightCommonRecord& common) -> void
+  //! Reads a light's `common` object into `record`; `Field` is the light's
+  //! field set, whose shared fields have the same names in every light kind.
+  template <typename Field, typename Record>
+  auto ReadLightCommon(const PropertyReader& light, Record& record,
+    const ComponentId component) -> void
   {
     const auto reader = light.Nested("common");
-    common.affects_world = reader.Flag("affects_world", common.affects_world);
-    reader.FloatArray("color_rgb", common.color_rgb, ranges.color);
-    common.casts_shadows = reader.Flag("casts_shadows", common.casts_shadows);
-    common.exposure_compensation_ev = reader.Float("exposure_compensation_ev",
-      common.exposure_compensation_ev, ranges.exposure_compensation);
+    reader.Read("affects_world", record, component, Field::kAffectsWorld);
+    reader.ReadArray("color_rgb", record, component,
+      std::array { Field::kColorR, Field::kColorG, Field::kColorB });
+    reader.Read("casts_shadows", record, component, Field::kCastsShadows);
+    reader.Read("exposure_compensation_ev", record, component,
+      Field::kExposureCompensation);
 
     const auto shadow = reader.Nested("shadow");
-    common.shadow.bias
-      = shadow.Float("bias", common.shadow.bias, ranges.shadow_bias);
-    common.shadow.normal_bias = shadow.Float(
-      "normal_bias", common.shadow.normal_bias, ranges.shadow_normal_bias);
-    common.shadow.contact_shadows
-      = shadow.Flag("contact_shadows", common.shadow.contact_shadows);
-    common.shadow.resolution_hint = shadow.Member("resolution_hint",
-      common.shadow.resolution_hint, ranges.shadow_resolution_hints);
+    shadow.Read("bias", record, component, Field::kShadowBias);
+    shadow.Read("normal_bias", record, component, Field::kShadowNormalBias);
+    shadow.Read("contact_shadows", record, component, Field::kContactShadows);
+    shadow.Read(
+      "resolution_hint", record, component, Field::kShadowResolutionHint);
   }
 
   //! Reads a node's `flags`: an omitted flag takes the schema's default for a
@@ -794,85 +808,64 @@ namespace {
     data::pak::world::NodeRecord& record) -> void
   {
     namespace flags_schema = data::schema::node_flags;
+    using data::schema::NodeField;
+    const auto write_default = [&record](const NodeField field,
+                                 const world::FieldValue& value) -> void {
+      [[maybe_unused]] const auto written
+        = world::WriteField(record, field, value);
+      DCHECK_F(written, "the node record holds every node flag");
+    };
+    write_default(NodeField::kVisible,
+      static_cast<std::int32_t>(
+        std::to_underlying(is_root ? flags_schema::kVisibleRootDefault
+                                   : flags_schema::kVisibleDefault)));
+    write_default(NodeField::kCastsShadows,
+      static_cast<std::int32_t>(
+        std::to_underlying(is_root ? flags_schema::kCastsShadowsRootDefault
+                                   : flags_schema::kCastsShadowsDefault)));
+    write_default(NodeField::kReceivesShadows,
+      static_cast<std::int32_t>(
+        std::to_underlying(is_root ? flags_schema::kReceivesShadowsRootDefault
+                                   : flags_schema::kReceivesShadowsDefault)));
+    write_default(NodeField::kStatic, flags_schema::kStaticDefault);
+    write_default(NodeField::kRayCastingSelectable,
+      flags_schema::kRayCastingSelectableDefault);
+    write_default(NodeField::kIgnoreParentTransform,
+      flags_schema::kIgnoreParentTransformDefault);
+
     const auto flags = node.Nested("flags");
-    record.node_flags = 0U;
-    record.inherited_flags = 0U;
-
-    // Node flag sources share one encoding: inherit, local on, local off.
-    using data::schema::ShadowSource;
-    using data::schema::VisibilitySource;
-    static_assert(std::to_underlying(VisibilitySource::kInherit)
-      == std::to_underlying(ShadowSource::kInherit));
-    static_assert(std::to_underlying(VisibilitySource::kShown)
-      == std::to_underlying(ShadowSource::kOn));
-    static_assert(std::to_underlying(VisibilitySource::kHidden)
-      == std::to_underlying(ShadowSource::kOff));
-    const auto apply_source
-      = [&]<typename Source>(const std::string_view key,
-          const Source child_default, const Source root_default,
-          const std::span<const uint8_t> members,
-          const std::span<const std::string_view> keys,
-          const uint32_t mask) -> void {
-      const auto mode = std::to_underlying(flags.Named(
-        key, is_root ? root_default : child_default, members, keys));
-      if (mode == std::to_underlying(VisibilitySource::kInherit)) {
-        record.inherited_flags |= mask;
-      } else if (mode == std::to_underlying(VisibilitySource::kShown)) {
-        record.node_flags |= mask;
-      }
-    };
-    const auto apply_flag
-      = [&](const std::string_view key, const bool default_value,
-          const uint32_t mask) -> void {
-      if (flags.Bool(key, default_value)) {
-        record.node_flags |= mask;
-      }
-    };
-
-    apply_source("visible", flags_schema::kVisibleDefault,
-      flags_schema::kVisibleRootDefault, flags_schema::kVisibleValues,
-      data::schema::kVisibilitySourceMemberKeys, world::kSceneNodeFlag_Visible);
-    apply_flag(
-      "static", flags_schema::kStaticDefault, world::kSceneNodeFlag_Static);
-    apply_source("casts_shadows", flags_schema::kCastsShadowsDefault,
-      flags_schema::kCastsShadowsRootDefault, flags_schema::kCastsShadowsValues,
-      data::schema::kShadowSourceMemberKeys,
-      world::kSceneNodeFlag_CastsShadows);
-    apply_source("receives_shadows", flags_schema::kReceivesShadowsDefault,
-      flags_schema::kReceivesShadowsRootDefault,
+    flags.ReadNamed("visible", record, NodeField::kVisible,
+      flags_schema::kVisibleValues, data::schema::kVisibilitySourceMemberKeys);
+    flags.ReadNamed("casts_shadows", record, NodeField::kCastsShadows,
+      flags_schema::kCastsShadowsValues, data::schema::kShadowSourceMemberKeys);
+    flags.ReadNamed("receives_shadows", record, NodeField::kReceivesShadows,
       flags_schema::kReceivesShadowsValues,
-      data::schema::kShadowSourceMemberKeys,
-      world::kSceneNodeFlag_ReceivesShadows);
-    apply_flag("ray_cast_selectable",
-      flags_schema::kRayCastingSelectableDefault,
-      world::kSceneNodeFlag_RayCastingSelectable);
-    apply_flag("ignore_parent_transform",
-      flags_schema::kIgnoreParentTransformDefault,
-      world::kSceneNodeFlag_IgnoreParentTransform);
+      data::schema::kShadowSourceMemberKeys);
+    flags.Read("static", record, ComponentId::kNode, NodeField::kStatic);
+    flags.Read("ray_cast_selectable", record, ComponentId::kNode,
+      NodeField::kRayCastingSelectable);
+    flags.Read("ignore_parent_transform", record, ComponentId::kNode,
+      NodeField::kIgnoreParentTransform);
   }
 
-  //! Reads a node's `transform` over the defaults `record` holds.
+  //! Reads a node's `transform` over the defaults `record` holds. The
+  //! rotation is a quaternion, which the scene schema states no range for
+  //! beyond being finite.
   auto ReadNodeTransform(
     const PropertyReader& node, data::pak::world::NodeRecord& record) -> void
   {
-    namespace transform_schema = data::schema::transform;
-    // The rotation is a quaternion, which the scene schema states no range for
-    // beyond being finite.
-    constexpr auto kQuaternionRange = std::array<PropertyRange<float>, 4> {};
-    constexpr auto kTranslationRanges = std::array {
-      transform_schema::kPositionXRange,
-      transform_schema::kPositionYRange,
-      transform_schema::kPositionZRange,
-    };
-    constexpr auto kScaleRanges = std::array {
-      transform_schema::kScaleXRange,
-      transform_schema::kScaleYRange,
-      transform_schema::kScaleZRange,
-    };
+    using data::schema::TransformField;
     const auto transform = node.Nested("transform");
-    transform.FloatArray("translation", record.translation, kTranslationRanges);
-    transform.FloatArray("rotation", record.rotation, kQuaternionRange);
-    transform.FloatArray("scale", record.scale, kScaleRanges);
+    transform.ReadArray("translation", record, ComponentId::kTransform,
+      std::array { TransformField::kPositionX, TransformField::kPositionY,
+        TransformField::kPositionZ });
+    auto rotation = world::Quaternion {};
+    std::ranges::copy(record.rotation, rotation.begin());
+    transform.ReadFloats("rotation", rotation);
+    world::WriteRotation(record, rotation);
+    transform.ReadArray("scale", record, ComponentId::kTransform,
+      std::array { TransformField::kScaleX, TransformField::kScaleY,
+        TransformField::kScaleZ });
   }
 
   auto PrepareSceneSource(SourceContext& context, const json& descriptor_doc)
@@ -998,31 +991,31 @@ namespace {
             return std::nullopt;
           }
 
-          namespace camera_schema = data::schema::perspective_camera;
+          using data::schema::PerspectiveCameraField;
           auto camera
             = world::MakeDefaultRecord<world::PerspectiveCameraRecord>();
           camera.node_index = node_index;
           auto camera_valid = true;
           const auto reader
             = PropertyReader(context, camera_doc, object_path, camera_valid);
-          camera.aspect_mode = world::ToCameraAspectMode(
-            reader.Named("aspect_mode", camera_schema::kAspectModeDefault,
-              camera_schema::kAspectModeValues,
-              data::schema::kCameraAspectModeMemberKeys));
-          camera.fov_y = reader.Float(
-            "fov_y", camera.fov_y, camera_schema::kFieldOfViewYRadiansRange);
-          camera.aspect_ratio = reader.Float("aspect_ratio",
-            camera.aspect_ratio, camera_schema::kAspectRatioRange);
-          camera.near_plane = reader.Float(
-            "near_plane", camera.near_plane, camera_schema::kNearPlaneRange);
-          camera.far_plane = reader.Float(
-            "far_plane", camera.far_plane, camera_schema::kFarPlaneRange);
-          camera.aperture_f = reader.Float(
-            "aperture_f", camera.aperture_f, camera_schema::kApertureFRange);
-          camera.shutter_rate = reader.Float("shutter_rate",
-            camera.shutter_rate, camera_schema::kShutterRateRange);
-          camera.iso
-            = reader.Float("iso", camera.iso, camera_schema::kIsoRange);
+          constexpr auto kCamera = ComponentId::kPerspectiveCamera;
+          reader.ReadNamed("aspect_mode", camera,
+            PerspectiveCameraField::kAspectMode,
+            data::schema::kCameraAspectModeMembers,
+            data::schema::kCameraAspectModeMemberKeys);
+          reader.Read("fov_y", camera, kCamera,
+            PerspectiveCameraField::kFieldOfViewYRadians);
+          reader.Read("aspect_ratio", camera, kCamera,
+            PerspectiveCameraField::kAspectRatio);
+          reader.Read(
+            "near_plane", camera, kCamera, PerspectiveCameraField::kNearPlane);
+          reader.Read(
+            "far_plane", camera, kCamera, PerspectiveCameraField::kFarPlane);
+          reader.Read(
+            "aperture_f", camera, kCamera, PerspectiveCameraField::kApertureF);
+          reader.Read("shutter_rate", camera, kCamera,
+            PerspectiveCameraField::kShutterRate);
+          reader.Read("iso", camera, kCamera, PerspectiveCameraField::kIso);
           if (!camera_valid) {
             return std::nullopt;
           }
@@ -1045,38 +1038,32 @@ namespace {
             return std::nullopt;
           }
 
-          namespace camera_schema = data::schema::orthographic_camera;
+          using data::schema::OrthographicCameraField;
           auto camera
             = world::MakeDefaultRecord<world::OrthographicCameraRecord>();
           camera.node_index = node_index;
           auto camera_valid = true;
           const auto reader
             = PropertyReader(context, camera_doc, object_path, camera_valid);
-          camera.aspect_mode = world::ToCameraAspectMode(
-            reader.Named("aspect_mode", camera_schema::kAspectModeDefault,
-              camera_schema::kAspectModeValues,
-              data::schema::kCameraAspectModeMemberKeys));
+          constexpr auto kCamera = ComponentId::kOrthographicCamera;
+          reader.ReadNamed("aspect_mode", camera,
+            OrthographicCameraField::kAspectMode,
+            data::schema::kCameraAspectModeMembers,
+            data::schema::kCameraAspectModeMemberKeys);
           // The volume is the authored half height and aspect ratio.
-          const auto half_height = reader.Float("orthographic_size",
-            camera_schema::kOrthographicSizeDefault,
-            camera_schema::kOrthographicSizeRange);
-          const auto half_width = half_height
-            * reader.Float("aspect_ratio", camera_schema::kAspectRatioDefault,
-              camera_schema::kAspectRatioRange);
-          camera.left = -half_width;
-          camera.right = half_width;
-          camera.bottom = -half_height;
-          camera.top = half_height;
-          camera.near_plane = reader.Float(
-            "near_plane", camera.near_plane, camera_schema::kNearPlaneRange);
-          camera.far_plane = reader.Float(
-            "far_plane", camera.far_plane, camera_schema::kFarPlaneRange);
-          camera.aperture_f = reader.Float(
-            "aperture_f", camera.aperture_f, camera_schema::kApertureFRange);
-          camera.shutter_rate = reader.Float("shutter_rate",
-            camera.shutter_rate, camera_schema::kShutterRateRange);
-          camera.iso
-            = reader.Float("iso", camera.iso, camera_schema::kIsoRange);
+          reader.Read("orthographic_size", camera, kCamera,
+            OrthographicCameraField::kOrthographicSize);
+          reader.Read("aspect_ratio", camera, kCamera,
+            OrthographicCameraField::kAspectRatio);
+          reader.Read(
+            "near_plane", camera, kCamera, OrthographicCameraField::kNearPlane);
+          reader.Read(
+            "far_plane", camera, kCamera, OrthographicCameraField::kFarPlane);
+          reader.Read(
+            "aperture_f", camera, kCamera, OrthographicCameraField::kApertureF);
+          reader.Read("shutter_rate", camera, kCamera,
+            OrthographicCameraField::kShutterRate);
+          reader.Read("iso", camera, kCamera, OrthographicCameraField::kIso);
           if (!camera_valid) {
             return std::nullopt;
           }
@@ -1102,65 +1089,55 @@ namespace {
             return std::nullopt;
           }
 
-          namespace light_schema = data::schema::directional_light;
+          using data::schema::DirectionalLightField;
           auto light
             = world::MakeDefaultRecord<world::DirectionalLightRecord>();
           light.node_index = node_index;
           auto light_valid = true;
           const auto reader
             = PropertyReader(context, light_doc, object_path, light_valid);
-          ReadLightCommon(
-            reader, data::kDirectionalLightCommonRanges, light.common);
-          light.angular_size_radians = reader.Float("angular_size_radians",
-            light.angular_size_radians, light_schema::kAngularSizeRadiansRange);
-          light.atmosphere_light_slot = reader.Member("atmosphere_light_slot",
-            light.atmosphere_light_slot,
-            light_schema::kAtmosphereLightSlotValues);
-          light.use_per_pixel_atmosphere_transmittance
-            = reader.Flag("use_per_pixel_atmosphere_transmittance",
-              light.use_per_pixel_atmosphere_transmittance);
-          constexpr auto kDiskScaleRanges = std::array {
-            light_schema::kDiskScaleRRange,
-            light_schema::kDiskScaleGRange,
-            light_schema::kDiskScaleBRange,
-          };
-          reader.FloatArray("atmosphere_disk_luminance_scale_rgb",
-            light.atmosphere_disk_luminance_scale_rgb, kDiskScaleRanges);
-          light.cascade_count = reader.Integer("cascade_count",
-            light.cascade_count, light_schema::kCascadeCountRange);
-          light.split_mode = reader.Member(
-            "split_mode", light.split_mode, light_schema::kSplitModeValues);
-          light.max_shadow_distance = reader.Float("max_shadow_distance",
-            light.max_shadow_distance, light_schema::kMaxShadowDistanceRange);
-          constexpr auto kCascadeDistanceRanges = std::array {
-            light_schema::kCascadeDistance0Range,
-            light_schema::kCascadeDistance1Range,
-            light_schema::kCascadeDistance2Range,
-            light_schema::kCascadeDistance3Range,
-          };
-          reader.FloatArray("cascade_distances", light.cascade_distances,
-            kCascadeDistanceRanges);
+          constexpr auto kLight = ComponentId::kDirectionalLight;
+          ReadLightCommon<DirectionalLightField>(reader, light, kLight);
+          reader.Read("angular_size_radians", light, kLight,
+            DirectionalLightField::kAngularSizeRadians);
+          reader.Read("atmosphere_light_slot", light, kLight,
+            DirectionalLightField::kAtmosphereLightSlot);
+          reader.Read("use_per_pixel_atmosphere_transmittance", light, kLight,
+            DirectionalLightField::kUsePerPixelAtmosphereTransmittance);
+          reader.ReadArray("atmosphere_disk_luminance_scale_rgb", light, kLight,
+            std::array { DirectionalLightField::kDiskScaleR,
+              DirectionalLightField::kDiskScaleG,
+              DirectionalLightField::kDiskScaleB });
+          reader.Read("cascade_count", light, kLight,
+            DirectionalLightField::kCascadeCount);
+          reader.Read(
+            "split_mode", light, kLight, DirectionalLightField::kSplitMode);
+          reader.Read("max_shadow_distance", light, kLight,
+            DirectionalLightField::kMaxShadowDistance);
+          reader.ReadArray("cascade_distances", light, kLight,
+            std::array { DirectionalLightField::kCascadeDistance0,
+              DirectionalLightField::kCascadeDistance1,
+              DirectionalLightField::kCascadeDistance2,
+              DirectionalLightField::kCascadeDistance3 });
           // Authored distances without a split mode or a shadow distance are
           // the manual distances, ending at the last one.
-          if (light_doc.contains("cascade_distances")) {
-            if (!light_doc.contains("split_mode")) {
+          if (reader.Contains("cascade_distances")) {
+            if (!reader.Contains("split_mode")) {
               light.split_mode = std::to_underlying(
                 data::schema::DirectionalCsmSplitMode::kManualDistances);
             }
-            if (!light_doc.contains("max_shadow_distance")) {
+            if (!reader.Contains("max_shadow_distance")) {
               light.max_shadow_distance = light.cascade_distances[3];
             }
           }
-          light.distribution_exponent
-            = reader.Float("distribution_exponent", light.distribution_exponent,
-              light_schema::kDistributionExponentRange);
-          light.transition_fraction = reader.Float("transition_fraction",
-            light.transition_fraction, light_schema::kTransitionFractionRange);
-          light.distance_fadeout_fraction = reader.Float(
-            "distance_fadeout_fraction", light.distance_fadeout_fraction,
-            light_schema::kDistanceFadeoutFractionRange);
-          light.intensity_lux = reader.Float("intensity_lux",
-            light.intensity_lux, light_schema::kIntensityLuxRange);
+          reader.Read("distribution_exponent", light, kLight,
+            DirectionalLightField::kDistributionExponent);
+          reader.Read("transition_fraction", light, kLight,
+            DirectionalLightField::kTransitionFraction);
+          reader.Read("distance_fadeout_fraction", light, kLight,
+            DirectionalLightField::kDistanceFadeoutFraction);
+          reader.Read("intensity_lux", light, kLight,
+            DirectionalLightField::kIntensityLux);
           if (!light_valid) {
             return std::nullopt;
           }
@@ -1183,19 +1160,19 @@ namespace {
             return std::nullopt;
           }
 
-          namespace light_schema = data::schema::point_light;
+          using data::schema::LocalLightField;
           auto light = world::MakeDefaultRecord<world::PointLightRecord>();
           light.node_index = node_index;
           auto light_valid = true;
           const auto reader
             = PropertyReader(context, light_doc, object_path, light_valid);
-          ReadLightCommon(reader, data::kPointLightCommonRanges, light.common);
-          light.range
-            = reader.Float("range", light.range, light_schema::kRangeRange);
-          light.source_radius = reader.Float("source_radius",
-            light.source_radius, light_schema::kSourceRadiusRange);
-          light.luminous_flux_lm = reader.Float("luminous_flux_lm",
-            light.luminous_flux_lm, light_schema::kLuminousFluxLmRange);
+          constexpr auto kLight = ComponentId::kPointLight;
+          ReadLightCommon<LocalLightField>(reader, light, kLight);
+          reader.Read("range", light, kLight, LocalLightField::kRange);
+          reader.Read(
+            "source_radius", light, kLight, LocalLightField::kSourceRadius);
+          reader.Read("luminous_flux_lm", light, kLight,
+            LocalLightField::kLuminousFluxLm);
           if (!light_valid) {
             return std::nullopt;
           }
@@ -1218,25 +1195,23 @@ namespace {
             return std::nullopt;
           }
 
-          namespace light_schema = data::schema::spot_light;
+          using data::schema::LocalLightField;
           auto light = world::MakeDefaultRecord<world::SpotLightRecord>();
           light.node_index = node_index;
           auto light_valid = true;
           const auto reader
             = PropertyReader(context, light_doc, object_path, light_valid);
-          ReadLightCommon(reader, data::kSpotLightCommonRanges, light.common);
-          light.range
-            = reader.Float("range", light.range, light_schema::kRangeRange);
-          light.inner_cone_angle_radians = reader.Float(
-            "inner_cone_angle_radians", light.inner_cone_angle_radians,
-            light_schema::kInnerConeAngleRadiansRange);
-          light.outer_cone_angle_radians = reader.Float(
-            "outer_cone_angle_radians", light.outer_cone_angle_radians,
-            light_schema::kOuterConeAngleRadiansRange);
-          light.source_radius = reader.Float("source_radius",
-            light.source_radius, light_schema::kSourceRadiusRange);
-          light.luminous_flux_lm = reader.Float("luminous_flux_lm",
-            light.luminous_flux_lm, light_schema::kLuminousFluxLmRange);
+          constexpr auto kLight = ComponentId::kSpotLight;
+          ReadLightCommon<LocalLightField>(reader, light, kLight);
+          reader.Read("range", light, kLight, LocalLightField::kRange);
+          reader.Read("inner_cone_angle_radians", light, kLight,
+            LocalLightField::kInnerConeAngleRadians);
+          reader.Read("outer_cone_angle_radians", light, kLight,
+            LocalLightField::kOuterConeAngleRadians);
+          reader.Read(
+            "source_radius", light, kLight, LocalLightField::kSourceRadius);
+          reader.Read("luminous_flux_lm", light, kLight,
+            LocalLightField::kLuminousFluxLm);
           if (!light_valid) {
             return std::nullopt;
           }
@@ -1290,37 +1265,34 @@ namespace {
           return std::nullopt;
         }
 
-        namespace fog_schema = data::schema::local_fog_volume;
+        using data::schema::LocalFogVolumeField;
         auto record = world::MakeDefaultRecord<world::LocalFogVolumeRecord>();
         record.node_index = node_index;
         auto fog_valid = true;
         const auto reader
           = PropertyReader(context, volume_doc, object_path, fog_valid);
-        record.enabled = reader.Flag("enabled", record.enabled);
-        record.radial_fog_extinction = reader.Float("radial_fog_extinction",
-          record.radial_fog_extinction, fog_schema::kRadialFogExtinctionRange);
-        record.height_fog_extinction = reader.Float("height_fog_extinction",
-          record.height_fog_extinction, fog_schema::kHeightFogExtinctionRange);
-        record.height_fog_falloff = reader.Float("height_fog_falloff",
-          record.height_fog_falloff, fog_schema::kHeightFogFalloffRange);
-        record.height_fog_offset = reader.Float("height_fog_offset",
-          record.height_fog_offset, fog_schema::kHeightFogOffsetRange);
-        record.fog_phase_g = reader.Float(
-          "fog_phase_g", record.fog_phase_g, fog_schema::kFogPhaseGRange);
-        constexpr auto kAlbedoRanges = std::array {
-          fog_schema::kFogAlbedoRRange,
-          fog_schema::kFogAlbedoGRange,
-          fog_schema::kFogAlbedoBRange,
-        };
-        reader.FloatArray("fog_albedo", record.fog_albedo, kAlbedoRanges);
-        constexpr auto kEmissiveRanges = std::array {
-          fog_schema::kFogEmissiveRRange,
-          fog_schema::kFogEmissiveGRange,
-          fog_schema::kFogEmissiveBRange,
-        };
-        reader.FloatArray("fog_emissive", record.fog_emissive, kEmissiveRanges);
-        record.sort_priority = reader.Integer("sort_priority",
-          record.sort_priority, fog_schema::kSortPriorityRange);
+        constexpr auto kFog = ComponentId::kLocalFogVolume;
+        reader.Read("enabled", record, kFog, LocalFogVolumeField::kEnabled);
+        reader.Read("radial_fog_extinction", record, kFog,
+          LocalFogVolumeField::kRadialFogExtinction);
+        reader.Read("height_fog_extinction", record, kFog,
+          LocalFogVolumeField::kHeightFogExtinction);
+        reader.Read("height_fog_falloff", record, kFog,
+          LocalFogVolumeField::kHeightFogFalloff);
+        reader.Read("height_fog_offset", record, kFog,
+          LocalFogVolumeField::kHeightFogOffset);
+        reader.Read(
+          "fog_phase_g", record, kFog, LocalFogVolumeField::kFogPhaseG);
+        reader.ReadArray("fog_albedo", record, kFog,
+          std::array { LocalFogVolumeField::kFogAlbedoR,
+            LocalFogVolumeField::kFogAlbedoG,
+            LocalFogVolumeField::kFogAlbedoB });
+        reader.ReadArray("fog_emissive", record, kFog,
+          std::array { LocalFogVolumeField::kFogEmissiveR,
+            LocalFogVolumeField::kFogEmissiveG,
+            LocalFogVolumeField::kFogEmissiveB });
+        reader.Read(
+          "sort_priority", record, kFog, LocalFogVolumeField::kSortPriority);
         if (!fog_valid) {
           return std::nullopt;
         }

@@ -25,7 +25,7 @@ public sealed class TransformComponentTests
     public void NewComponentAndData_TakeTheSchemaDefaults()
     {
         var position = new Vector3(SceneSchema.Transform.Defaults.PositionX, SceneSchema.Transform.Defaults.PositionY, SceneSchema.Transform.Defaults.PositionZ);
-        var rotation = TransformConverter.EulerDegreesToQuaternion(new Vector3(SceneSchema.Transform.Defaults.RotationX, SceneSchema.Transform.Defaults.RotationY, SceneSchema.Transform.Defaults.RotationZ));
+        var rotation = TransformConverter.EulerDegreesToQuaternion(SceneSchema.Transform.Defaults.Rotation);
         var scale = new Vector3(SceneSchema.Transform.Defaults.ScaleX, SceneSchema.Transform.Defaults.ScaleY, SceneSchema.Transform.Defaults.ScaleZ);
 
         var component = new TransformComponent { Name = "Transform" };

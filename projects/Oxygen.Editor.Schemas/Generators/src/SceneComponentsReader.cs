@@ -39,8 +39,8 @@ internal sealed partial class SceneComponentsReader
     private static readonly string[] PartPropertyKeys = ["name", "key", "type", "sources", "override_id"];
     private static readonly string[] PartPropertyOptionalKeys = ["asset_type", "enum", .. ValueKeys];
     private static readonly string[] RangeKeys = ["min", "max", "min_exclusive", "max_exclusive", "nonzero"];
-    private static readonly string[] Sources = ["asset", "model"];
-    private static readonly string[] AssetTypes = ["geometry", "material"];
+    private static readonly string[] Sources = ["asset"];
+    private static readonly string[] AssetTypes = ["geometry", "material", "scene"];
     private static readonly string[] Cardinalities = ["required", "optional"];
     private static readonly string[] Commits = ["clamp", "reject"];
 

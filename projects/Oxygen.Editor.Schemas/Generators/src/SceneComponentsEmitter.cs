@@ -86,19 +86,42 @@ internal static partial class SceneComponentsEmitter
     private static StringBuilder AppendOverrideIds(StringBuilder source, SceneComponentsSchema schema)
     {
         _ = source.AppendLine()
-            .AppendLine("/// <summary>The ids of the properties a scene stores as overrides. Stable: never renumbered or reused.</summary>")
+            .AppendLine("/// <summary>")
+            .AppendLine("/// The ids of the properties a scene can change, and of those it stores as overrides of an asset's values. Stable:")
+            .AppendLine("/// never renumbered or reused.")
+            .AppendLine("/// </summary>")
             .AppendLine("public enum RuntimeOverrideId : ushort")
             .AppendLine("{")
             .AppendLine("    /// <summary>Sentinel; not a valid override id.</summary>")
             .AppendLine("    Invalid = 0,");
-        foreach (var (path, property) in Overridable(schema).OrderBy(static entry => entry.Property.Values.OverrideId))
+        foreach (var (path, property) in Changeable(schema).OrderBy(static entry => entry.Property.Values.OverrideId))
         {
             _ = source.AppendLine()
-                .Append("    /// <summary>The overrides of <c>SceneSchema.").Append(path).Append("</c> (<c>").Append(property.Key).AppendLine("</c>).</summary>")
+                .Append("    /// <summary>The changes of <c>SceneSchema.").Append(path).Append("</c> (<c>").Append(property.Key).AppendLine("</c>).</summary>")
                 .Append("    ").Append(path.Replace(".", string.Empty)).Append(" = ").Append(Number(property.Values.OverrideId!.Value)).AppendLine(",");
         }
 
         return source.AppendLine("}");
+    }
+
+    // Each property with an override id, with its path of component, part and property names.
+    private static IEnumerable<(string Path, SceneComponentsSchema.PropertyEntry Property)> Changeable(SceneComponentsSchema schema)
+    {
+        foreach (var component in schema.Components)
+        {
+            foreach (var property in component.Properties.Where(static property => property.Values.OverrideId is not null))
+            {
+                yield return (component.Name + "." + property.Name, property);
+            }
+
+            foreach (var part in component.Parts)
+            {
+                foreach (var property in part.Properties)
+                {
+                    yield return (component.Name + "." + part.Name + "." + property.Name, property);
+                }
+            }
+        }
     }
 
     // Each property a source may supply, with its path of component, part and property names.
@@ -217,9 +240,10 @@ internal static partial class SceneComponentsEmitter
                     .Append("        map.Add(global::Oxygen.Editor.World.SceneSchema.").Append(component.Name).Append('.').Append(property.Name)
                     .Append(".Id, new Mapping(global::Oxygen.Editor.Runtime.Engine.RuntimeComponentId.").Append(component.Name)
                     .Append(", [").Append(fields).Append("])");
-                _ = property.Encoding is null
+                var encode = property.Encoding is null ? null : SceneComponentsTypes.FieldEncodingMethod(property.Encoding);
+                _ = encode is null
                     ? source.AppendLine(");")
-                    : source.Append(" { Encode = ").Append(SceneComponentsTypes.EncodingMethod(property.Encoding)).AppendLine(" });");
+                    : source.Append(" { Encode = ").Append(encode).AppendLine(" });");
             }
         }
 

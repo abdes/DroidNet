@@ -18,7 +18,9 @@
 # a property receive its value in order, one value each: a bool as a bool, an
 # int or an enum member's wire value as an int32, a float or each axis of a
 # vec3 as a float. `encoding` names a unit conversion applied before the value
-# goes to its fields.
+# goes to its fields: `degrees-to-radians` converts one angle;
+# `euler-yxz-degrees-to-quat` turns three Y-X-Z Euler angles into one rotation,
+# which a change holds as a quaternion while the fields receive the angles.
 #
 # The schema is the only place that decides a property's creation `default`
 # and its valid `range`, both in the property's authored units. A range bounds
@@ -30,9 +32,10 @@
 # `display_unit` the unit UIs show it in.
 # An asset property names the `asset_type` of the asset it references.
 #
-# A property with `sources` may be supplied by a geometry asset (`asset`) or a
-# model template (`model`); a scene stores only its overrides of it, addressed
-# by its `override_id`. Override ids are stable and unique across the schema:
+# Every property a scene can change on an instanced node has an `override_id`:
+# every wired property, and every property with `sources`. A property with
+# `sources: [asset]` is supplied by a geometry asset; a scene stores only its
+# overrides of it. Override ids are stable and unique across the schema:
 # never renumber or reuse one. A part is a piece of a component that the asset
 # defining it identifies, such as a surface of a geometry; its properties
 # always have a source and are never applied field by field.
@@ -229,42 +232,38 @@ components:
         key: /local_position/0
         type: float
         fields: [PositionX]
+        override_id: 5
         default: 0
         unit: metre
       - name: PositionY
         key: /local_position/1
         type: float
         fields: [PositionY]
+        override_id: 6
         default: 0
         unit: metre
       - name: PositionZ
         key: /local_position/2
         type: float
         fields: [PositionZ]
+        override_id: 7
         default: 0
         unit: metre
-      - name: RotationX
-        key: /local_rotation_euler_degrees/0
-        type: float
-        fields: [RotationXDegrees]
-        default: 0
-        unit: degree
-      - name: RotationY
-        key: /local_rotation_euler_degrees/1
-        type: float
-        fields: [RotationYDegrees]
-        default: 0
-        unit: degree
-      - name: RotationZ
-        key: /local_rotation_euler_degrees/2
-        type: float
-        fields: [RotationZDegrees]
-        default: 0
+      # One rotation: a cooked node holds a quaternion, and one angle of it
+      # exists only through an ambiguous decomposition.
+      - name: Rotation
+        key: /local_rotation_euler_degrees
+        type: vec3
+        fields: [RotationXDegrees, RotationYDegrees, RotationZDegrees]
+        override_id: 8
+        encoding: euler-yxz-degrees-to-quat
+        default: [0, 0, 0]
         unit: degree
       - name: ScaleX
         key: /local_scale/0
         type: float
         fields: [ScaleX]
+        override_id: 9
         default: 1
         range: { nonzero: true }
         unit: multiplier
@@ -272,6 +271,7 @@ components:
         key: /local_scale/1
         type: float
         fields: [ScaleY]
+        override_id: 10
         default: 1
         range: { nonzero: true }
         unit: multiplier
@@ -279,6 +279,7 @@ components:
         key: /local_scale/2
         type: float
         fields: [ScaleZ]
+        override_id: 11
         default: 1
         range: { nonzero: true }
         unit: multiplier
@@ -295,6 +296,7 @@ components:
         type: enum
         enum: VisibilitySource
         fields: [Visible]
+        override_id: 12
         default: Inherit
         root_default: Shown
       - name: CastsShadows
@@ -302,6 +304,7 @@ components:
         type: enum
         enum: ShadowSource
         fields: [CastsShadows]
+        override_id: 13
         default: Inherit
         root_default: "On"
       - name: ReceivesShadows
@@ -309,22 +312,26 @@ components:
         type: enum
         enum: ShadowSource
         fields: [ReceivesShadows]
+        override_id: 14
         default: Inherit
         root_default: "On"
       - name: IsStatic
         key: /static
         type: bool
         fields: [Static]
+        override_id: 15
         default: false
       - name: IsRayCastingSelectable
         key: /ray_cast_selectable
         type: bool
         fields: [RayCastingSelectable]
+        override_id: 16
         default: true
       - name: IgnoreParentTransform
         key: /ignore_parent_transform
         type: bool
         fields: [IgnoreParentTransform]
+        override_id: 17
         default: false
 
   # The asset defaults of the surfaces and the LOD policy come from the
@@ -375,6 +382,7 @@ components:
         key: /field_of_view_degrees
         type: float
         fields: [FieldOfViewYRadians]
+        override_id: 18
         encoding: degrees-to-radians
         default: 60
         range: { min: 1, max: 179 }
@@ -384,12 +392,14 @@ components:
         key: /aspect_ratio
         type: float
         fields: [AspectRatio]
+        override_id: 19
         default: 1.7777778
         range: { min: 0, min_exclusive: true }
       - name: NearPlane
         key: /near_plane
         type: float
         fields: [NearPlane]
+        override_id: 20
         default: 0.1
         range: { min: 0, min_exclusive: true }
         unit: metre
@@ -397,6 +407,7 @@ components:
         key: /far_plane
         type: float
         fields: [FarPlane]
+        override_id: 21
         default: 1000
         range: { min: 0, min_exclusive: true }
         unit: metre
@@ -404,6 +415,7 @@ components:
         key: /aperture_f
         type: float
         fields: [ApertureF]
+        override_id: 22
         default: 11
         range: { min: 0, min_exclusive: true }
         unit: f-number
@@ -411,6 +423,7 @@ components:
         key: /shutter_rate
         type: float
         fields: [ShutterRate]
+        override_id: 23
         default: 125
         range: { min: 0, min_exclusive: true }
         unit: per-second
@@ -418,6 +431,7 @@ components:
         key: /iso
         type: float
         fields: [Iso]
+        override_id: 24
         default: 100
         range: { min: 0, min_exclusive: true }
       - name: AspectMode
@@ -425,6 +439,7 @@ components:
         type: enum
         enum: CameraAspectMode
         fields: [AspectMode]
+        override_id: 25
         default: Auto
 
   - name: OrthographicCamera
@@ -436,6 +451,7 @@ components:
         key: /orthographic_size
         type: float
         fields: [OrthographicSize]
+        override_id: 26
         default: 10
         range: { min: 0, min_exclusive: true }
         unit: metre
@@ -444,17 +460,20 @@ components:
         type: enum
         enum: CameraAspectMode
         fields: [AspectMode]
+        override_id: 27
         default: Auto
       - name: AspectRatio
         key: /aspect_ratio
         type: float
         fields: [AspectRatio]
+        override_id: 28
         default: 1.7777778
         range: { min: 0, min_exclusive: true }
       - name: NearPlane
         key: /near_plane
         type: float
         fields: [NearPlane]
+        override_id: 29
         default: 0.1
         range: { min: 0, min_exclusive: true }
         unit: metre
@@ -462,6 +481,7 @@ components:
         key: /far_plane
         type: float
         fields: [FarPlane]
+        override_id: 30
         default: 1000
         range: { min: 0, min_exclusive: true }
         unit: metre
@@ -469,6 +489,7 @@ components:
         key: /aperture_f
         type: float
         fields: [ApertureF]
+        override_id: 31
         default: 11
         range: { min: 0, min_exclusive: true }
         unit: f-number
@@ -476,6 +497,7 @@ components:
         key: /shutter_rate
         type: float
         fields: [ShutterRate]
+        override_id: 32
         default: 125
         range: { min: 0, min_exclusive: true }
         unit: per-second
@@ -483,6 +505,7 @@ components:
         key: /iso
         type: float
         fields: [Iso]
+        override_id: 33
         default: 100
         range: { min: 0, min_exclusive: true }
 
@@ -495,6 +518,7 @@ components:
         key: /color
         type: vec3
         fields: [ColorR, ColorG, ColorB]
+        override_id: 34
         default: [1, 1, 1]
         range: { min: 0, max: 1 }
         commit: clamp
@@ -502,6 +526,7 @@ components:
         key: /intensity_lux
         type: float
         fields: [IntensityLux]
+        override_id: 35
         default: 100000
         range: { min: 0 }
         commit: clamp
@@ -511,26 +536,31 @@ components:
         type: enum
         enum: AtmosphereLightSlot
         fields: [AtmosphereLightSlot]
+        override_id: 36
         default: None
       - name: UsePerPixelAtmosphereTransmittance
         key: /use_per_pixel_atmosphere_transmittance
         type: bool
         fields: [UsePerPixelAtmosphereTransmittance]
+        override_id: 37
         default: false
       - name: CastsShadows
         key: /casts_shadows
         type: bool
         fields: [CastsShadows]
+        override_id: 38
         default: true
       - name: AffectsWorld
         key: /affects_world
         type: bool
         fields: [AffectsWorld]
+        override_id: 39
         default: true
       - name: AngularSizeRadians
         key: /angular_size_radians
         type: float
         fields: [AngularSizeRadians]
+        override_id: 40
         default: 0.00935
         range: { min: 0, max: 3.14159265 }
         commit: clamp
@@ -539,6 +569,7 @@ components:
         key: /exposure_compensation
         type: float
         fields: [ExposureCompensation]
+        override_id: 41
         default: 0
         range: { min: -10, max: 10 }
         commit: clamp
@@ -547,6 +578,7 @@ components:
         key: /atmosphere_disk_luminance_scale_rgb
         type: vec3
         fields: [DiskScaleR, DiskScaleG, DiskScaleB]
+        override_id: 42
         default: [1, 1, 1]
         range: { min: 0 }
         unit: multiplier
@@ -554,6 +586,7 @@ components:
         key: /shadow/bias
         type: float
         fields: [ShadowBias]
+        override_id: 43
         default: 0
         range: { min: 0, max: 10 }
         commit: clamp
@@ -561,6 +594,7 @@ components:
         key: /shadow/normal_bias
         type: float
         fields: [ShadowNormalBias]
+        override_id: 44
         default: 0.02
         range: { min: 0 }
         commit: clamp
@@ -569,17 +603,20 @@ components:
         key: /shadow/contact_shadows
         type: bool
         fields: [ContactShadows]
+        override_id: 45
         default: false
       - name: ShadowResolutionHint
         key: /shadow/resolution_hint
         type: enum
         enum: ShadowResolutionHint
         fields: [ShadowResolutionHint]
+        override_id: 46
         default: Medium
       - name: CascadeCount
         key: /csm/cascade_count
         type: int
         fields: [CascadeCount]
+        override_id: 47
         default: 4
         range: { min: 1, max: 4 }
       - name: SplitMode
@@ -587,11 +624,13 @@ components:
         type: enum
         enum: DirectionalCsmSplitMode
         fields: [SplitMode]
+        override_id: 48
         default: Generated
       - name: MaxShadowDistance
         key: /csm/max_shadow_distance
         type: float
         fields: [MaxShadowDistance]
+        override_id: 49
         default: 160
         range: { min: 0, min_exclusive: true }
         unit: metre
@@ -599,6 +638,7 @@ components:
         key: /csm/cascade_distances/0
         type: float
         fields: [CascadeDistance0]
+        override_id: 50
         default: 8
         range: { min: 0, min_exclusive: true }
         unit: metre
@@ -606,6 +646,7 @@ components:
         key: /csm/cascade_distances/1
         type: float
         fields: [CascadeDistance1]
+        override_id: 51
         default: 24
         range: { min: 0, min_exclusive: true }
         unit: metre
@@ -613,6 +654,7 @@ components:
         key: /csm/cascade_distances/2
         type: float
         fields: [CascadeDistance2]
+        override_id: 52
         default: 64
         range: { min: 0, min_exclusive: true }
         unit: metre
@@ -620,6 +662,7 @@ components:
         key: /csm/cascade_distances/3
         type: float
         fields: [CascadeDistance3]
+        override_id: 53
         default: 160
         range: { min: 0, min_exclusive: true }
         unit: metre
@@ -627,18 +670,21 @@ components:
         key: /csm/distribution_exponent
         type: float
         fields: [DistributionExponent]
+        override_id: 54
         default: 3
         range: { min: 1 }
       - name: TransitionFraction
         key: /csm/transition_fraction
         type: float
         fields: [TransitionFraction]
+        override_id: 55
         default: 0.1
         range: { min: 0, max: 1 }
       - name: DistanceFadeoutFraction
         key: /csm/distance_fadeout_fraction
         type: float
         fields: [DistanceFadeoutFraction]
+        override_id: 56
         default: 0.1
         range: { min: 0, max: 1 }
 
@@ -651,6 +697,7 @@ components:
         key: /color
         type: vec3
         fields: [ColorR, ColorG, ColorB]
+        override_id: 57
         default: [1, 1, 1]
         range: { min: 0, max: 1 }
         commit: clamp
@@ -658,16 +705,19 @@ components:
         key: /affects_world
         type: bool
         fields: [AffectsWorld]
+        override_id: 58
         default: true
       - name: CastsShadows
         key: /casts_shadows
         type: bool
         fields: [CastsShadows]
+        override_id: 59
         default: true
       - name: ExposureCompensation
         key: /exposure_compensation
         type: float
         fields: [ExposureCompensation]
+        override_id: 60
         default: 0
         range: { min: -10, max: 10 }
         commit: clamp
@@ -676,6 +726,7 @@ components:
         key: /shadow/bias
         type: float
         fields: [ShadowBias]
+        override_id: 61
         default: 0
         range: { min: 0, max: 10 }
         commit: clamp
@@ -683,6 +734,7 @@ components:
         key: /shadow/normal_bias
         type: float
         fields: [ShadowNormalBias]
+        override_id: 62
         default: 0.02
         range: { min: 0 }
         commit: clamp
@@ -691,17 +743,20 @@ components:
         key: /shadow/contact_shadows
         type: bool
         fields: [ContactShadows]
+        override_id: 63
         default: false
       - name: ShadowResolutionHint
         key: /shadow/resolution_hint
         type: enum
         enum: ShadowResolutionHint
         fields: [ShadowResolutionHint]
+        override_id: 64
         default: Medium
       - name: LuminousFluxLumens
         key: /luminous_flux_lm
         type: float
         fields: [LuminousFluxLm]
+        override_id: 65
         default: 1600
         range: { min: 0, min_exclusive: true }
         unit: lumen
@@ -709,6 +764,7 @@ components:
         key: /range
         type: float
         fields: [Range]
+        override_id: 66
         default: 20
         range: { min: 0, min_exclusive: true }
         unit: metre
@@ -716,6 +772,7 @@ components:
         key: /source_radius
         type: float
         fields: [SourceRadius]
+        override_id: 67
         default: 0
         range: { min: 0 }
         unit: metre
@@ -729,6 +786,7 @@ components:
         key: /color
         type: vec3
         fields: [ColorR, ColorG, ColorB]
+        override_id: 68
         default: [1, 1, 1]
         range: { min: 0, max: 1 }
         commit: clamp
@@ -736,16 +794,19 @@ components:
         key: /affects_world
         type: bool
         fields: [AffectsWorld]
+        override_id: 69
         default: true
       - name: CastsShadows
         key: /casts_shadows
         type: bool
         fields: [CastsShadows]
+        override_id: 70
         default: true
       - name: ExposureCompensation
         key: /exposure_compensation
         type: float
         fields: [ExposureCompensation]
+        override_id: 71
         default: 0
         range: { min: -10, max: 10 }
         commit: clamp
@@ -754,6 +815,7 @@ components:
         key: /shadow/bias
         type: float
         fields: [ShadowBias]
+        override_id: 72
         default: 0
         range: { min: 0, max: 10 }
         commit: clamp
@@ -761,6 +823,7 @@ components:
         key: /shadow/normal_bias
         type: float
         fields: [ShadowNormalBias]
+        override_id: 73
         default: 0.02
         range: { min: 0 }
         commit: clamp
@@ -769,17 +832,20 @@ components:
         key: /shadow/contact_shadows
         type: bool
         fields: [ContactShadows]
+        override_id: 74
         default: false
       - name: ShadowResolutionHint
         key: /shadow/resolution_hint
         type: enum
         enum: ShadowResolutionHint
         fields: [ShadowResolutionHint]
+        override_id: 75
         default: Medium
       - name: LuminousFluxLumens
         key: /luminous_flux_lm
         type: float
         fields: [LuminousFluxLm]
+        override_id: 76
         default: 1600
         range: { min: 0, min_exclusive: true }
         unit: lumen
@@ -787,6 +853,7 @@ components:
         key: /range
         type: float
         fields: [Range]
+        override_id: 77
         default: 20
         range: { min: 0, min_exclusive: true }
         unit: metre
@@ -794,6 +861,7 @@ components:
         key: /source_radius
         type: float
         fields: [SourceRadius]
+        override_id: 78
         default: 0
         range: { min: 0 }
         unit: metre
@@ -802,6 +870,7 @@ components:
         key: /inner_cone_angle_radians
         type: float
         fields: [InnerConeAngleRadians]
+        override_id: 79
         default: 0.39269908
         range: { min: 0, max: 1.57079633 }
         unit: radian
@@ -810,6 +879,7 @@ components:
         key: /outer_cone_angle_radians
         type: float
         fields: [OuterConeAngleRadians]
+        override_id: 80
         default: 0.78539816
         range: { min: 0, max: 1.57079633 }
         unit: radian
@@ -822,6 +892,17 @@ components:
     cardinality: optional
     properties: []
 
+  # The source an instance root brings in, a model or an authored scene; it is
+  # cooked as the node's instance and its changes, never field by field.
+  - name: SceneInstance
+    kind: scene-instance
+    cardinality: optional
+    properties:
+      - name: Source
+        key: /source
+        type: asset
+        asset_type: scene
+
   - name: LocalFogVolume
     kind: local-fog-volume
     cardinality: optional
@@ -831,11 +912,13 @@ components:
         key: /enabled
         type: bool
         fields: [Enabled]
+        override_id: 81
         default: true
       - name: RadialFogExtinction
         key: /radial_fog_extinction
         type: float
         fields: [RadialFogExtinction]
+        override_id: 82
         default: 1
         range: { min: 0 }
         unit: per-metre
@@ -843,6 +926,7 @@ components:
         key: /height_fog_extinction
         type: float
         fields: [HeightFogExtinction]
+        override_id: 83
         default: 1
         range: { min: 0 }
         unit: per-metre
@@ -850,6 +934,7 @@ components:
         key: /height_fog_falloff
         type: float
         fields: [HeightFogFalloff]
+        override_id: 84
         default: 1000
         range: { min: 0 }
         unit: per-metre
@@ -857,29 +942,34 @@ components:
         key: /height_fog_offset
         type: float
         fields: [HeightFogOffset]
+        override_id: 85
         default: 0
         unit: metre
       - name: FogPhaseG
         key: /fog_phase_g
         type: float
         fields: [FogPhaseG]
+        override_id: 86
         default: 0.2
         range: { min: 0, max: 0.999 }
       - name: FogAlbedo
         key: /fog_albedo
         type: vec3
         fields: [FogAlbedoR, FogAlbedoG, FogAlbedoB]
+        override_id: 87
         default: [1, 1, 1]
         range: { min: 0, max: 1 }
       - name: FogEmissive
         key: /fog_emissive
         type: vec3
         fields: [FogEmissiveR, FogEmissiveG, FogEmissiveB]
+        override_id: 88
         default: [0, 0, 0]
         range: { min: 0 }
       - name: SortPriority
         key: /sort_priority
         type: int
         fields: [SortPriority]
+        override_id: 89
         default: 0
         range: { min: -127, max: 127 }

@@ -14,7 +14,7 @@
       }
     },
     {
-      Location: Schema\SceneComponents.yaml: (32,14)-(32,19),
+      Location: Schema\SceneComponents.yaml: (33,14)-(33,19),
       Message: Lamp property has no 'key',
       Severity: Error,
       Descriptor: {

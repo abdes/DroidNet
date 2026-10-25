@@ -23,7 +23,7 @@ public sealed class PropertyValidatorsTests
     public static IEnumerable<TestDataRow<ValidatorCase>> Rejected =>
     [
         Row("Position_NaN", SceneProperties.Transform.PositionXDescriptor, float.NaN, SceneDiagnosticCodes.PropertyValueNotFinite),
-        Row("Rotation_Infinity", SceneProperties.Transform.RotationYDescriptor, float.PositiveInfinity, SceneDiagnosticCodes.PropertyValueNotFinite),
+        Row("Rotation_Infinity", SceneProperties.Transform.RotationDescriptor, new Vector3(0, float.PositiveInfinity, 0), SceneDiagnosticCodes.PropertyValueNotFinite),
         Row("Scale_Zero", SceneProperties.Transform.ScaleZDescriptor, 0f, SceneDiagnosticCodes.PropertyValueOutOfRange),
         Row("Scale_NaN", SceneProperties.Transform.ScaleXDescriptor, float.NaN, SceneDiagnosticCodes.PropertyValueNotFinite),
         Row("PerspectiveNear_Zero", SceneProperties.PerspectiveCamera.NearPlaneDescriptor, 0f, SceneDiagnosticCodes.PropertyValueOutOfRange),
@@ -54,7 +54,7 @@ public sealed class PropertyValidatorsTests
 
     public static IEnumerable<TestDataRow<ValidatorCase>> Accepted =>
     [
-        Row("Rotation_FullTurn", SceneProperties.Transform.RotationZDescriptor, 360f, string.Empty),
+        Row("Rotation_FullTurn", SceneProperties.Transform.RotationDescriptor, new Vector3(0, 0, 360), string.Empty),
         Row("Scale_Negative", SceneProperties.Transform.ScaleYDescriptor, -2f, string.Empty),
         Row("PerspectiveFieldOfView_Min", SceneProperties.PerspectiveCamera.FieldOfViewDegreesDescriptor, 1f, string.Empty),
         Row("DirectionalColor_White", SceneProperties.DirectionalLight.ColorDescriptor, Vector3.One, string.Empty),

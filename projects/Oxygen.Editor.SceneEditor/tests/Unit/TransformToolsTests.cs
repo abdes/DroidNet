@@ -130,12 +130,12 @@ public sealed class TransformToolsTests
         var scale = SceneEditorViewModel.BuildGizmoEdits(RuntimeTransformTool.Scale, [target])[TargetNode];
 
         _ = move.Ids.Should().BeEquivalentTo([SceneSchema.Transform.PositionX.Id, SceneSchema.Transform.PositionY.Id, SceneSchema.Transform.PositionZ.Id]);
-        _ = rotate.Count.Should().Be(6);
-        _ = rotate.GetTyped(SceneSchema.Transform.RotationZ, out var degrees).Should().BeTrue();
-        _ = degrees.Should().BeApproximately(90.0F, 1.0e-3F);
+        _ = rotate.Count.Should().Be(4);
+        _ = rotate.GetTyped(SceneSchema.Transform.Rotation, out var degrees).Should().BeTrue();
+        _ = degrees.Z.Should().BeApproximately(90.0F, 1.0e-3F);
         _ = scale.GetTyped(SceneSchema.Transform.ScaleY, out var scaleY).Should().BeTrue();
         _ = scaleY.Should().Be(3.0F);
-        _ = scale.Contains(SceneSchema.Transform.RotationX.Id).Should().BeFalse();
+        _ = scale.Contains(SceneSchema.Transform.Rotation.Id).Should().BeFalse();
     }
 
     [TestMethod]

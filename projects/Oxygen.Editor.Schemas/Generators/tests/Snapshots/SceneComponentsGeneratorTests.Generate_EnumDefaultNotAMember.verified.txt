@@ -1,7 +1,7 @@
 ﻿{
   Diagnostics: [
     {
-      Location: Schema\SceneComponents.yaml: (53,17)-(53,24),
+      Location: Schema\SceneComponents.yaml: (57,17)-(57,24),
       Message: Lamp.Mode: 'Stretch' is not a member of CameraAspectMode,
       Severity: Error,
       Descriptor: {

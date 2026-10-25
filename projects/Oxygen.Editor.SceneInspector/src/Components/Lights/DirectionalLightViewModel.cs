@@ -238,10 +238,10 @@ public sealed partial class DirectionalLightViewModel : ComponentPropertyEditor,
     public InspectorFieldDiagnostic ColorBDiagnostic => this.edits?.Diagnostics.Get(this.colorBinding.Id.Id) ?? this.unboundDiagnostic;
 
     /// <summary>Gets current diagnostics for SunAzimuth.</summary>
-    public InspectorFieldDiagnostic SunAzimuthDiagnostic => this.edits?.Diagnostics.Get(SceneSchema.Transform.RotationX.Id) ?? this.unboundDiagnostic;
+    public InspectorFieldDiagnostic SunAzimuthDiagnostic => this.edits?.Diagnostics.Get(SceneSchema.Transform.Rotation.Id) ?? this.unboundDiagnostic;
 
     /// <summary>Gets current diagnostics for SunElevation.</summary>
-    public InspectorFieldDiagnostic SunElevationDiagnostic => this.edits?.Diagnostics.Get(SceneSchema.Transform.RotationX.Id) ?? this.unboundDiagnostic;
+    public InspectorFieldDiagnostic SunElevationDiagnostic => this.edits?.Diagnostics.Get(SceneSchema.Transform.Rotation.Id) ?? this.unboundDiagnostic;
 
     /// <summary>Gets current diagnostics for IntensityLux.</summary>
     public InspectorFieldDiagnostic IntensityLuxDiagnostic => this.edits?.Diagnostics.Get(this.intensityLuxBinding.Id.Id) ?? this.unboundDiagnostic;
@@ -607,9 +607,7 @@ public sealed partial class DirectionalLightViewModel : ComponentPropertyEditor,
         {
             var angles = TransformConverter.QuaternionToEulerDegrees(DirectionalLightOrientation.LocalRotation(node, (float)azimuth, (float)elevation));
             perTarget[node.Id] = new PropertyEdit.Builder()
-                .Set(SceneSchema.Transform.RotationX, angles.X)
-                .Set(SceneSchema.Transform.RotationY, angles.Y)
-                .Set(SceneSchema.Transform.RotationZ, angles.Z)
+                .Set(SceneSchema.Transform.Rotation, angles)
                 .Build();
         }
 

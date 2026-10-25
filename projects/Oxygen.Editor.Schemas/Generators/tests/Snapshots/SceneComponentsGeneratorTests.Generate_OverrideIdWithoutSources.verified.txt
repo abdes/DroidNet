@@ -1,8 +1,8 @@
 ﻿{
   Diagnostics: [
     {
-      Location: Schema\SceneComponents.yaml: (61,21)-(61,22),
-      Message: Geometry.GeometryUri: a property has an override id exactly when it has sources,
+      Location: Schema\SceneComponents.yaml: (65,21)-(65,22),
+      Message: Geometry.GeometryUri: a property has an override id exactly when it has sources or fields,
       Severity: Error,
       Descriptor: {
         Id: OXGNSC009,

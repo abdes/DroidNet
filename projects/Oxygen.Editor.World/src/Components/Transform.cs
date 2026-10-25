@@ -23,10 +23,7 @@ public partial class TransformComponent : GameComponent
         SceneSchema.Transform.Defaults.PositionY,
         SceneSchema.Transform.Defaults.PositionZ);
 
-    private Quaternion localRotation = TransformConverter.EulerDegreesToQuaternion(new(
-        SceneSchema.Transform.Defaults.RotationX,
-        SceneSchema.Transform.Defaults.RotationY,
-        SceneSchema.Transform.Defaults.RotationZ));
+    private Quaternion localRotation = TransformConverter.EulerDegreesToQuaternion(SceneSchema.Transform.Defaults.Rotation);
 
     private Vector3 localScale = new(
         SceneSchema.Transform.Defaults.ScaleX,
@@ -145,12 +142,7 @@ public partial class TransformComponent : GameComponent
 
     // The schema ranges the Euler angles a rotation reads as; a rotation that is not finite reads as angles that are not.
     private static void RequireRotation(Quaternion rotation)
-    {
-        var euler = TransformConverter.QuaternionToEulerDegrees(rotation);
-        PropertyChecks.Require(SceneSchema.Transform.RotationX, euler.X, nameof(rotation));
-        PropertyChecks.Require(SceneSchema.Transform.RotationY, euler.Y, nameof(rotation));
-        PropertyChecks.Require(SceneSchema.Transform.RotationZ, euler.Z, nameof(rotation));
-    }
+        => PropertyChecks.Require(SceneSchema.Transform.Rotation, TransformConverter.QuaternionToEulerDegrees(rotation), nameof(rotation));
 
     private static void RequireScale(Vector3 scale)
     {

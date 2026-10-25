@@ -15,7 +15,7 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
-from . import cpp, model
+from . import changes, cpp, model
 
 
 def write_if_changed(path: Path, text: str) -> bool:
@@ -29,7 +29,7 @@ def write_if_changed(path: Path, text: str) -> bool:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Validates the schema and generates its C++ header."""
+    """Validates the schema and generates its C++ headers."""
     parser = argparse.ArgumentParser(prog="scene_schema_codegen")
     parser.add_argument(
         "--schema", required=True, type=Path, help="scene components YAML file"
@@ -41,24 +41,36 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="JSON Schema that validates the YAML file",
     )
     parser.add_argument(
-        "--cpp-out", required=True, type=Path, help="C++ header to write"
+        "--cpp-out", required=True, type=Path, help="C++ header of the ids to write"
+    )
+    parser.add_argument(
+        "--changes-out",
+        required=True,
+        type=Path,
+        help="C++ header of the change encoder and appliers to write",
     )
     args = parser.parse_args(argv)
     schema_path: Path = args.schema
     json_schema: Path = args.json_schema
     cpp_out: Path = args.cpp_out
+    changes_out: Path = args.changes_out
 
     try:
         schema = model.load(schema_path, json_schema)
+        outputs = (
+            (cpp_out, cpp.render(schema, schema_path.name)),
+            (changes_out, changes.render(schema, schema_path.name)),
+        )
     except model.SchemaError as error:
         print(f"[SceneSchemaCodeGen] {schema_path}: {error}", file=sys.stderr)
         return 1
-    changed = write_if_changed(cpp_out, cpp.render(schema, schema_path.name))
-    print(
-        f"[SceneSchemaCodeGen] {'Wrote' if changed else 'Unchanged'} "
-        f"{cpp_out.name}: {len(schema.components)} components, "
-        f"{len(schema.field_sets)} field sets"
-    )
+    for path, text in outputs:
+        changed = write_if_changed(path, text)
+        print(
+            f"[SceneSchemaCodeGen] {'Wrote' if changed else 'Unchanged'} "
+            f"{path.name}: {len(schema.components)} components, "
+            f"{len(schema.overrides())} changeable properties"
+        )
     return 0
 
 

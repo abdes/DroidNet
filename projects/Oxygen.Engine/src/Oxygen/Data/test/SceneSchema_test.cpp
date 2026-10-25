@@ -105,14 +105,21 @@ NOLINT_TEST(SceneSchemaTest, OverridePropertiesAreOrderedByStableId)
 {
   const auto& table = schema::kOverrideProperties;
 
-  ASSERT_EQ(table.size(), 4U);
+  ASSERT_EQ(table.size(), 89U);
   EXPECT_TRUE(std::ranges::is_sorted(table, {}, &schema::OverrideProperty::id));
+  EXPECT_EQ(
+    std::ranges::adjacent_find(table, {}, &schema::OverrideProperty::id),
+    table.end());
   EXPECT_EQ(table[0].id, schema::OverrideId::kGeometrySurfaceMaterial);
   EXPECT_EQ(table[0].part_kind, schema::PartKind::kSurface);
   EXPECT_EQ(table[0].key, "/material");
   EXPECT_EQ(table[3].id, schema::OverrideId::kGeometryLodPolicy);
   EXPECT_EQ(table[3].part_kind, schema::PartKind::kNone);
   EXPECT_EQ(table[3].type, schema::ValueType::kLodPolicy);
+  EXPECT_TRUE(table[3].asset_sourced);
+  EXPECT_EQ(table[4].id, schema::OverrideId::kTransformPositionX);
+  EXPECT_EQ(table[4].component, schema::ComponentId::kTransform);
+  EXPECT_FALSE(table[4].asset_sourced);
 }
 
 NOLINT_TEST(SceneSchemaTest, AssetDefaultsShowEverySurfaceAndTheFinestLod)

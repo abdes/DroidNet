@@ -785,7 +785,8 @@ namespace Oxygen::Interop::World {
       for each (OverrideEntryManaged entry in entries) {
         const auto id = static_cast<oxygen::data::schema::OverrideId>(entry.OverrideId);
         const auto* property = oxygen::data::schema::FindOverrideProperty(id);
-        if (property == nullptr || property->part_kind != part_kind) {
+        if (property == nullptr || !property->asset_sourced
+          || property->part_kind != part_kind) {
           throw gcnew ArgumentException(
             "An override names a property the addressed part does not have.", "entries");
         }
@@ -832,8 +833,8 @@ namespace Oxygen::Interop::World {
         case ValueType::kVec3:
         case ValueType::kEnum:
         case ValueType::kString:
-          // No override property has these types yet; each needs its reader
-          // here when the schema declares one.
+          // No asset-sourced property has these types yet; each needs its
+          // reader here when the schema declares one.
           throw gcnew NotSupportedException("The override value type is not supported.");
         }
       }

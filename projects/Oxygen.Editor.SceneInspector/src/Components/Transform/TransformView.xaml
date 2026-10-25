@@ -118,24 +118,9 @@
                 <TextBlock
                     AutomationProperties.LiveSetting="Polite"
                     Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                    Text="{x:Bind ViewModel.RotationDiagnostic.Message, Mode=OneWay}"
                     TextWrapping="Wrap"
-                    Visibility="{x:Bind ViewModel.RotationXDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}">
-                    <Run Text="X: " /><Run Text="{x:Bind ViewModel.RotationXDiagnostic.Message, Mode=OneWay}" />
-                </TextBlock>
-                <TextBlock
-                    AutomationProperties.LiveSetting="Polite"
-                    Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                    TextWrapping="Wrap"
-                    Visibility="{x:Bind ViewModel.RotationYDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}">
-                    <Run Text="Y: " /><Run Text="{x:Bind ViewModel.RotationYDiagnostic.Message, Mode=OneWay}" />
-                </TextBlock>
-                <TextBlock
-                    AutomationProperties.LiveSetting="Polite"
-                    Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                    TextWrapping="Wrap"
-                    Visibility="{x:Bind ViewModel.RotationZDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}">
-                    <Run Text="Z: " /><Run Text="{x:Bind ViewModel.RotationZDiagnostic.Message, Mode=OneWay}" />
-                </TextBlock>
+                    Visibility="{x:Bind ViewModel.RotationDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
             </StackPanel>
             <!--  Errors sit below the card, so their wrapping text never decides whether the row stacks.  -->
             <StackPanel Spacing="2">

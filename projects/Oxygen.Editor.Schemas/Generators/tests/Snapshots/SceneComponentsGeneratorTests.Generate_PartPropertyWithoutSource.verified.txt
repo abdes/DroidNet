@@ -1,7 +1,7 @@
 ﻿{
   Diagnostics: [
     {
-      Location: Schema\SceneComponents.yaml: (71,18)-(71,26),
+      Location: Schema\SceneComponents.yaml: (75,18)-(75,26),
       Message: Geometry.Surface property has no 'sources',
       Severity: Error,
       Descriptor: {
@@ -14,8 +14,8 @@
       }
     },
     {
-      Location: Schema\SceneComponents.yaml: (74,25)-(74,26),
-      Message: Geometry.Surface.Material: a property has an override id exactly when it has sources,
+      Location: Schema\SceneComponents.yaml: (78,25)-(78,26),
+      Message: Geometry.Surface.Material: a property has an override id exactly when it has sources or fields,
       Severity: Error,
       Descriptor: {
         Id: OXGNSC009,

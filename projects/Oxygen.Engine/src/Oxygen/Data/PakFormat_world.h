@@ -269,10 +269,14 @@ static_assert(sizeof(OverrideRecordIndex) == sizeof(uint32_t));
 
 #pragma pack(push, 1)
 //! The value of one override; the property its `override_id` names decides
-//! which member holds it (the scene schema's `kOverrideProperties`).
+//! which member holds it (`OverrideProperty::member` in the scene schema's
+//! `kOverrideProperties`).
 /*!
  - `as_bool`: 0 or 1.
  - `as_int32`: an int, or the wire value of an enum member.
+ - `as_float`: a float; `as_vec3`: the three floats of a vec3.
+ - `as_quat`: a rotation quaternion (x, y, z, w), the change of a rotation
+   property (`schema::Encoding::kEulerYxzDegreesToQuat`).
  - `as_asset`: the key of an asset of the property's asset type.
  - `as_string_offset`: an offset into the descriptor string table.
  - `as_record_index`: the index of an entry of the record table of the value
@@ -286,6 +290,7 @@ union OverrideValue {
   int32_t as_int32;
   float as_float;
   float as_vec3[3];
+  float as_quat[4];
   AssetKey as_asset {}; // Initializes every byte to zero.
   core::StringTableOffsetT as_string_offset;
   OverrideRecordIndex as_record_index;

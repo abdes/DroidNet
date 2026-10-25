@@ -26,10 +26,7 @@ public record TransformData : ComponentData
     /// Gets or sets the local rotation (as a quaternion); the scene schema's default Euler angles give the identity.
     /// </summary>
     [JsonPropertyName("LocalRotation")]
-    public Quaternion Rotation { get; set; } = TransformConverter.EulerDegreesToQuaternion(new(
-        SceneSchema.Transform.Defaults.RotationX,
-        SceneSchema.Transform.Defaults.RotationY,
-        SceneSchema.Transform.Defaults.RotationZ));
+    public Quaternion Rotation { get; set; } = TransformConverter.EulerDegreesToQuaternion(SceneSchema.Transform.Defaults.Rotation);
 
     /// <summary>
     /// Gets or sets the local scale; the scene schema's default is one on every axis.
