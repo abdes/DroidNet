@@ -9,6 +9,7 @@
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <exception>
 #include <filesystem>
 #include <fstream>
 #include <ios>
@@ -676,6 +677,7 @@ auto ModelImportRecord::MakeSettings(const SceneImportSettings& settings)
   add("normals_policy", settings.normals_policy);
   add("tangents_policy", settings.tangents_policy);
   add("node_pruning", settings.node_pruning);
+  add("gltf_scene", settings.gltf_scene);
   if (settings.unit_scale_set) {
     job.update({ { "unit_scale", settings.unit_scale } });
   }
@@ -1169,8 +1171,11 @@ auto ModelImportRecord::Publish(
   const auto& cooked_root = state_->request.cooked_root;
   const auto& validated_index = state_->validated_index;
   const auto& validated_provenance = state_->validated_provenance;
-  if (!cooked_root || !validated_index || !validated_provenance
-    || state_->published || !report.success
+  if (!cooked_root || !validated_index || !validated_provenance) {
+    throw std::invalid_argument(
+      "Import candidate was not validated or changed before publication");
+  }
+  if (state_->published || !report.success
     || *validated_provenance != Digest(report.surface_provenance_json)
     || Absolute(report.cooked_root) != Absolute(*cooked_root)
     || *validated_index

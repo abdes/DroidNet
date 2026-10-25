@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <cstring>
 #include <exception>
 #include <filesystem>
@@ -16,6 +17,8 @@
 #include <iterator>
 #include <memory>
 #include <optional>
+#include <span>
+#include <sstream>
 #include <stop_token>
 #include <string>
 #include <string_view>
@@ -25,16 +28,22 @@
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Cooker/Import/FileError.h>
 #include <Oxygen/Cooker/Import/FileInfo.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportManifest.h>
+#include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/ImportSourceAnalysis.h>
+#include <Oxygen/Cooker/Import/Internal/AdapterTypes.h>
 #include <Oxygen/Cooker/Import/Internal/ImportEventLoop.h>
 #include <Oxygen/Cooker/Import/Internal/SceneSource.h>
 #include <Oxygen/Cooker/Import/Internal/SourceAnalysisRunner.h>
+#include <Oxygen/Cooker/Import/Internal/gltf/GltfAdapter.h>
+#include <Oxygen/Cooker/Import/Naming.h>
 #include <Oxygen/Cooker/test/Pak/PakTestSupport.h>
 #include <Oxygen/Cooker/test/Support/JsonSchema.h>
 #include <Oxygen/Cooker/test/Support/TempDir.h>
@@ -467,7 +476,167 @@ namespace {
         }));
       ASSERT_EQ(job.observations.size(), 1U);
       EXPECT_FALSE(job.observations.front().reads.empty());
+      // Each reports its source facts; only glTF has scenes.
+      ASSERT_HAS_VALUE(job.model) << report.ToJson();
+      EXPECT_EQ(job.model->mesh_count, 1U);
+      EXPECT_FALSE(job.model->up.empty());
+      EXPECT_EQ(job.model->materials.size(),
+        static_cast<size_t>(std::ranges::count(job.outputs,
+          ImportDependencyKind::kMaterial, &ImportLogicalDependency::kind)));
+      EXPECT_EQ(job.model->scenes.size(), job.job_type == "gltf" ? 1U : 0U);
     }
+    static const auto schema = oxygen::cooker::test::LoadSchema(
+      "Import/Schemas/oxygen.source-analysis.schema.json");
+    EXPECT_THAT(oxygen::cooker::test::ValidateJson(
+                  schema, nlohmann::json::parse(report.ToJson())),
+      ::testing::IsEmpty());
+  }
+
+  //! A glTF model job lists the file's scenes: each by index, name and the
+  //! selector the `gltf_scene` setting names it by (`#N` when the name is
+  //! missing or shared), the default, and its root and reachable node counts.
+  //! Every scene but the one imported is reported dropped. glTF is in metres,
+  //! +Y up and right-handed.
+  NOLINT_TEST_F(ImportSourceAnalysisTest, GltfJobListsTheFilesScenes)
+  {
+    const auto source = Write("rooms.gltf", R"({
+      "asset": {"version": "2.0"},
+      "nodes": [{"name": "Hall", "children": [2]}, {"name": "Garden"},
+        {"name": "Lamp"}],
+      "scenes": [{"name": "Day", "nodes": [0]}, {"nodes": [0, 1]},
+        {"name": "Night", "nodes": [1]}, {"name": "Night", "nodes": [0]}],
+      "scene": 1
+    })");
+    auto manifest = ImportManifest {};
+    auto job = ImportManifestJob {};
+    job.id = "rooms";
+    job.job_type = "gltf";
+    job.gltf.source_path = source.string();
+    job.virtual_path = "/.cooked/rooms.gltf";
+    job.gltf.virtual_path = job.virtual_path;
+    manifest.jobs.push_back(job);
+    const auto report = manifest.AnalyzeSources();
+    ASSERT_EQ(report.jobs.size(), 1U);
+    const auto& result = report.jobs.front();
+    ASSERT_HAS_VALUE(result.model) << report.ToJson();
+    const auto& model = *result.model;
+    EXPECT_EQ(model.unit_meters, 1.0);
+    EXPECT_EQ(model.right, "+X");
+    EXPECT_EQ(model.up, "+Y");
+    EXPECT_EQ(model.front, "+Z");
+    EXPECT_EQ(model.left_handed, false);
+    EXPECT_EQ(model.node_count, 3U);
+    EXPECT_EQ(model.mesh_count, 0U);
+    const auto expected = std::vector<ModelSourceScene> {
+      {
+        .index = 0U,
+        .name = "Day",
+        .selector = "Day",
+        .is_default = false,
+        .root_count = 1U,
+        .node_count = 2U,
+      },
+      {
+        .index = 1U,
+        .name = "",
+        .selector = "#1",
+        .is_default = true,
+        .root_count = 2U,
+        .node_count = 3U,
+      },
+      {
+        .index = 2U,
+        .name = "Night",
+        .selector = "#2",
+        .is_default = false,
+        .root_count = 1U,
+        .node_count = 1U,
+      },
+      {
+        .index = 3U,
+        .name = "Night",
+        .selector = "#3",
+        .is_default = false,
+        .root_count = 1U,
+        .node_count = 2U,
+      },
+    };
+    EXPECT_EQ(model.scenes, expected);
+    auto dropped = std::vector<std::string> {};
+    for (const auto& diagnostic : result.diagnostics) {
+      if (diagnostic.code == "import.source_feature_dropped"
+        && diagnostic.object_path.starts_with("/scenes/")) {
+        EXPECT_EQ(diagnostic.severity, ImportSeverity::kWarning);
+        dropped.push_back(diagnostic.object_path);
+      }
+    }
+    EXPECT_EQ(dropped,
+      (std::vector<std::string> { "/scenes/0", "/scenes/2", "/scenes/3" }));
+    static const auto schema = oxygen::cooker::test::LoadSchema(
+      "Import/Schemas/oxygen.source-analysis.schema.json");
+    EXPECT_THAT(oxygen::cooker::test::ValidateJson(
+                  schema, nlohmann::json::parse(report.ToJson())),
+      ::testing::IsEmpty());
+  }
+
+  //! The metadata of a `.glb` comes from its JSON chunk alone: the analysis
+  //! never reads the whole file, and its facts equal a parse of the whole
+  //! file.
+  NOLINT_TEST_F(ImportSourceAnalysisTest, GlbAnalysisReadsOnlyItsJsonChunk)
+  {
+    const auto source
+      = oxygen::cooker::test::AssetsDir() / "Models" / "Tabuleiro.glb";
+    auto manifest = ImportManifest {};
+    auto job = ImportManifestJob {};
+    job.id = "glb";
+    job.job_type = "gltf";
+    job.gltf.source_path = source.string();
+    job.virtual_path = "/.cooked/Props/Tabuleiro.glb";
+    job.gltf.virtual_path = job.virtual_path;
+    manifest.jobs.push_back(job);
+    const auto report = manifest.AnalyzeSources();
+    ASSERT_EQ(report.jobs.size(), 1U);
+    const auto& result = report.jobs.front();
+    ASSERT_HAS_VALUE(result.model) << report.ToJson();
+    const auto primary = std::ranges::find(result.observations,
+      std::filesystem::absolute(source).lexically_normal(),
+      &ImportSourceObservation::path);
+    ASSERT_NE(primary, result.observations.end());
+    auto read_bytes = uint64_t { 0 };
+    for (const auto& read : primary->reads) {
+      EXPECT_NE(read.max_bytes, 0U) << "the whole file was read";
+      read_bytes += read.max_bytes;
+    }
+    EXPECT_LT(read_bytes, std::filesystem::file_size(source));
+
+    // The whole file, through the analysis's own request and preparations.
+    auto file = std::ifstream(source, std::ios::binary);
+    const auto text = std::string(std::istreambuf_iterator<char>(file), {});
+    ASSERT_EQ(text.size(), std::filesystem::file_size(source));
+    auto errors = std::ostringstream {};
+    auto request = job.gltf.Prepare(ImportFormat::kGltf, errors);
+    ASSERT_HAS_VALUE(request) << errors.str();
+    const auto source_id = request->source_path.string();
+    auto naming = NamingService {};
+    auto input = adapters::AdapterInput {};
+    input.source_id_prefix = source_id;
+    input.request = *request;
+    input.naming_service = observer_ptr { &naming };
+    auto adapter = adapters::GltfAdapter {};
+    ASSERT_TRUE(adapter
+        .Parse(std::as_bytes(std::span(text)), input,
+          adapters::ModelParseMode::kMetadata)
+        .success);
+    auto expected = adapter.DescribeSource();
+    for (const auto& material : adapter.PrepareMaterials(input).sources) {
+      expected.materials.push_back(material.material.storage_name);
+    }
+    static_cast<void>(adapter.PrepareGeometry(input));
+    for (const auto& texture : adapter.PrepareTextures(input).sources) {
+      expected.textures.push_back(texture.name);
+    }
+    EXPECT_FALSE(expected.materials.empty());
+    EXPECT_EQ(*result.model, expected);
   }
 
   //! A model's identity is the virtual path of its source file: one without

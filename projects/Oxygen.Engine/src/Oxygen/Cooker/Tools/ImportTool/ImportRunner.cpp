@@ -445,6 +445,7 @@ auto RunSceneImportJob(const SceneImportSettings& settings,
         "prune-nodes",
         "content-hashing",
         "omitted-light-range",
+        "gltf-scene",
       };
       for (const auto* option : kContentOverrides) {
         if (globals.parsed_options->HasOption(option)

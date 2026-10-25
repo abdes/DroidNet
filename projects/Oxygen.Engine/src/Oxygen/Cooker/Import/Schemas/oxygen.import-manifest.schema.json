@@ -655,6 +655,11 @@
           "exclusiveMinimum": 0,
           "default": 4096
         },
+        "gltf_scene": {
+          "description": "The glTF scene imported as the model scene: its name, or #N for the scene at index N. Absent: the default scene, else the first.",
+          "type": "string",
+          "minLength": 1
+        },
         "bake_transforms": {
           "type": "boolean"
         },
@@ -1037,6 +1042,11 @@
           "type": "number",
           "exclusiveMinimum": 0,
           "default": 4096
+        },
+        "gltf_scene": {
+          "description": "The glTF scene imported as the model scene: its name, or #N for the scene at index N. Absent: the default scene, else the first.",
+          "type": "string",
+          "minLength": 1
         },
         "bake_transforms": {
           "type": "boolean"

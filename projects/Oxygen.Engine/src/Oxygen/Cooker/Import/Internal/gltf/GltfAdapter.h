@@ -12,6 +12,7 @@
 #include <vector>
 
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/ImportSourceAnalysis.h>
 #include <Oxygen/Cooker/Import/Internal/AdapterTypes.h>
 #include <Oxygen/Cooker/Import/Internal/ModelGeometrySource.h>
 #include <Oxygen/Cooker/Import/Internal/ModelMaterialSource.h>
@@ -53,6 +54,10 @@ public:
   OXGN_COOK_NDAPI auto Parse(std::span<const std::byte> source_bytes,
     const AdapterInput& input, ModelParseMode mode = ModelParseMode::kGeometry)
     -> ParseResult;
+
+  //! The units, axes, counts and scenes of the parsed source. Materials and
+  //! textures are named by their preparations.
+  OXGN_COOK_NDAPI auto DescribeSource() const -> ModelSourceFacts;
 
   //! Assign geometry identities using the same bake variants as production.
   OXGN_COOK_NDAPI auto PrepareGeometry(const AdapterInput& input) const

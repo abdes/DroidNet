@@ -383,6 +383,10 @@ struct ImportOptions final {
   //! glTF's unbounded influence, independent of intensity, exposure and scene.
   float gltf_omitted_light_range_m = 4096.0F;
 
+  //! The glTF scene that becomes the model scene: a scene's name, or `#N` for
+  //! the scene at index N. Empty selects the default scene, else the first.
+  std::string gltf_scene;
+
   //! Cooperative cancellation token for long-running imports.
   /*! Importers should periodically check this token and abort promptly. */
   std::stop_token stop_token {};

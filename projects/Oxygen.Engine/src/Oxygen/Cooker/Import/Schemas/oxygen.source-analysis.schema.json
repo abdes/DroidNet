@@ -166,6 +166,121 @@
         }
       }
     },
+    "count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "axis": {
+      "enum": ["+X", "-X", "+Y", "-Y", "+Z", "-Z", "unknown"]
+    },
+    "model_scene": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "index",
+        "name",
+        "selector",
+        "is_default",
+        "root_count",
+        "node_count"
+      ],
+      "properties": {
+        "index": {
+          "$ref": "#/definitions/count"
+        },
+        "name": {
+          "description": "The authored name; empty when the scene has none.",
+          "type": "string"
+        },
+        "selector": {
+          "description": "What the gltf_scene import setting names this scene by: its name, or #N when the name is empty, starts with # or is shared.",
+          "type": "string",
+          "minLength": 1
+        },
+        "is_default": {
+          "description": "Whether an import without a chosen scene takes this one.",
+          "type": "boolean"
+        },
+        "root_count": {
+          "$ref": "#/definitions/count"
+        },
+        "node_count": {
+          "description": "The distinct nodes reachable from the scene's roots.",
+          "$ref": "#/definitions/count"
+        }
+      }
+    },
+    "model": {
+      "description": "What a model source holds, from its metadata parse.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "unit_meters",
+        "right",
+        "up",
+        "front",
+        "left_handed",
+        "node_count",
+        "mesh_count",
+        "scenes",
+        "materials",
+        "textures"
+      ],
+      "properties": {
+        "unit_meters": {
+          "description": "Metres per source unit; null when the file does not state its unit.",
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "number",
+              "exclusiveMinimum": 0
+            }
+          ]
+        },
+        "right": {
+          "$ref": "#/definitions/axis"
+        },
+        "up": {
+          "$ref": "#/definitions/axis"
+        },
+        "front": {
+          "$ref": "#/definitions/axis"
+        },
+        "left_handed": {
+          "description": "Null when the file's axes are not a valid basis.",
+          "type": ["boolean", "null"]
+        },
+        "node_count": {
+          "$ref": "#/definitions/count"
+        },
+        "mesh_count": {
+          "$ref": "#/definitions/count"
+        },
+        "scenes": {
+          "description": "The file's scenes; empty for a format with one root (FBX).",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/model_scene"
+          }
+        },
+        "materials": {
+          "description": "The names the import gives the materials it produces.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "textures": {
+          "description": "The names the import gives the textures it produces.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
     "job": {
       "type": "object",
       "additionalProperties": false,
@@ -229,6 +344,9 @@
           "items": {
             "type": "string"
           }
+        },
+        "model": {
+          "$ref": "#/definitions/model"
         }
       }
     }

@@ -20,6 +20,7 @@
 #include <memory>
 #include <numbers>
 #include <optional>
+#include <ranges>
 #include <span>
 #include <string>
 #include <string_view>
@@ -1563,6 +1564,181 @@ NOLINT_TEST_F(AsyncGltfImporterFullTest, UnbuildableMeshIsDroppedWithoutShift)
   ASSERT_EQ(scene.nodes.size(), 2U);
   ASSERT_EQ(scene.renderables.size(), 1U);
   EXPECT_EQ(scene.renderables.front().node_index, 1U);
+}
+
+//! Imports glTF documents, choosing the model scene.
+class GltfSceneSelectionTest : public AsyncGltfImporterFullTest {
+protected:
+  //! Two scenes over two nodes: "First", the default, holds A; "Second"
+  //! holds B.
+  static auto TwoScenes() -> nlohmann::json
+  {
+    return nlohmann::json::parse(R"({
+      "asset": {"version": "2.0"},
+      "nodes": [{"name": "A"}, {"name": "B"}],
+      "scenes": [{"name": "First", "nodes": [0]},
+        {"name": "Second", "nodes": [1]}],
+      "scene": 0
+    })");
+  }
+
+  //! Where a document imports, and the scene it takes as the model scene.
+  struct ImportTarget final {
+    std::string name;
+    std::string scene;
+  };
+
+  auto Import(const nlohmann::json& document, const ImportTarget& target)
+    -> ImportRunResult
+  {
+    const auto root = MakeTempDir(target.name);
+    const auto source_path = root / (target.name + ".gltf");
+    {
+      std::ofstream source(source_path);
+      source << document.dump();
+      source.close();
+      EXPECT_TRUE(source.good());
+    }
+    ImportRequest request {};
+    request.source_path = source_path;
+    request.asset_virtual_path
+      = oxygen::cooker::test::ModelVirtualPath(request.source_path);
+    request.cooked_root = root / "cooked";
+    request.options.gltf_scene = target.scene;
+    return RunImport(std::move(request));
+  }
+
+  static auto NodeNames(const ImportRunResult& imported)
+    -> std::vector<std::string>
+  {
+    auto names = std::vector<std::string> {};
+    const auto scene = LoadCameraScene(imported.report);
+    if (!scene) {
+      return names;
+    }
+    for (const auto& node : scene->GetNodes()) {
+      names.emplace_back(scene->GetNodeName(node));
+    }
+    return names;
+  }
+
+  static auto Reports(const ImportRunResult& imported,
+    const std::string_view code,
+    const oxygen::content::import::ImportSeverity severity,
+    const std::string_view object_path) -> bool
+  {
+    return std::ranges::any_of(
+      imported.report.diagnostics, [&](const auto& diagnostic) -> bool {
+        return diagnostic.code == code && diagnostic.severity == severity
+          && diagnostic.object_path == object_path;
+      });
+  }
+};
+
+//! The chosen scene, by name or by `#N`, is the model scene; the scene not
+//! imported is reported dropped. Without a choice the default scene imports.
+NOLINT_TEST_F(GltfSceneSelectionTest, ChosenSceneImportsAndTheOtherIsReported)
+{
+  using oxygen::content::import::ImportSeverity;
+  struct Case final {
+    std::string scene;
+    std::vector<std::string> nodes;
+    std::string dropped;
+  };
+  const auto cases = std::array {
+    Case { .scene = "Second", .nodes = { "B" }, .dropped = "/scenes/0" },
+    Case { .scene = "#1", .nodes = { "B" }, .dropped = "/scenes/0" },
+    Case { .scene = "", .nodes = { "A" }, .dropped = "/scenes/1" },
+  };
+  for (const auto& [index, item] : std::views::enumerate(cases)) {
+    SCOPED_TRACE(item.scene);
+    const auto imported = Import(TwoScenes(),
+      {
+        .name = "gltf_scene_choice_" + std::to_string(index),
+        .scene = item.scene,
+      });
+    ASSERT_TRUE(imported.report.success);
+    EXPECT_EQ(NodeNames(imported), item.nodes);
+    EXPECT_TRUE(Reports(imported, "import.source_feature_dropped",
+      ImportSeverity::kWarning, item.dropped));
+    EXPECT_FALSE(Reports(imported, "import.gltf_scene_missing",
+      ImportSeverity::kWarning, "/scenes"));
+  }
+}
+
+//! A chosen scene the file no longer has warns, and the default imports.
+NOLINT_TEST_F(
+  GltfSceneSelectionTest, MissingChosenSceneWarnsAndImportsTheDefault)
+{
+  using oxygen::content::import::ImportSeverity;
+  const auto imported = Import(TwoScenes(),
+    {
+      .name = "gltf_scene_missing",
+      .scene = "Third",
+    });
+  ASSERT_TRUE(imported.report.success);
+  EXPECT_TRUE(Reports(imported, "import.gltf_scene_missing",
+    ImportSeverity::kWarning, "/scenes"));
+  EXPECT_EQ(NodeNames(imported), std::vector<std::string> { "A" });
+}
+
+//! A node reached twice, as a root listed twice or a child of two parents,
+//! is refused: it would have two scene nodes and one anchor.
+NOLINT_TEST_F(GltfSceneSelectionTest, NodeReachedTwiceIsRefused)
+{
+  using oxygen::content::import::ImportSeverity;
+  struct Case final {
+    std::string_view document;
+    std::string node;
+  };
+  const auto cases = std::array {
+    Case {
+      .document = R"({"asset": {"version": "2.0"},
+        "nodes": [{"name": "A"}], "scenes": [{"nodes": [0, 0]}]})",
+      .node = "/nodes/0",
+    },
+    Case {
+      .document = R"({"asset": {"version": "2.0"},
+        "nodes": [{"name": "P", "children": [2]},
+          {"name": "Q", "children": [2]}, {"name": "C"}],
+        "scenes": [{"nodes": [0, 1]}]})",
+      .node = "/nodes/2",
+    },
+  };
+  for (const auto& [index, item] : std::views::enumerate(cases)) {
+    SCOPED_TRACE(item.node);
+    const auto imported = Import(nlohmann::json::parse(item.document),
+      {
+        .name = "gltf_node_reached_twice_" + std::to_string(index),
+        .scene = {},
+      });
+    EXPECT_FALSE(imported.report.success);
+    EXPECT_TRUE(Reports(imported, "import.gltf_node_reached_twice",
+      ImportSeverity::kError, item.node));
+  }
+}
+
+//! A document cgltf finds invalid, here a node cycle, is refused before any
+//! traversal.
+NOLINT_TEST_F(GltfSceneSelectionTest, InvalidDocumentIsRefused)
+{
+  using oxygen::content::import::ImportSeverity;
+  const auto imported = Import(nlohmann::json::parse(R"({
+      "asset": {"version": "2.0"},
+      "nodes": [{"name": "A", "children": [1]},
+        {"name": "B", "children": [0]}],
+      "scenes": [{"nodes": []}]
+    })"),
+    {
+      .name = "gltf_invalid_document",
+      .scene = {},
+    });
+  EXPECT_FALSE(imported.report.success);
+  EXPECT_TRUE(std::ranges::any_of(
+    imported.report.diagnostics, [](const auto& diagnostic) -> bool {
+      return diagnostic.code == "gltf.validation_failed"
+        && diagnostic.severity == ImportSeverity::kError;
+    }));
 }
 
 } // namespace

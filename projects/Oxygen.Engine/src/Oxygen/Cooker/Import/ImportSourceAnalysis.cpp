@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cstddef>
+#include <cstdint>
 #include <cstring>
 #include <exception>
 #include <filesystem>
@@ -171,14 +172,14 @@ namespace {
       }
     }
 
-    auto Read(const std::filesystem::path& path)
+    auto Read(const std::filesystem::path& path, const ReadOptions options = {})
       -> co::Co<std::vector<std::byte>>
     {
       if (stop.stop_requested()) {
         throw std::runtime_error("Source analysis canceled");
       }
       AddFile(path);
-      auto bytes = co_await reader->ReadFile(path);
+      auto bytes = co_await reader->ReadFile(path, options);
       if (!bytes) {
         throw std::runtime_error(bytes.error().ToString());
       }
@@ -300,8 +301,57 @@ namespace {
       .object_path = {},
       .required = true,
     });
+    auto facts = adapter.DescribeSource();
+    for (const auto& material : materials.sources) {
+      facts.materials.push_back(material.material.storage_name);
+    }
+    for (const auto& texture : textures.sources) {
+      facts.textures.push_back(texture.name);
+    }
+    report.model = std::move(facts);
     report.complete = materials.success && geometry.success && textures.success;
     return report;
+  }
+
+  //! The bytes the metadata parse of a glTF source needs: a `.glb`'s JSON
+  //! chunk alone, found from its 12-byte header and first chunk header, so its
+  //! binary chunk is never read; any other file whole.
+  auto ReadGltfMetadata(AnalysisContext& context,
+    const std::filesystem::path& path) -> co::Co<std::vector<std::byte>>
+  {
+    constexpr auto kHeadersSize = uint64_t { 20 };
+    constexpr auto kChunkLengthOffset = size_t { 12 };
+    constexpr auto kChunkTypeOffset = size_t { 16 };
+    constexpr auto kGlbMagic = uint32_t { 0x46546C67 }; // "glTF"
+    constexpr auto kJsonChunk = uint32_t { 0x4E4F534A }; // "JSON"
+    const auto headers = co_await context.Read(path,
+      ReadOptions {
+        .offset = 0U,
+        .max_bytes = kHeadersSize,
+        .size_hint = kHeadersSize,
+        .alignment = 0U,
+      });
+    // GLB words are little-endian, as on every platform the cooker runs on.
+    const auto word = [&headers](const size_t offset) -> uint32_t {
+      auto value = uint32_t { 0 };
+      std::memcpy(&value,
+        std::span(headers).subspan(offset, sizeof(value)).data(),
+        sizeof(value));
+      return value;
+    };
+    if (headers.size() < kHeadersSize || word(0) != kGlbMagic
+      || word(kChunkTypeOffset) != kJsonChunk
+      || word(kChunkLengthOffset) == 0U) {
+      co_return co_await context.Read(path);
+    }
+    const auto json_size = uint64_t { word(kChunkLengthOffset) };
+    co_return co_await context.Read(path,
+      ReadOptions {
+        .offset = kHeadersSize,
+        .max_bytes = json_size,
+        .size_hint = json_size,
+        .alignment = 0U,
+      });
   }
 
   //! The array `field` of `parent`, or an empty array.
@@ -621,7 +671,12 @@ namespace {
         throw std::invalid_argument(errors.str());
       }
       request->loose_cooked_layout = layout;
-      auto bytes = co_await context.Read(report.source_path);
+      auto bytes = std::vector<std::byte> {};
+      if (request->GetFormat() == ImportFormat::kGltf) {
+        bytes = co_await ReadGltfMetadata(context, report.source_path);
+      } else {
+        bytes = co_await context.Read(report.source_path);
+      }
       auto facts = co_await context.pool->Run(
         [request = std::move(*request), bytes = std::move(bytes),
           stop = context.stop](
@@ -632,6 +687,7 @@ namespace {
           return PrepareModel<adapters::FbxAdapter>(request, bytes, stop);
         });
       report.outputs = std::move(facts.outputs);
+      report.model = std::move(facts.model);
       AppendDiagnostics(report.diagnostics, std::move(facts.diagnostics));
       for (const auto& file : facts.files) {
         context.AddFile(file.path, file.required);
@@ -717,6 +773,42 @@ namespace {
       result.complete = result.complete && analyzed.complete;
       result.jobs.push_back(std::move(analyzed));
     }
+  }
+
+  auto ModelJson(const ModelSourceFacts& facts) -> nlohmann::json
+  {
+    using nlohmann::json;
+    auto scenes = json::array();
+    for (const auto& scene : facts.scenes) {
+      scenes.push_back({
+        { "index", scene.index },
+        { "name", scene.name },
+        { "selector", scene.selector },
+        { "is_default", scene.is_default },
+        { "root_count", scene.root_count },
+        { "node_count", scene.node_count },
+      });
+    }
+    auto unit_meters = json(nullptr);
+    if (facts.unit_meters.has_value()) {
+      unit_meters = *facts.unit_meters;
+    }
+    auto left_handed = json(nullptr);
+    if (facts.left_handed.has_value()) {
+      left_handed = *facts.left_handed;
+    }
+    return {
+      { "unit_meters", std::move(unit_meters) },
+      { "right", facts.right },
+      { "up", facts.up },
+      { "front", facts.front },
+      { "left_handed", std::move(left_handed) },
+      { "node_count", facts.node_count },
+      { "mesh_count", facts.mesh_count },
+      { "scenes", std::move(scenes) },
+      { "materials", facts.materials },
+      { "textures", facts.textures },
+    };
   }
 
   auto DigestText(const base::Sha256Digest& digest) -> std::string
@@ -839,7 +931,7 @@ auto ImportSourceAnalysis::ToJson() const -> std::string
         { "object_path", diagnostic.object_path },
       });
     }
-    serialized_jobs.push_back({
+    auto serialized = json {
       { "id", job.id },
       { "job_type", job.job_type },
       { "source_path", PathText(job.source_path) },
@@ -850,7 +942,11 @@ auto ImportSourceAnalysis::ToJson() const -> std::string
       { "observations", std::move(observations) },
       { "accessed_paths", std::move(accessed) },
       { "diagnostics", std::move(diagnostics) },
-    });
+    };
+    if (const auto& model = job.model; model.has_value()) {
+      serialized["model"] = ModelJson(*model);
+    }
+    serialized_jobs.push_back(std::move(serialized));
   }
   return json {
     { "version", version },

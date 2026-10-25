@@ -165,6 +165,7 @@ auto SceneImportSettings::Prepare(const ImportFormat expected_format,
   }
   auto options = request.options;
   options.gltf_omitted_light_range_m = settings.gltf_omitted_light_range_m;
+  options.gltf_scene = settings.gltf_scene;
   options.import_content = BuildContentFlags(settings);
   options.coordinate.bake_transforms_into_meshes = settings.bake_transforms;
   options.with_content_hashing

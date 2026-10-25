@@ -149,6 +149,15 @@ auto GltfCommand::BuildCommand() -> std::shared_ptr<clap::Command>
         .StoreTo(&options_.gltf_omitted_light_range_m)
         .Build();
 
+  auto gltf_scene
+    = Option::WithKey("gltf-scene")
+        .About("The scene imported as the model scene: its name, or #N for the "
+               "scene at index N (default: the file's default scene)")
+        .Long("gltf-scene")
+        .WithValue<std::string>()
+        .StoreTo(&options_.gltf_scene)
+        .Build();
+
   auto bake_transforms = Option::WithKey("bake-transforms")
                            .About("Bake node transforms into meshes, moving "
                                   "every pivot to the model's origin")
@@ -205,6 +214,7 @@ auto GltfCommand::BuildCommand() -> std::shared_ptr<clap::Command>
     .WithOption(std::move(unit_policy))
     .WithOption(std::move(unit_scale))
     .WithOption(std::move(omitted_light_range))
+    .WithOption(std::move(gltf_scene))
     .WithOption(std::move(bake_transforms))
     .WithOption(std::move(normals))
     .WithOption(std::move(tangents))

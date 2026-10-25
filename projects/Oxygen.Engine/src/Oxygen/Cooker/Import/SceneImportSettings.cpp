@@ -6,7 +6,7 @@
 
 #include <stdexcept>
 #include <string>
-#include <utility>
+#include <string_view>
 
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
@@ -43,7 +43,7 @@ namespace {
       std::string("Unsupported model recipe option: ") + definition);
   }
 
-  auto GeometryPolicy(const GeometryAttributePolicy policy) -> std::string
+  auto GeometryPolicy(const GeometryAttributePolicy policy) -> std::string_view
   {
     switch (policy) {
     case GeometryAttributePolicy::kNone:
@@ -124,6 +124,7 @@ auto SceneImportSettings::FromOptions(const ImportOptions& options)
   settings.with_content_hashing = options.with_content_hashing;
   settings.bake_transforms = options.coordinate.bake_transforms_into_meshes;
   settings.gltf_omitted_light_range_m = options.gltf_omitted_light_range_m;
+  settings.gltf_scene = options.gltf_scene;
   switch (options.coordinate.unit_normalization) {
   case UnitNormalizationPolicy::kNormalizeToMeters:
     settings.unit_policy = "normalize";

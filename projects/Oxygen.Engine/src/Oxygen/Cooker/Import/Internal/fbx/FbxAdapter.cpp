@@ -42,6 +42,7 @@
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
+#include <Oxygen/Cooker/Import/ImportSourceAnalysis.h>
 #include <Oxygen/Cooker/Import/Internal/AdapterTypes.h>
 #include <Oxygen/Cooker/Import/Internal/DroppedSourceFeatures.h>
 #include <Oxygen/Cooker/Import/Internal/ImportedLightSemantics.h>
@@ -2331,6 +2332,65 @@ namespace {
 
 } // namespace
 
+namespace {
+  //! The file's stated unit and axes; a unit the file does not author is none.
+  auto DescribeFbx(const ufbx_scene& scene) -> ModelSourceFacts
+  {
+    const auto axis_name = [](const ufbx_coordinate_axis axis) -> std::string {
+      switch (axis) {
+      case UFBX_COORDINATE_AXIS_POSITIVE_X:
+        return "+X";
+      case UFBX_COORDINATE_AXIS_NEGATIVE_X:
+        return "-X";
+      case UFBX_COORDINATE_AXIS_POSITIVE_Y:
+        return "+Y";
+      case UFBX_COORDINATE_AXIS_NEGATIVE_Y:
+        return "-Y";
+      case UFBX_COORDINATE_AXIS_POSITIVE_Z:
+        return "+Z";
+      case UFBX_COORDINATE_AXIS_NEGATIVE_Z:
+        return "-Z";
+      default:
+        return "unknown";
+      }
+    };
+    const auto& axes = scene.settings.axes;
+    auto facts = ModelSourceFacts {
+      .unit_meters = std::nullopt,
+      .right = axis_name(axes.right),
+      .up = axis_name(axes.up),
+      .front = axis_name(axes.front),
+      .left_handed = std::nullopt,
+      .node_count = scene.nodes.count,
+      .mesh_count = scene.meshes.count,
+      .scenes = {},
+      .materials = {},
+      .textures = {},
+    };
+    if (ufbx_coordinate_axes_valid(axes)) {
+      facts.left_handed = IsLeftHandedAxes(axes);
+    }
+    const auto* units
+      = ufbx_find_prop(&scene.settings.props, "UnitScaleFactor");
+    constexpr auto kUnauthoredProp
+      = static_cast<uint32_t>(UFBX_PROP_FLAG_NOT_FOUND)
+      | static_cast<uint32_t>(UFBX_PROP_FLAG_SYNTHETIC);
+    if (units != nullptr
+      && (static_cast<uint32_t>(units->flags) & kUnauthoredProp) == 0U
+      && std::isfinite(scene.settings.unit_meters)
+      && scene.settings.unit_meters > 0.0) {
+      facts.unit_meters = scene.settings.unit_meters;
+    }
+    return facts;
+  }
+} // namespace
+
+auto FbxAdapter::DescribeSource() const -> ModelSourceFacts
+{
+  return impl_->source.scene ? DescribeFbx(*impl_->source.scene)
+                             : ModelSourceFacts {};
+}
+
 auto FbxAdapter::InspectSource(const std::filesystem::path& source_path,
   const AdapterInput& input) -> SceneSourceInspection
 {
@@ -2348,41 +2408,12 @@ auto FbxAdapter::InspectSource(const std::filesystem::path& source_path,
   result.supported = true;
   internal::ReportDroppedSourceFeatures(
     *scene, input.source_id_prefix, result.diagnostics);
-  const auto axis_name = [](const ufbx_coordinate_axis axis) -> std::string {
-    switch (axis) {
-    case UFBX_COORDINATE_AXIS_POSITIVE_X:
-      return "+X";
-    case UFBX_COORDINATE_AXIS_NEGATIVE_X:
-      return "-X";
-    case UFBX_COORDINATE_AXIS_POSITIVE_Y:
-      return "+Y";
-    case UFBX_COORDINATE_AXIS_NEGATIVE_Y:
-      return "-Y";
-    case UFBX_COORDINATE_AXIS_POSITIVE_Z:
-      return "+Z";
-    case UFBX_COORDINATE_AXIS_NEGATIVE_Z:
-      return "-Z";
-    default:
-      return "unknown";
-    }
-  };
-  const auto& axes = scene->settings.axes;
-  result.source_right = axis_name(axes.right);
-  result.source_up = axis_name(axes.up);
-  result.source_front = axis_name(axes.front);
-  if (ufbx_coordinate_axes_valid(axes)) {
-    result.source_left_handed = IsLeftHandedAxes(axes);
-  }
-  const auto* units = ufbx_find_prop(&scene->settings.props, "UnitScaleFactor");
-  constexpr auto kUnauthoredProp
-    = static_cast<uint32_t>(UFBX_PROP_FLAG_NOT_FOUND)
-    | static_cast<uint32_t>(UFBX_PROP_FLAG_SYNTHETIC);
-  if (units != nullptr
-    && (static_cast<uint32_t>(units->flags) & kUnauthoredProp) == 0U
-    && std::isfinite(scene->settings.unit_meters)
-    && scene->settings.unit_meters > 0.0) {
-    result.source_unit_meters = scene->settings.unit_meters;
-  }
+  const auto facts = DescribeFbx(*scene);
+  result.source_right = facts.right;
+  result.source_up = facts.up;
+  result.source_front = facts.front;
+  result.source_left_handed = facts.left_handed;
+  result.source_unit_meters = facts.unit_meters;
   result.reverses_winding
     = scene->metadata.mirror_axis != UFBX_MIRROR_AXIS_NONE;
   result.mesh_count = scene->meshes.count;
@@ -2765,13 +2796,12 @@ auto FbxAdapter::PrepareMaterials(const AdapterInput& input)
       item.material.inputs.specular_factor
         = SpecularLevel(*material, textures.specular.Texture() != nullptr);
 
-      if (material->features.sheen.enabled) {
-        if (material->pbr.sheen_color.has_value) {
-          const auto sc = material->pbr.sheen_color.value_vec3;
-          item.material.inputs.sheen_color_factor[0] = static_cast<float>(sc.x);
-          item.material.inputs.sheen_color_factor[1] = static_cast<float>(sc.y);
-          item.material.inputs.sheen_color_factor[2] = static_cast<float>(sc.z);
-        }
+      if (material->features.sheen.enabled
+        && material->pbr.sheen_color.has_value) {
+        const auto sc = material->pbr.sheen_color.value_vec3;
+        item.material.inputs.sheen_color_factor[0] = static_cast<float>(sc.x);
+        item.material.inputs.sheen_color_factor[1] = static_cast<float>(sc.y);
+        item.material.inputs.sheen_color_factor[2] = static_cast<float>(sc.z);
       }
 
       if (material->features.coat.enabled) {

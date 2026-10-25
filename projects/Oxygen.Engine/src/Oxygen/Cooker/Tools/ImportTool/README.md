@@ -154,6 +154,21 @@ Required:
 Options are the same shape as `fbx`. A record can be replayed without supplying
 `source`.
 
+A glTF file can hold several scenes; one becomes the model scene.
+`--gltf-scene <selector>` (manifest `gltf_scene`) names it by its name, or by
+`#N` for the scene at index N; without it the import takes the file's default
+scene, else the first. A selector the file lacks warns
+(`import.gltf_scene_missing`) and the default applies; every scene not imported
+is reported with `import.source_feature_dropped`. Geometry, materials and
+textures are imported for the whole file whichever scene is chosen. A document
+that fails `cgltf_validate` (`gltf.validation_failed`), or whose model scene
+reaches one node twice (`import.gltf_node_reached_twice`), is refused.
+
+`analyze-sources` reports, for each `gltf` or `fbx` job, the source's unit,
+axes and handedness, node and mesh counts, the names of the materials and
+textures the import produces, and for glTF each scene with its selector. It
+reads a `.glb`'s JSON chunk only, never its binary chunk.
+
 ### Model import records
 
 A model's import state lives in its model import record,

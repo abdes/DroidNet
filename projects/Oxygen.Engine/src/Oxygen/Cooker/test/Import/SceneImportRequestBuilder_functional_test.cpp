@@ -192,8 +192,12 @@ NOLINT_TEST_F(SceneImportRequestBuilderTest, AModelJobRunsItsRecord)
   const auto gltf_identity = Identity();
   const auto fbx_identity
     = Uuid::FromString("01990000-0000-7000-8000-000000000002").value();
-  const auto gltf = SaveRecord("model.gltf", "/.cooked/model.gltf",
-    gltf_identity, json { { "name", "the_gltf" } });
+  const auto gltf
+    = SaveRecord("model.gltf", "/.cooked/model.gltf", gltf_identity,
+      json {
+        { "name", "the_gltf" },
+        { "gltf_scene", "Interior" },
+      });
   const auto fbx = SaveRecord("model.fbx", "/.cooked/model.fbx", fbx_identity);
   const auto manifest_path = Path("import-manifest.json");
   {
@@ -235,10 +239,30 @@ NOLINT_TEST_F(SceneImportRequestBuilderTest, AModelJobRunsItsRecord)
   ASSERT_HAS_VALUE(second) << errors.str();
   EXPECT_EQ(first->asset_virtual_path, "/.cooked/model.gltf");
   EXPECT_EQ(first->job_name, "the_gltf");
+  EXPECT_EQ(first->options.gltf_scene, "Interior");
   EXPECT_EQ(first->surface_provenance->SourceIdentity(), gltf_identity);
   EXPECT_TRUE(first->model_import.has_value());
   EXPECT_EQ(second->GetFormat(), ImportFormat::kFbx);
   EXPECT_EQ(second->surface_provenance->SourceIdentity(), fbx_identity);
+}
+
+//! The chosen glTF scene is a setting: the record keeps it only when chosen,
+//! and an import from the settings asks for it.
+NOLINT_TEST_F(SceneImportRequestBuilderTest, TheChosenGltfSceneIsASetting)
+{
+  auto settings = Settings();
+  EXPECT_FALSE(json::parse(ModelImportRecord::MakeSettings(settings))
+      .contains("gltf_scene"));
+  settings.gltf_scene = "#2";
+  EXPECT_EQ(json::parse(ModelImportRecord::MakeSettings(settings))
+              .value("gltf_scene", std::string {}),
+    "#2");
+  std::ostringstream errors;
+  const auto request = settings.Prepare(ImportFormat::kGltf, errors);
+  ASSERT_HAS_VALUE(request) << errors.str();
+  EXPECT_EQ(request->options.gltf_scene, "#2");
+  EXPECT_EQ(
+    SceneImportSettings::FromOptions(request->options).gltf_scene, "#2");
 }
 
 //! Identity and provenance belong to the record: a job cannot carry them, and

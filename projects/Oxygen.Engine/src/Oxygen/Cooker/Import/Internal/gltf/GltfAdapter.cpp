@@ -20,6 +20,7 @@
 #include <numbers>
 #include <numeric>
 #include <optional>
+#include <ranges>
 #include <span>
 #include <sstream>
 #include <string>
@@ -53,6 +54,7 @@
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
+#include <Oxygen/Cooker/Import/ImportSourceAnalysis.h>
 #include <Oxygen/Cooker/Import/Internal/AdapterTypes.h>
 #include <Oxygen/Cooker/Import/Internal/DroppedSourceFeatures.h>
 #include <Oxygen/Cooker/Import/Internal/ImportSourceSnapshot.h>
@@ -94,6 +96,8 @@ namespace oxygen::content::import::adapters {
 struct GltfAdapter::Impl final {
   std::shared_ptr<detail::ImportSourceSnapshot> source_snapshot;
   std::shared_ptr<const cgltf_data> data_owner;
+  //! The scene imported as the model scene; none when the file has no scene.
+  std::optional<size_t> scene_index;
   //! The bake-plan variant of each geometry work item, in emission order; the
   //! scene stage's geometry keys follow this order.
   std::vector<size_t> emitted_variants;
@@ -347,6 +351,153 @@ namespace {
     return options;
   }
 
+  //! Refuses a document cgltf finds inconsistent, such as a node cycle or an
+  //! accessor past its buffer view, which every later reader would trust.
+  [[nodiscard]] auto ValidateData(CgltfDataPtr data, const AdapterInput& input,
+    std::vector<ImportDiagnostic>& diagnostics) -> CgltfDataPtr
+  {
+    const auto result = cgltf_validate(data.get());
+    if (result == cgltf_result_success) {
+      return data;
+    }
+    diagnostics.push_back(MakeErrorDiagnostic("gltf.validation_failed",
+      std::string("The glTF document is invalid: ") + ResultToMessage(result),
+      input.source_id_prefix, {}));
+    return { nullptr, &cgltf_free };
+  }
+
+  [[nodiscard]] auto SceneName(const cgltf_scene& scene) -> std::string_view
+  {
+    return scene.name != nullptr ? std::string_view(scene.name)
+                                 : std::string_view {};
+  }
+
+  //! What `gltf_scene` names the scene at `index` by: its name, unless that is
+  //! empty, starts with '#' or is shared with another scene; then `#index`.
+  [[nodiscard]] auto GltfSceneSelector(
+    const cgltf_data& data, const size_t index) -> std::string
+  {
+    const auto scenes = std::span(data.scenes, data.scenes_count);
+    const auto name = SceneName(scenes[index]);
+    const auto shared = std::ranges::count_if(scenes,
+                          [name](const cgltf_scene& scene) -> bool {
+                            return SceneName(scene) == name;
+                          })
+      > 1;
+    if (name.empty() || name.starts_with('#') || shared) {
+      return "#" + std::to_string(index);
+    }
+    return std::string(name);
+  }
+
+  //! The scene `selector` names: a scene's selector, or `#N` for any scene.
+  [[nodiscard]] auto FindGltfScene(const cgltf_data& data,
+    const std::string_view selector) -> std::optional<size_t>
+  {
+    for (size_t index = 0; index < data.scenes_count; ++index) {
+      if (selector == GltfSceneSelector(data, index)
+        || selector == "#" + std::to_string(index)) {
+        return index;
+      }
+    }
+    return std::nullopt;
+  }
+
+  //! The file's default scene, else its first; none when it has no scene.
+  [[nodiscard]] auto DefaultGltfScene(const cgltf_data& data)
+    -> std::optional<size_t>
+  {
+    if (data.scenes_count == 0U) {
+      return std::nullopt;
+    }
+    return data.scene != nullptr ? cgltf_scene_index(&data, data.scene) : 0U;
+  }
+
+  //! The scene imported as the model scene: the requested one, else the
+  //! default. A requested scene the file lacks warns, and every other scene is
+  //! reported as dropped.
+  [[nodiscard]] auto ChooseGltfScene(const cgltf_data& data,
+    const AdapterInput& input, std::vector<ImportDiagnostic>& diagnostics)
+    -> std::optional<size_t>
+  {
+    auto chosen = DefaultGltfScene(data);
+    const auto& requested = input.request.options.gltf_scene;
+    if (!requested.empty()) {
+      if (const auto found = FindGltfScene(data, requested);
+        found.has_value()) {
+        chosen = found;
+      } else {
+        diagnostics.push_back(MakeWarningDiagnostic("import.gltf_scene_missing",
+          "The file has no scene '" + requested
+            + "'; the import takes its default scene.",
+          input.source_id_prefix, "/scenes"));
+      }
+    }
+    for (size_t index = 0; index < data.scenes_count; ++index) {
+      if (index != chosen) {
+        diagnostics.push_back(
+          MakeWarningDiagnostic("import.source_feature_dropped",
+            "Import does not carry scene '" + GltfSceneSelector(data, index)
+              + "'; only the model scene imports.",
+            input.source_id_prefix, "/scenes/" + std::to_string(index)));
+      }
+    }
+    return chosen;
+  }
+
+  //! The distinct nodes reachable from `scene`'s roots.
+  [[nodiscard]] auto CountSceneNodes(
+    const cgltf_data& data, const cgltf_scene& scene) -> size_t
+  {
+    auto reached = std::vector<bool>(data.nodes_count, false);
+    auto pending = std::vector<const cgltf_node*>(
+      std::from_range, std::span(scene.nodes, scene.nodes_count));
+    auto count = size_t { 0 };
+    while (!pending.empty()) {
+      const auto* node = pending.back();
+      pending.pop_back();
+      const auto index = cgltf_node_index(&data, node);
+      if (reached.at(index)) {
+        continue;
+      }
+      reached.at(index) = true;
+      ++count;
+      pending.append_range(std::span(node->children, node->children_count));
+    }
+    return count;
+  }
+
+  //! glTF is in metres, +Y up, +Z front and right-handed by specification.
+  [[nodiscard]] auto DescribeGltf(const cgltf_data& data) -> ModelSourceFacts
+  {
+    auto facts = ModelSourceFacts {
+      .unit_meters = 1.0,
+      .right = "+X",
+      .up = "+Y",
+      .front = "+Z",
+      .left_handed = false,
+      .node_count = data.nodes_count,
+      .mesh_count = data.meshes_count,
+      .scenes = {},
+      .materials = {},
+      .textures = {},
+    };
+    const auto default_scene = DefaultGltfScene(data);
+    for (const auto& [index, scene] :
+      std::views::enumerate(std::span(data.scenes, data.scenes_count))) {
+      const auto scene_index = static_cast<size_t>(index);
+      facts.scenes.push_back({
+        .index = scene_index,
+        .name = std::string(SceneName(scene)),
+        .selector = GltfSceneSelector(data, scene_index),
+        .is_default = scene_index == default_scene,
+        .root_count = scene.nodes_count,
+        .node_count = CountSceneNodes(data, scene),
+      });
+    }
+    return facts;
+  }
+
   [[nodiscard]] auto LoadDataFromFile(const std::filesystem::path& path,
     const AdapterInput& input, std::vector<ImportDiagnostic>& diagnostics,
     const bool load_external_buffers = true) -> CgltfDataPtr
@@ -371,7 +522,7 @@ namespace {
     }
 
     if (!load_external_buffers) {
-      return { data, &cgltf_free };
+      return ValidateData({ data, &cgltf_free }, input, diagnostics);
     }
 
     const auto load_result
@@ -385,7 +536,7 @@ namespace {
       return { nullptr, &cgltf_free };
     }
 
-    return { data, &cgltf_free };
+    return ValidateData({ data, &cgltf_free }, input, diagnostics);
   }
 
   [[nodiscard]] auto LoadDataFromMemory(const std::span<const std::byte> bytes,
@@ -413,7 +564,7 @@ namespace {
     }
 
     if (!load_external_buffers) {
-      return { data, &cgltf_free };
+      return ValidateData({ data, &cgltf_free }, input, diagnostics);
     }
 
     const auto load_result
@@ -427,7 +578,7 @@ namespace {
       return { nullptr, &cgltf_free };
     }
 
-    return { data, &cgltf_free };
+    return ValidateData({ data, &cgltf_free }, input, diagnostics);
   }
 
   auto ExternalSourcePath(const char* source_uri,
@@ -1950,11 +2101,12 @@ auto GltfAdapter::InspectSource(const std::filesystem::path& source_path,
   result.supported = true;
   internal::ReportDroppedSourceFeatures(
     *data, input.source_id_prefix, result.diagnostics);
-  result.source_unit_meters = 1.0;
-  result.source_right = "+X";
-  result.source_up = "+Y";
-  result.source_front = "+Z";
-  result.source_left_handed = false;
+  const auto facts = DescribeGltf(*data);
+  result.source_unit_meters = facts.unit_meters;
+  result.source_right = facts.right;
+  result.source_up = facts.up;
+  result.source_front = facts.front;
+  result.source_left_handed = facts.left_handed;
   result.mesh_count = data->meshes_count;
   result.material_count = data->materials_count;
   result.node_count = data->nodes_count;
@@ -2001,6 +2153,7 @@ auto GltfAdapter::Parse(const std::filesystem::path& source_path,
   const AdapterInput& input, const ModelParseMode mode) -> ParseResult
 {
   impl_->data_owner.reset();
+  impl_->scene_index.reset();
   impl_->source_snapshot = input.source_snapshot;
   ParseResult result;
   auto data = LoadDataFromFile(
@@ -2019,6 +2172,7 @@ auto GltfAdapter::Parse(const std::filesystem::path& source_path,
 
   internal::ReportDroppedSourceFeatures(
     *data, input.source_id_prefix, result.diagnostics);
+  impl_->scene_index = ChooseGltfScene(*data, input, result.diagnostics);
 
   impl_->data_owner
     = std::shared_ptr<const cgltf_data>(data.release(), &cgltf_free);
@@ -2029,6 +2183,7 @@ auto GltfAdapter::Parse(const std::span<const std::byte> source_bytes,
   const AdapterInput& input, const ModelParseMode mode) -> ParseResult
 {
   impl_->data_owner.reset();
+  impl_->scene_index.reset();
   impl_->source_snapshot = input.source_snapshot;
   ParseResult result;
   auto data = LoadDataFromMemory(source_bytes, input, result.diagnostics,
@@ -2047,10 +2202,17 @@ auto GltfAdapter::Parse(const std::span<const std::byte> source_bytes,
 
   internal::ReportDroppedSourceFeatures(
     *data, input.source_id_prefix, result.diagnostics);
+  impl_->scene_index = ChooseGltfScene(*data, input, result.diagnostics);
 
   impl_->data_owner
     = std::shared_ptr<const cgltf_data>(data.release(), &cgltf_free);
   return result;
+}
+
+auto GltfAdapter::DescribeSource() const -> ModelSourceFacts
+{
+  return impl_->data_owner ? DescribeGltf(*impl_->data_owner)
+                           : ModelSourceFacts {};
 }
 
 auto GltfAdapter::PrepareGeometry(const AdapterInput& input) const
@@ -2617,12 +2779,24 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
     request, input.source_id, diagnostics);
 
   const auto kInvalidParent = std::numeric_limits<uint32_t>::max();
+  // A node two parents or two roots list would get two scene nodes and one
+  // anchor; it is refused where it is reached the second time.
+  auto reached = std::vector<bool>(data.nodes_count, false);
   const auto apply_node
     = [&](const cgltf_node* node, uint32_t parent_index, uint32_t& ordinal,
         const glm::mat4& parent_world, auto&& self) -> void {
     if (node == nullptr || input.stop_token.stop_requested()) {
       return;
     }
+    const auto source_node_index = cgltf_node_index(&data, node);
+    if (reached.at(source_node_index)) {
+      diagnostics.push_back(
+        MakeErrorDiagnostic("import.gltf_node_reached_twice",
+          "A glTF node is reached twice in the model scene's hierarchy.",
+          input.source_id, "/nodes/" + std::to_string(source_node_index)));
+      return;
+    }
+    reached.at(source_node_index) = true;
 
     const auto authored = node->name != nullptr ? std::string_view(node->name)
                                                 : std::string_view {};
@@ -2639,7 +2813,6 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
 
     local_matrix
       = ConvertGltfTransform(local_matrix, request.options.coordinate);
-    const auto source_node_index = static_cast<size_t>(node - data.nodes);
     const auto variant_index = bake_plan.node_variant.at(source_node_index);
     if (variant_index < bake_plan.variants.size()
       && bake_plan.variants.at(variant_index).transform.has_value()) {
@@ -2684,9 +2857,10 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
   };
 
   uint32_t ordinal = 0;
-  if (data.scenes_count > 0) {
-    const auto* scene = data.scene != nullptr ? data.scene : data.scenes;
-    for (const auto* root : std::span(scene->nodes, scene->nodes_count)) {
+  if (impl_->scene_index.has_value()) {
+    const auto& scene
+      = std::span(data.scenes, data.scenes_count)[*impl_->scene_index];
+    for (const auto* root : std::span(scene.nodes, scene.nodes_count)) {
       apply_node(root, kInvalidParent, ordinal, glm::mat4 { 1.0F }, apply_node);
     }
   }

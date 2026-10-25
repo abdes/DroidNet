@@ -739,6 +739,9 @@ namespace {
           settings.gltf_omitted_light_range_m, errors)) {
       return false;
     }
+    if (!ReadStringField(obj, "gltf_scene", settings.gltf_scene, errors)) {
+      return false;
+    }
     if (obj.contains("bake_transforms")
       && (!ReadBoolField(
         obj, "bake_transforms", settings.bake_transforms, errors))) {
