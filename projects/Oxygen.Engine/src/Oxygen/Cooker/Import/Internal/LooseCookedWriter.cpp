@@ -710,7 +710,9 @@ private:
     return removed;
   }
 
-  //! Deletes files the published index no longer lists.
+  //! Deletes files the published index no longer lists, and the folders they
+  //! leave empty, so a later write names its folders anew: on a file system
+  //! that ignores case, a kept folder would keep a name renamed only in case.
   auto DeleteRemovedFiles_(const std::vector<std::string>& relpaths) const
     -> void
   {
@@ -722,6 +724,19 @@ private:
       if (error) {
         throw std::system_error(
           error, "Failed to delete removed cooked file '" + relpath + "'");
+      }
+      for (auto folder = std::filesystem::path(relpath).parent_path();
+        !folder.empty(); folder = folder.parent_path()) {
+        const auto native = base::ToNativePath(cooked_root_ / folder);
+        if (!std::filesystem::is_empty(native, error) || error) {
+          break;
+        }
+        std::filesystem::remove(native, error);
+        if (error) {
+          throw std::system_error(error,
+            "Failed to delete emptied cooked folder '" + folder.generic_string()
+              + "'");
+        }
       }
     }
   }

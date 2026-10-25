@@ -104,6 +104,27 @@ namespace {
   }
 
   /*!
+   Scenario: every material of a folder is removed, as when its model folder is
+   renamed only in case. The emptied folder goes too, so the next write
+   creates it under its new name instead of reusing the old one.
+  */
+  NOLINT_TEST(LooseCookedWriterRemovalTest,
+    RemovingTheLastAssetsOfAFolderDeletesTheFolder)
+  {
+    const ScopedTempDir temp;
+    const auto cooked_root = temp.Path() / "loose_cooked_writer_empty_folder";
+    CookTwoMaterials(cooked_root);
+
+    LooseCookedWriter writer(cooked_root);
+    writer.RemoveAssetDescriptor(VirtualPath("A"));
+    writer.RemoveAssetDescriptor(VirtualPath("B"));
+    static_cast<void>(writer.Finish());
+
+    EXPECT_FALSE(std::filesystem::exists(cooked_root / "Materials"));
+    EXPECT_TRUE(std::filesystem::exists(cooked_root / "container.index.bin"));
+  }
+
+  /*!
    Scenario: another writer publishes an asset after this writer opened the
    root. The removal applies to the index published at Finish, so it still
    removes that asset.
