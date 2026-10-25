@@ -1682,19 +1682,22 @@ NOLINT_TEST_F(
   EXPECT_EQ(NodeNames(imported), std::vector<std::string> { "A" });
 }
 
-//! A node reached twice, as a root listed twice or a child of two parents,
-//! is refused: it would have two scene nodes and one anchor.
+//! A node reached twice is refused: it would have two scene nodes and one
+//! anchor. A root listed twice is refused by the traversal at that node; a
+//! child of two parents is invalid glTF, which cgltf refuses as it parses.
 NOLINT_TEST_F(GltfSceneSelectionTest, NodeReachedTwiceIsRefused)
 {
   using oxygen::content::import::ImportSeverity;
   struct Case final {
     std::string_view document;
+    std::string code;
     std::string node;
   };
   const auto cases = std::array {
     Case {
       .document = R"({"asset": {"version": "2.0"},
         "nodes": [{"name": "A"}], "scenes": [{"nodes": [0, 0]}]})",
+      .code = "import.gltf_node_reached_twice",
       .node = "/nodes/0",
     },
     Case {
@@ -1702,19 +1705,20 @@ NOLINT_TEST_F(GltfSceneSelectionTest, NodeReachedTwiceIsRefused)
         "nodes": [{"name": "P", "children": [2]},
           {"name": "Q", "children": [2]}, {"name": "C"}],
         "scenes": [{"nodes": [0, 1]}]})",
-      .node = "/nodes/2",
+      .code = "gltf.parse_failed",
+      .node = "",
     },
   };
   for (const auto& [index, item] : std::views::enumerate(cases)) {
-    SCOPED_TRACE(item.node);
+    SCOPED_TRACE(item.code);
     const auto imported = Import(nlohmann::json::parse(item.document),
       {
         .name = "gltf_node_reached_twice_" + std::to_string(index),
         .scene = {},
       });
     EXPECT_FALSE(imported.report.success);
-    EXPECT_TRUE(Reports(imported, "import.gltf_node_reached_twice",
-      ImportSeverity::kError, item.node));
+    EXPECT_TRUE(
+      Reports(imported, item.code, ImportSeverity::kError, item.node));
   }
 }
 
