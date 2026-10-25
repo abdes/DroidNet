@@ -14,6 +14,7 @@
 #include <Oxygen/Input/Action.h>
 #include <Oxygen/Input/ActionTriggers.h>
 #include <Oxygen/Input/ActionValue.h>
+#include <Oxygen/Input/CodeInput.h>
 #include <Oxygen/Input/InputActionMapping.h>
 #include <Oxygen/Input/test/ActionTestAccess.h>
 #include <Oxygen/Input/test/InputSystemTest.h>
@@ -30,15 +31,10 @@ using namespace std::chrono_literals;
 
 namespace {
 
-using ::testing::AllOf;
-using ::testing::Contains;
-using ::testing::IsSupersetOf;
-using ::testing::SizeIs;
-
 using oxygen::Axis1D;
 using oxygen::Axis2D;
 using oxygen::input::Action;
-using oxygen::input::ActionTrigger;
+using oxygen::input::ActionTriggerChord;
 using oxygen::input::ActionTriggerDown;
 using oxygen::input::ActionTriggerHold;
 using oxygen::input::ActionTriggerPressed;
@@ -147,6 +143,59 @@ NOLINT_TEST_F(InputActionMappingTest, KeyDown_OngoingWhileHeld)
 
   // Assert: evaluation ended (mapping stops ongoing)
   EXPECT_FALSE(action->IsOngoing());
+}
+
+//! An implicit chord gates a held mapping on its chord action: the right
+//! button walks only while the left button is held too, and stops when the
+//! left button is released.
+NOLINT_TEST_F(InputActionMappingTest, Chord_TriggersOnlyWhileChordActionHeld)
+{
+  // Arrange
+  auto look = MakeCodeAction(
+    kTestInputOwner, "Look", oxygen::input::ActionValueType::kBool);
+  InputActionMapping look_mapping(look, InputSlots::LeftMouseButton);
+  auto look_down = std::make_shared<ActionTriggerDown>();
+  look_down->MakeExplicit();
+  look_mapping.AddTrigger(look_down);
+
+  auto walk = MakeCodeAction(
+    kTestInputOwner, "Walk", oxygen::input::ActionValueType::kBool);
+  InputActionMapping walk_mapping(walk, InputSlots::RightMouseButton);
+  auto walk_down = std::make_shared<ActionTriggerDown>();
+  walk_down->MakeExplicit();
+  walk_mapping.AddTrigger(walk_down);
+  auto chord = std::make_shared<ActionTriggerChord>();
+  chord->MakeImplicit();
+  chord->SetChordAction(look);
+  walk_mapping.AddTrigger(chord);
+
+  // Act: the right button alone
+  walk_mapping.HandleInput(
+    MakeMouseBtn(MouseButton::kRight, ButtonState::kPressed));
+  (void)walk_mapping.Update(CanonicalDuration {});
+
+  // Assert
+  EXPECT_FALSE(walk->IsTriggered());
+
+  // Act: the left button too, the right one still held
+  look_mapping.HandleInput(
+    MakeMouseBtn(MouseButton::kLeft, ButtonState::kPressed));
+  (void)look_mapping.Update(CanonicalDuration {});
+  (void)walk_mapping.Update(CanonicalDuration { 16ms });
+
+  // Assert
+  EXPECT_TRUE(walk->IsTriggered());
+  EXPECT_TRUE(walk->IsOngoing());
+
+  // Act: the left button released
+  look_mapping.HandleInput(
+    MakeMouseBtn(MouseButton::kLeft, ButtonState::kReleased));
+  (void)look_mapping.Update(CanonicalDuration {});
+  (void)walk_mapping.Update(CanonicalDuration { 16ms });
+
+  // Assert
+  EXPECT_FALSE(walk->IsTriggered());
+  EXPECT_FALSE(walk->IsOngoing());
 }
 
 //! Mouse motion respects mapping slot: MouseX only uses dx, MouseY uses dy

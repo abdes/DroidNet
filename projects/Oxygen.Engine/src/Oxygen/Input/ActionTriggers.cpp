@@ -21,6 +21,7 @@
 
 using oxygen::input::ActionTrigger;
 using oxygen::input::ActionTriggerChain;
+using oxygen::input::ActionTriggerChord;
 using oxygen::input::ActionTriggerCombo;
 using oxygen::input::ActionTriggerDown;
 using oxygen::input::ActionTriggerHold;
@@ -120,11 +121,10 @@ auto ActionTriggerHold::DoUpdateState(const ActionValue& action_value,
     triggered_once_ = false;
   }
   ActionTriggerTimed::DoUpdateState(action_value, delta_time);
-  if (GetHeldDuration() >= hold_duration_threshold_) {
-    if (!triggered_once_ || !IsOneShot()) {
-      triggered_once_ = true;
-      return true;
-    }
+  if (GetHeldDuration() >= hold_duration_threshold_
+    && (!triggered_once_ || !IsOneShot())) {
+    triggered_once_ = true;
+    return true;
   }
   return false;
 }
@@ -135,12 +135,8 @@ auto ActionTriggerHoldAndRelease::DoUpdateState(const ActionValue& action_value,
   const oxygen::time::CanonicalDuration delta_time) -> bool
 {
   ActionTriggerTimed::DoUpdateState(action_value, delta_time);
-  if (!action_value.IsActuated(GetActuationThreshold())) {
-    if (GetHeldDuration() >= hold_duration_threshold_) {
-      return true;
-    }
-  }
-  return false;
+  return !action_value.IsActuated(GetActuationThreshold())
+    && GetHeldDuration() >= hold_duration_threshold_;
 }
 
 //-- ActionTriggerPulse --------------------------------------------------------
@@ -289,15 +285,30 @@ auto ActionTriggerTap::DoUpdateState(const ActionValue& action_value,
 {
   ActionTriggerTimed::DoUpdateState(action_value, delta_time);
   // Trigger only on true release (Ongoing -> Idle) within the tap threshold.
-  if (!action_value.IsActuated(GetActuationThreshold())) {
-    // Only consider as a tap if we were previously Ongoing (i.e., actually
-    // pressed) before this release.
-    if (GetPreviousState() == State::kOngoing) {
-      if (GetHeldDuration() <= threshold_) {
-        return true;
-      }
-    }
+  // Only consider as a tap if we were previously Ongoing (i.e., actually
+  // pressed) before this release.
+  return !action_value.IsActuated(GetActuationThreshold())
+    && GetPreviousState() == State::kOngoing && GetHeldDuration() <= threshold_;
+}
+
+//-- ActionTriggerChord --------------------------------------------------------
+
+void ActionTriggerChord::SetChordAction(std::shared_ptr<Action> action)
+{
+  chord_action_ = std::move(action);
+}
+
+auto ActionTriggerChord::DoUpdateState(const ActionValue& /*action_value*/,
+  oxygen::time::CanonicalDuration /*delta_time*/) -> bool
+{
+  // The chord action is held while it is ongoing; it may also trigger
+  // without holding (a press), which counts for that frame.
+  if (chord_action_
+    && (chord_action_->IsOngoing() || chord_action_->IsTriggered())) {
+    SetTriggerState(State::kOngoing);
+    return true;
   }
+  SetTriggerState(State::kIdle);
   return false;
 }
 
@@ -333,17 +344,13 @@ auto ActionTriggerChain::DoUpdateState(const ActionValue& action_value,
     return false;
   }
 
-  // If prerequisite triggered this frame or is currently triggered, arm the
-  // gate
-  if (!disarmed_until_idle_
-    && (linked_action_->IsTriggered() || linked_action_->IsOngoing())) {
-    // Arm only once it has actually triggered at least once
-    if (linked_action_->IsTriggered()) {
-      if (!armed_) {
-        window_elapsed_ = {};
-      }
-      armed_ = true;
+  // Arm only once the prerequisite has actually triggered; holding it
+  // without triggering keeps the gate as it is.
+  if (!disarmed_until_idle_ && linked_action_->IsTriggered()) {
+    if (!armed_) {
+      window_elapsed_ = {};
     }
+    armed_ = true;
   }
 
   // If not armed yet, remain ongoing but do not evaluate local press
@@ -376,15 +383,14 @@ auto ActionTriggerChain::DoUpdateState(const ActionValue& action_value,
   // auto-repeat while held.
   const bool actuated = action_value.IsActuated(GetActuationThreshold());
   bool fired = false;
-  if (actuated && !prev_actuated_) {
-    // Optional: require prerequisite to still be held at the instant of press
-    if (!require_prereq_held_ || linked_action_->IsOngoing()) {
-      fired = true;
-      // Once fired, reset the arm; require prerequisite to re-trigger for next
-      // chain
-      armed_ = false;
-      window_elapsed_ = {};
-    }
+  // Optional: require prerequisite to still be held at the instant of press
+  if (actuated && !prev_actuated_
+    && (!require_prereq_held_ || linked_action_->IsOngoing())) {
+    fired = true;
+    // Once fired, reset the arm; require prerequisite to re-trigger for next
+    // chain
+    armed_ = false;
+    window_elapsed_ = {};
   }
   prev_actuated_ = actuated;
   return fired;
@@ -488,7 +494,7 @@ auto ActionTriggerCombo::DoUpdateState(const ActionValue& /*action_value*/,
       });
   };
   // After this evaluation, mark every observed transition as seen.
-  const auto mark_seen = [&]() -> void {
+  const auto mark_seen = [&] -> void {
     for (const auto& step : combo_steps_) {
       cursor_for(*step.action).seen = step.action->GetFrameTransitions().size();
     }

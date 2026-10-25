@@ -38,11 +38,10 @@ namespace detail {
     case T::kHoldAndRelease:
     case T::kPulse:
     case T::kTap:
+    case T::kChord:
     case T::kActionChain:
     case T::kCombo:
       return;
-    case T::kChord:
-      throw std::runtime_error("input trigger type 'Chord' is not supported");
     default:
       throw std::runtime_error("invalid input trigger type");
     }

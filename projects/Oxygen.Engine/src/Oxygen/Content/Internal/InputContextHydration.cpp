@@ -312,16 +312,34 @@ auto HydrateInputContext(const data::InputMappingContextAsset& asset,
           trigger = std::move(typed);
           break;
         }
-        case InputTriggerType::kChord:
+        case InputTriggerType::kChord: {
+          auto typed = std::make_shared<input::ActionTriggerChord>();
+          if (trigger_record.linked_action_asset_key.IsNil()) {
+            LOG_F(ERROR,
+              "ERROR [input.context.hydration_failed]: trigger type Chord "
+              "requires its chord action at mapping index {} trigger index {} "
+              "in context '{}'",
+              mapping_index, trigger_index, context_name);
+            continue;
+          }
+          auto chord = resolve_action(trigger_record.linked_action_asset_key,
+            "mappings[" + std::to_string(mapping_index) + "].triggers["
+              + std::to_string(trigger_index - trigger_start)
+              + "].linked_action");
+          if (!chord) {
+            continue;
+          }
+          typed->SetChordAction(chord);
+          trigger = std::move(typed);
+          break;
+        }
         case InputTriggerType::kActionChain: {
           auto typed = std::make_shared<input::ActionTriggerChain>();
           if (trigger_record.linked_action_asset_key.IsNil()) {
             LOG_F(ERROR,
-              "ERROR [input.context.hydration_failed]: trigger type {} "
-              "requires linked action at mapping index {} trigger index {} in "
-              "context '{}'",
-              trigger_record.type == InputTriggerType::kChord ? "Chord"
-                                                              : "ActionChain",
+              "ERROR [input.context.hydration_failed]: trigger type "
+              "ActionChain requires linked action at mapping index {} trigger "
+              "index {} in context '{}'",
               mapping_index, trigger_index, context_name);
             continue;
           }

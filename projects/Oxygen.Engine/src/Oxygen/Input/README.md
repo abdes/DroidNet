@@ -12,14 +12,14 @@ The module builds on every platform that builds the reusable engine modules
 
 ## Concepts
 
-| Concept               | Role                                                                                                                                                           | Details                                        |
-| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
-| `Action`              | Named logical input with a typed value (`bool`, `Axis1D`, `Axis2D`), a level state and per-frame edges. Combines every binding that drives it.                 | [Docs/Actions.md](Docs/Actions.md)             |
-| `InputActionMapping`  | One binding: an `InputSlot` driving one action, with triggers and a scale/bias value transform.                                                                | [Docs/Mappings.md](Docs/Mappings.md)           |
-| `InputMappingContext` | Ordered group of mappings, activated and prioritized as a unit (gameplay, UI, vehicle...).                                                                     | [Docs/Mappings.md](Docs/Mappings.md)           |
-| Triggers              | Small state machines deciding when a binding triggers: Pressed, Released, Down, Hold, HoldAndRelease, Pulse, Tap, Chain, Combo; explicit, implicit or blocker. | [Docs/Triggers](Docs/Triggers)                 |
-| `InputSystem`         | Engine module: routes events, evaluates contexts by priority, applies consumption, publishes the frame's `InputSnapshot`.                                      | below                                          |
-| `InputSnapshot`       | Immutable value copy of all actions at the end of `kInput`, safe to read from any later phase, task or frame in flight.                                        | [Docs/InputSnapshot.md](Docs/InputSnapshot.md) |
+| Concept               | Role                                                                                                                                                                  | Details                                        |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| `Action`              | Named logical input with a typed value (`bool`, `Axis1D`, `Axis2D`), a level state and per-frame edges. Combines every binding that drives it.                        | [Docs/Actions.md](Docs/Actions.md)             |
+| `InputActionMapping`  | One binding: an `InputSlot` driving one action, with triggers and a scale/bias value transform.                                                                       | [Docs/Mappings.md](Docs/Mappings.md)           |
+| `InputMappingContext` | Ordered group of mappings, activated and prioritized as a unit (gameplay, UI, vehicle...).                                                                            | [Docs/Mappings.md](Docs/Mappings.md)           |
+| Triggers              | Small state machines deciding when a binding triggers: Pressed, Released, Down, Hold, HoldAndRelease, Pulse, Tap, Chord, Chain, Combo; explicit, implicit or blocker. | [Docs/Triggers](Docs/Triggers)                 |
+| `InputSystem`         | Engine module: routes events, evaluates contexts by priority, applies consumption, publishes the frame's `InputSnapshot`.                                             | below                                          |
+| `InputSnapshot`       | Immutable value copy of all actions at the end of `kInput`, safe to read from any later phase, task or frame in flight.                                               | [Docs/InputSnapshot.md](Docs/InputSnapshot.md) |
 
 ## Quick start
 
@@ -206,8 +206,6 @@ Not yet provided (known gaps against current engines):
   rebinding service or persistence of player bindings.
 - **Modifier stack.** Scale and bias cover key-to-axis and sensitivity; there is
   no general modifier chain (negate, swizzle, dead zone, smoothing).
-- **Chord and modifier keys** are expressed with Chain triggers, not a dedicated
-  chord trigger.
 - **Text input** is outside this module (platform text events).
 
 ## Tests

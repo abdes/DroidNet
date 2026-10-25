@@ -13,6 +13,7 @@
 #include <span>
 #include <stdexcept>
 #include <string_view>
+#include <type_traits>
 #include <utility>
 
 #include "Mocks/MockStream.h"
@@ -82,10 +83,60 @@ protected:
 
   auto WriteBlob(const auto& pod) -> void
   {
-    auto bytes = std::span<const std::byte>(
-      reinterpret_cast<const std::byte*>(&pod), sizeof(pod));
+    const auto bytes = std::as_bytes(std::span(&pod, 1));
     const auto res = writer_.WriteBlob(bytes);
     ASSERT_TRUE(res) << res.error().message();
+  }
+
+  //! Writes a mapping context with one mapping and one trigger of `type`.
+  auto WriteSingleTriggerContext(
+    const oxygen::data::pak::input::InputTriggerType type) -> void
+  {
+    using oxygen::data::AssetType;
+    using oxygen::data::pak::input::InputActionMappingRecord;
+    using oxygen::data::pak::input::InputMappingContextAssetDesc;
+    using oxygen::data::pak::input::InputTriggerBehavior;
+    using oxygen::data::pak::input::InputTriggerRecord;
+
+    constexpr size_t kDescSize = sizeof(InputMappingContextAssetDesc);
+    constexpr size_t kMappingSize = sizeof(InputActionMappingRecord);
+    constexpr size_t kTriggerSize = sizeof(InputTriggerRecord);
+
+    InputMappingContextAssetDesc desc {};
+    desc.header.asset_type
+      = static_cast<uint8_t>(AssetType::kInputMappingContext);
+    desc.header.version
+      = oxygen::data::pak::input::kInputMappingContextAssetVersion;
+    desc.mappings.offset = kDescSize;
+    desc.mappings.count = 1;
+    desc.mappings.entry_size = static_cast<uint32_t>(kMappingSize);
+    desc.triggers.offset = kDescSize + kMappingSize;
+    desc.triggers.count = 1;
+    desc.triggers.entry_size = static_cast<uint32_t>(kTriggerSize);
+    desc.trigger_aux.offset = desc.triggers.offset + kTriggerSize;
+    desc.trigger_aux.count = 0;
+    desc.trigger_aux.entry_size
+      = sizeof(oxygen::data::pak::input::InputTriggerAuxRecord);
+    desc.header.strings.offset
+      = static_cast<oxygen::data::pak::core::StringTableOffsetT>(
+        desc.trigger_aux.offset);
+    desc.header.strings.size = 2;
+
+    InputActionMappingRecord mapping {};
+    mapping.slot_name_offset = 1;
+    mapping.trigger_start_index = 0;
+    mapping.trigger_count = 1;
+
+    InputTriggerRecord trigger {};
+    trigger.type = type;
+    trigger.behavior = InputTriggerBehavior::kImplicit;
+
+    static constexpr auto kStrings = std::string_view { "\0\0", 2 };
+    WriteBlob(desc);
+    WriteBlob(mapping);
+    WriteBlob(trigger);
+    ASSERT_TRUE(writer_.WriteBlob(std::as_bytes(std::span(kStrings))));
+    ASSERT_TRUE(writer_.Flush());
   }
 
   MockStream stream_;
@@ -166,8 +217,9 @@ NOLINT_TEST_F(InputLoadersTest,
   desc.header.strings.offset
     = kDescSize + kMappingSize + kTriggerSize + kAuxSize;
 
-  static constexpr char kStrings[] = "\0Keyboard.PageUp\0";
-  desc.header.strings.size = static_cast<uint32_t>(sizeof(kStrings) - 1);
+  static constexpr auto kStrings
+    = std::string_view { "\0Keyboard.PageUp\0", 17 };
+  desc.header.strings.size = static_cast<uint32_t>(kStrings.size());
 
   InputActionMappingRecord mapping {};
   mapping.action_asset_key = action_a;
@@ -192,8 +244,7 @@ NOLINT_TEST_F(InputLoadersTest,
   WriteBlob(mapping);
   WriteBlob(trigger);
   WriteBlob(aux);
-  ASSERT_TRUE(writer_.WriteBlob(
-    std::as_bytes(std::span(kStrings, sizeof(kStrings) - 1))));
+  ASSERT_TRUE(writer_.WriteBlob(std::as_bytes(std::span(kStrings))));
   ASSERT_TRUE(writer_.Flush());
 
   auto [context, collector] = MakeDecodeContext();
@@ -236,57 +287,29 @@ NOLINT_TEST_F(
   InputLoadersTest, LoadInputMappingContextAssetInvalidTriggerTypeThrows)
 {
   using oxygen::content::loaders::LoadInputMappingContextAsset;
-  using oxygen::data::AssetType;
-  using oxygen::data::pak::input::InputActionMappingRecord;
-  using oxygen::data::pak::input::InputMappingContextAssetDesc;
-  using oxygen::data::pak::input::InputTriggerBehavior;
-  using oxygen::data::pak::input::InputTriggerRecord;
   using oxygen::data::pak::input::InputTriggerType;
 
-  constexpr size_t kDescSize = sizeof(InputMappingContextAssetDesc);
-  constexpr size_t kMappingSize = sizeof(InputActionMappingRecord);
-  constexpr size_t kTriggerSize = sizeof(InputTriggerRecord);
-
-  InputMappingContextAssetDesc desc {};
-  desc.header.asset_type
-    = static_cast<uint8_t>(AssetType::kInputMappingContext);
-  desc.header.version
-    = oxygen::data::pak::input::kInputMappingContextAssetVersion;
-  desc.mappings.offset = kDescSize;
-  desc.mappings.count = 1;
-  desc.mappings.entry_size = static_cast<uint32_t>(kMappingSize);
-  desc.triggers.offset = kDescSize + kMappingSize;
-  desc.triggers.count = 1;
-  desc.triggers.entry_size = static_cast<uint32_t>(kTriggerSize);
-  desc.trigger_aux.offset = desc.triggers.offset + kTriggerSize;
-  desc.trigger_aux.count = 0;
-  desc.trigger_aux.entry_size
-    = sizeof(oxygen::data::pak::input::InputTriggerAuxRecord);
-  desc.header.strings.offset
-    = static_cast<oxygen::data::pak::core::StringTableOffsetT>(
-      desc.trigger_aux.offset);
-  desc.header.strings.size = 2;
-
-  InputActionMappingRecord mapping {};
-  mapping.slot_name_offset = 1;
-  mapping.trigger_start_index = 0;
-  mapping.trigger_count = 1;
-
-  InputTriggerRecord trigger {};
-  trigger.type = InputTriggerType::kChord; // explicitly unsupported by loader
-  trigger.behavior = InputTriggerBehavior::kImplicit;
-
-  static constexpr char kStrings[] = "\0\0";
-  WriteBlob(desc);
-  WriteBlob(mapping);
-  WriteBlob(trigger);
-  ASSERT_TRUE(writer_.WriteBlob(
-    std::as_bytes(std::span(kStrings, sizeof(kStrings) - 1))));
-  ASSERT_TRUE(writer_.Flush());
+  // One past the last trigger type the format defines.
+  WriteSingleTriggerContext(static_cast<InputTriggerType>(
+    static_cast<std::underlying_type_t<InputTriggerType>>(
+      InputTriggerType::kCombo)
+    + 1U));
 
   auto context = MakeParseOnlyContext();
   EXPECT_THROW(
     { (void)LoadInputMappingContextAsset(context); }, std::runtime_error);
+}
+
+//! Every trigger type the input schema declares loads, the chord included.
+NOLINT_TEST_F(InputLoadersTest, LoadInputMappingContextAssetAcceptsChord)
+{
+  using oxygen::content::loaders::LoadInputMappingContextAsset;
+  using oxygen::data::pak::input::InputTriggerType;
+
+  WriteSingleTriggerContext(InputTriggerType::kChord);
+
+  auto context = MakeParseOnlyContext();
+  EXPECT_NO_THROW({ (void)LoadInputMappingContextAsset(context); });
 }
 
 NOLINT_TEST_F(
@@ -326,11 +349,10 @@ NOLINT_TEST_F(
   mapping.trigger_start_index = 0;
   mapping.trigger_count = 0;
 
-  static constexpr char kStrings[] = "\0\0";
+  static constexpr auto kStrings = std::string_view { "\0\0", 2 };
   WriteBlob(desc);
   WriteBlob(mapping);
-  ASSERT_TRUE(writer_.WriteBlob(
-    std::as_bytes(std::span(kStrings, sizeof(kStrings) - 1))));
+  ASSERT_TRUE(writer_.WriteBlob(std::as_bytes(std::span(kStrings))));
   ASSERT_TRUE(writer_.Flush());
 
   auto context = MakeParseOnlyContext();
@@ -375,11 +397,10 @@ NOLINT_TEST_F(
   mapping.trigger_start_index = 0;
   mapping.trigger_count = 1; // out of bounds because triggers.count == 0
 
-  static constexpr char kStrings[] = "\0\0";
+  static constexpr auto kStrings = std::string_view { "\0\0", 2 };
   WriteBlob(desc);
   WriteBlob(mapping);
-  ASSERT_TRUE(writer_.WriteBlob(
-    std::as_bytes(std::span(kStrings, sizeof(kStrings) - 1))));
+  ASSERT_TRUE(writer_.WriteBlob(std::as_bytes(std::span(kStrings))));
   ASSERT_TRUE(writer_.Flush());
 
   auto context = MakeParseOnlyContext();
@@ -433,12 +454,11 @@ NOLINT_TEST_F(
   trigger.aux_start_index = 0;
   trigger.aux_count = 1; // out of bounds because trigger_aux.count == 0
 
-  static constexpr char kStrings[] = "\0\0";
+  static constexpr auto kStrings = std::string_view { "\0\0", 2 };
   WriteBlob(desc);
   WriteBlob(mapping);
   WriteBlob(trigger);
-  ASSERT_TRUE(writer_.WriteBlob(
-    std::as_bytes(std::span(kStrings, sizeof(kStrings) - 1))));
+  ASSERT_TRUE(writer_.WriteBlob(std::as_bytes(std::span(kStrings))));
   ASSERT_TRUE(writer_.Flush());
 
   auto context = MakeParseOnlyContext();
@@ -461,10 +481,9 @@ NOLINT_TEST_F(
   desc.header.strings.offset = sizeof(InputMappingContextAssetDesc);
   desc.header.strings.size = 1;
 
-  static constexpr char kStrings[] = "\0";
+  static constexpr auto kStrings = std::string_view { "\0", 1 };
   WriteBlob(desc);
-  ASSERT_TRUE(writer_.WriteBlob(
-    std::as_bytes(std::span(kStrings, sizeof(kStrings) - 1))));
+  ASSERT_TRUE(writer_.WriteBlob(std::as_bytes(std::span(kStrings))));
   ASSERT_TRUE(writer_.Flush());
 
   auto context = MakeParseOnlyContext();
@@ -491,10 +510,9 @@ NOLINT_TEST_F(InputLoadersTest, LoadInputMappingContextAssetReservedFlagsThrow)
   desc.header.strings.offset = sizeof(InputMappingContextAssetDesc);
   desc.header.strings.size = 1;
 
-  static constexpr char kStrings[] = "\0";
+  static constexpr auto kStrings = std::string_view { "\0", 1 };
   WriteBlob(desc);
-  ASSERT_TRUE(writer_.WriteBlob(
-    std::as_bytes(std::span(kStrings, sizeof(kStrings) - 1))));
+  ASSERT_TRUE(writer_.WriteBlob(std::as_bytes(std::span(kStrings))));
   ASSERT_TRUE(writer_.Flush());
 
   auto context = MakeParseOnlyContext();

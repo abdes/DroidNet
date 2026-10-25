@@ -518,6 +518,38 @@ private:
   oxygen::time::CanonicalDuration threshold_;
 };
 
+//-- ActionTriggerChord --------------------------------------------------------
+
+//! Fires while its chord action is active (triggered or ongoing), as a
+//! modifier does: an implicit chord gates its mapping on another action
+//! being held, and the mapping's other triggers decide when it fires.
+class ActionTriggerChord : public ActionTrigger {
+public:
+  ActionTriggerChord() = default;
+  ~ActionTriggerChord() override = default;
+
+  OXYGEN_DEFAULT_COPYABLE(ActionTriggerChord);
+  OXYGEN_DEFAULT_MOVABLE(ActionTriggerChord);
+
+  [[nodiscard]] auto GetType() const -> ActionTriggerType override
+  {
+    return ActionTriggerType::kChord;
+  }
+
+  OXGN_NPUT_API void SetChordAction(std::shared_ptr<Action> action);
+  [[nodiscard]] auto GetChordAction() const -> std::weak_ptr<const Action>
+  {
+    return chord_action_;
+  }
+
+protected:
+  OXGN_NPUT_API auto DoUpdateState(const ActionValue& action_value,
+    oxygen::time::CanonicalDuration delta_time) -> bool override;
+
+private:
+  std::shared_ptr<Action> chord_action_;
+};
+
 //-- ActionTriggerChain --------------------------------------------------------
 
 // Links this trigger to an action that must trigger for this one to trigger.
