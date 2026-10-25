@@ -46,6 +46,7 @@
 #include <Commands/SetGeometryCommand.h>
 #include <Commands/SetLocalTransformCommand.h>
 #include <Commands/SetOverridesCommand.h>
+#include <Commands/SceneInstanceCommands.h>
 #include <Commands/SchemaEnums.h>
 #include <Commands/SetPropertiesCommand.h>
 #include <Commands/UpdateTransformsForNodesCommand.h>
@@ -915,6 +916,158 @@ namespace Oxygen::Interop::World {
     command->SetFailureCallback(MakeAssetFailureCallback(onFailure));
     command->SetSuccessCallback(MakeAssetSuccessCallback(onSuccess));
     editor_module->get().Enqueue(std::move(command));
+  }
+
+  namespace {
+    //! The engine node ID of a managed node ID; an empty one is refused.
+    auto ToNodeId(System::Guid id) -> oxygen::data::NodeId
+    {
+      const auto parsed = oxygen::data::NodeId::FromString(
+        msclr::interop::marshal_as<std::string>(id.ToString("D")));
+      if (!parsed || parsed.value().IsNil()) {
+        throw gcnew ArgumentException("A node path holds an empty node ID.", "path");
+      }
+      return parsed.value();
+    }
+
+    //! The engine node path of a managed one; it cannot be empty.
+    auto ToNodePath(array<System::Guid>^ path)
+      -> std::vector<oxygen::data::NodeId>
+    {
+      if (path == nullptr || path->Length == 0) {
+        throw gcnew ArgumentException(
+          "An instance change names a node below the instance root.", "path");
+      }
+      auto nodes = std::vector<oxygen::data::NodeId> {};
+      for each (System::Guid id in path) {
+        nodes.push_back(ToNodeId(id));
+      }
+      return nodes;
+    }
+
+    //! The engine surface ID of a part; an empty one names no part.
+    auto ToPartId(System::Guid part) -> oxygen::data::SurfaceId
+    {
+      if (part == System::Guid::Empty) {
+        return {};
+      }
+      const auto parsed = oxygen::data::SurfaceId::FromString(
+        msclr::interop::marshal_as<std::string>(part.ToString("D")));
+      if (!parsed) {
+        throw gcnew ArgumentException("Surface identity is invalid.", "partId");
+      }
+      return parsed.value();
+    }
+
+    //! The engine override ID of a change; the invalid ID is refused.
+    auto ToOverrideId(System::UInt16 id) -> oxygen::data::schema::OverrideId
+    {
+      const auto native = static_cast<oxygen::data::schema::OverrideId>(id);
+      if (native == oxygen::data::schema::OverrideId::kInvalid) {
+        throw gcnew ArgumentOutOfRangeException(
+          "overrideId", "An instance change names a property.");
+      }
+      return native;
+    }
+
+    //! The native change of a managed one.
+    auto ToHostChange(InstanceChangeManaged change)
+      -> interop::HostInstanceChange
+    {
+      auto value = interop::InstanceValue {};
+      switch (change.Kind) {
+      case InstanceValueKind::Bool:
+        value = change.BoolValue;
+        break;
+      case InstanceValueKind::Int32:
+        value = static_cast<std::int32_t>(change.Int32Value);
+        break;
+      case InstanceValueKind::Float:
+        value = change.FloatValue;
+        break;
+      case InstanceValueKind::Vector3:
+        value = std::array<float, 3> { change.Vector3Value.X,
+          change.Vector3Value.Y, change.Vector3Value.Z };
+        break;
+      case InstanceValueKind::Asset:
+        if (String::IsNullOrWhiteSpace(change.AssetPath)) {
+          throw gcnew ArgumentException(
+            "An asset change names its asset.", "change");
+        }
+        value = interop::InstanceMaterial {
+          .virtual_path
+          = msclr::interop::marshal_as<std::string>(change.AssetPath),
+        };
+        break;
+      case InstanceValueKind::LodPolicy:
+        value = ToNativeLodPolicy(change.LodPolicy);
+        break;
+      default:
+        throw gcnew ArgumentOutOfRangeException("change", "Unknown value kind.");
+      }
+      return interop::HostInstanceChange {
+        .path = ToNodePath(change.Path),
+        .override_id = ToOverrideId(change.OverrideId),
+        .part_id = ToPartId(change.PartId),
+        .value = std::move(value),
+      };
+    }
+  } // namespace
+
+  void OxygenWorld::InstantiateScene(System::Guid nodeId, String^ sourcePath,
+    array<InstanceChangeManaged>^ changes,
+    Action<System::UInt64, String^>^ onFailure,
+    Action<System::UInt64>^ onSuccess) {
+    if (String::IsNullOrWhiteSpace(sourcePath)) {
+      throw gcnew ArgumentException(
+        "An instance names the scene it instances.", "sourcePath");
+    }
+    auto native_changes = std::vector<interop::HostInstanceChange> {};
+    if (changes != nullptr) {
+      for each (InstanceChangeManaged change in changes) {
+        native_changes.push_back(ToHostChange(change));
+      }
+    }
+    const auto target
+      = RequireNodeForCommand(context_, nodeId, "InstantiateScene");
+    target.module.Enqueue(std::make_unique<InstantiateSceneCommand>(
+      target.node, msclr::interop::marshal_as<std::string>(sourcePath),
+      std::move(native_changes), MakeAssetFailureCallback(onFailure),
+      MakeAssetSuccessCallback(onSuccess)));
+  }
+
+  void OxygenWorld::SetInstanceChange(
+    System::Guid nodeId, InstanceChangeManaged change) {
+    auto native_change = ToHostChange(change);
+    const auto target
+      = RequireNodeForCommand(context_, nodeId, "SetInstanceChange");
+    target.module.Enqueue(std::make_unique<SetInstanceChangeCommand>(
+      target.node, std::move(native_change)));
+  }
+
+  void OxygenWorld::ClearInstanceChange(System::Guid nodeId,
+    array<System::Guid>^ path, System::UInt16 overrideId, System::Guid partId) {
+    auto address = oxygen::data::ChangeAddress {
+      .path = ToNodePath(path),
+      .target = oxygen::data::PropertyAddress {
+        .override_id = ToOverrideId(overrideId),
+        .part_id = ToPartId(partId),
+      },
+    };
+    const auto target
+      = RequireNodeForCommand(context_, nodeId, "ClearInstanceChange");
+    target.module.Enqueue(std::make_unique<ClearInstanceChangeCommand>(
+      target.node, std::move(address)));
+  }
+
+  void OxygenWorld::DetachInstance(System::Guid nodeId) {
+    // A node that is gone took its instance with it.
+    const auto target = LookupNodeForCommand(context_, nodeId);
+    if (!target) {
+      return;
+    }
+    target->module.Enqueue(
+      std::make_unique<DetachInstanceCommand>(target->node));
   }
 
   void OxygenWorld::SetEnvironment(bool atmosphereEnabled, bool sunDiskEnabled,

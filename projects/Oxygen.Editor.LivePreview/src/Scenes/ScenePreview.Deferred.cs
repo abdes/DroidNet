@@ -73,6 +73,10 @@ internal sealed partial class ScenePreview
             RuntimeDetachCamera detach when FindNode(scene, detach.NodeId)?.Components.Any(component => component is CameraComponent) == true => null,
             RuntimeSetGeometry geometry when FindNode(scene, geometry.NodeId)?.Components.Any(component => component is GeometryComponent) != true => null,
             RuntimeSetOverrides overrides when FindNode(scene, overrides.NodeId)?.Components.Any(component => component is GeometryComponent) != true => null,
+            RuntimeInstantiateScene instance when FindNode(scene, instance.NodeId)?.Components.Any(component => component is SceneInstanceComponent) != true => null,
+            RuntimeSetInstanceChange change when FindNode(scene, change.NodeId)?.Components.Any(component => component is SceneInstanceComponent) != true => null,
+            RuntimeClearInstanceChange change when FindNode(scene, change.NodeId)?.Components.Any(component => component is SceneInstanceComponent) != true => null,
+            RuntimeDetachInstance detach when FindNode(scene, detach.NodeId)?.Components.Any(component => component is SceneInstanceComponent) == true => null,
             _ => command,
         };
 

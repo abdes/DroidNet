@@ -156,6 +156,7 @@ internal sealed partial class ScenePreview
                 foreach (var node in added.Roots.Select(id => FindNode(scene, id)).OfType<SceneNode>())
                 {
                     RecordOverrideParts(lifetime, [node, .. node.Descendants()]);
+                    RecordInstances(lifetime, [node, .. node.Descendants()]);
                     await this.CreateSubtreeAsync(node, node.Hierarchy.Parent?.Id, cancellationToken).ConfigureAwait(true);
                 }
 
@@ -172,8 +173,15 @@ internal sealed partial class ScenePreview
             case SceneChange.ComponentAdded added when FindNode(scene, added.Node) is { } node:
                 await this.AttachAsync(lifetime, node, node.Components.FirstOrDefault(component => component.Id == added.Component), cancellationToken).ConfigureAwait(true);
                 break;
+            case SceneChange.ComponentRemoved removed when string.Equals(removed.Kind, SceneSchema.SceneInstance.Kind, StringComparison.Ordinal):
+                await this.ProjectInstanceAsync(lifetime, removed.Node, cancellationToken).ConfigureAwait(true);
+                break;
             case SceneChange.ComponentRemoved removed:
                 await this.DetachAsync(scene, removed.Node, removed.Kind, cancellationToken).ConfigureAwait(true);
+                break;
+            case SceneChange.PropertiesChanged { Node: { } node } properties
+                when properties.Properties.Any(static property => string.Equals(property.ComponentKind, SceneSchema.SceneInstance.Kind, StringComparison.Ordinal)):
+                await this.ProjectInstanceAsync(lifetime, node, cancellationToken).ConfigureAwait(true);
                 break;
             case SceneChange.PropertiesChanged properties:
                 await this.ProjectPropertiesAsync(lifetime, properties, revision, cancellationToken).ConfigureAwait(true);
@@ -182,9 +190,19 @@ internal sealed partial class ScenePreview
                 RecordOverrideParts(lifetime, [node]);
                 await this.AttachGeometryWhenMountedAsync(lifetime, node, cancellationToken).ConfigureAwait(true);
                 break;
-            case SceneChange.OverridesChanged overrides
-                when overrides.Properties.Any(static property => SceneWire.TryGetOverrideId(property, out _)) && FindNode(scene, overrides.Node) is { } node:
-                await this.ProjectOverridesAsync(lifetime, node, cancellationToken).ConfigureAwait(true);
+            case SceneChange.OverridesChanged overrides when FindNode(scene, overrides.Node) is { } node:
+                // An instance root's changes and its own geometry's overrides are projected apart.
+                if (InstanceOf(node) is not null || lifetime.Instances.ContainsKey(node.Id))
+                {
+                    await this.ProjectInstanceAsync(lifetime, node.Id, cancellationToken).ConfigureAwait(true);
+                }
+
+                if (overrides.Properties.Any(static property => SceneWire.TryGetOverrideId(property, out _))
+                    && (node.Components.OfType<GeometryComponent>().Any() || lifetime.OverrideParts.GetValueOrDefault(node.Id, []).Length != 0))
+                {
+                    await this.ProjectOverridesAsync(lifetime, node, cancellationToken).ConfigureAwait(true);
+                }
+
                 break;
             default:
                 // Layout, editor visibility, play, references and scripts have no engine projection.
@@ -254,6 +272,9 @@ internal sealed partial class ScenePreview
                 break;
             case LocalFogVolumeComponent:
                 this.Report(await this.AttachLocalFogVolumeAsync(scene, node, cancellationToken).ConfigureAwait(true));
+                break;
+            case SceneInstanceComponent:
+                await this.ProjectInstanceAsync(lifetime, node.Id, cancellationToken).ConfigureAwait(true);
                 break;
             default:
                 break;

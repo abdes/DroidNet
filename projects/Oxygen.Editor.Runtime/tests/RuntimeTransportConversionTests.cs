@@ -95,4 +95,29 @@ public sealed class RuntimeTransportConversionTests
         _ = native[3].Type.Should().Be(FieldType.Bool);
         _ = native[3].BoolValue.Should().BeTrue();
     }
+
+    [TestMethod]
+    public void InstanceChange_FillsTheMemberOfItsKind()
+    {
+        var path = Oxygen.Editor.World.NodePath.Of(Oxygen.Managed.Core.NodeId.New(), Oxygen.Managed.Core.NodeId.New());
+        var surface = Guid.NewGuid();
+
+        var vector = RuntimeTransportConversion.ToNative(new RuntimeInstanceChange(path, RuntimeOverrideId.TransformRotation, Guid.Empty, new RuntimeInstanceValue.Vector(new Vector3(1, 2, 3))));
+        var material = RuntimeTransportConversion.ToNative(new RuntimeInstanceChange(path, RuntimeOverrideId.GeometrySurfaceMaterial, surface, new RuntimeInstanceValue.Asset("/Content/Red.omat")));
+        var integer = RuntimeTransportConversion.ToNative(new RuntimeInstanceChange(path, RuntimeOverrideId.NodeVisibility, Guid.Empty, new RuntimeInstanceValue.Integer(2)));
+
+        _ = vector.Path.Should().Equal([.. path.Nodes.Select(static id => id.Value)], "the path keeps its levels, shallowest first");
+        _ = vector.OverrideId.Should().Be((ushort)RuntimeOverrideId.TransformRotation);
+        _ = vector.Kind.Should().Be(InstanceValueKind.Vector3);
+        _ = vector.Vector3Value.Should().Be(new Vector3(1, 2, 3));
+        _ = material.Kind.Should().Be(InstanceValueKind.Asset);
+        _ = material.AssetPath.Should().Be("/Content/Red.omat");
+        _ = material.PartId.Should().Be(surface);
+        _ = integer.Kind.Should().Be(InstanceValueKind.Int32);
+        _ = integer.Int32Value.Should().Be(2);
+
+        var policy = RuntimeTransportConversion.ToNative(new RuntimeInstanceChange(path, RuntimeOverrideId.GeometryLodPolicy, Guid.Empty, new RuntimeInstanceValue.LodPolicyValue(new Oxygen.Editor.World.Serialization.LodPolicy.Fixed(1))));
+        _ = policy.Kind.Should().Be(InstanceValueKind.LodPolicy);
+        _ = policy.LodPolicy.LodIndex.Should().Be(1);
+    }
 }

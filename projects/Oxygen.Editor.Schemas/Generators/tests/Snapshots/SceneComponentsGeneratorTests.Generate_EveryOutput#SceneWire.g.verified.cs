@@ -26,4 +26,14 @@ internal static partial class SceneWire
         map.Add(global::Oxygen.Editor.World.SceneSchema.Geometry.Surface.Material.Id, global::Oxygen.Editor.Runtime.Engine.RuntimeOverrideId.GeometrySurfaceMaterial);
         map.Add(global::Oxygen.Editor.World.SceneSchema.Geometry.LodPolicy.Id, global::Oxygen.Editor.Runtime.Engine.RuntimeOverrideId.GeometryLodPolicy);
     }
+
+    private static void AddSchemaChangeIds(global::System.Collections.Generic.Dictionary<global::Oxygen.Managed.Core.PropertyId, global::Oxygen.Editor.Runtime.Engine.RuntimeOverrideId> map)
+    {
+        map.Add(global::Oxygen.Editor.World.SceneSchema.Geometry.Surface.Material.Id, global::Oxygen.Editor.Runtime.Engine.RuntimeOverrideId.GeometrySurfaceMaterial);
+        map.Add(global::Oxygen.Editor.World.SceneSchema.Geometry.LodPolicy.Id, global::Oxygen.Editor.Runtime.Engine.RuntimeOverrideId.GeometryLodPolicy);
+        map.Add(global::Oxygen.Editor.World.SceneSchema.Lamp.Color.Id, global::Oxygen.Editor.Runtime.Engine.RuntimeOverrideId.LampColor);
+        map.Add(global::Oxygen.Editor.World.SceneSchema.Lamp.Range.Id, global::Oxygen.Editor.Runtime.Engine.RuntimeOverrideId.LampRange);
+        map.Add(global::Oxygen.Editor.World.SceneSchema.Lamp.FovDegrees.Id, global::Oxygen.Editor.Runtime.Engine.RuntimeOverrideId.LampFovDegrees);
+        map.Add(global::Oxygen.Editor.World.SceneSchema.Lamp.Mode.Id, global::Oxygen.Editor.Runtime.Engine.RuntimeOverrideId.LampMode);
+    }
 }

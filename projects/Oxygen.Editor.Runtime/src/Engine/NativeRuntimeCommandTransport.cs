@@ -54,6 +54,18 @@ internal sealed partial class NativeRuntimeCommandTransport(EngineContext contex
             case RuntimeDetachGeometry value:
                 this.world.DetachGeometry(value.NodeId.Value);
                 break;
+            case RuntimeInstantiateScene value:
+                this.world.InstantiateScene(value.NodeId.Value, value.SourcePath, [.. value.Changes.Select(RuntimeTransportConversion.ToNative)], (generation, message) => this.OnAssetLoadFailed(request, generation, message), generation => this.OnAssetLoadSucceeded(request, generation));
+                break;
+            case RuntimeSetInstanceChange value:
+                this.world.SetInstanceChange(value.NodeId.Value, RuntimeTransportConversion.ToNative(value.Change));
+                break;
+            case RuntimeClearInstanceChange value:
+                this.world.ClearInstanceChange(value.NodeId.Value, RuntimeTransportConversion.ToNative(value.Path), (ushort)value.Id, value.PartId);
+                break;
+            case RuntimeDetachInstance value:
+                this.world.DetachInstance(value.NodeId.Value);
+                break;
             case RuntimeSelectNode value:
                 this.world.SelectNode(value.NodeId.Value);
                 break;

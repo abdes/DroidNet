@@ -107,6 +107,11 @@ public static class SceneOperationKinds
     public const string EditLocalFogVolume = "Scene.Component.EditLocalFogVolume";
 
     /// <summary>
+    /// Scene instance edit: its source or its changes.
+    /// </summary>
+    public const string EditInstance = "Scene.Component.EditInstance";
+
+    /// <summary>
     /// Spot light component edit.
     /// </summary>
     public const string EditSpotLight = "Scene.Component.EditSpotLight";

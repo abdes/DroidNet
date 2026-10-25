@@ -35,6 +35,7 @@
 #include <EditorModule/EditorViewportNavigation.h>
 #include <EditorModule/InputAccumulatorAdapter.h>
 #include <EditorModule/NodeRegistry.h>
+#include <EditorModule/SceneInstances.h>
 #include <EditorModule/SurfaceFramebuffers.h>
 #include <EditorModule/SurfaceRegistry.h>
 #include <EditorModule/ViewportInset.h>
@@ -43,7 +44,9 @@
 #include <Oxygen/Content/ContentMounts.h>
 #include <Oxygen/Content/OperationCancelledException.h>
 #include <Oxygen/Content/VirtualPathResolver.h>
+#include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Engine/IAsyncEngine.h>
+#include <Oxygen/OxCo/Event.h>
 #include <Oxygen/OxCo/TaskCancelledException.h>
 #include <Oxygen/OxCo/ThreadPool.h>
 #include <Oxygen/Platform/Platform.h>
@@ -53,6 +56,7 @@
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
 #include <Oxygen/Scene/SceneTraversal.h>
+#include <Oxygen/SceneInstantiation/SceneInstantiation.h>
 #include <Oxygen/Scene/Types/Traversal.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/SceneCameraViewResolver.h>
@@ -308,6 +312,7 @@ namespace oxygen::interop::module {
 
   EditorModule::~EditorModule() {
     CancelPendingPicks();
+    instances_.reset();
     asset_requests_.reset();
     LOG_F(INFO, "EditorModule destroying; releasing registered surfaces.");
 
@@ -494,7 +499,8 @@ namespace oxygen::interop::module {
       .Scene = observer_ptr{scene_.get()},
       .AssetLoader = observer_ptr{asset_loader_.get()},
       .PathResolver = observer_ptr{path_resolver_.get()},
-      .AssetRequests = observer_ptr{asset_requests_.get()}
+      .AssetRequests = observer_ptr{asset_requests_.get()},
+      .Instances = observer_ptr{instances_.get()}
     };
 
     // 1) Destroy view commands first
@@ -714,6 +720,7 @@ namespace oxygen::interop::module {
       .AssetLoader = observer_ptr{asset_loader_.get()},
       .PathResolver = observer_ptr{path_resolver_.get()},
       .AssetRequests = observer_ptr{asset_requests_.get()},
+      .Instances = observer_ptr{instances_.get()},
       .Renderer = renderer ? observer_ptr{ &renderer->get() } : nullptr
     };
     command_queue_.DrainIf(
@@ -733,10 +740,16 @@ namespace oxygen::interop::module {
     if (scene_ && asset_requests_) {
       if (content_changed) {
         asset_requests_->Refresh(*scene_);
+        if (instances_) {
+          instances_->Refresh();
+        }
       }
       if (asset_requests_->Drain(*scene_)) {
         scene_changed_ = true;
       }
+    }
+    if (co_await ApplyInstancesAsync()) {
+      scene_changed_ = true;
     }
 
     if (active_roots_completion_ && (!asset_requests_ || !asset_requests_->IsRefreshPending())) {
@@ -1489,12 +1502,14 @@ namespace oxygen::interop::module {
         scene_.reset();
       }
     }
+    instances_.reset();
     asset_requests_.reset();
     scene_generation_->fetch_add(1U);
     scene_ = std::make_shared<oxygen::scene::Scene>(std::string(name), 1024U);
 
     asset_requests_ = std::make_unique<SceneAssetRequests>(
       *asset_loader_, *path_resolver_);
+    instances_ = std::make_unique<SceneInstances>();
     if (!content_resumed_ || preview_paused_) {
       asset_requests_->SuspendLoads();
     }
@@ -1692,6 +1707,184 @@ namespace oxygen::interop::module {
     }
   }
 
+  namespace {
+    using MaterialPins = std::vector<std::shared_ptr<data::MaterialAsset>>;
+
+    //! Loads the material a change names; null when it does not load.
+    auto LoadInstanceMaterial(content::IAssetLoader& loader,
+      const data::AssetKey key) -> co::Co<std::shared_ptr<data::MaterialAsset>>
+    {
+      if (auto cached = loader.GetMaterialAsset(key)) {
+        co_return cached;
+      }
+      struct Pending {
+        std::shared_ptr<data::MaterialAsset> asset;
+        co::Event done;
+      };
+      auto pending = std::make_shared<Pending>();
+      loader.StartLoadMaterialAsset(
+        key, [pending](std::shared_ptr<data::MaterialAsset> asset) {
+          pending->asset = std::move(asset);
+          pending->done.Trigger();
+        });
+      co_await pending->done;
+      co_return std::move(pending->asset);
+    }
+
+    // NOLINTBEGIN(*-avoid-reference-coroutine-parameters)
+    // The caller awaits at once and owns the referenced arguments.
+    //! The engine change of `change`, its material loaded and pinned in
+    //! `pins`; nothing, with an error, when the material does not load.
+    auto ToEngineChange(const HostInstanceChange& change,
+      content::IAssetLoader& loader, content::VirtualPathResolver& resolver,
+      MaterialPins& pins, std::vector<std::string>& errors)
+      -> co::Co<std::optional<instantiation::InstanceChange>>
+    // NOLINTEND(*-avoid-reference-coroutine-parameters)
+    {
+      if (const auto* policy
+        = std::get_if<data::pak::geometry::LodPolicyRecord>(&change.value)) {
+        co_return instantiation::InstanceChange {
+          .path = change.path,
+          .change = instantiation::LodPolicyValue { .policy = *policy },
+        };
+      }
+      auto value = data::schema::SchemaValue {};
+      if (const auto* material = std::get_if<InstanceMaterial>(&change.value)) {
+        const auto key = resolver.ResolveAssetKey(material->virtual_path);
+        auto loaded = std::shared_ptr<data::MaterialAsset> {};
+        if (key.has_value()) {
+          loaded = co_await LoadInstanceMaterial(loader, *key);
+        }
+        if (!loaded) {
+          errors.push_back(fmt::format(
+            "material '{}' did not load", material->virtual_path));
+          co_return std::nullopt;
+        }
+        pins.push_back(std::move(loaded));
+        value = *key;
+      } else {
+        value = std::visit(
+          [](const auto& held) -> data::schema::SchemaValue {
+            using Held = std::decay_t<decltype(held)>;
+            if constexpr (std::is_same_v<Held, InstanceMaterial>
+              || std::is_same_v<Held, data::pak::geometry::LodPolicyRecord>) {
+              return {};
+            } else {
+              return held;
+            }
+          },
+          change.value);
+      }
+      co_return instantiation::InstanceChange {
+        .path = change.path,
+        .change = instantiation::PropertyValue {
+          .override_id = change.override_id,
+          .part_id = change.part_id,
+          .value = std::move(value),
+        },
+      };
+    }
+
+    //! The error an operation reports: none when nothing went wrong.
+    auto InstanceError(std::vector<std::string> errors,
+      const std::vector<instantiation::SceneInstantiationIssue>& issues)
+      -> std::string
+    {
+      // Instantiation has already logged each issue.
+      for (const auto& issue : issues) {
+        errors.push_back(fmt::format("{}: {}", issue.code, issue.message));
+      }
+      if (errors.empty()) {
+        return {};
+      }
+      return errors.size() == 1U
+        ? errors.front()
+        : fmt::format("{} (and {} more)", errors.front(), errors.size() - 1U);
+    }
+  } // namespace
+
+  auto EditorModule::ApplyInstancesAsync() -> co::Co<bool> {
+    if (!scene_ || !instances_ || !asset_loader_ || !path_resolver_
+      || preview_paused_ || !content_resumed_) {
+      co_return false;
+    }
+    // Operations wait for their loads within this phase, so no other edit
+    // reaches the scene meanwhile.
+    const auto scene = scene_;
+    auto& loader = *asset_loader_;
+    auto& resolver = *path_resolver_;
+    auto changed = false;
+    for (auto& operation : instances_->TakeOperations()) {
+      if (const auto* detach
+        = std::get_if<SceneInstances::DetachOperation>(&operation)) {
+        if (auto root = scene->GetNode(detach->root); root && root->IsAlive()) {
+          changed |= instantiation::Detach(*scene, *root);
+        }
+        continue;
+      }
+      const auto root_handle = std::visit(
+        [](const auto& value) { return value.root; }, operation);
+      auto root = scene->GetNode(root_handle);
+      if (!root || !root->IsAlive()) {
+        instances_->Forget(root_handle);
+        continue;
+      }
+      auto pins = MaterialPins {};
+      auto errors = std::vector<std::string> {};
+      if (const auto* build
+        = std::get_if<SceneInstances::BuildOperation>(&operation)) {
+        if (root->GetInstance().IsInstanceRoot()) {
+          changed |= instantiation::Detach(*scene, *root);
+        }
+        const auto source = resolver.ResolveAssetKey(build->source);
+        if (!source.has_value()) {
+          instances_->Report(root_handle, build->generation,
+            fmt::format("scene '{}' is not in the mounted content",
+              build->source));
+          continue;
+        }
+        auto changes = std::vector<instantiation::InstanceChange> {};
+        for (const auto& change : build->changes) {
+          if (auto engine_change = co_await ToEngineChange(
+                change, loader, resolver, pins, errors)) {
+            changes.push_back(std::move(*engine_change));
+          }
+        }
+        const auto result = co_await instantiation::InstantiateUnder(
+          instantiation::InstanceRequest {
+            .target = observer_ptr { scene.get() },
+            .root = *root,
+            .source = *source,
+            .changes = std::move(changes),
+            .scripts = nullptr,
+          },
+          loader);
+        changed = true;
+        instances_->Report(root_handle, build->generation,
+          InstanceError(std::move(errors), result.issues));
+      } else if (const auto* set
+        = std::get_if<SceneInstances::SetOperation>(&operation)) {
+        auto issues = std::vector<instantiation::SceneInstantiationIssue> {};
+        if (const auto engine_change = co_await ToEngineChange(
+              set->change, loader, resolver, pins, errors)) {
+          issues = instantiation::SetChange(*root, *engine_change, loader)
+                     .issues;
+          changed = true;
+        }
+        instances_->Report(root_handle, set->generation,
+          InstanceError(std::move(errors), issues));
+      } else if (const auto* clear
+        = std::get_if<SceneInstances::ClearOperation>(&operation)) {
+        const auto result
+          = instantiation::ClearChange(*root, clear->address, loader);
+        changed = true;
+        instances_->Report(root_handle, clear->generation,
+          InstanceError(std::move(errors), result.issues));
+      }
+    }
+    co_return changed;
+  }
+
   auto EditorModule::ProcessContentPauseAsync(engine::FrameContext& frame_context) -> co::Co<> {
     std::optional<bool> requested;
     std::uint64_t revision = 0;
@@ -1822,6 +2015,7 @@ namespace oxygen::interop::module {
     bool destroy_views,
     engine::FrameContext* frame_context) {
     LOG_F(INFO, "EditorModule::ApplyDestroyScene: destroying current scene");
+    instances_.reset();
     asset_requests_.reset();
     // Ensure all views are destroyed/cleaned up before releasing the scene.
     if (destroy_views && view_manager_) {

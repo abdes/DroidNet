@@ -1067,6 +1067,11 @@ internal sealed partial class ScenePreview : IScenePreview, IDisposable
             succeeded &= TryApply(() => ApplyLocalFogVolume(world, node, volume), exception => this.LogFailedToAttachLocalFogVolume(exception, node.Id));
         }
 
+        if (InstanceOf(node) is { } instance)
+        {
+            succeeded &= TryApply(() => ApplyInstance(world, node, instance), exception => this.LogFailedToInstantiate(exception, node.Id));
+        }
+
         return succeeded;
     }
 

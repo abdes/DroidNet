@@ -269,6 +269,17 @@ internal static partial class SceneComponentsEmitter
                 .Append(".Id, global::Oxygen.Editor.Runtime.Engine.RuntimeOverrideId.").Append(path.Replace(".", string.Empty)).AppendLine(");");
         }
 
+        _ = source.AppendLine("    }")
+            .AppendLine()
+            .AppendLine("    private static void AddSchemaChangeIds(global::System.Collections.Generic.Dictionary<global::Oxygen.Managed.Core.PropertyId, global::Oxygen.Editor.Runtime.Engine.RuntimeOverrideId> map)")
+            .AppendLine("    {");
+        foreach (var (path, property) in Changeable(schema).OrderBy(static entry => entry.Property.Values.OverrideId))
+        {
+            _ = source
+                .Append("        map.Add(global::Oxygen.Editor.World.SceneSchema.").Append(path)
+                .Append(".Id, global::Oxygen.Editor.Runtime.Engine.RuntimeOverrideId.").Append(path.Replace(".", string.Empty)).AppendLine(");");
+        }
+
         return source.AppendLine("    }").AppendLine("}").ToString();
     }
 

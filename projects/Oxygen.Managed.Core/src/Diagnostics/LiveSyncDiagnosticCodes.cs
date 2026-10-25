@@ -72,6 +72,12 @@ public static class LiveSyncDiagnosticCodes
     /// <summary>Material live sync failed.</summary>
     public const string MaterialFailed = DiagnosticCodes.LiveSyncPrefix + "MATERIAL.Failed";
 
+    /// <summary>Scene instance live sync was rejected.</summary>
+    public const string InstanceRejected = DiagnosticCodes.LiveSyncPrefix + "INSTANCE.Rejected";
+
+    /// <summary>The engine could not build a scene instance, or apply one of its changes.</summary>
+    public const string InstanceFailed = DiagnosticCodes.LiveSyncPrefix + "INSTANCE.Failed";
+
     /// <summary>Environment atmosphere live sync is unsupported.</summary>
     public const string EnvironmentAtmosphereUnsupported = DiagnosticCodes.LiveSyncPrefix + "ENVIRONMENT.Atmosphere.Unsupported";
 

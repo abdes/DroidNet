@@ -371,6 +371,9 @@
     <ClInclude Include="Commands\SetOverridesCommand.h">
       <Filter>Commands</Filter>
     </ClInclude>
+    <ClInclude Include="Commands\SceneInstanceCommands.h">
+      <Filter>Commands</Filter>
+    </ClInclude>
     <ClInclude Include="Commands\AttachCameraCommand.h">
       <Filter>Commands</Filter>
     </ClInclude>
@@ -419,6 +422,12 @@
       <Filter>EditorModule</Filter>
     </ClCompile>
     <ClInclude Include="EditorModule\SceneAssetRequests.h">
+      <Filter>EditorModule</Filter>
+    </ClInclude>
+    <ClCompile Include="EditorModule\SceneInstances.cpp">
+      <Filter>EditorModule</Filter>
+    </ClCompile>
+    <ClInclude Include="EditorModule\SceneInstances.h">
       <Filter>EditorModule</Filter>
     </ClInclude>
   </ItemGroup>

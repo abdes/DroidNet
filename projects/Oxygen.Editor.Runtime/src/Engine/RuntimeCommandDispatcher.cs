@@ -29,6 +29,7 @@ internal sealed partial class RuntimeCommandDispatcher : IRuntimeWorldCommands, 
         Geometry,
         Overrides,
         EnvironmentMask,
+        Instance,
     }
 
     /// <inheritdoc/>
@@ -171,6 +172,7 @@ internal sealed partial class RuntimeCommandDispatcher : IRuntimeWorldCommands, 
             RuntimeSetGeometry geometry => new(geometry.NodeId, AssetRequestKind.Geometry),
             RuntimeSetOverrides overrides => new(overrides.NodeId, AssetRequestKind.Overrides, overrides.Part?.SurfaceId ?? Guid.Empty, overrides.GeometryPath),
             RuntimeSetEnvironment => new(NodeId.Empty, AssetRequestKind.EnvironmentMask),
+            RuntimeInstantiateScene instance => new(instance.NodeId, AssetRequestKind.Instance),
             _ => null,
         };
 
@@ -393,6 +395,11 @@ internal sealed partial class RuntimeCommandDispatcher : IRuntimeWorldCommands, 
         else if (request.Command is RuntimeDetachGeometry detach)
         {
             this.ForgetAssetOperations(detach.NodeId);
+        }
+        else if (request.Command is RuntimeDetachInstance instance)
+        {
+            _ = this.assetOperations.Remove(new(instance.NodeId, AssetRequestKind.Instance));
+            this.NotifyAssetStatusChanged();
         }
         else if (request.Command is RuntimeRemoveSceneNode remove)
         {

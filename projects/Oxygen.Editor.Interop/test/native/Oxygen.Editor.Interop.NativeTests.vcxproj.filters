@@ -39,6 +39,9 @@
     <ClCompile Include="src\AssetRequests_native_test.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="src\SceneInstances_native_test.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="src\EditorCameraPlacement_native_test.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>

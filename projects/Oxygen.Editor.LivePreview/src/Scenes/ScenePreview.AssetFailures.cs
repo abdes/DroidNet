@@ -69,6 +69,7 @@ internal sealed partial class ScenePreview
             RuntimeSetGeometry geometry => (geometry.NodeId, geometry.AssetPath, SceneOperationKinds.EditGeometry, LiveSyncDiagnosticCodes.GeometryUnresolvedAtRuntime),
             RuntimeSetOverrides overrides => (overrides.NodeId, AssetOf(overrides), SceneOperationKinds.EditSurfaceMaterial, LiveSyncDiagnosticCodes.MaterialFailed),
             RuntimeSetEnvironment environment => (NodeId.Empty, SoleEnvironmentTexture(environment), SceneOperationKinds.EditEnvironment, LiveSyncDiagnosticCodes.EnvironmentFailed),
+            RuntimeInstantiateScene instance => (instance.NodeId, instance.SourcePath, SceneOperationKinds.EditInstance, LiveSyncDiagnosticCodes.InstanceFailed),
             _ => (NodeId.Empty, null, string.Empty, string.Empty),
         };
         var node = FindNode(scene, nodeId);

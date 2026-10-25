@@ -61,6 +61,7 @@ namespace oxygen::interop::module {
   class EditorCommand;
   struct CommandContext;
   class SceneAssetRequests;
+  class SceneInstances;
   class SurfaceFramebuffers;
 } // namespace oxygen::interop::module
 
@@ -329,6 +330,8 @@ namespace oxygen::interop::module {
 
     auto SynchronizeCookedRootsAsync() -> oxygen::co::Co<bool>;
     auto ProcessContentPauseAsync(oxygen::engine::FrameContext& frame_context) -> oxygen::co::Co<>;
+    //! Runs the queued instance operations; true when the scene changed.
+    auto ApplyInstancesAsync() -> oxygen::co::Co<bool>;
 
     void UpdateViewRoutingFromInputBatch(ViewId view_id,
       const AccumulatedInput& batch) noexcept;
@@ -369,6 +372,7 @@ namespace oxygen::interop::module {
 
     std::shared_ptr<oxygen::scene::Scene> scene_;
     std::unique_ptr<SceneAssetRequests> asset_requests_;
+    std::unique_ptr<SceneInstances> instances_;
     oxygen::observer_ptr<oxygen::content::IAssetLoader> asset_loader_{};
     std::unique_ptr<oxygen::content::VirtualPathResolver> path_resolver_;
 

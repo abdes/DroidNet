@@ -33,6 +33,7 @@ namespace oxygen {
 namespace oxygen::interop::module {
 
   class SceneAssetRequests;
+  class SceneInstances;
 
   //! Context passed to EditorCommands during execution.
   struct CommandContext {
@@ -43,6 +44,7 @@ namespace oxygen::interop::module {
     oxygen::observer_ptr<oxygen::content::IAssetLoader> AssetLoader;
     oxygen::observer_ptr<oxygen::content::VirtualPathResolver> PathResolver;
     oxygen::observer_ptr<SceneAssetRequests> AssetRequests;
+    oxygen::observer_ptr<SceneInstances> Instances;
     oxygen::observer_ptr<oxygen::vortex::Renderer> Renderer;
   };
 

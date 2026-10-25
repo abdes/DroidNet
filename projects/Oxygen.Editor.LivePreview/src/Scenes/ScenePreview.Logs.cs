@@ -443,6 +443,15 @@ internal sealed partial class ScenePreview
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Error,
+        Message = "Failed to instance a scene under node {NodeId}")]
+    private static partial void LogFailedToInstantiate(ILogger logger, Exception exception, NodeId nodeId);
+
+    private void LogFailedToInstantiate(Exception ex, NodeId nodeId)
+        => LogFailedToInstantiate(this.logger, ex, nodeId);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Error,
         Message = "Failed to apply authored node flags to node {NodeId}")]
     private static partial void LogFailedToApplyNodeFlags(ILogger logger, Exception exception, NodeId nodeId);
 

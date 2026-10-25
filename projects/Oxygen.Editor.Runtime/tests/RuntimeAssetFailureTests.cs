@@ -74,6 +74,31 @@ public sealed class RuntimeAssetFailureTests
     }
 
     [TestMethod]
+    public async Task InstanceOutcomes_FollowItsBuildAndItsDetachForgetsOnlyIt()
+    {
+        var native = CreateTransport();
+        var sut = new RuntimeCommandDispatcher();
+        _ = sut.BeginRun(native.Object, new TaskCompletionSource().Task);
+        var target = new RuntimeSceneTarget(sut.RunId, SceneId.New(), Guid.NewGuid(), Guid.NewGuid());
+        _ = await sut.ActivateSceneAsync(Guid.NewGuid(), target, "Scene", this.TestContext.CancellationToken).ConfigureAwait(false);
+        var node = NodeId.New();
+        var geometry = new RuntimeWorldRequest(Guid.NewGuid(), target, new RuntimeSetGeometry(node, "/Content/Mesh.ogeo"));
+        var instance = new RuntimeWorldRequest(Guid.NewGuid(), target, new RuntimeInstantiateScene(node, "/Content/Car.glb/Car.oscene", []));
+        _ = sut.Execute(geometry, this.TestContext.CancellationToken);
+        _ = sut.Execute(instance, this.TestContext.CancellationToken);
+
+        native.Raise(value => value.AssetLoadFailed += null, new RuntimeAssetLoadFailedEventArgs(instance, 1, "Not mounted"));
+        _ = sut.IsCurrentAssetRequest(instance).Should().BeTrue("an instance is tracked apart from its node's geometry");
+        _ = sut.IsCurrentAssetRequest(geometry).Should().BeTrue();
+        native.Raise(value => value.AssetLoadSucceeded += null, new RuntimeAssetLoadSucceededEventArgs(instance, 2));
+        _ = sut.AssetRequests.Should().Contain(status => status.Request == instance && status.Succeeded == true, "a rebuild after mounting succeeds");
+
+        _ = sut.Execute(new RuntimeWorldRequest(Guid.NewGuid(), target, new RuntimeDetachInstance(node)), this.TestContext.CancellationToken);
+        _ = sut.IsCurrentAssetRequest(instance).Should().BeFalse();
+        _ = sut.IsCurrentAssetRequest(geometry).Should().BeTrue("detaching the instance keeps the node's geometry");
+    }
+
+    [TestMethod]
     public async Task MaterialRequestsKeepGeometryContextWhenSurfaceIdsMatch()
     {
         var native = CreateTransport();

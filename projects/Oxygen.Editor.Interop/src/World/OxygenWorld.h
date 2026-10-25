@@ -74,6 +74,37 @@ value struct PropertyValueEntry {
     LodPolicyManaged LodPolicy;
   };
 
+  //! The member of `InstanceChangeManaged` that holds a change's value.
+  public enum class InstanceValueKind : System::Byte {
+    Bool = 0,
+    Int32 = 1,
+    Float = 2,
+    Vector3 = 3,
+    Asset = 4,
+    LodPolicy = 5,
+  };
+
+  //! A property change of a node an instance brings in, its value in the
+  //! schema's units: an enum is its member's wire value, a material the
+  //! virtual path of its cooked asset, a LOD policy its record's values.
+  //! `Kind` names the member that holds the value; the others stay at their
+  //! defaults.
+  public value struct InstanceChangeManaged {
+    //! One node ID per nesting level below the instance root, shallowest
+    //! first.
+    array<System::Guid>^ Path;
+    System::UInt16 OverrideId;
+    //! The surface of a surface property; empty otherwise.
+    System::Guid PartId;
+    InstanceValueKind Kind;
+    bool BoolValue;
+    System::Int32 Int32Value;
+    float FloatValue;
+    System::Numerics::Vector3 Vector3Value;
+    System::String^ AssetPath;
+    LodPolicyManaged LodPolicy;
+  };
+
   //! How the engine reads a cooked content source.
   public enum class CookedRootKindManaged : System::Byte {
     //! A loose cooked root directory.
@@ -157,6 +188,24 @@ value struct PropertyValueEntry {
       array<OverrideEntryManaged>^ entries, System::Byte intent,
       Action<System::UInt64, String^>^ onFailure,
       Action<System::UInt64>^ onSuccess);
+
+    // Scene instances
+    //! Instances the cooked scene at `sourcePath` under the node, with
+    //! `changes`; replaces an instance the node has. Every outcome of the
+    //! instance, its changes included, reaches `onFailure` or `onSuccess` with
+    //! a generation that grows; mounting content again builds it again.
+    void InstantiateScene(System::Guid nodeId, String^ sourcePath,
+      array<InstanceChangeManaged>^ changes,
+      Action<System::UInt64, String^>^ onFailure,
+      Action<System::UInt64>^ onSuccess);
+    //! Sets one change of the node's instance.
+    void SetInstanceChange(System::Guid nodeId, InstanceChangeManaged change);
+    //! Clears one change of the node's instance: the node below it takes the
+    //! next level's value, or its source's.
+    void ClearInstanceChange(System::Guid nodeId, array<System::Guid>^ path,
+      System::UInt16 overrideId, System::Guid partId);
+    //! Removes the node's instance; the node and its owned children stay.
+    void DetachInstance(System::Guid nodeId);
 
     //! Reads native atmosphere and post-process values after preceding mutations.
     System::Threading::Tasks::Task<EnvironmentStateManaged>^

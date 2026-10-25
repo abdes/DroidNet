@@ -71,6 +71,7 @@ public sealed partial class AssetRuntimeStatusSource : IAssetRuntimeStatusSource
     {
         RuntimeSetGeometry geometry => geometry.AssetPath,
         RuntimeSetOverrides overrides => overrides.Overrides.Select(static entry => entry.Value).OfType<RuntimeOverrideValue.Asset>().FirstOrDefault()?.Path,
+        RuntimeInstantiateScene instance => instance.SourcePath,
         _ => null,
     };
 

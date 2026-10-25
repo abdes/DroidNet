@@ -103,6 +103,7 @@ internal sealed partial class ScenePreview
             {
                 lifetime.Authoring = authoring;
                 RecordOverrideParts(lifetime, authoring.Scene.AllNodes);
+                RecordInstances(lifetime, authoring.Scene.AllNodes);
                 lifetime.OnChanged = (_, args) => this.Project(lifetime, args.Changes);
                 authoring.Changed += lifetime.OnChanged;
             }
@@ -494,6 +495,9 @@ internal sealed partial class ScenePreview
 
         // The override parts each node had when the projector last saw it; a part that goes away is cleared.
         public Dictionary<NodeId, OverridePart[]> OverrideParts { get; } = [];
+
+        // The instance each instance root had when the projector last sent it; only what differs is sent.
+        public Dictionary<NodeId, ProjectedInstance> Instances { get; } = [];
     }
 
     private sealed record SceneProjection(DocumentLifetime Lifetime, Scene Snapshot, SceneSyncRevision Boundary)

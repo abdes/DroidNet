@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.Immutable;
+using Oxygen.Editor.World;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Interop.Input;
 using Oxygen.Interop.World;
@@ -29,6 +30,55 @@ internal static class RuntimeTransportConversion
             RuntimeOverrideValue.LodPolicyValue policy => new OverrideEntryManaged { OverrideId = (ushort)entry.Id, LodPolicy = ToNative(policy.Policy) },
             _ => throw new ArgumentOutOfRangeException(nameof(overrides), entry.Value, "Unknown override value kind."),
         })];
+
+    /// <summary>Converts an instance change; its value keeps the schema's units.</summary>
+    /// <param name="change">The change.</param>
+    /// <returns>The native transport value.</returns>
+    public static InstanceChangeManaged ToNative(RuntimeInstanceChange change)
+    {
+        ArgumentNullException.ThrowIfNull(change);
+        var native = new InstanceChangeManaged { Path = ToNative(change.Path), OverrideId = (ushort)change.Id, PartId = change.PartId };
+        switch (change.Value)
+        {
+            case RuntimeInstanceValue.Flag flag:
+                native.Kind = InstanceValueKind.Bool;
+                native.BoolValue = flag.Value;
+                break;
+            case RuntimeInstanceValue.Integer number:
+                native.Kind = InstanceValueKind.Int32;
+                native.Int32Value = number.Value;
+                break;
+            case RuntimeInstanceValue.Scalar number:
+                native.Kind = InstanceValueKind.Float;
+                native.FloatValue = number.Value;
+                break;
+            case RuntimeInstanceValue.Vector vector:
+                native.Kind = InstanceValueKind.Vector3;
+                native.Vector3Value = vector.Value;
+                break;
+            case RuntimeInstanceValue.Asset asset:
+                native.Kind = InstanceValueKind.Asset;
+                native.AssetPath = asset.Path;
+                break;
+            case RuntimeInstanceValue.LodPolicyValue policy:
+                native.Kind = InstanceValueKind.LodPolicy;
+                native.LodPolicy = ToNative(policy.Policy);
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(change), change.Value, "Unknown instance value kind.");
+        }
+
+        return native;
+    }
+
+    /// <summary>Converts a node path to its node IDs, shallowest first.</summary>
+    /// <param name="path">The node path.</param>
+    /// <returns>The native transport value.</returns>
+    public static Guid[] ToNative(NodePath path)
+    {
+        ArgumentNullException.ThrowIfNull(path);
+        return [.. path.Nodes.Select(static id => id.Value)];
+    }
 
     /// <summary>Converts authored fog without changing its units.</summary>
     /// <param name="value">The authored fog.</param>
