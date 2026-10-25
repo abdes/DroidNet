@@ -2,7 +2,7 @@
 
 Status: **design for owner review** (ED-M09 item 14, #77 slice 77.8).
 
-Last Updated: 2026-10-24
+Last Updated: 2026-10-25
 
 Summary: a node of a scene can **instance** an imported model (`Car.glb`) or
 another authored scene (`Watchtower.oscene`). The instanced hierarchy appears
@@ -874,23 +874,38 @@ implementation would resolve changes apart from the runtime.
 - `instantiation::InstantiateUnder(InstanceRequest, IAssetLoader&)` returns
   `co::Co<InstantiationResult>`. The request names the target scene, the
   existing node that becomes the instance root, the source scene's asset key
-  and the changes. Whole-scene `Instantiate` calls it for each instance record,
-  so both run one path.
-- `SceneNode::Instance::SetChange(change)` and `ClearChange(address)` update
-  the changes of the component that holds them, recompute the addressed node
-  with `ComposeNode` and apply its records again. An address is a node path
-  with an override ID and part, or with a slot ID and parameter key. Clearing
-  therefore yields the next level's change or the defining scene's value, read
-  from the scenes the components keep loaded. An address that does not resolve
-  returns an issue and changes nothing.
-- `SceneNode::Instance::Detach()` destroys the source's root nodes with
+  and the changes. It composes with `ComposeInstance` and builds through the
+  same builders as whole-scene `Instantiate`, so both run one path.
+- `instantiation::SetChange(root, change, loader, scripts)` and
+  `ClearChange(root, address, loader, scripts)` update the changes of the
+  component that holds them, recompute the addressed node with `ComposeNode`
+  (a script parameter with `ComposeSlots`) and apply only that property's
+  records again. They live in `SceneInstantiation`, not on
+  `SceneNode::Instance`, because applying needs the asset loader, the builders
+  and the script attachment, which the Scene module does not depend on. An
+  address (`ChangeAddress`) is a node path with an override ID and part, or
+  with a slot ID and parameter key. The recomputation reads the changes every
+  live instance root above the node holds, so an outer scene's change still
+  wins; clearing yields the next level's change or the defining scene's value,
+  read from the scenes the components keep loaded. An address that does not
+  resolve (`CheckChange`) returns an issue and changes nothing.
+- A component records who made each change: the requester, the scene that
+  instances the source, whose tables its values use and whose live nodes,
+  shared by its instance roots, its node values name; or a host, whose values
+  name no table and whose node values name live nodes the host gave
+  (`NodeParameterValue`). Every change of an instance a host made is a host's.
+- `instantiation::Detach(scene, root)` destroys the source's root nodes with
   `Scene::DestroyNodeHierarchies` (`Scene/Scene.h:326`) and removes the
-  component. Owned children of the instance root stay.
-- Values arrive in schema units and are encoded by `EncodeChange` (NGN4).
+  component. Owned children of the instance root stay. It takes the scene
+  because a node facade holds a read-only view of its scene.
+- Values arrive in schema units and are encoded by `EncodeChange` (NGN4); a
+  host's surface change names the geometry as loaded, so the layout revision
+  check applies only to a scene's changes.
 
 **Done when.** Engine tests: an instance under a live node; setting then
-clearing a change restores the source value, at both nesting levels; `Detach`
-leaves the root and its owned children.
+clearing a change restores the source value, at both nesting levels; a host's
+node value binds its node, and an outer scene's node value binds again after a
+live change; `Detach` leaves the root and its owned children.
 
 ### 7.9 Cooking instances and kept changes (NGN9)
 

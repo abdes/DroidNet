@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -15,7 +16,6 @@
 #include <vector>
 
 #include <Oxygen/Base/ObserverPtr.h>
-#include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Content/test/Fakes/StubAssetLoader.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/Asset.h>
@@ -162,7 +162,8 @@ namespace {
     }
 
     //! Attaches `asset` composed alone, with the slots the test set.
-    auto Attach(std::shared_ptr<const data::SceneAsset> asset)
+    auto Attach(std::shared_ptr<const data::SceneAsset> asset,
+      const std::span<const scene::SceneNode> requester_nodes = {})
       -> SceneScriptAttachmentResult
     {
       auto composed = data::ComposedScene {};
@@ -174,7 +175,24 @@ namespace {
         loader_, resolver_, observer_ptr { &compiler_ });
       // One occurrence: the nodes created for the scene.
       const auto nodes = std::vector<std::vector<scene::SceneNode>> { nodes_ };
-      return attachment.Attach(composed, 0U, nodes);
+      return attachment.Attach(composed, 0U, nodes, requester_nodes);
+    }
+
+    //! Applies parameter `key` of the root's slot again, from the slots the
+    //! test set.
+    auto ApplyAgain(std::shared_ptr<const data::SceneAsset> asset,
+      const std::string_view key) -> SceneScriptAttachmentResult
+    {
+      auto composed = data::ComposedScene {};
+      composed.occurrences.push_back({
+        .scene = std::move(asset),
+        .slots = slots_,
+      });
+      const auto attachment = SceneScriptAttachment(
+        loader_, resolver_, observer_ptr { &compiler_ });
+      const auto nodes = std::vector<std::vector<scene::SceneNode>> { nodes_ };
+      return attachment.ApplyParameter(
+        composed, 0U, nodes, {}, 0U, slots_.front().slot_id, key);
     }
 
     auto RootSlot() -> const scene::ScriptingComponent::Slot&
@@ -341,13 +359,67 @@ NOLINT_TEST_F(SceneScriptAttachmentTest, NodeParameterBindsToItsNode)
   const auto script = Key("/test/Rotate.oscript");
   Loader().AddScript(script);
   Resolver().UseBytecode(script);
-  SetSlots({ Slot(script, { Param("target", ScriptNodeParam { 1U }) }) });
+  SetSlots({
+    Slot(script, { Param("target", ScriptNodeParam { .node_index = 1U }) }),
+  });
   const auto asset = MakeScene();
 
   const auto result = Attach(asset);
 
   EXPECT_TRUE(result.slots.front().diagnostics.empty());
   EXPECT_EQ(RootSlot().TryGetBoundNode("target"), Nodes().at(1).GetHandle());
+}
+
+//! Applying a parameter again after a change takes the new effective value,
+//! and the declared default once no value is left.
+NOLINT_TEST_F(SceneScriptAttachmentTest, ParameterAppliesAgainAfterAChange)
+{
+  const auto script = Key("/test/Rotate.oscript");
+  Loader().AddScript(script);
+  Resolver().UseBytecode(script);
+  constexpr float kAuthored = 2.5F;
+  constexpr float kChanged = 4.0F;
+  SetSlots({ Slot(script, { Param("speed", kAuthored) }) });
+  const auto asset = MakeScene();
+  (void)Attach(asset);
+
+  SetSlots({ Slot(script, { Param("speed", kChanged) }) });
+  const auto changed = ApplyAgain(asset, "speed");
+  SetSlots({ Slot(script) });
+  const auto speed_after_change = std::get<float>(
+    Nodes().front().GetScripting().GetParameter(RootSlot(), "speed"));
+  const auto cleared = ApplyAgain(asset, "speed");
+
+  ASSERT_EQ(changed.slots.size(), 1U);
+  EXPECT_TRUE(changed.slots.front().diagnostics.empty());
+  EXPECT_EQ(speed_after_change, kChanged);
+  ASSERT_EQ(cleared.slots.size(), 1U);
+  EXPECT_EQ(std::get<float>(
+              Nodes().front().GetScripting().GetParameter(RootSlot(), "speed")),
+    1.0F);
+}
+
+//! A node value the requester of an instance composition supplies binds to
+//! the requester's node it names.
+NOLINT_TEST_F(SceneScriptAttachmentTest, RequesterNodeParameterBinds)
+{
+  const auto script = Key("/test/Rotate.oscript");
+  Loader().AddScript(script);
+  Resolver().UseBytecode(script);
+  auto slot = Slot(script);
+  slot.parameters.push_back({
+    .key = "target",
+    .value = ScriptNodeParam { .node_index = 0U },
+    .supplier = data::kRequester,
+  });
+  SetSlots({ slot });
+  const auto asset = MakeScene();
+  const auto requester = std::vector { Nodes().at(2) };
+
+  const auto result = Attach(asset, requester);
+
+  EXPECT_TRUE(result.slots.front().diagnostics.empty());
+  EXPECT_EQ(RootSlot().TryGetBoundNode("target"), Nodes().at(2).GetHandle());
 }
 
 } // namespace oxygen::scripting::test

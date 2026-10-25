@@ -13,10 +13,13 @@
 #include <memory>
 #include <optional>
 #include <ranges>
+#include <span>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <unordered_map>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include <fmt/format.h>
@@ -30,11 +33,14 @@
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/InputMappingContextAsset.h>
 #include <Oxygen/Data/PakFormat_geometry.h>
+#include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Data/SceneComposition.h>
 #include <Oxygen/Data/SceneIds.h>
+#include <Oxygen/Data/Schema/Generated.SceneChanges.h>
 #include <Oxygen/Data/Schema/Generated.SceneComponents.h>
+#include <Oxygen/Data/ScriptAsset.h>
 #include <Oxygen/Input/InputSystem.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Event.h>
@@ -283,11 +289,13 @@ namespace {
   //! Builds the composed tree of one scene and the scenes it instances.
   class Instantiator final {
   public:
-    Instantiator(content::IAssetLoader& loader, scene::Scene& target,
+    //! `target` may be null when no node is created, as for a live change.
+    Instantiator(content::IAssetLoader& loader,
+      const observer_ptr<scene::Scene> target,
       const observer_ptr<const scripting::SceneScriptAttachment> scripts,
       InstantiationResult& result)
       : loader_(&loader)
-      , target_(&target)
+      , target_(target)
       , scripts_(scripts)
       , result_(&result)
     {
@@ -298,37 +306,46 @@ namespace {
     // The caller awaits at once and owns the referenced arguments.
     auto Compose(std::shared_ptr<const data::SceneAsset> asset) -> co::Co<>
     {
-      auto loaded = std::unordered_map<data::AssetKey,
-        std::shared_ptr<const data::SceneAsset>> {};
-      auto pending = std::vector<std::shared_ptr<const data::SceneAsset>> {
-        asset,
-      };
-      loaded.emplace(asset->GetAssetKey(), asset);
-      while (!pending.empty()) {
-        const auto scene = std::move(pending.back());
-        pending.pop_back();
-        for (const auto& record :
-          scene->GetComponents<world::SceneInstanceRecord>()) {
-          if (loaded.contains(record.scene_key)) {
-            continue;
-          }
-          auto instanced = co_await LoadScene(record.scene_key);
-          loaded.emplace(record.scene_key, instanced);
-          if (instanced) {
-            pending.push_back(std::move(instanced));
-          }
-        }
-      }
-      composed_ = data::ComposeScene(std::move(asset),
-        [&loaded](const data::AssetKey& key)
-          -> std::shared_ptr<const data::SceneAsset> {
-          const auto found = loaded.find(key);
-          return found != loaded.end() ? found->second : nullptr;
-        });
+      const auto loaded = co_await LoadInstanced(asset);
+      composed_ = data::ComposeScene(std::move(asset), MakeResolver(loaded));
       ReportComposition();
     }
 
-    //! Creates the nodes of every occurrence, parents first, and makes each
+    //! Loads `source` and the scenes it instances, then composes it as an
+    //! instance under `root` with a host's `changes`.
+    // The caller awaits at once and owns the referenced arguments.
+    auto ComposeUnder(scene::SceneNode root, const data::AssetKey source,
+      std::vector<data::SceneChange> changes,
+      std::vector<scene::SceneNode> host_nodes,
+      std::vector<data::AssetKey> ancestors) -> co::Co<>
+    {
+      root_ = std::move(root);
+      root_changes_ = std::move(changes);
+      host_nodes_ = std::move(host_nodes);
+      auto loaded = LoadedScenes {};
+      // A cycle loads nothing: composing reports it.
+      if (!std::ranges::contains(ancestors, source)) {
+        if (auto asset = co_await LoadScene(source)) {
+          loaded = co_await LoadInstanced(std::move(asset));
+        }
+      }
+      composed_ = data::ComposeInstance(
+        data::InstanceComposition {
+          .source = source,
+          .changes = root_changes_,
+          .ancestors = ancestors,
+        },
+        MakeResolver(loaded));
+      ReportComposition();
+    }
+
+    //! Applies the records with `composed`, made from live instances.
+    auto UseComposition(data::ComposedScene composed) -> void
+    {
+      composed_ = std::move(composed);
+    }
+
+    //! Builds the nodes of every occurrence, parents first, and makes each
     //! instance root an instance.
     auto Build() -> void
     {
@@ -337,15 +354,42 @@ namespace {
       for (std::size_t index = 0; index < occurrences.size(); ++index) {
         BuildOccurrence(index);
       }
-      for (std::size_t index = 1; index < occurrences.size(); ++index) {
+      for (std::size_t index = 0; index < occurrences.size(); ++index) {
         AttachInstance(index);
       }
     }
 
-    //! The nodes created for the requested scene.
-    [[nodiscard]] auto RootNodes() const -> const std::vector<scene::SceneNode>&
+    //! The nodes created for the first occurrence: the requested scene, or
+    //! the instanced one.
+    [[nodiscard]] auto RootNodes() const -> std::vector<scene::SceneNode>
     {
-      return nodes_.front();
+      return nodes_.empty() ? std::vector<scene::SceneNode> {} : nodes_.front();
+    }
+
+    //! Applies again the records of a node that `address` sets, after a
+    //! change of it: the node's flags and transform, the component the
+    //! property belongs to, or the renderable's overrides.
+    auto Reapply(const std::size_t occurrence, scene::SceneNode& node,
+      const data::ComposedNode& composed, const data::PropertyAddress& address)
+      -> void
+    {
+      using data::schema::ComponentId;
+      const auto* property
+        = data::schema::FindOverrideProperty(address.override_id);
+      if (property == nullptr) {
+        return;
+      }
+      if (property->asset_sourced) {
+        ClearOverride(node, address);
+        ApplyRenderable(SceneOf(occurrence), node, composed);
+        return;
+      }
+      if (property->component == ComponentId::kTransform
+        || property->component == ComponentId::kNode) {
+        ApplyNode(node, composed.node);
+        return;
+      }
+      ApplyComponents(occurrence, node, composed, property->component);
     }
 
     //! The node created for node `index` of an occurrence.
@@ -367,7 +411,8 @@ namespace {
         return;
       }
       const auto attach = [this](const std::size_t occurrence) -> void {
-        auto attached = scripts_->Attach(composed_, occurrence, nodes_);
+        auto attached
+          = scripts_->Attach(composed_, occurrence, nodes_, host_nodes_);
         std::ranges::move(attached.slots, std::back_inserter(result_->scripts));
       };
       for (std::size_t index = 1; index < nodes_.size(); ++index) {
@@ -380,14 +425,22 @@ namespace {
       const std::optional<uint32_t> node_index, std::string message,
       std::vector<data::NodeId> node_path = {}) -> void
     {
-      LOG_F(WARNING, "scene {}{}: {} ({})",
-        data::to_string(asset.GetAssetKey()),
+      Issue(asset.GetAssetKey(), code, node_index, std::move(message),
+        std::move(node_path));
+    }
+
+    //! An issue of the scene `scene` names; nil for a host's change.
+    auto Issue(const data::AssetKey& scene, const std::string_view code,
+      const std::optional<uint32_t> node_index, std::string message,
+      std::vector<data::NodeId> node_path = {}) -> void
+    {
+      LOG_F(WARNING, "scene {}{}: {} ({})", data::to_string(scene),
         node_index.has_value() ? fmt::format(" node {}", *node_index)
                                : std::string {},
         message, code);
       result_->issues.push_back({
         .code = std::string(code),
-        .scene = asset.GetAssetKey(),
+        .scene = scene,
         .node_index = node_index,
         .node_path = std::move(node_path),
         .message = std::move(message),
@@ -428,31 +481,84 @@ namespace {
     }
 
   private:
+    using LoadedScenes = std::unordered_map<data::AssetKey,
+      std::shared_ptr<const data::SceneAsset>>;
+
+    [[nodiscard]] static auto MakeResolver(const LoadedScenes& loaded)
+      -> data::SceneResolver
+    {
+      return [&loaded](const data::AssetKey& key)
+               -> std::shared_ptr<const data::SceneAsset> {
+        const auto found = loaded.find(key);
+        return found != loaded.end() ? found->second : nullptr;
+      };
+    }
+
+    //! Loads `asset`'s instanced scenes, recursively; `asset` included.
+    // The caller awaits at once and owns the referenced arguments.
+    auto LoadInstanced(std::shared_ptr<const data::SceneAsset> asset)
+      -> co::Co<LoadedScenes>
+    {
+      auto loaded = LoadedScenes {};
+      auto pending = std::vector<std::shared_ptr<const data::SceneAsset>> {
+        asset,
+      };
+      loaded.emplace(asset->GetAssetKey(), asset);
+      while (!pending.empty()) {
+        const auto scene = std::move(pending.back());
+        pending.pop_back();
+        for (const auto& record :
+          scene->GetComponents<world::SceneInstanceRecord>()) {
+          if (loaded.contains(record.scene_key)) {
+            continue;
+          }
+          auto instanced = co_await LoadScene(record.scene_key);
+          loaded.emplace(record.scene_key, instanced);
+          if (instanced) {
+            pending.push_back(std::move(instanced));
+          }
+        }
+      }
+      co_return loaded;
+    }
+
     [[nodiscard]] auto SceneOf(const std::size_t occurrence) const
       -> const data::SceneAsset&
     {
       return *composed_.occurrences.at(occurrence).scene;
     }
 
-    //! The scene that supplied a value: an occurrence's scene.
+    //! The scene that supplied a value: an occurrence's scene; null for a
+    //! host, which supplies no scene (`data::kRequester`).
     [[nodiscard]] auto SupplierOf(const data::ChangeSupplier supplier) const
-      -> const data::SceneAsset&
+      -> const data::SceneAsset*
     {
-      return SceneOf(supplier);
+      return supplier < composed_.occurrences.size()
+        ? composed_.occurrences.at(supplier).scene.get()
+        : nullptr;
     }
 
     auto ReportComposition() -> void
     {
       for (const auto& issue : composed_.issues) {
-        const auto& scene = SceneOf(issue.occurrence);
-        Issue(scene, data::to_string(issue.code), issue.node_index,
-          issue.scene.IsNil()
-            ? std::string { "a record of the scene is invalid" }
-            : fmt::format("instanced scene {}", data::to_string(issue.scene)));
+        auto message = issue.scene.IsNil()
+          ? std::string { "a record of the scene is invalid" }
+          : fmt::format("instanced scene {}", data::to_string(issue.scene));
+        // An instance that cannot be composed at all has no occurrence.
+        if (issue.occurrence >= composed_.occurrences.size()) {
+          Issue(issue.scene, data::to_string(issue.code), std::nullopt,
+            std::move(message));
+          continue;
+        }
+        Issue(SceneOf(issue.occurrence), data::to_string(issue.code),
+          issue.node_index, std::move(message));
       }
       for (const auto& unresolved : composed_.unresolved) {
-        Issue(SupplierOf(unresolved.supplier), issue_codes::kChangeUnresolved,
-          unresolved.instance_root,
+        const auto* supplier = SupplierOf(unresolved.supplier);
+        Issue(supplier != nullptr ? supplier->GetAssetKey() : data::AssetKey {},
+          issue_codes::kChangeUnresolved,
+          supplier != nullptr ? std::optional { unresolved.instance_root }
+                              : std::nullopt,
           "the change names no node of the instanced scene, or a property "
           "that node does not have",
           unresolved.change.path);
@@ -463,7 +569,7 @@ namespace {
     {
       const auto& occurrence = composed_.occurrences.at(index);
       const auto& asset = *occurrence.scene;
-      auto parent = std::optional<scene::SceneNode> {};
+      auto parent = root_;
       if (occurrence.parent.has_value()) {
         parent = nodes_.at(*occurrence.parent).at(occurrence.instance_root);
       }
@@ -503,11 +609,14 @@ namespace {
       }
     }
 
-    //! Applies the composed records of one node; applying them again
-    //! replaces what they set.
+    //! Applies the composed records of one node, or only those of the
+    //! component `only`; applying them again replaces what they set.
     auto ApplyComponents(const std::size_t occurrence, scene::SceneNode& node,
-      const data::ComposedNode& composed) -> void
+      const data::ComposedNode& composed,
+      const std::optional<data::schema::ComponentId> only = std::nullopt)
+      -> void
     {
+      using data::schema::ComponentId;
       const auto& asset = SceneOf(occurrence);
       const auto check
         = [&](const bool applied, const std::string_view kind) -> void {
@@ -516,25 +625,33 @@ namespace {
             fmt::format("cannot attach the {}", kind));
         }
       };
-      if (composed.renderable.has_value()) {
+      const auto wanted = [only](const ComponentId component) -> bool {
+        return !only.has_value() || *only == component;
+      };
+      if (!only.has_value() && composed.renderable.has_value()) {
         ApplyRenderable(asset, node, composed);
       }
-      if (composed.perspective_camera.has_value()) {
+      if (wanted(ComponentId::kPerspectiveCamera)
+        && composed.perspective_camera.has_value()) {
         check(ApplyCamera(node, *composed.perspective_camera), "camera");
       }
-      if (composed.orthographic_camera.has_value()) {
+      if (wanted(ComponentId::kOrthographicCamera)
+        && composed.orthographic_camera.has_value()) {
         check(ApplyCamera(node, *composed.orthographic_camera), "camera");
       }
-      if (composed.directional_light.has_value()) {
+      if (wanted(ComponentId::kDirectionalLight)
+        && composed.directional_light.has_value()) {
         check(ApplyLight(node, *composed.directional_light), "light");
       }
-      if (composed.point_light.has_value()) {
+      if (wanted(ComponentId::kPointLight)
+        && composed.point_light.has_value()) {
         check(ApplyLight(node, *composed.point_light), "light");
       }
-      if (composed.spot_light.has_value()) {
+      if (wanted(ComponentId::kSpotLight) && composed.spot_light.has_value()) {
         check(ApplyLight(node, *composed.spot_light), "light");
       }
-      if (composed.local_fog_volume.has_value()) {
+      if (wanted(ComponentId::kLocalFogVolume)
+        && composed.local_fog_volume.has_value()) {
         check(ApplyLocalFogVolume(node, *composed.local_fog_volume),
           "local fog volume");
       }
@@ -570,11 +687,14 @@ namespace {
     {
       using data::schema::OverrideId;
       const auto& record = entry.record;
-      const auto& supplier = SupplierOf(entry.supplier);
+      const auto* supplier = SupplierOf(entry.supplier);
       const auto* property
         = data::schema::FindOverrideProperty(record.override_id);
       DCHECK_NOTNULL_F(property);
-      if (property->part_kind == data::schema::PartKind::kSurface
+      // A host's change names a surface of the geometry as loaded; only a
+      // scene's can be stale.
+      if (supplier != nullptr
+        && property->part_kind == data::schema::PartKind::kSurface
         && record.layout_revision != geometry.Surfaces().layout_revision) {
         Issue(asset, issue_codes::kOverrideNotApplied, node_index,
           fmt::format("the override of {} no longer matches the geometry's "
@@ -586,8 +706,9 @@ namespace {
       switch (record.override_id) {
       case OverrideId::kGeometrySurfaceMaterial: {
         DCHECK_F(property->type == data::schema::ValueType::kAsset);
-        auto material
-          = loader_->GetMaterialAsset(record.value.as_asset, supplier);
+        auto material = supplier != nullptr
+          ? loader_->GetMaterialAsset(record.value.as_asset, *supplier)
+          : loader_->GetMaterialAsset(record.value.as_asset);
         applied = material
           && renderable.SetMaterialOverride(
             record.part_id, std::move(material));
@@ -605,8 +726,13 @@ namespace {
         break;
       case OverrideId::kGeometryLodPolicy: {
         DCHECK_F(property->type == data::schema::ValueType::kLodPolicy);
+        // A host's change cannot hold a LOD policy (EncodeChange).
+        if (supplier == nullptr) {
+          applied = false;
+          break;
+        }
         const auto policies
-          = supplier.GetComponents<data::pak::geometry::LodPolicyRecord>();
+          = supplier->GetComponents<data::pak::geometry::LodPolicyRecord>();
         renderable.SetLodPolicyOverride(
           scene::MakeLodPolicy(policies[record.value.as_record_index.get()]));
         break;
@@ -623,21 +749,62 @@ namespace {
       }
     }
 
-    //! Gives the instance root of `occurrence` its `SceneInstanceComponent`.
+    //! Removes the renderable's value of the property `address` sets, so a
+    //! cleared change leaves none.
+    static auto ClearOverride(
+      scene::SceneNode& node, const data::PropertyAddress& address) -> void
+    {
+      using data::schema::OverrideId;
+      auto renderable = node.GetRenderable();
+      if (!renderable.HasGeometry()) {
+        return;
+      }
+      switch (address.override_id) {
+      case OverrideId::kGeometrySurfaceMaterial:
+        (void)renderable.ClearMaterialOverride(address.part_id);
+        break;
+      case OverrideId::kGeometrySurfaceVisibility:
+        (void)renderable.ClearVisibilityOverride(address.part_id);
+        break;
+      case OverrideId::kGeometrySurfaceCastsShadows:
+        (void)renderable.ClearCastsShadowsOverride(address.part_id);
+        break;
+      case OverrideId::kGeometryLodPolicy:
+        renderable.ClearLodPolicyOverride();
+        break;
+      default:
+        break;
+      }
+    }
+
+    //! Gives the instance root of `occurrence` its `SceneInstanceComponent`:
+    //! a node of its parent occurrence, or the host's root.
     auto AttachInstance(const std::size_t index) -> void
     {
       const auto& occurrence = composed_.occurrences.at(index);
       if (!occurrence.parent.has_value()) {
+        if (root_.has_value()) {
+          MakeInstance(*root_, index, std::nullopt, root_changes_);
+        }
         return;
       }
       const auto parent = *occurrence.parent;
-      auto& root = nodes_.at(parent).at(occurrence.instance_root);
       auto changes = std::vector<data::SceneChange> {};
       for (const auto& reaching : occurrence.changes) {
         if (reaching.supplier == parent && reaching.consumed == 0U) {
           changes.push_back(reaching.change);
         }
       }
+      MakeInstance(nodes_.at(parent).at(occurrence.instance_root), index,
+        parent, std::move(changes));
+    }
+
+    //! `requester` is the parent occurrence; none for the host's root.
+    auto MakeInstance(scene::SceneNode& root, const std::size_t index,
+      const std::optional<std::size_t> requester,
+      std::vector<data::SceneChange> changes) -> void
+    {
+      const auto& occurrence = composed_.occurrences.at(index);
       auto created = std::unordered_map<data::NodeId, scene::NodeHandle> {};
       for (const auto& [composed, node] :
         std::views::zip(occurrence.nodes, nodes_.at(index))) {
@@ -651,8 +818,29 @@ namespace {
       if (root_impl.HasComponent<scene::SceneInstanceComponent>()) {
         root_impl.RemoveComponent<scene::SceneInstanceComponent>();
       }
-      root_impl.AddComponent<scene::SceneInstanceComponent>(
-        occurrence.scene, std::move(changes), std::move(created));
+      if (!requester.has_value()) {
+        root_impl.AddComponent<scene::SceneInstanceComponent>(occurrence.scene,
+          nullptr, nullptr, std::move(changes), std::move(created),
+          host_nodes_);
+        return;
+      }
+      root_impl.AddComponent<scene::SceneInstanceComponent>(occurrence.scene,
+        composed_.occurrences.at(*requester).scene, SharedNodes(*requester),
+        std::move(changes), std::move(created));
+    }
+
+    //! The nodes created for `occurrence`, one table shared by the instance
+    //! roots it requests.
+    auto SharedNodes(const std::size_t occurrence)
+      -> std::shared_ptr<const std::vector<scene::SceneNode>>
+    {
+      shared_nodes_.resize(nodes_.size());
+      auto& shared = shared_nodes_.at(occurrence);
+      if (!shared) {
+        shared = std::make_shared<const std::vector<scene::SceneNode>>(
+          nodes_.at(occurrence));
+      }
+      return shared;
     }
 
     observer_ptr<content::IAssetLoader> loader_;
@@ -662,6 +850,15 @@ namespace {
     data::ComposedScene composed_;
     //! The nodes created for each occurrence, by node index.
     std::vector<std::vector<scene::SceneNode>> nodes_;
+    //! The host's node the first occurrence is instanced under, if any, and
+    //! the host's changes.
+    std::optional<scene::SceneNode> root_;
+    std::vector<data::SceneChange> root_changes_;
+    //! The nodes the host's node values name, by position.
+    std::vector<scene::SceneNode> host_nodes_;
+    //! The created nodes of an occurrence, as its instance roots share them.
+    std::vector<std::shared_ptr<const std::vector<scene::SceneNode>>>
+      shared_nodes_;
   };
 
   auto ApplyEnvironment(Instantiator& instantiator,
@@ -775,6 +972,316 @@ namespace {
     }
   }
 
+  //! The node's `SceneInstanceComponent`; null when it is not an instance
+  //! root.
+  auto InstanceOf(scene::SceneNode& node)
+    -> observer_ptr<scene::SceneInstanceComponent>
+  {
+    if (!node.IsAlive()) {
+      return nullptr;
+    }
+    const auto impl = node.GetImpl();
+    if (!impl.has_value()
+      || !impl->get().HasComponent<scene::SceneInstanceComponent>()) {
+      return nullptr;
+    }
+    return observer_ptr {
+      &impl->get().GetComponent<scene::SceneInstanceComponent>(),
+    };
+  }
+
+  //! An instance root above a node, and the node ID its source gave the next
+  //! node down toward that node.
+  struct OuterLevel {
+    scene::SceneNode root;
+    observer_ptr<scene::SceneInstanceComponent> component;
+    data::NodeId id;
+  };
+
+  //! The instance roots whose instances bring `node` in, innermost first.
+  /*!
+   A node is brought in by the nearest instance root above it whose source
+   defines it; a node no source defines, such as a host's node, has none.
+  */
+  auto OuterLevels(scene::SceneNode node) -> std::vector<OuterLevel>
+  {
+    auto levels = std::vector<OuterLevel> {};
+    auto current = std::move(node);
+    auto ancestor = current.GetParent();
+    while (ancestor.has_value()) {
+      const auto component = InstanceOf(*ancestor);
+      const auto id = component != nullptr
+        ? component->IdOf(current.GetHandle())
+        : std::nullopt;
+      if (id.has_value()) {
+        levels.push_back({
+          .root = *ancestor,
+          .component = component,
+          .id = *id,
+        });
+        current = *ancestor;
+      }
+      ancestor = ancestor->GetParent();
+    }
+    return levels;
+  }
+
+  //! The scene change a host's change encodes; none when its value is not a
+  //! value of its property, or a parameter's node value names a node. A live
+  //! node a `NodeParameterValue` names is found in `host_nodes`, or added.
+  auto Encode(
+    const InstanceChange& change, std::vector<scene::SceneNode>& host_nodes)
+    -> std::optional<data::SceneChange>
+  {
+    return std::visit(
+      [&change, &host_nodes]<typename Change>(
+        const Change& value) -> std::optional<data::SceneChange> {
+        if constexpr (std::is_same_v<Change, NodeParameterValue>) {
+          if (!value.node.IsAlive()) {
+            return std::nullopt;
+          }
+          const auto found = std::ranges::find(
+            host_nodes, value.node.GetHandle(), &scene::SceneNode::GetHandle);
+          const auto position
+            = static_cast<std::uint32_t>(found - host_nodes.begin());
+          if (found == host_nodes.end()) {
+            host_nodes.push_back(value.node);
+          }
+          return data::SceneChange {
+            .path = change.path,
+            .change = data::ParameterChange {
+              .slot_id = value.slot_id,
+              .key = value.key,
+              .value = data::ScriptNodeParam { .node_index = position },
+            },
+          };
+        } else if constexpr (std::is_same_v<Change, data::ParameterChange>) {
+          const auto* node = std::get_if<data::ScriptNodeParam>(&value.value);
+          if (node != nullptr
+            && node->node_index != data::pak::scripting::kUnsetNodeParam) {
+            return std::nullopt;
+          }
+          return data::SceneChange { .path = change.path, .change = value };
+        } else {
+          const auto encoded
+            = data::schema::EncodeChange(value.override_id, value.value);
+          if (!encoded.has_value()) {
+            return std::nullopt;
+          }
+          return data::SceneChange {
+            .path = change.path,
+            .change = world::OverrideRecord {
+              .override_id = value.override_id,
+              .part_id = value.part_id,
+              .value = *encoded,
+            },
+          };
+        }
+      },
+      change.change);
+  }
+
+  //! A node below a live instance root and the live instance roots that lead
+  //! to it, outermost first.
+  class LiveTarget final {
+  public:
+    //! The node `path` names below `root`; none when an element names no
+    //! node, or a node before the last is not an instance root.
+    static auto Resolve(scene::SceneNode& root,
+      const std::span<const data::NodeId> path) -> std::optional<LiveTarget>
+    {
+      const auto component = InstanceOf(root);
+      if (component == nullptr || path.empty()) {
+        return std::nullopt;
+      }
+      auto target = LiveTarget {};
+      auto suffix = std::vector<data::NodeId>(path.begin(), path.end());
+      for (const auto& outer : OuterLevels(root)) {
+        suffix.insert(suffix.begin(), outer.id);
+        target.levels_.push_back({
+          .root = outer.root,
+          .component = outer.component,
+          .path = suffix,
+        });
+      }
+      std::ranges::reverse(target.levels_);
+      target.levels_.push_back({
+        .root = root,
+        .component = component,
+        .path = { path.begin(), path.end() },
+      });
+      for (std::size_t depth = 1U; depth < path.size(); ++depth) {
+        auto nested = root.GetInstance().Find(path.first(depth));
+        if (!nested.has_value()) {
+          return std::nullopt;
+        }
+        const auto nested_component = InstanceOf(*nested);
+        if (nested_component == nullptr) {
+          return std::nullopt;
+        }
+        target.levels_.push_back({
+          .root = std::move(*nested),
+          .component = nested_component,
+          .path
+          = { path.begin() + static_cast<std::ptrdiff_t>(depth), path.end() },
+        });
+      }
+      auto node = root.GetInstance().Find(path);
+      if (!node.has_value()) {
+        return std::nullopt;
+      }
+      target.node_ = std::move(*node);
+      const auto nodes = target.Source()->GetNodes();
+      const auto found
+        = std::ranges::find(nodes, path.back(), &world::NodeRecord::node_id);
+      if (found == nodes.end()) {
+        return std::nullopt;
+      }
+      target.index_
+        = static_cast<world::SceneNodeIndexT>(found - nodes.begin());
+      return target;
+    }
+
+    //! The scene that defines the node.
+    [[nodiscard]] auto Source() const
+      -> const std::shared_ptr<const data::SceneAsset>&
+    {
+      return levels_.back().component->Source();
+    }
+
+    [[nodiscard]] auto Node() -> scene::SceneNode& { return node_; }
+    [[nodiscard]] auto Index() const -> world::SceneNodeIndexT
+    {
+      return index_;
+    }
+
+    //! The occurrence of the node's scene in Compose().
+    [[nodiscard]] auto Occurrence() const -> std::size_t
+    {
+      return levels_.size() - 1U;
+    }
+
+    //! A composition of the node's scene with the changes the live instance
+    //! roots hold of the node: one occurrence per level, then the outermost
+    //! level's requester, when it is a scene, then one occurrence per level
+    //! that supplies that level's host changes.
+    [[nodiscard]] auto Compose() const -> data::ComposedScene
+    {
+      auto composed = data::ComposedScene {};
+      for (const auto [level, entry] : std::views::enumerate(levels_)) {
+        composed.occurrences.push_back({
+          .scene = entry.component->Source(),
+          .level = static_cast<std::uint32_t>(level) + 1U,
+        });
+      }
+      const auto& requester = levels_.front().component->Requester();
+      if (requester) {
+        composed.occurrences.push_back({ .scene = requester });
+      }
+      // A host supplies no scene: its values name no tables.
+      for (std::size_t level = 0; level < levels_.size(); ++level) {
+        composed.occurrences.push_back({});
+      }
+      auto reaching = std::vector<data::ReachingChange> {};
+      for (const auto [level, entry] : std::views::enumerate(levels_)) {
+        const auto index = static_cast<std::size_t>(level);
+        for (const auto& change : entry.component->Changes()) {
+          if (change.path != entry.path) {
+            continue;
+          }
+          auto supplier = index == 0U ? levels_.size() : index - 1U;
+          if (entry.component->IsHostChange(data::AddressOf(change))) {
+            supplier = HostOccurrence(index);
+          }
+          reaching.push_back({
+            .change = change,
+            .supplier = supplier,
+            .consumed = change.path.size() - 1U,
+            .level = static_cast<std::uint32_t>(level),
+          });
+        }
+      }
+      composed.occurrences.at(Occurrence()).changes = std::move(reaching);
+      composed.occurrences.at(Occurrence()).slots
+        = data::ComposeSlots(composed, Occurrence());
+      return composed;
+    }
+
+    //! The live nodes of each occurrence of Compose(), by node index: the
+    //! levels' sources', the requester's and each level's host nodes.
+    [[nodiscard]] auto Nodes() const
+      -> std::vector<std::vector<scene::SceneNode>>
+    {
+      auto nodes = std::vector<std::vector<scene::SceneNode>> {};
+      for (const auto& entry : levels_) {
+        auto created = std::vector<scene::SceneNode> {};
+        for (const auto& record : entry.component->Source()->GetNodes()) {
+          const auto found = entry.root.GetInstance().Find(
+            std::span<const data::NodeId>(&record.node_id, 1U));
+          created.push_back(found.value_or(scene::SceneNode {}));
+        }
+        nodes.push_back(std::move(created));
+      }
+      const auto& front = *levels_.front().component;
+      if (front.Requester()) {
+        nodes.emplace_back(
+          front.RequesterNodes().begin(), front.RequesterNodes().end());
+      }
+      for (const auto& entry : levels_) {
+        const auto host = entry.component->HostNodes();
+        nodes.emplace_back(host.begin(), host.end());
+      }
+      return nodes;
+    }
+
+  private:
+    //! The occurrence that supplies the host's changes held at `level`.
+    [[nodiscard]] auto HostOccurrence(const std::size_t level) const
+      -> std::size_t
+    {
+      const auto requester = levels_.front().component->Requester() ? 1U : 0U;
+      return levels_.size() + requester + level;
+    }
+
+    struct Level {
+      scene::SceneNode root;
+      observer_ptr<scene::SceneInstanceComponent> component;
+      //! The node's path below this root.
+      std::vector<data::NodeId> path;
+    };
+
+    LiveTarget() = default;
+
+    std::vector<Level> levels_;
+    scene::SceneNode node_;
+    world::SceneNodeIndexT index_ = 0;
+  };
+
+  //! Applies the value `address` sets on the target node again.
+  auto Reapply(LiveTarget& target, const data::ChangeAddress& address,
+    Instantiator& instantiator,
+    const observer_ptr<const scripting::SceneScriptAttachment> scripts,
+    ChangeResult& result) -> void
+  {
+    auto composed = target.Compose();
+    const auto occurrence = target.Occurrence();
+    if (const auto* property
+      = std::get_if<data::PropertyAddress>(&address.target)) {
+      const auto node = data::ComposeNode(composed, occurrence, target.Index());
+      instantiator.UseComposition(std::move(composed));
+      instantiator.Reapply(occurrence, target.Node(), node, *property);
+      return;
+    }
+    if (scripts == nullptr) {
+      return;
+    }
+    const auto& parameter = std::get<data::ParameterAddress>(address.target);
+    const auto nodes = target.Nodes();
+    auto applied = scripts->ApplyParameter(composed, occurrence, nodes, {},
+      target.Index(), parameter.slot_id, parameter.key);
+    std::ranges::move(applied.slots, std::back_inserter(result.scripts));
+  }
+
 } // namespace
 
 // The caller awaits at once and owns the referenced arguments.
@@ -787,7 +1294,8 @@ auto Instantiate(SceneInstantiationRequest request,
   }
   const auto& asset = *request.asset;
   auto& target = *request.target;
-  auto instantiator = Instantiator(loader, target, request.scripts, result);
+  auto instantiator
+    = Instantiator(loader, observer_ptr { &target }, request.scripts, result);
 
   ApplyEnvironment(instantiator, asset, target);
   co_await instantiator.Compose(request.asset);
@@ -805,6 +1313,163 @@ auto Instantiate(SceneInstantiationRequest request,
   }
   instantiator.AttachScripts();
   co_return result;
+}
+
+// The caller awaits at once and owns the referenced arguments.
+auto InstantiateUnder(InstanceRequest request, content::IAssetLoader& loader)
+  -> co::Co<InstantiationResult>
+{
+  auto result = InstantiationResult {};
+  auto instantiator
+    = Instantiator(loader, request.target, request.scripts, result);
+  if (request.target == nullptr || !request.root.IsAlive()
+    || !request.target->Contains(request.root)
+    || InstanceOf(request.root) != nullptr) {
+    instantiator.Issue(request.source, issue_codes::kInstanceRootInvalid,
+      std::nullopt,
+      "the node to instance under is not a live node of the scene, or is an "
+      "instance root already");
+    co_return result;
+  }
+  auto changes = std::vector<data::SceneChange> {};
+  auto host_nodes = std::vector<scene::SceneNode> {};
+  for (const auto& change : request.changes) {
+    if (auto encoded = Encode(change, host_nodes); encoded.has_value()) {
+      changes.push_back(std::move(*encoded));
+      continue;
+    }
+    instantiator.Issue(data::AssetKey {},
+      data::to_string(data::CompositionIssueCode::kChangeInvalid), std::nullopt,
+      "the value is not a value of the property it changes", change.path);
+  }
+  // The scenes whose instances bring the root in: instancing one of them
+  // again is a cycle.
+  auto ancestors = std::vector<data::AssetKey> {};
+  for (const auto& outer : OuterLevels(request.root)) {
+    ancestors.push_back(outer.component->Source()->GetAssetKey());
+    if (const auto& requester = outer.component->Requester()) {
+      ancestors.push_back(requester->GetAssetKey());
+    }
+  }
+  co_await instantiator.ComposeUnder(request.root, request.source,
+    std::move(changes), std::move(host_nodes), std::move(ancestors));
+  instantiator.Build();
+  result.nodes = instantiator.RootNodes();
+  try {
+    request.target->GetDirectionalLightResolver().Validate();
+  } catch (const std::exception& error) {
+    instantiator.Issue(
+      request.source, issue_codes::kLightsInvalid, std::nullopt, error.what());
+  }
+  instantiator.AttachScripts();
+  co_return result;
+}
+
+auto SetChange(scene::SceneNode& root, const InstanceChange& change,
+  content::IAssetLoader& loader,
+  const observer_ptr<const scripting::SceneScriptAttachment> scripts)
+  -> ChangeResult
+{
+  auto built = InstantiationResult {};
+  auto instantiator = Instantiator(loader, nullptr, scripts, built);
+  auto result = ChangeResult {};
+  const auto finish = [&] -> ChangeResult {
+    std::ranges::move(built.issues, std::back_inserter(result.issues));
+    return std::move(result);
+  };
+  const auto component = InstanceOf(root);
+  if (component == nullptr) {
+    instantiator.Issue(data::AssetKey {}, issue_codes::kNotInstanceRoot,
+      std::nullopt, "the node is not an instance root", change.path);
+    return finish();
+  }
+  auto host_nodes = std::vector<scene::SceneNode>(
+    component->HostNodes().begin(), component->HostNodes().end());
+  auto encoded = Encode(change, host_nodes);
+  if (!encoded.has_value()) {
+    instantiator.Issue(data::AssetKey {},
+      data::to_string(data::CompositionIssueCode::kChangeInvalid), std::nullopt,
+      "the value is not a value of the property it changes", change.path);
+    return finish();
+  }
+  auto target = LiveTarget::Resolve(root, encoded->path);
+  const auto outcome = target.has_value()
+    ? data::CheckChange(target->Source(), target->Index(), *encoded)
+    : data::ChangeOutcome::kUnresolved;
+  if (outcome != data::ChangeOutcome::kApplied) {
+    instantiator.Issue(data::AssetKey {},
+      outcome == data::ChangeOutcome::kInvalid
+        ? data::to_string(data::CompositionIssueCode::kChangeInvalid)
+        : issue_codes::kChangeUnresolved,
+      std::nullopt,
+      "the change names no node of the instance, or a property that node "
+      "does not have, or a value its record does not accept",
+      change.path);
+    return finish();
+  }
+  // NOLINTBEGIN(bugprone-unchecked-optional-access) - applied implies found
+  const auto address = data::AddressOf(*encoded);
+  component->SetHostNodes(std::move(host_nodes));
+  component->SetChange(std::move(*encoded), true);
+  Reapply(*target, address, instantiator, scripts, result);
+  // NOLINTEND(bugprone-unchecked-optional-access)
+  return finish();
+}
+
+auto ClearChange(scene::SceneNode& root, const data::ChangeAddress& address,
+  content::IAssetLoader& loader,
+  const observer_ptr<const scripting::SceneScriptAttachment> scripts)
+  -> ChangeResult
+{
+  auto built = InstantiationResult {};
+  auto instantiator = Instantiator(loader, nullptr, scripts, built);
+  auto result = ChangeResult {};
+  const auto finish = [&] -> ChangeResult {
+    std::ranges::move(built.issues, std::back_inserter(result.issues));
+    return std::move(result);
+  };
+  const auto component = InstanceOf(root);
+  if (component == nullptr) {
+    instantiator.Issue(data::AssetKey {}, issue_codes::kNotInstanceRoot,
+      std::nullopt, "the node is not an instance root", address.path);
+    return finish();
+  }
+  auto target = LiveTarget::Resolve(root, address.path);
+  if (!target.has_value() || !component->ClearChange(address)) {
+    instantiator.Issue(data::AssetKey {}, issue_codes::kChangeUnresolved,
+      std::nullopt, "the instance holds no change at the address",
+      address.path);
+    return finish();
+  }
+  Reapply(*target, address, instantiator, scripts, result);
+  return finish();
+}
+
+auto Detach(scene::Scene& target, scene::SceneNode& root) -> bool
+{
+  const auto component = InstanceOf(root);
+  if (component == nullptr || !target.Contains(root)) {
+    return false;
+  }
+  auto roots = std::vector<scene::SceneNode> {};
+  for (const auto [index, record] :
+    std::views::enumerate(component->Source()->GetNodes())) {
+    if (std::cmp_not_equal(record.parent_index, index)) {
+      continue;
+    }
+    const auto handle = component->FindNode(record.node_id);
+    if (!handle.has_value()) {
+      continue;
+    }
+    if (auto node = target.GetNode(*handle); node.has_value()) {
+      roots.push_back(std::move(*node));
+    }
+  }
+  (void)target.DestroyNodeHierarchies(roots);
+  if (const auto impl = root.GetImpl(); impl.has_value()) {
+    impl->get().RemoveComponent<scene::SceneInstanceComponent>();
+  }
+  return true;
 }
 
 } // namespace oxygen::instantiation

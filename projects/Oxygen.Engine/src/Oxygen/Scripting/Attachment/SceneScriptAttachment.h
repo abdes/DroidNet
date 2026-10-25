@@ -10,11 +10,13 @@
 #include <cstdint>
 #include <functional>
 #include <span>
+#include <string_view>
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Data/SceneIds.h>
 #include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Scripting/Analysis/ScriptDiagnostic.h>
 #include <Oxygen/Scripting/api_export.h>
@@ -90,10 +92,25 @@ public:
   OXYGEN_MAKE_NON_MOVABLE(SceneScriptAttachment)
 
   //! Attach the slots of occurrence `occurrence` of `composed`;
-  //! `nodes[o][i]` is the node created for node index i of occurrence o.
+  //! `nodes[o][i]` is the node created for node index i of occurrence o, and
+  //! `requester_nodes[i]` the node a value the requester of an instance
+  //! composition supplies (`data::kRequester`) names by index i.
   OXGN_SCRP_NDAPI auto Attach(const data::ComposedScene& composed,
     std::size_t occurrence,
-    std::span<const std::vector<scene::SceneNode>> nodes) const
+    std::span<const std::vector<scene::SceneNode>> nodes,
+    std::span<const scene::SceneNode> requester_nodes = {}) const
+    -> SceneScriptAttachmentResult;
+
+  //! Applies parameter `key` of slot `slot_id` of node `node_index` of
+  //! occurrence `occurrence` again, after a change of it: the attached slot
+  //! takes the composed slot's effective value, checked and bound as Attach()
+  //! does, or its declared default when the composed slot has none. The
+  //! result holds the slot's outcome; none when the node has no such slot.
+  OXGN_SCRP_NDAPI auto ApplyParameter(const data::ComposedScene& composed,
+    std::size_t occurrence,
+    std::span<const std::vector<scene::SceneNode>> nodes,
+    std::span<const scene::SceneNode> requester_nodes, uint32_t node_index,
+    const data::ScriptSlotId& slot_id, std::string_view key) const
     -> SceneScriptAttachmentResult;
 
 private:

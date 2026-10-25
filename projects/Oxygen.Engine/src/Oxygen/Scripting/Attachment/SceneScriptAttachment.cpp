@@ -4,12 +4,14 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <optional>
 #include <span>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -27,6 +29,7 @@
 #include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Data/SceneComposition.h>
+#include <Oxygen/Data/SceneIds.h>
 #include <Oxygen/Data/ScriptAsset.h>
 #include <Oxygen/Data/ScriptResource.h>
 #include <Oxygen/Engine/Scripting/IScriptCompilationService.h>
@@ -58,6 +61,7 @@ namespace {
       const observer_ptr<const LateScriptDiagnosticHandler> on_late_diagnostic,
       const data::ComposedScene& composed, const std::size_t occurrence,
       std::span<const std::vector<scene::SceneNode>> nodes,
+      std::span<const scene::SceneNode> requester_nodes,
       const uint32_t node_index)
       : loader_(loader)
       , resolver_(resolver)
@@ -66,6 +70,7 @@ namespace {
       , composed_(&composed)
       , asset_(composed.occurrences.at(occurrence).scene.get())
       , nodes_(nodes)
+      , requester_nodes_(requester_nodes)
       , node_index_(node_index)
       , node_(base::CheckedAt(nodes, occurrence).at(node_index))
     {
@@ -105,7 +110,55 @@ namespace {
       result.slots.push_back(std::move(outcome));
     }
 
+    //! Applies parameter `key` of the slot at `slot_index` on the node again:
+    //! removes its value, then applies the effective one, if any.
+    auto ApplyParameter(const data::ComposedSlot& record,
+      const uint32_t slot_index, const std::string_view key,
+      SceneScriptAttachmentResult& result) -> void
+    {
+      auto outcome = SceneScriptSlotOutcome {
+        .node_index = node_index_,
+        .slot_index = slot_index,
+        .script = record.script,
+        .state = State::kReady,
+        .diagnostics = {},
+      };
+      auto scripting = node_.GetScripting();
+      const auto slots = scripting.Slots();
+      const auto script = record.script.IsNil()
+        ? nullptr
+        : loader_->GetScriptAsset(record.script, *asset_);
+      if (slot_index >= slots.size() || script == nullptr) {
+        Reject(outcome,
+          fmt::format("parameter '{}' names a slot that is not attached", key));
+        result.slots.push_back(std::move(outcome));
+        return;
+      }
+      const auto& slot = slots[slot_index];
+      outcome.state = OutcomeState(slot);
+      (void)scripting.RemoveParameter(slot, key);
+      const auto found = std::ranges::find(
+        record.parameters, key, &data::ComposedParameter::key);
+      if (found != record.parameters.end()) {
+        ApplyOverrides(outcome, slot, *script, std::span(&*found, 1U));
+      }
+      result.slots.push_back(std::move(outcome));
+    }
+
   private:
+    //! Where an attached slot stands, as an outcome reports it.
+    [[nodiscard]] static auto OutcomeState(const Slot& slot) -> State
+    {
+      using CompileState = Slot::CompileState;
+      if (slot.State() == CompileState::kReady) {
+        return State::kReady;
+      }
+      if (slot.State() == CompileState::kCompilationFailed) {
+        return State::kFailed;
+      }
+      return State::kCompiling;
+    }
+
     [[nodiscard]] auto Diagnostic(const SceneScriptSlotOutcome& outcome,
       const DiagnosticCode code, std::string message) const -> ScriptDiagnostic
     {
@@ -180,10 +233,23 @@ namespace {
     [[nodiscard]] auto SupplierNodeCount(
       const data::ChangeSupplier supplier) const -> std::optional<std::size_t>
     {
-      if (supplier >= composed_->occurrences.size()) {
+      const auto nodes = NodesOf(supplier);
+      return nodes.has_value() ? std::optional { nodes->size() } : std::nullopt;
+    }
+
+    //! The nodes a node value of `supplier` names, by index: an occurrence's
+    //! created nodes, or the requester's nodes.
+    [[nodiscard]] auto NodesOf(const data::ChangeSupplier supplier) const
+      -> std::optional<std::span<const scene::SceneNode>>
+    {
+      if (supplier == data::kRequester) {
+        return requester_nodes_;
+      }
+      if (supplier >= nodes_.size()) {
         return std::nullopt;
       }
-      return composed_->occurrences.at(supplier).scene->GetNodes().size();
+      return std::span<const scene::SceneNode>(
+        base::CheckedAt(nodes_, supplier));
     }
 
     //! The node a node value names in the scene that supplied it.
@@ -191,13 +257,18 @@ namespace {
       const data::ScriptNodeParam& value) const
       -> std::optional<scene::SceneNode>
     {
-      if (supplier >= nodes_.size()
-        || value.node_index >= base::CheckedAt(nodes_, supplier).size()) {
+      const auto nodes = NodesOf(supplier);
+      if (!nodes.has_value() || value.node_index >= nodes->size()) {
         return std::nullopt;
       }
-      auto node = base::CheckedAt(nodes_, supplier).at(value.node_index);
+      auto node = (*nodes)[value.node_index];
       if (value.node_path == data::pak::world::kNoNodePath) {
         return node;
+      }
+      // Only a scene's node value has a path: a host names live nodes.
+      if (supplier >= composed_->occurrences.size()
+        || !composed_->occurrences.at(supplier).scene) {
+        return std::nullopt;
       }
       const auto path = composed_->occurrences.at(supplier).scene->GetNodePath({
         .node_index = value.node_index,
@@ -345,6 +416,7 @@ namespace {
     observer_ptr<const data::ComposedScene> composed_;
     observer_ptr<const data::SceneAsset> asset_;
     std::span<const std::vector<scene::SceneNode>> nodes_;
+    std::span<const scene::SceneNode> requester_nodes_;
     uint32_t node_index_;
     scene::SceneNode node_;
   };
@@ -363,7 +435,8 @@ SceneScriptAttachment::SceneScriptAttachment(content::IAssetLoader& loader,
 
 auto SceneScriptAttachment::Attach(const data::ComposedScene& composed,
   const std::size_t occurrence,
-  const std::span<const std::vector<scene::SceneNode>> nodes) const
+  const std::span<const std::vector<scene::SceneNode>> nodes,
+  const std::span<const scene::SceneNode> requester_nodes) const
   -> SceneScriptAttachmentResult
 {
   auto result = SceneScriptAttachmentResult {};
@@ -385,8 +458,40 @@ auto SceneScriptAttachment::Attach(const data::ComposedScene& composed,
     }
     auto attachment = NodeAttachment(loader_, resolver_, compiler_,
       observer_ptr { &on_late_diagnostic_ }, composed, occurrence, nodes,
-      node_index);
+      requester_nodes, node_index);
     attachment.AttachSlot(slot, result);
+  }
+  return result;
+}
+
+auto SceneScriptAttachment::ApplyParameter(const data::ComposedScene& composed,
+  const std::size_t occurrence,
+  const std::span<const std::vector<scene::SceneNode>> nodes,
+  const std::span<const scene::SceneNode> requester_nodes,
+  const uint32_t node_index, const data::ScriptSlotId& slot_id,
+  const std::string_view key) const -> SceneScriptAttachmentResult
+{
+  auto result = SceneScriptAttachmentResult {};
+  if (occurrence >= composed.occurrences.size() || occurrence >= nodes.size()
+    || node_index >= base::CheckedAt(nodes, occurrence).size()
+    || !base::CheckedAt(nodes, occurrence).at(node_index).IsAlive()) {
+    return result;
+  }
+  // Slots are added to a node in record order, so a slot's position on its
+  // node is its position among the node's composed slots.
+  auto slot_index = uint32_t { 0U };
+  for (const auto& slot : composed.occurrences.at(occurrence).slots) {
+    if (slot.node_index != node_index) {
+      continue;
+    }
+    if (slot.slot_id == slot_id) {
+      auto attachment = NodeAttachment(loader_, resolver_, compiler_,
+        observer_ptr { &on_late_diagnostic_ }, composed, occurrence, nodes,
+        requester_nodes, node_index);
+      attachment.ApplyParameter(slot, slot_index, key, result);
+      return result;
+    }
+    ++slot_index;
   }
   return result;
 }

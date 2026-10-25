@@ -52,6 +52,34 @@ struct SceneChange {
   std::variant<pak::world::OverrideRecord, ParameterChange> change;
 };
 
+//! The property and part a change sets.
+struct PropertyAddress {
+  schema::OverrideId override_id = schema::OverrideId::kInvalid;
+  SurfaceId part_id;
+
+  auto operator==(const PropertyAddress&) const -> bool = default;
+};
+
+//! The script parameter a change sets.
+struct ParameterAddress {
+  ScriptSlotId slot_id;
+  std::string key;
+
+  auto operator==(const ParameterAddress&) const -> bool = default;
+};
+
+//! What a change sets: its node path and the property or parameter. A scene
+//! makes at most one change per address below one instance root.
+struct ChangeAddress {
+  std::vector<NodeId> path;
+  std::variant<PropertyAddress, ParameterAddress> target;
+
+  auto operator==(const ChangeAddress&) const -> bool = default;
+};
+
+//! The address `change` sets.
+OXGN_DATA_NDAPI auto AddressOf(const SceneChange& change) -> ChangeAddress;
+
 //! Where a value of the composed scene comes from: an occurrence, or the
 //! requester of an instance composition (`kRequester`).
 using ChangeSupplier = std::size_t;
@@ -218,5 +246,25 @@ OXGN_DATA_NDAPI auto ComposeInstance(const InstanceComposition& instance,
 //! changes that reach it, as the composition that made it did.
 OXGN_DATA_NDAPI auto ComposeNode(const ComposedScene& scene,
   std::size_t occurrence, pak::world::SceneNodeIndexT index) -> ComposedNode;
+
+//! Recomposes the script slots of an occurrence of `scene` from its scene and
+//! the parameter changes that reach it, as the composition that made them did.
+OXGN_DATA_NDAPI auto ComposeSlots(const ComposedScene& scene,
+  std::size_t occurrence) -> std::vector<ComposedSlot>;
+
+//! How a change fares on the node it names.
+enum class ChangeOutcome : std::uint8_t {
+  kApplied,
+  //! The node has no record for the property, or no such script slot.
+  kUnresolved,
+  //! The value fails the validation of the record it patches.
+  kInvalid,
+};
+
+//! How `change` fares on node `index` of `scene`, from the scene's own
+//! records; the change's path is not read.
+OXGN_DATA_NDAPI auto CheckChange(const std::shared_ptr<const SceneAsset>& scene,
+  pak::world::SceneNodeIndexT index, const SceneChange& change)
+  -> ChangeOutcome;
 
 } // namespace oxygen::data

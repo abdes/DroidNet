@@ -4,12 +4,15 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-// Covers: ComposeScene, ComposeInstance and ComposeNode (scene instances
-// 7.6): which change wins, unresolved changes, missing scenes and cycles.
+// Covers: ComposeScene, ComposeInstance, ComposeNode, ComposeSlots,
+// CheckChange and AddressOf (scene instances 7.6, 7.8): which change wins,
+// unresolved changes, missing scenes and cycles.
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <memory>
+#include <optional>
 #include <unordered_map>
 #include <variant>
 #include <vector>
@@ -21,7 +24,6 @@
 #include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Data/SceneComposition.h>
 #include <Oxygen/Data/SceneIds.h>
-#include <Oxygen/Data/SceneRecordDefaults.h>
 #include <Oxygen/Data/Schema/Generated.SceneComponents.h>
 #include <Oxygen/Data/test/Fixtures/SceneAssetBuilder.h>
 #include <Oxygen/Testing/GTest.h>
@@ -108,7 +110,9 @@ auto Instancing(const InstancingSpec& spec) -> SceneAssetBuilder
   builder.AddComponents(ComponentType::kSceneInstance,
     std::vector {
       world::SceneInstanceRecord {
-        .node_index = kHolder, .scene_key = spec.source },
+        .node_index = kHolder,
+        .scene_key = spec.source,
+      },
     });
   auto records = std::vector<world::NodePathRecord> {};
   auto elements = std::vector<world::NodePathElement> {};
@@ -170,10 +174,12 @@ protected:
     wheel_ = model.Node(kWheel).node_id;
     scenes_.Add(ModelKey(), model);
 
-    auto car = Instancing({ .root = "CarRoot",
+    auto car = Instancing({
+      .root = "CarRoot",
       .holder = "ModelHolder",
       .source = ModelKey(),
-      .paths = { { wheel_ } } });
+      .paths = { { wheel_ } },
+    });
     holder_ = car.Node(kHolder).node_id;
     car_root_ = car.Node(0U).node_id;
     car.AddComponents(ComponentType::kOverride,
@@ -207,10 +213,12 @@ private:
 //! (SI-10).
 NOLINT_TEST_F(SceneCompositionTest, OuterChangeWinsTwoLevelsDown)
 {
-  auto street = Instancing({ .root = "Street",
+  auto street = Instancing({
+    .root = "Street",
     .holder = "Car",
     .source = CarKey(),
-    .paths = { { Holder(), Wheel() } } });
+    .paths = { { Holder(), Wheel() } },
+  });
   street.AddComponents(ComponentType::kOverride,
     std::vector {
       Change(kHolder, 0U, OverrideId::kTransformPositionX, kStreetX),
@@ -259,7 +267,7 @@ NOLINT_TEST_F(SceneCompositionTest, ChangesThatDoNotResolveAreReported)
       { stranger },
       { CarRoot(), Wheel() },
       { Holder(), Wheel() },
-    } });
+    }, });
   street.AddComponents(ComponentType::kOverride,
     std::vector {
       Change(kHolder, 0U, OverrideId::kTransformPositionX, kStreetX),
@@ -307,15 +315,19 @@ NOLINT_TEST_F(SceneCompositionTest, CycleEndsItsBranch)
 {
   const auto loop_key = AssetKey::FromVirtualPath("/test/Loop.oscene");
   Scenes().Add(loop_key,
-    Instancing({ .root = "Loop",
+    Instancing({
+      .root = "Loop",
       .holder = "Back",
       .source = StreetKey(),
-      .paths = {} }));
+      .paths = {},
+    }));
   const auto scene = Scenes().Add(StreetKey(),
-    Instancing({ .root = "Street",
+    Instancing({
+      .root = "Street",
       .holder = "Ahead",
       .source = loop_key,
-      .paths = {} }));
+      .paths = {},
+    }));
 
   const auto composed = data::ComposeScene(scene, Scenes().Resolver());
 
@@ -329,10 +341,12 @@ NOLINT_TEST_F(SceneCompositionTest, CycleEndsItsBranch)
 //! ComposeNode recomputes a node exactly as ComposeScene composed it.
 NOLINT_TEST_F(SceneCompositionTest, ComposeNodeEqualsComposeScene)
 {
-  auto street = Instancing({ .root = "Street",
+  auto street = Instancing({
+    .root = "Street",
     .holder = "Car",
     .source = CarKey(),
-    .paths = { { Holder(), Wheel() } } });
+    .paths = { { Holder(), Wheel() } },
+  });
   street.AddComponents(ComponentType::kOverride,
     std::vector {
       Change(kHolder, 0U, OverrideId::kTransformScaleY, kStreetX),
@@ -359,10 +373,12 @@ NOLINT_TEST_F(SceneCompositionTest, ComposeNodeEqualsComposeScene)
 //! the node does not have is unresolved.
 NOLINT_TEST_F(SceneCompositionTest, ParameterChangesReachTheirSlot)
 {
-  auto street = Instancing({ .root = "Street",
+  auto street = Instancing({
+    .root = "Street",
     .holder = "Car",
     .source = CarKey(),
-    .paths = { { Holder(), Wheel() } } });
+    .paths = { { Holder(), Wheel() } },
+  });
   const auto key = street.AddString("speed");
   const auto change
     = [&](const data::ScriptSlotId& slot) -> script::ScriptParamOverrideRecord {
@@ -398,6 +414,83 @@ NOLINT_TEST_F(SceneCompositionTest, ParameterChangesReachTheirSlot)
   ASSERT_EQ(composed.unresolved.size(), 1U);
   EXPECT_TRUE(std::holds_alternative<data::ParameterChange>(
     composed.unresolved.front().change.change));
+
+  const auto recomposed = data::ComposeSlots(composed, 2U);
+
+  ASSERT_EQ(recomposed.size(), slots.size());
+  ASSERT_EQ(recomposed.front().parameters.size(), 1U);
+  EXPECT_EQ(recomposed.front().parameters.front().key, "speed");
+  EXPECT_EQ(recomposed.front().parameters.front().supplier, 0U);
+  EXPECT_FLOAT_EQ(
+    std::get<float>(recomposed.front().parameters.front().value), kSpeed);
+}
+
+//! CheckChange applies a change to a node's own records: a property of a
+//! record the node has, a property of one it lacks, and a slot it lacks.
+NOLINT_TEST_F(SceneCompositionTest, CheckChangeReadsTheNodesRecords)
+{
+  auto street = Instancing({
+    .root = "Street",
+    .holder = "Car",
+    .source = CarKey(),
+    .paths = { { Holder(), Wheel() } },
+  });
+  const auto scene = Scenes().Add(StreetKey(), street);
+  const auto composed = data::ComposeScene(scene, Scenes().Resolver());
+  ASSERT_EQ(composed.occurrences.size(), 3U);
+  const auto& wheel_scene = composed.occurrences.at(2U).scene;
+  const auto change = [](const OverrideId id) -> data::SceneChange {
+    return { .change = Change(kHolder, 0U, id, kStreetX) };
+  };
+
+  const auto moved = data::CheckChange(
+    wheel_scene, kWheel, change(OverrideId::kTransformScaleY));
+  const auto camera = data::CheckChange(
+    wheel_scene, kWheel, change(OverrideId::kPerspectiveCameraNearPlane));
+  const auto slot = data::CheckChange(wheel_scene, kWheel,
+    data::SceneChange {
+      .change = data::ParameterChange {
+        .slot_id = data::ScriptSlotId::FromStableIdentity("/test/slot/other"),
+        .key = "speed",
+        .value = kSpeed,
+      },
+    });
+
+  EXPECT_EQ(moved, data::ChangeOutcome::kApplied);
+  EXPECT_EQ(camera, data::ChangeOutcome::kUnresolved);
+  EXPECT_EQ(slot, data::ChangeOutcome::kUnresolved);
+}
+
+//! A change's address is its path and the property and part, or the slot and
+//! key, it sets.
+NOLINT_TEST_F(SceneCompositionTest, AddressOfNamesWhatAChangeSets)
+{
+  const auto path = std::vector { Holder(), Wheel() };
+  const auto property = data::SceneChange {
+    .path = path,
+    .change = Change(kHolder, 0U, OverrideId::kTransformScaleY, kStreetX),
+  };
+  const auto parameter = data::SceneChange {
+    .path = path,
+    .change = data::ParameterChange {
+      .slot_id = SlotId(),
+      .key = "speed",
+      .value = kSpeed,
+    },
+  };
+
+  EXPECT_EQ(data::AddressOf(property),
+    (data::ChangeAddress {
+      .path = path,
+      .target = data::PropertyAddress {
+        .override_id = OverrideId::kTransformScaleY,
+      },
+    }));
+  EXPECT_EQ(data::AddressOf(parameter),
+    (data::ChangeAddress {
+      .path = path,
+      .target = data::ParameterAddress { .slot_id = SlotId(), .key = "speed" },
+    }));
 }
 
 //! An instance composition applies its requester's changes, which win, and

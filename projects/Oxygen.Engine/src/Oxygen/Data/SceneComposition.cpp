@@ -6,7 +6,6 @@
 
 #include <algorithm>
 #include <cstddef>
-#include <cstdint>
 #include <exception>
 #include <functional>
 #include <map>
@@ -41,23 +40,17 @@ namespace {
   namespace scripting = pak::scripting;
   using schema::ComponentId;
 
-  enum class ApplyOutcome : std::uint8_t {
-    kApplied,
-    kUnresolved,
-    kInvalid,
-  };
-
   //! Applies `change` to `record` when the node has one.
   template <typename Record>
   auto ApplyToRecord(std::optional<Record>& record,
-    const world::OverrideRecord& change) -> ApplyOutcome
+    const world::OverrideRecord& change) -> ChangeOutcome
   {
     if (!record.has_value()) {
-      return ApplyOutcome::kUnresolved;
+      return ChangeOutcome::kUnresolved;
     }
     return schema::ApplyChange(*record, change.override_id, change.value)
-      ? ApplyOutcome::kApplied
-      : ApplyOutcome::kInvalid;
+      ? ChangeOutcome::kApplied
+      : ChangeOutcome::kInvalid;
   }
 
   //! Replaces the entry with the same key, or inserts it.
@@ -73,16 +66,16 @@ namespace {
   }
 
   auto ApplyProperty(ComposedNode& node, const world::OverrideRecord& change,
-    const ChangeSupplier supplier) -> ApplyOutcome
+    const ChangeSupplier supplier) -> ChangeOutcome
   {
     const auto* property = schema::FindOverrideProperty(change.override_id);
     if (property == nullptr) {
-      return ApplyOutcome::kInvalid;
+      return ChangeOutcome::kInvalid;
     }
-    auto outcome = ApplyOutcome::kInvalid;
+    auto outcome = ChangeOutcome::kInvalid;
     if (property->asset_sourced) {
       if (!node.renderable.has_value()) {
-        return ApplyOutcome::kUnresolved;
+        return ChangeOutcome::kUnresolved;
       }
       auto record = change;
       record.target = { .node_index = node.index };
@@ -91,15 +84,15 @@ namespace {
         [](const ComposedOverride& entry) -> auto {
           return std::tie(entry.record.override_id, entry.record.part_id);
         });
-      outcome = ApplyOutcome::kApplied;
+      outcome = ChangeOutcome::kApplied;
     } else {
       switch (property->component) {
       case ComponentId::kTransform:
       case ComponentId::kNode:
         outcome
           = schema::ApplyChange(node.node, change.override_id, change.value)
-          ? ApplyOutcome::kApplied
-          : ApplyOutcome::kInvalid;
+          ? ChangeOutcome::kApplied
+          : ChangeOutcome::kInvalid;
         break;
       case ComponentId::kPerspectiveCamera:
         outcome = ApplyToRecord(node.perspective_camera, change);
@@ -123,7 +116,7 @@ namespace {
         break;
       }
     }
-    if (outcome == ApplyOutcome::kApplied) {
+    if (outcome == ChangeOutcome::kApplied) {
       Upsert(node.changes,
         AppliedChange {
           .override_id = change.override_id,
@@ -139,7 +132,7 @@ namespace {
 
   auto ApplyParameter(std::vector<ComposedSlot>& slots,
     const world::SceneNodeIndexT node_index, const ParameterChange& change,
-    const ChangeSupplier supplier) -> ApplyOutcome
+    const ChangeSupplier supplier) -> ChangeOutcome
   {
     const auto slot
       = std::ranges::find_if(slots, [&](const ComposedSlot& entry) -> bool {
@@ -147,7 +140,7 @@ namespace {
             && entry.slot_id == change.slot_id;
         });
     if (slot == slots.end()) {
-      return ApplyOutcome::kUnresolved;
+      return ChangeOutcome::kUnresolved;
     }
     Upsert(slot->parameters,
       ComposedParameter {
@@ -156,7 +149,7 @@ namespace {
         .supplier = supplier,
       },
       &ComposedParameter::key);
-    return ApplyOutcome::kApplied;
+    return ChangeOutcome::kApplied;
   }
 
   //! The nodes of `occurrence`'s scene with their own records and overrides.
@@ -207,6 +200,40 @@ namespace {
       }
     }
     return nodes;
+  }
+
+  //! The slots of `scene` with their own parameters, supplied by `self`;
+  //! none when the scene's script records cannot be read.
+  auto ReadSlots(const SceneAsset& scene, const std::size_t self)
+    -> std::optional<std::vector<ComposedSlot>>
+  {
+    auto slots = std::vector<ComposedSlot> {};
+    try {
+      for (const auto& component :
+        scene.GetComponents<scripting::ScriptingComponentRecord>()) {
+        for (const auto& slot : scene.ReadScriptSlots(
+               component.slot_start_index, component.slot_count)) {
+          auto composed = ComposedSlot {
+            .node_index = component.node_index,
+            .slot_id = slot.slot_id,
+            .script = slot.script_asset_key,
+            .execution_order = slot.execution_order,
+          };
+          for (auto& [key, value] : DecodeScriptParameters(
+                 scene.ReadScriptParameters(slot), scene.GetStrings())) {
+            composed.parameters.push_back({
+              .key = std::move(key),
+              .value = std::move(value),
+              .supplier = self,
+            });
+          }
+          slots.push_back(std::move(composed));
+        }
+      }
+    } catch (const std::exception&) {
+      return std::nullopt;
+    }
+    return slots;
   }
 
   //! The reaching changes that apply to one node, deepest supplier first.
@@ -268,34 +295,12 @@ namespace {
     //! The slots of the occurrence's scene, with their own parameters.
     auto BaseSlots(const std::size_t self) -> std::vector<ComposedSlot>
     {
-      const auto& scene = *result_.occurrences.at(self).scene;
-      auto slots = std::vector<ComposedSlot> {};
-      try {
-        for (const auto& component :
-          scene.GetComponents<scripting::ScriptingComponentRecord>()) {
-          for (const auto& slot : scene.ReadScriptSlots(
-                 component.slot_start_index, component.slot_count)) {
-            auto composed = ComposedSlot {
-              .node_index = component.node_index,
-              .slot_id = slot.slot_id,
-              .script = slot.script_asset_key,
-              .execution_order = slot.execution_order,
-            };
-            for (auto& [key, value] : DecodeScriptParameters(
-                   scene.ReadScriptParameters(slot), scene.GetStrings())) {
-              composed.parameters.push_back({
-                .key = std::move(key),
-                .value = std::move(value),
-                .supplier = self,
-              });
-            }
-            slots.push_back(std::move(composed));
-          }
-        }
-      } catch (const std::exception&) {
+      auto slots = ReadSlots(*result_.occurrences.at(self).scene, self);
+      if (!slots.has_value()) {
         Issue(CompositionIssueCode::kRecordInvalid, self, std::nullopt);
+        return {};
       }
-      return slots;
+      return std::move(*slots);
     }
 
     //! The changes the occurrence's scene makes below its instance roots,
@@ -386,7 +391,7 @@ namespace {
           continue;
         }
         const auto outcome = std::visit(
-          [&]<typename Change>(const Change& value) -> ApplyOutcome {
+          [&]<typename Change>(const Change& value) -> ChangeOutcome {
             if constexpr (std::is_same_v<Change, ParameterChange>) {
               return ApplyParameter(slots, index, value, change.supplier);
             } else {
@@ -394,9 +399,9 @@ namespace {
             }
           },
           change.change.change);
-        if (outcome == ApplyOutcome::kUnresolved) {
+        if (outcome == ChangeOutcome::kUnresolved) {
           Unresolved(change);
-        } else if (outcome == ApplyOutcome::kInvalid) {
+        } else if (outcome == ChangeOutcome::kInvalid) {
           Issue(CompositionIssueCode::kChangeInvalid, self, index);
         }
       }
@@ -534,6 +539,83 @@ auto ComposeNode(const ComposedScene& scene, const std::size_t occurrence,
     }
   }
   return node;
+}
+
+auto ComposeSlots(const ComposedScene& scene, const std::size_t occurrence)
+  -> std::vector<ComposedSlot>
+{
+  const auto& composed = scene.occurrences.at(occurrence);
+  const auto& asset = *composed.scene;
+  auto slots
+    = ReadSlots(asset, occurrence).value_or(std::vector<ComposedSlot> {});
+  auto by_id = std::unordered_map<NodeId, world::SceneNodeIndexT> {};
+  for (const auto [index, record] : std::views::enumerate(asset.GetNodes())) {
+    by_id.emplace(record.node_id, static_cast<world::SceneNodeIndexT>(index));
+  }
+  auto reaching = std::vector<const ReachingChange*> {};
+  for (const auto& change : composed.changes) {
+    reaching.push_back(&change);
+  }
+  std::ranges::stable_sort(
+    reaching, std::ranges::greater {}, &ReachingChange::level);
+  for (const auto* change : reaching) {
+    const auto& path = change->change.path;
+    const auto* parameter
+      = std::get_if<ParameterChange>(&change->change.change);
+    if (parameter == nullptr || path.size() != change->consumed + 1U) {
+      continue;
+    }
+    if (const auto found = by_id.find(path.back()); found != by_id.end()) {
+      (void)ApplyParameter(slots, found->second, *parameter, change->supplier);
+    }
+  }
+  return slots;
+}
+
+auto AddressOf(const SceneChange& change) -> ChangeAddress
+{
+  return ChangeAddress {
+    .path = change.path,
+    .target = std::visit(
+      []<typename Change>(const Change& value)
+        -> std::variant<PropertyAddress, ParameterAddress> {
+        if constexpr (std::is_same_v<Change, ParameterChange>) {
+          return ParameterAddress {
+            .slot_id = value.slot_id,
+            .key = value.key,
+          };
+        } else {
+          return PropertyAddress {
+            .override_id = value.override_id,
+            .part_id = value.part_id,
+          };
+        }
+      },
+      change.change),
+  };
+}
+
+auto CheckChange(const std::shared_ptr<const SceneAsset>& scene,
+  const world::SceneNodeIndexT index, const SceneChange& change)
+  -> ChangeOutcome
+{
+  if (!scene || index >= scene->GetNodes().size()) {
+    return ChangeOutcome::kUnresolved;
+  }
+  return std::visit(
+    [&]<typename Change>(const Change& value) -> ChangeOutcome {
+      if constexpr (std::is_same_v<Change, ParameterChange>) {
+        auto slots = ReadSlots(*scene, 0U);
+        if (!slots.has_value()) {
+          return ChangeOutcome::kInvalid;
+        }
+        return ApplyParameter(*slots, index, value, 0U);
+      } else {
+        auto nodes = BaseNodes(ComposedOccurrence { .scene = scene }, 0U);
+        return ApplyProperty(nodes.at(index), value, 0U);
+      }
+    },
+    change.change);
 }
 
 } // namespace oxygen::data

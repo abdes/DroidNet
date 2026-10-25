@@ -11,11 +11,16 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <variant>
 #include <vector>
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Data/SceneChangeValues.h>
+#include <Oxygen/Data/SceneComposition.h>
 #include <Oxygen/Data/SceneIds.h>
+#include <Oxygen/Data/Schema/Generated.SceneComponents.h>
+#include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/SceneInstantiation/api_export.h>
@@ -45,6 +50,13 @@ namespace issue_codes {
   //! A change whose address does not resolve; it has no effect.
   inline constexpr std::string_view kChangeUnresolved
     = "scene.instance.change_unresolved";
+  //! The node to instance under is not a live node of the target scene, or
+  //! is an instance root already.
+  inline constexpr std::string_view kInstanceRootInvalid
+    = "scene.instance.root_invalid";
+  //! A live change names a node that is not an instance root.
+  inline constexpr std::string_view kNotInstanceRoot
+    = "scene.instance.not_root";
   //! A node cannot be placed under its parent or instance root.
   inline constexpr std::string_view kNodeParentInvalid
     = "scene.node.parent_invalid";
@@ -81,7 +93,8 @@ namespace issue_codes {
 struct SceneInstantiationIssue {
   //! The contract code, from `issue_codes` or the composition's codes.
   std::string code;
-  //! Scene whose record it is: the requested scene or one it instances.
+  //! Scene whose record it is: the requested scene or one it instances; nil
+  //! for a host's change.
   data::AssetKey scene;
   //! Node index within that scene, when the record belongs to a node.
   std::optional<uint32_t> node_index;
@@ -109,6 +122,44 @@ struct InstantiationResult {
   std::vector<scripting::SceneScriptSlotOutcome> scripts;
 };
 
+//! A property change a host makes, its value in the schema's units.
+struct PropertyValue {
+  data::schema::OverrideId override_id = data::schema::OverrideId::kInvalid;
+  //! The surface, for a surface property.
+  data::SurfaceId part_id;
+  data::schema::SchemaValue value;
+};
+
+//! A script parameter change a host makes whose value is a live node.
+struct NodeParameterValue {
+  data::ScriptSlotId slot_id;
+  std::string key;
+  //! A node of the instance's scene.
+  scene::SceneNode node;
+};
+
+//! A change a host makes of a node below an instance root.
+struct InstanceChange {
+  //! One node ID per nesting level below the root, shallowest first.
+  std::vector<data::NodeId> path;
+  //! A host names a node by `NodeParameterValue`: the node value of a
+  //! `data::ParameterChange` indexes a scene's nodes, which a host has none
+  //! of, so one that names a node is invalid.
+  std::variant<PropertyValue, data::ParameterChange, NodeParameterValue> change;
+};
+
+struct InstanceRequest {
+  observer_ptr<scene::Scene> target;
+  //! A live node of `target` that is not an instance root; it becomes the
+  //! instance root.
+  scene::SceneNode root;
+  //! The scene to instance; it and the scenes it instances are loaded here.
+  data::AssetKey source;
+  std::vector<InstanceChange> changes;
+  //! Attaches the scripts of the instanced scenes; null: no scripts.
+  observer_ptr<const scripting::SceneScriptAttachment> scripts;
+};
+
 //! Creates the runtime scene of a cooked scene asset in `request.target`.
 /*!
  Loads the scenes it instances, composes it (`data::ComposeScene`) and builds
@@ -133,5 +184,60 @@ struct InstantiationResult {
 */
 OXGN_SCNI_NDAPI auto Instantiate(SceneInstantiationRequest request,
   content::IAssetLoader& loader) -> co::Co<InstantiationResult>;
+
+//! Instances `request.source` under the existing node `request.root`.
+/*!
+ Builds the composed tree of the source with the host's changes
+ (`data::ComposeInstance`) by the builders `Instantiate` uses: the source's
+ root nodes become children of the root, which gets a
+ `SceneInstanceComponent` with the changes and no requester scene. Values are
+ encoded from the schema's units (`data::schema::EncodeChange`); a value that
+ does not encode (`scene.instance.change_invalid`) and a change that does not
+ resolve are issues and have no effect. A scene on the root's own instance path
+ is a cycle. The result's nodes are the source's nodes, by index. Scene
+ dependencies must be loaded, as for `Instantiate`; the materials a change names
+ must be too.
+*/
+OXGN_SCNI_NDAPI auto InstantiateUnder(InstanceRequest request,
+  content::IAssetLoader& loader) -> co::Co<InstantiationResult>;
+
+//! What applying a live change met.
+struct ChangeResult {
+  std::vector<SceneInstantiationIssue> issues;
+  //! The outcome of a script parameter applied again.
+  std::vector<scripting::SceneScriptSlotOutcome> scripts;
+};
+
+//! Sets a change of the instance `root` makes, replacing the one with its
+//! address, and applies the addressed node's value again.
+/*!
+ The node's value is recomposed (`data::ComposeNode`, `data::ComposeSlots`)
+ from its defining scene and the changes the live instance roots above it
+ hold, so a change an outer scene makes of the same property still wins. Only
+ the records of the property's component are applied again; a script
+ parameter is applied through `scripts`, when the scene's scripts were
+ attached. An address that does not resolve, or a value that does not
+ encode, returns an issue and changes nothing. Issues of applying the value
+ (a material that is not loaded) leave the change set.
+*/
+OXGN_SCNI_NDAPI auto SetChange(scene::SceneNode& root,
+  const InstanceChange& change, content::IAssetLoader& loader,
+  observer_ptr<const scripting::SceneScriptAttachment> scripts = nullptr)
+  -> ChangeResult;
+
+//! Removes the change of the instance `root` with `address` and applies the
+//! addressed node's value again: the next level's change, or the defining
+//! scene's value. An address that does not resolve, or that `root` holds no
+//! change for, returns an issue and changes nothing.
+OXGN_SCNI_NDAPI auto ClearChange(scene::SceneNode& root,
+  const data::ChangeAddress& address, content::IAssetLoader& loader,
+  observer_ptr<const scripting::SceneScriptAttachment> scripts = nullptr)
+  -> ChangeResult;
+
+//! Removes the instance `root` of `target`: destroys the hierarchies of the
+//! source's root nodes and the root's `SceneInstanceComponent`. The root and
+//! its owned children stay. False when `root` is not an instance root of
+//! `target`.
+OXGN_SCNI_API auto Detach(scene::Scene& target, scene::SceneNode& root) -> bool;
 
 } // namespace oxygen::instantiation
