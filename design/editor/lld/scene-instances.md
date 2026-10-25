@@ -893,8 +893,10 @@ implementation would resolve changes apart from the runtime.
 - A component records who made each change: the requester, the scene that
   instances the source, whose tables its values use and whose live nodes,
   shared by its instance roots, its node values name; or a host, whose values
-  name no table and whose node values name live nodes the host gave
-  (`NodeParameterValue`). Every change of an instance a host made is a host's.
+  name no scene's table: its node values name live nodes the host gave
+  (`NodeParameterValue`), and its LOD policies (`LodPolicyValue`) a policy
+  table the component keeps for the host, where a new value of one change
+  replaces the old. Every change of an instance a host made is a host's.
 - `instantiation::Detach(scene, root)` destroys the source's root nodes with
   `Scene::DestroyNodeHierarchies` (`Scene/Scene.h:326`) and removes the
   component. Owned children of the instance root stay. It takes the scene

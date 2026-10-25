@@ -15,6 +15,7 @@
 #include <vector>
 
 #include <Oxygen/Composition/Component.h>
+#include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Data/SceneComposition.h>
 #include <Oxygen/Data/SceneIds.h>
 #include <Oxygen/Scene/Detail/TransformComponent.h>
@@ -33,8 +34,9 @@ namespace oxygen::scene {
 
  A change is the instancing scene's, the requester, whose tables its values
  use and whose live nodes, by node index, its node values name; or a host's,
- whose values name no table and whose node values name the host nodes, by
- position. Every change of an instance a host made is a host's.
+ whose values name no table: its node values name the host nodes, and its
+ LOD policies the host policies, by position. Every change of an instance a
+ host made is a host's.
 */
 class SceneInstanceComponent final : public Component {
   OXYGEN_COMPONENT(SceneInstanceComponent)
@@ -48,13 +50,15 @@ public:
     std::shared_ptr<const std::vector<SceneNode>> requester_nodes,
     std::vector<data::SceneChange> changes,
     std::unordered_map<data::NodeId, NodeHandle> nodes,
-    std::vector<SceneNode> host_nodes = {})
+    std::vector<SceneNode> host_nodes = {},
+    std::vector<data::pak::geometry::LodPolicyRecord> host_lod_policies = {})
     : source_(std::move(source))
     , requester_(std::move(requester))
     , requester_nodes_(std::move(requester_nodes))
     , changes_(std::move(changes))
     , nodes_(std::move(nodes))
     , host_nodes_(std::move(host_nodes))
+    , host_lod_policies_(std::move(host_lod_policies))
   {
   }
 
@@ -96,6 +100,20 @@ public:
     host_nodes_ = std::move(nodes);
   }
 
+  //! The LOD policies a host's LOD policy changes name, by position.
+  [[nodiscard]] auto HostLodPolicies() const noexcept
+    -> std::span<const data::pak::geometry::LodPolicyRecord>
+  {
+    return host_lod_policies_;
+  }
+
+  //! Replaces the host LOD policies; positions a held change names must stay.
+  auto SetHostLodPolicies(
+    std::vector<data::pak::geometry::LodPolicyRecord> policies) -> void
+  {
+    host_lod_policies_ = std::move(policies);
+  }
+
   //! The changes below the root.
   [[nodiscard]] auto Changes() const noexcept
     -> std::span<const data::SceneChange>
@@ -107,7 +125,11 @@ public:
   [[nodiscard]] auto IsHostChange(const data::ChangeAddress& address) const
     -> bool
   {
-    return !requester_ || std::ranges::contains(by_host_, address);
+    // The C++20 editor interop reads this header: no `std::ranges::contains`.
+    // NOLINTBEGIN(*contains*)
+    return !requester_
+      || std::ranges::find(by_host_, address) != by_host_.end();
+    // NOLINTEND(*contains*)
   }
 
   //! Adds `change`, or replaces the change with its address; `by_host` says a
@@ -173,6 +195,7 @@ private:
   std::vector<data::ChangeAddress> by_host_;
   std::unordered_map<data::NodeId, NodeHandle> nodes_;
   std::vector<SceneNode> host_nodes_;
+  std::vector<data::pak::geometry::LodPolicyRecord> host_lod_policies_;
 };
 
 } // namespace oxygen::scene

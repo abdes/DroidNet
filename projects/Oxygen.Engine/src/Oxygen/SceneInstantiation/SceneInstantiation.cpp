@@ -32,6 +32,7 @@
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/InputMappingContextAsset.h>
+#include <Oxygen/Data/LodPolicyValidation.h>
 #include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Data/PakFormat_world.h>
@@ -286,6 +287,16 @@ namespace {
     return node.ReplaceLight(MakeSpotLight(record));
   }
 
+  //! What a host's changes name, by position: live nodes and LOD policies.
+  struct HostTables {
+    std::vector<scene::SceneNode> nodes;
+    std::vector<data::pak::geometry::LodPolicyRecord> lod_policies;
+  };
+
+  //! The LOD policies of the hosts that supply changes, by supplier.
+  using HostLodPolicies = std::unordered_map<data::ChangeSupplier,
+    std::vector<data::pak::geometry::LodPolicyRecord>>;
+
   //! Builds the composed tree of one scene and the scenes it instances.
   class Instantiator final {
   public:
@@ -315,13 +326,12 @@ namespace {
     //! instance under `root` with a host's `changes`.
     // The caller awaits at once and owns the referenced arguments.
     auto ComposeUnder(scene::SceneNode root, const data::AssetKey source,
-      std::vector<data::SceneChange> changes,
-      std::vector<scene::SceneNode> host_nodes,
+      std::vector<data::SceneChange> changes, HostTables host,
       std::vector<data::AssetKey> ancestors) -> co::Co<>
     {
       root_ = std::move(root);
       root_changes_ = std::move(changes);
-      host_nodes_ = std::move(host_nodes);
+      host_ = std::move(host);
       auto loaded = LoadedScenes {};
       // A cycle loads nothing: composing reports it.
       if (!std::ranges::contains(ancestors, source)) {
@@ -343,6 +353,13 @@ namespace {
     auto UseComposition(data::ComposedScene composed) -> void
     {
       composed_ = std::move(composed);
+    }
+
+    //! Uses the LOD policies of the hosts that supply changes to the
+    //! composition UseComposition() gave, by supplier.
+    auto UseHostLodPolicies(HostLodPolicies policies) -> void
+    {
+      live_host_policies_ = std::move(policies);
     }
 
     //! Builds the nodes of every occurrence, parents first, and makes each
@@ -412,7 +429,7 @@ namespace {
       }
       const auto attach = [this](const std::size_t occurrence) -> void {
         auto attached
-          = scripts_->Attach(composed_, occurrence, nodes_, host_nodes_);
+          = scripts_->Attach(composed_, occurrence, nodes_, host_.nodes);
         std::ranges::move(attached.slots, std::back_inserter(result_->scripts));
       };
       for (std::size_t index = 1; index < nodes_.size(); ++index) {
@@ -536,6 +553,21 @@ namespace {
       return supplier < composed_.occurrences.size()
         ? composed_.occurrences.at(supplier).scene.get()
         : nullptr;
+    }
+
+    //! The LOD policies of the host that supplied a value: the host an
+    //! instance is made under, or a host of a live change's composition.
+    [[nodiscard]] auto HostLodPoliciesOf(
+      const data::ChangeSupplier supplier) const
+      -> std::span<const data::pak::geometry::LodPolicyRecord>
+    {
+      if (supplier == data::kRequester) {
+        return host_.lod_policies;
+      }
+      const auto found = live_host_policies_.find(supplier);
+      return found != live_host_policies_.end()
+        ? std::span<const data::pak::geometry::LodPolicyRecord>(found->second)
+        : std::span<const data::pak::geometry::LodPolicyRecord> {};
     }
 
     auto ReportComposition() -> void
@@ -726,15 +758,16 @@ namespace {
         break;
       case OverrideId::kGeometryLodPolicy: {
         DCHECK_F(property->type == data::schema::ValueType::kLodPolicy);
-        // A host's change cannot hold a LOD policy (EncodeChange).
-        if (supplier == nullptr) {
-          applied = false;
-          break;
+        // A scene's change indexes its policy table, a host's the host's.
+        const auto policies = supplier != nullptr
+          ? supplier->GetComponents<data::pak::geometry::LodPolicyRecord>()
+          : HostLodPoliciesOf(entry.supplier);
+        const auto index = record.value.as_record_index.get();
+        applied = index < policies.size();
+        if (applied) {
+          renderable.SetLodPolicyOverride(
+            scene::MakeLodPolicy(policies[index]));
         }
-        const auto policies
-          = supplier->GetComponents<data::pak::geometry::LodPolicyRecord>();
-        renderable.SetLodPolicyOverride(
-          scene::MakeLodPolicy(policies[record.value.as_record_index.get()]));
         break;
       }
       default:
@@ -820,8 +853,8 @@ namespace {
       }
       if (!requester.has_value()) {
         root_impl.AddComponent<scene::SceneInstanceComponent>(occurrence.scene,
-          nullptr, nullptr, std::move(changes), std::move(created),
-          host_nodes_);
+          nullptr, nullptr, std::move(changes), std::move(created), host_.nodes,
+          host_.lod_policies);
         return;
       }
       root_impl.AddComponent<scene::SceneInstanceComponent>(occurrence.scene,
@@ -854,8 +887,10 @@ namespace {
     //! the host's changes.
     std::optional<scene::SceneNode> root_;
     std::vector<data::SceneChange> root_changes_;
-    //! The nodes the host's node values name, by position.
-    std::vector<scene::SceneNode> host_nodes_;
+    //! What the host's changes name, by position.
+    HostTables host_;
+    //! The LOD policies of the hosts of a live change's composition.
+    HostLodPolicies live_host_policies_;
     //! The created nodes of an occurrence, as its instance roots share them.
     std::vector<std::shared_ptr<const std::vector<scene::SceneNode>>>
       shared_nodes_;
@@ -1028,15 +1063,35 @@ namespace {
 
   //! The scene change a host's change encodes; none when its value is not a
   //! value of its property, or a parameter's node value names a node. A live
-  //! node a `NodeParameterValue` names is found in `host_nodes`, or added.
-  auto Encode(
-    const InstanceChange& change, std::vector<scene::SceneNode>& host_nodes)
+  //! node a `NodeParameterValue` names is found in `host.nodes`, or added; a
+  //! LOD policy goes to `lod_slot` of `host.lod_policies`, or is added.
+  auto Encode(const InstanceChange& change, HostTables& host,
+    const std::optional<std::uint32_t> lod_slot = std::nullopt)
     -> std::optional<data::SceneChange>
   {
+    auto& host_nodes = host.nodes;
+    auto& host_policies = host.lod_policies;
     return std::visit(
-      [&change, &host_nodes]<typename Change>(
+      [&change, &host_nodes, &host_policies, lod_slot]<typename Change>(
         const Change& value) -> std::optional<data::SceneChange> {
-        if constexpr (std::is_same_v<Change, NodeParameterValue>) {
+        if constexpr (std::is_same_v<Change, LodPolicyValue>) {
+          if (!data::IsValidLodPolicy(value.policy)) {
+            return std::nullopt;
+          }
+          auto position = static_cast<std::uint32_t>(host_policies.size());
+          if (lod_slot.has_value() && *lod_slot < host_policies.size()) {
+            position = *lod_slot;
+            host_policies.at(position) = value.policy;
+          } else {
+            host_policies.push_back(value.policy);
+          }
+          auto record = world::OverrideRecord {
+            .override_id = data::schema::OverrideId::kGeometryLodPolicy,
+          };
+          record.value.as_record_index
+            = world::OverrideRecordIndex { position };
+          return data::SceneChange { .path = change.path, .change = record };
+        } else if constexpr (std::is_same_v<Change, NodeParameterValue>) {
           if (!value.node.IsAlive()) {
             return std::nullopt;
           }
@@ -1079,6 +1134,32 @@ namespace {
         }
       },
       change.change);
+  }
+
+  //! The position in the host LOD policies of the host's LOD policy change
+  //! `component` holds at the address of `change`, which a new value reuses.
+  auto HostLodSlot(const scene::SceneInstanceComponent& component,
+    const InstanceChange& change) -> std::optional<std::uint32_t>
+  {
+    if (!std::holds_alternative<LodPolicyValue>(change.change)) {
+      return std::nullopt;
+    }
+    const auto address = data::ChangeAddress {
+      .path = change.path,
+      .target = data::PropertyAddress {
+        .override_id = data::schema::OverrideId::kGeometryLodPolicy,
+      },
+    };
+    if (!component.IsHostChange(address)) {
+      return std::nullopt;
+    }
+    for (const auto& held : component.Changes()) {
+      const auto* record = std::get_if<world::OverrideRecord>(&held.change);
+      if (record != nullptr && data::AddressOf(held) == address) {
+        return record->value.as_record_index.get();
+      }
+    }
+    return std::nullopt;
   }
 
   //! A node below a live instance root and the live instance roots that lead
@@ -1234,6 +1315,19 @@ namespace {
       return nodes;
     }
 
+    //! The host LOD policies each level holds, by the occurrence that
+    //! supplies that level's host changes in Compose().
+    [[nodiscard]] auto LodPoliciesByHost() const -> HostLodPolicies
+    {
+      auto policies = HostLodPolicies {};
+      for (std::size_t level = 0; level < levels_.size(); ++level) {
+        const auto held = levels_.at(level).component->HostLodPolicies();
+        policies.emplace(
+          HostOccurrence(level), std::vector(held.begin(), held.end()));
+      }
+      return policies;
+    }
+
   private:
     //! The occurrence that supplies the host's changes held at `level`.
     [[nodiscard]] auto HostOccurrence(const std::size_t level) const
@@ -1269,6 +1363,7 @@ namespace {
       = std::get_if<data::PropertyAddress>(&address.target)) {
       const auto node = data::ComposeNode(composed, occurrence, target.Index());
       instantiator.UseComposition(std::move(composed));
+      instantiator.UseHostLodPolicies(target.LodPoliciesByHost());
       instantiator.Reapply(occurrence, target.Node(), node, *property);
       return;
     }
@@ -1332,9 +1427,9 @@ auto InstantiateUnder(InstanceRequest request, content::IAssetLoader& loader)
     co_return result;
   }
   auto changes = std::vector<data::SceneChange> {};
-  auto host_nodes = std::vector<scene::SceneNode> {};
+  auto host = HostTables {};
   for (const auto& change : request.changes) {
-    if (auto encoded = Encode(change, host_nodes); encoded.has_value()) {
+    if (auto encoded = Encode(change, host); encoded.has_value()) {
       changes.push_back(std::move(*encoded));
       continue;
     }
@@ -1352,7 +1447,7 @@ auto InstantiateUnder(InstanceRequest request, content::IAssetLoader& loader)
     }
   }
   co_await instantiator.ComposeUnder(request.root, request.source,
-    std::move(changes), std::move(host_nodes), std::move(ancestors));
+    std::move(changes), std::move(host), std::move(ancestors));
   instantiator.Build();
   result.nodes = instantiator.RootNodes();
   try {
@@ -1383,9 +1478,12 @@ auto SetChange(scene::SceneNode& root, const InstanceChange& change,
       std::nullopt, "the node is not an instance root", change.path);
     return finish();
   }
-  auto host_nodes = std::vector<scene::SceneNode>(
-    component->HostNodes().begin(), component->HostNodes().end());
-  auto encoded = Encode(change, host_nodes);
+  auto host = HostTables {
+    .nodes = { component->HostNodes().begin(), component->HostNodes().end() },
+    .lod_policies = { component->HostLodPolicies().begin(),
+      component->HostLodPolicies().end(), },
+  };
+  auto encoded = Encode(change, host, HostLodSlot(*component, change));
   if (!encoded.has_value()) {
     instantiator.Issue(data::AssetKey {},
       data::to_string(data::CompositionIssueCode::kChangeInvalid), std::nullopt,
@@ -1409,7 +1507,8 @@ auto SetChange(scene::SceneNode& root, const InstanceChange& change,
   }
   // NOLINTBEGIN(bugprone-unchecked-optional-access) - applied implies found
   const auto address = data::AddressOf(*encoded);
-  component->SetHostNodes(std::move(host_nodes));
+  component->SetHostNodes(std::move(host.nodes));
+  component->SetHostLodPolicies(std::move(host.lod_policies));
   component->SetChange(std::move(*encoded), true);
   Reapply(*target, address, instantiator, scripts, result);
   // NOLINTEND(bugprone-unchecked-optional-access)

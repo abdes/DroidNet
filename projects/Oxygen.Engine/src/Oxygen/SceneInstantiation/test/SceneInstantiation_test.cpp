@@ -69,7 +69,9 @@
 #include <Oxygen/Scene/Light/PointLight.h>
 #include <Oxygen/Scene/Light/SpotLight.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Scene/SceneInstanceComponent.h>
 #include <Oxygen/Scene/SceneNode.h>
+#include <Oxygen/Scene/SceneNodeImpl.h>
 #include <Oxygen/Scene/Types/NodeHandle.h>
 #include <Oxygen/Scene/Types/RenderablePolicies.h>
 #include <Oxygen/SceneInstantiation/SceneInstantiation.h>
@@ -1402,6 +1404,82 @@ NOLINT_TEST_F(SceneInstantiationTest, SurfaceChangeSetsAndClearsLive)
   EXPECT_TRUE(hidden);
   EXPECT_TRUE(cleared.issues.empty());
   EXPECT_TRUE(found->GetRenderable().IsSubmeshVisible(first, submesh));
+  // NOLINTEND(bugprone-unchecked-optional-access)
+}
+
+//! A host's LOD policy applies when the instance is placed; a live change
+//! replaces it in place, and clearing it restores the geometry's policy.
+NOLINT_TEST_F(SceneInstantiationTest, HostLodPolicySetsAndClearsLive)
+{
+  const auto geometry = MakeGeometry(
+    Key("/test/Mesh.ogeo"), data::SurfaceId::FromStableIdentity("test/slot"));
+  Loader().AddGeometry(geometry);
+  const auto model_key = Key("/test/Prop.oscene");
+  auto model = SceneAssetBuilder {};
+  model.AddNode("Prop");
+  model.AddComponents(ComponentType::kRenderable,
+    std::vector {
+      world::RenderableRecord {
+        .node_index = 0U,
+        .geometry_key = geometry->GetAssetKey(),
+      },
+    });
+  const auto prop = model.Node(0U).node_id;
+  Loader().AddScene(model_key, model.Build(model_key));
+  const auto distance = [](const float threshold) -> LodPolicyValue {
+    auto policy = data::pak::geometry::LodPolicyRecord {
+      .type = data::pak::geometry::LodPolicyType::kDistance,
+      .boundary_count = 1U,
+    };
+    policy.thresholds[0] = threshold;
+    policy.hysteresis_ratio = kLodHysteresis;
+    return LodPolicyValue { .policy = policy };
+  };
+  const auto threshold = [](scene::SceneNode& node) -> float {
+    const auto policy = node.GetRenderable().GetLodPolicy();
+    const auto* resolved = policy.has_value()
+      ? std::get_if<scene::DistancePolicy>(&policy.value())
+      : nullptr;
+    return resolved != nullptr && !resolved->thresholds.empty()
+      ? resolved->thresholds.front()
+      : 0.0F;
+  };
+  auto host = Scene().CreateNode("Host");
+
+  const auto placed = Place(host, model_key,
+    { InstanceChange { .path = { prop }, .change = distance(kLodDistance) } });
+  auto found = host.GetInstance().Find(std::vector { prop });
+  ASSERT_TRUE(found.has_value());
+  // NOLINTBEGIN(bugprone-unchecked-optional-access) - asserted above
+  const auto placed_threshold = threshold(*found);
+  const auto set = SetChange(host,
+    InstanceChange {
+      .path = { prop },
+      .change = distance(2.0F * kLodDistance),
+    },
+    Loader());
+  const auto set_threshold = threshold(*found);
+  const auto held = host.GetImpl()
+                      ->get()
+                      .GetComponent<scene::SceneInstanceComponent>()
+                      .HostLodPolicies()
+                      .size();
+  const auto cleared = ClearChange(host,
+    data::ChangeAddress {
+      .path = { prop },
+      .target = data::PropertyAddress {
+        .override_id = data::schema::OverrideId::kGeometryLodPolicy,
+      },
+    },
+    Loader());
+
+  EXPECT_TRUE(placed.issues.empty());
+  EXPECT_FLOAT_EQ(placed_threshold, kLodDistance);
+  EXPECT_TRUE(set.issues.empty());
+  EXPECT_FLOAT_EQ(set_threshold, 2.0F * kLodDistance);
+  EXPECT_EQ(held, 1U) << "a new value of the same change reuses its policy";
+  EXPECT_TRUE(cleared.issues.empty());
+  EXPECT_FALSE(found->GetRenderable().HasLodPolicyOverride());
   // NOLINTEND(bugprone-unchecked-optional-access)
 }
 

@@ -16,6 +16,7 @@
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Data/SceneChangeValues.h>
 #include <Oxygen/Data/SceneComposition.h>
 #include <Oxygen/Data/SceneIds.h>
@@ -138,6 +139,13 @@ struct NodeParameterValue {
   scene::SceneNode node;
 };
 
+//! A LOD policy change a host makes. A scene's LOD policy change indexes the
+//! scene's policy table, which a host has none of; the instance root keeps
+//! the host's policies instead.
+struct LodPolicyValue {
+  data::pak::geometry::LodPolicyRecord policy;
+};
+
 //! A change a host makes of a node below an instance root.
 struct InstanceChange {
   //! One node ID per nesting level below the root, shallowest first.
@@ -145,7 +153,9 @@ struct InstanceChange {
   //! A host names a node by `NodeParameterValue`: the node value of a
   //! `data::ParameterChange` indexes a scene's nodes, which a host has none
   //! of, so one that names a node is invalid.
-  std::variant<PropertyValue, data::ParameterChange, NodeParameterValue> change;
+  std::variant<PropertyValue, LodPolicyValue, data::ParameterChange,
+    NodeParameterValue>
+    change;
 };
 
 struct InstanceRequest {
