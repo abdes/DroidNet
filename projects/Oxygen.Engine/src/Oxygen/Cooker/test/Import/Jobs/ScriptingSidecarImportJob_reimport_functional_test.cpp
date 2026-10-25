@@ -109,7 +109,9 @@ namespace {
 
   //! Each change of an instanced node's script parameter names its node by
   //! path. Reimporting the sidecar keeps the scene loadable whatever paths
-  //! it names, and keeps only the paths its changes still name.
+  //! it names, and keeps only the paths its changes still name. A change
+  //! naming no node of the instanced scene is a warning and left out
+  //! (scene instances 7.9).
   NOLINT_TEST_F(ScriptingSidecarImportJobReimportTest,
     InstancedNodeChangesKeepOnlyTheirNodePaths)
   {
@@ -118,14 +120,41 @@ namespace {
       = std::string_view { "00000000-0000-4000-8000-0000000000a1" };
     constexpr auto kSecond
       = std::string_view { "00000000-0000-4000-8000-0000000000b2" };
+    constexpr auto kStranger
+      = std::string_view { "00000000-0000-4000-8000-0000000000c3" };
     const ScopedTempDir temp;
     const auto cooked_root = temp.Path() / "instanced_node_changes";
     ASSERT_TRUE(CookDescriptor(cooked_root,
       {
         { "name", "Part" },
         { "nodes",
-          nlohmann::json::array({ { { "id", kFirst }, { "name", "part" } } }) },
+          nlohmann::json::array({
+            { { "id", kFirst }, { "name", "part" } },
+            { { "id", kSecond }, { "name", "other" }, { "parent", 0 } },
+          }) },
       })
+        .success);
+    // Both part nodes hold the slot the changes name.
+    const auto script_source = cooked_root / "input" / "logic.luau";
+    WriteText(script_source, SpeedScriptSource());
+    ASSERT_TRUE(Submit(MakeScriptRequest({
+                         .source_path = script_source,
+                         .cooked_root = cooked_root,
+                       }))
+        .success);
+    const auto part_sidecar = cooked_root / "input" / "part.sidescript.json";
+    const auto script = CanonicalScriptVirtualPath("logic");
+    WriteText(part_sidecar,
+      MakeSidecarPayload(std::vector {
+        SidecarBindingSpec { .node_index = 0, .script_virtual_path = script },
+        SidecarBindingSpec { .node_index = 1, .script_virtual_path = script },
+      }));
+    ASSERT_TRUE(
+      Submit(MakeSidecarRequest({
+               .source_path = part_sidecar,
+               .cooked_root = cooked_root,
+               .scene_virtual_path = CanonicalSceneVirtualPath("Part"),
+             }))
         .success);
     ASSERT_TRUE(CookDescriptor(cooked_root,
       {
@@ -148,6 +177,9 @@ namespace {
     const auto both_level = LoadLevel(cooked_root);
     const auto first_only = ApplyInstanceChanges(cooked_root, { kFirst });
     const auto first_level = LoadLevel(cooked_root);
+    const auto with_stranger
+      = ApplyInstanceChanges(cooked_root, { kFirst, kStranger });
+    const auto stranger_level = LoadLevel(cooked_root);
 
     // Assert
     ASSERT_TRUE(second_only.success);
@@ -170,6 +202,14 @@ namespace {
       ::testing::ElementsAre(first.value()));
     EXPECT_EQ(
       first_level.GetComponents<data::pak::world::NodePathRecord>().size(), 1U);
+    ASSERT_TRUE(with_stranger.success);
+    EXPECT_TRUE(HasDiagnosticCode(with_stranger.diagnostics,
+      "script.sidecar.instance_override_unresolved"));
+    EXPECT_EQ(
+      stranger_level
+        .GetComponents<data::pak::scripting::ScriptParamOverrideRecord>()
+        .size(),
+      1U);
   }
 
   NOLINT_TEST_F(ScriptingSidecarImportJobReimportTest,

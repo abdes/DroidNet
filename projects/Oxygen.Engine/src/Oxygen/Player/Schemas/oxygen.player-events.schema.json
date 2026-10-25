@@ -49,6 +49,10 @@
                 "description": "Why the scene failed.",
                 "type": "string"
               },
+              "code": {
+                "description": "The code of a refused scene, such as player.model_scene.",
+                "type": "string"
+              },
               "issues": {
                 "description": "Records of the scene that could not be applied.",
                 "type": "array",
@@ -128,8 +132,12 @@
     "issue": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["scene", "message"],
+      "required": ["code", "scene", "message"],
       "properties": {
+        "code": {
+          "description": "The issue's code, such as scene.instance.change_unresolved.",
+          "type": "string"
+        },
         "scene": {
           "description": "Asset key of the scene the record belongs to.",
           "type": "string"
@@ -137,6 +145,13 @@
         "node_index": {
           "type": "integer",
           "minimum": 0
+        },
+        "node_path": {
+          "description": "Node IDs below the instance root node_index names, shallowest first.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         },
         "message": {
           "type": "string"

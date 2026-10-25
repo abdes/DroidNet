@@ -38,11 +38,15 @@ enum class LifecycleState : std::uint8_t {
 
 [[nodiscard]] auto to_string(LifecycleState state) noexcept -> std::string_view;
 
-//! Data of a `lifecycle` event.
+//! The code of a `scene_failed` event for a model scene: a model is placed
+//! in an authored scene, never played on its own.
+inline constexpr std::string_view kModelSceneCode = "player.model_scene";
+
+//! Data of a `lifecycle` event; `code` names why a scene was refused.
 [[nodiscard]] auto LifecycleData(LifecycleState state,
   std::string_view scene = {}, std::string_view message = {},
-  std::span<const instantiation::SceneInstantiationIssue> issues = {})
-  -> nlohmann::json;
+  std::span<const instantiation::SceneInstantiationIssue> issues = {},
+  std::string_view code = {}) -> nlohmann::json;
 
 //! Data of a `diagnostic` event: the diagnostic itself.
 [[nodiscard]] auto DiagnosticData(const scripting::ScriptDiagnostic& diagnostic)

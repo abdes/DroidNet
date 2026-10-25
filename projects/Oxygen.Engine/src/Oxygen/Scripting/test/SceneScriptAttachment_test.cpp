@@ -22,6 +22,7 @@
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Data/SceneAsset.h>
+#include <Oxygen/Data/SceneComposition.h>
 #include <Oxygen/Data/ScriptAsset.h>
 #include <Oxygen/Data/test/Fixtures/SceneAssetBuilder.h>
 #include <Oxygen/Engine/Scripting/ScriptBytecodeBlob.h>
@@ -74,18 +75,12 @@ namespace {
       key, data::pak::scripting::ScriptAssetDesc {}, declarations);
   }
 
-  //! Serves the script assets and hydrated slots a test registers.
+  //! Serves the script assets a test registers.
   class TestLoader final : public content::testing::StubAssetLoader {
   public:
     auto AddScript(const AssetKey& key) -> void
     {
       scripts_.insert_or_assign(key, MakeScript(key));
-    }
-
-    auto SetSlots(const uint32_t node,
-      std::vector<content::IAssetLoader::HydratedScriptSlot> slots) -> void
-    {
-      slots_.insert_or_assign(node, std::move(slots));
     }
 
     auto GetScriptAsset(const AssetKey& key, const data::Asset& /*context*/)
@@ -95,19 +90,8 @@ namespace {
       return it != scripts_.end() ? it->second : nullptr;
     }
 
-    [[nodiscard]] auto GetHydratedScriptSlots(
-      const data::SceneAsset& /*scene_asset*/,
-      const data::pak::scripting::ScriptingComponentRecord& component) const
-      -> std::vector<HydratedScriptSlot> override
-    {
-      const auto it = slots_.find(component.node_index);
-      return it != slots_.end() ? it->second
-                                : std::vector<HydratedScriptSlot> {};
-    }
-
   private:
     std::unordered_map<AssetKey, std::shared_ptr<data::ScriptAsset>> scripts_;
-    std::unordered_map<uint32_t, std::vector<HydratedScriptSlot>> slots_;
   };
 
   //! Resolves registered scripts to bytecode or to Luau source.
@@ -157,7 +141,7 @@ namespace {
       const auto root = builder.AddNode("Root");
       builder.AddNode("Target", root);
       builder.AddNode("Other", root);
-      // The loader hydrates the slots a test sets; the cooked record only
+      // The composed slots are the ones a test sets; the cooked record only
       // has to be valid.
       builder.AddScripting(root,
         {
@@ -171,11 +155,26 @@ namespace {
       return builder.Build();
     }
 
-    auto Attach(const data::SceneAsset& asset) -> SceneScriptAttachmentResult
+    //! Sets the composed slots of the scene's root node.
+    auto SetSlots(std::vector<data::ComposedSlot> slots) -> void
     {
+      slots_ = std::move(slots);
+    }
+
+    //! Attaches `asset` composed alone, with the slots the test set.
+    auto Attach(std::shared_ptr<const data::SceneAsset> asset)
+      -> SceneScriptAttachmentResult
+    {
+      auto composed = data::ComposedScene {};
+      composed.occurrences.push_back({
+        .scene = std::move(asset),
+        .slots = slots_,
+      });
       const auto attachment = SceneScriptAttachment(
         loader_, resolver_, observer_ptr { &compiler_ });
-      return attachment.Attach(asset, nodes_);
+      // One occurrence: the nodes created for the scene.
+      const auto nodes = std::vector<std::vector<scene::SceneNode>> { nodes_ };
+      return attachment.Attach(composed, 0U, nodes);
     }
 
     auto RootSlot() -> const scene::ScriptingComponent::Slot&
@@ -194,19 +193,29 @@ namespace {
     std::shared_ptr<scene::Scene> scene_
       = std::make_shared<scene::Scene>("attach", kSceneCapacity);
     std::vector<scene::SceneNode> nodes_;
+    std::vector<data::ComposedSlot> slots_;
     TestLoader loader_;
     TestResolver resolver_;
     FakeScriptCompilationService compiler_;
   };
 
+  //! A slot of the root node whose parameters its own scene supplies.
   auto Slot(const AssetKey& script, data::ScriptParameters params = {})
-    -> content::IAssetLoader::HydratedScriptSlot
+    -> data::ComposedSlot
   {
-    return {
-      .script_asset_key = script,
+    auto slot = data::ComposedSlot {
+      .node_index = 0U,
+      .script = script,
       .execution_order = kExecutionOrder,
-      .params = std::move(params),
     };
+    for (auto& [key, value] : params) {
+      slot.parameters.push_back({
+        .key = std::move(key),
+        .value = std::move(value),
+        .supplier = 0U,
+      });
+    }
+    return slot;
   }
 
 } // namespace
@@ -217,10 +226,10 @@ NOLINT_TEST_F(SceneScriptAttachmentTest, BytecodeSlotIsReady)
   const auto script = Key("/test/Rotate.oscript");
   Loader().AddScript(script);
   Resolver().UseBytecode(script);
-  Loader().SetSlots(0U, { Slot(script) });
+  SetSlots({ Slot(script) });
   const auto asset = MakeScene();
 
-  const auto result = Attach(*asset);
+  const auto result = Attach(asset);
 
   ASSERT_EQ(result.slots.size(), 1U);
   EXPECT_EQ(result.slots.front().state, State::kReady);
@@ -235,10 +244,10 @@ NOLINT_TEST_F(SceneScriptAttachmentTest, SourceSlotCompiles)
   const auto script = Key("/test/Source.oscript");
   Loader().AddScript(script);
   Resolver().UseSource(script);
-  Loader().SetSlots(0U, { Slot(script) });
+  SetSlots({ Slot(script) });
   const auto asset = MakeScene();
 
-  const auto result = Attach(*asset);
+  const auto result = Attach(asset);
 
   ASSERT_EQ(result.slots.size(), 1U);
   EXPECT_EQ(result.slots.front().state, State::kCompiling);
@@ -249,10 +258,10 @@ NOLINT_TEST_F(SceneScriptAttachmentTest, SourceSlotCompiles)
 NOLINT_TEST_F(SceneScriptAttachmentTest, MissingScriptFailsItsSlot)
 {
   const auto missing = Key("/test/Missing.oscript");
-  Loader().SetSlots(0U, { Slot(missing) });
+  SetSlots({ Slot(missing) });
   const auto asset = MakeScene();
 
-  const auto result = Attach(*asset);
+  const auto result = Attach(asset);
 
   ASSERT_EQ(result.slots.size(), 1U);
   const auto& outcome = result.slots.front();
@@ -272,23 +281,22 @@ NOLINT_TEST_F(SceneScriptAttachmentTest, OverridesAreCheckedAgainstDeclarations)
   Resolver().UseBytecode(script);
   constexpr float kSpeed = 2.5F;
   constexpr uint32_t kMissingNode = 9U;
-  Loader().SetSlots(0U,
-    {
-      Slot(script,
-        {
-          Param("speed", kSpeed),
-          Param("helper",
-            ScriptAssetParam {
-              .key = helper,
-              .asset_type = data::AssetType::kScript,
-            }),
-          Param("unknown", 1.0F),
-          Param("target", ScriptNodeParam { .node_index = kMissingNode }),
-        }),
-    });
+  SetSlots({
+    Slot(script,
+      {
+        Param("speed", kSpeed),
+        Param("helper",
+          ScriptAssetParam {
+            .key = helper,
+            .asset_type = data::AssetType::kScript,
+          }),
+        Param("unknown", 1.0F),
+        Param("target", ScriptNodeParam { .node_index = kMissingNode }),
+      }),
+  });
   const auto asset = MakeScene();
 
-  const auto result = Attach(*asset);
+  const auto result = Attach(asset);
 
   ASSERT_EQ(result.slots.size(), 1U);
   const auto& outcome = result.slots.front();
@@ -314,10 +322,10 @@ NOLINT_TEST_F(SceneScriptAttachmentTest, OverrideOfAnotherTypeIsRejected)
   const auto script = Key("/test/Rotate.oscript");
   Loader().AddScript(script);
   Resolver().UseBytecode(script);
-  Loader().SetSlots(0U, { Slot(script, { Param("speed", int32_t { 3 }) }) });
+  SetSlots({ Slot(script, { Param("speed", int32_t { 3 }) }) });
   const auto asset = MakeScene();
 
-  const auto result = Attach(*asset);
+  const auto result = Attach(asset);
 
   ASSERT_EQ(result.slots.front().diagnostics.size(), 1U);
   EXPECT_EQ(result.slots.front().diagnostics.front().code,
@@ -333,11 +341,10 @@ NOLINT_TEST_F(SceneScriptAttachmentTest, NodeParameterBindsToItsNode)
   const auto script = Key("/test/Rotate.oscript");
   Loader().AddScript(script);
   Resolver().UseBytecode(script);
-  Loader().SetSlots(
-    0U, { Slot(script, { Param("target", ScriptNodeParam { 1U }) }) });
+  SetSlots({ Slot(script, { Param("target", ScriptNodeParam { 1U }) }) });
   const auto asset = MakeScene();
 
-  const auto result = Attach(*asset);
+  const auto result = Attach(asset);
 
   EXPECT_TRUE(result.slots.front().diagnostics.empty());
   EXPECT_EQ(RootSlot().TryGetBoundNode("target"), Nodes().at(1).GetHandle());

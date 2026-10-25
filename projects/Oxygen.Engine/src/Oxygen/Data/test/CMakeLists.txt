@@ -64,5 +64,6 @@ m_gtest_program(
   SceneSchema
   SOURCES
     "SceneChanges_test.cpp"
+    "SceneComposition_test.cpp"
     "SceneSchema_test.cpp"
 )

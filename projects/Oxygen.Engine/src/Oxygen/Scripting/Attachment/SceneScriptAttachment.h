@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <span>
@@ -23,7 +24,7 @@ class IAssetLoader;
 } // namespace oxygen::content
 
 namespace oxygen::data {
-class SceneAsset;
+struct ComposedScene;
 } // namespace oxygen::data
 
 namespace oxygen::scripting {
@@ -61,16 +62,17 @@ struct SceneScriptAttachmentResult {
 using LateScriptDiagnosticHandler
   = std::function<void(const ScriptDiagnostic&)>;
 
-//! Attaches the scripts a scene asset records to the nodes created for it.
+//! Attaches the scripts of a composed scene to the nodes created for it.
 /*!
- For each scripting component record, in record order, every slot is added
- to its node with its execution order. Overrides are checked against the
- script's declarations: an override of an undeclared parameter, of another
- type or asset kind, or naming a node the scene does not have is rejected
- with a diagnostic and the declared default stays. Node parameters are bound
- to the nodes created for their indexes. The executable comes from embedded
- bytecode at once, or from source through the compilation service. A slot
- whose script asset is missing, whose source cannot be resolved or whose
+ For each composed slot of one occurrence, in record order, the slot is added
+ to its node with its execution order. Its effective parameters are checked
+ against the script's declarations: one that is undeclared, of another type
+ or asset kind, or names a node its scene does not have is rejected with a
+ diagnostic and the declared default stays. A node parameter is bound to the
+ node created for it in the scene that supplied the value, found through
+ instance roots for a node an instance brings in. The executable comes from
+ embedded bytecode at once, or from source through the compilation service. A
+ slot whose script asset is missing, whose source cannot be resolved or whose
  compilation fails is left in CompilationFailed with its diagnostic; the
  rest of the scene runs.
 */
@@ -87,10 +89,11 @@ public:
   OXYGEN_MAKE_NON_COPYABLE(SceneScriptAttachment)
   OXYGEN_MAKE_NON_MOVABLE(SceneScriptAttachment)
 
-  //! Attach every scripting component of `asset`; `nodes[i]` is the node
-  //! created for scene node index i.
-  OXGN_SCRP_NDAPI auto Attach(const data::SceneAsset& asset,
-    std::span<const scene::SceneNode> nodes) const
+  //! Attach the slots of occurrence `occurrence` of `composed`;
+  //! `nodes[o][i]` is the node created for node index i of occurrence o.
+  OXGN_SCRP_NDAPI auto Attach(const data::ComposedScene& composed,
+    std::size_t occurrence,
+    std::span<const std::vector<scene::SceneNode>> nodes) const
     -> SceneScriptAttachmentResult;
 
 private:

@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -12,6 +13,7 @@
 #include <filesystem>
 #include <memory>
 #include <optional>
+#include <ranges>
 #include <span>
 #include <string>
 #include <string_view>
@@ -56,6 +58,8 @@
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/Data/SceneAsset.h>
+#include <Oxygen/Data/SceneComposition.h>
+#include <Oxygen/Data/SceneIds.h>
 #include <Oxygen/Data/Schema/Generated.SceneComponents.h>
 #include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/OxCo/Co.h>
@@ -87,8 +91,6 @@ namespace {
     std::vector<data::AssetKey> geometry_keys;
     std::vector<SceneEnvironmentSystem> environment_systems;
     data::AssetReferences environment_references;
-    //! Descriptor object path of each `build.instances` entry, for diagnostics.
-    std::vector<std::string> instance_paths;
   };
 
   class SceneDescriptorAdapter final {
@@ -465,33 +467,61 @@ namespace {
     };
   }
 
-  //! Walks the cooked scenes reachable through instances and fails when one
-  //! of them instances the scene being cooked. Scenes not yet cooked end
-  //! their branch: their own cook checks them.
-  auto CheckInstanceCycles(SceneDescriptorExecutionContext& context,
-    const data::AssetKey& scene_key, const LinkedSceneDescriptor& prepared,
-    IAsyncFileReader& file_reader) -> co::Co<bool>
+  //! The cooked geometry `key` names, parsed for its surfaces; null when it
+  //! is not cooked or cannot be parsed.
+  auto ReadGeometry(const SceneDescriptorExecutionContext& context,
+    const data::AssetKey& key, IAsyncFileReader& file_reader)
+    -> co::Co<std::shared_ptr<const data::GeometryAsset>>
+  {
+    auto bytes
+      = (co_await ReadListedDescriptor(context, key, file_reader)).bytes;
+    if (!bytes) {
+      co_return nullptr;
+    }
+    try {
+      serio::ReadOnlyMemoryStream stream(bytes.value());
+      serio::Reader reader(stream);
+      const LoaderContext loader_context {
+        .current_asset_key = key,
+        .desc_reader = &reader,
+        .work_offline = true,
+        .parse_only = true,
+      };
+      co_return loaders::LoadGeometryAsset(loader_context);
+    } catch (const std::exception&) {
+      co_return nullptr;
+    }
+  }
+
+  using SceneMap = std::unordered_map<data::AssetKey,
+    std::shared_ptr<const data::SceneAsset>>;
+
+  //! An instance of the scene being cooked: its node, cooked key and source.
+  struct CookedInstance final {
+    data::AssetKey key;
+    observer_ptr<internal::SceneSource::Instance> source;
+  };
+
+  //! Reads the cooked scenes reachable through `instances`. A scene not
+  //! cooked yet is absent: its own cook checks it.
+  auto ReadInstancedScenes(SceneDescriptorExecutionContext& context,
+    std::span<const CookedInstance> instances, IAsyncFileReader& file_reader)
+    -> co::Co<std::optional<SceneMap>>
   {
     struct Pending final {
       data::AssetKey key;
-      size_t origin = 0;
+      std::string_view object_path;
     };
     auto pending = std::vector<Pending> {};
-    for (size_t i = 0; i < prepared.build.instances.size(); ++i) {
+    for (const auto& instance : instances) {
       pending.push_back(
-        { .key = prepared.build.instances.at(i).scene_key, .origin = i });
+        { .key = instance.key, .object_path = instance.source->object_path });
     }
+    auto scenes = SceneMap {};
     auto visited = std::unordered_set<data::AssetKey> {};
     while (!pending.empty()) {
-      const auto [key, origin] = pending.back();
+      const auto [key, object_path] = pending.back();
       pending.pop_back();
-      const auto& object_path = prepared.instance_paths.at(origin);
-      if (key == scene_key) {
-        AddDiagnostic(context.session, context.request, ImportSeverity::kError,
-          "scene.descriptor.instance_cycle",
-          "The instanced scene instances this scene", object_path);
-        co_return false;
-      }
       if (!visited.insert(key).second) {
         continue;
       }
@@ -503,25 +533,204 @@ namespace {
         AddDiagnostic(context.session, context.request, ImportSeverity::kError,
           "scene.descriptor.instance_unreadable",
           "Cannot read an instanced scene: " + data::to_string(key),
-          object_path);
-        co_return false;
+          std::string(object_path));
+        co_return std::nullopt;
       }
       try {
-        const auto scene = data::SceneAsset(key, std::move(*listed.bytes));
+        auto scene = std::make_shared<const data::SceneAsset>(
+          key, std::move(*listed.bytes));
         for (const auto& nested :
-          scene.GetComponents<data::pak::world::SceneInstanceRecord>()) {
-          pending.push_back({ .key = nested.scene_key, .origin = origin });
+          scene->GetComponents<data::pak::world::SceneInstanceRecord>()) {
+          pending.push_back(
+            { .key = nested.scene_key, .object_path = object_path });
         }
+        scenes.emplace(key, std::move(scene));
       } catch (const std::exception& error) {
         AddDiagnostic(context.session, context.request, ImportSeverity::kError,
           "scene.descriptor.instance_invalid",
           "An instanced scene is invalid; re-cook it: "
             + std::string(error.what()),
-          object_path);
-        co_return false;
+          std::string(object_path));
+        co_return std::nullopt;
       }
     }
-    co_return true;
+    co_return scenes;
+  }
+
+  //! The change a descriptor instance makes, as composition reads it. Only
+  //! a value a node's records hold is needed: asset-sourced values are
+  //! linked later and resolve by node and part alone.
+  auto ToSceneChange(const internal::SceneSource::InstanceChange& source)
+    -> data::SceneChange
+  {
+    auto record = data::pak::world::OverrideRecord {
+      .override_id = source.change.property->id,
+      .part_id = source.change.part_id,
+      .layout_revision = source.change.layout_revision,
+    };
+    if (const auto* encoded
+      = std::get_if<data::pak::world::OverrideValue>(&source.change.value)) {
+      record.value = *encoded;
+    } else if (const auto* flag = std::get_if<bool>(&source.change.value)) {
+      record.value.as_bool = *flag ? 1U : 0U;
+    }
+    return { .path = source.path, .change = record };
+  }
+
+  //! The composed node `path` names below the instance root, if any.
+  auto FindComposedNode(const data::ComposedScene& composed,
+    std::span<const data::NodeId> path) -> const data::ComposedNode*
+  {
+    for (const auto& occurrence : composed.occurrences) {
+      for (const auto& node : occurrence.nodes) {
+        if (std::ranges::equal(node.path, path)) {
+          return &node;
+        }
+      }
+    }
+    return nullptr;
+  }
+
+  //! Composes each instance of the scene with the cooked instanced scenes.
+  /*!
+   A cycle, or a change whose value its record refuses, fails the cook. A
+   change that does not resolve, or names a surface its geometry does not
+   declare, is a warning and left out; so is a starting camera below an
+   instance root that names no camera. An instance of a scene not cooked yet
+   is not checked.
+  */
+  auto ComposeInstances(SceneDescriptorExecutionContext& context,
+    const data::AssetKey& scene_key, internal::SceneSource& source,
+    IAsyncFileReader& file_reader) -> co::Co<bool>
+  {
+    auto instances = std::vector<CookedInstance> {};
+    for (auto& instance : source.instances) {
+      const auto resolved = ResolveAssetReference(
+        context, instance.scene, data::AssetType::kScene, instance.object_path);
+      if (!resolved.has_value()) {
+        co_return false;
+      }
+      // Linking refuses a scene that instances itself.
+      if (resolved->first != scene_key) {
+        instances.push_back(
+          { .key = resolved->first, .source = observer_ptr { &instance } });
+      }
+    }
+    auto scenes = co_await ReadInstancedScenes(context, instances, file_reader);
+    if (!scenes.has_value()) {
+      co_return false;
+    }
+    const auto resolve =
+      [&scenes](
+        const data::AssetKey& key) -> std::shared_ptr<const data::SceneAsset> {
+      const auto found = scenes->find(key);
+      return found != scenes->end() ? found->second : nullptr;
+    };
+    auto geometries = std::unordered_map<data::AssetKey,
+      std::shared_ptr<const data::GeometryAsset>> {};
+    const auto ancestors = std::array { scene_key };
+    auto valid = true;
+    for (const auto& [key, instance] : instances) {
+      auto changes = std::vector<data::SceneChange> {};
+      changes.reserve(instance->changes.size());
+      for (const auto& change : instance->changes) {
+        changes.push_back(ToSceneChange(change));
+      }
+      const auto composed = data::ComposeInstance(
+        {
+          .source = key,
+          .instance_root = instance->node_index,
+          .changes = changes,
+          .ancestors = ancestors,
+        },
+        resolve);
+      for (const auto& issue : composed.issues) {
+        if (issue.code == data::CompositionIssueCode::kSceneMissing) {
+          continue;
+        }
+        const auto cycle = issue.code == data::CompositionIssueCode::kCycle;
+        AddDiagnostic(context.session, context.request, ImportSeverity::kError,
+          cycle ? "scene.descriptor.instance_cycle"
+                : "scene.descriptor.instance_invalid",
+          cycle ? "An instanced scene instances a scene on its own path"
+                : "An instanced scene cannot be composed: "
+              + std::string(data::to_string(issue.code)),
+          instance->object_path);
+        valid = false;
+      }
+      if (composed.occurrences.empty()) {
+        continue;
+      }
+
+      // Left out: changes that do not resolve, and surface changes whose
+      // geometry does not declare the surface.
+      auto kept = std::vector<internal::SceneSource::InstanceChange> {};
+      for (auto&& [index, change] : std::views::enumerate(instance->changes)) {
+        const auto& as_composed = changes.at(static_cast<size_t>(index));
+        const auto unresolved = std::ranges::any_of(composed.unresolved,
+          [&](const data::UnresolvedChange& entry) -> bool {
+            const auto* record = std::get_if<data::pak::world::OverrideRecord>(
+              &entry.change.change);
+            const auto& own
+              = std::get<data::pak::world::OverrideRecord>(as_composed.change);
+            return record != nullptr && entry.change.path == as_composed.path
+              && record->override_id == own.override_id
+              && record->part_id == own.part_id;
+          });
+        if (unresolved) {
+          AddDiagnostic(context.session, context.request,
+            ImportSeverity::kWarning,
+            "scene.descriptor.instance_override_unresolved",
+            "The change names no node of the instanced scene, or a property "
+            "that node does not have; it has no effect until it resolves",
+            change.change.object_path);
+          continue;
+        }
+        if (change.change.property->part_kind
+          == data::schema::PartKind::kSurface) {
+          const auto* node = FindComposedNode(composed, change.path);
+          if (node != nullptr && node->renderable.has_value()) {
+            const auto geometry_key = node->renderable->geometry_key;
+            if (!geometries.contains(geometry_key)) {
+              geometries.emplace(geometry_key,
+                co_await ReadGeometry(context, geometry_key, file_reader));
+            }
+            const auto& geometry = geometries.at(geometry_key);
+            if (geometry
+              && geometry->FindSurface(change.change.part_id) == nullptr) {
+              AddDiagnostic(context.session, context.request,
+                ImportSeverity::kWarning, "scene.descriptor.surface_invalid",
+                "The change targets a surface the geometry does not declare; "
+                "it has no effect until the geometry declares the surface "
+                "again",
+                change.change.object_path);
+              continue;
+            }
+          }
+        }
+        kept.push_back(std::move(change));
+      }
+      instance->changes = std::move(kept);
+
+      auto& camera = source.build.starting_camera;
+      if (camera.node_index == instance->node_index
+        && !source.starting_camera_path.empty()) {
+        const auto* node
+          = FindComposedNode(composed, source.starting_camera_path);
+        if (node == nullptr
+          || (!node->perspective_camera.has_value()
+            && !node->orthographic_camera.has_value())) {
+          AddDiagnostic(context.session, context.request,
+            ImportSeverity::kWarning, "scene.starting_camera.unresolved",
+            "The starting camera names no camera of the instanced scene; the "
+            "scene starts through its first camera",
+            "starting_camera");
+          camera = { .node_index = data::pak::world::kNoStartingCamera };
+          source.starting_camera_path.clear();
+        }
+      }
+    }
+    co_return valid;
   }
 
   //! Encodes the value of one override as its property's value type,
@@ -623,7 +832,6 @@ namespace {
       .geometry_keys = {},
       .environment_systems = {},
       .environment_references = {},
-      .instance_paths = {},
     };
     // The job placed the scene at its identity before linking it.
     const auto& scene_virtual_path = context.request.asset_virtual_path;
@@ -679,7 +887,6 @@ namespace {
         .node_index = instance.node_index,
         .scene_key = resolved->first,
       });
-      prepared.instance_paths.push_back(std::move(instance.object_path));
     }
     auto starting_contexts = std::unordered_set<data::AssetKey> {};
     for (auto& starting : source.starting_input_contexts) {
@@ -880,6 +1087,13 @@ auto SceneDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
       textures.sky_sphere_cubemap)) {
     co_return co_await FinalizeWithTelemetry(session);
   }
+  if (!co_await ComposeInstances(context,
+        data::AssetKey::FromVirtualPath(placement->virtual_path), *source,
+        *CookedReader())) {
+    ReportPhaseProgress(
+      ImportPhase::kFailed, 1.0F, "Scene descriptor instances do not compose");
+    co_return co_await FinalizeWithTelemetry(session);
+  }
   auto prepared_opt
     = LinkSceneDescriptor(context, std::move(*source), textures);
   if (!prepared_opt.has_value()) {
@@ -894,13 +1108,6 @@ auto SceneDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
   }
 
   auto& prepared = *prepared_opt;
-  if (!co_await CheckInstanceCycles(context,
-        data::AssetKey::FromVirtualPath(placement->virtual_path), prepared,
-        *CookedReader())) {
-    ReportPhaseProgress(
-      ImportPhase::kFailed, 1.0F, "Scene descriptor instances a cycle");
-    co_return co_await FinalizeWithTelemetry(session);
-  }
   auto request_for_pipeline = Request();
   request_for_pipeline.source_path = std::filesystem::path(prepared.scene_name);
   auto& pipeline = CreatePipeline<ScenePipeline>(*ThreadPool(),

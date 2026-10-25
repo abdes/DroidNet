@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -34,6 +35,8 @@
 #include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/Data/SceneAsset.h>
+#include <Oxygen/Data/SceneComposition.h>
+#include <Oxygen/Data/SceneIds.h>
 #include <Oxygen/Data/SceneRecordDefaults.h>
 #include <Oxygen/Data/Schema/Generated.SceneComponents.h>
 #include <Oxygen/Data/SurfaceId.h>
@@ -221,7 +224,8 @@ namespace {
 
   class SceneInstantiationTest : public ::testing::Test {
   protected:
-    auto Run(std::shared_ptr<const data::SceneAsset> asset) -> SceneInstance
+    auto Run(std::shared_ptr<const data::SceneAsset> asset)
+      -> InstantiationResult
     {
       co::testing::TestEventLoop loop;
       return co::Run(loop,
@@ -264,13 +268,56 @@ namespace {
     engine::InputSystem input_ { input_channel_.ForRead() };
   };
 
-  auto HasIssue(const SceneInstance& instance, const std::string_view text)
-    -> bool
+  auto FindIssue(const InstantiationResult& instance,
+    const std::string_view code) -> const SceneInstantiationIssue*
   {
-    return std::ranges::any_of(
-      instance.issues, [text](const SceneInstantiationIssue& issue) -> bool {
-        return issue.message.contains(text);
+    const auto found = std::ranges::find(
+      instance.issues, code, &SceneInstantiationIssue::code);
+    return found != instance.issues.end() ? &*found : nullptr;
+  }
+
+  auto HasIssue(
+    const InstantiationResult& instance, const std::string_view code) -> bool
+  {
+    return FindIssue(instance, code) != nullptr;
+  }
+
+  //! Adds the node path tables of `paths` to `builder`.
+  auto AddPaths(SceneAssetBuilder& builder,
+    const std::vector<std::vector<data::NodeId>>& paths) -> void
+  {
+    auto records = std::vector<world::NodePathRecord> {};
+    auto elements = std::vector<world::NodePathElement> {};
+    for (const auto& path : paths) {
+      records.push_back({
+        .first = static_cast<uint32_t>(elements.size()),
+        .count = static_cast<uint32_t>(path.size()),
       });
+      for (const auto& id : path) {
+        elements.push_back({ .node_id = id });
+      }
+    }
+    builder.AddComponents(ComponentType::kNodePath, records);
+    builder.AddComponents(ComponentType::kNodePathElement, elements);
+  }
+
+  //! A change of a float property below the instance root `root`.
+  auto FloatChange(const uint32_t root, const uint32_t path,
+    const data::schema::OverrideId id, const float value)
+    -> world::OverrideRecord
+  {
+    auto record = world::OverrideRecord {
+      .target = { .node_index = root, .node_path = path },
+      .override_id = id,
+    };
+    record.value.as_float = value;
+    return record;
+  }
+
+  auto LocalX(scene::SceneNode& node) -> float
+  {
+    const auto position = node.GetTransform().GetLocalPosition();
+    return position.has_value() ? position->x : 0.0F;
   }
 
 } // namespace
@@ -335,7 +382,7 @@ NOLINT_TEST_F(SceneInstantiationTest, FirstCameraIsUsedWhenNoneIsAuthored)
   ASSERT_TRUE(active.has_value());
   // NOLINTNEXTLINE(bugprone-unchecked-optional-access) - asserted above
   EXPECT_EQ(active.value().GetName(), "Eye");
-  EXPECT_TRUE(HasIssue(instance, "no starting camera is authored"));
+  EXPECT_TRUE(HasIssue(instance, issue_codes::kStartingCameraMissing));
 }
 
 //! An instanced scene's nodes are created under the instance node; a missing
@@ -373,7 +420,8 @@ NOLINT_TEST_F(SceneInstantiationTest, InstancedScenesLoadUnderTheirNodes)
   ASSERT_TRUE(wheel.has_value());
   // NOLINTNEXTLINE(bugprone-unchecked-optional-access) - asserted above
   EXPECT_EQ(wheel.value().GetName(), "Wheel");
-  EXPECT_TRUE(HasIssue(instance, "is not available"));
+  EXPECT_TRUE(HasIssue(
+    instance, data::to_string(data::CompositionIssueCode::kSceneMissing)));
 }
 
 namespace {
@@ -446,7 +494,7 @@ NOLINT_TEST_F(SceneInstantiationTest, AppliesSurfaceAndLodPolicyOverrides)
   const auto instance = Run(builder.Build());
 
   // The scene has no camera, which is an issue of its own.
-  EXPECT_FALSE(HasIssue(instance, "override"));
+  EXPECT_FALSE(HasIssue(instance, issue_codes::kOverrideNotApplied));
   const auto first = data::LodIndex { 0U };
   const auto submesh = data::SubmeshIndex { 0U };
   const auto hidden_renderable = instance.nodes.at(hidden).GetRenderable();
@@ -661,7 +709,7 @@ NOLINT_TEST_F(SceneInstantiationTest, StartingInputContextsStart)
 
   const auto instance = Run(builder.Build());
 
-  EXPECT_TRUE(HasIssue(instance, "is not available"));
+  EXPECT_TRUE(HasIssue(instance, issue_codes::kInputContextInvalid));
   const auto gameplay_context = Input().GetMappingContextByKey(gameplay);
   const auto menu_context = Input().GetMappingContextByKey(menu);
   ASSERT_NE(gameplay_context, nullptr);
@@ -704,7 +752,7 @@ NOLINT_TEST_F(SceneInstantiationTest, MissingGeometryIsAnIssue)
   ASSERT_EQ(instance.nodes.size(), 1U);
   ASSERT_FALSE(instance.issues.empty());
   EXPECT_EQ(instance.issues.front().node_index, 0U);
-  EXPECT_TRUE(HasIssue(instance, "geometry"));
+  EXPECT_TRUE(HasIssue(instance, issue_codes::kGeometryMissing));
 }
 
 //! A record the scene cannot apply is an issue on its node and the rest of
@@ -735,12 +783,242 @@ NOLINT_TEST_F(SceneInstantiationTest, StaleMaterialOverrideIsAnIssue)
 
   ASSERT_EQ(instance.nodes.size(), 1U);
   EXPECT_EQ(instance.nodes.at(0).GetRenderable().GetGeometry(), geometry);
-  const auto stale = std::ranges::find_if(
-    instance.issues, [](const SceneInstantiationIssue& issue) -> bool {
-      return issue.message.contains("/material");
-    });
-  ASSERT_NE(stale, instance.issues.end());
+  const auto* stale = FindIssue(instance, issue_codes::kOverrideNotApplied);
+  ASSERT_NE(stale, nullptr);
   EXPECT_EQ(stale->node_index, 0U);
+}
+
+namespace {
+  constexpr float kModelX = 1.0F;
+  constexpr float kChangedX = 2.0F;
+  constexpr float kOuterX = 3.0F;
+  constexpr uint32_t kWheel = 1U;
+
+  //! A model `Body` with a child `Wheel` at x = 1.
+  auto WheelModel() -> SceneAssetBuilder
+  {
+    auto model = SceneAssetBuilder {};
+    model.AddNode("Body");
+    model.AddNode("Wheel", 0U);
+    model.Node(kWheel).translation[0] = kModelX;
+    model.SetFlags(world::SceneAssetFlags::kModelScene);
+    return model;
+  }
+} // namespace
+
+//! A scene that places a model twice builds both instances; a change applies
+//! to its own instance only, and Find returns each instanced node.
+NOLINT_TEST_F(SceneInstantiationTest, PlacesAModelTwice)
+{
+  const auto model_key = Key("/test/Wheel.oscene");
+  auto model = WheelModel();
+  const auto wheel = model.Node(kWheel).node_id;
+  Loader().AddScene(model_key, model.Build(model_key));
+
+  auto builder = SceneAssetBuilder {};
+  builder.AddNode("Root");
+  const auto left = builder.AddNode("Left", 0U);
+  const auto right = builder.AddNode("Right", 0U);
+  builder.AddComponents(ComponentType::kSceneInstance,
+    std::vector {
+      world::SceneInstanceRecord { .node_index = left, .scene_key = model_key },
+      world::SceneInstanceRecord {
+        .node_index = right, .scene_key = model_key },
+    });
+  AddPaths(builder, { { wheel } });
+  builder.AddComponents(ComponentType::kOverride,
+    std::vector {
+      FloatChange(
+        right, 0U, data::schema::OverrideId::kTransformPositionX, kChangedX),
+    });
+
+  const auto instance = Run(builder.Build());
+
+  EXPECT_FALSE(HasIssue(instance, issue_codes::kChangeUnresolved));
+  auto left_root = instance.nodes.at(left);
+  auto right_root = instance.nodes.at(right);
+  ASSERT_TRUE(left_root.GetInstance().IsInstanceRoot());
+  ASSERT_TRUE(right_root.GetInstance().IsInstanceRoot());
+  EXPECT_TRUE(left_root.GetInstance().Changes().empty());
+  EXPECT_EQ(right_root.GetInstance().Changes().size(), 1U);
+  EXPECT_EQ(right_root.GetInstance().Source()->GetAssetKey(), model_key);
+  const auto path = std::vector { wheel };
+  auto left_wheel = left_root.GetInstance().Find(path);
+  auto right_wheel = right_root.GetInstance().Find(path);
+  ASSERT_TRUE(left_wheel.has_value());
+  ASSERT_TRUE(right_wheel.has_value());
+  // NOLINTBEGIN(bugprone-unchecked-optional-access) - asserted above
+  EXPECT_EQ(left_wheel->GetName(), "Wheel");
+  EXPECT_NE(left_wheel->GetHandle(), right_wheel->GetHandle());
+  EXPECT_FLOAT_EQ(LocalX(*left_wheel), kModelX);
+  EXPECT_FLOAT_EQ(LocalX(*right_wheel), kChangedX);
+  // NOLINTEND(bugprone-unchecked-optional-access)
+}
+
+//! Nesting two levels deep builds the composed tree: the outer scene's
+//! change of a node two levels down wins over the nested scene's, and Find
+//! follows the path one instance root per level.
+NOLINT_TEST_F(SceneInstantiationTest, BuildsTwoNestingLevels)
+{
+  const auto model_key = Key("/test/Wheel.oscene");
+  auto model = WheelModel();
+  const auto wheel = model.Node(kWheel).node_id;
+  Loader().AddScene(model_key, model.Build(model_key));
+
+  const auto car_key = Key("/test/Car.oscene");
+  auto car = SceneAssetBuilder {};
+  car.AddNode("CarRoot");
+  const auto holder = car.AddNode("Holder", 0U);
+  const auto holder_id = car.Node(holder).node_id;
+  car.AddComponents(ComponentType::kSceneInstance,
+    std::vector {
+      world::SceneInstanceRecord {
+        .node_index = holder, .scene_key = model_key },
+    });
+  AddPaths(car, { { wheel } });
+  car.AddComponents(ComponentType::kOverride,
+    std::vector {
+      FloatChange(
+        holder, 0U, data::schema::OverrideId::kTransformPositionX, kChangedX),
+    });
+  Loader().AddScene(car_key, car.Build(car_key));
+
+  auto street = SceneAssetBuilder {};
+  street.AddNode("Street");
+  const auto parked = street.AddNode("Parked", 0U);
+  street.AddComponents(ComponentType::kSceneInstance,
+    std::vector {
+      world::SceneInstanceRecord { .node_index = parked, .scene_key = car_key },
+    });
+  AddPaths(street, { { holder_id, wheel } });
+  street.AddComponents(ComponentType::kOverride,
+    std::vector {
+      FloatChange(
+        parked, 0U, data::schema::OverrideId::kTransformPositionX, kOuterX),
+    });
+
+  const auto instance = Run(street.Build());
+
+  auto root = instance.nodes.at(parked);
+  const auto path = std::vector { holder_id, wheel };
+  auto found = root.GetInstance().Find(path);
+  ASSERT_TRUE(found.has_value());
+  // NOLINTNEXTLINE(bugprone-unchecked-optional-access) - asserted above
+  EXPECT_FLOAT_EQ(LocalX(*found), kOuterX);
+  auto nested = root.GetInstance().Find(std::span(path).first(1U));
+  ASSERT_TRUE(nested.has_value());
+  // NOLINTNEXTLINE(bugprone-unchecked-optional-access) - asserted above
+  EXPECT_EQ(nested->GetInstance().Source()->GetAssetKey(), model_key);
+}
+
+//! A change that does not resolve is an issue naming its path; the rest of
+//! the scene builds.
+NOLINT_TEST_F(SceneInstantiationTest, UnresolvedChangeIsAnIssue)
+{
+  const auto model_key = Key("/test/Wheel.oscene");
+  auto model = WheelModel();
+  const auto wheel = model.Node(kWheel).node_id;
+  Loader().AddScene(model_key, model.Build(model_key));
+  const auto stranger = data::NodeId::FromStableIdentity("/test/Stranger");
+
+  auto builder = SceneAssetBuilder {};
+  builder.AddNode("Root");
+  const auto holder = builder.AddNode("Holder", 0U);
+  builder.AddComponents(ComponentType::kSceneInstance,
+    std::vector {
+      world::SceneInstanceRecord {
+        .node_index = holder, .scene_key = model_key },
+    });
+  AddPaths(builder, { { stranger } });
+  builder.AddComponents(ComponentType::kOverride,
+    std::vector {
+      FloatChange(
+        holder, 0U, data::schema::OverrideId::kTransformPositionX, kChangedX),
+    });
+
+  const auto instance = Run(builder.Build());
+
+  const auto* issue = FindIssue(instance, issue_codes::kChangeUnresolved);
+  ASSERT_NE(issue, nullptr);
+  EXPECT_EQ(issue->node_index, holder);
+  EXPECT_EQ(issue->node_path, std::vector { stranger });
+  auto root = instance.nodes.at(holder);
+  auto found = root.GetInstance().Find(std::vector { wheel });
+  ASSERT_TRUE(found.has_value());
+  // NOLINTNEXTLINE(bugprone-unchecked-optional-access) - asserted above
+  EXPECT_FLOAT_EQ(LocalX(*found), kModelX);
+}
+
+namespace {
+  //! A camera rig whose node 1, `RigEye`, has a camera when `with_camera`.
+  auto CameraRig(const bool with_camera) -> SceneAssetBuilder
+  {
+    auto rig = SceneAssetBuilder {};
+    rig.AddNode("Rig");
+    rig.AddNode("RigEye", 0U);
+    if (with_camera) {
+      rig.AddComponents(
+        ComponentType::kPerspectiveCamera, std::vector { Camera(1U) });
+    }
+    return rig;
+  }
+
+  //! A scene with its own camera first and a placed rig whose eye is the
+  //! starting camera.
+  auto StartsThroughTheRig(const AssetKey& rig_key, const data::NodeId& eye)
+    -> SceneAssetBuilder
+  {
+    auto builder = SceneAssetBuilder {};
+    builder.AddNode("Eye");
+    const auto holder = builder.AddNode("RigHolder");
+    builder.AddComponents(
+      ComponentType::kPerspectiveCamera, std::vector { Camera(0U) });
+    builder.AddComponents(ComponentType::kSceneInstance,
+      std::vector {
+        world::SceneInstanceRecord {
+          .node_index = holder, .scene_key = rig_key },
+      });
+    AddPaths(builder, { { eye } });
+    builder.SetStartingCamera(
+      world::NodeRef { .node_index = holder, .node_path = 0U });
+    return builder;
+  }
+} // namespace
+
+//! A scene whose starting camera is a camera of a placed rig starts through
+//! it.
+NOLINT_TEST_F(SceneInstantiationTest, StartsThroughAnInstancedCamera)
+{
+  const auto rig_key = Key("/test/CameraRig.oscene");
+  auto rig = CameraRig(true);
+  Loader().AddScene(rig_key, rig.Build(rig_key));
+
+  const auto instance
+    = Run(StartsThroughTheRig(rig_key, rig.Node(1U).node_id).Build());
+
+  EXPECT_FALSE(HasIssue(instance, issue_codes::kStartingCameraUnresolved));
+  const auto active = Scene().ActiveCamera();
+  ASSERT_TRUE(active.has_value());
+  // NOLINTNEXTLINE(bugprone-unchecked-optional-access) - asserted above
+  EXPECT_EQ(active->GetName(), "RigEye");
+}
+
+//! With the camera gone from the rig, the scene starts through its first
+//! camera, with an issue.
+NOLINT_TEST_F(SceneInstantiationTest, MissingInstancedCameraFallsBack)
+{
+  const auto rig_key = Key("/test/CameraRig.oscene");
+  auto rig = CameraRig(false);
+  Loader().AddScene(rig_key, rig.Build(rig_key));
+
+  const auto instance
+    = Run(StartsThroughTheRig(rig_key, rig.Node(1U).node_id).Build());
+
+  EXPECT_TRUE(HasIssue(instance, issue_codes::kStartingCameraUnresolved));
+  const auto active = Scene().ActiveCamera();
+  ASSERT_TRUE(active.has_value());
+  // NOLINTNEXTLINE(bugprone-unchecked-optional-access) - asserted above
+  EXPECT_EQ(active->GetName(), "Eye");
 }
 
 } // namespace oxygen::instantiation::test

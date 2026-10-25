@@ -274,7 +274,7 @@ namespace {
           "cameras"));
       return outcome;
     }
-    // An instanced starting camera is checked when the scene is composed.
+    // The job checks an instanced starting camera against its instance.
     const auto& camera = build.starting_camera;
     const auto instanced_camera
       = camera.node_path != data::pak::world::kNoNodePath;

@@ -123,8 +123,8 @@ private:
   //! Replies to every Play waiting for the session's load outcome.
   auto ResolvePlay(const commands::CommandResult& result) -> void;
   auto Publish(LifecycleState state, std::string_view message = {},
-    std::span<const instantiation::SceneInstantiationIssue> issues = {})
-    -> void;
+    std::span<const instantiation::SceneInstantiationIssue> issues = {},
+    std::string_view code = {}) -> void;
   auto UpdateGpuWorkLease() -> void;
   auto StartRemount() -> void;
   auto FinishRemount() -> void;

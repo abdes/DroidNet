@@ -13,6 +13,7 @@
 #include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Data/StableId.h>
 #include <Oxygen/Player/PlayerProtocol.h>
 #include <Oxygen/SceneInstantiation/SceneInstantiation.h>
 #include <Oxygen/Scripting/Analysis/DiagnosticJson.h>
@@ -81,7 +82,8 @@ auto to_string(const LifecycleState state) noexcept -> std::string_view
 
 auto LifecycleData(const LifecycleState state, const std::string_view scene,
   const std::string_view message,
-  const std::span<const instantiation::SceneInstantiationIssue> issues) -> json
+  const std::span<const instantiation::SceneInstantiationIssue> issues,
+  const std::string_view code) -> json
 {
   auto event = json {
     { "state", to_string(state) },
@@ -92,15 +94,26 @@ auto LifecycleData(const LifecycleState state, const std::string_view scene,
   if (!message.empty()) {
     event["message"] = message;
   }
+  if (!code.empty()) {
+    event["code"] = code;
+  }
   if (!issues.empty()) {
     auto list = json::array();
     for (const auto& issue : issues) {
       auto entry = json {
+        { "code", issue.code },
         { "scene", data::to_string(issue.scene) },
         { "message", issue.message },
       };
       if (issue.node_index.has_value()) {
         entry["node_index"] = *issue.node_index;
+      }
+      if (!issue.node_path.empty()) {
+        auto path = json::array();
+        for (const auto& id : issue.node_path) {
+          path.push_back(data::to_string(id));
+        }
+        entry["node_path"] = std::move(path);
       }
       list.push_back(std::move(entry));
     }

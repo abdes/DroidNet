@@ -9,16 +9,19 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <type_traits>
 #include <utility>
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Resource.h>
 #include <Oxygen/Composition/Object.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Resources.h>
 #include <Oxygen/Core/SafeCall.h>
 #include <Oxygen/Data/GeometryIndices.h>
+#include <Oxygen/Data/SceneIds.h>
 #include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Scene/Light/LightValidation.h>
 #include <Oxygen/Scene/SceneNodeImpl.h>
@@ -29,6 +32,8 @@
 #include <Oxygen/Scene/api_export.h>
 
 namespace oxygen::data {
+class SceneAsset;
+struct SceneChange;
 class Mesh;
 class GeometryAsset;
 class MaterialAsset; // forward declaration for material override APIs
@@ -95,6 +100,9 @@ public:
   //! Forward declaration for Scripting interface.
   //! @see SceneNode::Scripting for full documentation.
   class Scripting;
+  //! Forward declaration for Instance interface.
+  //! @see SceneNode::Instance for full documentation.
+  class Instance;
 
   // We make the Scene a friend, so it can invalidate a SceneNode when its
   // data is erased.
@@ -178,6 +186,16 @@ public:
   //! A Scripting refers to its node, so it cannot come from a temporary.
   auto GetScripting() && -> Scripting = delete;
   auto GetScripting() const&& -> Scripting = delete;
+
+  //=== Instance Access ===---------------------------------------------------//
+
+  //! Gets an Instance interface: the scene this node instances, if it is an
+  //! instance root.
+  OXGN_SCN_NDAPI auto GetInstance() & noexcept -> Instance;
+  OXGN_SCN_NDAPI auto GetInstance() const& noexcept -> Instance;
+  //! An Instance refers to its node, so it cannot come from a temporary.
+  auto GetInstance() && -> Instance = delete;
+  auto GetInstance() const&& -> Instance = delete;
 
   //=== Camera Attachment ===-------------------------------------------------//
 
@@ -908,6 +926,38 @@ private:
   // Validators for SafeCall operations
   class RequiresScriptingValidator;
   [[nodiscard]] auto RequiresScripting() const -> RequiresScriptingValidator;
+};
+
+//==============================================================================
+// SceneNode::Instance
+//==============================================================================
+
+//! The scene an instance root instances (its `SceneInstanceComponent`).
+class SceneNode::Instance {
+public:
+  explicit Instance(SceneNode& node) noexcept
+    : node_(&node)
+  {
+  }
+
+  //! True when the node is an instance root.
+  OXGN_SCN_NDAPI auto IsInstanceRoot() const noexcept -> bool;
+
+  //! The instanced scene; null when the node is not an instance root.
+  OXGN_SCN_NDAPI auto Source() const noexcept
+    -> std::shared_ptr<const data::SceneAsset>;
+
+  //! The instancing scene's changes below the root.
+  OXGN_SCN_NDAPI auto Changes() const noexcept
+    -> std::span<const data::SceneChange>;
+
+  //! The node `path` names below the root: one node ID per nesting level,
+  //! shallowest first, each level found through its instance root.
+  OXGN_SCN_NDAPI auto Find(std::span<const data::NodeId> path) const
+    -> std::optional<SceneNode>;
+
+private:
+  observer_ptr<SceneNode> node_;
 };
 
 } // namespace oxygen::scene

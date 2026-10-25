@@ -12,6 +12,7 @@
 #include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Data/SceneIds.h>
 #include <Oxygen/Player/PlayerProtocol.h>
 #include <Oxygen/Player/SchemaCheck.h>
 #include <Oxygen/SceneInstantiation/SceneInstantiation.h>
@@ -43,6 +44,8 @@ auto CheckEvent(const std::string& topic, const json& data) -> json
 
 NOLINT_TEST(PlayerProtocolTest, LifecycleEventsMatchTheSchema)
 {
+  namespace issue_codes = oxygen::instantiation::issue_codes;
+  const auto bulb = oxygen::data::NodeId::FromStableIdentity("/test/Bulb");
   const auto started = CheckEvent("lifecycle",
     LifecycleData(LifecycleState::kSessionStarted, "/Scenes/A.oscene"));
   EXPECT_EQ(started["state"], "session_started");
@@ -52,13 +55,17 @@ NOLINT_TEST(PlayerProtocolTest, LifecycleEventsMatchTheSchema)
   const auto issues
     = std::vector<oxygen::instantiation::SceneInstantiationIssue> {
         {
+          .code = std::string(issue_codes::kChangeUnresolved),
           .scene = oxygen::data::AssetKey::FromVirtualPath("/Scenes/A.oscene"),
           .node_index = 3U,
-          .message = "unsupported record",
+          .node_path = { bulb },
+          .message = "unresolved change",
         },
         {
+          .code = std::string(issue_codes::kStartingCameraMissing),
           .scene = oxygen::data::AssetKey::FromVirtualPath("/Scenes/A.oscene"),
           .node_index = std::nullopt,
+          .node_path = {},
           .message = "no starting camera",
         },
       };
@@ -67,8 +74,19 @@ NOLINT_TEST(PlayerProtocolTest, LifecycleEventsMatchTheSchema)
       "the scene has no camera", issues));
   EXPECT_EQ(failed["message"], "the scene has no camera");
   ASSERT_EQ(failed["issues"].size(), 2U);
+  EXPECT_EQ(failed["issues"][0]["code"].get<std::string>(),
+    issue_codes::kChangeUnresolved);
   EXPECT_EQ(failed["issues"][0]["node_index"], 3);
+  EXPECT_EQ(failed["issues"][0]["node_path"][0], oxygen::data::to_string(bulb));
   EXPECT_FALSE(failed["issues"][1].contains("node_index"));
+  EXPECT_FALSE(failed["issues"][1].contains("node_path"));
+
+  // A model scene is refused with its code.
+  const auto refused = CheckEvent("lifecycle",
+    LifecycleData(LifecycleState::kSceneFailed, "/Scenes/Model.oscene",
+      "the scene is a model", {}, oxygen::player::kModelSceneCode));
+  EXPECT_EQ(
+    refused["code"].get<std::string>(), oxygen::player::kModelSceneCode);
 
   for (const auto state : {
          LifecycleState::kSceneLoaded,

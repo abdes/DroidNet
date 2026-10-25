@@ -153,6 +153,8 @@ struct SessionLoad {
   std::shared_ptr<scene::Scene> scene;
   //! Why the load failed.
   std::string failure;
+  //! The code of a refused scene; empty for other failures.
+  std::string_view failure_code;
   std::vector<instantiation::SceneInstantiationIssue> issues;
   //! Script attach problems, reported once the scene is loaded.
   std::vector<scripting::ScriptDiagnostic> diagnostics;
@@ -194,6 +196,14 @@ namespace {
     if (!pending->asset) {
       load->failure
         = fmt::format("the scene '{}' could not be loaded", in.scene_path);
+      co_return;
+    }
+    // A model is placed in an authored scene, never played on its own.
+    if (pending->asset->IsModelScene()) {
+      load->failure = fmt::format(
+        "the scene '{}' is a model; play a scene that instances it",
+        in.scene_path);
+      load->failure_code = kModelSceneCode;
       co_return;
     }
 
@@ -584,11 +594,12 @@ auto PlayerModule::FinishLoad() -> void
     LOG_F(ERROR, "{}: {}", GetName(), load->failure);
     status_ = load->failure;
     session_failed_ = true;
-    Publish(LifecycleState::kSceneFailed, load->failure, load->issues);
+    Publish(LifecycleState::kSceneFailed, load->failure, load->issues,
+      load->failure_code);
     auto failure = commands::CommandResult::Failure(
       commands::ExecutionStatus::kError, load->failure);
-    failure.data = LifecycleData(
-      LifecycleState::kSceneFailed, session_scene_, {}, load->issues);
+    failure.data = LifecycleData(LifecycleState::kSceneFailed, session_scene_,
+      {}, load->issues, load->failure_code);
     ResolvePlay(failure);
     Host().engine->EndSession();
     return;
@@ -639,10 +650,11 @@ auto PlayerModule::ResolvePlay(const commands::CommandResult& result) -> void
 
 auto PlayerModule::Publish(const LifecycleState state,
   const std::string_view message,
-  const std::span<const instantiation::SceneInstantiationIssue> issues) -> void
+  const std::span<const instantiation::SceneInstantiationIssue> issues,
+  const std::string_view code) -> void
 {
   events_->Publish(
-    "lifecycle", LifecycleData(state, session_scene_, message, issues));
+    "lifecycle", LifecycleData(state, session_scene_, message, issues, code));
 }
 
 auto PlayerModule::UpdateGpuWorkLease() -> void

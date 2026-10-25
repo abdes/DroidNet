@@ -53,6 +53,7 @@
 #include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/Data/SceneAsset.h>
+#include <Oxygen/Data/SceneIds.h>
 #include <Oxygen/Data/Schema/Generated.SceneComponents.h>
 #include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Data/StableId.h>
@@ -338,6 +339,69 @@ namespace {
         report->diagnostics, "scene.descriptor.instance_cycle"))
         << instanced;
     }
+  }
+
+  //! Changes of a placed rig: one that resolves is cooked; one naming no
+  //! node of the rig and a starting camera naming a node without a camera
+  //! are warnings, left out, and the cook succeeds (scene instances 7.9,
+  //! 7.10).
+  NOLINT_TEST_F(SceneDescriptorImportJobTest, LeavesOutChangesThatDoNotResolve)
+  {
+    namespace world = data::pak::world;
+    const auto root = TempDir() / "unresolved_changes";
+    std::filesystem::create_directories(root);
+    // MakeRequest gives node i the ID ending in i + 1.
+    constexpr auto kEye
+      = std::string_view { "00000000-0000-4000-8000-000000000002" };
+    constexpr auto kStranger
+      = std::string_view { "00000000-0000-4000-8000-000000000009" };
+    const auto rig = Import(MakeRequest(root, R"({
+      "name":"Rig",
+      "nodes":[{"name":"rig"},{"name":"eye","parent":0}]
+    })"));
+    ASSERT_HAS_VALUE(rig);
+    ASSERT_TRUE(rig->success);
+    const auto change = [](const std::string_view node) -> nlohmann::json {
+      return {
+        { "path", nlohmann::json::array({ node }) },
+        {
+          "components",
+          nlohmann::json::parse(
+            R"({"transform":{"values":{"/local_position/0":2.5}}})"),
+        },
+      };
+    };
+    auto level = nlohmann::json::parse(R"({
+      "name":"Level",
+      "nodes":[{"name":"root"},
+        {"name":"rig","parent":0,
+         "instance":{"scene_ref":"/.cooked/Scenes/Rig.oscene"}}]
+    })");
+    level.at("nodes").at(1).at("instance")["overrides"]
+      = nlohmann::json::array({ change(kEye), change(kStranger) });
+    level["starting_camera"] = {
+      { "node", 1 },
+      { "path", nlohmann::json::array({ kEye }) },
+    };
+
+    const auto report = Import(MakeRequest(root, level.dump()));
+
+    ASSERT_HAS_VALUE(report);
+    ASSERT_TRUE(report->success);
+    EXPECT_TRUE(HasDiagnosticCode(
+      report->diagnostics, "scene.descriptor.instance_override_unresolved"));
+    EXPECT_TRUE(HasDiagnosticCode(
+      report->diagnostics, "scene.starting_camera.unresolved"));
+    const auto scene = data::SceneAsset(
+      data::AssetKey {}, ReadBytes(root / "Scenes/Level.oscene"));
+    EXPECT_FALSE(scene.GetStartingCamera().has_value());
+    const auto changes = scene.GetComponents<world::OverrideRecord>();
+    ASSERT_EQ(changes.size(), 1U);
+    const auto eye = data::NodeId::FromString(kEye);
+    ASSERT_TRUE(eye.has_value());
+    // NOLINTNEXTLINE(bugprone-unchecked-optional-access) - asserted above
+    EXPECT_EQ(scene.GetNodePath(CheckedAt(changes, 0).target),
+      std::vector { eye.value() });
   }
 
   auto WriteTextureSidecar(const std::filesystem::path& root,

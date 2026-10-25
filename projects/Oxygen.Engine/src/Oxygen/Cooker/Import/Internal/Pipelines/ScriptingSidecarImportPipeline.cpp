@@ -16,6 +16,7 @@
 #include <filesystem>
 #include <limits>
 #include <map>
+#include <memory>
 #include <optional>
 #include <ranges>
 #include <set>
@@ -24,7 +25,10 @@
 #include <string>
 #include <string_view>
 #include <tuple>
+#include <unordered_map>
+#include <unordered_set>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include <nlohmann/json.hpp>
@@ -58,6 +62,7 @@
 #include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/SceneAsset.h>
+#include <Oxygen/Data/SceneComposition.h>
 #include <Oxygen/Data/SceneIds.h>
 #include <Oxygen/Data/Schema/Generated.SceneComponents.h>
 #include <Oxygen/Data/ScriptAsset.h>
@@ -154,7 +159,14 @@ namespace {
     std::vector<data::NodeId> node_path;
     data::ScriptSlotId slot_id;
     SidecarParam param;
+    //! The sidecar path its diagnostics name; empty for a change the scene
+    //! already holds.
+    std::string object_path;
   };
+
+  //! Cooked scenes by key.
+  using SceneMap = std::unordered_map<data::AssetKey,
+    std::shared_ptr<const data::SceneAsset>>;
 
   //! Parameter declarations of each script a sidecar references.
   using ScriptDeclarationMap
@@ -1237,6 +1249,50 @@ namespace {
     co_return declarations;
   }
 
+  //! The cooked scenes reachable through `scene`'s instances. A scene that is
+  //! not mounted or cannot be read is absent, and changes below it are not
+  //! checked: its own cook reports it.
+  auto ReadInstancedScenes(
+    std::span<const SidecarCookedInspectionContext> cooked_contexts,
+    IAsyncFileReader& reader, const data::SceneAsset& scene) -> co::Co<SceneMap>
+  {
+    auto scenes = SceneMap {};
+    auto pending = std::vector<data::AssetKey> {};
+    for (const auto& record :
+      scene.GetComponents<world::SceneInstanceRecord>()) {
+      pending.push_back(record.scene_key);
+    }
+    auto visited = std::unordered_set<data::AssetKey> { scene.GetAssetKey() };
+    while (!pending.empty()) {
+      const auto key = pending.back();
+      pending.pop_back();
+      if (!visited.insert(key).second) {
+        continue;
+      }
+      const auto mounted = FindMountedAsset(cooked_contexts, key);
+      if (!mounted) {
+        continue;
+      }
+      auto read = co_await detail::ReadCookedDescriptor(
+        *mounted->context, *mounted->entry, reader);
+      if (!read.has_value()) {
+        continue;
+      }
+      try {
+        auto instanced
+          = std::make_shared<const data::SceneAsset>(key, std::move(*read));
+        for (const auto& record :
+          instanced->GetComponents<world::SceneInstanceRecord>()) {
+          pending.push_back(record.scene_key);
+        }
+        scenes.emplace(key, std::move(instanced));
+      } catch (const std::exception&) {
+        continue;
+      }
+    }
+    co_return scenes;
+  }
+
   auto BuildBindingsByNodeFromComponents(const data::SceneAsset& scene)
     -> std::map<uint32_t, std::vector<SlotWithParams>>
   {
@@ -1360,7 +1416,8 @@ namespace {
       content::VirtualPathResolver& resolver, const SidecarDocument& parsed,
       const uint32_t node_count,
       std::span<const SidecarCookedInspectionContext> cooked_contexts,
-      const data::SceneAsset& scene, const ScriptDeclarationMap& declarations)
+      const data::SceneAsset& scene, const ScriptDeclarationMap& declarations,
+      const SceneMap& instanced)
       : session_(&session)
       , request_(&request)
       , resolver_(&resolver)
@@ -1369,6 +1426,7 @@ namespace {
       , cooked_contexts_(cooked_contexts)
       , scene_(&scene)
       , declarations_(&declarations)
+      , instanced_(&instanced)
     {
     }
 
@@ -1505,9 +1563,9 @@ namespace {
     }
 
     //! The scene's changes of instanced nodes' script parameters: those of
-    //! the instance roots the sidecar names are replaced by its rows. Their
-    //! parameters are checked against the slot's script when the scene is
-    //! composed.
+    //! the instance roots the sidecar names are replaced by its rows. A
+    //! change that does not resolve is left out with a warning; values are
+    //! checked against the slot's script when the scene is instantiated.
     auto BuildInstanceChanges()
       -> std::optional<std::vector<InstanceParamChange>>
     {
@@ -1555,17 +1613,92 @@ namespace {
             .node_path = row.node_path,
             .slot_id = row.slot_id,
             .param = std::move(param),
+            .object_path = object_path + ".params[" + std::to_string(j) + "]",
           });
         }
       }
       if (!valid) {
         return std::nullopt;
       }
+      DropUnresolved(changes);
       std::ranges::sort(changes, {}, [](const InstanceParamChange& change) {
         return std::tie(change.node_index, change.node_path, change.slot_id,
           change.param.key);
       });
       return changes;
+    }
+
+    //! Composes each instance root's changes with the cooked instanced
+    //! scenes; a change naming no node, or a slot the node does not have, is
+    //! a warning and left out.
+    auto DropUnresolved(std::vector<InstanceParamChange>& changes) -> void
+    {
+      auto roots = std::set<uint32_t> {};
+      for (const auto& change : changes) {
+        roots.insert(change.node_index);
+      }
+      const auto resolve = [this](const data::AssetKey& key)
+        -> std::shared_ptr<const data::SceneAsset> {
+        const auto found = instanced_->find(key);
+        return found != instanced_->end() ? found->second : nullptr;
+      };
+      const auto ancestors = std::array { scene_->GetAssetKey() };
+      auto unresolved = std::vector<const InstanceParamChange*> {};
+      for (const auto root : roots) {
+        const auto* instance
+          = scene_->FindComponent<world::SceneInstanceRecord>(root);
+        auto addressed = std::vector<const InstanceParamChange*> {};
+        auto scene_changes = std::vector<data::SceneChange> {};
+        for (const auto& change : changes) {
+          if (change.node_index != root) {
+            continue;
+          }
+          addressed.push_back(&change);
+          // Resolution reads the node and slot alone; the value is checked
+          // against the slot's script when the scene is instantiated.
+          scene_changes.push_back({
+            .path = change.node_path,
+            .change = data::ParameterChange {
+              .slot_id = change.slot_id,
+              .key = change.param.key,
+              .value = {},
+            },
+          });
+        }
+        const auto composed = data::ComposeInstance(
+          {
+            .source = instance->scene_key,
+            .instance_root = root,
+            .changes = scene_changes,
+            .ancestors = ancestors,
+          },
+          resolve);
+        for (const auto& entry : composed.unresolved) {
+          const auto* parameter
+            = std::get_if<data::ParameterChange>(&entry.change.change);
+          const auto match = std::ranges::find_if(
+            addressed, [&](const InstanceParamChange* change) -> bool {
+              return parameter != nullptr
+                && change->node_path == entry.change.path
+                && change->slot_id == parameter->slot_id
+                && change->param.key == parameter->key;
+            });
+          if (match != addressed.end()) {
+            unresolved.push_back(*match);
+          }
+        }
+      }
+      for (const auto* change : unresolved) {
+        AddDiagnosticAtPath(*session_, *request_, ImportSeverity::kWarning,
+          "script.sidecar.instance_override_unresolved",
+          "The change names no node of the instanced scene, or a slot that "
+          "node does not have; it has no effect until it resolves",
+          change->object_path.empty() ? std::string { "instance_bindings" }
+                                      : change->object_path);
+      }
+      std::erase_if(changes, [&](const InstanceParamChange& change) -> bool {
+        return std::ranges::contains(unresolved, &change);
+      });
     }
 
     //! Checks each override of `row` against the script's declarations and
@@ -1681,6 +1814,7 @@ namespace {
     std::span<const SidecarCookedInspectionContext> cooked_contexts_;
     observer_ptr<const data::SceneAsset> scene_;
     observer_ptr<const ScriptDeclarationMap> declarations_;
+    observer_ptr<const SceneMap> instanced_;
   };
 
   auto BuildPatchedSceneDescriptor(ImportSession& session,
@@ -1903,8 +2037,11 @@ namespace {
 
     const data::SceneAsset scene(resolved_scene_state.scene_key,
       std::span<const std::byte>(resolved_scene_state.source_scene_descriptor));
+    const auto instanced
+      = co_await ReadInstancedScenes(cooked_contexts, reader, scene);
     auto builder = SceneScriptBuilder(session, request, resolver, parsed,
-      resolved_scene_state.node_count, cooked_contexts, scene, *declarations);
+      resolved_scene_state.node_count, cooked_contexts, scene, *declarations,
+      instanced);
     const auto scripts = builder.Build();
     if (!scripts) {
       co_return false;

@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -25,6 +26,7 @@
 #include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/Data/SceneAsset.h>
+#include <Oxygen/Data/SceneComposition.h>
 #include <Oxygen/Data/ScriptAsset.h>
 #include <Oxygen/Data/ScriptResource.h>
 #include <Oxygen/Engine/Scripting/IScriptCompilationService.h>
@@ -54,32 +56,34 @@ namespace {
       const observer_ptr<const IScriptSourceResolver> resolver,
       const observer_ptr<IScriptCompilationService> compiler,
       const observer_ptr<const LateScriptDiagnosticHandler> on_late_diagnostic,
-      const data::SceneAsset& asset, std::span<const scene::SceneNode> nodes,
+      const data::ComposedScene& composed, const std::size_t occurrence,
+      std::span<const std::vector<scene::SceneNode>> nodes,
       const uint32_t node_index)
       : loader_(loader)
       , resolver_(resolver)
       , compiler_(compiler)
       , on_late_diagnostic_(on_late_diagnostic)
-      , asset_(&asset)
+      , composed_(&composed)
+      , asset_(composed.occurrences.at(occurrence).scene.get())
       , nodes_(nodes)
       , node_index_(node_index)
-      , node_(base::CheckedAt(nodes, node_index))
+      , node_(base::CheckedAt(nodes, occurrence).at(node_index))
     {
     }
 
-    auto AttachSlot(const content::IAssetLoader::HydratedScriptSlot& record,
+    auto AttachSlot(const data::ComposedSlot& record,
       SceneScriptAttachmentResult& result) -> void
     {
       auto outcome = SceneScriptSlotOutcome {
         .node_index = node_index_,
         .slot_index = 0,
-        .script = record.script_asset_key,
+        .script = record.script,
         .state = State::kFailed,
         .diagnostics = {},
       };
-      const auto script = record.script_asset_key.IsNil()
+      const auto script = record.script.IsNil()
         ? nullptr
-        : loader_->GetScriptAsset(record.script_asset_key, *asset_);
+        : loader_->GetScriptAsset(record.script, *asset_);
 
       auto scripting = node_.GetScripting();
       if (!scripting.AddSlot(script, record.execution_order)) {
@@ -92,10 +96,10 @@ namespace {
 
       if (script == nullptr) {
         Fail(outcome, &slot,
-          fmt::format("script asset {} is not loaded",
-            data::to_string(record.script_asset_key)));
+          fmt::format(
+            "script asset {} is not loaded", data::to_string(record.script)));
       } else {
-        ApplyOverrides(outcome, slot, *script, record.params);
+        ApplyOverrides(outcome, slot, *script, record.parameters);
         Resolve(outcome, slot, script);
       }
       result.slots.push_back(std::move(outcome));
@@ -142,29 +146,64 @@ namespace {
       outcome.diagnostics.push_back(std::move(diagnostic));
     }
 
-    //! Applies the overrides that match a declaration and binds node
-    //! parameters to the nodes created for their indexes.
+    //! Applies the parameters that match a declaration and binds node
+    //! parameters to the nodes created for them.
     auto ApplyOverrides(SceneScriptSlotOutcome& outcome, const Slot& slot,
-      const data::ScriptAsset& script, const data::ScriptParameters& params)
-      -> void
+      const data::ScriptAsset& script,
+      std::span<const data::ComposedParameter> params) -> void
     {
       auto scripting = node_.GetScripting();
-      for (const auto& [key, value] : params) {
-        if (auto rejection
-          = CheckParameterOverride(script, key, value, nodes_.size())) {
+      for (const auto& [key, value, supplier] : params) {
+        if (auto rejection = CheckParameterOverride(
+              script, key, value, SupplierNodeCount(supplier))) {
           Reject(outcome, std::move(*rejection));
           continue;
         }
         const auto* node = std::get_if<data::ScriptNodeParam>(&value);
-        // A node an instance brings in is bound once the instance is built.
         if (node != nullptr
-          && node->node_index != data::pak::scripting::kUnsetNodeParam
-          && node->node_path == data::pak::world::kNoNodePath) {
-          (void)scripting.BindNodeParameter(
-            slot, key, base::CheckedAt(nodes_, node->node_index));
+          && node->node_index != data::pak::scripting::kUnsetNodeParam) {
+          const auto target = FindNode(supplier, *node);
+          if (!target.has_value()) {
+            Reject(outcome,
+              fmt::format(
+                "parameter '{}' names a node that was not created", key));
+            continue;
+          }
+          (void)scripting.BindNodeParameter(slot, key, *target);
         }
         (void)scripting.SetParameter(slot, key, value);
       }
+    }
+
+    //! The node count of the scene that supplied a value, when it is one of
+    //! the composed scenes.
+    [[nodiscard]] auto SupplierNodeCount(
+      const data::ChangeSupplier supplier) const -> std::optional<std::size_t>
+    {
+      if (supplier >= composed_->occurrences.size()) {
+        return std::nullopt;
+      }
+      return composed_->occurrences.at(supplier).scene->GetNodes().size();
+    }
+
+    //! The node a node value names in the scene that supplied it.
+    [[nodiscard]] auto FindNode(const data::ChangeSupplier supplier,
+      const data::ScriptNodeParam& value) const
+      -> std::optional<scene::SceneNode>
+    {
+      if (supplier >= nodes_.size()
+        || value.node_index >= base::CheckedAt(nodes_, supplier).size()) {
+        return std::nullopt;
+      }
+      auto node = base::CheckedAt(nodes_, supplier).at(value.node_index);
+      if (value.node_path == data::pak::world::kNoNodePath) {
+        return node;
+      }
+      const auto path = composed_->occurrences.at(supplier).scene->GetNodePath({
+        .node_index = value.node_index,
+        .node_path = value.node_path,
+      });
+      return node.GetInstance().Find(path);
     }
 
     //! Installs embedded bytecode, or submits source for compilation.
@@ -303,8 +342,9 @@ namespace {
     observer_ptr<const IScriptSourceResolver> resolver_;
     observer_ptr<IScriptCompilationService> compiler_;
     observer_ptr<const LateScriptDiagnosticHandler> on_late_diagnostic_;
+    observer_ptr<const data::ComposedScene> composed_;
     observer_ptr<const data::SceneAsset> asset_;
-    std::span<const scene::SceneNode> nodes_;
+    std::span<const std::vector<scene::SceneNode>> nodes_;
     uint32_t node_index_;
     scene::SceneNode node_;
   };
@@ -321,32 +361,32 @@ SceneScriptAttachment::SceneScriptAttachment(content::IAssetLoader& loader,
 {
 }
 
-auto SceneScriptAttachment::Attach(const data::SceneAsset& asset,
-  const std::span<const scene::SceneNode> nodes) const
+auto SceneScriptAttachment::Attach(const data::ComposedScene& composed,
+  const std::size_t occurrence,
+  const std::span<const std::vector<scene::SceneNode>> nodes) const
   -> SceneScriptAttachmentResult
 {
-  using data::pak::scripting::ScriptingComponentRecord;
-
   auto result = SceneScriptAttachmentResult {};
-  for (const auto& component :
-    asset.GetComponents<ScriptingComponentRecord>()) {
-    const auto node_index = component.node_index;
-    if (node_index >= nodes.size()
-      || !base::CheckedAt(nodes, node_index).IsAlive()) {
-      LOG_F(ERROR, "scripting component names node {}, which was not created",
-        node_index);
+  if (occurrence >= composed.occurrences.size() || occurrence >= nodes.size()) {
+    return result;
+  }
+  const auto& created = base::CheckedAt(nodes, occurrence);
+  for (const auto& slot : composed.occurrences.at(occurrence).slots) {
+    const auto node_index = slot.node_index;
+    if (node_index >= created.size() || !created.at(node_index).IsAlive()) {
+      LOG_F(
+        ERROR, "script slot names node {}, which was not created", node_index);
       continue;
     }
-    auto node = base::CheckedAt(nodes, node_index);
+    auto node = created.at(node_index);
     if (!node.HasScripting() && !node.AttachScripting()) {
       LOG_F(ERROR, "cannot attach scripting to node {}", node_index);
       continue;
     }
     auto attachment = NodeAttachment(loader_, resolver_, compiler_,
-      observer_ptr { &on_late_diagnostic_ }, asset, nodes, node_index);
-    for (const auto& slot : loader_->GetHydratedScriptSlots(asset, component)) {
-      attachment.AttachSlot(slot, result);
-    }
+      observer_ptr { &on_late_diagnostic_ }, composed, occurrence, nodes,
+      node_index);
+    attachment.AttachSlot(slot, result);
   }
   return result;
 }

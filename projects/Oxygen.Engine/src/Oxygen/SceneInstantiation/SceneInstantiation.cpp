@@ -15,6 +15,7 @@
 #include <ranges>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -22,7 +23,6 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
-#include <Oxygen/Composition/Component.h>
 #include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Content/InputContextHydration.h>
 #include <Oxygen/Core/Constants.h>
@@ -32,6 +32,8 @@
 #include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/Data/SceneAsset.h>
+#include <Oxygen/Data/SceneComposition.h>
+#include <Oxygen/Data/SceneIds.h>
 #include <Oxygen/Data/Schema/Generated.SceneComponents.h>
 #include <Oxygen/Input/InputSystem.h>
 #include <Oxygen/OxCo/Co.h>
@@ -48,8 +50,10 @@
 #include <Oxygen/Scene/Light/SpotLight.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneFlags.h>
+#include <Oxygen/Scene/SceneInstanceComponent.h>
 #include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Scene/Types/Flags.h>
+#include <Oxygen/Scene/Types/NodeHandle.h>
 #include <Oxygen/Scene/Types/RenderablePolicies.h>
 #include <Oxygen/SceneInstantiation/EnvironmentHydration.h>
 #include <Oxygen/SceneInstantiation/SceneInstantiation.h>
@@ -59,9 +63,6 @@ namespace oxygen::instantiation {
 
 namespace {
   namespace world = data::pak::world;
-
-  //! Instancing deeper than this is treated as a cycle.
-  constexpr int kMaxInstanceDepth = 16;
 
   auto MakeNodeName(const std::string_view name, const size_t index)
     -> std::string
@@ -230,12 +231,61 @@ namespace {
     std::shared_ptr<Asset> asset;
   };
 
-  //! Builds the nodes of one scene and of the scenes it instances.
+  //! Writes a node's flags and local transform; applying it again replaces
+  //! them.
+  auto ApplyNode(scene::SceneNode& node, const world::NodeRecord& record)
+    -> void
+  {
+    if (auto flags = node.GetFlags(); flags.has_value()) {
+      flags->get() = DecodeNodeFlags(record);
+    }
+    auto transform = node.GetTransform();
+    transform.SetLocalPosition(
+      { record.translation[0], record.translation[1], record.translation[2] });
+    transform.SetLocalRotation(Quat(record.rotation[3], record.rotation[0],
+      record.rotation[1], record.rotation[2]));
+    transform.SetLocalScale(
+      { record.scale[0], record.scale[1], record.scale[2] });
+  }
+
+  //! Attaches or replaces the node's camera.
+  auto ApplyCamera(scene::SceneNode& node,
+    const world::PerspectiveCameraRecord& record) -> bool
+  {
+    return node.ReplaceCamera(MakePerspectiveCamera(record));
+  }
+
+  auto ApplyCamera(scene::SceneNode& node,
+    const world::OrthographicCameraRecord& record) -> bool
+  {
+    return node.ReplaceCamera(MakeOrthographicCamera(record));
+  }
+
+  //! Attaches or replaces the node's light.
+  auto ApplyLight(
+    scene::SceneNode& node, const world::DirectionalLightRecord& record) -> bool
+  {
+    return node.ReplaceLight(MakeDirectionalLight(record));
+  }
+
+  auto ApplyLight(scene::SceneNode& node, const world::PointLightRecord& record)
+    -> bool
+  {
+    return node.ReplaceLight(MakePointLight(record));
+  }
+
+  auto ApplyLight(scene::SceneNode& node, const world::SpotLightRecord& record)
+    -> bool
+  {
+    return node.ReplaceLight(MakeSpotLight(record));
+  }
+
+  //! Builds the composed tree of one scene and the scenes it instances.
   class Instantiator final {
   public:
     Instantiator(content::IAssetLoader& loader, scene::Scene& target,
       const observer_ptr<const scripting::SceneScriptAttachment> scripts,
-      SceneInstance& result)
+      InstantiationResult& result)
       : loader_(&loader)
       , target_(&target)
       , scripts_(scripts)
@@ -243,42 +293,103 @@ namespace {
     {
     }
 
-    //! Creates `asset`'s nodes, under `parent` when it is instanced.
+    //! Loads `asset` and every scene reachable through its instances, then
+    //! composes it.
     // The caller awaits at once and owns the referenced arguments.
-    auto Build(const data::SceneAsset& asset,
-      std::optional<scene::SceneNode> parent, const int depth)
-      -> co::Co<std::vector<scene::SceneNode>>
+    auto Compose(std::shared_ptr<const data::SceneAsset> asset) -> co::Co<>
     {
-      auto nodes = CreateNodes(asset, parent);
-      AttachRenderables(asset, nodes);
-      AttachCameras(asset, nodes);
-      AttachLights(asset, nodes);
-      AttachLocalFogVolumes(asset, nodes);
-      co_await InstantiateInstances(asset, nodes, depth);
-      co_return nodes;
+      auto loaded = std::unordered_map<data::AssetKey,
+        std::shared_ptr<const data::SceneAsset>> {};
+      auto pending = std::vector<std::shared_ptr<const data::SceneAsset>> {
+        asset,
+      };
+      loaded.emplace(asset->GetAssetKey(), asset);
+      while (!pending.empty()) {
+        const auto scene = std::move(pending.back());
+        pending.pop_back();
+        for (const auto& record :
+          scene->GetComponents<world::SceneInstanceRecord>()) {
+          if (loaded.contains(record.scene_key)) {
+            continue;
+          }
+          auto instanced = co_await LoadScene(record.scene_key);
+          loaded.emplace(record.scene_key, instanced);
+          if (instanced) {
+            pending.push_back(std::move(instanced));
+          }
+        }
+      }
+      composed_ = data::ComposeScene(std::move(asset),
+        [&loaded](const data::AssetKey& key)
+          -> std::shared_ptr<const data::SceneAsset> {
+          const auto found = loaded.find(key);
+          return found != loaded.end() ? found->second : nullptr;
+        });
+      ReportComposition();
     }
 
-    //! Attaches the scripts of a built scene.
-    auto AttachScripts(const data::SceneAsset& asset,
-      const std::vector<scene::SceneNode>& nodes) -> void
+    //! Creates the nodes of every occurrence, parents first, and makes each
+    //! instance root an instance.
+    auto Build() -> void
+    {
+      const auto& occurrences = composed_.occurrences;
+      nodes_.resize(occurrences.size());
+      for (std::size_t index = 0; index < occurrences.size(); ++index) {
+        BuildOccurrence(index);
+      }
+      for (std::size_t index = 1; index < occurrences.size(); ++index) {
+        AttachInstance(index);
+      }
+    }
+
+    //! The nodes created for the requested scene.
+    [[nodiscard]] auto RootNodes() const -> const std::vector<scene::SceneNode>&
+    {
+      return nodes_.front();
+    }
+
+    //! The node created for node `index` of an occurrence.
+    [[nodiscard]] auto NodeOf(const std::size_t occurrence,
+      const uint32_t index) const -> scene::SceneNode
+    {
+      return nodes_.at(occurrence).at(index);
+    }
+
+    [[nodiscard]] auto Composed() const -> const data::ComposedScene&
+    {
+      return composed_;
+    }
+
+    //! Attaches the scripts of every occurrence, the requested scene's last.
+    auto AttachScripts() -> void
     {
       if (scripts_ == nullptr) {
         return;
       }
-      auto attached = scripts_->Attach(asset, nodes);
-      std::ranges::move(attached.slots, std::back_inserter(result_->scripts));
+      const auto attach = [this](const std::size_t occurrence) -> void {
+        auto attached = scripts_->Attach(composed_, occurrence, nodes_);
+        std::ranges::move(attached.slots, std::back_inserter(result_->scripts));
+      };
+      for (std::size_t index = 1; index < nodes_.size(); ++index) {
+        attach(index);
+      }
+      attach(0U);
     }
 
-    auto Issue(const data::SceneAsset& asset,
-      const std::optional<uint32_t> node_index, std::string message) -> void
+    auto Issue(const data::SceneAsset& asset, const std::string_view code,
+      const std::optional<uint32_t> node_index, std::string message,
+      std::vector<data::NodeId> node_path = {}) -> void
     {
-      LOG_F(WARNING, "scene {}{}: {}", data::to_string(asset.GetAssetKey()),
+      LOG_F(WARNING, "scene {}{}: {} ({})",
+        data::to_string(asset.GetAssetKey()),
         node_index.has_value() ? fmt::format(" node {}", *node_index)
                                : std::string {},
-        message);
+        message, code);
       result_->issues.push_back({
+        .code = std::string(code),
         .scene = asset.GetAssetKey(),
         .node_index = node_index,
+        .node_path = std::move(node_path),
         .message = std::move(message),
       });
     }
@@ -317,85 +428,155 @@ namespace {
     }
 
   private:
-    auto CreateNodes(const data::SceneAsset& asset,
-      std::optional<scene::SceneNode> parent) -> std::vector<scene::SceneNode>
+    [[nodiscard]] auto SceneOf(const std::size_t occurrence) const
+      -> const data::SceneAsset&
     {
-      const auto records = asset.GetNodes();
-      auto nodes = std::vector<scene::SceneNode> {};
-      nodes.reserve(records.size());
-      for (const auto [index, record] : std::views::enumerate(records)) {
-        auto node = target_->CreateNode(
-          MakeNodeName(asset.GetNodeName(record), static_cast<size_t>(index)),
-          DecodeNodeFlags(record));
-        auto transform = node.GetTransform();
-        transform.SetLocalPosition({ record.translation[0],
-          record.translation[1], record.translation[2] });
-        transform.SetLocalRotation(Quat(record.rotation[3], record.rotation[0],
-          record.rotation[1], record.rotation[2]));
-        transform.SetLocalScale(
-          { record.scale[0], record.scale[1], record.scale[2] });
-        nodes.push_back(std::move(node));
-      }
-
-      for (const auto [index, record] : std::views::enumerate(records)) {
-        const auto node_index = static_cast<uint32_t>(index);
-        auto& node = nodes.at(static_cast<size_t>(index));
-        const auto parent_index = record.parent_index;
-        if (parent_index == node_index) {
-          if (parent.has_value()
-            && !target_->ReparentNode(node, *parent, false)) {
-            Issue(
-              asset, node_index, "cannot place the node under its instance");
-          }
-          continue;
-        }
-        if (!target_->ReparentNode(node, nodes.at(parent_index), false)) {
-          Issue(asset, node_index,
-            fmt::format("cannot parent the node to node {}", parent_index));
-        }
-      }
-      return nodes;
+      return *composed_.occurrences.at(occurrence).scene;
     }
 
-    auto AttachRenderables(const data::SceneAsset& asset,
-      std::vector<scene::SceneNode>& nodes) -> void
+    //! The scene that supplied a value: an occurrence's scene.
+    [[nodiscard]] auto SupplierOf(const data::ChangeSupplier supplier) const
+      -> const data::SceneAsset&
     {
-      for (const auto& record :
-        asset.GetComponents<world::RenderableRecord>()) {
-        auto geometry = loader_->GetGeometryAsset(record.geometry_key, asset);
-        if (!geometry) {
-          Issue(asset, record.node_index,
-            fmt::format("geometry {} is not loaded",
-              data::to_string(record.geometry_key)));
-          continue;
+      return SceneOf(supplier);
+    }
+
+    auto ReportComposition() -> void
+    {
+      for (const auto& issue : composed_.issues) {
+        const auto& scene = SceneOf(issue.occurrence);
+        Issue(scene, data::to_string(issue.code), issue.node_index,
+          issue.scene.IsNil()
+            ? std::string { "a record of the scene is invalid" }
+            : fmt::format("instanced scene {}", data::to_string(issue.scene)));
+      }
+      for (const auto& unresolved : composed_.unresolved) {
+        Issue(SupplierOf(unresolved.supplier), issue_codes::kChangeUnresolved,
+          unresolved.instance_root,
+          "the change names no node of the instanced scene, or a property "
+          "that node does not have",
+          unresolved.change.path);
+      }
+    }
+
+    auto BuildOccurrence(const std::size_t index) -> void
+    {
+      const auto& occurrence = composed_.occurrences.at(index);
+      const auto& asset = *occurrence.scene;
+      auto parent = std::optional<scene::SceneNode> {};
+      if (occurrence.parent.has_value()) {
+        parent = nodes_.at(*occurrence.parent).at(occurrence.instance_root);
+      }
+      auto& nodes = nodes_.at(index);
+      nodes.reserve(occurrence.nodes.size());
+      for (const auto& composed : occurrence.nodes) {
+        auto node = target_->CreateNode(
+          MakeNodeName(
+            asset.GetNodeName(asset.GetNode(composed.index)), composed.index),
+          DecodeNodeFlags(composed.node));
+        ApplyNode(node, composed.node);
+        nodes.push_back(std::move(node));
+      }
+      for (const auto& composed : occurrence.nodes) {
+        Parent(asset, nodes, composed, parent);
+        ApplyComponents(index, nodes.at(composed.index), composed);
+      }
+    }
+
+    auto Parent(const data::SceneAsset& asset,
+      std::vector<scene::SceneNode>& nodes, const data::ComposedNode& composed,
+      std::optional<scene::SceneNode>& parent) -> void
+    {
+      auto& node = nodes.at(composed.index);
+      const auto parent_index = composed.node.parent_index;
+      if (parent_index == composed.index) {
+        if (parent.has_value()
+          && !target_->ReparentNode(node, *parent, false)) {
+          Issue(asset, issue_codes::kNodeParentInvalid, composed.index,
+            "cannot place the node under its instance");
         }
-        auto renderable = nodes.at(record.node_index).GetRenderable();
-        renderable.SetGeometry(geometry);
-        // The table is sorted by target; the scene validated every override.
-        const auto overrides = asset.GetComponents<world::OverrideRecord>();
-        const auto [first, last] = std::ranges::equal_range(overrides,
-          world::NodeRef { .node_index = record.node_index }, {},
-          &world::OverrideRecord::target);
-        for (const auto& override_record : std::ranges::subrange(first, last)) {
-          ApplyOverride(asset, *geometry, renderable, override_record);
+        return;
+      }
+      if (!target_->ReparentNode(node, nodes.at(parent_index), false)) {
+        Issue(asset, issue_codes::kNodeParentInvalid, composed.index,
+          fmt::format("cannot parent the node to node {}", parent_index));
+      }
+    }
+
+    //! Applies the composed records of one node; applying them again
+    //! replaces what they set.
+    auto ApplyComponents(const std::size_t occurrence, scene::SceneNode& node,
+      const data::ComposedNode& composed) -> void
+    {
+      const auto& asset = SceneOf(occurrence);
+      const auto check
+        = [&](const bool applied, const std::string_view kind) -> void {
+        if (!applied) {
+          Issue(asset, issue_codes::kComponentNotAttached, composed.index,
+            fmt::format("cannot attach the {}", kind));
         }
+      };
+      if (composed.renderable.has_value()) {
+        ApplyRenderable(asset, node, composed);
+      }
+      if (composed.perspective_camera.has_value()) {
+        check(ApplyCamera(node, *composed.perspective_camera), "camera");
+      }
+      if (composed.orthographic_camera.has_value()) {
+        check(ApplyCamera(node, *composed.orthographic_camera), "camera");
+      }
+      if (composed.directional_light.has_value()) {
+        check(ApplyLight(node, *composed.directional_light), "light");
+      }
+      if (composed.point_light.has_value()) {
+        check(ApplyLight(node, *composed.point_light), "light");
+      }
+      if (composed.spot_light.has_value()) {
+        check(ApplyLight(node, *composed.spot_light), "light");
+      }
+      if (composed.local_fog_volume.has_value()) {
+        check(ApplyLocalFogVolume(node, *composed.local_fog_volume),
+          "local fog volume");
+      }
+    }
+
+    auto ApplyRenderable(const data::SceneAsset& asset, scene::SceneNode& node,
+      const data::ComposedNode& composed) -> void
+    {
+      if (!composed.renderable.has_value()) {
+        return;
+      }
+      const auto& record = *composed.renderable;
+      auto geometry = loader_->GetGeometryAsset(record.geometry_key, asset);
+      if (!geometry) {
+        Issue(asset, issue_codes::kGeometryMissing, composed.index,
+          fmt::format(
+            "geometry {} is not loaded", data::to_string(record.geometry_key)));
+        return;
+      }
+      auto renderable = node.GetRenderable();
+      renderable.SetGeometry(geometry);
+      for (const auto& entry : composed.overrides) {
+        ApplyOverride(asset, *geometry, renderable, composed.index, entry);
       }
     }
 
     //! Applies one override; its value is decoded by the value type of the
-    //! property its id names.
+    //! property its id names, with the tables of the scene that supplied it.
     auto ApplyOverride(const data::SceneAsset& asset,
       const data::GeometryAsset& geometry,
-      scene::SceneNode::Renderable& renderable,
-      const world::OverrideRecord& record) -> void
+      scene::SceneNode::Renderable& renderable, const uint32_t node_index,
+      const data::ComposedOverride& entry) -> void
     {
       using data::schema::OverrideId;
+      const auto& record = entry.record;
+      const auto& supplier = SupplierOf(entry.supplier);
       const auto* property
         = data::schema::FindOverrideProperty(record.override_id);
       DCHECK_NOTNULL_F(property);
       if (property->part_kind == data::schema::PartKind::kSurface
         && record.layout_revision != geometry.Surfaces().layout_revision) {
-        Issue(asset, record.target.node_index,
+        Issue(asset, issue_codes::kOverrideNotApplied, node_index,
           fmt::format("the override of {} no longer matches the geometry's "
                       "surfaces",
             property->key));
@@ -405,7 +586,8 @@ namespace {
       switch (record.override_id) {
       case OverrideId::kGeometrySurfaceMaterial: {
         DCHECK_F(property->type == data::schema::ValueType::kAsset);
-        auto material = loader_->GetMaterialAsset(record.value.as_asset, asset);
+        auto material
+          = loader_->GetMaterialAsset(record.value.as_asset, supplier);
         applied = material
           && renderable.SetMaterialOverride(
             record.part_id, std::move(material));
@@ -424,106 +606,62 @@ namespace {
       case OverrideId::kGeometryLodPolicy: {
         DCHECK_F(property->type == data::schema::ValueType::kLodPolicy);
         const auto policies
-          = asset.GetComponents<data::pak::geometry::LodPolicyRecord>();
+          = supplier.GetComponents<data::pak::geometry::LodPolicyRecord>();
         renderable.SetLodPolicyOverride(
           scene::MakeLodPolicy(policies[record.value.as_record_index.get()]));
         break;
       }
       default:
-        // A scene's own nodes override only their assets' values.
-        ABORT_F("A validated scene overrides only its assets' values");
+        // Composition keeps only the geometry's values as overrides.
+        ABORT_F("A composed override is an asset-sourced property");
       }
       if (!applied) {
-        Issue(asset, record.target.node_index,
+        Issue(asset, issue_codes::kOverrideNotApplied, node_index,
           fmt::format("the override of {} is not loaded or names a surface "
                       "the geometry does not declare",
             property->key));
       }
     }
 
-    auto AttachCameras(const data::SceneAsset& asset,
-      std::vector<scene::SceneNode>& nodes) -> void
+    //! Gives the instance root of `occurrence` its `SceneInstanceComponent`.
+    auto AttachInstance(const std::size_t index) -> void
     {
-      for (const auto& record :
-        asset.GetComponents<world::PerspectiveCameraRecord>()) {
-        if (!nodes.at(record.node_index)
-              .AttachCamera(MakePerspectiveCamera(record))) {
-          Issue(asset, record.node_index, "cannot attach the camera");
+      const auto& occurrence = composed_.occurrences.at(index);
+      if (!occurrence.parent.has_value()) {
+        return;
+      }
+      const auto parent = *occurrence.parent;
+      auto& root = nodes_.at(parent).at(occurrence.instance_root);
+      auto changes = std::vector<data::SceneChange> {};
+      for (const auto& reaching : occurrence.changes) {
+        if (reaching.supplier == parent && reaching.consumed == 0U) {
+          changes.push_back(reaching.change);
         }
       }
-      for (const auto& record :
-        asset.GetComponents<world::OrthographicCameraRecord>()) {
-        if (!nodes.at(record.node_index)
-              .AttachCamera(MakeOrthographicCamera(record))) {
-          Issue(asset, record.node_index, "cannot attach the camera");
-        }
+      auto created = std::unordered_map<data::NodeId, scene::NodeHandle> {};
+      for (const auto& [composed, node] :
+        std::views::zip(occurrence.nodes, nodes_.at(index))) {
+        created.emplace(composed.node.node_id, node.GetHandle());
       }
-    }
-
-    auto AttachLights(const data::SceneAsset& asset,
-      std::vector<scene::SceneNode>& nodes) -> void
-    {
-      const auto attach
-        = [&](const uint32_t node_index, std::unique_ptr<Component> light,
-            const std::string_view kind) -> void {
-        if (!nodes.at(node_index).ReplaceLight(std::move(light))) {
-          Issue(asset, node_index, fmt::format("cannot attach the {}", kind));
-        }
-      };
-      for (const auto& record :
-        asset.GetComponents<world::DirectionalLightRecord>()) {
-        attach(
-          record.node_index, MakeDirectionalLight(record), "directional light");
+      const auto impl = root.GetImpl();
+      if (!impl.has_value()) {
+        return;
       }
-      for (const auto& record :
-        asset.GetComponents<world::PointLightRecord>()) {
-        attach(record.node_index, MakePointLight(record), "point light");
+      auto& root_impl = impl->get();
+      if (root_impl.HasComponent<scene::SceneInstanceComponent>()) {
+        root_impl.RemoveComponent<scene::SceneInstanceComponent>();
       }
-      for (const auto& record : asset.GetComponents<world::SpotLightRecord>()) {
-        attach(record.node_index, MakeSpotLight(record), "spot light");
-      }
-    }
-
-    auto AttachLocalFogVolumes(const data::SceneAsset& asset,
-      std::vector<scene::SceneNode>& nodes) -> void
-    {
-      for (const auto& record :
-        asset.GetComponents<world::LocalFogVolumeRecord>()) {
-        if (!ApplyLocalFogVolume(nodes.at(record.node_index), record)) {
-          Issue(asset, record.node_index, "cannot attach the local fog volume");
-        }
-      }
-    }
-
-    // The caller awaits at once and owns the referenced arguments.
-    auto InstantiateInstances(const data::SceneAsset& asset,
-      std::vector<scene::SceneNode>& nodes, const int depth) -> co::Co<>
-    {
-      for (const auto& record :
-        asset.GetComponents<world::SceneInstanceRecord>()) {
-        const auto key_text = data::to_string(record.scene_key);
-        if (depth >= kMaxInstanceDepth) {
-          Issue(asset, record.node_index,
-            fmt::format(
-              "instancing scene {} nests too deeply (a cycle?)", key_text));
-          continue;
-        }
-        const auto instanced = co_await LoadScene(record.scene_key);
-        if (!instanced) {
-          Issue(asset, record.node_index,
-            fmt::format("instanced scene {} is not available", key_text));
-          continue;
-        }
-        const auto instance_nodes
-          = co_await Build(*instanced, nodes.at(record.node_index), depth + 1);
-        AttachScripts(*instanced, instance_nodes);
-      }
+      root_impl.AddComponent<scene::SceneInstanceComponent>(
+        occurrence.scene, std::move(changes), std::move(created));
     }
 
     observer_ptr<content::IAssetLoader> loader_;
     observer_ptr<scene::Scene> target_;
     observer_ptr<const scripting::SceneScriptAttachment> scripts_;
-    observer_ptr<SceneInstance> result_;
+    observer_ptr<InstantiationResult> result_;
+    data::ComposedScene composed_;
+    //! The nodes created for each occurrence, by node index.
+    std::vector<std::vector<scene::SceneNode>> nodes_;
   };
 
   auto ApplyEnvironment(Instantiator& instantiator,
@@ -532,37 +670,76 @@ namespace {
     try {
       target.SetEnvironment(BuildEnvironment(asset, instantiator.Loader()));
     } catch (const std::exception& error) {
-      instantiator.Issue(asset, std::nullopt,
+      instantiator.Issue(asset, issue_codes::kEnvironmentInvalid, std::nullopt,
         fmt::format("the environment is not applied: {}", error.what()));
     }
   }
 
-  auto ApplyStartingCamera(Instantiator& instantiator,
-    const data::SceneAsset& asset, scene::Scene& target,
-    std::vector<scene::SceneNode>& nodes) -> void
+  //! The node the starting camera names, an owned node or one an instance
+  //! brings in, when it has a camera.
+  auto FindStartingCamera(
+    const data::SceneAsset& asset, const std::vector<scene::SceneNode>& nodes)
+    -> std::optional<scene::SceneNode>
   {
     const auto start = asset.GetStartingCamera();
-    if (start.has_value() && start->node_path == world::kNoNodePath) {
-      if (!target.SetActiveCamera(nodes.at(start->node_index))) {
-        instantiator.Issue(asset, start->node_index,
+    if (!start.has_value()) {
+      return std::nullopt;
+    }
+    auto node = std::optional { nodes.at(start->node_index) };
+    if (start->node_path != world::kNoNodePath) {
+      node = node->GetInstance().Find(asset.GetNodePath(*start));
+    }
+    if (!node.has_value() || !node->HasCamera()) {
+      return std::nullopt;
+    }
+    return node;
+  }
+
+  auto ApplyStartingCamera(Instantiator& instantiator,
+    const data::SceneAsset& asset, scene::Scene& target) -> void
+  {
+    const auto start = asset.GetStartingCamera();
+    if (auto camera = FindStartingCamera(asset, instantiator.RootNodes());
+      camera.has_value()) {
+      if (!target.SetActiveCamera(*camera)) {
+        instantiator.Issue(asset, issue_codes::kStartingCameraUnresolved,
+          start.has_value() ? std::optional { start->node_index }
+                            : std::nullopt,
           "the starting camera cannot be made active");
       }
       return;
     }
-    // A camera an instance brings in is found once instances are composed;
-    // until then the first camera applies.
-    const auto camera = std::ranges::find_if(
-      nodes, [](scene::SceneNode& node) -> bool { return node.HasCamera(); });
-    if (camera == nodes.end()) {
-      instantiator.Issue(asset, std::nullopt, "the scene has no camera");
-      return;
+    if (start.has_value()) {
+      instantiator.Issue(asset, issue_codes::kStartingCameraUnresolved,
+        start->node_index, "the starting camera names no node with a camera",
+        asset.GetNodePath(*start));
     }
-    const auto index = static_cast<uint32_t>(camera - nodes.begin());
-    (void)target.SetActiveCamera(*camera);
-    instantiator.Issue(asset, index,
-      fmt::format("no starting camera is authored; viewing through '{}', the "
-                  "first camera",
-        camera->GetName()));
+    // The first camera in composed order: occurrences depth first, nodes in
+    // index order.
+    const auto& occurrences = instantiator.Composed().occurrences;
+    for (std::size_t index = 0; index < occurrences.size(); ++index) {
+      for (const auto& composed : occurrences.at(index).nodes) {
+        if (!composed.perspective_camera.has_value()
+          && !composed.orthographic_camera.has_value()) {
+          continue;
+        }
+        auto camera = instantiator.NodeOf(index, composed.index);
+        if (!camera.HasCamera()) {
+          continue;
+        }
+        (void)target.SetActiveCamera(camera);
+        if (!start.has_value()) {
+          instantiator.Issue(asset, issue_codes::kStartingCameraMissing,
+            std::nullopt,
+            fmt::format("no starting camera is authored; viewing through "
+                        "'{}', the first camera",
+              camera.GetName()));
+        }
+        return;
+      }
+    }
+    instantiator.Issue(
+      asset, issue_codes::kNoCamera, std::nullopt, "the scene has no camera");
   }
 
   // The caller awaits at once and owns the referenced arguments.
@@ -579,14 +756,16 @@ namespace {
       const auto context_asset
         = co_await instantiator.LoadInputContext(record.context_key);
       if (!context_asset) {
-        instantiator.Issue(asset, std::nullopt,
+        instantiator.Issue(asset, issue_codes::kInputContextInvalid,
+          std::nullopt,
           fmt::format("starting input context {} is not available", key_text));
         continue;
       }
       auto context = content::HydrateInputContext(
         *context_asset, instantiator.Loader(), input);
       if (!context) {
-        instantiator.Issue(asset, std::nullopt,
+        instantiator.Issue(asset, issue_codes::kInputContextInvalid,
+          std::nullopt,
           fmt::format(
             "starting input context {} cannot be hydrated", key_text));
         continue;
@@ -600,9 +779,9 @@ namespace {
 
 // The caller awaits at once and owns the referenced arguments.
 auto Instantiate(SceneInstantiationRequest request,
-  content::IAssetLoader& loader) -> co::Co<SceneInstance>
+  content::IAssetLoader& loader) -> co::Co<InstantiationResult>
 {
-  auto result = SceneInstance {};
+  auto result = InstantiationResult {};
   if (!request.asset || request.target == nullptr) {
     co_return result;
   }
@@ -611,17 +790,20 @@ auto Instantiate(SceneInstantiationRequest request,
   auto instantiator = Instantiator(loader, target, request.scripts, result);
 
   ApplyEnvironment(instantiator, asset, target);
-  result.nodes = co_await instantiator.Build(asset, std::nullopt, 0);
+  co_await instantiator.Compose(request.asset);
+  instantiator.Build();
+  result.nodes = instantiator.RootNodes();
   try {
     target.GetDirectionalLightResolver().Validate();
   } catch (const std::exception& error) {
-    instantiator.Issue(asset, std::nullopt, error.what());
+    instantiator.Issue(
+      asset, issue_codes::kLightsInvalid, std::nullopt, error.what());
   }
-  ApplyStartingCamera(instantiator, asset, target, result.nodes);
+  ApplyStartingCamera(instantiator, asset, target);
   if (request.input != nullptr) {
     co_await StartInputContexts(instantiator, asset, *request.input);
   }
-  instantiator.AttachScripts(asset, result.nodes);
+  instantiator.AttachScripts();
   co_return result;
 }
 
