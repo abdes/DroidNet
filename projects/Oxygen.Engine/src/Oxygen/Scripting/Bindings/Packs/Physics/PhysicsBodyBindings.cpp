@@ -23,6 +23,7 @@
 #include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Scripting/Bindings/LuaBindingCommon.h>
 #include <Oxygen/Scripting/Bindings/Packs/Core/EventsBindings.h>
+#include <Oxygen/Scripting/Bindings/Packs/Core/MathBindings.h>
 #include <Oxygen/Scripting/Bindings/Packs/Physics/PhysicsBindingsCommon.h>
 #include <Oxygen/Scripting/Bindings/Packs/Physics/PhysicsBodyBindings.h>
 #include <Oxygen/Scripting/Bindings/Packs/Scene/SceneNodeBindings.h>
@@ -399,7 +400,7 @@ namespace {
       return 1;
     }
     const auto& q = result.value();
-    return PushQuat(state, q.x, q.y, q.z, q.w);
+    return PushQuat(state, q);
   }
 
   auto LuaBodyHandleGetLinearVelocity(lua_State* state) -> int

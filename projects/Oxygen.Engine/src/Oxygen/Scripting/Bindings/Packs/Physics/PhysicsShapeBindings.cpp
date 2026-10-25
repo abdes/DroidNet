@@ -17,6 +17,7 @@
 #include <Oxygen/PhysicsModule/PhysicsModule.h>
 #include <Oxygen/Scripting/Bindings/LuaBindingCommon.h>
 #include <Oxygen/Scripting/Bindings/Packs/Core/EventsBindings.h>
+#include <Oxygen/Scripting/Bindings/Packs/Core/MathBindings.h>
 #include <Oxygen/Scripting/Bindings/Packs/Physics/PhysicsBindingsCommon.h>
 #include <Oxygen/Scripting/Bindings/Packs/Physics/PhysicsShapeBindings.h>
 #include <Oxygen/Scripting/Bindings/Packs/Scene/SceneNodeBindings.h>
@@ -128,6 +129,8 @@ namespace {
     lua_createtable(state, 0, 2);
     PushPayloadTypeString(state, payload.payload_type);
     lua_setfield(state, -2, "payload_type");
+    // A Lua string is a run of chars, which may alias any object's bytes.
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
     lua_pushlstring(state, reinterpret_cast<const char*>(payload.data.data()),
       payload.data.size());
     lua_setfield(state, -2, "data");
@@ -228,8 +231,7 @@ namespace {
     lua_setfield(state, -2, "shape");
     PushVec3(state, desc.local_position);
     lua_setfield(state, -2, "local_position");
-    PushQuat(state, desc.local_rotation.x, desc.local_rotation.y,
-      desc.local_rotation.z, desc.local_rotation.w);
+    PushQuat(state, desc.local_rotation);
     lua_setfield(state, -2, "local_rotation");
     PushVec3(state, desc.local_scale);
     lua_setfield(state, -2, "local_scale");

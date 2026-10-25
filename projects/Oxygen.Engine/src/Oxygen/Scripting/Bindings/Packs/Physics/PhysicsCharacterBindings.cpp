@@ -19,6 +19,7 @@
 #include <Oxygen/PhysicsModule/ScenePhysics.h>
 #include <Oxygen/Scripting/Bindings/LuaBindingCommon.h>
 #include <Oxygen/Scripting/Bindings/Packs/Core/EventsBindings.h>
+#include <Oxygen/Scripting/Bindings/Packs/Core/MathBindings.h>
 #include <Oxygen/Scripting/Bindings/Packs/Physics/PhysicsBindingsCommon.h>
 #include <Oxygen/Scripting/Bindings/Packs/Physics/PhysicsCharacterBindings.h>
 #include <Oxygen/Scripting/Bindings/Packs/Scene/SceneNodeBindings.h>
@@ -289,8 +290,7 @@ namespace {
     lua_setfield(state, -2, "is_grounded");
     PushVec3(state, move_result.state.position);
     lua_setfield(state, -2, "position");
-    PushQuat(state, move_result.state.rotation.x, move_result.state.rotation.y,
-      move_result.state.rotation.z, move_result.state.rotation.w);
+    PushQuat(state, move_result.state.rotation);
     lua_setfield(state, -2, "rotation");
     PushVec3(state, move_result.state.velocity);
     lua_setfield(state, -2, "velocity");

@@ -24,13 +24,13 @@
 #include <Oxygen/Scripting/Bindings/Contracts/BindingDescription.h>
 #include <Oxygen/Scripting/Bindings/LuaBindingCommon.h>
 #include <Oxygen/Scripting/Bindings/Packs/Core/EventsBindings.h>
+#include <Oxygen/Scripting/Bindings/Packs/Core/MathBindings.h>
 #include <Oxygen/Scripting/Bindings/Packs/Scene/SceneNodeBindings.h>
 #include <Oxygen/Scripting/Bindings/Packs/Scene/SceneNodeComponentBindings.h>
 
 namespace oxygen::scripting::bindings {
 
 namespace {
-  constexpr const char* kQuatMetatable = "oxygen.quat";
 
   struct SceneNodeUserdata {
     scene::SceneNode node;
@@ -377,7 +377,7 @@ namespace {
       lua_pushnil(state);
       return 1;
     }
-    return PushQuat(state, v->x, v->y, v->z, v->w);
+    return PushQuat(state, *v);
   }
 
   auto SceneNodeSetLocalRotation(lua_State* state) -> int
@@ -516,7 +516,7 @@ namespace {
       lua_pushnil(state);
       return 1;
     }
-    return PushQuat(state, v->x, v->y, v->z, v->w);
+    return PushQuat(state, *v);
   }
 
   auto SceneNodeGetWorldScale(lua_State* state) -> int
@@ -956,37 +956,6 @@ auto TryCheckVec3(lua_State* state, const int index, Vec3& out) -> bool
 auto PushVec3(lua_State* state, const Vec3& v) -> int
 {
   lua_pushvector(state, v.x, v.y, v.z);
-  return 1;
-}
-
-auto TryCheckQuat(lua_State* state, const int index) -> QuatUserdata*
-{
-  if (lua_type(state, index) != LUA_TUSERDATA) {
-    return nullptr;
-  }
-  if (lua_userdatatag(state, index) != kTagQuat) {
-    return nullptr;
-  }
-  return static_cast<QuatUserdata*>(lua_touserdata(state, index));
-}
-
-// NOLINTNEXTLINE(*-easily-swappable-parameters)
-auto PushQuat(lua_State* state, const float x, const float y, const float z,
-  const float w) -> int
-{
-  auto* u
-    = static_cast<QuatUserdata*>(lua_newuserdata(state, sizeof(QuatUserdata)));
-  u->x = x;
-  u->y = y;
-  u->z = z;
-  u->w = w;
-  luaL_getmetatable(state, kQuatMetatable);
-  if (lua_isnil(state, -1) != 0) {
-    lua_pop(state, 1);
-    lua_pushnil(state);
-    return 1;
-  }
-  lua_setmetatable(state, -2);
   return 1;
 }
 

@@ -50,10 +50,6 @@ namespace {
     float x, y, z, w;
   };
 
-  struct QuatUserdata {
-    float x, y, z, w;
-  };
-
   struct Mat4Userdata {
     std::array<float, kMat4Size> m; // Column-major
   };
@@ -82,19 +78,6 @@ namespace {
     u->z = value.z;
     u->w = value.w;
     luaL_getmetatable(state, kVec4MetatableName);
-    lua_setmetatable(state, -2);
-    return 1;
-  }
-
-  auto PushQuat(lua_State* state, const Quat& value) -> int
-  {
-    auto* u = static_cast<QuatUserdata*>(
-      lua_newuserdatatagged(state, sizeof(QuatUserdata), kTagQuat));
-    u->x = value.x;
-    u->y = value.y;
-    u->z = value.z;
-    u->w = value.w;
-    luaL_getmetatable(state, kQuatMetatableName);
     lua_setmetatable(state, -2);
     return 1;
   }
@@ -812,6 +795,28 @@ auto RegisterMathBindings(lua_State* state, const int oxygen_table_index)
 auto DescribeMathBindings() -> std::span<const BindingNamespaceDescription>
 {
   return kMathDescription;
+}
+
+auto TryCheckQuat(lua_State* state, const int index) -> QuatUserdata*
+{
+  if (lua_type(state, index) != LUA_TUSERDATA
+    || lua_userdatatag(state, index) != kTagQuat) {
+    return nullptr;
+  }
+  return static_cast<QuatUserdata*>(lua_touserdata(state, index));
+}
+
+auto PushQuat(lua_State* state, const Quat& value) -> int
+{
+  auto* u = static_cast<QuatUserdata*>(
+    lua_newuserdatatagged(state, sizeof(QuatUserdata), kTagQuat));
+  u->x = value.x;
+  u->y = value.y;
+  u->z = value.z;
+  u->w = value.w;
+  luaL_getmetatable(state, kQuatMetatableName);
+  lua_setmetatable(state, -2);
+  return 1;
 }
 
 } // namespace oxygen::scripting::bindings

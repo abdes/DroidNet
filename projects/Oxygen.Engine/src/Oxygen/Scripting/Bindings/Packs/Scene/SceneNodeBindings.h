@@ -8,6 +8,7 @@
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Scripting/Bindings/BindingTable.h>
+#include <Oxygen/Scripting/Bindings/Packs/Core/MathBindings.h>
 
 namespace oxygen::scripting::bindings {
 
@@ -24,12 +25,5 @@ auto GetScene(lua_State* state) -> observer_ptr<scene::Scene>;
 
 auto TryCheckVec3(lua_State* state, int index, Vec3& out) -> bool;
 auto PushVec3(lua_State* state, const Vec3& v) -> int;
-
-struct QuatUserdata {
-  float x, y, z, w;
-};
-
-auto TryCheckQuat(lua_State* state, int index) -> QuatUserdata*;
-auto PushQuat(lua_State* state, float x, float y, float z, float w) -> int;
 
 } // namespace oxygen::scripting::bindings

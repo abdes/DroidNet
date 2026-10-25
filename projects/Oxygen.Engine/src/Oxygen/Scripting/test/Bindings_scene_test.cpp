@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "ScriptingModule_test_fixture.h"
+#include <glm/ext/quaternion_geometric.hpp>
 #include <gtest/gtest.h>
 
 #include <Oxygen/Base/ObserverPtr.h>
@@ -125,6 +126,61 @@ end
     ASSERT_NE(geometry, nullptr);
     ExpectMeshBuffers(*geometry, *expected);
   }
+}
+
+//! A rotation read from a node is an `oxygen.quat`: the math functions and
+//! operators accept it, and it can be given back to a node.
+NOLINT_TEST_F(SceneBindingsTest, OnSceneMutationNodeRotationsAreMathQuaternions)
+{
+  auto module = MakeModule();
+  ASSERT_TRUE(AttachModule(module));
+  const auto hook_result = module.ExecuteScript(ScriptExecutionRequest {
+    .source_text = ScriptSourceText { R"lua(
+function on_scene_mutation()
+  local omath = oxygen.math
+  local source = oxygen.scene.create_node("Source", nil)
+  local target = oxygen.scene.create_node("Target", nil)
+  local turn = omath.quat_from_euler_xyz(0, 0, omath.deg_to_rad(90))
+  source:set_local_rotation(turn)
+  -- World rotations are valid only once the scene updates its transforms;
+  -- the local rotation goes through the same quaternion push.
+  local read = source:get_local_rotation()
+  local ahead = omath.rotate_vec3(read, vector.create(1, 0, 0))
+  if not omath.near_equal(ahead, vector.create(0, 1, 0)) then
+    error("rotate_vec3 of a node rotation is wrong")
+  end
+  if not omath.near_equal(omath.quat_mul(read, turn) * vector.create(1, 0, 0),
+      vector.create(-1, 0, 0)) then
+    error("quat_mul of a node rotation is wrong")
+  end
+  if not target:set_local_rotation(source:get_local_rotation()) then
+    error("a node rotation cannot be given to a node")
+  end
+end
+)lua" },
+    .chunk_name = ScriptChunkName { "node_rotations" },
+  });
+  ASSERT_TRUE(hook_result.ok) << hook_result.message;
+
+  auto scene
+    = std::make_shared<scene::Scene>("node_rotations", kDefaultSceneCapacity);
+  engine::FrameContext context;
+  context.SetFrameSequenceNumber(frame::SequenceNumber { 1 }, Tag::Get());
+  context.SetScene(observer_ptr<scene::Scene> { scene.get() });
+  RunSceneMutationPhase(
+    module, observer_ptr<engine::FrameContext> { &context });
+
+  ASSERT_FALSE(context.HasErrors());
+  const auto roots = scene->GetRootNodes();
+  ASSERT_EQ(roots.size(), 2U);
+  const auto& source = roots.front();
+  const auto& target = roots.back();
+  const auto expected = source.GetTransform().GetLocalRotation();
+  const auto actual = target.GetTransform().GetLocalRotation();
+  ASSERT_TRUE(expected.has_value());
+  ASSERT_TRUE(actual.has_value());
+  // NOLINTNEXTLINE(bugprone-unchecked-optional-access) - asserted above
+  EXPECT_NEAR(glm::dot(*expected, *actual), 1.0F, 1e-5F);
 }
 
 NOLINT_TEST_F(
