@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <memory>
 #include <stdexcept>
+#include <utility>
 #include <vector>
 
 #include <Oxygen/Base/Sha256.h>
@@ -50,7 +51,7 @@ auto SurfaceFlag(const OverrideId id, const uint8_t value)
   -> world::OverrideRecord
 {
   auto record = world::OverrideRecord {
-    .node_index = 0U,
+    .target = { .node_index = 0U },
     .override_id = id,
     .part_id = Surface(),
     .layout_revision = Revision(),
@@ -62,7 +63,7 @@ auto SurfaceFlag(const OverrideId id, const uint8_t value)
 auto LodPolicyOverride(const uint32_t index) -> world::OverrideRecord
 {
   auto record = world::OverrideRecord {
-    .node_index = 0U,
+    .target = { .node_index = 0U },
     .override_id = OverrideId::kGeometryLodPolicy,
   };
   record.value.as_record_index = world::OverrideRecordIndex { index };
@@ -89,10 +90,12 @@ auto Scene(std::vector<world::OverrideRecord> overrides,
   auto builder = SceneAssetBuilder {};
   builder.AddNode("Mesh");
   builder.AddComponents(ComponentType::kRenderable,
-    std::vector { world::RenderableRecord {
-      .node_index = 0U,
-      .geometry_key = data::AssetKey::FromVirtualPath("/test/Mesh.ogeo"),
-    } });
+    std::vector {
+      world::RenderableRecord {
+        .node_index = 0U,
+        .geometry_key = data::AssetKey::FromVirtualPath("/test/Mesh.ogeo"),
+      },
+    });
   builder.AddComponents(ComponentType::kOverride, std::move(overrides));
   if (!policies.empty()) {
     builder.AddComponents(
@@ -105,7 +108,7 @@ auto Scene(std::vector<world::OverrideRecord> overrides,
 NOLINT_TEST(SceneOverridesTest, AcceptsOneOverrideOfEachValueType)
 {
   auto material = world::OverrideRecord {
-    .node_index = 0U,
+    .target = { .node_index = 0U },
     .override_id = OverrideId::kGeometrySurfaceMaterial,
     .part_id = Surface(),
     .layout_revision = Revision(),
@@ -168,7 +171,7 @@ NOLINT_TEST(SceneOverridesTest, RejectsUnsortedOrRepeatedOverrides)
 NOLINT_TEST(SceneOverridesTest, RejectsMalformedValues)
 {
   auto nil_material = world::OverrideRecord {
-    .node_index = 0U,
+    .target = { .node_index = 0U },
     .override_id = OverrideId::kGeometrySurfaceMaterial,
     .part_id = Surface(),
     .layout_revision = Revision(),
@@ -199,15 +202,17 @@ NOLINT_TEST(SceneOverridesTest, RejectsUnusedLodPolicyRecords)
 NOLINT_TEST(SceneOverridesTest, RejectsOverridesOfNodesWithoutRenderable)
 {
   auto record = SurfaceFlag(OverrideId::kGeometrySurfaceVisibility, 1U);
-  record.node_index = 1U;
+  record.target.node_index = 1U;
   auto builder = SceneAssetBuilder {};
   builder.AddNode("Mesh");
   builder.AddNode("Empty");
   builder.AddComponents(ComponentType::kRenderable,
-    std::vector { world::RenderableRecord {
-      .node_index = 0U,
-      .geometry_key = data::AssetKey::FromVirtualPath("/test/Mesh.ogeo"),
-    } });
+    std::vector {
+      world::RenderableRecord {
+        .node_index = 0U,
+        .geometry_key = data::AssetKey::FromVirtualPath("/test/Mesh.ogeo"),
+      },
+    });
   builder.AddComponents(ComponentType::kOverride, std::vector { record });
 
   EXPECT_THROW(static_cast<void>(builder.Build()), std::runtime_error);

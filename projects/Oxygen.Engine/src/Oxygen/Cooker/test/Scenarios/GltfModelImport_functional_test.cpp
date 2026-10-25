@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -64,6 +65,7 @@
 #include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/Data/SceneAsset.h>
+#include <Oxygen/Data/SceneIds.h>
 #include <Oxygen/Data/Schema/Generated.SceneComponents.h>
 #include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Data/Unorm16.h>
@@ -420,9 +422,8 @@ NOLINT_TEST_F(CameraAttachmentSceneTest, ImportedSceneIsAModelScene)
 NOLINT_TEST_F(
   CameraAttachmentSceneTest, CameraAttachmentNodesHaveStableNamesIdsAndFlags)
 {
-  using oxygen::data::AssetKey;
   ASSERT_TRUE(error_.empty()) << error_;
-  std::vector<AssetKey> first_ids;
+  std::vector<oxygen::data::NodeId> first_ids;
   for (const auto& item : cases_) {
     SCOPED_TRACE(item.keep_empty);
     SCOPED_TRACE(item.pass);
@@ -430,13 +431,13 @@ NOLINT_TEST_F(
     const auto& names = item.names;
     const auto source_count = item.source_count;
     ASSERT_EQ(scene->GetNodes().size(), names.size());
-    std::vector<AssetKey> ids;
+    // A model node's ID derives from its anchor and the model's source
+    // identity, never from where the model lives: every pass gives the same.
+    std::vector<oxygen::data::NodeId> ids;
     for (uint32_t index = 0; index < names.size(); ++index) {
       const auto& node = scene->GetNode(index);
       EXPECT_EQ(scene->GetNodeName(node), names.at(index));
-      EXPECT_EQ(node.node_id,
-        AssetKey::FromVirtualPath(
-          item.scene_path + "/" + std::string(names.at(index))));
+      EXPECT_FALSE(node.node_id.IsNil());
       EXPECT_TRUE(world::HasCanonicalNodeFlags(node));
       if (index >= source_count) {
         EXPECT_EQ(node.node_flags, 0U);
@@ -1481,38 +1482,53 @@ NOLINT_TEST_F(AsyncGltfImporterFullTest, UnbuildableMeshIsDroppedWithoutShift)
   };
   {
     std::ofstream buffer(root / "triangle.bin", std::ios::binary);
-    buffer.write(reinterpret_cast<const char*>(kPositions.data()),
-      static_cast<std::streamsize>(sizeof(kPositions)));
+    const auto bytes
+      = std::bit_cast<std::array<char, sizeof(kPositions)>>(kPositions);
+    buffer.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
   }
   const auto byte_length = static_cast<int>(sizeof(kPositions));
   const auto position = nlohmann::json { { "POSITION", 0 } };
   const auto document = nlohmann::json {
     { "asset", { { "version", "2.0" } } },
-    { "buffers",
-      { { { "uri", "triangle.bin" }, { "byteLength", byte_length } } } },
+    {
+      "buffers",
+      { { { "uri", "triangle.bin" }, { "byteLength", byte_length } } },
+    },
     { "bufferViews", { { { "buffer", 0 }, { "byteLength", byte_length } } } },
-    { "accessors",
-      { {
-        { "bufferView", 0 },
-        { "componentType", 5126 },
-        { "count", 3 },
-        { "type", "VEC3" },
-        { "min", { 0.0, 0.0, 0.0 } },
-        { "max", { 1.0, 1.0, 0.0 } },
-      } } },
-    // Mesh 0 holds only a line primitive; mesh 1 is a triangle.
-    { "meshes",
+    {
+      "accessors",
       {
-        { { "name", "Lines" },
-          { "primitives", { { { "attributes", position }, { "mode", 1 } } } } },
-        { { "name", "Triangle" },
-          { "primitives", { { { "attributes", position } } } } },
-      } },
-    { "nodes",
+        {
+          { "bufferView", 0 },
+          { "componentType", 5126 },
+          { "count", 3 },
+          { "type", "VEC3" },
+          { "min", { 0.0, 0.0, 0.0 } },
+          { "max", { 1.0, 1.0, 0.0 } },
+        },
+      },
+    },
+    // Mesh 0 holds only a line primitive; mesh 1 is a triangle.
+    {
+      "meshes",
+      {
+        {
+          { "name", "Lines" },
+          { "primitives", { { { "attributes", position }, { "mode", 1 } } } },
+        },
+        {
+          { "name", "Triangle" },
+          { "primitives", { { { "attributes", position } } } },
+        },
+      },
+    },
+    {
+      "nodes",
       {
         { { "name", "Lines" }, { "mesh", 0 } },
         { { "name", "Triangle" }, { "mesh", 1 } },
-      } },
+      },
+    },
     { "scenes", { { { "nodes", { 0, 1 } } } } },
     { "scene", 0 },
   };

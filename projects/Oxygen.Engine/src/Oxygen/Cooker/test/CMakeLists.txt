@@ -57,6 +57,7 @@ oxygen_cooker_test(
     "Import/SurfaceProvenance_test.cpp"
     "Import/MaterialSource_test.cpp"
     "Import/MeshTransformBake_test.cpp"
+    "Import/ModelNodeIdentity_test.cpp"
     "Import/Naming_test.cpp"
     "Import/PhysicsImportRequestBuilder_test.cpp"
     "Import/SceneNodeImportDefaults_test.cpp"

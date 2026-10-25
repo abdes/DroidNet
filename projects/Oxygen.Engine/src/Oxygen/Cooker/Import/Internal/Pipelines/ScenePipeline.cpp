@@ -126,7 +126,7 @@ namespace {
     // A LOD policy value is an index, so sorting keeps it valid.
     std::ranges::sort(build.overrides, {},
       [](const data::pak::world::OverrideRecord& record) -> auto {
-        return std::tie(record.node_index, record.override_id, record.part_id);
+        return std::tie(record.target, record.override_id, record.part_id);
       });
     std::ranges::sort(build.renderables,
       [](const RenderableRecord& a, const RenderableRecord& b) -> bool {
@@ -274,12 +274,26 @@ namespace {
           "cameras"));
       return outcome;
     }
-    if (build.starting_camera != data::pak::world::kNoStartingCamera
-      && !camera_nodes.contains(build.starting_camera)) {
+    // An instanced starting camera is checked when the scene is composed.
+    const auto& camera = build.starting_camera;
+    const auto instanced_camera
+      = camera.node_path != data::pak::world::kNoNodePath;
+    if (camera.node_index != data::pak::world::kNoStartingCamera
+      && !instanced_camera && !camera_nodes.contains(camera.node_index)) {
       diagnostics.push_back(
         MakeErrorDiagnostic("scene.starting_camera.not_a_camera",
           "The starting camera must be a node that owns a camera", source_id,
           "starting_camera"));
+      return outcome;
+    }
+    if (instanced_camera
+      && !std::ranges::contains(build.instances, camera.node_index,
+        &data::pak::world::SceneInstanceRecord::node_index)) {
+      diagnostics.push_back(
+        MakeErrorDiagnostic("scene.starting_camera.not_an_instance_root",
+          "A starting camera with a node path must name it below an instance "
+          "root",
+          source_id, "starting_camera"));
       return outcome;
     }
     if (!HasValidStartState(build)) {
@@ -399,6 +413,12 @@ namespace {
     add_component_table(ComponentType::kStartingInputContext,
       sizeof(data::pak::world::StartingInputContextRecord),
       std::as_bytes(std::span(build.starting_input_contexts)));
+    add_component_table(ComponentType::kNodePath,
+      sizeof(data::pak::world::NodePathRecord),
+      std::as_bytes(build.node_paths.Records()));
+    add_component_table(ComponentType::kNodePathElement,
+      sizeof(data::pak::world::NodePathElement),
+      std::as_bytes(build.node_paths.Elements()));
 
     std::vector<SceneComponentTableDesc> component_directory;
 

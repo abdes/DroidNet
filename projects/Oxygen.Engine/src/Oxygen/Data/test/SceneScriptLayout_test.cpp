@@ -10,14 +10,17 @@
 #include <limits>
 #include <span>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/ComponentType.h>
+#include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/Data/SceneAsset.h>
+#include <Oxygen/Data/SceneIds.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {
@@ -50,7 +53,7 @@ protected:
       .entry_size = sizeof(component_),
     };
     component_.slot_count = 2U;
-    node_.node_id = data::AssetKey::FromVirtualPath("/test/root");
+    node_.node_id = data::NodeId::FromStableIdentity("/test/root");
     node_.parent_index = 0U;
     descriptor_.script_slots = {
       .offset = table_.table.offset + sizeof(component_),
@@ -60,6 +63,8 @@ protected:
     auto offset = descriptor_.script_slots.offset + sizeof(slots_);
     for (size_t i = 0; i < slots_.size(); ++i) {
       auto& slot = slots_.at(i);
+      slot.slot_id = data::ScriptSlotId::FromStableIdentity(
+        "/test/slot/" + std::to_string(i));
       slot.script_asset_key
         = data::AssetKey::FromVirtualPath("/test/script.oscript");
       slot.params_count = 1U;
@@ -73,7 +78,7 @@ protected:
     environment_.byte_size = sizeof(environment_);
   }
 
-  auto Bytes() const -> std::vector<std::byte>
+  [[nodiscard]] auto Bytes() const -> std::vector<std::byte>
   {
     std::vector<std::byte> result;
     const auto append = [&result](const auto& value) -> auto {
@@ -162,5 +167,20 @@ NOLINT_TEST_F(SceneScriptLayoutTest, RejectsMissingScriptIdentity)
   const auto bytes = Bytes();
   EXPECT_THROW(
     static_cast<void>(data::SceneAsset({}, bytes)), std::runtime_error);
+}
+
+//! A change of a slot's parameter names the slot by its ID, so every slot has
+//! one, unique among its node's slots.
+NOLINT_TEST_F(SceneScriptLayoutTest, RejectsMissingOrRepeatedSlotIds)
+{
+  slots_.front().slot_id = {};
+  const auto missing = Bytes();
+  slots_.front().slot_id = slots_.back().slot_id;
+  const auto repeated = Bytes();
+
+  EXPECT_THROW(
+    static_cast<void>(data::SceneAsset({}, missing)), std::runtime_error);
+  EXPECT_THROW(
+    static_cast<void>(data::SceneAsset({}, repeated)), std::runtime_error);
 }
 } // namespace

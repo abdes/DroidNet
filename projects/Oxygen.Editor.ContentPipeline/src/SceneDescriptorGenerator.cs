@@ -23,12 +23,16 @@ namespace Oxygen.Editor.ContentPipeline;
 /// </summary>
 public sealed partial class SceneDescriptorGenerator : ISceneDescriptorGenerator
 {
-    private const int NativeSceneDescriptorVersion = 14;
     private const double MaximumExposureLogLuminance = 32;
     private static readonly Lazy<EditorSchemaCatalog> SceneSchemas = new(() =>
         EditorSchemaCatalog.LoadFromDirectory(Path.Combine(
             Path.GetDirectoryName(typeof(EditorSchemaCatalog).Assembly.Location) ?? AppContext.BaseDirectory,
             "Schemas")));
+
+    // The engine schema owns the descriptor version; a descriptor names the one it requires.
+    private static readonly Lazy<int> NativeSceneDescriptorVersion = new(() =>
+        SceneSchemas.Value.GetEngineSchema("oxygen.scene-descriptor.schema.json")["properties"]!["version"]!["const"]!
+            .GetValue<int>());
 
     /// <inheritdoc />
     public async Task<SceneDescriptorGenerationResult> GenerateAsync(
@@ -133,7 +137,7 @@ public sealed partial class SceneDescriptorGenerator : ISceneDescriptorGenerator
         var (scriptBindings, scriptSites, scriptReferences) = CreateScriptBindings(scene, scope, sceneInput, nodeIndices, operationId, diagnostics);
         var startingCamera = CreateStartingCamera(scene, nodeIndices, site);
         var startingInputContexts = CreateStartingInputContexts(scene, scope, site);
-        if (diagnostics.Any(static issue => issue.Severity >= DiagnosticSeverity.Error))
+        if (diagnostics.Exists(static issue => issue.Severity >= DiagnosticSeverity.Error))
         {
             return new(sceneInput.AssetUri, descriptorPath, descriptorVirtualPath, Dependencies: [], diagnostics);
         }
@@ -153,8 +157,8 @@ public sealed partial class SceneDescriptorGenerator : ISceneDescriptorGenerator
                 PhysicsSidecars: authoredReferences?.PhysicsSidecars,
                 ExtraAssets: authoredReferences?.ExtraAssets);
         var descriptor = new NativeSceneDescriptor(
-            Schema: string.Create(CultureInfo.InvariantCulture, $"oxygen.scene-descriptor.v{NativeSceneDescriptorVersion}"),
-            Version: NativeSceneDescriptorVersion,
+            Schema: string.Create(CultureInfo.InvariantCulture, $"oxygen.scene-descriptor.v{NativeSceneDescriptorVersion.Value}"),
+            Version: NativeSceneDescriptorVersion.Value,
             Name: Path.GetFileNameWithoutExtension(Path.GetFileNameWithoutExtension(sceneInput.SourceRelativePath)),
             Nodes: nodes,
             StartingCamera: startingCamera,
@@ -229,6 +233,7 @@ public sealed partial class SceneDescriptorGenerator : ISceneDescriptorGenerator
 
             // Every source mode is written, so the cooker's omitted-value defaults never decide one.
             nodes.Add(new NativeSceneNode(
+                node.Id.ToString(),
                 node.Metadata.Name,
                 parentIndex,
                 new NativeNodeFlags(

@@ -12,9 +12,11 @@
 #include <filesystem>
 #include <limits>
 #include <optional>
+#include <set>
 #include <span>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -25,16 +27,21 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/GeometryDefaults.h>
 #include <Oxygen/Cooker/Import/Internal/ImportManifest_schema.h>
+#include <Oxygen/Cooker/Import/Internal/NodeReferenceJson.h>
 #include <Oxygen/Cooker/Import/Internal/SceneSource.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
 #include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakFormat_world.h>
+#include <Oxygen/Data/SceneChangeValues.h>
+#include <Oxygen/Data/SceneIds.h>
 #include <Oxygen/Data/SceneRecordDefaults.h>
 #include <Oxygen/Data/SceneRecordFields.h>
+#include <Oxygen/Data/Schema/Generated.SceneChanges.h>
 #include <Oxygen/Data/Schema/Generated.SceneComponents.h>
 #include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Scene/ExposureSettings.h>
@@ -413,7 +420,7 @@ namespace {
         = data::SurfaceId::FromString(part.at("id").get<std::string>());
       if (!surface || surface->IsNil() || !surfaces.insert(*surface).second) {
         AddDiagnostic(context, ImportSeverity::kError,
-          "scene.descriptor.surface_invalid",
+          "scene.descriptor.surface_id_invalid",
           "A surface override requires a non-nil surface identity, named once",
           part_path + ".id");
         return false;
@@ -421,6 +428,212 @@ namespace {
       if (!ReadOverrideValues(context, part.at("values"),
             data::schema::PartKind::kSurface, *surface, part_path + ".values",
             overrides)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  //! Reads a node path, reporting the first element that is not a non-nil
+  //! node ID.
+  auto ReadNodePath(SourceContext& context, const json& document,
+    const std::string& object_path) -> std::optional<std::vector<data::NodeId>>
+  {
+    auto path = ParseNodePath(document);
+    if (!path.has_value()) {
+      AddDiagnostic(context, ImportSeverity::kError,
+        "scene.descriptor.node_path_invalid",
+        "A node path element must be a non-nil node ID",
+        object_path + "[" + std::to_string(path.error()) + "]");
+      return std::nullopt;
+    }
+    return std::move(*path);
+  }
+
+  //! Reads the value of a change of a property its node's records hold, in
+  //! schema units, and encodes it as the property's change.
+  auto ReadChangeValue(SourceContext& context,
+    const data::schema::OverrideProperty& property, const json& document,
+    const std::string& object_path) -> std::optional<SceneSource::OverrideValue>
+  {
+    using data::schema::ValueType;
+    auto value = std::optional<data::schema::SchemaValue> {};
+    switch (property.type) {
+    case ValueType::kBool:
+      if (document.is_boolean()) {
+        value = document.get<bool>();
+      }
+      break;
+    case ValueType::kInt:
+    case ValueType::kEnum:
+      // An enum value is its member's wire value.
+      if (document.is_number_integer()
+        && std::in_range<std::int32_t>(document.get<std::int64_t>())) {
+        value = static_cast<std::int32_t>(document.get<std::int64_t>());
+      }
+      break;
+    case ValueType::kFloat:
+      if (document.is_number() && std::isfinite(document.get<double>())) {
+        value = document.get<float>();
+      }
+      break;
+    case ValueType::kVec3:
+      if (document.is_array() && document.size() == 3
+        && std::ranges::all_of(document, [](const json& axis) -> bool {
+             return axis.is_number() && std::isfinite(axis.get<double>());
+           })) {
+        value = std::array {
+          document.at(0).get<float>(),
+          document.at(1).get<float>(),
+          document.at(2).get<float>(),
+        };
+      }
+      break;
+    case ValueType::kAsset:
+    case ValueType::kString:
+    case ValueType::kLodPolicy:
+      break;
+    }
+    const auto encoded = value.has_value()
+      ? data::schema::EncodeChange(property.id, *value)
+      : std::nullopt;
+    if (!encoded.has_value()) {
+      AddDiagnostic(context, ImportSeverity::kError,
+        "scene.descriptor.instance_override_invalid",
+        "The value is not a valid value of the property the scene schema "
+        "declares",
+        object_path);
+      return std::nullopt;
+    }
+    return *encoded;
+  }
+
+  //! Reads one component's changes of an instanced node.
+  auto ReadComponentChanges(SourceContext& context,
+    const std::string_view component_kind, const json& document,
+    const std::string& object_path, const std::vector<data::NodeId>& path,
+    std::vector<SceneSource::InstanceChange>& changes) -> bool
+  {
+    const auto read_values
+      = [&](const json& values, const data::schema::PartKind part_kind,
+          const data::SurfaceId part_id,
+          const base::Sha256Digest& layout_revision,
+          const std::string& values_path) -> bool {
+      for (const auto& [key, value] : values.items()) {
+        auto value_path = values_path;
+        value_path.append("[\"").append(key).append("\"]");
+        const auto* property
+          = data::schema::FindOverrideProperty(component_kind, part_kind, key);
+        if (property == nullptr) {
+          AddDiagnostic(context, ImportSeverity::kError,
+            "scene.descriptor.override_unknown",
+            "The scene schema declares no changeable property with this "
+            "component and key",
+            value_path);
+          return false;
+        }
+        auto read = property->asset_sourced
+          ? ReadOverrideValue(context, *property, value, value_path)
+          : ReadChangeValue(context, *property, value, value_path);
+        if (!read.has_value()) {
+          return false;
+        }
+        changes.push_back({
+          .path = path,
+          .change = {
+            .property = property,
+            .part_id = part_id,
+            .layout_revision = layout_revision,
+            .value = std::move(*read),
+            .object_path = std::move(value_path),
+          },
+        });
+      }
+      return true;
+    };
+
+    if (document.contains("values")
+      && !read_values(document.at("values"), data::schema::PartKind::kNone,
+        data::SurfaceId {}, base::Sha256Digest {}, object_path + ".values")) {
+      return false;
+    }
+    if (!document.contains("parts")) {
+      return true;
+    }
+    const auto& parts = document.at("parts");
+    for (size_t i = 0; i < parts.size(); ++i) {
+      const auto& part = parts.at(i);
+      const auto part_path = object_path + ".parts[" + std::to_string(i) + "]";
+      // Surfaces are the only part kind.
+      if (part.at("kind").get<std::string>() != "surface") {
+        AddDiagnostic(context, ImportSeverity::kError,
+          "scene.descriptor.part_kind_unknown",
+          "The scene schema declares no part of this kind",
+          part_path + ".kind");
+        return false;
+      }
+      const auto surface
+        = data::SurfaceId::FromString(part.at("id").get<std::string>());
+      const auto revision = base::Sha256DigestFromHex(
+        part.at("layout_revision").get<std::string>());
+      if (!surface.has_value() || surface.value().IsNil()) {
+        AddDiagnostic(context, ImportSeverity::kError,
+          "scene.descriptor.surface_id_invalid",
+          "A surface change requires a non-nil surface identity",
+          part_path + ".id");
+        return false;
+      }
+      if (!revision.has_value()) {
+        AddDiagnostic(context, ImportSeverity::kError,
+          "scene.descriptor.layout_revision_invalid",
+          "A surface change requires the layout revision it was made for",
+          part_path + ".layout_revision");
+        return false;
+      }
+      if (!read_values(part.at("values"), data::schema::PartKind::kSurface,
+            surface.value(), *revision, part_path + ".values")) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  //! Reads an instance root's `overrides`, the changes of the nodes the
+  //! instance brings in.
+  auto ReadInstanceChanges(SourceContext& context, const json& document,
+    const std::string& object_path,
+    std::vector<SceneSource::InstanceChange>& changes) -> bool
+  {
+    for (size_t i = 0; i < document.size(); ++i) {
+      const auto& entry = document.at(i);
+      const auto entry_path = object_path + "[" + std::to_string(i) + "]";
+      const auto path
+        = ReadNodePath(context, entry.at("path"), entry_path + ".path");
+      if (!path.has_value()) {
+        return false;
+      }
+      for (const auto& [kind, component] : entry.at("components").items()) {
+        auto component_path = entry_path;
+        component_path.append(".components.").append(kind);
+        if (!ReadComponentChanges(
+              context, kind, component, component_path, *path, changes)) {
+          return false;
+        }
+      }
+    }
+    // A scene holds one change per node, property and part.
+    auto seen = std::set<std::tuple<std::vector<data::NodeId>,
+      data::schema::OverrideId, data::SurfaceId>> {};
+    for (const auto& change : changes) {
+      if (!seen
+            .emplace(
+              change.path, change.change.property->id, change.change.part_id)
+            .second) {
+        AddDiagnostic(context, ImportSeverity::kError,
+          "scene.descriptor.instance_override_duplicate",
+          "Another change of this instance names the same node, property and "
+          "part",
+          change.change.object_path);
         return false;
       }
     }
@@ -857,15 +1070,21 @@ namespace {
     using data::schema::TransformField;
     const auto transform = node.Nested("transform");
     transform.ReadArray("translation", record, ComponentId::kTransform,
-      std::array { TransformField::kPositionX, TransformField::kPositionY,
-        TransformField::kPositionZ });
+      std::array {
+        TransformField::kPositionX,
+        TransformField::kPositionY,
+        TransformField::kPositionZ,
+      });
     auto rotation = world::Quaternion {};
     std::ranges::copy(record.rotation, rotation.begin());
     transform.ReadFloats("rotation", rotation);
     world::WriteRotation(record, rotation);
     transform.ReadArray("scale", record, ComponentId::kTransform,
-      std::array { TransformField::kScaleX, TransformField::kScaleY,
-        TransformField::kScaleZ });
+      std::array {
+        TransformField::kScaleX,
+        TransformField::kScaleY,
+        TransformField::kScaleZ,
+      });
   }
 
   auto PrepareSceneSource(SourceContext& context, const json& descriptor_doc)
@@ -882,6 +1101,7 @@ namespace {
 
     auto& string_table = prepared.build.strings;
     prepared.build.nodes.reserve(nodes_doc.size());
+    auto node_ids = std::unordered_set<data::NodeId> {};
 
     for (size_t node_i = 0; node_i < nodes_doc.size(); ++node_i) {
       const auto& node_doc = nodes_doc.at(node_i);
@@ -889,6 +1109,20 @@ namespace {
         = std::string { "nodes[" } + std::to_string(node_i) + "]";
 
       auto node_record = data::pak::world::NodeRecord {};
+      const auto node_id = ParseNonNilId<data::NodeId>(node_doc.at("id"));
+      if (!node_id.has_value()) {
+        AddDiagnostic(context, ImportSeverity::kError,
+          "scene.descriptor.node_id_invalid",
+          "A node ID must be a non-nil UUID", node_path + ".id");
+        return std::nullopt;
+      }
+      if (!node_ids.insert(*node_id).second) {
+        AddDiagnostic(context, ImportSeverity::kError,
+          "scene.descriptor.node_id_duplicate",
+          "Another node of the scene has this ID", node_path + ".id");
+        return std::nullopt;
+      }
+      node_record.node_id = *node_id;
       if (node_doc.contains("name")) {
         node_record.scene_name_offset
           = string_table.Add(node_doc.at("name").get<std::string>());
@@ -916,24 +1150,42 @@ namespace {
       }
 
       if (node_doc.contains("instance")) {
-        prepared.instances.push_back({
+        const auto& instance_doc = node_doc.at("instance");
+        auto instance = SceneSource::Instance {
           .node_index = static_cast<uint32_t>(node_i),
-          .scene = node_doc.at("instance").at("scene_ref").get<std::string>(),
+          .scene = instance_doc.at("scene_ref").get<std::string>(),
           .object_path = node_path + ".instance.scene_ref",
-        });
+          .changes = {},
+        };
+        if (instance_doc.contains("overrides")
+          && !ReadInstanceChanges(context, instance_doc.at("overrides"),
+            node_path + ".instance.overrides", instance.changes)) {
+          return std::nullopt;
+        }
+        prepared.instances.push_back(std::move(instance));
       }
 
       prepared.build.nodes.push_back(node_record);
     }
 
     if (descriptor_doc.contains("starting_camera")) {
-      const auto camera = descriptor_doc.at("starting_camera").get<uint32_t>();
+      const auto& camera_doc = descriptor_doc.at("starting_camera");
+      const auto camera = camera_doc.at("node").get<uint32_t>();
       if (!ValidateNodeIndex(context, camera, node_count,
             "scene.descriptor.starting_camera_out_of_range",
-            "Starting camera node index is out of range", "starting_camera")) {
+            "Starting camera node index is out of range",
+            "starting_camera.node")) {
         return std::nullopt;
       }
-      prepared.build.starting_camera = camera;
+      prepared.build.starting_camera.node_index = camera;
+      if (camera_doc.contains("path")) {
+        auto path = ReadNodePath(
+          context, camera_doc.at("path"), "starting_camera.path");
+        if (!path.has_value()) {
+          return std::nullopt;
+        }
+        prepared.starting_camera_path = std::move(*path);
+      }
     }
     if (descriptor_doc.contains("starting_input_contexts")) {
       const auto& values = descriptor_doc.at("starting_input_contexts");
@@ -1105,9 +1357,11 @@ namespace {
           reader.Read("use_per_pixel_atmosphere_transmittance", light, kLight,
             DirectionalLightField::kUsePerPixelAtmosphereTransmittance);
           reader.ReadArray("atmosphere_disk_luminance_scale_rgb", light, kLight,
-            std::array { DirectionalLightField::kDiskScaleR,
+            std::array {
+              DirectionalLightField::kDiskScaleR,
               DirectionalLightField::kDiskScaleG,
-              DirectionalLightField::kDiskScaleB });
+              DirectionalLightField::kDiskScaleB,
+            });
           reader.Read("cascade_count", light, kLight,
             DirectionalLightField::kCascadeCount);
           reader.Read(
@@ -1115,10 +1369,12 @@ namespace {
           reader.Read("max_shadow_distance", light, kLight,
             DirectionalLightField::kMaxShadowDistance);
           reader.ReadArray("cascade_distances", light, kLight,
-            std::array { DirectionalLightField::kCascadeDistance0,
+            std::array {
+              DirectionalLightField::kCascadeDistance0,
               DirectionalLightField::kCascadeDistance1,
               DirectionalLightField::kCascadeDistance2,
-              DirectionalLightField::kCascadeDistance3 });
+              DirectionalLightField::kCascadeDistance3,
+            });
           // Authored distances without a split mode or a shadow distance are
           // the manual distances, ending at the last one.
           if (reader.Contains("cascade_distances")) {
@@ -1284,13 +1540,17 @@ namespace {
         reader.Read(
           "fog_phase_g", record, kFog, LocalFogVolumeField::kFogPhaseG);
         reader.ReadArray("fog_albedo", record, kFog,
-          std::array { LocalFogVolumeField::kFogAlbedoR,
+          std::array {
+            LocalFogVolumeField::kFogAlbedoR,
             LocalFogVolumeField::kFogAlbedoG,
-            LocalFogVolumeField::kFogAlbedoB });
+            LocalFogVolumeField::kFogAlbedoB,
+          });
         reader.ReadArray("fog_emissive", record, kFog,
-          std::array { LocalFogVolumeField::kFogEmissiveR,
+          std::array {
+            LocalFogVolumeField::kFogEmissiveR,
             LocalFogVolumeField::kFogEmissiveG,
-            LocalFogVolumeField::kFogEmissiveB });
+            LocalFogVolumeField::kFogEmissiveB,
+          });
         reader.Read(
           "sort_priority", record, kFog, LocalFogVolumeField::kSortPriority);
         if (!fog_valid) {

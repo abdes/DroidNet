@@ -29,7 +29,7 @@ public:
 private:
   const GlobalOptions* global_options_ = nullptr;
   SceneImportSettings options_ {};
-  bool no_bake_transforms_ = false;
+  bool bake_transforms_ = false;
   bool no_import_textures_ = false;
   bool no_import_materials_ = false;
   bool no_import_geometry_ = false;

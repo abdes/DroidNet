@@ -69,19 +69,22 @@ auto oxygen::data::to_string(oxygen::data::ComponentType value) noexcept
 {
   switch (value) {
     // clang-format off
-    case ComponentType::kUnknown:            return "__Unknown__";
-    case ComponentType::kRenderable:         return "MESH";
-    case ComponentType::kPerspectiveCamera:  return "PCAM";
-    case ComponentType::kOrthographicCamera: return "OCAM";
-    case ComponentType::kDirectionalLight:   return "DLIT";
-    case ComponentType::kPointLight:         return "PLIT";
-    case ComponentType::kSpotLight:          return "SLIT";
-    case ComponentType::kScripting:          return "SCRP";
-    case ComponentType::kSceneInstance:      return "INST";
+    case ComponentType::kUnknown:              return "__Unknown__";
+    case ComponentType::kRenderable:           return "MESH";
+    case ComponentType::kPerspectiveCamera:    return "PCAM";
+    case ComponentType::kOrthographicCamera:   return "OCAM";
+    case ComponentType::kDirectionalLight:     return "DLIT";
+    case ComponentType::kPointLight:           return "PLIT";
+    case ComponentType::kSpotLight:            return "SLIT";
+    case ComponentType::kScripting:            return "SCRP";
+    case ComponentType::kSceneInstance:        return "INST";
     case ComponentType::kStartingInputContext: return "SICX";
-    case ComponentType::kLocalFogVolume:     return "LFOG";
-    case ComponentType::kOverride:           return "OVRD";
-    case ComponentType::kOverrideLodPolicy:  return "OLOD";
+    case ComponentType::kNodePath:             return "NPTH";
+    case ComponentType::kNodePathElement:      return "NPEL";
+    case ComponentType::kScriptParamOverride:  return "SPOV";
+    case ComponentType::kLocalFogVolume:       return "LFOG";
+    case ComponentType::kOverride:             return "OVRD";
+    case ComponentType::kOverrideLodPolicy:    return "OLOD";
     // clang-format on
   }
 

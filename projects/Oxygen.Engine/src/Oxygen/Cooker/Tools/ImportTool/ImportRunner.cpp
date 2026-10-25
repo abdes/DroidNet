@@ -176,9 +176,9 @@ auto RunImportJob(const ImportRequest& request,
         UpdateProgressTrace(progress_trace, progress, now);
 
         if (progress.header.kind == ProgressEventKind::kJobStarted) {
-          recent_logs.push_back("Job Started");
+          recent_logs.emplace_back("Job Started");
         } else if (progress.header.kind == ProgressEventKind::kJobFinished) {
-          recent_logs.push_back("Job Finished");
+          recent_logs.emplace_back("Job Finished");
         }
 
         if (const auto* item = GetItemProgress(progress);
@@ -212,7 +212,8 @@ auto RunImportJob(const ImportRequest& request,
     LOG_F(INFO, "ImportTool submit job: source='{}' with_content_hashing={}",
       request.source_path.string(), request.options.with_content_hashing);
     const auto job_id = publication
-      ? service->SubmitRetainedImport(publication, on_complete, on_progress)
+      ? service->SubmitRetainedImport(
+          std::move(publication), on_complete, on_progress)
       : service->SubmitImport(request, on_complete, on_progress);
     if (!job_id) {
       submit_error = "ERROR: failed to submit import job";
@@ -234,9 +235,10 @@ auto RunImportJob(const ImportRequest& request,
           } else {
             vm.progress = 0.0F;
           }
-          vm.status = report.has_value()
-            ? (report->success ? "Completed" : "Failed")
-            : "Running";
+          vm.status = "Running";
+          if (report.has_value()) {
+            vm.status = report->success ? "Completed" : "Failed";
+          }
           vm.recent_logs = recent_logs;
           if (progress_trace.started.has_value()) {
             vm.elapsed = std::chrono::duration_cast<std::chrono::seconds>(
@@ -445,7 +447,7 @@ auto RunSceneImportJob(const SceneImportSettings& settings,
         "no-import-scene",
         "unit-policy",
         "unit-scale",
-        "no-bake-transforms",
+        "bake-transforms",
         "normals",
         "tangents",
         "prune-nodes",

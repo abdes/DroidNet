@@ -6,9 +6,7 @@
 
 #pragma once
 
-#include <algorithm>
 #include <cstddef>
-#include <cstdint>
 #include <cstring>
 #include <iomanip>
 #include <iostream>
@@ -43,8 +41,7 @@ inline auto PrintAssetKey(const oxygen::data::AssetKey& key, DumpContext& ctx)
 {
   if (ctx.verbose) {
     PrintUtils::Field("GUID", oxygen::data::to_string(key));
-    PrintUtils::Bytes(
-      "Raw bytes", reinterpret_cast<const uint8_t*>(&key), sizeof(key));
+    PrintUtils::Bytes("Raw bytes", key.data(), oxygen::data::AssetKey::size());
     return;
   }
 
@@ -80,8 +77,7 @@ inline auto PrintAssetDescriptorHexPreview(
 
   std::cout << "    Asset Descriptor Preview (" << data.size()
             << " bytes read):\n";
-  PrintUtils::HexDump(reinterpret_cast<const uint8_t*>(data.data()),
-    (std::min)(data.size(), ctx.max_data_bytes), ctx.max_data_bytes);
+  PrintUtils::HexDump(data, ctx.max_data_bytes);
 }
 
 //! Resolves a string of a descriptor's string table, for display.
@@ -135,7 +131,8 @@ inline auto PrintAssetHeaderFields(
   return fmt::format("[{:.3f}, {:.3f}, {:.3f}]", v[0], v[1], v[2]);
 }
 
-[[nodiscard]] inline auto FormatQuat(const float q[4]) -> std::string
+[[nodiscard]] inline auto FormatQuat(const std::span<const float, 4> q)
+  -> std::string
 {
   return fmt::format(
     "[{:.3f}, {:.3f}, {:.3f}, {:.3f}]", q[0], q[1], q[2], q[3]);
@@ -147,7 +144,7 @@ inline auto PrintAssetHeaderFields(
   if (offset > data.size() || struct_size > (data.size() - offset)) {
     return false;
   }
-  std::memcpy(out, data.data() + offset, struct_size);
+  std::memcpy(out, std::span(data).subspan(offset).data(), struct_size);
   return true;
 }
 

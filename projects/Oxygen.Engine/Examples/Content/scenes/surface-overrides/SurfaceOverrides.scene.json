@@ -1,5 +1,5 @@
 {
-  "version": 14,
+  "version": 15,
   "name": "SurfaceOverrides",
   "starting_input_contexts": [
     {
@@ -9,6 +9,7 @@
   ],
   "nodes": [
     {
+      "id": "c515169b-5de1-5b91-8d7f-def1f2bc6abc",
       "name": "Root",
       "flags": {
         "visible": "shown",
@@ -17,6 +18,7 @@
       }
     },
     {
+      "id": "ff6170eb-8d0f-5f52-a2d1-9928cad68e24",
       "name": "Floor",
       "flags": {
         "visible": "shown",
@@ -31,6 +33,7 @@
       }
     },
     {
+      "id": "4942049d-d27f-5942-b42b-c289ca21e340",
       "name": "Lamp_Asset",
       "flags": {
         "visible": "shown",
@@ -45,6 +48,7 @@
       }
     },
     {
+      "id": "04f0804f-e518-5e65-a026-c1789ba1d216",
       "name": "Lamp_SceneMaterial",
       "flags": {
         "visible": "shown",
@@ -59,6 +63,7 @@
       }
     },
     {
+      "id": "24cf2b84-47a5-5060-a176-3ab59c129dfe",
       "name": "Lamp_ShadeHidden",
       "flags": {
         "visible": "shown",
@@ -73,6 +78,7 @@
       }
     },
     {
+      "id": "e4cdaa05-49f5-51ea-9bdc-ec84cbca6de0",
       "name": "Lamp_MetalNoShadow",
       "flags": {
         "visible": "shown",
@@ -87,6 +93,7 @@
       }
     },
     {
+      "id": "9335cb2f-a731-54c3-94ab-f6f884d89c69",
       "name": "Pot_Asset",
       "flags": {
         "visible": "shown",
@@ -101,6 +108,7 @@
       }
     },
     {
+      "id": "7f3815cd-f0aa-5ef8-b5ac-f7510750384d",
       "name": "Pot_SceneMaterials",
       "flags": {
         "visible": "shown",
@@ -115,6 +123,7 @@
       }
     },
     {
+      "id": "86d895ca-d218-5a1a-9878-f3e9c4b41266",
       "name": "Pot_Runtime",
       "flags": {
         "visible": "shown",
@@ -129,6 +138,7 @@
       }
     },
     {
+      "id": "2fc276b7-1bd1-5654-ad50-c1dcac70765b",
       "name": "Pillar_Asset",
       "flags": {
         "visible": "shown",
@@ -143,6 +153,7 @@
       }
     },
     {
+      "id": "7d93470a-9068-52f9-9f45-22a0f92860f3",
       "name": "Pillar_CastOverride",
       "flags": {
         "visible": "shown",
@@ -157,6 +168,7 @@
       }
     },
     {
+      "id": "c9504929-8759-541a-81d5-83cfb38acfea",
       "name": "Ghost_Asset",
       "flags": {
         "visible": "shown",
@@ -171,6 +183,7 @@
       }
     },
     {
+      "id": "6aa310d8-7309-5bee-a614-c3e907c2ac3b",
       "name": "Ghost_VisibleOverride",
       "flags": {
         "visible": "shown",
@@ -185,6 +198,7 @@
       }
     },
     {
+      "id": "c66dc7eb-d027-5dd2-b11e-eca2853f6d35",
       "name": "Lod_Asset",
       "flags": {
         "visible": "shown",
@@ -199,6 +213,7 @@
       }
     },
     {
+      "id": "c683c0e6-e635-5ae6-a5dc-c37c8efa6a88",
       "name": "Lod_Fixed2",
       "flags": {
         "visible": "shown",
@@ -213,6 +228,7 @@
       }
     },
     {
+      "id": "7daa04da-0e9b-5c74-82f1-3f1ced444878",
       "name": "Lod_ScreenSpaceError",
       "flags": {
         "visible": "shown",
@@ -227,6 +243,7 @@
       }
     },
     {
+      "id": "b7d169c6-6ee3-5991-9915-90533c227aee",
       "name": "Lod_Material",
       "flags": {
         "visible": "shown",
@@ -241,6 +258,7 @@
       }
     },
     {
+      "id": "8a79649e-18df-5cc2-a8df-5186d9803b9d",
       "name": "Play_Lamp",
       "flags": {
         "visible": "shown",
@@ -255,6 +273,7 @@
       }
     },
     {
+      "id": "3e4a75fc-941e-5842-a956-2c609d19a6e8",
       "name": "Play_Lod",
       "flags": {
         "visible": "shown",
@@ -269,6 +288,7 @@
       }
     },
     {
+      "id": "c6c4f195-9614-5532-a5c6-04b7f81eb715",
       "name": "MainCamera",
       "flags": {
         "visible": "shown",
@@ -283,6 +303,7 @@
       }
     },
     {
+      "id": "0a40639d-4d80-57f2-8894-404e17d59482",
       "name": "Sun",
       "flags": {
         "visible": "shown",
@@ -297,6 +318,7 @@
       }
     },
     {
+      "id": "70bfb4a4-9ade-5a73-8fa8-26092e2527cf",
       "name": "Showcase",
       "flags": {
         "visible": "shown",
@@ -311,6 +333,7 @@
       }
     },
     {
+      "id": "8611e4e8-d6ff-5643-8250-4da307f01f87",
       "name": "Lamp_SceneShadeHidden",
       "flags": {
         "visible": "shown",
@@ -325,6 +348,7 @@
       }
     },
     {
+      "id": "ca1af7c3-7688-5de7-aa7a-0a8164f8074a",
       "name": "Lamp_SceneMetalNoShadow",
       "flags": {
         "visible": "shown",
@@ -339,6 +363,7 @@
       }
     },
     {
+      "id": "65765701-7805-55ea-97fd-d0e541716d78",
       "name": "Pillar_SceneCast",
       "flags": {
         "visible": "shown",
@@ -353,6 +378,7 @@
       }
     },
     {
+      "id": "4bdbdf1d-a025-58e0-89b5-f9df50204082",
       "name": "Ghost_SceneVisible",
       "flags": {
         "visible": "shown",
@@ -367,6 +393,7 @@
       }
     },
     {
+      "id": "ca401fd4-037e-565e-a831-5e71979c232f",
       "name": "Lod_SceneFixed",
       "flags": {
         "visible": "shown",
@@ -381,6 +408,7 @@
       }
     },
     {
+      "id": "3f1a2e0f-9b00-5539-8287-92d101e87e68",
       "name": "Lod_SceneScreenSpaceError",
       "flags": {
         "visible": "shown",
@@ -414,17 +442,17 @@
     },
     {
       "node": 2,
-      "geometry_ref": "/.cooked/fbx/showcase/lampRoundTable.fbx/Mesh_0__baked_1.ogeo"
+      "geometry_ref": "/.cooked/fbx/showcase/lampRoundTable.fbx/Mesh_0.ogeo"
     },
     {
       "node": 3,
-      "geometry_ref": "/.cooked/fbx/showcase/lampRoundTable.fbx/Mesh_0__baked_1.ogeo",
+      "geometry_ref": "/.cooked/fbx/showcase/lampRoundTable.fbx/Mesh_0.ogeo",
       "overrides": {
         "parts": [
           {
             "kind": "surface",
-            "id": "61fcfaeb-0ff4-a13e-0355-842dd715bdbb",
-            "layout_revision": "323bf2b2f42400efee5ff51cbbb6a40915c56ff568f6750a7ea4beac3d6a8864",
+            "id": "914071b0-c22f-f08b-ea6d-33dd2cec5584",
+            "layout_revision": "e3c225623d3dc9c308622770e45e068174145d4525914fc02f9cb41efab0db82",
             "values": {
               "/material": "/.cooked/Materials/SoShadeRed.omat"
             }
@@ -434,11 +462,11 @@
     },
     {
       "node": 4,
-      "geometry_ref": "/.cooked/fbx/showcase/lampRoundTable.fbx/Mesh_0__baked_1.ogeo"
+      "geometry_ref": "/.cooked/fbx/showcase/lampRoundTable.fbx/Mesh_0.ogeo"
     },
     {
       "node": 5,
-      "geometry_ref": "/.cooked/fbx/showcase/lampRoundTable.fbx/Mesh_0__baked_1.ogeo"
+      "geometry_ref": "/.cooked/fbx/showcase/lampRoundTable.fbx/Mesh_0.ogeo"
     },
     {
       "node": 6,
@@ -506,7 +534,7 @@
     },
     {
       "node": 17,
-      "geometry_ref": "/.cooked/fbx/showcase/lampRoundTable.fbx/Mesh_0__baked_1.ogeo"
+      "geometry_ref": "/.cooked/fbx/showcase/lampRoundTable.fbx/Mesh_0.ogeo"
     },
     {
       "node": 18,
@@ -514,13 +542,13 @@
     },
     {
       "node": 22,
-      "geometry_ref": "/.cooked/fbx/showcase/lampRoundTable.fbx/Mesh_0__baked_1.ogeo",
+      "geometry_ref": "/.cooked/fbx/showcase/lampRoundTable.fbx/Mesh_0.ogeo",
       "overrides": {
         "parts": [
           {
             "kind": "surface",
-            "id": "61fcfaeb-0ff4-a13e-0355-842dd715bdbb",
-            "layout_revision": "323bf2b2f42400efee5ff51cbbb6a40915c56ff568f6750a7ea4beac3d6a8864",
+            "id": "914071b0-c22f-f08b-ea6d-33dd2cec5584",
+            "layout_revision": "e3c225623d3dc9c308622770e45e068174145d4525914fc02f9cb41efab0db82",
             "values": {
               "/visible": false
             }
@@ -530,13 +558,13 @@
     },
     {
       "node": 23,
-      "geometry_ref": "/.cooked/fbx/showcase/lampRoundTable.fbx/Mesh_0__baked_1.ogeo",
+      "geometry_ref": "/.cooked/fbx/showcase/lampRoundTable.fbx/Mesh_0.ogeo",
       "overrides": {
         "parts": [
           {
             "kind": "surface",
-            "id": "87ce6cad-ae7e-905c-2284-14fb824f4a39",
-            "layout_revision": "323bf2b2f42400efee5ff51cbbb6a40915c56ff568f6750a7ea4beac3d6a8864",
+            "id": "d7f5a78e-b92f-4d10-b287-5ca6ba9428b8",
+            "layout_revision": "e3c225623d3dc9c308622770e45e068174145d4525914fc02f9cb41efab0db82",
             "values": {
               "/casts_shadows": false
             }

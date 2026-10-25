@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <vector>
 
+#include <Oxygen/Cooker/Import/Internal/NodePathTable.h>
 #include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/PakFormat.h>
 
@@ -28,8 +29,8 @@ struct SceneBuild final {
   data::DescriptorStringsBuilder strings;
 
   std::vector<data::pak::world::RenderableRecord> renderables;
-  //! The renderables' overrides; a LOD policy value is an index into
-  //! `override_lod_policies`.
+  //! The overrides of the renderables and the changes of instanced nodes; a
+  //! LOD policy value is an index into `override_lod_policies`.
   std::vector<data::pak::world::OverrideRecord> overrides;
   std::vector<data::pak::geometry::LodPolicyRecord> override_lod_policies;
   std::vector<data::pak::world::LocalFogVolumeRecord> local_fog_volumes;
@@ -41,8 +42,11 @@ struct SceneBuild final {
 
   data::pak::world::SceneAssetFlags flags
     = data::pak::world::SceneAssetFlags::kNone;
-  data::pak::world::SceneNodeIndexT starting_camera
-    = data::pak::world::kNoStartingCamera;
+  data::pak::world::NodeRef starting_camera {
+    .node_index = data::pak::world::kNoStartingCamera,
+  };
+  //! The paths every node reference of the scene names.
+  internal::NodePathTable node_paths;
   //! Sorted by node; one instance per node.
   std::vector<data::pak::world::SceneInstanceRecord> instances;
   //! In activation order.

@@ -14,6 +14,7 @@
 #include <optional>
 #include <span>
 #include <stdexcept>
+#include <string>
 #include <string_view>
 #include <unordered_map>
 #include <utility>
@@ -54,12 +55,12 @@
 #include <Oxygen/Data/PhysicsResource.h>
 #include <Oxygen/Data/PhysicsSceneAsset.h>
 #include <Oxygen/Data/SceneAsset.h>
+#include <Oxygen/Data/SceneIds.h>
 #include <Oxygen/Data/SceneRecordDefaults.h>
 #include <Oxygen/Data/Schema/Generated.SceneComponents.h>
 #include <Oxygen/Data/ScriptAsset.h>
 #include <Oxygen/Data/ScriptResource.h>
 #include <Oxygen/Data/SourceKey.h>
-#include <Oxygen/Data/SourceOrigin.h>
 #include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/Data/Vertex.h>
 #include <Oxygen/OxCo/Co.h>
@@ -144,7 +145,10 @@ namespace {
     auto bytes = std::vector<std::byte> {};
     AppendRecord(bytes, desc);
     for (uint32_t i = 0; i < node_count; ++i) {
-      AppendRecord(bytes, pakw::NodeRecord {});
+      auto node = pakw::NodeRecord {};
+      node.node_id
+        = data::NodeId::FromStableIdentity("/test/node/" + std::to_string(i));
+      AppendRecord(bytes, node);
     }
     AppendText(bytes, std::string_view("\0", 1));
     return bytes;
@@ -160,10 +164,12 @@ namespace {
     desc.nodes.entry_size = sizeof(pakw::NodeRecord);
 
     auto root = pakw::NodeRecord {};
+    root.node_id = data::NodeId::FromStableIdentity("/test/root");
     root.parent_index = 0U;
     root.scene_name_offset = kRootNameOffset;
 
     auto fog_node = pakw::NodeRecord {};
+    fog_node.node_id = data::NodeId::FromStableIdentity("/test/fog");
     fog_node.parent_index = 0U;
     fog_node.scene_name_offset = kSecondNameOffset;
 
@@ -218,6 +224,10 @@ namespace {
     descriptor.nodes.count = 3U;
     descriptor.nodes.entry_size = sizeof(pakw::NodeRecord);
     auto nodes = std::array<pakw::NodeRecord, 3> {};
+    for (size_t i = 0; i < nodes.size(); ++i) {
+      nodes.at(i).node_id
+        = data::NodeId::FromStableIdentity("/test/node/" + std::to_string(i));
+    }
     nodes.at(0).scene_name_offset = kRootNameOffset;
     nodes.at(1).scene_name_offset = kSecondNameOffset;
     nodes.at(1).inherited_flags = pakw::kSceneNodeFlags_Inheritable;
@@ -244,10 +254,12 @@ namespace {
     desc.nodes.entry_size = sizeof(pakw::NodeRecord);
 
     auto root = pakw::NodeRecord {};
+    root.node_id = data::NodeId::FromStableIdentity("/test/root");
     root.parent_index = 0U;
     root.scene_name_offset = kRootNameOffset;
 
     auto sun_node = pakw::NodeRecord {};
+    sun_node.node_id = data::NodeId::FromStableIdentity("/test/sun");
     sun_node.parent_index = 0U;
     sun_node.scene_name_offset = kSecondNameOffset;
 
@@ -318,8 +330,10 @@ namespace {
       .entry_size = sizeof(pakw::NodeRecord),
     };
     auto root = pakw::NodeRecord {};
+    root.node_id = data::NodeId::FromStableIdentity("/test/root");
     root.scene_name_offset = kRootNameOffset;
     auto mesh_node = pakw::NodeRecord {};
+    mesh_node.node_id = data::NodeId::FromStableIdentity("/test/mesh");
     mesh_node.parent_index = 0;
     mesh_node.scene_name_offset = kSecondNameOffset;
     constexpr auto strings = std::string_view("\0Root\0MeshNode\0", 15);
@@ -355,7 +369,7 @@ namespace {
     };
     const auto& inventory = geometry.Surfaces();
     auto assignment = pakw::OverrideRecord {
-      .node_index = 1,
+      .target = { .node_index = 1 },
       .override_id = data::schema::OverrideId::kGeometrySurfaceMaterial,
       .part_id = inventory.surfaces.at(0).surface_id,
       .layout_revision = inventory.layout_revision,
@@ -546,14 +560,8 @@ namespace {
       data::SourceKey source, const content::LoadRequest& /*request*/,
       PhysicsSceneCallback on_complete) override
     {
-      last_physics_source_ = source;
       const auto asset = GetPhysicsSceneAsset(key);
       on_complete(asset && asset->GetSourceKey() == source ? asset : nullptr);
-    }
-
-    [[nodiscard]] auto LastPhysicsSource() const -> data::SourceKey
-    {
-      return last_physics_source_;
     }
 
     [[nodiscard]] auto GetMaterialAsset(
@@ -993,7 +1001,6 @@ namespace {
     uint64_t next_subscription_id_ { 1U };
     std::shared_ptr<int> eviction_alive_token_ { std::make_shared<int>(0) };
     uint64_t next_resource_key_ { 1U };
-    data::SourceKey last_physics_source_ {};
   };
 
   auto MakeService(content::IAssetLoader& loader)
@@ -1011,178 +1018,158 @@ namespace {
     co::testing::TestEventLoop loop;
     co::Run(loop, service.BuildSceneAsync(runtime_scene, std::move(asset)));
   }
+
+  auto SceneKey() -> data::AssetKey
+  {
+    return data::AssetKey::FromVirtualPath("/Game/Tests/SceneLoader/a.oscene");
+  }
+
+  auto SidecarKey() -> data::AssetKey
+  {
+    return data::AssetKey::FromVirtualPath("/Game/Tests/SceneLoader/a.opscene");
+  }
+
+  //! What a test sidecar says about the scene it belongs to; the defaults
+  //! describe the one-node scene `StartLoadWithSidecar` loads.
+  struct SidecarTarget final {
+    data::AssetKey scene_key = SceneKey();
+    uint32_t node_count = 1U;
+    bool matches_content = true;
+  };
+
+  //! Starts loading a one-node scene whose physics sidecar names `target`.
+  auto StartLoadWithSidecar(SceneLoaderTestAssetLoader& loader,
+    const SidecarTarget& target) -> std::shared_ptr<SceneLoaderService>
+  {
+    auto scene = std::make_shared<data::SceneAsset>(
+      SceneKey(), BuildMinimalSceneDescriptorBytes(1U));
+    auto hash = base::ComputeSha256(scene->GetRawData());
+    if (!target.matches_content) {
+      hash.at(0) = static_cast<std::uint8_t>(~hash.at(0));
+    }
+    loader.PutScene(SceneKey(), scene);
+    loader.PutPhysicsSidecar(SceneKey(), SidecarKey(),
+      std::make_shared<data::PhysicsSceneAsset>(SidecarKey(),
+        BuildMinimalPhysicsSidecarDescriptorBytes(
+          target.scene_key, target.node_count, hash)));
+    auto service = MakeService(loader);
+    service->StartLoad(SceneKey());
+    return service;
+  }
 } // namespace
 
-NOLINT_TEST(SceneLoaderServicePhase4Test,
-  StartLoadFailsWhenTargetSceneContentHashMismatches)
+//=== Loading a scene and its physics sidecar ===----------------------------//
+
+//! A scene without a physics sidecar loads on its own.
+NOLINT_TEST(SceneLoaderServiceLoadTest, LoadsASceneThatHasNoSidecar)
 {
   auto loader = SceneLoaderTestAssetLoader {};
-  const auto scene_key
-    = data::AssetKey::FromVirtualPath("/Game/Tests/Phase4/identity.oscene");
-  const auto sidecar_key
-    = data::AssetKey::FromVirtualPath("/Game/Tests/Phase4/identity.opscene");
-
-  const auto scene_bytes = BuildMinimalSceneDescriptorBytes(1U);
-  auto scene_asset = std::make_shared<data::SceneAsset>(scene_key, scene_bytes);
-  const auto scene_hash = base::ComputeSha256(scene_asset->GetRawData());
-  auto mismatched_hash = scene_hash;
-  mismatched_hash.at(0) = static_cast<std::uint8_t>(~mismatched_hash.at(0));
-
-  auto sidecar_asset = std::make_shared<data::PhysicsSceneAsset>(sidecar_key,
-    BuildMinimalPhysicsSidecarDescriptorBytes(scene_key, 1U, mismatched_hash));
-
-  loader.PutScene(scene_key, scene_asset);
-  loader.PutPhysicsSidecar(scene_key, sidecar_key, sidecar_asset);
-
+  loader.PutScene(SceneKey(),
+    std::make_shared<data::SceneAsset>(
+      SceneKey(), BuildMinimalSceneDescriptorBytes(1U)));
   auto service = MakeService(loader);
 
-  service->StartLoad(scene_key);
+  service->StartLoad(SceneKey());
 
-  EXPECT_TRUE(service->IsFailed());
-  EXPECT_FALSE(service->IsReady());
+  ASSERT_TRUE(service->IsReady());
+  const auto result = service->GetResult();
+  EXPECT_THAT(result.asset, ::testing::NotNull());
+  EXPECT_THAT(result.physics_asset, ::testing::IsNull());
 }
 
-NOLINT_TEST(
-  SceneLoaderServicePhase4Test, StartLoadFailsWhenTargetSceneKeyMismatches)
+//! A sidecar cooked for this scene's key, content and node count loads with
+//! it.
+NOLINT_TEST(SceneLoaderServiceLoadTest, LoadsASceneWithItsSidecar)
 {
   auto loader = SceneLoaderTestAssetLoader {};
-  const auto scene_key
-    = data::AssetKey::FromVirtualPath("/Game/Tests/Phase4/key_mismatch.oscene");
-  const auto foreign_scene_key
-    = data::AssetKey::FromVirtualPath("/Game/Tests/Phase4/foreign.oscene");
-  const auto sidecar_key = data::AssetKey::FromVirtualPath(
-    "/Game/Tests/Phase4/key_mismatch.opscene");
 
-  const auto scene_bytes = BuildMinimalSceneDescriptorBytes(1U);
-  auto scene_asset = std::make_shared<data::SceneAsset>(scene_key, scene_bytes);
-  const auto scene_hash = base::ComputeSha256(scene_asset->GetRawData());
-
-  auto sidecar_asset = std::make_shared<data::PhysicsSceneAsset>(sidecar_key,
-    BuildMinimalPhysicsSidecarDescriptorBytes(
-      foreign_scene_key, 1U, scene_hash));
-
-  loader.PutScene(scene_key, scene_asset);
-  loader.PutPhysicsSidecar(scene_key, sidecar_key, sidecar_asset);
-
-  auto service = MakeService(loader);
-
-  service->StartLoad(scene_key);
-
-  EXPECT_TRUE(service->IsFailed());
-  EXPECT_FALSE(service->IsReady());
-}
-
-NOLINT_TEST(
-  SceneLoaderServicePhase4Test, StartLoadFailsWhenTargetNodeCountMismatches)
-{
-  auto loader = SceneLoaderTestAssetLoader {};
-  const auto scene_key = data::AssetKey::FromVirtualPath(
-    "/Game/Tests/Phase4/node_count_mismatch.oscene");
-  const auto sidecar_key = data::AssetKey::FromVirtualPath(
-    "/Game/Tests/Phase4/node_count_mismatch.opscene");
-
-  const auto scene_bytes = BuildMinimalSceneDescriptorBytes(1U);
-  auto scene_asset = std::make_shared<data::SceneAsset>(scene_key, scene_bytes);
-  const auto scene_hash = base::ComputeSha256(scene_asset->GetRawData());
-
-  auto sidecar_asset = std::make_shared<data::PhysicsSceneAsset>(sidecar_key,
-    BuildMinimalPhysicsSidecarDescriptorBytes(scene_key, 2U, scene_hash));
-
-  loader.PutScene(scene_key, scene_asset);
-  loader.PutPhysicsSidecar(scene_key, sidecar_key, sidecar_asset);
-
-  auto service = MakeService(loader);
-
-  service->StartLoad(scene_key);
-
-  EXPECT_TRUE(service->IsFailed());
-  EXPECT_FALSE(service->IsReady());
-}
-
-NOLINT_TEST(SceneLoaderServicePhase4Test,
-  StartLoadSucceedsWhenSceneIdentityHashKeyAndNodeCountMatch)
-{
-  auto loader = SceneLoaderTestAssetLoader {};
-  const auto parsed_source
-    = data::SourceKey::FromString("019ba912-6b80-7000-8000-000000000001");
-  ASSERT_TRUE(parsed_source.has_value());
-  const auto source = parsed_source.value();
-  const auto scene_key
-    = data::AssetKey::FromVirtualPath("/Game/Tests/Phase4/valid.oscene");
-  const auto sidecar_key
-    = data::AssetKey::FromVirtualPath("/Game/Tests/Phase4/valid.opscene");
-
-  const auto scene_bytes = BuildMinimalSceneDescriptorBytes(1U);
-  auto scene_asset = std::make_shared<data::SceneAsset>(
-    scene_key, scene_bytes, data::SourceOrigin { .key = source });
-  const auto scene_hash = base::ComputeSha256(scene_asset->GetRawData());
-
-  auto sidecar_asset = std::make_shared<data::PhysicsSceneAsset>(sidecar_key,
-    BuildMinimalPhysicsSidecarDescriptorBytes(scene_key, 1U, scene_hash),
-    data::SourceOrigin { .key = source });
-
-  loader.PutScene(scene_key, scene_asset);
-  loader.PutPhysicsSidecar(scene_key, sidecar_key, sidecar_asset);
-
-  auto service = MakeService(loader);
-
-  service->StartLoad(scene_key);
+  const auto service = StartLoadWithSidecar(loader, {});
 
   ASSERT_TRUE(service->IsReady());
   EXPECT_FALSE(service->IsFailed());
-  auto result = service->GetResult();
-  EXPECT_EQ(result.scene_key, scene_key);
+  const auto result = service->GetResult();
+  EXPECT_EQ(result.scene_key, SceneKey());
   EXPECT_THAT(result.asset, ::testing::NotNull());
   EXPECT_THAT(result.physics_asset, ::testing::NotNull());
-  EXPECT_TRUE(loader.LastPhysicsSource().IsNil());
 }
 
-NOLINT_TEST(SceneLoaderServicePhase4Test,
-  BuildSceneAsyncHydratesIndependentNodeFlagSourceModes)
+//! A sidecar cooked for other content of the scene fails the load.
+NOLINT_TEST(SceneLoaderServiceLoadTest, RejectsASidecarOfOtherSceneContent)
 {
   auto loader = SceneLoaderTestAssetLoader {};
-  const auto key = data::AssetKey::FromVirtualPath("/Game/Tests/flags.oscene");
+
+  const auto service
+    = StartLoadWithSidecar(loader, { .matches_content = false });
+
+  EXPECT_TRUE(service->IsFailed());
+  EXPECT_FALSE(service->IsReady());
+}
+
+//! A sidecar that names another scene fails the load.
+NOLINT_TEST(SceneLoaderServiceLoadTest, RejectsASidecarOfAnotherScene)
+{
+  auto loader = SceneLoaderTestAssetLoader {};
+
+  const auto service = StartLoadWithSidecar(loader,
+    {
+      .scene_key
+      = data::AssetKey::FromVirtualPath("/Game/Tests/SceneLoader/b.oscene"),
+    });
+
+  EXPECT_TRUE(service->IsFailed());
+  EXPECT_FALSE(service->IsReady());
+}
+
+//! A sidecar cooked for another node count fails the load.
+NOLINT_TEST(SceneLoaderServiceLoadTest, RejectsASidecarOfAnotherNodeCount)
+{
+  auto loader = SceneLoaderTestAssetLoader {};
+
+  const auto service = StartLoadWithSidecar(loader, { .node_count = 2U });
+
+  EXPECT_TRUE(service->IsFailed());
+  EXPECT_FALSE(service->IsReady());
+}
+
+//=== Building the runtime scene ===-----------------------------------------//
+
+//! Each node flag keeps its cooked source mode: an inherited flag follows its
+//! parent, a local one keeps its own value.
+NOLINT_TEST(SceneLoaderServiceBuildTest, KeepsEachNodeFlagSourceMode)
+{
+  using scene::SceneNodeFlags;
+  constexpr auto kInheritable = std::array {
+    SceneNodeFlags::kVisible,
+    SceneNodeFlags::kCastsShadows,
+    SceneNodeFlags::kReceivesShadows,
+  };
+  auto loader = SceneLoaderTestAssetLoader {};
   const auto asset = std::make_shared<data::SceneAsset>(
-    key, BuildSceneDescriptorBytesWithFlagModes());
-  loader.PutScene(key, asset);
+    SceneKey(), BuildSceneDescriptorBytesWithFlagModes());
+  loader.PutScene(SceneKey(), asset);
   auto service = MakeService(loader);
   auto runtime_scene
     = std::make_shared<scene::Scene>("FlagsHydration", kRuntimeSceneCapacity);
+
   BuildScene(*service, *runtime_scene, asset);
   runtime_scene->Update();
+
   auto root = FindNodeByName(*runtime_scene, "Root");
   auto inherited = FindNodeByName(*runtime_scene, "Inherited");
   auto local = FindNodeByName(*runtime_scene, "Local");
-  if (!root.has_value()) {
-    FAIL() << "Expected root to contain a value";
-  }
-  if (!inherited.has_value()) {
-    FAIL() << "Expected inherited to contain a value";
-  }
-  if (!local.has_value()) {
-    FAIL() << "Expected local to contain a value";
+  if (!root.has_value() || !inherited.has_value() || !local.has_value()) {
+    FAIL() << "the built scene lacks a cooked node";
   }
   const auto root_flags = root->GetFlags();
   const auto inherited_flags = inherited->GetFlags();
   const auto local_flags = local->GetFlags();
-  if (!root_flags.has_value()) {
-    FAIL() << "Expected root_flags to contain a value";
+  if (!root_flags.has_value() || !inherited_flags.has_value()
+    || !local_flags.has_value()) {
+    FAIL() << "a built node has no flags";
   }
-  if (!inherited_flags.has_value()) {
-    FAIL() << "Expected inherited_flags to contain a value";
-  }
-  if (!local_flags.has_value()) {
-    FAIL() << "Expected local_flags to contain a value";
-  }
-  using scene::SceneNodeFlags;
-  for (const auto flag : {
-         SceneNodeFlags::kVisible,
-         SceneNodeFlags::kCastsShadows,
-         SceneNodeFlags::kReceivesShadows,
-       }) {
+  for (const auto flag : kInheritable) {
     EXPECT_TRUE(inherited_flags->get().IsInherited(flag));
     EXPECT_FALSE(inherited_flags->get().GetEffectiveValue(flag));
-    root_flags->get().SetLocalValue(flag, true);
   }
   EXPECT_FALSE(local_flags->get().IsInherited(SceneNodeFlags::kVisible));
   EXPECT_TRUE(local_flags->get().GetEffectiveValue(SceneNodeFlags::kVisible));
@@ -1190,12 +1177,13 @@ NOLINT_TEST(SceneLoaderServicePhase4Test,
   EXPECT_FALSE(
     local_flags->get().GetEffectiveValue(SceneNodeFlags::kCastsShadows));
   EXPECT_TRUE(local_flags->get().IsInherited(SceneNodeFlags::kReceivesShadows));
+
+  for (const auto flag : kInheritable) {
+    root_flags->get().SetLocalValue(flag, true);
+  }
   runtime_scene->Update();
-  for (const auto flag : {
-         SceneNodeFlags::kVisible,
-         SceneNodeFlags::kCastsShadows,
-         SceneNodeFlags::kReceivesShadows,
-       }) {
+
+  for (const auto flag : kInheritable) {
     EXPECT_TRUE(inherited_flags->get().GetEffectiveValue(flag));
   }
   EXPECT_FALSE(
@@ -1204,81 +1192,69 @@ NOLINT_TEST(SceneLoaderServicePhase4Test,
     local_flags->get().GetEffectiveValue(SceneNodeFlags::kReceivesShadows));
 }
 
-NOLINT_TEST(SceneLoaderServicePhase4Test,
-  BuildSceneAsyncHydratesDirectionalLightCsmSettings)
+//! A directional light gets its cooked shadow, atmosphere and cascade
+//! settings.
+NOLINT_TEST(SceneLoaderServiceBuildTest, BuildsADirectionalLightFromItsRecord)
 {
   auto loader = SceneLoaderTestAssetLoader {};
-  const auto scene_key
-    = data::AssetKey::FromVirtualPath("/Game/Tests/Phase4/sun_csm.oscene");
   auto scene_asset = std::make_shared<data::SceneAsset>(
-    scene_key, BuildSceneDescriptorBytesWithDirectionalLight());
-  loader.PutScene(scene_key, scene_asset);
-
+    SceneKey(), BuildSceneDescriptorBytesWithDirectionalLight());
+  loader.PutScene(SceneKey(), scene_asset);
   auto service = MakeService(loader);
-
   auto runtime_scene = std::make_shared<scene::Scene>(
     "DemoShell.DirectionalCsmHydration", kRuntimeSceneCapacity);
+
   BuildScene(*service, *runtime_scene, scene_asset);
 
   auto sun_node = FindNodeByName(*runtime_scene, "SunNode");
   if (!sun_node.has_value()) {
-    FAIL() << "Expected sun_node to contain a value";
+    FAIL() << "the built scene lacks the sun node";
   }
   auto light = sun_node->GetLightAs<scene::DirectionalLight>();
   if (!light.has_value()) {
-    FAIL() << "Expected light to contain a value";
+    FAIL() << "the sun node has no directional light";
   }
-
-  EXPECT_TRUE(light->get().Common().casts_shadows);
-  EXPECT_FLOAT_EQ(light->get().Common().shadow.bias, kSunShadowBias);
-  EXPECT_FLOAT_EQ(
-    light->get().Common().shadow.normal_bias, kSunShadowNormalBias);
-
-  EXPECT_TRUE(light->get().GetAtmosphereLightSlot()
-    == scene::AtmosphereLightSlot::kPrimary);
-  EXPECT_FLOAT_EQ(light->get().GetIntensityLux(), kSunIntensityLux);
-
-  const auto& csm = light->get().CascadedShadows();
+  const auto& sun = light->get();
+  EXPECT_TRUE(sun.Common().casts_shadows);
+  EXPECT_FLOAT_EQ(sun.Common().shadow.bias, kSunShadowBias);
+  EXPECT_FLOAT_EQ(sun.Common().shadow.normal_bias, kSunShadowNormalBias);
+  EXPECT_EQ(sun.GetAtmosphereLightSlot(), scene::AtmosphereLightSlot::kPrimary);
+  EXPECT_FLOAT_EQ(sun.GetIntensityLux(), kSunIntensityLux);
+  const auto& csm = sun.CascadedShadows();
   EXPECT_EQ(csm.cascade_count, kSunCascadeDistances.size());
   EXPECT_EQ(csm.split_mode, scene::DirectionalCsmSplitMode::kManualDistances);
   EXPECT_FLOAT_EQ(csm.max_shadow_distance, kSunMaxShadowDistance);
-  for (size_t i = 0; i < kSunCascadeDistances.size(); ++i) {
-    EXPECT_FLOAT_EQ(csm.cascade_distances.at(i), kSunCascadeDistances.at(i));
-  }
+  EXPECT_THAT(csm.cascade_distances,
+    ::testing::Pointwise(::testing::FloatEq(), kSunCascadeDistances));
   EXPECT_FLOAT_EQ(csm.distribution_exponent, kSunDistributionExponent);
   EXPECT_FLOAT_EQ(csm.transition_fraction, kSunTransitionFraction);
   EXPECT_FLOAT_EQ(csm.distance_fadeout_fraction, kSunFadeoutFraction);
 }
 
-NOLINT_TEST(
-  SceneLoaderServicePhase4Test, BuildSceneAsyncHydratesLocalFogVolumeComponents)
+//! A local fog volume gets every cooked fog value.
+NOLINT_TEST(SceneLoaderServiceBuildTest, BuildsALocalFogVolumeFromItsRecord)
 {
   auto loader = SceneLoaderTestAssetLoader {};
-  const auto scene_key
-    = data::AssetKey::FromVirtualPath("/Game/Tests/Phase4/local_fog.oscene");
   auto scene_asset = std::make_shared<data::SceneAsset>(
-    scene_key, BuildSceneDescriptorBytesWithLocalFog());
-  loader.PutScene(scene_key, scene_asset);
-
+    SceneKey(), BuildSceneDescriptorBytesWithLocalFog());
+  loader.PutScene(SceneKey(), scene_asset);
   auto service = MakeService(loader);
-
   auto runtime_scene = std::make_shared<scene::Scene>(
     "DemoShell.LocalFogHydration", kRuntimeSceneCapacity);
+
   BuildScene(*service, *runtime_scene, scene_asset);
 
   auto fog_node = FindNodeByName(*runtime_scene, "FogNode");
   if (!fog_node.has_value()) {
-    FAIL() << "Expected fog_node to contain a value";
+    FAIL() << "the built scene lacks the fog node";
   }
-  const auto impl_opt = fog_node->GetImpl();
-  if (!impl_opt.has_value()) {
-    FAIL() << "Expected impl_opt to contain a value";
+  const auto impl = fog_node->GetImpl();
+  if (!impl.has_value()) {
+    FAIL() << "the fog node has no implementation";
   }
-  ASSERT_TRUE(
-    impl_opt->get().HasComponent<scene::environment::LocalFogVolume>());
-
+  ASSERT_TRUE(impl->get().HasComponent<scene::environment::LocalFogVolume>());
   const auto& local_fog
-    = impl_opt->get().GetComponent<scene::environment::LocalFogVolume>();
+    = impl->get().GetComponent<scene::environment::LocalFogVolume>();
   EXPECT_TRUE(local_fog.IsEnabled());
   EXPECT_FLOAT_EQ(local_fog.GetRadialFogExtinction(), kFogRadialExtinction);
   EXPECT_FLOAT_EQ(local_fog.GetHeightFogExtinction(), kFogHeightExtinction);
@@ -1292,42 +1268,37 @@ NOLINT_TEST(
   EXPECT_EQ(local_fog.GetSortPriority(), kFogSortPriority);
 }
 
-NOLINT_TEST(SceneLoaderServicePhase4Test,
-  BuildSceneAsyncAppliesRenderableMaterialOverride)
+//! A surface material override replaces the geometry's own material.
+NOLINT_TEST(SceneLoaderServiceBuildTest, AppliesASurfaceMaterialOverride)
 {
   auto loader = SceneLoaderTestAssetLoader {};
-  const auto scene_key = data::AssetKey::FromVirtualPath(
-    "/Game/Tests/Phase4/renderable_override.oscene");
   const auto geometry_key
-    = data::AssetKey::FromVirtualPath("/Game/Tests/Phase4/cube.ogeo");
+    = data::AssetKey::FromVirtualPath("/Game/Tests/SceneLoader/cube.ogeo");
   const auto material_key
-    = data::AssetKey::FromVirtualPath("/Game/Tests/Phase4/override.omat");
-
-  auto base_material = data::MaterialAsset::CreateDefault();
+    = data::AssetKey::FromVirtualPath("/Game/Tests/SceneLoader/override.omat");
   auto override_material = BuildTestMaterial(material_key);
-  auto geometry = BuildSingleSubmeshGeometry(base_material);
-
-  auto scene_asset = std::make_shared<data::SceneAsset>(scene_key,
+  auto geometry
+    = BuildSingleSubmeshGeometry(data::MaterialAsset::CreateDefault());
+  auto scene_asset = std::make_shared<data::SceneAsset>(SceneKey(),
     BuildSceneDescriptorBytesWithRenderableMaterialOverride(
       { .geometry = geometry_key, .material = material_key }, *geometry));
-  loader.PutScene(scene_key, scene_asset);
+  loader.PutScene(SceneKey(), scene_asset);
   loader.PutGeometry(geometry_key, geometry);
   loader.PutMaterial(material_key, override_material);
-
   auto service = MakeService(loader);
-
   auto runtime_scene = std::make_shared<scene::Scene>(
     "DemoShell.RenderableOverride", kRuntimeSceneCapacity);
+
   BuildScene(*service, *runtime_scene, scene_asset);
 
   auto mesh_node = FindNodeByName(*runtime_scene, "MeshNode");
   if (!mesh_node.has_value()) {
-    FAIL() << "Expected mesh_node to contain a value";
+    FAIL() << "the built scene lacks the mesh node";
   }
   auto renderable = mesh_node->GetRenderable();
   ASSERT_TRUE(renderable.HasGeometry());
   EXPECT_EQ(renderable.ResolveSubmeshMaterial(
-              oxygen::data::LodIndex { 0U }, oxygen::data::SubmeshIndex { 0U }),
+              data::LodIndex { 0U }, data::SubmeshIndex { 0U }),
     override_material);
 }
 

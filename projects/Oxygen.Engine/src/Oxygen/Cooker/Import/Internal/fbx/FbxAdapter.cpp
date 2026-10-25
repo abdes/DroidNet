@@ -50,6 +50,7 @@
 #include <Oxygen/Cooker/Import/Internal/MeshTransformBake.h>
 #include <Oxygen/Cooker/Import/Internal/ModelGeometrySource.h>
 #include <Oxygen/Cooker/Import/Internal/ModelMaterialSource.h>
+#include <Oxygen/Cooker/Import/Internal/ModelNodeIdentity.h>
 #include <Oxygen/Cooker/Import/Internal/ModelTextureSource.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/MaterialPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/MeshBuildPipeline.h>
@@ -58,7 +59,6 @@
 #include <Oxygen/Cooker/Import/Internal/SceneBuild.h>
 #include <Oxygen/Cooker/Import/Internal/SceneNodeImportDefaults.h>
 #include <Oxygen/Cooker/Import/Internal/SourceLayoutHash.h>
-#include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Cooker/Import/Internal/fbx/CoordTransform.h>
 #include <Oxygen/Cooker/Import/Internal/fbx/FbxAdapter.h>
 #include <Oxygen/Cooker/Import/Internal/fbx/FbxMaterialTextures.h>
@@ -70,7 +70,6 @@
 #include <Oxygen/Core/Transforms/Decompose.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/CameraAspectMode.h>
-#include <Oxygen/Core/Types/DescriptorExtensions.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Data/LightValidation.h>
 #include <Oxygen/Data/MaterialDomain.h>
@@ -1185,6 +1184,8 @@ namespace {
   struct NodeInput final {
     std::string authored_name;
     std::string base_name;
+    //! The node's anchor, its model node identity (ModelNodeIdentity).
+    std::string anchor;
     uint32_t parent_index = 0;
     glm::mat4 local_matrix { 1.0F };
     glm::mat4 world_matrix { 1.0F };
@@ -1194,12 +1195,6 @@ namespace {
     bool visible = true;
     const void* source_node = nullptr;
   };
-
-  [[nodiscard]] auto MakeNodeKey(const std::string_view node_virtual_path)
-    -> data::AssetKey
-  {
-    return oxygen::data::AssetKey::FromVirtualPath(node_virtual_path);
-  }
 
   [[nodiscard]] auto MakeLocalTransformMatrix(const ufbx_transform& transform)
     -> glm::mat4
@@ -1596,7 +1591,9 @@ namespace {
       mesh_node = helper;
     } else {
       return {
-        .mesh_node = nullptr, .transform = {}, .problem = "has no mesh"
+        .mesh_node = nullptr,
+        .transform = {},
+        .problem = "has no mesh",
       };
     }
     const auto own_children = std::ranges::count_if(Items(level.children),
@@ -1654,7 +1651,7 @@ namespace {
       if (std::isdigit(static_cast<unsigned char>(digit)) == 0) {
         return std::nullopt;
       }
-      level = level * kRadix + static_cast<size_t>(digit - '0');
+      level = (level * kRadix) + static_cast<size_t>(digit - '0');
     }
     return std::pair { name.substr(0, separator), level };
   }
@@ -1713,8 +1710,13 @@ namespace {
     };
 
     // Notes each level the group leaves out, with why for the first one.
-    const auto commit = [&](FbxLodGroup lods, std::span<const size_t> skipped,
-                          std::span<const size_t> members) -> void {
+    //! A group's nodes: the levels it leaves out and every member.
+    struct GroupNodes final {
+      std::span<const size_t> skipped;
+      std::span<const size_t> members;
+    };
+    const auto commit = [&](FbxLodGroup lods, const GroupNodes nodes) -> void {
+      const auto [skipped, members] = nodes;
       for (const auto node : skipped) {
         const auto problem = problems.find(node);
         result.notes.push_back({
@@ -1780,7 +1782,11 @@ namespace {
             + "' has no usable LOD0; its children import as separate nodes");
         return;
       }
-      commit(std::move(lods), skipped, members);
+      commit(std::move(lods),
+        {
+          .skipped = skipped,
+          .members = members,
+        });
     };
 
     const auto add_named_levels = [&](const ufbx_node& parent) -> void {
@@ -1838,7 +1844,11 @@ namespace {
                 "nodes");
           continue;
         }
-        commit(std::move(lods), skipped, members);
+        commit(std::move(lods),
+          {
+            .skipped = skipped,
+            .members = members,
+          });
       }
     };
 
@@ -3145,6 +3155,8 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
 
   std::vector<NodeInput> nodes;
   nodes.reserve(scene.nodes.count > 0 ? scene.nodes.count : 1U);
+  auto identity = internal::ModelNodeIdentity::ForRequest(
+    request, input.source_id, diagnostics);
 
   auto traverse = [&](auto&& self, const ufbx_node* node, uint32_t parent,
                     uint32_t& ordinal, const glm::mat4& parent_world) -> void {
@@ -3178,6 +3190,19 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
     NodeInput node_input;
     node_input.authored_name = std::string(authored);
     node_input.base_name = base_name;
+    // The scene root is the importer's; its children are the model's roots.
+    if (node == scene.root_node) {
+      node_input.anchor = internal::ModelNodeIdentity::kSynthesizedRoot;
+    } else {
+      const auto& parent_anchor = nodes.at(parent).anchor;
+      node_input.anchor = identity.SourceAnchor({
+        .parent_anchor
+        = parent_anchor == internal::ModelNodeIdentity::kSynthesizedRoot
+          ? std::string_view {}
+          : std::string_view { parent_anchor },
+        .name = authored,
+      });
+    }
     node_input.parent_index = parent;
     node_input.local_matrix = local_matrix;
     node_input.world_matrix = world_matrix;
@@ -3213,6 +3238,7 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
     NodeInput root;
     root.authored_name = "root";
     root.base_name = "root";
+    root.anchor = internal::ModelNodeIdentity::kSynthesizedRoot;
     root.parent_index = 0;
     root.local_matrix = glm::mat4 { 1.0F };
     root.world_matrix = glm::mat4 { 1.0F };
@@ -3240,6 +3266,7 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
     NodeInput root;
     root.authored_name = "root";
     root.base_name = "root";
+    root.anchor = internal::ModelNodeIdentity::kSynthesizedRoot;
     root.parent_index = 0;
     root.local_matrix = glm::mat4 { 1.0F };
     root.world_matrix = glm::mat4 { 1.0F };
@@ -3319,11 +3346,6 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
   build.flags = data::pak::world::SceneAssetFlags::kModelScene;
   build.nodes.reserve(pruned_nodes.size());
 
-  const auto scene_name = request.GetSceneName();
-  const auto virtual_path = internal::PlaceModelProduct(
-    request, scene_name, data::kSceneDescriptorExtension)
-                              .virtual_path;
-
   // A camera or light keeps the frame ufbx gave it. Its node's transform is
   // in Oxygen axes for geometry rotated by the basis (LocalTransform), so the
   // component sits on a child whose local transform is the basis, as in the
@@ -3345,7 +3367,11 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
       owner.base_name + "_" + std::string(role), context);
     const auto rotation = glm::quat_cast(basis);
     NodeRecord attachment {};
-    attachment.node_id = MakeNodeKey(std::string(virtual_path) + "/" + name);
+    attachment.node_id
+      = identity.IdOf(internal::ModelNodeIdentity::AddedAnchor({
+        .owner_anchor = owner.anchor,
+        .role = role,
+      }));
     attachment.scene_name_offset = build.strings.Add(name);
     attachment.parent_index = owner_index;
     // Visibility and shadow edits on the owner still govern its component.
@@ -3379,7 +3405,7 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
     }
 
     NodeRecord rec {};
-    rec.node_id = MakeNodeKey(std::string(virtual_path) + "/" + name);
+    rec.node_id = identity.IdOf(node.anchor);
     rec.scene_name_offset = build.strings.Add(name);
     rec.parent_index = node.parent_index;
     rec.node_flags = detail::BuildImportedNodeFlags(

@@ -1,7 +1,9 @@
 {
-  "version": 14,
+  "version": 15,
   "name": "rotating_gltf",
-  "starting_camera": 3,
+  "starting_camera": {
+    "node": 3
+  },
   "starting_input_contexts": [
     {
       "context_ref": "/.cooked/Input/rotate.input/RotateInputContext.oimap",
@@ -10,25 +12,33 @@
   ],
   "nodes": [
     {
+      "id": "c66a65b6-1fe4-5c1c-a096-d50548ad269b",
       "name": "Root"
     },
     {
+      "id": "855639c5-8002-5c04-a721-99a1d2a783bc",
       "name": "Backpack",
       "parent": 0,
       "transform": {
         "translation": [-1.0, 0.0, 0.0]
       },
-      "instance": { "scene_ref": "/.cooked/glb/backpack.glb/backpack.oscene" }
+      "instance": {
+        "scene_ref": "/.cooked/glb/backpack.glb/backpack.oscene"
+      }
     },
     {
+      "id": "598c53d1-14b1-5259-8dc3-f21e0a53283f",
       "name": "Chest",
       "parent": 0,
       "transform": {
         "translation": [1.0, 0.0, 0.0]
       },
-      "instance": { "scene_ref": "/.cooked/glb/chest.glb/chest.oscene" }
+      "instance": {
+        "scene_ref": "/.cooked/glb/chest.glb/chest.oscene"
+      }
     },
     {
+      "id": "d252ea81-9462-5371-a7a3-a1796abbacac",
       "name": "MainCamera",
       "parent": 0,
       "transform": {
@@ -37,6 +47,7 @@
       }
     },
     {
+      "id": "4b20ec61-5684-550a-bc14-07615ceab85f",
       "name": "Sun",
       "parent": 0,
       "transform": {

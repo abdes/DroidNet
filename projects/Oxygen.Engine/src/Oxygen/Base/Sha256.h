@@ -10,7 +10,10 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <optional>
 #include <span>
+#include <string>
+#include <string_view>
 
 #include <Oxygen/Base/api_export.h>
 
@@ -69,5 +72,12 @@ OXGN_BASE_NDAPI auto ComputeFileSha256(const std::filesystem::path& path)
 
 //! Check if a digest is all zeros.
 OXGN_BASE_NDAPI auto IsAllZero(const Sha256Digest& digest) noexcept -> bool;
+
+//! The digest as 64 lowercase hexadecimal digits.
+OXGN_BASE_NDAPI auto ToHexString(const Sha256Digest& digest) -> std::string;
+
+//! The digest 64 hexadecimal digits spell, or nothing for any other text.
+OXGN_BASE_NDAPI auto Sha256DigestFromHex(std::string_view text) noexcept
+  -> std::optional<Sha256Digest>;
 
 } // namespace oxygen::base

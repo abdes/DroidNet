@@ -25,6 +25,8 @@
 #include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/PakFormatSerioWriters.h> // IWYU pragma: keep
+#include <Oxygen/Data/SceneIds.h>
+#include <Oxygen/Data/Schema/Generated.SceneComponents.h>
 #include <Oxygen/Data/SourceOrigin.h>
 #include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Serio/MemoryStream.h>
@@ -56,6 +58,7 @@ auto MakeSceneWithFlagRecord(const SceneFlagInput input)
   descriptor.nodes.count = 1U;
   descriptor.nodes.entry_size = sizeof(world::NodeRecord);
   auto node = world::NodeRecord {};
+  node.node_id = oxygen::data::NodeId::FromStableIdentity("/test/root");
   node.node_flags = input.values;
   node.inherited_flags = input.inherited;
   constexpr float kTranslation = 3.5F;
@@ -134,6 +137,7 @@ NOLINT_TEST(
     std::array { std::pair { 1U, 0U }, std::pair { 0U, 1U } }) {
     auto bytes = MakeSceneWithFlagRecord({ .values = 0U, .inherited = 0U });
     auto node = world::NodeRecord {};
+    node.node_id = oxygen::data::NodeId::FromStableIdentity("/test/root");
     node.parent_index = parent;
     node.scene_name_offset = name;
     std::memcpy(std::span(bytes).subspan(sizeof(world::SceneAssetDesc)).data(),
@@ -386,6 +390,7 @@ protected:
     };
     write_record(desc);
     NodeRecord node {};
+    node.node_id = oxygen::data::NodeId::FromStableIdentity("/test/root");
     node.scene_name_offset = 1;
     node.parent_index = 0;
     write_record(node);
@@ -416,7 +421,7 @@ protected:
     write_record(renderable);
     if (has_override) {
       auto assignment = oxygen::data::pak::world::OverrideRecord {
-        .node_index = 0,
+        .target = { .node_index = 0 },
         .override_id
         = oxygen::data::schema::OverrideId::kGeometrySurfaceMaterial,
         .part_id

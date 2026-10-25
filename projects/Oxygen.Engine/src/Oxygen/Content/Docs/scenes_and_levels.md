@@ -74,7 +74,8 @@ instantiate nodes and bind renderable geometry.
 ### Required data (Phase 1.5)
 
 - `Node`
-  - stable id: GUID (`data::AssetKey`)
+  - stable id: `data::NodeId`, unique within the scene or model that defines
+    the node
   - name: string (for debugging, editor UI, and parity with the runtime scene
     node model)
   - hierarchy: parent/child relationship (required)
@@ -112,7 +113,8 @@ The authoritative layout is defined in `Oxygen/Data/PakFormat.h`.
 
 - Node table (packed AoS)
   - `pak::NodeRecord` (one per node)
-  - `data::AssetKey node_id` (stable GUID)
+  - `data::NodeId node_id` (unique within the scene; changes and node paths
+    name a node by it)
   - `u32 parent_index` (root uses `parent_index == self_index`)
   - `u32 node_flags`
   - local transform:

@@ -1,8 +1,9 @@
 {
-  "version": 14,
+  "version": 15,
   "name": "EmissiveScene",
   "nodes": [
     {
+      "id": "562d9499-9585-5827-ae1a-06be6a7bb531",
       "name": "Root",
       "flags": {
         "visible": "shown",
@@ -11,6 +12,7 @@
       }
     },
     {
+      "id": "e88f1bf1-8326-5d63-bbac-fdb3f626e41f",
       "name": "EmissiveRed",
       "parent": 0,
       "transform": {
@@ -25,6 +27,7 @@
       }
     },
     {
+      "id": "621a4590-f524-5348-b90d-67a7b4d13432",
       "name": "EmissiveGreen",
       "parent": 0,
       "transform": {
@@ -39,6 +42,7 @@
       }
     },
     {
+      "id": "c546ef1c-925a-5ae3-a59a-d88a55e8271c",
       "name": "EmissiveBlue",
       "parent": 0,
       "transform": {
@@ -53,6 +57,7 @@
       }
     },
     {
+      "id": "355d2b78-ef3d-5921-8186-8e556f81063d",
       "name": "EmissiveTextured",
       "parent": 0,
       "transform": {
@@ -67,6 +72,7 @@
       }
     },
     {
+      "id": "94f8f069-5bdc-542c-8707-3b59d109f300",
       "name": "EmissiveMasked",
       "parent": 0,
       "transform": {
@@ -81,6 +87,7 @@
       }
     },
     {
+      "id": "e13490be-6f8f-504f-bbf0-ed6576c44fd5",
       "name": "Reference",
       "parent": 0,
       "transform": {
@@ -95,6 +102,7 @@
       }
     },
     {
+      "id": "51bdd8c5-82b4-5780-97b3-a9148e97257d",
       "name": "MainCamera",
       "parent": 0,
       "transform": {

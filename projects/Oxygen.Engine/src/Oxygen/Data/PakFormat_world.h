@@ -21,6 +21,7 @@
 #include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/PakFormat_core.h>
+#include <Oxygen/Data/SceneIds.h>
 #include <Oxygen/Data/Schema/Generated.SceneComponents.h>
 #include <Oxygen/Data/SurfaceId.h>
 
@@ -63,8 +64,53 @@ using SceneNodeIndexT = uint32_t;
 //! Index type for scene component tables.
 using SceneComponentIndexT = uint32_t;
 
-//! `SceneAssetDesc::starting_camera` value of a scene without one.
+//! `SceneAssetDesc::starting_camera.node_index` of a scene without one.
 inline constexpr SceneNodeIndexT kNoStartingCamera = 0xFFFFFFFFU;
+
+//! Index of a `NodePathRecord` in the scene's `ComponentType::kNodePath` table.
+using NodePathIndexT = uint32_t;
+
+//! `NodeRef::node_path` of a reference to one of the scene's own nodes.
+inline constexpr NodePathIndexT kNoNodePath = 0xFFFFFFFFU;
+
+#pragma pack(push, 1)
+//! The one way a cooked scene names a node: one of its own nodes, or a node an
+//! instance brings in.
+/*!
+ With `kNoNodePath`, `node_index` is the node. Otherwise `node_index` is an
+ instance root and `node_path` the index of the `NodePathRecord` whose elements
+ name one node per nesting level below it, shallowest first: the first is a
+ node of the root's source. References order by node index, then path.
+*/
+struct NodeRef {
+  SceneNodeIndexT node_index = 0;
+  NodePathIndexT node_path = kNoNodePath;
+
+  [[nodiscard]] friend constexpr auto operator<=>(
+    const NodeRef&, const NodeRef&) noexcept = default;
+};
+#pragma pack(pop)
+static_assert(sizeof(NodeRef) == 8);
+
+#pragma pack(push, 1)
+//! A node path (`ComponentType::kNodePath`): `count` elements of the
+//! `ComponentType::kNodePathElement` table from `first`. Identical paths share
+//! one record.
+struct NodePathRecord {
+  uint32_t first = 0;
+  uint32_t count = 0;
+};
+#pragma pack(pop)
+static_assert(sizeof(NodePathRecord) == 8);
+
+#pragma pack(push, 1)
+//! One nesting level of a node path (`ComponentType::kNodePathElement`): the
+//! ID of a node in the scene that defines it.
+struct NodePathElement {
+  NodeId node_id;
+};
+#pragma pack(pop)
+static_assert(sizeof(NodePathElement) == 16);
 
 //! Scene asset flags.
 enum class SceneAssetFlags : uint32_t {
@@ -111,8 +157,10 @@ using SceneComponentTable = SceneDataTable;
  The directory also holds scene-level tables: `SceneInstanceRecord[]`
  (model scenes instanced under authored nodes) and
  `StartingInputContextRecord[]` (input contexts the scene starts with).
- `starting_camera` names the camera node the scene starts viewing through, or
- is `kNoStartingCamera`.
+ `starting_camera` names the camera node the scene starts viewing through, an
+ owned node or one an instance brings in, or holds `kNoStartingCamera` in its
+ `node_index`. The node path tables (`NodePathRecord[]`, `NodePathElement[]`)
+ hold the paths every `NodeRef` of the scene names.
 
  `nodes.entry_size` MUST match the corresponding struct size for the scene
  format version. Component tables declare their own `entry_size` via
@@ -140,10 +188,10 @@ struct SceneAssetDesc {
   SceneComponentTable script_slots {};
   SceneAssetFlags flags = SceneAssetFlags::kNone;
   //! Camera node the scene starts viewing through.
-  SceneNodeIndexT starting_camera = kNoStartingCamera;
+  NodeRef starting_camera { .node_index = kNoStartingCamera };
 };
 #pragma pack(pop)
-static_assert(sizeof(SceneAssetDesc) == 103);
+static_assert(sizeof(SceneAssetDesc) == 107);
 
 //! Scene component table directory entry.
 /*!
@@ -168,7 +216,8 @@ static_assert(sizeof(SceneComponentTableDesc) == 20);
 //! Node record used by the cooked scene descriptor.
 /*!
   Describes a single node in the scene hierarchy. Nodes are stored in a flat
-  array in the `SceneAssetDesc`.
+  array in the `SceneAssetDesc`. Changes and node paths name a node by its
+  `node_id` alone.
 
   ### Hierarchy
   - The node at index 0 is always the root node.
@@ -183,7 +232,9 @@ static_assert(sizeof(SceneComponentTableDesc) == 20);
   @see SceneAssetDesc
 */
 struct NodeRecord {
-  AssetKey node_id; // Stable GUID for the node
+  //! Unique within the scene: an authored node's editor ID, a model node's ID
+  //! derived from its anchor.
+  NodeId node_id;
   core::StringTableOffsetT scene_name_offset
     = 0; // Offset into the descriptor string table
 
@@ -299,27 +350,29 @@ union OverrideValue {
 static_assert(sizeof(OverrideValue) == 16);
 
 #pragma pack(push, 1)
-//! A scene's change of one asset-supplied property of a renderable node
-//! (`ComponentType::kOverride`); absence keeps the asset's value.
+//! A scene's change of one property of a node (`ComponentType::kOverride`).
 /*!
- `override_id` names the property. A part property names its part in
- `part_id` (a surface's SurfaceId; surfaces are the only part kind) and carries
- the geometry layout revision the override was resolved against; a property of
- the component itself has a nil `part_id` and a zero `layout_revision`. A node
- holds at most one override per property and part. The table is sorted by node,
- override id and part.
+ `override_id` names the property. A target with `kNoNodePath` is one of the
+ scene's own renderable nodes, and the property is asset-sourced: the change
+ replaces the geometry's value. A target with a node path is a node an
+ instance brings in, and the property is any changeable one. A part property
+ names its part in `part_id` (a surface's SurfaceId; surfaces are the only
+ part kind) and carries the geometry layout revision the override was resolved
+ against; a property of the component itself has a nil `part_id` and a zero
+ `layout_revision`. A target holds at most one override per property and part.
+ The table is sorted by target, override id and part.
 */
 // `override_id` is no tag: its property's schema value type selects the member.
 // NOLINTNEXTLINE(bugprone-tagged-union-member-count)
 struct OverrideRecord {
-  SceneNodeIndexT node_index = 0;
+  NodeRef target;
   schema::OverrideId override_id = schema::OverrideId::kInvalid;
   SurfaceId part_id;
   base::Sha256Digest layout_revision {};
   OverrideValue value {};
 };
 #pragma pack(pop)
-static_assert(sizeof(OverrideRecord) == 70);
+static_assert(sizeof(OverrideRecord) == 74);
 
 #pragma pack(push, 1)
 

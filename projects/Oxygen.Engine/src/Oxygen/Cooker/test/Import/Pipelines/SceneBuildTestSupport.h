@@ -7,10 +7,8 @@
 #pragma once
 
 #include <array>
-#include <cstddef>
 #include <cstdint>
 #include <string_view>
-#include <utility>
 #include <vector>
 
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
@@ -18,6 +16,7 @@
 #include <Oxygen/Cooker/Import/Internal/SceneBuild.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Data/SceneIds.h>
 
 namespace oxygen::cooker::test {
 
@@ -54,7 +53,7 @@ inline auto MakeMinimalSceneBuild(const std::string_view name)
   content::import::SceneBuild build;
   const auto name_offset = build.strings.Add(name);
   build.nodes.push_back(data::pak::world::NodeRecord {
-    .node_id = MakeFirstByteAssetKey(1U),
+    .node_id = data::NodeId::FromStableIdentity("/test/node/1"),
     .scene_name_offset = name_offset,
     .parent_index = 0,
     .node_flags = 0,

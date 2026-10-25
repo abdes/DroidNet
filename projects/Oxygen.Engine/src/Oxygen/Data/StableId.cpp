@@ -6,59 +6,59 @@
 
 #include <algorithm>
 #include <span>
-#include <stdexcept>
 #include <string>
 #include <string_view>
+#include <system_error>
 
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Base/Uuid.h>
 #include <Oxygen/Core/Types/AssetKey.h>
-#include <Oxygen/Data/SurfaceId.h>
+#include <Oxygen/Data/StableId.h>
 
-namespace oxygen::data {
+namespace oxygen::data::detail {
 
-auto SurfaceId::Generate() -> SurfaceId
+auto GenerateStableId() -> StableIdBytes
 {
   const auto uuid = Uuid::Generate();
-  ByteArray bytes {};
+  StableIdBytes bytes {};
   std::ranges::copy(uuid, bytes.begin());
-  return FromBytes(bytes);
+  return bytes;
 }
 
-auto SurfaceId::FromStableIdentity(const std::string_view identity) -> SurfaceId
+auto HashStableIdentity(const std::string_view identity)
+  -> Result<StableIdBytes>
 {
   if (identity.empty()) {
-    throw std::invalid_argument("Surface identity must not be empty");
+    return Err(std::errc::invalid_argument);
   }
   const auto digest = base::ComputeSha256(
     std::as_bytes(std::span(identity.data(), identity.size())));
-  ByteArray bytes {};
+  StableIdBytes bytes {};
   std::copy_n(digest.begin(), bytes.size(), bytes.begin());
-  const auto id = FromBytes(bytes);
-  if (id.IsNil()) {
-    throw std::invalid_argument("Surface identity hash must not be nil");
+  if (bytes == StableIdBytes {}) {
+    return Err(std::errc::result_out_of_range);
   }
-  return id;
+  return Result<StableIdBytes>::Ok(bytes);
 }
 
-auto SurfaceId::FromString(const std::string_view text) -> Result<SurfaceId>
+auto ParseStableId(const std::string_view text) -> Result<StableIdBytes>
 {
   // Share the native opaque-128-bit text codec, not asset identity semantics.
   const auto parsed = AssetKey::FromString(text);
   if (!parsed.has_value()) {
-    return Result<SurfaceId>::Err(parsed.error());
+    return Result<StableIdBytes>::Err(parsed.error());
   }
-  ByteArray bytes {};
+  StableIdBytes bytes {};
   std::ranges::copy(parsed.value(), bytes.begin());
-  return Result<SurfaceId>::Ok(FromBytes(bytes));
+  return Result<StableIdBytes>::Ok(bytes);
 }
 
-auto to_string(const SurfaceId& value) -> std::string
+auto FormatStableId(const StableIdBytes& bytes) -> std::string
 {
-  AssetKey::ByteArray bytes {};
-  std::ranges::copy(value, bytes.begin());
-  return to_string(AssetKey::FromBytes(bytes));
+  AssetKey::ByteArray key {};
+  std::ranges::copy(bytes, key.begin());
+  return to_string(AssetKey::FromBytes(key));
 }
 
-} // namespace oxygen::data
+} // namespace oxygen::data::detail

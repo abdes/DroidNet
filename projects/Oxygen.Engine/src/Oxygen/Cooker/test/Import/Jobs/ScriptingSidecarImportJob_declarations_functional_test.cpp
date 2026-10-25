@@ -42,7 +42,11 @@ namespace {
       const auto source = std::string("local Script = oxygen.script {\n"
                                       "  params = {\n")
         + std::string(params_body) + "\n  },\n}\nreturn Script\n";
-      return CookSceneWithScript(cooked_root, source, "declared.luau");
+      return CookSceneWithScript({
+        .cooked_root = cooked_root,
+        .script_text = source,
+        .script_file_name = "declared.luau",
+      });
     }
 
     //! Applies a one-binding sidecar whose params are `params_json`.
@@ -54,13 +58,16 @@ namespace {
       WriteText(sidecar,
         MakeSidecarPayload(SidecarBindingSpec {
           .node_index = 0,
-          .slot_id = "main",
+          .slot_id = std::string(kMainSlotId),
           .script_virtual_path = script.virtual_path,
           .execution_order = std::nullopt,
           .params = nlohmann::json::parse(params_json),
         }));
-      return Submit(
-        MakeSidecarRequest(sidecar, cooked_root, scene.virtual_path));
+      return Submit(MakeSidecarRequest({
+        .source_path = sidecar,
+        .cooked_root = cooked_root,
+        .scene_virtual_path = scene.virtual_path,
+      }));
     }
 
     [[nodiscard]] static auto FindDiagnostic(const ImportReport& report,
@@ -148,11 +155,12 @@ namespace {
     ASSERT_HAS_VALUE(cooked.scene);
     ASSERT_HAS_VALUE(cooked.script);
 
-    const auto rejected
+    const auto rejected = ApplySidecar(cooked_root, *cooked.scene,
+      *cooked.script,
+      R"([ { "key": "target", "type": "node", "value": { "node": 1000000 } } ])");
+    const auto accepted
       = ApplySidecar(cooked_root, *cooked.scene, *cooked.script,
-        R"([ { "key": "target", "type": "node", "value": 1000000 } ])");
-    const auto accepted = ApplySidecar(cooked_root, *cooked.scene,
-      *cooked.script, R"([ { "key": "target", "type": "node", "value": 0 } ])");
+        R"([ { "key": "target", "type": "node", "value": { "node": 0 } } ])");
 
     EXPECT_FALSE(rejected.success);
     const auto diagnostic
@@ -164,7 +172,26 @@ namespace {
     const auto state = ReadSceneScriptState(cooked_root, *cooked.scene);
     ASSERT_EQ(state.params.size(), 1U);
     EXPECT_EQ(state.params.front().type, ScriptParamType::kNode);
-    EXPECT_EQ(state.params.front().value.as_node_index, 0U);
+    EXPECT_EQ(state.params.front().value.as_node.node_index, 0U);
+  }
+
+  //! A node override with a path needs its node to be an instance root.
+  NOLINT_TEST_F(ScriptingSidecarDeclarationsTest, NodePathRequiresInstanceRoot)
+  {
+    const ScopedTempDir temp;
+    const auto cooked_root = temp.Path() / "sidecar_node_param_path";
+    const auto cooked
+      = CookWithDeclaration(cooked_root, "    target = oxygen.param.node {},");
+    ASSERT_HAS_VALUE(cooked.scene);
+    ASSERT_HAS_VALUE(cooked.script);
+
+    const auto report = ApplySidecar(cooked_root, *cooked.scene, *cooked.script,
+      R"([ { "key": "target", "type": "node", "value": {
+        "node": 0, "path": [ "00000000-0000-4000-8000-0000000000c1" ] } } ])");
+
+    EXPECT_FALSE(report.success);
+    EXPECT_TRUE(HasDiagnosticCode(
+      report.diagnostics, "script.sidecar.instance_root_invalid"));
   }
 
   //! An asset override cooks the asset key and kind and joins the scene's

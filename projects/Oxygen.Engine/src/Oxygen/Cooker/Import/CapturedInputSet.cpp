@@ -4,9 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <charconv>
 #include <chrono>
-#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <memory>
@@ -14,7 +12,6 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
-#include <system_error>
 #include <utility>
 #include <vector>
 
@@ -33,11 +30,11 @@ namespace {
   auto ReadPath(const nlohmann::json& value) -> std::filesystem::path
   {
     const auto text = value.get<std::string>();
-    if (text.find('\0') != std::string::npos) {
+    if (text.contains('\0')) {
       throw std::invalid_argument(
         "Captured paths cannot contain null characters");
     }
-    return std::filesystem::path(std::u8string(text.begin(), text.end()));
+    return { std::u8string(text.begin(), text.end()) };
   }
 
   auto ReadSize(const nlohmann::json& value) -> uint64_t
@@ -57,26 +54,26 @@ namespace {
 
   auto ReadDigest(const std::string& text) -> base::Sha256Digest
   {
-    auto digest = base::Sha256Digest {};
-    constexpr auto kHexCharactersPerByte = 2U;
-    constexpr auto kHexRadix = 16;
-    for (size_t index = 0; index < digest.size(); ++index) {
-      const auto* begin = text.data() + index * kHexCharactersPerByte;
-      const auto* end = begin + kHexCharactersPerByte;
-      const auto parsed
-        = std::from_chars(begin, end, digest.at(index), kHexRadix);
-      if (parsed.ec != std::errc {} || parsed.ptr != end) {
-        throw std::invalid_argument("Invalid captured source digest");
-      }
+    const auto digest = base::Sha256DigestFromHex(text);
+    if (!digest.has_value()) {
+      throw std::invalid_argument("Invalid captured source digest");
     }
-    return digest;
+    return *digest;
   }
 
   auto ReadTimestamp(const nlohmann::json& value)
     -> std::filesystem::file_time_type
   {
-    using namespace std::chrono;
+    using std::chrono::ceil;
+    using std::chrono::clock_cast;
+    using std::chrono::duration_cast;
+    using std::chrono::file_clock;
+    using std::chrono::floor;
+    using std::chrono::nanoseconds;
+    using std::chrono::seconds;
+    using std::chrono::sys_seconds;
     using FileDuration = std::filesystem::file_time_type::duration;
+
     const auto whole_seconds = clock_cast<file_clock>(
       sys_seconds { seconds { value.at("last_modified_seconds")
           .get<int64_t>() } }).time_since_epoch();
@@ -135,10 +132,10 @@ auto CapturedInputSet::Find(const std::filesystem::path& logical_path) const
   return entry == indices_.end() ? nullptr : &inputs_.at(entry->second);
 }
 
-auto CapturedInputSet::Parse(const std::string_view text)
+auto CapturedInputSet::Parse(const std::string_view json)
   -> std::shared_ptr<const CapturedInputSet>
 {
-  const auto document = nlohmann::json::parse(text);
+  const auto document = nlohmann::json::parse(json);
   auto validator = nlohmann::json_schema::json_validator {};
   validator.set_root_schema(nlohmann::json::parse(kCapturedInputsSchema));
   validator.validate(document);

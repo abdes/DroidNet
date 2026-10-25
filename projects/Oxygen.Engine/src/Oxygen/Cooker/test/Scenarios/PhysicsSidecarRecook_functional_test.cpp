@@ -46,7 +46,6 @@
 #include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/MeshType.h>
 #include <Oxygen/Data/PakFormat.h>
-#include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Testing/GTest.h>
 
@@ -83,36 +82,34 @@ namespace {
       return std::nullopt;
     }
     auto value = T {};
-    std::memcpy(&value, bytes.data() + offset, sizeof(T));
+    std::memcpy(
+      &value, std::span(bytes).subspan(offset, sizeof(T)).data(), sizeof(T));
     return value;
   }
 
+  //! Where an array of records sits in a descriptor.
+  struct ArrayRange final {
+    size_t offset = 0;
+    uint32_t count = 0;
+    uint32_t entry_size = 0;
+  };
+
+  //! The records `range` holds, or none when it does not fit `bytes` or its
+  //! records are not `T`s.
   template <typename T>
   auto ReadStructArrayAt(const std::vector<std::byte>& bytes,
-    const size_t offset, const uint32_t count, const uint32_t entry_size)
-    -> std::vector<T>
+    const ArrayRange& range) -> std::vector<T>
   {
-    if (entry_size != sizeof(T)) {
+    if (range.entry_size != sizeof(T)) {
       return {};
     }
-    const auto byte_size = static_cast<size_t>(count) * sizeof(T);
-    if (offset + byte_size > bytes.size()) {
+    const auto byte_size = static_cast<size_t>(range.count) * sizeof(T);
+    if (range.offset + byte_size > bytes.size()) {
       return {};
     }
-    auto out = std::vector<T>(count);
-    std::memcpy(out.data(), bytes.data() + offset, byte_size);
-    return out;
-  }
-
-  auto ReadUint32ArrayAt(const std::vector<std::byte>& bytes,
-    const size_t offset, const uint32_t count) -> std::vector<uint32_t>
-  {
-    const auto byte_size = static_cast<size_t>(count) * sizeof(uint32_t);
-    if (offset + byte_size > bytes.size()) {
-      return {};
-    }
-    auto out = std::vector<uint32_t>(count);
-    std::memcpy(out.data(), bytes.data() + offset, byte_size);
+    auto out = std::vector<T>(range.count);
+    std::memcpy(out.data(),
+      std::span(bytes).subspan(range.offset, byte_size).data(), byte_size);
     return out;
   }
 
@@ -139,8 +136,11 @@ namespace {
       return std::nullopt;
     }
     parsed.directory = ReadStructArrayAt<phys::PhysicsComponentTableDesc>(bytes,
-      directory_offset, parsed.descriptor.component_table_count,
-      sizeof(phys::PhysicsComponentTableDesc));
+      {
+        .offset = directory_offset,
+        .count = parsed.descriptor.component_table_count,
+        .entry_size = sizeof(phys::PhysicsComponentTableDesc),
+      });
     if (parsed.directory.size() != parsed.descriptor.component_table_count) {
       return std::nullopt;
     }
@@ -169,8 +169,12 @@ namespace {
     }
     const auto count
       = static_cast<uint32_t>(bytes.size() / sizeof(phys::PhysicsResourceDesc));
-    return ReadStructArrayAt<phys::PhysicsResourceDesc>(
-      bytes, 0, count, sizeof(phys::PhysicsResourceDesc));
+    return ReadStructArrayAt<phys::PhysicsResourceDesc>(bytes,
+      {
+        .offset = 0,
+        .count = count,
+        .entry_size = sizeof(phys::PhysicsResourceDesc),
+      });
   }
 
   auto FindPhysicsResourceByAssetKey(
@@ -217,10 +221,17 @@ namespace {
     const std::string_view scene_name, const uint32_t node_count)
     -> ImportRequest
   {
+    // A readable, deterministic id per node index.
+    const auto node_id = [](const uint32_t index) -> std::string {
+      const auto digits = std::to_string(index + 1U);
+      return "00000000-0000-4000-8000-" + std::string(12U - digits.size(), '0')
+        + digits;
+    };
     auto nodes = json::array();
-    nodes.push_back(json { { "name", "Root" } });
+    nodes.push_back(json { { "id", node_id(0U) }, { "name", "Root" } });
     for (uint32_t i = 1; i < node_count; ++i) {
       nodes.push_back(json {
+        { "id", node_id(i) },
         { "name", "Node" + std::to_string(i) },
         { "parent", 0U },
       });
@@ -630,8 +641,9 @@ namespace {
     const auto append_pod
       = [&descriptor_bytes]<typename T>(const T& pod) -> auto {
       static_assert(std::is_trivially_copyable_v<T>);
-      const auto* bytes = reinterpret_cast<const std::byte*>(&pod);
-      descriptor_bytes.insert(descriptor_bytes.end(), bytes, bytes + sizeof(T));
+      const auto bytes = std::as_bytes(std::span<const T, 1>(&pod, 1));
+      descriptor_bytes.insert(
+        descriptor_bytes.end(), bytes.begin(), bytes.end());
     };
     append_pod(descriptor);
     append_pod(mesh);
@@ -658,21 +670,19 @@ namespace {
     auto buffer_data = std::vector<std::byte> {};
     buffer_data.reserve(static_cast<size_t>(table_entries.at(1).size_bytes)
       + static_cast<size_t>(table_entries.at(2).size_bytes));
-    const auto* vertex_bytes
-      = reinterpret_cast<const std::byte*>(vertices.data());
-    buffer_data.insert(buffer_data.end(), vertex_bytes,
-      vertex_bytes + table_entries.at(1).size_bytes);
-    const auto* index_bytes
-      = reinterpret_cast<const std::byte*>(indices.data());
-    buffer_data.insert(buffer_data.end(), index_bytes,
-      index_bytes + table_entries.at(2).size_bytes);
+    const auto vertex_bytes = std::as_bytes(std::span(vertices))
+                                .first(table_entries.at(1).size_bytes);
+    buffer_data.insert(
+      buffer_data.end(), vertex_bytes.begin(), vertex_bytes.end());
+    const auto index_bytes
+      = std::as_bytes(std::span(indices)).first(table_entries.at(2).size_bytes);
+    buffer_data.insert(
+      buffer_data.end(), index_bytes.begin(), index_bytes.end());
 
     auto table_bytes = std::vector<std::byte> {};
     table_bytes.reserve(sizeof(table_entries));
-    const auto* table_raw
-      = reinterpret_cast<const std::byte*>(table_entries.data());
-    table_bytes.insert(
-      table_bytes.end(), table_raw, table_raw + sizeof(table_entries));
+    const auto table_raw = std::as_bytes(std::span(table_entries));
+    table_bytes.insert(table_bytes.end(), table_raw.begin(), table_raw.end());
 
     auto writer = LooseCookedWriter(cooked_root);
     writer.WriteAssetDescriptor(key, data::AssetType::kGeometry, virtual_path,
@@ -691,7 +701,9 @@ namespace {
         {})
         .value(),
       content::import::LooseCookedProducer {
-        .source = std::string(virtual_path) + ".json", .completes = {} });
+        .source = std::string(virtual_path) + ".json",
+        .completes = {},
+      });
     (void)writer.Finish();
 
     const auto layout = LooseCookedLayout {};
@@ -722,7 +734,7 @@ namespace {
   //! Cooks geometry, scene, material and compound shape. Returns an error
   //! message, or an empty string on success.
   auto CookComplexDependencies(AsyncImportService& service,
-    const std::filesystem::path& cooked_root) -> std::string
+    const std::filesystem::path& cooked_root) -> std::string_view
   {
     std::filesystem::create_directories(cooked_root);
     RegisterStubGeometryAsset(
@@ -875,6 +887,9 @@ namespace {
       const phys::PhysicsBindingType type, size_t* record_offset = nullptr)
       -> std::optional<Record>
     {
+      if (!parsed_sidecar_.has_value()) {
+        return std::nullopt;
+      }
       const auto table = FindTable(*parsed_sidecar_, type);
       if (!table.has_value()) {
         return std::nullopt;
@@ -1032,6 +1047,9 @@ NOLINT_TEST_F(PhysicsComplexSceneTest,
   ASSERT_FALSE(scene_bytes.empty());
   const auto scene_hash = base::ComputeSha256(
     std::span<const std::byte>(scene_bytes.data(), scene_bytes.size()));
+  if (!parsed_sidecar_.has_value()) {
+    FAIL() << "Expected the sidecar to be parsed";
+  }
 
   EXPECT_EQ(parsed_sidecar_->descriptor.target_scene_key,
     data::AssetKey::FromVirtualPath(kSceneVirtualPath));
@@ -1046,6 +1064,9 @@ NOLINT_TEST_F(
   PhysicsComplexSceneTest, SidecarComponentDirectoryIsSortedByBindingType)
 {
   ASSERT_TRUE(error_.empty()) << error_;
+  if (!parsed_sidecar_.has_value()) {
+    FAIL() << "Expected the sidecar to be parsed";
+  }
 
   for (size_t i = 1; i < parsed_sidecar_->directory.size(); ++i) {
     EXPECT_LT(
@@ -1085,14 +1106,20 @@ NOLINT_TEST_F(
     static_cast<uint32_t>(sizeof(phys::SoftBodyBindingRecord)));
   EXPECT_EQ(soft_record->kinematic_vertex_byte_offset,
     static_cast<uint32_t>(
-      sizeof(phys::SoftBodyBindingRecord) + 3U * sizeof(uint32_t)));
+      sizeof(phys::SoftBodyBindingRecord) + (3U * sizeof(uint32_t))));
 
-  const auto pinned_vertices = ReadUint32ArrayAt(sidecar_bytes_,
-    soft_record_offset + soft_record->pinned_vertex_byte_offset,
-    soft_record->pinned_vertex_count);
-  const auto kinematic_vertices = ReadUint32ArrayAt(sidecar_bytes_,
-    soft_record_offset + soft_record->kinematic_vertex_byte_offset,
-    soft_record->kinematic_vertex_count);
+  const auto pinned_vertices = ReadStructArrayAt<uint32_t>(sidecar_bytes_,
+    {
+      .offset = soft_record_offset + soft_record->pinned_vertex_byte_offset,
+      .count = soft_record->pinned_vertex_count,
+      .entry_size = sizeof(uint32_t),
+    });
+  const auto kinematic_vertices = ReadStructArrayAt<uint32_t>(sidecar_bytes_,
+    {
+      .offset = soft_record_offset + soft_record->kinematic_vertex_byte_offset,
+      .count = soft_record->kinematic_vertex_count,
+      .entry_size = sizeof(uint32_t),
+    });
   EXPECT_EQ(pinned_vertices, (std::vector<uint32_t> { 0U, 2U, 4U }));
   EXPECT_EQ(kinematic_vertices, (std::vector<uint32_t> { 1U, 3U }));
   EXPECT_FALSE(soft_record->topology_asset_key.IsNil());
@@ -1126,13 +1153,20 @@ NOLINT_TEST_F(
   PhysicsComplexSceneTest, VehicleWheelRecordsPreserveNodeAxleSideAndCastor)
 {
   ASSERT_TRUE(error_.empty()) << error_;
+  if (!parsed_sidecar_.has_value()) {
+    FAIL() << "Expected the sidecar to be parsed";
+  }
 
   const auto wheel_table
     = FindTable(*parsed_sidecar_, phys::PhysicsBindingType::kVehicleWheel);
   ASSERT_HAS_VALUE(wheel_table) << "Expected wheel_table to contain a value";
-  const auto wheel_records = ReadStructArrayAt<phys::VehicleWheelBindingRecord>(
-    sidecar_bytes_, static_cast<size_t>(wheel_table->table.offset),
-    wheel_table->table.count, wheel_table->table.entry_size);
+  const auto wheel_records
+    = ReadStructArrayAt<phys::VehicleWheelBindingRecord>(sidecar_bytes_,
+      {
+        .offset = static_cast<size_t>(wheel_table->table.offset),
+        .count = wheel_table->table.count,
+        .entry_size = wheel_table->table.entry_size,
+      });
   ASSERT_EQ(wheel_records.size(), 4U);
   EXPECT_EQ(wheel_records.at(0).wheel_node_index, 5U);
   EXPECT_EQ(wheel_records.at(0).axle_index, 0U);
@@ -1369,6 +1403,13 @@ NOLINT_TEST_F(PhysicsRepeatRecookTest,
   ASSERT_TRUE(error_.empty()) << error_;
   const auto& before = before_;
   const auto& after = after_;
+  if (!before.scene_asset.has_value() || !before.sidecar_asset.has_value()
+    || !before.material_asset.has_value() || !before.shape_asset.has_value()
+    || !before.geometry_asset.has_value() || !after.scene_asset.has_value()
+    || !after.sidecar_asset.has_value() || !after.material_asset.has_value()
+    || !after.shape_asset.has_value() || !after.geometry_asset.has_value()) {
+    FAIL() << "Expected every cooked asset in both inspection snapshots";
+  }
 
   EXPECT_EQ(before.scene_asset->descriptor_sha256,
     after.scene_asset->descriptor_sha256);

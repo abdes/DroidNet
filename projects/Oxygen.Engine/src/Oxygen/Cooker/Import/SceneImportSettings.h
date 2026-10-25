@@ -59,7 +59,7 @@ struct SceneImportSettings {
   std::string unit_policy;
   float unit_scale = 1.0F;
   bool unit_scale_set = false;
-  bool bake_transforms = true;
+  bool bake_transforms = false;
   float gltf_omitted_light_range_m = 4096.0F;
 
   std::string normals_policy;

@@ -33,6 +33,7 @@
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Data/PakFormat_world.h>
+#include <Oxygen/Data/SceneIds.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {
@@ -85,7 +86,8 @@ auto WriteSceneRoot(
   descriptor.header.strings.size
     = static_cast<oxygen::data::pak::core::StringTableSizeT>(strings.size());
   auto node = world::NodeRecord {};
-  node.node_id = oxygen::data::AssetKey::FromVirtualPath("/Content/Nodes/Root");
+  node.node_id
+    = oxygen::data::NodeId::FromStableIdentity("/Content/Nodes/Root");
   node.scene_name_offset = 1U;
   node.node_flags = fixture.values;
   node.inherited_flags = fixture.inherited;
@@ -253,7 +255,7 @@ NOLINT_TEST_F(
     EXPECT_EQ(node.at("name"), "Root");
     EXPECT_EQ(node.at("node_id"),
       nostd::to_string(
-        oxygen::data::AssetKey::FromVirtualPath("/Content/Nodes/Root")));
+        oxygen::data::NodeId::FromStableIdentity("/Content/Nodes/Root")));
     EXPECT_EQ(node.at("flags").at("visible"), test.visible);
     EXPECT_EQ(node.at("flags").at("casts_shadows"), test.shadows);
     EXPECT_EQ(node.at("flags").at("receives_shadows"), test.shadows);

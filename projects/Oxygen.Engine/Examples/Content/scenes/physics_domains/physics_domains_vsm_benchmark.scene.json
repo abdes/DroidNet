@@ -1,5 +1,5 @@
 {
-  "version": 14,
+  "version": 15,
   "name": "physics_domains_vsm_benchmark",
   "starting_input_contexts": [
     {
@@ -9,6 +9,7 @@
   ],
   "nodes": [
     {
+      "id": "6056f38f-c075-5475-951c-87963628c14d",
       "name": "Root",
       "flags": {
         "visible": "shown",
@@ -18,6 +19,7 @@
       }
     },
     {
+      "id": "5e7bfb1a-cfce-5ad3-ab7f-9058eab384ec",
       "name": "Floor",
       "parent": 0,
       "flags": {
@@ -33,6 +35,7 @@
       }
     },
     {
+      "id": "0b12c5e5-9bbf-5c84-b818-9b8952046ef7",
       "name": "Ramp",
       "parent": 0,
       "flags": {
@@ -48,6 +51,7 @@
       }
     },
     {
+      "id": "44d11723-89b7-5443-a113-3ff839b05fef",
       "name": "BouncySphere",
       "parent": 0,
       "flags": {
@@ -60,6 +64,7 @@
       }
     },
     {
+      "id": "03aea376-f5a0-5304-9197-904fd4a3e951",
       "name": "AggregateAnchor",
       "parent": 0,
       "flags": {
@@ -72,6 +77,7 @@
       }
     },
     {
+      "id": "4e302b9a-16f1-5a33-9a93-f0c366d73c84",
       "name": "HingedCubeA",
       "parent": 4,
       "flags": {
@@ -84,6 +90,7 @@
       }
     },
     {
+      "id": "2f23f6d6-522c-57b1-8b19-3b98e8aa3e58",
       "name": "HingedCubeB",
       "parent": 4,
       "flags": {
@@ -96,6 +103,7 @@
       }
     },
     {
+      "id": "c1c3e9f7-d19c-55a9-9e3c-36f2cc528143",
       "name": "StackCube0",
       "parent": 0,
       "flags": {
@@ -109,6 +117,7 @@
       }
     },
     {
+      "id": "8ba23b56-f43d-559a-830a-6ff58ca12d1e",
       "name": "StackCube1",
       "parent": 0,
       "flags": {
@@ -122,6 +131,7 @@
       }
     },
     {
+      "id": "6408f415-295d-5448-ba03-6302625d181d",
       "name": "StackCube2",
       "parent": 0,
       "flags": {
@@ -135,6 +145,7 @@
       }
     },
     {
+      "id": "4c44ee12-f07f-5307-968c-ea3c32292017",
       "name": "StackCube3",
       "parent": 0,
       "flags": {
@@ -148,6 +159,7 @@
       }
     },
     {
+      "id": "281cc860-520f-55e7-aec3-c8b98ef15193",
       "name": "Character",
       "parent": 0,
       "flags": {
@@ -160,6 +172,7 @@
       }
     },
     {
+      "id": "635f6a38-8b96-5b04-9b6b-08060226a2e7",
       "name": "Vehicle",
       "parent": 0,
       "flags": {
@@ -172,6 +185,7 @@
       }
     },
     {
+      "id": "4a6617c1-5955-5785-8738-f4a70759971b",
       "name": "ChassisVisual",
       "parent": 12,
       "flags": {
@@ -184,6 +198,7 @@
       }
     },
     {
+      "id": "757527b6-8126-5545-9799-c2d70d1e3573",
       "name": "VehicleWheelFL",
       "parent": 12,
       "flags": {
@@ -197,6 +212,7 @@
       }
     },
     {
+      "id": "ebfe5b06-1219-5e1e-b84d-5b428eb4926c",
       "name": "VehicleWheelFR",
       "parent": 12,
       "flags": {
@@ -210,6 +226,7 @@
       }
     },
     {
+      "id": "e438966c-f211-5710-9f66-46d6f9e55f27",
       "name": "VehicleWheelRL",
       "parent": 12,
       "flags": {
@@ -223,6 +240,7 @@
       }
     },
     {
+      "id": "67506a5a-d7f6-5cc1-a294-c5cec6e72a0f",
       "name": "VehicleWheelRR",
       "parent": 12,
       "flags": {
@@ -236,6 +254,7 @@
       }
     },
     {
+      "id": "9578ca1e-447a-5ad7-8da9-059f76efa475",
       "name": "TriggerZone",
       "parent": 0,
       "flags": {
@@ -248,6 +267,7 @@
       }
     },
     {
+      "id": "9215b81d-dc5f-5707-82c9-b2cdba369dd8",
       "name": "SoftBody",
       "parent": 0,
       "flags": {
@@ -260,6 +280,7 @@
       }
     },
     {
+      "id": "a3803d94-39d5-5f2e-aba6-3e1e94233921",
       "name": "sun_light_node",
       "parent": 0,
       "flags": {
@@ -274,6 +295,7 @@
       }
     },
     {
+      "id": "518d8377-95ca-52bf-8d4c-5fb6b9448e2b",
       "name": "camera_node",
       "parent": 0,
       "flags": {
@@ -288,6 +310,7 @@
       }
     },
     {
+      "id": "f013e838-e8fe-51b0-a4cd-0ea4a95f308a",
       "name": "SoftBodyCube",
       "parent": 0,
       "flags": {

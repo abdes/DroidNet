@@ -1,8 +1,9 @@
 {
-  "version": 14,
+  "version": 15,
   "name": "VsmBug1LargeThinCube",
   "nodes": [
     {
+      "id": "4b35fd02-f1e3-511a-a3ea-0afcc75f1d4c",
       "name": "world",
       "flags": {
         "visible": "shown",
@@ -12,6 +13,7 @@
       }
     },
     {
+      "id": "2faeafb4-5c0e-5fba-907c-9cd934ce595b",
       "name": "thin_cube_node",
       "parent": 0,
       "flags": {
@@ -27,6 +29,7 @@
       }
     },
     {
+      "id": "cce75036-be68-5863-b0e4-c0b5a774fdc1",
       "name": "sun_light_node",
       "parent": 0,
       "flags": {
@@ -41,6 +44,7 @@
       }
     },
     {
+      "id": "81a00587-8300-58cd-9574-2ef2e671eb4f",
       "name": "camera_node",
       "parent": 0,
       "flags": {

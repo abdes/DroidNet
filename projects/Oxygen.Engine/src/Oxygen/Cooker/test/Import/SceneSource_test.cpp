@@ -7,7 +7,9 @@
 // Covers: Import/Internal/SceneSource.cpp
 
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -24,8 +26,10 @@
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Data/PakFormat_world.h>
+#include <Oxygen/Data/SceneIds.h>
 #include <Oxygen/Data/SceneRecordDefaults.h>
 #include <Oxygen/Data/Schema/Generated.SceneComponents.h>
+#include <Oxygen/Data/StableId.h>
 #include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Testing/GTest.h>
 
@@ -43,6 +47,24 @@ namespace {
     };
   }
 
+  //! The readable fixture id of the node at `index`.
+  auto NodeIdText(const std::size_t index) -> std::string
+  {
+    auto digits = std::to_string(index + 1U);
+    return "00000000-0000-4000-8000-" + std::string(12U - digits.size(), '0')
+      + digits;
+  }
+
+  //! Gives every node of `nodes` its fixture id, unless it names one.
+  auto WithIds(json nodes) -> json
+  {
+    for (auto index = std::size_t { 0 }; index < nodes.size(); ++index) {
+      nodes.at(index).emplace("id", NodeIdText(index));
+    }
+    return nodes;
+  }
+
+  using oxygen::cooker::test::DiagnosticSummary;
   using oxygen::cooker::test::HasDiagnosticCode;
 
   NOLINT_TEST(SceneSourceTest, EmptyScenePreservesEnvironmentAndCurve)
@@ -79,7 +101,7 @@ namespace {
   NOLINT_TEST(SceneSourceTest, RetainsGeometryMaterialsAndEveryReferenceGroup)
   {
     auto document = MakeScene();
-    document.at("nodes") = json::array({ json::object() });
+    document.at("nodes") = WithIds(json::array({ json::object() }));
     document.emplace("renderables", json::parse(R"([{
       "node":0,"geometry_ref":"/Content/Geometry/body.ogeo",
       "overrides":{"parts":[{
@@ -129,7 +151,7 @@ namespace {
   NOLINT_TEST(SceneSourceTest, ReadsEachOverrideAsItsValueType)
   {
     auto document = MakeScene();
-    document.at("nodes") = json::array({ json::object() });
+    document.at("nodes") = WithIds(json::array({ json::object() }));
     document.emplace("renderables", json::parse(R"([{
       "node":0,"geometry_ref":"/Content/Geometry/body.ogeo",
       "overrides":{
@@ -177,7 +199,7 @@ namespace {
   {
     const auto read = [](const std::string_view overrides) -> auto {
       auto document = MakeScene();
-      document.at("nodes") = json::array({ json::object() });
+      document.at("nodes") = WithIds(json::array({ json::object() }));
       auto renderable = json::object({
         { "node", 0 },
         { "geometry_ref", "/Content/Geometry/body.ogeo" },
@@ -198,7 +220,7 @@ namespace {
 
     EXPECT_TRUE(
       HasDiagnosticCode(read(R"({"parts":[)" + part + "," + part + "]}"),
-        "scene.descriptor.surface_invalid"));
+        "scene.descriptor.surface_id_invalid"));
     EXPECT_TRUE(HasDiagnosticCode(
       read(
         R"({"values":{"/lod_policy":{"type":"distance","thresholds":[9,4],"hysteresis_ratio":0.1}}})"),
@@ -242,12 +264,12 @@ namespace {
   NOLINT_TEST(SceneSourceTest, RetainsInstancesAndStartState)
   {
     auto document = MakeScene();
-    document.at("nodes") = json::parse(R"([
+    document.at("nodes") = WithIds(json::parse(R"([
       {"name":"root"},
       {"name":"model","parent":0,
        "instance":{"scene_ref":"/Content/Scenes/model.oscene"}},
-      {"name":"camera","parent":0}])");
-    document.emplace("starting_camera", 2);
+      {"name":"camera","parent":0}])"));
+    document.emplace("starting_camera", json::object({ { "node", 2 } }));
     document.emplace("starting_input_contexts", json::parse(R"([
       {"context_ref":"/Content/Input/gameplay.oimap","priority":5},
       {"context_ref":"/Content/Input/menu.oimap"}])"));
@@ -259,7 +281,7 @@ namespace {
     ASSERT_EQ(source->instances.size(), 1U);
     EXPECT_EQ(source->instances.front().node_index, 1U);
     EXPECT_EQ(source->instances.front().scene, "/Content/Scenes/model.oscene");
-    EXPECT_EQ(source->build.starting_camera, 2U);
+    EXPECT_EQ(source->build.starting_camera.node_index, 2U);
     ASSERT_EQ(source->starting_input_contexts.size(), 2U);
     EXPECT_EQ(source->starting_input_contexts.front().context,
       "/Content/Input/gameplay.oimap");
@@ -274,8 +296,8 @@ namespace {
     const auto source = SceneSource::FromDescriptor(
       MakeScene().dump(), "scene.json", diagnostics);
     ASSERT_HAS_VALUE(source) << "Expected source to contain a value";
-    EXPECT_EQ(
-      source->build.starting_camera, data::pak::world::kNoStartingCamera);
+    EXPECT_EQ(source->build.starting_camera.node_index,
+      data::pak::world::kNoStartingCamera);
     EXPECT_TRUE(source->instances.empty());
     EXPECT_TRUE(source->starting_input_contexts.empty());
   }
@@ -283,7 +305,7 @@ namespace {
   NOLINT_TEST(SceneSourceTest, RejectsStartingCameraOutsideTheScene)
   {
     auto document = MakeScene();
-    document.emplace("starting_camera", 0);
+    document.emplace("starting_camera", json::object({ { "node", 0 } }));
     auto diagnostics = std::vector<ImportDiagnostic> {};
     EXPECT_FALSE(
       SceneSource::FromDescriptor(document.dump(), "scene.json", diagnostics));
@@ -320,7 +342,7 @@ namespace {
   NOLINT_TEST(SceneSourceTest, OmittedComponentValuesTakeTheSchemaDefaults)
   {
     auto document = MakeScene();
-    document.at("nodes") = json::parse(R"([{}, {"parent":0}])");
+    document.at("nodes") = WithIds(json::parse(R"([{}, {"parent":0}])"));
     document.emplace("cameras", json::parse(R"({
       "perspective":[{"node":0}],
       "orthographic":[{"node":1,"aspect_mode":"fixed"}]})"));
@@ -404,7 +426,7 @@ namespace {
   {
     namespace world = data::pak::world;
     auto document = MakeScene();
-    document.at("nodes") = json::parse(R"([{}])");
+    document.at("nodes") = WithIds(json::parse(R"([{}])"));
     document.emplace("lights", json::parse(R"({
       "point":[{"node":0,"range":5,"common":{"shadow":{"bias":0.5}}}]})"));
     auto diagnostics = std::vector<ImportDiagnostic> {};
@@ -428,7 +450,7 @@ namespace {
   {
     namespace world = data::pak::world;
     auto document = MakeScene();
-    document.at("nodes") = json::parse(R"([{}, {"parent":0}])");
+    document.at("nodes") = WithIds(json::parse(R"([{}, {"parent":0}])"));
     auto diagnostics = std::vector<ImportDiagnostic> {};
     const auto source
       = SceneSource::FromDescriptor(document.dump(), "scene.json", diagnostics);
@@ -568,14 +590,15 @@ namespace {
       },
       {
         .group = "nodes",
-        .body = R"([{"transform":{"scale":[1,0,1]}}])",
+        .body = R"([{"id":"00000000-0000-4000-8000-000000000001",
+          "transform":{"scale":[1,0,1]}}])",
         .object_path = "nodes[0].transform.scale[1]",
       },
     };
     for (const auto& [group, body, object_path] : cases) {
       SCOPED_TRACE(std::string(object_path));
       auto document = MakeScene();
-      document.at("nodes") = json::parse(R"([{}])");
+      document.at("nodes") = WithIds(json::parse(R"([{}])"));
       document[std::string(group)] = json::parse(body);
       auto diagnostics = std::vector<ImportDiagnostic> {};
       EXPECT_FALSE(SceneSource::FromDescriptor(
@@ -592,7 +615,7 @@ namespace {
   NOLINT_TEST(SceneSourceTest, ReportsEveryPropertyOutsideItsRange)
   {
     auto document = MakeScene();
-    document.at("nodes") = json::parse(R"([{}])");
+    document.at("nodes") = WithIds(json::parse(R"([{}])"));
     document.emplace("lights", json::parse(R"({"point":[{"node":0,"range":0,
       "source_radius":-1,"luminous_flux_lm":0}]})"));
     auto diagnostics = std::vector<ImportDiagnostic> {};
@@ -608,7 +631,7 @@ namespace {
   NOLINT_TEST(SceneSourceTest, AcceptsValuesOnTheGeneratedBounds)
   {
     auto document = MakeScene();
-    document.at("nodes") = json::parse(R"([{}])");
+    document.at("nodes") = WithIds(json::parse(R"([{}])"));
     document.emplace("lights", json::parse(R"({
       "directional":[{"node":0,"intensity_lux":0,"cascade_count":1,
         "common":{"color_rgb":[0,1,0],"exposure_compensation_ev":-10}}]})"));
@@ -616,6 +639,200 @@ namespace {
     EXPECT_TRUE(
       SceneSource::FromDescriptor(document.dump(), "scene.json", diagnostics));
     EXPECT_TRUE(diagnostics.empty());
+  }
+
+  //! A node without an id fails the schema.
+  NOLINT_TEST(SceneSourceTest, RejectsNodeWithoutId)
+  {
+    auto document = MakeScene();
+    document.at("nodes") = json::array({ json::object() });
+    auto diagnostics = std::vector<ImportDiagnostic> {};
+    EXPECT_FALSE(
+      SceneSource::FromDescriptor(document.dump(), "scene.json", diagnostics));
+    EXPECT_TRUE(HasDiagnosticCode(
+      diagnostics, "scene.descriptor.schema_validation_failed"));
+  }
+
+  //! A nil node id is refused.
+  NOLINT_TEST(SceneSourceTest, RejectsNilNodeId)
+  {
+    auto document = MakeScene();
+    document.at("nodes") = json::array({
+      json::object({
+        { "id", "00000000-0000-0000-0000-000000000000" },
+      }),
+    });
+    auto diagnostics = std::vector<ImportDiagnostic> {};
+    EXPECT_FALSE(
+      SceneSource::FromDescriptor(document.dump(), "scene.json", diagnostics));
+    EXPECT_TRUE(
+      HasDiagnosticCode(diagnostics, "scene.descriptor.node_id_invalid"));
+  }
+
+  //! Two nodes of one descriptor cannot share an id.
+  NOLINT_TEST(SceneSourceTest, RejectsDuplicateNodeId)
+  {
+    auto document = MakeScene();
+    const auto node = json::object({ { "id", NodeIdText(0) } });
+    document.at("nodes") = json::array({ node, node });
+    auto diagnostics = std::vector<ImportDiagnostic> {};
+    EXPECT_FALSE(
+      SceneSource::FromDescriptor(document.dump(), "scene.json", diagnostics));
+    EXPECT_TRUE(
+      HasDiagnosticCode(diagnostics, "scene.descriptor.node_id_duplicate"));
+  }
+
+  //! A cooked node record carries the id its descriptor node authored.
+  NOLINT_TEST(SceneSourceTest, CookedNodeRecordCarriesTheDescriptorId)
+  {
+    auto document = MakeScene();
+    document.at("nodes") = WithIds(json::parse(R"([{}, {"parent":0}])"));
+    auto diagnostics = std::vector<ImportDiagnostic> {};
+    const auto source
+      = SceneSource::FromDescriptor(document.dump(), "scene.json", diagnostics);
+    ASSERT_HAS_VALUE(source) << "Expected source to contain a value";
+    ASSERT_EQ(source->build.nodes.size(), 2U);
+    for (auto index = std::size_t { 0 }; index < 2U; ++index) {
+      const auto expected = data::NodeId::FromString(NodeIdText(index));
+      if (!expected.has_value()) {
+        FAIL() << "Fixture node id " << index << " does not parse";
+      }
+      EXPECT_EQ(source->build.nodes.at(index).node_id, expected.value());
+    }
+  }
+
+  //! A starting camera path is kept beside the camera's node index.
+  NOLINT_TEST(SceneSourceTest, RetainsStartingCameraPath)
+  {
+    auto document = MakeScene();
+    document.at("nodes") = WithIds(json::parse(R"([{}, {"parent":0}])"));
+    const auto first = NodeIdText(4);
+    const auto second = NodeIdText(5);
+    document.emplace("starting_camera",
+      json::object({
+        { "node", 1 },
+        { "path", json::array({ first, second }) },
+      }));
+    auto diagnostics = std::vector<ImportDiagnostic> {};
+    const auto source
+      = SceneSource::FromDescriptor(document.dump(), "scene.json", diagnostics);
+    ASSERT_HAS_VALUE(source) << "Expected source to contain a value";
+    EXPECT_EQ(source->build.starting_camera.node_index, 1U);
+    const auto expected_first = data::NodeId::FromString(first);
+    const auto expected_second = data::NodeId::FromString(second);
+    if (!expected_first.has_value() || !expected_second.has_value()) {
+      FAIL() << "Fixture path ids do not parse";
+    }
+    ASSERT_EQ(source->starting_camera_path.size(), 2U);
+    EXPECT_EQ(source->starting_camera_path.at(0), expected_first.value());
+    EXPECT_EQ(source->starting_camera_path.at(1), expected_second.value());
+  }
+
+  //! A one-root scene whose instance root (node 0) holds `overrides`.
+  auto ReadSceneWithInstanceChanges(const json& overrides,
+    std::vector<ImportDiagnostic>& diagnostics) -> std::optional<SceneSource>
+  {
+    auto document = MakeScene();
+    document.at("nodes") = WithIds(json::array({
+      json::object({
+        {
+          "instance",
+          json::object({
+            { "scene_ref", "/Content/Scenes/model.oscene" },
+            { "overrides", overrides },
+          }),
+        },
+      }),
+    }));
+    return SceneSource::FromDescriptor(
+      document.dump(), "scene.json", diagnostics);
+  }
+
+  //! A change names an instanced node by its path below the instance root and
+  //! a property by its component and key.
+  NOLINT_TEST(SceneSourceTest, ReadsTheChangesOfAnInstancedNode)
+  {
+    const auto lamp = NodeIdText(4);
+    const auto bulb = NodeIdText(5);
+    auto diagnostics = std::vector<ImportDiagnostic> {};
+
+    const auto source = ReadSceneWithInstanceChanges(
+      json::array({
+        json::object({
+          { "path", json::array({ lamp, bulb }) },
+          {
+            "components",
+            json::parse(
+              R"({"transform":{"values":{"/local_position/0":2.5}}})"),
+          },
+        }),
+      }),
+      diagnostics);
+
+    ASSERT_HAS_VALUE(source) << DiagnosticSummary(diagnostics);
+    ASSERT_EQ(source->instances.size(), 1U);
+    const auto& changes = source->instances.front().changes;
+    ASSERT_EQ(changes.size(), 1U);
+    const auto expected_lamp = data::NodeId::FromString(lamp);
+    const auto expected_bulb = data::NodeId::FromString(bulb);
+    if (!expected_lamp.has_value() || !expected_bulb.has_value()) {
+      FAIL() << "Fixture path ids do not parse";
+    }
+    EXPECT_THAT(changes.front().path,
+      ::testing::ElementsAre(expected_lamp.value(), expected_bulb.value()));
+    EXPECT_EQ(changes.front().change.property->id,
+      data::schema::OverrideId::kTransformPositionX);
+  }
+
+  //! A scene holds one change per instanced node, property and part.
+  NOLINT_TEST(SceneSourceTest, RejectsARepeatedChangeOfAnInstancedNode)
+  {
+    const auto change = json::object({
+      { "path", json::array({ NodeIdText(4) }) },
+      {
+        "components",
+        json::parse(R"({"transform":{"values":{"/local_position/0":2.5}}})"),
+      },
+    });
+    auto diagnostics = std::vector<ImportDiagnostic> {};
+
+    const auto source = ReadSceneWithInstanceChanges(
+      json::array({ change, change }), diagnostics);
+
+    EXPECT_FALSE(source.has_value());
+    EXPECT_TRUE(HasDiagnosticCode(
+      diagnostics, "scene.descriptor.instance_override_duplicate"));
+  }
+
+  //! Every element of a change's path is a non-nil node ID.
+  NOLINT_TEST(SceneSourceTest, RejectsANilNodeInAChangePath)
+  {
+    auto diagnostics = std::vector<ImportDiagnostic> {};
+
+    const auto source = ReadSceneWithInstanceChanges(
+      json::array({
+        json::object({
+          {
+            "path",
+            json::array(
+              { NodeIdText(4), "00000000-0000-0000-0000-000000000000" }),
+          },
+          {
+            "components",
+            json::parse(
+              R"({"transform":{"values":{"/local_position/0":2.5}}})"),
+          },
+        }),
+      }),
+      diagnostics);
+
+    EXPECT_FALSE(source.has_value());
+    const auto invalid = std::ranges::find_if(
+      diagnostics, [](const ImportDiagnostic& diagnostic) -> bool {
+        return diagnostic.code == "scene.descriptor.node_path_invalid";
+      });
+    ASSERT_NE(invalid, diagnostics.end());
+    EXPECT_THAT(invalid->object_path, ::testing::EndsWith(".path[1]"));
   }
 
   NOLINT_TEST(SceneSourceTest, NonObjectInputIsNotAFormatUpgradeError)

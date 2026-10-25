@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.Immutable;
+using System.Globalization;
 using System.Numerics;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -23,6 +24,8 @@ namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Descriptors;
 [TestClass]
 internal sealed partial class SceneDescriptorGeneratorTests
 {
+    private static readonly Lazy<int> EngineSceneDescriptorVersion = new(ReadEngineSceneDescriptorVersion);
+
     public TestContext TestContext { get; set; } = null!;
 
     /// <summary>An engine material override is referenced by its engine path and cooks no input.</summary>
@@ -212,8 +215,7 @@ internal sealed partial class SceneDescriptorGeneratorTests
         _ = result.Diagnostics.Should().BeEmpty();
         using var document = JsonDocument.Parse(await File.ReadAllTextAsync(result.DescriptorPath, this.TestContext.CancellationToken).ConfigureAwait(false));
         var root = document.RootElement;
-        _ = root.GetProperty("$schema").GetString().Should().Be("oxygen.scene-descriptor.v14");
-        _ = root.GetProperty("version").GetInt32().Should().Be(14);
+        AssertCurrentDescriptorVersion(root);
         var nodes = root.GetProperty("nodes");
         _ = nodes.GetArrayLength().Should().Be(2);
         _ = nodes[1].GetProperty("parent").GetInt32().Should().Be(0);
@@ -593,7 +595,7 @@ internal sealed partial class SceneDescriptorGeneratorTests
                 var result = await generator.GenerateAsync(savedScene, scope, this.TestContext.CancellationToken).ConfigureAwait(false);
                 _ = result.Diagnostics.Should().BeEmpty();
                 using var document = JsonDocument.Parse(await File.ReadAllTextAsync(result.DescriptorPath, this.TestContext.CancellationToken).ConfigureAwait(false));
-                _ = document.RootElement.GetProperty("version").GetInt32().Should().Be(14);
+                AssertCurrentDescriptorVersion(document.RootElement);
                 var environment = document.RootElement.GetProperty("environment");
                 _ = environment.GetProperty("sky_atmosphere").GetProperty("enabled").GetBoolean().Should().BeFalse();
                 var post = environment.GetProperty("post_process_volume");
@@ -883,9 +885,28 @@ internal sealed partial class SceneDescriptorGeneratorTests
             DisplayGamma = 2.4f,
         };
 
+    /// <summary>
+    /// Reads the descriptor version the installed engine schema requires.
+    /// </summary>
+    private static int ReadEngineSceneDescriptorVersion()
+        => EditorSchemaCatalog.LoadFromDirectory(Path.Combine(AppContext.BaseDirectory, "Schemas"))
+            .GetEngineSchema("oxygen.scene-descriptor.schema.json")["properties"]!["version"]!["const"]!
+            .GetValue<int>();
+
+    /// <summary>
+    /// Asserts that a descriptor names the version the installed engine schema requires.
+    /// </summary>
+    private static void AssertCurrentDescriptorVersion(JsonElement root)
+    {
+        var version = EngineSceneDescriptorVersion.Value;
+        _ = root.GetProperty("$schema").GetString().Should()
+            .Be(string.Create(CultureInfo.InvariantCulture, $"oxygen.scene-descriptor.v{version}"));
+        _ = root.GetProperty("version").GetInt32().Should().Be(version);
+    }
+
     private static void AssertSupportedSceneDescriptor(JsonElement root, Guid surfaceId)
     {
-        _ = root.GetProperty("version").GetInt32().Should().Be(14);
+        AssertCurrentDescriptorVersion(root);
         _ = root.GetProperty("name").GetString().Should().Be("Main");
         _ = root.GetProperty("renderables")[0].GetProperty("geometry_ref").GetString()
             .Should().Be(EngineAssets.BasicShape("Cube").VirtualPath);

@@ -49,7 +49,7 @@ NOLINT_TEST(ImportManifestScriptSidecarTest, AcceptsInlineBindingsForSidecarJob)
           "bindings": [
             {
               "node_index": 0,
-              "slot_id": "main",
+              "slot_id": "00000000-0000-4000-8000-00000000000a",
               "script_virtual_path": "/Scripts/test.oscript"
             }
           ]
@@ -95,7 +95,7 @@ NOLINT_TEST(ImportManifestScriptSidecarTest,
           "bindings": [
             {
               "node_index": 0,
-              "slot_id": "main",
+              "slot_id": "00000000-0000-4000-8000-00000000000a",
               "script_virtual_path": "/Content/move.oscript"
             }
           ]
@@ -186,7 +186,7 @@ NOLINT_TEST(ImportManifestScriptSidecarTest,
           "bindings": [
             {
               "node_index": 0,
-              "slot_id": "main",
+              "slot_id": "00000000-0000-4000-8000-00000000000a",
               "script_virtual_path": "/Scripts/test.oscript"
             }
           ]
@@ -223,7 +223,7 @@ NOLINT_TEST(
           "bindings": [
             {
               "node_index": 0,
-              "slot_id": "main",
+              "slot_id": "00000000-0000-4000-8000-00000000000a",
               "script_virtual_path": "/Scripts/test.oscript"
             }
           ]
@@ -266,7 +266,7 @@ NOLINT_TEST(ImportManifestScriptSidecarTest,
           "bindings": [
             {
               "node_index": 0,
-              "slot_id": "main",
+              "slot_id": "00000000-0000-4000-8000-00000000000a",
               "script_virtual_path": "/Scripts/test.oscript"
             }
           ]
@@ -324,7 +324,7 @@ NOLINT_TEST(ImportManifestScriptSidecarTest,
           "bindings": [
             {
               "node_index": 0,
-              "slot_id": "main",
+              "slot_id": "00000000-0000-4000-8000-00000000000a",
               "script_virtual_path": "/Scripts/test.oscript"
             }
           ]
@@ -377,7 +377,7 @@ NOLINT_TEST(ImportManifestScriptSidecarTest,
           "bindings": [
             {
               "node_index": 0,
-              "slot_id": "main",
+              "slot_id": "00000000-0000-4000-8000-00000000000a",
               "script_virtual_path": "/Scripts/test.oscript"
             }
           ]

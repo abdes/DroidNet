@@ -25,10 +25,14 @@
 #include <Oxygen/Cooker/test/Support/TempDir.h>
 #include <Oxygen/Testing/GTest.h>
 
-using namespace oxygen::content::import;
-
 namespace {
 
+using oxygen::content::import::AsyncImportService;
+using oxygen::content::import::ImportDiagnostic;
+using oxygen::content::import::ImportJobId;
+using oxygen::content::import::ImportReport;
+using oxygen::content::import::ImportRequest;
+using oxygen::content::import::PhysicsImportSettings;
 using oxygen::cooker::test::HasDiagnosticCode;
 
 auto StopService(AsyncImportService& service) -> void { service.Stop(); }
@@ -198,7 +202,7 @@ NOLINT_TEST_F(
   std::filesystem::create_directories(*request.cooked_root);
   request.scene_descriptor = ImportRequest::SceneDescriptorPayload {
     .normalized_descriptor_json
-    = R"({"name":"BadScene","nodes":[{"name":"Root"},{"name":"Mesh","parent":0}],"renderables":[{"node":1,"geometry_ref":"not/canonical"}]})",
+    = R"({"name":"BadScene","nodes":[{"id":"00000000-0000-4000-8000-000000000001","name":"Root"},{"id":"00000000-0000-4000-8000-000000000002","name":"Mesh","parent":0}],"renderables":[{"node":1,"geometry_ref":"not/canonical"}]})",
   };
 
   std::latch done(1);

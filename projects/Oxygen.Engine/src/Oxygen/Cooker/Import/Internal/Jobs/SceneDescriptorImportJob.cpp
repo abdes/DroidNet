@@ -42,6 +42,7 @@
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Cooker/Import/TextureSourceAssembly.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
+#include <Oxygen/Cooker/Loose/Types.h>
 #include <Oxygen/Core/Detail/FormatUtils.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/DescriptorExtensions.h>
@@ -149,16 +150,6 @@ namespace {
     return std::chrono::duration_cast<std::chrono::microseconds>(end - start);
   }
 
-  auto BuildNodeAssetKey(const ImportRequest& request,
-    std::string_view scene_virtual_path, const uint32_t node_index)
-    -> data::AssetKey
-  {
-    static_cast<void>(request);
-    const auto key_path = std::string(scene_virtual_path) + "/nodes/"
-      + std::to_string(node_index);
-    return oxygen::data::AssetKey::FromVirtualPath(key_path);
-  }
-
   template <typename RecordT>
   auto PackRecordBytes(const RecordT& record) -> std::vector<std::byte>
   {
@@ -221,7 +212,9 @@ namespace {
         std::move(object_path));
       break;
     case internal::AssetReferenceRefusal::kTypeMismatch:
-      type_mismatch(*resolved.error().found_type);
+      if (resolved.error().found_type.has_value()) {
+        type_mismatch(*resolved.error().found_type);
+      }
       break;
     }
     return std::nullopt;
@@ -531,37 +524,19 @@ namespace {
     co_return true;
   }
 
-  //! Encodes one override as its property's value type, resolving its surface
-  //! against the geometry being cooked and its asset against the mounts.
-  auto LinkOverride(SceneDescriptorExecutionContext& context,
-    const internal::SceneSource::Renderable& renderable,
-    const internal::SceneSource::Override& source, SceneBuild& build) -> bool
+  //! Encodes the value of one override as its property's value type,
+  //! resolving an asset against the mounts.
+  auto LinkOverrideValue(SceneDescriptorExecutionContext& context,
+    const internal::SceneSource::Override& source,
+    data::pak::world::OverrideRecord& record, SceneBuild& build) -> bool
   {
     const auto& property = *source.property;
-    auto record = data::pak::world::OverrideRecord {
-      .node_index = renderable.node_index,
-      .override_id = property.id,
-    };
-    switch (property.part_kind) {
-    case data::schema::PartKind::kNone:
-      DCHECK_F(source.part_id.IsNil());
-      break;
-    case data::schema::PartKind::kSurface: {
-      const auto& geometry = *context.geometries.at(renderable.geometry);
-      if (geometry.FindSurface(source.part_id) == nullptr) {
-        AddDiagnostic(context.session, context.request, ImportSeverity::kError,
-          "scene.descriptor.surface_invalid",
-          "The override targets a surface the geometry does not declare",
-          source.object_path);
-        return false;
-      }
-      record.part_id = source.part_id;
-      record.layout_revision = geometry.Surfaces().layout_revision;
-      break;
-    }
-    }
-    // SceneSource read each value as its property's value type.
-    if (const auto* flag = std::get_if<bool>(&source.value)) {
+    // SceneSource read each value as its property's value type, and encoded
+    // the change of every property a node's records hold.
+    if (const auto* encoded
+      = std::get_if<data::pak::world::OverrideValue>(&source.value)) {
+      record.value = *encoded;
+    } else if (const auto* flag = std::get_if<bool>(&source.value)) {
       DCHECK_F(property.type == data::schema::ValueType::kBool);
       record.value.as_bool = *flag ? 1U : 0U;
     } else if (const auto* asset
@@ -585,6 +560,59 @@ namespace {
     return true;
   }
 
+  //! Links one override of a renderable of this scene. A surface the geometry
+  //! no longer declares keeps the override in the descriptor and leaves it out
+  //! of the cooked scene, with a warning.
+  auto LinkOverride(SceneDescriptorExecutionContext& context,
+    const internal::SceneSource::Renderable& renderable,
+    const internal::SceneSource::Override& source, SceneBuild& build) -> bool
+  {
+    const auto& property = *source.property;
+    auto record = data::pak::world::OverrideRecord {
+      .target = { .node_index = renderable.node_index },
+      .override_id = property.id,
+    };
+    switch (property.part_kind) {
+    case data::schema::PartKind::kNone:
+      DCHECK_F(source.part_id.IsNil());
+      break;
+    case data::schema::PartKind::kSurface: {
+      const auto& geometry = *context.geometries.at(renderable.geometry);
+      if (geometry.FindSurface(source.part_id) == nullptr) {
+        AddDiagnostic(context.session, context.request,
+          ImportSeverity::kWarning, "scene.descriptor.surface_invalid",
+          "The override targets a surface the geometry does not declare; it "
+          "has no effect until the geometry declares the surface again",
+          source.object_path);
+        return true;
+      }
+      record.part_id = source.part_id;
+      record.layout_revision = geometry.Surfaces().layout_revision;
+      break;
+    }
+    }
+    return LinkOverrideValue(context, source, record, build);
+  }
+
+  //! Links one change of a node an instance brings in. It keeps its authored
+  //! surface and layout revision: the instanced scene owns the geometry.
+  auto LinkInstanceChange(SceneDescriptorExecutionContext& context,
+    const uint32_t instance_root,
+    const internal::SceneSource::InstanceChange& change, SceneBuild& build)
+    -> bool
+  {
+    auto record = data::pak::world::OverrideRecord {
+      .target = {
+        .node_index = instance_root,
+        .node_path = build.node_paths.Intern(change.path),
+      },
+      .override_id = change.change.property->id,
+      .part_id = change.change.part_id,
+      .layout_revision = change.change.layout_revision,
+    };
+    return LinkOverrideValue(context, change.change, record, build);
+  }
+
   auto LinkSceneDescriptor(SceneDescriptorExecutionContext& context,
     internal::SceneSource source, const EnvironmentTextureIndices& textures)
     -> std::optional<LinkedSceneDescriptor>
@@ -599,9 +627,9 @@ namespace {
     };
     // The job placed the scene at its identity before linking it.
     const auto& scene_virtual_path = context.request.asset_virtual_path;
-    for (size_t i = 0; i < prepared.build.nodes.size(); ++i) {
-      prepared.build.nodes.at(i).node_id = BuildNodeAssetKey(
-        context.request, scene_virtual_path, static_cast<uint32_t>(i));
+    if (!source.starting_camera_path.empty()) {
+      prepared.build.starting_camera.node_path
+        = prepared.build.node_paths.Intern(source.starting_camera_path);
     }
     prepared.build.renderables.reserve(source.renderables.size());
     prepared.geometry_keys.reserve(source.renderables.size());
@@ -640,6 +668,12 @@ namespace {
           "scene.descriptor.instance_cycle", "A scene cannot instance itself",
           std::move(instance.object_path));
         return std::nullopt;
+      }
+      for (const auto& change : instance.changes) {
+        if (!LinkInstanceChange(
+              context, instance.node_index, change, prepared.build)) {
+          return std::nullopt;
+        }
       }
       prepared.build.instances.push_back({
         .node_index = instance.node_index,

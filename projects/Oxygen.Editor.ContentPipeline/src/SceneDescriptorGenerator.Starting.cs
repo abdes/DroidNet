@@ -5,7 +5,6 @@
 using Oxygen.Editor.Input;
 using Oxygen.Editor.World;
 using Oxygen.Managed.Assets;
-using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -24,22 +23,21 @@ public sealed partial class SceneDescriptorGenerator
     /// <param name="scene">The scene.</param>
     /// <param name="nodeIndices">Each node's index in the cooked scene.</param>
     /// <param name="site">Where a problem is reported.</param>
-    /// <returns>The camera's node index; <see langword="null"/> when the scene has no camera or the authored one is
+    /// <returns>The camera's node; <see langword="null"/> when the scene has no camera or the authored one is
     /// missing, which is reported.</returns>
-    private static int? CreateStartingCamera(Scene scene, IReadOnlyDictionary<NodeId, int> nodeIndices, PropertySite site)
+    private static NativeNodeRef? CreateStartingCamera(Scene scene, IReadOnlyDictionary<NodeId, int> nodeIndices, PropertySite site)
     {
         if (scene.StartingCamera is { } authored && scene.EffectiveStartingCamera is null)
         {
             var name = scene.AllNodes.FirstOrDefault(node => node.Id == authored)?.Metadata.Name;
-            site.Report(
-                SceneStartingPropertyPaths.StartingCamera,
-                name is null
-                    ? "The starting camera was deleted. Pick another camera in the scene's Play section, or return it to Automatic."
-                    : $"The starting camera '{name}' is no longer a camera. Pick another camera in the scene's Play section, or return it to Automatic.");
+            var message = name is null
+                                ? "The starting camera was deleted. Pick another camera in the scene's Play section, or return it to Automatic."
+                                : $"The starting camera '{name}' is no longer a camera. Pick another camera in the scene's Play section, or return it to Automatic.";
+            site.Report(SceneStartingPropertyPaths.StartingCamera, message);
             return null;
         }
 
-        return scene.EffectiveStartingCamera is { } camera ? nodeIndices[camera.Id] : null;
+        return scene.EffectiveStartingCamera is { } camera ? new NativeNodeRef(nodeIndices[camera.Id]) : null;
     }
 
     /// <summary>Resolves the input mapping contexts the cooked scene activates when it starts.</summary>

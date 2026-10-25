@@ -13,6 +13,7 @@
 #include <ios>
 #include <iterator>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <utility>
 
@@ -25,8 +26,8 @@
 #include <Oxygen/Content/Loaders/GeometryLoader.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
-#include <Oxygen/Cooker/Import/Naming.h>
 #include <Oxygen/Cooker/Import/SurfaceProvenance.h>
+#include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/test/Support/ModelImportTestBase.h>
 #include <Oxygen/Cooker/test/Support/TestPaths.h>
 #include <Oxygen/Data/AssetType.h>
@@ -37,14 +38,20 @@
 
 namespace {
 
-using namespace oxygen::content::import;
+using oxygen::content::import::CoordinateConversionPolicy;
+using oxygen::content::import::ImportRequest;
+using oxygen::content::import::SurfaceProvenance;
+using oxygen::content::import::UnitNormalizationPolicy;
+using oxygen::cooker::test::DiagnosticSummary;
+using oxygen::cooker::test::HasDiagnosticCode;
 
 struct SourceCapture {
   std::shared_ptr<const SurfaceProvenance> provenance;
   glm::vec3 bounds_max {};
 };
 
-class SourceLayoutWitnessTest : public test::ModelImportTestBase {
+class SourceLayoutWitnessTest
+  : public oxygen::content::import::test::ModelImportTestBase {
 protected:
   static auto FixturePath(const std::string& extension) -> std::filesystem::path
   {
@@ -57,6 +64,40 @@ protected:
   {
     return MakeTempDir("source_witness_edit_" + TestName())
       / ("static_scalar_triangle." + extension);
+  }
+
+  [[nodiscard]] auto Request(const std::filesystem::path& source)
+    -> ImportRequest
+  {
+    auto request = ImportRequest {};
+    request.source_path = source;
+    request.asset_virtual_path
+      = oxygen::cooker::test::ModelVirtualPath(request.source_path);
+    request.cooked_root = MakeTempDir("source_witness_import_" + TestName()
+      + "_" + std::to_string(capture_index_++));
+    return request;
+  }
+
+  //! The glTF fixture with its only primitive drawn as points.
+  [[nodiscard]] auto WritePointsSource() const -> std::filesystem::path
+  {
+    std::ifstream input(FixturePath("gltf"));
+    auto source = nlohmann::json::parse(input);
+    constexpr auto kPointsMode = 0;
+    source.at("meshes")
+      .at(0)
+      .at("primitives")
+      .at(0)
+      .update({
+        { "mode", kPointsMode },
+      });
+    const auto path = ChangedSourcePath("gltf");
+    std::ofstream output(path);
+    output << source.dump();
+    if (!output.good()) {
+      throw std::runtime_error("Failed to write the points glTF fixture");
+    }
+    return path;
   }
 
   auto Capture(const std::filesystem::path& source,
@@ -217,27 +258,61 @@ NOLINT_TEST_F(
     original.provenance->Geometries().front().source_layout_witness);
 }
 
-NOLINT_TEST_F(
-  SourceLayoutWitnessTest, GltfUnsupportedPrimitiveModeDoesNotReplaceProvenance)
+//! A primitive that is not a triangle list is dropped with a warning and the
+//! model still imports; the published provenance lists only the geometry the
+//! cook produced, so the emptied mesh has no entry.
+NOLINT_TEST_F(SourceLayoutWitnessTest, GltfNonTrianglePrimitiveIsDropped)
 {
   const auto original
     = Capture(FixturePath("gltf"), CoordinateConversionPolicy {});
   ASSERT_NE(original.provenance, nullptr);
-  std::ifstream input(FixturePath("gltf"));
-  auto source = nlohmann::json::parse(input);
-  source.at("meshes").at(0).at("primitives").at(0).update({ { "mode", 0 } });
+  ASSERT_EQ(original.provenance->Geometries().size(), 1U);
+
+  const auto dropped = RunImport(Request(WritePointsSource()));
+
+  EXPECT_TRUE(dropped.report.success)
+    << DiagnosticSummary(dropped.report.diagnostics);
+  EXPECT_TRUE(
+    HasDiagnosticCode(dropped.report.diagnostics, "gltf.primitive.type"));
+  ASSERT_NE(source_provenance_, nullptr);
+  EXPECT_TRUE(source_provenance_->Geometries().empty());
+}
+
+//! Surface ids derive from the source, so a geometry an import dropped gets
+//! its ids back once its source is repaired.
+NOLINT_TEST_F(SourceLayoutWitnessTest, RepairedGeometryGetsItsSurfaceIdsBack)
+{
+  const auto original
+    = Capture(FixturePath("gltf"), CoordinateConversionPolicy {});
+  ASSERT_NE(original.provenance, nullptr);
+  ASSERT_EQ(original.provenance->Geometries().size(), 1U);
+  ASSERT_TRUE(RunImport(Request(WritePointsSource())).report.success);
+
+  const auto repaired
+    = Capture(FixturePath("gltf"), CoordinateConversionPolicy {});
+
+  ASSERT_NE(repaired.provenance, nullptr);
+  ASSERT_EQ(repaired.provenance->Geometries().size(), 1U);
+  EXPECT_EQ(repaired.provenance->Geometries().front().allocations,
+    original.provenance->Geometries().front().allocations);
+}
+
+//! A failed import publishes no provenance and leaves the recorded one as it
+//! was.
+NOLINT_TEST_F(SourceLayoutWitnessTest, FailedImportKeepsRecordedProvenance)
+{
+  const auto original
+    = Capture(FixturePath("gltf"), CoordinateConversionPolicy {});
+  ASSERT_NE(original.provenance, nullptr);
   const auto path = ChangedSourcePath("gltf");
   {
     std::ofstream output(path);
-    output << source.dump();
+    output << "{ not glTF";
     ASSERT_TRUE(output.good());
   }
-  auto request = ImportRequest {};
-  request.source_path = path;
-  request.asset_virtual_path
-    = oxygen::cooker::test::ModelVirtualPath(request.source_path);
-  request.cooked_root = MakeTempDir("source_witness_rejected_mode");
-  const auto failed = RunImport(std::move(request));
+
+  const auto failed = RunImport(Request(path));
+
   EXPECT_FALSE(failed.report.success);
   EXPECT_TRUE(failed.report.surface_provenance_json.empty());
   EXPECT_EQ(source_provenance_->Serialize(), original.provenance->Serialize());

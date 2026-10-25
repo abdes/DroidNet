@@ -22,8 +22,6 @@
 #include <system_error>
 #include <utility>
 
-#include <fmt/format.h>
-#include <fmt/ranges.h>
 #include <nlohmann/json-schema.hpp>
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
@@ -407,7 +405,7 @@ auto RetainedModelImport::RecordPath(const std::filesystem::path& content_root,
     return *match;
   }
   const auto source = Absolute(source_path).generic_string();
-  const auto key = fmt::format("{:02x}", fmt::join(Digest(source), ""));
+  const auto key = base::ToHexString(Digest(source));
   return records / (key + ".import.json");
 }
 
@@ -626,7 +624,7 @@ auto RetainedModelImport::SelectedGeneration(
   }
   const auto actual
     = base::ComputeFileSha256(*selected / "container.index.bin");
-  if (fmt::format("{:02x}", fmt::join(actual, ""))
+  if (base::ToHexString(actual)
     != record.at("published_generation")
       .at("index_sha256")
       .get<std::string>()) {
@@ -710,7 +708,7 @@ auto RetainedModelImport::ValidateCandidate(const ImportReport& report) -> void
         { "id", state_->generation.ToString() },
         {
           "index_sha256",
-          fmt::format("{:02x}", fmt::join(*state_->validated_index, "")),
+          base::ToHexString(*state_->validated_index),
         },
       },
     },

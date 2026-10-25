@@ -13,7 +13,6 @@
 #include <filesystem>
 #include <fstream>
 #include <ios>
-#include <random>
 #include <span>
 #include <string>
 #include <string_view>
@@ -23,10 +22,7 @@
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Testing/GTest.h>
 
-using ::testing::Each;
 using ::testing::ElementsAreArray;
-using ::testing::Eq;
-using ::testing::SizeIs;
 
 namespace {
 
@@ -39,9 +35,9 @@ namespace {
   -> oxygen::base::Sha256Digest
 {
   oxygen::base::Sha256Digest digest = {};
-  for (size_t i = 0; i < 32 && i * 2 + 1 < hex.size(); ++i) {
+  for (size_t i = 0; i < 32 && (i * 2) + 1 < hex.size(); ++i) {
     const auto hi = hex[i * 2];
-    const auto lo = hex[i * 2 + 1];
+    const auto lo = hex[(i * 2) + 1];
     auto nibble = [](char c) -> uint8_t {
       if (c >= '0' && c <= '9') {
         return static_cast<uint8_t>(c - '0');
@@ -54,29 +50,29 @@ namespace {
       }
       return 0;
     };
-    digest[i] = static_cast<uint8_t>((nibble(hi) << 4U) | nibble(lo));
+    digest[i] = static_cast<uint8_t>((static_cast<unsigned>(nibble(hi)) << 4U)
+      | static_cast<unsigned>(nibble(lo)));
   }
   return digest;
 }
 
-//! Convert Sha256Digest to lowercase hex string for debugging.
-[[nodiscard]] auto DigestToHex(const oxygen::base::Sha256Digest& digest)
-  -> std::string
+//! Fills `data` with a fixed byte sequence that is not periodic in any small
+//! block size.
+auto FillWithPattern(std::span<std::byte> data) -> void
 {
-  std::string result;
-  result.reserve(64);
-  for (uint8_t byte : digest) {
-    constexpr char hex_chars[] = "0123456789abcdef";
-    result.push_back(hex_chars[byte >> 4U]);
-    result.push_back(hex_chars[byte & 0xFU]);
+  constexpr auto kMultiplier = 131U;
+  constexpr auto kIncrement = 7U;
+  auto state = 0U;
+  for (auto& byte : data) {
+    state = (state * kMultiplier) + kIncrement;
+    byte = static_cast<std::byte>((state >> 8U) & 0xFFU);
   }
-  return result;
 }
 
 //! Convert string to span of bytes.
 [[nodiscard]] auto ToBytes(std::string_view sv) -> std::span<const std::byte>
 {
-  return { reinterpret_cast<const std::byte*>(sv.data()), sv.size() };
+  return std::as_bytes(std::span<const char>(sv));
 }
 
 // ---------------------------------------------------------------------------
@@ -93,43 +89,59 @@ struct Sha256TestVector {
 constexpr std::array<Sha256TestVector, 8> kTestVectors = {
   {
     // Empty string
-    { "", "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" },
+    {
+      .input = "",
+      .expected_hex
+      = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    },
     // "abc" - NIST short message
     {
-      "abc",
-      "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+      .input = "abc",
+      .expected_hex
+      = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
     },
     // "abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq"
     // NIST 448-bit message
     {
-      "abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq",
-      "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1",
+      .input = "abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq",
+      .expected_hex
+      = "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1",
     },
     // "abcdefghbcdefghicdefghijdefghijkefghijklfghijklmghijklmnhijklmnoijklmnopjklmnopqklmnopqrlmnopqrsmnopqrstnopqrstu"
     // NIST 896-bit message
     {
-      "abcdefghbcdefghicdefghijdefghijkefghijklfghijklmghijklmnhijklmnoijklmnop"
-      "jk"
-      "l"
-      "mnopqklmnopqrlmnopqrsmnopqrstnopqrstu",
-      "cf5b16a778af8380036ce59e7b0492370b249b11e8f07a51afac45037afee9d1",
+      .input = "abcdefghbcdefghicdefghijdefghijkefghijklfghijklmghijklmnhijklmn"
+               "oijklmnop"
+               "jk"
+               "l"
+               "mnopqklmnopqrlmnopqrsmnopqrstnopqrstu",
+      .expected_hex
+      = "cf5b16a778af8380036ce59e7b0492370b249b11e8f07a51afac45037afee9d1",
     },
     // Single character
-    { "a", "ca978112ca1bbdcafac231b39a23dc4da786eff8147c4e72b9807785afee48bb" },
+    {
+      .input = "a",
+      .expected_hex
+      = "ca978112ca1bbdcafac231b39a23dc4da786eff8147c4e72b9807785afee48bb",
+    },
     // Longer message
     {
-      "The quick brown fox jumps over the lazy dog",
-      "d7a8fbb307d7809469ca9abcb0082e4f8d5651e46d3cdb762d02d0bf37c9e592",
+      .input = "The quick brown fox jumps over the lazy dog",
+      .expected_hex
+      = "d7a8fbb307d7809469ca9abcb0082e4f8d5651e46d3cdb762d02d0bf37c9e592",
     },
     // With punctuation
     {
-      "The quick brown fox jumps over the lazy dog.",
-      "ef537f25c895bfa782526529a9b63d97aa631564d5d789c2b765448c8635fb6c",
+      .input = "The quick brown fox jumps over the lazy dog.",
+      .expected_hex
+      = "ef537f25c895bfa782526529a9b63d97aa631564d5d789c2b765448c8635fb6c",
     },
     // 63 bytes - one less than block size
     {
-      "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcde",
-      "057ee79ece0b9a849552ab8d3c335fe9a5f1c46ef5f1d9b190c295728628299c",
+      .input
+      = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcde",
+      .expected_hex
+      = "057ee79ece0b9a849552ab8d3c335fe9a5f1c46ef5f1d9b190c295728628299c",
     },
   },
 };
@@ -193,7 +205,8 @@ NOLINT_TEST(ComputeSha256_basic, DifferentInputsProduceDifferentDigests)
   const auto result2 = oxygen::base::ComputeSha256(ToBytes(input2));
 
   // Assert
-  EXPECT_NE(DigestToHex(result1), DigestToHex(result2));
+  EXPECT_NE(
+    oxygen::base::ToHexString(result1), oxygen::base::ToHexString(result2));
 }
 
 // ---------------------------------------------------------------------------
@@ -216,7 +229,7 @@ NOLINT_TEST_P(Sha256VectorTest, MatchesReferenceVector)
   EXPECT_THAT(result, ElementsAreArray(expected))
     << "Input: \"" << input << "\"\n"
     << "Expected: " << expected_hex << "\n"
-    << "Got: " << DigestToHex(result);
+    << "Got: " << oxygen::base::ToHexString(result);
 }
 
 INSTANTIATE_TEST_SUITE_P(
@@ -286,7 +299,7 @@ NOLINT_TEST_F(Sha256StreamingTest, ByteByByteStreamingMatchesOneShot)
 
   // Act
   for (char c : input) {
-    const std::byte byte = static_cast<std::byte>(c);
+    const auto byte = static_cast<std::byte>(c);
     hasher_.Update({ &byte, 1 });
   }
   const auto result = hasher_.Finalize();
@@ -460,10 +473,10 @@ class Sha256LargeDataTest : public ::testing::Test { };
 NOLINT_TEST_F(Sha256LargeDataTest, OneMegabyteProducesConsistentResult)
 {
   // Arrange
-  constexpr size_t kSize = 1024 * 1024;
+  constexpr size_t kSize = size_t { 1024 } * 1024;
   std::vector<std::byte> data(kSize);
   for (size_t i = 0; i < kSize; ++i) {
-    data[i] = static_cast<std::byte>(i & 0xFF);
+    data[i] = static_cast<std::byte>(i & 0xFFU);
   }
 
   // Act
@@ -480,20 +493,18 @@ NOLINT_TEST_F(Sha256LargeDataTest, OneMegabyteProducesConsistentResult)
 NOLINT_TEST_F(Sha256LargeDataTest, StreamingLargeDataMatchesOneShot)
 {
   // Arrange
-  constexpr size_t kSize = 256 * 1024; // 256 KB
+  constexpr size_t kSize = size_t { 256 } * 1024; // 256 KB
   std::vector<std::byte> data(kSize);
-  std::mt19937 rng(42); // Fixed seed for reproducibility
-  for (auto& b : data) {
-    b = static_cast<std::byte>(rng() & 0xFF);
-  }
+  FillWithPattern(data);
   const auto expected = oxygen::base::ComputeSha256(data);
 
   // Act - Stream in 4KB chunks
   oxygen::base::Sha256 hasher;
   constexpr size_t kChunkSize = 4096;
+  const std::span<const std::byte> all_data(data);
   for (size_t offset = 0; offset < data.size(); offset += kChunkSize) {
     const size_t chunk_len = std::min(kChunkSize, data.size() - offset);
-    hasher.Update({ data.data() + offset, chunk_len });
+    hasher.Update(all_data.subspan(offset, chunk_len));
   }
   const auto result = hasher.Finalize();
 
@@ -562,6 +573,74 @@ NOLINT_TEST_F(IsAllZeroTest, DetectsNonZeroLastByte)
 }
 
 // ---------------------------------------------------------------------------
+// Hex Text Tests
+// ---------------------------------------------------------------------------
+
+constexpr auto kAbcDigestHex = std::string_view {
+  "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+};
+
+//! A digest is spelled as 64 lowercase hexadecimal digits, first byte first.
+NOLINT_TEST(Sha256HexTest, ToHexStringSpellsTheDigestInLowercase)
+{
+  const auto digest = oxygen::base::ComputeSha256(ToBytes("abc"));
+  auto edges = oxygen::base::Sha256Digest {};
+  edges.front() = 0x0F;
+  edges.back() = 0xA0;
+
+  const auto text = oxygen::base::ToHexString(digest);
+  const auto edge_text = oxygen::base::ToHexString(edges);
+
+  EXPECT_EQ(text, kAbcDigestHex);
+  EXPECT_EQ(edge_text.substr(0U, 2U), "0f");
+  EXPECT_EQ(edge_text.substr(edge_text.size() - 2U), "a0");
+  EXPECT_EQ(oxygen::base::ToHexString(oxygen::base::Sha256Digest {}),
+    std::string(64U, '0'));
+}
+
+//! Reading the spelling of a digest gives that digest back, in either case.
+NOLINT_TEST(Sha256HexTest, FromHexReadsWhatToHexStringSpells)
+{
+  const auto digest = oxygen::base::ComputeSha256(ToBytes("abc"));
+  constexpr auto upper = std::string_view {
+    "BA7816BF8F01CFEA414140DE5DAE2223B00361A396177A9CB410FF61F20015AD"
+  };
+
+  const auto lower_read = oxygen::base::Sha256DigestFromHex(kAbcDigestHex);
+  const auto upper_read = oxygen::base::Sha256DigestFromHex(upper);
+
+  if (!lower_read.has_value() || !upper_read.has_value()) {
+    FAIL() << "Sha256DigestFromHex rejected a valid digest spelling";
+  }
+  EXPECT_THAT(*lower_read, ElementsAreArray(digest));
+  EXPECT_THAT(*upper_read, ElementsAreArray(digest));
+}
+
+//! Text that is not exactly 64 hexadecimal digits is no digest.
+NOLINT_TEST(Sha256HexTest, FromHexRejectsAnyOtherText)
+{
+  const auto valid = std::string { kAbcDigestHex };
+  const auto with_pair = [&valid](const std::string_view pair) -> std::string {
+    return std::string { pair } + valid.substr(2U);
+  };
+  const auto rejected = std::array {
+    std::string {},
+    valid.substr(1U),
+    valid + "0",
+    with_pair("g0"),
+    with_pair("-1"),
+    with_pair("+1"),
+    with_pair(" a"),
+    with_pair("0x"),
+  };
+
+  for (const auto& text : rejected) {
+    EXPECT_FALSE(oxygen::base::Sha256DigestFromHex(text).has_value())
+      << "accepted '" << text << "'";
+  }
+}
+
+// ---------------------------------------------------------------------------
 // File Hashing Tests
 // ---------------------------------------------------------------------------
 
@@ -583,9 +662,10 @@ protected:
 
   void WriteFile(const std::vector<std::byte>& data)
   {
-    std::ofstream ofs(temp_file_, std::ios::binary);
-    ofs.write(reinterpret_cast<const char*>(data.data()),
-      static_cast<std::streamsize>(data.size()));
+    auto text = std::string(data.size(), '\0');
+    std::ranges::transform(data, text.begin(),
+      [](const std::byte byte) -> char { return static_cast<char>(byte); });
+    WriteFile(std::string_view { text });
   }
 
   void WriteFile(std::string_view content)
@@ -628,12 +708,9 @@ NOLINT_TEST_F(Sha256FileTest, EmptyFileProducesCorrectHash)
 NOLINT_TEST_F(Sha256FileTest, LargeFileMatchesMemoryHash)
 {
   // Arrange - Create file larger than 256KB buffer
-  constexpr size_t kSize = 512 * 1024;
+  constexpr size_t kSize = size_t { 512 } * 1024;
   std::vector<std::byte> data(kSize);
-  std::mt19937 rng(12345);
-  for (auto& b : data) {
-    b = static_cast<std::byte>(rng() & 0xFF);
-  }
+  FillWithPattern(data);
   WriteFile(data);
   const auto expected = oxygen::base::ComputeSha256(data);
 
@@ -706,7 +783,8 @@ NOLINT_TEST_F(Sha256EdgeCaseTest, NullByteVsFFByte)
   const auto result_ff = oxygen::base::ComputeSha256({ &ff_byte, 1 });
 
   // Assert
-  EXPECT_NE(DigestToHex(result_null), DigestToHex(result_ff));
+  EXPECT_NE(oxygen::base::ToHexString(result_null),
+    oxygen::base::ToHexString(result_ff));
 }
 
 //! Verify binary data with embedded nulls hashes correctly.

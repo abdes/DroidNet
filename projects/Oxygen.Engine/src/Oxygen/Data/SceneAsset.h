@@ -15,6 +15,7 @@
 #include <span>
 #include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
@@ -25,6 +26,7 @@
 #include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/PakFormatSerioLoaders.h>
+#include <Oxygen/Data/SceneIds.h>
 #include <Oxygen/Data/Schema/Generated.SceneComponents.h>
 #include <Oxygen/Data/api_export.h>
 #include <Oxygen/Serio/MemoryStream.h>
@@ -84,6 +86,18 @@ template <> struct ComponentTraits<pak::world::SceneInstanceRecord> {
 
 template <> struct ComponentTraits<pak::world::StartingInputContextRecord> {
   static constexpr ComponentType kType = ComponentType::kStartingInputContext;
+};
+
+template <> struct ComponentTraits<pak::world::NodePathRecord> {
+  static constexpr ComponentType kType = ComponentType::kNodePath;
+};
+
+template <> struct ComponentTraits<pak::world::NodePathElement> {
+  static constexpr ComponentType kType = ComponentType::kNodePathElement;
+};
+
+template <> struct ComponentTraits<pak::scripting::ScriptParamOverrideRecord> {
+  static constexpr ComponentType kType = ComponentType::kScriptParamOverride;
 };
 
 //! Represents a loaded Scene asset.
@@ -222,15 +236,21 @@ public:
       != pak::world::SceneAssetFlags::kNone;
   }
 
-  //! Returns the camera node the scene starts viewing through, if authored.
+  //! Returns the camera node the scene starts viewing through, if authored:
+  //! one of its own nodes, or a node an instance brings in.
   [[nodiscard]] auto GetStartingCamera() const noexcept
-    -> std::optional<pak::world::SceneNodeIndexT>
+    -> std::optional<pak::world::NodeRef>
   {
-    if (desc_.starting_camera == pak::world::kNoStartingCamera) {
+    if (desc_.starting_camera.node_index == pak::world::kNoStartingCamera) {
       return std::nullopt;
     }
     return desc_.starting_camera;
   }
+
+  //! The node IDs of the path `ref` names below its instance root, shallowest
+  //! first; empty for one of the scene's own nodes.
+  OXGN_DATA_NDAPI auto GetNodePath(const pak::world::NodeRef& ref) const
+    -> std::vector<NodeId>;
 
   //=== Environment Access (v3+) ===----------------------------------------//
 
@@ -390,8 +410,19 @@ private:
   // Validates offsets and sizes against the data buffer
   auto ParseAndValidate() -> void;
 
+  // Validates node IDs, node paths and every node reference.
+  auto ValidateNodeIdentity() const -> void;
+  auto ValidateNodeRef(const pak::world::NodeRef& ref,
+    const std::unordered_set<pak::world::SceneNodeIndexT>& instance_roots,
+    std::string_view what) const -> void;
+  auto ValidateScriptNodes(
+    const std::unordered_set<pak::world::SceneNodeIndexT>& instance_roots) const
+    -> void;
+
   // Validates every override against the property its id names.
-  auto ValidateOverrides() const -> void;
+  auto ValidateOverrides(
+    const std::unordered_set<pak::world::SceneNodeIndexT>& instance_roots) const
+    -> void;
   auto ValidateOverrideValue(const schema::OverrideProperty& property,
     const pak::world::OverrideValue& value,
     std::vector<bool>& lod_policy_used) const -> void;

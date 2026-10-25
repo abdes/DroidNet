@@ -1,8 +1,9 @@
 {
-  "version": 14,
+  "version": 15,
   "name": "EngineAssets",
   "nodes": [
     {
+      "id": "e4ebbfd5-cede-55ec-bbbd-307598a20478",
       "name": "Root",
       "flags": {
         "visible": "shown",
@@ -11,6 +12,7 @@
       }
     },
     {
+      "id": "f61eb73a-31f8-546b-a1ad-4b6a3df8f395",
       "name": "Floor",
       "parent": 0,
       "transform": {
@@ -25,6 +27,7 @@
       }
     },
     {
+      "id": "2b47f6a8-472c-511b-9f0a-a2aa41f156b8",
       "name": "Cube",
       "parent": 0,
       "transform": {
@@ -39,6 +42,7 @@
       }
     },
     {
+      "id": "0a187ca0-817b-5e84-9637-1513398bd5ce",
       "name": "SubdividedCube",
       "parent": 0,
       "transform": {
@@ -53,6 +57,7 @@
       }
     },
     {
+      "id": "fb0d5ebb-aa3e-5240-b868-53b329cd8dd5",
       "name": "Sphere",
       "parent": 0,
       "transform": {
@@ -67,6 +72,7 @@
       }
     },
     {
+      "id": "7cdef6f6-2430-5a4e-b40b-691efdb4688a",
       "name": "Cylinder",
       "parent": 0,
       "transform": {
@@ -81,6 +87,7 @@
       }
     },
     {
+      "id": "7f3638d1-4d6b-54df-946a-ca9ba2457856",
       "name": "Quad",
       "parent": 0,
       "transform": {
@@ -95,6 +102,7 @@
       }
     },
     {
+      "id": "302b9bfd-ac68-519e-8859-c0b8613b09ce",
       "name": "IcoSphere",
       "parent": 0,
       "transform": {
@@ -109,6 +117,7 @@
       }
     },
     {
+      "id": "43d20502-3183-5376-9ad0-d0417f59ef88",
       "name": "Cone",
       "parent": 0,
       "transform": {
@@ -123,6 +132,7 @@
       }
     },
     {
+      "id": "58df622b-ba67-5389-a9b3-bae89ac0f081",
       "name": "Capsule",
       "parent": 0,
       "transform": {
@@ -137,6 +147,7 @@
       }
     },
     {
+      "id": "a4cfc335-0b82-5c61-b2cc-5ced0c512b24",
       "name": "Torus",
       "parent": 0,
       "transform": {
@@ -151,6 +162,7 @@
       }
     },
     {
+      "id": "bb4fa8a0-5512-5609-a8d1-d4f0263e4442",
       "name": "ArrowGizmo",
       "parent": 0,
       "transform": {
@@ -165,6 +177,7 @@
       }
     },
     {
+      "id": "f9cb1bcb-c132-55b2-ac20-5bf29a5d1e6a",
       "name": "MainCamera",
       "parent": 0,
       "transform": {
@@ -179,6 +192,7 @@
       }
     },
     {
+      "id": "f5edd15b-503a-5349-a1ec-c324ddc94735",
       "name": "Sun",
       "parent": 0,
       "transform": {
@@ -193,6 +207,7 @@
       }
     },
     {
+      "id": "9e3c7097-2685-5140-ad0b-bf706f3d524e",
       "name": "FillLight",
       "parent": 0,
       "transform": {
@@ -207,6 +222,7 @@
       }
     },
     {
+      "id": "b14f34d9-3452-5977-8fe0-ced3f13feb7f",
       "name": "SpotRig",
       "parent": 0,
       "transform": {
@@ -235,7 +251,9 @@
             "kind": "surface",
             "id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
             "layout_revision": "70d2458daeb2184329ef81aef4e913cb828e2494a8cd5eda069969aff3f64aa6",
-            "values": { "/material": "/.cooked/Materials/MatCube.omat" }
+            "values": {
+              "/material": "/.cooked/Materials/MatCube.omat"
+            }
           }
         ]
       }
@@ -249,7 +267,9 @@
             "kind": "surface",
             "id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
             "layout_revision": "70d2458daeb2184329ef81aef4e913cb828e2494a8cd5eda069969aff3f64aa6",
-            "values": { "/material": "/.cooked/Materials/MatCubeB.omat" }
+            "values": {
+              "/material": "/.cooked/Materials/MatCubeB.omat"
+            }
           }
         ]
       }
@@ -263,7 +283,9 @@
             "kind": "surface",
             "id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
             "layout_revision": "70d2458daeb2184329ef81aef4e913cb828e2494a8cd5eda069969aff3f64aa6",
-            "values": { "/material": "/.cooked/Materials/MatCubeC.omat" }
+            "values": {
+              "/material": "/.cooked/Materials/MatCubeC.omat"
+            }
           }
         ]
       }
@@ -277,7 +299,9 @@
             "kind": "surface",
             "id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
             "layout_revision": "70d2458daeb2184329ef81aef4e913cb828e2494a8cd5eda069969aff3f64aa6",
-            "values": { "/material": "/.cooked/Materials/MatCubeD.omat" }
+            "values": {
+              "/material": "/.cooked/Materials/MatCubeD.omat"
+            }
           }
         ]
       }
@@ -291,7 +315,9 @@
             "kind": "surface",
             "id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
             "layout_revision": "70d2458daeb2184329ef81aef4e913cb828e2494a8cd5eda069969aff3f64aa6",
-            "values": { "/material": "/.cooked/Materials/MatCubeD.omat" }
+            "values": {
+              "/material": "/.cooked/Materials/MatCubeD.omat"
+            }
           }
         ]
       }

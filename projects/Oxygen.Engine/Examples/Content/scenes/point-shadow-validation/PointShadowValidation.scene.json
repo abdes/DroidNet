@@ -1,8 +1,9 @@
 {
-  "version": 14,
+  "version": 15,
   "name": "PointShadowValidation",
   "nodes": [
     {
+      "id": "5529a0e0-0ed6-565d-a0fb-910e9d8d286a",
       "name": "Root",
       "flags": {
         "visible": "shown",
@@ -12,6 +13,7 @@
       }
     },
     {
+      "id": "019054bc-99be-5cab-84da-f461d1678910",
       "name": "FloorReceiver",
       "parent": 0,
       "flags": {
@@ -27,6 +29,7 @@
       }
     },
     {
+      "id": "706b168c-f94b-526b-84c3-b93263090fe5",
       "name": "CenterCaster",
       "parent": 0,
       "flags": {
@@ -42,6 +45,7 @@
       }
     },
     {
+      "id": "4c72552d-6355-5125-aa5a-52e821b08fe4",
       "name": "SideCaster",
       "parent": 0,
       "flags": {
@@ -57,6 +61,7 @@
       }
     },
     {
+      "id": "bd62bd8c-c7e7-5e1f-9eea-e3b5cb4c27d4",
       "name": "PointKey",
       "parent": 0,
       "flags": {
@@ -71,6 +76,7 @@
       }
     },
     {
+      "id": "af9391cb-438c-539f-86b2-936d18e8f4d0",
       "name": "MainCamera",
       "parent": 0,
       "flags": {

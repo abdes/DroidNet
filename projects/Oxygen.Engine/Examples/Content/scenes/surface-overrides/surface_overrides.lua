@@ -71,8 +71,8 @@ local log = oxygen.log
 local TAG = "[surface-overrides] "
 
 -- Surfaces of the cooked geometries, as their inventories declare them.
-local LAMP_METAL = "87ce6cad-ae7e-905c-2284-14fb824f4a39"
-local LAMP_SHADE = "61fcfaeb-0ff4-a13e-0355-842dd715bdbb"
+local LAMP_METAL = "d7f5a78e-b92f-4d10-b287-5ca6ba9428b8"
+local LAMP_SHADE = "914071b0-c22f-f08b-ea6d-33dd2cec5584"
 local POT_LIGHT = "15f61e58-02db-1303-d223-663d1e95110e"
 local POT_DARK = "5aac8d25-d9b8-dafb-0dfb-da32cd6051c1"
 local PILLAR = "48bdfd22-1873-48b5-8ae6-ef8495a77914"

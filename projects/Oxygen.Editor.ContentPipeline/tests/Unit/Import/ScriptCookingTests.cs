@@ -112,7 +112,7 @@ internal sealed partial class ScriptCookingTests : IDisposable
         _ = binding.ExecutionOrder.Should().Be(2);
         _ = binding.Params.Select(static param => (param.Key, param.Type)).Should().Equal(
             ("follow", "node"), ("jump", "asset"), ("offset", "vec2"), ("speed", "float"));
-        _ = binding.Params.Single(static param => string.Equals(param.Key, "follow", StringComparison.Ordinal)).Value.Should().Be(0u);
+        _ = binding.Params.Single(static param => string.Equals(param.Key, "follow", StringComparison.Ordinal)).Value.Should().Be(new ScriptSidecarNodeRef(0u));
         _ = binding.Params.Single(static param => string.Equals(param.Key, "jump", StringComparison.Ordinal)).Value.Should().Be("/Content/Input/Jump.oiact");
         _ = result.ScriptReferences.Should().BeEquivalentTo([MoveScript, AssetPath.Parse("/Content/Input/Jump.oiact")]);
         var warning = result.Diagnostics.Should().ContainSingle().Subject;

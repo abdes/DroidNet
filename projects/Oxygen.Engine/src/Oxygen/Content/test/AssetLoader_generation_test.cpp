@@ -13,7 +13,6 @@
 #include <cstring>
 #include <exception>
 #include <filesystem>
-#include <iterator>
 #include <latch>
 #include <memory>
 #include <optional>
@@ -60,6 +59,8 @@
 #include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/Data/SceneAsset.h>
+#include <Oxygen/Data/SceneIds.h>
+#include <Oxygen/Data/Schema/Generated.SceneComponents.h>
 #include <Oxygen/Data/ScriptAsset.h>
 #include <Oxygen/Data/ScriptResource.h>
 #include <Oxygen/Data/SourceKey.h>
@@ -114,7 +115,13 @@ namespace {
 
   auto SceneBytes(const data::AssetKey& material) -> std::vector<std::byte>
   {
-    using namespace data::pak::world;
+    using data::pak::world::kSceneAssetVersion;
+    using data::pak::world::NodeRecord;
+    using data::pak::world::OverrideRecord;
+    using data::pak::world::RenderableRecord;
+    using data::pak::world::SceneAssetDesc;
+    using data::pak::world::SceneComponentTableDesc;
+    using data::pak::world::SceneEnvironmentBlockHeader;
     SceneAssetDesc descriptor {};
     descriptor.header.asset_type
       = static_cast<std::uint8_t>(data::AssetType::kScene);
@@ -167,7 +174,7 @@ namespace {
       assignment.layout_revision = revision.value();
     }
     NodeRecord node {};
-    node.node_id = SceneKey();
+    node.node_id = data::NodeId::FromStableIdentity("/test/root");
     node.parent_index = 0U;
     node.scene_name_offset = 1U;
     SceneEnvironmentBlockHeader environment {};
@@ -915,19 +922,27 @@ namespace {
     co::Run(loop, ExerciseAtomicMountSet(&loop, temp_dir_));
   }
 
-  auto PrepareIdleMountSet(AssetLoader* loader, std::filesystem::path old_root,
-    std::filesystem::path new_root) -> co::Co<PreparedMountSet>
+  //! A running loader that has loaded from `old_root`, and the root of the
+  //! mount set it prepares.
+  struct IdleMountSetSpec final {
+    AssetLoader* loader;
+    std::filesystem::path old_root;
+    std::filesystem::path new_root;
+  };
+
+  auto PrepareIdleMountSet(IdleMountSetSpec spec) -> co::Co<PreparedMountSet>
   {
+    auto* const loader = spec.loader;
     std::optional<PreparedMountSet> prepared;
     OXCO_WITH_NURSERY(nursery)
     {
       co_await nursery.Start(&AssetLoader::ActivateAsync, loader);
       loader->Run();
-      loader->AddLooseCookedRoot(old_root);
+      loader->AddLooseCookedRoot(spec.old_root);
       EXPECT_NE(
         co_await loader->LoadAssetAsync<data::MaterialAsset>(MaterialKey()),
         nullptr);
-      std::vector roots { std::move(new_root) };
+      std::vector roots { std::move(spec.new_root) };
       prepared.emplace(co_await loader->PrepareMountsAsync(LooseRoots(roots)));
       co_return co::kCancel;
     };
@@ -949,8 +964,12 @@ namespace {
     config.thread_pool = observer_ptr { &pool };
     AssetLoader loader(engine::internal::EngineTagFactory::Get(), config);
     loader.RegisterLoader(loaders::LoadMaterialAsset);
-    auto prepared
-      = co::Run(loop, PrepareIdleMountSet(&loader, old_root, new_root));
+    auto prepared = co::Run(loop,
+      PrepareIdleMountSet({
+        .loader = &loader,
+        .old_root = old_root,
+        .new_root = new_root,
+      }));
     loader.Stop();
     loader.Run();
     EXPECT_THROW(
@@ -987,8 +1006,12 @@ namespace {
     auto loader = std::make_unique<AssetLoader>(
       engine::internal::EngineTagFactory::Get(), config);
     loader->RegisterLoader(loaders::LoadMaterialAsset);
-    auto prepared
-      = co::Run(loop, PrepareIdleMountSet(loader.get(), old_root, new_root));
+    auto prepared = co::Run(loop,
+      PrepareIdleMountSet({
+        .loader = loader.get(),
+        .old_root = old_root,
+        .new_root = new_root,
+      }));
     unsigned notifications = 0;
     auto subscription = loader->SubscribeResourceEvictions(
       data::MaterialAsset::ClassTypeId(), [&](const EvictionEvent&) -> void {
@@ -1062,11 +1085,13 @@ namespace {
     const auto content_pak = temp_dir_ / "content.pak";
     auto content_config = PakTestWriter::Config {};
     content_config.source_key = data::SourceKey { Uuid::Generate() };
-    content_config.dependencies = { {
-      .source_key = engine.source_key,
-      .content_version = engine.content_version,
-      .catalog_digest = engine.catalog_digest,
-    } };
+    content_config.dependencies = {
+      {
+        .source_key = engine.source_key,
+        .content_version = engine.content_version,
+        .catalog_digest = engine.catalog_digest,
+      },
+    };
     PakTestWriter(content_pak).Write(content_config);
     const auto project = temp_dir_ / "project";
     const auto project_source
@@ -1122,11 +1147,13 @@ namespace {
     const auto content_pak = temp_dir_ / "content.pak";
     auto content_config = PakTestWriter::Config {};
     content_config.source_key = data::SourceKey { Uuid::Generate() };
-    content_config.dependencies = { {
-      .source_key = engine.source_key,
-      .content_version = engine.content_version,
-      .catalog_digest = engine.catalog_digest,
-    } };
+    content_config.dependencies = {
+      {
+        .source_key = engine.source_key,
+        .content_version = engine.content_version,
+        .catalog_digest = engine.catalog_digest,
+      },
+    };
     PakTestWriter(content_pak).Write(content_config);
     const auto project = temp_dir_ / "project";
     static_cast<void>(WriteGeneration(project, { .material = MaterialKey() }));

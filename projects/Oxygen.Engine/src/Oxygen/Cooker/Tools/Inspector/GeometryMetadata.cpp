@@ -15,12 +15,11 @@
 #include <utility>
 
 #include "GeometryMetadata.h"
-#include <fmt/format.h>
-#include <fmt/ranges.h>
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Base/NoStd.h>
+#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Clap/Fluent/CommandBuilder.h>
 #include <Oxygen/Clap/Fluent/DSL.h>
 #include <Oxygen/Clap/Option.h>
@@ -30,12 +29,24 @@
 #include <Oxygen/Cooker/Loose/Inspection.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/GeometryAsset.h>
-#include <Oxygen/Data/SurfaceId.h>
+#include <Oxygen/Data/StableId.h>
 #include <Oxygen/Data/SurfaceInventory.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
 
 namespace oxygen::content::inspection {
+
+namespace {
+  //! A cooked surface's defaults; the loader rejects a cooked geometry that
+  //! declares none.
+  auto DefaultsOf(const data::Surface& surface) -> const data::SurfaceDefaults&
+  {
+    if (!surface.defaults.has_value()) {
+      throw std::runtime_error("surface declares no defaults");
+    }
+    return *surface.defaults;
+  }
+} // namespace
 
 auto BuildGeometryMetadataCommand(GeometryMetadataOptions& options)
   -> std::shared_ptr<clap::Command>
@@ -135,8 +146,7 @@ auto RunGeometryMetadataReport(const GeometryMetadataOptions& options) -> int
               },
             });
           }
-          // The loader rejects a cooked geometry that declares no defaults.
-          const auto& defaults = surface.defaults.value();
+          const auto& defaults = DefaultsOf(surface);
           surfaces.push_back({
             { "surface_id", data::to_string(surface.surface_id) },
             { "display_name", surface.display_name },
@@ -145,6 +155,10 @@ auto RunGeometryMetadataReport(const GeometryMetadataOptions& options) -> int
             { "bindings", std::move(bindings) },
           });
         }
+        const auto lod_policy = geometry->DefaultLodPolicy();
+        if (!lod_policy.has_value()) {
+          throw std::runtime_error("geometry declares no LOD policy");
+        }
         geometries.push_back({
           {
             "geometry_asset_key",
@@ -152,12 +166,11 @@ auto RunGeometryMetadataReport(const GeometryMetadataOptions& options) -> int
           },
           {
             "layout_revision",
-            fmt::format("{:02x}", fmt::join(inventory.layout_revision, "")),
+            base::ToHexString(inventory.layout_revision),
           },
           {
             "lod_policy",
-            import::internal::WriteLodPolicy(
-              geometry->DefaultLodPolicy().value()),
+            import::internal::WriteLodPolicy(*lod_policy),
           },
           { "surfaces", std::move(surfaces) },
         });
@@ -170,7 +183,7 @@ auto RunGeometryMetadataReport(const GeometryMetadataOptions& options) -> int
       { "schema_version", data::kSurfaceInventorySchemaVersion },
       { "geometries", std::move(geometries) },
     };
-    std::ofstream output(output_path, std::ios::binary | std::ios::trunc);
+    std::ofstream output(output_path, std::ios::binary);
     output << report.dump(2) << '\n';
     output.close();
     if (!output) {

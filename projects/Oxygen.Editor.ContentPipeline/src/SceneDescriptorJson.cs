@@ -25,7 +25,7 @@ internal sealed record NativeSceneDescriptor(
     [property: JsonPropertyName("version")] int Version,
     [property: JsonPropertyName("name")] string Name,
     [property: JsonPropertyName("nodes")] IReadOnlyList<NativeSceneNode> Nodes,
-    [property: JsonPropertyName("starting_camera")] int? StartingCamera,
+    [property: JsonPropertyName("starting_camera")] NativeNodeRef? StartingCamera,
     [property: JsonPropertyName("starting_input_contexts")] IReadOnlyList<NativeStartingInputContext>? StartingInputContexts,
     [property: JsonPropertyName("renderables")] IReadOnlyList<NativeRenderable>? Renderables,
     [property: JsonPropertyName("cameras")] NativeCameras? Cameras,
@@ -50,7 +50,11 @@ internal sealed record NativeLocalFogVolume(
     [property: JsonPropertyName("fog_emissive")] float[] FogEmissive,
     [property: JsonPropertyName("sort_priority")] int SortPriority);
 
+// A node of the scene by its index, as the cooked scene names a node.
+internal sealed record NativeNodeRef([property: JsonPropertyName("node")] int Node);
+
 internal sealed record NativeSceneNode(
+    [property: JsonPropertyName("id")] string Id,
     [property: JsonPropertyName("name")] string Name,
     [property: JsonPropertyName("parent")] int? Parent,
     [property: JsonPropertyName("flags")] NativeNodeFlags Flags,

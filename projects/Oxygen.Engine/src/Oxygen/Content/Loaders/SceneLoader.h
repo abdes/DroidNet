@@ -487,9 +487,11 @@ inline auto LoadSceneAsset(const LoaderContext& context)
         geometry_deps.insert(record.geometry_key);
       }
     } else if (type == oxygen::data::ComponentType::kOverride) {
+      // The scene asset validates each override's target and order.
       using Record = oxygen::data::pak::world::OverrideRecord;
-      detail::ValidateComponentTable<Record>(
-        table_bytes, entry.table, node_count);
+      if (entry.table.entry_size != sizeof(Record)) {
+        throw std::runtime_error("scene override record size mismatch");
+      }
       for (uint32_t i = 0; i < entry.table.count; ++i) {
         const auto record = detail::ReadPackedRecord<Record>(
           table_bytes.subspan(
@@ -505,6 +507,27 @@ inline auto LoadSceneAsset(const LoaderContext& context)
           DCHECK_F(property->asset_type != data::AssetType::kUnknown);
           override_asset_deps.insert_or_assign(
             record.value.as_asset, property->asset_type);
+        }
+      }
+    } else if (type == oxygen::data::ComponentType::kScriptParamOverride) {
+      using Record = data::pak::scripting::ScriptParamOverrideRecord;
+      if (entry.table.entry_size != sizeof(Record)) {
+        throw std::runtime_error(
+          "scene script parameter change record size mismatch");
+      }
+      for (uint32_t i = 0; i < entry.table.count; ++i) {
+        const auto record = detail::ReadPackedRecord<Record>(
+          table_bytes.subspan(size_t { i } * sizeof(Record), sizeof(Record)),
+          "scene script parameter change");
+        if (!data::TryGetScriptParamKey(record.param, strings)
+          || !data::ToScriptParam(record.param, strings)) {
+          throw std::runtime_error(
+            "scene script parameter change has an invalid key or value");
+        }
+        if (record.param.type == data::pak::scripting::ScriptParamType::kAsset
+          && !record.param.value.as_asset.key.IsNil()) {
+          param_asset_deps.insert_or_assign(record.param.value.as_asset.key,
+            record.param.value.as_asset.asset_type);
         }
       }
     } else if (type == oxygen::data::ComponentType::kPerspectiveCamera) {

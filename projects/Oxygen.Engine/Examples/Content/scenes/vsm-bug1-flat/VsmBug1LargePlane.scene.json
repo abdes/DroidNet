@@ -1,8 +1,9 @@
 {
-  "version": 14,
+  "version": 15,
   "name": "VsmBug1LargePlane",
   "nodes": [
     {
+      "id": "b7a658bf-33b4-5908-a26f-b524980a3b6c",
       "name": "world",
       "flags": {
         "visible": "shown",
@@ -12,6 +13,7 @@
       }
     },
     {
+      "id": "f7c8c451-a3a9-5958-986e-18add8fd967d",
       "name": "plane_node",
       "parent": 0,
       "flags": {
@@ -27,6 +29,7 @@
       }
     },
     {
+      "id": "9a5af105-1902-52fd-a2ee-2ffb6cf2125c",
       "name": "sun_light_node",
       "parent": 0,
       "flags": {
@@ -41,6 +44,7 @@
       }
     },
     {
+      "id": "4d4d5d57-7121-5713-b072-79d9723a5546",
       "name": "camera_node",
       "parent": 0,
       "flags": {

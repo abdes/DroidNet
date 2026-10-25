@@ -38,13 +38,13 @@ auto Schema() -> const json&
   return schema;
 }
 
-// The documents in the table below spell out `"version": 14`; this test fails
+// The documents in the table below spell out `"version": 15`; this test fails
 // loudly when the schema and the scene asset version drift apart.
 NOLINT_TEST(SceneDescriptorSchemaTest, SchemaVersionMatchesSceneAssetVersion)
 {
   EXPECT_EQ(Schema().at("properties").at("version").at("const"),
     MakeCurrentSceneDescriptor("{}").at("version"));
-  EXPECT_EQ(Schema().at("properties").at("version").at("const"), 14);
+  EXPECT_EQ(Schema().at("properties").at("version").at("const"), 15);
 }
 
 class SceneDescriptorSchemaCaseTest
@@ -59,24 +59,25 @@ INSTANTIATE_TEST_SUITE_P(Cases, SceneDescriptorSchemaCaseTest,
   ::testing::Values(
     SchemaCase {
       "AcceptsNameFollowingTheSegmentRule",
-      R"j({ "version": 14, "name": "Level 1.v2 (copy)", "nodes": [{}] })j",
+      R"j({ "version": 15, "name": "Level 1.v2 (copy)", "nodes": [{ "id": "00000000-0000-4000-8000-000000000001" }] })j",
       true,
       "",
     },
     SchemaCase {
       "RejectsNameWithReservedCharacter",
-      R"j({ "version": 14, "name": "Level:1", "nodes": [{}] })j",
+      R"j({ "version": 15, "name": "Level:1", "nodes": [{ "id": "00000000-0000-4000-8000-000000000001" }] })j",
       false,
       "does not match regex pattern",
     },
     SchemaCase {
       "AcceptsCanonicalDocument",
-      R"({ "version": 14,
+      R"({ "version": 15,
     "$schema": "./src/Oxygen/Cooker/Import/Schemas/oxygen.scene-descriptor.schema.json",
     "name": "DemoScene",
     "nodes": [
-      { "name": "Root", "transform": { "translation": [0, 0, 0] } },
-      { "name": "MeshNode", "parent": 0, "transform": { "translation": [1, 0, 0] } }
+      { "id": "00000000-0000-4000-8000-000000000001", "name": "Root",
+        "transform": { "translation": [0, 0, 0] } },
+      { "id": "00000000-0000-4000-8000-000000000002", "name": "MeshNode", "parent": 0, "transform": { "translation": [1, 0, 0] } }
     ],
     "renderables": [
       { "node": 1, "geometry_ref": "/.cooked/Geometry/cube.ogeo",
@@ -117,9 +118,9 @@ INSTANTIATE_TEST_SUITE_P(Cases, SceneDescriptorSchemaCaseTest,
     },
     SchemaCase {
       "RejectsAnOverrideKeyItsOwnerDoesNotHave",
-      R"({ "version": 14,
+      R"({ "version": 15,
     "name": "BadScene",
-    "nodes": [ { "name": "Root" } ],
+    "nodes": [ { "id": "00000000-0000-4000-8000-000000000001", "name": "Root" } ],
     "renderables": [
       { "node": 0, "geometry_ref": "/.cooked/Geometry/cube.ogeo",
         "overrides": { "values": { "/visible": false } } }
@@ -130,19 +131,19 @@ INSTANTIATE_TEST_SUITE_P(Cases, SceneDescriptorSchemaCaseTest,
     },
     SchemaCase {
       "RejectsUnknownNestedFields",
-      R"({ "version": 14,
+      R"({ "version": 15,
     "name": "BadScene",
-    "nodes": [ { "name": "Root", "unknown_field": true } ]
+    "nodes": [ { "id": "00000000-0000-4000-8000-000000000001", "name": "Root", "unknown_field": true } ]
   })",
       false,
       "'unknown_field'",
     },
     SchemaCase {
       "AcceptsDirectionalShadowTuningFields",
-      R"({ "version": 14,
+      R"({ "version": 15,
     "name": "TunedScene",
     "nodes": [
-      { "name": "Root" }
+      { "id": "00000000-0000-4000-8000-000000000001", "name": "Root" }
     ],
     "lights": {
       "directional": [
@@ -165,11 +166,11 @@ INSTANTIATE_TEST_SUITE_P(Cases, SceneDescriptorSchemaCaseTest,
     },
     SchemaCase {
       "AcceptsCurrentEnvironmentAndLocalFogShape",
-      R"({ "version": 14,
+      R"({ "version": 15,
     "name": "FogScene",
     "nodes": [
-      { "name": "Root" },
-      { "name": "FogVolumeNode", "parent": 0 }
+      { "id": "00000000-0000-4000-8000-000000000001", "name": "Root" },
+      { "id": "00000000-0000-4000-8000-000000000002", "name": "FogVolumeNode", "parent": 0 }
     ],
     "environment": {
       "sky_atmosphere": {
@@ -277,7 +278,7 @@ INSTANTIATE_TEST_SUITE_P(Cases, SceneDescriptorSchemaCaseTest,
       "RejectsMissingVersion",
       R"({
     "name": "LegacyScene",
-    "nodes": [ { "name": "Root" } ]
+    "nodes": [ { "id": "00000000-0000-4000-8000-000000000001", "name": "Root" } ]
   })",
       false,
       "'version'",
@@ -286,8 +287,8 @@ INSTANTIATE_TEST_SUITE_P(Cases, SceneDescriptorSchemaCaseTest,
 
 NOLINT_TEST(SceneDescriptorSchemaTest, NodeFlagSourceModesAreCanonical)
 {
-  auto document
-    = MakeCurrentSceneDescriptor(R"({"name":"Flags","nodes":[{"flags":{}}]})");
+  auto document = MakeCurrentSceneDescriptor(
+    R"({"name":"Flags","nodes":[{"id":"00000000-0000-4000-8000-000000000001","flags":{}}]})");
   for (const auto& visibility : { "inherit", "shown", "hidden" }) {
     for (const auto& shadow : { "inherit", "on", "off" }) {
       document.at("nodes").at(0).update({
@@ -349,7 +350,7 @@ NOLINT_TEST(SceneDescriptorSchemaTest, NodeFlagSourceModesAreCanonical)
 NOLINT_TEST(SceneDescriptorSchemaTest, CameraAspectPolicyIsADeclaredMember)
 {
   auto doc = MakeCurrentSceneDescriptor(R"({
-    "name": "CameraPolicy", "nodes": [{}],
+    "name": "CameraPolicy", "nodes": [{ "id": "00000000-0000-4000-8000-000000000001" }],
     "cameras": { "perspective": [{ "node": 0 }] }
   })");
   EXPECT_THAT(ValidateJson(Schema(), doc), IsEmpty());
@@ -371,6 +372,7 @@ NOLINT_TEST(
   "name": "Environment",
   "nodes": [
     {
+      "id": "00000000-0000-4000-8000-000000000001",
       "name": "Root"
     }
   ],
@@ -447,7 +449,7 @@ NOLINT_TEST(
 NOLINT_TEST(SceneDescriptorSchemaTest, RejectsRetiredCaptureModeAndOldVersion)
 {
   const auto canonical = MakeCurrentSceneDescriptor(R"({
-    "name": "AutomaticSky", "nodes": [{}],
+    "name": "AutomaticSky", "nodes": [{ "id": "00000000-0000-4000-8000-000000000001" }],
     "environment": { "sky_light": {
       "enabled": true, "source": 0, "intensity": 2.5,
       "tint_rgb": [0.2, 0.4, 0.8], "diffuse_intensity": 0.5,
@@ -583,7 +585,7 @@ NOLINT_TEST(SceneDescriptorSchemaTest, ComponentPropertiesAreOptional)
 NOLINT_TEST(SceneDescriptorSchemaTest, ComponentValuesAreNotRangeChecked)
 {
   const auto document = MakeCurrentSceneDescriptor(R"({
-    "name": "Ranges", "nodes": [{}],
+    "name": "Ranges", "nodes": [{ "id": "00000000-0000-4000-8000-000000000001" }],
     "cameras": { "perspective": [
       { "node": 0, "aspect_mode": "auto", "fov_y": 10.0, "near_plane": -1.0, "iso": 0 }
     ] },

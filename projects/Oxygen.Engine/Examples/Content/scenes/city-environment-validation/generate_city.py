@@ -19,6 +19,7 @@ import argparse
 import json
 import math
 import random
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -135,7 +136,12 @@ class SceneBuilder:
     def node(
         self, name: str, translation, scale=(1, 1, 1), rotation=(0, 0, 0, 1), flags=None
     ) -> int:
+        # A node's ID follows its index, so regenerating keeps every ID.
+        node_id = uuid.uuid5(
+            uuid.NAMESPACE_URL, f"oxygen-example/{SCENE_NAME}/{len(self.nodes)}"
+        )
         entry = {
+            "id": str(node_id),
             "name": name,
             "flags": dict(flags or FLAGS_STATIC),
             "transform": {
@@ -770,7 +776,7 @@ def scene_document() -> dict:
         flags={"visible": "shown", "casts_shadows": "on", "receives_shadows": "on"},
     )
     return {
-        "version": 14,
+        "version": 15,
         "name": SCENE_NAME,
         "nodes": s.nodes,
         "renderables": s.renderables,

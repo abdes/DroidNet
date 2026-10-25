@@ -1,5 +1,5 @@
 {
-  "version": 14,
+  "version": 15,
   "name": "multi_script_scene",
   "starting_input_contexts": [
     {
@@ -9,6 +9,7 @@
   ],
   "nodes": [
     {
+      "id": "11992c35-a807-573f-829a-d940025f760f",
       "name": "Root",
       "flags": {
         "visible": "shown",
@@ -17,6 +18,7 @@
       }
     },
     {
+      "id": "8ca43ae7-cb1e-5d8b-b73c-739c4bc892aa",
       "name": "ScriptedCube",
       "parent": 0,
       "transform": {
@@ -31,6 +33,7 @@
       }
     },
     {
+      "id": "a7e5d471-a5c0-5430-a4a0-288088c06fe7",
       "name": "MainCamera",
       "parent": 0,
       "transform": {
@@ -45,6 +48,7 @@
       }
     },
     {
+      "id": "6f34da5d-4be5-5da6-8879-e18a3f729664",
       "name": "Sun",
       "parent": 0,
       "transform": {
@@ -59,6 +63,7 @@
       }
     },
     {
+      "id": "c7f93ef7-0323-5cc0-8002-79466f1d1538",
       "name": "TimeOfDayController",
       "parent": 0,
       "transform": {

@@ -141,7 +141,7 @@ namespace {
       "thickness":{"virtual_path":"/.cooked/Textures/thickness.otex"}}})");
       const auto scene = WriteFile("scene.json",
         R"({"version":)" + std::to_string(internal::kSceneDescriptorVersion)
-          + R"(,"name":"Scene.v2","nodes":[{}],
+          + R"(,"name":"Scene.v2","nodes":[{"id":"00000000-0000-4000-8000-000000000001"}],
       "renderables":[{"node":0,"geometry_ref":"/.cooked/Geometry/body.ogeo"}],
       "starting_input_contexts":[{"context_ref":"/.cooked/Input/Gameplay.oimap","priority":2}],
       "references":{"scripts":["/.cooked/Scripts/move.oscript"]},

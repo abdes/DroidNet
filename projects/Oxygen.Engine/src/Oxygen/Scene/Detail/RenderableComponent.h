@@ -15,6 +15,7 @@
 #include <Oxygen/Composition/Component.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Data/GeometryIndices.h>
+#include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Scene/Detail/TransformComponent.h>
 #include <Oxygen/Scene/Types/ActiveMesh.h>
 #include <Oxygen/Scene/Types/RenderablePolicies.h>
@@ -24,7 +25,6 @@
 namespace oxygen::data {
 class GeometryAsset;
 class MaterialAsset;
-class SurfaceId;
 } // namespace oxygen::data
 
 namespace oxygen::scene::detail {

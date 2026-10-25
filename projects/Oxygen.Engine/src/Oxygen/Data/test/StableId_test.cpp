@@ -6,6 +6,7 @@
 
 #include <array>
 #include <cstddef>
+#include <stdexcept>
 #include <string_view>
 #include <type_traits>
 #include <unordered_set>
@@ -13,18 +14,29 @@
 #include <fmt/format.h>
 
 #include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Data/SceneIds.h>
+#include <Oxygen/Data/SourceKey.h>
+#include <Oxygen/Data/StableId.h>
 #include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {
 
+using oxygen::data::NodeId;
+using oxygen::data::ScriptSlotId;
 using oxygen::data::SurfaceId;
 using oxygen::data::to_string;
 
 static_assert(!std::is_convertible_v<SurfaceId, oxygen::data::AssetKey>);
 static_assert(!std::is_convertible_v<oxygen::data::AssetKey, SurfaceId>);
+// Each kind of ID is its own type: one cannot stand in for another.
+static_assert(!std::is_convertible_v<NodeId, SurfaceId>);
+static_assert(!std::is_convertible_v<SurfaceId, NodeId>);
+static_assert(!std::is_convertible_v<NodeId, ScriptSlotId>);
+static_assert(!std::is_convertible_v<ScriptSlotId, NodeId>);
+static_assert(!std::is_convertible_v<ScriptSlotId, SurfaceId>);
 
-NOLINT_TEST(SurfaceIdTest, PreservesAllOpaqueBytesAndCanonicalText)
+NOLINT_TEST(StableIdTest, PreservesAllOpaqueBytesAndCanonicalText)
 {
   constexpr SurfaceId::ByteArray kBytes {
     0x01,
@@ -58,7 +70,7 @@ NOLINT_TEST(SurfaceIdTest, PreservesAllOpaqueBytesAndCanonicalText)
   EXPECT_EQ(oxygen::data::as_bytes(kId).back(), std::byte { 0x10 });
 }
 
-NOLINT_TEST(SurfaceIdTest, RejectsNoncanonicalTextWithoutNormalization)
+NOLINT_TEST(StableIdTest, RejectsNoncanonicalTextWithoutNormalization)
 {
   constexpr std::array<std::string_view, 12> kInvalid {
     "",
@@ -80,7 +92,7 @@ NOLINT_TEST(SurfaceIdTest, RejectsNoncanonicalTextWithoutNormalization)
   }
 }
 
-NOLINT_TEST(SurfaceIdTest, NilIsAnUnsetSentinelAndOrderingUsesAllBytes)
+NOLINT_TEST(StableIdTest, NilIsAnUnsetSentinelAndOrderingUsesAllBytes)
 {
   EXPECT_TRUE(SurfaceId {}.IsNil());
   const auto nil
@@ -104,6 +116,39 @@ NOLINT_TEST(SurfaceIdTest, NilIsAnUnsetSentinelAndOrderingUsesAllBytes)
   EXPECT_EQ(unique.size(), 2U);
   EXPECT_TRUE(unique.contains(first));
   EXPECT_TRUE(unique.contains(second));
+}
+
+//! An ID derived from a canonical identity is the same on every derivation
+//! and differs for another identity; an empty identity is refused, named by
+//! the ID's kind.
+NOLINT_TEST(StableIdTest, DerivesTheSameIdFromTheSameIdentity)
+{
+  const auto first = NodeId::FromStableIdentity("/model/Body/Door_FL");
+  const auto again = NodeId::FromStableIdentity("/model/Body/Door_FL");
+  const auto other = NodeId::FromStableIdentity("/model/Body/Door_FR");
+
+  EXPECT_FALSE(first.IsNil());
+  EXPECT_EQ(first, again);
+  EXPECT_NE(first, other);
+  NOLINT_EXPECT_THROW(
+    static_cast<void>(NodeId::FromStableIdentity("")), std::invalid_argument);
+  try {
+    static_cast<void>(ScriptSlotId::FromStableIdentity(""));
+    ADD_FAILURE() << "an empty identity derived an ID";
+  } catch (const std::invalid_argument& error) {
+    EXPECT_EQ(std::string_view { error.what() },
+      "Script slot identity must not be empty");
+  }
+}
+
+//! A generated ID is never nil and never repeats.
+NOLINT_TEST(StableIdTest, GeneratesDistinctIds)
+{
+  const auto first = NodeId::Generate();
+  const auto second = NodeId::Generate();
+
+  EXPECT_FALSE(first.IsNil());
+  EXPECT_NE(first, second);
 }
 
 } // namespace

@@ -41,11 +41,17 @@ namespace {
 
     const auto script_source = cooked_root / "input" / "runtime.luau";
     WriteText(script_source, SpeedScriptSource("7"));
-    ASSERT_TRUE(Submit(MakeScriptRequest(script_source, cooked_root,
-                         ScriptStorageMode::kExternal, false))
+    ASSERT_TRUE(Submit(MakeScriptRequest({
+                         .source_path = script_source,
+                         .cooked_root = cooked_root,
+                         .storage = ScriptStorageMode::kExternal,
+                       }))
         .success);
-    ASSERT_TRUE(
-      Submit(MakeSceneRequest(model_path, inflight_scene_root)).success);
+    ASSERT_TRUE(Submit(MakeSceneRequest({
+                         .source_path = model_path,
+                         .cooked_root = inflight_scene_root,
+                       }))
+        .success);
 
     const auto inflight_inspection = LoadInspection(inflight_scene_root);
     const auto inflight_scene
@@ -59,8 +65,11 @@ namespace {
     WriteText(sidecar_source,
       MakeSidecarPayload(MakeSpeedBinding(script_asset->virtual_path)));
 
-    auto request = MakeSidecarRequest(
-      sidecar_source, cooked_root, inflight_scene->virtual_path);
+    auto request = MakeSidecarRequest({
+      .source_path = sidecar_source,
+      .cooked_root = cooked_root,
+      .scene_virtual_path = inflight_scene->virtual_path,
+    });
     request.inflight_scene_contexts.push_back(
       MakeInflightSceneContext(inflight_scene_root, *inflight_scene));
 
@@ -103,13 +112,22 @@ namespace {
 
     const auto script_source = cooked_root / "input" / "seed.luau";
     WriteText(script_source, SpeedScriptSource("1"));
-    ASSERT_TRUE(Submit(MakeScriptRequest(script_source, cooked_root,
-                         ScriptStorageMode::kExternal, false))
+    ASSERT_TRUE(Submit(MakeScriptRequest({
+                         .source_path = script_source,
+                         .cooked_root = cooked_root,
+                         .storage = ScriptStorageMode::kExternal,
+                       }))
         .success);
-    ASSERT_TRUE(
-      Submit(MakeSceneRequest(model_path, inflight_scene_root_a)).success);
-    ASSERT_TRUE(
-      Submit(MakeSceneRequest(model_path, inflight_scene_root_b)).success);
+    ASSERT_TRUE(Submit(MakeSceneRequest({
+                         .source_path = model_path,
+                         .cooked_root = inflight_scene_root_a,
+                       }))
+        .success);
+    ASSERT_TRUE(Submit(MakeSceneRequest({
+                         .source_path = model_path,
+                         .cooked_root = inflight_scene_root_b,
+                       }))
+        .success);
 
     const auto inspection_a = LoadInspection(inflight_scene_root_a);
     const auto inspection_b = LoadInspection(inflight_scene_root_b);
@@ -123,8 +141,11 @@ namespace {
     const auto sidecar_source = cooked_root / "input" / "duplicate.json";
     WriteText(sidecar_source, "{ \"bindings\": [] }");
 
-    auto request
-      = MakeSidecarRequest(sidecar_source, cooked_root, scene_a->virtual_path);
+    auto request = MakeSidecarRequest({
+      .source_path = sidecar_source,
+      .cooked_root = cooked_root,
+      .scene_virtual_path = scene_a->virtual_path,
+    });
     request.inflight_scene_contexts.push_back(
       MakeInflightSceneContext(inflight_scene_root_a, *scene_a));
     request.inflight_scene_contexts.push_back(
@@ -151,11 +172,22 @@ namespace {
 
     const auto script_source = cooked_root / "input" / "resolver_ref.luau";
     WriteText(script_source, SpeedScriptSource("5"));
-    ASSERT_TRUE(Submit(MakeScriptRequest(script_source, cooked_root,
-                         ScriptStorageMode::kExternal, false))
+    ASSERT_TRUE(Submit(MakeScriptRequest({
+                         .source_path = script_source,
+                         .cooked_root = cooked_root,
+                         .storage = ScriptStorageMode::kExternal,
+                       }))
         .success);
-    ASSERT_TRUE(Submit(MakeSceneRequest(model_path, context_root_a)).success);
-    ASSERT_TRUE(Submit(MakeSceneRequest(model_path, context_root_b)).success);
+    ASSERT_TRUE(Submit(MakeSceneRequest({
+                         .source_path = model_path,
+                         .cooked_root = context_root_a,
+                       }))
+        .success);
+    ASSERT_TRUE(Submit(MakeSceneRequest({
+                         .source_path = model_path,
+                         .cooked_root = context_root_b,
+                       }))
+        .success);
 
     const auto inspection_a = LoadInspection(context_root_a);
     const auto inspection_b = LoadInspection(context_root_b);
@@ -173,8 +205,11 @@ namespace {
     WriteText(sidecar_source,
       MakeSidecarPayload(MakeSpeedBinding(script_asset->virtual_path)));
 
-    auto request
-      = MakeSidecarRequest(sidecar_source, cooked_root, scene_a->virtual_path);
+    auto request = MakeSidecarRequest({
+      .source_path = sidecar_source,
+      .cooked_root = cooked_root,
+      .scene_virtual_path = scene_a->virtual_path,
+    });
     request.cooked_context_roots.push_back(context_root_a);
     request.cooked_context_roots.push_back(context_root_b);
 
@@ -205,10 +240,17 @@ namespace {
     const auto context_script_source
       = context_root / "input" / "context_script.luau";
     WriteText(context_script_source, SpeedScriptSource("77"));
-    ASSERT_TRUE(Submit(MakeScriptRequest(context_script_source, context_root,
-                         ScriptStorageMode::kExternal, false))
+    ASSERT_TRUE(Submit(MakeScriptRequest({
+                         .source_path = context_script_source,
+                         .cooked_root = context_root,
+                         .storage = ScriptStorageMode::kExternal,
+                       }))
         .success);
-    ASSERT_TRUE(Submit(MakeSceneRequest(model_path, context_root)).success);
+    ASSERT_TRUE(Submit(MakeSceneRequest({
+                         .source_path = model_path,
+                         .cooked_root = context_root,
+                       }))
+        .success);
 
     const auto context_inspection_before = LoadInspection(context_root);
     const auto context_scene
@@ -222,15 +264,21 @@ namespace {
       = context_root / "input" / "seed_context_sidecar.json";
     WriteText(context_sidecar_source,
       MakeSidecarPayload(MakeSpeedBinding(context_script->virtual_path)));
-    ASSERT_TRUE(Submit(MakeSidecarRequest(context_sidecar_source, context_root,
-                         context_scene->virtual_path))
+    ASSERT_TRUE(Submit(MakeSidecarRequest({
+                         .source_path = context_sidecar_source,
+                         .cooked_root = context_root,
+                         .scene_virtual_path = context_scene->virtual_path,
+                       }))
         .success);
 
     const auto request_script_source
       = request_root / "input" / "context_script.luau";
     WriteText(request_script_source, SpeedScriptSource("88"));
-    ASSERT_TRUE(Submit(MakeScriptRequest(request_script_source, request_root,
-                         ScriptStorageMode::kExternal, false))
+    ASSERT_TRUE(Submit(MakeScriptRequest({
+                         .source_path = request_script_source,
+                         .cooked_root = request_root,
+                         .storage = ScriptStorageMode::kExternal,
+                       }))
         .success);
 
     const auto request_inspection_before = LoadInspection(request_root);
@@ -243,8 +291,11 @@ namespace {
     WriteText(request_sidecar_source,
       MakeSidecarPayload(MakeSpeedBinding(request_script->virtual_path)));
 
-    auto request = MakeSidecarRequest(
-      request_sidecar_source, request_root, context_scene->virtual_path);
+    auto request = MakeSidecarRequest({
+      .source_path = request_sidecar_source,
+      .cooked_root = request_root,
+      .scene_virtual_path = context_scene->virtual_path,
+    });
     request.cooked_context_roots.push_back(context_root);
     const auto report = Submit(std::move(request));
     ASSERT_TRUE(report.success);
@@ -288,15 +339,28 @@ namespace {
     WriteText(script_source_a, kScriptText);
     WriteText(script_source_b, kScriptText);
 
-    ASSERT_TRUE(Submit(MakeScriptRequest(script_source_a, concurrent_root,
-                         ScriptStorageMode::kExternal, false))
+    ASSERT_TRUE(Submit(MakeScriptRequest({
+                         .source_path = script_source_a,
+                         .cooked_root = concurrent_root,
+                         .storage = ScriptStorageMode::kExternal,
+                       }))
         .success);
-    ASSERT_TRUE(Submit(MakeScriptRequest(script_source_b, standalone_root,
-                         ScriptStorageMode::kExternal, false))
+    ASSERT_TRUE(Submit(MakeScriptRequest({
+                         .source_path = script_source_b,
+                         .cooked_root = standalone_root,
+                         .storage = ScriptStorageMode::kExternal,
+                       }))
         .success);
-    ASSERT_TRUE(
-      Submit(MakeSceneRequest(model_path, inflight_scene_root)).success);
-    ASSERT_TRUE(Submit(MakeSceneRequest(model_path, standalone_root)).success);
+    ASSERT_TRUE(Submit(MakeSceneRequest({
+                         .source_path = model_path,
+                         .cooked_root = inflight_scene_root,
+                       }))
+        .success);
+    ASSERT_TRUE(Submit(MakeSceneRequest({
+                         .source_path = model_path,
+                         .cooked_root = standalone_root,
+                       }))
+        .success);
 
     const auto inflight_inspection = LoadInspection(inflight_scene_root);
     const auto inflight_scene
@@ -319,8 +383,11 @@ namespace {
     WriteText(sidecar_source_b,
       MakeSidecarPayload(MakeSpeedBinding(script_b->virtual_path)));
 
-    auto concurrent_request = MakeSidecarRequest(
-      sidecar_source_a, concurrent_root, inflight_scene->virtual_path);
+    auto concurrent_request = MakeSidecarRequest({
+      .source_path = sidecar_source_a,
+      .cooked_root = concurrent_root,
+      .scene_virtual_path = inflight_scene->virtual_path,
+    });
     concurrent_request.inflight_scene_contexts.push_back(
       MakeInflightSceneContext(inflight_scene_root, *inflight_scene));
     ASSERT_TRUE(Submit(std::move(concurrent_request)).success);
@@ -329,8 +396,12 @@ namespace {
       LoadInspection(standalone_root), AssetType::kScene);
     ASSERT_HAS_VALUE(standalone_scene_before)
       << "Expected standalone scene before to be present";
-    ASSERT_TRUE(Submit(MakeSidecarRequest(sidecar_source_b, standalone_root,
-                         standalone_scene_before->virtual_path))
+    ASSERT_TRUE(
+      Submit(MakeSidecarRequest({
+               .source_path = sidecar_source_b,
+               .cooked_root = standalone_root,
+               .scene_virtual_path = standalone_scene_before->virtual_path,
+             }))
         .success);
 
     const auto concurrent_inspection = LoadInspection(concurrent_root);

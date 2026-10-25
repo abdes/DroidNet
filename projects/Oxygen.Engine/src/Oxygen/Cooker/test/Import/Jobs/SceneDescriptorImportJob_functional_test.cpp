@@ -6,6 +6,7 @@
 
 // Covers: Import/Internal/Jobs/SceneDescriptorImportJob.cpp
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -28,6 +29,7 @@
 #include <Oxygen/Base/Span.h>
 #include <Oxygen/Base/Uuid.h>
 #include <Oxygen/Content/LooseCookedIndex.h>
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
@@ -53,6 +55,7 @@
 #include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Data/Schema/Generated.SceneComponents.h>
 #include <Oxygen/Data/SourceKey.h>
+#include <Oxygen/Data/StableId.h>
 #include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Serio/FileStream.h>
 #include <Oxygen/Serio/MemoryStream.h>
@@ -136,6 +139,17 @@ namespace {
     {
       auto document = nlohmann::json::parse(descriptor_json);
       document.emplace("version", internal::kSceneDescriptorVersion);
+      // Every node needs an identity; a test that does not care gets a
+      // readable one from its position.
+      if (document.contains("nodes") && document.at("nodes").is_array()) {
+        auto& nodes = document.at("nodes");
+        for (std::size_t index = 0; index < nodes.size(); ++index) {
+          auto digits = std::to_string(index + 1U);
+          nodes.at(index).emplace("id",
+            "00000000-0000-4000-8000-" + std::string(12U - digits.size(), '0')
+              + digits);
+        }
+      }
       auto request = ImportRequest {};
       request.source_path = "inline://scene.oscene.json";
       request.asset_virtual_path = "/.cooked/Scenes/"
@@ -223,7 +237,7 @@ namespace {
          "instance":{"scene_ref":"/.cooked/Scenes/Model.oscene"}},
         {"name":"camera","parent":0}],
       "cameras":{"perspective":[{"node":2,"aspect_mode":"auto"}]},
-      "starting_camera":2,
+      "starting_camera":{"node":2},
       "starting_input_contexts":[
         {"context_ref":"/.cooked/Input/gameplay.oimap","priority":3}]
     })"));
@@ -237,7 +251,8 @@ namespace {
     const auto bytes = ReadBytes(root / "Scenes/Level.oscene");
     const auto scene = data::SceneAsset(data::AssetKey {}, bytes);
     EXPECT_FALSE(scene.IsModelScene());
-    EXPECT_EQ(scene.GetStartingCamera(), std::optional<uint32_t> { 2U });
+    EXPECT_EQ(scene.GetStartingCamera(),
+      std::optional { world::NodeRef { .node_index = 2U } });
     const auto instances = scene.GetComponents<world::SceneInstanceRecord>();
     ASSERT_EQ(instances.size(), 1U);
     EXPECT_EQ(CheckedAt(instances, 0).node_index, 1U);
@@ -277,7 +292,7 @@ namespace {
     const auto root = TempDir() / "starting_camera_without_camera";
     std::filesystem::create_directories(root);
     const auto report = Import(MakeRequest(root,
-      R"({"name":"Scene","nodes":[{"name":"root"}],"starting_camera":0})"));
+      R"({"name":"Scene","nodes":[{"name":"root"}],"starting_camera":{"node":0}})"));
     ASSERT_HAS_VALUE(report);
     EXPECT_FALSE(report->success);
     EXPECT_TRUE(HasDiagnosticCode(
@@ -1359,8 +1374,8 @@ namespace {
     return pak_path;
   }
 
-  //! A project scene resolves /Engine geometry and material, and validates a
-  //! material override against the geometry's surfaces, from a pak context.
+  //! A project scene resolves /Engine geometry and the material of a surface
+  //! override from a pak context.
   NOLINT_TEST_F(
     SceneDescriptorImportJobTest, ResolvesEngineReferencesFromAPakContext)
   {
@@ -1396,6 +1411,50 @@ namespace {
     ASSERT_EQ(renderables.size(), 1U);
     EXPECT_EQ(CheckedAt(renderables, 0).geometry_key,
       data::AssetKey::FromVirtualPath(kEngineCube));
+  }
+
+  //! An override of a surface the geometry does not declare is kept in the
+  //! scene, but the cook reports it as a warning and leaves it out, so the
+  //! surface draws with the geometry's own defaults.
+  NOLINT_TEST_F(
+    SceneDescriptorImportJobTest, CooksWithoutAnOverrideOfAnUndeclaredSurface)
+  {
+    // Arrange
+    const auto output = TempDir() / "undeclared_surface_output";
+    std::filesystem::create_directories(output);
+    const auto surface = data::to_string(
+      data::SurfaceId::FromStableIdentity("surface-the-cube-does-not-declare"));
+    auto request = MakeRequest(output,
+      R"({"name":"Scene",
+      "nodes":[{"name":"Mesh"}],
+      "renderables":[{"node":0,
+        "geometry_ref":"/Engine/Generated/BasicShapes/Cube.ogeo",
+        "overrides":{"parts":[{"kind":"surface","id":")"
+        + surface + R"(",
+          "layout_revision":"0000000000000000000000000000000000000000000000000000000000000001",
+          "values":{"/visible":false}
+        }]}}]})");
+    request.cooked_context_roots = { WriteEnginePak(TempDir()) };
+
+    // Act
+    const auto report = Import(std::move(request));
+
+    // Assert
+    ASSERT_HAS_VALUE(report);
+    EXPECT_TRUE(report->success);
+    const auto warning = std::ranges::find_if(
+      report->diagnostics, [](const ImportDiagnostic& diagnostic) -> bool {
+        return diagnostic.code == "scene.descriptor.surface_invalid";
+      });
+    ASSERT_NE(warning, report->diagnostics.end());
+    EXPECT_EQ(warning->severity, ImportSeverity::kWarning);
+    const auto scene = data::SceneAsset(
+      data::AssetKey::FromVirtualPath("/.cooked/Scenes/Scene.oscene"),
+      ReadBytes(output / "Scenes/Scene.oscene"));
+    EXPECT_EQ(
+      scene.GetComponents<data::pak::world::RenderableRecord>().size(), 1U);
+    EXPECT_TRUE(
+      scene.GetComponents<data::pak::world::OverrideRecord>().empty());
   }
 
 } // namespace

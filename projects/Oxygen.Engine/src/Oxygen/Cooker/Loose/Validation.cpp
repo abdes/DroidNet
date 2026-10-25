@@ -30,7 +30,6 @@
 #include <Oxygen/Cooker/Loose/Types.h>
 #include <Oxygen/Cooker/Loose/Validation.h>
 #include <Oxygen/Core/Types/AssetKey.h>
-#include <Oxygen/Core/Types/DescriptorExtensions.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/DescriptorStrings.h>
@@ -39,6 +38,7 @@
 #include <Oxygen/Data/PakFormatVersions.h>
 #include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Data/Schema/Generated.SceneComponents.h>
+#include <Oxygen/Data/StableId.h>
 #include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Serio/FileStream.h>
 #include <Oxygen/Serio/Reader.h>
@@ -252,10 +252,13 @@ auto ValidateRoot(
         = data::schema::FindOverrideProperty(record.override_id);
       // The scene validated every override against the schema when it loaded.
       DCHECK_NOTNULL_F(property);
-      if (property->part_kind != data::schema::PartKind::kSurface) {
+      // A change of an instanced node names a surface of the instanced
+      // scene's geometry, which composition resolves.
+      if (property->part_kind != data::schema::PartKind::kSurface
+        || record.target.node_path != data::pak::world::kNoNodePath) {
         continue;
       }
-      const auto node = geometry_by_node.find(record.node_index);
+      const auto node = geometry_by_node.find(record.target.node_index);
       if (node == geometry_by_node.end()) {
         throw std::runtime_error("override has no renderable in scene "
           + nostd::to_string(scene->GetAssetKey()));

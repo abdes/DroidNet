@@ -383,7 +383,7 @@ namespace {
     -> world::OverrideRecord
   {
     auto record = world::OverrideRecord {
-      .node_index = node,
+      .target = { .node_index = node },
       .override_id = data::schema::OverrideId::kGeometrySurfaceMaterial,
       .part_id = surface,
       .layout_revision = layout_revision,
@@ -414,21 +414,21 @@ NOLINT_TEST_F(SceneInstantiationTest, AppliesSurfaceAndLodPolicyOverrides)
   }
   builder.AddComponents(ComponentType::kRenderable, std::move(renderables));
   auto visibility = world::OverrideRecord {
-    .node_index = hidden,
+    .target = { .node_index = hidden },
     .override_id = data::schema::OverrideId::kGeometrySurfaceVisibility,
     .part_id = surface,
     .layout_revision = revision,
   };
   visibility.value.as_bool = 0U;
   auto shadows = world::OverrideRecord {
-    .node_index = unlit,
+    .target = { .node_index = unlit },
     .override_id = data::schema::OverrideId::kGeometrySurfaceCastsShadows,
     .part_id = surface,
     .layout_revision = revision,
   };
   shadows.value.as_bool = 0U;
   auto lod_policy = world::OverrideRecord {
-    .node_index = unlit,
+    .target = { .node_index = unlit },
     .override_id = data::schema::OverrideId::kGeometryLodPolicy,
   };
   lod_policy.value.as_record_index = world::OverrideRecordIndex { 0U };

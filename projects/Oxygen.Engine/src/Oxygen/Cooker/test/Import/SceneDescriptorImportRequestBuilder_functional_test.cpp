@@ -56,8 +56,8 @@ NOLINT_TEST(SceneDescriptorImportRequestBuilderTest,
       "name": "DemoScene",
       "content_hashing": false,
       "nodes": [
-        { "name": "Root" },
-        { "name": "MeshNode", "parent": 0 }
+        { "id": "00000000-0000-4000-8000-000000000001", "name": "Root" },
+        { "id": "00000000-0000-4000-8000-000000000002", "name": "MeshNode", "parent": 0 }
       ],
       "renderables": [
         { "node": 1, "geometry_ref": "/.cooked/Geometry/cube.ogeo" }
@@ -95,7 +95,8 @@ NOLINT_TEST(SceneDescriptorImportRequestBuilderTest,
   const auto dir = temp.Path() / "context_root_order";
   const auto descriptor = dir / "scene.json";
   WriteText(descriptor,
-    MakeCurrentSceneDescriptor(R"({"name":"Scene","nodes":[{"name":"Root"}]})")
+    MakeCurrentSceneDescriptor(
+      R"({"name":"Scene","nodes":[{"id":"00000000-0000-4000-8000-000000000001","name":"Root"}]})")
       .dump());
   auto settings = MakeBaseSettings(descriptor);
   settings.cooked_context_roots = { "relative/root" };
@@ -124,7 +125,7 @@ NOLINT_TEST(SceneDescriptorImportRequestBuilderTest,
     MakeCurrentSceneDescriptor(R"({
       "name": "BadScene",
       "nodes": [
-        { "name": "Root", "unexpected": true }
+        { "id": "00000000-0000-4000-8000-000000000001", "name": "Root", "unexpected": true }
       ]
     })")
       .dump());
@@ -162,7 +163,7 @@ NOLINT_TEST(SceneDescriptorImportRequestBuilderTest, RejectsRelativeCookedRoot)
   WriteText(descriptor_path,
     MakeCurrentSceneDescriptor(R"({
       "name": "DemoScene",
-      "nodes": [ { "name": "Root" } ]
+      "nodes": [ { "id": "00000000-0000-4000-8000-000000000001", "name": "Root" } ]
     })")
       .dump());
 

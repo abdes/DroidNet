@@ -6,14 +6,20 @@
 
 #include <algorithm>
 #include <array>
+#include <charconv>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <ios>
+#include <memory>
+#include <optional>
 #include <span>
 #include <stdexcept>
+#include <string>
+#include <string_view>
+#include <system_error>
 
 #include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Base/Sha256.h>
@@ -21,9 +27,7 @@
 #if defined(_MSC_VER) && (defined(_M_X64) || defined(_M_IX86))
 #  include <immintrin.h>
 #  include <intrin.h>
-#  define OXYGEN_SHA_HAS_SHANI 1
-#else
-#  define OXYGEN_SHA_HAS_SHANI 0
+#  define OXYGEN_SHA_HAS_SHANI
 #endif
 
 namespace oxygen::base {
@@ -141,58 +145,92 @@ namespace {
 
   [[nodiscard]] constexpr auto sigma0(uint32_t x) noexcept -> uint32_t
   {
-    return RotR(x, 7) ^ RotR(x, 18) ^ (x >> 3);
+    return RotR(x, 7) ^ RotR(x, 18) ^ (x >> 3U);
   }
 
   [[nodiscard]] constexpr auto sigma1(uint32_t x) noexcept -> uint32_t
   {
-    return RotR(x, 17) ^ RotR(x, 19) ^ (x >> 10);
+    return RotR(x, 17) ^ RotR(x, 19) ^ (x >> 10U);
   }
 
   // Read 32-bit big-endian value
-  [[nodiscard]] inline auto LoadBE32(const std::byte* ptr) noexcept -> uint32_t
+  [[nodiscard]] inline auto LoadBE32(
+    const std::span<const std::byte, 4> bytes) noexcept -> uint32_t
   {
-    const auto* p = reinterpret_cast<const uint8_t*>(ptr);
-    return (static_cast<uint32_t>(p[0]) << 24U)
-      | (static_cast<uint32_t>(p[1]) << 16U)
-      | (static_cast<uint32_t>(p[2]) << 8U) | static_cast<uint32_t>(p[3]);
+    return (std::to_integer<uint32_t>(bytes[0]) << 24U)
+      | (std::to_integer<uint32_t>(bytes[1]) << 16U)
+      | (std::to_integer<uint32_t>(bytes[2]) << 8U)
+      | std::to_integer<uint32_t>(bytes[3]);
   }
 
   // Write 32-bit big-endian value
-  inline auto StoreBE32(uint8_t* ptr, uint32_t val) noexcept -> void
+  inline auto StoreBE32(
+    const std::span<uint8_t, 4> out, const uint32_t val) noexcept -> void
   {
-    ptr[0] = static_cast<uint8_t>(val >> 24U);
-    ptr[1] = static_cast<uint8_t>(val >> 16U);
-    ptr[2] = static_cast<uint8_t>(val >> 8U);
-    ptr[3] = static_cast<uint8_t>(val);
+    out[0] = static_cast<uint8_t>(val >> 24U);
+    out[1] = static_cast<uint8_t>(val >> 16U);
+    out[2] = static_cast<uint8_t>(val >> 8U);
+    out[3] = static_cast<uint8_t>(val);
   }
 
   // Write 64-bit big-endian value
-  inline auto StoreBE64(uint8_t* ptr, uint64_t val) noexcept -> void
+  inline auto StoreBE64(
+    const std::span<std::byte, 8> out, const uint64_t val) noexcept -> void
   {
-    ptr[0] = static_cast<uint8_t>(val >> 56U);
-    ptr[1] = static_cast<uint8_t>(val >> 48U);
-    ptr[2] = static_cast<uint8_t>(val >> 40U);
-    ptr[3] = static_cast<uint8_t>(val >> 32U);
-    ptr[4] = static_cast<uint8_t>(val >> 24U);
-    ptr[5] = static_cast<uint8_t>(val >> 16U);
-    ptr[6] = static_cast<uint8_t>(val >> 8U);
-    ptr[7] = static_cast<uint8_t>(val);
+    out[0] = static_cast<std::byte>(val >> 56U);
+    out[1] = static_cast<std::byte>(val >> 48U);
+    out[2] = static_cast<std::byte>(val >> 40U);
+    out[3] = static_cast<std::byte>(val >> 32U);
+    out[4] = static_cast<std::byte>(val >> 24U);
+    out[5] = static_cast<std::byte>(val >> 16U);
+    out[6] = static_cast<std::byte>(val >> 8U);
+    out[7] = static_cast<std::byte>(val);
   }
 
-#if OXYGEN_SHA_HAS_SHANI
+#ifdef OXYGEN_SHA_HAS_SHANI
+  // Unaligned 128-bit load from four words
+  [[nodiscard]] inline auto LoadU128(
+    const std::span<const uint32_t, 4> words) noexcept -> __m128i
+  {
+    auto value = __m128i {};
+    std::memcpy(&value, words.data(), sizeof(value));
+    return value;
+  }
+
+  // Unaligned 128-bit load from sixteen bytes
+  [[nodiscard]] inline auto LoadU128(
+    const std::span<const std::byte, 16> bytes) noexcept -> __m128i
+  {
+    auto value = __m128i {};
+    std::memcpy(&value, bytes.data(), sizeof(value));
+    return value;
+  }
+
+  // Unaligned 128-bit store to four words
+  inline auto StoreU128(
+    const std::span<uint32_t, 4> words, const __m128i value) noexcept -> void
+  {
+    std::memcpy(words.data(), &value, sizeof(value));
+  }
+
+  // Load four round constants starting at the given index
+  [[nodiscard]] inline auto LoadK(const size_t index) noexcept -> __m128i
+  {
+    return LoadU128(std::span<const uint32_t> { kK }.subspan(index).first<4>());
+  }
+
   // Cached CPU feature detection
   [[nodiscard]] auto DetectShaNi() noexcept -> bool
   {
-    int cpu_info[4] = {};
-    __cpuid(cpu_info, 0);
-    const int max_leaf = cpu_info[0];
+    auto cpu_info = std::array<int, 4> {};
+    __cpuid(cpu_info.data(), 0);
+    const int max_leaf = cpu_info.at(0);
     if (max_leaf < 7) {
       return false;
     }
-    __cpuidex(cpu_info, 7, 0);
+    __cpuidex(cpu_info.data(), 7, 0);
     // SHA-NI is bit 29 of EBX
-    return (cpu_info[1] & (1 << 29)) != 0;
+    return (static_cast<uint32_t>(cpu_info.at(1)) & (1U << 29U)) != 0U;
   }
 
   [[nodiscard]] auto HasShaNi() noexcept -> bool
@@ -228,7 +266,7 @@ Sha256::Sha256() noexcept
 
 auto Sha256::HasHardwareSupport() noexcept -> bool
 {
-#if OXYGEN_SHA_HAS_SHANI
+#ifdef OXYGEN_SHA_HAS_SHANI
   return HasShaNi();
 #else
   return false;
@@ -241,19 +279,18 @@ auto Sha256::Update(std::span<const std::byte> data) noexcept -> void
     return;
   }
 
-  const auto* ptr = data.data();
-  size_t remaining = data.size();
+  auto input = data;
 
-  total_bytes_ += remaining;
+  total_bytes_ += input.size();
 
   // If we have buffered data, try to complete a block
   if (buffer_size_ != 0) {
     const size_t need = kBlockSize - buffer_size_;
-    const size_t take = std::min(need, remaining);
-    std::memcpy(buffer_.data() + buffer_size_, ptr, take);
+    const size_t take = std::min(need, input.size());
+    std::ranges::copy(input.first(take),
+      std::span<std::byte> { buffer_ }.subspan(buffer_size_).begin());
     buffer_size_ += take;
-    ptr += take;
-    remaining -= take;
+    input = input.subspan(take);
 
     if (buffer_size_ == kBlockSize) {
       ProcessBlocks_(buffer_.data(), 1);
@@ -262,18 +299,16 @@ auto Sha256::Update(std::span<const std::byte> data) noexcept -> void
   }
 
   // Process complete blocks directly from input
-  if (remaining >= kBlockSize) {
-    const size_t blocks = remaining / kBlockSize;
-    ProcessBlocks_(ptr, blocks);
-    const size_t processed = blocks * kBlockSize;
-    ptr += processed;
-    remaining -= processed;
+  if (input.size() >= kBlockSize) {
+    const size_t blocks = input.size() / kBlockSize;
+    ProcessBlocks_(input.data(), blocks);
+    input = input.subspan(blocks * kBlockSize);
   }
 
   // Buffer remaining bytes
-  if (remaining != 0) {
-    std::memcpy(buffer_.data(), ptr, remaining);
-    buffer_size_ = remaining;
+  if (!input.empty()) {
+    std::ranges::copy(input, buffer_.begin());
+    buffer_size_ = input.size();
   }
 }
 
@@ -282,25 +317,29 @@ auto Sha256::Finalize() noexcept -> Sha256Digest
   // Pad message
   const uint64_t total_bits = total_bytes_ * 8;
 
+  const std::span<std::byte> buffer { buffer_ };
+
   // Append 0x80 byte
   buffer_.at(buffer_size_++) = std::byte { 0x80 };
 
   // If not enough room for length, pad and process
   if (buffer_size_ > 56) {
-    std::memset(buffer_.data() + buffer_size_, 0, kBlockSize - buffer_size_);
+    std::ranges::fill(buffer.subspan(buffer_size_), std::byte { 0 });
     ProcessBlocks_(buffer_.data(), 1);
     buffer_size_ = 0;
   }
 
   // Pad to 56 bytes and append length
-  std::memset(buffer_.data() + buffer_size_, 0, 56 - buffer_size_);
-  StoreBE64(reinterpret_cast<uint8_t*>(buffer_.data() + 56), total_bits);
+  std::ranges::fill(
+    buffer.subspan(buffer_size_, 56 - buffer_size_), std::byte { 0 });
+  StoreBE64(buffer.subspan(56).first<8>(), total_bits);
   ProcessBlocks_(buffer_.data(), 1);
 
   // Output digest
   Sha256Digest digest = {};
+  const std::span<uint8_t> digest_bytes { digest };
   for (size_t i = 0; i < 8; ++i) {
-    StoreBE32(digest.data() + (i * 4), state_.at(i));
+    StoreBE32(digest_bytes.subspan(i * 4).first<4>(), state_.at(i));
   }
 
   // Reset state for potential reuse
@@ -314,7 +353,7 @@ auto Sha256::Finalize() noexcept -> Sha256Digest
 auto Sha256::ProcessBlocks_(const std::byte* data, size_t block_count) noexcept
   -> void
 {
-#if OXYGEN_SHA_HAS_SHANI
+#ifdef OXYGEN_SHA_HAS_SHANI
   if (HasShaNi()) {
     ProcessBlocksShaNi_(data, block_count);
     return;
@@ -328,13 +367,14 @@ auto Sha256::ProcessBlocksSoftware_(
   const std::byte* data, size_t block_count) noexcept -> void
 {
   alignas(64) std::array<uint32_t, 64> w {};
+  const std::span<const std::byte> input { data, block_count * kBlockSize };
 
   for (size_t blk = 0; blk < block_count; ++blk) {
-    const std::byte* block = data + (blk * kBlockSize);
+    const auto block = input.subspan(blk * kBlockSize, kBlockSize);
 
     // Load and expand message schedule
     for (size_t i = 0; i < 16; ++i) {
-      w.at(i) = LoadBE32(block + (i * 4));
+      w.at(i) = LoadBE32(block.subspan(i * 4).first<4>());
     }
     for (size_t i = 16; i < 64; ++i) {
       w.at(i) = sigma1(w.at(i - 2)) + w.at(i - 7) + sigma0(w.at(i - 15))
@@ -375,7 +415,7 @@ auto Sha256::ProcessBlocksSoftware_(
   }
 }
 
-#if OXYGEN_SHA_HAS_SHANI
+#ifdef OXYGEN_SHA_HAS_SHANI
 // Intel SHA-NI hardware-accelerated implementation
 auto Sha256::ProcessBlocksShaNi_(
   const std::byte* data, size_t block_count) noexcept -> void
@@ -388,10 +428,8 @@ auto Sha256::ProcessBlocksShaNi_(
   // In memory as 128-bit loads:
   //   tmp0 = lanes[3][2][1][0] = D C B A
   //   tmp1 = lanes[3][2][1][0] = H G F E
-  __m128i tmp0
-    = _mm_loadu_si128(reinterpret_cast<const __m128i*>(&state_.at(0)));
-  __m128i tmp1
-    = _mm_loadu_si128(reinterpret_cast<const __m128i*>(&state_.at(4)));
+  __m128i tmp0 = LoadU128(std::span<const uint32_t> { state_ }.first<4>());
+  __m128i tmp1 = LoadU128(std::span<const uint32_t> { state_ }.last<4>());
 
   // SHA-NI expects: STATE0 = [A][B][E][F], STATE1 = [C][D][G][H] in lanes
   // [3][2][1][0] Swap pairs: DCBA -> CDAB, HGFE -> GHEF
@@ -403,47 +441,47 @@ auto Sha256::ProcessBlocksShaNi_(
   __m128i state0 = _mm_unpacklo_epi64(tmp1, tmp0); // [A][B][E][F]
   __m128i state1 = _mm_unpackhi_epi64(tmp1, tmp0); // [C][D][G][H]
   __m128i tmp;
+  const std::span<const std::byte> input { data, block_count * kBlockSize };
 
   for (size_t blk = 0; blk < block_count; ++blk) {
-    const __m128i* msg_ptr
-      = reinterpret_cast<const __m128i*>(data + (blk * kBlockSize));
+    const auto block = input.subspan(blk * kBlockSize, kBlockSize);
+    const auto load_msg = [&block, &kShufMask](const size_t index) {
+      return _mm_shuffle_epi8(
+        LoadU128(block.subspan(index * 16).first<16>()), kShufMask);
+    };
 
     // Save current state
     const __m128i save_state0 = state0;
     const __m128i save_state1 = state1;
 
     // Load message and convert to big-endian
-    __m128i msg0 = _mm_shuffle_epi8(_mm_loadu_si128(msg_ptr + 0), kShufMask);
-    __m128i msg1 = _mm_shuffle_epi8(_mm_loadu_si128(msg_ptr + 1), kShufMask);
-    __m128i msg2 = _mm_shuffle_epi8(_mm_loadu_si128(msg_ptr + 2), kShufMask);
-    __m128i msg3 = _mm_shuffle_epi8(_mm_loadu_si128(msg_ptr + 3), kShufMask);
+    __m128i msg0 = load_msg(0);
+    __m128i msg1 = load_msg(1);
+    __m128i msg2 = load_msg(2);
+    __m128i msg3 = load_msg(3);
 
     // Rounds 0-3
-    __m128i msg = _mm_add_epi32(
-      msg0, _mm_loadu_si128(reinterpret_cast<const __m128i*>(&kK.at(0))));
+    __m128i msg = _mm_add_epi32(msg0, LoadK(0));
     state1 = _mm_sha256rnds2_epu32(state1, state0, msg);
     msg = _mm_shuffle_epi32(msg, 0x0E);
     state0 = _mm_sha256rnds2_epu32(state0, state1, msg);
 
     // Rounds 4-7
-    msg = _mm_add_epi32(
-      msg1, _mm_loadu_si128(reinterpret_cast<const __m128i*>(&kK.at(4))));
+    msg = _mm_add_epi32(msg1, LoadK(4));
     state1 = _mm_sha256rnds2_epu32(state1, state0, msg);
     msg = _mm_shuffle_epi32(msg, 0x0E);
     state0 = _mm_sha256rnds2_epu32(state0, state1, msg);
     msg0 = _mm_sha256msg1_epu32(msg0, msg1);
 
     // Rounds 8-11
-    msg = _mm_add_epi32(
-      msg2, _mm_loadu_si128(reinterpret_cast<const __m128i*>(&kK.at(8))));
+    msg = _mm_add_epi32(msg2, LoadK(8));
     state1 = _mm_sha256rnds2_epu32(state1, state0, msg);
     msg = _mm_shuffle_epi32(msg, 0x0E);
     state0 = _mm_sha256rnds2_epu32(state0, state1, msg);
     msg1 = _mm_sha256msg1_epu32(msg1, msg2);
 
     // Rounds 12-15
-    msg = _mm_add_epi32(
-      msg3, _mm_loadu_si128(reinterpret_cast<const __m128i*>(&kK.at(12))));
+    msg = _mm_add_epi32(msg3, LoadK(12));
     state1 = _mm_sha256rnds2_epu32(state1, state0, msg);
     tmp = _mm_alignr_epi8(msg3, msg2, 4);
     msg0 = _mm_add_epi32(msg0, tmp);
@@ -453,8 +491,7 @@ auto Sha256::ProcessBlocksShaNi_(
     msg2 = _mm_sha256msg1_epu32(msg2, msg3);
 
     // Rounds 16-19
-    msg = _mm_add_epi32(
-      msg0, _mm_loadu_si128(reinterpret_cast<const __m128i*>(&kK.at(16))));
+    msg = _mm_add_epi32(msg0, LoadK(16));
     state1 = _mm_sha256rnds2_epu32(state1, state0, msg);
     tmp = _mm_alignr_epi8(msg0, msg3, 4);
     msg1 = _mm_add_epi32(msg1, tmp);
@@ -464,8 +501,7 @@ auto Sha256::ProcessBlocksShaNi_(
     msg3 = _mm_sha256msg1_epu32(msg3, msg0);
 
     // Rounds 20-23
-    msg = _mm_add_epi32(
-      msg1, _mm_loadu_si128(reinterpret_cast<const __m128i*>(&kK.at(20))));
+    msg = _mm_add_epi32(msg1, LoadK(20));
     state1 = _mm_sha256rnds2_epu32(state1, state0, msg);
     tmp = _mm_alignr_epi8(msg1, msg0, 4);
     msg2 = _mm_add_epi32(msg2, tmp);
@@ -475,8 +511,7 @@ auto Sha256::ProcessBlocksShaNi_(
     msg0 = _mm_sha256msg1_epu32(msg0, msg1);
 
     // Rounds 24-27
-    msg = _mm_add_epi32(
-      msg2, _mm_loadu_si128(reinterpret_cast<const __m128i*>(&kK.at(24))));
+    msg = _mm_add_epi32(msg2, LoadK(24));
     state1 = _mm_sha256rnds2_epu32(state1, state0, msg);
     tmp = _mm_alignr_epi8(msg2, msg1, 4);
     msg3 = _mm_add_epi32(msg3, tmp);
@@ -486,8 +521,7 @@ auto Sha256::ProcessBlocksShaNi_(
     msg1 = _mm_sha256msg1_epu32(msg1, msg2);
 
     // Rounds 28-31
-    msg = _mm_add_epi32(
-      msg3, _mm_loadu_si128(reinterpret_cast<const __m128i*>(&kK.at(28))));
+    msg = _mm_add_epi32(msg3, LoadK(28));
     state1 = _mm_sha256rnds2_epu32(state1, state0, msg);
     tmp = _mm_alignr_epi8(msg3, msg2, 4);
     msg0 = _mm_add_epi32(msg0, tmp);
@@ -497,8 +531,7 @@ auto Sha256::ProcessBlocksShaNi_(
     msg2 = _mm_sha256msg1_epu32(msg2, msg3);
 
     // Rounds 32-35
-    msg = _mm_add_epi32(
-      msg0, _mm_loadu_si128(reinterpret_cast<const __m128i*>(&kK.at(32))));
+    msg = _mm_add_epi32(msg0, LoadK(32));
     state1 = _mm_sha256rnds2_epu32(state1, state0, msg);
     tmp = _mm_alignr_epi8(msg0, msg3, 4);
     msg1 = _mm_add_epi32(msg1, tmp);
@@ -508,8 +541,7 @@ auto Sha256::ProcessBlocksShaNi_(
     msg3 = _mm_sha256msg1_epu32(msg3, msg0);
 
     // Rounds 36-39
-    msg = _mm_add_epi32(
-      msg1, _mm_loadu_si128(reinterpret_cast<const __m128i*>(&kK.at(36))));
+    msg = _mm_add_epi32(msg1, LoadK(36));
     state1 = _mm_sha256rnds2_epu32(state1, state0, msg);
     tmp = _mm_alignr_epi8(msg1, msg0, 4);
     msg2 = _mm_add_epi32(msg2, tmp);
@@ -519,8 +551,7 @@ auto Sha256::ProcessBlocksShaNi_(
     msg0 = _mm_sha256msg1_epu32(msg0, msg1);
 
     // Rounds 40-43
-    msg = _mm_add_epi32(
-      msg2, _mm_loadu_si128(reinterpret_cast<const __m128i*>(&kK.at(40))));
+    msg = _mm_add_epi32(msg2, LoadK(40));
     state1 = _mm_sha256rnds2_epu32(state1, state0, msg);
     tmp = _mm_alignr_epi8(msg2, msg1, 4);
     msg3 = _mm_add_epi32(msg3, tmp);
@@ -530,8 +561,7 @@ auto Sha256::ProcessBlocksShaNi_(
     msg1 = _mm_sha256msg1_epu32(msg1, msg2);
 
     // Rounds 44-47
-    msg = _mm_add_epi32(
-      msg3, _mm_loadu_si128(reinterpret_cast<const __m128i*>(&kK.at(44))));
+    msg = _mm_add_epi32(msg3, LoadK(44));
     state1 = _mm_sha256rnds2_epu32(state1, state0, msg);
     tmp = _mm_alignr_epi8(msg3, msg2, 4);
     msg0 = _mm_add_epi32(msg0, tmp);
@@ -541,8 +571,7 @@ auto Sha256::ProcessBlocksShaNi_(
     msg2 = _mm_sha256msg1_epu32(msg2, msg3);
 
     // Rounds 48-51
-    msg = _mm_add_epi32(
-      msg0, _mm_loadu_si128(reinterpret_cast<const __m128i*>(&kK.at(48))));
+    msg = _mm_add_epi32(msg0, LoadK(48));
     state1 = _mm_sha256rnds2_epu32(state1, state0, msg);
     tmp = _mm_alignr_epi8(msg0, msg3, 4);
     msg1 = _mm_add_epi32(msg1, tmp);
@@ -552,8 +581,7 @@ auto Sha256::ProcessBlocksShaNi_(
     msg3 = _mm_sha256msg1_epu32(msg3, msg0);
 
     // Rounds 52-55
-    msg = _mm_add_epi32(
-      msg1, _mm_loadu_si128(reinterpret_cast<const __m128i*>(&kK.at(52))));
+    msg = _mm_add_epi32(msg1, LoadK(52));
     state1 = _mm_sha256rnds2_epu32(state1, state0, msg);
     tmp = _mm_alignr_epi8(msg1, msg0, 4);
     msg2 = _mm_add_epi32(msg2, tmp);
@@ -562,8 +590,7 @@ auto Sha256::ProcessBlocksShaNi_(
     state0 = _mm_sha256rnds2_epu32(state0, state1, msg);
 
     // Rounds 56-59
-    msg = _mm_add_epi32(
-      msg2, _mm_loadu_si128(reinterpret_cast<const __m128i*>(&kK.at(56))));
+    msg = _mm_add_epi32(msg2, LoadK(56));
     state1 = _mm_sha256rnds2_epu32(state1, state0, msg);
     tmp = _mm_alignr_epi8(msg2, msg1, 4);
     msg3 = _mm_add_epi32(msg3, tmp);
@@ -572,8 +599,7 @@ auto Sha256::ProcessBlocksShaNi_(
     state0 = _mm_sha256rnds2_epu32(state0, state1, msg);
 
     // Rounds 60-63
-    msg = _mm_add_epi32(
-      msg3, _mm_loadu_si128(reinterpret_cast<const __m128i*>(&kK.at(60))));
+    msg = _mm_add_epi32(msg3, LoadK(60));
     state1 = _mm_sha256rnds2_epu32(state1, state0, msg);
     msg = _mm_shuffle_epi32(msg, 0x0E);
     state0 = _mm_sha256rnds2_epu32(state0, state1, msg);
@@ -593,8 +619,8 @@ auto Sha256::ProcessBlocksShaNi_(
   tmp0 = _mm_shuffle_epi32(tmp0, 0xB1); // D C B A
   tmp1 = _mm_shuffle_epi32(tmp1, 0xB1); // H G F E
 
-  _mm_storeu_si128(reinterpret_cast<__m128i*>(&state_.at(0)), tmp0);
-  _mm_storeu_si128(reinterpret_cast<__m128i*>(&state_.at(4)), tmp1);
+  StoreU128(std::span<uint32_t> { state_ }.first<4>(), tmp0);
+  StoreU128(std::span<uint32_t> { state_ }.last<4>(), tmp1);
 }
 #endif
 
@@ -603,6 +629,40 @@ auto ComputeSha256(std::span<const std::byte> data) noexcept -> Sha256Digest
   Sha256 hasher;
   hasher.Update(data);
   return hasher.Finalize();
+}
+
+auto ToHexString(const Sha256Digest& digest) -> std::string
+{
+  constexpr auto kDigits = std::string_view { "0123456789abcdef" };
+  constexpr auto kNibbleBits = 4U;
+  constexpr auto kNibbleMask = 0x0FU;
+  auto text = std::string {};
+  text.reserve(digest.size() * 2U);
+  for (const auto byte : digest) {
+    text.push_back(kDigits.at(byte >> kNibbleBits));
+    text.push_back(kDigits.at(byte & kNibbleMask));
+  }
+  return text;
+}
+
+auto Sha256DigestFromHex(const std::string_view text) noexcept
+  -> std::optional<Sha256Digest>
+{
+  auto digest = Sha256Digest {};
+  if (text.size() != digest.size() * 2U) {
+    return std::nullopt;
+  }
+  constexpr auto kHexRadix = 16;
+  for (size_t index = 0U; index < digest.size(); ++index) {
+    const auto pair = text.substr(index * 2U, 2U);
+    const auto* const end = std::to_address(pair.end());
+    const auto parsed = std::from_chars(
+      std::to_address(pair.begin()), end, digest.at(index), kHexRadix);
+    if (parsed.ec != std::errc {} || parsed.ptr != end) {
+      return std::nullopt;
+    }
+  }
+  return digest;
 }
 
 auto IsAllZero(const Sha256Digest& digest) noexcept -> bool
@@ -626,16 +686,15 @@ auto ComputeFileSha256(const std::filesystem::path& path) -> Sha256Digest
   Sha256 hasher;
 
   // Use larger buffer for better I/O performance (256 KB)
-  constexpr size_t kBufferSize = 256 * 1024;
-  std::array<std::byte, kBufferSize> buffer = {};
+  constexpr size_t kBufferSize = size_t { 256 } * 1024U;
+  std::array<char, kBufferSize> buffer = {};
 
   while (true) {
-    in.read(reinterpret_cast<char*>(buffer.data()),
-      static_cast<std::streamsize>(buffer.size()));
+    in.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
     const auto got = in.gcount();
     if (got > 0) {
-      hasher.Update(
-        std::span<const std::byte>(buffer.data(), static_cast<size_t>(got)));
+      hasher.Update(std::as_bytes(
+        std::span<const char> { buffer }.first(static_cast<size_t>(got))));
     }
 
     if (!in) {

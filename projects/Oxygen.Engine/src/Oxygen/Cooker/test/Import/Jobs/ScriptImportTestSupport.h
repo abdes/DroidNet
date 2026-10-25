@@ -97,35 +97,61 @@ inline auto CanonicalScriptVirtualPath(std::string_view script_name)
     + std::string(script_name) + std::string(data::kScriptDescriptorExtension);
 }
 
-inline auto MakeScriptRequest(const std::filesystem::path& source_path,
-  const std::filesystem::path& cooked_root, const ScriptStorageMode storage,
-  const bool compile_scripts = false) -> ImportRequest
+//! A script asset import: the script, where it cooks and how it is stored.
+struct ScriptRequestSpec final {
+  std::filesystem::path source_path;
+  std::filesystem::path cooked_root;
+  ScriptStorageMode storage = ScriptStorageMode::kEmbedded;
+  bool compile_scripts = false;
+};
+
+inline auto MakeScriptRequest(const ScriptRequestSpec& spec) -> ImportRequest
 {
   ImportRequest request {};
-  request.source_path = source_path;
-  request.cooked_root = cooked_root;
+  request.source_path = spec.source_path;
+  request.cooked_root = spec.cooked_root;
   request.options.scripting.import_kind = ScriptingImportKind::kScriptAsset;
-  request.options.scripting.compile_scripts = compile_scripts;
-  request.options.scripting.script_storage = storage;
-  request.options.scripting.source_root = cooked_root.parent_path();
+  request.options.scripting.compile_scripts = spec.compile_scripts;
+  request.options.scripting.script_storage = spec.storage;
+  request.options.scripting.source_root = spec.cooked_root.parent_path();
   request.asset_virtual_path
-    = CanonicalScriptVirtualPath(source_path.stem().string());
+    = CanonicalScriptVirtualPath(spec.source_path.stem().string());
   return request;
 }
 
-inline auto MakeSidecarRequest(const std::filesystem::path& source_path,
-  const std::filesystem::path& cooked_root, std::string scene_virtual_path)
-  -> ImportRequest
+//! A scripting sidecar import: the sidecar, where it cooks and the scene it
+//! binds scripts to.
+struct SidecarRequestSpec final {
+  std::filesystem::path source_path;
+  std::filesystem::path cooked_root;
+  std::string scene_virtual_path;
+};
+
+inline auto MakeSidecarRequest(SidecarRequestSpec spec) -> ImportRequest
 {
   ImportRequest request {};
-  request.source_path = source_path;
-  request.cooked_root = cooked_root;
+  request.source_path = std::move(spec.source_path);
+  request.cooked_root = std::move(spec.cooked_root);
   request.options.scripting.import_kind
     = ScriptingImportKind::kScriptingSidecar;
   request.options.scripting.target_scene_virtual_path
-    = std::move(scene_virtual_path);
+    = std::move(spec.scene_virtual_path);
   return request;
 }
+
+//! A model scene import: the model and where it cooks.
+struct SceneRequestSpec final {
+  std::filesystem::path source_path;
+  std::filesystem::path cooked_root;
+};
+
+//! A scene cooked with an external script: where both cook, and the script's
+//! text and file name.
+struct SceneWithScriptSpec final {
+  std::filesystem::path cooked_root;
+  std::string_view script_text;
+  std::string_view script_file_name = "main_logic.luau";
+};
 
 //! The identity these tests give an authored scene: its name at the mount
 //! root.
@@ -288,11 +314,17 @@ inline auto MakeInflightSceneContext(const std::filesystem::path& cooked_root,
   };
 }
 
+//! Canonical slot ids of the fixtures; readable and deterministic.
+inline constexpr std::string_view kMainSlotId
+  = "00000000-0000-4000-8000-00000000000a";
+inline constexpr std::string_view kAuxSlotId
+  = "00000000-0000-4000-8000-00000000000b";
+
 //! One script binding of a sidecar payload. Unset optional fields are
 //! omitted from the emitted JSON.
 struct SidecarBindingSpec final {
   uint32_t node_index = 0;
-  std::string slot_id = "main";
+  std::string slot_id = std::string(kMainSlotId);
   std::string script_virtual_path;
   std::optional<int32_t> execution_order;
   nlohmann::json params;
@@ -348,7 +380,7 @@ inline auto MakeSpeedBinding(const std::string_view script_virtual_path,
   param["value"] = speed;
   return SidecarBindingSpec {
     .node_index = 0,
-    .slot_id = "main",
+    .slot_id = std::string(kMainSlotId),
     .script_virtual_path = std::string(script_virtual_path),
     .execution_order = 2,
     .params = nlohmann::json::array({ std::move(param) }),
@@ -392,14 +424,14 @@ protected:
     return *report;
   }
 
-  [[nodiscard]] auto MakeSceneRequest(const std::filesystem::path& source_path,
-    const std::filesystem::path& cooked_root) const -> ImportRequest
+  [[nodiscard]] auto MakeSceneRequest(const SceneRequestSpec& spec) const
+    -> ImportRequest
   {
     ImportRequest request {};
-    request.source_path = source_path;
+    request.source_path = spec.source_path;
     request.asset_virtual_path
-      = oxygen::cooker::test::ModelVirtualPath(source_path);
-    request.cooked_root = cooked_root;
+      = oxygen::cooker::test::ModelVirtualPath(spec.source_path);
+    request.cooked_root = spec.cooked_root;
     request.surface_provenance = source_provenance_;
     return request;
   }
@@ -422,21 +454,26 @@ protected:
   //! Imports an external script, then `Tabuleiro.glb`, into `cooked_root` and
   //! finds the first scene and script assets. Missing assets are reported as
   //! failures and left empty, so callers must still check them.
-  [[nodiscard]] auto CookSceneWithScript(
-    const std::filesystem::path& cooked_root,
-    const std::string_view script_text,
-    const std::string_view script_file_name = "main_logic.luau")
+  [[nodiscard]] auto CookSceneWithScript(const SceneWithScriptSpec& spec)
     -> SceneAndScript
   {
-    const auto script_source = cooked_root / "input" / script_file_name;
-    WriteText(script_source, script_text);
+    const auto& cooked_root = spec.cooked_root;
+    const auto script_source = cooked_root / "input" / spec.script_file_name;
+    WriteText(script_source, spec.script_text);
 
     const auto model_path = ModelPath();
     EXPECT_TRUE(std::filesystem::exists(model_path));
-    EXPECT_TRUE(Submit(MakeScriptRequest(script_source, cooked_root,
-                         ScriptStorageMode::kExternal, false))
+    EXPECT_TRUE(Submit(MakeScriptRequest({
+                         .source_path = script_source,
+                         .cooked_root = cooked_root,
+                         .storage = ScriptStorageMode::kExternal,
+                       }))
         .success);
-    EXPECT_TRUE(Submit(MakeSceneRequest(model_path, cooked_root)).success);
+    EXPECT_TRUE(Submit(MakeSceneRequest({
+                         .source_path = model_path,
+                         .cooked_root = cooked_root,
+                       }))
+        .success);
 
     auto result = SceneAndScript { .inspection = LoadInspection(cooked_root) };
     result.scene = FindFirstAssetByType(result.inspection, AssetType::kScene);

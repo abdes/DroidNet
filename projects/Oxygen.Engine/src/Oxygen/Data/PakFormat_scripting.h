@@ -66,7 +66,8 @@ enum class ScriptSlotFlags : uint32_t { kNone = 0 };
 OXYGEN_DEFINE_FLAGS_OPERATORS(ScriptSlotFlags)
 OXGN_DATA_NDAPI auto to_string(ScriptSlotFlags value) -> std::string;
 
-//! `ScriptParamRecord::value.as_node_index` of a node parameter with no node.
+//! `ScriptParamRecord::value.as_node.node_index` of a node parameter with no
+//! node.
 inline constexpr world::SceneNodeIndexT kUnsetNodeParam = 0xFFFFFFFFU;
 
 //! Asset reference value of a `kAsset` script parameter.
@@ -85,9 +86,11 @@ static_assert(sizeof(ScriptAssetParamValue) == 17);
 //! Fixed-size script parameter record.
 /*!
  Used both for a script asset's parameter declarations (key, type and default
- value) and for a script slot's overrides. A `kNode` value is a node index of
- the scene that owns the slot. Declarations carry no node or asset default:
- their value is `kUnsetNodeParam`, or a nil key with the declared asset kind.
+ value) and for a script slot's overrides. A `kNode` value is a `NodeRef` into
+ the scene that owns the slot: one of its own nodes, or a node an instance
+ brings in. Declarations carry no node or asset default: their value is
+ `kUnsetNodeParam` in the node index, or a nil key with the declared asset
+ kind.
 
  `key_offset` and a `kString` value's `as_string_offset` are offsets into the
  string table of the descriptor that holds the record: the script descriptor
@@ -105,7 +108,7 @@ struct ScriptParamRecord {
     float as_vec[4]; // Used for Vec2, Vec3, Vec4
     core::StringTableOffsetT as_string_offset;
     ScriptAssetParamValue as_asset;
-    world::SceneNodeIndexT as_node_index;
+    world::NodeRef as_node;
   } value;
 };
 #pragma pack(pop)
@@ -115,6 +118,8 @@ static_assert(sizeof(ScriptParamRecord) == 25);
 #pragma pack(push, 1)
 // NOLINTNEXTLINE(*-type-member-init) - MUST be initialized by users
 struct ScriptSlotRecord {
+  //! Unique among the node's slots; a change of a slot's parameter names it.
+  ScriptSlotId slot_id;
   AssetKey script_asset_key; // References a ScriptAssetDesc
   core::OffsetT params_array_offset = 0; // Relative to the scene descriptor
   uint32_t params_count = 0; // Number of ScriptParamRecords
@@ -122,7 +127,23 @@ struct ScriptSlotRecord {
   ScriptSlotFlags flags = ScriptSlotFlags::kNone;
 };
 #pragma pack(pop)
-static_assert(sizeof(ScriptSlotRecord) == 36);
+static_assert(sizeof(ScriptSlotRecord) == 52);
+
+//! A change of one script parameter of a node an instance brings in
+//! (`ComponentType::kScriptParamOverride`).
+/*!
+ `target` names the node with a node path, `slot_id` its slot and `param` the
+ parameter's key and value, with the parameter's type. A target holds at most
+ one change per slot and key; the table is sorted by target, slot and key.
+*/
+#pragma pack(push, 1)
+struct ScriptParamOverrideRecord {
+  world::NodeRef target;
+  ScriptSlotId slot_id;
+  ScriptParamRecord param {};
+};
+#pragma pack(pop)
+static_assert(sizeof(ScriptParamOverrideRecord) == 49);
 
 //! Scripting component record for scene component tables.
 #pragma pack(push, 1)

@@ -1,8 +1,9 @@
 {
-  "version": 14,
+  "version": 15,
   "name": "bottle-on-box",
   "nodes": [
     {
+      "id": "3b110db7-18f5-5bab-b7e7-419e29c56ac0",
       "name": "world",
       "flags": {
         "visible": "shown",
@@ -12,6 +13,7 @@
       }
     },
     {
+      "id": "e370e89f-d23f-5e66-a854-3fd4fc5f15a3",
       "name": "floor_node",
       "parent": 0,
       "flags": {
@@ -27,6 +29,7 @@
       }
     },
     {
+      "id": "83cbb5a8-854e-570e-860a-2a3cbd07b578",
       "name": "cube_node",
       "parent": 0,
       "flags": {
@@ -42,6 +45,7 @@
       }
     },
     {
+      "id": "18ff7750-5cd0-573d-9d94-e9a8ff114d63",
       "name": "sphere_node",
       "parent": 0,
       "flags": {
@@ -57,6 +61,7 @@
       }
     },
     {
+      "id": "f454d8c6-5e62-52d5-9345-63b3f1724bc6",
       "name": "waterbottle_node",
       "parent": 0,
       "flags": {
@@ -73,6 +78,7 @@
       }
     },
     {
+      "id": "ccfabcf3-4784-584b-b8a8-2907e7a5287d",
       "name": "sun_light_node",
       "parent": 0,
       "flags": {
@@ -87,6 +93,7 @@
       }
     },
     {
+      "id": "6c0d21b3-3f5c-529f-9530-0f35f2aac406",
       "name": "camera_node",
       "parent": 0,
       "flags": {

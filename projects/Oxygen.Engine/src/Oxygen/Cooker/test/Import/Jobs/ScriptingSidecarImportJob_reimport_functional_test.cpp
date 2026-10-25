@@ -12,16 +12,25 @@
 #include <cstring>
 #include <filesystem>
 #include <optional>
+#include <stdexcept>
+#include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
 #include "ScriptImportTestSupport.h"
+#include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Cooker/Import/ImportOptions.h>
+#include <Oxygen/Cooker/Import/ImportReport.h>
+#include <Oxygen/Cooker/Import/ImportRequest.h>
+#include <Oxygen/Cooker/Import/Internal/SceneSource.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/SceneAsset.h>
+#include <Oxygen/Data/SceneIds.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace oxygen::content::import::test {
@@ -32,7 +41,136 @@ namespace {
   constexpr auto kSceneBSpeed = 7.5F;
 
   class ScriptingSidecarImportJobReimportTest : public ScriptingImportTestBase {
+  protected:
+    //! Cooks the scene `descriptor` describes at its name's identity.
+    auto CookDescriptor(const std::filesystem::path& cooked_root,
+      nlohmann::json descriptor) -> ImportReport
+    {
+      descriptor.emplace("version", internal::kSceneDescriptorVersion);
+      auto request = ImportRequest {};
+      request.source_path = "inline://scene.oscene.json";
+      request.asset_virtual_path
+        = CanonicalSceneVirtualPath(descriptor.at("name").get<std::string>());
+      request.cooked_root = cooked_root;
+      request.scene_descriptor = ImportRequest::SceneDescriptorPayload {
+        .normalized_descriptor_json = descriptor.dump(),
+      };
+      return Submit(std::move(request));
+    }
+
+    //! Applies a sidecar whose only rows change the `speed` of one slot of
+    //! the nodes `paths` name below node 1, the scene's instance root.
+    auto ApplyInstanceChanges(const std::filesystem::path& cooked_root,
+      const std::vector<std::string_view>& paths) -> ImportReport
+    {
+      auto rows = nlohmann::json::array();
+      for (const auto node : paths) {
+        rows.push_back({
+          { "node_index", 1 },
+          { "node_path", nlohmann::json::array({ node }) },
+          { "slot_id", kMainSlotId },
+          {
+            "params",
+            nlohmann::json::array({
+              { { "key", "speed" }, { "type", "float" }, { "value", 2.0 } },
+            }),
+          },
+        });
+      }
+      const auto source = cooked_root / "input" / "level.sidescript.json";
+      WriteText(source,
+        nlohmann::json {
+          { "bindings", nlohmann::json::array() },
+          { "instance_bindings", std::move(rows) },
+        }
+          .dump(2));
+      return Submit(MakeSidecarRequest({
+        .source_path = source,
+        .cooked_root = cooked_root,
+        .scene_virtual_path = CanonicalSceneVirtualPath("Level"),
+      }));
+    }
+
+    //! The cooked level, loaded and validated.
+    [[nodiscard]] static auto LoadLevel(
+      const std::filesystem::path& cooked_root) -> data::SceneAsset
+    {
+      const auto key
+        = data::AssetKey::FromVirtualPath(CanonicalSceneVirtualPath("Level"));
+      const auto inspection = LoadInspection(cooked_root);
+      const auto entry = std::ranges::find_if(inspection.Assets(),
+        [&key](const auto& asset) -> bool { return asset.key == key; });
+      if (entry == inspection.Assets().end()) {
+        throw std::runtime_error("The level was not cooked");
+      }
+      return { key, ReadBytes(cooked_root / entry->descriptor_relpath) };
+    }
   };
+
+  //! Each change of an instanced node's script parameter names its node by
+  //! path. Reimporting the sidecar keeps the scene loadable whatever paths
+  //! it names, and keeps only the paths its changes still name.
+  NOLINT_TEST_F(ScriptingSidecarImportJobReimportTest,
+    InstancedNodeChangesKeepOnlyTheirNodePaths)
+  {
+    // Arrange
+    constexpr auto kFirst
+      = std::string_view { "00000000-0000-4000-8000-0000000000a1" };
+    constexpr auto kSecond
+      = std::string_view { "00000000-0000-4000-8000-0000000000b2" };
+    const ScopedTempDir temp;
+    const auto cooked_root = temp.Path() / "instanced_node_changes";
+    ASSERT_TRUE(CookDescriptor(cooked_root,
+      {
+        { "name", "Part" },
+        { "nodes",
+          nlohmann::json::array({ { { "id", kFirst }, { "name", "part" } } }) },
+      })
+        .success);
+    ASSERT_TRUE(CookDescriptor(cooked_root,
+      {
+        { "name", "Level" },
+        { "nodes",
+          nlohmann::json::array({
+            { { "id", "00000000-0000-4000-8000-000000000001" },
+              { "name", "root" } },
+            { { "id", "00000000-0000-4000-8000-000000000002" },
+              { "name", "part" }, { "parent", 0 },
+              { "instance",
+                { { "scene_ref", CanonicalSceneVirtualPath("Part") } } } },
+          }) },
+      })
+        .success);
+
+    // Act
+    const auto second_only = ApplyInstanceChanges(cooked_root, { kSecond });
+    const auto both = ApplyInstanceChanges(cooked_root, { kFirst, kSecond });
+    const auto both_level = LoadLevel(cooked_root);
+    const auto first_only = ApplyInstanceChanges(cooked_root, { kFirst });
+    const auto first_level = LoadLevel(cooked_root);
+
+    // Assert
+    ASSERT_TRUE(second_only.success);
+    ASSERT_TRUE(both.success);
+    EXPECT_EQ(
+      both_level
+        .GetComponents<data::pak::scripting::ScriptParamOverrideRecord>()
+        .size(),
+      2U);
+    EXPECT_EQ(
+      both_level.GetComponents<data::pak::world::NodePathRecord>().size(), 2U);
+    ASSERT_TRUE(first_only.success);
+    const auto changes
+      = first_level
+          .GetComponents<data::pak::scripting::ScriptParamOverrideRecord>();
+    ASSERT_EQ(changes.size(), 1U);
+    const auto first = data::NodeId::FromString(kFirst);
+    ASSERT_TRUE(first.has_value());
+    EXPECT_THAT(first_level.GetNodePath(changes.front().target),
+      ::testing::ElementsAre(first.value()));
+    EXPECT_EQ(
+      first_level.GetComponents<data::pak::world::NodePathRecord>().size(), 1U);
+  }
 
   NOLINT_TEST_F(ScriptingSidecarImportJobReimportTest,
     NodeBindingOverwriteAndAdditiveUpdateBehavior)
@@ -53,15 +191,28 @@ namespace {
     WriteText(script_b_source, SpeedScriptSource("'B'"));
     WriteText(script_c_source, SpeedScriptSource("'C'"));
 
-    ASSERT_TRUE(Submit(MakeSceneRequest(model_path, cooked_root)).success);
-    ASSERT_TRUE(Submit(MakeScriptRequest(script_a_source, cooked_root,
-                         ScriptStorageMode::kExternal, false))
+    ASSERT_TRUE(Submit(MakeSceneRequest({
+                         .source_path = model_path,
+                         .cooked_root = cooked_root,
+                       }))
         .success);
-    ASSERT_TRUE(Submit(MakeScriptRequest(script_b_source, cooked_root,
-                         ScriptStorageMode::kExternal, false))
+    ASSERT_TRUE(Submit(MakeScriptRequest({
+                         .source_path = script_a_source,
+                         .cooked_root = cooked_root,
+                         .storage = ScriptStorageMode::kExternal,
+                       }))
         .success);
-    ASSERT_TRUE(Submit(MakeScriptRequest(script_c_source, cooked_root,
-                         ScriptStorageMode::kExternal, false))
+    ASSERT_TRUE(Submit(MakeScriptRequest({
+                         .source_path = script_b_source,
+                         .cooked_root = cooked_root,
+                         .storage = ScriptStorageMode::kExternal,
+                       }))
+        .success);
+    ASSERT_TRUE(Submit(MakeScriptRequest({
+                         .source_path = script_c_source,
+                         .cooked_root = cooked_root,
+                         .storage = ScriptStorageMode::kExternal,
+                       }))
         .success);
 
     const auto inspection_before = LoadInspection(cooked_root);
@@ -89,35 +240,41 @@ namespace {
       MakeSidecarPayload(std::vector {
         SidecarBindingSpec {
           .node_index = 0,
-          .slot_id = "main",
+          .slot_id = std::string(kMainSlotId),
           .script_virtual_path = script_a->virtual_path,
           .execution_order = 1,
           .params = {},
         },
       }));
-    ASSERT_TRUE(Submit(MakeSidecarRequest(sidecar_source, cooked_root,
-                         scene_asset->virtual_path))
+    ASSERT_TRUE(Submit(MakeSidecarRequest({
+                         .source_path = sidecar_source,
+                         .cooked_root = cooked_root,
+                         .scene_virtual_path = scene_asset->virtual_path,
+                       }))
         .success);
 
     WriteText(sidecar_source,
       MakeSidecarPayload(std::vector {
         SidecarBindingSpec {
           .node_index = 0,
-          .slot_id = "main",
+          .slot_id = std::string(kMainSlotId),
           .script_virtual_path = script_b->virtual_path,
           .execution_order = 2,
           .params = {},
         },
         SidecarBindingSpec {
           .node_index = 1,
-          .slot_id = "aux",
+          .slot_id = std::string(kAuxSlotId),
           .script_virtual_path = script_c->virtual_path,
           .execution_order = 3,
           .params = {},
         },
       }));
-    ASSERT_TRUE(Submit(MakeSidecarRequest(sidecar_source, cooked_root,
-                         scene_asset->virtual_path))
+    ASSERT_TRUE(Submit(MakeSidecarRequest({
+                         .source_path = sidecar_source,
+                         .cooked_root = cooked_root,
+                         .scene_virtual_path = scene_asset->virtual_path,
+                       }))
         .success);
 
     const auto inspection_after = LoadInspection(cooked_root);
@@ -156,8 +313,11 @@ namespace {
 
     const ScopedTempDir temp;
     const auto cooked_root = temp.Path() / "script_sidecar_atomicity";
-    const auto cooked
-      = CookSceneWithScript(cooked_root, SpeedScriptSource("3"), "stable.luau");
+    const auto cooked = CookSceneWithScript({
+      .cooked_root = cooked_root,
+      .script_text = SpeedScriptSource("3"),
+      .script_file_name = "stable.luau",
+    });
     const auto& scene_asset = cooked.scene;
     const auto& script_asset = cooked.script;
     ASSERT_HAS_VALUE(scene_asset) << "Expected scene asset to be present";
@@ -167,8 +327,11 @@ namespace {
       = cooked_root / "input" / "atomic.sidescript.json";
     WriteText(sidecar_source,
       MakeSidecarPayload(MakeSpeedBinding(script_asset->virtual_path)));
-    ASSERT_TRUE(Submit(MakeSidecarRequest(sidecar_source, cooked_root,
-                         scene_asset->virtual_path))
+    ASSERT_TRUE(Submit(MakeSidecarRequest({
+                         .source_path = sidecar_source,
+                         .cooked_root = cooked_root,
+                         .scene_virtual_path = scene_asset->virtual_path,
+                       }))
         .success);
 
     const auto inspection_after_success = LoadInspection(cooked_root);
@@ -179,8 +342,11 @@ namespace {
     WriteText(sidecar_source,
       MakeSidecarPayload(
         MakeSpeedBinding(CanonicalScriptVirtualPath("does_not_exist"))));
-    const auto failure_report = Submit(MakeSidecarRequest(
-      sidecar_source, cooked_root, scene_asset->virtual_path));
+    const auto failure_report = Submit(MakeSidecarRequest({
+      .source_path = sidecar_source,
+      .cooked_root = cooked_root,
+      .scene_virtual_path = scene_asset->virtual_path,
+    }));
     ASSERT_FALSE(failure_report.success);
     EXPECT_TRUE(HasDiagnosticCode(
       failure_report.diagnostics, "script.sidecar.script_ref_unresolved"));
@@ -199,8 +365,11 @@ namespace {
     const ScopedTempDir temp;
     const auto cooked_root
       = temp.Path() / "script_sidecar_table_write_atomicity";
-    const auto cooked = CookSceneWithScript(
-      cooked_root, SpeedScriptSource("9"), "writer_fail.luau");
+    const auto cooked = CookSceneWithScript({
+      .cooked_root = cooked_root,
+      .script_text = SpeedScriptSource("9"),
+      .script_file_name = "writer_fail.luau",
+    });
     const auto& scene_asset = cooked.scene;
     const auto& script_asset = cooked.script;
     ASSERT_HAS_VALUE(scene_asset) << "Expected scene asset to be present";
@@ -215,8 +384,11 @@ namespace {
     WriteText(sidecar_source,
       MakeSidecarPayload(MakeSpeedBinding(script_asset->virtual_path)));
 
-    auto request = MakeSidecarRequest(
-      sidecar_source, cooked_root, scene_asset->virtual_path);
+    auto request = MakeSidecarRequest({
+      .source_path = sidecar_source,
+      .cooked_root = cooked_root,
+      .scene_virtual_path = scene_asset->virtual_path,
+    });
     const auto index_before = ReadBytes(cooked_root / "container.index.bin");
     auto inflight = MakeInflightSceneContext(cooked_root, *scene_asset);
     inflight.descriptor_relpath = "blocked-parent/scene.oscene";
@@ -249,12 +421,22 @@ namespace {
     WriteText(script_a_source, SpeedScriptSource("'A'"));
     WriteText(script_b_source, SpeedScriptSource("'B'"));
 
-    ASSERT_TRUE(Submit(MakeSceneRequest(model_path, cooked_root)).success);
-    ASSERT_TRUE(Submit(MakeScriptRequest(script_a_source, cooked_root,
-                         ScriptStorageMode::kExternal, false))
+    ASSERT_TRUE(Submit(MakeSceneRequest({
+                         .source_path = model_path,
+                         .cooked_root = cooked_root,
+                       }))
         .success);
-    ASSERT_TRUE(Submit(MakeScriptRequest(script_b_source, cooked_root,
-                         ScriptStorageMode::kExternal, false))
+    ASSERT_TRUE(Submit(MakeScriptRequest({
+                         .source_path = script_a_source,
+                         .cooked_root = cooked_root,
+                         .storage = ScriptStorageMode::kExternal,
+                       }))
+        .success);
+    ASSERT_TRUE(Submit(MakeScriptRequest({
+                         .source_path = script_b_source,
+                         .cooked_root = cooked_root,
+                         .storage = ScriptStorageMode::kExternal,
+                       }))
         .success);
 
     const auto before_inspection = LoadInspection(cooked_root);
@@ -294,14 +476,20 @@ namespace {
       = cooked_root / "input" / "rebind.sidescript.json";
     WriteText(sidecar_source,
       MakeSidecarPayload(MakeSpeedBinding(script_a_asset->virtual_path)));
-    ASSERT_TRUE(Submit(MakeSidecarRequest(sidecar_source, cooked_root,
-                         scene_asset->virtual_path))
+    ASSERT_TRUE(Submit(MakeSidecarRequest({
+                         .source_path = sidecar_source,
+                         .cooked_root = cooked_root,
+                         .scene_virtual_path = scene_asset->virtual_path,
+                       }))
         .success);
 
     WriteText(sidecar_source,
       MakeSidecarPayload(MakeSpeedBinding(script_b_asset->virtual_path)));
-    const auto second_report = Submit(MakeSidecarRequest(
-      sidecar_source, cooked_root, scene_asset->virtual_path));
+    const auto second_report = Submit(MakeSidecarRequest({
+      .source_path = sidecar_source,
+      .cooked_root = cooked_root,
+      .scene_virtual_path = scene_asset->virtual_path,
+    }));
     ASSERT_TRUE(second_report.success);
 
     const auto after_inspection = LoadInspection(cooked_root);
@@ -333,9 +521,16 @@ namespace {
     const auto script_source = cooked_root / "input" / "idempotent_script.luau";
     WriteText(script_source, SpeedScriptSource("'stable'"));
 
-    ASSERT_TRUE(Submit(MakeSceneRequest(model_path, cooked_root)).success);
-    ASSERT_TRUE(Submit(MakeScriptRequest(script_source, cooked_root,
-                         ScriptStorageMode::kExternal, false))
+    ASSERT_TRUE(Submit(MakeSceneRequest({
+                         .source_path = model_path,
+                         .cooked_root = cooked_root,
+                       }))
+        .success);
+    ASSERT_TRUE(Submit(MakeScriptRequest({
+                         .source_path = script_source,
+                         .cooked_root = cooked_root,
+                         .storage = ScriptStorageMode::kExternal,
+                       }))
         .success);
 
     const auto inspection = LoadInspection(cooked_root);
@@ -351,8 +546,11 @@ namespace {
     WriteText(sidecar_source,
       MakeSidecarPayload(MakeSpeedBinding(script_asset->virtual_path)));
 
-    ASSERT_TRUE(Submit(MakeSidecarRequest(sidecar_source, cooked_root,
-                         scene_asset->virtual_path))
+    ASSERT_TRUE(Submit(MakeSidecarRequest({
+                         .source_path = sidecar_source,
+                         .cooked_root = cooked_root,
+                         .scene_virtual_path = scene_asset->virtual_path,
+                       }))
         .success);
 
     const auto first_inspection = LoadInspection(cooked_root);
@@ -360,8 +558,11 @@ namespace {
     const auto first_scene_bytes
       = ReadBytes(cooked_root / scene_asset->descriptor_relpath);
 
-    ASSERT_TRUE(Submit(MakeSidecarRequest(sidecar_source, cooked_root,
-                         scene_asset->virtual_path))
+    ASSERT_TRUE(Submit(MakeSidecarRequest({
+                         .source_path = sidecar_source,
+                         .cooked_root = cooked_root,
+                         .scene_virtual_path = scene_asset->virtual_path,
+                       }))
         .success);
 
     const auto second_scene_bytes
@@ -378,8 +579,11 @@ namespace {
     const ScopedTempDir temp;
     const auto cooked_root
       = temp.Path() / "script_sidecar_scene_patch_preserves_core_tables";
-    const auto cooked = CookSceneWithScript(
-      cooked_root, SpeedScriptSource("1"), "patch_guard.luau");
+    const auto cooked = CookSceneWithScript({
+      .cooked_root = cooked_root,
+      .script_text = SpeedScriptSource("1"),
+      .script_file_name = "patch_guard.luau",
+    });
     const auto& scene_asset = cooked.scene;
     const auto& script_asset = cooked.script;
     ASSERT_HAS_VALUE(scene_asset) << "Expected scene asset to be present";
@@ -440,8 +644,11 @@ namespace {
       = cooked_root / "input" / "patch_guard_sidecar.json";
     WriteText(sidecar_source,
       MakeSidecarPayload(MakeSpeedBinding(script_asset->virtual_path)));
-    ASSERT_TRUE(Submit(MakeSidecarRequest(sidecar_source, cooked_root,
-                         scene_asset->virtual_path))
+    ASSERT_TRUE(Submit(MakeSidecarRequest({
+                         .source_path = sidecar_source,
+                         .cooked_root = cooked_root,
+                         .scene_virtual_path = scene_asset->virtual_path,
+                       }))
         .success);
 
     const auto after_scene_bytes
@@ -466,8 +673,11 @@ namespace {
 
     const ScopedTempDir temp;
     const auto cooked_root = temp.Path() / "script_sidecar_in_place_update";
-    const auto cooked = CookSceneWithScript(
-      cooked_root, SpeedScriptSource("1"), "in_place.luau");
+    const auto cooked = CookSceneWithScript({
+      .cooked_root = cooked_root,
+      .script_text = SpeedScriptSource("1"),
+      .script_file_name = "in_place.luau",
+    });
     const auto& scene_asset = cooked.scene;
     const auto& script_asset = cooked.script;
     ASSERT_HAS_VALUE(scene_asset) << "Expected scene asset to be present";
@@ -476,8 +686,11 @@ namespace {
     const auto sidecar_source = cooked_root / "input" / "in_place.json";
     WriteText(sidecar_source,
       MakeSidecarPayload(MakeSpeedBinding(script_asset->virtual_path, 1.0F)));
-    ASSERT_TRUE(Submit(MakeSidecarRequest(sidecar_source, cooked_root,
-                         scene_asset->virtual_path))
+    ASSERT_TRUE(Submit(MakeSidecarRequest({
+                         .source_path = sidecar_source,
+                         .cooked_root = cooked_root,
+                         .scene_virtual_path = scene_asset->virtual_path,
+                       }))
         .success);
 
     const auto first_size = std::filesystem::file_size(
@@ -486,8 +699,11 @@ namespace {
     WriteText(sidecar_source,
       MakeSidecarPayload(
         MakeSpeedBinding(script_asset->virtual_path, kUpdatedSpeed)));
-    ASSERT_TRUE(Submit(MakeSidecarRequest(sidecar_source, cooked_root,
-                         scene_asset->virtual_path))
+    ASSERT_TRUE(Submit(MakeSidecarRequest({
+                         .source_path = sidecar_source,
+                         .cooked_root = cooked_root,
+                         .scene_virtual_path = scene_asset->virtual_path,
+                       }))
         .success);
 
     EXPECT_EQ(
@@ -535,10 +751,21 @@ namespace {
       "  },\n"
       "}\n"
       "return Script\n");
-    ASSERT_TRUE(Submit(MakeSceneRequest(scene_a_source, cooked_root)).success);
-    ASSERT_TRUE(Submit(MakeSceneRequest(scene_b_source, cooked_root)).success);
-    ASSERT_TRUE(Submit(MakeScriptRequest(script_source, cooked_root,
-                         ScriptStorageMode::kExternal, false))
+    ASSERT_TRUE(Submit(MakeSceneRequest({
+                         .source_path = scene_a_source,
+                         .cooked_root = cooked_root,
+                       }))
+        .success);
+    ASSERT_TRUE(Submit(MakeSceneRequest({
+                         .source_path = scene_b_source,
+                         .cooked_root = cooked_root,
+                       }))
+        .success);
+    ASSERT_TRUE(Submit(MakeScriptRequest({
+                         .source_path = script_source,
+                         .cooked_root = cooked_root,
+                         .storage = ScriptStorageMode::kExternal,
+                       }))
         .success);
 
     const auto inspection = LoadInspection(cooked_root);
@@ -591,11 +818,17 @@ namespace {
     WriteText(sidecar_b,
       MakeSidecarPayload(
         MakeSpeedBinding(script_asset->virtual_path, kSceneBSpeed)));
-    ASSERT_TRUE(
-      Submit(MakeSidecarRequest(sidecar_a, cooked_root, scene_a->virtual_path))
+    ASSERT_TRUE(Submit(MakeSidecarRequest({
+                         .source_path = sidecar_a,
+                         .cooked_root = cooked_root,
+                         .scene_virtual_path = scene_a->virtual_path,
+                       }))
         .success);
-    ASSERT_TRUE(
-      Submit(MakeSidecarRequest(sidecar_b, cooked_root, scene_b->virtual_path))
+    ASSERT_TRUE(Submit(MakeSidecarRequest({
+                         .source_path = sidecar_b,
+                         .cooked_root = cooked_root,
+                         .scene_virtual_path = scene_b->virtual_path,
+                       }))
         .success);
 
     const auto ReadSlotStartForNodeZero
@@ -617,7 +850,7 @@ namespace {
     WriteText(sidecar_a,
       MakeSidecarPayload(SidecarBindingSpec {
         .node_index = 0,
-        .slot_id = "main",
+        .slot_id = std::string(kMainSlotId),
         .script_virtual_path = script_asset->virtual_path,
         .execution_order = 2,
         .params = nlohmann::json::parse(R"([
@@ -625,8 +858,11 @@ namespace {
         { "key": "enabled", "type": "bool", "value": true }
       ])"),
       }));
-    ASSERT_TRUE(
-      Submit(MakeSidecarRequest(sidecar_a, cooked_root, scene_a->virtual_path))
+    ASSERT_TRUE(Submit(MakeSidecarRequest({
+                         .source_path = sidecar_a,
+                         .cooked_root = cooked_root,
+                         .scene_virtual_path = scene_a->virtual_path,
+                       }))
         .success);
 
     const auto scene_b_slot_start_after = ReadSlotStartForNodeZero(*scene_b);

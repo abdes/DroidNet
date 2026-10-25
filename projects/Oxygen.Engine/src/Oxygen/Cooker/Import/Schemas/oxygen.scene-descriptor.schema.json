@@ -9,7 +9,7 @@
     },
     "version": {
       "type": "integer",
-      "const": 14
+      "const": 15
     },
     "name": {
       "$ref": "oxygen.name.schema.json#/definitions/segment"
@@ -26,9 +26,8 @@
       }
     },
     "starting_camera": {
-      "type": "integer",
-      "minimum": 0,
-      "description": "Index of the camera node the scene starts viewing through."
+      "$ref": "#/definitions/node_ref",
+      "description": "The camera node the scene starts viewing through: one of its own nodes, or a node an instance brings in."
     },
     "starting_input_contexts": {
       "type": "array",
@@ -64,6 +63,33 @@
   },
   "required": ["version", "name", "nodes"],
   "definitions": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "node_path": {
+      "description": "One node ID per nesting level below an instance root, shallowest first.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/definitions/uuid"
+      }
+    },
+    "node_ref": {
+      "description": "A node of this scene by index, or, with a path, a node the instance rooted at that node brings in.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["node"],
+      "properties": {
+        "node": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "path": {
+          "$ref": "#/definitions/node_path"
+        }
+      }
+    },
     "vec2": {
       "type": "array",
       "items": {
@@ -181,7 +207,12 @@
     "node": {
       "type": "object",
       "additionalProperties": false,
+      "required": ["id"],
       "properties": {
+        "id": {
+          "description": "The node's ID, unique in the scene; changes and node paths name the node by it.",
+          "$ref": "#/definitions/uuid"
+        },
         "name": {
           "type": "string"
         },
@@ -208,7 +239,87 @@
       "properties": {
         "scene_ref": {
           "$ref": "#/definitions/canonical_oscene_path"
+        },
+        "overrides": {
+          "description": "This scene's changes of the nodes the instance brings in, per node path.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/instance_override"
+          }
         }
+      }
+    },
+    "instance_override": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "components"],
+      "properties": {
+        "path": {
+          "$ref": "#/definitions/node_path"
+        },
+        "components": {
+          "description": "The changed values by component kind of the scene schema, each property by its schema key and in schema units.",
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": {
+            "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$"
+          },
+          "additionalProperties": {
+            "$ref": "#/definitions/component_changes"
+          }
+        }
+      }
+    },
+    "component_changes": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "values": {
+          "$ref": "#/definitions/change_values"
+        },
+        "parts": {
+          "type": "array",
+          "maxItems": 65535,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind", "id", "layout_revision", "values"],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$"
+              },
+              "id": {
+                "$ref": "#/definitions/uuid"
+              },
+              "layout_revision": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "values": {
+                "$ref": "#/definitions/change_values"
+              }
+            }
+          }
+        }
+      }
+    },
+    "change_values": {
+      "description": "Values by scene schema property key; the scene schema decides each key's value type.",
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {
+        "pattern": "^(/[a-z0-9_]+)+$"
+      },
+      "additionalProperties": {
+        "anyOf": [
+          { "type": "boolean" },
+          { "type": "number" },
+          { "type": "string" },
+          { "$ref": "#/definitions/vec3" },
+          { "$ref": "oxygen.lod-policy.schema.json#/definitions/lod_policy" }
+        ]
       }
     },
     "starting_input_context": {

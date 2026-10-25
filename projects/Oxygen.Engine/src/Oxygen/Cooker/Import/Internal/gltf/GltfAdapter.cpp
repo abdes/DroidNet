@@ -62,6 +62,7 @@
 #include <Oxygen/Cooker/Import/Internal/MeshTransformBake.h>
 #include <Oxygen/Cooker/Import/Internal/ModelGeometrySource.h>
 #include <Oxygen/Cooker/Import/Internal/ModelMaterialSource.h>
+#include <Oxygen/Cooker/Import/Internal/ModelNodeIdentity.h>
 #include <Oxygen/Cooker/Import/Internal/ModelTextureSource.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/MaterialPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/MeshBuildPipeline.h>
@@ -70,7 +71,6 @@
 #include <Oxygen/Cooker/Import/Internal/SceneBuild.h>
 #include <Oxygen/Cooker/Import/Internal/SceneNodeImportDefaults.h>
 #include <Oxygen/Cooker/Import/Internal/SourceLayoutHash.h>
-#include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Cooker/Import/Internal/gltf/GltfAdapter.h>
 #include <Oxygen/Cooker/Import/Internal/gltf/cgltf.h>
 #include <Oxygen/Cooker/Import/Naming.h>
@@ -81,7 +81,6 @@
 #include <Oxygen/Core/Transforms/Decompose.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/CameraAspectMode.h>
-#include <Oxygen/Core/Types/DescriptorExtensions.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Data/LightValidation.h>
 #include <Oxygen/Data/MaterialDomain.h>
@@ -923,6 +922,8 @@ namespace {
   struct NodeInput final {
     std::string authored_name;
     std::string base_name;
+    //! The node's anchor, its model node identity (ModelNodeIdentity).
+    std::string anchor;
     uint32_t parent_index = 0;
     glm::mat4 local_matrix { 1.0F };
     glm::mat4 world_matrix { 1.0F };
@@ -932,12 +933,6 @@ namespace {
     bool visible = true;
     const void* source_node = nullptr;
   };
-
-  [[nodiscard]] auto MakeNodeKey(const std::string_view node_virtual_path)
-    -> data::AssetKey
-  {
-    return oxygen::data::AssetKey::FromVirtualPath(node_virtual_path);
-  }
 
   [[nodiscard]] auto GltfToOxygenBasis() -> glm::mat4
   {
@@ -2606,10 +2601,11 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
   };
 
   CHECK_F(input.naming_service != nullptr, "NamingService must not be null");
-  const auto scene_name = request.GetSceneName();
 
   std::vector<NodeInput> nodes;
   nodes.reserve(data.nodes_count > 0 ? data.nodes_count : 1U);
+  auto identity = internal::ModelNodeIdentity::ForRequest(
+    request, input.source_id, diagnostics);
 
   const auto kInvalidParent = std::numeric_limits<uint32_t>::max();
   const auto apply_node
@@ -2645,6 +2641,12 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
     NodeInput node_input;
     node_input.authored_name = std::string(authored);
     node_input.base_name = base_name;
+    node_input.anchor = identity.SourceAnchor({
+      .parent_anchor = parent_index == kInvalidParent
+        ? std::string_view {}
+        : std::string_view { nodes.at(parent_index).anchor },
+      .name = authored,
+    });
     node_input.local_matrix = local_matrix;
     node_input.world_matrix = world_matrix;
     node_input.visible = true;
@@ -2684,6 +2686,7 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
     NodeInput root;
     root.authored_name = "root";
     root.base_name = "root";
+    root.anchor = internal::ModelNodeIdentity::kSynthesizedRoot;
     root.parent_index = 0;
     root.local_matrix = glm::mat4 { 1.0F };
     root.world_matrix = glm::mat4 { 1.0F };
@@ -2711,6 +2714,7 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
     NodeInput root;
     root.authored_name = "root";
     root.base_name = "root";
+    root.anchor = internal::ModelNodeIdentity::kSynthesizedRoot;
     root.parent_index = 0;
     root.local_matrix = glm::mat4 { 1.0F };
     root.world_matrix = glm::mat4 { 1.0F };
@@ -2791,10 +2795,6 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
   build.nodes.reserve(pruned_nodes.size());
   std::vector<NodeRecord> component_attachments;
 
-  const auto virtual_path = internal::PlaceModelProduct(
-    request, scene_name, data::kSceneDescriptorExtension)
-                              .virtual_path;
-
   // Register generated names only after every source name, and append these
   // nodes after all source nodes to preserve authored identities and indices.
   const auto append_attachment
@@ -2809,7 +2809,11 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
     const auto name = input.naming_service->MakeUniqueName(
       owner.base_name + "_" + std::string(role), context);
     NodeRecord attachment {};
-    attachment.node_id = MakeNodeKey(std::string(virtual_path) + "/" + name);
+    attachment.node_id
+      = identity.IdOf(internal::ModelNodeIdentity::AddedAnchor({
+        .owner_anchor = owner.anchor,
+        .role = role,
+      }));
     attachment.scene_name_offset = build.strings.Add(name);
     attachment.parent_index = owner_index;
     // Later visibility/shadow edits on the source owner must still govern its
@@ -2857,7 +2861,7 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
     }
 
     NodeRecord rec {};
-    rec.node_id = MakeNodeKey(std::string(virtual_path) + "/" + name);
+    rec.node_id = identity.IdOf(node.anchor);
     rec.scene_name_offset = build.strings.Add(name);
     rec.parent_index = node.parent_index;
     rec.node_flags = detail::BuildImportedNodeFlags(

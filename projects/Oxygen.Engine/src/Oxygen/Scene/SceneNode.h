@@ -19,6 +19,7 @@
 #include <Oxygen/Core/Resources.h>
 #include <Oxygen/Core/SafeCall.h>
 #include <Oxygen/Data/GeometryIndices.h>
+#include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Scene/Light/LightValidation.h>
 #include <Oxygen/Scene/SceneNodeImpl.h>
 #include <Oxygen/Scene/Scripting/ScriptingComponent.h>
@@ -31,7 +32,6 @@ namespace oxygen::data {
 class Mesh;
 class GeometryAsset;
 class MaterialAsset; // forward declaration for material override APIs
-class SurfaceId;
 } // namespace oxygen::data
 
 namespace oxygen::scene {

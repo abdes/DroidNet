@@ -1,8 +1,9 @@
 {
-  "version": 14,
+  "version": 15,
   "name": "VsmTwoCubes",
   "nodes": [
     {
+      "id": "03738942-b328-53f0-b1f4-447d3544c2d2",
       "name": "Root",
       "flags": {
         "visible": "shown",
@@ -12,6 +13,7 @@
       }
     },
     {
+      "id": "6b405918-81b0-5a97-8b3e-172cb429fa77",
       "name": "Floor",
       "parent": 0,
       "flags": {
@@ -27,6 +29,7 @@
       }
     },
     {
+      "id": "2eae5336-5939-5347-831f-8713a2a75e27",
       "name": "CubeShort",
       "parent": 0,
       "flags": {
@@ -42,6 +45,7 @@
       }
     },
     {
+      "id": "0d4b5b4a-fc01-5c08-97b0-c2e11ccb2631",
       "name": "CubeTall",
       "parent": 0,
       "flags": {
@@ -57,6 +61,7 @@
       }
     },
     {
+      "id": "58c8e042-8e77-5e7d-bd2c-fd35a67a8741",
       "name": "Sun",
       "parent": 0,
       "flags": {
@@ -71,6 +76,7 @@
       }
     },
     {
+      "id": "452b30b6-0588-5647-856e-4a9dc19f2c35",
       "name": "MainCamera",
       "parent": 0,
       "flags": {

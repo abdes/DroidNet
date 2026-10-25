@@ -1,8 +1,9 @@
 {
-  "version": 14,
+  "version": 15,
   "name": "SceneProcCubes",
   "nodes": [
     {
+      "id": "5faa8cfe-9c03-5cf1-809b-22d23063e6d8",
       "name": "Root",
       "flags": {
         "visible": "shown",
@@ -11,6 +12,7 @@
       }
     },
     {
+      "id": "09842657-0445-51b9-bea7-b40fa273ca37",
       "name": "ProcHost",
       "parent": 0,
       "transform": {
@@ -25,6 +27,7 @@
       }
     },
     {
+      "id": "0ec0bf9f-ef49-503b-b42f-5af31d892647",
       "name": "CameraRig",
       "parent": 0,
       "transform": {

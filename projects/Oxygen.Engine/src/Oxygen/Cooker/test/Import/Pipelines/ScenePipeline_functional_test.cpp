@@ -28,16 +28,25 @@
 #include <Oxygen/Cooker/Import/Naming.h>
 #include <Oxygen/Data/ComponentType.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Data/SceneIds.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/ThreadPool.h>
 #include <Oxygen/Testing/GTest.h>
 
-using namespace oxygen::content::import;
-using namespace oxygen::co;
 namespace co = oxygen::co;
 namespace data = oxygen::data;
+using oxygen::co::Co;
+using oxygen::co::kJoin;
+using oxygen::co::ThreadPool;
+using oxygen::content::import::ImportDiagnostic;
+using oxygen::content::import::ImportEventLoop;
+using oxygen::content::import::ImportRequest;
+using oxygen::content::import::NamingService;
+using oxygen::content::import::SceneBuild;
+using oxygen::content::import::SceneEnvironmentSystem;
+using oxygen::content::import::ScenePipeline;
 using oxygen::cooker::test::FakeSceneAdapter;
 using oxygen::cooker::test::MakeFirstByteAssetKey;
 using oxygen::cooker::test::MakeMinimalSceneBuild;
@@ -67,7 +76,7 @@ auto ReadNodeRecord(const std::vector<std::byte>& bytes,
   if (bytes.size() < offset + sizeof(record)) {
     return record;
   }
-  std::memcpy(&record, bytes.data() + offset, sizeof(record));
+  std::memcpy(&record, std::span(bytes).subspan(offset).data(), sizeof(record));
   return record;
 }
 
@@ -78,7 +87,7 @@ auto ReadEnvironmentHeader(const std::vector<std::byte>& bytes, size_t offset)
   if (bytes.size() < offset + sizeof(header)) {
     return header;
   }
-  std::memcpy(&header, bytes.data() + offset, sizeof(header));
+  std::memcpy(&header, std::span(bytes).subspan(offset).data(), sizeof(header));
   return header;
 }
 
@@ -99,7 +108,8 @@ auto ReadComponentDirectory(const std::vector<std::byte>& bytes,
   std::vector<data::pak::world::SceneComponentTableDesc> entries;
   entries.resize(desc.component_table_count);
   std::memcpy(entries.data(),
-    bytes.data() + desc.component_table_directory_offset, dir_bytes);
+    std::span(bytes).subspan(desc.component_table_directory_offset).data(),
+    dir_bytes);
   return entries;
 }
 
@@ -112,7 +122,7 @@ auto ReadRenderableRecord(const std::vector<std::byte>& bytes,
   if (bytes.size() < offset + sizeof(record)) {
     return record;
   }
-  std::memcpy(&record, bytes.data() + offset, sizeof(record));
+  std::memcpy(&record, std::span(bytes).subspan(offset).data(), sizeof(record));
   return record;
 }
 
@@ -207,7 +217,7 @@ NOLINT_TEST_F(ScenePipelineTest, CollectSortsRenderablesByNodeIndex)
   const auto root_offset = build.strings.Add("Root");
   const auto child_offset = build.strings.Add("Child");
   build.nodes.push_back(data::pak::world::NodeRecord {
-    .node_id = MakeFirstByteAssetKey(1U),
+    .node_id = data::NodeId::FromStableIdentity("/test/node/1"),
     .scene_name_offset = root_offset,
     .parent_index = 0,
     .node_flags = 0,
@@ -216,7 +226,7 @@ NOLINT_TEST_F(ScenePipelineTest, CollectSortsRenderablesByNodeIndex)
     .scale = { 1.0F, 1.0F, 1.0F },
   });
   build.nodes.push_back(data::pak::world::NodeRecord {
-    .node_id = MakeFirstByteAssetKey(2U),
+    .node_id = data::NodeId::FromStableIdentity("/test/node/2"),
     .scene_name_offset = child_offset,
     .parent_index = 0,
     .node_flags = 0,

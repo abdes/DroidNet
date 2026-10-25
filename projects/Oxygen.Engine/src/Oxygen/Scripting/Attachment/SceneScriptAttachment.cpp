@@ -4,13 +4,11 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <algorithm>
 #include <cstdint>
 #include <memory>
 #include <optional>
 #include <span>
 #include <string>
-#include <string_view>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -25,6 +23,7 @@
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
+#include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Data/ScriptAsset.h>
 #include <Oxygen/Data/ScriptResource.h>
@@ -157,8 +156,10 @@ namespace {
           continue;
         }
         const auto* node = std::get_if<data::ScriptNodeParam>(&value);
+        // A node an instance brings in is bound once the instance is built.
         if (node != nullptr
-          && node->node_index != data::pak::scripting::kUnsetNodeParam) {
+          && node->node_index != data::pak::scripting::kUnsetNodeParam
+          && node->node_path == data::pak::world::kNoNodePath) {
           (void)scripting.BindNodeParameter(
             slot, key, base::CheckedAt(nodes_, node->node_index));
         }

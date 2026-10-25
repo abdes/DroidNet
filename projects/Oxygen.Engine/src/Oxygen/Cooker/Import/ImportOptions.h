@@ -8,11 +8,8 @@
 
 #include <cstdint>
 #include <filesystem>
-#include <memory>
-#include <optional>
 #include <stop_token>
 #include <string>
-#include <type_traits>
 #include <unordered_map>
 
 #include <Oxygen/Base/Macros.h>
@@ -275,8 +272,11 @@ struct CoordinateConversionPolicy final {
    If baking is enabled but a node's transform must remain authored to preserve
    fidelity, the importer MUST keep the transform on the node and record a
    diagnostic.
+
+   Off by default: a model keeps its node pivots, so a scene's change rotates a
+   node about its own pivot.
   */
-  bool bake_transforms_into_meshes = true;
+  bool bake_transforms_into_meshes = false;
 
   //! Unit normalization policy for authored linear distances.
   UnitNormalizationPolicy unit_normalization

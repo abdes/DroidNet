@@ -27,6 +27,7 @@
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
 #include <Oxygen/Cooker/Loose/Validation.h>
+#include <Oxygen/Cooker/Pak/PakBuildReport.h>
 #include <Oxygen/Cooker/Pak/PakBuilder.h>
 #include <Oxygen/Cooker/Tools/Inspector/GeometryMetadata.h>
 #include <Oxygen/Cooker/test/Pak/PakTestSupport.h>
@@ -44,6 +45,9 @@
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Data/PakFormat_world.h>
+#include <Oxygen/Data/SceneIds.h>
+#include <Oxygen/Data/Schema/Generated.SceneComponents.h>
+#include <Oxygen/Data/StableId.h>
 #include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Data/SurfaceInventory.h>
 #include <Oxygen/Data/Vertex.h>
@@ -167,9 +171,11 @@ auto GeometryAsset(const GeometryFixture& fixture) -> AssetSpec
   descriptor.lod_count = 2;
   // Every surface is drawn by default; the second casts no shadows.
   auto surfaces = std::vector<geometry::SurfaceDesc> {
-    { .surface_id = fixture.first_surface,
+    {
+      .surface_id = fixture.first_surface,
       .flags
-      = geometry::kSurfaceFlag_Visible | geometry::kSurfaceFlag_CastsShadows },
+      = geometry::kSurfaceFlag_Visible | geometry::kSurfaceFlag_CastsShadows,
+    },
   };
   if (fixture.first_surface != MakeSurfaceId(2)) {
     surfaces.push_back({
@@ -283,7 +289,7 @@ auto WriteOverrideScene(const std::filesystem::path& root,
 {
   namespace world = oxygen::data::pak::world;
   auto assignment = world::OverrideRecord {
-    .node_index = 0,
+    .target = { .node_index = 0 },
     .override_id = oxygen::data::schema::OverrideId::kGeometrySurfaceMaterial,
     .part_id = surface,
     .layout_revision = layout_revision,
@@ -325,7 +331,8 @@ auto WriteOverrideScene(const std::filesystem::path& root,
     },
   };
   auto node = world::NodeRecord {};
-  node.node_id = AssetKey::FromVirtualPath("/Content/Nodes/Root");
+  node.node_id
+    = oxygen::data::NodeId::FromStableIdentity("/Content/Nodes/Root");
   const auto renderable = world::RenderableRecord {
     .node_index = 0,
     .geometry_key = AssetKey::FromVirtualPath(kGeometryPath),
@@ -513,7 +520,7 @@ NOLINT_TEST_F(InspectorGeometryMetadataTest, ReportsSurfacesFromAPak)
         .sources = { oxygen::data::CookedSource {
           .kind = oxygen::data::CookedSourceKind::kLooseCooked,
           .path = loose,
-        } },
+        }, },
         .embed_browse_index = true,
       }));
   ASSERT_TRUE(built.has_value());

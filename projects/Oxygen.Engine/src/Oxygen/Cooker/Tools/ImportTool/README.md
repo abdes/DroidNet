@@ -136,7 +136,8 @@ Scene controls:
 - `--no-import-scene`
 - `--unit-policy <normalize|preserve|custom>`
 - `--unit-scale <float>`
-- `--no-bake-transforms`
+- `--bake-transforms` (bake node transforms into meshes; off by default, so
+  node pivots stay)
 - `--normals <none|preserve|generate|recalculate>`
 - `--tangents <none|preserve|generate|recalculate>`
 - `--prune-nodes <keep|drop-empty>`

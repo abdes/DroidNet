@@ -165,12 +165,13 @@ auto FbxCommand::BuildCommand() -> std::shared_ptr<clap::Command>
                       })
                       .Build();
 
-  auto no_bake_transforms = Option::WithKey("no-bake-transforms")
-                              .About("Disable transform baking into meshes")
-                              .Long("no-bake-transforms")
-                              .WithValue<bool>()
-                              .StoreTo(&no_bake_transforms_)
-                              .Build();
+  auto bake_transforms = Option::WithKey("bake-transforms")
+                           .About("Bake node transforms into meshes, moving "
+                                  "every pivot to the model's origin")
+                           .Long("bake-transforms")
+                           .WithValue<bool>()
+                           .StoreTo(&bake_transforms_)
+                           .Build();
 
   auto normals
     = Option::WithKey("normals")
@@ -213,7 +214,7 @@ auto FbxCommand::BuildCommand() -> std::shared_ptr<clap::Command>
     .WithOption(std::move(no_import_scene))
     .WithOption(std::move(unit_policy))
     .WithOption(std::move(unit_scale))
-    .WithOption(std::move(no_bake_transforms))
+    .WithOption(std::move(bake_transforms))
     .WithOption(std::move(normals))
     .WithOption(std::move(tangents))
     .WithOption(std::move(prune_nodes))
@@ -233,7 +234,7 @@ auto FbxCommand::Run() -> std::expected<void, std::error_code>
   settings.import_materials = !no_import_materials_;
   settings.import_geometry = !no_import_geometry_;
   settings.import_scene = !no_import_scene_;
-  settings.bake_transforms = !no_bake_transforms_;
+  settings.bake_transforms = bake_transforms_;
 
   return RunSceneImportJob(settings, ImportFormat::kFbx, *global_options_);
 }

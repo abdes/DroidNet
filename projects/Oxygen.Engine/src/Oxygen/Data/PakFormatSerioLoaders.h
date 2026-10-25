@@ -48,6 +48,17 @@ inline auto Load(AnyReader& reader, data::AssetKey& key) -> Result<void>
   return {};
 }
 
+template <typename Tag>
+auto Load(AnyReader& reader, data::StableId<Tag>& id) -> Result<void>
+{
+  auto pack = reader.ScopedAlignment(1);
+  auto bytes = data::StableIdBytes {};
+  CHECK_RESULT(
+    reader.ReadBlobInto(std::as_writable_bytes(std::span { bytes })));
+  id = data::StableId<Tag>::FromBytes(bytes);
+  return {};
+}
+
 inline auto Load(AnyReader& reader, data::pak::core::AssetHeader& header)
   -> Result<void>
 {
@@ -308,6 +319,30 @@ inline auto Load(AnyReader& reader, data::pak::world::SceneDataTable& table)
   return {};
 }
 
+inline auto Load(AnyReader& reader, data::pak::world::NodeRef& ref)
+  -> Result<void>
+{
+  auto pack = reader.ScopedAlignment(1);
+  CHECK_RESULT(reader.ReadInto(ref.node_index));
+  CHECK_RESULT(reader.ReadInto(ref.node_path));
+  return {};
+}
+
+inline auto Load(AnyReader& reader, data::pak::world::NodePathRecord& record)
+  -> Result<void>
+{
+  auto pack = reader.ScopedAlignment(1);
+  CHECK_RESULT(reader.ReadInto(record.first));
+  CHECK_RESULT(reader.ReadInto(record.count));
+  return {};
+}
+
+inline auto Load(AnyReader& reader, data::pak::world::NodePathElement& record)
+  -> Result<void>
+{
+  return reader.ReadInto(record.node_id);
+}
+
 inline auto Load(AnyReader& reader, data::pak::world::SceneAssetDesc& desc)
   -> Result<void>
 {
@@ -392,11 +427,9 @@ inline auto Load(AnyReader& reader, data::pak::world::OverrideRecord& record)
   -> Result<void>
 {
   auto pack = reader.ScopedAlignment(1);
-  CHECK_RESULT(reader.ReadInto(record.node_index));
+  CHECK_RESULT(reader.ReadInto(record.target));
   CHECK_RESULT(reader.ReadInto(record.override_id));
-  data::SurfaceId::ByteArray bytes {};
-  CHECK_RESULT(reader.ReadBlobInto(std::as_writable_bytes(std::span(bytes))));
-  record.part_id = data::SurfaceId::FromBytes(bytes);
+  CHECK_RESULT(reader.ReadInto(record.part_id));
   CHECK_RESULT(reader.ReadBlobInto(
     std::as_writable_bytes(std::span(record.layout_revision))));
   CHECK_RESULT(reader.ReadBlobInto(
@@ -493,6 +526,7 @@ inline auto Load(AnyReader& reader,
   data::pak::scripting::ScriptSlotRecord& record) -> Result<void>
 {
   auto pack = reader.ScopedAlignment(1);
+  CHECK_RESULT(reader.ReadInto(record.slot_id));
   CHECK_RESULT(reader.ReadInto(record.script_asset_key));
   CHECK_RESULT(reader.ReadInto(record.params_array_offset));
   CHECK_RESULT(reader.ReadInto(record.params_count));
@@ -524,6 +558,16 @@ inline auto Load(AnyReader& reader,
       > 1U) {
     return Err(std::errc::invalid_argument);
   }
+  return {};
+}
+
+inline auto Load(AnyReader& reader,
+  data::pak::scripting::ScriptParamOverrideRecord& record) -> Result<void>
+{
+  auto pack = reader.ScopedAlignment(1);
+  CHECK_RESULT(reader.ReadInto(record.target));
+  CHECK_RESULT(reader.ReadInto(record.slot_id));
+  CHECK_RESULT(reader.ReadInto(record.param));
   return {};
 }
 

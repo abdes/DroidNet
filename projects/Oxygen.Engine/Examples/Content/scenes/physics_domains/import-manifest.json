@@ -231,7 +231,7 @@
       "bindings": [
         {
           "node_index": 12,
-          "slot_id": "physics_domains_controller",
+          "slot_id": "06cd936e-6895-56bc-b6c8-c59f70564e97",
           "script_virtual_path": "/.cooked/Scripts/physics_domains_controller.oscript",
           "execution_order": 0,
           "params": [
@@ -283,7 +283,7 @@
       "bindings": [
         {
           "node_index": 12,
-          "slot_id": "physics_domains_controller",
+          "slot_id": "06cd936e-6895-56bc-b6c8-c59f70564e97",
           "script_virtual_path": "/.cooked/Scripts/physics_domains_controller.oscript",
           "execution_order": 0,
           "params": [
@@ -321,7 +321,7 @@
         },
         {
           "node_index": 21,
-          "slot_id": "physics_domains_benchmark_camera",
+          "slot_id": "0c211a92-ee5b-563b-a77e-0d65e0be4c61",
           "script_virtual_path": "/.cooked/Scripts/physics_domains_benchmark_camera.oscript",
           "execution_order": 1,
           "params": [

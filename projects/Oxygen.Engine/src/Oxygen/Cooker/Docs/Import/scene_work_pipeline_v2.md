@@ -507,11 +507,13 @@ item).
 
 - The adapter names nodes through the import's `NamingService`: a node keeps its
   authored name verbatim, an unnamed one takes `Node_<ordinal>`, and a duplicate
-  gets `_N` in traversal order, compared case-sensitively. Unique names keep
-  `node_id` unique within the model.
-- `node_id` derives from the scene's virtual path, as every key does
-  (`AssetKey::FromVirtualPath`): a model keys a node by `<scene>/<node name>`, a
-  scene descriptor by `<scene>/nodes/<index>`.
+  gets `_N` in traversal order, compared case-sensitively.
+- A model node's `node_id` derives from the model's source identity and the
+  node's anchor (`ModelNodeIdentity`): the path of authored names from the
+  model's roots, with same-named siblings numbered from the second
+  (`Body/Mirror[2]`) and a node the importer adds named by its owner and role
+  (`Body/Lamp#light`). Moving or renaming the model keeps every node ID.
+- A scene descriptor's node takes the `id` the descriptor gives it.
 
 ---
 

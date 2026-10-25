@@ -30,6 +30,7 @@
 #include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Data/PakFormat_world.h>
+#include <Oxygen/Data/SceneIds.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Writer.h>
 
@@ -45,8 +46,10 @@ namespace oxygen::content::pak::test {
   desc.header.asset_type = static_cast<uint8_t>(data::AssetType::kScene);
   desc.header.version = data::pak::world::kSceneAssetVersion;
   std::array<data::pak::world::NodeRecord, 2> nodes {};
-  nodes.front().node_id = MakeAssetKey(seed);
-  nodes.back().node_id = MakeAssetKey(static_cast<uint8_t>(seed + 2U));
+  nodes.front().node_id
+    = data::NodeId::FromStableIdentity("/test/node/" + std::to_string(seed));
+  nodes.back().node_id = data::NodeId::FromStableIdentity(
+    "/test/node/" + std::to_string(seed + 2U));
   nodes.front().parent_index = 0U;
   nodes.back().parent_index = 0U;
   desc.nodes = {
@@ -84,8 +87,10 @@ namespace oxygen::content::pak::test {
     component.slot_start_index = static_cast<uint32_t>(i);
     component.slot_count = 1U;
     auto& slot = slots.at(i);
-    slot.script_asset_key
-      = MakeAssetKey(static_cast<uint8_t>((seed * 10U) + i));
+    slot.slot_id = data::ScriptSlotId::FromStableIdentity(
+      "/test/slot/" + std::to_string(i));
+    slot.script_asset_key = MakeAssetKey(
+      static_cast<uint8_t>((static_cast<size_t>(seed) * 10U) + i));
     slot.params_array_offset = desc.script_slots.offset + sizeof(slots)
       + (i * sizeof(data::pak::scripting::ScriptParamRecord));
     slot.params_count = 1U;
@@ -120,7 +125,8 @@ namespace oxygen::content::pak::test {
   std::vector<AssetSpec> assets;
   std::vector<data::KeyReference> keys;
   for (uint8_t i = 0U; i < 2U; ++i) {
-    const auto key = MakeAssetKey(static_cast<uint8_t>((seed * 10U) + i));
+    const auto key = MakeAssetKey(
+      static_cast<uint8_t>((static_cast<size_t>(seed) * 10U) + i));
     keys.push_back({
       .key = key,
       .kind = data::KeyReferenceKind::kAsset,

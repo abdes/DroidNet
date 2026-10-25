@@ -38,7 +38,8 @@ NOLINT_TEST(ImportManifestSceneDescriptorTest,
   const auto path = temp.Path() / "context_roots" / "import_manifest.json";
   const auto root = path.parent_path();
   WriteText(root / "scene.json",
-    MakeCurrentSceneDescriptor(R"({"name":"Scene","nodes":[{"name":"Root"}]})")
+    MakeCurrentSceneDescriptor(
+      R"({"name":"Scene","nodes":[{"id":"00000000-0000-4000-8000-000000000001","name":"Root"}]})")
       .dump());
   WriteText(path, R"({
     "version":1,"output":"out",
@@ -75,7 +76,8 @@ NOLINT_TEST(ImportManifestSceneDescriptorTest, BaseContextRootsPrecedeJobRoots)
   const auto path = temp.Path() / "base_roots" / "import_manifest.json";
   const auto root = path.parent_path();
   WriteText(root / "scene.json",
-    MakeCurrentSceneDescriptor(R"({"name":"Scene","nodes":[{"name":"Root"}]})")
+    MakeCurrentSceneDescriptor(
+      R"({"name":"Scene","nodes":[{"id":"00000000-0000-4000-8000-000000000001","name":"Root"}]})")
       .dump());
   WriteText(path, R"({
     "version":1,"output":"out",
@@ -150,8 +152,8 @@ NOLINT_TEST(ImportManifestSceneDescriptorTest,
       "name": "DemoScene",
       "content_hashing": false,
       "nodes": [
-        { "name": "Root" },
-        { "name": "MeshNode", "parent": 0 }
+        { "id": "00000000-0000-4000-8000-000000000001", "name": "Root" },
+        { "id": "00000000-0000-4000-8000-000000000002", "name": "MeshNode", "parent": 0 }
       ],
       "renderables": [
         { "node": 1, "geometry_ref": "/.cooked/Geometry/cube.ogeo" }
@@ -220,7 +222,7 @@ NOLINT_TEST(ImportManifestSceneDescriptorTest,
   WriteText(descriptor_path,
     MakeCurrentSceneDescriptor(R"({
       "name": "DemoScene",
-      "nodes": [ { "name": "Root" } ]
+      "nodes": [ { "id": "00000000-0000-4000-8000-000000000001", "name": "Root" } ]
     })")
       .dump());
 

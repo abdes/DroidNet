@@ -1,7 +1,9 @@
 {
-  "version": 14,
+  "version": 15,
   "name": "camera_switch",
-  "starting_camera": 2,
+  "starting_camera": {
+    "node": 2
+  },
   "starting_input_contexts": [
     {
       "context_ref": "/.cooked/Input/camera_switch.input/CameraSwitchPlay.oimap",
@@ -9,9 +11,17 @@
     }
   ],
   "nodes": [
-    { "name": "Root" },
-    { "name": "Cube", "parent": 0 },
     {
+      "id": "650fcc09-b59d-5e35-8d62-14a04206380c",
+      "name": "Root"
+    },
+    {
+      "id": "bf2f69f0-6b24-57c9-89ae-82be9a5f8e3b",
+      "name": "Cube",
+      "parent": 0
+    },
+    {
+      "id": "afa1b315-5689-5ab1-a3c8-c99466622e64",
       "name": "FrontCamera",
       "parent": 0,
       "transform": {
@@ -20,6 +30,7 @@
       }
     },
     {
+      "id": "4b893b7e-c45f-5708-9c9a-c633582b6037",
       "name": "SideCamera",
       "parent": 0,
       "transform": {
@@ -28,6 +39,7 @@
       }
     },
     {
+      "id": "698a0e4f-c88a-522b-9b5d-edf967da996e",
       "name": "Sun",
       "parent": 0,
       "transform": {
@@ -35,7 +47,11 @@
         "rotation": [0.5, 0.0, 0.0, 0.8660254]
       }
     },
-    { "name": "Controller", "parent": 0 }
+    {
+      "id": "fdc700ce-a6a8-556b-ac10-e635fc4b5485",
+      "name": "Controller",
+      "parent": 0
+    }
   ],
   "renderables": [
     {
@@ -71,7 +87,9 @@
           "affects_world": true,
           "color_rgb": [1.0, 0.98, 0.92],
           "casts_shadows": true,
-          "shadow": { "bias": 0.03 }
+          "shadow": {
+            "bias": 0.03
+          }
         },
         "angular_size_radians": 0.00935,
         "atmosphere_light_slot": 1,

@@ -58,19 +58,23 @@
       "bindings": [
         {
           "node_index": 5,
-          "slot_id": "camera_switch",
+          "slot_id": "48a16ecd-d2a0-579a-a929-47eee324728d",
           "script_virtual_path": "/.cooked/Scripts/camera_switch.oscript",
           "execution_order": 0,
           "params": [
             {
               "key": "first_camera",
               "type": "node",
-              "value": 2
+              "value": {
+                "node": 2
+              }
             },
             {
               "key": "second_camera",
               "type": "node",
-              "value": 3
+              "value": {
+                "node": 3
+              }
             },
             {
               "key": "play_context",

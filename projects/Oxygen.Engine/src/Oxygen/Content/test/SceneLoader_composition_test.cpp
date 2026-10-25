@@ -11,6 +11,7 @@
 #include <optional>
 #include <span>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 #include <Oxygen/Base/Span.h>
@@ -24,6 +25,7 @@
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/Data/SceneAsset.h>
+#include <Oxygen/Data/SceneIds.h>
 #include <Oxygen/Data/SceneRecordDefaults.h>
 #include <Oxygen/Data/SourceOrigin.h>
 #include <Oxygen/Serio/MemoryStream.h>
@@ -100,7 +102,7 @@ auto MakeComposedScene(const CompositionInput& input) -> std::vector<std::byte>
     .entry_size = sizeof(world::NodeRecord),
   };
   descriptor.flags = input.flags;
-  descriptor.starting_camera = input.starting_camera;
+  descriptor.starting_camera.node_index = input.starting_camera;
   auto offset
     = descriptor.nodes.offset + (kNodeCount * sizeof(world::NodeRecord));
   const auto strings = oxygen::data::DescriptorStringsBuilder {};
@@ -121,6 +123,8 @@ auto MakeComposedScene(const CompositionInput& input) -> std::vector<std::byte>
   Append(bytes, descriptor);
   for (world::SceneNodeIndexT index = 0; index < kNodeCount; ++index) {
     auto node = world::NodeRecord {};
+    node.node_id = oxygen::data::NodeId::FromStableIdentity(
+      "/test/node/" + std::to_string(index));
     node.parent_index = 0U;
     Append(bytes, node);
   }
@@ -181,7 +185,7 @@ NOLINT_TEST(SceneCompositionLoadTest, PreservesInstancesAndStartState)
   ASSERT_NE(scene, nullptr);
   EXPECT_FALSE(scene->IsModelScene());
   EXPECT_EQ(scene->GetStartingCamera(),
-    std::optional<world::SceneNodeIndexT> { kCameraNode });
+    std::optional { world::NodeRef { .node_index = kCameraNode } });
   const auto instances = scene->GetComponents<world::SceneInstanceRecord>();
   ASSERT_EQ(instances.size(), 1U);
   EXPECT_EQ(CheckedAt(instances, 0).node_index, 1U);

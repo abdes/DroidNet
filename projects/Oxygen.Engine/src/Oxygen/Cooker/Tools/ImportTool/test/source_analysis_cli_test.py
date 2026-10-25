@@ -506,7 +506,12 @@ class CapturedInputBatchCliTests(unittest.TestCase):
                 {
                     "version": SCENE_VERSION,
                     "name": "TriangleScene",
-                    "nodes": [{"name": "Triangle"}],
+                    "nodes": [
+                        {
+                            "id": "6f0d2c4e-8a31-4b7d-9e52-1c3a7b9d0e44",
+                            "name": "Triangle",
+                        }
+                    ],
                     "renderables": [
                         {
                             "node": 0,

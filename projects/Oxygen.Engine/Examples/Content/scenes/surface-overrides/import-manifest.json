@@ -180,124 +180,170 @@
       "bindings": [
         {
           "node_index": 21,
-          "slot_id": "SurfaceOverridesScript",
+          "slot_id": "c3f05628-a906-5823-a5ef-18ca95536163",
           "script_virtual_path": "/.cooked/Scripts/surface_overrides.oscript",
           "execution_order": 0,
           "params": [
             {
               "key": "lamp_asset",
               "type": "node",
-              "value": 2
+              "value": {
+                "node": 2
+              }
             },
             {
               "key": "lamp_scene_material",
               "type": "node",
-              "value": 3
+              "value": {
+                "node": 3
+              }
             },
             {
               "key": "lamp_shade_hidden",
               "type": "node",
-              "value": 4
+              "value": {
+                "node": 4
+              }
             },
             {
               "key": "lamp_metal_no_shadow",
               "type": "node",
-              "value": 5
+              "value": {
+                "node": 5
+              }
             },
             {
               "key": "pot_asset",
               "type": "node",
-              "value": 6
+              "value": {
+                "node": 6
+              }
             },
             {
               "key": "pot_scene_materials",
               "type": "node",
-              "value": 7
+              "value": {
+                "node": 7
+              }
             },
             {
               "key": "pot_runtime",
               "type": "node",
-              "value": 8
+              "value": {
+                "node": 8
+              }
             },
             {
               "key": "pillar_asset",
               "type": "node",
-              "value": 9
+              "value": {
+                "node": 9
+              }
             },
             {
               "key": "pillar_cast_override",
               "type": "node",
-              "value": 10
+              "value": {
+                "node": 10
+              }
             },
             {
               "key": "ghost_asset",
               "type": "node",
-              "value": 11
+              "value": {
+                "node": 11
+              }
             },
             {
               "key": "ghost_visible_override",
               "type": "node",
-              "value": 12
+              "value": {
+                "node": 12
+              }
             },
             {
               "key": "lod_asset",
               "type": "node",
-              "value": 13
+              "value": {
+                "node": 13
+              }
             },
             {
               "key": "lod_fixed",
               "type": "node",
-              "value": 14
+              "value": {
+                "node": 14
+              }
             },
             {
               "key": "lod_sse",
               "type": "node",
-              "value": 15
+              "value": {
+                "node": 15
+              }
             },
             {
               "key": "lod_material",
               "type": "node",
-              "value": 16
+              "value": {
+                "node": 16
+              }
             },
             {
               "key": "lamp_scene_shade_hidden",
               "type": "node",
-              "value": 22
+              "value": {
+                "node": 22
+              }
             },
             {
               "key": "lamp_scene_metal_no_shadow",
               "type": "node",
-              "value": 23
+              "value": {
+                "node": 23
+              }
             },
             {
               "key": "pillar_scene_cast",
               "type": "node",
-              "value": 24
+              "value": {
+                "node": 24
+              }
             },
             {
               "key": "ghost_scene_visible",
               "type": "node",
-              "value": 25
+              "value": {
+                "node": 25
+              }
             },
             {
               "key": "lod_scene_fixed",
               "type": "node",
-              "value": 26
+              "value": {
+                "node": 26
+              }
             },
             {
               "key": "lod_scene_sse",
               "type": "node",
-              "value": 27
+              "value": {
+                "node": 27
+              }
             },
             {
               "key": "play_lamp",
               "type": "node",
-              "value": 17
+              "value": {
+                "node": 17
+              }
             },
             {
               "key": "play_lod",
               "type": "node",
-              "value": 18
+              "value": {
+                "node": 18
+              }
             },
             {
               "key": "shade_red",

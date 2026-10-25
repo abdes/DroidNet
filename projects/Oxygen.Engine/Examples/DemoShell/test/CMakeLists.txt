@@ -6,11 +6,7 @@
 
 include(GTestHelpers)
 
-m_gtest_program(
-  SceneLoaderServicePhase4
-  SOURCES
-    "SceneLoaderService_phase4_test.cpp"
-)
+m_gtest_program(SceneLoaderService SOURCES "SceneLoaderService_test.cpp")
 
 m_gtest_program(SettingsService SOURCES "SettingsService_test.cpp")
 m_gtest_program(FileBrowser SOURCES "FileBrowser_test.cpp")

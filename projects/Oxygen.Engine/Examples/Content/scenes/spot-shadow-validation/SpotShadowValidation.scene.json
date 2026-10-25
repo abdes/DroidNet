@@ -1,8 +1,9 @@
 {
-  "version": 14,
+  "version": 15,
   "name": "SpotShadowValidation",
   "nodes": [
     {
+      "id": "72780600-ba71-5862-ba6d-44679039ca7b",
       "name": "Root",
       "flags": {
         "visible": "shown",
@@ -12,6 +13,7 @@
       }
     },
     {
+      "id": "847594ae-479c-5a76-9acf-f00d838ce6ac",
       "name": "FloorReceiver",
       "parent": 0,
       "flags": {
@@ -27,6 +29,7 @@
       }
     },
     {
+      "id": "234279c6-876d-514f-a6f8-645405f74b5e",
       "name": "CenterCaster",
       "parent": 0,
       "flags": {
@@ -42,6 +45,7 @@
       }
     },
     {
+      "id": "2756c91a-a0c0-52f0-97f9-fc5b40d85463",
       "name": "TallCaster",
       "parent": 0,
       "flags": {
@@ -57,6 +61,7 @@
       }
     },
     {
+      "id": "6cc15961-f5a8-54e2-b66d-23c981c2f389",
       "name": "SpotKey",
       "parent": 0,
       "flags": {
@@ -73,6 +78,7 @@
       }
     },
     {
+      "id": "32aaca50-5644-535b-ac5b-0b72333d7fe1",
       "name": "MainCamera",
       "parent": 0,
       "flags": {

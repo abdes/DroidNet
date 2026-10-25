@@ -52,7 +52,7 @@
       "bindings": [
         {
           "node_index": 1,
-          "slot_id": "SceneProcCubesScript",
+          "slot_id": "e173ea63-4864-53de-8c04-ae89e2ac38e1",
           "script_virtual_path": "/.cooked/Scripts/proc_cubes.oscript",
           "execution_order": 0,
           "params": [

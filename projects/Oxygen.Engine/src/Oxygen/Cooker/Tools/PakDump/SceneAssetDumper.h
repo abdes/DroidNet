@@ -10,7 +10,6 @@
 #include <cstddef>
 #include <cstring>
 #include <iostream>
-#include <limits>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -85,13 +84,9 @@ public:
       scene->GetHeader(), scene->GetAssetName(), 4);
 
     const auto nodes_span = scene->GetNodes();
-    const uint32_t node_count = static_cast<uint32_t>(nodes_span.size());
-
-    std::vector<NodeRecord> nodes;
-    nodes.resize(node_count);
-    for (uint32_t i = 0; i < node_count; ++i) {
-      std::memcpy(&nodes.at(i), nodes_span.data() + i, sizeof(NodeRecord));
-    }
+    const auto nodes
+      = std::vector<NodeRecord>(nodes_span.begin(), nodes_span.end());
+    const uint32_t node_count = static_cast<uint32_t>(nodes.size());
 
     const uint32_t node_limit
       = ctx.verbose ? node_count : (std::min)(node_count, 16U);
@@ -105,12 +100,8 @@ public:
                   << " (parent=" << nodes.at(i).parent_index << ")\n";
 
         if (ctx.verbose) {
-          oxygen::data::AssetKey node_id {};
-          std::memcpy(&node_id,
-            reinterpret_cast<const std::byte*>(&nodes.at(i))
-              + offsetof(NodeRecord, node_id),
-            sizeof(node_id));
-          PrintUtils::Field("Node ID", oxygen::data::to_string(node_id), 10);
+          PrintUtils::Field(
+            "Node ID", oxygen::data::to_string(nodes.at(i).node_id), 10);
           PrintUtils::Field("Flags",
             asset_dump_helpers::ToHexString(nodes.at(i).node_flags), 10);
           PrintUtils::Field("Inherited Flags",
@@ -148,15 +139,20 @@ public:
       }
 
       for (auto& c : children) {
-        std::sort(c.begin(), c.end());
+        std::ranges::sort(c);
       }
-      std::sort(roots.begin(), roots.end());
+      std::ranges::sort(roots);
 
       std::vector<bool> visited;
       visited.resize(node_count, false);
 
-      const auto PrintSubtree = [&](auto&& self, const uint32_t node_index,
-                                  const uint32_t depth) -> void {
+      struct TreeVisit {
+        uint32_t node_index;
+        uint32_t depth;
+      };
+      const auto PrintSubtree
+        = [&](auto&& self, const TreeVisit visit) -> void {
+        const auto [node_index, depth] = visit;
         if (node_index >= nodes.size()) {
           return;
         }
@@ -174,12 +170,14 @@ public:
 
         fmt::print("{:>{}}[{}] {}\n", "", indent, node_index, pretty_name);
         for (const auto child_index : children.at(node_index)) {
-          self(self, child_index, depth + 1);
+          self(
+            self, TreeVisit { .node_index = child_index, .depth = depth + 1 });
         }
       };
 
       for (const auto root_index : roots) {
-        PrintSubtree(PrintSubtree, root_index, 0);
+        PrintSubtree(
+          PrintSubtree, TreeVisit { .node_index = root_index, .depth = 0 });
       }
 
       std::cout << "\n";
@@ -219,7 +217,7 @@ public:
       const auto policies
         = scene->GetComponents<oxygen::data::pak::geometry::LodPolicyRecord>();
       for (const auto& record : scene->GetComponents<OverrideRecord>()) {
-        if (record.node_index != node) {
+        if (record.target.node_index != node) {
           continue;
         }
         const auto* property
@@ -325,8 +323,7 @@ public:
       std::cout << "\n";
 
       for (size_t i = 0; i < lights.size(); ++i) {
-        PointLightRecord rec {};
-        std::memcpy(&rec, lights.data() + i, sizeof(PointLightRecord));
+        const auto& rec = oxygen::base::CheckedAt(lights, i);
 
         std::cout << "      [" << i << "] node=" << rec.node_index << "\n";
         PrintUtils::Field("Range", rec.range, 10);
@@ -346,8 +343,7 @@ public:
       std::cout << "\n";
 
       for (size_t i = 0; i < lights.size(); ++i) {
-        SpotLightRecord rec {};
-        std::memcpy(&rec, lights.data() + i, sizeof(SpotLightRecord));
+        const auto& rec = oxygen::base::CheckedAt(lights, i);
 
         std::cout << "      [" << i << "] node=" << rec.node_index << "\n";
         PrintUtils::Field("Range", rec.range, 10);

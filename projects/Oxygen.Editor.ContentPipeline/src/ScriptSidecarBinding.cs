@@ -6,6 +6,10 @@ using System.Text.Json.Serialization;
 
 namespace Oxygen.Editor.ContentPipeline;
 
+// These types are very tightly coupled, so they are kept together in one file
+// to avoid unnecessary file proliferation.
+#pragma warning disable SA1402 // File may only contain a single type
+
 /// <summary>
 /// One script slot of a scene, as the cooker's script sidecar job takes it.
 /// </summary>
@@ -25,11 +29,19 @@ public sealed record ScriptSidecarBinding(
 /// One parameter value of a script slot.
 /// </summary>
 /// <param name="Key">The parameter name.</param>
-/// <param name="Type">The type: <c>bool</c>, <c>int32</c>, <c>float</c>, <c>string</c>, <c>vec2</c>, <c>vec3</c>,
+/// <param name="Type">The type: <see langword="bool"/>, <c>int32</c>, <see langword="float"/>, <see langword="string"/>, <c>vec2</c>, <c>vec3</c>,
 /// <c>vec4</c>, <c>asset</c> or <c>node</c>.</param>
 /// <param name="Value">The value: a boolean, an integer, a number, a string, an array of numbers, an asset's virtual
-/// path, or a node index.</param>
+/// path, or a <see cref="ScriptSidecarNodeRef"/>.</param>
 public sealed record ScriptSidecarParam(
     [property: JsonPropertyName("key")] string Key,
     [property: JsonPropertyName("type")] string Type,
     [property: JsonPropertyName("value")] object Value);
+
+/// <summary>
+/// A node value of a script parameter, as the cooked scene names a node.
+/// </summary>
+/// <param name="Node">The node's index in the cooked scene.</param>
+public sealed record ScriptSidecarNodeRef([property: JsonPropertyName("node")] uint Node);
+
+#pragma warning restore SA1402 // File may only contain a single type

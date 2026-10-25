@@ -4,14 +4,12 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
-#include <iterator>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -24,16 +22,13 @@
 #include "Fixtures/LooseCookedTestWriter.h"
 
 #include <Oxygen/Base/ObserverPtr.h>
-#include <Oxygen/Base/Span.h>
 #include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Content/Loaders/SceneLoader.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
-#include <Oxygen/Data/GeometryAsset.h>
-#include <Oxygen/Data/InputMappingContextAsset.h>
 #include <Oxygen/Data/PakFormat.h>
-#include <Oxygen/Data/PhysicsSceneAsset.h>
 #include <Oxygen/Data/SceneAsset.h>
+#include <Oxygen/Data/SceneIds.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/Run.h>
@@ -52,12 +47,7 @@ using oxygen::content::AssetLoaderConfig;
 using oxygen::content::testing::AssetLoaderBasicTest;
 using oxygen::content::testing::LooseCookedLayout;
 
-using oxygen::data::GeometryAsset;
-using oxygen::data::InputMappingContextAsset;
-using oxygen::data::PhysicsSceneAsset;
 using oxygen::data::SceneAsset;
-
-using oxygen::base::CheckedAt;
 
 namespace {
 
@@ -86,7 +76,7 @@ auto WriteLooseCookedSceneWithSingleRootNode(
   desc.header.strings.size = sizeof(kStrings) - 1;
 
   NodeRecord node {};
-  node.node_id = scene_key;
+  node.node_id = oxygen::data::NodeId::FromStableIdentity("/test/root");
   node.scene_name_offset = 1; // "root"
   node.parent_index = 0; // root parent is self
   node.node_flags = 0;
@@ -225,7 +215,9 @@ NOLINT_TEST(
   auto bytes
     = std::vector<std::byte>(environment_offset + environment.byte_size);
   std::memcpy(bytes.data(), &descriptor, sizeof(descriptor));
-  const world::NodeRecord node {};
+  const auto node = world::NodeRecord {
+    .node_id = oxygen::data::NodeId::FromStableIdentity("/test/root"),
+  };
   std::memcpy(std::span(bytes).subspan(descriptor.nodes.offset).data(), &node,
     sizeof(node));
   std::memcpy(std::span(bytes).subspan(environment_offset).data(), &environment,

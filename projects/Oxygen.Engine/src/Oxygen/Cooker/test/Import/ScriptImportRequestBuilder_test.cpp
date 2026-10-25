@@ -65,7 +65,7 @@ auto MakeInlineSidecarSettings() -> ScriptingSidecarImportSettings
   auto settings = MakeValidSidecarSettings();
   settings.source_path.clear();
   settings.inline_bindings_json
-    = R"({"bindings":[{"node_index":0,"slot_id":"main","script_virtual_path":"/Scripts/test.oscript"}]})";
+    = R"({"bindings":[{"node_index":0,"slot_id":"00000000-0000-4000-8000-00000000000a","script_virtual_path":"/Scripts/test.oscript"}]})";
   return settings;
 }
 
@@ -255,7 +255,7 @@ NOLINT_TEST(ScriptImportRequestBuilderTest,
   auto settings = MakeValidSidecarSettings();
   settings.source_path.clear();
   settings.inline_bindings_json
-    = R"([{"node_index":0,"slot_id":"main","script_virtual_path":"/Scripts/test.oscript"}])";
+    = R"([{"node_index":0,"slot_id":"00000000-0000-4000-8000-00000000000a","script_virtual_path":"/Scripts/test.oscript"}])";
   std::ostringstream errors;
 
   const auto request = BuildScriptingSidecarRequest(settings, errors);

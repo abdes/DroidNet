@@ -41,7 +41,7 @@ internal sealed partial class SceneDescriptorGeneratorTests
 
         using var descriptor = await this.GenerateDescriptorAsync(workspace, scene).ConfigureAwait(false);
 
-        _ = descriptor.RootElement.GetProperty("starting_camera").GetInt32().Should().Be(2);
+        _ = descriptor.RootElement.GetProperty("starting_camera").GetProperty("node").GetInt32().Should().Be(2);
     }
 
     /// <summary>An unset starting camera cooks as the first camera in hierarchy order, which the editor shows as
@@ -67,7 +67,7 @@ internal sealed partial class SceneDescriptorGeneratorTests
 
         using var descriptor = await this.GenerateDescriptorAsync(workspace, scene).ConfigureAwait(false);
 
-        _ = descriptor.RootElement.GetProperty("starting_camera").GetInt32().Should().Be(1);
+        _ = descriptor.RootElement.GetProperty("starting_camera").GetProperty("node").GetInt32().Should().Be(1);
     }
 
     /// <summary>A starting camera that was deleted fails the cook with Go To Property on the field.</summary>

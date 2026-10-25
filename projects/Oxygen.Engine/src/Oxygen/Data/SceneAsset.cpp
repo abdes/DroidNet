@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -31,6 +32,7 @@
 #include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/Data/SceneAsset.h>
+#include <Oxygen/Data/SceneIds.h>
 #include <Oxygen/Data/Schema/Generated.SceneComponents.h>
 #include <Oxygen/Data/SourceOrigin.h>
 #include <Oxygen/Data/SurfaceId.h>
@@ -401,6 +403,21 @@ auto SceneAsset::ParseAndValidate() -> void
         && entry.table.entry_size != sizeof(pak::world::SpotLightRecord)) {
         throw std::runtime_error("SceneAsset spot light record size mismatch");
       }
+      if (type == ComponentType::kNodePath
+        && entry.table.entry_size != sizeof(pak::world::NodePathRecord)) {
+        throw std::runtime_error("SceneAsset node path record size mismatch");
+      }
+      if (type == ComponentType::kNodePathElement
+        && entry.table.entry_size != sizeof(pak::world::NodePathElement)) {
+        throw std::runtime_error(
+          "SceneAsset node path element record size mismatch");
+      }
+      if (type == ComponentType::kScriptParamOverride
+        && entry.table.entry_size
+          != sizeof(pak::scripting::ScriptParamOverrideRecord)) {
+        throw std::runtime_error(
+          "SceneAsset script parameter change record size mismatch");
+      }
 
       if (type == ComponentType::kLocalFogVolume) {
         // Decoding validates each record's values.
@@ -485,8 +502,11 @@ auto SceneAsset::ParseAndValidate() -> void
     }
   }
 
-  if (desc_.starting_camera != pak::world::kNoStartingCamera
-    && !camera_nodes.contains(desc_.starting_camera)) {
+  // An instanced starting camera is checked when the scene is composed.
+  const auto& camera = desc_.starting_camera;
+  if (camera.node_index != pak::world::kNoStartingCamera
+    && camera.node_path == pak::world::kNoNodePath
+    && !camera_nodes.contains(camera.node_index)) {
     throw std::runtime_error("SceneAsset starting camera is not a camera node");
   }
 
@@ -508,6 +528,9 @@ auto SceneAsset::ParseAndValidate() -> void
     for (const auto& slot : ReadScriptSlots(0U, desc_.script_slots.count)) {
       if (slot.script_asset_key.IsNil()) {
         throw std::runtime_error("Scene script slot has no script asset");
+      }
+      if (slot.slot_id.IsNil()) {
+        throw std::runtime_error("Scene script slot has no slot ID");
       }
       const auto params_size = uint64_t { slot.params_count }
         * sizeof(pak::scripting::ScriptParamRecord);
@@ -543,6 +566,14 @@ auto SceneAsset::ParseAndValidate() -> void
     if (component.slot_count != 0U) {
       script_ranges.emplace_back(component.slot_start_index,
         component.slot_start_index + component.slot_count);
+    }
+    // A change of a slot's parameter names the slot by its ID.
+    std::unordered_set<ScriptSlotId> slot_ids;
+    for (const auto& slot :
+      ReadScriptSlots(component.slot_start_index, component.slot_count)) {
+      if (!slot_ids.insert(slot.slot_id).second) {
+        throw std::runtime_error("Scene node has two script slots of one ID");
+      }
     }
   }
   std::ranges::sort(script_ranges);
@@ -661,10 +692,135 @@ auto SceneAsset::ParseAndValidate() -> void
         "SceneAsset environment block contains trailing bytes");
     }
   }
-  ValidateOverrides();
+  std::unordered_set<pak::world::SceneNodeIndexT> instance_roots;
+  for (const auto& instance :
+    GetComponents<pak::world::SceneInstanceRecord>()) {
+    instance_roots.insert(instance.node_index);
+  }
+  ValidateNodeIdentity();
+  if (camera.node_index != pak::world::kNoStartingCamera) {
+    ValidateNodeRef(camera, instance_roots, "starting camera");
+  }
+  ValidateScriptNodes(instance_roots);
+  ValidateOverrides(instance_roots);
 }
 
-auto SceneAsset::ValidateOverrides() const -> void
+auto SceneAsset::GetNodePath(const pak::world::NodeRef& ref) const
+  -> std::vector<NodeId>
+{
+  if (ref.node_path == pak::world::kNoNodePath) {
+    return {};
+  }
+  const auto paths = GetComponents<pak::world::NodePathRecord>();
+  const auto elements = GetComponents<pak::world::NodePathElement>();
+  const auto& path = oxygen::base::CheckedAt(paths, ref.node_path);
+  std::vector<NodeId> ids;
+  ids.reserve(path.count);
+  for (const auto& element : elements.subspan(path.first, path.count)) {
+    ids.push_back(element.node_id);
+  }
+  return ids;
+}
+
+auto SceneAsset::ValidateNodeIdentity() const -> void
+{
+  // Composition finds nodes by ID: an ID names one node of the scene.
+  std::unordered_set<NodeId> ids;
+  for (const auto& node : GetNodes()) {
+    if (node.node_id.IsNil() || !ids.insert(node.node_id).second) {
+      throw std::runtime_error(
+        "SceneAsset node IDs must be set and unique in the scene");
+    }
+  }
+  const auto elements = GetComponents<pak::world::NodePathElement>();
+  for (const auto& path : GetComponents<pak::world::NodePathRecord>()) {
+    if (path.count == 0U || path.first > elements.size()
+      || path.count > elements.size() - path.first) {
+      throw std::runtime_error("SceneAsset node path range is invalid");
+    }
+  }
+  if (std::ranges::any_of(
+        elements, [](const pak::world::NodePathElement& element) -> bool {
+          return element.node_id.IsNil();
+        })) {
+    throw std::runtime_error("SceneAsset node path element has no node ID");
+  }
+}
+
+auto SceneAsset::ValidateNodeRef(const pak::world::NodeRef& ref,
+  const std::unordered_set<pak::world::SceneNodeIndexT>& instance_roots,
+  const std::string_view what) const -> void
+{
+  if (ref.node_index >= desc_.nodes.count) {
+    throw std::runtime_error(
+      "SceneAsset " + std::string(what) + " names a node out of range");
+  }
+  if (ref.node_path == pak::world::kNoNodePath) {
+    return;
+  }
+  if (ref.node_path >= GetComponents<pak::world::NodePathRecord>().size()) {
+    throw std::runtime_error(
+      "SceneAsset " + std::string(what) + " names a node path out of range");
+  }
+  if (!instance_roots.contains(ref.node_index)) {
+    throw std::runtime_error("SceneAsset " + std::string(what)
+      + " has a node path below a node that is not an instance root");
+  }
+}
+
+auto SceneAsset::ValidateScriptNodes(
+  const std::unordered_set<pak::world::SceneNodeIndexT>& instance_roots) const
+  -> void
+{
+  using pak::scripting::ScriptParamType;
+  const auto validate_param
+    = [&](const pak::scripting::ScriptParamRecord& param) -> void {
+    if (param.type == ScriptParamType::kNode
+      && param.value.as_node.node_index != pak::scripting::kUnsetNodeParam) {
+      ValidateNodeRef(param.value.as_node, instance_roots, "node parameter");
+    }
+  };
+  if (desc_.script_slots.count != 0U) {
+    for (const auto& slot : ReadScriptSlots(0U, desc_.script_slots.count)) {
+      for (const auto& param : ReadScriptParameters(slot)) {
+        validate_param(param);
+      }
+    }
+  }
+
+  const pak::scripting::ScriptParamOverrideRecord* previous = nullptr;
+  for (const auto& change :
+    GetComponents<pak::scripting::ScriptParamOverrideRecord>()) {
+    if (change.target.node_path == pak::world::kNoNodePath) {
+      throw std::runtime_error(
+        "SceneAsset script parameter change must name an instanced node");
+    }
+    ValidateNodeRef(change.target, instance_roots, "script parameter change");
+    if (change.slot_id.IsNil() || !strings_.TryGet(change.param.key_offset)
+      || (change.param.type == ScriptParamType::kString
+        && !strings_.TryGet(change.param.value.as_string_offset))) {
+      throw std::runtime_error(
+        "SceneAsset script parameter change has no slot or key");
+    }
+    validate_param(change.param);
+    if (previous != nullptr) {
+      const auto previous_key
+        = strings_.TryGet(previous->param.key_offset).value_or("");
+      const auto key = strings_.TryGet(change.param.key_offset).value_or("");
+      if (std::tie(previous->target, previous->slot_id, previous_key)
+        >= std::tie(change.target, change.slot_id, key)) {
+        throw std::runtime_error(
+          "SceneAsset script parameter changes must be sorted and unique per "
+          "node, slot and key");
+      }
+    }
+    previous = &change;
+  }
+}
+
+auto SceneAsset::ValidateOverrides(
+  const std::unordered_set<pak::world::SceneNodeIndexT>& instance_roots) const
+  -> void
 {
   std::unordered_set<pak::world::SceneNodeIndexT> renderable_nodes;
   for (const auto& renderable : GetComponents<pak::world::RenderableRecord>()) {
@@ -678,20 +834,23 @@ auto SceneAsset::ValidateOverrides() const -> void
     if (property == nullptr) {
       throw std::runtime_error("SceneAsset override names an unknown property");
     }
-    // A node of this scene stores only its overrides of its asset's values;
-    // every other value lives in the node's own records.
-    if (!property->asset_sourced) {
-      throw std::runtime_error(
-        "SceneAsset override names a property the node's records hold");
-    }
-    // Every asset-sourced property belongs to the geometry component today; a
-    // property of another component needs its own owner check here.
-    if (property->component_kind != std::string_view { "geometry" }) {
-      throw std::runtime_error(
-        "SceneAsset override component is not supported");
-    }
-    if (!renderable_nodes.contains(record.node_index)) {
-      throw std::runtime_error("SceneAsset override node has no renderable");
+    ValidateNodeRef(record.target, instance_roots, "override");
+    if (record.target.node_path == pak::world::kNoNodePath) {
+      // A node of this scene stores only its overrides of its asset's values;
+      // every other value lives in the node's own records.
+      if (!property->asset_sourced) {
+        throw std::runtime_error(
+          "SceneAsset override names a property the node's records hold");
+      }
+      // Every asset-sourced property belongs to the geometry component
+      // today; a property of another component needs its own owner check.
+      if (property->component_kind != std::string_view { "geometry" }) {
+        throw std::runtime_error(
+          "SceneAsset override component is not supported");
+      }
+      if (!renderable_nodes.contains(record.target.node_index)) {
+        throw std::runtime_error("SceneAsset override node has no renderable");
+      }
     }
     switch (property->part_kind) {
     case schema::PartKind::kNone:
@@ -708,11 +867,10 @@ auto SceneAsset::ValidateOverrides() const -> void
       break;
     }
     if (previous != nullptr
-      && std::tie(
-           previous->node_index, previous->override_id, previous->part_id)
-        >= std::tie(record.node_index, record.override_id, record.part_id)) {
+      && std::tie(previous->target, previous->override_id, previous->part_id)
+        >= std::tie(record.target, record.override_id, record.part_id)) {
       throw std::runtime_error(
-        "SceneAsset overrides must be sorted and unique per node, property "
+        "SceneAsset overrides must be sorted and unique per target, property "
         "and part");
     }
     previous = &record;
@@ -733,18 +891,46 @@ auto SceneAsset::ValidateOverrideValue(const schema::OverrideProperty& property,
     return std::ranges::all_of(bytes.subspan(used),
       [](const std::byte byte) -> bool { return byte == std::byte { 0 }; });
   };
-  switch (property.type) {
-  case schema::ValueType::kBool:
+  // The range of a change of a wired property is checked when it is applied,
+  // with the record it patches.
+  const auto finite = [](const std::span<const float> values) -> bool {
+    return std::ranges::all_of(
+      values, [](const float number) -> bool { return std::isfinite(number); });
+  };
+  switch (property.member) {
+  case schema::ValueMember::kBool:
     if (value.as_bool > 1U || !unused_bytes_are_zero(sizeof(value.as_bool))) {
       throw std::runtime_error("SceneAsset override bool value is invalid");
     }
     return;
-  case schema::ValueType::kAsset:
+  case schema::ValueMember::kInt32:
+    if (!unused_bytes_are_zero(sizeof(value.as_int32))) {
+      throw std::runtime_error("SceneAsset override int value is invalid");
+    }
+    return;
+  case schema::ValueMember::kFloat:
+    if (!finite(std::span(&value.as_float, 1))
+      || !unused_bytes_are_zero(sizeof(value.as_float))) {
+      throw std::runtime_error("SceneAsset override float value is invalid");
+    }
+    return;
+  case schema::ValueMember::kVec3:
+    if (!finite(value.as_vec3)
+      || !unused_bytes_are_zero(sizeof(value.as_vec3))) {
+      throw std::runtime_error("SceneAsset override vector value is invalid");
+    }
+    return;
+  case schema::ValueMember::kQuat:
+    if (!finite(value.as_quat)) {
+      throw std::runtime_error("SceneAsset override rotation is invalid");
+    }
+    return;
+  case schema::ValueMember::kAsset:
     if (value.as_asset.IsNil()) {
       throw std::runtime_error("SceneAsset override asset value is nil");
     }
     return;
-  case schema::ValueType::kLodPolicy: {
+  case schema::ValueMember::kRecordIndex: {
     const auto index = value.as_record_index.get();
     const auto lod_policies = GetComponents<pak::geometry::LodPolicyRecord>();
     if (!unused_bytes_are_zero(sizeof(value.as_record_index))
@@ -756,13 +942,8 @@ auto SceneAsset::ValidateOverrideValue(const schema::OverrideProperty& property,
     lod_policy_used.at(index) = true;
     return;
   }
-  case schema::ValueType::kInt:
-  case schema::ValueType::kFloat:
-  case schema::ValueType::kVec3:
-  case schema::ValueType::kEnum:
-  case schema::ValueType::kString:
-    // No override property has these types yet; each needs its own check
-    // when the schema declares one.
+  case schema::ValueMember::kStringOffset:
+    // No changeable property holds a string.
     throw std::runtime_error("SceneAsset override value type is not supported");
   }
   throw std::runtime_error("SceneAsset override value type is unknown");

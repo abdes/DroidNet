@@ -44,10 +44,13 @@ struct ScriptAssetParam {
 //! Scene node reference value of a script parameter.
 /*!
  `node_index` indexes the nodes of the scene that owns the slot;
- `pak::scripting::kUnsetNodeParam` means unset.
+ `pak::scripting::kUnsetNodeParam` means unset. With a `node_path`, the node
+ is one the instance rooted at `node_index` brings in, named by the scene's
+ node path table.
 */
 struct ScriptNodeParam {
   pak::world::SceneNodeIndexT node_index = pak::scripting::kUnsetNodeParam;
+  pak::world::NodePathIndexT node_path = pak::world::kNoNodePath;
 
   auto operator==(const ScriptNodeParam&) const -> bool = default;
 };

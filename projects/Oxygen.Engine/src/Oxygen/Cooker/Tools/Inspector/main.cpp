@@ -4,7 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -657,10 +656,15 @@ auto FormatScriptParamValue(
       oxygen::data::to_string(record.value.as_asset.key),
       oxygen::data::to_string(record.value.as_asset.asset_type));
   case ScriptParamType::kNode:
-    return record.value.as_node_index
-        == oxygen::data::pak::scripting::kUnsetNodeParam
-      ? std::string { "<unset node>" }
-      : fmt::format("node {}", record.value.as_node_index);
+    if (record.value.as_node.node_index
+      == oxygen::data::pak::scripting::kUnsetNodeParam) {
+      return std::string { "<unset node>" };
+    }
+    return record.value.as_node.node_path
+        == oxygen::data::pak::world::kNoNodePath
+      ? fmt::format("node {}", record.value.as_node.node_index)
+      : fmt::format("node {} path {}", record.value.as_node.node_index,
+          record.value.as_node.node_path);
   case ScriptParamType::kNone:
   default:
     return "<none>";

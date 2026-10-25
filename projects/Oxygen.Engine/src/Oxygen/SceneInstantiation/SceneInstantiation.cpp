@@ -15,7 +15,6 @@
 #include <ranges>
 #include <string>
 #include <string_view>
-#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -30,6 +29,7 @@
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/InputMappingContextAsset.h>
+#include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Data/Schema/Generated.SceneComponents.h>
@@ -371,10 +371,11 @@ namespace {
         }
         auto renderable = nodes.at(record.node_index).GetRenderable();
         renderable.SetGeometry(geometry);
-        // The table is sorted by node; the scene validated every override.
+        // The table is sorted by target; the scene validated every override.
         const auto overrides = asset.GetComponents<world::OverrideRecord>();
-        const auto [first, last] = std::ranges::equal_range(
-          overrides, record.node_index, {}, &world::OverrideRecord::node_index);
+        const auto [first, last] = std::ranges::equal_range(overrides,
+          world::NodeRef { .node_index = record.node_index }, {},
+          &world::OverrideRecord::target);
         for (const auto& override_record : std::ranges::subrange(first, last)) {
           ApplyOverride(asset, *geometry, renderable, override_record);
         }
@@ -394,7 +395,7 @@ namespace {
       DCHECK_NOTNULL_F(property);
       if (property->part_kind == data::schema::PartKind::kSurface
         && record.layout_revision != geometry.Surfaces().layout_revision) {
-        Issue(asset, record.node_index,
+        Issue(asset, record.target.node_index,
           fmt::format("the override of {} no longer matches the geometry's "
                       "surfaces",
             property->key));
@@ -429,11 +430,11 @@ namespace {
         break;
       }
       default:
-        // Loading admits overrides of asset-sourced properties only.
+        // A scene's own nodes override only their assets' values.
         ABORT_F("A validated scene overrides only its assets' values");
       }
       if (!applied) {
-        Issue(asset, record.node_index,
+        Issue(asset, record.target.node_index,
           fmt::format("the override of {} is not loaded or names a surface "
                       "the geometry does not declare",
             property->key));
@@ -540,13 +541,16 @@ namespace {
     const data::SceneAsset& asset, scene::Scene& target,
     std::vector<scene::SceneNode>& nodes) -> void
   {
-    if (const auto start = asset.GetStartingCamera(); start.has_value()) {
-      if (!target.SetActiveCamera(nodes.at(*start))) {
-        instantiator.Issue(
-          asset, *start, "the starting camera cannot be made active");
+    const auto start = asset.GetStartingCamera();
+    if (start.has_value() && start->node_path == world::kNoNodePath) {
+      if (!target.SetActiveCamera(nodes.at(start->node_index))) {
+        instantiator.Issue(asset, start->node_index,
+          "the starting camera cannot be made active");
       }
       return;
     }
+    // A camera an instance brings in is found once instances are composed;
+    // until then the first camera applies.
     const auto camera = std::ranges::find_if(
       nodes, [](scene::SceneNode& node) -> bool { return node.HasCamera(); });
     if (camera == nodes.end()) {

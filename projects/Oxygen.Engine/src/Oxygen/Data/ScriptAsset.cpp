@@ -5,7 +5,6 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
-#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -22,6 +21,7 @@
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/Asset.h>
+#include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/ScriptAsset.h>
 #include <Oxygen/Data/SourceOrigin.h>
@@ -71,7 +71,10 @@ auto ToScriptParam(const pak::scripting::ScriptParamRecord& record,
       .asset_type = value.as_asset.asset_type,
     };
   case ScriptParamType::kNode:
-    return ScriptNodeParam { .node_index = value.as_node_index };
+    return ScriptNodeParam {
+      .node_index = value.as_node.node_index,
+      .node_path = value.as_node.node_path,
+    };
   case ScriptParamType::kNone:
     break;
   }
@@ -106,9 +109,8 @@ auto MakeScriptParamRecord(const std::string_view key, const ScriptParam& value,
 {
   using pak::scripting::ScriptParamType;
 
-  const auto holds_nul = [](const std::string_view text) -> bool {
-    return text.find('\0') != std::string_view::npos;
-  };
+  const auto holds_nul
+    = [](const std::string_view text) -> bool { return text.contains('\0'); };
   if (key.empty() || holds_nul(key)) {
     return std::nullopt;
   }
@@ -156,7 +158,7 @@ auto MakeScriptParamRecord(const std::string_view key, const ScriptParam& value,
         out.as_asset = { .key = v.key, .asset_type = v.asset_type };
       } else if constexpr (std::is_same_v<T, ScriptNodeParam>) {
         record.type = ScriptParamType::kNode;
-        out.as_node_index = v.node_index;
+        out.as_node = { .node_index = v.node_index, .node_path = v.node_path };
       }
     },
     value);

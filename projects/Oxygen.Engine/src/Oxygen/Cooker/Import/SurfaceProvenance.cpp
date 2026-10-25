@@ -5,8 +5,6 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
-#include <charconv>
-#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -14,12 +12,9 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
-#include <system_error>
 #include <utility>
 #include <vector>
 
-#include <fmt/format.h>
-#include <fmt/ranges.h>
 #include <nlohmann/json-schema.hpp>
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
@@ -29,35 +24,20 @@
 #include <Oxygen/Cooker/Import/Internal/ImportManifest_schema.h>
 #include <Oxygen/Cooker/Import/SurfaceProvenance.h>
 #include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Data/StableId.h>
 #include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Data/SurfaceInventory.h>
 
 namespace oxygen::content::import {
 namespace {
 
-  auto DigestText(const base::Sha256Digest& digest) -> std::string
-  {
-    return fmt::format("{:02x}", fmt::join(digest, ""));
-  }
-
   auto ReadDigest(const std::string& text) -> base::Sha256Digest
   {
-    base::Sha256Digest result {};
-    constexpr size_t kHexCharactersPerByte = 2U;
-    if (text.size() != result.size() * kHexCharactersPerByte) {
-      throw std::invalid_argument("Invalid surface digest length");
+    const auto digest = base::Sha256DigestFromHex(text);
+    if (!digest.has_value()) {
+      throw std::invalid_argument("Invalid surface digest");
     }
-    for (size_t index = 0U; index < result.size(); ++index) {
-      const auto* begin = text.data() + (index * kHexCharactersPerByte);
-      const auto* end = begin + kHexCharactersPerByte;
-      constexpr int kHexRadix = 16;
-      const auto parsed
-        = std::from_chars(begin, end, result.at(index), kHexRadix);
-      if (parsed.ec != std::errc {} || parsed.ptr != end) {
-        throw std::invalid_argument("Invalid surface digest");
-      }
-    }
-    return result;
+    return *digest;
   }
 
   auto ReadGeometry(const nlohmann::json& record) -> SurfaceGeometryProvenance
@@ -113,8 +93,10 @@ namespace {
     using nlohmann::json;
     auto allocations = json::array();
     for (const auto& [declaration, id] : geometry.allocations) {
-      allocations.push_back({ { "declaration_key", declaration },
-        { "surface_id", to_string(id) } });
+      allocations.push_back({
+        { "declaration_key", declaration },
+        { "surface_id", to_string(id) },
+      });
     }
     auto surfaces = json::array();
     for (const auto& surface : geometry.inventory.surfaces) {
@@ -141,8 +123,14 @@ namespace {
         to_string(geometry.inventory.geometry_asset_key),
       },
       { "source_geometry_anchor", geometry.source_geometry_anchor },
-      { "source_layout_witness", DigestText(geometry.source_layout_witness) },
-      { "layout_revision", DigestText(geometry.inventory.layout_revision) },
+      {
+        "source_layout_witness",
+        base::ToHexString(geometry.source_layout_witness),
+      },
+      {
+        "layout_revision",
+        base::ToHexString(geometry.inventory.layout_revision),
+      },
       { "allocations", std::move(allocations) },
       { "surfaces", std::move(surfaces) },
     };
@@ -196,10 +184,10 @@ SurfaceProvenance::SurfaceProvenance(
   }
 }
 
-auto SurfaceProvenance::Parse(const std::string_view text)
+auto SurfaceProvenance::Parse(const std::string_view json)
   -> std::shared_ptr<const SurfaceProvenance>
 {
-  const auto document = nlohmann::json::parse(text);
+  const auto document = nlohmann::json::parse(json);
   nlohmann::json_schema::json_validator validator;
   validator.set_root_schema(nlohmann::json::parse(kSurfaceProvenanceSchema));
   validator.validate(document);

@@ -4,13 +4,11 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
-#include <iterator>
 #include <memory>
 #include <optional>
 #include <span>
@@ -35,6 +33,7 @@
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/SceneAsset.h>
+#include <Oxygen/Data/SceneIds.h>
 #include <Oxygen/Data/ScriptAsset.h>
 #include <Oxygen/Data/ScriptResource.h>
 #include <Oxygen/OxCo/Co.h>
@@ -79,8 +78,12 @@ auto WriteLooseCookedScriptAsset(const std::filesystem::path& cooked_root,
   script_desc.header.name_offset = strings.Add("Reload");
   auto declarations = std::vector<ScriptParamRecord> {};
   for (const auto& [key, value] : parameters) {
-    declarations.push_back(
-      oxygen::data::MakeScriptParamRecord(key, value, strings).value());
+    const auto record
+      = oxygen::data::MakeScriptParamRecord(key, value, strings);
+    if (!record.has_value()) {
+      FAIL() << "Failed to make script param record for key: " << key;
+    }
+    declarations.push_back(*record);
   }
   script_desc.bytecode_resource_index
     = oxygen::data::ResourceReferenceIndex { 0U };
@@ -179,6 +182,7 @@ auto WriteLooseCookedSceneWithScripting(
     .entry_size = sizeof(ScriptSlotRecord),
   };
   ScriptSlotRecord slot {};
+  slot.slot_id = oxygen::data::ScriptSlotId::FromStableIdentity("/test/slot");
   slot.script_asset_key
     = oxygen::data::AssetKey::FromVirtualPath("/test/scene-script.oscript");
   slot.execution_order = kSlotExecutionOrder;
@@ -203,7 +207,7 @@ auto WriteLooseCookedSceneWithScripting(
   desc.component_table_count = 1;
 
   NodeRecord node {};
-  node.node_id = scene_key;
+  node.node_id = oxygen::data::NodeId::FromStableIdentity("/test/root");
   node.scene_name_offset = 1;
   node.parent_index = 0;
 
@@ -392,11 +396,13 @@ NOLINT_TEST_F(AssetLoaderScriptingTest, ScriptAssetLoadsDeclaredParameters)
   constexpr auto kSpeedDefault = 2.5F;
   const auto declarations = oxygen::data::ScriptParameters {
     { "speed", kSpeedDefault },
-    { "orb",
+    {
+      "orb",
       ScriptAssetParam {
         .key = {},
         .asset_type = oxygen::data::AssetType::kMaterial,
-      } },
+      },
+    },
   };
   WriteLooseCookedScriptAsset(cooked_root, script_key, declarations);
 

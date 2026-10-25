@@ -16,8 +16,6 @@
 #include <utility>
 
 #include "InventoryReport.h"
-#include <fmt/format.h>
-#include <fmt/ranges.h>
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
@@ -80,7 +78,7 @@ auto RunInventoryReport(const InventoryReportOptions& options) -> int
     }
     auto issues = json::array();
     for (const auto& failure : failures) {
-      const auto reason = [&] -> const char* {
+      const auto* const reason = [&] -> const char* {
         switch (failure.reason) {
         case lc::IntegrityFailure::kMissing:
           return "missing";
@@ -101,7 +99,7 @@ auto RunInventoryReport(const InventoryReportOptions& options) -> int
         { { "relative_path", failure.relative_path }, { "reason", reason } });
     }
     const auto hex = [](const base::Sha256Digest& digest) -> std::string {
-      return fmt::format("{:02x}", fmt::join(digest, ""));
+      return base::ToHexString(digest);
     };
     auto files = json::array();
     for (const auto& file : index.GetFileInventory()) {

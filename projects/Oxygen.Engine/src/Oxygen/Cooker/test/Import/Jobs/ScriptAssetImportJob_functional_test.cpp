@@ -114,8 +114,11 @@ namespace {
 
     auto shutdown_callback_invoked = std::atomic<bool> { false };
     const auto shutdown_submit = Service().SubmitImport(
-      MakeScriptRequest(cooked_root / "input" / "shutdown.luau", cooked_root,
-        ScriptStorageMode::kExternal, false),
+      MakeScriptRequest({
+        .source_path = cooked_root / "input" / "shutdown.luau",
+        .cooked_root = cooked_root,
+        .storage = ScriptStorageMode::kExternal,
+      }),
       [&shutdown_callback_invoked](
         const auto /*job_id*/, const ImportReport& /*report*/) -> auto {
         shutdown_callback_invoked.store(true, std::memory_order_release);
@@ -134,8 +137,11 @@ namespace {
     WriteText(source_path, kScriptSource);
 
     const auto capture = SubmitAndCaptureCallbacks(Service(),
-      MakeScriptRequest(
-        source_path, cooked_root, ScriptStorageMode::kExternal, false));
+      MakeScriptRequest({
+        .source_path = source_path,
+        .cooked_root = cooked_root,
+        .storage = ScriptStorageMode::kExternal,
+      }));
     ASSERT_HAS_VALUE(capture) << "Expected capture to be present";
     EXPECT_EQ(capture->completion_calls, 1U);
     EXPECT_TRUE(capture->report.success);
@@ -152,8 +158,11 @@ namespace {
     const auto source_path = cooked_root / "input" / "counter_asset.luau";
     WriteText(source_path, kScriptSource);
 
-    const auto report = Submit(MakeScriptRequest(
-      source_path, cooked_root, ScriptStorageMode::kExternal, false));
+    const auto report = Submit(MakeScriptRequest({
+      .source_path = source_path,
+      .cooked_root = cooked_root,
+      .storage = ScriptStorageMode::kExternal,
+    }));
     ASSERT_TRUE(report.success);
     EXPECT_EQ(report.scripts_written, 1U);
     EXPECT_EQ(report.scripting_components_written, 0U);
@@ -173,8 +182,11 @@ namespace {
     const auto source_path = cooked_root / "input" / "hello.luau";
     WriteText(source_path, "return 7");
 
-    const auto report = Submit(MakeScriptRequest(
-      source_path, cooked_root, ScriptStorageMode::kEmbedded, false));
+    const auto report = Submit(MakeScriptRequest({
+      .source_path = source_path,
+      .cooked_root = cooked_root,
+      .storage = ScriptStorageMode::kEmbedded,
+    }));
 
     EXPECT_TRUE(report.success);
 
@@ -215,8 +227,11 @@ namespace {
       / "script_import_external_success" / "external.lua";
     WriteText(source_path, "print('hello')");
 
-    const auto report = Submit(MakeScriptRequest(
-      source_path, cooked_root, ScriptStorageMode::kExternal, false));
+    const auto report = Submit(MakeScriptRequest({
+      .source_path = source_path,
+      .cooked_root = cooked_root,
+      .storage = ScriptStorageMode::kExternal,
+    }));
 
     EXPECT_TRUE(report.success);
 
@@ -266,8 +281,11 @@ namespace {
           .lexically_normal();
     WriteText(source_path_absolute, "print('relative')");
 
-    const auto report = Submit(MakeScriptRequest(
-      source_path_relative, cooked_root, ScriptStorageMode::kExternal, false));
+    const auto report = Submit(MakeScriptRequest({
+      .source_path = source_path_relative,
+      .cooked_root = cooked_root,
+      .storage = ScriptStorageMode::kExternal,
+    }));
     EXPECT_TRUE(report.success);
 
     const auto descriptor_path = cooked_root / "relative_source.oscript";
@@ -301,8 +319,11 @@ namespace {
       / "multi-script" / "relative_cooked_root.lua";
     WriteText(source_path_absolute, "print('relative cooked root')");
 
-    const auto report = Submit(MakeScriptRequest(source_path_absolute,
-      cooked_root_relative, ScriptStorageMode::kExternal, false));
+    const auto report = Submit(MakeScriptRequest({
+      .source_path = source_path_absolute,
+      .cooked_root = cooked_root_relative,
+      .storage = ScriptStorageMode::kExternal,
+    }));
     EXPECT_TRUE(report.success);
 
     const auto descriptor_path
@@ -326,8 +347,12 @@ namespace {
     const auto source_path = cooked_root / "input" / "compile_me.luau";
     WriteText(source_path, "return 99");
 
-    const auto report = Submit(MakeScriptRequest(
-      source_path, cooked_root, ScriptStorageMode::kEmbedded, true));
+    const auto report = Submit(MakeScriptRequest({
+      .source_path = source_path,
+      .cooked_root = cooked_root,
+      .storage = ScriptStorageMode::kEmbedded,
+      .compile_scripts = true,
+    }));
 
     EXPECT_FALSE(report.success);
     EXPECT_TRUE(HasDiagnosticCode(
@@ -365,8 +390,12 @@ namespace {
     WriteText(source_path, "return 21");
 
     const auto report = SubmitAndWait(service.Service(),
-      MakeScriptRequest(
-        source_path, cooked_root, ScriptStorageMode::kEmbedded, true));
+      MakeScriptRequest({
+        .source_path = source_path,
+        .cooked_root = cooked_root,
+        .storage = ScriptStorageMode::kEmbedded,
+        .compile_scripts = true,
+      }));
     ASSERT_HAS_VALUE(report);
     ASSERT_TRUE(report->success);
 
@@ -432,8 +461,12 @@ namespace {
     WriteText(source_path, "return 22");
 
     const auto report = SubmitAndWait(service.Service(),
-      MakeScriptRequest(
-        source_path, cooked_root, ScriptStorageMode::kEmbedded, true));
+      MakeScriptRequest({
+        .source_path = source_path,
+        .cooked_root = cooked_root,
+        .storage = ScriptStorageMode::kEmbedded,
+        .compile_scripts = true,
+      }));
     ASSERT_HAS_VALUE(report);
     EXPECT_FALSE(report->success);
     EXPECT_TRUE(HasDiagnosticCode(report->diagnostics, "script.S0201"));
@@ -472,8 +505,12 @@ namespace {
 
     // Act
     const auto report = SubmitAndWait(service.Service(),
-      MakeScriptRequest(
-        source_path, cooked_root, ScriptStorageMode::kExternal, true));
+      MakeScriptRequest({
+        .source_path = source_path,
+        .cooked_root = cooked_root,
+        .storage = ScriptStorageMode::kExternal,
+        .compile_scripts = true,
+      }));
 
     // Assert
     ASSERT_HAS_VALUE(report);
@@ -510,8 +547,11 @@ return Orbit
 )lua");
 
     // Act
-    const auto report = Submit(MakeScriptRequest(
-      source_path, cooked_root, ScriptStorageMode::kEmbedded));
+    const auto report = Submit(MakeScriptRequest({
+      .source_path = source_path,
+      .cooked_root = cooked_root,
+      .storage = ScriptStorageMode::kEmbedded,
+    }));
 
     // Assert
     ASSERT_TRUE(report.success);
@@ -546,8 +586,8 @@ return Orbit
                 bytes, params.at(2).key_offset),
       "target");
     EXPECT_EQ(params.at(2).type, ScriptParamType::kNode);
-    EXPECT_EQ(
-      params.at(2).value.as_node_index, data::pak::scripting::kUnsetNodeParam);
+    EXPECT_EQ(params.at(2).value.as_node.node_index,
+      data::pak::scripting::kUnsetNodeParam);
   }
 
   //! A declaration error fails the import with its script diagnostic and
@@ -566,8 +606,11 @@ return Orbit
       "return S\n");
 
     // Act
-    const auto report = Submit(MakeScriptRequest(
-      source_path, cooked_root, ScriptStorageMode::kEmbedded));
+    const auto report = Submit(MakeScriptRequest({
+      .source_path = source_path,
+      .cooked_root = cooked_root,
+      .storage = ScriptStorageMode::kEmbedded,
+    }));
 
     // Assert
     EXPECT_FALSE(report.success);
@@ -588,8 +631,11 @@ return Orbit
     const auto source_path = cooked_root / "input" / "reload.luau";
     WriteText(source_path, "return 'first'");
 
-    const auto report_first = Submit(MakeScriptRequest(
-      source_path, cooked_root, ScriptStorageMode::kEmbedded, false));
+    const auto report_first = Submit(MakeScriptRequest({
+      .source_path = source_path,
+      .cooked_root = cooked_root,
+      .storage = ScriptStorageMode::kEmbedded,
+    }));
     ASSERT_TRUE(report_first.success);
 
     const auto first_inspection = LoadInspection(cooked_root);
@@ -601,8 +647,11 @@ return Orbit
 
     WriteText(source_path, "return 'second'");
 
-    const auto report_second = Submit(MakeScriptRequest(
-      source_path, cooked_root, ScriptStorageMode::kEmbedded, false));
+    const auto report_second = Submit(MakeScriptRequest({
+      .source_path = source_path,
+      .cooked_root = cooked_root,
+      .storage = ScriptStorageMode::kEmbedded,
+    }));
     ASSERT_TRUE(report_second.success);
 
     const auto second_inspection = LoadInspection(cooked_root);
@@ -625,10 +674,16 @@ return Orbit
     WriteText(source_a, kSourceText);
     WriteText(source_b, kSourceText);
 
-    const auto report_a = Submit(
-      MakeScriptRequest(source_a, cooked_root_a, ScriptStorageMode::kEmbedded));
-    const auto report_b = Submit(
-      MakeScriptRequest(source_b, cooked_root_b, ScriptStorageMode::kEmbedded));
+    const auto report_a = Submit(MakeScriptRequest({
+      .source_path = source_a,
+      .cooked_root = cooked_root_a,
+      .storage = ScriptStorageMode::kEmbedded,
+    }));
+    const auto report_b = Submit(MakeScriptRequest({
+      .source_path = source_b,
+      .cooked_root = cooked_root_b,
+      .storage = ScriptStorageMode::kEmbedded,
+    }));
     ASSERT_TRUE(report_a.success);
     ASSERT_TRUE(report_b.success);
 
@@ -657,8 +712,11 @@ return Orbit
     const auto cooked_root = temp.Path() / "script_import_missing_source_file";
     const auto missing_source = cooked_root / "input" / "does_not_exist.luau";
 
-    const auto report = Submit(MakeScriptRequest(
-      missing_source, cooked_root, ScriptStorageMode::kExternal, false));
+    const auto report = Submit(MakeScriptRequest({
+      .source_path = missing_source,
+      .cooked_root = cooked_root,
+      .storage = ScriptStorageMode::kExternal,
+    }));
 
     EXPECT_FALSE(report.success);
     EXPECT_TRUE(
@@ -674,8 +732,12 @@ return Orbit
     const auto source_path = cooked_root / "input" / "invalid_combo.luau";
     WriteText(source_path, "return 3");
 
-    const auto report = Submit(MakeScriptRequest(
-      source_path, cooked_root, ScriptStorageMode::kExternal, true));
+    const auto report = Submit(MakeScriptRequest({
+      .source_path = source_path,
+      .cooked_root = cooked_root,
+      .storage = ScriptStorageMode::kExternal,
+      .compile_scripts = true,
+    }));
     ASSERT_FALSE(report.success);
     ExpectDiagnosticFieldsComplete(report.diagnostics);
   }
@@ -689,8 +751,12 @@ return Orbit
     const auto source_path = cooked_root / "input" / "summary_failure.luau";
     WriteText(source_path, "return 8");
 
-    const auto report = Submit(MakeScriptRequest(
-      source_path, cooked_root, ScriptStorageMode::kExternal, true));
+    const auto report = Submit(MakeScriptRequest({
+      .source_path = source_path,
+      .cooked_root = cooked_root,
+      .storage = ScriptStorageMode::kExternal,
+      .compile_scripts = true,
+    }));
     ASSERT_FALSE(report.success);
     ExpectPackagingSummaryMatchesDiagnostics(report);
   }
@@ -702,8 +768,11 @@ return Orbit
     const auto source_path = cooked_root / "input" / "dispatch_only.luau";
     WriteText(source_path, "return 11");
 
-    const auto report = Submit(MakeScriptRequest(
-      source_path, cooked_root, ScriptStorageMode::kExternal, false));
+    const auto report = Submit(MakeScriptRequest({
+      .source_path = source_path,
+      .cooked_root = cooked_root,
+      .storage = ScriptStorageMode::kExternal,
+    }));
     ASSERT_TRUE(report.success);
     EXPECT_EQ(report.scripts_written, 1U);
   }

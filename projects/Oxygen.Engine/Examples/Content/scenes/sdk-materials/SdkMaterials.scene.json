@@ -1,9 +1,10 @@
 {
   "$schema": "../../../../src/Oxygen/Cooker/Import/Schemas/oxygen.scene-descriptor.schema.json",
-  "version": 14,
+  "version": 15,
   "name": "SdkMaterials",
   "nodes": [
     {
+      "id": "b837581e-7276-5e06-bd05-8126437ae727",
       "name": "Root",
       "flags": {
         "visible": "shown",
@@ -12,6 +13,7 @@
       }
     },
     {
+      "id": "a514e235-27ef-5f00-8493-ddead023fe2e",
       "name": "Cube",
       "parent": 0,
       "transform": {
@@ -26,6 +28,7 @@
       }
     },
     {
+      "id": "c0ae7247-2d86-51a4-856d-8578d1471857",
       "name": "CubeB",
       "parent": 0,
       "transform": {
@@ -40,6 +43,7 @@
       }
     },
     {
+      "id": "2046f2b2-1b75-5b11-a9a1-74fa020bb694",
       "name": "CubeC",
       "parent": 0,
       "transform": {
@@ -54,6 +58,7 @@
       }
     },
     {
+      "id": "62cfd3f4-3d5f-5096-a3eb-a32270315704",
       "name": "MainCamera",
       "parent": 0,
       "transform": {
@@ -71,6 +76,7 @@
       }
     },
     {
+      "id": "53fd85e4-3e41-5b4b-a6c3-6c40e127868e",
       "name": "Sun",
       "parent": 0,
       "transform": {
@@ -85,6 +91,7 @@
       }
     },
     {
+      "id": "2bde18e7-380d-5000-8166-5b6cffda098a",
       "name": "FillLight",
       "parent": 0,
       "transform": {
@@ -99,6 +106,7 @@
       }
     },
     {
+      "id": "035572dc-b66a-59b8-b630-b8a3eda8e16f",
       "name": "SpotRig",
       "parent": 0,
       "transform": {
@@ -113,6 +121,7 @@
       }
     },
     {
+      "id": "30798a74-3880-5e6a-9160-a659d5257077",
       "name": "SideSpotX",
       "parent": 0,
       "transform": {
@@ -127,6 +136,7 @@
       }
     },
     {
+      "id": "60f3fb8b-9918-5624-aa44-2a285caaf893",
       "name": "SidePointX",
       "parent": 0,
       "transform": {
@@ -141,6 +151,7 @@
       }
     },
     {
+      "id": "250de5e2-6bdb-519b-9178-3b652b74beab",
       "name": "CubeD",
       "parent": 0,
       "transform": {

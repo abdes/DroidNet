@@ -7,8 +7,6 @@
 #include <stdexcept>
 
 #include "SurfaceAllocation.h"
-#include <fmt/format.h>
-#include <fmt/ranges.h>
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
@@ -66,7 +64,7 @@ auto AllocateSurfaces(const MeshBuildPipeline::WorkItem& item)
     return result;
   }
   const auto source_identity = retained->SourceIdentity().ToString();
-  const auto witness_text = fmt::format("{:02x}", fmt::join(witness, ""));
+  const auto witness_text = base::ToHexString(witness);
   for (auto& [declaration, id] : result.allocations) {
     // The geometry's place is not part of the surface's identity: moving the
     // model keeps its ids.

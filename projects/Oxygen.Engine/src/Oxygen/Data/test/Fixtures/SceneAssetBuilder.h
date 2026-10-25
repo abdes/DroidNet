@@ -13,7 +13,6 @@
 #include <span>
 #include <string>
 #include <string_view>
-#include <utility>
 #include <vector>
 
 #include <Oxygen/Core/Types/AssetKey.h>
@@ -23,6 +22,7 @@
 #include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/Data/SceneAsset.h>
+#include <Oxygen/Data/SceneIds.h>
 
 namespace oxygen::data::testing {
 
@@ -43,7 +43,7 @@ public:
   {
     const auto index = static_cast<NodeIndex>(nodes_.size());
     auto node = pak::world::NodeRecord {};
-    node.node_id = AssetKey::FromVirtualPath(
+    node.node_id = NodeId::FromStableIdentity(
       "/test/node/" + std::to_string(index) + "/" + std::string(name));
     node.scene_name_offset = strings_.Add(name);
     node.parent_index = parent.value_or(index);
@@ -72,10 +72,17 @@ public:
     return *this;
   }
 
-  //! Adds one scripting component per node with its slots, in node order.
+  //! Adds one scripting component per node with its slots, in node order; a
+  //! slot without an ID gets one from its node and position.
   auto AddScripting(const NodeIndex node,
     std::vector<pak::scripting::ScriptSlotRecord> slots) -> SceneAssetBuilder&
   {
+    for (size_t i = 0; i < slots.size(); ++i) {
+      if (slots.at(i).slot_id.IsNil()) {
+        slots.at(i).slot_id = ScriptSlotId::FromStableIdentity(
+          "/test/slot/" + std::to_string(node) + "/" + std::to_string(i));
+      }
+    }
     scripting_.push_back({
       .node_index = node,
       .slot_start_index = static_cast<uint32_t>(slots_.size()),
@@ -93,8 +100,22 @@ public:
 
   auto SetStartingCamera(const NodeIndex node) -> SceneAssetBuilder&
   {
-    starting_camera_ = node;
+    starting_camera_ = { .node_index = node };
     return *this;
+  }
+
+  //! Sets a starting camera that may name a node an instance brings in.
+  auto SetStartingCamera(const pak::world::NodeRef& camera)
+    -> SceneAssetBuilder&
+  {
+    starting_camera_ = camera;
+    return *this;
+  }
+
+  //! Adds `text` to the descriptor's string table.
+  auto AddString(const std::string_view text) -> pak::core::StringTableOffsetT
+  {
+    return strings_.Add(text);
   }
 
   //! Adds an environment system record; its header gives type and size.
@@ -216,7 +237,9 @@ private:
   std::vector<pak::scripting::ScriptingComponentRecord> scripting_;
   std::vector<pak::scripting::ScriptSlotRecord> slots_;
   pak::world::SceneAssetFlags flags_ { pak::world::SceneAssetFlags::kNone };
-  NodeIndex starting_camera_ { pak::world::kNoStartingCamera };
+  pak::world::NodeRef starting_camera_ {
+    .node_index = pak::world::kNoStartingCamera,
+  };
   std::vector<std::byte> environment_;
   uint32_t environment_count_ { 0 };
 };
