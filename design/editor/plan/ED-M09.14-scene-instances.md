@@ -158,26 +158,26 @@ The last slice's commit carries `Fixes #77`.
 
 ED-M09 item 14 points here and is `done` when every slice below is.
 
-| Slice | State | Commit    |
-| ----- | ----- | --------- |
-| E1    | done  | 37285ea2b |
-| E2    | done  | 701dc3ef8 |
-| E3    | done  | 4406449eb |
-| E4    | done  | 92d6333e3 |
-| E5    | done  | 0571f6896 |
-| E6    | open  | -         |
-| E7    | open  | -         |
-| E8    | open  | -         |
-| E9    | open  | -         |
-| E10   | open  | -         |
-| D1    | done  | -         |
-| D2    | open  | -         |
-| D3    | open  | -         |
-| D4    | open  | -         |
-| D5    | open  | -         |
-| D6    | open  | -         |
-| D7    | open  | -         |
-| D8    | open  | -         |
-| D9    | open  | -         |
-| D10   | open  | -         |
-| D11   | open  | -         |
+| Slice | State | Commit               |
+| ----- | ----- | -------------------- |
+| E1    | done  | 37285ea2b            |
+| E2    | done  | 701dc3ef8            |
+| E3    | done  | 4406449eb            |
+| E4    | done  | 92d6333e3            |
+| E5    | done  | 0571f6896            |
+| E6    | done  | 2f62748d6, e4f5383c3 |
+| E7    | open  | -                    |
+| E8    | open  | -                    |
+| E9    | open  | -                    |
+| E10   | open  | -                    |
+| D1    | done  | -                    |
+| D2    | open  | -                    |
+| D3    | open  | -                    |
+| D4    | open  | -                    |
+| D5    | open  | -                    |
+| D6    | open  | -                    |
+| D7    | open  | -                    |
+| D8    | open  | -                    |
+| D9    | open  | -                    |
+| D10   | open  | -                    |
+| D11   | open  | -                    |
