@@ -7,6 +7,7 @@ using DroidNet.Aura.Dialogs;
 using DroidNet.Aura.Windowing;
 using DroidNet.Tests;
 using Microsoft.UI;
+using Microsoft.Windows.Storage.Pickers;
 using Moq;
 
 namespace DroidNet.Aura.Tests;
@@ -37,7 +38,7 @@ public sealed class StoragePickerTests : VisualUserInterfaceTests
     public Task FilePicker_PreservesLabeledGroupsAndLocationAsync() => EnqueueAsync(async () =>
     {
         await LoadTestContentAsync(new Microsoft.UI.Xaml.Controls.Grid()).ConfigureAwait(true);
-        var choices = new Dictionary<string, IList<string>>(StringComparer.Ordinal)
+        var choices = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal)
         {
             ["Supported assets"] = [".gltf", ".glb", ".fbx", ".png"],
             ["3D models"] = [".gltf", ".glb", ".fbx"],
@@ -59,11 +60,84 @@ public sealed class StoragePickerTests : VisualUserInterfaceTests
     });
 
     [TestMethod]
+    public Task SavePicker_PreservesNameGroupsAndLocationAsync() => EnqueueAsync(async () =>
+    {
+        await LoadTestContentAsync(new Microsoft.UI.Xaml.Controls.Grid()).ConfigureAwait(true);
+        var choices = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal)
+        {
+            ["Import session"] = [".json"],
+        };
+        var spec = new FileSavePickerSpec("Save import session", "Oxygen.ImportSession", choices)
+        {
+            SuggestedStartFolder = @"D:\Project",
+            SuggestedFileName = "Vehicles.import-manifest.json",
+        };
+        var picker = DialogService.CreateSavePicker(spec, VisualUserInterfaceTestsApp.MainWindow.AppWindow.Id);
+        _ = picker.Title.Should().Be(spec.Title);
+        _ = picker.SettingsIdentifier.Should().Be(spec.SettingsIdentifier);
+        _ = picker.SuggestedStartFolder.Should().Be(spec.SuggestedStartFolder);
+        _ = picker.SuggestedFileName.Should().Be(spec.SuggestedFileName);
+        _ = picker.FileTypeChoices.Keys.Should().Equal(choices.Keys);
+        _ = picker.FileTypeChoices["Import session"].Should().Equal(choices["Import session"]);
+    });
+
+    [TestMethod]
+    public Task Pickers_WithoutSuggestedStartFolder_KeepThePickerDefaultAsync() => EnqueueAsync(async () =>
+    {
+        await LoadTestContentAsync(new Microsoft.UI.Xaml.Controls.Grid()).ConfigureAwait(true);
+        var owner = VisualUserInterfaceTestsApp.MainWindow.AppWindow.Id;
+        var choices = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal) { ["Text"] = [".txt"] };
+
+        var folder = DialogService.CreateFolderPicker(new FolderPickerSpec("Folder", "Test.Folder"), owner);
+        var file = DialogService.CreateFilePicker(new FilePickerSpec("File", "Test.File", choices), owner);
+        var save = DialogService.CreateSavePicker(new FileSavePickerSpec("Save", "Test.Save", choices), owner);
+
+        _ = folder.SuggestedStartFolder.Should().Be(new FolderPicker(owner).SuggestedStartFolder, "an unset start folder leaves the remembered location in charge");
+        _ = file.SuggestedStartFolder.Should().Be(new FileOpenPicker(owner).SuggestedStartFolder);
+        _ = save.SuggestedStartFolder.Should().Be(new FileSavePicker(owner).SuggestedStartFolder);
+    });
+
+    [TestMethod]
+    public Task SavePicker_FirstExtensionOfTheFirstChoiceIsTheDefaultAsync() => EnqueueAsync(async () =>
+    {
+        await LoadTestContentAsync(new Microsoft.UI.Xaml.Controls.Grid()).ConfigureAwait(true);
+        var choices = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal)
+        {
+            ["Import session"] = ["json", ".manifest"],
+            ["Text"] = [".txt"],
+        };
+
+        var picker = DialogService.CreateSavePicker(new FileSavePickerSpec("Save", "Test.Save", choices), VisualUserInterfaceTestsApp.MainWindow.AppWindow.Id);
+
+        _ = picker.DefaultFileExtension.Should().Be(".json");
+        _ = picker.FileTypeChoices["Import session"].Should().Equal(".json", ".manifest");
+    });
+
+    [TestMethod]
+    [DataRow(".png", ".png")]
+    [DataRow("png", ".png")]
+    [DataRow("*.png", ".png")]
+    [DataRow(".import-manifest.json", ".import-manifest.json")]
+    public void NormalizeExtension_AcceptsTheCommonSpellings(string extension, string expected)
+        => _ = DialogService.NormalizeExtension(extension).Should().Be(expected);
+
+    [TestMethod]
+    [DataRow("")]
+    [DataRow(" ")]
+    [DataRow("*")]
+    [DataRow(".*")]
+    [DataRow("p ng")]
+    [DataRow("png.")]
+    [DataRow("a/b")]
+    public void NormalizeExtension_RejectsWhatIsNotAnExtension(string extension)
+        => _ = FluentActions.Invoking(() => DialogService.NormalizeExtension(extension)).Should().Throw<ArgumentException>();
+
+    [TestMethod]
     public async Task Pickers_MissingOwnerAndCancellationAreExplicitAsync()
     {
         var service = new DialogService(Mock.Of<IWindowManagerService>());
         var folder = new FolderPickerSpec("Folder", "Test.Folder");
-        var file = new FilePickerSpec("File", "Test.File", new Dictionary<string, IList<string>>(StringComparer.Ordinal) { ["Text"] = [".txt"] });
+        var file = new FilePickerSpec("File", "Test.File", new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal) { ["Text"] = [".txt"] });
         Func<Task> pickFolder = () => service.PickFolderAsync(folder, new WindowId(42), this.TestContext.CancellationToken);
         Func<Task> pickFile = () => service.PickFileAsync(file, new WindowId(42), this.TestContext.CancellationToken);
         _ = await pickFolder.Should().ThrowAsync<DialogServiceException>().ConfigureAwait(false);
@@ -83,7 +157,7 @@ public sealed class StoragePickerTests : VisualUserInterfaceTests
         _ = windows.SetupGet(value => value.ActiveWindow).Returns(Mock.Of<IManagedWindow>());
         var service = new DialogService(windows.Object);
         var folder = new FolderPickerSpec("Folder", "Test.Folder");
-        var file = new FilePickerSpec("File", "Test.File", new Dictionary<string, IList<string>>(StringComparer.Ordinal) { ["Text"] = [".txt"] });
+        var file = new FilePickerSpec("File", "Test.File", new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal) { ["Text"] = [".txt"] });
         Func<Task> pickFolder = () => service.PickFolderAsync(folder, new WindowId(42), this.TestContext.CancellationToken);
         Func<Task> pickFile = () => service.PickFileAsync(file, new WindowId(42), this.TestContext.CancellationToken);
         _ = await pickFolder.Should().ThrowAsync<DialogServiceException>().ConfigureAwait(false);

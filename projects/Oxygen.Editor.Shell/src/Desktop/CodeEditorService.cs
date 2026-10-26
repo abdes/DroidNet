@@ -98,7 +98,7 @@ public sealed partial class CodeEditorService(
             PrimaryButtonText = "Open",
             CloseButtonText = "Cancel",
             DefaultButton = DialogButton.Primary,
-            PrimaryAction = () => Task.FromResult(form.Validate()),
+            PrimaryAction = _ => Task.FromResult(form.Validate()),
         };
 
         if (await dialogs.ShowAsync(spec).ConfigureAwait(true) != DialogButton.Primary)

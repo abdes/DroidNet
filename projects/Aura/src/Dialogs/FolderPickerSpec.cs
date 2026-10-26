@@ -9,6 +9,9 @@ namespace DroidNet.Aura.Dialogs;
 /// <param name="SettingsIdentifier">The stable identifier for the picker's remembered location.</param>
 public sealed record FolderPickerSpec(string Title, string SettingsIdentifier)
 {
-    /// <summary>Gets the initial folder used when the picker has no remembered location.</summary>
-    public string SuggestedStartFolder { get; init; } = string.Empty;
+    /// <summary>
+    ///     Gets the initial folder used when the picker has no remembered location; <see langword="null"/> to use the
+    ///     picker's own default.
+    /// </summary>
+    public string? SuggestedStartFolder { get; init; }
 }

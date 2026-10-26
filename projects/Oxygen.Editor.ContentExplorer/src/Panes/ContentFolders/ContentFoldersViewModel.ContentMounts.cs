@@ -121,7 +121,7 @@ public partial class ContentFoldersViewModel
             SecondaryButtonText = "Cancel",
             CloseButtonText = string.Empty,
             DefaultButton = DialogButton.Primary,
-            PrimaryAction = () => Task.FromResult(model.Validate()),
+            PrimaryAction = _ => Task.FromResult(model.Validate()),
             MaxWidth = 760,
         };
         if (await dialogService.ShowAsync(spec).ConfigureAwait(true) != DialogButton.Primary)

@@ -183,9 +183,9 @@ stable mount definition.
 
 Implementation note:
 
-- This dialog MUST be hosted via `IDialogService` (prefer
-  `ShowAsync(ViewModelDialogSpec ...)`) and MUST NOT be implemented by manually
-  instantiating WinUI `ContentDialog`.
+- This dialog MUST be hosted via `IDialogService` (a `DialogSpec` without
+  content whose `ViewModel` the service resolves to its view) and MUST NOT be
+  implemented by manually instantiating WinUI `ContentDialog`.
 - The dialog ViewModel should be UI-agnostic; the View (WinUI) is supplied by
   the app's `VmToViewConverter` (as already used by Aura's dialog service).
 

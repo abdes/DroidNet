@@ -6,6 +6,7 @@
         <ResourceDictionary Source="ms-appx:///DroidNet.Aura/Controls/AppIcon/AppIcon.xaml" />
         <ResourceDictionary Source="ms-appx:///DroidNet.Aura/Controls/Tabs/TabStrip.xaml" />
         <ResourceDictionary Source="ms-appx:///DroidNet.Aura/Controls/Tabs/TabStripItem.xaml" />
+        <ResourceDictionary Source="ms-appx:///DroidNet.Aura/Dialogs/AuraDialog.xaml" />
     </ResourceDictionary.MergedDictionaries>
 
 </ResourceDictionary>

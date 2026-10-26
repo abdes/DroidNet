@@ -251,7 +251,7 @@ public sealed partial class ContentMountsViewModel : ObservableObject
         {
             var path = this.IsPakFile
                 ? await this.dialogService.PickFileAsync(
-                    new FilePickerSpec("Choose a pak file to mount", "Oxygen.PakFileMount", new Dictionary<string, IList<string>> { ["Pak files"] = [PakFileMount.Extension] })
+                    new FilePickerSpec("Choose a pak file to mount", "Oxygen.PakFileMount", new Dictionary<string, IReadOnlyList<string>> { ["Pak files"] = [PakFileMount.Extension] })
                     {
                         SuggestedStartFolder = this.NewMountPath,
                     },

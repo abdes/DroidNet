@@ -3,33 +3,52 @@
 // SPDX-License-Identifier: MIT
 
 using System.Globalization;
+using System.Runtime.CompilerServices;
 using CommunityToolkit.WinUI;
 using DroidNet.Aura.Windowing;
+using DroidNet.Mvvm;
+using DroidNet.Mvvm.Converters;
 using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Data;
-using Microsoft.Windows.Storage.Pickers;
 
 namespace DroidNet.Aura.Dialogs;
 
 /// <summary>
 ///     WinUI 3 implementation of <see cref="IDialogService"/>.
 /// </summary>
-public sealed class DialogService : IDialogService
+/// <remarks>
+///     Dialogs are <see cref="AuraDialog"/> instances. A window shows one dialog at a time, so each window's dialogs
+///     wait for each other, in request order, while dialogs of other windows are independent. View models become views
+///     through the injected <see cref="IViewLocator"/>; without one, through the application resource
+///     <c>VmToViewConverter</c>.
+/// </remarks>
+public sealed partial class DialogService : IDialogService
 {
-    private static readonly SemaphoreSlim DialogGate = new(1, 1);
+    private const string ApplicationViewConverterKey = "VmToViewConverter";
+    private const string ButtonSpacingResourceKey = "ContentDialogButtonSpacing";
+
+    // ContentDialog allows one open dialog per XamlRoot, whichever service instance shows it.
+    private static readonly ConditionalWeakTable<XamlRoot, SemaphoreSlim> DialogGates = [];
 
     private readonly IWindowManagerService windowManager;
+    private readonly IValueConverter? viewConverter;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="DialogService"/> class.
     /// </summary>
     /// <param name="windowManager">The Aura window manager service.</param>
-    public DialogService(IWindowManagerService windowManager)
+    /// <param name="viewLocator">
+    ///     The view locator that resolves the views of dialog view models; <see langword="null"/> to use the application
+    ///     resource <c>VmToViewConverter</c>.
+    /// </param>
+    public DialogService(IWindowManagerService windowManager, IViewLocator? viewLocator = null)
     {
         ArgumentNullException.ThrowIfNull(windowManager);
         this.windowManager = windowManager;
+        this.viewConverter = viewLocator is null ? null : new ViewModelToView(viewLocator);
     }
 
     /// <inheritdoc/>
@@ -41,359 +60,201 @@ public sealed class DialogService : IDialogService
         => this.ShowAsync(dialog, (WindowId?)ownerWindowId, cancellationToken);
 
     /// <inheritdoc/>
-    public Task<DialogButton> ShowAsync(ViewModelDialogSpec dialog, CancellationToken cancellationToken = default)
-        => this.ShowAsync(dialog, ownerWindowId: null, cancellationToken);
+    public Task ShowMessageAsync(string title, string message, CancellationToken cancellationToken = default)
+        => this.ShowAsync(CreateMessage(title, message), ownerWindowId: null, cancellationToken);
 
     /// <inheritdoc/>
-    public Task<DialogButton> ShowAsync(ViewModelDialogSpec dialog, WindowId ownerWindowId, CancellationToken cancellationToken = default)
-        => this.ShowAsync(dialog, (WindowId?)ownerWindowId, cancellationToken);
+    public Task ShowMessageAsync(string title, string message, WindowId ownerWindowId, CancellationToken cancellationToken = default)
+        => this.ShowAsync(CreateMessage(title, message), ownerWindowId, cancellationToken);
 
     /// <inheritdoc/>
-    public async Task ShowMessageAsync(string title, string message, CancellationToken cancellationToken = default)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(title);
-        ArgumentNullException.ThrowIfNull(message);
-
-        _ = await this.ShowAsync(
-            new DialogSpec(title, message)
-            {
-                CloseButtonText = "OK",
-                DefaultButton = DialogButton.Close,
-            },
-            cancellationToken).ConfigureAwait(false);
-    }
+    public Task<bool> ConfirmAsync(string title, string message, CancellationToken cancellationToken = default)
+        => this.ConfirmAsync(title, message, ownerWindowId: null, cancellationToken);
 
     /// <inheritdoc/>
-    public async Task<bool> ConfirmAsync(string title, string message, CancellationToken cancellationToken = default)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(title);
-        ArgumentNullException.ThrowIfNull(message);
+    public Task<bool> ConfirmAsync(string title, string message, WindowId ownerWindowId, CancellationToken cancellationToken = default)
+        => this.ConfirmAsync(title, message, (WindowId?)ownerWindowId, cancellationToken);
 
-        var result = await this.ShowAsync(
-            new DialogSpec(title, message)
-            {
-                PrimaryButtonText = "OK",
-                CloseButtonText = "Cancel",
-                DefaultButton = DialogButton.Close,
-            },
-            cancellationToken).ConfigureAwait(false);
-
-        return result == DialogButton.Primary;
-    }
-
-    /// <inheritdoc/>
-    public Task<string?> PickFolderAsync(FolderPickerSpec picker, CancellationToken cancellationToken = default)
-        => this.PickFolderAsync(picker, ownerWindowId: null, cancellationToken);
-
-    /// <inheritdoc/>
-    public Task<string?> PickFolderAsync(FolderPickerSpec picker, WindowId ownerWindowId, CancellationToken cancellationToken = default)
-        => this.PickFolderAsync(picker, (WindowId?)ownerWindowId, cancellationToken);
-
-    /// <inheritdoc/>
-    public Task<string?> PickFileAsync(FilePickerSpec picker, CancellationToken cancellationToken = default)
-        => this.PickFileAsync(picker, ownerWindowId: null, cancellationToken);
-
-    /// <inheritdoc/>
-    public Task<string?> PickFileAsync(FilePickerSpec picker, WindowId ownerWindowId, CancellationToken cancellationToken = default)
-        => this.PickFileAsync(picker, (WindowId?)ownerWindowId, cancellationToken);
-
-    internal static FolderPicker CreateFolderPicker(FolderPickerSpec spec, WindowId ownerWindowId)
-    {
-        ArgumentNullException.ThrowIfNull(spec);
-        ArgumentException.ThrowIfNullOrWhiteSpace(spec.Title, nameof(spec));
-        ArgumentException.ThrowIfNullOrWhiteSpace(spec.SettingsIdentifier, nameof(spec));
-        return new FolderPicker(ownerWindowId)
-        {
-            Title = spec.Title,
-            SettingsIdentifier = spec.SettingsIdentifier,
-            SuggestedStartFolder = spec.SuggestedStartFolder,
-            SuggestedStartLocation = PickerLocationId.DocumentsLibrary,
-        };
-    }
-
-    internal static FileOpenPicker CreateFilePicker(FilePickerSpec spec, WindowId ownerWindowId)
-    {
-        ArgumentNullException.ThrowIfNull(spec);
-        ArgumentException.ThrowIfNullOrWhiteSpace(spec.Title, nameof(spec));
-        ArgumentException.ThrowIfNullOrWhiteSpace(spec.SettingsIdentifier, nameof(spec));
-        ArgumentNullException.ThrowIfNull(spec.FileTypeChoices, nameof(spec));
-        if (spec.FileTypeChoices.Count == 0)
-        {
-            throw new ArgumentException("At least one file type choice is required.", nameof(spec));
-        }
-
-        var picker = new FileOpenPicker(ownerWindowId)
-        {
-            Title = spec.Title,
-            SettingsIdentifier = spec.SettingsIdentifier,
-            SuggestedStartFolder = spec.SuggestedStartFolder,
-            SuggestedStartLocation = PickerLocationId.DocumentsLibrary,
-            ViewMode = PickerViewMode.List,
-        };
-        foreach (var (label, extensions) in spec.FileTypeChoices)
-        {
-            ArgumentException.ThrowIfNullOrWhiteSpace(label, nameof(spec));
-            ArgumentNullException.ThrowIfNull(extensions, nameof(spec));
-            if (extensions.Count == 0)
-            {
-                throw new ArgumentException("Each file type choice must contain an extension.", nameof(spec));
-            }
-
-            picker.FileTypeChoices.Add(label, [.. extensions]);
-        }
-
-        return picker;
-    }
-
-    private static DialogButton MapResult(ContentDialogResult result)
-        => result switch
-        {
-            ContentDialogResult.Primary => DialogButton.Primary,
-            ContentDialogResult.Secondary => DialogButton.Secondary,
-            _ => DialogButton.None,
-        };
-
-    private static ContentDialogButton MapDefaultButton(DialogButton button)
+    /// <summary>
+    ///     Maps a dialog's default button to the <see cref="ContentDialog"/> one.
+    /// </summary>
+    /// <param name="button">The default button of a <see cref="DialogSpec"/>.</param>
+    /// <returns>The <see cref="ContentDialogButton"/> with the same role.</returns>
+    internal static ContentDialogButton MapDefaultButton(DialogButton button)
         => button switch
         {
             DialogButton.Primary => ContentDialogButton.Primary,
             DialogButton.Secondary => ContentDialogButton.Secondary,
             DialogButton.Close => ContentDialogButton.Close,
-            _ => ContentDialogButton.Close,
+            DialogButton.None => ContentDialogButton.None,
+            _ => throw new ArgumentOutOfRangeException(nameof(button), button, message: null),
         };
 
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE0046:Convert to conditional expression", Justification = "code clarity")]
-    private static ContentDialog CreateContentDialog(IManagedWindow owner, DialogSpec spec)
+    private static DialogSpec CreateMessage(string title, string message)
     {
-        ArgumentNullException.ThrowIfNull(owner);
-        ArgumentNullException.ThrowIfNull(spec);
+        ArgumentException.ThrowIfNullOrWhiteSpace(title);
+        ArgumentNullException.ThrowIfNull(message);
+        return new DialogSpec(title, message)
+        {
+            CloseButtonText = "OK",
+            DefaultButton = DialogButton.Close,
+        };
+    }
 
+    private static void Validate(DialogSpec dialog)
+    {
+        ArgumentNullException.ThrowIfNull(dialog);
+        if (string.IsNullOrWhiteSpace(dialog.Title))
+        {
+            throw new ArgumentException("Dialog title cannot be null or whitespace.", nameof(dialog));
+        }
+
+        if (dialog.FooterCommands is null)
+        {
+            throw new ArgumentException("Dialog footer commands cannot be null.", nameof(dialog));
+        }
+
+        foreach (var command in dialog.FooterCommands)
+        {
+            if (command is null || string.IsNullOrWhiteSpace(command.Label) || command.Command is null)
+            {
+                throw new ArgumentException("Each footer command needs a label and a command.", nameof(dialog));
+            }
+        }
+    }
+
+    private static XamlRoot GetXamlRoot(IManagedWindow owner)
+    {
         if (owner.Window.Content is not UIElement rootElement)
         {
             throw new DialogServiceException("The owner window has no root XAML content.");
         }
 
-        if (rootElement.XamlRoot is null)
+        return rootElement.XamlRoot ?? throw new DialogServiceException("The owner window root content has no XamlRoot.");
+    }
+
+    private static StackPanel? CreateFooter(IReadOnlyList<DialogCommand> commands)
+    {
+        if (commands.Count == 0)
         {
-            throw new DialogServiceException("The owner window root content has no XamlRoot.");
+            return null;
         }
 
-        var dialog = new ContentDialog
+        var footer = new StackPanel
         {
-            XamlRoot = rootElement.XamlRoot,
+            Orientation = Orientation.Horizontal,
+            Spacing = Application.Current.Resources.TryGetValue(ButtonSpacingResourceKey, out var spacing) && spacing is GridLength length
+                ? length.Value
+                : 0,
+        };
+        foreach (var command in commands)
+        {
+            footer.Children.Add(new Button { Content = command.Label, Command = command.Command });
+        }
+
+        return footer;
+    }
+
+    private static IValueConverter GetApplicationViewConverter()
+        => Application.Current.Resources.TryGetValue(ApplicationViewConverterKey, out var resource) && resource is IValueConverter converter
+            ? converter
+            : throw new DialogServiceException(
+                $"No view locator was injected, and the application resource '{ApplicationViewConverterKey}' is not a value converter.");
+
+    private async Task<bool> ConfirmAsync(string title, string message, WindowId? ownerWindowId, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(title);
+        ArgumentNullException.ThrowIfNull(message);
+        var confirmation = new DialogSpec(title, message)
+        {
+            PrimaryButtonText = "OK",
+            CloseButtonText = "Cancel",
+            DefaultButton = DialogButton.Close,
+        };
+        return await this.ShowAsync(confirmation, ownerWindowId, cancellationToken).ConfigureAwait(false) == DialogButton.Primary;
+    }
+
+    private async Task<DialogButton> ShowAsync(DialogSpec dialog, WindowId? ownerWindowId, CancellationToken cancellationToken)
+    {
+        Validate(dialog);
+        cancellationToken.ThrowIfCancellationRequested();
+        var owner = this.ResolveOwnerWindow(ownerWindowId);
+        return await owner.DispatcherQueue
+            .EnqueueAsync(() => this.ShowOnOwnerThreadAsync(owner, dialog, cancellationToken))
+            .ConfigureAwait(false);
+    }
+
+    private async Task<DialogButton> ShowOnOwnerThreadAsync(IManagedWindow owner, DialogSpec spec, CancellationToken cancellationToken)
+    {
+        var xamlRoot = GetXamlRoot(owner);
+        var gate = DialogGates.GetValue(xamlRoot, static _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync(cancellationToken).ConfigureAwait(true);
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var session = new DialogSession(this.CreateDialog(xamlRoot, spec), spec, owner.DispatcherQueue, cancellationToken);
+            return await session.RunAsync().ConfigureAwait(true);
+        }
+        finally
+        {
+            _ = gate.Release();
+        }
+    }
+
+    private AuraDialog CreateDialog(XamlRoot xamlRoot, DialogSpec spec)
+    {
+        var dialog = new AuraDialog
+        {
+            XamlRoot = xamlRoot,
             Title = spec.Title,
-            Content = spec.Content,
+            Content = spec.Content ?? (spec.ViewModel is { } viewModel ? this.ResolveView(viewModel) : null),
             PrimaryButtonText = spec.PrimaryButtonText,
             SecondaryButtonText = spec.SecondaryButtonText,
             CloseButtonText = spec.CloseButtonText,
             DefaultButton = MapDefaultButton(spec.DefaultButton),
+            FooterContent = CreateFooter(spec.FooterCommands),
+            PrimaryButtonFlyout = spec.PrimaryButtonOptions is { } options ? this.CreateOptionsFlyout(options) : null,
         };
+        if (spec.ViewModel is { } dataContext)
+        {
+            dialog.DataContext = dataContext;
+        }
 
-        // ContentDialog reads its width cap from this theme resource when its template applies.
+        // ContentDialog reads its size caps from these theme resources when its template applies.
         if (spec.MaxWidth is { } maxWidth && double.IsFinite(maxWidth) && maxWidth > 0)
         {
             dialog.Resources["ContentDialogMaxWidth"] = maxWidth;
         }
 
+        if (spec.MaxHeight is { } maxHeight && double.IsFinite(maxHeight) && maxHeight > 0)
+        {
+            dialog.Resources["ContentDialogMaxHeight"] = maxHeight;
+        }
+
         return dialog;
     }
 
-    private static UIElement ResolveViewFromViewModel(object viewModel)
-    {
-        ArgumentNullException.ThrowIfNull(viewModel);
-
-        var application = Application.Current;
-
-        if (!application.Resources.TryGetValue("VmToViewConverter", out var converterObject))
+    private Flyout CreateOptionsFlyout(object options)
+        => new()
         {
-            throw new DialogServiceException("Application resource 'VmToViewConverter' was not found.");
-        }
-
-        if (converterObject is not IValueConverter converter)
-        {
-            throw new DialogServiceException("Application resource 'VmToViewConverter' is not an IValueConverter.");
-        }
-
-        var view = converter.Convert(viewModel, typeof(object), parameter: null, CultureInfo.CurrentUICulture.Name);
-        if (view is not UIElement element)
-        {
-            throw new DialogServiceException("VmToViewConverter did not return a UIElement.");
-        }
-
-        if (element is FrameworkElement frameworkElement && frameworkElement.DataContext is null)
-        {
-            frameworkElement.DataContext = viewModel;
-        }
-
-        return element;
-    }
-
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Exceptions from the async-void button event are transferred to the awaited dialog task.")]
-    private static async Task<ContentDialogResult> ShowContentDialogAsync(
-        ContentDialog dialog, Func<Task<bool>>? primaryAction, CancellationToken cancellationToken)
-    {
-        if (primaryAction is null)
-        {
-            return await dialog.ShowAsync();
-        }
-
-        var isBusy = false;
-        var actionCompletion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        dialog.Closing += (_, args) => args.Cancel = isBusy;
-        dialog.PrimaryButtonClick += async (sender, args) =>
-        {
-            var deferral = args.GetDeferral();
-            isBusy = true;
-            dialog.IsPrimaryButtonEnabled = false;
-            dialog.IsSecondaryButtonEnabled = false;
-            try
-            {
-                args.Cancel = !await primaryAction().ConfigureAwait(true);
-            }
-            catch (Exception ex)
-            {
-                _ = actionCompletion.TrySetException(ex);
-                args.Cancel = false;
-            }
-            finally
-            {
-                isBusy = false;
-                dialog.IsPrimaryButtonEnabled = true;
-                dialog.IsSecondaryButtonEnabled = true;
-                if (cancellationToken.IsCancellationRequested)
-                {
-                    args.Cancel = false;
-                }
-
-                deferral.Complete();
-            }
+            Content = options as UIElement ?? this.ResolveView(options),
+            Placement = FlyoutPlacementMode.TopEdgeAlignedRight,
         };
 
-        var result = await dialog.ShowAsync();
-        _ = actionCompletion.TrySetResult();
-        await actionCompletion.Task.ConfigureAwait(true);
-
-        return result;
-    }
-
-    private async Task<DialogButton> ShowAsync(DialogSpec dialog, WindowId? ownerWindowId, CancellationToken cancellationToken)
+    private UIElement ResolveView(object viewModel)
     {
-        ArgumentNullException.ThrowIfNull(dialog);
-        if (string.IsNullOrWhiteSpace(dialog.Title))
+        var converter = this.viewConverter ?? GetApplicationViewConverter();
+        if (converter.Convert(viewModel, typeof(object), parameter: null, CultureInfo.CurrentUICulture.Name) is not UIElement view)
         {
-            throw new ArgumentException("Dialog title cannot be null or whitespace.", nameof(dialog));
+            throw new DialogServiceException($"No view was resolved for the view model '{viewModel.GetType().FullName}'.");
         }
 
-        var owner = this.ResolveOwnerWindow(ownerWindowId);
-
-        await DialogGate.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
+        if (view is FrameworkElement { DataContext: null } element)
         {
-            return await owner.DispatcherQueue.EnqueueAsync(async () =>
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-
-                var contentDialog = CreateContentDialog(owner, dialog);
-
-                var registration = cancellationToken.Register(() => owner.DispatcherQueue.TryEnqueue(contentDialog.Hide));
-                await using (registration.ConfigureAwait(false))
-                {
-                    var result = await ShowContentDialogAsync(contentDialog, dialog.PrimaryAction, cancellationToken).ConfigureAwait(true);
-
-                    cancellationToken.ThrowIfCancellationRequested();
-                    return MapResult(result);
-                }
-            }).ConfigureAwait(false);
-        }
-        finally
-        {
-            _ = DialogGate.Release();
-        }
-    }
-
-    private async Task<DialogButton> ShowAsync(ViewModelDialogSpec dialog, WindowId? ownerWindowId, CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(dialog);
-        if (string.IsNullOrWhiteSpace(dialog.Title))
-        {
-            throw new ArgumentException("Dialog title cannot be null or whitespace.", nameof(dialog));
+            element.DataContext = viewModel;
         }
 
-        if (dialog.ViewModel is null)
-        {
-            throw new ArgumentException("Dialog ViewModel cannot be null.", nameof(dialog));
-        }
-
-        var owner = this.ResolveOwnerWindow(ownerWindowId);
-
-        await DialogGate.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
-        {
-            return await owner.DispatcherQueue.EnqueueAsync(async () =>
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-
-                var view = ResolveViewFromViewModel(dialog.ViewModel);
-                var spec = new DialogSpec(dialog.Title, view)
-                {
-                    PrimaryButtonText = dialog.PrimaryButtonText,
-                    SecondaryButtonText = dialog.SecondaryButtonText,
-                    CloseButtonText = dialog.CloseButtonText,
-                    DefaultButton = dialog.DefaultButton,
-                };
-
-                var contentDialog = CreateContentDialog(owner, spec);
-
-                var registration = cancellationToken.Register(() => owner.DispatcherQueue.TryEnqueue(contentDialog.Hide));
-                await using (registration.ConfigureAwait(false))
-                {
-                    var result = await contentDialog.ShowAsync();
-
-                    cancellationToken.ThrowIfCancellationRequested();
-                    return MapResult(result);
-                }
-            }).ConfigureAwait(false);
-        }
-        finally
-        {
-            _ = DialogGate.Release();
-        }
-    }
-
-    private async Task<string?> PickFileAsync(FilePickerSpec picker, WindowId? ownerWindowId, CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(picker);
-        cancellationToken.ThrowIfCancellationRequested();
-        var owner = this.ResolveOwnerWindow(ownerWindowId);
-        return await owner.DispatcherQueue.EnqueueAsync(async () =>
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            var nativePicker = CreateFilePicker(picker, owner.Id);
-            var file = await nativePicker.PickSingleFileAsync();
-            cancellationToken.ThrowIfCancellationRequested();
-            return file?.Path;
-        }).ConfigureAwait(false);
-    }
-
-    private async Task<string?> PickFolderAsync(FolderPickerSpec spec, WindowId? ownerWindowId, CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(spec);
-        cancellationToken.ThrowIfCancellationRequested();
-        var owner = this.ResolveOwnerWindow(ownerWindowId);
-
-        return await owner.DispatcherQueue.EnqueueAsync(async () =>
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            var picker = CreateFolderPicker(spec, owner.Id);
-
-            // FolderPicker does not accept CancellationToken; honor cancellation before/after.
-            cancellationToken.ThrowIfCancellationRequested();
-            var folder = await picker.PickSingleFolderAsync();
-            cancellationToken.ThrowIfCancellationRequested();
-
-            return folder?.Path;
-        }).ConfigureAwait(false);
+        return view;
     }
 
     private IManagedWindow ResolveOwnerWindow(WindowId? ownerWindowId)

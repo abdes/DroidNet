@@ -87,11 +87,11 @@ public sealed class AuthoredAssetCreation(
             PrimaryButtonText = "Create",
             CloseButtonText = "Cancel",
             DefaultButton = DialogButton.Primary,
-            PrimaryAction = async () =>
+            PrimaryAction = async cancellationToken =>
             {
                 // A folder is a virtual path without an extension, so it is read as one rather than checked as a file's.
                 var invalid = AssetPath.TryParse(ReadFolder(folderBox), out var folder)
-                    ? await authoring.ValidateAsync(project, kind.Template, nameBox.Text.Trim(), folder, CancellationToken.None).ConfigureAwait(true)
+                    ? await authoring.ValidateAsync(project, kind.Template, nameBox.Text.Trim(), folder, cancellationToken).ConfigureAwait(true)
                     : "Choose a folder inside a project content folder, such as /Content/Materials.";
                 error.Text = invalid ?? string.Empty;
                 error.Visibility = invalid is null ? Visibility.Collapsed : Visibility.Visible;

@@ -233,15 +233,43 @@ Key public interfaces and types include:
 - **Event argument types** (`src/Controls/Tabs/*.cs`) — Strongly-typed event args used by the controls, including `TabSelectionChangedEventArgs`, `TabActivatedEventArgs`, `TabCloseRequestedEventArgs`, `TabDetachRequestedEventArgs`, `TabDragImageRequestEventArgs`, `TabDragCompleteEventArgs`, and `TabTearOutRequestedEventArgs`. These are the communication surfaces by which UI events are surfaced to the host application.
 - **`TabWidthPolicy`** (`src/Controls/Tabs/TabWidthPolicy.cs`) — Enum defining policies to control tab width behavior (e.g., preferred width, max width, compact/overflow behavior).
 - **`AppIcon`** (`src/Controls/AppIcon/AppIcon.cs`) — Small control used to surface application icons in templates (internal for now; planned to expose system menu integration).
-- **`Themes/Generic.xaml`** (`src/Themes/Generic.xaml`) — Resource dictionary that merges default styles and templates for `TabStrip`, `TabStripItem` and `AppIcon`, intended to be consumed by `App` resources so controls render with consistent defaults.
+- **`Themes/Generic.xaml`** (`src/Themes/Generic.xaml`) — Resource dictionary that merges default styles and templates for `TabStrip`, `TabStripItem`, `AppIcon` and `AuraDialog`, intended to be consumed by `App` resources so controls render with consistent defaults.
 
 These public types create a focused boundary: the Controls module owns the visual and template aspects of tabbed documents, while the Drag/Tab System module coordinates cross-window behaviors through stable contracts (`ITabStrip`/`IDragPayload` defined in the Drag module, implemented by `TabStrip` and `TabItem` in this module). Applications build on these building blocks to implement document lifecycle, window tear-out, and document-based actions while keeping application logic separate from the UI control implementations.
 
 ### Dialogs
 
-`IDialogService` owns XAML dialogs and desktop storage pickers. Its picker
-specifications carry titles, stable settings identifiers and suggested starting
-folders; `FilePickerSpec` additionally groups file extensions under labels.
+`IDialogService` owns XAML dialogs and desktop storage pickers, in terms a view
+model can provide. One `DialogSpec` describes every dialog: its content, or a
+`ViewModel` whose view the injected `IViewLocator` resolves (the application
+resource `VmToViewConverter` when none is injected); footer commands as
+`DialogCommand` (label and `ICommand`); options of the primary button, shown in
+a flyout from a chevron beside it; and predicates that enable the primary button
+and mark modified options, evaluated again whenever the view model or the
+options raise `PropertyChanged`.
+
+Dialogs are `AuraDialog`, a `ContentDialog` whose template is WinUI's with a
+button bar of two columns: the footer, first in reading and tab order, then the
+stock buttons. The footer takes only the width the buttons leave, so it never
+overlaps them. The chevron is its own button rather than a split button, so it
+stays enabled while the primary button is disabled; its corners come from the
+theme's `ControlCornerRadius`. Template parts and visual states are documented
+on the class.
+
+A window shows one dialog at a time: dialogs of one window wait for each other
+in request order, and dialogs of other windows are independent. While the
+primary action runs, the user cannot dismiss the dialog, and the action receives
+the caller's cancellation token. Cancellation closes a dialog that is still open
+once its action returns, and is reported as `OperationCanceledException`; a
+dialog that closed with a button, or whose action returned true, reports that
+button.
+
+Picker specifications carry titles, stable settings identifiers and optional
+suggested starting folders; `FilePickerSpec` and `FileSavePickerSpec`
+additionally group file extensions under labels. Extensions may be written
+`.png`, `png` or `*.png`; the first extension of a save picker's first choice is
+its default extension. A start folder is set only when the specification names
+one, so the picker's remembered location otherwise applies.
 `DialogService` uses `Microsoft.Windows.Storage.Pickers` with the resolved Aura
 window's id and marshals picker creation and display to its dispatcher. Explicit
 owner ids never fall back to whichever window happens to be active.

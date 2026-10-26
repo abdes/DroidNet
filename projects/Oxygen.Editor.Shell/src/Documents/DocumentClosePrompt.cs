@@ -125,7 +125,7 @@ public sealed class DocumentClosePrompt(IDialogService dialogs, IWindowManagerSe
             SecondaryButtonText = "Don't Save",
             CloseButtonText = "Cancel",
             DefaultButton = DialogButton.Close,
-            PrimaryAction = () => SaveSelectedAsync(rows),
+            PrimaryAction = _ => SaveSelectedAsync(rows),
         };
         DialogButton result;
         try

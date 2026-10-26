@@ -218,7 +218,7 @@ public sealed partial class AssetRelocationWorkflow(
             PrimaryButtonText = "Rename",
             CloseButtonText = "Cancel",
             DefaultButton = DialogButton.Primary,
-            PrimaryAction = () =>
+            PrimaryAction = _ =>
             {
                 var value = VirtualPath.NormalizeTypedName(input.Text);
                 var invalid = VirtualPath.ValidateSegment(value, VirtualPathRuleSet.Authored)?.ToMessage();
