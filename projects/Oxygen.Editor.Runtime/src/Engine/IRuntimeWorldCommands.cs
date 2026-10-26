@@ -69,4 +69,12 @@ public interface IRuntimeWorldCommands
     /// <param name="cancellationToken">Cancels the observation wait.</param>
     /// <returns>The native state only if the requested activation remains current.</returns>
     public Task<RuntimeNodeObservation> ObserveNodeAsync(Guid operationId, RuntimeSceneTarget target, NodeId nodeId, CancellationToken cancellationToken = default);
+
+    /// <summary>Reads the hierarchy of a scene of the content the activation mounts, from the scene descriptors alone.</summary>
+    /// <param name="operationId">The observation identity.</param>
+    /// <param name="target">The scene activation whose mounted content is read.</param>
+    /// <param name="virtualPath">The scene's virtual path.</param>
+    /// <param name="cancellationToken">Cancels the observation wait.</param>
+    /// <returns>The hierarchy only if the requested activation remains current.</returns>
+    public Task<RuntimeSceneHierarchyObservation> ReadSceneHierarchyAsync(Guid operationId, RuntimeSceneTarget target, string virtualPath, CancellationToken cancellationToken = default);
 }

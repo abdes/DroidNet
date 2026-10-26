@@ -166,6 +166,11 @@
       <PrecompiledHeaderFile>pch_clr.h</PrecompiledHeaderFile>
       <PrecompiledHeaderOutputFile>$(IntDir)pch_clr.pch</PrecompiledHeaderOutputFile>
     </ClCompile>
+    <ClCompile Include="World\SceneHierarchyObservation.cpp">
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>pch_clr.h</PrecompiledHeaderFile>
+      <PrecompiledHeaderOutputFile>$(IntDir)pch_clr.pch</PrecompiledHeaderOutputFile>
+    </ClCompile>
     <ClCompile Include="World\NodeObservation.cpp">
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>pch_clr.h</PrecompiledHeaderFile>
@@ -195,6 +200,7 @@
     <ClInclude Include="Commands\SetEnvironmentCommand.h" />
     <ClInclude Include="Commands\ObserveEnvironmentCommand.h" />
     <ClInclude Include="Commands\ObserveNodeCommand.h" />
+    <ClInclude Include="Commands\ReadSceneHierarchyCommand.h" />
     <ClInclude Include="Utils\EditorRotation.h" />
     <ClInclude Include="Utils\Utf8Marshaling.h" />
     <ClInclude Include="World\EnvironmentStateManaged.h" />

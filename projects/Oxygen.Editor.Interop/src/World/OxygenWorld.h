@@ -133,6 +133,46 @@ value struct PropertyValueEntry {
     array<System::Numerics::Vector4>^ MaterialBaseColors;
   };
 
+  //! A node of a mounted scene's hierarchy: one of the scene's own nodes, or
+  //! one an instance of it brings in.
+  public value struct SceneHierarchyNodeManaged {
+    //! The node IDs from the scene read down to the node, shallowest first.
+    array<System::Guid>^ Path;
+    System::String^ Name;
+    //! The parent's index in the hierarchy's nodes; -1 for a root of the
+    //! scene read.
+    int Parent;
+    //! The asset key of the scene that defines the node.
+    System::Guid SceneKey;
+    //! The asset key of the scene the node instances; empty when the node is
+    //! no instance root.
+    System::Guid InstanceKey;
+  };
+
+  //! Why part of a scene's hierarchy could not be read.
+  public enum class SceneHierarchyIssueCodeManaged : System::Byte {
+    SceneUnavailable = 0,
+    Cycle = 1,
+    InvalidInstance = 2,
+  };
+
+  //! A part of a scene's hierarchy that could not be read.
+  public value struct SceneHierarchyIssueManaged {
+    SceneHierarchyIssueCodeManaged Code;
+    //! The instance root's index in the hierarchy's nodes; -1 for none.
+    int Node;
+    System::Guid SceneKey;
+  };
+
+  //! The hierarchy of a mounted scene with every scene it instances.
+  public value struct SceneHierarchyManaged {
+    //! Whether the virtual path names a mounted, readable scene.
+    bool Exists;
+    System::Guid SceneKey;
+    array<SceneHierarchyNodeManaged>^ Nodes;
+    array<SceneHierarchyIssueManaged>^ Issues;
+  };
+
   public
   ref class OxygenWorld {
   public:
@@ -214,6 +254,11 @@ value struct PropertyValueEntry {
     //! Reads node properties and currently resolved assets after earlier mutations.
     System::Threading::Tasks::Task<NodeStateManaged>^
       ObserveNodeAsync(System::Guid nodeId);
+
+    //! Reads the hierarchy of the mounted scene at `virtualPath`, with every
+    //! scene it instances, from the scene descriptors alone.
+    System::Threading::Tasks::Task<SceneHierarchyManaged>^
+      ReadSceneHierarchyAsync(String^ virtualPath);
 
     void SetEnvironment(bool atmosphereEnabled, bool sunDiskEnabled,
       float planetRadiusMeters, float atmosphereHeightMeters,

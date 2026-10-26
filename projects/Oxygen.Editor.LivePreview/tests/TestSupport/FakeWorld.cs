@@ -128,4 +128,8 @@ internal sealed class FakeWorld : IRuntimeWorldCommands
     /// <inheritdoc/>
     public Task<RuntimeNodeObservation> ObserveNodeAsync(Guid operationId, RuntimeSceneTarget target, NodeId nodeId, CancellationToken cancellationToken = default)
         => throw new NotSupportedException("Scene preview tests do not observe nodes.");
+
+    /// <inheritdoc/>
+    public Task<RuntimeSceneHierarchyObservation> ReadSceneHierarchyAsync(Guid operationId, RuntimeSceneTarget target, string virtualPath, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException("Scene preview tests do not read scene hierarchies.");
 }

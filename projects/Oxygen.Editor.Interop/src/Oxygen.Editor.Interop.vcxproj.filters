@@ -42,6 +42,9 @@
     <ClCompile Include="World\NodeObservation.cpp">
       <Filter>World</Filter>
     </ClCompile>
+    <ClCompile Include="World\SceneHierarchyObservation.cpp">
+      <Filter>World</Filter>
+    </ClCompile>
     <ClCompile Include="EngineRunner_logging.cpp" />
     <ClCompile Include="pch.cpp" />
     <ClCompile Include="pch_clr.cpp" />
@@ -360,6 +363,9 @@
       <Filter>Commands</Filter>
     </ClInclude>
     <ClInclude Include="Commands\ObserveNodeCommand.h">
+      <Filter>Commands</Filter>
+    </ClInclude>
+    <ClInclude Include="Commands\ReadSceneHierarchyCommand.h">
       <Filter>Commands</Filter>
     </ClInclude>
     <ClInclude Include="Utils\EditorRotation.h">

@@ -25,6 +25,15 @@ internal sealed partial class RuntimeCommandDispatcher
         return new(outcome, nodeId, state);
     }
 
+    /// <inheritdoc/>
+    public async Task<RuntimeSceneHierarchyObservation> ReadSceneHierarchyAsync(
+        Guid operationId, RuntimeSceneTarget target, string virtualPath, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(virtualPath);
+        var (outcome, hierarchy) = await this.ObserveAsync(operationId, target, transport => transport.ReadSceneHierarchyAsync(virtualPath), cancellationToken).ConfigureAwait(false);
+        return new(outcome, hierarchy);
+    }
+
     private async Task<(RuntimeCommandResult Outcome, TState? State)> ObserveAsync<TState>(
         Guid operationId,
         RuntimeSceneTarget target,

@@ -38,6 +38,11 @@ internal interface IRuntimeCommandTransport
     /// <returns>The native node state.</returns>
     public Task<RuntimeNodeState> ObserveNodeAsync(NodeId nodeId);
 
+    /// <summary>Reads the hierarchy of a scene of the mounted content, from the scene descriptors alone.</summary>
+    /// <param name="virtualPath">The scene's virtual path.</param>
+    /// <returns>The hierarchy; not existing when no mounted scene has the path.</returns>
+    public Task<RuntimeSceneHierarchy> ReadSceneHierarchyAsync(string virtualPath);
+
     /// <summary>Performs the native ExecuteInput operation.</summary>
     /// <param name="viewId">The viewId transport value.</param>
     /// <param name="input">The input transport value.</param>

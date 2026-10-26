@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Editor.World;
 using Oxygen.Interop.World;
 using Oxygen.Managed.Core;
 
@@ -24,6 +25,25 @@ internal sealed partial class NativeRuntimeCommandTransport
             state.IndexCount,
             [.. state.MaterialKeys])
         { MaterialBaseColors = [.. state.MaterialBaseColors] };
+    }
+
+    /// <inheritdoc/>
+    public async Task<RuntimeSceneHierarchy> ReadSceneHierarchyAsync(string virtualPath)
+    {
+        var hierarchy = await this.world.ReadSceneHierarchyAsync(virtualPath).ConfigureAwait(false);
+        return new(
+            hierarchy.Exists,
+            hierarchy.SceneKey,
+            [.. hierarchy.Nodes.Select(static node => new RuntimeSceneHierarchyNode(
+                NodePath.Of(node.Path.Select(NodeId.FromValue)),
+                node.Name,
+                node.Parent < 0 ? null : node.Parent,
+                node.SceneKey,
+                node.InstanceKey == Guid.Empty ? null : node.InstanceKey))],
+            [.. hierarchy.Issues.Select(static issue => new RuntimeSceneHierarchyIssue(
+                (RuntimeSceneHierarchyIssueCode)issue.Code,
+                issue.Node < 0 ? null : issue.Node,
+                issue.SceneKey))]);
     }
 
     /// <inheritdoc/>
