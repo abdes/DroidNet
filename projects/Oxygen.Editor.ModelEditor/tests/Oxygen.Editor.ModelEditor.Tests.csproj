@@ -1,0 +1,17 @@
+<Project Sdk="MSTest.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+        <DefaultItemExcludes>$(DefaultItemExcludes);UI/**</DefaultItemExcludes>
+
+        <RootNamespace>Oxygen.Editor.ModelEditor.Tests</RootNamespace>
+        <AssemblyName>$(MSBuildProjectName)</AssemblyName>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Moq" />
+        <PackageReference Include="Testably.Abstractions.Testing" />
+        <ProjectReference Include="..\src\Oxygen.Editor.ModelEditor.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Projects\testing\Oxygen.Editor.Projects.Testing.csproj" />
+    </ItemGroup>
+
+</Project>

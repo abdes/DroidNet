@@ -430,7 +430,7 @@ public sealed partial class ContentPipelineService
         CancellationToken cancellationToken)
     {
         // Removal results come first: a later cook into the same root verifies it again and supersedes them.
-        List<ContentCookResult> results = [.. removals, .. await this.CookDependencyLayersAsync(operation, targetKind, artifacts, snapshot, graph, previous, plan, dirtyInputs, staging, libraries.OrderRoots(references.Paths), cancellationToken).ConfigureAwait(false)];
+        List<ContentCookResult> results = [.. removals, .. await this.CookDependencyLayersAsync(operation, targetKind, artifacts, snapshot, graph, previous, plan, dirtyInputs, staging, libraries.OrderRoots(references.Paths), ContentCookScope.RunOf(resolveScopes()), cancellationToken).ConfigureAwait(false)];
 
         var cooked = results.Count == 1 ? results[0] : MergeProjectResults(operation.OperationId, results);
         var result = cooked with

@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Text.Json;
+using Oxygen.Editor.Models;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Core;
 
@@ -16,6 +18,14 @@ public sealed record SceneImportRequest(ProjectContext Project, string SourcePat
 {
     /// <summary>Gets the existing source explicitly reviewed for replacement, or null for a new import.</summary>
     public SceneImportReplacement? Replacement { get; init; }
+
+    /// <summary>Gets the model import settings chosen for the model, its name included: a new model's record is created
+    /// with them, and a replaced model's record takes them before the replacement cooks. Null keeps the defaults of a
+    /// new model, or the replaced model's own settings.</summary>
+    public JsonElement? Settings { get; init; }
+
+    /// <summary>Gets the ImportTool's execution settings the import runs with.</summary>
+    public ImportRunSettings Run { get; init; } = ImportRunSettings.None;
 
     /// <summary>Gets the source identity kept from the first attempt through the record's creation and retries; it names
     /// the model's import record.</summary>

@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using Oxygen.Editor.ContentPipeline.Snapshots;
+using Oxygen.Editor.Models;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Compatibility;
@@ -85,4 +86,13 @@ public sealed record ContentCookScope(
 
     /// <summary>Gets the owning run's callback for retaining an incoming replacement candidate for Retry.</summary>
     internal Action<Import.SceneImportRequest>? RetainReplacementCandidate { get; init; }
+
+    /// <summary>Gets the ImportTool's execution settings of an explicit import's run; empty for every other cook.</summary>
+    internal ImportRunSettings Run { get; init; } = ImportRunSettings.None;
+
+    /// <summary>Gets the execution settings a cook of <paramref name="scopes"/> runs with: an explicit import's, or none.</summary>
+    /// <param name="scopes">The cook's requested scopes.</param>
+    /// <returns>The first settings a scope sets, or <see cref="ImportRunSettings.None"/>.</returns>
+    internal static ImportRunSettings RunOf(IEnumerable<ContentCookScope> scopes)
+        => scopes.Select(static scope => scope.Run).FirstOrDefault(static run => !run.IsEmpty) ?? ImportRunSettings.None;
 }

@@ -4,6 +4,7 @@
 
 using DroidNet.Composition;
 using DryIoc;
+using Oxygen.Editor.Shell.Desktop;
 using Oxygen.Editor.Shell.Documents;
 using Oxygen.Editor.Shell.Windows;
 
@@ -35,5 +36,8 @@ public sealed class ShellModule : IScopeModule<IApplicationLayer>
         scope.RegisterMapping<ICloseAndExit, CloseAndExit>();
         scope.Register<IDocumentClosePrompt, DocumentClosePrompt>(Reuse.Singleton);
         scope.Register<IDocumentConfirmations, DocumentConfirmations>(Reuse.Singleton);
+
+        // The clipboard, File Explorer and the Recycle Bin, for every window and module.
+        scope.Register<IDesktopIntegration, WindowsDesktopIntegration>(Reuse.Singleton);
     }
 }

@@ -97,6 +97,7 @@ internal static class NativeImportReportReader
                     Message = issue.GetProperty("message").GetString()!,
                     AffectedPath = Path.GetFullPath(Path.Combine(execution.InputRoot, execution.Manifest.Jobs[index].AttributedSource)),
                     TechnicalMessage = issue.TryGetProperty("object_path", out var location) ? location.GetString() : null,
+                    AffectedEntity = NativeSourceObject.Read(issue),
                 });
             }
         }

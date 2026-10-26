@@ -1,0 +1,247 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="Oxygen.Editor.ModelEditor.Settings.ModelImportSettingsPanel"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:editorcontrols="using:Oxygen.Editor.Controls"
+    xmlns:pickers="using:Oxygen.Editor.Pickers"
+    xmlns:settings="using:Oxygen.Editor.ModelEditor.Settings"
+    xmlns:ui="using:CommunityToolkit.WinUI">
+    <UserControl.Resources>
+        <!--  Every row is a property card, as in the Properties pane: label, override bar, reset and qualifier.  -->
+        <DataTemplate x:Key="ChoiceRowTemplate" x:DataType="settings:ChoiceRow">
+            <editorcontrols:PropertyCard
+                OverrideState="{x:Bind OverrideState, Mode=OneWay}"
+                PropertyName="{x:Bind Label}"
+                Qualifier="{x:Bind Qualifier, Mode=OneWay}"
+                ResetCommand="{x:Bind ResetCommand}"
+                ResetToolTip="{x:Bind ResetToolTip}">
+                <ComboBox
+                    HorizontalAlignment="Stretch"
+                    AutomationProperties.Name="{x:Bind Label}"
+                    DisplayMemberPath="Label"
+                    ItemsSource="{x:Bind Options, Mode=OneWay}"
+                    PlaceholderText="{x:Bind PlaceholderText, Mode=OneWay}"
+                    SelectedItem="{x:Bind SelectedOption, Mode=TwoWay}" />
+            </editorcontrols:PropertyCard>
+        </DataTemplate>
+        <DataTemplate x:Key="NumberRowTemplate" x:DataType="settings:NumberRow">
+            <editorcontrols:NumberField
+                ErrorText="{x:Bind ErrorText, Mode=OneWay}"
+                HasError="{x:Bind HasError, Mode=OneWay}"
+                IsMixed="{x:Bind IsMixed, Mode=OneWay}"
+                Label="{x:Bind Label}"
+                NumberValue="{x:Bind NumberValue, Mode=TwoWay}"
+                OverrideState="{x:Bind OverrideState, Mode=OneWay}"
+                Prefix="{x:Bind Prefix}"
+                Qualifier="{x:Bind Qualifier, Mode=OneWay}"
+                ResetCommand="{x:Bind ResetCommand}"
+                ResetToolTip="{x:Bind ResetToolTip}"
+                Unit="{x:Bind Unit}" />
+        </DataTemplate>
+        <DataTemplate x:Key="ToggleRowTemplate" x:DataType="settings:ToggleRow">
+            <editorcontrols:ToggleField
+                Label="{x:Bind Label}"
+                OverrideState="{x:Bind OverrideState, Mode=OneWay}"
+                ResetCommand="{x:Bind ResetCommand}"
+                ResetToolTip="{x:Bind ResetToolTip}"
+                Value="{x:Bind Value, Mode=TwoWay}" />
+        </DataTemplate>
+        <!--  The inspector's material picker: the chosen material's name, its chevron opening the asset picker.  -->
+        <DataTemplate x:Key="MaterialRowTemplate" x:DataType="settings:MaterialRow">
+            <editorcontrols:PropertyCard
+                OverrideState="{x:Bind OverrideState, Mode=OneWay}"
+                PropertyName="{x:Bind Material}"
+                ResetCommand="{x:Bind ResetCommand}"
+                ResetToolTip="{x:Bind ResetToolTip}">
+                <pickers:AssetPickerButton
+                    AutomationName="{x:Bind Material}"
+                    ChoiceInvoked="OnMaterialChoiceInvoked"
+                    Label="{x:Bind ButtonLabel, Mode=OneWay}"
+                    Model="{x:Bind Choices}" />
+            </editorcontrols:PropertyCard>
+        </DataTemplate>
+        <Style x:Key="RowHost" TargetType="ContentControl">
+            <Setter Property="IsTabStop" Value="False" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        </Style>
+    </UserControl.Resources>
+
+    <StackPanel Spacing="4">
+        <editorcontrols:PropertiesExpander
+            Description="The scene of the file the model is made from"
+            Header="Source"
+            HeaderIcon="{ui:FontIcon Glyph='&#xE7C3;'}"
+            IsExpanded="True"
+            Visibility="{x:Bind ViewModel.HasScenes, Mode=OneWay}">
+            <editorcontrols:PropertiesExpander.Items>
+                <ContentControl
+                    Content="{x:Bind ViewModel.Scene}"
+                    ContentTemplate="{StaticResource ChoiceRowTemplate}"
+                    Style="{StaticResource RowHost}" />
+            </editorcontrols:PropertiesExpander.Items>
+        </editorcontrols:PropertiesExpander>
+
+        <editorcontrols:PropertiesExpander
+            Description="The model's size and orientation"
+            Header="Units and axes"
+            HeaderIcon="{ui:FontIcon Glyph='&#xE1D9;'}"
+            IsExpanded="True">
+            <editorcontrols:PropertiesExpander.Items>
+                <!--  What the import will do to the model, in Oxygen's space (right-handed, Z up, metres).  -->
+                <editorcontrols:PropertyCard PropertyName="Result" Visibility="{x:Bind settings:ModelImportSettingsPanel.ShownWhenSet(ViewModel.ImportResult), Mode=OneWay}">
+                    <!--  Caption type: the sentences mostly wrap under the label, so they read as a note, not a value.  -->
+                    <TextBlock
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Style="{ThemeResource CaptionTextBlockStyle}"
+                        Text="{x:Bind ViewModel.ImportResult, Mode=OneWay}"
+                        TextWrapping="Wrap" />
+                </editorcontrols:PropertyCard>
+                <ContentControl
+                    Content="{x:Bind ViewModel.UnitPolicy}"
+                    ContentTemplate="{StaticResource ChoiceRowTemplate}"
+                    Style="{StaticResource RowHost}"
+                    Visibility="{x:Bind ViewModel.UnitPolicy.IsVisible, Mode=OneWay}" />
+                <ContentControl
+                    Content="{x:Bind ViewModel.UnitScale}"
+                    ContentTemplate="{StaticResource NumberRowTemplate}"
+                    Style="{StaticResource RowHost}"
+                    Visibility="{x:Bind ViewModel.UnitScale.IsVisible, Mode=OneWay}" />
+                <ContentControl
+                    Content="{x:Bind ViewModel.UpAxis}"
+                    ContentTemplate="{StaticResource ChoiceRowTemplate}"
+                    Style="{StaticResource RowHost}"
+                    Visibility="{x:Bind ViewModel.UpAxis.IsVisible, Mode=OneWay}" />
+            </editorcontrols:PropertiesExpander.Items>
+        </editorcontrols:PropertiesExpander>
+
+        <editorcontrols:PropertiesExpander
+            Description="Normals, tangents and node pivots"
+            Header="Geometry"
+            HeaderIcon="{ui:FontIcon Glyph='&#xF158;'}"
+            IsExpanded="True">
+            <editorcontrols:PropertiesExpander.Items>
+                <ContentControl
+                    Content="{x:Bind ViewModel.Normals}"
+                    ContentTemplate="{StaticResource ChoiceRowTemplate}"
+                    Style="{StaticResource RowHost}"
+                    Visibility="{x:Bind ViewModel.Normals.IsVisible, Mode=OneWay}" />
+                <ContentControl
+                    Content="{x:Bind ViewModel.SmoothingAngle}"
+                    ContentTemplate="{StaticResource NumberRowTemplate}"
+                    Style="{StaticResource RowHost}"
+                    Visibility="{x:Bind ViewModel.SmoothingAngle.IsVisible, Mode=OneWay}" />
+                <ContentControl
+                    Content="{x:Bind ViewModel.Tangents}"
+                    ContentTemplate="{StaticResource ChoiceRowTemplate}"
+                    Style="{StaticResource RowHost}"
+                    Visibility="{x:Bind ViewModel.Tangents.IsVisible, Mode=OneWay}" />
+                <ContentControl
+                    Content="{x:Bind ViewModel.KeepNodePivots}"
+                    ContentTemplate="{StaticResource ToggleRowTemplate}"
+                    Style="{StaticResource RowHost}"
+                    Visibility="{x:Bind ViewModel.KeepNodePivots.IsVisible, Mode=OneWay}" />
+            </editorcontrols:PropertiesExpander.Items>
+        </editorcontrols:PropertiesExpander>
+
+        <editorcontrols:PropertiesExpander
+            Description="The nodes the model keeps"
+            Header="Hierarchy"
+            HeaderIcon="{ui:FontIcon Glyph='&#xE8B7;'}"
+            IsExpanded="True">
+            <editorcontrols:PropertiesExpander.Items>
+                <ContentControl
+                    Content="{x:Bind ViewModel.DropEmptyNodes}"
+                    ContentTemplate="{StaticResource ToggleRowTemplate}"
+                    Style="{StaticResource RowHost}"
+                    Visibility="{x:Bind ViewModel.DropEmptyNodes.IsVisible, Mode=OneWay}" />
+            </editorcontrols:PropertiesExpander.Items>
+        </editorcontrols:PropertiesExpander>
+
+        <editorcontrols:PropertiesExpander
+            Description="Size, compression and normal map convention"
+            Header="Textures"
+            HeaderIcon="{ui:FontIcon Glyph='&#xEB9F;'}"
+            IsExpanded="True">
+            <editorcontrols:PropertiesExpander.Items>
+                <ContentControl
+                    Content="{x:Bind ViewModel.MaxTextureSize}"
+                    ContentTemplate="{StaticResource ChoiceRowTemplate}"
+                    Style="{StaticResource RowHost}"
+                    Visibility="{x:Bind ViewModel.MaxTextureSize.IsVisible, Mode=OneWay}" />
+                <ContentControl
+                    Content="{x:Bind ViewModel.CompressionQuality}"
+                    ContentTemplate="{StaticResource ChoiceRowTemplate}"
+                    Style="{StaticResource RowHost}"
+                    Visibility="{x:Bind ViewModel.CompressionQuality.IsVisible, Mode=OneWay}" />
+                <ContentControl
+                    Content="{x:Bind ViewModel.FlipNormalGreen}"
+                    ContentTemplate="{StaticResource ToggleRowTemplate}"
+                    Style="{StaticResource RowHost}"
+                    Visibility="{x:Bind ViewModel.FlipNormalGreen.IsVisible, Mode=OneWay}" />
+            </editorcontrols:PropertiesExpander.Items>
+        </editorcontrols:PropertiesExpander>
+
+        <editorcontrols:PropertiesExpander
+            Description="The file's lights and cameras"
+            Header="Lights and cameras"
+            HeaderIcon="{ui:FontIcon Glyph='&#xE706;'}"
+            IsExpanded="True">
+            <editorcontrols:PropertiesExpander.Items>
+                <ContentControl
+                    Content="{x:Bind ViewModel.ImportLights}"
+                    ContentTemplate="{StaticResource ToggleRowTemplate}"
+                    Style="{StaticResource RowHost}"
+                    Visibility="{x:Bind ViewModel.ImportLights.IsVisible, Mode=OneWay}" />
+                <ContentControl
+                    Content="{x:Bind ViewModel.LightIntensityScale}"
+                    ContentTemplate="{StaticResource NumberRowTemplate}"
+                    Style="{StaticResource RowHost}"
+                    Visibility="{x:Bind ViewModel.LightIntensityScale.IsVisible, Mode=OneWay}" />
+                <ContentControl
+                    Content="{x:Bind ViewModel.OmittedLightRange}"
+                    ContentTemplate="{StaticResource NumberRowTemplate}"
+                    Style="{StaticResource RowHost}"
+                    Visibility="{x:Bind ViewModel.OmittedLightRange.IsVisible, Mode=OneWay}" />
+                <ContentControl
+                    Content="{x:Bind ViewModel.ImportCameras}"
+                    ContentTemplate="{StaticResource ToggleRowTemplate}"
+                    Style="{StaticResource RowHost}"
+                    Visibility="{x:Bind ViewModel.ImportCameras.IsVisible, Mode=OneWay}" />
+            </editorcontrols:PropertiesExpander.Items>
+        </editorcontrols:PropertiesExpander>
+
+        <!--  Materials last: their rows are as many as the file has materials.  -->
+        <editorcontrols:PropertiesExpander
+            Description="Imported, or a project material the surfaces use instead"
+            Header="Materials"
+            HeaderIcon="{ui:FontIcon Glyph='&#xE8B9;'}"
+            IsExpanded="True"
+            Visibility="{x:Bind ViewModel.HasMaterials, Mode=OneWay}">
+            <editorcontrols:PropertiesExpander.HeaderActions>
+                <Button
+                    AutomationProperties.HelpText="For each material still set to Imported, use the project material with exactly the same name, when there is one. Materials you chose are kept, and each one set can be reset."
+                    Command="{x:Bind ViewModel.UseProjectMaterialsCommand}"
+                    Content="Match by name"
+                    ToolTipService.ToolTip="For each material still set to Imported, use the project material with exactly the same name, when there is one. Materials you chose are kept, and each one set can be reset." />
+            </editorcontrols:PropertiesExpander.HeaderActions>
+            <editorcontrols:PropertiesExpander.Items>
+                <!--  Virtualized: a file can have hundreds of materials; only the rows in view are built.  -->
+                <ItemsRepeater ItemTemplate="{StaticResource MaterialRowTemplate}" ItemsSource="{x:Bind ViewModel.Materials, Mode=OneWay}">
+                    <ItemsRepeater.Layout>
+                        <StackLayout Spacing="4" />
+                    </ItemsRepeater.Layout>
+                </ItemsRepeater>
+            </editorcontrols:PropertiesExpander.Items>
+        </editorcontrols:PropertiesExpander>
+
+        <TextBlock
+            Margin="12,4"
+            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+            Style="{StaticResource CaptionTextBlockStyle}"
+            Text="Select one file to choose its scene and materials."
+            TextWrapping="Wrap"
+            Visibility="{x:Bind ViewModel.ShowsSelectOneNote, Mode=OneWay}" />
+    </StackPanel>
+</UserControl>

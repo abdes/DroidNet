@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.Immutable;
+using Oxygen.Editor.Models;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.ContentPipeline.Import;
@@ -26,4 +27,9 @@ public sealed record NativeSourceAnalysisJob(
     ImmutableArray<NativeLogicalDependency> References,
     ImmutableArray<NativeSourceFileDependency> Files,
     ImmutableArray<NativeSourceObservation> Observations,
-    ImmutableArray<DiagnosticRecord> Diagnostics);
+    ImmutableArray<DiagnosticRecord> Diagnostics)
+{
+    /// <summary>Gets what a model source holds, from its metadata parse; null for other jobs and for a model whose
+    /// analysis did not complete.</summary>
+    public ModelSourceFacts? Model { get; init; }
+}

@@ -5,7 +5,7 @@
         <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
 
         <Title>Oxygen Editor Models</Title>
-        <Description>Model family module: a model's import record and the index of a project's records, without any UI.</Description>
+        <Description>Model family module: a model's import record and settings, source facts, import sessions and the import dialog's port, without any UI.</Description>
         <PackageReadmeFile>README.md</PackageReadmeFile>
         <PackageTags>oxygen;editor;models</PackageTags>
         <PackageReleaseNotes>Initial version.</PackageReleaseNotes>
@@ -17,6 +17,9 @@
         <!-- The engine owns the record's schema; the editor reads it as the installed SDK ships it. -->
         <EmbeddedResource Include="$(OxygenSdkSchemasDir)\oxygen.model-import.schema.json"
                           LogicalName="oxygen.model-import.schema.json" />
+        <!-- Import sessions are import manifests; the schema also states the ImportTool's execution defaults. -->
+        <EmbeddedResource Include="$(OxygenSdkSchemasDir)\oxygen.import-manifest.schema.json"
+                          LogicalName="oxygen.import-manifest.schema.json" />
     </ItemGroup>
 
     <ItemGroup>

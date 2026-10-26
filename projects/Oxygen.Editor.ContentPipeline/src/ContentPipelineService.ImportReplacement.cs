@@ -136,7 +136,7 @@ public sealed partial class ContentPipelineService
             [
                 this.CreateScope(operation.Project, [input], CookTargetKind.Asset) with
                 {
-                    ScopeUri = input.AssetUri, ImportReplacement = request, RetainReplacementCandidate = retainRecovery,
+                    ScopeUri = input.AssetUri, ImportReplacement = request, RetainReplacementCandidate = retainRecovery, Run = request.Run,
                 },
             ],
             CookTargetKind.Asset,
@@ -200,7 +200,7 @@ public sealed partial class ContentPipelineService
         var root = operation.Project.ProjectRoot.Combine(replacement.BundleRoot).FullPath;
         if (!replacement.Before.Matches(await CookRootImage.CaptureAsync(root, copyTo: null, cancellationToken).ConfigureAwait(false)))
         {
-            throw new IOException("The retained source changed after review. Review the replacement again.");
+            throw new IOException("The model to replace changed since its replacement was chosen. Choose Replace again.");
         }
     }
 

@@ -18,6 +18,15 @@ public interface IContentPipelineService : Status.IAssetCookStatusReader
     /// <returns>The cook result, including retained-source recovery when cooking fails.</returns>
     public Task<ContentCookResult> ImportSourceAsync(Import.SceneImportRequest request, CancellationToken cancellationToken);
 
+    /// <summary>Imports the models of one import dialog as one run: the new models are retained, get their records and
+    /// cook as one native batch; each replacement then runs on its own, as its capture and commit belong to its model.
+    /// Every cook runs with <paramref name="run"/>.</summary>
+    /// <param name="requests">The reviewed models, all of one project, in the dialog's order.</param>
+    /// <param name="run">The ImportTool's execution settings of the run.</param>
+    /// <param name="cancellationToken">Cancels the imports and owned native work.</param>
+    /// <returns>The cook results: the new models' first, then each replacement's.</returns>
+    public Task<IReadOnlyList<ContentCookResult>> ImportSourcesAsync(IReadOnlyList<Import.SceneImportRequest> requests, Oxygen.Editor.Models.ImportRunSettings run, CancellationToken cancellationToken);
+
     /// <summary>Reimports the latest saved retained source with its existing settings and identities.</summary>
     /// <param name="sourceUri">The retained source identity.</param>
     /// <param name="expectedProject">The project that originated the action.</param>

@@ -90,9 +90,10 @@ public sealed partial class ContentPipelineService
         // A reimport keeps every product the model produced before, named under the same identity.
         var previous = scope.PreviousProvenance?.Products.FirstOrDefault(product => product.SourceUri == source.AssetUri);
         var kept = previous?.Outputs.ToArray() ?? [];
-        var produced = result.CookedAssets.Select(static asset => asset.VirtualPath).ToHashSet(StringComparer.Ordinal);
+        var produced = result.CookedAssets.Where(asset => asset.SourceAssetUri == source.AssetUri)
+            .Select(static asset => asset.VirtualPath).ToHashSet(StringComparer.Ordinal);
         var missing = kept.FirstOrDefault(output => !produced.Contains(output.Asset.VirtualPath));
-        if (result.CookedAssets.Count == 0 || missing is not null)
+        if (produced.Count == 0 || missing is not null)
         {
             var message = missing is not null
                 ? $"Reimport would remove or rename '{missing.Asset.VirtualPath}'. Keep existing asset identities or import into a new destination."
@@ -152,20 +153,21 @@ public sealed partial class ContentPipelineService
 
     private async Task<ContentCookResult> CookWithImportedSourcesAsync(Guid operationId, ContentCookScope scope, CancellationToken cancellationToken)
     {
+        // The scope's models cook as one native batch, so the ImportTool runs them as concurrent jobs under the run's
+        // settings; each job keeps its own layout, and each model's identities are checked against its own products.
         var results = new List<ContentCookResult>();
-        foreach (var input in scope.Inputs.Where(static input => input.Kind == ContentCookAssetKind.ForeignSource))
+        var models = scope.Inputs.Where(static input => input.Kind == ContentCookAssetKind.ForeignSource).ToArray();
+        if (models.Length != 0)
         {
-            var record = ModelRecordLookup.Find(scope.Project, input.SourceAbsolutePath);
-            var sourceScope = scope with { Inputs = [input] };
-            var job = scope.NativeJobs.GetValueOrDefault(input.AssetUri)
-                ?? this.manifestBuilder.BuildJob(input, [], ModelRecordLookup.RelativePath(scope.Project, record));
+            var jobs = models.Select(input => scope.NativeJobs.GetValueOrDefault(input.AssetUri)
+                ?? this.manifestBuilder.BuildJob(input, [], ModelRecordLookup.RelativePath(scope.Project, ModelRecordLookup.Find(scope.Project, input.SourceAbsolutePath)))).ToArray();
             var manifest = new ContentImportManifest(
                 1,
                 (scope.Output ?? throw new InvalidOperationException("The import has no generation owner.")).Path,
-                job.Layout ?? new ContentImportLayout(AssetPath.Create(input.AssetUri.Mount).VirtualPath),
-                [job]);
-            var result = await this.ExecuteManifestAsync(operationId, scope.TargetKind, sourceScope, manifest, [], cancellationToken).ConfigureAwait(false);
-            results.Add(ValidateImportedIdentities(operationId, scope, input, result));
+                jobs[0].Layout ?? new ContentImportLayout(AssetPath.Create(models[0].AssetUri.Mount).VirtualPath),
+                jobs);
+            var result = await this.ExecuteManifestAsync(operationId, scope.TargetKind, scope with { Inputs = models }, manifest, [], cancellationToken).ConfigureAwait(false);
+            results.Add(models.Aggregate(result, (checkedResult, input) => ValidateImportedIdentities(operationId, scope, input, checkedResult)));
         }
 
         var authored = scope.Inputs.Where(static input => input.Kind != ContentCookAssetKind.ForeignSource).ToArray();

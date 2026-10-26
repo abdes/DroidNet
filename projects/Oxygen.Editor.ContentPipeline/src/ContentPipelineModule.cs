@@ -61,5 +61,6 @@ public sealed class ContentPipelineModule : IScopeModule<IApplicationLayer>
             resolver.Resolve<INativeCompatibilityService>(EditorNativeCompatibilityService.CookingServiceKey)),
             Reuse.Singleton);
         scope.RegisterMapping<IEngineContentPipelineApi, ImportToolContentPipelineApi>();
+        scope.Register<Import.IModelSourceAnalyzer, Import.ModelSourceAnalyzer>(Reuse.Singleton);
     }
 }

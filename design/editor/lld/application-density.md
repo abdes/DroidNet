@@ -121,7 +121,7 @@ Terms used below:
   `ContentDialog`s and already sets dialog-scoped resources. Three views bypass
   it: `AssetsView` creates a `ContentDialog`, and `HomeView` and
   `NewProjectView` create `NewProjectDialog`, a `ContentDialog` subclass.
-  `SceneImportDialogView`, `TextureImportDialogView` and
+  `ModelImportDialogView`, `TextureImportDialogView` and
   `LocalFolderMountDialogView` are content shown through the service.
   `DynamicTreeItem.xaml` declares a `Popup`.
 - **Explicit `RequestedTheme` sites:** the window root (`AppThemeModeService`);

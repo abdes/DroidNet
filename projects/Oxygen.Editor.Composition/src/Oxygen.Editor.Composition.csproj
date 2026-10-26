@@ -39,6 +39,7 @@
         <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.Input/src/Oxygen.Editor.Input.csproj" />
         <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.LivePreview/src/Oxygen.Editor.LivePreview.csproj" />
         <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.MaterialEditor/src/Oxygen.Editor.MaterialEditor.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.ModelEditor/src/Oxygen.Editor.ModelEditor.csproj" />
         <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.Materials/src/Oxygen.Editor.Materials.csproj" />
         <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.Output/src/Oxygen.Editor.Output.csproj" />
         <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.Problems/src/Oxygen.Editor.Problems.csproj" />

@@ -7,7 +7,6 @@ using DryIoc;
 using Oxygen.Editor.ContentExplorer.Panes.Assets;
 using Oxygen.Editor.ContentExplorer.Panes.Assets.Layouts;
 using Oxygen.Editor.ContentExplorer.Panes.ContentFolders;
-using Oxygen.Editor.Shell.Desktop;
 
 namespace Oxygen.Editor.ContentExplorer;
 
@@ -40,7 +39,6 @@ public sealed class ContentExplorerPanelModule : IScopeModule<IPanelLayer>
     public void Register(IRegistrator scope)
     {
         ArgumentNullException.ThrowIfNull(scope);
-        scope.Register<IDesktopIntegration, WindowsDesktopIntegration>(Reuse.Singleton);
         scope.Register<Relocation.IAssetRelocationWorkflow, Relocation.AssetRelocationWorkflow>(Reuse.Singleton);
         scope.Register<AssetDetailsViewModel>(Reuse.Singleton);
         scope.Register<Authoring.AuthoredAssetCreation>(Reuse.Singleton);
@@ -53,7 +51,6 @@ public sealed class ContentExplorerPanelModule : IScopeModule<IPanelLayer>
         // Dialog views used via Aura's IDialogService + VmToViewConverter.
         scope.Register<LocalFolderMountDialogViewModel>(Reuse.Transient);
         scope.Register<LocalFolderMountDialogView>(Reuse.Transient);
-        scope.Register<Importing.SceneImportDialogView>(Reuse.Transient);
 
         scope.Register<AssetsViewModel>(Reuse.Singleton);
         scope.Register<AssetsView>(Reuse.Transient);

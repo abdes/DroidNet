@@ -47,7 +47,7 @@ the Import run flyout,
 | M11 | Choose the glTF scene                    | `Car.glb` holds two scenes, Night (the default) and Day. The problems list says the model imports Night and names Day as not imported, with a link to the setting; the user chooses Day in the Scene setting and presses Save; the model is reimported with Day's nodes                                                                                                                                                                                             |
 | M12 | Import with the right settings           | _Import > Source model…_ in the Content Explorer opens the Import model dialog, and _Add files…_ adds `Car.fbx`. The dialog reads "FBX 7.4 · centimetres, Z up · 14 nodes · 9 meshes · 6 materials · 11 textures", lists a dropped animation, and shows the import settings; the user points the Glass material at the project's `Glass.omat` and presses Import. The car arrives upright, at the right size, using `Glass.omat`, ready to open in the Model Editor |
 | M13 | Import several files                     | Three files are picked and all are selected in the dialog's list, one with a warning glyph. The user sets Normals to Always recalculate once for all three, selects `Car.fbx` alone to point its Glass material at `Glass.omat`, and presses Import 3: the three cook as one run                                                                                                                                                                                    |
-| M14 | Import the same files again              | The user saves the session from the dialog as `Vehicles.import-manifest.json` beside the project. After a fresh checkout, _Import > Source model…_ and _Open session…_ open it: the three files are listed with their settings; `Truck.glb`, no longer on disk, shows the error glyph and is removed; Import brings in the two others. Later, the vendor sends new versions: the session opens with both names taken, Ctrl+A and _Review replacements_, Import      |
+| M14 | Import the same files again              | The user saves the session from the dialog as `Vehicles.import-manifest.json` beside the project. After a fresh checkout, _Import > Source model…_ and _Open session…_ open it: the three files are listed with their settings; `Truck.glb`, no longer on disk, shows the error glyph and is removed; Import brings in the two others. Later, the vendor sends new versions: the session opens with both names taken, Ctrl+A and _Replace_, Import                  |
 
 ## 3. Decisions
 
@@ -148,9 +148,10 @@ banner of ME-6 sits at the viewport's top edge, as the Texture Editor's does.
 
 One control, `ModelImportSettingsPanel`, shown beside the Model Editor's
 viewport and in the import dialog (section 7, ME-11). It is a
-`PropertiesExpander` stack of the inspector's controls (`PropertyCard` with its
-override bar and reset, `InspectorNumberField`, `InspectorToggleField`,
-`AssetPicker`; `Oxygen.Editor.Controls/src/Inspector/`), so every row looks and
+`PropertiesExpander` stack of the editor's shared property editors (`PropertyCard` with its
+override bar and reset, `NumberField`, `ToggleField`,
+`Oxygen.Editor.Controls/src/PropertyEditors/`; `AssetPickerButton` of
+`Oxygen.Editor.Pickers`), so every row looks and
 behaves as in the Properties pane: a set value carries the override bar and
 reset, an unset one shows the importer's default in secondary text. A row that
 does not apply to the file is absent, not disabled: the up axis for a glTF
@@ -167,12 +168,12 @@ controls already give:
   or half for a mixed selection), the reset button, the qualifier line ("FBX
   files") and its responsive layout, which stacks the label above the editor
   when the panel is narrow.
-- **Numbers are `InspectorNumberField`s**, with their unit or prefix (smoothing
+- **Numbers are `NumberField`s**, with their unit or prefix (smoothing
   angle in °, light range in m, scale and intensity as × factors), their
   validation (a value outside the setting's range is refused with the field's
   error text, the range being the manifest schema's), label scrubbing and the
   indeterminate state for Mixed.
-- **Toggles are `InspectorToggleField`s** (Mixed shows as its Mixed text), **choices
+- **Toggles are `ToggleField`s** (Mixed shows as its Mixed text), **choices
   are combo boxes** in a `PropertyCard` (Mixed as the placeholder), and
   **materials use the inspector's material picker**, `AssetPickerButton`
   (extracted from the Geometry section's surface cards, see Ownership in
@@ -180,8 +181,8 @@ controls already give:
   (_Imported_ while unset, `--` for a mixed selection) and its chevron opening
   the `AssetPicker` flyout.
 
-`InspectorNumberField` has no override bar or reset today, while
-`PropertyCard` and `InspectorToggleField` do; it gains them (`OverrideState`,
+`NumberField` had no override bar or reset, while
+`PropertyCard` and `ToggleField` do; it gains them (`OverrideState`,
 `ResetCommand`, `ResetToolTip`, passed to its card) as an enhancement of the
 control with its own tests, which the Properties pane can then use too. The
 Import run flyout of the dialog (section 7) is built from the same rows.
@@ -189,31 +190,31 @@ Import run flyout of the dialog (section 7) is built from the same rows.
 Each setting answers a problem real files have, and the format differences
 decide which rows exist:
 
-| Group              | Setting                                                  | Values, default first                                                                                            | Why it is a setting                                                                                                                                     | Engine                                |
-| ------------------ | -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- |
-| Source             | Scene                                                    | The file's default scene; any other by name, an unnamed one by index (`#2`)                                      | A glTF file can hold several scenes; shown only then (M11)                                                                                              | NGN12                                 |
-| Units and axes     | File                                                     | Read-only: the detected unit, up axis and handedness, such as "centimetres · Z up · right-handed (3ds Max)"      | A model a hundred times too large or lying on its back is the most common FBX import problem; the detected facts explain it before anything is imported | M-NGN2                                |
-|                    | Units                                                    | Convert to metres; Keep file units; Custom                                                                       | FBX files from Maya and 3ds Max are in centimetres, from Blender in metres; glTF is in metres by specification                                          | Exists (`unit_policy`)                |
-|                    | Scale                                                    | 1.0; shown with Custom                                                                                           | A file authored at the wrong size                                                                                                                       | Exists (`unit_scale`)                 |
-|                    | Up axis                                                  | From the file; Y up; Z up. FBX only                                                                              | Some exporters write no axes or wrong ones (`fbx.axis_unknown`); glTF is +Y up by specification, so the row is absent for it                            | M-NGN3                                |
-| Geometry           | Normals                                                  | From the file, generate missing; Always recalculate                                                              | Bad exported normals are fixed by recalculating; a glTF primitive without normals stays faceted, as its specification requires, unless recalculated     | Exists (`normals_policy`)             |
-|                    | Smoothing angle                                          | 60°; applies to every normal the import generates: missing ones, or all with Always recalculate                  | Generated normals without an angle are all smooth or all faceted, both wrong on hard-surface models                                                     | M-NGN4                                |
-|                    | Tangents                                                 | From the file, generate missing (MikkTSpace); Always recalculate                                                 | Normal maps baked in MikkTSpace need MikkTSpace tangents, which glTF requires when a file has none                                                      | Exists (`tangents_policy`)            |
-|                    | Keep node pivots                                         | On; Off: node transforms are baked into the meshes, and equal meshes are shared                                  | A change rotates a node about its pivot (opening a door, scene instances S6); baking moves every pivot to the model's origin                            | Exists (`bake_transforms`), M-NGN10   |
-|                    | Generate LODs                                            | Off; On, with levels (3, from 1 to 7) and reduction per level (50%)                                              | Most glTF files carry one LOD; LOD groups and `_LODn` meshes of an FBX file are always imported as authored                                             | M-NGN5                                |
-| Hierarchy          | Drop empty nodes                                         | Off; On                                                                                                          | Exporters add empty grouping nodes; anchors are taken before pruning, so dropping them keeps node IDs (scene instances NGN2)                            | Exists (`node_pruning`)               |
-| Node continuity    | Continued nodes                                          | See below                                                                                                        | A node renamed or moved in the DCC tool keeps its changes (scene instances SI-16)                                                                       | NGN2                                  |
-| Materials          | One row per source material                              | Imported; a project material, chosen with the asset picker                                                       | A project usually already has the materials an imported model should use; the replaced material is not produced                                         | M-NGN6                                |
-|                    | _Use project materials with the same name_               | A command: fills each row still Imported whose name matches exactly one project material                         | Matching is explicit: a name match is applied only when the user asks, and each filled row can be reset                                                 | Editor                                |
-| Textures           | Maximum size                                             | Source size; 4096; 2048; 1024; 512                                                                               | Downloaded models carry 8K textures that cost memory and cook time                                                                                      | M-NGN7                                |
-|                    | Compression quality                                      | Default; Fast; High                                                                                              | BC7 encoding trades cook time for quality                                                                                                               | Exists (`bc7_quality`)                |
-|                    | Flip normal map green                                    | Off; On                                                                                                          | Normal maps made with the DirectX convention, common in FBX pipelines, light backwards otherwise                                                        | Exists (`flip_normal_green`)          |
-| Lights and cameras | Import lights                                            | On; Off                                                                                                          | Props often carry the artist's preview lights                                                                                                           | M-NGN8                                |
-|                    | Light intensity scale                                    | 1.0                                                                                                              | FBX intensities have no unit and are converted by a rule (`FbxIntensityToLumens`); one factor corrects a file that comes out too bright or too dark     | M-NGN8                                |
-|                    | Range of lights without one                              | 4096 m; glTF only                                                                                                | A glTF light without a range reaches infinitely far                                                                                                     | Exists (`gltf_omitted_light_range_m`) |
-|                    | Import cameras                                           | On; Off                                                                                                          | A model's cameras are often turntable or render cameras                                                                                                 | M-NGN8                                |
-| Selected mesh      | LOD policy; per surface Visibility and Cast Shadows      | Shown while a mesh node is selected (Model Editor only)                                                          | The asset defaults every placement starts from ([content pipeline](content-pipeline.md) 20.5)                                                           | M-NGN1                                |
-| Selected texture   | Maximum size, Compression quality, Flip normal map green | Shown while a texture is chosen from a surface's material (Model Editor only); an override of the Textures group | One texture of a model can need its own size or convention                                                                                              | M-NGN7                                |
+| Group              | Setting                                                  | Values, default first                                                                                                                                                                                                                                                                                                                                                                                                                                 | Why it is a setting                                                                                                                                                                                                       | Engine                                |
+| ------------------ | -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- |
+| Source             | Scene                                                    | The file's default scene; any other by name, an unnamed one by index (`#2`)                                                                                                                                                                                                                                                                                                                                                                           | A glTF file can hold several scenes; shown only then (M11)                                                                                                                                                                | NGN12                                 |
+| Units and axes     | Result                                                   | Read-only: what the import does to the model's size and orientation in Oxygen's space (right-handed, Z up, metres; `Core/Constants.h`), such as "Real size kept: converted from centimetres to Oxygen's metres (1 file unit = 0.01 m). Turned from Y up to Oxygen's Z up."; the size sentence first says the outcome for the model (real size kept, not converted and how much larger, a chosen multiple), then what one file unit measures in Oxygen | A model a hundred times too large or lying on its back is the most common FBX import problem; saying what the import will do, not what the file states (the facts line has that), explains it before anything is imported | M-NGN2                                |
+|                    | Units                                                    | Metres (the file's unit converted); File units (one file unit becomes one metre); Custom                                                                                                                                                                                                                                                                                                                                                              | FBX files from Maya and 3ds Max are in centimetres, from Blender in metres; glTF is in metres by specification                                                                                                            | Exists (`unit_policy`)                |
+|                    | Scale                                                    | 1.0; shown with Custom                                                                                                                                                                                                                                                                                                                                                                                                                                | A file authored at the wrong size                                                                                                                                                                                         | Exists (`unit_scale`)                 |
+|                    | Up axis                                                  | From the file; Y up; Z up. FBX only                                                                                                                                                                                                                                                                                                                                                                                                                   | Some exporters write no axes or wrong ones (`fbx.axis_unknown`); glTF is +Y up by specification, so the row is absent for it                                                                                              | M-NGN3                                |
+| Geometry           | Normals                                                  | From the file, generate missing; Always recalculate                                                                                                                                                                                                                                                                                                                                                                                                   | Bad exported normals are fixed by recalculating; a glTF primitive without normals stays faceted, as its specification requires, unless recalculated                                                                       | Exists (`normals_policy`)             |
+|                    | Smoothing angle                                          | 60°; applies to every normal the import generates: missing ones, or all with Always recalculate                                                                                                                                                                                                                                                                                                                                                       | Generated normals without an angle are all smooth or all faceted, both wrong on hard-surface models                                                                                                                       | M-NGN4                                |
+|                    | Tangents                                                 | From the file, generate missing (MikkTSpace); Always recalculate                                                                                                                                                                                                                                                                                                                                                                                      | Normal maps baked in MikkTSpace need MikkTSpace tangents, which glTF requires when a file has none                                                                                                                        | Exists (`tangents_policy`)            |
+|                    | Keep node pivots                                         | On; Off: node transforms are baked into the meshes, and equal meshes are shared                                                                                                                                                                                                                                                                                                                                                                       | A change rotates a node about its pivot (opening a door, scene instances S6); baking moves every pivot to the model's origin                                                                                              | Exists (`bake_transforms`), M-NGN10   |
+|                    | Generate LODs                                            | Off; On, with levels (3, from 1 to 7) and reduction per level (50%)                                                                                                                                                                                                                                                                                                                                                                                   | Most glTF files carry one LOD; LOD groups and `_LODn` meshes of an FBX file are always imported as authored                                                                                                               | M-NGN5                                |
+| Hierarchy          | Drop empty nodes                                         | Off; On                                                                                                                                                                                                                                                                                                                                                                                                                                               | Exporters add empty grouping nodes; anchors are taken before pruning, so dropping them keeps node IDs (scene instances NGN2)                                                                                              | Exists (`node_pruning`)               |
+| Node continuity    | Continued nodes                                          | See below                                                                                                                                                                                                                                                                                                                                                                                                                                             | A node renamed or moved in the DCC tool keeps its changes (scene instances SI-16)                                                                                                                                         | NGN2                                  |
+| Textures           | Maximum size                                             | Source size; 4096; 2048; 1024; 512                                                                                                                                                                                                                                                                                                                                                                                                                    | Downloaded models carry 8K textures that cost memory and cook time                                                                                                                                                        | M-NGN7                                |
+|                    | Compression quality                                      | Default; Fast; High                                                                                                                                                                                                                                                                                                                                                                                                                                   | BC7 encoding trades cook time for quality                                                                                                                                                                                 | Exists (`bc7_quality`)                |
+|                    | Flip normal map green                                    | Off; On                                                                                                                                                                                                                                                                                                                                                                                                                                               | Normal maps made with the DirectX convention, common in FBX pipelines, light backwards otherwise                                                                                                                          | Exists (`flip_normal_green`)          |
+| Lights and cameras | Import lights                                            | On; Off                                                                                                                                                                                                                                                                                                                                                                                                                                               | Props often carry the artist's preview lights                                                                                                                                                                             | M-NGN8                                |
+|                    | Light intensity scale                                    | 1.0                                                                                                                                                                                                                                                                                                                                                                                                                                                   | FBX intensities have no unit and are converted by a rule (`FbxIntensityToLumens`); one factor corrects a file that comes out too bright or too dark                                                                       | M-NGN8                                |
+|                    | Range of lights without one                              | 4096 m; glTF only                                                                                                                                                                                                                                                                                                                                                                                                                                     | A glTF light without a range reaches infinitely far                                                                                                                                                                       | Exists (`gltf_omitted_light_range_m`) |
+|                    | Import cameras                                           | On; Off                                                                                                                                                                                                                                                                                                                                                                                                                                               | A model's cameras are often turntable or render cameras                                                                                                                                                                   | M-NGN8                                |
+| Materials          | One row per source material                              | Imported; a project material, chosen with the asset picker                                                                                                                                                                                                                                                                                                                                                                                            | A project usually already has the materials an imported model should use; the replaced material is not produced                                                                                                           | M-NGN6                                |
+|                    | _Match by name_ (header action)                          | A command in the group's header: fills each row still Imported whose name matches exactly one project material; its tooltip says so                                                                                                                                                                                                                                                                                                                   | Matching is explicit: a name match is applied only when the user asks, and each filled row can be reset                                                                                                                   | Editor                                |
+| Selected mesh      | LOD policy; per surface Visibility and Cast Shadows      | Shown while a mesh node is selected (Model Editor only)                                                                                                                                                                                                                                                                                                                                                                                               | The asset defaults every placement starts from ([content pipeline](content-pipeline.md) 20.5)                                                                                                                             | M-NGN1                                |
+| Selected texture   | Maximum size, Compression quality, Flip normal map green | Shown while a texture is chosen from a surface's material (Model Editor only); an override of the Textures group                                                                                                                                                                                                                                                                                                                                      | One texture of a model can need its own size or convention                                                                                                                                                                | M-NGN7                                |
 
 Each setting's engine default equals the panel's, so the ImportTool and the
 editor import a file the same way. A setting that does not apply to the file's
@@ -317,13 +318,20 @@ surface offers a setting, so none can be chosen at import or after.
 **The dialog.** It replaces `SceneImportDialog`, and the Content Explorer opens
 no file picker for a model any more: _Import > Source model…_ opens the dialog
 directly, and files and sessions are added from inside it. With nothing added
-yet, the list says to add files or open a session, and Import is disabled; the
+yet, one empty state fills the dialog's content instead of an empty list and
+an empty settings panel: the title _Add models to
+import_, a line saying files can be added, dropped from File Explorer or
+brought back from a session, and the buttons _Add files…_ (accent) and _Open
+session…_; files dropped anywhere on the content are added, and _Save session…_
+and Import are disabled until a file is listed. With files listed and none
+selected, the settings side says to select files to see their settings. The
 dialog's destination folder is the Content Explorer's selected folder, as
 today. Invoking a model source that has never been imported
 (`AssetsViewModel.cs:371-381`) opens the dialog with that file. The combined
 _Import…_ command keeps its picker, because textures are imported through it;
 model files picked there open this dialog with them, images go to the texture
-import as today. Mockups: one file selected,
+import as today. Mockups: no file yet,
+[model-import-dialog-empty.svg](mockups/model-import-dialog-empty.svg); one file selected,
 [model-import-dialog.svg](mockups/model-import-dialog.svg); several,
 [model-import-dialog-selection.svg](mockups/model-import-dialog-selection.svg);
 the Import run flyout,
@@ -347,26 +355,36 @@ the Import run flyout,
   missing file, _Locate…_, which points the row at the file's new place. Select
   all is Ctrl+A, and there is no Clear: Ctrl+A and Delete do it. With one file
   left the list stays, so more can be added.
-- **Layout.** Three columns separated by splitters: the file list, the import
-  settings panel and _Before import_. The list starts at 220 px. The panel has
-  a minimum width of 420 px, the width its rows need (label, value, reset);
-  otherwise the width beside the list is shared 70 to 30 between the panel and
-  _Before import_, as proportions: the splitter changes the ratio, and the
-  dialog keeps it as it resizes. The rows above the columns (name,
-  folder, facts) span the panel and _Before import_. The surfaces are WinUI's own: the
-  `ContentDialog` layers (its content on the top overlay, its buttons on the
-  base), the panel's groups as `PropertiesExpander` cards, the facts and
-  _Before import_ items as `InfoBar`s, and the Import run as a flyout; nothing
-  sets its own background.
+- **Layout.** Two columns separated by a splitter: the file list, which starts
+  at 220 px, and the import settings panel, which takes the rest (at least
+  560 px). The rows above the panel (name, folder, facts) span its width.
+  _Before import_ is not a column: it is a flyout of the facts bar's action
+  button, so the settings keep the width and the report shows on demand. The
+  surfaces are WinUI's own: the `ContentDialog` layers (its content on the top
+  overlay, its buttons on the base), the panel's groups as `PropertiesExpander`
+  cards, the facts as an `InfoBar`, the report's findings as the editor's
+  `DiagnosticCard`s, and the Import run as a flyout; nothing else sets its own
+  background.
 - **Name and folder.** Name is shown with one file selected. Content folder
   edits every selected file; folders that differ read _Mixed_, and Browse sets
-  them all. A taken name adds the existing replace review under the folder row;
-  with several selected files whose names are taken, one _Review replacements_
-  reviews them together and lists the model each one replaces.
-- **Facts.** With one file selected, one line from the analysis: the format
-  and its version, the detected unit and axes, and the counts of scenes, nodes,
-  meshes, materials and textures ("FBX 7.4 · centimetres, Z up, right-handed ·
-  14 nodes · 9 meshes · 6 materials · 11 textures").
+  them all. Whatever blocks a selected file's import is said in words in an
+  error `InfoBar` under the folder row, one line per file (a missing source, a
+  taken name, a file twice in the import); the list's error glyph only marks
+  the row. When a name is taken, the bar's action, _Replace_, approves
+  replacing the existing models of the selected files together; a note then
+  lists the model each one replaces.
+- **Imported again.** A model already imported in place, its source inside the
+  project, is not refused: its settings start from its import record, an
+  informational bar says Import imports it again with them, and Import writes
+  them into its record and reimports it.
+- **Facts.** One full-width `InfoBar`. With one file selected, its message is
+  one line from the analysis: the format and its version, the detected unit
+  and axes, and the counts of scenes, nodes, meshes, materials and textures
+  ("FBX 7.4 · centimetres, Z up, right-handed · 14 nodes · 9 meshes · 6
+  materials · 11 textures"); with several, how many are selected ("3 files
+  selected"). The bar's severity, so its icon, is the most serious finding's
+  (error, warning, else informational), and its title counts them ("1 error, 2
+  warnings"; none without findings).
 - **Settings.** `ModelImportSettingsPanel` without its Node continuity and
   selection groups, which need a previous import, editing the selected files as
   the Properties pane edits a multi-selection: a value the files share shows as
@@ -378,19 +396,31 @@ the Import run flyout,
   qualifier says which ("FBX files"). The rows bound to one file's content, the
   Scene and the Materials group, show with one file selected; with several, the
   panel says to select one file to choose its scene and materials.
-- **Before import.** What the analysis found: features that will be dropped
+- **Before import.** The facts bar's action button, _Before import_, shown
+  only when the selected files have findings; the bar's title already counts
+  them, so the button has no badge. It opens the report as a light-dismiss
+  flyout, which Esc or a click outside closes; the report scrolls inside the
+  flyout. The report is what the analysis found: features that will be dropped
   (an animation, a skin), required extensions that cannot be read, textures
-  not found. Each is the diagnostic the import itself will report. With several
-  files selected, the items are grouped under each file's name.
-- **Import run.** Import is a split button: its main part imports, and its
-  chevron opens a flyout with the ImportTool's execution settings for this
-  run, so the run's settings belong to the action they configure. The chevron
+  not found. Each is a diagnostic the import itself will report, shown once
+  per file: the engine reports a finding for every object it is about (each
+  material whose texture sampling is left out), and the item names those
+  objects as the file does, from the diagnostic's `object_name` ("Bun, Cheese,
+  Sauce and 2 more"; an unnamed one by kind and index, "material #3"). A
+  chevron expands the item to list every name in place, one per line; no name
+  is only in a tooltip. The item's background is its severity's, so it has no
+  icon. Each message says what is left out and what the content is instead.
+  With several files selected, the items are grouped under each file's name;
+  a file without findings is left out.
+- **Import run.** A chevron beside Import opens a flyout with the ImportTool's
+  execution settings for this run, so the run's settings belong to the action
+  they configure. The chevron
   stays enabled while Import is disabled (a name still taken), and a dot on it
   marks a run with custom settings. The flyout follows the Fluent type ramp and
   the Settings layering: a Subtitle title with a Caption description and
   _Reset all_, then two sections, each a BodyStrong header above a card on the
   flyout's acrylic. **Scheduling** holds Threads (`thread_pool_size`, the CPU
-  work pool) and Jobs at once (`max_in_flight_jobs`); Threads and Jobs at once are `InspectorNumberField`s.
+  work pool) and Jobs at once (`max_in_flight_jobs`); Threads and Jobs at once are `NumberField`s.
   **Pipelines** (`concurrency`) is a grid: each pipeline (textures, buffers,
   materials, mesh build, geometry, scene) is a row header, and its workers and
   queue capacity are two in-place `NumberBox`es without labels under the
@@ -441,7 +471,7 @@ schema when it reads and writes it. A job whose file is missing stays in the
 list with the error glyph until it is removed; a job of another type is left
 out with a warning (optional inputs warn and skip). A model of the session that
 is already imported reads as a taken name, so reimporting a session is: open
-it, select every file (Ctrl+A), _Review replacements_, Import; each replaced model keeps its
+it, select every file (Ctrl+A), _Replace_, Import; each replaced model keeps its
 record and takes the session's settings.
 
 Analysis runs when a file is added to the dialog, through the
@@ -454,11 +484,14 @@ dialog has no 3D preview: the Model Editor is the preview, one click away
 after the import.
 
 **Aura.** WinUI's `ContentDialog` has plain buttons only in its button bar, so
-Aura's dialog service gains two general options: `DialogSpec` content shown on
-the left of the button bar (the session commands), and a flyout for the
-primary button, which then renders as a split button whose chevron stays
-enabled when the primary action is not. Both are Aura features with their own
-tests, used here first.
+Aura's dialog service gains general options of `DialogSpec`: commands on the
+left of the button bar (`FooterCommands`, the session commands), and options of
+the primary button (`PrimaryButtonOptions`), opened in a flyout by a chevron
+beside it, a button of its own that stays enabled when the primary button is
+not, and marked by a dot while the options are modified
+(`HasModifiedPrimaryButtonOptions`); the primary button's enabled state is a
+predicate of the view model (`IsPrimaryButtonEnabled`). They are Aura features
+with their own tests, used here first.
 
 **Ownership.** The panel and the dialog live in `Oxygen.Editor.ModelEditor`,
 the model family's UI project. It references the editor's control libraries
@@ -469,10 +502,12 @@ libraries, and the Scene Inspector uses it from there. The material picker,
 today XAML of the Geometry section (a `SplitButton` whose flyout holds an
 `AssetPicker`), becomes `AssetPickerButton` in `Oxygen.Editor.Pickers`, beside
 `AssetPicker` (the Controls library does not reference the asset picker); the
-inspector styles the panel uses (`ScenePropertyCardStyle`,
-`SceneNumberBoxStyle`, `SceneUnitSuffix`, `QuietInspectorAction` and the
-`PropertiesExpander` paddings of `SceneInspectorStyles.xaml`) move to
-`Oxygen.Editor.Controls` as inspector styles. The Content Explorer opens the dialog through
+property editors are the library's generic, templated controls, their look
+their own default styles in its `Themes/Generic.xaml`, and the keyed styles a
+consumer's own elements use (`PropertyNumberBoxStyle`, `PropertyVectorBoxStyle`,
+`QuietActionButtonStyle`, `UnitSuffixTextStyle`) are in its
+`Themes/EditorStyles.xaml`, which the app merges; the Scene Inspector's styles
+no longer set the look of the library's controls. The Content Explorer opens the dialog through
 `IModelImportPrompt`, a port of `Oxygen.Editor.Models`, and never references
 the Model Editor: a UI surface calls family modules only
 ([asset family modules](asset-family-modules.md) section 9). The prompt

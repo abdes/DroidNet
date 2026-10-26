@@ -467,6 +467,11 @@ public sealed partial class ContentPipelineService(
     {
         var output = scope.Output ?? throw new InvalidOperationException("The cook has no generation owner.");
         manifest = PruneReusableJobs(scope, manifest, output.SourceKey);
+        if (!scope.Run.IsEmpty)
+        {
+            manifest = manifest.WithRun(scope.Run);
+        }
+
         scope = scope with { Inputs = scope.Inputs.Where(input => !scope.ReusableSources.Contains(input.AssetUri)).ToArray() };
         var manifestDiagnostics = this.manifestValidator.Validate(operationId, manifest);
         if (HasError(manifestDiagnostics))

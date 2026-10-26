@@ -7,6 +7,7 @@ using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Incremental;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.Snapshots;
+using Oxygen.Editor.Models;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Compatibility;
@@ -96,6 +97,7 @@ public sealed partial class ContentPipelineService
         IReadOnlyList<ContentCookInput> dirtyInputs,
         CookStagingArea staging,
         IReadOnlyList<string> referenceRoots,
+        ImportRunSettings run,
         CancellationToken cancellationToken)
     {
         var remaining = dirtyInputs.ToDictionary(static input => input.AssetUri);
@@ -141,6 +143,7 @@ public sealed partial class ContentPipelineService
                     Output = staging.Roots.Single(root => string.Equals(root.Mount, mount.Key, StringComparison.Ordinal)),
                     CookedContextRoots = referenceRoots,
                     InputDependencies = graph.Dependencies,
+                    Run = run,
                 };
                 var result = await this.CookMixedInputsAsync(operation.OperationId, scope, cancellationToken).ConfigureAwait(false);
                 results.Add(result);

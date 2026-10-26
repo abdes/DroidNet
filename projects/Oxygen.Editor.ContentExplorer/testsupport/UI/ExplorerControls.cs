@@ -19,6 +19,7 @@ using Oxygen.Editor.ContentExplorer.Panes.Assets;
 using Oxygen.Editor.ContentExplorer.Panes.Assets.Layouts;
 using Oxygen.Editor.ContentExplorer.Panes.ContentFolders;
 using Oxygen.Editor.ContentPipeline;
+using Oxygen.Editor.Models;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Shell.Desktop;
 using Oxygen.Editor.Shell.Windows;
@@ -41,8 +42,9 @@ internal sealed class ExplorerControls : DroidNet.Tests.VisualUserInterfaceTests
     /// <param name="placement">Opens documents and shows panels for the pane, if any.</param>
     /// <param name="assetReveal">Shows assets for the pane, if any.</param>
     /// <param name="cookedInspections">Inspects cooked output for the pane, if any.</param>
+    /// <param name="modelImport">The Import model dialog the pane opens; a prompt that imports nothing when none is given.</param>
     /// <returns>The pane, which the caller disposes.</returns>
-    internal static AssetsViewModel CreateAssetsModel(IAssetFeed provider, IProjectSession session, ContentExplorerState state, object layout, object layoutView, IContentPipelineService? pipeline = null, IPlacementService? placement = null, IAssetReveal? assetReveal = null, ICookedInspections? cookedInspections = null)
+    internal static AssetsViewModel CreateAssetsModel(IAssetFeed provider, IProjectSession session, ContentExplorerState state, object layout, object layoutView, IContentPipelineService? pipeline = null, IPlacementService? placement = null, IAssetReveal? assetReveal = null, ICookedInspections? cookedInspections = null, IModelImportPrompt? modelImport = null)
     {
         var locator = new Mock<IViewLocator>();
         _ = locator.Setup(value => value.ResolveView(layout)).Returns(layoutView);
@@ -61,6 +63,7 @@ internal sealed class ExplorerControls : DroidNet.Tests.VisualUserInterfaceTests
             Mock.Of<IWindowManagerService>(),
             Mock.Of<IDesktopIntegration>(),
             new TextureImport(new MockFileSystem()),
+            modelImport ?? Mock.Of<IModelImportPrompt>(),
             placement: placement,
             assetReveal: assetReveal,
             cookedInspections: cookedInspections);

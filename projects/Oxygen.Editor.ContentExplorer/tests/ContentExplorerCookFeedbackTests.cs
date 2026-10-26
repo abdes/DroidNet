@@ -41,7 +41,8 @@ public sealed partial class ContentExplorerCookFeedbackTests
             Mock.Of<DroidNet.Aura.Dialogs.IDialogService>(),
             Mock.Of<DroidNet.Aura.Windowing.IWindowManagerService>(),
             Mock.Of<IDesktopIntegration>(),
-            new TextureImport(new MockFileSystem()))
+            new TextureImport(new MockFileSystem()),
+            Mock.Of<Oxygen.Editor.Models.IModelImportPrompt>())
         {
             IsOperationResultVisible = true,
             OperationResultTitle = "Cook Project",

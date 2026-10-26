@@ -166,6 +166,8 @@ internal sealed partial class ExplorerRevealFixture : IDisposable
         this.container.RegisterInstance(Mock.Of<IStatusReducer>());
         this.container.RegisterInstance(Mock.Of<IWindowManagerService>());
         this.container.RegisterInstance(new Oxygen.Editor.Textures.TextureImport(new RealFileSystem()));
+        this.container.RegisterInstance(Mock.Of<Oxygen.Editor.Models.IModelImportPrompt>());
+        this.container.RegisterInstance(Mock.Of<IDesktopIntegration>());
 
         // The creation workflow the explorer builds over the window's services; without a relocation service the
         // explorer renames folders itself.

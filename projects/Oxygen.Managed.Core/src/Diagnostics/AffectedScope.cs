@@ -73,4 +73,15 @@ public sealed record AffectedScope
     /// Gets the affected component display name.
     /// </summary>
     public string? ComponentName { get; init; }
+
+    /// <summary>
+    /// Gets the path of the affected object inside its source file, such as <c>/materials/12</c> of a glTF file.
+    /// </summary>
+    public string? SourceObjectPath { get; init; }
+
+    /// <summary>
+    /// Gets the name the source file gives the affected object, such as a material's or a mesh's name; null when it
+    /// has none.
+    /// </summary>
+    public string? SourceObjectName { get; init; }
 }

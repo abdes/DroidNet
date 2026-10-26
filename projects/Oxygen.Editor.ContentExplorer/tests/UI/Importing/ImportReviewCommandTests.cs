@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Text.Json;
 using AwesomeAssertions;
 using DroidNet.Aura.Dialogs;
 using DroidNet.Aura.Windowing;
@@ -11,9 +12,9 @@ using Microsoft.UI;
 using Microsoft.UI.Xaml.Controls;
 using Moq;
 using Oxygen.Editor.Assets;
-using Oxygen.Editor.ContentExplorer.Importing;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Import;
+using Oxygen.Editor.Models;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Shell.Desktop;
@@ -24,107 +25,138 @@ using Testably.Abstractions.Testing;
 
 namespace Oxygen.Editor.ContentExplorer.UI.Tests.Importing;
 
+/// <summary>
+/// The Content Explorer opens the Import model dialog for models, without a file picker of its own, and imports what
+/// the dialog returns as one run (model editor LLD section 7).
+/// </summary>
 [TestClass]
 public sealed class ImportReviewCommandTests : DroidNet.Tests.VisualUserInterfaceTests
 {
-    /// <summary>Accepting the review submits its values once; cancelling starts no native operation.</summary>
-    /// <param name="selectSource">Whether the source picker returns a file or is cancelled.</param>
-    /// <param name="accept">Whether the user confirms the review.</param>
-    /// <returns>The asynchronous command handoff test.</returns>
+    private static readonly AssetPath SelectedFolder = AssetPath.Parse("/Content/Scenes");
+
     [TestMethod]
-    [DataRow(true, true)]
-    [DataRow(true, false)]
-    [DataRow(false, false)]
-    public Task ImportReviewUsesSharedCookingAndHonorsCancel(bool selectSource, bool accept) => EnqueueAsync(async () =>
+    public Task ImportModel_OpensTheDialogInTheSelectedFolderAndImportsItsPlanAsOneRun() => EnqueueAsync(async () =>
     {
-        var project = TestProject.Create(new MockFileSystem(), Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"))).Context with { Name = "Import" };
-        using var session = new TestSession(project);
-        SceneImportRequest? submitted = null;
-        var pipeline = new Mock<IContentPipelineService>();
-        _ = pipeline.Setup(value => value.ImportSourceAsync(It.IsAny<SceneImportRequest>(), It.IsAny<CancellationToken>()))
-            .Callback<SceneImportRequest, CancellationToken>((request, _) => submitted = request)
-            .ReturnsAsync(new ContentCookResult(Guid.NewGuid(), CookTargetKind.Asset, OperationStatus.Succeeded, [], [], Inspection: null, Validation: null));
-        var locator = new Mock<IViewLocator>();
-        _ = locator.Setup(value => value.ResolveView(It.IsAny<object>())).Returns(() => new SceneImportDialogView());
+        var fixture = await Fixture.CreateAsync(pickedFile: null).ConfigureAwait(true);
+        using var browser = fixture.Browser;
+        using var session = fixture.Session;
+        var settings = JsonSerializer.SerializeToElement(new Dictionary<string, object> { ["name"] = "Car", ["unit_policy"] = "preserve" });
+        var run = new ImportRunSettings { ThreadPoolSize = 4 };
+        fixture.Plan = new([
+            new(@"D:\Sources\Car.fbx", "Car", AssetPath.Parse("/Content/Vehicles"), settings),
+            new(@"D:\Sources\Truck.glb", "Truck", AssetPath.Parse("/Content/Vehicles"), settings),
+        ], run);
+
+        await browser.ImportModelCommand.ExecuteAsync(parameter: null).ConfigureAwait(true);
+
+        fixture.Dialogs.Verify(value => value.PickFileAsync(It.IsAny<FilePickerSpec>(), It.IsAny<WindowId>(), It.IsAny<CancellationToken>()), Times.Never());
+        _ = fixture.Prompted.Should().ContainSingle();
+        _ = fixture.Prompted[0].DestinationFolder.Should().Be(SelectedFolder);
+        _ = fixture.Prompted[0].Files.Should().BeEmpty("Import > Source model opens the dialog with no file");
+        _ = fixture.Imported.Should().ContainSingle("the dialog's models import as one run");
+        var (requests, imported) = fixture.Imported[0];
+        _ = requests.Select(static request => request.Name).Should().Equal("Car", "Truck");
+        _ = requests.Should().AllSatisfy(request => request.Settings!.Value.GetProperty("unit_policy").GetString().Should().Be("preserve"));
+        _ = requests.Should().AllSatisfy(static request => request.Replacement.Should().BeNull());
+        _ = imported.Should().BeSameAs(run);
+        fixture.Feed.Verify(value => value.RefreshAsync(It.IsAny<CancellationToken>()), Times.Once());
+    });
+
+    [TestMethod]
+    public Task ImportModel_CancelledDialogImportsNothing() => EnqueueAsync(async () =>
+    {
+        var fixture = await Fixture.CreateAsync(pickedFile: null).ConfigureAwait(true);
+        using var browser = fixture.Browser;
+        using var session = fixture.Session;
+
+        await browser.ImportModelCommand.ExecuteAsync(parameter: null).ConfigureAwait(true);
+
+        _ = fixture.Prompted.Should().ContainSingle();
+        _ = fixture.Imported.Should().BeEmpty();
+    });
+
+    [TestMethod]
+    [DataRow(true)]
+    [DataRow(false)]
+    public Task Import_PickedModelOpensTheDialogWithIt(bool picked) => EnqueueAsync(async () =>
+    {
         var source = @"D:\External Sources\Crate.gltf";
-        await LoadTestContentAsync(new Grid()).ConfigureAwait(true);
-        var owner = DroidNet.Tests.VisualUserInterfaceTestsApp.MainWindow;
-        var managed = new Mock<IManagedWindow>();
-        _ = managed.SetupGet(value => value.Window).Returns(owner);
-        var windows = new Mock<IWindowManagerService>();
-        _ = windows.SetupGet(value => value.ActiveWindow).Returns(managed.Object);
-        var dialogs = CreateDialogs(project, source, selectSource, accept);
-        var provider = new Mock<IAssetFeed>();
-        using var browser = new AssetsViewModel(
-            Mock.Of<Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService>(),
-            new ViewModelToView(locator.Object),
-            CreateSceneFolderImportState(),
-            session,
-            pipeline.Object,
-            provider.Object,
-            Mock.Of<IOperationResultPublisher>(),
-            Mock.Of<IStatusReducer>(),
-            Mock.Of<DroidNet.Storage.IStorageProvider>(),
-            Mock.Of<Oxygen.Editor.ContentExplorer.Panes.ContentFolders.IContentFoldersPane>(),
-            dialogs.Object,
-            windows.Object,
-            Mock.Of<IDesktopIntegration>(),
-            new TextureImport(new MockFileSystem()))
-        {
-            IsOperationResultVisible = true,
-        };
+        var fixture = await Fixture.CreateAsync(picked ? source : null).ConfigureAwait(true);
+        using var browser = fixture.Browser;
+        using var session = fixture.Session;
+
         await browser.ImportCommand.ExecuteAsync(parameter: null).ConfigureAwait(true);
-        dialogs.Verify(value => value.ShowAsync(It.IsAny<DialogSpec>(), It.IsAny<CancellationToken>()), selectSource ? Times.Once() : Times.Never());
-        pipeline.Verify(value => value.ImportSourceAsync(It.IsAny<SceneImportRequest>(), It.IsAny<CancellationToken>()), accept ? Times.Once() : Times.Never());
-        provider.Verify(value => value.RefreshAsync(It.IsAny<CancellationToken>()), accept ? Times.Once() : Times.Never());
-        if (accept)
+
+        _ = fixture.Prompted.Should().HaveCount(picked ? 1 : 0);
+        if (picked)
         {
-            _ = submitted.Should().NotBeNull();
-            _ = submitted!.SourcePath.Should().Be(source);
-            _ = submitted.Name.Should().Be("ReviewedCrate");
-            _ = submitted.DestinationFolder.Should().Be(AssetPath.Parse("/Content/Props"));
-            _ = browser.IsOperationResultVisible.Should().BeFalse();
+            _ = fixture.Prompted[0].Files.Should().Equal(source);
         }
     });
 
-    private static Mock<IDialogService> CreateDialogs(ProjectContext project, string source, bool selectSource, bool accept)
+    private sealed class Fixture
     {
-        var dialogs = new Mock<IDialogService>();
-        var ownerId = DroidNet.Tests.VisualUserInterfaceTestsApp.MainWindow.AppWindow.Id;
-        _ = dialogs.Setup(value => value.PickFileAsync(It.IsAny<FilePickerSpec>(), ownerId, It.IsAny<CancellationToken>()))
-            .Callback<FilePickerSpec, WindowId, CancellationToken>((spec, _, _) =>
-            {
-                _ = spec.SettingsIdentifier.Should().Be("Oxygen.ImportAsset");
-                _ = spec.SuggestedStartFolder.Should().Be(project.ProjectRoot.FullPath);
-                _ = spec.FileTypeChoices.Keys.Should().Equal("Supported assets", "3D models", "Textures");
-                _ = spec.FileTypeChoices["3D models"].Should().Equal(".gltf", ".glb", ".fbx");
-                _ = spec.FileTypeChoices["Textures"].Should().NotBeEmpty();
-            })
-            .ReturnsAsync(selectSource ? source : null);
-        _ = dialogs.Setup(value => value.ShowAsync(It.IsAny<DialogSpec>(), It.IsAny<CancellationToken>()))
-            .Returns<DialogSpec, CancellationToken>(async (spec, cancellationToken) =>
-            {
-                _ = spec.PrimaryButtonText.Should().Be("Import");
-                var view = (SceneImportDialogView)spec.Content!;
-                AssertImportPlacement(view.ViewModel!);
-                view.ViewModel!.Name = "ReviewedCrate";
-                view.ViewModel.DestinationFolder = "/Content/Props";
-                _ = (await spec.PrimaryAction!().ConfigureAwait(true)).Should().BeTrue();
-                return accept ? DialogButton.Primary : DialogButton.Close;
-            });
-        return dialogs;
-    }
+        private Fixture(ProjectContext project)
+        {
+            this.Project = project;
+        }
 
-    private static ContentExplorerState CreateSceneFolderImportState()
-    {
-        var state = new ContentExplorerState();
-        state.SetSelectedFolders([AssetPath.Parse("/Content/Scenes")]);
-        return state;
-    }
+        public ProjectContext Project { get; }
 
-    private static void AssertImportPlacement(SceneImportDialogViewModel model)
-    {
-        _ = model.DestinationFolder.Should().Be("/Content");
-        _ = model.ModelLocation.Should().Be("Model: /Content/Crate/Crate.gltf");
+        public Mock<IDialogService> Dialogs { get; } = new();
+
+        public Mock<IAssetFeed> Feed { get; } = new();
+
+        public List<ModelImportPromptRequest> Prompted { get; } = [];
+
+        public List<(IReadOnlyList<SceneImportRequest> Requests, ImportRunSettings Run)> Imported { get; } = [];
+
+        public ModelImportPlan? Plan { get; set; }
+
+        public AssetsViewModel Browser { get; private set; } = null!;
+
+        public TestSession Session { get; private set; } = null!;
+
+        public static async Task<Fixture> CreateAsync(string? pickedFile)
+        {
+            var project = TestProject.Create(new MockFileSystem(), Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"))).Context with { Name = "Import" };
+            var fixture = new Fixture(project);
+            await LoadTestContentAsync(new Grid()).ConfigureAwait(true);
+            var owner = DroidNet.Tests.VisualUserInterfaceTestsApp.MainWindow;
+            var managed = new Mock<IManagedWindow>();
+            _ = managed.SetupGet(value => value.Window).Returns(owner);
+            var windows = new Mock<IWindowManagerService>();
+            _ = windows.SetupGet(value => value.ActiveWindow).Returns(managed.Object);
+            _ = fixture.Dialogs.Setup(value => value.PickFileAsync(It.IsAny<FilePickerSpec>(), owner.AppWindow.Id, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(pickedFile);
+            var prompt = new Mock<IModelImportPrompt>();
+            _ = prompt.Setup(value => value.ShowAsync(It.IsAny<ModelImportPromptRequest>(), It.IsAny<CancellationToken>()))
+                .Callback<ModelImportPromptRequest, CancellationToken>((request, _) => fixture.Prompted.Add(request))
+                .Returns(() => Task.FromResult(fixture.Plan));
+            var pipeline = new Mock<IContentPipelineService>();
+            _ = pipeline.Setup(value => value.ImportSourcesAsync(It.IsAny<IReadOnlyList<SceneImportRequest>>(), It.IsAny<ImportRunSettings>(), It.IsAny<CancellationToken>()))
+                .Callback<IReadOnlyList<SceneImportRequest>, ImportRunSettings, CancellationToken>((requests, run, _) => fixture.Imported.Add((requests, run)))
+                .ReturnsAsync([new ContentCookResult(Guid.NewGuid(), CookTargetKind.Changes, OperationStatus.Succeeded, [], [], Inspection: null, Validation: null)]);
+            var state = new ContentExplorerState();
+            state.SetSelectedFolders([SelectedFolder]);
+            fixture.Session = new TestSession(project);
+            fixture.Browser = new AssetsViewModel(
+                Mock.Of<Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService>(),
+                new ViewModelToView(Mock.Of<IViewLocator>()),
+                state,
+                fixture.Session,
+                pipeline.Object,
+                fixture.Feed.Object,
+                Mock.Of<IOperationResultPublisher>(),
+                Mock.Of<IStatusReducer>(),
+                Mock.Of<DroidNet.Storage.IStorageProvider>(),
+                Mock.Of<Oxygen.Editor.ContentExplorer.Panes.ContentFolders.IContentFoldersPane>(),
+                fixture.Dialogs.Object,
+                windows.Object,
+                Mock.Of<IDesktopIntegration>(),
+                new TextureImport(new MockFileSystem()),
+                prompt.Object);
+            return fixture;
+        }
     }
 }

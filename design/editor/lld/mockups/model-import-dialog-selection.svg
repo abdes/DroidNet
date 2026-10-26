@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1000" viewBox="0 0 1440 1000" font-family="Segoe UI Variable, Segoe UI, sans-serif" font-size="14">
   <title>Import model dialog, several files selected (dark theme)</title>
-  <desc>The Import model dialog with all three files selected. The name row is absent and the content folder reads Mixed. An informational InfoBar says the settings apply to every selected file. The settings panel, drawn with the inspector's controls, edits the three files: Up axis applies to FBX files only (its qualifier says so); Normals is set on all three (full override bar, reset); the smoothing angle, an InspectorNumberField in degrees, differs between files and reads Mixed with a half override bar; Materials asks to select one file. Before import groups its InfoBars under each file, with a taken name. Import 3 is disabled. Colours are WinUI 3 dark-theme tokens.</desc>
+  <desc>The Import model dialog with all three files selected. The name row is absent and the content folder reads Mixed. The settings panel, drawn with the editor's shared property editors, edits the three files: Up axis applies to FBX files only (its qualifier says so); Normals is set on all three (full override bar, reset); the smoothing angle, a NumberField in degrees, differs between files and reads Mixed with a half override bar; Materials asks to select one file. An error InfoBar says Crates.gltf's name is taken, with Replace as its action. The facts InfoBar, an error bar titled 1 error, 3 warnings, says 3 files selected; the Before import flyout is open under its action button: DiagnosticCards without icons grouped under Car.fbx and Crates.gltf, each naming the objects it is about, with a chevron that lists them all; Truck.glb has no findings and is left out. Light dismiss: Esc or a click outside closes it. Import 3 is disabled. Colours are WinUI 3 dark-theme tokens.</desc>
   <defs><filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="8" stdDeviation="8" flood-color="#000000" flood-opacity="0.26"/></filter></defs>
   <rect width="1440" height="1000" fill="#202020"/>
   <rect x="0" y="0" width="1440" height="44" fill="#ffffff" fill-opacity="0.03"/>
@@ -39,106 +39,93 @@
   <text x="537" y="145" fill="#ffffff" fill-opacity="0.529">Mixed</text>
   <rect x="836" y="124" width="90" height="32" rx="4" fill="#ffffff" fill-opacity="0.059" stroke="#ffffff" stroke-opacity="0.07"/>
   <text x="881.0" y="145" text-anchor="middle" fill="#ffffff">Browse…</text>
-  <rect x="406" y="166" width="780" height="33" rx="4" fill="#ffffff" fill-opacity="0.031" stroke="#000000" stroke-opacity="0.10"/>
-  <text x="418" y="188" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#4cc2ff">&#xE946;</text>
-  <text x="442" y="188" font-size="13" fill="#ffffff">3 files selected · 1 FBX, 2 glTF · the settings below apply to every selected file</text>
-  <text x="406" y="226" font-weight="600" fill="#ffffff">Import settings</text>
-  <clipPath id="settings212"><rect x="402" y="238" width="539" height="636"/></clipPath>
-  <g clip-path="url(#settings212)">
-  <rect x="406" y="238" width="531" height="140" rx="8" fill="#ffffff" fill-opacity="0.031" stroke="#000000" stroke-opacity="0.10"/>
-  <path d="M406 290 V246 a8 8 0 0 1 8 -8 H929 a8 8 0 0 1 8 8 V290 Z" fill="#ffffff" fill-opacity="0.051"/>
-  <line x1="406" y1="290" x2="937" y2="290" stroke="#000000" stroke-opacity="0.10"/>
-  <text x="420" y="271" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="18" fill="#ffffff">&#xE7AD;</text>
-  <text x="452" y="261" font-weight="600" fill="#ffffff">Units and axes</text>
-  <text x="452" y="278" font-size="12" fill="#ffffff" fill-opacity="0.773">How the file's size and orientation are read.</text>
-  <text x="913" y="269" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="11" fill="#ffffff" fill-opacity="0.77">&#xE70E;</text>
-  <text x="426" y="320" fill="#ffffff">Units</text>
-  <rect x="576" y="300" width="313" height="30" rx="4" fill="#ffffff" fill-opacity="0.059" stroke="#ffffff" stroke-opacity="0.07"/>
-  <text x="587" y="320" fill="#ffffff" fill-opacity="0.773">Convert to metres</text>
-  <text x="867" y="319" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="10" fill="#ffffff" fill-opacity="0.77">&#xE70D;</text>
-  <text x="426" y="351" fill="#ffffff">Up axis</text>
-  <text x="426" y="366" font-size="11" fill="#ffffff" fill-opacity="0.529">FBX files</text>
-  <rect x="576" y="338" width="313" height="30" rx="4" fill="#ffffff" fill-opacity="0.059" stroke="#ffffff" stroke-opacity="0.07"/>
-  <text x="587" y="358" fill="#ffffff" fill-opacity="0.773">From the file</text>
-  <text x="867" y="357" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="10" fill="#ffffff" fill-opacity="0.77">&#xE70D;</text>
-  <rect x="406" y="386" width="531" height="254" rx="8" fill="#ffffff" fill-opacity="0.031" stroke="#000000" stroke-opacity="0.10"/>
-  <path d="M406 438 V394 a8 8 0 0 1 8 -8 H929 a8 8 0 0 1 8 8 V438 Z" fill="#ffffff" fill-opacity="0.051"/>
-  <line x1="406" y1="438" x2="937" y2="438" stroke="#000000" stroke-opacity="0.10"/>
-  <text x="420" y="419" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="18" fill="#ffffff">&#xF158;</text>
-  <text x="452" y="409" font-weight="600" fill="#ffffff">Geometry</text>
-  <text x="452" y="426" font-size="12" fill="#ffffff" fill-opacity="0.773">Normals, tangents and node pivots of the meshes.</text>
-  <text x="913" y="417" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="11" fill="#ffffff" fill-opacity="0.77">&#xE70E;</text>
-  <rect x="412" y="448" width="3" height="30" rx="1.5" fill="#4cc2ff"/>
-  <text x="426" y="468" fill="#ffffff">Normals</text>
-  <rect x="576" y="448" width="313" height="30" rx="4" fill="#ffffff" fill-opacity="0.059" stroke="#ffffff" stroke-opacity="0.07"/>
-  <text x="587" y="468" fill="#ffffff">Always recalculate</text>
-  <text x="867" y="467" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="10" fill="#ffffff" fill-opacity="0.77">&#xE70D;</text>
-  <rect x="895" y="449" width="28" height="28" rx="4" fill="#ffffff" fill-opacity="0.059"/>
-  <text x="902" y="468" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="13" fill="#ffffff">&#xE777;<title>Reset on the 3 selected files</title></text>
-  <rect x="412" y="486" width="3" height="30" rx="1.5" fill="#4cc2ff" fill-opacity="0.5"/>
-  <text x="426" y="506" fill="#ffffff">Smoothing angle</text>
-  <rect x="576" y="486" width="120" height="30" rx="4" fill="#ffffff" fill-opacity="0.043" stroke="#ffffff" stroke-opacity="0.07"/>
-  <text x="686" y="506.0" text-anchor="end" fill="#ffffff" fill-opacity="0.773">—</text>
-  <rect x="895" y="487" width="28" height="28" rx="4" fill="#ffffff" fill-opacity="0.059"/>
-  <text x="902" y="506" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="13" fill="#ffffff">&#xE777;<title>Reset on the 1 of 3 files that set it</title></text>
-  <text x="426" y="544" fill="#ffffff">Tangents</text>
-  <rect x="576" y="524" width="313" height="30" rx="4" fill="#ffffff" fill-opacity="0.059" stroke="#ffffff" stroke-opacity="0.07"/>
-  <text x="587" y="544" fill="#ffffff" fill-opacity="0.773">From the file, generate missing</text>
-  <text x="867" y="543" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="10" fill="#ffffff" fill-opacity="0.77">&#xE70D;</text>
-  <text x="426" y="582" fill="#ffffff">Keep node pivots</text>
-  <rect x="576" y="567" width="40" height="20" rx="10" fill="#4cc2ff"/><circle cx="606" cy="577" r="6" fill="#000000"/>
-  <text x="426" y="620" fill="#ffffff">Generate LODs</text>
-  <rect x="576.5" y="605.5" width="39" height="19" rx="9.5" fill="none" stroke="#ffffff" stroke-opacity="0.545"/><circle cx="586" cy="615" r="5" fill="#ffffff" fill-opacity="0.77"/>
-  <rect x="406" y="648" width="531" height="52" rx="8" fill="#ffffff" fill-opacity="0.031" stroke="#000000" stroke-opacity="0.10"/>
-  <rect x="406" y="648" width="531" height="52" rx="8" fill="#ffffff" fill-opacity="0.051"/>
-  <text x="420" y="681" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="18" fill="#ffffff">&#xE8FD;</text>
-  <text x="452" y="671" font-weight="600" fill="#ffffff">Hierarchy</text>
-  <text x="452" y="688" font-size="12" fill="#ffffff" fill-opacity="0.773">Which of the file's nodes are kept.</text>
-  <text x="913" y="679" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="11" fill="#ffffff" fill-opacity="0.77">&#xE70D;</text>
-  <rect x="406" y="708" width="531" height="102" rx="8" fill="#ffffff" fill-opacity="0.031" stroke="#000000" stroke-opacity="0.10"/>
-  <path d="M406 760 V716 a8 8 0 0 1 8 -8 H929 a8 8 0 0 1 8 8 V760 Z" fill="#ffffff" fill-opacity="0.051"/>
-  <line x1="406" y1="760" x2="937" y2="760" stroke="#000000" stroke-opacity="0.10"/>
-  <text x="420" y="741" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="18" fill="#ffffff">&#xE790;</text>
-  <text x="452" y="731" font-weight="600" fill="#ffffff">Materials</text>
-  <text x="452" y="748" font-size="12" fill="#ffffff" fill-opacity="0.773">Project materials used instead of the file's.</text>
-  <text x="913" y="739" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="11" fill="#ffffff" fill-opacity="0.77">&#xE70E;</text>
-  <text x="426" y="790" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="13" fill="#ffffff" fill-opacity="0.77">&#xE946;</text>
-  <text x="448" y="790" font-size="13" fill="#ffffff" fill-opacity="0.773">Select one file to choose its scene and replace its materials.</text>
-  <rect x="406" y="818" width="531" height="52" rx="8" fill="#ffffff" fill-opacity="0.031" stroke="#000000" stroke-opacity="0.10"/>
-  <rect x="406" y="818" width="531" height="52" rx="8" fill="#ffffff" fill-opacity="0.051"/>
-  <text x="420" y="851" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="18" fill="#ffffff">&#xE91B;</text>
-  <text x="452" y="841" font-weight="600" fill="#ffffff">Textures</text>
-  <text x="452" y="858" font-size="12" fill="#ffffff" fill-opacity="0.773">Size, compression and normal map convention.</text>
-  <text x="913" y="849" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="11" fill="#ffffff" fill-opacity="0.77">&#xE70D;</text>
-  <rect x="406" y="878" width="531" height="52" rx="8" fill="#ffffff" fill-opacity="0.031" stroke="#000000" stroke-opacity="0.10"/>
-  <rect x="406" y="878" width="531" height="52" rx="8" fill="#ffffff" fill-opacity="0.051"/>
-  <text x="420" y="911" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="18" fill="#ffffff">&#xEA80;</text>
-  <text x="452" y="901" font-weight="600" fill="#ffffff">Lights and cameras</text>
-  <text x="452" y="918" font-size="12" fill="#ffffff" fill-opacity="0.773">What the file's lights and cameras bring in.</text>
-  <text x="913" y="909" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="11" fill="#ffffff" fill-opacity="0.77">&#xE70D;</text>
+  <rect x="406" y="166" width="780" height="40" rx="4" fill="#442726" stroke="#000000" stroke-opacity="0.10"/>
+  <text x="418" y="192" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#ff99a4">&#xEA39;</text>
+  <text x="442" y="191" font-size="13" fill="#ffffff">Crates.gltf: A model named Crates is already in /Content/Props. Replace it, or choose another name.</text>
+  <rect x="1088" y="170" width="90" height="32" rx="4" fill="#ffffff" fill-opacity="0.059" stroke="#ffffff" stroke-opacity="0.07"/>
+  <text x="1133.0" y="191" text-anchor="middle" fill="#ffffff">Replace</text>
+  <rect x="406" y="214" width="780" height="40" rx="4" fill="#442726" stroke="#000000" stroke-opacity="0.10"/>
+  <text x="418" y="240" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#ff99a4">&#xEA39;</text>
+  <text x="442" y="239" font-size="13" font-weight="600" fill="#ffffff">1 error, 3 warnings</text>
+  <text x="566" y="239" font-size="13" fill="#ffffff">3 files selected</text>
+  <rect x="1058" y="218" width="120" height="32" rx="4" fill="#ffffff" fill-opacity="0.059" stroke="#ffffff" stroke-opacity="0.07"/>
+  <text x="1118.0" y="239" text-anchor="middle" fill="#ffffff">Before import<title>What the import will leave out or cannot read</title></text>
+  <text x="406" y="274" font-weight="600" fill="#ffffff">Import settings</text>
+  <clipPath id="settings260"><rect x="402" y="286" width="788" height="588"/></clipPath>
+  <g clip-path="url(#settings260)">
+  <rect x="406" y="286" width="780" height="140" rx="8" fill="#ffffff" fill-opacity="0.031" stroke="#000000" stroke-opacity="0.10"/>
+  <path d="M406 338 V294 a8 8 0 0 1 8 -8 H1178 a8 8 0 0 1 8 8 V338 Z" fill="#ffffff" fill-opacity="0.051"/>
+  <line x1="406" y1="338" x2="1186" y2="338" stroke="#000000" stroke-opacity="0.10"/>
+  <text x="420" y="319" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="18" fill="#ffffff">&#xE7AD;</text>
+  <text x="452" y="309" font-weight="600" fill="#ffffff">Units and axes</text>
+  <text x="452" y="326" font-size="12" fill="#ffffff" fill-opacity="0.773">How the file's size and orientation are read.</text>
+  <text x="1162" y="317" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="11" fill="#ffffff" fill-opacity="0.77">&#xE70E;</text>
+  <text x="426" y="368" fill="#ffffff">Units</text>
+  <rect x="576" y="348" width="562" height="30" rx="4" fill="#ffffff" fill-opacity="0.059" stroke="#ffffff" stroke-opacity="0.07"/>
+  <text x="587" y="368" fill="#ffffff" fill-opacity="0.773">Metres</text>
+  <text x="1116" y="367" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="10" fill="#ffffff" fill-opacity="0.77">&#xE70D;</text>
+  <text x="426" y="399" fill="#ffffff">Up axis</text>
+  <text x="426" y="414" font-size="11" fill="#ffffff" fill-opacity="0.529">FBX files</text>
+  <rect x="576" y="386" width="562" height="30" rx="4" fill="#ffffff" fill-opacity="0.059" stroke="#ffffff" stroke-opacity="0.07"/>
+  <text x="587" y="406" fill="#ffffff" fill-opacity="0.773">From the file</text>
+  <text x="1116" y="405" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="10" fill="#ffffff" fill-opacity="0.77">&#xE70D;</text>
+  <rect x="406" y="434" width="780" height="254" rx="8" fill="#ffffff" fill-opacity="0.031" stroke="#000000" stroke-opacity="0.10"/>
+  <path d="M406 486 V442 a8 8 0 0 1 8 -8 H1178 a8 8 0 0 1 8 8 V486 Z" fill="#ffffff" fill-opacity="0.051"/>
+  <line x1="406" y1="486" x2="1186" y2="486" stroke="#000000" stroke-opacity="0.10"/>
+  <text x="420" y="467" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="18" fill="#ffffff">&#xF158;</text>
+  <text x="452" y="457" font-weight="600" fill="#ffffff">Geometry</text>
+  <text x="452" y="474" font-size="12" fill="#ffffff" fill-opacity="0.773">Normals, tangents and node pivots of the meshes.</text>
+  <text x="1162" y="465" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="11" fill="#ffffff" fill-opacity="0.77">&#xE70E;</text>
+  <rect x="412" y="496" width="3" height="30" rx="1.5" fill="#4cc2ff"/>
+  <text x="426" y="516" fill="#ffffff">Normals</text>
+  <rect x="576" y="496" width="562" height="30" rx="4" fill="#ffffff" fill-opacity="0.059" stroke="#ffffff" stroke-opacity="0.07"/>
+  <text x="587" y="516" fill="#ffffff">Always recalculate</text>
+  <text x="1116" y="515" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="10" fill="#ffffff" fill-opacity="0.77">&#xE70D;</text>
+  <rect x="1144" y="497" width="28" height="28" rx="4" fill="#ffffff" fill-opacity="0.059"/>
+  <text x="1151" y="516" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="13" fill="#ffffff">&#xE777;<title>Reset on the 3 selected files</title></text>
+  <rect x="412" y="534" width="3" height="30" rx="1.5" fill="#4cc2ff" fill-opacity="0.5"/>
+  <text x="426" y="554" fill="#ffffff">Smoothing angle</text>
+  <rect x="576" y="534" width="120" height="30" rx="4" fill="#ffffff" fill-opacity="0.043" stroke="#ffffff" stroke-opacity="0.07"/>
+  <text x="686" y="554.0" text-anchor="end" fill="#ffffff" fill-opacity="0.773">—</text>
+  <rect x="1144" y="535" width="28" height="28" rx="4" fill="#ffffff" fill-opacity="0.059"/>
+  <text x="1151" y="554" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="13" fill="#ffffff">&#xE777;<title>Reset on the 1 of 3 files that set it</title></text>
+  <text x="426" y="592" fill="#ffffff">Tangents</text>
+  <rect x="576" y="572" width="562" height="30" rx="4" fill="#ffffff" fill-opacity="0.059" stroke="#ffffff" stroke-opacity="0.07"/>
+  <text x="587" y="592" fill="#ffffff" fill-opacity="0.773">From the file, generate missing</text>
+  <text x="1116" y="591" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="10" fill="#ffffff" fill-opacity="0.77">&#xE70D;</text>
+  <text x="426" y="630" fill="#ffffff">Keep node pivots</text>
+  <rect x="576" y="615" width="40" height="20" rx="10" fill="#4cc2ff"/><circle cx="606" cy="625" r="6" fill="#000000"/>
+  <text x="426" y="668" fill="#ffffff">Generate LODs</text>
+  <rect x="576.5" y="653.5" width="39" height="19" rx="9.5" fill="none" stroke="#ffffff" stroke-opacity="0.545"/><circle cx="586" cy="663" r="5" fill="#ffffff" fill-opacity="0.77"/>
+  <rect x="406" y="696" width="780" height="52" rx="8" fill="#ffffff" fill-opacity="0.031" stroke="#000000" stroke-opacity="0.10"/>
+  <rect x="406" y="696" width="780" height="52" rx="8" fill="#ffffff" fill-opacity="0.051"/>
+  <text x="420" y="729" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="18" fill="#ffffff">&#xE8FD;</text>
+  <text x="452" y="719" font-weight="600" fill="#ffffff">Hierarchy</text>
+  <text x="452" y="736" font-size="12" fill="#ffffff" fill-opacity="0.773">Which of the file's nodes are kept.</text>
+  <text x="1162" y="727" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="11" fill="#ffffff" fill-opacity="0.77">&#xE70D;</text>
+  <rect x="406" y="756" width="780" height="52" rx="8" fill="#ffffff" fill-opacity="0.031" stroke="#000000" stroke-opacity="0.10"/>
+  <rect x="406" y="756" width="780" height="52" rx="8" fill="#ffffff" fill-opacity="0.051"/>
+  <text x="420" y="789" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="18" fill="#ffffff">&#xE91B;</text>
+  <text x="452" y="779" font-weight="600" fill="#ffffff">Textures</text>
+  <text x="452" y="796" font-size="12" fill="#ffffff" fill-opacity="0.773">Size, compression and normal map convention.</text>
+  <text x="1162" y="787" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="11" fill="#ffffff" fill-opacity="0.77">&#xE70D;</text>
+  <rect x="406" y="816" width="780" height="52" rx="8" fill="#ffffff" fill-opacity="0.031" stroke="#000000" stroke-opacity="0.10"/>
+  <rect x="406" y="816" width="780" height="52" rx="8" fill="#ffffff" fill-opacity="0.051"/>
+  <text x="420" y="849" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="18" fill="#ffffff">&#xEA80;</text>
+  <text x="452" y="839" font-weight="600" fill="#ffffff">Lights and cameras</text>
+  <text x="452" y="856" font-size="12" fill="#ffffff" fill-opacity="0.773">What the file's lights and cameras bring in.</text>
+  <text x="1162" y="847" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="11" fill="#ffffff" fill-opacity="0.77">&#xE70D;</text>
+  <rect x="406" y="876" width="780" height="102" rx="8" fill="#ffffff" fill-opacity="0.031" stroke="#000000" stroke-opacity="0.10"/>
+  <path d="M406 928 V884 a8 8 0 0 1 8 -8 H1178 a8 8 0 0 1 8 8 V928 Z" fill="#ffffff" fill-opacity="0.051"/>
+  <line x1="406" y1="928" x2="1186" y2="928" stroke="#000000" stroke-opacity="0.10"/>
+  <text x="420" y="909" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="18" fill="#ffffff">&#xE790;</text>
+  <text x="452" y="899" font-weight="600" fill="#ffffff">Materials</text>
+  <text x="452" y="916" font-size="12" fill="#ffffff" fill-opacity="0.773">Project materials used instead of the file's.</text>
+  <text x="1162" y="907" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="11" fill="#ffffff" fill-opacity="0.77">&#xE70E;</text>
+  <text x="426" y="958" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="13" fill="#ffffff" fill-opacity="0.77">&#xE946;</text>
+  <text x="448" y="958" font-size="13" fill="#ffffff" fill-opacity="0.773">Select one file to choose its scene and replace its materials.</text>
   </g>
-  <rect x="941" y="240" width="3" height="573" rx="1.5" fill="#ffffff" fill-opacity="0.545"><title>Scroll bar</title></rect>
-  <rect x="946" y="531" width="4" height="24" rx="2" fill="#ffffff" fill-opacity="0.36"><title>Splitter</title></rect>
-  <text x="955" y="226" font-weight="600" fill="#ffffff">Before import</text>
-  <text x="955" y="252" font-size="13" font-weight="600" fill="#ffffff">Car.fbx</text>
-  <rect x="955" y="260" width="231" height="50" rx="4" fill="#433519" stroke="#000000" stroke-opacity="0.10"/>
-  <text x="967" y="282" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#fce100">&#xE7BA;</text>
-  <text x="991" y="282" font-size="13" fill="#ffffff">Animation "Drive" is not</text>
-  <text x="991" y="299" font-size="13" fill="#ffffff">imported.</text>
-  <rect x="955" y="318" width="231" height="50" rx="4" fill="#433519" stroke="#000000" stroke-opacity="0.10"/>
-  <text x="967" y="340" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#fce100">&#xE7BA;</text>
-  <text x="991" y="340" font-size="13" fill="#ffffff">Texture "Paint_N.png" is not</text>
-  <text x="991" y="357" font-size="13" fill="#ffffff">found.</text>
-  <text x="955" y="390" font-size="13" font-weight="600" fill="#ffffff">Truck.glb</text>
-  <text x="955" y="409" font-size="13" fill="#ffffff" fill-opacity="0.773">Nothing to report.</text>
-  <text x="955" y="440" font-size="13" font-weight="600" fill="#ffffff">Crates.gltf</text>
-  <rect x="955" y="448" width="231" height="101" rx="4" fill="#442726" stroke="#000000" stroke-opacity="0.10"/>
-  <text x="967" y="470" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#ff99a4">&#xEA39;</text>
-  <text x="991" y="470" font-size="13" fill="#ffffff">A model named Crates is</text>
-  <text x="991" y="487" font-size="13" fill="#ffffff">already in Content/Props.</text>
-  <text x="991" y="504" font-size="13" fill="#ffffff">Select it alone to rename</text>
-  <text x="991" y="521" font-size="13" fill="#ffffff">it, or review the</text>
-  <text x="991" y="538" font-size="13" fill="#ffffff">replacement.</text>
+  <rect x="1190" y="288" width="3" height="489" rx="1.5" fill="#ffffff" fill-opacity="0.545"><title>Scroll bar</title></rect>
   <rect x="174" y="908" width="124" height="32" rx="4" fill="#ffffff" fill-opacity="0.059" stroke="#ffffff" stroke-opacity="0.07"/>
   <text x="236.0" y="929" text-anchor="middle" fill="#ffffff">Open session…</text>
   <rect x="308" y="908" width="124" height="32" rx="4" fill="#ffffff" fill-opacity="0.059" stroke="#ffffff" stroke-opacity="0.07"/>
@@ -150,6 +137,25 @@
   <text x="1055" y="928" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="10" fill="#ffffff">&#xE70D;<title>Import run settings</title></text>
   <rect x="1086" y="908" width="100" height="32" rx="4" fill="#ffffff" fill-opacity="0.059" stroke="#ffffff" stroke-opacity="0.07"/>
   <text x="1136.0" y="929" text-anchor="middle" fill="#ffffff">Cancel</text>
+  <rect x="734" y="256" width="452" height="380" rx="8" fill="#2c2c2c" fill-opacity="0.96" stroke="#757575" stroke-opacity="0.40" filter="url(#shadow)"/>
+  <text x="750" y="286" font-weight="600" fill="#ffffff">Before import</text>
+  <text x="750" y="314" font-size="13" font-weight="600" fill="#ffffff">Car.fbx</text>
+  <rect x="750" y="322" width="420" height="54" rx="4" fill="#433519" stroke="#000000" stroke-opacity="0.10"/>
+  <text x="762" y="346" font-size="13" fill="#ffffff">Animations are not imported; the model imports in its rest pose.</text>
+  <text x="762" y="363" font-size="12" fill="#ffffff" fill-opacity="0.773">Drive</text>
+  <rect x="750" y="384" width="420" height="71" rx="4" fill="#433519" stroke="#000000" stroke-opacity="0.10"/>
+  <text x="762" y="408" font-size="13" fill="#ffffff">The material's texture wrap and filter modes are not imported;</text>
+  <text x="762" y="425" font-size="13" fill="#ffffff">its textures repeat and use trilinear filtering.</text>
+  <text x="762" y="442" font-size="12" fill="#ffffff" fill-opacity="0.773">Paint, Glass, Chrome and 2 more</text>
+  <text x="1144" y="442" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="10" fill="#ffffff" fill-opacity="0.77">&#xE70D;<title>Show all 5</title></text>
+  <rect x="750" y="463" width="420" height="71" rx="4" fill="#433519" stroke="#000000" stroke-opacity="0.10"/>
+  <text x="762" y="487" font-size="13" fill="#ffffff">Texture "Paint_N.png" is not found; Paint renders with the</text>
+  <text x="762" y="504" font-size="13" fill="#ffffff">error texture.</text>
+  <text x="762" y="521" font-size="12" fill="#ffffff" fill-opacity="0.773">Paint</text>
+  <text x="750" y="560" font-size="13" font-weight="600" fill="#ffffff">Crates.gltf</text>
+  <rect x="750" y="568" width="420" height="54" rx="4" fill="#442726" stroke="#000000" stroke-opacity="0.10"/>
+  <text x="762" y="592" font-size="13" fill="#ffffff">The required extension KHR_draco_mesh_compression cannot be</text>
+  <text x="762" y="609" font-size="13" fill="#ffffff">read; the file cannot be imported.</text>
   <g font-size="11" fill="#e0e0e0">
     <rect x="1220" y="40" width="212" height="760" rx="6" fill="#161616" stroke="#4a4a4a"/>
     <text x="1230" y="62" font-weight="600" fill="#ffffff">What the mockup shows</text>
@@ -169,22 +175,28 @@
     <text x="1230" y="307">5. Name, Scene and Materials</text>
     <text x="1240" y="322">belong to one file's content:</text>
     <text x="1240" y="337">select that file alone.</text>
-    <text x="1230" y="359">6. Before import, grouped by file;</text>
-    <text x="1240" y="374">a taken name blocks Import until</text>
-    <text x="1240" y="389">renamed or reviewed.</text>
-    <text x="1230" y="411">Settings use the inspector's own</text>
-    <text x="1240" y="426">controls: PropertiesExpander groups,</text>
-    <text x="1240" y="441">PropertyCard rows (override bar,</text>
-    <text x="1240" y="456">reset, responsive layout), Inspector-</text>
-    <text x="1240" y="471">NumberField (units, prefixes,</text>
-    <text x="1240" y="486">validation, label scrubbing),</text>
-    <text x="1240" y="501">InspectorToggleField, and Asset-</text>
-    <text x="1240" y="516">PickerButton (Pickers), never the</text>
-    <text x="1240" y="531">Scene Inspector project.</text>
-    <text x="1230" y="553">Layers (WinUI 3 dark tokens):</text>
-    <text x="1240" y="568">smoke 30 %, dialog base #202020,</text>
-    <text x="1240" y="583">content on LayerFillColorAlt, the</text>
-    <text x="1240" y="598">button bar on the base; cards,</text>
-    <text x="1240" y="613">inputs and InfoBars above it.</text>
+    <text x="1230" y="359">6. What blocks an import, in an</text>
+    <text x="1240" y="374">error bar; its action, Replace,</text>
+    <text x="1240" y="389">approves replacing a taken name.</text>
+    <text x="1230" y="411">7. Before import open: a light-</text>
+    <text x="1240" y="426">dismiss flyout (Esc or a click</text>
+    <text x="1240" y="441">outside closes it); DiagnosticCards</text>
+    <text x="1240" y="456">grouped by file, files without</text>
+    <text x="1240" y="471">findings left out; the chevron</text>
+    <text x="1240" y="486">lists every object in place.</text>
+    <text x="1230" y="508">Settings use the editor's shared</text>
+    <text x="1240" y="523">property editors: PropertiesExpander</text>
+    <text x="1240" y="538">groups, PropertyCard rows (override</text>
+    <text x="1240" y="553">bar, reset, responsive layout),</text>
+    <text x="1240" y="568">NumberField (units, prefixes,</text>
+    <text x="1240" y="583">validation, label scrubbing),</text>
+    <text x="1240" y="598">ToggleField, and AssetPickerButton</text>
+    <text x="1240" y="613">(Pickers), never the Scene</text>
+    <text x="1240" y="628">Inspector project.</text>
+    <text x="1230" y="650">Layers (WinUI 3 dark tokens):</text>
+    <text x="1240" y="665">smoke 30 %, dialog base #202020,</text>
+    <text x="1240" y="680">content on LayerFillColorAlt, the</text>
+    <text x="1240" y="695">button bar on the base; cards,</text>
+    <text x="1240" y="710">inputs and InfoBars above it.</text>
   </g>
 </svg>

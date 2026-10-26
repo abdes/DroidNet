@@ -21,6 +21,7 @@ using Oxygen.Editor.ContentExplorer.Panes.Assets.Layouts;
 using Oxygen.Editor.ContentExplorer.Panes.ContentFolders;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Cooking;
+using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.Models;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Shell.Desktop;
@@ -50,6 +51,7 @@ namespace Oxygen.Editor.ContentExplorer;
 /// <param name="windowManagerService">The window manager service.</param>
 /// <param name="shell">The clipboard and File Explorer actions.</param>
 /// <param name="textureImport">Imports images as textures.</param>
+/// <param name="modelImport">The Import model dialog, which chooses the models to import and their settings.</param>
 /// <param name="relocation">The rename, move, copy and delete workflow; without it those commands are unavailable.</param>
 /// <param name="creation">New Script, New Input File and New Scene; without it those commands are unavailable.</param>
 /// <param name="codeEditor">The code editor that opens scripts and input files; without it Edit is unavailable.</param>
@@ -74,6 +76,7 @@ public partial class AssetsViewModel(
     IWindowManagerService windowManagerService,
     IDesktopIntegration shell,
     TextureImport textureImport,
+    IModelImportPrompt modelImport,
     Relocation.IAssetRelocationWorkflow? relocation = null,
     Authoring.AuthoredAssetCreation? creation = null,
     ICodeEditorService? codeEditor = null,
@@ -166,11 +169,11 @@ public partial class AssetsViewModel(
         => string.Equals(operationKind, ContentPipelineOperationKinds.CookedOutputInspect, StringComparison.Ordinal)
            || string.Equals(operationKind, ContentPipelineOperationKinds.CookedOutputValidate, StringComparison.Ordinal);
 
-    /// <summary>Reviews and imports a source selected by the picker or the browser.</summary>
+    /// <summary>Opens the Import model dialog with <paramref name="sourcePaths"/>, then imports what it returns as one run.</summary>
     /// <param name="project">The originating project.</param>
-    /// <param name="sourcePath">The selected primary source.</param>
-    /// <returns>The review and visible import operation.</returns>
-    internal async Task ImportSourceFileAsync(ProjectContext project, string sourcePath)
+    /// <param name="sourcePaths">The model files the dialog starts with; empty to start with none.</param>
+    /// <returns>The dialog and the visible import operation.</returns>
+    internal async Task ImportModelsAsync(ProjectContext project, IReadOnlyList<string> sourcePaths)
     {
         try
         {
@@ -180,28 +183,21 @@ public partial class AssetsViewModel(
                 return;
             }
 
-            var selected = this.GetSelectedFolder();
-            var mount = project.AuthoringMounts.FirstOrDefault(mount => string.Equals(selected.Mount, mount.Name, StringComparison.Ordinal))
-                ?? project.AuthoringMounts.FirstOrDefault(static mount => string.Equals(mount.Name, "Content", StringComparison.Ordinal))
-                ?? project.AuthoringMounts[0];
-            var destination = "/" + mount.Name;
-
-            var model = new SceneImportDialogViewModel(project, sourcePath, destination, dialogService);
-            var view = this.VmToViewConverter.Convert(model, typeof(object), parameter: null, language: CultureInfo.CurrentUICulture.Name)
-                ?? throw new InvalidOperationException("The import review view is unavailable.");
-            var button = await dialogService.ShowAsync(new DialogSpec("Import model", view)
+            var plan = await modelImport.ShowAsync(new ModelImportPromptRequest(this.GetSelectedFolder()) { Files = [.. sourcePaths] }).ConfigureAwait(true);
+            if (plan is null || !ReferenceEquals(session.Context, project))
             {
-                PrimaryButtonText = "Import",
-                CloseButtonText = "Cancel",
-                DefaultButton = DialogButton.Primary,
-                PrimaryAction = () => Task.FromResult(model.Validate()),
-            }).ConfigureAwait(true);
-            if (button == DialogButton.Primary && model.Request is { } request)
-            {
-                await this.RunSourceImportAsync(project, () => contentPipelineService.ImportSourceAsync(request, CancellationToken.None)).ConfigureAwait(true);
+                return;
             }
+
+            var requests = new List<SceneImportRequest>(plan.Models.Length);
+            foreach (var model in plan.Models)
+            {
+                requests.Add(await ToRequestAsync(project, model).ConfigureAwait(true));
+            }
+
+            await this.RunSourceImportsAsync(project, () => contentPipelineService.ImportSourcesAsync(requests, plan.Run, CancellationToken.None)).ConfigureAwait(true);
         }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or System.Runtime.InteropServices.COMException)
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or InvalidDataException or InvalidOperationException or System.Runtime.InteropServices.COMException)
         {
             await dialogService.ShowMessageAsync("Import model", error.Message).ConfigureAwait(true);
         }
@@ -276,7 +272,7 @@ public partial class AssetsViewModel(
             PrimaryButtonText = "Import",
             CloseButtonText = "Cancel",
             DefaultButton = DialogButton.Primary,
-            PrimaryAction = () => Task.FromResult(model.Validate()),
+            PrimaryAction = _ => Task.FromResult(model.Validate()),
         }).ConfigureAwait(true);
         if (button != DialogButton.Primary || model.Request is not { } request)
         {
@@ -377,7 +373,7 @@ public partial class AssetsViewModel(
             }
             else
             {
-                await this.ImportSourceFileAsync(project, sourcePath.FullPath).ConfigureAwait(true);
+                await this.ImportModelsAsync(project, [sourcePath.FullPath]).ConfigureAwait(true);
             }
         }
         else if (args.InvokedItem is { Kind: AssetKind.Material, DescriptorPath: not null })
@@ -792,6 +788,21 @@ public partial class AssetsViewModel(
         };
     }
 
+    // A model the dialog was told to replace is checked again here, so the import replaces exactly that model.
+    private static async Task<SceneImportRequest> ToRequestAsync(ProjectContext project, ModelImportChoice model)
+    {
+        var request = new SceneImportRequest(project, model.SourcePath, model.Name, model.DestinationFolder) { Settings = model.Settings };
+        if (model.Replaces is not { } replaced)
+        {
+            return request;
+        }
+
+        var replacement = await SceneImportReplacement.ReviewAsync(project, model.DestinationFolder, model.Name, CancellationToken.None).ConfigureAwait(true);
+        return replacement.SourceUri == replaced
+            ? request with { Replacement = replacement }
+            : throw new InvalidOperationException($"The model {model.Name} would replace changed since its replacement was chosen. Choose Replace again.");
+    }
+
     // The folder that folder-wide commands act on: the first selected one, or the Content mount when none is.
     private AssetPath GetSelectedFolder()
         => contentExplorerState.SelectedFolders.Order().FirstOrDefault() ?? AssetPath.Content;
@@ -800,7 +811,7 @@ public partial class AssetsViewModel(
     private Task ImportAsync() => this.ImportPickedSourceAsync(models: true, textures: true);
 
     [RelayCommand]
-    private Task ImportModelAsync() => this.ImportPickedSourceAsync(models: true, textures: false);
+    private Task ImportModelAsync() => this.ImportModelsAsync(session.Context, []);
 
     [RelayCommand]
     private Task ImportTextureAsync() => this.ImportPickedSourceAsync(models: false, textures: true);
@@ -818,7 +829,7 @@ public partial class AssetsViewModel(
 
             var modelTypes = AssetFileTypes.Suffixes(AssetFileCategory.Model).ToList();
             var textureTypes = TextureImport.SupportedExtensions.ToList();
-            var filters = new Dictionary<string, IList<string>>(StringComparer.Ordinal);
+            var filters = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal);
             if (models && textures)
             {
                 filters["Supported assets"] = [.. modelTypes.Concat(textureTypes).Distinct(StringComparer.OrdinalIgnoreCase)];
@@ -850,7 +861,7 @@ public partial class AssetsViewModel(
                 }
                 else
                 {
-                    await this.ImportSourceFileAsync(project, path).ConfigureAwait(true);
+                    await this.ImportModelsAsync(project, [path]).ConfigureAwait(true);
                 }
             }
         }
@@ -897,6 +908,34 @@ public partial class AssetsViewModel(
         {
             var project = session.Context;
             await this.RunSourceImportAsync(project, () => contentPipelineService.ReimportSourceAsync(source, project, CancellationToken.None)).ConfigureAwait(true);
+        }
+    }
+
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "This user-command boundary reports failures; the coordinator owns native work and scoped recovery.")]
+    private async Task RunSourceImportsAsync(ProjectContext project, Func<Task<IReadOnlyList<ContentCookResult>>> import)
+    {
+        this.IsOperationResultVisible = false;
+        try
+        {
+            var results = await import().ConfigureAwait(true);
+            if (ReferenceEquals(session.Context, project))
+            {
+                await assetProvider.RefreshAsync().ConfigureAwait(true);
+                this.NotifyCookSelection();
+            }
+
+            foreach (var result in results)
+            {
+                this.PublishCookResult(ContentPipelineOperationKinds.Import, "Import model", result, result.RetainedSourceUri);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // The Cooking run retains the cancellation outcome.
+        }
+        catch (Exception error)
+        {
+            this.PublishFailure(ContentPipelineOperationKinds.Import, "Import model", error.Message, AssetImportDiagnosticCodes.ImportFailed, scopeUri: null, error, showInBrowser: false);
         }
     }
 

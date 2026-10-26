@@ -16,6 +16,18 @@ them. It holds no view, view model or dialog.
 - `ModelImportRecords` indexes a project's records by source path and by
   virtual path. A model is imported when a record names it. The index reads the
   folder when it is created, so callers create one per operation.
+- `ModelImportSettingCatalog` lists the settings a person chooses, each a
+  `ModelImportSetting`: a job key with the importer's default and the manifest
+  schema's values and ranges, read and written without touching other keys.
+  `ModelMaterialRemap` reads and writes the material remap.
+- `ModelSourceFacts` are what the source analysis reports of a model file: its
+  format and version, units, axes, counts, scenes and the names it produces.
+- `ImportRunSettings` are the ImportTool's execution settings of one import, with
+  the defaults the installed import manifest schema states.
+- `ModelImportSession` reads and writes an import session: the models of one
+  import and the run's settings, as an ImportTool import manifest.
+- `IModelImportPrompt` is the port of the Import model dialog: a UI surface asks
+  it which models to import and gets a `ModelImportPlan`.
 
 The content pipeline, which cooks and imports models, depends on this module;
 this module depends only on the shared asset formats.

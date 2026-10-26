@@ -5,6 +5,7 @@
 using System.Collections.Immutable;
 using System.Text.Json;
 using Json.Schema;
+using Oxygen.Editor.Models;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.ContentPipeline.Import;
@@ -69,7 +70,11 @@ public sealed record NativeSourceAnalysisReport(string ProducerFingerprint, bool
                 Message = issue.GetProperty("message").GetString()!,
                 AffectedPath = issue.GetProperty("source_path").GetString(),
                 TechnicalMessage = issue.GetProperty("object_path").GetString(),
-            }).ToImmutableArray());
+                AffectedEntity = NativeSourceObject.Read(issue),
+            }).ToImmutableArray())
+        {
+            Model = item.TryGetProperty("model", out var model) ? ModelSourceFacts.Read(model) : null,
+        };
 
     private static ImmutableArray<NativeLogicalDependency> ReadLogical(JsonElement entries)
         => entries.EnumerateArray().Select(static item => new NativeLogicalDependency(

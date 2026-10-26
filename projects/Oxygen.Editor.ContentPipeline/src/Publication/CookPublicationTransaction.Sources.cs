@@ -42,7 +42,7 @@ internal sealed partial class CookPublicationTransaction
         var current = await CookRootImage.CaptureAsync(published, copyTo: null, cancellationToken).ConfigureAwait(false);
         if (!source.Before.Matches(current))
         {
-            throw new IOException("The retained source changed after review. Review the replacement again.");
+            throw new IOException("The model to replace changed since its replacement was chosen. Choose Replace again.");
         }
 
         var captured = CapturedSourcePath(operation.Project, operation.OperationId, published);

@@ -189,6 +189,21 @@ public sealed class TopologyTests
     }
 
     [TestMethod]
+    public async Task Resolve_TheModelImportPromptFromTheSession_HasEveryDependency()
+    {
+        // Arrange: the prompt is the session's, so every service it uses is the session's or the editor's, never a
+        // window's or a panel's.
+        await using var scopes = await EditorScopes.CreateAsync().ConfigureAwait(false);
+        var session = scopes.CreateSession();
+
+        // Act
+        var resolve = () => session.Resolver.Resolve<Oxygen.Editor.Models.IModelImportPrompt>();
+
+        // Assert
+        _ = resolve.Should().NotThrow().Which.Should().NotBeNull();
+    }
+
+    [TestMethod]
     public async Task Resolve_EditorSingletonFromTheExplorerFirst_ReturnsTheEditorInstance()
     {
         // Arrange

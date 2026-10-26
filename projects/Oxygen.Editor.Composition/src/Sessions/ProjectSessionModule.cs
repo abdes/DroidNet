@@ -14,6 +14,7 @@ using Oxygen.Editor.Input;
 using Oxygen.Editor.LivePreview;
 using Oxygen.Editor.LivePreview.Content;
 using Oxygen.Editor.MaterialEditor;
+using Oxygen.Editor.ModelEditor;
 using Oxygen.Editor.Materials;
 using Oxygen.Editor.Materials.Documents;
 using Oxygen.Editor.Problems;
@@ -74,6 +75,7 @@ public sealed class ProjectSessionModule : IScopeModule<ISessionLayer>
             new ScenesSessionModule(),
             new SceneEditorSessionModule(),
             new MaterialEditorSessionModule(),
+            new ModelEditorSessionModule(),
             new ProjectSessionModule(),
         ];
 

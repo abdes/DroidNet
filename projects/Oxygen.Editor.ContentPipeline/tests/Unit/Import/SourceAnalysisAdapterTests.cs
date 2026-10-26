@@ -73,6 +73,37 @@ public sealed class SourceAnalysisAdapterTests
             && issue.AffectedPath == Path.Combine(workspace.Root, "first.json") && issue.TechnicalMessage == "textures.base_color");
     }
 
+    /// <summary>A diagnostic about an object of the source names the object as the file does, beside its path.</summary>
+    /// <returns>The asynchronous diagnostic test.</returns>
+    [TestMethod]
+    public async Task SourceAnalysis_KeepsTheObjectADiagnosticIsAbout()
+    {
+        using var workspace = new ImportAdapterWorkspace();
+        var runner = new SourceAnalysisRunner
+        {
+            RewriteReport = report =>
+            {
+                var job = report["jobs"]![0]!;
+                job["diagnostics"] = new JsonArray(new JsonObject
+                {
+                    ["severity"] = "Warning",
+                    ["code"] = "import.source_feature_dropped",
+                    ["message"] = "The material's texture wrap and filter modes are not imported.",
+                    ["source_path"] = job["source_path"]!.GetValue<string>(),
+                    ["object_path"] = "/materials/12",
+                    ["object_name"] = "Bun",
+                });
+            },
+        };
+
+        var report = await CreateQueryApi(workspace, runner).AnalyzeSourcesAsync(AnalysisExecution(workspace), this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        var affected = report.Jobs[0].Diagnostics.Should().ContainSingle().Which.AffectedEntity;
+        _ = affected.Should().NotBeNull();
+        _ = affected!.SourceObjectPath.Should().Be("/materials/12");
+        _ = affected.SourceObjectName.Should().Be("Bun");
+    }
+
     /// <summary>A query cannot silently associate another frontier's report with the caller.</summary>
     /// <returns>The asynchronous correlation test.</returns>
     [TestMethod]

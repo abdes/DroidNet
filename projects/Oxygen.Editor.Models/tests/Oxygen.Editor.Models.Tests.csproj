@@ -15,4 +15,10 @@
     <ItemGroup>
         <PackageReference Include="Testably.Abstractions.Testing" />
     </ItemGroup>
+
+    <ItemGroup>
+        <!-- The installed engine schemas the module's vocabulary is checked against. -->
+        <None Include="$(OxygenSdkSchemasDir)\oxygen.import-manifest.schema.json" Link="Schemas\oxygen.import-manifest.schema.json" CopyToOutputDirectory="PreserveNewest" />
+        <None Include="$(OxygenSdkSchemasDir)\oxygen.source-analysis.schema.json" Link="Schemas\oxygen.source-analysis.schema.json" CopyToOutputDirectory="PreserveNewest" />
+    </ItemGroup>
 </Project>

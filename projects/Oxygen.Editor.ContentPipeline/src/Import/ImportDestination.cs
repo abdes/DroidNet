@@ -4,10 +4,10 @@
 
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.ContentExplorer.Importing;
+namespace Oxygen.Editor.ContentPipeline.Import;
 
 /// <summary>Reads the destination folder people type in an import review.</summary>
-internal static class ImportDestination
+public static class ImportDestination
 {
     /// <summary>Reads a typed destination, such as <c>Content/Models</c> or <c>/Content/Models/</c>.</summary>
     /// <param name="folder">The typed folder.</param>

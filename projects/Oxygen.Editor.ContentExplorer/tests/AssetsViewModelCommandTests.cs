@@ -216,6 +216,7 @@ public sealed class AssetsViewModelCommandTests
             Mock.Of<DroidNet.Aura.Windowing.IWindowManagerService>(),
             Mock.Of<IDesktopIntegration>(),
             new TextureImport(new MockFileSystem()),
+            Mock.Of<Oxygen.Editor.Models.IModelImportPrompt>(),
             relocation);
         await browser.OnNavigatedToAsync(null!, null!).ConfigureAwait(false);
         return (browser, state, folders, session);

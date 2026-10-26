@@ -1,0 +1,19 @@
+<Project Sdk="MSTest.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+        <RootNamespace>Oxygen.Editor.ModelEditor.UI.Tests</RootNamespace>
+        <AssemblyName>$(MSBuildProjectName)</AssemblyName>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <DroidNetTestTier>Unit</DroidNetTestTier>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.ModelEditor/src/Oxygen.Editor.ModelEditor.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.Projects/testing/Oxygen.Editor.Projects.Testing.csproj" />
+        <PackageReference Include="Moq" />
+        <PackageReference Include="Testably.Abstractions.Testing" />
+        <!-- The module's own dialog fixture, shared by its unit and UI tests. -->
+        <Compile Include="../TestSupport/ImportDialogs.cs" Link="TestSupport/ImportDialogs.cs" />
+        <Compile Include="$(ProjectsRoot)/UITests.Shared/testsupport/UiTestHosting.cs" Link="Support/UiTestHosting.cs" />
+    </ItemGroup>
+    <Import Project="$(ProjectsRoot)/UITests.Shared/src/UITests.Shared.projitems" Label="Shared" />
+</Project>
