@@ -177,7 +177,7 @@ public sealed partial class ContentPipelineService
         snapshot = snapshot with
         {
             Inputs = inputs,
-            InputIdentity = CookInputSnapshotCapture.ComputeIdentity(snapshot.BuildFingerprint, inputs),
+            InputIdentity = CookInputSnapshotCapture.ComputeIdentity(inputs),
             SourceReplacement = new(replacement.BundleRoot, replacement.Before),
         };
         var replacementGraph = CreateReplacementGraph(
@@ -229,7 +229,6 @@ public sealed partial class ContentPipelineService
                 RequireCompleteReplacementBundle(operation, replacement, replacementFiles, graph);
                 return HasError(graph.Diagnostics) ? throw new CookInputDiscoveryException(graph.Diagnostics) : graph.Files;
             },
-            artifacts.Fingerprint,
             cancellationToken).ConfigureAwait(false);
         return (snapshot, graph!, replacementFiles);
     }

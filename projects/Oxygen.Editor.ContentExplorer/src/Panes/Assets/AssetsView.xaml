@@ -406,6 +406,12 @@
                 IsOpen="{x:Bind ViewModel.IsOperationResultVisible, Mode=TwoWay}"
                 Message="{x:Bind ViewModel.OperationResultMessage, Mode=OneWay}"
                 Severity="{x:Bind ViewModel.OperationResultSeverity, Mode=OneWay}">
+                <muxc:InfoBar.ActionButton>
+                    <Button
+                        Command="{x:Bind ViewModel.CookProjectCommand}"
+                        Content="Cook project"
+                        Visibility="{x:Bind ViewModel.IsPublicationOutdated, Mode=OneWay}" />
+                </muxc:InfoBar.ActionButton>
                 <muxc:InfoBar.Content>
                     <StackPanel
                         Margin="0,0,0,12"

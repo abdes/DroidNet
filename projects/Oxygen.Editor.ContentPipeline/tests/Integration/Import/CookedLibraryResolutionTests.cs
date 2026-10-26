@@ -31,7 +31,7 @@ public sealed class CookedLibraryResolutionTests
         using var library = new CookWorkspace([new("Content", "Content"), new("Art", "Art")], EngineContentPak.Installed());
         using var consumer = new CookWorkspace(engineContent: EngineContentPak.Installed());
         var source = await WriteCrossMountModelAsync(library, this.TestContext.CancellationToken).ConfigureAwait(false);
-        using var compatibility = EditorNativeCompatibilityService.ForCooking();
+        var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
         var imported = await CreateService(library, api, compatibility: compatibility).CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = imported.IsPublished.Should().BeTrue();
@@ -95,7 +95,7 @@ public sealed class CookedLibraryResolutionTests
             { "source": "Surface.tga", "intent": "albedo", "virtual_path": "/Art/Textures/Surface.otex",
               "decode": { "color_space": "srgb" }, "output": { "format": "rgba8_srgb" } }
             """);
-        using var compatibility = EditorNativeCompatibilityService.ForCooking();
+        var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
         var texture = await CreateService(library, api, compatibility: compatibility).CookAssetAsync(AssetPath.Parse("/Art/Textures/Surface.otex"), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = texture.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, texture.Diagnostics.Select(static issue => issue.TechnicalMessage ?? issue.Message)));
@@ -134,7 +134,7 @@ public sealed class CookedLibraryResolutionTests
         using var older = new CookWorkspace([new("Content", "Content"), new("Art", "Art")], EngineContentPak.Installed());
         using var newer = new CookWorkspace([new("Content", "Content"), new("Art", "Art")], EngineContentPak.Installed());
         using var consumer = new CookWorkspace(engineContent: EngineContentPak.Installed());
-        using var compatibility = EditorNativeCompatibilityService.ForCooking();
+        var compatibility = EditorNativeCompatibilityService.ForCooking();
         var runner = new CountingSourceRunner();
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), runner, NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
         AssetPath? geometry = null;

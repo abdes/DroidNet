@@ -36,7 +36,7 @@ public sealed class ImportWorkflowTests
         {
             var source = Path.Combine(external.FullName, "Model.gltf");
             File.Copy(Path.Combine(AppContext.BaseDirectory, "Fixtures", "static_scalar_triangle.gltf"), source);
-            using var cook = NativeCook.Create(workspace);
+            var cook = NativeCook.Create(workspace);
             var service = cook.Service;
             var result = await service.ImportSourceAsync(new(workspace.ProjectContext, source, "Model", AssetPath.Parse("/Content/Models")), this.TestContext.CancellationToken).ConfigureAwait(false);
             _ = result.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, result.Diagnostics.Select(static issue => issue.Message)));
@@ -74,7 +74,7 @@ public sealed class ImportWorkflowTests
         var path = Path.Combine(workspace.Root, "Content/Models/model.fbx");
         _ = Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         File.Copy(Path.Combine(AppContext.BaseDirectory, "Fixtures", "static_scalar_triangle.fbx"), path);
-        using var cook = NativeCook.Create(workspace);
+        var cook = NativeCook.Create(workspace);
         var service = cook.Service;
         var result = await service.ImportSourceAsync(new(workspace.ProjectContext, path, "Model", AssetPath.Parse("/Content/Models")), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = result.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, result.Diagnostics.Select(static issue => issue.Message)));
@@ -95,7 +95,7 @@ public sealed class ImportWorkflowTests
             var path = Path.Combine(external.FullName, "model.gltf");
             File.Copy(Path.Combine(AppContext.BaseDirectory, "Fixtures", "static_scalar_triangle.gltf"), path);
             var runner = new FailImportBatchRunner();
-            using var cook = NativeCook.Create(workspace, runner: runner);
+            var cook = NativeCook.Create(workspace, runner: runner);
             var service = cook.Service;
             var result = await service.ImportSourceAsync(new(workspace.ProjectContext, path, "Model", AssetPath.Parse("/Content/Models")), this.TestContext.CancellationToken).ConfigureAwait(false);
             _ = result.Status.Should().Be(OperationStatus.Failed);
@@ -132,7 +132,7 @@ public sealed class ImportWorkflowTests
             File.Copy(Path.Combine(AppContext.BaseDirectory, "Fixtures", "static_textured_triangle." + format), path);
             File.Copy(Path.Combine(AppContext.BaseDirectory, "Fixtures", "static_textured_checker.png"), texture);
             var runner = new FailImportBatchRunner();
-            using var cook = NativeCook.Create(workspace, runner: runner);
+            var cook = NativeCook.Create(workspace, runner: runner);
             var service = cook.Service;
             var result = await service.ImportSourceAsync(new(workspace.ProjectContext, path, "Triangle", AssetPath.Parse("/Content/Models")), this.TestContext.CancellationToken).ConfigureAwait(false);
             _ = result.Status.Should().Be(OperationStatus.Failed);
@@ -194,7 +194,7 @@ public sealed class ImportWorkflowTests
         {
             var source = Path.Combine(external.FullName, "model.gltf");
             File.Copy(Path.Combine(AppContext.BaseDirectory, "Fixtures", "static_scalar_triangle.gltf"), source);
-            using var compatibility = EditorNativeCompatibilityService.ForCooking();
+            var compatibility = EditorNativeCompatibilityService.ForCooking();
             var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
             var files = new FailSettingsStore();
             var service = new ContentPipelineService(

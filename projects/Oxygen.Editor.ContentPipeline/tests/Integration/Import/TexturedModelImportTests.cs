@@ -36,7 +36,7 @@ public sealed class TexturedModelImportTests
         File.Copy(Path.Combine(AppContext.BaseDirectory, "Fixtures", "static_textured_triangle." + extension), primary);
         const string imageName = "static_textured_checker.png";
         File.Copy(Path.Combine(AppContext.BaseDirectory, "Fixtures", imageName), Path.Combine(original, imageName));
-        using var cook = NativeCook.Create(workspace);
+        var cook = NativeCook.Create(workspace);
         var pipeline = cook.Service;
         var request = new SceneImportRequest(workspace.ProjectContext, primary, "Textured", AssetPath.Parse("/Content/Models"));
 

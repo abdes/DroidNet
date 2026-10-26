@@ -15,18 +15,13 @@ public sealed class NativeArtifactLease : IDisposable, IAsyncDisposable
     private bool disposed;
 
     /// <summary>Initializes a new instance of the <see cref="NativeArtifactLease"/> class with verified file ownership.</summary>
-    /// <param name="fingerprint">The canonical producer content identity.</param>
     /// <param name="paths">Verified physical paths by portable artifact identity.</param>
     /// <param name="streams">Protected file handles transferred by the verifier.</param>
-    internal NativeArtifactLease(string fingerprint, ImmutableDictionary<string, string> paths, ImmutableArray<FileStream> streams)
+    internal NativeArtifactLease(ImmutableDictionary<string, string> paths, ImmutableArray<FileStream> streams)
     {
-        this.Fingerprint = fingerprint;
         this.paths = paths;
         this.streams = streams;
     }
-
-    /// <summary>Gets the artifact/schema content identity used by cook provenance and reuse.</summary>
-    public string Fingerprint { get; }
 
     /// <summary>Gets a verified physical path while the lease remains active.</summary>
     /// <param name="artifactId">The required portable artifact identity.</param>

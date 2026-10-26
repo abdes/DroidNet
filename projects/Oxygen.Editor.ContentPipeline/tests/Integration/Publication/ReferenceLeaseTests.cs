@@ -34,7 +34,7 @@ public sealed class ReferenceLeaseTests
         using var workspace = new CookWorkspace([new("Content", "Content"), new("Art", "Art")], EngineContentPak.Installed());
         using var foreignConsumer = new CookWorkspace(engineContent: EngineContentPak.Installed());
         var source = await WriteCrossMountModelAsync(workspace, this.TestContext.CancellationToken).ConfigureAwait(false);
-        using var compatibility = EditorNativeCompatibilityService.ForCooking();
+        var compatibility = EditorNativeCompatibilityService.ForCooking();
         var drain = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var runner = new ContextLeaseRunner();
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), runner, NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);

@@ -37,7 +37,7 @@ public sealed class ImportRunTests
         {
             var gltf = CopyFixture(external, "static_scalar_triangle.gltf", "Crate.gltf");
             var fbx = CopyFixture(external, "static_scalar_triangle.fbx", "Barrel.fbx");
-            using var cook = NativeCook.Create(workspace);
+            var cook = NativeCook.Create(workspace);
             SceneImportRequest[] requests =
             [
                 new(workspace.ProjectContext, gltf, "Crate", Models) { Settings = Settings("Crate", ("import_cameras", false)) },
@@ -71,7 +71,7 @@ public sealed class ImportRunTests
         try
         {
             var source = CopyFixture(external, "static_scalar_triangle.gltf", "Model.gltf");
-            using var cook = NativeCook.Create(workspace);
+            var cook = NativeCook.Create(workspace);
             var first = await cook.Service.ImportSourceAsync(new(workspace.ProjectContext, source, "Model", Models), this.TestContext.CancellationToken).ConfigureAwait(false);
             _ = first.IsPublished.Should().BeTrue();
             var before = new ModelImportRecords(workspace.ProjectContext.FileSystem, workspace.Root).All.Single();
@@ -102,7 +102,7 @@ public sealed class ImportRunTests
         using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         var folder = Directory.CreateDirectory(Path.Combine(workspace.Root, "Content", "Models"));
         var source = CopyFixture(folder, "static_scalar_triangle.gltf", "Crate.gltf");
-        using var cook = NativeCook.Create(workspace);
+        var cook = NativeCook.Create(workspace);
         var first = await cook.Service.ImportSourcesAsync([new(workspace.ProjectContext, source, "Crate", Models)], ImportRunSettings.None, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = first.Should().ContainSingle().Which.IsPublished.Should().BeTrue();
         var before = new ModelImportRecords(workspace.ProjectContext.FileSystem, workspace.Root).All.Single();
@@ -124,7 +124,7 @@ public sealed class ImportRunTests
     public async Task Analyze_ReadsTheFactsOfASourceBeforeItIsImported()
     {
         using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
-        using var cook = NativeCook.Create(workspace);
+        var cook = NativeCook.Create(workspace);
         var analyzer = new ModelSourceAnalyzer(cook.Api, new ContentImportManifestBuilder());
         var source = Path.Combine(AppContext.BaseDirectory, "Fixtures", "static_scalar_triangle.fbx");
 

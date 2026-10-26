@@ -85,8 +85,7 @@ a pending cook of the same or a covering scope. The rules are in
 
 ## Freshness and validation
 
-Browser badges compare saved inputs and observed producer identity against the
-last successful publication. They consume event-driven snapshots, launch no
+Browser badges compare saved inputs against the last successful publication. They consume event-driven snapshots, launch no
 native processes and hash no cooked payloads. Unknown output availability is
 neutral; an observed missing output offers cooking. Filtering and resolving
 unchanged rows reuse the snapshot.

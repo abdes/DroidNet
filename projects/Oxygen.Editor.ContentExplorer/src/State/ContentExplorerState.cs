@@ -51,6 +51,12 @@ public sealed partial class ContentExplorerState : INotifyPropertyChanged
     /// <summary>Gets a value indicating whether Paste moves the clipboard's items instead of copying them.</summary>
     public bool IsClipboardCut { get; private set; }
 
+    /// <summary>
+    /// Gets why the project's cooked content cannot be shown, when it was published in a format this editor does not
+    /// read; cooking the project upgrades it. <see langword="null"/> while the cooked content is readable.
+    /// </summary>
+    public string? OutdatedPublication { get; private set; }
+
     /// <summary>Gets or sets the active identity retained when switching asset layouts.</summary>
     internal AssetPath? SelectedIdentity { get; set; }
 
@@ -103,6 +109,19 @@ public sealed partial class ContentExplorerState : INotifyPropertyChanged
         this.Clipboard = items;
         this.IsClipboardCut = isCut;
         this.OnPropertyChanged(nameof(this.Clipboard));
+    }
+
+    /// <summary>Records whether the project's cooked content is in a format this editor does not read.</summary>
+    /// <param name="reason">Why it cannot be shown and how to upgrade it; <see langword="null"/> once it is readable.</param>
+    public void SetOutdatedPublication(string? reason)
+    {
+        if (string.Equals(this.OutdatedPublication, reason, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        this.OutdatedPublication = reason;
+        this.OnPropertyChanged(nameof(this.OutdatedPublication));
     }
 
     /// <summary>Empties the clipboard, as after the cut items were moved.</summary>

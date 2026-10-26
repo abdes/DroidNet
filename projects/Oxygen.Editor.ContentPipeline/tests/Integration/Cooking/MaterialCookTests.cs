@@ -281,7 +281,6 @@ internal sealed partial class MaterialCookTests
             this.Session.End();
             this.CookCoordinator.Dispose();
             this.Session.Dispose();
-            this.nativePipeline?.Dispose();
             if (Directory.Exists(this.Root))
             {
                 Directory.Delete(this.Root, recursive: true);

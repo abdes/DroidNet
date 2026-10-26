@@ -35,35 +35,24 @@ public sealed partial class NativeSdkCompatibilityTests
         using var fixture = new Fixture();
         var path = Path.Combine(fixture.Installation.EngineRoot, "bin", Path.GetFileName(NativeArtifactInventory.RuntimeId(EditorNativeCompatibilityService.CurrentConfiguration)));
         await File.WriteAllTextAsync(path, "WXYZ", this.TestContext.CancellationToken).ConfigureAwait(false);
-        using var compatibility = new EditorNativeCompatibilityService(fixture.Installation);
+        var compatibility = new EditorNativeCompatibilityService(fixture.Installation);
         var result = await compatibility.VerifyAsync(Guid.NewGuid(), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = result.Succeeded.Should().BeFalse();
         _ = result.Diagnostics.Should().Contain(value => value.Code == NativeCompatibilityDiagnosticCodes.ArtifactMismatch && value.AffectedPath == path);
     }
 
-    /// <summary>Cooking needs no Interop or accepted manifest, and producer changes alter its content identity.</summary>
-    /// <param name="producerFile">The managed producer or reader that changed.</param>
-    /// <returns>The asynchronous producer test.</returns>
+    /// <summary>Cooking verifies from the cooking inputs alone: it needs neither Interop nor an accepted manifest.</summary>
+    /// <returns>The asynchronous cooking test.</returns>
     [TestMethod]
-    [DataRow("Oxygen.Editor.ContentPipeline.dll")]
-    [DataRow("Oxygen.Managed.Assets.dll")]
-    [DataRow("Oxygen.Managed.Core.dll")]
-    public async Task CookingCapturesCurrentProducerWithoutQualification(string producerFile)
+    public async Task CookingNeedsNoInterop()
     {
         using var fixture = new Fixture();
         fixture.CreateCookingInputs();
         File.Delete(fixture.Installation.InteropPath);
-        using var service = new EditorNativeCompatibilityService(fixture.Installation, cooking: true);
-        var first = await service.VerifyAsync(Guid.NewGuid(), this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = first.Succeeded.Should().BeTrue();
-        var fingerprint = first.Artifacts!.Fingerprint;
-        await first.Artifacts.DisposeAsync().ConfigureAwait(false);
-        await File.WriteAllTextAsync(Path.Combine(fixture.Installation.EditorRoot, producerFile), "updated producer", this.TestContext.CancellationToken).ConfigureAwait(false);
-        var second = await service.VerifyAsync(Guid.NewGuid(), this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = second.Succeeded.Should().BeTrue();
-        var artifacts = second.Artifacts!;
-        await using var lease = artifacts.ConfigureAwait(false);
-        _ = artifacts.Fingerprint.Should().NotBe(fingerprint);
+        var service = new EditorNativeCompatibilityService(fixture.Installation, cooking: true);
+        var result = await service.VerifyAsync(Guid.NewGuid(), this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = result.Succeeded.Should().BeTrue();
+        await result.Artifacts!.DisposeAsync().ConfigureAwait(false);
     }
 
     /// <summary>Schema disagreement blocks cooking while runtime startup remains available.</summary>
@@ -79,7 +68,7 @@ public sealed partial class NativeSdkCompatibilityTests
         using var fixture = new Fixture();
         fixture.CreateCookingInputs();
         await File.WriteAllTextAsync(Path.Combine(fixture.Installation.EditorRoot, "Schemas", schemaFile), """{"$id":"different"}""", this.TestContext.CancellationToken).ConfigureAwait(false);
-        using var compatibility = new EditorNativeCompatibilityService(fixture.Installation, cooking: true);
+        var compatibility = new EditorNativeCompatibilityService(fixture.Installation, cooking: true);
         var result = await compatibility.VerifyAsync(Guid.NewGuid(), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = result.Succeeded.Should().BeFalse();
         _ = result.Diagnostics.Should().ContainSingle(value => value.Message.Contains("schemas differ", StringComparison.Ordinal));
@@ -109,7 +98,7 @@ public sealed partial class NativeSdkCompatibilityTests
 
         public async Task VerifyRuntimeAsync(CancellationToken cancellationToken)
         {
-            using var compatibility = new EditorNativeCompatibilityService(this.Installation);
+            var compatibility = new EditorNativeCompatibilityService(this.Installation);
             var result = await compatibility.VerifyAsync(Guid.NewGuid(), cancellationToken).ConfigureAwait(false);
             _ = result.Succeeded.Should().BeTrue(string.Join("; ", result.Diagnostics.Select(static value => value.TechnicalMessage ?? value.Message)));
             await result.Artifacts!.DisposeAsync().ConfigureAwait(false);

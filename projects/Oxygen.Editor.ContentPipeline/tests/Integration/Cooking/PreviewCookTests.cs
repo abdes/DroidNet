@@ -25,7 +25,7 @@ public sealed class PreviewCookTests
     public async Task PreviewMaterialSharesSavedScopeWithoutIncludingConsumingScene()
     {
         using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
-        using var compatibility = EditorNativeCompatibilityService.ForCooking();
+        var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = CreateRecordingApi(compatibility);
         await PrepareIncrementalSceneAsync(workspace, api).ConfigureAwait(false);
         var pipeline = CreateIncrementalService(workspace, api, compatibility);
@@ -55,7 +55,7 @@ public sealed class PreviewCookTests
         using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         WriteAuthoredGeometry(workspace, withBuffer: false);
         workspace.WriteMaterial("Content/Materials/Red.omat.json", "Red");
-        using var compatibility = EditorNativeCompatibilityService.ForCooking();
+        var compatibility = EditorNativeCompatibilityService.ForCooking();
         var pipeline = CreateIncrementalService(workspace, CreateRecordingApi(compatibility), compatibility);
         var geometryUri = AssetPath.Parse("/Content/Geometry/AuthoredCube.ogeo");
         var result = await pipeline.CookPreviewAssetAsync(geometryUri, workspace.ProjectContext, this.TestContext.CancellationToken).ConfigureAwait(false);

@@ -10,21 +10,18 @@ using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.ContentPipeline.Import;
 
-/// <summary>Native dependency facts bound to the verified producer that computed them.</summary>
-/// <param name="ProducerFingerprint">The owning artifact lease's content identity.</param>
+/// <summary>Native dependency facts of the analyzed sources.</summary>
 /// <param name="Complete">Whether every requested job was analyzed successfully.</param>
 /// <param name="Jobs">Source-attributed dependencies, observations and diagnostics.</param>
-public sealed record NativeSourceAnalysisReport(string ProducerFingerprint, bool Complete, ImmutableArray<NativeSourceAnalysisJob> Jobs)
+public sealed record NativeSourceAnalysisReport(bool Complete, ImmutableArray<NativeSourceAnalysisJob> Jobs)
 {
     /// <summary>Validates and detaches native facts; the report's display version is not a cache identity.</summary>
     /// <param name="json">The native report bytes decoded as UTF-8.</param>
     /// <param name="operationId">The owning operation's diagnostic identity.</param>
-    /// <param name="producerFingerprint">The verified artifact lease fingerprint.</param>
     /// <param name="schema">The source-analysis schema protected by the artifact lease.</param>
     /// <returns>Immutable native facts ready for managed project resolution and capture.</returns>
-    public static NativeSourceAnalysisReport Parse(string json, Guid operationId, string producerFingerprint, JsonSchema schema)
+    public static NativeSourceAnalysisReport Parse(string json, Guid operationId, JsonSchema schema)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(producerFingerprint);
         ArgumentNullException.ThrowIfNull(schema);
         using var document = JsonDocument.Parse(json);
         var root = document.RootElement;
@@ -41,7 +38,7 @@ public sealed record NativeSourceAnalysisReport(string ProducerFingerprint, bool
             throw new InvalidDataException("The native source-analysis completion state contradicts its job results.");
         }
 
-        return new(producerFingerprint, complete, jobs);
+        return new(complete, jobs);
     }
 
     private static NativeSourceAnalysisJob ReadJob(JsonElement item, Guid operationId)

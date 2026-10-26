@@ -35,7 +35,7 @@ public sealed class CookRepairTests
     {
         using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         workspace.WriteMaterial("Content/Materials/Blue.omat.json", "Blue");
-        using var compatibility = EditorNativeCompatibilityService.ForCooking();
+        var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = CreateRecordingApi(compatibility);
         await PrepareIncrementalSceneAsync(workspace, api).ConfigureAwait(false);
         var pipeline = CreateIncrementalService(workspace, api, compatibility);
@@ -72,7 +72,7 @@ public sealed class CookRepairTests
         using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         workspace.WriteMaterial("Content/Materials/Blue.omat.json", "Blue");
         workspace.WriteMaterial("Content/Materials/Red.omat.json", "Red");
-        using var compatibility = EditorNativeCompatibilityService.ForCooking();
+        var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = CreateRecordingApi(compatibility);
         var pipeline = CreateIncrementalService(workspace, api, compatibility);
         AssertCookSucceeded(await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false));
@@ -102,7 +102,7 @@ public sealed class CookRepairTests
     {
         using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         workspace.WriteMaterial("Content/Materials/Blue.omat.json", "Blue");
-        using var compatibility = EditorNativeCompatibilityService.ForCooking();
+        var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = CreateRecordingApi(compatibility);
         var pipeline = CreateIncrementalService(workspace, api, compatibility);
         AssertCookSucceeded(await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false));
@@ -125,7 +125,7 @@ public sealed class CookRepairTests
     {
         using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         workspace.WriteMaterial("Content/New folder (2)/Wet Rubber.omat.json", "Wet Rubber");
-        using var compatibility = EditorNativeCompatibilityService.ForCooking();
+        var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = CreateRecordingApi(compatibility);
         var pipeline = CreateIncrementalService(workspace, api, compatibility);
 
@@ -146,7 +146,7 @@ public sealed class CookRepairTests
         workspace.WriteMaterial("Content/Materials/Blue.omat.json", "Blue");
         workspace.WriteMaterial("Content/Materials/Red.omat.json", "Red");
 
-        using var compatibility = EditorNativeCompatibilityService.ForCooking();
+        var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = CreateRecordingApi(compatibility);
         var pipeline = CreateIncrementalService(workspace, api, compatibility);
         AssertCookSucceeded(await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false));
@@ -186,7 +186,7 @@ public sealed class CookRepairTests
             return Script
             """);
         var script = AssetPath.Parse("/Content/Scripts/Orbit.lua");
-        using var compatibility = EditorNativeCompatibilityService.ForCooking();
+        var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = CreateRecordingApi(compatibility);
         var pipeline = CreateIncrementalService(workspace, api, compatibility);
         AssertCookSucceeded(await pipeline.CookSavedAssetAsync(AssetPath.Parse("/Content/Materials/Red.omat.json"), workspace.ProjectContext, this.TestContext.CancellationToken).ConfigureAwait(false));
@@ -214,7 +214,7 @@ public sealed class CookRepairTests
     public async Task DeletingAMaterialCooksTheSceneThatUsesIt()
     {
         using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
-        using var compatibility = EditorNativeCompatibilityService.ForCooking();
+        var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = CreateRecordingApi(compatibility);
         await PrepareIncrementalSceneAsync(workspace, api).ConfigureAwait(false);
         var pipeline = CreateIncrementalService(workspace, api, compatibility);
@@ -242,7 +242,7 @@ public sealed class CookRepairTests
         using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         workspace.WriteMaterial("Content/Materials/Red.omat.json", "Red");
         workspace.WriteMaterial("Content/New folder/Blue.omat.json", "Blue");
-        using var compatibility = EditorNativeCompatibilityService.ForCooking();
+        var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = CreateRecordingApi(compatibility);
         var pipeline = CreateIncrementalService(workspace, api, compatibility);
         AssertCookSucceeded(await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false));
@@ -285,7 +285,7 @@ public sealed class CookRepairTests
         using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         workspace.WriteMaterial("Content/Materials/Red.omat.json", "Red");
         workspace.WriteMaterial("Content/Materials/Blue.omat.json", "Blue");
-        using var compatibility = EditorNativeCompatibilityService.ForCooking();
+        var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = CreateRecordingApi(compatibility);
         var pipeline = CreateIncrementalService(workspace, api, compatibility);
         AssertCookSucceeded(await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false));
@@ -329,7 +329,7 @@ public sealed class CookRepairTests
     {
         using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         workspace.WriteMaterial("Content/Materials/Blue.omat.json", "Blue");
-        using var compatibility = EditorNativeCompatibilityService.ForCooking();
+        var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = CreateRecordingApi(compatibility);
         var pipeline = CreateIncrementalService(workspace, api, compatibility);
         AssertCookSucceeded(await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false));
@@ -358,7 +358,7 @@ public sealed class CookRepairTests
         using var workspace = new CookWorkspace([new("Content", "Content"), new("Extra", "Extra")], EngineContentPak.Installed());
         workspace.WriteMaterial("Content/Materials/Blue.omat.json", "Blue");
         workspace.WriteMaterial("Extra/Materials/Red.omat.json", "Red");
-        using var compatibility = EditorNativeCompatibilityService.ForCooking();
+        var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = CreateRecordingApi(compatibility);
         var pipeline = CreateIncrementalService(workspace, api, compatibility);
         AssertCookSucceeded(await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false));
@@ -384,7 +384,7 @@ public sealed class CookRepairTests
     {
         using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         workspace.WriteMaterial("Content/Materials/Red.omat.json", "Red");
-        using var compatibility = EditorNativeCompatibilityService.ForCooking();
+        var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = CreateRecordingApi(compatibility);
         var pipeline = CreateIncrementalService(workspace, api, compatibility);
         AssertCookSucceeded(await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false));
@@ -411,7 +411,7 @@ public sealed class CookRepairTests
         using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         workspace.WriteMaterial("Content/Materials/Blue.omat.json", "Blue");
         _ = await WriteRetainedModelAsync(workspace, "Model", "gltf", this.TestContext.CancellationToken).ConfigureAwait(false);
-        using var compatibility = EditorNativeCompatibilityService.ForCooking();
+        var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = CreateRecordingApi(compatibility);
         var pipeline = CreateIncrementalService(workspace, api, compatibility);
         var first = await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -477,7 +477,7 @@ public sealed class CookRepairTests
         using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         workspace.WriteMaterial("Content/Materials/Blue.omat.json", "Blue");
         workspace.WriteMaterial("Content/Materials/Red.omat.json", "Red");
-        using var compatibility = EditorNativeCompatibilityService.ForCooking();
+        var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = CreateRecordingApi(compatibility);
         var pipeline = CreateIncrementalService(workspace, api, compatibility);
         var first = await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false);

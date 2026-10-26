@@ -45,6 +45,7 @@ public sealed class NativeArtifactInventoryTests
         _ = inventory.Should().Contain(item => string.Equals(item.Id, "editor/Schemas/oxygen.source-analysis.schema.json", StringComparison.Ordinal));
         _ = inventory.Should().Contain(item => string.Equals(item.Id, "editor/Schemas/oxygen.captured-inputs.schema.json", StringComparison.Ordinal));
         _ = inventory.Should().NotContain(item => item.Id == NativeArtifactInventory.InteropId || item.Id.EndsWith("RenderScene.exe", StringComparison.Ordinal));
+        _ = inventory.Should().NotContain(item => item.Id.StartsWith("editor/", StringComparison.Ordinal) && !item.Id.StartsWith("editor/Schemas/", StringComparison.Ordinal));
     }
 
     /// <summary>Cooking reads the canonical SDK data layout, not a legacy root-level schema directory.</summary>

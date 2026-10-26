@@ -31,7 +31,7 @@ public sealed class ProjectAssetKeyTests
         workspace.WriteText("Content/Input/Jump.oiact.json", "{}");
         workspace.WriteText("Content/Input/Gameplay.oimap.json", "{}");
         workspace.WriteText("Content/Physics/Body.opscene.json", "{}");
-        using var compatibility = EditorNativeCompatibilityService.ForCooking();
+        var compatibility = EditorNativeCompatibilityService.ForCooking();
         var runner = new CountingSourceRunner();
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), runner, NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
         var index = await ProjectAssetKeyIndex.ReadAsync(workspace.ProjectContext, [], this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -77,7 +77,7 @@ public sealed class ProjectAssetKeyTests
     {
         using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         workspace.WriteMaterial("Content/Materials/Shared.omat.json", "Shared");
-        using var compatibility = EditorNativeCompatibilityService.ForCooking();
+        var compatibility = EditorNativeCompatibilityService.ForCooking();
         var runner = new CountingSourceRunner();
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), runner, NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
         var index = await ProjectAssetKeyIndex.ReadAsync(workspace.ProjectContext, [], this.TestContext.CancellationToken).ConfigureAwait(false);

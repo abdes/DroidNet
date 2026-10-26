@@ -500,12 +500,10 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
         }
         finally
         {
-            this.materialPipeline.Dispose();
             this.materialCookCoordinator.Dispose();
             this.Sessions.Dispose();
-            foreach (var (session, coordinator, pipeline) in this.foreignMaterialPipelines.Values)
+            foreach (var (session, coordinator, _) in this.foreignMaterialPipelines.Values)
             {
-                pipeline.Dispose();
                 coordinator.Dispose();
                 session.Dispose();
             }

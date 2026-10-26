@@ -115,7 +115,7 @@ internal sealed partial record CookProvenance(Guid ProjectId, ImmutableArray<Coo
             descriptors.UnionWith(outputs.Where(output => string.Equals(output.RootMount, this.Mount, StringComparison.Ordinal) && output.Asset.DescriptorRelativePath is not null)
                 .Select(static output => output.Asset.DescriptorRelativePath!));
             if (inventory.Issues.Any(issue => !descriptors.Contains(issue.RelativePath)
-                || issue.Reason is not ("missing" or "size_mismatch" or "digest_mismatch")))
+                || issue.Reason is not ("missing" or "size_mismatch" or "digest_mismatch" or "format_version")))
             {
                 return (false, []);
             }

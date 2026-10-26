@@ -45,6 +45,9 @@ internal sealed record CookIncrementalPlan(
     /// <summary>Gets diagnostics that still apply to reused products.</summary>
     public ImmutableArray<Oxygen.Managed.Core.Diagnostics.DiagnosticRecord> Diagnostics => [.. this.Reusable.Values.SelectMany(static product => product.Diagnostics).DistinctBy(static diagnostic => diagnostic.DiagnosticId)];
 
+    /// <summary>Gets the identities of the diagnostics that still apply to reused products.</summary>
+    public ImmutableHashSet<Guid> DiagnosticIds => [.. this.Diagnostics.Select(static diagnostic => diagnostic.DiagnosticId)];
+
     /// <summary>Gets a value indicating whether every requested product can be reused and no output is removed.</summary>
     public bool IsUpToDate => this.Fingerprints.Keys.All(this.Reusable.ContainsKey) && this.Removals.IsEmpty;
 }

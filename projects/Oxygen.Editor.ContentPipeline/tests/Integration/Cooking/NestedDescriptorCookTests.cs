@@ -40,7 +40,7 @@ public sealed class NestedDescriptorCookTests
         descriptor["lods"]![0]!["submeshes"]![0]!["material_ref"] = "/" + first[..^5];
         workspace.WriteText(geometry, descriptor.ToJsonString());
         File.Delete(original);
-        using var cook = NativeCook.Create(workspace);
+        var cook = NativeCook.Create(workspace);
         var service = cook.Service;
         var geometryUri = AssetPath.Parse("/" + geometry[..^5]);
         _ = (await service.CookAssetAsync(geometryUri, this.TestContext.CancellationToken).ConfigureAwait(false)).IsPublished.Should().BeTrue();

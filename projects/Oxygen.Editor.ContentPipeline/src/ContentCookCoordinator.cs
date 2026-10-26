@@ -149,7 +149,7 @@ public sealed partial class ContentCookCoordinator : IContentCookCoordinator, IC
     {
         ArgumentNullException.ThrowIfNull(work);
         cancellationToken.ThrowIfCancellationRequested();
-        var (operation, requestCancellation) = this.CreateRequest(cancellationToken, shared);
+        var (operation, requestCancellation) = this.CreateRequest(cancellationToken, shared?.Request ?? request, shared);
         IProgress<CookRunProgress>? progress = null;
         var acquired = false;
         var retained = false;
@@ -261,7 +261,7 @@ public sealed partial class ContentCookCoordinator : IContentCookCoordinator, IC
             TaskScheduler.Default);
     }
 
-    private (ContentCookOperation operation, CancellationTokenSource cancellation) CreateRequest(CancellationToken cancellationToken, SharedCook? shared = null)
+    private (ContentCookOperation operation, CancellationTokenSource cancellation) CreateRequest(CancellationToken cancellationToken, CookRunRequest? request, SharedCook? shared = null)
     {
         lock (this.stateLock)
         {
@@ -273,7 +273,10 @@ public sealed partial class ContentCookCoordinator : IContentCookCoordinator, IC
             ObjectDisposedException.ThrowIf(this.disposed, this);
             var context = this.project ?? throw new InvalidOperationException("Cooking requires an active project.");
             var requestCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, this.lifetimeCancellation.Token);
-            var operation = new ContentCookOperation(Guid.NewGuid(), context, this.lifetime);
+            var operation = new ContentCookOperation(Guid.NewGuid(), context, this.lifetime)
+            {
+                UpgradesPublication = request is { TargetKind: CookTargetKind.Project, IsAutomatic: false, IsDemand: false },
+            };
             shared?.OperationId = operation.OperationId;
 
             return (operation, requestCancellation);

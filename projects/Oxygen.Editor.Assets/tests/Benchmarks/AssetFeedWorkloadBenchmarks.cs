@@ -18,7 +18,6 @@ using Oxygen.Editor.ContentPipeline.Testing;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Projects.Testing;
 using Oxygen.Managed.Assets.Authoring.Materials;
-using Oxygen.Managed.Core.Compatibility;
 using Testably.Abstractions;
 
 namespace Oxygen.Editor.Assets.Benchmarks.Tests;
@@ -47,12 +46,11 @@ public sealed class AssetFeedWorkloadBenchmarks
         var documents = Mock.Of<Oxygen.Editor.Documents.IUnsavedDocuments>();
         using var runs = new ContentCookCoordinator(session, NullLogger<ContentCookCoordinator>.Instance);
         var files = new NativeAtomicFileStore(new RealFileSystem());
-        var native = new Mock<INativeCompatibilityService>(MockBehavior.Strict);
         var content = new Mock<IEngineContentPipelineApi>(MockBehavior.Strict);
         var storage = new NativeStorageProvider(new RealFileSystem());
         var engineContent = new EngineContentPakFixture();
         var publication = new CookPublicationService(runs, session, files, new ProjectManagerService(storage, atomicFiles: files), engineContent);
-        var statuses = new AssetCookStatusReader(publication, native.Object, engineContent);
+        var statuses = new AssetCookStatusReader(publication, engineContent);
         await using var catalog = new AssetCatalog(session, storage, engineContent, publication);
         var runtime = AssetStatusFixture.CreateUnavailableRuntimeStatus();
         using var provider = new AssetFeed(catalog, session, new WorkspaceCookScopeProvider(workspace), statuses, documents, runs, runtime, Mock.Of<IAssetRelocationService>(), Mock.Of<IAssetAuthoring>());
@@ -66,8 +64,6 @@ public sealed class AssetFeedWorkloadBenchmarks
         this.TestContext.WriteLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"Asset feed: cold={cold.TotalMilliseconds:F2}ms; entries={rows.Count}; configuration={typeof(AssetFeed).Assembly.GetCustomAttributes(typeof(System.Reflection.AssemblyConfigurationAttribute), inherit: false).Cast<System.Reflection.AssemblyConfigurationAttribute>().Single().Configuration}"));
         _ = cold.Should().BeLessThan(TimeSpan.FromSeconds(5));
         _ = runs.Runs.Should().BeEmpty();
-        native.VerifyAdd(service => service.ObservationChanged += It.IsAny<EventHandler>(), Times.Once);
-        native.VerifyNoOtherCalls();
         content.VerifyNoOtherCalls();
     }
 

@@ -34,7 +34,7 @@ public sealed class RetainedSourceCookTests
     {
         using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         var source = await WriteRetainedModelAsync(workspace, "Model", extension, this.TestContext.CancellationToken).ConfigureAwait(false);
-        using var compatibility = EditorNativeCompatibilityService.ForCooking();
+        var compatibility = EditorNativeCompatibilityService.ForCooking();
         var runner = new CountingSourceRunner();
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), runner, NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
         var service = CreateService(workspace, api, compatibility: compatibility);
@@ -64,7 +64,7 @@ public sealed class RetainedSourceCookTests
         var first = await WriteRetainedModelAsync(workspace, "First", "gltf", this.TestContext.CancellationToken).ConfigureAwait(false);
         var second = await WriteRetainedModelAsync(workspace, "Second", "fbx", this.TestContext.CancellationToken).ConfigureAwait(false);
         workspace.WriteMaterial("Content/Materials/Authored.omat.json", "Authored");
-        using var cook = NativeCook.Create(workspace);
+        var cook = NativeCook.Create(workspace);
         var service = cook.Service;
         var result = await service.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = result.Status.Should().BeOneOf([OperationStatus.Succeeded, OperationStatus.SucceededWithWarnings], string.Join(Environment.NewLine, result.Diagnostics.Select(static issue => issue.TechnicalMessage ?? issue.Message)));
@@ -83,7 +83,7 @@ public sealed class RetainedSourceCookTests
         using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         var source = await WriteRetainedModelAsync(workspace, "Model", "gltf", this.TestContext.CancellationToken).ConfigureAwait(false);
         var runner = new CountingSourceRunner();
-        using var cook = NativeCook.Create(workspace, runner: runner);
+        var cook = NativeCook.Create(workspace, runner: runner);
         var service = cook.Service;
         _ = (await service.CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false)).IsPublished.Should().BeTrue();
         var path = Path.Combine(workspace.Root, "Content/Models/Model/model.gltf");
@@ -105,7 +105,7 @@ public sealed class RetainedSourceCookTests
     {
         using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         var source = await WriteRetainedModelAsync(workspace, "Model", "gltf", this.TestContext.CancellationToken).ConfigureAwait(false);
-        using var cook = NativeCook.Create(workspace);
+        var cook = NativeCook.Create(workspace);
         var service = cook.Service;
         _ = (await service.CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false)).IsPublished.Should().BeTrue();
         var index = Path.Combine(workspace.CookedRoot("Content"), "container.index.bin");
@@ -133,7 +133,7 @@ public sealed class RetainedSourceCookTests
         using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         var first = await WriteRetainedModelAsync(workspace, "First", "gltf", this.TestContext.CancellationToken).ConfigureAwait(false);
         var second = await WriteRetainedModelAsync(workspace, "Second", "gltf", this.TestContext.CancellationToken).ConfigureAwait(false);
-        using var cook = NativeCook.Create(workspace);
+        var cook = NativeCook.Create(workspace);
         var service = cook.Service;
         var one = await service.CookAssetAsync(first, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = one.IsPublished.Should().BeTrue();
@@ -162,7 +162,7 @@ public sealed class RetainedSourceCookTests
         var sourceRoot = Path.Combine(first.Root, "Content/Models/Model");
         var copyRoot = Path.Combine(second.Root, "Content/Models/Model");
         _ = Directory.CreateDirectory(copyRoot);
-        using var compatibility = EditorNativeCompatibilityService.ForCooking();
+        var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
         var one = await CreateService(first, api, compatibility: compatibility).CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false);
         foreach (var file in Directory.EnumerateFiles(sourceRoot))
@@ -193,7 +193,7 @@ public sealed class RetainedSourceCookTests
         using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         var source = await WriteRetainedModelAsync(workspace, "Model", "gltf", this.TestContext.CancellationToken).ConfigureAwait(false);
         var runner = new CountingSourceRunner();
-        using var cook = NativeCook.Create(workspace, runner: runner);
+        var cook = NativeCook.Create(workspace, runner: runner);
         var service = cook.Service;
         _ = (await service.CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false)).IsPublished.Should().BeTrue();
         var directory = Path.Combine(workspace.Root, "Content/Models/Model");

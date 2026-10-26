@@ -3,7 +3,7 @@
 Status:
 `Canonical V0.1 contract; implementation and qualification tracked by ED-M08`
 
-Last Updated: 2026-10-20 01:32
+Last Updated: 2026-10-26 19:40
 
 **Navigation:** [purpose](#1-purpose),
 [surface identity and reimport](#20-canonical-surface-identity-and-reimport),
@@ -670,8 +670,7 @@ qualification borrows its normal publication and read APIs.
   leases before reuse; their presence in the graph does not establish freshness.
 - Normal cooking copies inputs to `.build/cook/<OperationId>/inputs`, preserving
   their logical mount-relative relationships. Record source hashes, import
-  settings, schema/build fingerprint, project lifetime, target scope, and
-  operation identity. Native jobs read this private snapshot. `ContentImportExecution` supplies the input root, operation
+  settings, project lifetime, target scope, and operation identity. Native jobs read this private snapshot. `ContentImportExecution` supplies the input root, operation
   directory and coordinator operation ID separately from the native manifest's
   output root. The adapter must not infer input paths from the published
   directory layout. Temporary manifests remain in the operation directory until
@@ -781,6 +780,15 @@ the cook with a diagnostic.
    unavailable root once per publication, and each unreadable library once for
    as long as it stays unreadable. Every index read hashes the file's bytes, and
    the parse and catalog records of identical bytes are shared by every reader.
+9. A publication document of another format is refused to every reader with
+   `CookPublicationFormatException`, which names its format: status, catalogs,
+   the preview and automatic cooks leave it alone, and nothing changes on its
+   own at startup. The Content Explorer, which owns cooking, shows it in its
+   result banner with **Cook project**. Only a cook of the whole project that
+   the user asked for may upgrade it: that cook reads the outdated publication
+   as nothing published, cooks everything, and its publication replaces the
+   outdated head; maintenance then reclaims the outdated document and its
+   generations.
 
 After publication, maintenance reclaims unused generations automatically. It
 protects selected documents, active/recovery roots and native or managed reader
@@ -1030,9 +1038,9 @@ does not start that work or force SDK rediscovery. Project changes cancel
 obsolete work and schedule the latest catalog revision.
 
 Cooking freshness and output integrity are separate facts. A **Cooked** badge
-means the acknowledged saved inputs, dependencies and observed producer match a
-successful publication. Browser rows consume immutable status snapshots. Save,
-catalog, completed-cook, producer and project events invalidate those snapshots;
+means the acknowledged saved inputs and dependencies match a successful
+publication. Browser rows consume immutable status snapshots. Save, catalog,
+completed-cook and project events invalidate those snapshots;
 unchanged refresh/filter/resolve requests reuse them. Dirty edits, progress and
 runtime availability update overlays without rescanning content.
 
@@ -1043,12 +1051,19 @@ offers **Needs cooking**. Only an actual validation/operation failure reports
 damage or failure. Keep source errors, cook progress and preview failures
 actionable in their existing diagnostics and Cooking surfaces.
 
-The shared cooking compatibility owner supplies its observed producer identity.
-Status reads neither verify SDK binaries nor launch discovery. Changes to engine
-or editor producer files invalidate that observation; an owned discovery or
-native operation establishes the next identity. Full native verification remains
-required for cook reuse, publication and explicit integrity validation. Normal
-mounts perform metadata admission; full hash verification remains opt-in.
+A product's freshness depends on its inputs alone, never on the binaries that
+cooked it: rebuilding the engine or the editor leaves cooked content current.
+The engine's cooked format versions (`Data/PakFormatVersions.inc`) decide
+whether cooked output is still readable. The editor refuses a cooked index of
+another index version, and before reusing any product a cook has the engine
+verify the cooked root: a descriptor whose asset version is not the current one
+is reported as a `format_version` issue of that file, so only its owner cooks
+again. Status reads neither verify SDK binaries nor launch discovery; the
+cooking compatibility check hashes only the schemas the editor and the cooker
+must share, and keeps the tools open while a cook runs. Full native
+verification remains required for cook reuse, publication and explicit
+integrity validation. Normal mounts perform metadata admission; full hash
+verification remains opt-in.
 
 When verification finds damaged shared cooked data, cooking automatically
 rebuilds the affected root from all its known source owners. Cooking reports
@@ -1124,9 +1139,9 @@ the output roots of matching retained models. An uncooked model reports its
 declared destination without starting native work for unrelated mounts; source
 associations require committed provenance and matching output bytes.
 
-Published model provenance records a source/settings/dependency fingerprint
-independent of the producer fingerprint. Automatic Save and preview demand may
-regenerate unchanged model inputs for a new producer, but changed model inputs
+Published model provenance records a source/settings/dependency fingerprint.
+Automatic Save and preview demand may regenerate unchanged model inputs whose
+output the engine no longer reads, but changed model inputs
 require explicit Reimport or Cook before replacing output. An outdated prior
 product without the source fingerprint requires that explicit confirmation too.
 
@@ -1203,8 +1218,7 @@ The editor reads `engine.pak` through `IEngineContentPak`:
 - the asset catalog lists its assets as Packaged assets with the Engine badge;
   the Content Explorer shows it as the read-only `Engine` root.
 - it is the lowest cooked library and the first native context root; the cooking
-  artifact inventory leases and verifies it like the tools and schemas, so its
-  content identity joins the cook fingerprint.
+  artifact inventory leases it with the tools for the duration of a cook.
 - the preview mounts it beneath the project's content; a missing pak is reported
   loudly and leaves `/Engine` references unresolved without failing the engine.
 
@@ -1464,7 +1478,7 @@ factor are defined in
 [Material Editor section 7.3](material-editor.md#73-field-table-and-numeric-contract).
 Native cooking emits float32 emissive RGB after the colour-times-intensity
 calculation, and the matching binary version is required by readers. Update
-canonical examples, schemas, producer fingerprints and all dependent products;
+canonical examples, schemas, format versions and all dependent products;
 retired binary16 material-factor content requires recook, not a runtime
 fallback.
 
@@ -1499,7 +1513,7 @@ owns execution order and gates.
 Native preparation and input observation are specified by the
 [Cooker owner](../../../projects/Oxygen.Engine/src/Oxygen/Cooker/Docs/Import/async_import_pipeline_v2.md#source-analysis-and-input-observations).
 Native source analysis extends the existing tool/API with a batch
-request/result: producer/schema identity, declared outputs, logical references,
+request/result: schema identity, declared outputs, logical references,
 actual file/absence observations and diagnostics. Use the same native
 schemas/import interpretation as cooking. Managed code keeps project/mount
 resolution, dirty-document policy, scene DTO projection and capture ownership.

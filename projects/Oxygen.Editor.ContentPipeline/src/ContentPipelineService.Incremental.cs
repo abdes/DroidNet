@@ -140,7 +140,7 @@ public sealed partial class ContentPipelineService
             NativeReferences = graph.SourceFacts.GetValueOrDefault(source.Key)?.References ?? [],
             AuxiliaryFiles = result.AuxiliaryFilesBySource.GetValueOrDefault(source.Key, []),
             ReuseFingerprint = sourceInputs.TryGetValue(source.Key, out var sourceInput)
-                ? CookIncrementalPlanner.Fingerprint(sourceInput, snapshot.BuildFingerprint, expectedInputs, graph) : fingerprint,
+                ? CookIncrementalPlanner.Fingerprint(sourceInput, expectedInputs, graph) : fingerprint,
             CookedDependencies = graph.CookedDependencies.GetValueOrDefault(source.Key, []),
             ImportedSource = graph.ImportedSources.TryGetValue(source.Key, out var imported) ? imported with
             {
@@ -220,7 +220,7 @@ public sealed partial class ContentPipelineService
         // A root reconstructed or vacated, that nothing in this cook goes into, leaves the publication.
         var dropped = repair.EmptyRoots.Union(repair.VacatedRoots)
             .Where(mount => !graph.Assets.Any(input => string.Equals(input.MountName, mount, StringComparison.Ordinal))).ToArray();
-        var plan = CookIncrementalPlanner.CreatePlan(snapshot.BuildFingerprint, snapshot.Inputs, graph, previous, inventories, repair.EmptyRoots, repair.RemovedSources, repair.Sources) with
+        var plan = CookIncrementalPlanner.CreatePlan(snapshot.Inputs, graph, previous, inventories, repair.EmptyRoots, repair.RemovedSources, repair.Sources) with
         {
             DroppedRoots = dropped.ToImmutableHashSet(StringComparer.Ordinal),
             Removals = repair.Removals.RemoveRange(dropped),
@@ -346,6 +346,7 @@ public sealed partial class ContentPipelineService
         {
             IsUpToDate = true,
             ReusedAssets = plan.ReusedAssets,
+            ReusedDiagnosticIds = plan.DiagnosticIds,
             InputSnapshot = snapshot,
             InputsAreCurrent = await this.InputsAreCurrentAsync(snapshot, graph, resolveScopes, cancellationToken).ConfigureAwait(false),
         };
@@ -438,6 +439,7 @@ public sealed partial class ContentPipelineService
             TargetKind = targetKind,
             InputSnapshot = snapshot,
             ReusedAssets = plan.ReusedAssets,
+            ReusedDiagnosticIds = plan.DiagnosticIds,
             Status = cooked.Status == OperationStatus.Succeeded && !plan.Diagnostics.IsEmpty ? OperationStatus.SucceededWithWarnings : cooked.Status,
             Diagnostics = NormalizeDiagnostics(operation.OperationId, cooked.Diagnostics.Concat(plan.Diagnostics)),
         };

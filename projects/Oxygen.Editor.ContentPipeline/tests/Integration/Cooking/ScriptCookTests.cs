@@ -53,8 +53,7 @@ public sealed class ScriptCookTests
             .WithOverride("speed", ScriptValue.FromFloat(2.5f))
             .WithOverride("target", ScriptValue.FromNode(target.Id));
         await this.WriteSceneAsync(workspace, slot).ConfigureAwait(false);
-        var service = CreateNativeService(workspace, out var compatibility);
-        using var lifetime = compatibility;
+        var service = CreateNativeService(workspace);
 
         var result = await service.CookCurrentSceneAsync(SceneUri, this.TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -84,8 +83,7 @@ public sealed class ScriptCookTests
         using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         var slot = AddScriptedNodes(workspace, out _).WithOverride("jump_height", ScriptValue.FromFloat(3f));
         await this.WriteSceneAsync(workspace, slot).ConfigureAwait(false);
-        var service = CreateNativeService(workspace, out var compatibility);
-        using var lifetime = compatibility;
+        var service = CreateNativeService(workspace);
 
         var result = await service.CookCurrentSceneAsync(SceneUri, this.TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -104,18 +102,14 @@ public sealed class ScriptCookTests
         using var library = new CookWorkspace(engineContent: EngineContentPak.Installed());
         using var consumer = new CookWorkspace(engineContent: EngineContentPak.Installed());
         await this.WriteSceneAsync(library, AddScriptedNodes(library, out _)).ConfigureAwait(false);
-        var producer = CreateNativeService(library, out var compatibility);
-        using (compatibility)
-        {
-            _ = (await producer.CookCurrentSceneAsync(SceneUri, this.TestContext.CancellationToken).ConfigureAwait(false)).IsPublished.Should().BeTrue();
-        }
+        var producer = CreateNativeService(library);
+        _ = (await producer.CookCurrentSceneAsync(SceneUri, this.TestContext.CancellationToken).ConfigureAwait(false)).IsPublished.Should().BeTrue();
 
         var root = await library.ExportRootAsync("Content", this.TestContext.CancellationToken).ConfigureAwait(false);
         var context = consumer.ProjectContext with { LocalFolderMounts = [new("Script library", FileSystemPath.From(root))] };
         consumer.Activate(context);
         consumer.WriteText("Content/Local/own.lua", Move);
-        IScriptLibrary service = CreateNativeService(consumer, out var consumerCompatibility);
-        using var lifetime = consumerCompatibility;
+        IScriptLibrary service = CreateNativeService(consumer);
 
         var script = await service.ReadAsync(context, MoveScript, this.TestContext.CancellationToken).ConfigureAwait(false);
         var own = await service.ReadAsync(context, AssetPath.Parse("/Content/Local/own.oscript"), this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -128,9 +122,9 @@ public sealed class ScriptCookTests
         _ = own.Should().BeNull("a script with its source in the project is analyzed from the source");
     }
 
-    private static ContentPipelineService CreateNativeService(CookWorkspace workspace, out EditorNativeCompatibilityService compatibility)
+    private static ContentPipelineService CreateNativeService(CookWorkspace workspace)
     {
-        compatibility = EditorNativeCompatibilityService.ForCooking();
+        var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
         return CreateService(workspace, api, compatibility: compatibility);
     }

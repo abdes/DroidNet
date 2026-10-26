@@ -27,7 +27,7 @@ public sealed class CookPublicationWorkflowTests
     public async Task NativeCookWithFailedPreviewRestoresPublishedGeneration()
     {
         using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
-        using var compatibility = EditorNativeCompatibilityService.ForCooking();
+        var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = CreateRecordingApi(compatibility);
         await PrepareIncrementalSceneAsync(workspace, api).ConfigureAwait(false);
         var publication = workspace.Publication;
@@ -92,7 +92,7 @@ public sealed class CookPublicationWorkflowTests
     public async Task StartupVerificationKeepsReadOwnershipThroughMountHandoff()
     {
         using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
-        using var compatibility = EditorNativeCompatibilityService.ForCooking();
+        var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = CreateRecordingApi(compatibility);
         await PrepareIncrementalSceneAsync(workspace, api).ConfigureAwait(false);
         var publication = workspace.Publication;
@@ -119,7 +119,7 @@ public sealed class CookPublicationWorkflowTests
     public async Task CookRepairsMissingGenerationMarker()
     {
         using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
-        using var compatibility = EditorNativeCompatibilityService.ForCooking();
+        var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = CreateRecordingApi(compatibility);
         await PrepareIncrementalSceneAsync(workspace, api).ConfigureAwait(false);
         var publication = workspace.Publication;
@@ -143,7 +143,7 @@ public sealed class CookPublicationWorkflowTests
     public async Task UntrustedSelectionStopsCookingWithoutGuessingOrReplacingIt(string damage)
     {
         using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
-        using var compatibility = EditorNativeCompatibilityService.ForCooking();
+        var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = CreateRecordingApi(compatibility);
         await PrepareIncrementalSceneAsync(workspace, api).ConfigureAwait(false);
         var service = CreateService(workspace, api, compatibility: compatibility);

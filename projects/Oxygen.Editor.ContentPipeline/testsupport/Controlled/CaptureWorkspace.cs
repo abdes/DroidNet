@@ -38,12 +38,12 @@ internal sealed partial class CaptureWorkspace : IDisposable
         return new(AssetPath.Parse("/" + relativePath), FileSystemPath.From(source), relativePath, Hash(content));
     }
 
-    public Task<CookInputSnapshot> CaptureAsync(IReadOnlyList<CookSnapshotInput> inputs, string build = "compatible-build")
-        => this.CaptureAsync(_ => Task.FromResult(inputs), build);
+    public Task<CookInputSnapshot> CaptureAsync(IReadOnlyList<CookSnapshotInput> inputs)
+        => this.CaptureAsync(_ => Task.FromResult(inputs));
 
     public Task<CookInputSnapshot> CaptureAsync(
-        Func<CancellationToken, Task<IReadOnlyList<CookSnapshotInput>>> discover, string build = "compatible-build")
-        => this.Coordinator.RunAsync((operation, token) => this.Capture.CaptureAsync(operation, discover, build, token), CancellationToken.None);
+        Func<CancellationToken, Task<IReadOnlyList<CookSnapshotInput>>> discover)
+        => this.Coordinator.RunAsync((operation, token) => this.Capture.CaptureAsync(operation, discover, token), CancellationToken.None);
 
     public void Dispose()
     {

@@ -90,7 +90,6 @@ internal sealed partial class PreviewProject : IDisposable
     /// </summary>
     public void OpenSession()
     {
-        this.native.Dispose();
         this.coordinator.Dispose();
         (this.coordinator, this.native) = this.OpenPipeline();
     }
@@ -108,7 +107,6 @@ internal sealed partial class PreviewProject : IDisposable
     /// <inheritdoc/>
     public void Dispose()
     {
-        this.native.Dispose();
         this.coordinator.Dispose();
         this.Sessions.Dispose();
         try

@@ -249,7 +249,6 @@ public sealed partial class CookPublicationService(IContentCookCoordinator coord
     {
         var owned = provenance.Roots.Select(static root => new CookPublicationRoot(CookPublicationRootOwner.Project, root.Mount, root.SourceKey, root.IndexSha256, LibraryPath: null));
         var cookInputs = new CookPublicationInputs(
-            snapshot.BuildFingerprint,
             snapshot.InputIdentity,
             snapshot.Inputs,
             snapshot.CookedDependencies,

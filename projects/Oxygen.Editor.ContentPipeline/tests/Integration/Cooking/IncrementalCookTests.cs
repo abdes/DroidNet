@@ -26,7 +26,7 @@ public sealed class IncrementalCookTests
     public async Task SavedSceneCookUsesSharedRunHistoryAndIncrementalOutput()
     {
         using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
-        using var compatibility = EditorNativeCompatibilityService.ForCooking();
+        var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = CreateRecordingApi(compatibility);
         await PrepareIncrementalSceneAsync(workspace, api).ConfigureAwait(false);
         var pipeline = CreateIncrementalService(workspace, api, compatibility);
@@ -53,7 +53,7 @@ public sealed class IncrementalCookTests
     public async Task ExplicitCookSharesQueuedSavedScopeThroughNativePublication()
     {
         using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
-        using var compatibility = EditorNativeCompatibilityService.ForCooking();
+        var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = CreateRecordingApi(compatibility);
         await PrepareIncrementalSceneAsync(workspace, api).ConfigureAwait(false);
         var pipeline = CreateIncrementalService(workspace, api, compatibility);
@@ -80,7 +80,7 @@ public sealed class IncrementalCookTests
     public async Task SceneCookPublishesTypedReferenceWithCookedLibraryDependency()
     {
         using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
-        using var compatibility = EditorNativeCompatibilityService.ForCooking();
+        var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = CreateRecordingApi(compatibility);
         await PrepareIncrementalSceneAsync(workspace, api).ConfigureAwait(false);
         using var library = new CookWorkspace(engineContent: EngineContentPak.Installed());
@@ -93,11 +93,9 @@ public sealed class IncrementalCookTests
         // A script cooks with the scene that references it.
         library.Scene.SetReferences(new SceneReferencesData { Scripts = [AssetPath.Parse("/Content/Scripts/Orbit.oscript")] });
         await library.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
-        using (var libraryCompatibility = EditorNativeCompatibilityService.ForCooking())
-        {
-            var producer = CreateIncrementalService(library, CreateRecordingApi(libraryCompatibility), libraryCompatibility);
-            AssertCookSucceeded(await producer.CookCurrentSceneAsync(AssetPath.Parse("/Content/Scenes/Main.oscene"), this.TestContext.CancellationToken).ConfigureAwait(false));
-        }
+        var libraryCompatibility = EditorNativeCompatibilityService.ForCooking();
+        var producer = CreateIncrementalService(library, CreateRecordingApi(libraryCompatibility), libraryCompatibility);
+        AssertCookSucceeded(await producer.CookCurrentSceneAsync(AssetPath.Parse("/Content/Scenes/Main.oscene"), this.TestContext.CancellationToken).ConfigureAwait(false));
 
         var libraryRoot = await library.ExportRootAsync("Content", this.TestContext.CancellationToken).ConfigureAwait(false);
         var context = workspace.ProjectContext with
@@ -132,7 +130,7 @@ public sealed class IncrementalCookTests
     public async Task CurrentProjectCookReusesVerifiedProductsWithoutNativeWorkers()
     {
         using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
-        using var compatibility = EditorNativeCompatibilityService.ForCooking();
+        var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = CreateRecordingApi(compatibility);
         await PrepareIncrementalSceneAsync(workspace, api).ConfigureAwait(false);
         var first = await CreateIncrementalService(workspace, api, compatibility).CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -158,7 +156,7 @@ public sealed class IncrementalCookTests
     public async Task ChangedMaterialRebuildsOnlyItsEmittedProduct()
     {
         using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
-        using var compatibility = EditorNativeCompatibilityService.ForCooking();
+        var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = CreateRecordingApi(compatibility);
         await PrepareIncrementalSceneAsync(workspace, api).ConfigureAwait(false);
         var pipeline = CreateIncrementalService(workspace, api, compatibility);
@@ -196,7 +194,7 @@ public sealed class IncrementalCookTests
     public async Task CorruptGeometryDescriptorInvalidatesOnlyThatProduct()
     {
         using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
-        using var compatibility = EditorNativeCompatibilityService.ForCooking();
+        var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = CreateRecordingApi(compatibility);
         await PrepareIncrementalSceneAsync(workspace, api).ConfigureAwait(false);
 
@@ -235,7 +233,7 @@ public sealed class IncrementalCookTests
     public async Task FailedCookDoesNotReplaceProductProvenance()
     {
         using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
-        using var compatibility = EditorNativeCompatibilityService.ForCooking();
+        var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = CreateRecordingApi(compatibility);
         await PrepareIncrementalSceneAsync(workspace, api).ConfigureAwait(false);
         var pipeline = CreateIncrementalService(workspace, api, compatibility);
@@ -261,7 +259,7 @@ public sealed class IncrementalCookTests
     public async Task ReusedWarningsStayWithTheirAffectedProduct()
     {
         using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
-        using var compatibility = EditorNativeCompatibilityService.ForCooking();
+        var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = CreateRecordingApi(compatibility);
         await PrepareIncrementalSceneAsync(workspace, api).ConfigureAwait(false);
         api.AddSceneWarning = true;

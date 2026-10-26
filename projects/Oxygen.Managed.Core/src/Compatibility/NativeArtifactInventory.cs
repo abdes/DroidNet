@@ -37,7 +37,7 @@ public static class NativeArtifactInventory
 
     /// <summary>Builds the cooking inventory independently of Interop and runtime startup.</summary>
     /// <param name="installation">The editor and SDK installation.</param>
-    /// <returns>The tools, schemas and producer assemblies used by cooking.</returns>
+    /// <returns>The tools, native libraries and schemas used by cooking.</returns>
     public static ImmutableArray<NativeArtifactLocation> CreateCooking(EditorNativeInstallation installation)
     {
         var files = NativeLibraries(installation);
@@ -47,12 +47,6 @@ public static class NativeArtifactInventory
         {
             AddSchema("engine/schemas/" + name, Path.Combine(installation.SchemaDirectory, name));
             AddSchema("editor/Schemas/" + name, Path.Combine(installation.EditorRoot, "Schemas", name));
-        }
-
-        foreach (var name in new[] { "Oxygen.Editor.ContentPipeline.dll", "Oxygen.Editor.Schemas.dll", "Oxygen.Editor.World.dll", "Oxygen.Managed.Assets.dll", "Oxygen.Managed.Core.dll" })
-        {
-            var id = "editor/" + name;
-            files[id] = new(id, Path.Combine(installation.EditorRoot, name));
         }
 
         return [.. files.Values.OrderBy(static value => value.Id, StringComparer.Ordinal)];

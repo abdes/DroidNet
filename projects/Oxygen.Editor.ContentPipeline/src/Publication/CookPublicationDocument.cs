@@ -24,7 +24,7 @@ internal sealed record CookPublicationDocument(
     ImmutableArray<CookProvenance.Product> Products,
     CookPublicationInputs? CookInputs)
 {
-    internal const int CurrentVersion = 6;
+    internal const int CurrentVersion = 7;
 
     internal static JsonSerializerOptions JsonOptions { get; } = new()
     {
@@ -52,16 +52,14 @@ internal sealed record CookPublicationDocument(
     /// <summary>Reads a publication document, refusing one written in another format before reading its fields.</summary>
     /// <param name="content">The document's bytes.</param>
     /// <returns>The document.</returns>
-    /// <exception cref="InvalidDataException">The document is empty, or in a format this editor does not read.</exception>
+    /// <exception cref="InvalidDataException">The document is empty.</exception>
+    /// <exception cref="CookPublicationFormatException">The document is in a format this editor does not read.</exception>
     internal static CookPublicationDocument Parse(ReadOnlySpan<byte> content)
     {
         var version = ReadVersion(content);
         if (version != CurrentVersion)
         {
-            throw new InvalidDataException(
-                $"The project's cooked content was published in format {version?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "unknown"}, "
-                + $"and this editor reads format {CurrentVersion.ToString(System.Globalization.CultureInfo.InvariantCulture)}. "
-                + "Close the project, delete its .cooked and .build folders, then cook it again.");
+            throw new CookPublicationFormatException(version, CurrentVersion);
         }
 
         return JsonSerializer.Deserialize<CookPublicationDocument>(content, JsonOptions)
@@ -91,7 +89,7 @@ internal sealed record CookPublicationDocument(
             throw new InvalidDataException("The publication contains duplicate physical roots or invalid product provenance.");
         }
 
-        if (this.CookInputs is { } inputs && (string.IsNullOrWhiteSpace(inputs.BuildFingerprint) || !IsDigest(inputs.InputIdentity)
+        if (this.CookInputs is { } inputs && (!IsDigest(inputs.InputIdentity)
             || inputs.Inputs.IsDefault || inputs.Inputs.Any(static input => input is null || !CookProvenance.ValidInputFacts(input))
             || inputs.CookedDependencies.IsDefault || inputs.ProducedSourceFiles.IsDefault))
         {
@@ -133,7 +131,6 @@ internal sealed record CookPublicationDocument(
 
 /// <summary>The last cook's consumed inputs; mount-only publications preserve these facts unchanged.</summary>
 internal sealed record CookPublicationInputs(
-    string BuildFingerprint,
     string InputIdentity,
     ImmutableArray<CookSnapshotInput> Inputs,
     ImmutableArray<CookedDependencySnapshot> CookedDependencies,

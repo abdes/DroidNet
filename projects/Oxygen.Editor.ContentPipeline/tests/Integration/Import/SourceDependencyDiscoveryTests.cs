@@ -52,7 +52,7 @@ public sealed class SourceDependencyDiscoveryTests
 
         var capture = new CookInputSnapshotCapture(workspace.CookCoordinator);
         var result = await workspace.CookCoordinator.RunAsync(
-            (operation, token) => capture.CaptureAsync(operation, _ => Task.FromResult<IReadOnlyList<CookSnapshotInput>>(graph.Files), "compatible-fixture-artifacts", token),
+            (operation, token) => capture.CaptureAsync(operation, _ => Task.FromResult<IReadOnlyList<CookSnapshotInput>>(graph.Files), token),
             this.TestContext.CancellationToken).ConfigureAwait(false);
         workspace.WriteText("Content/Geometry/mesh.bin", "changed buffer bytes");
         var capturedBuffer = await File.ReadAllTextAsync(Path.Combine(result.InputRoot, "Content", "Geometry", "mesh.bin"), this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -177,7 +177,7 @@ public sealed class SourceDependencyDiscoveryTests
         using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         WriteAuthoredGeometry(workspace, withBuffer: false);
         workspace.WriteMaterial("Content/Materials/Red.omat.json", "Red");
-        using var cook = NativeCook.Create(workspace);
+        var cook = NativeCook.Create(workspace);
         var service = cook.Service;
 
         if (sceneCook)
@@ -288,7 +288,7 @@ public sealed class SourceDependencyDiscoveryTests
         _ = graph.PublishedReferences.Should().ContainSingle().Which.Should().Be(AssetPath.Parse("/Library/Textures/Emit.otex"));
         var capture = new CookInputSnapshotCapture(workspace.CookCoordinator);
         var captured = await workspace.CookCoordinator.RunAsync(
-            (operation, token) => capture.CaptureAsync(operation, _ => Task.FromResult<IReadOnlyList<CookSnapshotInput>>(graph.Files), "compatible-fixture-artifacts", token),
+            (operation, token) => capture.CaptureAsync(operation, _ => Task.FromResult<IReadOnlyList<CookSnapshotInput>>(graph.Files), token),
             this.TestContext.CancellationToken).ConfigureAwait(false);
         workspace.WriteText("Content/Textures/Metal.png", "new image bytes");
         var saved = await File.ReadAllTextAsync(Path.Combine(captured.InputRoot, "Content/Textures/Metal.png"), this.TestContext.CancellationToken).ConfigureAwait(false);

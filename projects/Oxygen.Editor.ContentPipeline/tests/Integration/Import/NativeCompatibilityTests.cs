@@ -19,7 +19,7 @@ public sealed class NativeCompatibilityTests
     [TestMethod]
     public async Task InstalledCookerInputsMatchEditorSchemas()
     {
-        using var compatibility = EditorNativeCompatibilityService.ForCooking();
+        var compatibility = EditorNativeCompatibilityService.ForCooking();
         var result = await compatibility.VerifyAsync(Guid.NewGuid(), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = result.Succeeded.Should().BeTrue(string.Join("; ", result.Diagnostics.Select(static value => value.TechnicalMessage ?? value.Message)));
         await result.Artifacts!.DisposeAsync().ConfigureAwait(false);

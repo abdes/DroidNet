@@ -473,7 +473,8 @@ qualification-only headers, schemas, binaries or hooks into the normal SDK.
 Verify and retain actual artifact files before use; child startup checks its
 loaded identities against the request.
 
-Cooking producer fingerprints remain per-product provenance. Exact runtime,
+Cooked products carry no producer fingerprint; the engine's cooked format
+versions decide whether they are readable. Exact runtime,
 development tool, and profile hashes identify the parity run. Do not require
 unrelated managed assemblies, tests, documentation or git dirtiness to match. A
 source commit may be recorded diagnostically without becoming a startup gate. A

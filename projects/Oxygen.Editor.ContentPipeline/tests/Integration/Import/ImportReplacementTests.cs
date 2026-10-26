@@ -69,7 +69,7 @@ public sealed class ImportReplacementTests
 
             var runner = new FailImportBatchRunner { Fail = false };
             var publication = workspace.Publication;
-            using var cook = NativeCook.Create(workspace, runner: runner, publication: publication);
+            var cook = NativeCook.Create(workspace, runner: runner, publication: publication);
             var service = cook.Service;
             var first = repair
                 ? await service.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false)
@@ -155,7 +155,7 @@ public sealed class ImportReplacementTests
         {
             var source = await WriteRetainedModelAsync(workspace, "Model", "gltf", this.TestContext.CancellationToken).ConfigureAwait(false);
             var runner = new ContextLeaseRunner();
-            using var cook = NativeCook.Create(workspace, runner: runner);
+            var cook = NativeCook.Create(workspace, runner: runner);
             var service = cook.Service;
             _ = (await service.CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false)).IsPublished.Should().BeTrue();
             var before = ReadOutputIdentities(workspace.Root).ToDictionary(static item => item.Key, static item => item.Value.hash, StringComparer.Ordinal);
@@ -200,7 +200,7 @@ public sealed class ImportReplacementTests
         try
         {
             var source = await WriteRetainedModelAsync(workspace, "Model", "fbx", this.TestContext.CancellationToken).ConfigureAwait(false);
-            using var cook = NativeCook.Create(workspace, publication: workspace.Publication);
+            var cook = NativeCook.Create(workspace, publication: workspace.Publication);
             var service = cook.Service;
             var first = await service.CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false);
             _ = first.IsPublished.Should().BeTrue();

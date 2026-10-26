@@ -177,12 +177,30 @@ public sealed class CookPublicationReadLease : ICookPublicationReadLease
     }
 
     /// <summary>Captures the selected document after recovery, while the caller owns the selection gate.</summary>
+    /// <param name="project">The project whose publication is read.</param>
+    /// <param name="files">Reads the head and the document.</param>
+    /// <param name="gate">The selection gate the caller owns.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <param name="upgradeOutdated">
+    /// Whether a document in a format this editor does not read is taken as nothing published, for a cook that
+    /// publishes everything again; its publication then replaces the outdated one.
+    /// </param>
+    /// <returns>A lease on the selected publication.</returns>
+    /// <exception cref="CookPublicationFormatException">The document is outdated and <paramref name="upgradeOutdated"/> is false.</exception>
     internal static async Task<CookPublicationReadLease> OpenUnderGateAsync(ProjectContext project, IAtomicFileStore files,
-        CookOutputWriteLease gate, CancellationToken cancellationToken)
+        CookOutputWriteLease gate, CancellationToken cancellationToken, bool upgradeOutdated = false)
     {
         gate.VerifyOwner(project.ProjectRoot);
         var head = await files.ReadAsync(CookPublicationPaths.Head(project.ProjectRoot.FullPath), cancellationToken).ConfigureAwait(false);
-        return await OpenDocumentUnderGateAsync(project, files, gate, head, cancellationToken).ConfigureAwait(false);
+        try
+        {
+            return await OpenDocumentUnderGateAsync(project, files, gate, head, cancellationToken).ConfigureAwait(false);
+        }
+        catch (CookPublicationFormatException) when (upgradeOutdated)
+        {
+            // Nothing of the outdated publication is reused; the head is kept so the cook's publication replaces it.
+            return new(new(project, head, document: null, [], [], []));
+        }
     }
 
     /// <summary>Retains a known candidate or previous selection without rereading the mutable head.</summary>

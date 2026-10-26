@@ -176,9 +176,8 @@ public sealed class ProducedSourceMetadataTests
             [],
             []);
         var accepted = CookProducedSourceFile.ExpectedInputs(consumed, [update]);
-        const string producer = "native-producer";
-        var beforeFingerprint = CookIncrementalPlanner.Fingerprint(input, producer, consumed, graph);
-        var reuseFingerprint = CookIncrementalPlanner.Fingerprint(input, producer, accepted, graph);
+        var beforeFingerprint = CookIncrementalPlanner.Fingerprint(input, consumed, graph);
+        var reuseFingerprint = CookIncrementalPlanner.Fingerprint(input, accepted, graph);
         var output = new ContentCookedAsset(uri, AssetPath.Parse("/Content/Geometry/Model.ogeo"), ContentCookAssetKind.Geometry, "Content", "/Content/Geometry/Model.ogeo")
         {
             DescriptorRelativePath = "Geometry/Model.ogeo",
@@ -193,12 +192,12 @@ public sealed class ProducedSourceMetadataTests
         var root = new CookProvenance.Root("Content", inventory.SourceKey, inventory.IndexSha256);
         var previous = new CookProvenance(project.Context.ProjectId, [root], [product]);
         var verified = ImmutableDictionary<string, global::Oxygen.Editor.ContentPipeline.Inspection.CookedInventoryReport>.Empty.Add("Content", inventory);
-        var plan = CookIncrementalPlanner.CreatePlan(producer, accepted, graph, previous, verified);
+        var plan = CookIncrementalPlanner.CreatePlan(accepted, graph, previous, verified);
         _ = plan.Reusable.Keys.Should().Contain(uri);
         _ = product.Fingerprint.Should().Be(beforeFingerprint).And.NotBe(reuseFingerprint);
         _ = consumed.Single().DiscoveryHash.Should().Be(update.BeforeHash);
         var changed = accepted.SetItem(0, accepted[0] with { DiscoveryHash = new string('F', 64) });
-        var edited = CookIncrementalPlanner.CreatePlan(producer, changed, graph, previous, verified);
+        var edited = CookIncrementalPlanner.CreatePlan(changed, graph, previous, verified);
         _ = edited.Reusable.Should().BeEmpty();
     }
 

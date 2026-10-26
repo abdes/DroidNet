@@ -12,7 +12,7 @@ using Testably.Abstractions;
 namespace Oxygen.Editor.ContentPipeline.Testing;
 
 /// <summary>Composes the production native pipeline and cooking compatibility checks.</summary>
-public sealed partial class NativeContentPipelineFixture : IDisposable
+public sealed partial class NativeContentPipelineFixture
 {
     private readonly EditorNativeCompatibilityService compatibility = EditorNativeCompatibilityService.ForCooking();
 
@@ -50,7 +50,4 @@ public sealed partial class NativeContentPipelineFixture : IDisposable
 
     /// <summary>Gets the same publication owner used by fixture cooking and runtime admission.</summary>
     public CookPublicationService Publication { get; }
-
-    /// <inheritdoc />
-    public void Dispose() => this.compatibility.Dispose();
 }

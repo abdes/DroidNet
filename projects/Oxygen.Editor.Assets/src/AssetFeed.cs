@@ -108,7 +108,6 @@ public sealed partial class AssetFeed : IAssetFeed, IDisposable, IAsyncDisposabl
         this.sessionEnd = session.Lifetime.Register(this.ResetProject);
         this.documents.Changed += this.OnUnsavedDocumentsChanged;
         this.cooks.RunChanged += this.OnCookRunChanged;
-        this.cookStatus.Changed += this.OnFreshnessChanged;
         this.runtimeStatus.Changed += this.OnRuntimeStatusChanged;
         this.relocation.FilesChanged += this.OnEditorFilesChanged;
         this.authoring.FilesChanged += this.OnEditorFilesChanged;
@@ -241,7 +240,6 @@ public sealed partial class AssetFeed : IAssetFeed, IDisposable, IAsyncDisposabl
 
         this.documents.Changed -= this.OnUnsavedDocumentsChanged;
         this.cooks.RunChanged -= this.OnCookRunChanged;
-        this.cookStatus.Changed -= this.OnFreshnessChanged;
         this.runtimeStatus.Changed -= this.OnRuntimeStatusChanged;
         this.relocation.FilesChanged -= this.OnEditorFilesChanged;
         this.authoring.FilesChanged -= this.OnEditorFilesChanged;

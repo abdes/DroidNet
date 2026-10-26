@@ -28,7 +28,7 @@ public sealed class SourceAnalysisAdapterTests
         using var workspace = new ImportAdapterWorkspace();
         await File.WriteAllTextAsync(Path.Combine(workspace.Root, "first.json"), "{\"name\":\"First\"}", this.TestContext.CancellationToken).ConfigureAwait(false);
         await File.WriteAllTextAsync(Path.Combine(workspace.Root, "second.json"), "{\"name\":\"Second\"}", this.TestContext.CancellationToken).ConfigureAwait(false);
-        using var compatibility = EditorNativeCompatibilityService.ForCooking();
+        var compatibility = EditorNativeCompatibilityService.ForCooking();
         var verified = await compatibility.VerifyAsync(Guid.NewGuid(), this.TestContext.CancellationToken).ConfigureAwait(false);
         var artifacts = verified.Artifacts!;
         await using var lifetime = artifacts.ConfigureAwait(false);
@@ -36,7 +36,6 @@ public sealed class SourceAnalysisAdapterTests
         var execution = AnalysisExecution(workspace) with { Artifacts = artifacts };
         var analysis = await api.AnalyzeSourcesAsync(execution, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = analysis.Complete.Should().BeTrue();
-        _ = analysis.ProducerFingerprint.Should().Be(artifacts.Fingerprint);
         var captures = await CaptureAnalyzedSourcesAsync(execution, analysis, this.TestContext.CancellationToken).ConfigureAwait(false);
         var capturedAnalysis = await api.AnalyzeSourcesAsync(execution with { CapturedInputs = captures }, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = capturedAnalysis.Should().BeEquivalentTo(analysis);

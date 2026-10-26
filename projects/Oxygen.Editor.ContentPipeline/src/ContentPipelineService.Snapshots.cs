@@ -282,7 +282,6 @@ public sealed partial class ContentPipelineService
                 graph = graph with { ImportedReferences = [.. graph.ImportedReferences.Union(scopes.SelectMany(static scope => scope.RequiredImportedOutputs))] };
                 return HasError(graph.Diagnostics) ? throw new CookInputDiscoveryException(graph.Diagnostics) : graph.Files;
             },
-            artifacts.Fingerprint,
             cancellationToken).ConfigureAwait(false);
         return (snapshot, graph!);
     }

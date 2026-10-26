@@ -13,7 +13,7 @@ namespace Oxygen.Editor.ContentPipeline.Status;
 /// <summary>Compares publication metadata without verifying cooked payload bytes.</summary>
 public sealed partial class AssetCookStatusReader
 {
-    private static async Task<FreshnessSnapshot> ReadFreshnessAsync(CookPublicationReadLease publication, string producer,
+    private static async Task<FreshnessSnapshot> ReadFreshnessAsync(CookPublicationReadLease publication,
         CookDependencyGraph graph, CookProvenance previous, CancellationToken cancellationToken)
     {
         var available = ImmutableHashSet.CreateBuilder<(string rootMount, string virtualPath)>();
@@ -68,7 +68,7 @@ public sealed partial class AssetCookStatusReader
         }
 
         var fingerprints = graph.Assets.ToDictionary(static input => input.AssetUri,
-            input => CookIncrementalPlanner.Fingerprint(input, producer, graph.Files, graph));
+            input => CookIncrementalPlanner.Fingerprint(input, graph.Files, graph));
 
         var currentProducts = previous.Products.Where(product => fingerprints.TryGetValue(product.SourceUri, out var fingerprint)
             && string.Equals(fingerprint, product.ReuseFingerprint, StringComparison.Ordinal))

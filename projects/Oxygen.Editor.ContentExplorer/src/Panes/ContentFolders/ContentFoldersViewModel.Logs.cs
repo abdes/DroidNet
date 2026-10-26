@@ -281,6 +281,15 @@ public partial class ContentFoldersViewModel
 
     [LoggerMessage(
         SkipEnabledCheck = true,
+        Level = LogLevel.Warning,
+        Message = "The project's cooked content is in publication format {Version}, which this editor does not read; Cook project upgrades it.")]
+    private static partial void LogOutdatedPublication(ILogger logger, int? version);
+
+    private void LogOutdatedPublication(int? version)
+        => LogOutdatedPublication(this.logger, version);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
         Level = LogLevel.Error,
         Message = "Failed to navigate to folder.")]
     private static partial void LogFolderNavigationFailure(ILogger logger, Exception exception);

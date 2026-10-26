@@ -95,10 +95,10 @@ public sealed class SnapshotCaptureTests
         _ = Directory.EnumerateFiles(Path.Combine(workspace.Root, ".build"), "*", SearchOption.AllDirectories).Should().BeEmpty();
     }
 
-    /// <summary>Uses logical source content and compatible artifacts, independently of workspace and operation paths.</summary>
+    /// <summary>Uses logical source content, independently of workspace and operation paths.</summary>
     /// <returns>The asynchronous test operation.</returns>
     [TestMethod]
-    public async Task InputIdentityIsPortableAndIncludesTheBuildFingerprint()
+    public async Task InputIdentityIsPortable()
     {
         using var first = new CaptureWorkspace();
         using var second = new CaptureWorkspace();
@@ -106,11 +106,9 @@ public sealed class SnapshotCaptureTests
         var secondInput = second.WriteInput("Content/source.bin", "same bytes");
         var original = await first.CaptureAsync([firstInput]).ConfigureAwait(false);
         var relocated = await second.CaptureAsync([secondInput with { RelativePath = "Content\\source.bin" }]).ConfigureAwait(false);
-        var changedBuild = await second.CaptureAsync([secondInput], "different-compatible-build").ConfigureAwait(false);
 
         _ = relocated.InputIdentity.Should().Be(original.InputIdentity);
         _ = relocated.InputRoot.Should().NotBe(original.InputRoot);
-        _ = changedBuild.InputIdentity.Should().NotBe(original.InputIdentity);
     }
 
     /// <summary>Rejects stale callbacks even if their project remains active.</summary>
@@ -125,7 +123,6 @@ public sealed class SnapshotCaptureTests
         var capture = () => workspace.Capture.CaptureAsync(
             operation,
             _ => Task.FromResult<IReadOnlyList<CookSnapshotInput>>([input]),
-            "compatible-build",
             CancellationToken.None);
         _ = await capture.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false);
 

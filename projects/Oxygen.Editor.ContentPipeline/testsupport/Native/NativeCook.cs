@@ -12,7 +12,7 @@ namespace Oxygen.Editor.ContentPipeline.TestSupport;
 /// The real cook of a workspace: the installed ImportTool behind the native pipeline API, and the content pipeline
 /// service over both. A test names only what it varies, so a new dependency of the service changes this builder alone.
 /// </summary>
-internal sealed class NativeCook : IDisposable
+internal sealed class NativeCook
 {
     private NativeCook(EditorNativeCompatibilityService compatibility, ImportToolContentPipelineApi api, ContentPipelineService service)
     {
@@ -35,7 +35,7 @@ internal sealed class NativeCook : IDisposable
     /// <param name="runner">Runs the ImportTool process; a real process runner when none is given.</param>
     /// <param name="publication">Publishes the cooked roots; the workspace's own when none is given.</param>
     /// <param name="generator">Writes scene descriptors; the real generator when none is given.</param>
-    /// <returns>The cook, which the test disposes.</returns>
+    /// <returns>The cook.</returns>
     public static NativeCook Create(
         CookWorkspace workspace,
         IContentPipelineProcessRunner? runner = null,
@@ -47,7 +47,4 @@ internal sealed class NativeCook : IDisposable
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), runner ?? new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
         return new(compatibility, api, CookScenario.CreateService(workspace, api, generator, compatibility, publication));
     }
-
-    /// <inheritdoc/>
-    public void Dispose() => this.Compatibility.Dispose();
 }

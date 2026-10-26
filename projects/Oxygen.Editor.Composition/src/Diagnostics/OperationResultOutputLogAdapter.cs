@@ -47,7 +47,8 @@ internal sealed partial class OperationResultOutputLogAdapter : IObserver<Operat
         => this.buffer.Append(
             new OutputLogEntry
             {
-                Timestamp = value.CompletedAt ?? DateTimeOffset.Now,
+                // Operations record UTC completion times; Output shows every entry in local time.
+                Timestamp = value.CompletedAt?.ToLocalTime() ?? DateTimeOffset.Now,
                 Level = ToLogEventLevel(value.Severity),
                 Source = Source,
                 Channel = "Operations",

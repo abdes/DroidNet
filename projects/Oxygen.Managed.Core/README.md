@@ -211,13 +211,12 @@ sequenceDiagram
   Interop build: content hash, size and schema identifier. It never rewrites the
   receipt.
 - `NativeArtifactLease` keeps the verified files open, so they cannot be
-  replaced while native work uses them, and carries the fingerprint that cook
-  provenance uses to decide whether earlier output can be reused. The
-  fingerprint depends on content, schemas and configuration, not on install
-  paths.
+  replaced while native work uses them.
 - `EditorNativeCompatibilityService` is the editor's service for the running
-  process (`ForCurrentProcess`) and for cooking (`ForCooking`), and publishes
-  the last `NativeProducerObservation` for the UI.
+  process (`ForCurrentProcess`) and for cooking (`ForCooking`). Cooking checks
+  that the editor's copy of each cooking schema matches the engine's and hashes
+  nothing else: whether cooked output is still readable is decided by the
+  engine's cooked format versions, not by the binaries that wrote it.
 
 ## Paths
 

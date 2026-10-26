@@ -26,7 +26,7 @@ public sealed class ImportedSourceInspectionTests
         using var workspace = new CookWorkspace([new("Content", "Content"), new("Art", "Art")], EngineContentPak.Installed());
         var source = await WriteCrossMountModelAsync(workspace, this.TestContext.CancellationToken).ConfigureAwait(false);
         var runner = new CountingSourceRunner();
-        using var cook = NativeCook.Create(workspace, runner: runner);
+        var cook = NativeCook.Create(workspace, runner: runner);
         var service = cook.Service;
         var cooked = await service.CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = cooked.IsPublished.Should().BeTrue();

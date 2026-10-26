@@ -28,7 +28,7 @@ public sealed class SourceAnalysisReuseTests
     public async Task MixedFreshAndCachedSceneRepairReadsEngineGeometryFromPak()
     {
         using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
-        using var compatibility = EditorNativeCompatibilityService.ForCooking();
+        var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = CreateRecordingApi(compatibility);
         await PrepareIncrementalSceneAsync(workspace, api).ConfigureAwait(false);
         var second = new Scene { Name = "Second" };
@@ -70,7 +70,7 @@ public sealed class SourceAnalysisReuseTests
     public async Task CorruptSceneDescriptorReusesSourceFacts()
     {
         using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
-        using var compatibility = EditorNativeCompatibilityService.ForCooking();
+        var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = CreateRecordingApi(compatibility);
         await PrepareIncrementalSceneAsync(workspace, api).ConfigureAwait(false);
         var pipeline = CreateIncrementalService(workspace, api, compatibility);
@@ -98,7 +98,7 @@ public sealed class SourceAnalysisReuseTests
     public async Task DeferredSceneProjectionUsesCapturedBytes()
     {
         using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
-        using var compatibility = EditorNativeCompatibilityService.ForCooking();
+        var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = CreateRecordingApi(compatibility);
         await PrepareIncrementalSceneAsync(workspace, api).ConfigureAwait(false);
         const string relative = "Content/Scenes/Main.oscene.json";
@@ -117,7 +117,7 @@ public sealed class SourceAnalysisReuseTests
             new SceneDescriptorGenerator(),
             new FixedCookScopeProvider(workspace.Root));
         var input = CookInputResolver.Resolve(workspace.ProjectContext, AssetPath.Parse("/Content/Scenes/Main.oscene"), ContentCookInputRole.Primary);
-        var snapshot = new CookInputSnapshot(operation, Path.Combine(workspace.Root, ".build", "captured"), artifacts.Fingerprint, "captured-scene-test", []);
+        var snapshot = new CookInputSnapshot(operation, Path.Combine(workspace.Root, ".build", "captured"), "captured-scene-test", []);
 
         var prepared = await analyzer.PrepareCapturedScenesAsync([input], snapshot, this.TestContext.CancellationToken).ConfigureAwait(false);
 

@@ -260,10 +260,6 @@ public sealed partial class AssetFeedTests
 
     private sealed class DelegateStatusReader(Func<ProjectContext, IReadOnlyList<AssetPath>, CancellationToken, Task<IReadOnlyList<AssetCookStatus>>> read) : IAssetCookStatusReader
     {
-        public event EventHandler? Changed;
-
-        public void NotifyChanged() => this.Changed?.Invoke(this, EventArgs.Empty);
-
         public Task<IReadOnlyList<AssetCookStatus>> ReadAsync(ProjectContext project, Oxygen.Editor.ContentPipeline.Publication.ICookPublicationReadLease publication, IReadOnlyList<AssetPath> assetUris, CancellationToken cancellationToken = default)
             => this.ReadAsync(project, assetUris, cancellationToken);
 

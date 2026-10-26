@@ -89,6 +89,8 @@ public partial class AssetsViewModel(
     ICookedInspections? cookedInspections = null,
     ISceneViews? sceneViews = null) : AbstractOutletContainer, IRoutingAware
 {
+    private const string OutdatedPublicationTitle = "Cooked content needs upgrading";
+
     private bool disposed;
 
     private bool isInitialized;
@@ -118,6 +120,12 @@ public partial class AssetsViewModel(
     [ObservableProperty]
     public partial InfoBarSeverity OperationResultSeverity { get; set; } = InfoBarSeverity.Informational;
 
+    /// <summary>
+    /// Gets a value indicating whether the project's cooked content is in a format this editor does not read: the result
+    /// banner then offers Cook project, which upgrades it.
+    /// </summary>
+    public bool IsPublicationOutdated => contentExplorerState.OutdatedPublication is not null;
+
     /// <inheritdoc />
     public async Task OnNavigatedToAsync(IActiveRoute route, INavigationContext navigationContext)
     {
@@ -139,6 +147,7 @@ public partial class AssetsViewModel(
 
             // Indexing is started by ContentExplorerViewModel - no need to start here
             this.isInitialized = true;
+            this.ShowPublicationState();
         }
 
         // Asset indexing runs automatically in background with file watching
@@ -261,6 +270,18 @@ public partial class AssetsViewModel(
     private static string DescribeScope(AssetPath? scopeUri)
         => scopeUri?.ToString() ?? "the active project";
 
+    private static string DescribeCook(ContentCookResult result)
+    {
+        if (result.IsUpToDate)
+        {
+            return $"Already up to date: {result.ReusedAssets.Count} assets reused.";
+        }
+
+        return (result.Validation?.CookedRoot ?? result.Inspection?.CookedRoot) is { } cookedRoot
+            ? $"Cooked {result.CookedAssets.Count} assets to {cookedRoot}; reused {result.ReusedAssets.Count}."
+            : $"Cooked {result.CookedAssets.Count} assets; reused {result.ReusedAssets.Count}.";
+    }
+
     private async Task ImportImageSourceAsync(ProjectContext project, string sourcePath)
     {
         if (!ReferenceEquals(session.Context, project))
@@ -338,6 +359,28 @@ public partial class AssetsViewModel(
         if (!this.disposed && e.PropertyName is nameof(ContentExplorerState.Clipboard))
         {
             this.NotifyAssetActions();
+        }
+
+        if (!this.disposed && e.PropertyName is nameof(ContentExplorerState.OutdatedPublication))
+        {
+            this.ShowPublicationState();
+        }
+    }
+
+    // An outdated publication stays in the banner, with Cook project, until a cook upgrades it.
+    private void ShowPublicationState()
+    {
+        this.OnPropertyChanged(nameof(this.IsPublicationOutdated));
+        if (contentExplorerState.OutdatedPublication is { } reason)
+        {
+            this.OperationResultTitle = OutdatedPublicationTitle;
+            this.OperationResultMessage = reason;
+            this.OperationResultSeverity = InfoBarSeverity.Warning;
+            this.IsOperationResultVisible = true;
+        }
+        else if (string.Equals(this.OperationResultTitle, OutdatedPublicationTitle, StringComparison.Ordinal))
+        {
+            this.IsOperationResultVisible = false;
         }
     }
 
@@ -692,17 +735,17 @@ public partial class AssetsViewModel(
         ContentCookResult result,
         AssetPath? scopeUri)
     {
-        var cookedRoot = result.Validation?.CookedRoot ?? result.Inspection?.CookedRoot ?? "(no cooked root)";
+        var diagnostics = result.ReportedDiagnostics;
         var message = result.Status == OperationStatus.Failed
-            ? BuildOperationMessage($"Cook failed for {DescribeScope(scopeUri)}.", result.Diagnostics)
-            : $"Cooked {result.CookedAssets.Count} assets to {cookedRoot}.";
+            ? BuildOperationMessage($"Cook failed for {DescribeScope(scopeUri)}.", diagnostics)
+            : DescribeCook(result);
         this.PublishOperation(
             result.OperationId,
             operationKind,
-            result.Status,
+            result.ReportedStatus,
             title,
             message,
-            result.Diagnostics,
+            diagnostics,
             scopeUri,
             showInBrowser: false);
     }

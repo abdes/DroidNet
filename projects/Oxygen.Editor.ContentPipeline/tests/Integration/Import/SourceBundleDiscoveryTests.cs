@@ -83,7 +83,7 @@ public sealed class SourceBundleDiscoveryTests
             await File.WriteAllBytesAsync(dependency.SourcePath.FullPath, bufferBytes, this.TestContext.CancellationToken).ConfigureAwait(false);
         }
 
-        using var compatibility = EditorNativeCompatibilityService.ForCooking();
+        var compatibility = EditorNativeCompatibilityService.ForCooking();
         var native = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
         var source = await RetainDiscoveredAsync(workspace, primary.SourcePath.FullPath, native, this.TestContext.CancellationToken).ConfigureAwait(false);
         Directory.Delete(originalRoot, recursive: true);
@@ -271,7 +271,7 @@ public sealed class SourceBundleDiscoveryTests
             observations.Add(new(path, Exists: true, CookSavedSourceReader.ReadMetadata(path), [new(0, 0, Convert.ToHexStringLower(SHA256.HashData(bytes)))]));
         }
 
-        return new("native-source-test", diagnostics.Count == 0, [new(
+        return new(diagnostics.Count == 0, [new(
             job.Id,
             job.Type,
             job.AttributedSource,

@@ -178,6 +178,33 @@ public sealed class CookedContentMountTests
         _ = await stale.Should().ThrowAsync<CookedLibraryChangedException>().ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// A publication of an older format is refused to every reader, naming its format; a cook that upgrades the
+    /// publication reads it as nothing published, over the head its publication replaces.
+    /// </summary>
+    /// <returns>The asynchronous test.</returns>
+    [TestMethod]
+    public async Task AnOutdatedPublicationIsReadAsNothingPublishedOnlyByAnUpgrade()
+    {
+        using var fixture = new MountFixture();
+        using (await fixture.CaptureAsync(fixture.Project, this.TestContext.CancellationToken).ConfigureAwait(false))
+        {
+        }
+
+        var head = await fixture.DowngradeAsync(fixture.Project, version: 6, this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        Func<Task> read = () => fixture.OpenAsync(fixture.Project, upgradeOutdated: false, this.TestContext.CancellationToken);
+        var refused = await read.Should().ThrowAsync<CookPublicationFormatException>().ConfigureAwait(false);
+        _ = refused.Which.Version.Should().Be(6);
+        _ = refused.Which.Message.Should().Contain("Cook the project to upgrade it");
+
+        using var upgrade = await fixture.OpenAsync(fixture.Project, upgradeOutdated: true, this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = upgrade.PublicationId.Should().BeNull("nothing of the outdated publication is reused");
+        _ = upgrade.Roots.Should().BeEmpty();
+        _ = upgrade.ProductState.Products.Should().BeEmpty();
+        _ = upgrade.Head.Version.Sha256.Should().BeEquivalentTo(head, "the upgrade's publication replaces the outdated head");
+    }
+
     private sealed partial class MountFixture : IDisposable
     {
         private readonly DirectoryInfo directory = Directory.CreateTempSubdirectory("Oxygen-CookedMounts-");
@@ -229,6 +256,29 @@ public sealed class CookedContentMountTests
             var head = new CookPublicationHead(CookPublicationHead.CurrentVersion, document.OperationId, version.Sha256);
             _ = await this.files.WriteAsync(CookPublicationPaths.Head(project.ProjectRoot.FullPath), JsonSerializer.SerializeToUtf8Bytes(head, CookPublicationDocument.JsonOptions), FileVersion.Missing, token).ConfigureAwait(false);
             return await CookPublicationReadLease.OpenUnderGateAsync(project, this.files, gate, token).ConfigureAwait(false);
+        }
+
+        // Rewrites the selected document as one of another format, as an older editor wrote it, and selects it.
+        public async Task<string> DowngradeAsync(ProjectContext project, int version, CancellationToken token)
+        {
+            var headPath = CookPublicationPaths.Head(project.ProjectRoot.FullPath);
+            var selected = JsonSerializer.Deserialize<CookPublicationHead>(await File.ReadAllBytesAsync(headPath, token).ConfigureAwait(false), CookPublicationDocument.JsonOptions)!;
+            var path = CookPublicationPaths.Document(project.ProjectRoot.FullPath, selected.PublicationId);
+            var document = System.Text.Json.Nodes.JsonNode.Parse(await File.ReadAllBytesAsync(path, token).ConfigureAwait(false))!;
+            document["version"] = version;
+            document["cookInputs"] = new System.Text.Json.Nodes.JsonObject { ["buildFingerprint"] = "older" };
+            var bytes = System.Text.Encoding.UTF8.GetBytes(document.ToJsonString());
+            await File.WriteAllBytesAsync(path, bytes, token).ConfigureAwait(false);
+            var head = new CookPublicationHead(CookPublicationHead.CurrentVersion, selected.PublicationId, Convert.ToHexString(SHA256.HashData(bytes)));
+            var headBytes = JsonSerializer.SerializeToUtf8Bytes(head, CookPublicationDocument.JsonOptions);
+            await File.WriteAllBytesAsync(headPath, headBytes, token).ConfigureAwait(false);
+            return Convert.ToHexString(SHA256.HashData(headBytes));
+        }
+
+        public async Task<CookPublicationReadLease> OpenAsync(ProjectContext project, bool upgradeOutdated, CancellationToken token)
+        {
+            using var gate = await CookOutputLease.AcquireWriteAsync(project.ProjectRoot, token).ConfigureAwait(false);
+            return await CookPublicationReadLease.OpenUnderGateAsync(project, this.files, gate, token, upgradeOutdated).ConfigureAwait(false);
         }
 
         public void RecookFirst() => _ = this.WriteRoot("First", 4);

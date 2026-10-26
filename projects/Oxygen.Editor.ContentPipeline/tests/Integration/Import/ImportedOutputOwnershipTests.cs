@@ -37,7 +37,7 @@ public sealed class ImportedOutputOwnershipTests
         using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         var source = await WriteRetainedModelAsync(workspace, "Model", "gltf", this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = await WriteRetainedModelAsync(workspace, "Other", "gltf", this.TestContext.CancellationToken).ConfigureAwait(false);
-        using var cook = NativeCook.Create(workspace);
+        var cook = NativeCook.Create(workspace);
         var service = cook.Service;
 
         var result = await service.CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -48,27 +48,30 @@ public sealed class ImportedOutputOwnershipTests
         _ = result.CookedAssets.Should().Contain(asset => asset.CookedAssetUri == source.Combine("model.oscene"));
     }
 
-    /// <summary>A changed producer can regenerate an unchanged saved model automatically.</summary>
-    /// <returns>The asynchronous producer-only refresh regression.</returns>
+    /// <summary>Rewriting a producer binary keeps the cooked output reused: reuse depends on the inputs alone.</summary>
+    /// <returns>The asynchronous producer-rewrite regression.</returns>
     [TestMethod]
     [TestCategory("NativeContent")]
-    public async Task ImportedOutputProducerChangeDoesNotRequireSourceReimport()
+    public async Task RewritingAProducerBinaryKeepsTheProductReused()
     {
         using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         var source = await WriteRetainedModelAsync(workspace, "Model", "gltf", this.TestContext.CancellationToken).ConfigureAwait(false);
         var policy = Path.Combine(workspace.Root, "test-producer-policy");
         await File.WriteAllTextAsync(policy, "v1", this.TestContext.CancellationToken).ConfigureAwait(false);
         using var firstCompatibility = Oxygen.Managed.Core.Testing.TemporaryNativeArtifacts.ForInstalledEngine([new("test/policy", policy)]);
-        var firstApi = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, firstCompatibility);
+        var firstRunner = new CountingSourceRunner();
+        var firstApi = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), firstRunner, NullLogger<ImportToolContentPipelineApi>.Instance, firstCompatibility);
         var first = await CreateService(workspace, firstApi, compatibility: firstCompatibility).CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = first.IsPublished.Should().BeTrue();
         await File.WriteAllTextAsync(policy, "v2", this.TestContext.CancellationToken).ConfigureAwait(false);
         using var changedCompatibility = Oxygen.Managed.Core.Testing.TemporaryNativeArtifacts.ForInstalledEngine([new("test/policy", policy)]);
-        var changedApi = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, changedCompatibility);
+        var changedRunner = new CountingSourceRunner();
+        var changedApi = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), changedRunner, NullLogger<ImportToolContentPipelineApi>.Instance, changedCompatibility);
         var service = CreateService(workspace, changedApi, compatibility: changedCompatibility);
         var geometry = first.CookedAssets.First(static asset => asset.Kind == ContentCookAssetKind.Geometry).CookedAssetUri;
-        var result = await service.CookPreviewAssetAsync(geometry, workspace.ProjectContext, this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = result.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, result.Diagnostics.Select(static issue => issue.Message)));
+        var result = await service.CookAssetAsync(geometry, this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = result.IsUpToDate.Should().BeTrue(string.Join(Environment.NewLine, result.Diagnostics.Select(static issue => issue.Message)));
+        _ = changedRunner.ImportCount.Should().Be(0);
     }
 
     /// <summary>Every named native output resolves back to one retained source and reuses its verified publication.</summary>
@@ -80,7 +83,7 @@ public sealed class ImportedOutputOwnershipTests
         using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         var source = await WriteRetainedModelAsync(workspace, "Model", "gltf", this.TestContext.CancellationToken).ConfigureAwait(false);
         var runner = new CountingSourceRunner();
-        using var cook = NativeCook.Create(workspace, runner: runner);
+        var cook = NativeCook.Create(workspace, runner: runner);
         var service = cook.Service;
         var first = await service.CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = first.IsPublished.Should().BeTrue();
@@ -109,7 +112,7 @@ public sealed class ImportedOutputOwnershipTests
         using var clean = new CookWorkspace(engineContent: EngineContentPak.Installed());
         var source = await WriteRetainedModelAsync(original, "Model", "gltf", this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = await WriteRetainedModelAsync(clean, "Model", "gltf", this.TestContext.CancellationToken).ConfigureAwait(false);
-        using var compatibility = EditorNativeCompatibilityService.ForCooking();
+        var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
         var first = await CreateService(original, api, compatibility: compatibility).CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = first.IsPublished.Should().BeTrue();
@@ -140,7 +143,7 @@ public sealed class ImportedOutputOwnershipTests
     {
         using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         var source = await WriteRetainedModelAsync(workspace, "Model", "gltf", this.TestContext.CancellationToken).ConfigureAwait(false);
-        using var cook = NativeCook.Create(workspace);
+        var cook = NativeCook.Create(workspace);
         var service = cook.Service;
         var index = CookPublicationPaths.Head(workspace.Root);
         byte[]? before = null;
@@ -174,7 +177,7 @@ public sealed class ImportedOutputOwnershipTests
         using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         var source = await WriteRetainedModelAsync(workspace, "Model", "gltf", this.TestContext.CancellationToken).ConfigureAwait(false);
         var runner = new CountingSourceRunner();
-        using var cook = NativeCook.Create(workspace, runner: runner);
+        var cook = NativeCook.Create(workspace, runner: runner);
         var service = cook.Service;
         var first = await service.CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false);
         var uris = first.CookedAssets.Select(static output => output.CookedAssetUri).Prepend(source).ToArray();
@@ -219,7 +222,7 @@ public sealed class ImportedOutputOwnershipTests
             await File.WriteAllTextAsync(path, content.ToJsonString(), this.TestContext.CancellationToken).ConfigureAwait(false);
         }
 
-        using var cook = NativeCook.Create(workspace);
+        var cook = NativeCook.Create(workspace);
         var service = cook.Service;
         var first = await service.CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = first.IsPublished.Should().BeTrue();

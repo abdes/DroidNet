@@ -136,11 +136,11 @@ public sealed class NativeCompatibilityVerifierTests
         _ = result.Diagnostics.Should().ContainSingle(diagnostic => diagnostic.Code == NativeCompatibilityDiagnosticCodes.ArtifactMismatch && diagnostic.Message.Contains("schema", StringComparison.Ordinal));
     }
 
-    /// <summary>Installation relocation, record order and report revision do not change producer content identity.</summary>
+    /// <summary>Installation relocation, record order and report revision do not change whether the artifacts verify.</summary>
     /// <returns>The asynchronous verification test.</returns>
     [TestMethod]
-    [SuppressMessage("Globalization", "CA1308:Normalize strings to uppercase", Justification = "Intentionally tests lowercase receipt hashes against canonical producer fingerprints.")]
-    public async Task FingerprintIsPortableAndIndependentOfReceiptOrdering()
+    [SuppressMessage("Globalization", "CA1308:Normalize strings to uppercase", Justification = "Intentionally tests lowercase receipt hashes against canonical digests.")]
+    public async Task VerificationIsPortableAndIndependentOfReceiptOrdering()
     {
         using var first = new Fixture();
         using var second = new Fixture();
@@ -153,42 +153,7 @@ public sealed class NativeCompatibilityVerifierTests
         await using var secondLifetime = secondLease.ConfigureAwait(false);
         _ = firstResult.Succeeded.Should().BeTrue();
         _ = secondResult.Succeeded.Should().BeTrue();
-        _ = firstLease.Fingerprint.Should().Be(secondLease.Fingerprint);
         _ = firstLease.GetPath(first.Locations[0].Id).Should().NotBe(secondLease.GetPath(second.Locations[0].Id));
-    }
-
-    /// <summary>A newly compatible producer or schema gets a distinct cook provenance identity.</summary>
-    /// <param name="schemaChange">Whether to change the schema contract instead of artifact bytes.</param>
-    /// <returns>The asynchronous verification test.</returns>
-    [TestMethod]
-    [DataRow(false)]
-    [DataRow(true)]
-    public async Task FingerprintChangesWithProducerOrSchema(bool schemaChange)
-    {
-        using var fixture = new Fixture();
-        var original = await fixture.VerifyAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = original.Succeeded.Should().BeTrue();
-        var fingerprint = original.Artifacts!.Fingerprint;
-        await original.Artifacts.DisposeAsync().ConfigureAwait(false);
-        var artifacts = fixture.Receipt.Artifacts;
-        if (schemaChange)
-        {
-            fixture.Locations[2] = fixture.Locations[2] with { SchemaId = "oxygen.test.v2" };
-            artifacts = artifacts.SetItem(2, artifacts[2] with { SchemaId = "oxygen.test.v2" });
-        }
-        else
-        {
-            var bytes = Encoding.UTF8.GetBytes("changed producer");
-            await File.WriteAllBytesAsync(fixture.Locations[0].FullPath, bytes, this.TestContext.CancellationToken).ConfigureAwait(false);
-            artifacts = artifacts.SetItem(0, artifacts[0] with { Size = bytes.Length, Sha256 = Convert.ToHexString(SHA256.HashData(bytes)) });
-        }
-
-        fixture.WriteReceipt(fixture.Receipt with { Artifacts = artifacts });
-        var changed = await fixture.VerifyAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
-        var lease = changed.Artifacts!;
-        await using var lifetime = lease.ConfigureAwait(false);
-        _ = changed.Succeeded.Should().BeTrue();
-        _ = lease.Fingerprint.Should().NotBe(fingerprint);
     }
 
     /// <summary>Cancellation after checking a file releases its handle and cannot return a compatible lease.</summary>

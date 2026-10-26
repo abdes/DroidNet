@@ -11,14 +11,7 @@ namespace Oxygen.Editor.ContentPipeline;
 /// <summary>Exposes read-only cook facts through the existing shared pipeline service.</summary>
 public sealed partial class ContentPipelineService
 {
-    private readonly AssetCookStatusReader statusReader = new(publication, nativeCompatibility, engineContent);
-
-    /// <inheritdoc />
-    public event EventHandler? Changed
-    {
-        add => this.nativeCompatibility.ObservationChanged += value;
-        remove => this.nativeCompatibility.ObservationChanged -= value;
-    }
+    private readonly AssetCookStatusReader statusReader = new(publication, engineContent);
 
     /// <inheritdoc />
     public Task<IReadOnlyList<AssetCookStatus>> ReadAsync(ProjectContext project, IReadOnlyList<AssetPath> assetUris, CancellationToken cancellationToken = default)

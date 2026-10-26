@@ -38,7 +38,7 @@ public sealed class MaterialKeyPriorityTests
         const string material = "Art/Materials/Shared.omat.json";
         materials.WriteMaterial(material, "Library material");
         consumer.WriteMaterial(material, "Project material");
-        using var compatibility = EditorNativeCompatibilityService.ForCooking();
+        var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
         var materialProducer = CreateService(materials, api, compatibility: compatibility);
         var imported = await materialProducer.CookAssetAsync(AssetPath.Parse("/" + material[..^5]), this.TestContext.CancellationToken).ConfigureAwait(false);

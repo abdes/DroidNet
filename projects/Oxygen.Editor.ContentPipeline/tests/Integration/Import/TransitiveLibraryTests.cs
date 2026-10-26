@@ -42,7 +42,7 @@ public sealed class TransitiveLibraryTests
         var descriptor = JsonNode.Parse(library.ReadText("Content/Geometry/AuthoredCube.ogeo.json"))!;
         descriptor["lods"]![0]!["submeshes"]![0]!["material_ref"] = "/" + material[..^5];
         library.WriteText("Content/Geometry/AuthoredCube.ogeo.json", descriptor.ToJsonString());
-        using var compatibility = EditorNativeCompatibilityService.ForCooking();
+        var compatibility = EditorNativeCompatibilityService.ForCooking();
         var runner = new CountingSourceRunner();
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), runner, NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
         var producer = CreateService(library, api, compatibility: compatibility);
@@ -100,7 +100,7 @@ public sealed class TransitiveLibraryTests
         var descriptor = JsonNode.Parse(library.ReadText("Content/Geometry/AuthoredCube.ogeo.json"))!;
         descriptor["lods"]![0]!["submeshes"]![0]!["material_ref"] = "/" + material[..^5];
         library.WriteText("Content/Geometry/AuthoredCube.ogeo.json", descriptor.ToJsonString());
-        using var compatibility = EditorNativeCompatibilityService.ForCooking();
+        var compatibility = EditorNativeCompatibilityService.ForCooking();
         var runner = new CountingSourceRunner();
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), runner, NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
         var producer = CreateService(library, api, compatibility: compatibility);

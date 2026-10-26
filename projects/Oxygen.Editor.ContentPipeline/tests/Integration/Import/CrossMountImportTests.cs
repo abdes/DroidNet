@@ -47,7 +47,7 @@ public sealed class CrossMountImportTests
         workspace.WriteMaterial(materialPath, "Red");
         AddGeometryNode(workspace, AssetPath.Parse("/" + geometrySource[..^5]), "Mesh");
         await workspace.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
-        using var cook = NativeCook.Create(workspace);
+        var cook = NativeCook.Create(workspace);
         var service = cook.Service;
         var result = await service.CookCurrentSceneAsync(AssetPath.Parse("/Content/Scenes/Main.oscene"), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = result.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, result.Diagnostics.Select(static issue => issue.TechnicalMessage ?? issue.Message)));
@@ -71,7 +71,7 @@ public sealed class CrossMountImportTests
         using var clean = new CookWorkspace([new("Content", "Content"), new("Art", "Art")], EngineContentPak.Installed());
         var source = await WriteCrossMountModelAsync(original, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = await WriteCrossMountModelAsync(clean, this.TestContext.CancellationToken).ConfigureAwait(false);
-        using var compatibility = EditorNativeCompatibilityService.ForCooking();
+        var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
         var sourceService = CreateService(original, api, compatibility: compatibility);
         var imported = await sourceService.CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false);

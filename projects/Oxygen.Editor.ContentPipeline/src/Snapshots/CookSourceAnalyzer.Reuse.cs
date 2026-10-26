@@ -72,7 +72,7 @@ internal sealed partial class CookSourceAnalyzer
                 continue;
             }
 
-            var fingerprint = CookIncrementalPlanner.Fingerprint(facts.Input, artifacts.Fingerprint, facts.Files, product.Dependencies, product.CookedDependencies);
+            var fingerprint = CookIncrementalPlanner.Fingerprint(facts.Input, facts.Files, product.Dependencies, product.CookedDependencies);
             if (string.Equals(fingerprint, product.ReuseFingerprint, StringComparison.Ordinal))
             {
                 reused.Add(facts.Input.AssetUri, facts);

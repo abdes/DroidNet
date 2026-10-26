@@ -123,7 +123,6 @@ public sealed partial class ImportToolContentPipelineApi
         var report = NativeSourceAnalysisReport.Parse(
             await File.ReadAllTextAsync(reportPath, cancellationToken).ConfigureAwait(false),
             execution.OperationId,
-            artifacts.Fingerprint,
             JsonSchema.FromFile(artifacts.GetPath(NativeArtifactInventory.SourceAnalysisSchemaId), new BuildOptions { SchemaRegistry = new SchemaRegistry() }));
         ValidateSourceAnalysisReport(execution, result.ExitCode, report);
 

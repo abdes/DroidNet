@@ -41,7 +41,7 @@ public sealed class InputFileCookTests
     {
         using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         workspace.WriteText("Content/Gameplay/Player.input.json", Player);
-        using var compatibility = EditorNativeCompatibilityService.ForCooking();
+        var compatibility = EditorNativeCompatibilityService.ForCooking();
         var service = CreateInputService(workspace, compatibility);
 
         var result = await service.CookFolderAsync(AssetPath.Parse("/Content/Gameplay"), this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -63,7 +63,7 @@ public sealed class InputFileCookTests
     {
         using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         workspace.WriteText("Content/Gameplay/Player.input.json", Player);
-        using var compatibility = EditorNativeCompatibilityService.ForCooking();
+        var compatibility = EditorNativeCompatibilityService.ForCooking();
         var service = CreateInputService(workspace, compatibility);
 
         var result = await service.CookAssetAsync(AssetPath.Parse("/Content/Gameplay/Player.input"), this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -82,7 +82,7 @@ public sealed class InputFileCookTests
         using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         workspace.WriteText("Content/Gameplay/Player.input.json", Player);
         workspace.WriteText("Content/Gameplay/Vehicle.input.json", Player);
-        using var compatibility = EditorNativeCompatibilityService.ForCooking();
+        var compatibility = EditorNativeCompatibilityService.ForCooking();
         var service = CreateInputService(workspace, compatibility);
 
         var result = await service.CookFolderAsync(AssetPath.Parse("/Content/Gameplay"), this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -106,7 +106,7 @@ public sealed class InputFileCookTests
         using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         workspace.WriteText("Content/Common/Common.input.json", """{ "actions": [ { "name": "Fire", "type": "bool" } ] }""");
         workspace.WriteText("Content/Gameplay/Player.input.json", UsesCommonFire);
-        using var compatibility = EditorNativeCompatibilityService.ForCooking();
+        var compatibility = EditorNativeCompatibilityService.ForCooking();
         var service = CreateInputService(workspace, compatibility);
 
         var result = await service.CookFolderAsync(AssetPath.Parse("/Content/Gameplay"), this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -125,7 +125,7 @@ public sealed class InputFileCookTests
     {
         using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         workspace.WriteText("Content/Gameplay/Player.input.json", UsesCommonFire);
-        using var compatibility = EditorNativeCompatibilityService.ForCooking();
+        var compatibility = EditorNativeCompatibilityService.ForCooking();
         var service = CreateInputService(workspace, compatibility);
 
         var result = await service.CookFolderAsync(AssetPath.Parse("/Content/Gameplay"), this.TestContext.CancellationToken).ConfigureAwait(false);

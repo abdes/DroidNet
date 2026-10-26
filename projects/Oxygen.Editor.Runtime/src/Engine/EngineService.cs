@@ -149,8 +149,7 @@ public sealed partial class EngineService(
 
     private static async Task<EngineSession> CreateCompatibleSessionAsync(HostingContext hostingContext, INativeCompatibilityService? compatibility, CancellationToken cancellationToken)
     {
-        using var ownedCompatibility = compatibility is null ? EditorNativeCompatibilityService.ForCurrentProcess() : null;
-        compatibility ??= ownedCompatibility!;
+        compatibility ??= EditorNativeCompatibilityService.ForCurrentProcess();
         var result = await compatibility.VerifyAsync(Guid.NewGuid(), cancellationToken).ConfigureAwait(false);
         if (!result.Succeeded)
         {

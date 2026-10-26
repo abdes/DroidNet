@@ -46,7 +46,7 @@ public sealed class TextureCookTests
         });
         await workspace.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
         workspace.WriteText("Content/Materials/Masked.omat.json", MaskedMaterial);
-        using var compatibility = EditorNativeCompatibilityService.ForCooking();
+        var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = CreateRecordingApi(compatibility);
         var service = CreateIncrementalService(workspace, api, compatibility);
         var first = await service.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false);

@@ -201,8 +201,10 @@ internal sealed record CookRootRepair(ImmutableHashSet<string> EmptyRoots, Immut
         descriptors.UnionWith(owners.SelectMany(static product => product.Outputs)
             .Where(output => string.Equals(output.RootMount, mount, StringComparison.Ordinal) && output.Asset.DescriptorRelativePath is not null)
             .Select(static output => output.Asset.DescriptorRelativePath!));
+        // A descriptor whose bytes changed, or that is in an asset format the engine no longer reads, needs only its
+        // owner cooked again.
         var sharedDamage = inventory.Issues.Any(issue => !descriptors.Contains(issue.RelativePath)
-            || !string.Equals(issue.Reason, "digest_mismatch", StringComparison.Ordinal));
+            || issue.Reason is not ("digest_mismatch" or "format_version"));
         var affected = sharedDamage ? descriptors
             : descriptors.Where(descriptor => inventory.Issues.Any(issue => string.Equals(issue.RelativePath, descriptor, StringComparison.Ordinal)));
         foreach (var descriptor in affected)

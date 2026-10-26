@@ -21,8 +21,6 @@ public sealed partial class AssetFeed
     private long publishedRevision = -1;
     private ProjectContext? publishedProject;
 
-    private void OnFreshnessChanged(object? sender, EventArgs args) => this.OnCatalogChanged();
-
     // The catalog would see the change only when its file watcher reports it; reading again now shows it at once.
     private void OnEditorFilesChanged(object? sender, AssetFilesChangedEventArgs args) => this.OnCatalogChanged();
 

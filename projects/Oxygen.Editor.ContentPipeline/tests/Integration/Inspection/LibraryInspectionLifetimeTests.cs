@@ -30,7 +30,7 @@ public sealed class LibraryInspectionLifetimeTests
         using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         workspace.WriteMaterial("Content/Materials/Shared.omat.json", "Shared");
         var runner = new ContextLeaseRunner();
-        using var cook = NativeCook.Create(workspace, runner: runner);
+        var cook = NativeCook.Create(workspace, runner: runner);
         var service = cook.Service;
         var source = AssetPath.Parse("/Content/Materials/Shared.omat");
         AssertCookSucceeded(await service.CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false));

@@ -180,7 +180,6 @@ public static partial class NativeCompatibilityVerifier
             }
 
             var lease = new NativeArtifactLease(
-                ComputeFingerprint(receipt),
                 requiredArtifacts.ToImmutableDictionary(static artifact => artifact.Id, static artifact => Path.GetFullPath(artifact.FullPath), StringComparer.Ordinal),
                 [.. streams]);
             var result = new NativeCompatibilityResult(lease, []);
@@ -227,18 +226,6 @@ public static partial class NativeCompatibilityVerifier
         {
             diagnostics.Add(Failure(operationId, NativeCompatibilityDiagnosticCodes.ArtifactMismatch, $"The compatible file is missing or inaccessible: {artifact.Id}.", artifact.FullPath, ex.ToString()));
         }
-    }
-
-    private static string ComputeFingerprint(NativeBuildReceipt receipt)
-    {
-        var bytes = JsonSerializer.SerializeToUtf8Bytes(new
-        {
-            receipt.Version,
-            receipt.Configuration,
-            Artifacts = receipt.Artifacts.OrderBy(static artifact => artifact.Id, StringComparer.Ordinal)
-                .Select(static artifact => artifact with { Sha256 = artifact.Sha256.ToUpperInvariant() }),
-        });
-        return Convert.ToHexString(SHA256.HashData(bytes));
     }
 
     private static DiagnosticRecord Failure(Guid operationId, string code, string message, string path, string? technical = null)

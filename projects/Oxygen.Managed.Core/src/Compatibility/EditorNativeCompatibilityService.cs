@@ -13,7 +13,7 @@ namespace Oxygen.Managed.Core.Compatibility;
 /// <param name="installation">The editor and installed SDK paths.</param>
 /// <param name="cooking">Whether to check cooking inputs instead of the runtime bridge.</param>
 [SupportedOSPlatform("windows")]
-public sealed partial class EditorNativeCompatibilityService(EditorNativeInstallation installation, bool cooking = false) : INativeCompatibilityService, IDisposable
+public sealed class EditorNativeCompatibilityService(EditorNativeInstallation installation, bool cooking = false) : INativeCompatibilityService
 {
     /// <summary>Names the cooking instance without replacing runtime compatibility verification.</summary>
     public const string CookingServiceKey = "oxygen.cooking";
@@ -38,33 +38,6 @@ public sealed partial class EditorNativeCompatibilityService(EditorNativeInstall
 
     /// <inheritdoc />
     public async Task<NativeCompatibilityResult> VerifyAsync(Guid operationId, CancellationToken cancellationToken)
-    {
-        long revision;
-        lock (this.observationSync)
-        {
-            ObjectDisposedException.ThrowIf(this.disposed, this);
-            this.EnsureWatcher();
-            revision = ++this.observationGeneration;
-        }
-
-        var result = await this.VerifyCoreAsync(operationId, cancellationToken).ConfigureAwait(false);
-        try
-        {
-            this.PublishObservation(revision, result);
-            return result;
-        }
-        catch
-        {
-            if (result.Artifacts is { } artifacts)
-            {
-                await artifacts.DisposeAsync().ConfigureAwait(false);
-            }
-
-            throw;
-        }
-    }
-
-    private async Task<NativeCompatibilityResult> VerifyCoreAsync(Guid operationId, CancellationToken cancellationToken)
     {
         try
         {

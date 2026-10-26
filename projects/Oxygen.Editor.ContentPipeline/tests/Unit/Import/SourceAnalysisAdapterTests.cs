@@ -32,17 +32,16 @@ public sealed class SourceAnalysisAdapterTests
         _ = runner.Calls.Should().Be(0);
     }
 
-    /// <summary>A frontier uses one destination-free manifest and binds facts to the verified producer.</summary>
+    /// <summary>A frontier uses one destination-free manifest.</summary>
     /// <returns>The asynchronous query test.</returns>
     [TestMethod]
-    public async Task SourceAnalysis_BatchesJobsAndUsesArtifactFingerprint()
+    public async Task SourceAnalysis_BatchesJobsIntoOneManifest()
     {
         using var workspace = new ImportAdapterWorkspace();
         var runner = new SourceAnalysisRunner();
         var execution = AnalysisExecution(workspace);
         var result = await CreateQueryApi(workspace, runner).AnalyzeSourcesAsync(execution, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = result.Complete.Should().BeTrue();
-        _ = result.ProducerFingerprint.Should().NotBe("display-only-version");
         _ = result.Jobs.Should().HaveCount(2);
         _ = runner.Calls.Should().Be(1);
         _ = runner.Request!.Arguments.Should().ContainInOrder("analyze-sources", "--manifest", runner.ManifestPath!, "--root", execution.InputRoot, "--report", runner.ReportPath!);
@@ -204,7 +203,7 @@ public sealed class SourceAnalysisAdapterTests
         await using var lifetime = artifacts.ConfigureAwait(false);
         var report = await CreateQueryApi(workspace, new SourceAnalysisRunner()).AnalyzeSourcesAsync(
             AnalysisExecution(workspace) with { Artifacts = artifacts }, this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = report.ProducerFingerprint.Should().Be(artifacts.Fingerprint);
+        _ = report.Complete.Should().BeTrue();
         Action overwrite = () => File.WriteAllText(workspace.ToolPath, "replacement");
         _ = overwrite.Should().Throw<IOException>();
     }
@@ -227,7 +226,6 @@ public sealed class SourceAnalysisAdapterTests
         await using var firstLifetime = first.ConfigureAwait(false);
         await using var secondLifetime = second.ConfigureAwait(false);
         var api = CreateQueryApi(workspace, new SourceAnalysisRunner());
-        _ = first.Fingerprint.Should().NotBe(second.Fingerprint);
         _ = (await api.AnalyzeSourcesAsync(AnalysisExecution(workspace) with { Artifacts = first }, this.TestContext.CancellationToken).ConfigureAwait(false)).Complete.Should().BeTrue();
         Func<Task> analyze = () => api.AnalyzeSourcesAsync(AnalysisExecution(workspace) with { Artifacts = second }, this.TestContext.CancellationToken);
         _ = await analyze.Should().ThrowAsync<InvalidDataException>().ConfigureAwait(false);

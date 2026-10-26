@@ -44,7 +44,6 @@ public sealed class ImportSourceRetention(IContentCookCoordinator coordinator)
                 primary = ValidateBundle(bundle);
                 return bundle.Files;
             },
-            buildFingerprint: "Oxygen.SourceRetention/v1",
             cancellationToken).ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
         coordinator.VerifyWriter(operation);

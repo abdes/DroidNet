@@ -24,7 +24,10 @@ public sealed partial class CookPublicationService
     async Task<ICookPublicationReadLease> ICookPublicationReader.AcquireReadAsync(ProjectContext project, CancellationToken cancellationToken)
         => await this.AcquireReadAsync(project, cancellationToken).ConfigureAwait(false);
 
-    /// <summary>Recovers interrupted mutations, then opens the publication a cook operation runs against.</summary>
+    /// <summary>
+    /// Recovers interrupted mutations, then opens the publication a cook operation runs against. An operation that
+    /// upgrades the publication reads one in an outdated format as nothing published.
+    /// </summary>
     /// <param name="operation">The operation that owns the publication.</param>
     /// <param name="cancellationToken">Cancels the acquisition.</param>
     /// <returns>A lease on the settled publication.</returns>
@@ -48,7 +51,7 @@ public sealed partial class CookPublicationService
             throw new DroidNet.Storage.StorageWriteConflictException("The saved content configuration changed. Reopen the project before cooking or mounting it.");
         }
 
-        return this.ReportUnavailableRoots(await CookPublicationReadLease.OpenUnderGateAsync(operation.Project, files, gate, cancellationToken).ConfigureAwait(false));
+        return this.ReportUnavailableRoots(await CookPublicationReadLease.OpenUnderGateAsync(operation.Project, files, gate, cancellationToken, operation.UpgradesPublication).ConfigureAwait(false));
     }
 
     // Each unreadable root of a publication is reported once, however often the publication is read.

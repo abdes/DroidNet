@@ -14,7 +14,6 @@ internal static class ControlledSourceAnalysis
     {
         cancellationToken.ThrowIfCancellationRequested();
         return Task.FromResult(new NativeSourceAnalysisReport(
-            execution.Artifacts!.Fingerprint,
             Complete: true,
             [.. execution.Jobs.Select(job => Describe(execution.InputRoot, job))]));
     }

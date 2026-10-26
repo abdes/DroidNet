@@ -212,16 +212,15 @@ public sealed partial class ContentCookCoordinator
         IEnumerable<CookRunAsset> assets = [];
         if (result is ContentCookResult content)
         {
-            // An up-to-date result carries the warnings of the earlier cook that made the reused outputs; that cook already reported them.
             var upToDate = content.IsUpToDate && content.Status is OperationStatus.Succeeded or OperationStatus.SucceededWithWarnings;
-            state = upToDate ? CookRunState.UpToDate : content.Status switch
+            state = upToDate ? CookRunState.UpToDate : content.ReportedStatus switch
             {
                 OperationStatus.Succeeded => CookRunState.Succeeded,
                 OperationStatus.SucceededWithWarnings => CookRunState.SucceededWithWarnings,
                 OperationStatus.Cancelled => CookRunState.Cancelled,
                 _ => CookRunState.Failed,
             };
-            diagnostics = upToDate ? [] : content.Diagnostics;
+            diagnostics = content.ReportedDiagnostics;
             assets = FinishedAssets(content.CookedAssets, CookAssetState.Updated)
                 .Concat(FinishedAssets(content.ReusedAssets, CookAssetState.Reused));
         }

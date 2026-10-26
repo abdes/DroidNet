@@ -7,6 +7,7 @@ using System.Reactive.Concurrency;
 using DroidNet.Aura.Dialogs;
 using DroidNet.Controls;
 using Microsoft.UI.Xaml;
+using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets.Persistence.Pak;
 using Oxygen.Managed.Core;
@@ -178,8 +179,20 @@ public partial class ContentFoldersViewModel
             if (isProjectRelative && string.Equals(backingPath.Replace('\\', '/').Trim('/'), ".cooked", StringComparison.OrdinalIgnoreCase)
                 && !this.selectionDisposed)
             {
-                using var selected = await publications.AcquireReadAsync(context, CancellationToken.None).ConfigureAwait(true);
-                outputPaths = selected.ProjectOutputPaths.Distinct(StringComparer.Ordinal).ToArray();
+                try
+                {
+                    using var selected = await publications.AcquireReadAsync(context, CancellationToken.None).ConfigureAwait(true);
+                    outputPaths = selected.ProjectOutputPaths.Distinct(StringComparer.Ordinal).ToArray();
+                    contentExplorerState.SetOutdatedPublication(reason: null);
+                }
+                catch (CookPublicationFormatException outdated)
+                {
+                    // The assets pane offers Cook project, which upgrades it; the tree shows the cooked folder again
+                    // once the cook publishes.
+                    this.LogOutdatedPublication(outdated.Version);
+                    contentExplorerState.SetOutdatedPublication(outdated.Message);
+                    return;
+                }
             }
 
             VirtualFolderMountTreeItemAdapter? mount = null;

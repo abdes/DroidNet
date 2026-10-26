@@ -75,18 +75,16 @@ internal sealed partial class AssetCookStatusTests
         _ = status.Diagnostics.Should().BeEmpty();
     }
 
-    /// <summary>New descriptors do not require native availability merely to report Needs cooking.</summary>
+    /// <summary>A new descriptor reports Needs cooking.</summary>
     /// <returns>The asynchronous uncooked-source regression.</returns>
     [TestMethod]
-    public async Task NewSourceNeedsCookingWithoutInvokingTheNativeProducer()
+    public async Task NewSourceNeedsCooking()
     {
         using var project = new StatusProject();
-        var native = new Mock<INativeCompatibilityService>(MockBehavior.Strict);
-        var status = (await project.CreateReader(native.Object).ReadAsync(project.Project, [StatusProject.SourceUri], this.TestContext.CancellationToken).ConfigureAwait(false)).Single();
+        var status = (await project.CreateReader().ReadAsync(project.Project, [StatusProject.SourceUri], this.TestContext.CancellationToken).ConfigureAwait(false)).Single();
         _ = status.Freshness.Should().Be(AssetCookFreshness.NeedsCooking);
         _ = status.HasPublishedOutput.Should().BeFalse();
         _ = status.Diagnostics.Should().BeEmpty();
-        native.VerifyNoOtherCalls();
     }
 
     /// <summary>An asset that cannot be a cook input is invalid on its own; the other assets are read as usual.</summary>
@@ -178,67 +176,11 @@ internal sealed partial class AssetCookStatusTests
         _ = after.HasAvailableOutput.Should().Be(!damageOutput);
     }
 
-    /// <summary>A producer invalidated during status evaluation cannot receive a stale Current result.</summary>
-    /// <returns>The asynchronous concurrent-input regression.</returns>
-    [TestMethod]
-    public async Task ProducerChangedDuringStatusCannotBeCurrent()
-    {
-        using var project = new StatusProject();
-        await project.PublishAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
-        var native = new Mock<INativeCompatibilityService>(MockBehavior.Strict);
-        var verified = await project.VerifyNativeAsync(Guid.NewGuid(), this.TestContext.CancellationToken).ConfigureAwait(false);
-        var artifacts = verified.Artifacts!;
-        await using var artifactsLifetime = artifacts.ConfigureAwait(false);
-        _ = native.SetupSequence(service => service.Observation)
-            .Returns(new NativeProducerObservation(1, artifacts.Fingerprint, []))
-            .Returns(new NativeProducerObservation(2, Fingerprint: null, []));
-        var status = (await project.CreateReader(native.Object).ReadAsync(project.Project, [StatusProject.SourceUri], this.TestContext.CancellationToken).ConfigureAwait(false)).Single();
-        _ = status.Freshness.Should().Be(AssetCookFreshness.Unknown);
-        _ = status.HasAvailableOutput.Should().BeTrue();
-        native.Verify(service => service.VerifyAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
-    }
-
-    /// <summary>An unavailable native producer does not erase prior output or pretend it is current.</summary>
-    /// <returns>The asynchronous native-unavailability regression.</returns>
-    [TestMethod]
-    public async Task UnavailableProducerRetainsPriorOutputFacts()
-    {
-        using var project = new StatusProject();
-        await project.PublishAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
-        await File.WriteAllTextAsync(Path.Combine(project.Root, "producer.bin"), "changed producer", this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = await project.VerifyNativeAsync(Guid.NewGuid(), this.TestContext.CancellationToken).ConfigureAwait(false);
-        var status = await project.ReadAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = status.Freshness.Should().Be(AssetCookFreshness.Unknown);
-        _ = status.HasPublishedOutput.Should().BeTrue();
-        _ = status.HasAvailableOutput.Should().BeTrue();
-        _ = status.Diagnostics.Should().NotBeEmpty();
-    }
-
-    /// <summary>A different valid native build requires a recook without invalidating the prior bytes.</summary>
-    /// <returns>The asynchronous producer-identity regression.</returns>
-    [TestMethod]
-    public async Task ChangedProducerRequiresCooking()
-    {
-        using var project = new StatusProject();
-        await project.PublishAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
-        var producer = Path.Combine(project.Root, "producer.bin");
-        await File.WriteAllTextAsync(producer, "new producer", this.TestContext.CancellationToken).ConfigureAwait(false);
-        using var native = new Oxygen.Managed.Core.Testing.TemporaryNativeArtifacts([new NativeArtifactLocation("producer", producer)]);
-        var verifiedProducer = await native.VerifyAsync(Guid.NewGuid(), this.TestContext.CancellationToken).ConfigureAwait(false);
-        var producerArtifacts = verifiedProducer.Artifacts!;
-        await using var producerLifetime = producerArtifacts.ConfigureAwait(false);
-        var status = (await project.CreateReader(native).ReadAsync(project.Project, [StatusProject.SourceUri], this.TestContext.CancellationToken).ConfigureAwait(false)).Single();
-        _ = status.Freshness.Should().Be(AssetCookFreshness.OutOfDate);
-        _ = status.HasAvailableOutput.Should().BeTrue();
-        _ = status.Diagnostics.Should().BeEmpty();
-    }
-
     private sealed partial class StatusProject : IDisposable
     {
         public static readonly AssetPath SourceUri = AssetPath.Parse("/Content/Material.omat");
         private readonly DirectoryInfo directory = Directory.CreateTempSubdirectory("oxygen-status-");
         private readonly NativeAtomicFileStore files = new(new Testably.Abstractions.RealFileSystem());
-        private readonly Oxygen.Managed.Core.Testing.TemporaryNativeArtifacts native;
         private readonly EngineContentPakFixture engineContent = new();
         private readonly TestSession session;
         private readonly CookPublicationService publication;
@@ -251,9 +193,6 @@ internal sealed partial class AssetCookStatusTests
             this.Project = TestProject.Create(new Testably.Abstractions.RealFileSystem(), this.Root).Context with { Name = "Status" };
             Directory.CreateDirectory(Path.GetDirectoryName(this.SourcePath)!);
             File.WriteAllText(this.SourcePath, MaterialJson);
-            var producer = Path.Combine(this.Root, "producer.bin");
-            File.WriteAllText(producer, "producer");
-            this.native = new([new NativeArtifactLocation("producer", producer)]);
             _ = this.api.Setup(value => value.ReadInventoryAsync(It.IsAny<string>(), It.IsAny<NativeArtifactLease?>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync((string root, NativeArtifactLease? _, CancellationToken _) => Oxygen.Testing.NativeInventoryFixture.Read(root));
             _ = TestProject.SaveProjectFile(this.Project);
@@ -283,8 +222,8 @@ internal sealed partial class AssetCookStatusTests
             return Encoding.UTF8.GetString(buffer.ToArray());
         }
 
-        public AssetCookStatusReader CreateReader(INativeCompatibilityService? compatibility = null)
-            => new(this.publication, compatibility ?? this.native, this.engineContent);
+        public AssetCookStatusReader CreateReader()
+            => new(this.publication, this.engineContent);
 
         public async Task<AssetCookStatus> ReadAsync(CancellationToken cancellationToken)
             => (await this.CreateReader().ReadAsync(this.Project, [SourceUri], cancellationToken).ConfigureAwait(false)).Single();
@@ -296,11 +235,7 @@ internal sealed partial class AssetCookStatusTests
             var facts = new StatusSourceFacts(this.Project, input, dependencies ?? []);
             var graph = await new CookDependencyDiscovery(facts).DiscoverAsync(this.Project, [input], cancellationToken).ConfigureAwait(false);
             _ = graph.Diagnostics.Should().BeEmpty();
-            var verified = await this.native.VerifyAsync(operation.OperationId, cancellationToken).ConfigureAwait(false);
-            var producer = verified.Artifacts!;
-            await using var producerLifetime = producer.ConfigureAwait(false);
-            _ = verified.Succeeded.Should().BeTrue();
-            var plan = CookIncrementalPlanner.CreatePlan(producer.Fingerprint, graph.Files, graph, new(this.Project.ProjectId, [], []), []);
+            var plan = CookIncrementalPlanner.CreatePlan(graph.Files, graph, new(this.Project.ProjectId, [], []), []);
             using var baseline = await this.publication.AcquireReadAsync(this.Project, cancellationToken).ConfigureAwait(false);
             await using var ownership = CookOutputLease.AcquireOperation(this.Project.ProjectRoot, operation.OperationId).ConfigureAwait(false);
             var staging = await CookStagingArea.CreateAsync(operation, baseline, ["Content"], this.files, this.manager, cancellationToken).ConfigureAwait(false);
@@ -336,19 +271,16 @@ internal sealed partial class AssetCookStatusTests
                 CookPublicationDocument.ConfigurationIdentity(this.Project),
                 staging.SealRoots(),
                 provenance.Products,
-                new(producer.Fingerprint, new string('A', 64), graph.Files, [], []));
+                new(new string('A', 64), graph.Files, [], []));
             await staging.Transaction.PrepareAsync(operation, document, sourceReplacement: null, [], projectChange: null, cancellationToken).ConfigureAwait(false);
             staging.RetainForPublication();
             using var accepted = await staging.Transaction.PublishAsync(preview: null, baseline, static () => { }, cancellationToken).ConfigureAwait(false);
             this.selectedRoot = accepted.FindProjectRoot("Content")?.FullPath;
         }
 
-        public Task<NativeCompatibilityResult> VerifyNativeAsync(Guid operation, CancellationToken token) => this.native.VerifyAsync(operation, token);
-
         public void Dispose()
         {
             this.session.Dispose();
-            this.native.Dispose();
             this.directory.Delete(recursive: true);
         }
 

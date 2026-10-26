@@ -10,7 +10,6 @@ using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
-using Oxygen.Managed.Core.Compatibility;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.ContentPipeline.Status;
@@ -21,22 +20,13 @@ namespace Oxygen.Editor.ContentPipeline.Status;
 /// documents and their unsaved changes are not part of it.
 /// </remarks>
 /// <param name="publication">The committed metadata verifier.</param>
-/// <param name="nativeCompatibility">The current cooking producer identity.</param>
 /// <param name="engineContent">The engine content pak, the lowest library engine references resolve through.</param>
 public sealed partial class AssetCookStatusReader(
     CookPublicationService publication,
-    INativeCompatibilityService nativeCompatibility,
     IEngineContentPak engineContent) : IAssetCookStatusReader
 {
     /// <summary>The code of the status of an asset that cannot be a cook input, such as a deleted script.</summary>
     internal const string InputUnresolvedCode = "asset_status.input_unresolved";
-
-    /// <inheritdoc />
-    public event EventHandler? Changed
-    {
-        add => nativeCompatibility.ObservationChanged += value;
-        remove => nativeCompatibility.ObservationChanged -= value;
-    }
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<AssetCookStatus>> ReadAsync(ProjectContext project, IReadOnlyList<AssetPath> assetUris, CancellationToken cancellationToken = default)
@@ -89,8 +79,7 @@ public sealed partial class AssetCookStatusReader(
         var graph = await CreateDependencyDiscovery(project, prior, libraries).DiscoverAsync(project, inputs, cancellationToken).ConfigureAwait(false);
         graph = libraries.Apply(graph);
         var validGraph = WithCompleteAssets(graph);
-        var producer = prior.Products.IsEmpty ? NativeProducerObservation.Unknown : nativeCompatibility.Observation;
-        var plan = await ReadFreshnessAsync(snapshot, producer.Fingerprint ?? string.Empty, validGraph, prior, cancellationToken).ConfigureAwait(false);
+        var plan = await ReadFreshnessAsync(snapshot, validGraph, prior, cancellationToken).ConfigureAwait(false);
         var changed = await FindChangedInputsAsync(graph.Files, cancellationToken).ConfigureAwait(false);
         var products = prior.Products.ToDictionary(static product => product.SourceUri);
         var sourceStatuses = inputs.DistinctBy(static input => input.AssetUri).ToDictionary(static input => input.AssetUri, input => CreateStatus(
@@ -98,15 +87,13 @@ public sealed partial class AssetCookStatusReader(
             graph,
             plan,
             products,
-            prior.Products.IsEmpty || producer.Fingerprint is not null,
-            producer.Diagnostics,
             metadataUnavailable,
             changed));
-        var states = inputs.Select((input, index) => MapProductStatus(mapped[index].Requested, mapped[index].Container, sourceStatuses[input.AssetUri]))
-            .Concat(unresolved)
-            .Select(state => state with { OutputRoots = snapshot.ProjectRoots }).ToArray();
-        return prior.Products.IsEmpty || producer.Revision == nativeCompatibility.Observation.Revision ? states
-            : states.Select(static state => state with { Freshness = AssetCookFreshness.Unknown }).ToArray();
+        return [
+            .. inputs.Select((input, index) => MapProductStatus(mapped[index].Requested, mapped[index].Container, sourceStatuses[input.AssetUri]))
+                .Concat(unresolved)
+                .Select(state => state with { OutputRoots = snapshot.ProjectRoots }),
+        ];
     }
 
     // The cook input of a requested asset, or, when it cannot be one, the asset's invalid status.
@@ -164,8 +151,6 @@ public sealed partial class AssetCookStatusReader(
         CookDependencyGraph graph,
         FreshnessSnapshot plan,
         Dictionary<AssetPath, CookProvenance.Product> products,
-        bool nativeAvailable,
-        IReadOnlyList<DiagnosticRecord> nativeDiagnostics,
         bool metadataUnavailable,
         HashSet<string> changed)
     {
@@ -184,7 +169,7 @@ public sealed partial class AssetCookStatusReader(
         var needsDiscovery = closure.Overlaps(graph.SourcesNeedingAnalysis);
         var freshness = issues.Any(static issue => string.Equals(issue.Code, AssetImportDiagnosticCodes.SourceMissing, StringComparison.Ordinal)) ? AssetCookFreshness.MissingSource
             : issues.Any(static issue => issue.Severity == DiagnosticSeverity.Error) ? AssetCookFreshness.InvalidSource
-            : metadataUnavailable || !nativeAvailable || inputChanged ? AssetCookFreshness.Unknown
+            : metadataUnavailable || inputChanged ? AssetCookFreshness.Unknown
             : inspectionPending ? changedLibrary ? AssetCookFreshness.OutOfDate : AssetCookFreshness.Unknown
             : prior is null ? AssetCookFreshness.NeedsCooking
             : prior.SourceInput is null || prior.SourceFiles.IsEmpty ? AssetCookFreshness.Unknown
@@ -212,7 +197,7 @@ public sealed partial class AssetCookStatusReader(
             prior is not null,
             availability,
             published,
-            [.. issues, .. nativeDiagnostics])
+            issues)
         {
             SourcePaths = [.. paths],
             SavedSourceHash = graph.Files.FirstOrDefault(file => file.SourcePath == input.SourceAbsolutePath)?.DiscoveryHash,

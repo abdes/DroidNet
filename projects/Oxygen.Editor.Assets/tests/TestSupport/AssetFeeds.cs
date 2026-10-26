@@ -55,8 +55,6 @@ internal static class AssetFeeds
     // No asset has a cook status.
     private sealed class NoCookStatus : IAssetCookStatusReader
     {
-        public event EventHandler? Changed { add { } remove { } }
-
         public Task<IReadOnlyList<AssetCookStatus>> ReadAsync(ProjectContext project, ContentPipeline.Publication.ICookPublicationReadLease publication, IReadOnlyList<AssetPath> assetUris, CancellationToken cancellationToken = default)
             => this.ReadAsync(project, assetUris, cancellationToken);
 

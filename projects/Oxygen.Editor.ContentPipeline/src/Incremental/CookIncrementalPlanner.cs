@@ -40,11 +40,11 @@ internal static class CookIncrementalPlanner
     }
 
     /// <summary>Compares captured inputs with verified output facts without performing more I/O.</summary>
-    public static CookIncrementalPlan CreatePlan(string producer, IReadOnlyList<CookSnapshotInput> inputs,
+    public static CookIncrementalPlan CreatePlan(IReadOnlyList<CookSnapshotInput> inputs,
         CookDependencyGraph graph, CookProvenance previous, ImmutableDictionary<string, CookedInventoryReport> inventories,
         IReadOnlySet<string>? rebuiltRoots = null, IReadOnlySet<AssetPath>? removedSources = null, IReadOnlySet<AssetPath>? rebuiltSources = null)
     {
-        var fingerprints = graph.Assets.ToImmutableDictionary(static input => input.AssetUri, input => Fingerprint(input, producer, inputs, graph));
+        var fingerprints = graph.Assets.ToImmutableDictionary(static input => input.AssetUri, input => Fingerprint(input, inputs, graph));
 
         var sharedRoots = ImmutableHashSet.CreateBuilder<string>(StringComparer.Ordinal);
         var validOutputs = new HashSet<(string root, string path)>();
@@ -103,22 +103,23 @@ internal static class CookIncrementalPlanner
         };
     }
 
-    internal static string Fingerprint(ContentCookInput input, string producer, IReadOnlyList<CookSnapshotInput> inputs, CookDependencyGraph graph)
+    internal static string Fingerprint(ContentCookInput input, IReadOnlyList<CookSnapshotInput> inputs, CookDependencyGraph graph)
     {
         var files = inputs.ToDictionary(static file => file.RelativePath, StringComparer.Ordinal);
-        return Fingerprint(input, producer, graph.FileDependencies[input.AssetUri].Select(path => files[path]),
+        return Fingerprint(input, graph.FileDependencies[input.AssetUri].Select(path => files[path]),
             graph.Dependencies[input.AssetUri], graph.CookedDependencies.GetValueOrDefault(input.AssetUri, []));
     }
 
-    internal static string Fingerprint(ContentCookInput input, string producer, IEnumerable<CookSnapshotInput> files,
+    // A product depends on its inputs alone: the engine's verification of the cooked root refuses outputs in a format
+    // it no longer reads, so the tools that cooked them are no part of the fingerprint.
+    internal static string Fingerprint(ContentCookInput input, IEnumerable<CookSnapshotInput> files,
         IEnumerable<AssetPath> dependencies, IEnumerable<CookedDependencySnapshot> cookedDependencies)
     {
         var authored = Hash(new
         {
-            Version = 1,
+            Version = 2,
             Source = input.AssetUri.ToUriString(),
             input.Kind,
-            Producer = producer,
             Files = files.Select(file => new
             {
                 Path = file.RelativePath,
