@@ -533,8 +533,8 @@ Each note lists what to read first and the traps specific to the issue.
   properties, so this starts after #77's schema and part model.
 - **Light collection pruning:** engine change with explicit native tests; keep
   `VisibleFilter` for callers that prune on purpose.
-- **Material emission:** reuse `InspectorColorField` for the colour and
-  `InspectorNumberField` for HDR intensity, adding any missing capability to
+- **Material emission:** reuse `ColorField` for the colour and
+  `NumberField` for HDR intensity, adding any missing capability to
   those controls with their own tests; edits are scene-edit style records with
   history, and Save, cook and preview all carry them.
 - **Hide mask:** it affects editing views only and is independent of Lock and of
