@@ -224,7 +224,10 @@ Visual states (groups):
 
 Override the control template in XAML to change layout, icons, and animations.
 The control uses an `ItemsRepeater` internally and updates item margins based on
-item depth to provide indentation.
+item depth to provide indentation. A replacement template must host the repeater
+in a `ScrollView` (`PartScrollView`), not a `ScrollViewer`: the repeater
+virtualizes from the effective viewport its scroll host reports, which a
+`ScrollViewer` leaves stale during animated scrolling, so no rows are realized.
 
 The default item row measures content with a compact minimum height, allowing
 larger text or consumer-owned trailing content to grow the row. Set

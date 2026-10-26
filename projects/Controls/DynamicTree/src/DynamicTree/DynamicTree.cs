@@ -25,6 +25,7 @@ namespace DroidNet.Controls;
 /// </summary>
 [TemplatePart(Name = TreeItemPart, Type = typeof(DynamicTreeItem))]
 [TemplatePart(Name = ItemsRepeaterPart, Type = typeof(ItemsRepeater))]
+[TemplatePart(Name = ScrollViewPart, Type = typeof(ScrollView))]
 [TemplatePart(Name = RootGridPart, Type = typeof(Grid))]
 [ViewModel(typeof(DynamicTreeViewModel))]
 public partial class DynamicTree : Control
@@ -38,6 +39,13 @@ public partial class DynamicTree : Control
     /// The name of the ItemsRepeater part in the DynamicTree control template.
     /// </summary>
     public const string ItemsRepeaterPart = "PartItemsRepeater";
+
+    /// <summary>
+    /// The name of the ScrollView part in the DynamicTree control template, which hosts the ItemsRepeater. It must be a
+    /// <see cref="ScrollView"/>: the repeater virtualizes from the effective viewport its scroll host reports, which
+    /// the legacy ScrollViewer leaves stale during animated view changes, realizing no rows.
+    /// </summary>
+    public const string ScrollViewPart = "PartScrollView";
 
     /// <summary>
     /// The name of an instantiated tree item part within the DynamicTree item template.
@@ -59,6 +67,7 @@ public partial class DynamicTree : Control
     private FrameworkElement? dropIndicatorElement;
 
     private ItemsRepeater? itemsRepeater;
+    private ScrollView? scrollView;
     private Grid? rootGrid;
 
     private bool isApplyingFocus;
@@ -161,7 +170,7 @@ public partial class DynamicTree : Control
         // viewport opens its editor at the row's old position, clamped to the edge of the pane.
         // An element the repeater just created has no position until it is arranged; bring it into view only then.
         element.UpdateLayout();
-        element.StartBringIntoView(new BringIntoViewOptions { AnimationDesired = false });
+        await this.BringIntoViewAsync(element).ConfigureAwait(true);
         await this.WaitForLayoutAsync().ConfigureAwait(true);
 
         // Ensure the element has focus before starting rename.
@@ -561,6 +570,7 @@ public partial class DynamicTree : Control
 
         this.itemsRepeater = itemsRepeaterPart;
         this.rootGrid = this.GetTemplateChild(RootGridPart) as Grid;
+        this.scrollView = this.GetTemplateChild(ScrollViewPart) as ScrollView;
         this.ApplyFilterBarTemplate();
 
         this.itemsRepeater.AddHandler(KeyDownEvent, new KeyEventHandler(this.ItemsRepeater_OnKeyDown), handledEventsToo: true);
@@ -880,6 +890,51 @@ public partial class DynamicTree : Control
     }
 
     // Completes after the dispatcher has run the pending layout pass: low-priority work runs after layout.
+    /// <summary>
+    /// Brings an element into view without animation and completes once the scroll view has moved there: a scroll view
+    /// applies the offset on a later frame, after the request returns.
+    /// </summary>
+    /// <param name="element">The realized element.</param>
+    /// <returns>A task that completes when the element is in view.</returns>
+    private async Task BringIntoViewAsync(UIElement element)
+    {
+        if (this.scrollView is not { } scroller)
+        {
+            element.StartBringIntoView(new BringIntoViewOptions { AnimationDesired = false });
+            return;
+        }
+
+        int? correlation = null;
+        var completed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        void OnBringingIntoView(ScrollView sender, ScrollingBringingIntoViewEventArgs args) => correlation = args.CorrelationId;
+        void OnScrollCompleted(ScrollView sender, ScrollingScrollCompletedEventArgs args)
+        {
+            if (args.CorrelationId == correlation)
+            {
+                _ = completed.TrySetResult();
+            }
+        }
+
+        scroller.BringingIntoView += OnBringingIntoView;
+        scroller.ScrollCompleted += OnScrollCompleted;
+        try
+        {
+            element.StartBringIntoView(new BringIntoViewOptions { AnimationDesired = false });
+
+            // A request that needs no scroll raises nothing.
+            await this.WaitForLayoutAsync().ConfigureAwait(true);
+            if (correlation is not null)
+            {
+                await completed.Task.ConfigureAwait(true);
+            }
+        }
+        finally
+        {
+            scroller.BringingIntoView -= OnBringingIntoView;
+            scroller.ScrollCompleted -= OnScrollCompleted;
+        }
+    }
+
     private Task WaitForLayoutAsync()
     {
         var settled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -916,7 +971,7 @@ public partial class DynamicTree : Control
         }
 
         // Key finding: calling StartBringIntoView as part of a focus change can cause an
-        // *outer* ScrollViewer (outside this control) to take focus with FocusState.PointerInput
+        // *outer* scroller (outside this control) to take focus with FocusState.PointerInput
         // on mouse release, which can then raise GotFocus events while we're still
         // processing the focus request. To avoid processing those intermediate GotFocus
         // events we mark that we're applying focus before we start the BringIntoView
@@ -1273,7 +1328,7 @@ public partial class DynamicTree : Control
 
     private void TreeItem_PointerReleased(object sender, PointerRoutedEventArgs args)
     {
-        // Prevent the event from bubbling up to outer controls (like ScrollViewer)
+        // Prevent the event from bubbling up to outer controls (like a scroller)
         // which might steal focus on release.
         // We only swallow the left button release, as that is the one that triggers selection/focus.
         // Right-click release is often used for context menus and should be allowed to bubble.

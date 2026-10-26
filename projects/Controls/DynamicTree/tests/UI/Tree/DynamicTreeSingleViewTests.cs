@@ -27,6 +27,7 @@ public sealed partial class DynamicTreeSingleViewTests : VisualUserInterfaceTest
     /// <summary>
     /// A loading tree attaches through <see cref="DynamicTreeViewModel.TryAttachTree"/>; Debug builds throw there, which a
     /// loaded tree would raise from its Loaded handler as an unhandled UI exception, so the rule is checked at that call.
+    /// Release builds refuse the attach and keep the first tree.
     /// </summary>
     /// <returns>The asynchronous UI test.</returns>
     [TestMethod]
@@ -37,9 +38,12 @@ public sealed partial class DynamicTreeSingleViewTests : VisualUserInterfaceTest
         var displayed = this.viewModel!.DisplayedInteractionItems;
         var second = new TestableDynamicTree { ViewModel = this.viewModel };
 
+#if DEBUG
         var attach = () => this.viewModel.TryAttachTree(second);
-
         _ = attach.Should().Throw<InvalidOperationException>();
+#else
+        _ = this.viewModel.TryAttachTree(second).Should().BeFalse();
+#endif
         _ = this.viewModel.IsAttachedTree(first).Should().BeTrue();
         _ = this.viewModel.DisplayedInteractionItems.Should().BeSameAs(displayed);
         _ = Rows(first).Should().NotBeEmpty();

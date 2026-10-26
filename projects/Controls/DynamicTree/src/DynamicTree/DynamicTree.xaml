@@ -54,7 +54,7 @@
                                     IsHitTestVisible="False" />
                             </Grid>
                         </Grid>
-                        <ScrollViewer Grid.Row="1">
+                        <ScrollView x:Name="PartScrollView" Grid.Row="1">
                             <ItemsRepeater x:Name="PartItemsRepeater" ItemsSource="{Binding Path=DisplayedItems, RelativeSource={RelativeSource Mode=TemplatedParent}, Mode=OneWay}">
                                 <ItemsRepeater.Layout>
                                     <StackLayout />
@@ -87,7 +87,7 @@
                                     </DataTemplate>
                                 </ItemsRepeater.ItemTemplate>
                             </ItemsRepeater>
-                        </ScrollViewer>
+                        </ScrollView>
                     </Grid>
                 </ControlTemplate>
             </Setter.Value>

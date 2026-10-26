@@ -33,7 +33,7 @@ public sealed class DynamicTreeDensityWorkloadTests : VisualUserInterfaceTests
         TreePresentation.ApplyDensity(tree, compact, narrow);
         await LoadTestContentAsync(tree).ConfigureAwait(true);
         var repeater = tree.FindDescendant<ItemsRepeater>()!;
-        var scroller = tree.FindDescendant<ScrollViewer>()!;
+        var scroller = tree.FindDescendant<ScrollView>()!;
         var height = compact ? 32d : 40d;
         _ = tree.ItemRowHeight.Should().Be(height);
         AssertRealizedDensity(repeater, rows.Length, height, compact ? 18 : 24);
@@ -107,9 +107,9 @@ public sealed class DynamicTreeDensityWorkloadTests : VisualUserInterfaceTests
     private static int RealizedCount(ItemsRepeater repeater, int count)
         => Enumerable.Range(0, count).Count(index => repeater.TryGetElement(index) is not null);
 
-    private static async Task ScrollAndRenderAsync(ScrollViewer scroller, double offset)
+    private static async Task ScrollAndRenderAsync(ScrollView scroller, double offset)
     {
-        _ = scroller.ChangeView(horizontalOffset: null, offset, zoomFactor: null, disableAnimation: true);
+        _ = scroller.ScrollTo(0, offset, new ScrollingScrollOptions(ScrollingAnimationMode.Disabled));
         for (var frame = 0; frame < 20; frame++)
         {
             await RenderAsync().ConfigureAwait(true);

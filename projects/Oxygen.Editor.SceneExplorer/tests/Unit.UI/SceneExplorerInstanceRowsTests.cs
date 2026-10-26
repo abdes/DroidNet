@@ -74,24 +74,14 @@ internal sealed class SceneExplorerInstanceRowsTests : DroidNet.Tests.VisualUser
         using var harness = await LargeInstanceHarness.CreateAsync().ConfigureAwait(true);
         using var explorer = await harness.OpenAsync().ConfigureAwait(true);
         var tree = await harness.ShowAsync(explorer).ConfigureAwait(true);
-        var scroller = tree.FindDescendant<ScrollViewer>()!;
+        var scroller = tree.FindDescendant<ScrollView>()!;
 
         // Expand, then scroll down at once as a fast mouse wheel does: animated steps, one frame apart.
-        var changes = new List<string>();
-        void Record(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs args)
-            => changes.Add(string.Create(CultureInfo.InvariantCulture, $"{args.Action}@{args.NewStartingIndex}/{args.OldStartingIndex}x{args.NewItems?.Count ?? args.OldItems?.Count ?? 0}"));
-        var shownItems = (System.Collections.Specialized.INotifyCollectionChanged)explorer.ShownItems;
-        shownItems.CollectionChanged += Record;
-        var viewports = new List<string>();
-        void RecordViewport(FrameworkElement sender, EffectiveViewportChangedEventArgs args)
-            => viewports.Add(string.Create(CultureInfo.InvariantCulture, $"y={args.EffectiveViewport.Y:F0} h={args.EffectiveViewport.Height:F0} at height {sender.ActualHeight:F0}"));
-        var viewportSource = tree.FindDescendant<ItemsRepeater>()!;
-        viewportSource.EffectiveViewportChanged += RecordViewport;
         await explorer.ExpandItemAsync(harness.RootRow(explorer)).ConfigureAwait(true);
         tree.UpdateLayout();
         for (var step = 1; step <= 10; step++)
         {
-            _ = scroller.ChangeView(horizontalOffset: null, scroller.ScrollableHeight * step / 10, zoomFactor: null, disableAnimation: false);
+            _ = scroller.ScrollTo(0, scroller.ScrollableHeight * step / 10, new ScrollingScrollOptions(ScrollingAnimationMode.Enabled));
             await WaitForRenderAsync().ConfigureAwait(true);
         }
 
@@ -102,25 +92,9 @@ internal sealed class SceneExplorerInstanceRowsTests : DroidNet.Tests.VisualUser
             await WaitForRenderAsync().ConfigureAwait(true);
         }
 
-        shownItems.CollectionChanged -= Record;
-        viewportSource.EffectiveViewportChanged -= RecordViewport;
         var problems = RealizedRowProblems(explorer, tree, out var realized);
-        var grouped = changes.GroupBy(static change => change.Split('@')[0]).Select(static group => $"{group.Key} {group.Count()}");
-        var stuck = realized == 0 ? DescribeRepeater(explorer, tree, scroller) : string.Empty;
-        var recovered = -1;
-        if (realized == 0)
-        {
-            // Diagnostic only: whether a measure the repeater was never asked for realizes the rows in view.
-            tree.FindDescendant<ItemsRepeater>()!.InvalidateMeasure();
-            for (var frame = 0; frame < 5; frame++)
-            {
-                await WaitForRenderAsync().ConfigureAwait(true);
-            }
-
-            _ = RealizedRowProblems(explorer, tree, out recovered);
-        }
-
-        _ = realized.Should().BePositive($"{stuck}; after a forced measure {recovered} realized; shown item changes from the expansion on: {string.Join(", ", grouped)}; {viewports.Count} viewport changes, last {string.Join(" | ", viewports.TakeLast(6))}");
+        var rowsInView = (int)(scroller.ViewportHeight / tree.ItemRowHeight);
+        _ = realized.Should().BeGreaterThanOrEqualTo(rowsInView, DescribeRepeater(explorer, tree, scroller));
         _ = problems.Should().BeEmpty($"every realized row of {realized} shows its node at offset {scroller.VerticalOffset:F0}");
     });
 
@@ -130,7 +104,7 @@ internal sealed class SceneExplorerInstanceRowsTests : DroidNet.Tests.VisualUser
         using var harness = await LargeInstanceHarness.CreateAsync().ConfigureAwait(true);
         using var explorer = await harness.OpenAsync().ConfigureAwait(true);
         var tree = await harness.ShowAsync(explorer).ConfigureAwait(true);
-        var scroller = tree.FindDescendant<ScrollViewer>()!;
+        var scroller = tree.FindDescendant<ScrollView>()!;
         await explorer.ExpandItemAsync(harness.RootRow(explorer)).ConfigureAwait(true);
         await WaitForRenderAsync().ConfigureAwait(true);
         await ScrollAsync(scroller, scroller.ScrollableHeight).ConfigureAwait(true);
@@ -162,7 +136,7 @@ internal sealed class SceneExplorerInstanceRowsTests : DroidNet.Tests.VisualUser
         _ = shown.Should().OnlyHaveUniqueItems();
         _ = InstancedRows(explorer).Select(static row => row.Label).Should().Equal(Enumerable.Range(0, NodeCount).Select(NameOf));
         var repeater = tree.FindDescendant<ItemsRepeater>()!;
-        var scroller = tree.FindDescendant<ScrollViewer>()!;
+        var scroller = tree.FindDescendant<ScrollView>()!;
         foreach (var offset in new[] { 0d, scroller.ScrollableHeight / 2, scroller.ScrollableHeight })
         {
             await ScrollAsync(scroller, offset).ConfigureAwait(true);
@@ -221,8 +195,8 @@ internal sealed class SceneExplorerInstanceRowsTests : DroidNet.Tests.VisualUser
         return problems;
     }
 
-    // What the repeater holds against where the scroller is: each child element's index, visibility and position.
-    private static string DescribeRepeater(SceneExplorerViewModel explorer, DynamicTree tree, ScrollViewer scroller)
+    // What the repeater holds against where the scroll view is: each child element's index, visibility and position.
+    private static string DescribeRepeater(SceneExplorerViewModel explorer, DynamicTree tree, ScrollView scroller)
     {
         var repeater = tree.FindDescendant<ItemsRepeater>()!;
         var children = Enumerable.Range(0, VisualTreeHelper.GetChildrenCount(repeater))
@@ -238,9 +212,9 @@ internal sealed class SceneExplorerInstanceRowsTests : DroidNet.Tests.VisualUser
 
     private static string NameOf(int index) => "Part_" + index.ToString("D3", CultureInfo.InvariantCulture);
 
-    private static async Task ScrollAsync(ScrollViewer scroller, double offset)
+    private static async Task ScrollAsync(ScrollView scroller, double offset)
     {
-        _ = scroller.ChangeView(horizontalOffset: null, offset, zoomFactor: null, disableAnimation: true);
+        _ = scroller.ScrollTo(0, offset, new ScrollingScrollOptions(ScrollingAnimationMode.Disabled));
         await WaitUntilAsync(() => Math.Abs(scroller.VerticalOffset - offset) <= 1).ConfigureAwait(true);
         await WaitForRenderAsync().ConfigureAwait(true);
     }
