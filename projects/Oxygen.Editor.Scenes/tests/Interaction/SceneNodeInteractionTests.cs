@@ -32,7 +32,7 @@ public sealed partial class SceneNodeInteractionTests
             session.Context.ProjectId,
             new Dictionary<SceneId, SceneNodeInteraction.SceneInteraction>
             {
-                [sceneId] = new([hidden], [locked], SceneCategories.All),
+                [sceneId] = new([hidden], [NodeReference.To(locked)], SceneCategories.All),
             });
         _ = settings
             .Setup(s => s.LoadSettingAsync(
@@ -46,7 +46,7 @@ public sealed partial class SceneNodeInteractionTests
         await service.RestoreAsync(sceneId).ConfigureAwait(false);
 
         _ = service.IsHidden(hidden).Should().BeTrue("a stored hidden id reloads on scene restore");
-        _ = service.IsLocked(locked).Should().BeTrue("a stored locked id reloads on scene restore");
+        _ = service.IsLocked(NodeReference.To(locked)).Should().BeTrue("a stored locked id reloads on scene restore");
     }
 
     [TestMethod]
@@ -63,7 +63,7 @@ public sealed partial class SceneNodeInteractionTests
         var settings = new Mock<IEditorSettingsManager>(MockBehavior.Loose);
         var service = new SceneNodeInteraction(session, settings.Object, new CapturingOperationResultPublisher(), new OperationStatusReducer());
         await service.RestoreAsync(scene.Id).ConfigureAwait(false);
-        service.SetLocked(parent.Id, isLocked: true);
+        service.SetLocked(NodeReference.To(parent.Id), isLocked: true);
 
         _ = service.GetLockOwner(child).Should().BeSameAs(parent);
         _ = service.GetLockOwner(parent).Should().BeSameAs(parent);
@@ -118,17 +118,17 @@ public sealed partial class SceneNodeInteractionTests
         await service.RestoreAsync(sceneB).ConfigureAwait(false);
         _ = service.HiddenNodeIds().Should().BeEmpty();
         _ = service.Categories.Should().Be(SceneCategories.All);
-        service.SetLocked(nodeB, isLocked: true);
+        service.SetLocked(NodeReference.To(nodeB), isLocked: true);
         service.SetCategories(new SceneCategories(ShowMeshes: true, ShowLights: false, ShowCameras: true));
         await service.RestoreAsync(sceneA).ConfigureAwait(false);
 
         _ = service.IsHidden(nodeA).Should().BeTrue();
-        _ = service.IsLocked(nodeB).Should().BeFalse();
+        _ = service.IsLocked(NodeReference.To(nodeB)).Should().BeFalse();
         _ = service.Categories.Should().Be(new SceneCategories(ShowMeshes: false, ShowLights: true, ShowCameras: false));
         _ = store[session.Context.SettingsScope].Scenes.Keys.Should().BeEquivalentTo([sceneA, sceneB]);
         var restarted = new SceneNodeInteraction(session, settings.Object, new CapturingOperationResultPublisher(), new OperationStatusReducer());
         await restarted.RestoreAsync(sceneB).ConfigureAwait(false);
-        _ = restarted.IsLocked(nodeB).Should().BeTrue();
+        _ = restarted.IsLocked(NodeReference.To(nodeB)).Should().BeTrue();
         _ = restarted.IsHidden(nodeA).Should().BeFalse();
         _ = restarted.Categories.Should().Be(new SceneCategories(ShowMeshes: true, ShowLights: false, ShowCameras: true));
     }
@@ -150,13 +150,13 @@ public sealed partial class SceneNodeInteractionTests
         var secondService = new SceneNodeInteraction(second, settings.Object, new CapturingOperationResultPublisher(), new OperationStatusReducer());
         await secondService.RestoreAsync(sceneId).ConfigureAwait(false);
         _ = secondService.IsHidden(node).Should().BeFalse("another project's session has its own state");
-        secondService.SetLocked(node, isLocked: true);
+        secondService.SetLocked(NodeReference.To(node), isLocked: true);
         await secondService.RestoreAsync(sceneId).ConfigureAwait(false);
 
         var reopened = new SceneNodeInteraction(first, settings.Object, new CapturingOperationResultPublisher(), new OperationStatusReducer());
         await reopened.RestoreAsync(sceneId).ConfigureAwait(false);
         _ = reopened.IsHidden(node).Should().BeTrue();
-        _ = reopened.IsLocked(node).Should().BeFalse("the other session's write does not reach this project");
+        _ = reopened.IsLocked(NodeReference.To(node)).Should().BeFalse("the other session's write does not reach this project");
         _ = store.Keys.Should().BeEquivalentTo([first.Context.SettingsScope, second.Context.SettingsScope]);
     }
 
@@ -233,6 +233,81 @@ public sealed partial class SceneNodeInteractionTests
         _ = service.ActiveSceneId.Should().Be(SceneId.Empty);
         _ = service.IsHidden(hidden).Should().BeFalse();
         _ = service.Categories.Should().Be(SceneCategories.All);
+    }
+
+    [TestMethod]
+    public async Task LocksOfInstancedNodesSurviveARestart()
+    {
+        using var session = OpenSession();
+        var sceneId = SceneId.New();
+        var door = new NodeReference(NodeId.New(), NodePath.Of(NodeId.New(), NodeId.New()));
+        var store = new Dictionary<SettingContext, SceneNodeInteraction.ProjectInteraction>();
+        var settings = CreateStore(store);
+        var service = new SceneNodeInteraction(session, settings.Object, new CapturingOperationResultPublisher(), new OperationStatusReducer());
+        await service.RestoreAsync(sceneId).ConfigureAwait(false);
+
+        service.SetLocked(door, isLocked: true);
+        var restarted = new SceneNodeInteraction(session, settings.Object, new CapturingOperationResultPublisher(), new OperationStatusReducer());
+        await restarted.RestoreAsync(sceneId).ConfigureAwait(false);
+
+        _ = restarted.IsLocked(door).Should().BeTrue("settings LLD 5.1: an instanced node is locked by its instance root and node path");
+        _ = restarted.IsLocked(NodeReference.To(door.Node)).Should().BeFalse("locking an instanced node does not lock its instance root");
+    }
+
+    [TestMethod]
+    public async Task GetLockOwner_OfAnInstancedNodeChecksItsPathThenTheInstanceRootsAncestry()
+    {
+        using var session = OpenSession();
+        var scene = CreateScene();
+        var group = new SceneNode(scene, "Group");
+        var car = new SceneNode(scene, "Car");
+        group.Hierarchy.AddChild(car);
+        scene.RootNodes.Add(group);
+        var wheel = new NodeReference(car.Id, NodePath.Of(NodeId.New()));
+        var rim = new NodeReference(car.Id, wheel.Path.Append(NodeId.New()));
+        var service = new SceneNodeInteraction(session, new Mock<IEditorSettingsManager>().Object, new CapturingOperationResultPublisher(), new OperationStatusReducer());
+        await service.RestoreAsync(scene.Id).ConfigureAwait(false);
+
+        _ = service.GetLockOwner(scene, rim).Should().BeNull();
+
+        service.SetLocked(NodeReference.To(group.Id), isLocked: true);
+        _ = service.GetLockOwner(scene, rim).Should().Be(NodeReference.To(group.Id), "an ancestor of the instance root locks what the instance brought in");
+
+        service.SetLocked(wheel, isLocked: true);
+        _ = service.GetLockOwner(scene, rim).Should().Be(wheel, "the closest locked node owns the lock");
+        _ = service.GetLockOwner(CreateScene(), rim).Should().BeNull("an inactive scene must not inherit the active scene's lock state");
+    }
+
+    [TestMethod]
+    public async Task DropUnresolvedLocks_DropsOnlyThePathsTheSourceNoLongerHolds()
+    {
+        using var session = OpenSession();
+        var sceneId = SceneId.New();
+        var root = NodeId.New();
+        var kept = new NodeReference(root, NodePath.Of(NodeId.New()));
+        var gone = new NodeReference(root, NodePath.Of(NodeId.New()));
+        var otherInstance = new NodeReference(NodeId.New(), gone.Path);
+        var store = new Dictionary<SettingContext, SceneNodeInteraction.ProjectInteraction>();
+        var service = new SceneNodeInteraction(session, CreateStore(store).Object, new CapturingOperationResultPublisher(), new OperationStatusReducer());
+        await service.RestoreAsync(sceneId).ConfigureAwait(false);
+        foreach (var node in new[] { kept, gone, otherInstance, NodeReference.To(root) })
+        {
+            service.SetLocked(node, isLocked: true);
+        }
+
+        var changes = 0;
+        service.StateChanged += (_, _) => changes++;
+        service.DropUnresolvedLocks(root, path => path.Equals(kept.Path));
+
+        _ = service.IsLocked(gone).Should().BeFalse("a swap, reimport or removed change took its node away");
+        _ = service.IsLocked(kept).Should().BeTrue();
+        _ = service.IsLocked(otherInstance).Should().BeTrue("another instance's nodes are not this structure's");
+        _ = service.IsLocked(NodeReference.To(root)).Should().BeTrue("the instance root is a node of the scene");
+        _ = changes.Should().Be(1);
+        _ = store[session.Context.SettingsScope].Scenes[sceneId].LockedNodeIds.Should().NotContain(gone);
+
+        service.DropUnresolvedLocks(root, _ => true);
+        _ = changes.Should().Be(1, "nothing dropped, nothing changed");
     }
 
     [TestMethod]

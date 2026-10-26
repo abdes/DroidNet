@@ -53,7 +53,7 @@ internal sealed class ComponentFiltersTests : DroidNet.Tests.VisualUserInterface
 
         var editor = model.PropertyEditors.OfType<DirectionalLightViewModel>().Single();
         _ = editor.IsInputEnabled.Should().BeTrue();
-        interaction.SetLocked(fixture.Node.Id, isLocked: true);
+        interaction.SetLocked(NodeReference.To(fixture.Node.Id), isLocked: true);
         await WaitForRenderAsync().ConfigureAwait(true);
         _ = editor.IsInputEnabled.Should().BeFalse("the lock notification must disable the active component editor");
 
@@ -291,7 +291,7 @@ internal sealed class ComponentFiltersTests : DroidNet.Tests.VisualUserInterface
         scene = metadata.Scene;
         node = metadata.NodeOf(node);
         fixture.Area.Activate(metadata.Document);
-        fixture.Selection.SetSelection(metadata.DocumentId, [node], "Test");
+        fixture.Selection.SetSelection(metadata.DocumentId, [NodeReference.To(node.Id)], "Test");
         await WaitForRenderAsync().ConfigureAwait(true);
         _ = model.IsAllComponentsSelected.Should().BeTrue();
         _ = model.SelectedNode.Should().BeSameAs(node);

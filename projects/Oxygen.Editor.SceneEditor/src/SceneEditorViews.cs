@@ -4,6 +4,7 @@
 
 using DroidNet.Documents;
 using Oxygen.Editor.Scenes.Views;
+using Oxygen.Editor.World;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.SceneEditor;
@@ -17,7 +18,7 @@ public sealed class SceneEditorViews : ISceneViews
     private readonly Dictionary<DocumentId, SceneEditorViewModel> editors = [];
 
     /// <inheritdoc/>
-    public Task<bool> FrameAsync(DocumentId document, IReadOnlyList<NodeId> nodes)
+    public Task<bool> FrameAsync(DocumentId document, IReadOnlyList<NodeReference> nodes)
         => this.editors.TryGetValue(document, out var editor) ? editor.FrameNodesAsync(nodes) : Task.FromResult(false);
 
     /// <inheritdoc/>

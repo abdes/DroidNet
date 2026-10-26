@@ -6,6 +6,7 @@ using Oxygen.Editor.LivePreview.Play;
 using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.Shell.Documents;
+using Oxygen.Editor.World;
 
 namespace Oxygen.Editor.Problems;
 
@@ -33,7 +34,7 @@ public sealed class RuntimeProblemNodes(IRuntimeProblemSource runtime, IDocument
             return false;
         }
 
-        selection.SetSelection(target.Document, [node], SelectionSource);
+        selection.SetSelection(target.Document, [NodeReference.To(node.Id)], SelectionSource);
         return true;
     }
 }

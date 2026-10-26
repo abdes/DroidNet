@@ -142,6 +142,22 @@ public partial class Scene : GameObject, IPersistent<Serialization.SceneData>
     }
 
     /// <summary>
+    /// Gets whether a reference can name a node of this scene: a node of the scene itself, or a node below one of its
+    /// instance roots.
+    /// </summary>
+    /// <param name="reference">The reference.</param>
+    /// <returns>
+    /// Whether the node, or the instance root the path starts from, is in the scene. Whether the instanced source holds
+    /// the path is known from that source's structure, not from the scene.
+    /// </returns>
+    public bool Holds(NodeReference reference)
+    {
+        ArgumentNullException.ThrowIfNull(reference);
+        var node = this.AllNodes.FirstOrDefault(node => node.Id == reference.Node);
+        return node is not null && (reference.IsOwned || node.Components.OfType<SceneInstanceComponent>().Any());
+    }
+
+    /// <summary>
     ///     Dehydrates this scene to a data transfer object.
     /// </summary>
     /// <returns>A data transfer object containing the current state of this scene.</returns>

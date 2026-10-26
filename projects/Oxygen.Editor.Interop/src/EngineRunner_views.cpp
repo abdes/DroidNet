@@ -785,7 +785,7 @@ namespace Oxygen::Interop {
   }
 
   auto EngineRunner::TryFrameViewAsync(EngineContext^ ctx, ViewIdManaged viewId,
-    array<System::Guid>^ nodeIds)
+    array<NodeReferenceManaged^>^ nodeIds)
     -> System::Threading::Tasks::Task<ViewFramingOutcomeManaged>^
   {
     if (ctx == nullptr) {
@@ -811,12 +811,11 @@ namespace Oxygen::Interop {
         ViewFramingOutcomeManaged::NoView);
     }
 
-    std::vector<oxygen::interop::module::UuidKey> nodes;
+    std::vector<oxygen::interop::module::NodeReferenceKey> nodes;
     if (nodeIds != nullptr) {
       nodes.reserve(static_cast<std::size_t>(nodeIds->Length));
-      for each (System::Guid id in nodeIds) {
-        nodes.push_back(
-          detail::ToNativeKey<oxygen::interop::module::UuidKey>(id));
+      for each (NodeReferenceManaged^ reference in nodeIds) {
+        nodes.push_back(NodeReferenceManaged::ToNative(reference));
       }
     }
 
@@ -840,7 +839,7 @@ namespace Oxygen::Interop {
   }
 
   auto EngineRunner::TrySetSelectionOutline(EngineContext^ ctx,
-    array<System::Guid>^ nodeIds, System::Nullable<System::Guid> activeNodeId)
+    array<NodeReferenceManaged^>^ nodeIds, NodeReferenceManaged^ activeNodeId)
     -> bool
   {
     if (ctx == nullptr) {
@@ -860,18 +859,16 @@ namespace Oxygen::Interop {
       return false;
     }
 
-    std::vector<oxygen::interop::module::UuidKey> nodes;
+    std::vector<oxygen::interop::module::NodeReferenceKey> nodes;
     if (nodeIds != nullptr) {
       nodes.reserve(static_cast<std::size_t>(nodeIds->Length));
-      for each (System::Guid id in nodeIds) {
-        nodes.push_back(
-          detail::ToNativeKey<oxygen::interop::module::UuidKey>(id));
+      for each (NodeReferenceManaged^ reference in nodeIds) {
+        nodes.push_back(NodeReferenceManaged::ToNative(reference));
       }
     }
-    std::optional<oxygen::interop::module::UuidKey> active;
-    if (activeNodeId.HasValue) {
-      active = detail::ToNativeKey<oxygen::interop::module::UuidKey>(
-        activeNodeId.Value);
+    std::optional<oxygen::interop::module::NodeReferenceKey> active;
+    if (activeNodeId != nullptr) {
+      active = NodeReferenceManaged::ToNative(activeNodeId);
     }
     try {
       editor_module_opt->get().SetSelectionOutline(std::move(nodes), active);

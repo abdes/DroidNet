@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using Microsoft.UI.Xaml.Controls;
+using Oxygen.Editor.World;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Runtime.Engine;
@@ -433,21 +434,21 @@ public interface IEngineService : IAsyncDisposable
     /// changes the authored scene.
     /// </summary>
     /// <param name="viewId">The view whose editor camera moves.</param>
-    /// <param name="nodeIds">The nodes to frame, with their descendants; empty frames the whole scene.</param>
+    /// <param name="nodes">The nodes to frame, with their descendants; empty frames the whole scene.</param>
     /// <returns>What the request did.</returns>
-    public Task<RuntimeFramingOutcome> FrameViewAsync(RuntimeViewId viewId, IReadOnlyList<NodeId> nodeIds);
+    public Task<RuntimeFramingOutcome> FrameViewAsync(RuntimeViewId viewId, IReadOnlyList<NodeReference> nodes);
 
     /// <summary>
     /// Outline the selected nodes, and their descendants, in every editing view that shows the
     /// selection outline. The active node is drawn brighter.
     /// </summary>
-    /// <param name="nodeIds">The selected nodes; empty clears the outline.</param>
-    /// <param name="activeNodeId">The active (last selected) node, if any.</param>
+    /// <param name="nodes">The selected nodes; empty clears the outline.</param>
+    /// <param name="activeNode">The active (last selected) node, if any.</param>
     /// <returns>
     ///     A <see cref="Task"/> that completes with <see langword="true"/> on success, or
     ///     <see langword="false"/> on failure.
     /// </returns>
-    public Task<bool> SetSelectionOutlineAsync(IReadOnlyList<NodeId> nodeIds, NodeId? activeNodeId);
+    public Task<bool> SetSelectionOutlineAsync(IReadOnlyList<NodeReference> nodes, NodeReference? activeNode);
 
     /// <summary>
     /// Show the transform gizmo of the given targets in every editing view, or hide it for the

@@ -12,6 +12,7 @@ using Oxygen.Editor.Schemas;
 using Oxygen.Editor.Scripting;
 using Oxygen.Editor.Shell.Documents;
 using Oxygen.Editor.Shell.Windows;
+using Oxygen.Editor.World;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
@@ -81,12 +82,12 @@ public sealed class CookRecovery(
         {
             if (content.Scene.AllNodes.FirstOrDefault(candidate => candidate.Id == nodeId) is { } node)
             {
-                selection.SetSelection(document.Id, [node], SelectionSource);
+                selection.SetSelection(document.Id, [NodeReference.To(node.Id)], SelectionSource);
             }
         }
         else
         {
-            selection.Publish(document.Id, new SceneSelectionContext(SceneSelectionKind.Scene, [], [], PrimaryNodeId: null, PrimaryFolderId: null), SelectionSource);
+            selection.Publish(document.Id, new SceneSelectionContext(SceneSelectionKind.Scene, [], [], PrimaryNode: null, PrimaryFolderId: null), SelectionSource);
             selection.RequestPropertyFocus(document.Id, property, SelectionSource);
         }
 

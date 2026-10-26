@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using DroidNet.Documents;
+using Oxygen.Editor.World;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Scenes.Views;
@@ -16,9 +17,9 @@ public interface ISceneViews
 {
     /// <summary>Frames nodes in the active viewport of the editor that shows a scene document.</summary>
     /// <param name="document">The scene document.</param>
-    /// <param name="nodes">The nodes to frame.</param>
+    /// <param name="nodes">The nodes to frame: nodes of the scene and nodes an instance brought in.</param>
     /// <returns><see langword="true"/> when a viewport framed them.</returns>
-    public Task<bool> FrameAsync(DocumentId document, IReadOnlyList<NodeId> nodes);
+    public Task<bool> FrameAsync(DocumentId document, IReadOnlyList<NodeReference> nodes);
 
     /// <summary>Runs a camera command in the active viewport of the editor that shows a scene document.</summary>
     /// <param name="document">The scene document.</param>

@@ -13,13 +13,17 @@
 
 #pragma managed(push, on)
 
+#include <Views/NodeReferenceManaged.h>
+
 namespace Oxygen::Interop {
 
   /// <summary>A scene node with visible pixels in a picked rectangle.</summary>
   public
   ref class ViewPickHitManaged sealed {
   public:
-    property System::Guid NodeId;
+    /// <summary>The node; a node an instance brought in is named by its
+    /// path.</summary>
+    property NodeReferenceManaged^ Node;
 
     /// <summary>Device depth of the node's nearest pixel.</summary>
     property float Depth;
@@ -50,12 +54,8 @@ namespace Oxygen::Interop {
         static_cast<int>(result.hits.size()));
       for (int i = 0; i < managed->Hits->Length; ++i) {
         const auto& hit = result.hits[static_cast<std::size_t>(i)];
-        auto bytes = gcnew array<System::Byte>(16);
-        for (int b = 0; b < 16; ++b) {
-          bytes[b] = hit.node[static_cast<std::size_t>(b)];
-        }
         auto item = gcnew ViewPickHitManaged();
-        item->NodeId = System::Guid(bytes);
+        item->Node = NodeReferenceManaged::FromNative(hit.node);
         item->Depth = hit.depth;
         item->GeometrySlot = hit.geometry_slot.get();
         item->CenterDistance = hit.center_distance;

@@ -5,6 +5,7 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Editor.World;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Runtime.Tests;
@@ -131,9 +132,9 @@ internal sealed class FakeEngineSession : EngineSession
 
     public override Task<RuntimePickResult?> PickViewAsync(RuntimeViewId viewId, RuntimePickRect rect) => Task.FromResult<RuntimePickResult?>(null);
 
-    public override Task<RuntimeFramingOutcome> FrameViewAsync(RuntimeViewId viewId, IReadOnlyList<NodeId> nodeIds) => Task.FromResult(RuntimeFramingOutcome.Framed);
+    public override Task<RuntimeFramingOutcome> FrameViewAsync(RuntimeViewId viewId, IReadOnlyList<NodeReference> nodes) => Task.FromResult(RuntimeFramingOutcome.Framed);
 
-    public override bool SetSelectionOutline(IReadOnlyList<NodeId> nodeIds, NodeId? activeNodeId) => true;
+    public override bool SetSelectionOutline(IReadOnlyList<NodeReference> nodes, NodeReference? activeNode) => true;
 
     public override bool SetTransformGizmo(RuntimeTransformGizmo gizmo) => true;
 

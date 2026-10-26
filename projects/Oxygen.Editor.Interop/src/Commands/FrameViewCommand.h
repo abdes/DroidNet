@@ -31,7 +31,7 @@ namespace oxygen::interop::module {
     using Callback = std::function<void(EditorFramingOutcome)>;
 
     FrameViewCommand(ViewManager* manager, ViewId view_id,
-      std::vector<UuidKey> nodes, Callback callback) noexcept
+      std::vector<NodeReferenceKey> nodes, Callback callback) noexcept
       : EditorCommand(oxygen::core::PhaseId::kSceneMutation)
       , view_manager_(manager)
       , view_id_(view_id)
@@ -58,7 +58,7 @@ namespace oxygen::interop::module {
 
     ViewManager* view_manager_;
     ViewId view_id_;
-    std::vector<UuidKey> nodes_;
+    std::vector<NodeReferenceKey> nodes_;
     Callback callback_;
   };
 

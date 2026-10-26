@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Editor.World;
 using Oxygen.Interop;
 using Oxygen.Managed.Core;
 
@@ -78,13 +79,16 @@ internal sealed partial class NativeEngineSession
             await this.Runner.TryPickViewAsync(this.context, new(viewId.Value), rect.X, rect.Y, rect.Width, rect.Height).ConfigureAwait(false));
 
     /// <inheritdoc />
-    public override async Task<RuntimeFramingOutcome> FrameViewAsync(RuntimeViewId viewId, IReadOnlyList<NodeId> nodeIds)
+    public override async Task<RuntimeFramingOutcome> FrameViewAsync(RuntimeViewId viewId, IReadOnlyList<NodeReference> nodes)
         => NativeSessionConversions.FromNative(
-            await this.Runner.TryFrameViewAsync(this.context, new(viewId.Value), [.. nodeIds.Select(static id => id.Value)]).ConfigureAwait(false));
+            await this.Runner.TryFrameViewAsync(this.context, new(viewId.Value), [.. nodes.Select(NativeSessionConversions.ToNative)]).ConfigureAwait(false));
 
     /// <inheritdoc />
-    public override bool SetSelectionOutline(IReadOnlyList<NodeId> nodeIds, NodeId? activeNodeId)
-        => this.Runner.TrySetSelectionOutline(this.context, [.. nodeIds.Select(static id => id.Value)], activeNodeId?.Value);
+    public override bool SetSelectionOutline(IReadOnlyList<NodeReference> nodes, NodeReference? activeNode)
+        => this.Runner.TrySetSelectionOutline(
+            this.context,
+            [.. nodes.Select(NativeSessionConversions.ToNative)],
+            activeNode is null ? null : NativeSessionConversions.ToNative(activeNode));
 
     /// <inheritdoc />
     public override bool SetTransformGizmo(RuntimeTransformGizmo gizmo)

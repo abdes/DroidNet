@@ -33,7 +33,7 @@ internal sealed class InspectorSelectionRoutingTests : DroidNet.Tests.VisualUser
         var folderId = FolderId.New();
         fixture.Selection.Publish(
             fixture.TestScene.DocumentId,
-            new SceneSelectionContext(SceneSelectionKind.Folder, [], [folderId], PrimaryNodeId: null, folderId),
+            new SceneSelectionContext(SceneSelectionKind.Folder, [], [folderId], PrimaryNode: null, folderId),
             "Test");
         _ = host.HasSelectionSummary.Should().BeTrue();
         _ = host.InspectorTitle.Should().Be("Grouping Summary");
@@ -54,7 +54,7 @@ internal sealed class InspectorSelectionRoutingTests : DroidNet.Tests.VisualUser
         var folderId = FolderId.New();
         fixture.Selection.Publish(
             fixture.TestScene.DocumentId,
-            new SceneSelectionContext(SceneSelectionKind.Mixed, [fixture.Node.Id], [folderId], fixture.Node.Id, PrimaryFolderId: null),
+            new SceneSelectionContext(SceneSelectionKind.Mixed, [NodeReference.To(fixture.Node.Id)], [folderId], NodeReference.To(fixture.Node.Id), PrimaryFolderId: null),
             "Test");
         _ = host.HasSelectionSummary.Should().BeTrue();
         _ = host.InspectorTitle.Should().Be("Selection Summary");
@@ -72,7 +72,7 @@ internal sealed class InspectorSelectionRoutingTests : DroidNet.Tests.VisualUser
         using var host = fixture.CreateInspectorHost("Environment");
         fixture.Selection.Publish(
             fixture.TestScene.DocumentId,
-            new SceneSelectionContext(SceneSelectionKind.Scene, [], [], PrimaryNodeId: null, PrimaryFolderId: null),
+            new SceneSelectionContext(SceneSelectionKind.Scene, [], [], PrimaryNode: null, PrimaryFolderId: null),
             "Test");
         _ = host.HasSceneSettings.Should().BeTrue();
         _ = host.HasSelectionSummary.Should().BeFalse();
@@ -106,7 +106,7 @@ internal sealed class InspectorSelectionRoutingTests : DroidNet.Tests.VisualUser
 
         fixture.Selection.Publish(
             DocumentId.New(),
-            new SceneSelectionContext(SceneSelectionKind.Folder, [], [folderId], PrimaryNodeId: null, folderId),
+            new SceneSelectionContext(SceneSelectionKind.Folder, [], [folderId], PrimaryNode: null, folderId),
             "Test");
 
         _ = host.SelectedNode.Should().BeSameAs(fixture.Node);
@@ -119,7 +119,7 @@ internal sealed class InspectorSelectionRoutingTests : DroidNet.Tests.VisualUser
     {
         using var fixture = new SceneAuthoringFixture();
         var folderId = FolderId.New();
-        var previous = new SceneSelectionContext(SceneSelectionKind.Folder, [], [folderId], PrimaryNodeId: null, folderId);
+        var previous = new SceneSelectionContext(SceneSelectionKind.Folder, [], [folderId], PrimaryNode: null, folderId);
 
         // A subscriber that runs before the Inspector replaces the folder selection while it is still being announced:
         // the Inspector then sees a change whose context the service no longer holds.
@@ -149,7 +149,7 @@ internal sealed class InspectorSelectionRoutingTests : DroidNet.Tests.VisualUser
         using var fixture = new SceneAuthoringFixture();
         using var host = fixture.CreateInspectorHost("Transform");
         var missingNodeId = NodeId.New();
-        var context = new SceneSelectionContext(SceneSelectionKind.Node, [missingNodeId], [], missingNodeId, PrimaryFolderId: null);
+        var context = SceneSelectionContext.ForNodes([NodeReference.To(missingNodeId)]);
         fixture.Selection.Publish(fixture.TestScene.DocumentId, context, "Test");
 
         _ = host.HasSceneSettings.Should().BeFalse();
@@ -166,7 +166,7 @@ internal sealed class InspectorSelectionRoutingTests : DroidNet.Tests.VisualUser
         using var fixture = new SceneAuthoringFixture();
         using var host = fixture.CreateInspectorHost("Transform");
         var folderId = FolderId.New();
-        var folderContext = new SceneSelectionContext(SceneSelectionKind.Folder, [], [folderId], PrimaryNodeId: null, folderId);
+        var folderContext = new SceneSelectionContext(SceneSelectionKind.Folder, [], [folderId], PrimaryNode: null, folderId);
         fixture.Selection.Publish(fixture.TestScene.DocumentId, folderContext, "Test");
         _ = host.PropertyEditors.Should().BeEmpty();
 

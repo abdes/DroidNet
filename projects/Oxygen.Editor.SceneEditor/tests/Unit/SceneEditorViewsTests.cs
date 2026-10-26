@@ -5,6 +5,7 @@
 using AwesomeAssertions;
 using DroidNet.Documents;
 using Oxygen.Editor.Scenes.Views;
+using Oxygen.Editor.World;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.SceneEditor.Unit.Tests;
@@ -18,7 +19,7 @@ public sealed class SceneEditorViewsTests
     {
         var views = new SceneEditorViews();
 
-        var framed = await views.FrameAsync(DocumentId.New(), [NodeId.New()]).ConfigureAwait(false);
+        var framed = await views.FrameAsync(DocumentId.New(), [NodeReference.To(NodeId.New())]).ConfigureAwait(false);
 
         _ = framed.Should().BeFalse();
     }

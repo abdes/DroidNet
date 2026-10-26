@@ -116,7 +116,7 @@ public sealed partial class SceneExplorerAuthoringTests
         _ = SceneExplorerViewModel.BuildSelectionContext([]).Kind.Should().Be(SceneSelectionKind.Empty);
 
         var nodeContext = SceneExplorerViewModel.BuildSelectionContext([nodeAdapter]);
-        _ = nodeContext.PrimaryNodeId.Should().Be(node.Id);
+        _ = nodeContext.OwnedPrimaryNodeId.Should().Be(node.Id);
         _ = nodeContext.PrimaryFolderId.Should().BeNull();
     }
 

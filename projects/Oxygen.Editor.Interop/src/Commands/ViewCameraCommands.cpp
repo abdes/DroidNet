@@ -201,8 +201,9 @@ namespace oxygen::interop::module {
     } else {
       std::vector<scene::NodeHandle> handles;
       handles.reserve(nodes_.size());
-      for (const auto& id : nodes_) {
-        if (const auto handle = NodeRegistry::Lookup(id)) {
+      for (const auto& reference : nodes_) {
+        if (const auto handle
+          = NodeRegistry::Lookup(*context.Scene, reference)) {
           handles.push_back(*handle);
         }
       }

@@ -228,7 +228,7 @@ public partial class SceneExplorerViewModel
         var selected = this.GetSelectedItems().ToArray();
 
         // Authoritative identities can include collapsed/unrealized rows. Never silently shrink that batch.
-        foreach (var id in selection.SelectedNodeIds)
+        foreach (var id in selection.OwnedNodeIds)
         {
             if (this.projection.GetNode(id) is { } row && !selected.Contains(row))
             {
@@ -279,7 +279,7 @@ public partial class SceneExplorerViewModel
             && ReferenceEquals(this.CurrentAuthoring(), context.Authoring)
             && this.openDocuments.Find(context.Authoring.Document) is { Content: SceneContent { Scene: var scene } } && ReferenceEquals(scene, context.Authoring.Scene)
             && SameSelection(this.selectionService.GetContext(context.Authoring.Document), context.Selection)
-            && context.Selection.SelectedNodeIds.All(id => this.projection.GetNode(id) is not null)
+            && context.Selection.OwnedNodeIds.All(id => this.projection.GetNode(id) is not null)
             && context.Selection.SelectedFolderIds.All(id => this.projection.GetFolder(id) is not null)
             && context.SelectedRows.All(this.IsCurrentContextRow)
             && context.Parentage.All(static captured => ReferenceEquals(captured.Row.Parent, captured.Parent)
@@ -288,8 +288,8 @@ public partial class SceneExplorerViewModel
     }
 
     private static bool SameSelection(SceneSelectionContext left, SceneSelectionContext right)
-        => left.Kind == right.Kind && left.PrimaryNodeId == right.PrimaryNodeId && left.PrimaryFolderId == right.PrimaryFolderId
-            && left.SelectedNodeIds.SequenceEqual(right.SelectedNodeIds)
+        => left.Kind == right.Kind && left.PrimaryNode == right.PrimaryNode && left.PrimaryFolderId == right.PrimaryFolderId
+            && left.SelectedNodes.SequenceEqual(right.SelectedNodes)
             && left.SelectedFolderIds.SequenceEqual(right.SelectedFolderIds);
 
     private bool IsCurrentContextRow(ITreeItem row) => row switch
@@ -493,7 +493,7 @@ public partial class SceneExplorerViewModel
             {
                 for (var parent = row.AttachedObject.Hierarchy.Parent; parent is not null; parent = parent.Hierarchy.Parent)
                 {
-                    if (kind == SceneExplorerCommandKind.Show ? this.interaction!.IsHidden(parent.Id) : this.interaction!.IsLocked(parent.Id))
+                    if (kind == SceneExplorerCommandKind.Show ? this.interaction!.IsHidden(parent.Id) : this.interaction!.IsLocked(NodeReference.To(parent.Id)))
                     {
                         return $"{(kind == SceneExplorerCommandKind.Show ? "Hidden" : "Locked")} by {parent.Metadata.Name}.";
                     }
@@ -653,7 +653,7 @@ public partial class SceneExplorerViewModel
             case SceneExplorerCommandKind.Unlock:
                 foreach (var id in nodes)
                 {
-                    this.interaction!.SetLocked(id, kind == SceneExplorerCommandKind.Lock);
+                    this.interaction!.SetLocked(NodeReference.To(id), kind == SceneExplorerCommandKind.Lock);
                 }
 
                 break;

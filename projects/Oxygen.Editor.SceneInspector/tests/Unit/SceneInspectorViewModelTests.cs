@@ -67,7 +67,7 @@ internal sealed class SceneInspectorViewModelTests
             Mock.Of<IOperationResultPublisher>(),
             new OperationStatusReducer());
         await interaction.RestoreAsync(scene.Id).ConfigureAwait(false);
-        interaction.SetLocked(parent.Id, isLocked: true);
+        interaction.SetLocked(NodeReference.To(parent.Id), isLocked: true);
 
         using var testScene = TestScenes.Open(child.Scene, project: project);
         using var surfaces = new FakeSurfaceProvider();
@@ -169,7 +169,7 @@ internal sealed class SceneInspectorViewModelTests
 
         var documents = new TestDocumentArea(testScene.Document);
         var selectionService = new SceneSelectionService();
-        selectionService.SetSelection(testScene.DocumentId, nodes, "Test");
+        selectionService.SetSelection(testScene.DocumentId, [.. nodes.Select(node => NodeReference.To(node.Id))], "Test");
 
         return new SceneInspectorViewModel(
             new HostingContext

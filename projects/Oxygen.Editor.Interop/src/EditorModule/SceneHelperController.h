@@ -41,6 +41,22 @@ namespace oxygen::interop::module {
     float display_scale { 1.0F };
   };
 
+  //! What the helpers show of the workspace state and the selection.
+  struct HelperNodeFilter {
+    //! Workspace-hidden nodes, which hide their descendants too.
+    std::unordered_set<UuidKey, UuidKeyHash> hidden;
+    std::unordered_set<UuidKey, UuidKeyHash> locked;
+    std::unordered_set<NodeReferenceKey, NodeReferenceKeyHash> selected;
+    std::optional<NodeReferenceKey> active;
+  };
+
+  //! The lights, cameras and local fog volumes of `scene` that have helpers:
+  //! the editor's nodes and the nodes its instances brought in, except the
+  //! hidden ones.
+  OXGN_EI_NDAPI auto CollectHelperNodes(
+    scene::Scene& scene, const HelperNodeFilter& filter)
+    -> std::vector<SceneHelperNode>;
+
   //! Light and camera icons, the selected nodes' helpers with their handles,
   //! and the orientation triad of every editing view.
   /*!
@@ -65,7 +81,8 @@ namespace oxygen::interop::module {
     //! Reads this frame's lights and cameras; the engine thread calls it
     //! before input. A new scene generation cancels a drag.
     void BeginFrame(scene::Scene* scene, std::uint64_t scene_generation,
-      const std::vector<UuidKey>& selected, std::optional<UuidKey> active);
+      const std::vector<NodeReferenceKey>& selected,
+      std::optional<NodeReferenceKey> active);
     [[nodiscard]] auto IsDragging() const noexcept -> bool
     {
       return drag_.has_value();
@@ -99,7 +116,6 @@ namespace oxygen::interop::module {
     //! and with the selected cameras' viewing volumes for its extent.
     [[nodiscard]] auto NodesFor(EditorView& view) const
       -> std::vector<SceneHelperNode>;
-    void CollectNodes();
     void SetHover(ViewId view, std::optional<HelperHandleHit> handle,
       TriadAxis triad);
     void CancelDrag();
@@ -118,10 +134,7 @@ namespace oxygen::interop::module {
     scene::Scene* scene_ { nullptr };
     std::uint64_t scene_generation_ { 0U };
     float display_scale_ { 1.0F };
-    std::unordered_set<UuidKey, UuidKeyHash> hidden_;
-    std::unordered_set<UuidKey, UuidKeyHash> locked_;
-    std::unordered_set<UuidKey, UuidKeyHash> selected_;
-    std::optional<UuidKey> active_;
+    HelperNodeFilter filter_;
     std::vector<SceneHelperNode> nodes_;
     ViewId hover_view_ { kInvalidViewId };
     std::optional<HelperHandleHit> hovered_handle_;

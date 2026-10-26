@@ -553,7 +553,7 @@ namespace oxygen::interop::module {
         continue;
       }
       hits.push_back(HelperIconHit {
-        .id = node.id,
+        .node = node.node,
         .center_distance
         = std::max(glm::distance(*center, rect_center) - radius, 0.0F),
         .depth = camera.DeviceDepth(node.position),
@@ -778,7 +778,7 @@ namespace oxygen::interop::module {
         continue;
       }
       const auto dragged
-        = visual.drag != nullptr && visual.drag->Node().id == stored.id;
+        = visual.drag != nullptr && visual.drag->Node().node == stored.node;
       const auto& node = dragged ? visual.drag->Node() : stored;
       const auto color = Tint(node);
       const auto width = (node.active ? kActiveStrokePixels

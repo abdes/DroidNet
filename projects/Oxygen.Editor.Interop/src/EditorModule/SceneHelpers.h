@@ -37,7 +37,8 @@ namespace oxygen::interop::module {
   //! when selected, a helper for. Editor overlay data, never authored or
   //! cooked.
   struct SceneHelperNode {
-    UuidKey id {};
+    //! The node; a node an instance brought in is named by its path.
+    NodeReferenceKey node {};
     SceneHelperKind kind { SceneHelperKind::kPointLight };
     //! World position of the node's origin.
     glm::vec3 position { 0.0F };
@@ -82,7 +83,7 @@ namespace oxygen::interop::module {
 
   //! An icon inside a picked rectangle.
   struct HelperIconHit {
-    UuidKey id {};
+    NodeReferenceKey node {};
     //! Pixels from the rectangle centre to the icon; zero when it covers it.
     float center_distance { 0.0F };
     //! Device depth of the node's origin.

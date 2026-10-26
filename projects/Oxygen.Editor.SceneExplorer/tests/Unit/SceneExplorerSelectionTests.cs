@@ -43,7 +43,7 @@ public sealed partial class SceneExplorerSelectionTests
 
         var context = harness.SelectionService.GetContext(harness.DocumentIdOf(scene));
         _ = context.Kind.Should().Be(SceneSelectionKind.Folder);
-        _ = context.SelectedNodeIds.Should().BeEmpty("a folder selection must not claim its contained nodes");
+        _ = context.OwnedNodeIds.Should().BeEmpty("a folder selection must not claim its contained nodes");
         _ = context.SelectedFolderIds.Should().Equal(folderId);
         _ = context.PrimaryFolderId.Should().Be(folderId);
         var change = harness.Received[^1];
@@ -65,9 +65,9 @@ public sealed partial class SceneExplorerSelectionTests
 
         var context = harness.SelectionService.GetContext(harness.DocumentIdOf(scene));
         _ = context.Kind.Should().Be(SceneSelectionKind.Mixed);
-        _ = context.SelectedNodeIds.Should().Equal(freeNode.Id);
+        _ = context.OwnedNodeIds.Should().Equal(freeNode.Id);
         _ = context.SelectedFolderIds.Should().Equal(folderId);
-        _ = context.PrimaryNodeId.Should().Be(freeNode.Id, "the explicitly active row is the primary, not the last in row order");
+        _ = context.OwnedPrimaryNodeId.Should().Be(freeNode.Id, "the explicitly active row is the primary, not the last in row order");
     }
 
     [TestMethod]
@@ -102,7 +102,7 @@ public sealed partial class SceneExplorerSelectionTests
 
         harness.SelectionService.Publish(
             harness.DocumentIdOf(scene),
-            new SceneSelectionContext(SceneSelectionKind.Node, [node.Id], [], node.Id, PrimaryFolderId: null),
+            SceneSelectionContext.ForNodes([NodeReference.To(node.Id)]),
             "Viewport");
 
         var nodeAdapter = await explorer.FindAdapterByNodeIdAsync(node.Id).ConfigureAwait(false);
@@ -110,7 +110,25 @@ public sealed partial class SceneExplorerSelectionTests
         _ = explorer.ActiveItem.Should().BeSameAs(nodeAdapter);
         var context = harness.SelectionService.GetContext(harness.DocumentIdOf(scene));
         _ = context.Kind.Should().Be(SceneSelectionKind.Node);
-        _ = context.PrimaryNodeId.Should().Be(node.Id);
+        _ = context.OwnedPrimaryNodeId.Should().Be(node.Id);
+    }
+
+    [TestMethod]
+    public async Task ViewportSelectionOfAnInstancedNode_IsKeptAsItWasPicked()
+    {
+        using var harness = new SelectionHarness(out var scene, out var node, out _);
+        using var explorer = harness.Build();
+        await explorer.HandleDocumentOpenedAsync(scene).ConfigureAwait(false);
+        var door = new NodeReference(node.Id, NodePath.Of(NodeId.New()));
+        var picked = SceneSelectionContext.ForNodes([door]);
+
+        harness.SelectionService.Publish(harness.DocumentIdOf(scene), picked, "Viewport");
+
+        var context = harness.SelectionService.GetContext(harness.DocumentIdOf(scene));
+        _ = context.SelectedNodes.Should().Equal([door], "the Explorer forwards a selection it has no row for instead of shrinking it");
+        _ = context.PrimaryNode.Should().Be(door);
+        var root = await explorer.FindAdapterByNodeIdAsync(node.Id).ConfigureAwait(false);
+        _ = root!.IsSelected.Should().BeFalse("selecting an instanced node does not select its instance root");
     }
 
     [TestMethod]
@@ -124,7 +142,7 @@ public sealed partial class SceneExplorerSelectionTests
 
         harness.SelectionService.Publish(
             harness.DocumentIdOf(scene),
-            new SceneSelectionContext(SceneSelectionKind.Node, [node.Id], [], node.Id, PrimaryFolderId: null),
+            SceneSelectionContext.ForNodes([NodeReference.To(node.Id)]),
             "Viewport");
 
         var nodeAdapter = await explorer.FindAdapterByNodeIdAsync(node.Id).ConfigureAwait(false);
@@ -142,7 +160,7 @@ public sealed partial class SceneExplorerSelectionTests
         explorer.InvokeItem(nodeAdapter!);
 
         harness.Views.Verify(
-            views => views.FrameAsync(harness.DocumentIdOf(scene), It.Is<IReadOnlyList<NodeId>>(ids => ids.SequenceEqual(new[] { node.Id }))),
+            views => views.FrameAsync(harness.DocumentIdOf(scene), It.Is<IReadOnlyList<NodeReference>>(nodes => nodes.SequenceEqual(new[] { NodeReference.To(node.Id) }))),
             Times.Once);
     }
 
@@ -155,7 +173,7 @@ public sealed partial class SceneExplorerSelectionTests
 
         harness.SelectionService.Publish(
             harness.DocumentIdOf(scene),
-            new SceneSelectionContext(SceneSelectionKind.Scene, [], [], PrimaryNodeId: null, PrimaryFolderId: null),
+            new SceneSelectionContext(SceneSelectionKind.Scene, [], [], PrimaryNode: null, PrimaryFolderId: null),
             "Viewport");
 
         _ = explorer.ShownItems.OfType<SceneAdapter>().Single().IsSelected.Should().BeTrue();
@@ -181,7 +199,7 @@ public sealed partial class SceneExplorerSelectionTests
         _ = rebuiltAdapter.Should().NotBeSameAs(nodeAdapter, "the rebuild replaces the selected adapter");
         _ = (await explorer.FindAdapterByNodeIdAsync(added.Id).ConfigureAwait(false)).Should().NotBeNull();
         _ = explorer.SelectedItem.Should().BeSameAs(rebuiltAdapter, "the selection comes back on the replacement adapter");
-        _ = harness.SelectionService.GetContext(harness.DocumentIdOf(scene)).PrimaryNodeId.Should().Be(node.Id);
+        _ = harness.SelectionService.GetContext(harness.DocumentIdOf(scene)).OwnedPrimaryNodeId.Should().Be(node.Id);
     }
 
     [TestMethod]
@@ -203,7 +221,7 @@ public sealed partial class SceneExplorerSelectionTests
 
         var restored = await explorer.FindAdapterByNodeIdAsync(nodeA.Id).ConfigureAwait(false);
         _ = explorer.SelectedItem.Should().BeSameAs(restored, "returning to scene A restores its selection by identity");
-        _ = harness.SelectionService.GetContext(harness.DocumentIdOf(sceneA)).PrimaryNodeId.Should().Be(nodeA.Id);
+        _ = harness.SelectionService.GetContext(harness.DocumentIdOf(sceneA)).OwnedPrimaryNodeId.Should().Be(nodeA.Id);
     }
 
     [TestMethod]
@@ -220,8 +238,8 @@ public sealed partial class SceneExplorerSelectionTests
         _ = applied.Should().BeFalse("the named id has no row in this projection");
         _ = harness.Received.Should().HaveCountGreaterThan(baseline, "a changed authoritative context notifies consumers even when the visible row set does not move");
         var last = harness.Received[^1];
-        _ = last.Context.SelectedNodeIds.Should().Equal(unaddressable);
-        _ = harness.SelectionService.GetContext(harness.DocumentIdOf(scene)).SelectedNodeIds.Should().Equal(unaddressable);
+        _ = last.Context.OwnedNodeIds.Should().Equal(unaddressable);
+        _ = harness.SelectionService.GetContext(harness.DocumentIdOf(scene)).OwnedNodeIds.Should().Equal(unaddressable);
     }
 
     [TestMethod]
@@ -252,7 +270,7 @@ public sealed partial class SceneExplorerSelectionTests
         // A command reveal stores the node before its adapter exists (PublishNodeAdded order).
         harness.SelectionService.Publish(
             harness.DocumentIdOf(scene),
-            new SceneSelectionContext(SceneSelectionKind.Node, [late.Id], [], late.Id, PrimaryFolderId: null),
+            SceneSelectionContext.ForNodes([NodeReference.To(late.Id)]),
             "Command");
 
         _ = await harness.Insert(scene, late).ConfigureAwait(false);
@@ -276,7 +294,7 @@ public sealed partial class SceneExplorerSelectionTests
         await Task.Yield();
 
         var context = harness.SelectionService.GetContext(harness.DocumentIdOf(scene));
-        _ = context.SelectedNodeIds.Should().Equal(selected.Id);
+        _ = context.OwnedNodeIds.Should().Equal(selected.Id);
         _ = explorer.SelectedItem.Should().BeSameAs(await explorer.FindAdapterByNodeIdAsync(selected.Id).ConfigureAwait(false));
         _ = (await explorer.FindAdapterByNodeIdAsync(added.Id).ConfigureAwait(false)).Should().NotBeNull();
     }
@@ -306,7 +324,7 @@ public sealed partial class SceneExplorerSelectionTests
         harness.TestSceneOf(scene).ReplaceLayout([outer]);
         harness.SelectionService.Publish(
             harness.DocumentIdOf(scene),
-            new SceneSelectionContext(SceneSelectionKind.Folder, [], [innerId], PrimaryNodeId: null, innerId),
+            new SceneSelectionContext(SceneSelectionKind.Folder, [], [innerId], PrimaryNode: null, innerId),
             "Viewport");
         using var explorer = harness.Build();
 
@@ -360,7 +378,7 @@ public sealed partial class SceneExplorerSelectionTests
                 changed = true;
                 harness.SelectionService.Publish(
                     harness.DocumentIdOf(scene),
-                    new SceneSelectionContext(SceneSelectionKind.Folder, [], [folderId], PrimaryNodeId: null, folderId),
+                    new SceneSelectionContext(SceneSelectionKind.Folder, [], [folderId], PrimaryNode: null, folderId),
                     "Viewport");
             }
         };
@@ -413,7 +431,7 @@ public sealed partial class SceneExplorerSelectionTests
 
             this.SelectionService = new SceneSelectionService();
             this.SelectionService.SelectionChanged += (_, args) => this.Received.Add(args);
-            _ = this.Views.Setup(views => views.FrameAsync(It.IsAny<DocumentId>(), It.IsAny<IReadOnlyList<NodeId>>())).ReturnsAsync(true);
+            _ = this.Views.Setup(views => views.FrameAsync(It.IsAny<DocumentId>(), It.IsAny<IReadOnlyList<NodeReference>>())).ReturnsAsync(true);
         }
 
         public TestDocumentArea Documents { get; }

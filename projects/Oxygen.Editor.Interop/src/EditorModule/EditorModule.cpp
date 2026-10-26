@@ -435,8 +435,8 @@ namespace oxygen::interop::module {
     // out first; a running helper drag keeps the pointer from the gizmo.
     transform_gizmo_.BeginFrame(scene_.get(), scene_generation_->load());
     {
-      std::vector<UuidKey> selected;
-      std::optional<UuidKey> active;
+      std::vector<NodeReferenceKey> selected;
+      std::optional<NodeReferenceKey> active;
       {
         std::lock_guard lock(outline_mutex_);
         selected = outline_nodes_;
@@ -1168,8 +1168,8 @@ namespace oxygen::interop::module {
 
   auto EditorModule::BuildSelectionOutline()
     -> std::shared_ptr<const vortex::ViewOutline> {
-    std::vector<UuidKey> nodes;
-    std::optional<UuidKey> active;
+    std::vector<NodeReferenceKey> nodes;
+    std::optional<NodeReferenceKey> active;
     {
       std::lock_guard lock(outline_mutex_);
       nodes = outline_nodes_;
@@ -1181,9 +1181,9 @@ namespace oxygen::interop::module {
 
     // Selecting a node outlines its whole subtree: a group shows what it
     // holds.
-    const auto add_subtree = [this](const UuidKey& id,
+    const auto add_subtree = [this](const NodeReferenceKey& reference,
                                std::vector<scene::NodeHandle>& out) {
-      const auto handle = NodeRegistry::Lookup(id);
+      const auto handle = NodeRegistry::Lookup(*scene_, reference);
       if (!handle.has_value()) {
         return;
       }
@@ -1236,11 +1236,13 @@ namespace oxygen::interop::module {
         icons = scene_helpers_.PickIcons(*view, pick.rect);
       }
       auto completion = [scene_generation = scene_generation_, generation,
+                          weak_scene = std::weak_ptr<scene::Scene>(scene_),
                           icons = std::move(icons),
                           callback = std::move(pick.callback)](
                           vortex::ViewPickResult result) {
+        const auto picked_scene = weak_scene.lock();
         if (result.status != vortex::ViewPickResult::Status::kCompleted
-          || scene_generation->load() != generation) {
+          || scene_generation->load() != generation || !picked_scene) {
           callback(std::nullopt);
           return;
         }
@@ -1249,17 +1251,19 @@ namespace oxygen::interop::module {
         picked.hits.reserve(icons.size() + result.hits.size());
         for (const auto& icon : icons) {
           picked.hits.push_back(EditorPickHit {
-            .node = icon.id,
+            .node = icon.node,
             .depth = icon.depth,
             .geometry_slot = {},
             .center_distance = icon.center_distance,
           });
         }
         for (const auto& hit : result.hits) {
-          // Nodes the editor did not create (none today) are not pickable.
-          if (const auto id = NodeRegistry::ReverseLookup(hit.node)) {
+          // Only the editor's nodes and the nodes its instances brought in
+          // are pickable.
+          if (auto reference
+            = NodeRegistry::ReverseLookup(*picked_scene, hit.node)) {
             picked.hits.push_back(EditorPickHit {
-              .node = *id,
+              .node = std::move(*reference),
               .depth = hit.depth,
               .geometry_slot = hit.submesh_index,
               .center_distance = hit.center_distance,
@@ -1270,7 +1274,7 @@ namespace oxygen::interop::module {
           // Closest to the centre first, a node hit by its icon and its
           // geometry listed once.
           std::ranges::stable_sort(picked.hits, {}, &EditorPickHit::center_distance);
-          std::unordered_set<UuidKey, UuidKeyHash> seen;
+          std::unordered_set<NodeReferenceKey, NodeReferenceKeyHash> seen;
           std::erase_if(picked.hits, [&](const EditorPickHit& hit) {
             return !seen.insert(hit.node).second;
           });
@@ -1312,7 +1316,8 @@ namespace oxygen::interop::module {
     });
   }
 
-  void EditorModule::FrameView(ViewId view_id, std::vector<UuidKey> nodes,
+  void EditorModule::FrameView(ViewId view_id,
+    std::vector<NodeReferenceKey> nodes,
     std::function<void(EditorFramingOutcome)> callback) {
     if (view_id == kInvalidViewId || !view_manager_) {
       callback(EditorFramingOutcome::kNoView);
@@ -1322,8 +1327,8 @@ namespace oxygen::interop::module {
       view_manager_.get(), view_id, std::move(nodes), std::move(callback)));
   }
 
-  void EditorModule::SetSelectionOutline(
-    std::vector<UuidKey> nodes, std::optional<UuidKey> active) {
+  void EditorModule::SetSelectionOutline(std::vector<NodeReferenceKey> nodes,
+    std::optional<NodeReferenceKey> active) {
     std::lock_guard lock(outline_mutex_);
     outline_nodes_ = std::move(nodes);
     outline_active_ = active;

@@ -5,7 +5,6 @@
 using DroidNet.Documents;
 using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.World;
-using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Scenes.Selection;
 
@@ -15,7 +14,7 @@ namespace Oxygen.Editor.Scenes.Selection;
 /// </summary>
 public sealed class SceneSelectionService : ISceneSelectionService
 {
-    // One stored context per document: kind, ordered node/folder ids and the explicit primary.
+    // One stored context per document: kind, ordered node references and folder ids, and the explicit primary.
     // The writer's source travels with the change event and is deliberately not stored.
     private readonly Dictionary<DocumentId, SceneSelectionContext> contexts = [];
 
@@ -26,26 +25,10 @@ public sealed class SceneSelectionService : ISceneSelectionService
     public event EventHandler<ScenePropertyFocusEventArgs>? PropertyFocusRequested;
 
     /// <inheritdoc />
-    public void SetSelection(DocumentId documentId, IReadOnlyList<SceneNode> nodes, string source)
+    public void SetSelection(DocumentId documentId, IReadOnlyList<NodeReference> nodes, string source)
     {
         ArgumentNullException.ThrowIfNull(nodes);
-
-        var orderedIds = nodes
-            .Where(node => node is not null)
-            .Select(node => node.Id)
-            .Distinct()
-            .ToArray();
-
-        var context = orderedIds.Length == 0
-            ? SceneSelectionContext.Empty
-            : new SceneSelectionContext(
-                SceneSelectionKind.Node,
-                orderedIds,
-                [],
-                orderedIds[^1],
-                PrimaryFolderId: null);
-
-        this.PublishCore(documentId, context, source);
+        this.PublishCore(documentId, SceneSelectionContext.ForNodes(nodes.Where(static node => node is not null)), source);
     }
 
     /// <inheritdoc />
@@ -59,7 +42,7 @@ public sealed class SceneSelectionService : ISceneSelectionService
         }
 
         var byId = scene.AllNodes.ToDictionary(node => node.Id);
-        return [.. context.SelectedNodeIds
+        return [.. context.OwnedNodeIds
             .Where(byId.ContainsKey)
             .Select(id => byId[id])];
     }
@@ -76,28 +59,26 @@ public sealed class SceneSelectionService : ISceneSelectionService
         }
 
         var byId = scene.AllNodes.ToDictionary(node => node.Id);
-        var survivingIds = context.SelectedNodeIds
-            .Where(byId.ContainsKey)
-            .ToArray();
+        var survivingNodes = context.SelectedNodes.Where(scene.Holds).ToArray();
 
         var folderIds = GetFolderIds(layout);
         var survivingFolderIds = context.SelectedFolderIds.Where(folderIds.Contains).ToArray();
-        NodeId? primaryNode = context.PrimaryNodeId is { } nodeId && survivingIds.Contains(nodeId)
-            ? nodeId
+        var primaryNode = context.PrimaryNode is { } primary && survivingNodes.Contains(primary)
+            ? primary
             : null;
         FolderId? primaryFolder = context.PrimaryFolderId is { } folderId && survivingFolderIds.Contains(folderId)
             ? folderId
             : null;
         if (primaryNode is null && primaryFolder is null)
         {
-            primaryNode = survivingIds.Length > 0 ? survivingIds[0] : null;
+            primaryNode = survivingNodes.Length > 0 ? survivingNodes[0] : null;
             primaryFolder = primaryNode is null && survivingFolderIds.Length > 0 ? survivingFolderIds[0] : null;
         }
 
         var kind = SceneSelectionContext.Classify(
             context.Kind == SceneSelectionKind.Scene,
             survivingFolderIds.Length > 0,
-            survivingIds.Length > 0);
+            survivingNodes.Length > 0);
 
         if (kind == SceneSelectionKind.Empty)
         {
@@ -105,23 +86,24 @@ public sealed class SceneSelectionService : ISceneSelectionService
             return [];
         }
 
+        IReadOnlyList<SceneNode> survivingOwned = [.. survivingNodes.Where(static node => node.IsOwned).Select(node => byId[node.Node])];
         if (kind == context.Kind
-            && survivingIds.SequenceEqual(context.SelectedNodeIds)
+            && survivingNodes.SequenceEqual(context.SelectedNodes)
             && survivingFolderIds.SequenceEqual(context.SelectedFolderIds)
-            && primaryNode == context.PrimaryNodeId
+            && primaryNode == context.PrimaryNode
             && primaryFolder == context.PrimaryFolderId)
         {
-            return [.. survivingIds.Select(id => byId[id])];
+            return survivingOwned;
         }
 
         var updated = new SceneSelectionContext(
             kind,
-            survivingIds,
+            survivingNodes,
             survivingFolderIds,
             primaryNode,
             primaryFolder);
         this.PublishCore(documentId, updated, "Reconcile");
-        return [.. survivingIds.Select(id => byId[id])];
+        return survivingOwned;
     }
 
     /// <inheritdoc />

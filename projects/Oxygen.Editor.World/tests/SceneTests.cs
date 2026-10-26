@@ -277,4 +277,21 @@ public sealed class SceneTests
         // Assert - creating a scene with a null name should fail validation
         _ = act.Should().Throw<ArgumentException>();
     }
+
+    [TestMethod]
+    public void Holds_NamesItsOwnNodesAndPathsBelowItsInstanceRoots()
+    {
+        var scene = new Scene { Name = "Street" };
+        var car = new SceneNode(scene, "Car3");
+        _ = car.AddComponent(new SceneInstanceComponent { Name = "Scene Instance", Source = AssetPath.Parse("/Content/Vehicles/Car.glb") });
+        var lamp = new SceneNode(scene, "Lamp");
+        scene.RootNodes.Add(car);
+        scene.RootNodes.Add(lamp);
+        var below = NodePath.Of(NodeId.New());
+
+        _ = scene.Holds(NodeReference.To(lamp.Id)).Should().BeTrue();
+        _ = scene.Holds(new NodeReference(car.Id, below)).Should().BeTrue("a path runs below an instance root");
+        _ = scene.Holds(new NodeReference(lamp.Id, below)).Should().BeFalse("a node that is no instance root brings in no nodes");
+        _ = scene.Holds(NodeReference.To(NodeId.New())).Should().BeFalse("the node is not in the scene");
+    }
 }

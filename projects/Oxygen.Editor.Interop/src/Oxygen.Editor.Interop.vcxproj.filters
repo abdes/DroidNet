@@ -335,6 +335,9 @@
     <ClInclude Include="Views\ViewPickManaged.h">
       <Filter>Views</Filter>
     </ClInclude>
+    <ClInclude Include="Views\NodeReferenceManaged.h">
+      <Filter>Views</Filter>
+    </ClInclude>
     <ClInclude Include="Views\TransformGizmoManaged.h">
       <Filter>Views</Filter>
     </ClInclude>

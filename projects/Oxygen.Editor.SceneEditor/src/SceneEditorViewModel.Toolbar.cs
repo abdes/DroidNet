@@ -172,6 +172,6 @@ public partial class SceneEditorViewModel
     private void SelectEnvironment()
         => this.SelectionService.Publish(
             this.Document.Id,
-            new SceneSelectionContext(SceneSelectionKind.Scene, [], [], PrimaryNodeId: null, PrimaryFolderId: null),
+            new SceneSelectionContext(SceneSelectionKind.Scene, [], [], PrimaryNode: null, PrimaryFolderId: null),
             SelectionSource);
 }

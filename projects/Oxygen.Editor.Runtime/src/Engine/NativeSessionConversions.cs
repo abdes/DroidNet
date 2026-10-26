@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Editor.World;
 using Oxygen.Interop;
 using Oxygen.Managed.Core;
 
@@ -32,8 +33,26 @@ internal static class NativeSessionConversions
         => result is null
             ? null
             : new(
-                [.. result.Hits.Select(hit => new RuntimePickHit(NodeId.FromValue(hit.NodeId), hit.Depth, hit.GeometrySlot, hit.CenterDistance))],
+                [.. result.Hits.Select(hit => new RuntimePickHit(FromNative(hit.Node), hit.Depth, hit.GeometrySlot, hit.CenterDistance))],
                 result.WorldPosition);
+
+    /// <summary>Converts a native node reference.</summary>
+    /// <param name="reference">The native reference.</param>
+    /// <returns>The managed reference.</returns>
+    public static NodeReference FromNative(NodeReferenceManaged reference)
+    {
+        ArgumentNullException.ThrowIfNull(reference);
+        return new(NodeId.FromValue(reference.Node), NodePath.Of(reference.Path.Select(NodeId.FromValue)));
+    }
+
+    /// <summary>Converts a node reference for the native side.</summary>
+    /// <param name="reference">The managed reference.</param>
+    /// <returns>The native reference.</returns>
+    public static NodeReferenceManaged ToNative(NodeReference reference)
+    {
+        ArgumentNullException.ThrowIfNull(reference);
+        return new NodeReferenceManaged { Node = reference.Node.Value, Path = [.. reference.Path.Nodes.Select(static id => id.Value)] };
+    }
 
     /// <summary>Converts a native framing outcome by its named meaning.</summary>
     /// <param name="outcome">The native outcome.</param>

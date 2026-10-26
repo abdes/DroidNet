@@ -4,14 +4,14 @@
 
 using CommunityToolkit.Mvvm.ComponentModel;
 using Oxygen.Editor.Runtime.Engine;
-using Oxygen.Managed.Core;
+using Oxygen.Editor.World;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.SceneEditor;
 
 /// <summary>
-/// Selecting in the pane: picking the nodes under a click or marquee, and framing the selection or
-/// the whole scene with the pane's editor camera.
+/// Selecting in the pane: picking the nodes under a click, double-click or marquee, and framing the
+/// selection or the whole scene with the pane's editor camera.
 /// </summary>
 public partial class ViewportViewModel
 {
@@ -32,17 +32,114 @@ public partial class ViewportViewModel
     public Action<ViewportSelection>? SelectionPicked { get; set; }
 
     /// <summary>Gets or sets the source of the selected nodes that <see cref="FrameSelectionAsync"/> frames.</summary>
-    public Func<IReadOnlyList<NodeId>>? SelectedNodesProvider { get; set; }
+    public Func<IReadOnlyList<NodeReference>>? SelectedNodesProvider { get; set; }
 
     /// <summary>
     /// Picks the nodes inside a rectangle of the pane and hands them to <see cref="SelectionPicked"/>.
-    /// A newer pick, or a new view, supersedes a pick still in flight.
+    /// A node an instance brought in stands for the whole instance: it picks its outermost instance
+    /// root. A newer pick, or a new view, supersedes a pick still in flight.
     /// </summary>
     /// <param name="rect">The rectangle, in physical pixels of the pane.</param>
     /// <param name="mode">How the picked nodes combine with the selection.</param>
     /// <param name="isMarquee">Whether every node inside the rectangle is picked, rather than the nearest.</param>
     /// <returns>A task that completes when the pick has been applied or dropped.</returns>
-    internal async Task PickAsync(RuntimePickRect rect, ViewportSelectionMode mode, bool isMarquee)
+    internal Task PickAsync(RuntimePickRect rect, ViewportSelectionMode mode, bool isMarquee)
+        => this.PickCoreAsync(rect, result =>
+        {
+            // Hits come nearest the centre first; the selection's active node is its last.
+            var nodes = result.Hits.Select(static hit => NodeReference.To(hit.Node.Node)).Distinct().ToList();
+            IReadOnlyList<NodeReference> picked = nodes.Count == 0
+                ? []
+                : isMarquee ? [.. nodes.Skip(1), nodes[0]] : [nodes[0]];
+            return new ViewportSelection(picked, mode);
+        });
+
+    /// <summary>
+    /// Picks the node under a double-click, however deep an instance brought it in, and selects only it.
+    /// </summary>
+    /// <param name="rect">The click rectangle, in physical pixels of the pane.</param>
+    /// <returns>A task that completes when the pick has been applied or dropped.</returns>
+    internal Task PickExactAsync(RuntimePickRect rect)
+        => this.PickCoreAsync(rect, static result => new ViewportSelection(
+            result.Hits.Count == 0 ? [] : [result.Hits[0].Node],
+            ViewportSelectionMode.Replace));
+
+    /// <summary>Clears the selection (Escape with nothing in progress); a pick still in flight is dropped.</summary>
+    internal void ClearSelection()
+    {
+        ++this.pickGeneration;
+        this.SelectionPicked?.Invoke(new ViewportSelection([], ViewportSelectionMode.Replace));
+    }
+
+    /// <summary>Frames the selected nodes with the pane's editor camera (F).</summary>
+    /// <returns>A task that completes when the request has been submitted.</returns>
+    internal Task FrameSelectionAsync()
+    {
+        var nodes = this.SelectedNodesProvider?.Invoke() ?? [];
+        if (nodes.Count == 0)
+        {
+            this.ShowNotice("Nothing selected to frame");
+            return Task.CompletedTask;
+        }
+
+        return this.FrameAsync(nodes);
+    }
+
+    /// <summary>Frames the whole scene with the pane's editor camera (Shift+F).</summary>
+    /// <returns>A task that completes when the request has been submitted.</returns>
+    internal Task FrameAllAsync() => this.FrameAsync([]);
+
+    /// <summary>Frames nodes with the pane's editor camera; an empty list frames the whole scene.</summary>
+    /// <param name="nodes">The nodes to frame, with their descendants.</param>
+    /// <returns>A task that completes when the request has been submitted.</returns>
+    internal async Task FrameAsync(IReadOnlyList<NodeReference> nodes)
+    {
+        if (!this.AssignedViewId.IsValid)
+        {
+            return;
+        }
+
+        try
+        {
+            var outcome = await this.EngineService.FrameViewAsync(this.AssignedViewId, nodes).ConfigureAwait(true);
+            switch (outcome)
+            {
+                case RuntimeFramingOutcome.Framed:
+                    this.MarkNavigated();
+                    break;
+                case RuntimeFramingOutcome.ViewingSceneCamera:
+                    this.ShowNotice("Framing moves the editor camera; return to it first");
+                    break;
+                case RuntimeFramingOutcome.NothingToFrame:
+                    this.ShowNotice("The selected nodes no longer exist");
+                    break;
+                case RuntimeFramingOutcome.InvalidBounds:
+                    this.ShowNotice("The selection has no valid bounds to frame");
+                    break;
+                default:
+                    break;
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            this.PublishRuntimeFailure(
+                RuntimeOperationKinds.ViewFrame,
+                FailureDomain.RuntimeView,
+                DiagnosticCodes.ViewPrefix + "FRAME_FAILED",
+                "Framing failed",
+                "The runtime could not frame the selection in this viewport.",
+                ex);
+        }
+    }
+
+    /// <summary>
+    /// Picks inside a rectangle of the pane and hands the selection made of its hits to <see cref="SelectionPicked"/>.
+    /// A newer pick, or a new view, supersedes a pick still in flight.
+    /// </summary>
+    /// <param name="rect">The rectangle, in physical pixels of the pane.</param>
+    /// <param name="select">Makes the selection of the pick's hits.</param>
+    /// <returns>A task that completes when the pick has been applied or dropped.</returns>
+    private async Task PickCoreAsync(RuntimePickRect rect, Func<RuntimePickResult, ViewportSelection> select)
     {
         var viewId = this.AssignedViewId;
         if (!viewId.IsValid || this.SelectionPicked is null)
@@ -73,80 +170,7 @@ public partial class ViewportViewModel
             return;
         }
 
-        // Hits come nearest the centre first; the selection's active node is its last.
-        var nodes = result.Hits.Select(hit => hit.NodeId).Distinct().ToList();
-        IReadOnlyList<NodeId> picked = nodes.Count == 0
-            ? []
-            : isMarquee ? [.. nodes.Skip(1), nodes[0]] : [nodes[0]];
-        this.SelectionPicked?.Invoke(new ViewportSelection(picked, mode));
-    }
-
-    /// <summary>Clears the selection (Escape with nothing in progress); a pick still in flight is dropped.</summary>
-    internal void ClearSelection()
-    {
-        ++this.pickGeneration;
-        this.SelectionPicked?.Invoke(new ViewportSelection([], ViewportSelectionMode.Replace));
-    }
-
-    /// <summary>Frames the selected nodes with the pane's editor camera (F).</summary>
-    /// <returns>A task that completes when the request has been submitted.</returns>
-    internal Task FrameSelectionAsync()
-    {
-        var nodes = this.SelectedNodesProvider?.Invoke() ?? [];
-        if (nodes.Count == 0)
-        {
-            this.ShowNotice("Nothing selected to frame");
-            return Task.CompletedTask;
-        }
-
-        return this.FrameAsync(nodes);
-    }
-
-    /// <summary>Frames the whole scene with the pane's editor camera (Shift+F).</summary>
-    /// <returns>A task that completes when the request has been submitted.</returns>
-    internal Task FrameAllAsync() => this.FrameAsync([]);
-
-    /// <summary>Frames nodes with the pane's editor camera; an empty list frames the whole scene.</summary>
-    /// <param name="nodeIds">The nodes to frame, with their descendants.</param>
-    /// <returns>A task that completes when the request has been submitted.</returns>
-    internal async Task FrameAsync(IReadOnlyList<NodeId> nodeIds)
-    {
-        if (!this.AssignedViewId.IsValid)
-        {
-            return;
-        }
-
-        try
-        {
-            var outcome = await this.EngineService.FrameViewAsync(this.AssignedViewId, nodeIds).ConfigureAwait(true);
-            switch (outcome)
-            {
-                case RuntimeFramingOutcome.Framed:
-                    this.MarkNavigated();
-                    break;
-                case RuntimeFramingOutcome.ViewingSceneCamera:
-                    this.ShowNotice("Framing moves the editor camera; return to it first");
-                    break;
-                case RuntimeFramingOutcome.NothingToFrame:
-                    this.ShowNotice("The selected nodes no longer exist");
-                    break;
-                case RuntimeFramingOutcome.InvalidBounds:
-                    this.ShowNotice("The selection has no valid bounds to frame");
-                    break;
-                default:
-                    break;
-            }
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            this.PublishRuntimeFailure(
-                RuntimeOperationKinds.ViewFrame,
-                FailureDomain.RuntimeView,
-                DiagnosticCodes.ViewPrefix + "FRAME_FAILED",
-                "Framing failed",
-                "The runtime could not frame the selection in this viewport.",
-                ex);
-        }
+        this.SelectionPicked?.Invoke(select(result));
     }
 
     private void ShowNotice(string notice)

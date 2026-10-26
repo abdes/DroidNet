@@ -131,7 +131,7 @@ public sealed class SceneEditScope
         List<SceneDiagnostic>? errors = null;
         foreach (var root in roots.Select(this.FindNode).OfType<SceneNode>())
         {
-            foreach (var locked in root.Descendants().Where(node => interaction.IsLocked(node.Id)))
+            foreach (var locked in root.Descendants().Where(node => interaction.IsLocked(NodeReference.To(node.Id))))
             {
                 (errors ??= []).Add(SceneDiagnostic.Error(SceneEditCodes.TargetLocked, $"'{locked.Metadata.Name}' is locked.", locked.Id));
             }
@@ -171,7 +171,7 @@ public sealed class SceneEditScope
 
         for (var current = node; current is not null; current = current.Hierarchy.Parent)
         {
-            if (interaction.IsLocked(current.Id))
+            if (interaction.IsLocked(NodeReference.To(current.Id)))
             {
                 return SceneDiagnostic.Error(
                     SceneEditCodes.TargetLocked,

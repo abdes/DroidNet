@@ -60,7 +60,7 @@ internal sealed class RuntimeProblemNodesTests
 
         _ = withoutTab.Should().BeFalse();
         _ = withoutNode.Should().BeFalse();
-        _ = selection.GetContext(document.Id).SelectedNodeIds.Should().BeEmpty();
+        _ = selection.GetContext(document.Id).OwnedNodeIds.Should().BeEmpty();
     }
 
     private static async Task<Document> OpenSceneAsync(TestSceneDocuments documents)

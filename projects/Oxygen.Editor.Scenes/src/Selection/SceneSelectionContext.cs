@@ -34,25 +34,50 @@ public enum SceneSelectionKind
 /// kind and explicit primary identity in addition to the selected node/folder ids.
 /// </summary>
 /// <param name="Kind">The classified selection kind.</param>
-/// <param name="SelectedNodeIds">Selected scene-node identities in stable order.</param>
+/// <param name="SelectedNodes">
+/// Selected scene nodes in stable order: nodes of the scene and nodes an instance brought in, each by its reference.
+/// </param>
 /// <param name="SelectedFolderIds">Selected folder identities in stable order.</param>
-/// <param name="PrimaryNodeId">The primary node identity, if a node is the primary.</param>
+/// <param name="PrimaryNode">The primary node, if a node is the primary.</param>
 /// <param name="PrimaryFolderId">The primary folder identity, if a folder is the primary.</param>
 public sealed record SceneSelectionContext(
     SceneSelectionKind Kind,
-    IReadOnlyList<NodeId> SelectedNodeIds,
+    IReadOnlyList<NodeReference> SelectedNodes,
     IReadOnlyList<FolderId> SelectedFolderIds,
-    NodeId? PrimaryNodeId,
+    NodeReference? PrimaryNode,
     FolderId? PrimaryFolderId)
 {
-    /// <summary>Gets the selected node identities captured independently of the caller's collection.</summary>
-    public IReadOnlyList<NodeId> SelectedNodeIds { get; } = Array.AsReadOnly(SelectedNodeIds.ToArray());
+    /// <summary>Gets the selected nodes captured independently of the caller's collection.</summary>
+    public IReadOnlyList<NodeReference> SelectedNodes { get; } = Array.AsReadOnly(SelectedNodes.ToArray());
 
     /// <summary>Gets the selected folder identities captured independently of the caller's collection.</summary>
     public IReadOnlyList<FolderId> SelectedFolderIds { get; } = Array.AsReadOnly(SelectedFolderIds.ToArray());
 
     /// <summary>Gets an empty selection context.</summary>
-    public static SceneSelectionContext Empty { get; } = new(SceneSelectionKind.Empty, [], [], PrimaryNodeId: null, PrimaryFolderId: null);
+    public static SceneSelectionContext Empty { get; } = new(SceneSelectionKind.Empty, [], [], PrimaryNode: null, PrimaryFolderId: null);
+
+    /// <summary>
+    /// Gets the selected nodes of the scene itself, in selection order. A node an instance brought in has no scene
+    /// node of its own and is left out; its instance root is not selected by it.
+    /// </summary>
+    public IReadOnlyList<NodeId> OwnedNodeIds => [.. this.SelectedNodes.Where(static node => node.IsOwned).Select(static node => node.Node)];
+
+    /// <summary>Gets the primary node when it is a node of the scene itself.</summary>
+    public NodeId? OwnedPrimaryNodeId => this.PrimaryNode is { IsOwned: true } primary ? primary.Node : null;
+
+    /// <summary>
+    /// Creates a node selection, the last node primary; no nodes is the empty selection.
+    /// </summary>
+    /// <param name="nodes">The selected nodes in stable order; repeats keep their first place.</param>
+    /// <returns>The selection context.</returns>
+    public static SceneSelectionContext ForNodes(IEnumerable<NodeReference> nodes)
+    {
+        ArgumentNullException.ThrowIfNull(nodes);
+        NodeReference[] ordered = [.. nodes.Distinct()];
+        return ordered.Length == 0
+            ? Empty
+            : new(SceneSelectionKind.Node, ordered, [], ordered[^1], PrimaryFolderId: null);
+    }
 
     /// <summary>
     /// Classifies a selection from the presence of each row kind, so every

@@ -13,10 +13,10 @@ public sealed partial class SceneNodeInteraction
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Information,
-        Message = "Scene node interaction state: {NodeId} {Change}.")]
-    private static partial void LogStateChange(ILogger logger, NodeId nodeId, string change);
+        Message = "Scene node interaction state: {Node} {Change}.")]
+    private static partial void LogStateChange(ILogger logger, string node, string change);
 
-    private void LogStateChange(NodeId nodeId, bool requested, string appliedMessage, string reversedMessage)
+    private void LogStateChange(string node, bool requested, string appliedMessage, string reversedMessage)
     {
         if (!this.logger.IsEnabled(LogLevel.Information))
         {
@@ -24,7 +24,7 @@ public sealed partial class SceneNodeInteraction
         }
 
         var change = requested ? appliedMessage : reversedMessage;
-        LogStateChange(this.logger, nodeId, change);
+        LogStateChange(this.logger, node, change);
     }
 
     [LoggerMessage(

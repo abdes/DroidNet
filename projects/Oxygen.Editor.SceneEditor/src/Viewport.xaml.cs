@@ -54,6 +54,9 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
             "1",
             StringComparison.Ordinal);
 
+    // One handler instance, so it can be removed again.
+    private readonly DoubleTappedEventHandler swapChainDoubleTappedHandler;
+
     private IViewportSurfaceLease? surfaceLease;
 
     // The view model whose view presents through the lease; the control's view model may already
@@ -100,6 +103,7 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
     /// </summary>
     public Viewport()
     {
+        this.swapChainDoubleTappedHandler = this.OnSwapChainDoubleTapped;
         this.InitializeComponent();
         this.Loaded += this.OnLoaded;
         this.Unloaded += this.OnUnloaded;
@@ -759,6 +763,9 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
         this.SwapChainPanel.PointerMoved += this.OnSwapChainPointerMoved;
         this.SwapChainPanel.PointerWheelChanged += this.OnSwapChainPointerWheelChanged;
 
+        // The pointer handlers mark presses handled; a double-click is still a selection gesture.
+        this.SwapChainPanel.AddHandler(DoubleTappedEvent, this.swapChainDoubleTappedHandler, handledEventsToo: true);
+
         this.inputHandlersHooked = true;
         this.DebugInputLog("RegisterInputHandlers: hooked SwapChainPanel pointer events");
     }
@@ -776,6 +783,7 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
             this.SwapChainPanel.PointerReleased -= this.OnSwapChainPointerReleased;
             this.SwapChainPanel.PointerMoved -= this.OnSwapChainPointerMoved;
             this.SwapChainPanel.PointerWheelChanged -= this.OnSwapChainPointerWheelChanged;
+            this.SwapChainPanel.RemoveHandler(DoubleTappedEvent, this.swapChainDoubleTappedHandler);
         }
 
         this.inputHandlersHooked = false;
@@ -975,13 +983,39 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
         }
         else
         {
-            const int halfExtent = (int)(ClickPickExtent / 2);
-            var x = (int)(point.Position.X * scale) - halfExtent;
-            var y = (int)(point.Position.Y * scale) - halfExtent;
-            rect = new RuntimePickRect((uint)Math.Max(0, x), (uint)Math.Max(0, y), ClickPickExtent, ClickPickExtent);
+            rect = this.ClickPickRect(point.Position);
         }
 
         _ = viewModel.PickAsync(rect, mode, wasMarquee);
+    }
+
+    /// <summary>The pick rectangle of a click, in physical pixels of the surface.</summary>
+    private RuntimePickRect ClickPickRect(Windows.Foundation.Point position)
+    {
+        const int halfExtent = (int)(ClickPickExtent / 2);
+        var scale = this.XamlRoot?.RasterizationScale ?? 1.0;
+        var x = (int)(position.X * scale) - halfExtent;
+        var y = (int)(position.Y * scale) - halfExtent;
+        return new RuntimePickRect((uint)Math.Max(0, x), (uint)Math.Max(0, y), ClickPickExtent, ClickPickExtent);
+    }
+
+    /// <summary>
+    /// Selects the node under a double-click, however deep an instance brought it in, in place of
+    /// the instance root its clicks selected. Alt+double-click and a double-click on a gizmo handle
+    /// stay with navigation and the gizmo.
+    /// </summary>
+    private void OnSwapChainDoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
+    {
+        _ = sender;
+        if (this.isDisposed || this.lastAltKeyDown
+            || this.ViewModel is not { IsGizmoHovered: false, IsGizmoDragging: false } viewModel)
+        {
+            return;
+        }
+
+        // The second click's release must not pick its instance root after this pick.
+        this.CancelSelectionGesture();
+        _ = viewModel.PickExactAsync(this.ClickPickRect(e.GetPosition(this.SwapChainPanel)));
     }
 
     /// <summary>Whether a gizmo drag started after the selection gesture did.</summary>

@@ -4,7 +4,9 @@
 
 using AwesomeAssertions;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Editor.World;
 using Oxygen.Interop;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Runtime.Tests;
 
@@ -72,6 +74,18 @@ public sealed class NativeSessionConversionTests
         _ = RuntimeViewId.Invalid.Value.Should().Be(ViewIdManaged.Invalid.Value);
         _ = RuntimeViewId.Invalid.IsValid.Should().BeFalse();
         _ = new RuntimeViewId(42).IsValid.Should().BeTrue();
+    }
+
+    /// <summary>A node reference crosses the boundary with its instance root and every node path element, in order.</summary>
+    [TestMethod]
+    public void NodeReferencesRoundTripWithTheirPath()
+    {
+        var owned = NodeReference.To(NodeId.New());
+        var instanced = new NodeReference(NodeId.New(), NodePath.Of(NodeId.New(), NodeId.New()));
+
+        _ = NativeSessionConversions.FromNative(NativeSessionConversions.ToNative(owned)).Should().Be(owned);
+        _ = NativeSessionConversions.FromNative(NativeSessionConversions.ToNative(instanced)).Should().Be(instanced);
+        _ = NativeSessionConversions.ToNative(instanced).Path.Should().Equal(instanced.Path.Nodes.Select(static id => id.Value));
     }
 
     private static void CheckEnum<TManaged, TNative>()

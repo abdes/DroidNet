@@ -65,6 +65,7 @@
 #include <Commands/AttachLightCommand.h>
 #include <Commands/CreateSceneNodeCommand.h>
 #include <EditorModule/CommandFactory.h>
+#include <Views/NodeReferenceManaged.h>
 #include <World/FogEnvironmentConversion.h>
 #include <World/OxygenWorld.h>
 #include <World/SkyEnvironmentConversion.h>
@@ -922,12 +923,11 @@ namespace Oxygen::Interop::World {
     //! The engine node ID of a managed node ID; an empty one is refused.
     auto ToNodeId(System::Guid id) -> oxygen::data::NodeId
     {
-      const auto parsed = oxygen::data::NodeId::FromString(
-        msclr::interop::marshal_as<std::string>(id.ToString("D")));
-      if (!parsed || parsed.value().IsNil()) {
+      const auto parsed = ::Oxygen::Interop::detail::ToNativeNodeId(id);
+      if (!parsed.has_value()) {
         throw gcnew ArgumentException("A node path holds an empty node ID.", "path");
       }
-      return parsed.value();
+      return *parsed;
     }
 
     //! The engine node path of a managed one; it cannot be empty.

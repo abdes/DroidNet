@@ -4,6 +4,7 @@
 
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Editor.World;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -263,10 +264,10 @@ internal sealed class FakeEngine(EngineServiceState state = EngineServiceState.R
     public Task<RuntimePickResult?> PickViewAsync(RuntimeViewId viewId, RuntimePickRect rect) => throw Viewports();
 
     /// <inheritdoc/>
-    public Task<RuntimeFramingOutcome> FrameViewAsync(RuntimeViewId viewId, IReadOnlyList<NodeId> nodeIds) => throw Viewports();
+    public Task<RuntimeFramingOutcome> FrameViewAsync(RuntimeViewId viewId, IReadOnlyList<NodeReference> nodes) => throw Viewports();
 
     /// <inheritdoc/>
-    public Task<bool> SetSelectionOutlineAsync(IReadOnlyList<NodeId> nodeIds, NodeId? activeNodeId) => throw Viewports();
+    public Task<bool> SetSelectionOutlineAsync(IReadOnlyList<NodeReference> nodes, NodeReference? activeNode) => throw Viewports();
 
     /// <inheritdoc/>
     public Task<bool> SetTransformGizmoAsync(RuntimeTransformGizmo gizmo) => throw Viewports();

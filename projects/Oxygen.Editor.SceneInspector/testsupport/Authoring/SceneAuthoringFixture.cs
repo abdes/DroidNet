@@ -99,7 +99,7 @@ internal sealed partial class SceneAuthoringFixture : IDisposable
     /// <summary>Writes the node selection of the fixture's document through the shared selection service, as the Explorer, a viewport or another panel does.</summary>
     /// <param name="nodes">The selected nodes, of which the last is primary; none clears the selection.</param>
     public void Select(params SceneNode[] nodes)
-        => this.Selection.SetSelection(this.TestScene.DocumentId, nodes, "Test");
+        => this.Selection.SetSelection(this.TestScene.DocumentId, [.. nodes.Select(node => NodeReference.To(node.Id))], "Test");
 
     public void Dispose()
     {

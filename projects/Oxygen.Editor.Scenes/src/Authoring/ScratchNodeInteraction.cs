@@ -17,10 +17,13 @@ internal sealed class ScratchNodeInteraction(ISceneNodeInteraction live) : IScen
     public bool IsHidden(NodeId nodeId) => this.hidden.TryGetValue(nodeId, out var isHidden) ? isHidden : live.IsHidden(nodeId);
 
     /// <inheritdoc/>
-    public bool IsLocked(NodeId nodeId) => live.IsLocked(nodeId);
+    public bool IsLocked(NodeReference node) => live.IsLocked(node);
 
     /// <inheritdoc/>
     public SceneNode? GetLockOwner(SceneNode node) => live.GetLockOwner(node);
+
+    /// <inheritdoc/>
+    public NodeReference? GetLockOwner(Scene scene, NodeReference node) => live.GetLockOwner(scene, node);
 
     /// <inheritdoc/>
     public void SetHidden(NodeId nodeId, bool isHidden) => this.hidden[nodeId] = isHidden;

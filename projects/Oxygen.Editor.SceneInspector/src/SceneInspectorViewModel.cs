@@ -267,7 +267,7 @@ public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNo
         SceneSelectionKind.Folder => this.selectionContext.SelectedFolderIds.Count == 1
             ? "1 grouping selected. Select a contained object to edit its components."
             : $"{this.selectionContext.SelectedFolderIds.Count} groupings selected. Select a contained object to edit its components.",
-        SceneSelectionKind.Mixed => $"{this.selectionContext.SelectedNodeIds.Count} objects and {this.selectionContext.SelectedFolderIds.Count} groupings selected.",
+        SceneSelectionKind.Mixed => $"{this.selectionContext.SelectedNodes.Count} objects and {this.selectionContext.SelectedFolderIds.Count} groupings selected.",
         SceneSelectionKind.Node when !this.HasItems => "The selected objects are not available in the current scene.",
         _ => string.Empty,
     };
@@ -572,7 +572,7 @@ public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNo
             return;
         }
 
-        this.sceneSelectionService.SetSelection(documentId, [node], InspectorSelectionSource);
+        this.sceneSelectionService.SetSelection(documentId, [NodeReference.To(node.Id)], InspectorSelectionSource);
     }
 
     private async Task InspectAtmosphereSource(NodeId nodeId)
@@ -591,7 +591,7 @@ public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNo
         // The Explorer reveals and focuses the row for a selection written by this source; the selection may reach the
         // inspector later, through its dispatcher.
         this.pendingAtmosphereSource = node.Id;
-        this.sceneSelectionService.SetSelection(documentId, [node], InspectorSelectionSource);
+        this.sceneSelectionService.SetSelection(documentId, [NodeReference.To(node.Id)], InspectorSelectionSource);
         this.ApplyPendingAtmosphereFilter();
     }
 

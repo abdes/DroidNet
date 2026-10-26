@@ -31,20 +31,25 @@ public interface ISceneSelectionService
     public event EventHandler<ScenePropertyFocusEventArgs>? PropertyFocusRequested;
 
     /// <summary>
-    /// Sets the selected scene-node identities for a document, classified as a
+    /// Sets the selected scene nodes for a document, classified as a
     /// node selection with the last node as primary.
     /// </summary>
     /// <param name="documentId">The document identity.</param>
-    /// <param name="nodes">The selected nodes in stable selection order.</param>
+    /// <param name="nodes">
+    /// The selected nodes in stable selection order: nodes of the scene and nodes an instance brought in.
+    /// </param>
     /// <param name="source">The selection source.</param>
-    public void SetSelection(DocumentId documentId, IReadOnlyList<SceneNode> nodes, string source);
+    public void SetSelection(DocumentId documentId, IReadOnlyList<NodeReference> nodes, string source);
 
     /// <summary>
-    /// Gets selected nodes that still exist in the supplied scene.
+    /// Gets the selected nodes of the scene itself that still exist in the supplied scene.
     /// </summary>
     /// <param name="documentId">The document identity.</param>
     /// <param name="scene">The active scene model.</param>
-    /// <returns>Selected nodes that survived in stable order.</returns>
+    /// <returns>
+    /// Selected nodes that survived in stable order; a selected node an instance brought in has no scene node and is
+    /// not among them.
+    /// </returns>
     public IReadOnlyList<SceneNode> GetSelectedNodes(DocumentId documentId, Scene scene);
 
     /// <summary>
@@ -53,7 +58,10 @@ public interface ISceneSelectionService
     /// <param name="documentId">The document identity.</param>
     /// <param name="scene">The scene model.</param>
     /// <param name="layout">The scene's explorer layout, whose folders a folder selection must still name.</param>
-    /// <returns>Selected nodes that survived reconciliation.</returns>
+    /// <returns>
+    /// Selected nodes of the scene itself that survived reconciliation. A selected node an instance brought in
+    /// survives while its instance root is in the scene.
+    /// </returns>
     public IReadOnlyList<SceneNode> Reconcile(DocumentId documentId, Scene scene, IList<ExplorerEntryData> layout);
 
     /// <summary>

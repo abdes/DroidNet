@@ -236,7 +236,7 @@ public sealed class CookRecoveryTests
         var result = await this.CreateRecovery().GoToPropertyAsync(RunOf(project, new(CookTargetKind.Project, ScopeUri: null)), issue).ConfigureAwait(false);
 
         _ = result.Should().BeTrue();
-        _ = this.selection.GetContext(document.Id).SelectedNodeIds.Should().ContainSingle().Which.Should().Be(node.Id);
+        _ = this.selection.GetContext(document.Id).OwnedNodeIds.Should().ContainSingle().Which.Should().Be(node.Id);
         _ = focused.Should().BeEmpty();
         this.placement.Verify(service => service.ShowPanelsAsync(It.Is<IReadOnlyList<string>>(panels => panels.SequenceEqual(new[] { "props", "cook" })), It.IsAny<WindowPlacement>()), Times.Once);
     }

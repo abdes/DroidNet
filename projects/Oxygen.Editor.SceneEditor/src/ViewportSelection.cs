@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using Oxygen.Managed.Core;
+using Oxygen.Editor.World;
 
 namespace Oxygen.Editor.SceneEditor;
 
@@ -20,9 +20,9 @@ public enum ViewportSelectionMode
 }
 
 /// <summary>The scene nodes a viewport click or marquee picked, and how they combine with the selection.</summary>
-/// <param name="NodeIds">The picked nodes, the one nearest the pointer or marquee centre last.</param>
+/// <param name="Nodes">The picked nodes, the one nearest the pointer or marquee centre last.</param>
 /// <param name="Mode">How the picked nodes combine with the current selection.</param>
-public sealed record ViewportSelection(IReadOnlyList<NodeId> NodeIds, ViewportSelectionMode Mode)
+public sealed record ViewportSelection(IReadOnlyList<NodeReference> Nodes, ViewportSelectionMode Mode)
 {
     /// <summary>
     /// Combines the picked nodes with the current selection. The last node of the result is the
@@ -33,10 +33,10 @@ public sealed record ViewportSelection(IReadOnlyList<NodeId> NodeIds, ViewportSe
     ///     The new selection, or <see langword="null"/> when the pick leaves the selection unchanged:
     ///     an empty Add or Toggle pick.
     /// </returns>
-    public IReadOnlyList<NodeId>? Combine(IReadOnlyList<NodeId> current)
+    public IReadOnlyList<NodeReference>? Combine(IReadOnlyList<NodeReference> current)
     {
         ArgumentNullException.ThrowIfNull(current);
-        var picked = this.NodeIds.Distinct().ToList();
+        var picked = this.Nodes.Distinct().ToList();
         if (picked.Count == 0)
         {
             return this.Mode == ViewportSelectionMode.Replace && current.Count > 0 ? [] : null;

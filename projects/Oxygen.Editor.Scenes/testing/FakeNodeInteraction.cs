@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using Oxygen.Editor.Scenes.Authoring;
+using Oxygen.Editor.Scenes.Interaction;
 using Oxygen.Editor.World;
 using Oxygen.Managed.Core;
 
@@ -15,7 +16,7 @@ namespace Oxygen.Editor.Scenes.Testing;
 public sealed class FakeNodeInteraction : ISceneNodeInteraction
 {
     private readonly Lock gate = new();
-    private readonly HashSet<NodeId> locked = [];
+    private readonly HashSet<NodeReference> locked = [];
     private readonly HashSet<NodeId> hidden = [];
 
     /// <summary>Gets the hidden nodes, sorted, so two reads compare by value.</summary>
@@ -33,6 +34,11 @@ public sealed class FakeNodeInteraction : ISceneNodeInteraction
     /// <summary>Locks nodes; their descendants are locked through them.</summary>
     /// <param name="nodes">The nodes.</param>
     public void Lock(params IEnumerable<NodeId> nodes)
+        => this.Lock(nodes.Select(NodeReference.To));
+
+    /// <summary>Locks nodes, which an instance may have brought in; their descendants are locked through them.</summary>
+    /// <param name="nodes">The nodes.</param>
+    public void Lock(params IEnumerable<NodeReference> nodes)
     {
         lock (this.gate)
         {
@@ -46,7 +52,7 @@ public sealed class FakeNodeInteraction : ISceneNodeInteraction
     {
         lock (this.gate)
         {
-            this.locked.ExceptWith(nodes);
+            this.locked.ExceptWith(nodes.Select(NodeReference.To));
         }
     }
 
@@ -70,11 +76,11 @@ public sealed class FakeNodeInteraction : ISceneNodeInteraction
     }
 
     /// <inheritdoc/>
-    public bool IsLocked(NodeId nodeId)
+    public bool IsLocked(NodeReference node)
     {
         lock (this.gate)
         {
-            return this.locked.Contains(nodeId);
+            return this.locked.Contains(node);
         }
     }
 
@@ -84,7 +90,7 @@ public sealed class FakeNodeInteraction : ISceneNodeInteraction
         ArgumentNullException.ThrowIfNull(node);
         for (var current = node; current is not null; current = current.Hierarchy.Parent)
         {
-            if (this.IsLocked(current.Id))
+            if (this.IsLocked(NodeReference.To(current.Id)))
             {
                 return current;
             }
@@ -92,6 +98,10 @@ public sealed class FakeNodeInteraction : ISceneNodeInteraction
 
         return null;
     }
+
+    /// <inheritdoc/>
+    public NodeReference? GetLockOwner(Scene scene, NodeReference node)
+        => SceneNodeInteraction.FindLockOwner(scene, node, this.IsLocked);
 
     /// <inheritdoc/>
     public void SetHidden(NodeId nodeId, bool isHidden)

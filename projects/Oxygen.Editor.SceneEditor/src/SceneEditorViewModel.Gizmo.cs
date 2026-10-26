@@ -156,10 +156,10 @@ public partial class SceneEditorViewModel
         }
 
         var context = this.SelectionService.GetContext(this.Document.Id);
-        var nodes = this.FindSelectionRoots(context.SelectedNodeIds);
+        var nodes = this.FindSelectionRoots(context.OwnedNodeIds);
         var interaction = this.Interaction;
         var targets = nodes.Where(node => interaction.GetLockOwner(node) is null).Select(static node => node.Id).ToList();
-        activeNodeId = context.PrimaryNodeId is { } primary && targets.Contains(primary) ? primary
+        activeNodeId = context.OwnedPrimaryNodeId is { } primary && targets.Contains(primary) ? primary
             : targets.Count > 0 ? targets[^1] : null;
         return targets;
     }
@@ -299,7 +299,7 @@ public partial class SceneEditorViewModel
     private async Task SetSceneHelpersAsync(float displayScale)
     {
         var interaction = this.Interaction;
-        var selected = this.SelectionService.GetContext(this.Document.Id).SelectedNodeIds.ToHashSet();
+        var selected = this.SelectionService.GetContext(this.Document.Id).OwnedNodeIds.ToHashSet();
         IReadOnlyList<NodeId> locked = this.scene is null
             ? []
             : [.. this.scene.AllNodes.Where(node => selected.Contains(node.Id) && interaction.GetLockOwner(node) is not null).Select(static node => node.Id)];
@@ -438,7 +438,7 @@ public partial class SceneEditorViewModel
         switch (command)
         {
             case ViewportEditCommand.Duplicate:
-                var selected = this.SelectionService.GetContext(this.Document.Id).SelectedNodeIds;
+                var selected = this.SelectionService.GetContext(this.Document.Id).OwnedNodeIds;
                 var roots = this.FindSelectionRoots(selected);
                 if (roots.Count > 0 && this.Authoring is { } authoring)
                 {
@@ -477,10 +477,9 @@ public partial class SceneEditorViewModel
             return;
         }
 
-        IReadOnlyList<NodeId> ids = [.. duplicate.Inserts.Select(static insert => insert.Node.Id)];
         this.SelectionService.Publish(
             this.Document.Id,
-            new SceneSelectionContext(SceneSelectionKind.Node, ids, [], ids[^1], PrimaryFolderId: null),
+            SceneSelectionContext.ForNodes(duplicate.Inserts.Select(static insert => NodeReference.To(insert.Node.Id))),
             ViewportSelectionSource);
     }
 

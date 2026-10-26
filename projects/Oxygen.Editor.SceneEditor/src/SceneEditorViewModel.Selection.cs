@@ -4,7 +4,7 @@
 
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.Scenes.Selection;
-using Oxygen.Managed.Core;
+using Oxygen.Editor.World;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.SceneEditor;
@@ -18,16 +18,16 @@ public partial class SceneEditorViewModel
     private const string ViewportSelectionSource = "Viewport";
 
     /// <summary>Frames nodes in the focused viewport; no nodes frame the whole scene.</summary>
-    /// <param name="nodeIds">The nodes to frame.</param>
+    /// <param name="nodes">The nodes to frame.</param>
     /// <returns>Whether a viewport framed them.</returns>
-    internal async Task<bool> FrameNodesAsync(IReadOnlyList<NodeId> nodeIds)
+    internal async Task<bool> FrameNodesAsync(IReadOnlyList<NodeReference> nodes)
     {
         if (this.isDisposed || this.GetActiveViewport() is not { } viewport)
         {
             return false;
         }
 
-        await viewport.FrameAsync(nodeIds).ConfigureAwait(true);
+        await viewport.FrameAsync(nodes).ConfigureAwait(true);
         return true;
     }
 
@@ -36,38 +36,33 @@ public partial class SceneEditorViewModel
     private void AttachSelectionServices(ViewportViewModel viewport)
     {
         viewport.SelectionPicked = this.ApplyViewportSelection;
-        viewport.SelectedNodesProvider = this.GetSelectedNodeIds;
+        viewport.SelectedNodesProvider = this.GetSelectedNodes;
     }
 
-    private IReadOnlyList<NodeId> GetSelectedNodeIds()
-        => this.SelectionService.GetContext(this.Document.Id).SelectedNodeIds;
+    private IReadOnlyList<NodeReference> GetSelectedNodes()
+        => this.SelectionService.GetContext(this.Document.Id).SelectedNodes;
 
     private void ApplyViewportSelection(ViewportSelection selection)
     {
-        if (this.isDisposed || selection.Combine(this.GetSelectedNodeIds()) is not { } nodeIds)
+        if (this.isDisposed || selection.Combine(this.GetSelectedNodes()) is not { } nodes)
         {
             return;
         }
 
         // The Explorer reconciles its rows with the stored selection, reveals the active row and
         // tells the other panels.
-        this.SelectionService.Publish(
-            this.Document.Id,
-            nodeIds.Count == 0
-                ? SceneSelectionContext.Empty
-                : new SceneSelectionContext(SceneSelectionKind.Node, nodeIds, [], nodeIds[^1], PrimaryFolderId: null),
-            ViewportSelectionSource);
+        this.SelectionService.Publish(this.Document.Id, SceneSelectionContext.ForNodes(nodes), ViewportSelectionSource);
     }
 
     /// <summary>Outlines the document's selection in the editing views; only the active scene renders.</summary>
     private void UpdateSelectionOutline(SceneSelectionContext context)
-        => _ = this.SetSelectionOutlineAsync(context.SelectedNodeIds, context.PrimaryNodeId);
+        => _ = this.SetSelectionOutlineAsync(context.SelectedNodes, context.PrimaryNode);
 
-    private async Task SetSelectionOutlineAsync(IReadOnlyList<NodeId> nodeIds, NodeId? activeNodeId)
+    private async Task SetSelectionOutlineAsync(IReadOnlyList<NodeReference> nodes, NodeReference? activeNode)
     {
         try
         {
-            if (!await this.services.Engine.SetSelectionOutlineAsync(nodeIds, activeNodeId).ConfigureAwait(true))
+            if (!await this.services.Engine.SetSelectionOutlineAsync(nodes, activeNode).ConfigureAwait(true))
             {
                 this.LogSelectionOutlineRejected();
             }

@@ -47,6 +47,16 @@ namespace oxygen::interop::module {
     auto operator==(const NodeReferenceKey&) const -> bool = default;
   };
 
+  struct NodeReferenceKeyHash {
+    size_t operator()(const NodeReferenceKey& k) const noexcept {
+      auto hash = UuidKeyHash {}(k.node);
+      for (const auto& id : k.path) {
+        hash = (hash * 31U) ^ std::hash<oxygen::data::NodeId> {}(id);
+      }
+      return hash;
+    }
+  };
+
   class NodeRegistry {
   public:
     OXGN_EI_API static void Register(const UuidKey& id,

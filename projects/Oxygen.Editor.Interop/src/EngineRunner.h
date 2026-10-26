@@ -29,6 +29,7 @@ namespace oxygen::graphics {
 #include <Views/ViewConfigManaged.h>
 #include <Views/ViewIdManaged.h>
 #include <Views/ViewModeManaged.h>
+#include <Views/NodeReferenceManaged.h>
 #include <Views/ViewPickManaged.h>
 
 #pragma managed(push, on)
@@ -326,7 +327,7 @@ namespace Oxygen::Interop {
     /// is empty, in one view with a short eased camera move.
     /// </summary>
     auto TryFrameViewAsync(EngineContext^ ctx, ViewIdManaged viewId,
-      array<System::Guid>^ nodeIds)
+      array<NodeReferenceManaged^>^ nodeIds)
       -> System::Threading::Tasks::Task<ViewFramingOutcomeManaged>^;
 
     /// <summary>
@@ -335,7 +336,7 @@ namespace Oxygen::Interop {
     /// drawn brighter.
     /// </summary>
     auto TrySetSelectionOutline(EngineContext^ ctx,
-      array<System::Guid>^ nodeIds, System::Nullable<System::Guid> activeNodeId)
+      array<NodeReferenceManaged^>^ nodeIds, NodeReferenceManaged^ activeNodeId)
       -> bool;
 
     /// <summary>

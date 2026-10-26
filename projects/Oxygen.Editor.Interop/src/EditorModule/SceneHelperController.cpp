@@ -115,14 +115,17 @@ namespace oxygen::interop::module {
   }
 
   void SceneHelperController::BeginFrame(scene::Scene* scene,
-    const std::uint64_t scene_generation, const std::vector<UuidKey>& selected,
-    const std::optional<UuidKey> active)
+    const std::uint64_t scene_generation,
+    const std::vector<NodeReferenceKey>& selected,
+    std::optional<NodeReferenceKey> active)
   {
     {
       std::lock_guard lock(mutex_);
       if (settings_changed_) {
-        hidden_ = { requested_.hidden.begin(), requested_.hidden.end() };
-        locked_ = { requested_.locked.begin(), requested_.locked.end() };
+        filter_.hidden
+          = { requested_.hidden.begin(), requested_.hidden.end() };
+        filter_.locked
+          = { requested_.locked.begin(), requested_.locked.end() };
         display_scale_ = requested_.display_scale;
         settings_changed_ = false;
       }
@@ -134,15 +137,16 @@ namespace oxygen::interop::module {
       SetHover(kInvalidViewId, std::nullopt, TriadAxis::kNone);
       pressed_triad_ = TriadAxis::kNone;
     }
-    selected_ = { selected.begin(), selected.end() };
-    active_ = active;
-    CollectNodes();
+    filter_.selected = { selected.begin(), selected.end() };
+    filter_.active = std::move(active);
+    nodes_ = scene_ != nullptr ? CollectHelperNodes(*scene_, filter_)
+                               : std::vector<SceneHelperNode> {};
 
     // A drag ends when its light is gone, deselected or locked.
     if (drag_.has_value()) {
-      const auto& id = drag_->Node().id;
+      const auto& dragged = drag_->Node().node;
       const auto alive = std::ranges::any_of(nodes_,
-        [&](const SceneHelperNode& node) { return node.id == id && node.editable; });
+        [&](const SceneHelperNode& node) { return node.node == dragged && node.editable; });
       if (!alive) {
         cancel_requested_.store(true, std::memory_order_relaxed);
       }
@@ -152,14 +156,12 @@ namespace oxygen::interop::module {
     }
   }
 
-  void SceneHelperController::CollectNodes()
+  auto CollectHelperNodes(scene::Scene& scene, const HelperNodeFilter& filter)
+    -> std::vector<SceneHelperNode>
   {
-    nodes_.clear();
-    if (scene_ == nullptr) {
-      return;
-    }
+    std::vector<SceneHelperNode> nodes;
     std::vector<std::pair<scene::SceneNode, bool>> pending;
-    for (auto& root : scene_->GetRootNodes()) {
+    for (auto& root : scene.GetRootNodes()) {
       pending.emplace_back(root, false);
     }
     while (!pending.empty()) {
@@ -168,19 +170,18 @@ namespace oxygen::interop::module {
       if (!node.IsAlive()) {
         continue;
       }
-      // Only the editor's own nodes have helpers; its viewport cameras are
-      // not authored.
       const auto id = NodeRegistry::ReverseLookup(node.GetHandle());
-      const auto hidden = parent_hidden || (id.has_value() && hidden_.contains(*id));
+      const auto hidden
+        = parent_hidden || (id.has_value() && filter.hidden.contains(*id));
       for (auto child = node.GetFirstChild(); child.has_value();
         child = child->GetNextSibling()) {
         pending.emplace_back(*child, hidden);
       }
-      if (!id.has_value() || hidden) {
+      if (hidden) {
         continue;
       }
 
-      auto helper = SceneHelperNode { .id = *id };
+      auto helper = SceneHelperNode {};
       if (const auto point = node.GetLightAs<scene::PointLight>()) {
         helper.kind = SceneHelperKind::kPointLight;
         helper.color = point->get().Common().color_rgb;
@@ -208,6 +209,14 @@ namespace oxygen::interop::module {
       } else {
         continue;
       }
+      // The editor's viewport cameras are neither its nodes nor instanced.
+      auto reference = id.has_value()
+        ? std::optional(NodeReferenceKey { .node = *id, .path = {} })
+        : NodeRegistry::ReverseLookup(scene, node.GetHandle());
+      if (!reference.has_value()) {
+        continue;
+      }
+      helper.node = std::move(*reference);
       auto transform = node.GetTransform();
       const auto position = transform.GetWorldPosition();
       if (!position.has_value()) {
@@ -220,11 +229,15 @@ namespace oxygen::interop::module {
       if (glm::length(direction) > 1.0e-4F) {
         helper.direction = glm::normalize(direction);
       }
-      helper.selected = selected_.contains(*id);
-      helper.active = helper.selected && active_ == id;
-      helper.editable = helper.selected && !locked_.contains(*id);
-      nodes_.push_back(helper);
+      helper.selected = filter.selected.contains(helper.node);
+      helper.active = helper.selected && filter.active == helper.node;
+      // Handles write the node's own light; a node an instance brought in
+      // changes through its instance instead.
+      helper.editable = helper.selected && helper.node.path.empty()
+        && !filter.locked.contains(helper.node.node);
+      nodes.push_back(std::move(helper));
     }
+    return nodes;
   }
 
   auto SceneHelperController::NodesFor(EditorView& view) const
@@ -238,7 +251,8 @@ namespace oxygen::interop::module {
     nodes.reserve(nodes_.size());
     for (const auto& node : nodes_) {
       // The camera a view looks through is its eye.
-      if (viewed_id == node.id) {
+      if (viewed_id.has_value() && node.node.path.empty()
+        && node.node.node == *viewed_id) {
         continue;
       }
       nodes.push_back(node);
@@ -246,7 +260,7 @@ namespace oxygen::interop::module {
         || scene_ == nullptr) {
         continue;
       }
-      if (const auto handle = NodeRegistry::Lookup(node.id)) {
+      if (const auto handle = NodeRegistry::Lookup(*scene_, node.node)) {
         if (auto camera_node = scene_->GetNode(*handle);
           camera_node.has_value() && camera_node->IsAlive()) {
           ResolveFrustum(*camera_node, view, nodes.back());
@@ -497,7 +511,8 @@ namespace oxygen::interop::module {
       .hovering = false,
       .pointer_pixel = drag_->Pointer(),
       .helper = true,
-      .node = drag_->Node().id,
+      // Only editable helpers are dragged: nodes of the editor's own.
+      .node = drag_->Node().node.node,
       .helper_handle = drag_->Handle(),
       .value = drag_->Value(),
     };

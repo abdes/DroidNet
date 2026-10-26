@@ -83,7 +83,8 @@ namespace oxygen::interop::module {
 
   //! A scene node with visible pixels in a picked rectangle.
   struct EditorPickHit {
-    UuidKey node {};
+    //! The node hit; a node an instance brought in is named by its path.
+    NodeReferenceKey node {};
     //! Device depth of the node's nearest pixel.
     float depth { 0.0F };
     //! Geometry slot (submesh) under the pixel closest to the centre.
@@ -247,14 +248,14 @@ namespace oxygen::interop::module {
 
     //! Frames scene nodes, or the whole scene when `nodes` is empty, in one
     //! view. The callback runs exactly once, on the engine thread.
-    void FrameView(ViewId view_id, std::vector<UuidKey> nodes,
+    void FrameView(ViewId view_id, std::vector<NodeReferenceKey> nodes,
       std::function<void(EditorFramingOutcome)> callback);
 
     //! Outlines the selected scene nodes, and their descendants, in every
     //! editing view that shows the selection outline; `active` is drawn
     //! brighter. Callable from any thread.
-    void SetSelectionOutline(
-      std::vector<UuidKey> nodes, std::optional<UuidKey> active);
+    void SetSelectionOutline(std::vector<NodeReferenceKey> nodes,
+      std::optional<NodeReferenceKey> active);
 
     //! Renders every visible pane each frame instead of only the panes whose
     //! content may have changed. Callable from any thread.
@@ -403,8 +404,8 @@ namespace oxygen::interop::module {
     };
 
     std::mutex outline_mutex_;
-    std::vector<UuidKey> outline_nodes_;
-    std::optional<UuidKey> outline_active_;
+    std::vector<NodeReferenceKey> outline_nodes_;
+    std::optional<NodeReferenceKey> outline_active_;
     //! Advances with every selection outline change.
     std::atomic<std::uint64_t> outline_revision_ { 0U };
     std::uint64_t published_outline_revision_ { 0U };

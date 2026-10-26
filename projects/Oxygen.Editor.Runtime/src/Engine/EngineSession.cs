@@ -4,6 +4,7 @@
 
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml.Controls;
+using Oxygen.Editor.World;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Runtime.Engine;
@@ -163,15 +164,15 @@ internal abstract class EngineSession
 
     /// <summary>Frames scene nodes, or the whole scene, in a view.</summary>
     /// <param name="viewId">The view whose editor camera moves.</param>
-    /// <param name="nodeIds">The nodes to frame; empty frames the whole scene.</param>
+    /// <param name="nodes">The nodes to frame; empty frames the whole scene.</param>
     /// <returns>What the request did.</returns>
-    public abstract Task<RuntimeFramingOutcome> FrameViewAsync(RuntimeViewId viewId, IReadOnlyList<NodeId> nodeIds);
+    public abstract Task<RuntimeFramingOutcome> FrameViewAsync(RuntimeViewId viewId, IReadOnlyList<NodeReference> nodes);
 
     /// <summary>Outlines the selected nodes in every editing view.</summary>
-    /// <param name="nodeIds">The selected nodes; empty clears the outline.</param>
-    /// <param name="activeNodeId">The active node, if any.</param>
+    /// <param name="nodes">The selected nodes; empty clears the outline.</param>
+    /// <param name="activeNode">The active node, if any.</param>
     /// <returns>The runtime operation result.</returns>
-    public abstract bool SetSelectionOutline(IReadOnlyList<NodeId> nodeIds, NodeId? activeNodeId);
+    public abstract bool SetSelectionOutline(IReadOnlyList<NodeReference> nodes, NodeReference? activeNode);
 
     /// <summary>Shows the transform gizmo for the given targets in every editing view.</summary>
     /// <param name="gizmo">The tool, space, snapping and targets.</param>

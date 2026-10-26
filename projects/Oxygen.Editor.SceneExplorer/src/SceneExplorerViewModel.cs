@@ -407,10 +407,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             return false;
         }
 
-        var distinctIds = nodeIds.Distinct().ToArray();
-        var context = distinctIds.Length == 0
-            ? SceneSelectionContext.Empty
-            : new SceneSelectionContext(SceneSelectionKind.Node, distinctIds, [], distinctIds[^1], PrimaryFolderId: null);
+        var context = SceneSelectionContext.ForNodes(nodeIds.Select(NodeReference.To));
 
         this.suppressSelectionSync = true;
         try
@@ -542,7 +539,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         var hasNode = items.Any(static item => item is SceneNodeAdapter);
         var kind = SceneSelectionContext.Classify(hasScene, hasFolder, hasNode);
 
-        var nodeIds = items.OfType<SceneNodeAdapter>().Select(adapter => adapter.AttachedObject.Id).ToList();
+        var nodes = items.OfType<SceneNodeAdapter>().Select(adapter => NodeReference.To(adapter.AttachedObject.Id)).ToList();
         var folderIds = items.OfType<FolderAdapter>().Select(folder => folder.Id).ToList();
 
         // The explicit active row is the primary identity; selection order is only the fallback
@@ -551,9 +548,9 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
 
         return new SceneSelectionContext(
             kind,
-            nodeIds,
+            nodes,
             folderIds,
-            primary is SceneNodeAdapter primaryNode ? primaryNode.AttachedObject.Id : null,
+            primary is SceneNodeAdapter primaryNode ? NodeReference.To(primaryNode.AttachedObject.Id) : null,
             primary is FolderAdapter primaryFolder ? primaryFolder.Id : null);
     }
 
@@ -720,7 +717,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             return targets.FirstOrDefault(target => target is FolderAdapter folder && folder.Id == folderId);
         }
 
-        if (context.PrimaryNodeId is { } nodeId)
+        if (context.OwnedPrimaryNodeId is { } nodeId)
         {
             return targets.FirstOrDefault(target => target is SceneNodeAdapter node && node.AttachedObject.Id == nodeId);
         }
@@ -1591,15 +1588,15 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             return;
         }
 
-        IReadOnlyList<NodeId>? nodeIds = args.TreeItem switch
+        IReadOnlyList<NodeReference>? nodes = args.TreeItem switch
         {
-            SceneNodeAdapter node => [node.AttachedObject.Id],
+            SceneNodeAdapter node => [NodeReference.To(node.AttachedObject.Id)],
             SceneAdapter => [],
             _ => null,
         };
-        if (nodeIds is not null)
+        if (nodes is not null)
         {
-            _ = this.views?.FrameAsync(this.SceneDocumentId, nodeIds);
+            _ = this.views?.FrameAsync(this.SceneDocumentId, nodes);
         }
     }
 
@@ -1684,7 +1681,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         {
             // The Inspector asks to inspect a node: a search that hides its row ends, and the row takes the focus.
             var inspecting = string.Equals(args.Source, InspectorSelectionSource, StringComparison.Ordinal)
-                && args.Context.SelectedNodeIds.Any(id => this.projection.GetNode(id) is not null);
+                && args.Context.OwnedNodeIds.Any(id => this.projection.GetNode(id) is not null);
             if (inspecting)
             {
                 await this.ClearSearchAsync().ConfigureAwait(true);
@@ -1731,7 +1728,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
 
         // True when every identity the context names resolves to one of the applied rows.
         var fullyResolved =
-            context.SelectedNodeIds.Count == targets.OfType<SceneNodeAdapter>().Count()
+            context.SelectedNodes.Count == targets.OfType<SceneNodeAdapter>().Count()
             && context.SelectedFolderIds.Count == targets.OfType<FolderAdapter>().Count()
             && (context.Kind != SceneSelectionKind.Scene || targets.OfType<SceneAdapter>().Any());
 
@@ -1762,7 +1759,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             targets.Add(sceneAdapter);
         }
 
-        foreach (var nodeId in context.SelectedNodeIds)
+        foreach (var nodeId in context.OwnedNodeIds)
         {
             if (this.projection.GetNode(nodeId) is { } nodeAdapter)
             {
@@ -2169,7 +2166,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             node.IsEffectivelyHiddenInEditor = isExplicitlyHidden || HasHiddenSceneAncestor(node.AttachedObject, service);
             if (!node.IsRoot)
             {
-                node.IsLocked = service.IsLocked(nodeId);
+                node.IsLocked = service.IsLocked(NodeReference.To(nodeId));
             }
         }
 
@@ -2317,9 +2314,9 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             return;
         }
 
-        foreach (var nodeId in this.ResolveWorkspaceTargetIds(anchor))
+        foreach (var node in this.ResolveWorkspaceTargetIds(anchor).Select(NodeReference.To))
         {
-            service.SetLocked(nodeId, !service.IsLocked(nodeId));
+            service.SetLocked(node, !service.IsLocked(node));
         }
     }
 

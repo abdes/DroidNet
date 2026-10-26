@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Editor.World;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Runtime.Engine;
@@ -257,14 +258,14 @@ public sealed partial class EngineService
     }
 
     /// <inheritdoc/>
-    public async Task<RuntimeFramingOutcome> FrameViewAsync(RuntimeViewId viewId, IReadOnlyList<NodeId> nodeIds)
+    public async Task<RuntimeFramingOutcome> FrameViewAsync(RuntimeViewId viewId, IReadOnlyList<NodeReference> nodes)
     {
-        ArgumentNullException.ThrowIfNull(nodeIds);
+        ArgumentNullException.ThrowIfNull(nodes);
         await this.lifecycleGate.WaitAsync(CancellationToken.None).ConfigureAwait(true);
         try
         {
             var runner = this.EnsureIsRunning();
-            return await this.AwaitRuntimeOperationAsync(runner.FrameViewAsync(viewId, nodeIds)).ConfigureAwait(true);
+            return await this.AwaitRuntimeOperationAsync(runner.FrameViewAsync(viewId, nodes)).ConfigureAwait(true);
         }
         finally
         {
@@ -273,14 +274,14 @@ public sealed partial class EngineService
     }
 
     /// <inheritdoc/>
-    public async Task<bool> SetSelectionOutlineAsync(IReadOnlyList<NodeId> nodeIds, NodeId? activeNodeId)
+    public async Task<bool> SetSelectionOutlineAsync(IReadOnlyList<NodeReference> nodes, NodeReference? activeNode)
     {
-        ArgumentNullException.ThrowIfNull(nodeIds);
+        ArgumentNullException.ThrowIfNull(nodes);
         await this.lifecycleGate.WaitAsync(CancellationToken.None).ConfigureAwait(true);
         try
         {
             return this.State == EngineServiceState.Running && this.session is { } running
-                && running.SetSelectionOutline(nodeIds, activeNodeId);
+                && running.SetSelectionOutline(nodes, activeNode);
         }
         finally
         {
