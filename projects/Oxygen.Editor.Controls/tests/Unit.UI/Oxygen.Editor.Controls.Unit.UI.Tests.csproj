@@ -8,6 +8,7 @@
     </PropertyGroup>
     <ItemGroup>
         <ProjectReference Include="../../src/Oxygen.Editor.Controls.csproj" />
+        <ProjectReference Include="../../testing/Oxygen.Editor.Controls.Testing.csproj" />
     </ItemGroup>
     <Import Project="$(ProjectsRoot)/UITests.Shared/src/UITests.Shared.projitems" Label="Shared" />
 </Project>

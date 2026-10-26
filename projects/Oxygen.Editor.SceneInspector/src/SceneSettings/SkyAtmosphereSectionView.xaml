@@ -15,31 +15,25 @@
     </UserControl.Resources>
     <editorcontrols:PropertiesExpander
         x:Name="SkyAtmosphereSection"
-        HorizontalAlignment="Stretch"
-        HorizontalContentAlignment="Stretch"
         Description="Atmospheric sky and aerial perspective authored on the scene."
         Header="Sky Atmosphere"
         HeaderIcon="{ui:FontIcon Glyph='&#xE753;'}"
         IsExpanded="True"
         Tag="Environment">
         <editorcontrols:PropertiesExpander.Items>
-            <editorcontrols:PropertyCard
-                x:Name="SunDiskEnabledCard"
-                HorizontalContentAlignment="Stretch"
-                PropertyName="Sun Disk">
+            <editorcontrols:PropertyCard x:Name="SunDiskEnabledCard" PropertyName="Sun Disk">
                 <ToggleSwitch
                     VerticalAlignment="Center"
                     IsOn="{x:Bind ViewModel.SunDiskEnabled, Mode=TwoWay}"
                     Tag="SunDiskEnabled" />
             </editorcontrols:PropertyCard>
-            <editorcontrols:InspectorColorField
+            <editorcontrols:ColorField
                 x:Name="SkyLuminanceCard"
                 Blue="{x:Bind ViewModel.SkyLuminanceB, Mode=TwoWay}"
                 DiagnosticSpacing="2"
                 EditSessionCompleted="ColorEditCompleted"
                 EditSessionStarted="ColorEditStarted"
                 ErrorText="{x:Bind ViewModel.SkyLuminanceRDiagnostic.Message, Mode=OneWay}"
-                FontSize="14"
                 Green="{x:Bind ViewModel.SkyLuminanceG, Mode=TwoWay}"
                 HasError="{x:Bind ViewModel.SkyLuminanceRDiagnostic.HasError, Mode=OneWay}"
                 Kind="Multiplier"
@@ -55,33 +49,27 @@
                 IsExpanded="False"
                 Style="{StaticResource QuietDisclosure}">
                 <StackPanel Spacing="4">
-                    <editorcontrols:InspectorNumberField
+                    <editorcontrols:NumberField
                         x:Name="PlanetRadiusKmCard"
-                        CardStyle="{StaticResource ScenePropertyCardStyle}"
                         EditSessionCompleted="NumberEditCompleted"
                         EditSessionStarted="NumberEditStarted"
                         ErrorText="{x:Bind ViewModel.PlanetRadiusKmDiagnostic.Message, Mode=OneWay}"
-                        FontSize="14"
                         HasError="{x:Bind ViewModel.PlanetRadiusKmDiagnostic.HasError, Mode=OneWay}"
                         Label="Planet Radius"
-                        NumberStyle="{StaticResource SceneNumberBoxStyle}"
                         NumberValue="{x:Bind ViewModel.PlanetRadiusKm, Mode=TwoWay}"
                         Tag="PlanetRadiusKm"
                         Unit="km" />
-                    <editorcontrols:InspectorNumberField
+                    <editorcontrols:NumberField
                         x:Name="AtmosphereHeightKmCard"
-                        CardStyle="{StaticResource ScenePropertyCardStyle}"
                         EditSessionCompleted="NumberEditCompleted"
                         EditSessionStarted="NumberEditStarted"
                         ErrorText="{x:Bind ViewModel.AtmosphereHeightKmDiagnostic.Message, Mode=OneWay}"
-                        FontSize="14"
                         HasError="{x:Bind ViewModel.AtmosphereHeightKmDiagnostic.HasError, Mode=OneWay}"
                         Label="Atmosphere Height"
-                        NumberStyle="{StaticResource SceneNumberBoxStyle}"
                         NumberValue="{x:Bind ViewModel.AtmosphereHeightKm, Mode=TwoWay}"
                         Tag="AtmosphereHeightKm"
                         Unit="km" />
-                    <editorcontrols:InspectorColorField
+                    <editorcontrols:ColorField
                         x:Name="GroundAlbedoCard"
                         Blue="{x:Bind ViewModel.GroundAlbedoB, Mode=TwoWay}"
                         ColorPicked="OnRgbColorPicked"
@@ -89,7 +77,6 @@
                         EditSessionCompleted="ColorEditCompleted"
                         EditSessionStarted="ColorEditStarted"
                         ErrorText="{x:Bind ViewModel.GroundAlbedoRDiagnostic.Message, Mode=OneWay}"
-                        FontSize="14"
                         Green="{x:Bind ViewModel.GroundAlbedoG, Mode=TwoWay}"
                         HasError="{x:Bind ViewModel.GroundAlbedoRDiagnostic.HasError, Mode=OneWay}"
                         Label="Ground Albedo"
@@ -107,42 +94,33 @@
                 IsExpanded="False"
                 Style="{StaticResource QuietDisclosure}">
                 <StackPanel Spacing="4">
-                    <editorcontrols:InspectorNumberField
+                    <editorcontrols:NumberField
                         x:Name="RayleighScaleHeightKmCard"
-                        CardStyle="{StaticResource ScenePropertyCardStyle}"
                         EditSessionCompleted="NumberEditCompleted"
                         EditSessionStarted="NumberEditStarted"
                         ErrorText="{x:Bind ViewModel.RayleighScaleHeightKmDiagnostic.Message, Mode=OneWay}"
-                        FontSize="14"
                         HasError="{x:Bind ViewModel.RayleighScaleHeightKmDiagnostic.HasError, Mode=OneWay}"
                         Label="Rayleigh Height"
-                        NumberStyle="{StaticResource SceneNumberBoxStyle}"
                         NumberValue="{x:Bind ViewModel.RayleighScaleHeightKm, Mode=TwoWay}"
                         Tag="RayleighScaleHeightKm"
                         Unit="km" />
-                    <editorcontrols:InspectorNumberField
+                    <editorcontrols:NumberField
                         x:Name="MieScaleHeightKmCard"
-                        CardStyle="{StaticResource ScenePropertyCardStyle}"
                         EditSessionCompleted="NumberEditCompleted"
                         EditSessionStarted="NumberEditStarted"
                         ErrorText="{x:Bind ViewModel.MieScaleHeightKmDiagnostic.Message, Mode=OneWay}"
-                        FontSize="14"
                         HasError="{x:Bind ViewModel.MieScaleHeightKmDiagnostic.HasError, Mode=OneWay}"
                         Label="Mie Height"
-                        NumberStyle="{StaticResource SceneNumberBoxStyle}"
                         NumberValue="{x:Bind ViewModel.MieScaleHeightKm, Mode=TwoWay}"
                         Tag="MieScaleHeightKm"
                         Unit="km" />
-                    <editorcontrols:InspectorNumberField
+                    <editorcontrols:NumberField
                         x:Name="MieAnisotropyCard"
-                        CardStyle="{StaticResource ScenePropertyCardStyle}"
                         EditSessionCompleted="NumberEditCompleted"
                         EditSessionStarted="NumberEditStarted"
                         ErrorText="{x:Bind ViewModel.MieAnisotropyDiagnostic.Message, Mode=OneWay}"
-                        FontSize="14"
                         HasError="{x:Bind ViewModel.MieAnisotropyDiagnostic.HasError, Mode=OneWay}"
                         Label="Mie Anisotropy"
-                        NumberStyle="{StaticResource SceneNumberBoxStyle}"
                         NumberValue="{x:Bind ViewModel.MieAnisotropy, Mode=TwoWay}"
                         Tag="MieAnisotropy" />
                 </StackPanel>
@@ -156,33 +134,26 @@
                 IsExpanded="False"
                 Style="{StaticResource QuietDisclosure}">
                 <StackPanel Spacing="4">
-                    <editorcontrols:InspectorNumberField
+                    <editorcontrols:NumberField
                         x:Name="AerialPerspectiveDistanceScaleCard"
-                        CardStyle="{StaticResource ScenePropertyCardStyle}"
                         EditSessionCompleted="NumberEditCompleted"
                         EditSessionStarted="NumberEditStarted"
                         ErrorText="{x:Bind ViewModel.AerialPerspectiveDistanceScaleDiagnostic.Message, Mode=OneWay}"
-                        FontSize="14"
                         HasError="{x:Bind ViewModel.AerialPerspectiveDistanceScaleDiagnostic.HasError, Mode=OneWay}"
                         Label="Distance scale"
-                        NumberStyle="{StaticResource SceneNumberBoxStyle}"
                         NumberValue="{x:Bind ViewModel.AerialPerspectiveDistanceScale, Mode=TwoWay}"
                         Tag="AerialPerspectiveDistanceScale" />
-                    <editorcontrols:InspectorNumberField
+                    <editorcontrols:NumberField
                         x:Name="AerialScatteringStrengthCard"
-                        CardStyle="{StaticResource ScenePropertyCardStyle}"
                         EditSessionCompleted="NumberEditCompleted"
                         EditSessionStarted="NumberEditStarted"
                         ErrorText="{x:Bind ViewModel.AerialScatteringStrengthDiagnostic.Message, Mode=OneWay}"
-                        FontSize="14"
                         HasError="{x:Bind ViewModel.AerialScatteringStrengthDiagnostic.HasError, Mode=OneWay}"
                         Label="Scattering strength"
-                        NumberStyle="{StaticResource SceneNumberBoxStyle}"
                         NumberValue="{x:Bind ViewModel.AerialScatteringStrength, Mode=TwoWay}"
                         Tag="AerialScatteringStrength" />
                     <editorcontrols:PropertyCard
                         x:Name="AerialStartCard"
-                        HorizontalContentAlignment="Stretch"
                         PropertyName="Start distance"
                         Tag="Aerial Start aerial_perspective_start_depth_meters">
                         <controls:NumberBox
@@ -203,16 +174,13 @@
                         Text="{x:Bind ViewModel.AerialPerspectiveStartDepthMetersDiagnostic.Message, Mode=OneWay}"
                         TextWrapping="Wrap"
                         Visibility="{x:Bind ViewModel.AerialPerspectiveStartDepthMetersDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
-                    <editorcontrols:InspectorNumberField
+                    <editorcontrols:NumberField
                         x:Name="HeightFogContributionCard"
-                        CardStyle="{StaticResource ScenePropertyCardStyle}"
                         EditSessionCompleted="NumberEditCompleted"
                         EditSessionStarted="NumberEditStarted"
                         ErrorText="{x:Bind ViewModel.HeightFogContributionDiagnostic.Message, Mode=OneWay}"
-                        FontSize="14"
                         HasError="{x:Bind ViewModel.HeightFogContributionDiagnostic.HasError, Mode=OneWay}"
                         Label="Height fog contribution"
-                        NumberStyle="{StaticResource SceneNumberBoxStyle}"
                         NumberValue="{x:Bind ViewModel.HeightFogContribution, Mode=TwoWay}"
                         Tag="HeightFogContribution" />
                 </StackPanel>

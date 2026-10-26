@@ -7,6 +7,7 @@ using CommunityToolkit.WinUI;
 using DroidNet.Tests;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using static Oxygen.Editor.Controls.Testing.PropertyEditorProbes;
 using static Oxygen.Editor.SceneInspector.TestSupport.InspectorControls;
 using Expander = Microsoft.UI.Xaml.Controls.Expander;
 using NumberBox = DroidNet.Controls.NumberBox;
@@ -47,8 +48,8 @@ public sealed partial class InspectorBindingTests
         => item switch
         {
             Oxygen.Editor.Controls.PropertyCard card => [card],
-            Oxygen.Editor.Controls.InspectorNumberField number => [CardOf(number)],
-            Oxygen.Editor.Controls.InspectorColorField color => [CardOf(color)],
+            Oxygen.Editor.Controls.NumberField number => [CardOf(number)],
+            Oxygen.Editor.Controls.ColorField color => [CardOf(color)],
             Expander { Content: StackPanel content } => content.Children.SelectMany(SceneCardsOf),
             StackPanel panel => panel.Children.SelectMany(SceneCardsOf),
             _ => [],
@@ -61,8 +62,8 @@ public sealed partial class InspectorBindingTests
             _ => [item],
         }).Where(item => item is not TextBlock).Select(item => item switch
         {
-            Oxygen.Editor.Controls.InspectorNumberField number => number.Label,
-            Oxygen.Editor.Controls.InspectorColorField color => color.Label,
+            Oxygen.Editor.Controls.NumberField number => number.Label,
+            Oxygen.Editor.Controls.ColorField color => color.Label,
             Oxygen.Editor.Controls.PropertyCard card => card.PropertyName,
             _ => throw new InvalidOperationException($"Unexpected field composition {item.GetType().Name}."),
         });
@@ -71,8 +72,8 @@ public sealed partial class InspectorBindingTests
     {
         var identities = ((StackPanel)disclosure.Content).Children.Where(child => child is not TextBlock).Select(child => child switch
         {
-            Oxygen.Editor.Controls.InspectorNumberField numeric => (string)numeric.Tag,
-            Oxygen.Editor.Controls.InspectorColorField color => (string)color.Tag,
+            Oxygen.Editor.Controls.NumberField numeric => (string)numeric.Tag,
+            Oxygen.Editor.Controls.ColorField color => (string)color.Tag,
             Oxygen.Editor.Controls.PropertyCard card => GetCardPropertyIdentity(card),
             _ => throw new InvalidOperationException($"Unexpected field composition {child.GetType().Name}."),
         }).ToArray();

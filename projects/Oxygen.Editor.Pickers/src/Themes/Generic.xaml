@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+    The default styles of the pickers' templated controls, loaded by the framework for every control whose
+    DefaultStyleKey names a type of this assembly. Consumers never merge it.
+-->
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation">
+    <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="ms-appx:///Oxygen.Editor.Pickers/AssetPickerButton.xaml" />
+    </ResourceDictionary.MergedDictionaries>
+</ResourceDictionary>

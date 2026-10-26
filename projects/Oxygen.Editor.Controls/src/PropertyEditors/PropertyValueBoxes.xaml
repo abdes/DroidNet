@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+    The value box looks of the property editors: a NumberBox and a VectorBox of a property row. The fields' templates
+    use them, and Themes/EditorStyles.xaml publishes them to consumers for their standalone value boxes.
+-->
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:DroidNet.Controls">
+    <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="ms-appx:///DroidNet.Controls.InPlaceEdit/NumberBox/NumberBox.xaml" />
+        <ResourceDictionary Source="ms-appx:///DroidNet.Controls.InPlaceEdit/VectorBox/VectorBox.xaml" />
+    </ResourceDictionary.MergedDictionaries>
+
+    <!--  The value box of a property row: right-aligned, trailing zeros trimmed, stretched to the row's value column.  -->
+    <Style
+        x:Key="PropertyNumberBoxStyle"
+        BasedOn="{StaticResource DefaultNumberBoxStyle}"
+        TargetType="controls:NumberBox">
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="MinHeight" Value="28" />
+        <Setter Property="Padding" Value="6,4" />
+        <Setter Property="CornerRadius" Value="4" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="TrimTrailingZeros" Value="True" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="HorizontalValueAlignment" Value="Right" />
+    </Style>
+
+    <!--  The components of a row's vector or color: number boxes of the row's look, stacked when the row is narrow.  -->
+    <Style
+        x:Key="PropertyVectorBoxStyle"
+        BasedOn="{StaticResource DefaultVectorBoxStyle}"
+        TargetType="controls:VectorBox">
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="ComponentStyle" Value="{StaticResource PropertyNumberBoxStyle}" />
+        <Setter Property="AutoStackComponents" Value="True" />
+        <Setter Property="CompactComponentLabels" Value="True" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="HorizontalValueAlignment" Value="Right" />
+    </Style>
+</ResourceDictionary>

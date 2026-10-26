@@ -24,6 +24,7 @@ using Oxygen.Editor.SceneInspector.SceneSettings;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Windows.Foundation;
+using static Oxygen.Editor.Controls.Testing.PropertyEditorProbes;
 using NumberBox = DroidNet.Controls.NumberBox;
 
 namespace Oxygen.Editor.SceneInspector.TestSupport;
@@ -121,42 +122,11 @@ internal static class InspectorControls
         throw new InvalidOperationException($"Environment field {fieldName} was not editable: {NotEditableReason(lastResolved, everLoaded, captionEverLoaded, scroller)}.");
     }
 
-    internal static async Task EnterTextAsync(NumberBox number, string value)
-    {
-        _ = number.ApplyTemplate();
-        number.BeginTextEdit();
-        var input = number.FindDescendant<TextBox>(element => string.Equals(element.Name, "PartEditBox", StringComparison.Ordinal))!;
-        if (string.Equals(input.Text, value, StringComparison.Ordinal))
-        {
-            return;
-        }
-
-        var changed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        void TextChanged(object sender, TextChangedEventArgs args)
-        {
-            if (string.Equals(input.Text, value, StringComparison.Ordinal))
-            {
-                _ = changed.TrySetResult();
-            }
-        }
-
-        input.TextChanged += TextChanged;
-        try
-        {
-            input.Text = value;
-            await changed.Task.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(true);
-        }
-        finally
-        {
-            input.TextChanged -= TextChanged;
-        }
-    }
-
     internal static async Task<VectorBox> FindVisibleVectorAsync(SceneSettingsView view, ScrollViewer scroller, string field)
     {
         for (var step = 0; step <= 100; step++)
         {
-            if (view.FindDescendant<Oxygen.Editor.Controls.InspectorColorField>(element => Equals(element.Tag, field))?.FindDescendant<VectorBox>() is { } vector)
+            if (view.FindDescendant<Oxygen.Editor.Controls.ColorField>(element => Equals(element.Tag, field))?.FindDescendant<VectorBox>() is { } vector)
             {
                 return vector;
             }
@@ -280,42 +250,6 @@ internal static class InspectorControls
         }
         finally
         {
-            flyout.Closed -= OnClosed;
-            flyout.Hide();
-        }
-    }
-
-    // A field's row card; its feedback text sits beside the card, below it.
-    internal static Oxygen.Editor.Controls.PropertyCard CardOf(UserControl field)
-        => ((Panel)field.Content).Children.OfType<Oxygen.Editor.Controls.PropertyCard>().Single();
-
-    internal static Button SwatchOf(Oxygen.Editor.Controls.InspectorColorField field)
-        => field.FindDescendant<Button>(button => string.Equals(button.Name, "PartSwatchButton", StringComparison.Ordinal))!;
-
-    internal static Windows.UI.Color SwatchColor(Oxygen.Editor.Controls.InspectorColorField field)
-        => ((SolidColorBrush)field.FindDescendant<Border>(border => string.Equals(border.Name, "PartSwatchFill", StringComparison.Ordinal))!.Background).Color;
-
-    internal static async Task PickDisplayColorAsync(Button swatch, Windows.UI.Color color)
-    {
-        var flyout = (Flyout)swatch.Flyout;
-        var opened = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var closed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        void OnOpened(object? sender, object args) => opened.TrySetResult();
-        void OnClosed(object? sender, object args) => closed.TrySetResult();
-        flyout.Opened += OnOpened;
-        flyout.Closed += OnClosed;
-        try
-        {
-            flyout.ShowAt(swatch);
-            await opened.Task.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(true);
-            ((ColorPicker)flyout.Content).Color = color;
-            flyout.Hide();
-            await closed.Task.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(true);
-            _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
-        }
-        finally
-        {
-            flyout.Opened -= OnOpened;
             flyout.Closed -= OnClosed;
             flyout.Hide();
         }

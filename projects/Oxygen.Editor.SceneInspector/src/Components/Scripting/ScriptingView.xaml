@@ -27,7 +27,7 @@
 
             <!--  Every field is a property row: label, editor, the override bar and the reset to the script's default.  -->
             <DataTemplate x:Key="ToggleField" x:DataType="local:ScriptParameterFieldViewModel">
-                <editorcontrols:InspectorToggleField
+                <editorcontrols:ToggleField
                     IsEnabled="{x:Bind CanEdit, Mode=OneWay}"
                     Label="{x:Bind Label}"
                     OverrideState="{x:Bind OverrideState, Mode=OneWay}"
@@ -39,7 +39,6 @@
 
             <DataTemplate x:Key="NumberField" x:DataType="local:ScriptParameterFieldViewModel">
                 <editorcontrols:PropertyCard
-                    HorizontalContentAlignment="Stretch"
                     IsEnabled="{x:Bind CanEdit, Mode=OneWay}"
                     OverrideState="{x:Bind OverrideState, Mode=OneWay}"
                     PropertyName="{x:Bind Label}"
@@ -53,14 +52,13 @@
                         LabelPosition="None"
                         Mask="{x:Bind NumberMask}"
                         NumberValue="{x:Bind NumberValue, Mode=TwoWay}"
-                        Style="{StaticResource SceneNumberBoxStyle}"
+                        Style="{StaticResource PropertyNumberBoxStyle}"
                         Unit="{x:Bind Unit}" />
                 </editorcontrols:PropertyCard>
             </DataTemplate>
 
             <DataTemplate x:Key="ChoiceField" x:DataType="local:ScriptParameterFieldViewModel">
                 <editorcontrols:PropertyCard
-                    HorizontalContentAlignment="Stretch"
                     IsEnabled="{x:Bind CanEdit, Mode=OneWay}"
                     OverrideState="{x:Bind OverrideState, Mode=OneWay}"
                     PropertyName="{x:Bind Label}"
@@ -78,7 +76,6 @@
             <DataTemplate x:Key="TextField" x:DataType="local:ScriptParameterFieldViewModel">
                 <StackPanel Spacing="2">
                     <editorcontrols:PropertyCard
-                        HorizontalContentAlignment="Stretch"
                         IsEnabled="{x:Bind CanEdit, Mode=OneWay}"
                         OverrideState="{x:Bind OverrideState, Mode=OneWay}"
                         PropertyName="{x:Bind Label}"
@@ -100,7 +97,6 @@
 
             <DataTemplate x:Key="VectorField" x:DataType="local:ScriptParameterFieldViewModel">
                 <editorcontrols:PropertyCard
-                    HorizontalContentAlignment="Stretch"
                     IsCompound="True"
                     IsEnabled="{x:Bind CanEdit, Mode=OneWay}"
                     OverrideState="{x:Bind OverrideState, Mode=OneWay}"
@@ -128,7 +124,6 @@
 
             <DataTemplate x:Key="ColorField" x:DataType="local:ScriptParameterFieldViewModel">
                 <editorcontrols:PropertyCard
-                    HorizontalContentAlignment="Stretch"
                     IsEnabled="{x:Bind CanEdit, Mode=OneWay}"
                     OverrideState="{x:Bind OverrideState, Mode=OneWay}"
                     PropertyName="{x:Bind Label}"
@@ -153,7 +148,6 @@
             <DataTemplate x:Key="AssetField" x:DataType="local:ScriptParameterFieldViewModel">
                 <StackPanel Spacing="2">
                     <editorcontrols:PropertyCard
-                        HorizontalContentAlignment="Stretch"
                         IsEnabled="{x:Bind CanEdit, Mode=OneWay}"
                         OverrideState="{x:Bind OverrideState, Mode=OneWay}"
                         PropertyName="{x:Bind Label}"
@@ -186,7 +180,6 @@
             <DataTemplate x:Key="NodeField" x:DataType="local:ScriptParameterFieldViewModel">
                 <StackPanel Spacing="2">
                     <editorcontrols:PropertyCard
-                        HorizontalContentAlignment="Stretch"
                         IsEnabled="{x:Bind CanEdit, Mode=OneWay}"
                         OverrideState="{x:Bind OverrideState, Mode=OneWay}"
                         PropertyName="{x:Bind Label}"
@@ -255,8 +248,6 @@
     </UserControl.Resources>
 
     <editorcontrols:PropertiesExpander
-        HorizontalAlignment="Stretch"
-        HorizontalContentAlignment="Stretch"
         Description="{x:Bind ViewModel.Description, Mode=OneWay}"
         Header="{x:Bind ViewModel.Header, Mode=OneWay}"
         HeaderIcon="{ui:FontIcon Glyph='&#xE943;'}"
@@ -332,7 +323,7 @@
                                         Content="{ui:FontIcon Glyph='&#xE70E;',
                                                               FontSize=12}"
                                         IsEnabled="{x:Bind CanMoveUp, Mode=OneWay}"
-                                        Style="{StaticResource QuietInspectorAction}"
+                                        Style="{StaticResource QuietActionButtonStyle}"
                                         ToolTipService.ToolTip="Move up" />
                                     <Button
                                         Grid.Column="3"
@@ -341,7 +332,7 @@
                                         Content="{ui:FontIcon Glyph='&#xE70D;',
                                                               FontSize=12}"
                                         IsEnabled="{x:Bind CanMoveDown, Mode=OneWay}"
-                                        Style="{StaticResource QuietInspectorAction}"
+                                        Style="{StaticResource QuietActionButtonStyle}"
                                         ToolTipService.ToolTip="Move down" />
                                     <Button
                                         Grid.Column="4"
@@ -350,7 +341,7 @@
                                         Content="{ui:FontIcon Glyph='&#xE74D;',
                                                               FontSize=12}"
                                         IsEnabled="{x:Bind CanEdit, Mode=OneWay}"
-                                        Style="{StaticResource QuietInspectorAction}"
+                                        Style="{StaticResource QuietActionButtonStyle}"
                                         ToolTipService.ToolTip="Remove slot" />
                                 </Grid>
 
@@ -387,7 +378,7 @@
                                         Content="{ui:FontIcon Glyph='&#xE710;',
                                                               FontSize=12}"
                                         IsEnabled="{x:Bind CanEdit, Mode=OneWay}"
-                                        Style="{StaticResource QuietInspectorAction}"
+                                        Style="{StaticResource QuietActionButtonStyle}"
                                         ToolTipService.ToolTip="New Script" />
                                     <Border
                                         Grid.Column="3"
@@ -400,7 +391,7 @@
                                             Content="{ui:FontIcon Glyph='&#xE70F;',
                                                                   FontSize=12}"
                                             IsEnabled="{x:Bind CanEditScript, Mode=OneWay}"
-                                            Style="{StaticResource QuietInspectorAction}" />
+                                            Style="{StaticResource QuietActionButtonStyle}" />
                                     </Border>
                                 </Grid>
                                 <TextBlock
@@ -420,7 +411,7 @@
                                     LabelWidth="123"
                                     Mask="~."
                                     NumberValue="{x:Bind ExecutionOrder, Mode=TwoWay}"
-                                    Style="{StaticResource SceneNumberBoxStyle}"
+                                    Style="{StaticResource PropertyNumberBoxStyle}"
                                     ToolTipService.ToolTip="Scripts with a lower order run earlier, across all nodes." />
 
                                 <TextBlock
@@ -476,7 +467,7 @@
                                                             Content="{ui:FontIcon Glyph='&#xE711;',
                                                                                   FontSize=12}"
                                                             IsEnabled="{x:Bind CanEdit, Mode=OneWay}"
-                                                            Style="{StaticResource QuietInspectorAction}"
+                                                            Style="{StaticResource QuietActionButtonStyle}"
                                                             ToolTipService.ToolTip="Remove value" />
                                                     </Grid>
                                                 </DataTemplate>

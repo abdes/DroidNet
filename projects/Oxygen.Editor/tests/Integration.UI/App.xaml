@@ -9,7 +9,7 @@
             <ResourceDictionary.MergedDictionaries>
                 <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
                 <ResourceDictionary Source="ms-appx:///DroidNet.Docking/Themes/Generic.xaml" />
-                <ResourceDictionary Source="ms-appx:///Oxygen.Editor.Controls/Themes/Generic.xaml" />
+                <ResourceDictionary Source="ms-appx:///Oxygen.Editor.Controls/Themes/EditorStyles.xaml" />
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>
     </Application.Resources>

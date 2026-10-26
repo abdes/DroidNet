@@ -11,6 +11,7 @@ using Oxygen.Editor.SceneInspector.Components.Transform;
 using Oxygen.Editor.SceneInspector.TestSupport;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
+using static Oxygen.Editor.Controls.Testing.PropertyEditorProbes;
 using static Oxygen.Editor.SceneInspector.TestSupport.InspectorControls;
 using static Oxygen.Editor.SceneInspector.TestSupport.SceneTestData;
 using NumberBox = DroidNet.Controls.NumberBox;

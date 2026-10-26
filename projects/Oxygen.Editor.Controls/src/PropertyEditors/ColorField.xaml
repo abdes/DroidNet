@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:DroidNet.Controls"
+    xmlns:local="using:Oxygen.Editor.Controls">
+    <!--  The channels' look, merged here so the template resolves it wherever this dictionary is merged.  -->
+    <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="ms-appx:///Oxygen.Editor.Controls/PropertyEditors/PropertyValueBoxes.xaml" />
+    </ResourceDictionary.MergedDictionaries>
+    <Style x:Key="DefaultColorFieldStyle" TargetType="local:ColorField">
+        <Setter Property="IsTabStop" Value="False" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="local:ColorField">
+                    <!--  Feedback sits below the card, so its wrapping text never decides whether the row stacks.  -->
+                    <StackPanel Spacing="{TemplateBinding DiagnosticSpacing}">
+                        <local:PropertyCard
+                            x:Name="PART_Card"
+                            HorizontalContentAlignment="Stretch"
+                            FontSize="{TemplateBinding FontSize}"
+                            IsCompound="True"
+                            PropertyName="{TemplateBinding Label}"
+                            QualifierGroup="{TemplateBinding QualifierGroup}">
+                            <local:PropertyCard.Resources>
+                                <!--  The ColorBox's channels are a VectorBox of the row's look, whatever the consumer styles.  -->
+                                <Style BasedOn="{StaticResource PropertyVectorBoxStyle}" TargetType="controls:VectorBox" />
+                            </local:PropertyCard.Resources>
+                            <controls:ColorBox
+                                x:Name="PART_ColorBox"
+                                AlphaIsIndeterminate="{TemplateBinding AlphaIsMixed}"
+                                BlueIsIndeterminate="{TemplateBinding BlueIsMixed}"
+                                ChannelLabelPosition="{TemplateBinding ChannelLabelPosition}"
+                                ComponentMask="{TemplateBinding ComponentMask}"
+                                Encoding="Linear"
+                                GreenIsIndeterminate="{TemplateBinding GreenIsMixed}"
+                                HasAlpha="{TemplateBinding HasAlpha}"
+                                PickerAutomationName="{TemplateBinding PickerAutomationName}"
+                                RedIsIndeterminate="{TemplateBinding RedIsMixed}"
+                                Tag="{TemplateBinding Tag}" />
+                        </local:PropertyCard>
+                        <TextBlock
+                            x:Name="PART_ErrorText"
+                            AutomationProperties.LiveSetting="Polite"
+                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                            Text="{TemplateBinding ErrorText}"
+                            TextWrapping="Wrap"
+                            Visibility="Collapsed" />
+                    </StackPanel>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <Style BasedOn="{StaticResource DefaultColorFieldStyle}" TargetType="local:ColorField" />
+</ResourceDictionary>

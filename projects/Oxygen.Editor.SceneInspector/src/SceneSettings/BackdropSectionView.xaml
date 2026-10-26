@@ -16,18 +16,13 @@
     </UserControl.Resources>
     <editorcontrols:PropertiesExpander
         x:Name="BackdropSection"
-        HorizontalAlignment="Stretch"
-        HorizontalContentAlignment="Stretch"
         Description="What shows behind the scene: the atmosphere, a cubemap or a solid color."
         Header="Backdrop"
         HeaderIcon="{ui:FontIcon Glyph='&#xE790;'}"
         IsExpanded="True"
         Tag="Environment">
         <editorcontrols:PropertiesExpander.Items>
-            <editorcontrols:PropertyCard
-                x:Name="BackdropCard"
-                HorizontalContentAlignment="Stretch"
-                PropertyName="Show">
+            <editorcontrols:PropertyCard x:Name="BackdropCard" PropertyName="Show">
                 <StackPanel Spacing="4">
                     <seg:Segmented
                         HorizontalAlignment="Stretch"
@@ -53,10 +48,7 @@
                 </StackPanel>
             </editorcontrols:PropertyCard>
             <StackPanel x:Name="CubemapFields" Spacing="4">
-                <editorcontrols:PropertyCard
-                    x:Name="CubemapCard"
-                    HorizontalContentAlignment="Stretch"
-                    PropertyName="Cubemap">
+                <editorcontrols:PropertyCard x:Name="CubemapCard" PropertyName="Cubemap">
                     <StackPanel Spacing="4">
                         <Grid ColumnSpacing="6">
                             <Grid.ColumnDefinitions>
@@ -95,39 +87,32 @@
                             Visibility="{x:Bind ViewModel.CubemapDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
                     </StackPanel>
                 </editorcontrols:PropertyCard>
-                <editorcontrols:InspectorNumberField
+                <editorcontrols:NumberField
                     x:Name="RotationCard"
-                    CardStyle="{StaticResource ScenePropertyCardStyle}"
                     EditSessionCompleted="NumberEditCompleted"
                     EditSessionStarted="NumberEditStarted"
                     ErrorText="{x:Bind ViewModel.RotationDiagnostic.Message, Mode=OneWay}"
-                    FontSize="14"
                     HasError="{x:Bind ViewModel.RotationDiagnostic.HasError, Mode=OneWay}"
                     Label="Rotation"
-                    NumberStyle="{StaticResource SceneNumberBoxStyle}"
                     NumberValue="{x:Bind ViewModel.RotationDegrees, Mode=TwoWay}"
                     Tag="SkySphereRotation"
                     Unit="°" />
             </StackPanel>
             <StackPanel x:Name="SolidColorFields" Spacing="4">
-                <editorcontrols:InspectorColorField
+                <editorcontrols:ColorField
                     x:Name="SolidColorCard"
                     Blue="{x:Bind ViewModel.SolidColorB, Mode=TwoWay}"
                     ColorPicked="OnRgbColorPicked"
                     EditSessionCompleted="ColorEditCompleted"
                     EditSessionStarted="ColorEditStarted"
                     ErrorText="{x:Bind ViewModel.SolidColorDiagnostic.Message, Mode=OneWay}"
-                    FontSize="14"
                     Green="{x:Bind ViewModel.SolidColorG, Mode=TwoWay}"
                     HasError="{x:Bind ViewModel.SolidColorDiagnostic.HasError, Mode=OneWay}"
                     Label="Color"
                     PickerAutomationName="Pick backdrop color"
                     Red="{x:Bind ViewModel.SolidColorR, Mode=TwoWay}"
                     Tag="SolidColor" />
-                <editorcontrols:PropertyCard
-                    x:Name="SolidColorLightsSceneCard"
-                    HorizontalContentAlignment="Stretch"
-                    PropertyName="Light the scene with this color">
+                <editorcontrols:PropertyCard x:Name="SolidColorLightsSceneCard" PropertyName="Light the scene with this color">
                     <ToggleSwitch
                         IsEnabled="{x:Bind ViewModel.EditOwner.IsInputEnabled, Mode=OneWay}"
                         IsOn="{x:Bind ViewModel.SolidColorLightsScene, Mode=TwoWay}"
@@ -136,42 +121,35 @@
                 </editorcontrols:PropertyCard>
             </StackPanel>
             <StackPanel x:Name="ToneFields" Spacing="4">
-                <editorcontrols:InspectorNumberField
+                <editorcontrols:NumberField
                     x:Name="IlluminanceCard"
-                    CardStyle="{StaticResource ScenePropertyCardStyle}"
                     EditSessionCompleted="NumberEditCompleted"
                     EditSessionStarted="NumberEditStarted"
                     ErrorText="{x:Bind ViewModel.IlluminanceDiagnostic.Message, Mode=OneWay}"
-                    FontSize="14"
                     HasError="{x:Bind ViewModel.IlluminanceDiagnostic.HasError, Mode=OneWay}"
                     Label="Illuminance"
-                    NumberStyle="{StaticResource SceneNumberBoxStyle}"
                     NumberValue="{x:Bind ViewModel.IlluminanceLux, Mode=TwoWay}"
                     Tag="SkySphereIlluminance"
                     ToolTipService.ToolTip="Calibrates the sky to a physical brightness: the illuminance, in lux, it delivers on an upward-facing surface. The cubemap or color is scaled to deliver it, both for what the view shows and for the light a Sky Light set to Capture sky reads, so the sky matches a physical sun. HDR images rarely carry real units: a typical one delivers a few lux while a daylight sun delivers 25,000 to 100,000, so uncalibrated, auto exposure meters the dim sky and burns sunlit surfaces to white. Typical values: clear day 10,000 to 25,000; overcast 1,000 to 10,000; sunset 100 to 1,000; night below 1. 0 uses the image&apos;s own values. Only a float (HDR) cubemap can be measured: an LDR one stays uncalibrated, and the renderer warns."
                     Unit="lux" />
-                <editorcontrols:InspectorNumberField
+                <editorcontrols:NumberField
                     x:Name="IntensityCard"
-                    CardStyle="{StaticResource ScenePropertyCardStyle}"
                     EditSessionCompleted="NumberEditCompleted"
                     EditSessionStarted="NumberEditStarted"
                     ErrorText="{x:Bind ViewModel.IntensityDiagnostic.Message, Mode=OneWay}"
-                    FontSize="14"
                     HasError="{x:Bind ViewModel.IntensityDiagnostic.HasError, Mode=OneWay}"
                     Label="Intensity"
-                    NumberStyle="{StaticResource SceneNumberBoxStyle}"
                     NumberValue="{x:Bind ViewModel.IntensityEv, Mode=TwoWay}"
                     Tag="SkySphereIntensity"
                     ToolTipService.ToolTip="Adjusts only what the view shows, in exposure stops (EV): the shown radiance is multiplied by 2 to the power EV, so EV 0 keeps the calibrated sky and each +1 EV doubles it. It never changes the light the sky casts; calibrate brightness with Illuminance. The minimum, EV -16, is effectively off."
                     Unit="EV" />
-                <editorcontrols:InspectorColorField
+                <editorcontrols:ColorField
                     x:Name="TintCard"
                     Blue="{x:Bind ViewModel.TintB, Mode=TwoWay}"
                     ColorPicked="OnRgbColorPicked"
                     EditSessionCompleted="ColorEditCompleted"
                     EditSessionStarted="ColorEditStarted"
                     ErrorText="{x:Bind ViewModel.TintDiagnostic.Message, Mode=OneWay}"
-                    FontSize="14"
                     Green="{x:Bind ViewModel.TintG, Mode=TwoWay}"
                     HasError="{x:Bind ViewModel.TintDiagnostic.HasError, Mode=OneWay}"
                     Label="Tint"

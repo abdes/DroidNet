@@ -10,7 +10,7 @@
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="ms-appx:///Oxygen.Editor.SceneInspector/SceneInspectorStyles.xaml" />
             </ResourceDictionary.MergedDictionaries>
-            <Style BasedOn="{StaticResource QuietInspectorAction}" TargetType="Button" />
+            <Style BasedOn="{StaticResource QuietActionButtonStyle}" TargetType="Button" />
             <Style x:Key="ScopeItemStyle" TargetType="seg:SegmentedItem">
                 <Setter Property="MinWidth" Value="0" />
                 <Setter Property="MinHeight" Value="27" />

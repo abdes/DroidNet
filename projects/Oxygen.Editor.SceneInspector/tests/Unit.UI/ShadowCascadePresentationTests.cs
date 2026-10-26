@@ -154,7 +154,7 @@ internal sealed class ShadowCascadePresentationTests : VisualUserInterfaceTests
         second.SplitMode = DirectionalCsmSplitMode.Generated;
         model.UpdateValues([fixture.Node, other]);
         await WaitForRenderAsync().ConfigureAwait(true);
-        foreach (var field in view.FindDescendants().OfType<InspectorNumberField>().Where(field => field.Tag is string name
+        foreach (var field in view.FindDescendants().OfType<NumberField>().Where(field => field.Tag is string name
             && (name.StartsWith("CascadeDistance", StringComparison.Ordinal) || string.Equals(name, "DistributionExponent", StringComparison.Ordinal))))
         {
             _ = field.IsEnabled.Should().BeFalse();
@@ -184,8 +184,8 @@ internal sealed class ShadowCascadePresentationTests : VisualUserInterfaceTests
         return view;
     }
 
-    private static InspectorNumberField Field(DirectionalLightShadowsView view, string name)
-        => view.FindDescendant<InspectorNumberField>(field => Equals(field.Tag, name))!;
+    private static NumberField Field(DirectionalLightShadowsView view, string name)
+        => view.FindDescendant<NumberField>(field => Equals(field.Tag, name))!;
 
     private static void AssertFields(DirectionalLightShadowsView view, DirectionalCsmSplitMode mode, int count)
     {

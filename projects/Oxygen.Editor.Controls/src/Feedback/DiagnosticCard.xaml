@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:Oxygen.Editor.Controls">
+    <Style x:Key="DefaultDiagnosticCardStyle" TargetType="local:DiagnosticCard">
+        <Setter Property="IsTabStop" Value="False" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="Padding" Value="12,10" />
+        <Setter Property="CornerRadius" Value="{ThemeResource ControlCornerRadius}" />
+        <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="local:DiagnosticCard">
+                    <Border
+                        x:Name="Root"
+                        Padding="{TemplateBinding Padding}"
+                        Background="{TemplateBinding Background}"
+                        BorderBrush="{TemplateBinding BorderBrush}"
+                        BorderThickness="{TemplateBinding BorderThickness}"
+                        CornerRadius="{TemplateBinding CornerRadius}">
+                        <Grid ColumnSpacing="8" RowSpacing="4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <TextBlock
+                                Grid.ColumnSpan="2"
+                                Text="{TemplateBinding Message}"
+                                TextWrapping="Wrap" />
+                            <TextBlock
+                                x:Name="PART_Preview"
+                                Grid.Row="1"
+                                VerticalAlignment="Center"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Style="{ThemeResource CaptionTextBlockStyle}"
+                                TextWrapping="Wrap"
+                                Visibility="Collapsed" />
+                            <ItemsControl
+                                x:Name="PART_Details"
+                                Grid.Row="1"
+                                IsTabStop="False"
+                                Visibility="Collapsed">
+                                <ItemsControl.ItemTemplate>
+                                    <!--  A theme dictionary has no code-behind, so the item template binds at run time.  -->
+                                    <DataTemplate>
+                                        <TextBlock
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                            Style="{ThemeResource CaptionTextBlockStyle}"
+                                            Text="{Binding}"
+                                            TextWrapping="Wrap" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <Button
+                                x:Name="PART_Expand"
+                                Grid.Row="1"
+                                Grid.Column="1"
+                                Width="28"
+                                Height="24"
+                                Padding="0"
+                                VerticalAlignment="Top"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                Visibility="Collapsed" />
+                        </Grid>
+                        <VisualStateManager.VisualStateGroups>
+                            <!--  The background says how serious the finding is; the card carries no icon.  -->
+                            <VisualStateGroup x:Name="SeverityStates">
+                                <VisualState x:Name="Informational" />
+                                <VisualState x:Name="Warning">
+                                    <VisualState.Setters>
+                                        <Setter Target="Root.Background" Value="{ThemeResource SystemFillColorCautionBackgroundBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="Error">
+                                    <VisualState.Setters>
+                                        <Setter Target="Root.Background" Value="{ThemeResource SystemFillColorCriticalBackgroundBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                            </VisualStateGroup>
+                        </VisualStateManager.VisualStateGroups>
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <Style BasedOn="{StaticResource DefaultDiagnosticCardStyle}" TargetType="local:DiagnosticCard" />
+</ResourceDictionary>

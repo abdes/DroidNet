@@ -13,21 +13,19 @@
         </ResourceDictionary>
     </UserControl.Resources>
     <editorcontrols:PropertiesExpander
-        HorizontalAlignment="Stretch"
-        HorizontalContentAlignment="Stretch"
         Description="{x:Bind ViewModel.Description, Mode=OneWay}"
         Header="{x:Bind ViewModel.Header, Mode=OneWay}"
         HeaderIcon="{ui:FontIcon Glyph='&#xE7B3;'}"
         IsExpanded="{x:Bind ViewModel.IsExpanded, Mode=TwoWay}">
         <editorcontrols:PropertiesExpander.Items>
-            <editorcontrols:InspectorSourceModeField
+            <editorcontrols:SourceModeField
                 Caption="{x:Bind ViewModel.Visibility.Caption, Mode=OneWay}"
                 Label="Scene visibility"
                 ModeNames="{x:Bind ViewModel.Visibility.ModeNames}"
                 SelectedIndex="{x:Bind ViewModel.Visibility.SelectedIndex, Mode=TwoWay}"
                 SourceRequested="{x:Bind ViewModel.Visibility.SelectSource}"
                 SourceToolTip="{x:Bind ViewModel.Visibility.SourceToolTip, Mode=OneWay}" />
-            <editorcontrols:InspectorSourceModeField
+            <editorcontrols:SourceModeField
                 Caption="{x:Bind ViewModel.CastsShadows.Caption, Mode=OneWay}"
                 Label="Cast shadows"
                 ModeNames="{x:Bind ViewModel.CastsShadows.ModeNames}"
@@ -42,15 +40,15 @@
                 IsExpanded="False"
                 Style="{StaticResource QuietDisclosure}">
                 <StackPanel Spacing="4">
-                    <editorcontrols:InspectorSourceModeField
+                    <editorcontrols:SourceModeField
                         Caption="{x:Bind ViewModel.ReceivesShadows.Caption, Mode=OneWay}"
                         Label="Receive shadows"
                         ModeNames="{x:Bind ViewModel.ReceivesShadows.ModeNames}"
                         SelectedIndex="{x:Bind ViewModel.ReceivesShadows.SelectedIndex, Mode=TwoWay}"
                         SourceRequested="{x:Bind ViewModel.ReceivesShadows.SelectSource}"
                         SourceToolTip="{x:Bind ViewModel.ReceivesShadows.SourceToolTip, Mode=OneWay}" />
-                    <editorcontrols:InspectorToggleField Label="Static" Value="{x:Bind ViewModel.IsStatic, Mode=TwoWay}" />
-                    <editorcontrols:InspectorToggleField Label="Ray-cast selectable" Value="{x:Bind ViewModel.IsRayCastingSelectable, Mode=TwoWay}" />
+                    <editorcontrols:ToggleField Label="Static" Value="{x:Bind ViewModel.IsStatic, Mode=TwoWay}" />
+                    <editorcontrols:ToggleField Label="Ray-cast selectable" Value="{x:Bind ViewModel.IsRayCastingSelectable, Mode=TwoWay}" />
                 </StackPanel>
             </Expander>
         </editorcontrols:PropertiesExpander.Items>

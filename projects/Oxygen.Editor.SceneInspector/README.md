@@ -25,8 +25,10 @@ Oxygen.Editor.Pickers'.
 | `Editing/`       | Edit sessions and gestures over the scene's authoring, field values and diagnostics.                                                                                                                                                                                |
 | `Presentation/`  | Field applicability, search, converters and the scene field catalog.                                                                                                                                                                                                |
 
-The views merge `SceneInspectorStyles.xaml`. The shared inspector controls'
-theme is `Oxygen.Editor.Controls`', which the application merges.
+The views merge `SceneInspectorStyles.xaml`, which holds only the inspector's
+own resources. The property editors take their look from their default styles in
+`Oxygen.Editor.Controls`; the application merges that library's
+`Themes/EditorStyles.xaml` for the keyed styles of the inspector's own elements.
 
 ## Testing
 
@@ -38,3 +40,5 @@ in `testsupport/UI/InspectorControls.cs`). Tests of how a view wires its
 controls (late callbacks from recycled controls, vector boxes, filter changes)
 raise the control's session events by reflection (`RaiseNumberEvent`), because
 `NumberBox` has no public way to drive a drag.
+Probes of the property editors' parts (`CardOf`, `SwatchOf`, `EnterTextAsync`)
+come from the Controls test kit, `Oxygen.Editor.Controls.Testing`.

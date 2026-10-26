@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+    Keyed styles for consumers' own elements, so a standalone NumberBox, a quiet action button, a unit suffix or a
+    settings-row switch looks like the library's property editors. Apps and UI test hosts merge this dictionary into
+    Application.Resources; the library's Themes/Generic.xaml holds the controls' default styles and is never merged
+    by consumers. Every style here is keyed, so merging it restyles only the elements that ask for one.
+-->
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="ms-appx:///Oxygen.Editor.Controls/PropertyEditors/PropertyValueBoxes.xaml" />
+        <ResourceDictionary Source="ms-appx:///Oxygen.Editor.Controls/Styles/RightAlignedToggleSwitch.xaml" />
+    </ResourceDictionary.MergedDictionaries>
+
+    <!--  A borderless icon button for row and section actions, such as add, remove or reset.  -->
+    <Style
+        x:Key="QuietActionButtonStyle"
+        BasedOn="{StaticResource DefaultButtonStyle}"
+        TargetType="Button">
+        <Setter Property="MinWidth" Value="32" />
+        <Setter Property="MinHeight" Value="32" />
+        <Setter Property="Padding" Value="6" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="CornerRadius" Value="4" />
+    </Style>
+
+    <!--  A unit shown after a value, such as m or °.  -->
+    <Style x:Key="UnitSuffixTextStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="HorizontalAlignment" Value="Left" />
+    </Style>
+</ResourceDictionary>

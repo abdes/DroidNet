@@ -10,6 +10,7 @@
         <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.SceneInspector/src/Oxygen.Editor.SceneInspector.csproj" />
         <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.Assets/testing/Oxygen.Editor.Assets.Testing.csproj" />
         <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testing/Oxygen.Editor.ContentPipeline.Testing.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.Controls/testing/Oxygen.Editor.Controls.Testing.csproj" />
         <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.Input/testing/Oxygen.Editor.Input.Testing.csproj" />
         <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.Projects/testing/Oxygen.Editor.Projects.Testing.csproj" />
         <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.Scenes/testing/Oxygen.Editor.Scenes.Testing.csproj" />

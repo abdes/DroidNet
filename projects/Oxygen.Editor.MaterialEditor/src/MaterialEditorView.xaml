@@ -115,15 +115,12 @@
             </Grid>
 
             <editorcontrols:PropertiesExpander
-                Padding="2"
-                HorizontalAlignment="Stretch"
-                HorizontalContentAlignment="Stretch"
                 Description="Names and identifies the material descriptor."
                 Header="Identity"
                 HeaderIcon="{ui:FontIcon Glyph='&#xE8A5;'}"
                 IsExpanded="True">
                 <editorcontrols:PropertiesExpander.Items>
-                    <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Asset URI">
+                    <editorcontrols:PropertyCard PropertyName="Asset URI">
                         <Grid ColumnSpacing="8">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
@@ -143,7 +140,7 @@
                             </Button>
                         </Grid>
                     </editorcontrols:PropertyCard>
-                    <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Asset GUID">
+                    <editorcontrols:PropertyCard PropertyName="Asset GUID">
                         <Grid ColumnSpacing="8">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
@@ -164,7 +161,7 @@
                         </Grid>
                     </editorcontrols:PropertyCard>
 
-                    <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Texture Parameters">
+                    <editorcontrols:PropertyCard PropertyName="Texture Parameters">
                         <Grid ColumnSpacing="8">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
@@ -196,9 +193,6 @@
             </editorcontrols:PropertiesExpander>
 
             <editorcontrols:PropertiesExpander
-                Padding="2"
-                HorizontalAlignment="Stretch"
-                HorizontalContentAlignment="Stretch"
                 Description="Named texture assets assigned to native material channels."
                 Header="Textures"
                 HeaderIcon="{ui:FontIcon Glyph='&#xE91B;'}"
@@ -244,15 +238,12 @@
             </editorcontrols:PropertiesExpander>
 
             <editorcontrols:PropertiesExpander
-                Padding="2"
-                HorizontalAlignment="Stretch"
-                HorizontalContentAlignment="Stretch"
                 Description="Scalar PBR values stored in oxygen.material.v1."
                 Header="PBR Metallic Roughness"
                 HeaderIcon="{ui:FontIcon Glyph='&#xE790;'}"
                 IsExpanded="True">
                 <editorcontrols:PropertiesExpander.Items>
-                    <editorcontrols:InspectorColorField
+                    <editorcontrols:ColorField
                         Alpha="{x:Bind ViewModel.BaseColorA, Mode=TwoWay}"
                         Blue="{x:Bind ViewModel.BaseColorB, Mode=TwoWay}"
                         ColorPicked="OnBaseColorPicked"
@@ -265,7 +256,7 @@
                         Red="{x:Bind ViewModel.BaseColorR, Mode=TwoWay}"
                         Tag="BaseColor" />
 
-                    <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Surface">
+                    <editorcontrols:PropertyCard PropertyName="Surface">
                         <Grid ColumnSpacing="8">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
@@ -297,15 +288,12 @@
             </editorcontrols:PropertiesExpander>
 
             <editorcontrols:PropertiesExpander
-                Padding="2"
-                HorizontalAlignment="Stretch"
-                HorizontalContentAlignment="Stretch"
                 Description="Alpha and render-state descriptor fields."
                 Header="Advanced"
                 HeaderIcon="{ui:FontIcon Glyph='&#xE9D2;'}"
                 IsExpanded="False">
                 <editorcontrols:PropertiesExpander.Items>
-                    <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Alpha">
+                    <editorcontrols:PropertyCard PropertyName="Alpha">
                         <Grid ColumnSpacing="8">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="180" />
@@ -326,7 +314,7 @@
                         </Grid>
                     </editorcontrols:PropertyCard>
 
-                    <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Rendering">
+                    <editorcontrols:PropertyCard PropertyName="Rendering">
                         <ToggleSwitch Header="Double Sided" IsOn="{x:Bind ViewModel.DoubleSided, Mode=TwoWay}" />
                     </editorcontrols:PropertyCard>
                 </editorcontrols:PropertiesExpander.Items>

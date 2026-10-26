@@ -16,6 +16,7 @@ using Oxygen.Editor.SceneInspector.Components.Transform;
 using Oxygen.Editor.SceneInspector.Editing;
 using Oxygen.Editor.SceneInspector.TestSupport;
 using Oxygen.Editor.World.Components;
+using static Oxygen.Editor.Controls.Testing.PropertyEditorProbes;
 using static Oxygen.Editor.SceneInspector.TestSupport.InspectorControls;
 using static Oxygen.Editor.SceneInspector.TestSupport.SceneTestData;
 using NumberBox = DroidNet.Controls.NumberBox;
@@ -163,8 +164,8 @@ internal sealed class ComponentEditBoundariesTests : DroidNet.Tests.VisualUserIn
         host.SelectComponentFilter(typeof(DirectionalLightComponent));
         var light = host.PropertyEditors.OfType<DirectionalLightViewModel>().Single();
         var original = ReadSceneColor(fixture, "Light");
-        var oldField = new InspectorColorField { Tag = "Color" };
-        var currentField = new InspectorColorField { Tag = "Color" };
+        var oldField = new ColorField { Tag = "Color" };
+        var currentField = new ColorField { Tag = "Color" };
         var panel = new StackPanel();
         panel.Children.Add(oldField);
         panel.Children.Add(currentField);
@@ -191,7 +192,7 @@ internal sealed class ComponentEditBoundariesTests : DroidNet.Tests.VisualUserIn
         static ColorBoxEditSessionEventArgs Pick(NumberBoxEditCompletionKind? completion = null)
             => new(channel: null, NumberBoxEditInteractionKind.PointerDrag, completion);
 
-        static void Apply(InspectorColorField field, ColorChannels color)
+        static void Apply(ColorField field, ColorChannels color)
             => InspectorColorEdits.Apply<DirectionalLightViewModel>(field, new ColorBoxColorPickedEventArgs(color), static (owner, picked) => owner.SetColor(picked.ToVector3()));
     });
 }

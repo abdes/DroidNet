@@ -7,7 +7,7 @@
         <AssemblyName>$(MSBuildProjectName)</AssemblyName>
 
         <Title>Oxygen editor shared controls.</Title>
-        <Description>Shared Oxygen editor controls used by inspector and document editors.</Description>
+        <Description>Shared Oxygen editor controls: property rows, sections and field editors with their default styles, plus keyed styles for editor elements.</Description>
         <PackageTags>oxygen;editor;controls;ui</PackageTags>
     </PropertyGroup>
 

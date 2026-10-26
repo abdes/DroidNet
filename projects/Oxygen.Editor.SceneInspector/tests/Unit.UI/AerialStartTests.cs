@@ -10,6 +10,7 @@ using Oxygen.Editor.SceneInspector.SceneSettings;
 using Oxygen.Editor.SceneInspector.TestSupport;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World.Serialization;
+using static Oxygen.Editor.Controls.Testing.PropertyEditorProbes;
 using static Oxygen.Editor.SceneInspector.TestSupport.InspectorControls;
 using static Oxygen.Editor.SceneInspector.TestSupport.InspectorModels;
 using NumberBox = DroidNet.Controls.NumberBox;

@@ -20,6 +20,7 @@ using Oxygen.Editor.SceneInspector.TestSupport;
 using Oxygen.Editor.World.Components;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
+using static Oxygen.Editor.Controls.Testing.PropertyEditorProbes;
 using static Oxygen.Editor.SceneInspector.TestSupport.InspectorControls;
 using static Oxygen.Editor.SceneInspector.TestSupport.InspectorModels;
 using Expander = Microsoft.UI.Xaml.Controls.Expander;
@@ -108,7 +109,7 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         assertRealizedAsync: static view =>
         {
             var section = view.FindDescendant<Oxygen.Editor.Controls.PropertiesExpander>()!;
-            var outer = section.Items.OfType<Oxygen.Editor.Controls.InspectorNumberField>().Single(field => Equals(field.Tag, "OuterConeAngleRadians"));
+            var outer = section.Items.OfType<Oxygen.Editor.Controls.NumberField>().Single(field => Equals(field.Tag, "OuterConeAngleRadians"));
             _ = outer.NumberValue.Should().BeApproximately(0.5f * 180f / MathF.PI, 0.01f);
             return Task.CompletedTask;
         });
@@ -127,7 +128,7 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         assertRealizedAsync: static async view =>
         {
             await ExpandAdvancedAsync(view).ConfigureAwait(true);
-            var fields = view.FindDescendants().OfType<Oxygen.Editor.Controls.InspectorSourceModeField>().ToList();
+            var fields = view.FindDescendants().OfType<Oxygen.Editor.Controls.SourceModeField>().ToList();
             _ = fields.Select(static field => field.Label).Should().Equal("Scene visibility", "Cast shadows", "Receive shadows");
             _ = fields.Should().OnlyContain(static field => field.SelectedIndex == 0, "a root created without its creation modes inherits");
             _ = ToggleNames(view).Should().BeEquivalentTo("Static", "Ray-cast selectable");
@@ -143,7 +144,7 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         assertRealizedAsync: static async view =>
         {
             var model = (NodeRenderingViewModel)((NodeRenderingView)view).ViewModel!;
-            var visibility = view.FindDescendants().OfType<Oxygen.Editor.Controls.InspectorSourceModeField>().First();
+            var visibility = view.FindDescendants().OfType<Oxygen.Editor.Controls.SourceModeField>().First();
             var segmented = visibility.FindDescendant<CommunityToolkit.WinUI.Controls.Segmented>()!;
 
             segmented.SelectedIndex = 2;
@@ -227,9 +228,9 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         await scenario.SearchAsync("Ground Albedo").ConfigureAwait(true);
         var planet = sky.Items.OfType<Expander>().Single(group => Equals(group.Header, "Planet & ground"));
         _ = await scenario.BringIntoViewAsync(sky, planet).ConfigureAwait(true);
-        var albedoField = (Oxygen.Editor.Controls.InspectorColorField)await FindInspectorControlAsync(
+        var albedoField = (Oxygen.Editor.Controls.ColorField)await FindInspectorControlAsync(
             (ScrollViewer)scenario.View.FindName("ScenePropertyScroll"),
-            () => scenario.View.FindDescendant<Oxygen.Editor.Controls.InspectorColorField>(field =>
+            () => scenario.View.FindDescendant<Oxygen.Editor.Controls.ColorField>(field =>
                 field.IsLoaded && Equals(field.Tag, "GroundAlbedo") && SwatchOf(field) is not null),
             "GroundAlbedo",
             this.TestContext.CancellationToken).ConfigureAwait(true);
@@ -255,7 +256,7 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         using var scenario = await EnvironmentInspectorScenario.LoadAsync(LoadTestContentAsync, width: null, height: null, host: ScenarioHost.Scroll).ConfigureAwait(true);
         var exposure = scenario.Section("ExposureSection");
         exposure.IsExpanded = false;
-        var autoMinimum = scenario.Element<Oxygen.Editor.Controls.InspectorNumberField>("AutoExposureMinEvCard");
+        var autoMinimum = scenario.Element<Oxygen.Editor.Controls.NumberField>("AutoExposureMinEvCard");
 
         // precondition (was asserted mid-test): manual exposure keeps the auto minimum inactive
         _ = scenario.Model.Exposure.ExposureMode.Should().Be(Oxygen.Editor.World.Serialization.ExposureMode.Manual);
@@ -328,7 +329,7 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         scenario.Model.PostProcessing.ToneMapping = Oxygen.Editor.World.Serialization.ToneMappingMode.None;
         await scenario.Model.PendingEdits.ConfigureAwait(true);
         _ = scenario.Named("DisplayGammaCard").Visibility.Should().Be(Visibility.Visible);
-        _ = scenario.Element<Oxygen.Editor.Controls.InspectorNumberField>("DisplayGammaCard").Label.Should().Be("Display Gamma");
+        _ = scenario.Element<Oxygen.Editor.Controls.NumberField>("DisplayGammaCard").Label.Should().Be("Display Gamma");
     });
 
     /// <summary>Scene extra-asset references are added and removed through the interactive inspector.</summary>
@@ -426,7 +427,7 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
     {
         using var scenario = await EnvironmentInspectorScenario.LoadAsync(LoadTestContentAsync, host: ScenarioHost.None).ConfigureAwait(true);
         var exposure = scenario.Section("ExposureSection");
-        var spot = scenario.Element<Oxygen.Editor.Controls.InspectorNumberField>("AutoExposureSpotMeterRadiusCard");
+        var spot = scenario.Element<Oxygen.Editor.Controls.NumberField>("AutoExposureSpotMeterRadiusCard");
         var originalContent = CardOf(spot).Content;
         var storedRadius = scenario.Fixture.Scene.Environment.PostProcess.AutoExposureSpotMeterRadius;
         await scenario.SearchAsync("spot radius").ConfigureAwait(true);
@@ -464,7 +465,7 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         var search = (TextBox)view.FindName("ScenePropertySearchBox");
         search.Text = "auto_exposure_min_ev";
         await WaitForRenderAsync().ConfigureAwait(true);
-        var field = (Oxygen.Editor.Controls.InspectorNumberField)FindInspectorElement(view, "AutoExposureMinEvCard");
+        var field = (Oxygen.Editor.Controls.NumberField)FindInspectorElement(view, "AutoExposureMinEvCard");
 
         // The replacement model is still Manual: the stored-value note names that mode explicitly,
         // so a stale observer applying the first model's switch to Auto would visibly rewrite it.
@@ -495,7 +496,7 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         };
         await LoadTestContentAsync(view).ConfigureAwait(true);
         var number = view.FindDescendant<NumberBox>(element => Equals(element.Tag, "NearPlane"))!;
-        var field = number.FindAscendant<Oxygen.Editor.Controls.InspectorNumberField>()!;
+        var field = number.FindAscendant<Oxygen.Editor.Controls.NumberField>()!;
         var before = fixture.Camera.NearPlane;
 
         // Invalid by the fixture contract: twice the far plane can never be a valid near plane.

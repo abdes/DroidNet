@@ -8,7 +8,7 @@ using Oxygen.Editor.Controls;
 
 namespace Oxygen.Editor.SceneInspector.Editing;
 
-/// <summary>Routes <see cref="InspectorColorField"/> edits to an inspector edit owner.</summary>
+/// <summary>Routes <see cref="ColorField"/> edits to an inspector edit owner.</summary>
 /// <remarks>
 ///     A channel edit uses the field's <c>Tag</c> plus the channel name as its key, a pick uses the <c>Tag</c>. A pick
 ///     only applies within the binding scope it began in, so a picker left open while the inspector binds other
@@ -16,7 +16,7 @@ namespace Oxygen.Editor.SceneInspector.Editing;
 /// </remarks>
 internal static class InspectorColorEdits
 {
-    private static readonly ConditionalWeakTable<InspectorColorField, Pick> Picks = [];
+    private static readonly ConditionalWeakTable<ColorField, Pick> Picks = [];
 
     /// <summary>Begins a channel edit or a pick.</summary>
     /// <param name="owner">The edit owner bound now.</param>
@@ -24,7 +24,7 @@ internal static class InspectorColorEdits
     /// <param name="args">The field's start event.</param>
     public static void Begin(IInspectorEditSessionOwner? owner, object? sender, ColorBoxEditSessionEventArgs args)
     {
-        if (owner is null || sender is not InspectorColorField { Tag: string field } color)
+        if (owner is null || sender is not ColorField { Tag: string field } color)
         {
             return;
         }
@@ -51,7 +51,7 @@ internal static class InspectorColorEdits
             return;
         }
 
-        if (sender is InspectorColorField color && Picks.TryGetValue(color, out var pick))
+        if (sender is ColorField color && Picks.TryGetValue(color, out var pick))
         {
             _ = Picks.Remove(color);
             if (pick.IsCurrent)
@@ -70,7 +70,7 @@ internal static class InspectorColorEdits
         where TOwner : class, IInspectorEditSessionOwner
     {
         args.Handled = true;
-        if (sender is InspectorColorField color && Picks.TryGetValue(color, out var pick) && pick.IsCurrent && pick.Owner is TOwner owner)
+        if (sender is ColorField color && Picks.TryGetValue(color, out var pick) && pick.IsCurrent && pick.Owner is TOwner owner)
         {
             apply(owner, args.Color);
         }

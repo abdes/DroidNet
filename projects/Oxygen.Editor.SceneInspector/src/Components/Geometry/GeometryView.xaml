@@ -9,7 +9,6 @@
     xmlns:editorcontrols="using:Oxygen.Editor.Controls"
     xmlns:local="using:Oxygen.Editor.SceneInspector.Components.Geometry"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    xmlns:muxc="using:Microsoft.UI.Xaml.Controls"
     xmlns:pickers="using:Oxygen.Editor.Pickers"
     xmlns:ui="using:CommunityToolkit.WinUI"
     x:Name="root"
@@ -83,7 +82,7 @@
                                         AutomationProperties.Name="{x:Bind ResetToolTip, Mode=OneWay}"
                                         Command="{x:Bind ResetCommand}"
                                         IsEnabled="{x:Bind CanEdit, Mode=OneWay}"
-                                        Style="{StaticResource QuietInspectorAction}"
+                                        Style="{StaticResource QuietActionButtonStyle}"
                                         ToolTipService.ToolTip="{x:Bind ResetToolTip, Mode=OneWay}"
                                         Visibility="{x:Bind editorcontrols:OverrideStates.ResetVisibility(OverrideState), Mode=OneWay}">
                                         <FontIcon FontSize="12" Glyph="&#xE777;" />
@@ -92,32 +91,26 @@
                             </Expander.Header>
                             <StackPanel Padding="0,4,0,0" Spacing="4">
                                 <editorcontrols:PropertyCard
-                                    HorizontalContentAlignment="Stretch"
                                     IsEnabled="{x:Bind CanEdit, Mode=OneWay}"
                                     OverrideState="{x:Bind MaterialOverrideState, Mode=OneWay}"
                                     PropertyName="Material"
                                     ResetCommand="{x:Bind ResetMaterialCommand}"
                                     ResetToolTip="{x:Bind MaterialResetToolTip, Mode=OneWay}">
-                                    <muxc:SplitButton
-                                        HorizontalAlignment="Stretch"
-                                        AutomationProperties.Name="Material"
-                                        Content="{x:Bind MaterialLabel, Mode=OneWay}"
-                                        ToolTipService.ToolTip="{x:Bind MaterialLabel, Mode=OneWay}">
-                                        <muxc:SplitButton.Flyout>
-                                            <Flyout Opening="OnMaterialPickerOpening">
-                                                <pickers:AssetPicker ChoiceInvoked="OnMaterialChoiceInvoked" Model="{x:Bind MaterialChoices}" />
-                                            </Flyout>
-                                        </muxc:SplitButton.Flyout>
-                                    </muxc:SplitButton>
+                                    <pickers:AssetPickerButton
+                                        AutomationName="Material"
+                                        ChoiceInvoked="OnMaterialChoiceInvoked"
+                                        Label="{x:Bind MaterialLabel, Mode=OneWay}"
+                                        Model="{x:Bind MaterialChoices}"
+                                        PickerOpening="OnMaterialPickerOpening" />
                                 </editorcontrols:PropertyCard>
-                                <editorcontrols:InspectorToggleField
+                                <editorcontrols:ToggleField
                                     IsEnabled="{x:Bind CanEdit, Mode=OneWay}"
                                     Label="Visible"
                                     OverrideState="{x:Bind VisibleOverrideState, Mode=OneWay}"
                                     ResetCommand="{x:Bind ResetVisibleCommand}"
                                     ResetToolTip="{x:Bind VisibleResetToolTip, Mode=OneWay}"
                                     Value="{x:Bind Visible, Mode=TwoWay}" />
-                                <editorcontrols:InspectorToggleField
+                                <editorcontrols:ToggleField
                                     IsEnabled="{x:Bind CanEdit, Mode=OneWay}"
                                     Label="Cast shadows"
                                     OverrideState="{x:Bind CastsShadowsOverrideState, Mode=OneWay}"
@@ -163,7 +156,7 @@
                         AutomationProperties.Name="Remove these changes"
                         Command="{x:Bind RemoveCommand}"
                         IsEnabled="{x:Bind CanEdit, Mode=OneWay}"
-                        Style="{StaticResource QuietInspectorAction}"
+                        Style="{StaticResource QuietActionButtonStyle}"
                         ToolTipService.ToolTip="Remove these changes">
                         <FontIcon FontSize="12" Glyph="&#xE711;" />
                     </Button>
@@ -171,12 +164,9 @@
             </DataTemplate>
             <!--  A Distance threshold; the first names the unit for all.  -->
             <DataTemplate x:Key="DistanceTransitionTemplate" x:DataType="local:LodTransitionViewModel">
-                <editorcontrols:InspectorNumberField
-                    CardStyle="{StaticResource ScenePropertyCardStyle}"
-                    FontSize="14"
+                <editorcontrols:NumberField
                     IsEnabled="{x:Bind CanEdit, Mode=OneWay}"
                     Label="{x:Bind Label}"
-                    NumberStyle="{StaticResource SceneNumberBoxStyle}"
                     NumberValue="{x:Bind Distance, Mode=TwoWay}"
                     Qualifier="{x:Bind DistanceUnit}"
                     QualifierGroup="LodDistance"
@@ -185,10 +175,7 @@
 
             <!--  A Screen-space error pair: the error that brings the finer LOD back, and the one that moves to the coarser.  -->
             <DataTemplate x:Key="ErrorTransitionTemplate" x:DataType="local:LodTransitionViewModel">
-                <editorcontrols:PropertyCard
-                    HorizontalContentAlignment="Stretch"
-                    IsEnabled="{x:Bind CanEdit, Mode=OneWay}"
-                    PropertyName="{x:Bind Label}">
+                <editorcontrols:PropertyCard IsEnabled="{x:Bind CanEdit, Mode=OneWay}" PropertyName="{x:Bind Label}">
                     <Grid ColumnSpacing="8">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
@@ -198,14 +185,14 @@
                             AutomationProperties.Name="{x:Bind FinerName}"
                             LabelPosition="None"
                             NumberValue="{x:Bind Finer, Mode=TwoWay}"
-                            Style="{StaticResource SceneNumberBoxStyle}"
+                            Style="{StaticResource PropertyNumberBoxStyle}"
                             ToolTipService.ToolTip="At or above this screen-space error, the bounding sphere&apos;s projected radius in pixels, the finer LOD shows. Errors must not increase toward coarser LODs." />
                         <controls:NumberBox
                             Grid.Column="1"
                             AutomationProperties.Name="{x:Bind CoarserName}"
                             LabelPosition="None"
                             NumberValue="{x:Bind Coarser, Mode=TwoWay}"
-                            Style="{StaticResource SceneNumberBoxStyle}"
+                            Style="{StaticResource PropertyNumberBoxStyle}"
                             ToolTipService.ToolTip="At or below this screen-space error, the coarser LOD shows. Keep it below the finer error so the LOD does not flicker." />
                     </Grid>
                 </editorcontrols:PropertyCard>
@@ -215,16 +202,13 @@
 
     <Grid>
         <editorcontrols:PropertiesExpander
-            Padding="2"
-            HorizontalAlignment="Stretch"
             VerticalAlignment="Top"
-            HorizontalContentAlignment="Stretch"
             Description="{x:Bind ViewModel.Description, Mode=OneWay}"
             Header="{x:Bind ViewModel.Header, Mode=OneWay}"
             HeaderIcon="{ui:FontIcon Glyph='&#xF158;'}"
             IsExpanded="{x:Bind ViewModel.IsExpanded, Mode=TwoWay}">
             <editorcontrols:PropertiesExpander.Items>
-                <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Asset">
+                <editorcontrols:PropertyCard PropertyName="Asset">
                     <Grid HorizontalAlignment="Stretch" ColumnSpacing="8">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
@@ -238,25 +222,18 @@
                             Content="{x:Bind ViewModel.AssetThumbnailGlyph, Mode=OneWay}"
                             ContentTemplate="{StaticResource AssetThumbnailTemplate}" />
 
-                        <muxc:SplitButton
-                            x:Name="AssetSplitButton"
+                        <pickers:AssetPickerButton
+                            x:Name="GeometryAssetButton"
                             Grid.Column="1"
-                            HorizontalAlignment="Stretch"
-                            Content="{x:Bind ViewModel.AssetButtonLabel, Mode=OneWay}"
-                            ToolTipService.ToolTip="{x:Bind ViewModel.AssetButtonLabel, Mode=OneWay}">
-                            <muxc:SplitButton.Flyout>
-                                <Flyout x:Name="AssetPickerFlyout">
-                                    <pickers:AssetPicker ChoiceInvoked="OnGeometryChoiceInvoked" Model="{x:Bind ViewModel.GeometryChoices}" />
-                                </Flyout>
-                            </muxc:SplitButton.Flyout>
-                        </muxc:SplitButton>
+                            ChoiceInvoked="OnGeometryChoiceInvoked"
+                            Label="{x:Bind ViewModel.AssetButtonLabel, Mode=OneWay}"
+                            Model="{x:Bind ViewModel.GeometryChoices}" />
                     </Grid>
                 </editorcontrols:PropertyCard>
 
                 <!--  Level of detail: the policy, then its boundaries under a disclosure whose summary names the source.  -->
                 <StackPanel Spacing="4" Visibility="{x:Bind ViewModel.LevelOfDetail.IsAvailable, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
                     <editorcontrols:PropertyCard
-                        HorizontalContentAlignment="Stretch"
                         IsEnabled="{x:Bind ViewModel.LevelOfDetail.CanEdit, Mode=OneWay}"
                         OverrideState="{x:Bind ViewModel.LevelOfDetail.OverrideState, Mode=OneWay}"
                         PropertyName="Level of detail"
@@ -294,13 +271,10 @@
                             </Grid>
                         </Expander.Header>
                         <StackPanel Padding="0,4,0,0" Spacing="4">
-                            <editorcontrols:InspectorNumberField
-                                CardStyle="{StaticResource ScenePropertyCardStyle}"
-                                FontSize="14"
+                            <editorcontrols:NumberField
                                 IsEnabled="{x:Bind ViewModel.LevelOfDetail.CanEdit, Mode=OneWay}"
                                 Label="LOD"
                                 Mask="#."
-                                NumberStyle="{StaticResource SceneNumberBoxStyle}"
                                 NumberValue="{x:Bind ViewModel.LevelOfDetail.FixedLod, Mode=TwoWay}"
                                 Qualifier="{x:Bind ViewModel.LevelOfDetail.FixedRange, Mode=OneWay}"
                                 ToolTipService.ToolTip="The LOD that always shows; 0 is the finest. The engine clamps it if a reimport removes LODs."
@@ -313,20 +287,17 @@
                                         </ItemsPanelTemplate>
                                     </ItemsControl.ItemsPanel>
                                 </ItemsControl>
-                                <editorcontrols:InspectorNumberField
+                                <editorcontrols:NumberField
                                     Margin="0,8,0,0"
-                                    CardStyle="{StaticResource ScenePropertyCardStyle}"
-                                    FontSize="14"
                                     IsEnabled="{x:Bind ViewModel.LevelOfDetail.CanEdit, Mode=OneWay}"
                                     Label="Hysteresis"
-                                    NumberStyle="{StaticResource SceneNumberBoxStyle}"
                                     NumberValue="{x:Bind ViewModel.LevelOfDetail.Hysteresis, Mode=TwoWay}"
                                     Qualifier="ratio"
                                     QualifierGroup="LodDistance"
                                     ToolTipService.ToolTip="The band around each threshold, as a ratio of it, within which the current LOD stays: from 0 to 0.99." />
                             </StackPanel>
                             <StackPanel Spacing="4" Visibility="{x:Bind ViewModel.LevelOfDetail.IsScreenSpaceError, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
-                                <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="">
+                                <editorcontrols:PropertyCard PropertyName="">
                                     <Grid ColumnSpacing="8">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" />
@@ -382,7 +353,7 @@
                         Grid.Column="2"
                         AutomationProperties.Name="Refresh surfaces"
                         Command="{x:Bind ViewModel.RefreshSurfacesCommand}"
-                        Style="{StaticResource QuietInspectorAction}"
+                        Style="{StaticResource QuietActionButtonStyle}"
                         ToolTipService.ToolTip="Refresh surfaces: read this geometry's surfaces again from its cooked output, for example after a cook or reimport.">
                         <FontIcon
                             FontSize="14"
@@ -397,7 +368,7 @@
                         Grid.Column="3"
                         AutomationProperties.Name="Remove every kept change"
                         Command="{x:Bind ViewModel.ClearUnresolvedSurfacesCommand}"
-                        Style="{StaticResource QuietInspectorAction}"
+                        Style="{StaticResource QuietActionButtonStyle}"
                         ToolTipService.ToolTip="Remove every change kept for a surface this geometry no longer has. Undo restores them."
                         Visibility="{x:Bind ViewModel.HasKeptChanges, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
                         <FontIcon FontSize="14" Glyph="&#xE894;" />

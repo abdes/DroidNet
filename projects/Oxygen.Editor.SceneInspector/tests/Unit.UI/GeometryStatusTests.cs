@@ -68,7 +68,7 @@ internal sealed class GeometryStatusTests : DroidNet.Tests.VisualUserInterfaceTe
         var engine = model.GeometryChoices.Groups.Single(group => group.Origin == AssetOrigin.Engine);
         var engineRow = engine.Rows.Should().ContainSingle().Subject;
         _ = engineRow.Choice.Asset.Should().Be(copy.Identity);
-        var owner = (SplitButton)view.FindName("AssetSplitButton");
+        var owner = ((FrameworkElement)view.FindName("GeometryAssetButton")).FindDescendant<SplitButton>()!;
         var flyout = (Flyout)owner.Flyout;
         flyout.AreOpenCloseAnimationsEnabled = false;
         flyout.ShowAt(owner);

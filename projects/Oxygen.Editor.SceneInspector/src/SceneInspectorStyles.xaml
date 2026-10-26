@@ -7,14 +7,7 @@
     xmlns:editorcontrols="using:Oxygen.Editor.Controls">
     <ResourceDictionary.MergedDictionaries>
         <ResourceDictionary Source="ms-appx:///Microsoft.UI.Xaml/DensityStyles/Compact.xaml" />
-        <ResourceDictionary Source="ms-appx:///DroidNet.Controls.InPlaceEdit/VectorBox/VectorBox.xaml" />
-        <ResourceDictionary Source="ms-appx:///Oxygen.Editor.Controls/Inspector/ThemeResources.xaml" />
-        <ResourceDictionary Source="ms-appx:///Oxygen.Editor.Controls/Inspector/PropertyCard.xaml" />
-        <ResourceDictionary Source="ms-appx:///Oxygen.Editor.Controls/Inspector/PropertiesExpander.xaml" />
     </ResourceDictionary.MergedDictionaries>
-    <Thickness x:Key="PropertiesExpanderHeaderPadding">12,10</Thickness>
-    <Thickness x:Key="PropertiesExpanderHeaderIconMargin">0,0,12,0</Thickness>
-    <x:Double x:Key="PropertiesExpanderItemsSpacing">4</x:Double>
     <ctkcvt:BoolToObjectConverter
         x:Key="SceneDisclosureGlyph"
         FalseValue="&#xE76C;"
@@ -34,17 +27,6 @@
         <Setter Property="CornerRadius" Value="4" />
         <Setter Property="HorizontalContentAlignment" Value="Stretch" />
     </Style>
-    <Style
-        x:Key="QuietInspectorAction"
-        BasedOn="{StaticResource DefaultButtonStyle}"
-        TargetType="Button">
-        <Setter Property="MinWidth" Value="32" />
-        <Setter Property="MinHeight" Value="32" />
-        <Setter Property="Padding" Value="6" />
-        <Setter Property="Background" Value="Transparent" />
-        <Setter Property="BorderThickness" Value="0" />
-        <Setter Property="CornerRadius" Value="4" />
-    </Style>
     <!--  A card for one item of a section's list, such as a script slot or a geometry surface.  -->
     <Style x:Key="InspectorItemCard" TargetType="Border">
         <Setter Property="Padding" Value="10" />
@@ -59,61 +41,12 @@
         <Setter Property="Background" Value="{ThemeResource SystemFillColorCautionBackgroundBrush}" />
         <Setter Property="CornerRadius" Value="4" />
     </Style>
-    <Style
-        x:Key="SceneNumberBoxStyle"
-        BasedOn="{StaticResource DefaultNumberBoxStyle}"
-        TargetType="controls:NumberBox">
-        <Setter Property="FontSize" Value="14" />
-        <Setter Property="MinHeight" Value="28" />
-        <Setter Property="Padding" Value="6,4" />
-        <Setter Property="CornerRadius" Value="4" />
-        <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="TrimTrailingZeros" Value="True" />
-        <Setter Property="HorizontalAlignment" Value="Stretch" />
-        <Setter Property="HorizontalValueAlignment" Value="Right" />
-    </Style>
-    <Style BasedOn="{StaticResource SceneNumberBoxStyle}" TargetType="controls:NumberBox" />
-    <Style
-        x:Key="SceneVectorBoxStyle"
-        BasedOn="{StaticResource DefaultVectorBoxStyle}"
-        TargetType="controls:VectorBox">
-        <Setter Property="FontSize" Value="14" />
-        <Setter Property="Padding" Value="0" />
-        <Setter Property="ComponentStyle" Value="{StaticResource SceneNumberBoxStyle}" />
-        <Setter Property="AutoStackComponents" Value="True" />
-        <Setter Property="CompactComponentLabels" Value="True" />
-        <Setter Property="HorizontalAlignment" Value="Stretch" />
-        <Setter Property="HorizontalValueAlignment" Value="Right" />
-    </Style>
-    <Style BasedOn="{StaticResource SceneVectorBoxStyle}" TargetType="controls:VectorBox" />
-    <Style
-        x:Key="ScenePropertyCardStyle"
-        BasedOn="{StaticResource DefaultPropertyCardStyle}"
-        TargetType="editorcontrols:PropertyCard">
-        <Setter Property="FontSize" Value="14" />
-        <Setter Property="Margin" Value="0" />
-        <Setter Property="Padding" Value="0" />
-    </Style>
-    <Style BasedOn="{StaticResource ScenePropertyCardStyle}" TargetType="editorcontrols:PropertyCard" />
-    <Style
-        x:Key="ContentOnlyPropertyCard"
-        BasedOn="{StaticResource ScenePropertyCardStyle}"
-        TargetType="editorcontrols:PropertyCard">
+    <!--  The inspector's own value boxes look like the library's property rows; the app merges the keyed styles.  -->
+    <Style BasedOn="{StaticResource PropertyVectorBoxStyle}" TargetType="controls:VectorBox" />
+    <Style BasedOn="{StaticResource PropertyNumberBoxStyle}" TargetType="controls:NumberBox" />
+    <Style x:Key="ContentOnlyPropertyCard" TargetType="editorcontrols:PropertyCard">
         <Setter Property="IsHeaderVisible" Value="False" />
         <Setter Property="Layout" Value="Stacked" />
-    </Style>
-    <Style BasedOn="{StaticResource DefaultPropertiesExpanderStyle}" TargetType="editorcontrols:PropertiesExpander">
-        <Setter Property="Padding" Value="12" />
-        <Setter Property="CornerRadius" Value="8" />
-        <Setter Property="MinWidth" Value="0" />
-        <Setter Property="HorizontalAlignment" Value="Stretch" />
-        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-    </Style>
-    <Style x:Key="SceneUnitSuffix" TargetType="TextBlock">
-        <Setter Property="FontSize" Value="12" />
-        <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
-        <Setter Property="VerticalAlignment" Value="Center" />
-        <Setter Property="HorizontalAlignment" Value="Left" />
     </Style>
     <ctkcvt:BoolToVisibilityConverter x:Key="SceneExpandedVisibility" />
     <ctkcvt:BoolToVisibilityConverter x:Key="InspectorDiagnosticVisibility" />

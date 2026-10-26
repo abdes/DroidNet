@@ -33,7 +33,7 @@ internal sealed class AcceptedExposurePresentationTests : VisualUserInterfaceTes
         var field = (FrameworkElement)FindInspectorElement(view, key + "Card");
         var actualLabel = field switch
         {
-            InspectorNumberField number => number.Label,
+            NumberField number => number.Label,
             PropertyCard card => card.PropertyName,
             _ => throw new InvalidOperationException($"Unexpected field type {field.GetType().Name}."),
         };

@@ -54,9 +54,9 @@ internal sealed class InspectorSceneFieldRegistry(InspectorSearchModel search, I
             Mode = BindingMode.OneWay,
             Converter = visibility,
         });
-        if (fieldRoot is InspectorNumberField number)
+        if (fieldRoot is NumberField number)
         {
-            number.SetBinding(InspectorNumberField.ApplicabilityTextProperty, new Binding
+            number.SetBinding(NumberField.ApplicabilityTextProperty, new Binding
             {
                 Source = field,
                 Path = new PropertyPath(nameof(InspectorFieldPresentation.ApplicabilityText)),

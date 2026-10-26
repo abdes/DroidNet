@@ -14,15 +14,12 @@
         </ResourceDictionary>
     </UserControl.Resources>
     <editorcontrols:PropertiesExpander
-        HorizontalAlignment="Stretch"
-        HorizontalContentAlignment="Stretch"
         Description="{x:Bind ViewModel.Description, Mode=OneWay}"
         Header="{x:Bind ViewModel.Header, Mode=OneWay}"
         HeaderIcon="{ui:FontIcon Glyph='&#xE714;'}"
         IsExpanded="{x:Bind ViewModel.IsExpanded, Mode=TwoWay}">
         <editorcontrols:PropertiesExpander.Items>
             <editorcontrols:PropertyCard
-                HorizontalContentAlignment="Stretch"
                 IsEnabled="{x:Bind ViewModel.StartingCamera.IsAvailable, Mode=OneWay}"
                 PropertyName="Starting camera"
                 ToolTipService.ToolTip="{x:Bind ViewModel.StartingCamera.ToolTip, Mode=OneWay}">
@@ -39,16 +36,13 @@
                         Visibility="{x:Bind ViewModel.StartingCamera.IsAutomatic, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
                 </StackPanel>
             </editorcontrols:PropertyCard>
-            <editorcontrols:InspectorNumberField
-                CardStyle="{StaticResource ScenePropertyCardStyle}"
+            <editorcontrols:NumberField
                 EditSessionCompleted="NumberEditCompleted"
                 EditSessionStarted="NumberEditStarted"
                 ErrorText="{x:Bind ViewModel.OrthographicSizeDiagnostic.Message, Mode=OneWay}"
-                FontSize="14"
                 HasError="{x:Bind ViewModel.OrthographicSizeDiagnostic.HasError, Mode=OneWay}"
                 IsMixed="{x:Bind ViewModel.OrthographicSize.IsMixed, Mode=OneWay}"
                 Label="Orthographic size"
-                NumberStyle="{StaticResource SceneNumberBoxStyle}"
                 NumberValue="{x:Bind ViewModel.OrthographicSize.Number, Mode=TwoWay}"
                 Tag="OrthographicSize"
                 Unit="m" />
@@ -59,81 +53,63 @@
                     ItemsSource="{x:Bind ViewModel.AspectModeOptions}"
                     SelectedItem="{x:Bind ViewModel.AspectMode, Mode=TwoWay}" />
             </editorcontrols:PropertyCard>
-            <editorcontrols:InspectorNumberField
-                CardStyle="{StaticResource ScenePropertyCardStyle}"
+            <editorcontrols:NumberField
                 EditSessionCompleted="NumberEditCompleted"
                 EditSessionStarted="NumberEditStarted"
                 ErrorText="{x:Bind ViewModel.AspectRatioDiagnostic.Message, Mode=OneWay}"
-                FontSize="14"
                 HasError="{x:Bind ViewModel.AspectRatioDiagnostic.HasError, Mode=OneWay}"
                 IsMixed="{x:Bind ViewModel.AspectRatio.IsMixed, Mode=OneWay}"
                 Label="Fixed aspect ratio"
-                NumberStyle="{StaticResource SceneNumberBoxStyle}"
                 NumberValue="{x:Bind ViewModel.AspectRatio.Number, Mode=TwoWay}"
                 Tag="AspectRatio" />
-            <editorcontrols:InspectorNumberField
-                CardStyle="{StaticResource ScenePropertyCardStyle}"
+            <editorcontrols:NumberField
                 EditSessionCompleted="NumberEditCompleted"
                 EditSessionStarted="NumberEditStarted"
                 ErrorText="{x:Bind ViewModel.NearPlaneDiagnostic.Message, Mode=OneWay}"
-                FontSize="14"
                 HasError="{x:Bind ViewModel.NearPlaneDiagnostic.HasError, Mode=OneWay}"
                 IsMixed="{x:Bind ViewModel.NearPlane.IsMixed, Mode=OneWay}"
                 Label="Near plane"
-                NumberStyle="{StaticResource SceneNumberBoxStyle}"
                 NumberValue="{x:Bind ViewModel.NearPlane.Number, Mode=TwoWay}"
                 Tag="NearPlane"
                 Unit="m" />
-            <editorcontrols:InspectorNumberField
-                CardStyle="{StaticResource ScenePropertyCardStyle}"
+            <editorcontrols:NumberField
                 EditSessionCompleted="NumberEditCompleted"
                 EditSessionStarted="NumberEditStarted"
                 ErrorText="{x:Bind ViewModel.FarPlaneDiagnostic.Message, Mode=OneWay}"
-                FontSize="14"
                 HasError="{x:Bind ViewModel.FarPlaneDiagnostic.HasError, Mode=OneWay}"
                 IsMixed="{x:Bind ViewModel.FarPlane.IsMixed, Mode=OneWay}"
                 Label="Far plane"
-                NumberStyle="{StaticResource SceneNumberBoxStyle}"
                 NumberValue="{x:Bind ViewModel.FarPlane.Number, Mode=TwoWay}"
                 Tag="FarPlane"
                 Unit="m" />
-            <editorcontrols:InspectorNumberField
-                CardStyle="{StaticResource ScenePropertyCardStyle}"
+            <editorcontrols:NumberField
                 EditSessionCompleted="NumberEditCompleted"
                 EditSessionStarted="NumberEditStarted"
                 ErrorText="{x:Bind ViewModel.ApertureFDiagnostic.Message, Mode=OneWay}"
-                FontSize="14"
                 HasError="{x:Bind ViewModel.ApertureFDiagnostic.HasError, Mode=OneWay}"
                 IsMixed="{x:Bind ViewModel.ApertureF.IsMixed, Mode=OneWay}"
                 Label="Aperture"
-                NumberStyle="{StaticResource SceneNumberBoxStyle}"
                 NumberValue="{x:Bind ViewModel.ApertureF.Number, Mode=TwoWay}"
                 Tag="ApertureF"
                 Unit="f" />
-            <editorcontrols:InspectorNumberField
-                CardStyle="{StaticResource ScenePropertyCardStyle}"
+            <editorcontrols:NumberField
                 EditSessionCompleted="NumberEditCompleted"
                 EditSessionStarted="NumberEditStarted"
                 ErrorText="{x:Bind ViewModel.ShutterRateDiagnostic.Message, Mode=OneWay}"
-                FontSize="14"
                 HasError="{x:Bind ViewModel.ShutterRateDiagnostic.HasError, Mode=OneWay}"
                 IsMixed="{x:Bind ViewModel.ShutterRate.IsMixed, Mode=OneWay}"
                 Label="Shutter speed"
-                NumberStyle="{StaticResource SceneNumberBoxStyle}"
                 NumberValue="{x:Bind ViewModel.ShutterRate.Number, Mode=TwoWay}"
                 Prefix="1/"
                 Tag="ShutterRate"
                 Unit="s" />
-            <editorcontrols:InspectorNumberField
-                CardStyle="{StaticResource ScenePropertyCardStyle}"
+            <editorcontrols:NumberField
                 EditSessionCompleted="NumberEditCompleted"
                 EditSessionStarted="NumberEditStarted"
                 ErrorText="{x:Bind ViewModel.IsoDiagnostic.Message, Mode=OneWay}"
-                FontSize="14"
                 HasError="{x:Bind ViewModel.IsoDiagnostic.HasError, Mode=OneWay}"
                 IsMixed="{x:Bind ViewModel.Iso.IsMixed, Mode=OneWay}"
                 Label="ISO"
-                NumberStyle="{StaticResource SceneNumberBoxStyle}"
                 NumberValue="{x:Bind ViewModel.Iso.Number, Mode=TwoWay}"
                 Tag="Iso" />
         </editorcontrols:PropertiesExpander.Items>

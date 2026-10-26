@@ -5,7 +5,6 @@
 using System.Diagnostics;
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.Pickers;
 
 namespace Oxygen.Editor.SceneInspector.Components.Geometry;
@@ -16,8 +15,6 @@ namespace Oxygen.Editor.SceneInspector.Components.Geometry;
 [ViewModel(typeof(GeometryViewModel))]
 public partial class GeometryView
 {
-    private Flyout? openMaterialPicker;
-
     /// <summary>
     /// Initializes a new instance of the <see cref="GeometryView"/> class.
     /// </summary>
@@ -30,15 +27,13 @@ public partial class GeometryView
     {
         Debug.Assert(this.ViewModel is not null, "ViewModel should not be null when handling a geometry choice.");
         await this.ViewModel.ApplyAssetAsync(choice).ConfigureAwait(true);
-        this.AssetPickerFlyout.Hide();
     }
 
-    private async void OnMaterialPickerOpening(object? sender, object args)
+    private async void OnMaterialPickerOpening(object? sender, EventArgs args)
     {
         _ = args;
-        if (sender is Flyout { Target.DataContext: SurfaceCardViewModel card } flyout)
+        if (sender is FrameworkElement { DataContext: SurfaceCardViewModel card })
         {
-            this.openMaterialPicker = flyout;
             await card.PrepareMaterialPickerAsync().ConfigureAwait(true);
         }
     }
@@ -47,8 +42,6 @@ public partial class GeometryView
     {
         if (sender is FrameworkElement { DataContext: SurfaceCardViewModel card })
         {
-            this.openMaterialPicker?.Hide();
-            this.openMaterialPicker = null;
             await card.ApplyMaterialAsync(choice).ConfigureAwait(true);
         }
     }

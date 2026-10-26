@@ -14,10 +14,10 @@
                 <ResourceDictionary Source="ms-appx:///Oxygen.Editor.SceneInspector/SceneInspectorStyles.xaml" />
             </ResourceDictionary.MergedDictionaries>
             <ctkcvt:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter" />
-            <Style BasedOn="{StaticResource QuietInspectorAction}" TargetType="Button" />
+            <Style BasedOn="{StaticResource QuietActionButtonStyle}" TargetType="Button" />
             <Style
                 x:Key="SourceReferenceAction"
-                BasedOn="{StaticResource QuietInspectorAction}"
+                BasedOn="{StaticResource QuietActionButtonStyle}"
                 TargetType="Button">
                 <Setter Property="VerticalAlignment" Value="Center" />
             </Style>
@@ -25,8 +25,6 @@
     </UserControl.Resources>
     <editorcontrols:PropertiesExpander
         x:Name="AtmosphereLightsSection"
-        HorizontalAlignment="Stretch"
-        HorizontalContentAlignment="Stretch"
         Description="Primary and secondary directional light sources."
         Header="Atmosphere Lights"
         HeaderIcon="{ui:FontIcon Glyph='&#xE706;'}"
@@ -45,7 +43,6 @@
         <editorcontrols:PropertiesExpander.Items>
             <editorcontrols:PropertyCard
                 x:Name="SourcesCard"
-                HorizontalContentAlignment="Stretch"
                 PropertyName="Sources"
                 Style="{StaticResource ContentOnlyPropertyCard}"
                 Tag="Sun Binding Sun Reference atmosphere_light_slot azimuth elevation direction angular diameter disk luminance transmittance primary secondary">

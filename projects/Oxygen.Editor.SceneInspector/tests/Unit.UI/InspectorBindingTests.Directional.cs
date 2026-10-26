@@ -11,6 +11,7 @@ using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.SceneInspector.Components.Lights;
 using Oxygen.Editor.SceneInspector.TestSupport;
 using Oxygen.Editor.World.Components;
+using static Oxygen.Editor.Controls.Testing.PropertyEditorProbes;
 using static Oxygen.Editor.SceneInspector.TestSupport.InspectorControls;
 using NumberBox = DroidNet.Controls.NumberBox;
 using PropertiesExpander = Oxygen.Editor.Controls.PropertiesExpander;
@@ -34,7 +35,7 @@ public sealed partial class InspectorBindingTests
         await LoadTestContentAsync(view).ConfigureAwait(true);
         var display = Windows.UI.Color.FromArgb(255, 128, 64, 32);
         var section = view.FindDescendant<PropertiesExpander>()!;
-        var field = (Oxygen.Editor.Controls.InspectorColorField)view.FindName("ColorField");
+        var field = (Oxygen.Editor.Controls.ColorField)view.FindName("ColorField");
         _ = section.BringItemIntoView(field);
         await WaitForRenderAsync().ConfigureAwait(true);
         var swatch = SwatchOf(field);
@@ -74,7 +75,7 @@ public sealed partial class InspectorBindingTests
 
         // Resolve the declared instance from the expander's Items and bring it into view before
         // walking its card.
-        var item = section.Items.OfType<Oxygen.Editor.Controls.InspectorColorField>()
+        var item = section.Items.OfType<Oxygen.Editor.Controls.ColorField>()
             .Single(candidate => string.Equals(
                 candidate.Name,
                 string.Equals(field, "Color", StringComparison.Ordinal) ? "ColorField" : "DiskScaleField",

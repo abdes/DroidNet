@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:pickers="using:Oxygen.Editor.Pickers">
+    <Style x:Key="DefaultAssetPickerButtonStyle" TargetType="pickers:AssetPickerButton">
+        <Setter Property="IsTabStop" Value="False" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="pickers:AssetPickerButton">
+                    <SplitButton
+                        x:Name="PART_Button"
+                        HorizontalAlignment="Stretch"
+                        AutomationProperties.Name="{TemplateBinding AutomationName}"
+                        Content="{TemplateBinding Label}"
+                        ToolTipService.ToolTip="{TemplateBinding Label}">
+                        <SplitButton.Flyout>
+                            <!--  The button creates the picker when the flyout first opens.  -->
+                            <Flyout />
+                        </SplitButton.Flyout>
+                    </SplitButton>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <Style BasedOn="{StaticResource DefaultAssetPickerButtonStyle}" TargetType="pickers:AssetPickerButton" />
+</ResourceDictionary>

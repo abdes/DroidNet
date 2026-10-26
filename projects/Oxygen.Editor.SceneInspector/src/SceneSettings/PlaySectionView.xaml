@@ -47,8 +47,6 @@
     </UserControl.Resources>
     <editorcontrols:PropertiesExpander
         x:Name="Section"
-        HorizontalAlignment="Stretch"
-        HorizontalContentAlignment="Stretch"
         Description="How the scene starts when you press Play."
         Header="Play"
         HeaderIcon="{ui:FontIcon Glyph='&#xE768;'}"
@@ -267,7 +265,7 @@
                                             IsEnabled="{x:Bind CanEdit, Mode=OneWay}"
                                             Mask="~."
                                             NumberValue="{x:Bind Priority, Mode=TwoWay}"
-                                            Style="{StaticResource SceneNumberBoxStyle}"
+                                            Style="{StaticResource PropertyNumberBoxStyle}"
                                             ToolTipService.ToolTip="Higher priorities take input first." />
                                         <Button
                                             Grid.Column="4"

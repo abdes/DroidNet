@@ -1,6 +1,0 @@
-<?xml version="1.0" encoding="utf-8" ?>
-<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation">
-    <ResourceDictionary.MergedDictionaries>
-        <ResourceDictionary Source="ms-appx:///Oxygen.Editor.Controls/Styles/RightAlignedToggleSwitch.xaml" />
-    </ResourceDictionary.MergedDictionaries>
-</ResourceDictionary>

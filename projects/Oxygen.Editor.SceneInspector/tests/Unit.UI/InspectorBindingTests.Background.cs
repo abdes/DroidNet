@@ -10,6 +10,7 @@ using Oxygen.Editor.SceneInspector.Editing;
 using Oxygen.Editor.SceneInspector.TestSupport;
 using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.World.Serialization;
+using static Oxygen.Editor.Controls.Testing.PropertyEditorProbes;
 using static Oxygen.Editor.SceneInspector.TestSupport.InspectorControls;
 using Expander = Microsoft.UI.Xaml.Controls.Expander;
 
@@ -98,7 +99,7 @@ public sealed partial class InspectorBindingTests
                 return model.PendingEdits;
             }).ConfigureAwait(true);
         await scenario.SearchAsync("background").ConfigureAwait(true);
-        var field = scenario.Element<Oxygen.Editor.Controls.InspectorColorField>("SolidColorCard");
+        var field = scenario.Element<Oxygen.Editor.Controls.ColorField>("SolidColorCard");
         var swatch = SwatchOf(field);
         var displayColor = Windows.UI.Color.FromArgb(255, 128, 64, 32);
         await PickDisplayColorAsync(swatch, displayColor).ConfigureAwait(true);

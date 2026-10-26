@@ -33,9 +33,7 @@
         </ResourceDictionary>
     </UserControl.Resources>
     <editorcontrols:PropertiesExpander
-        HorizontalAlignment="Stretch"
         VerticalAlignment="Top"
-        HorizontalContentAlignment="Stretch"
         Description="{x:Bind ViewModel.Description, Mode=OneWay}"
         Header="{x:Bind ViewModel.Header, Mode=OneWay}"
         HeaderIcon="{ui:FontIcon Glyph='&#xE7AD;'}"
@@ -44,7 +42,6 @@
             <!--  Errors sit below the card, so their wrapping text never decides whether the row stacks.  -->
             <StackPanel Spacing="2">
                 <editorcontrols:PropertyCard
-                    HorizontalContentAlignment="Stretch"
                     IsCompound="True"
                     IsEnabled="{x:Bind ViewModel.PositionProperty.IsEnabled, Mode=OneWay}"
                     PropertyName="Position"
@@ -92,7 +89,6 @@
             <!--  Errors sit below the card, so their wrapping text never decides whether the row stacks.  -->
             <StackPanel Spacing="2">
                 <editorcontrols:PropertyCard
-                    HorizontalContentAlignment="Stretch"
                     IsCompound="True"
                     IsEnabled="{x:Bind ViewModel.RotationProperty.IsEnabled, Mode=OneWay}"
                     PropertyName="Rotation"
@@ -125,7 +121,6 @@
             <!--  Errors sit below the card, so their wrapping text never decides whether the row stacks.  -->
             <StackPanel Spacing="2">
                 <editorcontrols:PropertyCard
-                    HorizontalContentAlignment="Stretch"
                     IsCompound="True"
                     IsEnabled="{x:Bind ViewModel.ScaleProperty.IsEnabled, Mode=OneWay}"
                     PropertyName="Scale"

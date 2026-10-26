@@ -1,6 +1,7 @@
 <Project Sdk="MSTest.Sdk">
     <PropertyGroup>
         <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+        <DefaultItemExcludes>$(DefaultItemExcludes);UI/**</DefaultItemExcludes>
 
         <RootNamespace>Oxygen.Editor.Pickers.Tests</RootNamespace>
         <AssemblyName>$(MSBuildProjectName)</AssemblyName>

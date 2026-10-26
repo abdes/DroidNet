@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:Oxygen.Editor.Controls"
+    xmlns:seg="using:CommunityToolkit.WinUI.Controls">
+    <Style x:Key="DefaultSourceModeFieldStyle" TargetType="local:SourceModeField">
+        <Setter Property="IsTabStop" Value="False" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="local:SourceModeField">
+                    <!--  The caption sits below the card, so its wrapping text never decides whether the row stacks.  -->
+                    <StackPanel Spacing="2">
+                        <local:PropertyCard
+                            HorizontalContentAlignment="Stretch"
+                            FontSize="{TemplateBinding FontSize}"
+                            PropertyName="{TemplateBinding Label}">
+                            <seg:Segmented
+                                x:Name="PART_Modes"
+                                HorizontalAlignment="Stretch"
+                                AutomationProperties.Name="{TemplateBinding Label}"
+                                Tag="{TemplateBinding Tag}" />
+                        </local:PropertyCard>
+                        <Grid
+                            x:Name="PART_CaptionRow"
+                            ColumnSpacing="4"
+                            Visibility="Collapsed">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock
+                                VerticalAlignment="Center"
+                                AutomationProperties.LiveSetting="Polite"
+                                FontSize="12"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Text="{TemplateBinding Caption}"
+                                TextWrapping="Wrap" />
+                            <Button
+                                x:Name="PART_SourceButton"
+                                Grid.Column="1"
+                                Padding="4"
+                                VerticalAlignment="Center"
+                                AutomationProperties.Name="{TemplateBinding SourceToolTip}"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                ToolTipService.ToolTip="{TemplateBinding SourceToolTip}"
+                                Visibility="Collapsed">
+                                <FontIcon FontSize="14" Glyph="&#xE8FD;" />
+                            </Button>
+                        </Grid>
+                    </StackPanel>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <Style BasedOn="{StaticResource DefaultSourceModeFieldStyle}" TargetType="local:SourceModeField" />
+</ResourceDictionary>

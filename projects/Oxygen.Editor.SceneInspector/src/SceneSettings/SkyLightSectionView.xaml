@@ -16,8 +16,6 @@
     </UserControl.Resources>
     <editorcontrols:PropertiesExpander
         x:Name="SkyLightSection"
-        HorizontalAlignment="Stretch"
-        HorizontalContentAlignment="Stretch"
         Description="Image-based diffuse and specular light from the sky."
         Header="Sky Light"
         HeaderIcon="{ui:FontIcon Glyph='&#xE706;'}"
@@ -33,16 +31,10 @@
                 Severity="Warning" />
         </editorcontrols:PropertiesExpander.ItemsHeader>
         <editorcontrols:PropertiesExpander.Items>
-            <editorcontrols:PropertyCard
-                x:Name="EnabledCard"
-                HorizontalContentAlignment="Stretch"
-                PropertyName="Enabled">
+            <editorcontrols:PropertyCard x:Name="EnabledCard" PropertyName="Enabled">
                 <ToggleSwitch IsOn="{x:Bind ViewModel.Enabled, Mode=TwoWay}" Tag="SkyLightEnabled" />
             </editorcontrols:PropertyCard>
-            <editorcontrols:PropertyCard
-                x:Name="SourceCard"
-                HorizontalContentAlignment="Stretch"
-                PropertyName="Source">
+            <editorcontrols:PropertyCard x:Name="SourceCard" PropertyName="Source">
                 <seg:Segmented
                     HorizontalAlignment="Stretch"
                     AutomationProperties.Name="Sky light source"
@@ -54,10 +46,7 @@
                 </seg:Segmented>
             </editorcontrols:PropertyCard>
             <StackPanel x:Name="CubemapFields" Spacing="4">
-                <editorcontrols:PropertyCard
-                    x:Name="CubemapCard"
-                    HorizontalContentAlignment="Stretch"
-                    PropertyName="Cubemap">
+                <editorcontrols:PropertyCard x:Name="CubemapCard" PropertyName="Cubemap">
                     <StackPanel Spacing="4">
                         <Grid ColumnSpacing="6">
                             <Grid.ColumnDefinitions>
@@ -96,85 +85,69 @@
                             Visibility="{x:Bind ViewModel.CubemapDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
                     </StackPanel>
                 </editorcontrols:PropertyCard>
-                <editorcontrols:InspectorNumberField
+                <editorcontrols:NumberField
                     x:Name="CubemapAngleCard"
-                    CardStyle="{StaticResource ScenePropertyCardStyle}"
                     EditSessionCompleted="NumberEditCompleted"
                     EditSessionStarted="NumberEditStarted"
                     ErrorText="{x:Bind ViewModel.CubemapAngleDiagnostic.Message, Mode=OneWay}"
-                    FontSize="14"
                     HasError="{x:Bind ViewModel.CubemapAngleDiagnostic.HasError, Mode=OneWay}"
                     Label="Rotation"
-                    NumberStyle="{StaticResource SceneNumberBoxStyle}"
                     NumberValue="{x:Bind ViewModel.CubemapAngleDegrees, Mode=TwoWay}"
                     Tag="SkyLightCubemapAngle"
                     Unit="°" />
-                <editorcontrols:InspectorNumberField
+                <editorcontrols:NumberField
                     x:Name="CubemapIlluminanceCard"
-                    CardStyle="{StaticResource ScenePropertyCardStyle}"
                     EditSessionCompleted="NumberEditCompleted"
                     EditSessionStarted="NumberEditStarted"
                     ErrorText="{x:Bind ViewModel.CubemapIlluminanceDiagnostic.Message, Mode=OneWay}"
-                    FontSize="14"
                     HasError="{x:Bind ViewModel.CubemapIlluminanceDiagnostic.HasError, Mode=OneWay}"
                     Label="Illuminance"
-                    NumberStyle="{StaticResource SceneNumberBoxStyle}"
                     NumberValue="{x:Bind ViewModel.CubemapIlluminanceLux, Mode=TwoWay}"
                     Tag="SkyLightCubemapIlluminance"
                     ToolTipService.ToolTip="Calibrates the cubemap to a physical brightness: the illuminance, in lux, it delivers on an upward-facing surface. Its radiance is scaled to deliver it before Intensity, Tint, Diffuse and Specular apply. Typical values: clear day 10,000 to 25,000; overcast 1,000 to 10,000. 0 uses the image&apos;s own values. Capture sky uses the Backdrop&apos;s Illuminance instead. Only a float (HDR) cubemap can be measured and light the scene."
                     Unit="lux" />
             </StackPanel>
-            <editorcontrols:InspectorNumberField
+            <editorcontrols:NumberField
                 x:Name="IntensityCard"
-                CardStyle="{StaticResource ScenePropertyCardStyle}"
                 EditSessionCompleted="NumberEditCompleted"
                 EditSessionStarted="NumberEditStarted"
                 ErrorText="{x:Bind ViewModel.IntensityDiagnostic.Message, Mode=OneWay}"
-                FontSize="14"
                 HasError="{x:Bind ViewModel.IntensityDiagnostic.HasError, Mode=OneWay}"
                 Label="Intensity"
-                NumberStyle="{StaticResource SceneNumberBoxStyle}"
                 NumberValue="{x:Bind ViewModel.IntensityEv, Mode=TwoWay}"
                 Tag="SkyLightIntensity"
                 ToolTipService.ToolTip="Scales the sky light&apos;s diffuse and specular lighting, in exposure stops (EV): EV 0 lights with the sky&apos;s calibrated radiance and each +1 EV doubles it. To match a physical sun, calibrate the source with Illuminance rather than raising this. The minimum, EV -16, is effectively off."
                 Unit="EV" />
-            <editorcontrols:InspectorColorField
+            <editorcontrols:ColorField
                 x:Name="TintCard"
                 Blue="{x:Bind ViewModel.TintB, Mode=TwoWay}"
                 ColorPicked="OnRgbColorPicked"
                 EditSessionCompleted="ColorEditCompleted"
                 EditSessionStarted="ColorEditStarted"
                 ErrorText="{x:Bind ViewModel.TintDiagnostic.Message, Mode=OneWay}"
-                FontSize="14"
                 Green="{x:Bind ViewModel.TintG, Mode=TwoWay}"
                 HasError="{x:Bind ViewModel.TintDiagnostic.HasError, Mode=OneWay}"
                 Label="Tint"
                 PickerAutomationName="Pick sky light tint"
                 Red="{x:Bind ViewModel.TintR, Mode=TwoWay}"
                 Tag="SkyLightTint" />
-            <editorcontrols:InspectorNumberField
+            <editorcontrols:NumberField
                 x:Name="DiffuseIntensityCard"
-                CardStyle="{StaticResource ScenePropertyCardStyle}"
                 EditSessionCompleted="NumberEditCompleted"
                 EditSessionStarted="NumberEditStarted"
                 ErrorText="{x:Bind ViewModel.DiffuseIntensityDiagnostic.Message, Mode=OneWay}"
-                FontSize="14"
                 HasError="{x:Bind ViewModel.DiffuseIntensityDiagnostic.HasError, Mode=OneWay}"
                 Label="Diffuse"
-                NumberStyle="{StaticResource SceneNumberBoxStyle}"
                 NumberValue="{x:Bind ViewModel.DiffuseIntensity, Mode=TwoWay}"
                 Tag="SkyLightDiffuse"
                 Unit="×" />
-            <editorcontrols:InspectorNumberField
+            <editorcontrols:NumberField
                 x:Name="SpecularIntensityCard"
-                CardStyle="{StaticResource ScenePropertyCardStyle}"
                 EditSessionCompleted="NumberEditCompleted"
                 EditSessionStarted="NumberEditStarted"
                 ErrorText="{x:Bind ViewModel.SpecularIntensityDiagnostic.Message, Mode=OneWay}"
-                FontSize="14"
                 HasError="{x:Bind ViewModel.SpecularIntensityDiagnostic.HasError, Mode=OneWay}"
                 Label="Specular"
-                NumberStyle="{StaticResource SceneNumberBoxStyle}"
                 NumberValue="{x:Bind ViewModel.SpecularIntensity, Mode=TwoWay}"
                 Tag="SkyLightSpecular"
                 Unit="×" />
@@ -187,36 +160,29 @@
                 IsExpanded="False"
                 Style="{StaticResource QuietDisclosure}">
                 <StackPanel Spacing="4">
-                    <editorcontrols:PropertyCard
-                        x:Name="LowerHemisphereIsSolidColorCard"
-                        HorizontalContentAlignment="Stretch"
-                        PropertyName="Solid Color">
+                    <editorcontrols:PropertyCard x:Name="LowerHemisphereIsSolidColorCard" PropertyName="Solid Color">
                         <ToggleSwitch IsOn="{x:Bind ViewModel.LowerHemisphereIsSolidColor, Mode=TwoWay}" Tag="SkyLightLowerHemisphereIsSolidColor" />
                     </editorcontrols:PropertyCard>
-                    <editorcontrols:InspectorColorField
+                    <editorcontrols:ColorField
                         x:Name="LowerHemisphereColorCard"
                         Blue="{x:Bind ViewModel.LowerHemisphereB, Mode=TwoWay}"
                         ColorPicked="OnRgbColorPicked"
                         EditSessionCompleted="ColorEditCompleted"
                         EditSessionStarted="ColorEditStarted"
                         ErrorText="{x:Bind ViewModel.LowerHemisphereColorDiagnostic.Message, Mode=OneWay}"
-                        FontSize="14"
                         Green="{x:Bind ViewModel.LowerHemisphereG, Mode=TwoWay}"
                         HasError="{x:Bind ViewModel.LowerHemisphereColorDiagnostic.HasError, Mode=OneWay}"
                         Label="Color"
                         PickerAutomationName="Pick lower hemisphere color"
                         Red="{x:Bind ViewModel.LowerHemisphereR, Mode=TwoWay}"
                         Tag="SkyLightLowerHemisphereColor" />
-                    <editorcontrols:InspectorNumberField
+                    <editorcontrols:NumberField
                         x:Name="LowerHemisphereBlendAlphaCard"
-                        CardStyle="{StaticResource ScenePropertyCardStyle}"
                         EditSessionCompleted="NumberEditCompleted"
                         EditSessionStarted="NumberEditStarted"
                         ErrorText="{x:Bind ViewModel.LowerHemisphereBlendAlphaDiagnostic.Message, Mode=OneWay}"
-                        FontSize="14"
                         HasError="{x:Bind ViewModel.LowerHemisphereBlendAlphaDiagnostic.HasError, Mode=OneWay}"
                         Label="Blend"
-                        NumberStyle="{StaticResource SceneNumberBoxStyle}"
                         NumberValue="{x:Bind ViewModel.LowerHemisphereBlendAlpha, Mode=TwoWay}"
                         Tag="SkyLightLowerHemisphereBlend" />
                 </StackPanel>
@@ -230,23 +196,17 @@
                 IsExpanded="False"
                 Style="{StaticResource QuietDisclosure}">
                 <StackPanel Spacing="4">
-                    <editorcontrols:InspectorNumberField
+                    <editorcontrols:NumberField
                         x:Name="VolumetricScatteringIntensityCard"
-                        CardStyle="{StaticResource ScenePropertyCardStyle}"
                         EditSessionCompleted="NumberEditCompleted"
                         EditSessionStarted="NumberEditStarted"
                         ErrorText="{x:Bind ViewModel.VolumetricScatteringIntensityDiagnostic.Message, Mode=OneWay}"
-                        FontSize="14"
                         HasError="{x:Bind ViewModel.VolumetricScatteringIntensityDiagnostic.HasError, Mode=OneWay}"
                         Label="Volumetric Scattering"
-                        NumberStyle="{StaticResource SceneNumberBoxStyle}"
                         NumberValue="{x:Bind ViewModel.VolumetricScatteringIntensity, Mode=TwoWay}"
                         Tag="SkyLightVolumetricScattering"
                         Unit="×" />
-                    <editorcontrols:PropertyCard
-                        x:Name="AffectReflectionsCard"
-                        HorizontalContentAlignment="Stretch"
-                        PropertyName="Affect Reflections">
+                    <editorcontrols:PropertyCard x:Name="AffectReflectionsCard" PropertyName="Affect Reflections">
                         <ToggleSwitch IsOn="{x:Bind ViewModel.AffectReflections, Mode=TwoWay}" Tag="SkyLightAffectReflections" />
                     </editorcontrols:PropertyCard>
                 </StackPanel>

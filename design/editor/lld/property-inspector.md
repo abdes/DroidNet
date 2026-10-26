@@ -91,7 +91,7 @@ displays that origin. This resolution and the creation defaults are explicit
 engine/model policies, not assumptions about the current low-level Flags
 constructor.
 
-Each mode is an `InspectorSourceModeField` (`Oxygen.Editor.Controls`): a
+Each mode is a `SourceModeField` (`Oxygen.Editor.Controls`): a
 `PropertyCard` row, inline or stacked by width, holding the toolkit `Segmented`
 and, below it, a caption line. Under Inherit the caption gives the resolved
 value and the ancestor it comes from, or the scene default, with a button that

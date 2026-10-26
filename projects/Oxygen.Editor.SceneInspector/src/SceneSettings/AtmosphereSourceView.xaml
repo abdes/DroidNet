@@ -13,57 +13,47 @@
         </ResourceDictionary>
     </UserControl.Resources>
     <StackPanel Spacing="4">
-        <editorcontrols:InspectorNumberField
-            CardStyle="{StaticResource ScenePropertyCardStyle}"
+        <editorcontrols:NumberField
             EditSessionCompleted="NumberEditCompleted"
             EditSessionStarted="NumberEditStarted"
             ErrorText="{Binding SunAzimuthDiagnostic.Message}"
-            FontSize="14"
             HasError="{Binding SunAzimuthDiagnostic.HasError}"
             Label="Azimuth"
-            NumberStyle="{StaticResource SceneNumberBoxStyle}"
             NumberValue="{Binding SunAzimuth, Mode=TwoWay}"
             Tag="SunAzimuth"
             Unit="°" />
-        <editorcontrols:InspectorNumberField
-            CardStyle="{StaticResource ScenePropertyCardStyle}"
+        <editorcontrols:NumberField
             EditSessionCompleted="NumberEditCompleted"
             EditSessionStarted="NumberEditStarted"
             ErrorText="{Binding SunElevationDiagnostic.Message}"
-            FontSize="14"
             HasError="{Binding SunElevationDiagnostic.HasError}"
             Label="Elevation"
-            NumberStyle="{StaticResource SceneNumberBoxStyle}"
             NumberValue="{Binding SunElevation, Mode=TwoWay}"
             Tag="SunElevation"
             Unit="°" />
-        <editorcontrols:InspectorNumberField
-            CardStyle="{StaticResource ScenePropertyCardStyle}"
+        <editorcontrols:NumberField
             EditSessionCompleted="NumberEditCompleted"
             EditSessionStarted="NumberEditStarted"
             ErrorText="{Binding AngularSizeRadiansDiagnostic.Message}"
-            FontSize="14"
             HasError="{Binding AngularSizeRadiansDiagnostic.HasError}"
             Label="Angular diameter"
-            NumberStyle="{StaticResource SceneNumberBoxStyle}"
             NumberValue="{Binding AngularDiameterDegrees, Mode=TwoWay}"
             Tag="AngularSizeRadians"
             Unit="°" />
-        <editorcontrols:InspectorColorField
+        <editorcontrols:ColorField
             Blue="{Binding DiskScaleB, Mode=TwoWay}"
             ComponentMask="~.#"
             DiagnosticSpacing="2"
             EditSessionCompleted="ColorEditCompleted"
             EditSessionStarted="ColorEditStarted"
             ErrorText="{Binding AtmosphereDiskLuminanceScaleRgbDiagnostic.Message}"
-            FontSize="14"
             Green="{Binding DiskScaleG, Mode=TwoWay}"
             HasError="{Binding AtmosphereDiskLuminanceScaleRgbDiagnostic.HasError}"
             Kind="Multiplier"
             Label="Disk luminance scale"
             Red="{Binding DiskScaleR, Mode=TwoWay}"
             Tag="DiskScale" />
-        <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Per-pixel transmittance">
+        <editorcontrols:PropertyCard PropertyName="Per-pixel transmittance">
             <ToggleSwitch IsOn="{Binding UsePerPixelAtmosphereTransmittance, Mode=TwoWay}" />
         </editorcontrols:PropertyCard>
     </StackPanel>

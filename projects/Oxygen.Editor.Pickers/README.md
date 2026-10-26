@@ -80,11 +80,41 @@ private void OnAssets(IReadOnlyList<AssetEntry> assets)
     => this.MaterialChoices.Update(AssetRule.ForCooked(AssetKind.Material).Apply(assets));
 ```
 
+## Asset picker button
+
+`AssetPickerButton` is the usual way to show an `AssetPicker`: a stretched
+split button whose content is the current assignment and whose flyout holds the
+picker, created when the flyout first opens, so a list of many buttons builds
+no picker until one is used. It replaces a hand-built `SplitButton` plus
+`Flyout`. It is a templated
+control: its default style is in `src/AssetPickerButton.xaml`, which the
+assembly's `Themes/Generic.xaml` merges; consumers merge nothing.
+
+| Member           | Role                                                                         |
+| ---------------- | ---------------------------------------------------------------------------- |
+| `Label`          | The button's content and tooltip, such as the assigned asset's name.         |
+| `Model`          | The `AssetPickerModel` the flyout's picker shows.                            |
+| `AutomationName` | The button's automation name; empty lets the label name it.                  |
+| `PickerOpening`  | Raised when the flyout opens, so the owner can refresh its choices.          |
+| `ChoiceInvoked`  | Raised with the picked `AssetChoice`, after the button hides its own flyout. |
+
+```xml
+<pickers:AssetPickerButton
+    AutomationName="Material"
+    ChoiceInvoked="OnMaterialChoiceInvoked"
+    Label="{x:Bind ViewModel.MaterialLabel, Mode=OneWay}"
+    Model="{x:Bind ViewModel.MaterialChoices}"
+    PickerOpening="OnMaterialPickerOpening" />
+```
+
 ## Tests
 
 `tests/` covers the model: group order and hiding, search, row identity across
-updates, duplicates, and the clearing and row-identity contracts. The World
-Editor's UI tests exercise the control inside the inspector.
+updates, duplicates, and the clearing and row-identity contracts.
+`tests/UI` hosts `AssetPickerButton` in the WinUI test host: the label,
+`PickerOpening` and the picker created on first opening, and `ChoiceInvoked`
+closing the flyout. The World Editor's UI
+tests exercise the control inside the inspector.
 
 ## Asset kind presentation
 

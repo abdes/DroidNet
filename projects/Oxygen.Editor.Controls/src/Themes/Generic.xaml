@@ -1,9 +1,17 @@
 ﻿<?xml version="1.0" encoding="utf-8" ?>
+<!--
+    The library's default styles, loaded by the framework for every control whose DefaultStyleKey names a type of this
+    assembly. Consumers never merge it; they merge Themes/EditorStyles.xaml for the keyed styles of their own elements.
+    It merges only the per-control dictionaries; each merges the shared resources it uses.
+-->
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation">
     <ResourceDictionary.MergedDictionaries>
-        <ResourceDictionary Source="ms-appx:///Oxygen.Editor.Controls/Inspector/ThemeResources.xaml" />
-        <ResourceDictionary Source="ms-appx:///Oxygen.Editor.Controls/Inspector/PropertiesExpander.xaml" />
-        <ResourceDictionary Source="ms-appx:///Oxygen.Editor.Controls/Inspector/PropertyCard.xaml" />
-        <ResourceDictionary Source="ms-appx:///Oxygen.Editor.Controls/Styles/RightAlignedToggleSwitch.xaml" />
+        <ResourceDictionary Source="ms-appx:///Oxygen.Editor.Controls/PropertyEditors/PropertyCard.xaml" />
+        <ResourceDictionary Source="ms-appx:///Oxygen.Editor.Controls/PropertyEditors/PropertiesExpander.xaml" />
+        <ResourceDictionary Source="ms-appx:///Oxygen.Editor.Controls/PropertyEditors/NumberField.xaml" />
+        <ResourceDictionary Source="ms-appx:///Oxygen.Editor.Controls/PropertyEditors/ToggleField.xaml" />
+        <ResourceDictionary Source="ms-appx:///Oxygen.Editor.Controls/PropertyEditors/ColorField.xaml" />
+        <ResourceDictionary Source="ms-appx:///Oxygen.Editor.Controls/PropertyEditors/SourceModeField.xaml" />
+        <ResourceDictionary Source="ms-appx:///Oxygen.Editor.Controls/Feedback/DiagnosticCard.xaml" />
     </ResourceDictionary.MergedDictionaries>
 </ResourceDictionary>
