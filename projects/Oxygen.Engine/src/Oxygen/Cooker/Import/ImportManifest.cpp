@@ -1942,6 +1942,23 @@ auto ImportManifest::Parse(const std::string_view text,
   return manifest;
 }
 
+auto ImportManifestJob::SetCookedRoot(const std::string& cooked_root) -> void
+{
+  texture.cooked_root = cooked_root;
+  fbx.cooked_root = cooked_root;
+  gltf.cooked_root = cooked_root;
+  script.cooked_root = cooked_root;
+  scripting_sidecar.cooked_root = cooked_root;
+  physics_sidecar.cooked_root = cooked_root;
+  input.cooked_root = cooked_root;
+  buffer_container.cooked_root = cooked_root;
+  material_descriptor.cooked_root = cooked_root;
+  physics_material_descriptor.cooked_root = cooked_root;
+  collision_shape_descriptor.cooked_root = cooked_root;
+  geometry_descriptor.cooked_root = cooked_root;
+  scene_descriptor.cooked_root = cooked_root;
+}
+
 auto ImportManifestJob::SourcePath() const -> std::filesystem::path
 {
   if (job_type == "texture") {

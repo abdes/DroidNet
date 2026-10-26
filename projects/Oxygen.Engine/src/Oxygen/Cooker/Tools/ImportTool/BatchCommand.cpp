@@ -55,7 +55,6 @@
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/ImportSourceDocument.h>
 #include <Oxygen/Cooker/Import/ModelImportRecord.h>
-#include <Oxygen/Cooker/Import/SceneImportSettings.h>
 #include <Oxygen/Cooker/Tools/ImportTool/BatchCommand.h>
 #include <Oxygen/Cooker/Tools/ImportTool/MessageWriter.h>
 #include <Oxygen/Cooker/Tools/ImportTool/ReportJson.h>
@@ -964,6 +963,16 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
     }
   }
 
+  // The command line's cooked root replaces every job's own, so a manifest
+  // that names none, such as an editor import session, cooks there.
+  if (global_options_ != nullptr && !global_options_->cooked_root.empty()) {
+    const auto cooked_root
+      = std::filesystem::absolute(global_options_->cooked_root).string();
+    for (auto& job : manifest->jobs) {
+      job.SetCookedRoot(cooked_root);
+    }
+  }
+
   for (const auto& job : manifest->jobs) {
     if (job.job_type != "texture" && job.job_type != "texture-descriptor"
       && job.job_type != "material-descriptor"
@@ -1001,10 +1010,6 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
       }
     }
 
-    if (global_options_ != nullptr && !global_options_->cooked_root.empty()) {
-      request->cooked_root
-        = std::filesystem::path(global_options_->cooked_root);
-    }
     request->cooked_root
       = base::ToLogicalPath(std::filesystem::weakly_canonical(
         base::ToNativePath(request->ResolveCookedRoot())));

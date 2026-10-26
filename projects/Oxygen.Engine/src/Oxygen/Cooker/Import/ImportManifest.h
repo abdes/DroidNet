@@ -70,6 +70,9 @@ struct ImportManifestJob {
   OXGN_COOK_NDAPI auto BuildRequest(std::ostream& error_stream,
     std::shared_ptr<const CapturedInputSet> captured_inputs = {}) const
     -> std::optional<ImportRequest>;
+
+  //! Cooks the job into `cooked_root`, replacing the root it names.
+  OXGN_COOK_API auto SetCookedRoot(const std::string& cooked_root) -> void;
 };
 
 struct ImportManifestDefaults {
