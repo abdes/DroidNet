@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <cstdint>
+#include <cstring>
 #include <exception>
 #include <filesystem>
 #include <iostream>
@@ -14,6 +15,7 @@
 #include <string>
 #include <system_error>
 #include <utility>
+#include <vector>
 
 #include "InventoryReport.h"
 #include <nlohmann/json.hpp>
@@ -29,9 +31,51 @@
 #include <Oxygen/Cooker/Loose/Inspection.h>
 #include <Oxygen/Cooker/Loose/Types.h>
 #include <Oxygen/Cooker/Loose/Validation.h>
+#include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/PakFormatVersions.h>
+#include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Serio/AtomicFile.h>
+#include <Oxygen/Serio/FileStream.h>
+#include <Oxygen/Serio/Reader.h>
 
 namespace oxygen::content::inspection {
+
+namespace {
+
+  //! The descriptors of the root cooked in an asset format this engine no
+  //! longer reads; each is an issue of its own file, so only the product that
+  //! owns it needs cooking again.
+  auto FindStaleDescriptors(const std::filesystem::path& root,
+    const lc::LooseCookedIndex& index) -> std::vector<std::string>
+  {
+    auto stale = std::vector<std::string> {};
+    for (const auto& key : index.GetAllAssetKeys()) {
+      const auto relpath = index.FindDescriptorRelPath(key);
+      const auto type = index.FindAssetType(key);
+      if (!relpath.has_value() || !type.has_value()) {
+        continue;
+      }
+      serio::FileStream<> stream(
+        root / std::filesystem::path(*relpath), std::ios::in);
+      serio::Reader<serio::FileStream<>> reader(stream);
+      auto pack = reader.ScopedAlignment(1);
+      const auto blob = reader.ReadBlob(sizeof(data::pak::core::AssetHeader));
+      if (!blob) {
+        throw std::runtime_error(
+          "failed to read descriptor header: " + std::string(*relpath));
+      }
+      data::pak::core::AssetHeader header {};
+      std::memcpy(&header, blob->data(), sizeof(header));
+      const auto current
+        = data::pak::CurrentAssetVersion(static_cast<data::AssetType>(*type));
+      if (!current.has_value() || header.version != *current) {
+        stale.emplace_back(*relpath);
+      }
+    }
+    return stale;
+  }
+
+} // namespace
 
 auto BuildInventoryReportCommand(InventoryReportOptions& options)
   -> std::shared_ptr<clap::Command>
@@ -73,10 +117,16 @@ auto RunInventoryReport(const InventoryReportOptions& options) -> int
     const auto index_digest = base::ComputeFileSha256(index_path);
     const auto index = lc::LooseCookedIndex::LoadFromRoot(root);
     const auto failures = index.CheckContent(root, lc::IntegrityCheck::kFull);
-    if (failures.empty()) {
+    const auto stale = failures.empty() ? FindStaleDescriptors(root, index)
+                                        : std::vector<std::string> {};
+    if (failures.empty() && stale.empty()) {
       lc::ValidateRoot(root, lc::IntegrityCheck::kMetadata);
     }
     auto issues = json::array();
+    for (const auto& relpath : stale) {
+      issues.push_back(
+        { { "relative_path", relpath }, { "reason", "format_version" } });
+    }
     for (const auto& failure : failures) {
       const auto* const reason = [&] -> const char* {
         switch (failure.reason) {

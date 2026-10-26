@@ -127,7 +127,8 @@
               "size_mismatch",
               "digest_mismatch",
               "linked_path",
-              "not_regular"
+              "not_regular",
+              "format_version"
             ]
           }
         }
