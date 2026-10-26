@@ -15,19 +15,25 @@ public partial class DynamicTreeItem
     /// <summary>Gets a value indicating whether an interactive trailing-content pointer gesture is in progress.</summary>
     internal bool IsInteractiveActionInProgress => this.isInteractivePointerActive;
 
-    /// <summary>Checks whether an event source belongs to an interactive control in the consumer's trailing content.</summary>
+    /// <summary>Checks whether an event source belongs to a control that handles its own input within the row.</summary>
     /// <param name="element">The input event source.</param>
-    /// <returns>True for enabled buttons or focusable controls and their descendants within the trailing presenter.</returns>
+    /// <returns>
+    ///     True for the expander, the in-place rename editor and its popup, and for enabled buttons or focusable controls
+    ///     (and their descendants) within the consumer's trailing presenter.
+    /// </returns>
     internal bool IsInteractiveContentElement(DependencyObject? element)
     {
-        if (this.GetTemplateChild(TrailingContentPresenterPart) is not DependencyObject trailingContent)
-        {
-            return false;
-        }
-
+        var trailingContent = this.GetTemplateChild(TrailingContentPresenterPart) as DependencyObject;
         var isInteractive = false;
         for (var current = element; current is not null; current = VisualTreeHelper.GetParent(current))
         {
+            if (ReferenceEquals(current, this.expander)
+                || ReferenceEquals(current, this.inPlaceRenamePart)
+                || ReferenceEquals(current, this.itemNameTextBox))
+            {
+                return true;
+            }
+
             if (ReferenceEquals(current, trailingContent))
             {
                 return isInteractive;
@@ -45,8 +51,18 @@ public partial class DynamicTreeItem
     /// <param name="template">A uniform template that takes precedence over the selector.</param>
     internal void UpdateTrailingContentTemplate(DataTemplateSelector? selector, ITreeItem? item, DataTemplate? template = null)
     {
-        this.TrailingContent = item;
-        this.TrailingContentTemplate = item is null ? null : template ?? selector?.SelectTemplate(item, this);
+        // The property callbacks re-measure on their own; one explicit update covers both writes.
+        this.isApplyingTrailingContent = true;
+        try
+        {
+            this.TrailingContent = item;
+            this.TrailingContentTemplate = item is null ? null : template ?? selector?.SelectTemplate(item, this);
+        }
+        finally
+        {
+            this.isApplyingTrailingContent = false;
+        }
+
         this.UpdateTrailingContentPresenter();
     }
 

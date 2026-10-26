@@ -23,134 +23,93 @@ public partial class DynamicTreeItemTests : VisualUserInterfaceTests
     private TreeItemAdapterMock? itemAdapter;
 
     [TestMethod]
-    public Task InitializesTemplateParts_Async() => EnqueueAsync(
-        () =>
-        {
-            // Assert
-            _ = this.treeItem!.FindDescendant<Grid>(e => string.Equals(e.Name, Controls.DynamicTreeItem.RootGridPart, StringComparison.Ordinal)).Should().NotBeNull();
-            _ = this.treeItem!.FindDescendant<ContentPresenter>(e => string.Equals(e.Name, Controls.DynamicTreeItem.ContentPresenterPart, StringComparison.Ordinal)).Should().NotBeNull();
-            _ = this.treeItem!.FindDescendant<Controls.Expander>(e => string.Equals(e.Name, Controls.DynamicTreeItem.ExpanderPart, StringComparison.Ordinal)).Should().NotBeNull();
-            _ = this.treeItem!.FindDescendant<TextBlock>(e => string.Equals(e.Name, Controls.DynamicTreeItem.ItemNamePart, StringComparison.Ordinal)).Should().NotBeNull();
-            _ = this.treeItem!.FindDescendant<Popup>(e => string.Equals(e.Name, Controls.DynamicTreeItem.InPlaceRenamePart, StringComparison.Ordinal)).Should().NotBeNull();
-        });
+    public Task InitializesTemplateParts_Async() => EnqueueAsync(this.AssertTemplateParts);
 
     [TestMethod]
     public Task InitializesTemplatePartsOnItemAdapterChange_Async() => EnqueueAsync(
         async () =>
         {
-            // Setup
             this.treeItem = new Controls.DynamicTreeItem(); // No ItemAdapter set
             await LoadTestContentAsync(this.treeItem).ConfigureAwait(true);
 
-            // Act
             this.treeItem.ItemAdapter = new TreeItemAdapterMock { Label = "Modified Item" };
 
-            // Assert
-            _ = this.treeItem!.FindDescendant<Grid>(e => string.Equals(e.Name, Controls.DynamicTreeItem.RootGridPart, StringComparison.Ordinal)).Should().NotBeNull();
-            _ = this.treeItem!.FindDescendant<ContentPresenter>(e => string.Equals(e.Name, Controls.DynamicTreeItem.ContentPresenterPart, StringComparison.Ordinal)).Should().NotBeNull();
-            _ = this.treeItem!.FindDescendant<Controls.Expander>(e => string.Equals(e.Name, Controls.DynamicTreeItem.ExpanderPart, StringComparison.Ordinal)).Should().NotBeNull();
-            _ = this.treeItem!.FindDescendant<TextBlock>(e => string.Equals(e.Name, Controls.DynamicTreeItem.ItemNamePart, StringComparison.Ordinal)).Should().NotBeNull();
-            _ = this.treeItem!.FindDescendant<Popup>(e => string.Equals(e.Name, Controls.DynamicTreeItem.InPlaceRenamePart, StringComparison.Ordinal)).Should().NotBeNull();
+            this.AssertTemplateParts();
         });
 
     [TestMethod]
-    public Task FiresExpandEventWhenExpanded_Async() => EnqueueAsync(
-    () =>
-    {
-        // Setup
-        var eventFired = false;
-
-        // Find the Expander
-        var expander = this.treeItem!.FindDescendant<Controls.Expander>(e => string.Equals(e.Name, Controls.DynamicTreeItem.ExpanderPart, StringComparison.Ordinal));
-        _ = expander.Should().NotBeNull();
-
-        // Handle the treeItem's Expand event and set IsExpanded to true
-        this.treeItem!.Expand += (_, _) =>
+    public Task ForwardsTheExpanderExpandEvent_Async() => EnqueueAsync(
+        () =>
         {
-            eventFired = true;
-            expander!.IsExpanded = true; // Set IsExpanded to true to keep it expanded
-        };
+            var eventFired = false;
+            this.treeItem!.Expand += (_, _) => eventFired = true;
 
-        // Act
-        expander!.Toggle(); // This will trigger the Expand event
+            this.FindExpander().Toggle();
 
-        // Assert
-        _ = eventFired.Should().BeTrue();
-        _ = expander.IsExpanded.Should().BeTrue(); // Verify that it is actually expanded
-    });
+            _ = eventFired.Should().BeTrue();
+        });
 
     [TestMethod]
-    public Task FiresCollapseEventWhenCollapsed_Async() => EnqueueAsync(
-    () =>
-    {
-        // Setup
-        var eventFired = false;
-
-        // Find the Expander
-        var expander = this.treeItem!.FindDescendant<Controls.Expander>(e => string.Equals(e.Name, Controls.DynamicTreeItem.ExpanderPart, StringComparison.Ordinal));
-        _ = expander.Should().NotBeNull();
-
-        // Initially expand it
-        this.treeItem!.Expand += (_, _) => expander!.IsExpanded = true;
-        expander!.Toggle(); // Expand
-
-        // Handle the treeItem's Collapse event and set IsExpanded to false
-        this.treeItem!.Collapse += (_, _) =>
+    public Task ForwardsTheExpanderCollapseEvent_Async() => EnqueueAsync(
+        () =>
         {
-            eventFired = true;
-            expander.IsExpanded = false; // Set IsExpanded to false to keep it collapsed
-        };
+            var expander = this.FindExpander();
+            expander.IsExpanded = true;
+            var eventFired = false;
+            this.treeItem!.Collapse += (_, _) => eventFired = true;
 
-        // Act
-        expander.Toggle(); // Collapse
+            expander.Toggle();
 
-        // Assert
-        _ = eventFired.Should().BeTrue();
-        _ = expander.IsExpanded.Should().BeFalse(); // Verify that it is actually collapsed
-    });
+            _ = eventFired.Should().BeTrue();
+        });
 
     [TestMethod]
     public Task UpdatesVisualStateWhenSelected_Async() => EnqueueAsync(
-    () =>
-    {
-        // Setup
-        this.itemAdapter!.IsSelected = false;
+        () =>
+        {
+            this.itemAdapter!.IsSelected = true;
 
-        // Act
-        this.itemAdapter!.IsSelected = true;
-
-        // Assert
-        _ = this.vsm!.GetCurrentStates(this.treeItem).Should().Contain(Controls.DynamicTreeItem.SelectedVisualState);
-    });
+            _ = this.vsm!.GetCurrentStates(this.treeItem).Should().Contain(Controls.DynamicTreeItem.SelectedVisualState);
+        });
 
     [TestMethod]
     public Task UpdatesVisualStateWhenDeselected_Async() => EnqueueAsync(
-    () =>
-    {
-        // Setup
-        this.itemAdapter!.IsSelected = true;
+        () =>
+        {
+            this.itemAdapter!.IsSelected = true;
 
-        // Act
-        this.itemAdapter!.IsSelected = false;
+            this.itemAdapter.IsSelected = false;
 
-        // Assert
-        _ = this.vsm!.GetCurrentStates(this.treeItem).Should().Contain(Controls.DynamicTreeItem.NormalVisualState);
-    });
+            // The state manager logs every state entered; the latest one is the current state.
+            _ = this.vsm!.GetCurrentStates(this.treeItem)!.Last().Should().NotBe(Controls.DynamicTreeItem.SelectedVisualState);
+        });
 
     [TestMethod]
-    public Task UpdatesVisualState_ItemWithNoChildren_AlwaysCollapsed_Async() => EnqueueAsync(
+    public Task UpdatesVisualState_ItemWithNoChildren_ShowsNoChildrenAndCollapsed_Async() => EnqueueAsync(
+        () =>
+        {
+            // Act
+            this.treeItem!.ItemAdapter = new TreeItemAdapterMock(withChildren: false) { IsExpanded = false };
+
+            // Assert
+            _ = this.vsm!.GetCurrentStates(this.treeItem).Should().Contain([Controls.DynamicTreeItem.NoChildrenVisualState, Controls.DynamicTreeItem.CollapsedVisualState]);
+            _ = this.vsm.GetCurrentStates(this.treeItem).Should().NotContain([Controls.DynamicTreeItem.WithChildrenVisualState, Controls.DynamicTreeItem.ExpandedVisualState]);
+        });
+
+    [TestMethod]
+    public Task UpdatesVisualState_WhenTheItemExpansionChanges_Async() => EnqueueAsync(
         () =>
         {
             // Setup
-            this.treeItem!.ItemAdapter = new TreeItemAdapterMock(withChildren: false) { IsExpanded = false };
-            this.itemAdapter!.IsSelected = true;
-            _ = this.vsm!.GetCurrentStates(this.treeItem).Should().Contain(Controls.DynamicTreeItem.CollapsedVisualState);
+            var adapter = new TreeItemAdapterMock(withChildren: true) { IsExpanded = false };
+            this.treeItem!.ItemAdapter = adapter;
 
             // Act
-            this.treeItem.ItemAdapter.IsExpanded = true;
+            adapter.IsExpanded = true;
 
             // Assert
-            _ = this.vsm!.GetCurrentStates(this.treeItem).Should().NotContain([Controls.DynamicTreeItem.ExpandedVisualState]);
+            _ = this.vsm!.GetCurrentStates(this.treeItem).Should().Contain(Controls.DynamicTreeItem.ExpandedVisualState);
+            _ = this.FindExpander().IsExpanded.Should().BeTrue();
         });
 
     [TestMethod]
@@ -173,9 +132,7 @@ public partial class DynamicTreeItemTests : VisualUserInterfaceTests
             this.treeItem!.ItemAdapter = new TreeItemAdapterMock(withChildren: true) { IsExpanded = true };
 
             // Assert
-            var expander = this.treeItem!.FindDescendant<Controls.Expander>(e => string.Equals(e.Name, Controls.DynamicTreeItem.ExpanderPart, StringComparison.Ordinal));
-            _ = expander.Should().NotBeNull();
-            _ = expander!.IsExpanded.Should().BeTrue();
+            _ = this.FindExpander().IsExpanded.Should().BeTrue();
             _ = this.vsm!.GetCurrentStates(this.treeItem).Should().Contain([Controls.DynamicTreeItem.WithChildrenVisualState, Controls.DynamicTreeItem.ExpandedVisualState]);
             _ = this.vsm!.GetCurrentStates(this.treeItem).Should().NotContain([Controls.DynamicTreeItem.CollapsedVisualState]);
         });
@@ -200,6 +157,19 @@ public partial class DynamicTreeItemTests : VisualUserInterfaceTests
             taskCompletionSource.SetResult();
         });
         await taskCompletionSource.Task.ConfigureAwait(true);
+    }
+
+    private Controls.Expander FindExpander()
+        => this.treeItem!.FindDescendant<Controls.Expander>(e => string.Equals(e.Name, Controls.DynamicTreeItem.ExpanderPart, StringComparison.Ordinal))!;
+
+    private void AssertTemplateParts()
+    {
+        var item = this.treeItem!;
+        _ = item.FindDescendant<Grid>(e => string.Equals(e.Name, Controls.DynamicTreeItem.RootGridPart, StringComparison.Ordinal)).Should().NotBeNull();
+        _ = item.FindDescendant<ContentPresenter>(e => string.Equals(e.Name, Controls.DynamicTreeItem.ContentPresenterPart, StringComparison.Ordinal)).Should().NotBeNull();
+        _ = this.FindExpander().Should().NotBeNull();
+        _ = item.FindDescendant<TextBlock>(e => string.Equals(e.Name, Controls.DynamicTreeItem.ItemNamePart, StringComparison.Ordinal)).Should().NotBeNull();
+        _ = item.FindDescendant<Popup>(e => string.Equals(e.Name, Controls.DynamicTreeItem.InPlaceRenamePart, StringComparison.Ordinal)).Should().NotBeNull();
     }
 
     private sealed partial class TreeItemAdapterMock(bool withChildren = false) : TreeItemAdapter

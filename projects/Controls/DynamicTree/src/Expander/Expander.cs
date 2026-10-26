@@ -5,6 +5,7 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 
@@ -12,18 +13,14 @@ namespace DroidNet.Controls;
 
 /// <summary>
 ///     Represents a control which has two states expanded or collapsed which can be toggled by the user
-///     when the control is tapped or double tapped.
+///     when the control is tapped.
 /// </summary>
 /// <remarks>
 ///     The control is always in the state specified by the value of the <see cref="IsExpanded" />
-///     property. When the control is <see cref="UIElement.Tapped">tapped</see> or
-///     <see
-///         cref="UIElement.DoubleTapped">
-///         double tapped
-///     </see>
-///     it fires the <see cref="Expand" /> or
-///     <see cref="Collapse" /> event depending on whether it is currently in the expanded or the
-///     collapsed state.
+///     property. When the control is <see cref="UIElement.Tapped">tapped</see> it fires the
+///     <see cref="Expand" /> or <see cref="Collapse" /> event depending on whether it is currently in
+///     the expanded or the collapsed state. Both tap and double tap are marked as handled, so they do
+///     not reach the container of the control (for example, a row that would select or invoke itself).
 ///     <para>
 ///         The event handler of the <see cref="Expand" /> and <see cref="Collapse" /> events can then
 ///         decide to do the corresponding action (or not) and set the <see cref="IsExpanded" /> property of
@@ -112,6 +109,9 @@ public partial class Expander : Control
     }
 
     /// <inheritdoc />
+    protected override AutomationPeer OnCreateAutomationPeer() => new ExpanderAutomationPeer(this);
+
+    /// <inheritdoc />
     protected override void OnApplyTemplate()
     {
         base.OnApplyTemplate();
@@ -136,17 +136,17 @@ public partial class Expander : Control
     private void OnTapped(object sender, TappedRoutedEventArgs args)
     {
         _ = sender; // unused
-        _ = args; // unused
 
+        args.Handled = true;
         this.Toggle();
     }
 
     private void OnDoubleTapped(object sender, DoubleTappedRoutedEventArgs args)
     {
         _ = sender; // unused
-        _ = args; // unused
 
-        this.Toggle();
+        // Each tap of a double tap already toggled the control; only keep it from reaching the container.
+        args.Handled = true;
     }
 
     private void UpdateVisualState()

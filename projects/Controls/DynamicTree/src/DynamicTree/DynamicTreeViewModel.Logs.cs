@@ -61,6 +61,24 @@ public partial class DynamicTreeViewModel
 
     [LoggerMessage(
         SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "Expanding item '{item}': it is not in the shown list; only its expanded state is recorded.")]
+    private static partial void LogExpandItemNotShown(ILogger logger, string item);
+
+    [Conditional("DEBUG")]
+    private void LogExpandItemNotShown(ITreeItem item)
+    {
+        if (!this.logger.IsEnabled(LogLevel.Debug))
+        {
+            return;
+        }
+
+        var label = item.Label;
+        LogExpandItemNotShown(this.logger, label);
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
         Level = LogLevel.Trace,
         Message = "Expanding item '{item}': Depth={depth}, Children={childrenCount}")]
     private static partial void LogExpandItem(ILogger logger, string item, int depth, int childrenCount);
@@ -405,5 +423,30 @@ public partial class DynamicTreeViewModel
 
         var viewModel = this.GetType().Name;
         LogSecondTreeRejected(this.logger, viewModel);
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Error,
+        Message = "Recomputing the filter cache failed; the filtered view keeps its previous content.")]
+    private static partial void LogFilteringRecomputeFailed(ILogger logger, Exception exception);
+
+    private void LogFilteringRecomputeFailed(Exception exception)
+        => LogFilteringRecomputeFailed(this.logger, exception);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Warning,
+        Message = "Paste skipped: target '{target}' cannot receive children")]
+    private static partial void LogPasteSkippedTargetRejectsChildren(ILogger logger, string target);
+
+    private void LogPasteSkippedTargetRejectsChildren(ITreeItem target)
+    {
+        if (!this.logger.IsEnabled(LogLevel.Warning))
+        {
+            return;
+        }
+
+        LogPasteSkippedTargetRejectsChildren(this.logger, target.Label);
     }
 }

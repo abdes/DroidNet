@@ -12,8 +12,11 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="local:Expander">
-                    <Grid x:Name="PART_ActiveElement">
-                        <FontIcon x:Name="Icon" FontSize="14" />
+                    <Grid x:Name="PART_ActiveElement" Background="Transparent">
+                        <FontIcon
+                            x:Name="Icon"
+                            AutomationProperties.AccessibilityView="Raw"
+                            FontSize="14" />
                         <VisualStateManager.VisualStateGroups>
                             <VisualStateGroup x:Name="ExpansionStates">
                                 <VisualState x:Name="Expanded">

@@ -112,8 +112,8 @@ internal sealed partial class TreeDisplayHelper(
     /// </remarks>
     /// <param name="item">The item to remove.</param>
     /// <param name="updateSelection">Whether selection should be updated after removal.</param>
-    /// <returns>A task that completes when the removal is finished.</returns>
-    public async Task RemoveItemAsync(ITreeItem item, bool updateSelection)
+    /// <returns><see langword="true" /> when the item was removed; <see langword="false" /> when the removal was vetoed.</returns>
+    public async Task<bool> RemoveItemAsync(ITreeItem item, bool updateSelection)
     {
         this.LogRemoveItemRequested(item);
 
@@ -121,15 +121,19 @@ internal sealed partial class TreeDisplayHelper(
 
         if (!this.ApproveItemBeingRemoved(item))
         {
-            return;
+            return false;
         }
 
         var shownIndex = this.shownItems.IndexOf(item);
         var isShown = shownIndex != -1;
 
-        if (isShown && updateSelection && item.IsSelected)
+        // The selection models store row positions, which removing rows above a selected row would re-point. The
+        // selection is released while the positions still name the right rows, and restored by item afterwards.
+        ITreeItem[] selectedBefore = [];
+        if (isShown && this.SelectionModel is { IsEmpty: false } selection)
         {
-            this.SelectionModel?.ClearSelection(item);
+            selectedBefore = [.. this.shownItems.Where(static shown => shown.IsSelected)];
+            selection.ClearSelection();
         }
 
         var removedShownCount = await this.RemoveChildrenAsync(item, isShown).ConfigureAwait(true);
@@ -143,8 +147,14 @@ internal sealed partial class TreeDisplayHelper(
             removedShownCount++;
         }
 
-        if (isShown && updateSelection)
+        var survivors = selectedBefore.Where(this.shownItems.Contains).ToArray();
+        if (survivors.Length > 0 || !updateSelection)
         {
+            this.SelectShownItems(survivors);
+        }
+        else if (selectedBefore.Length > 0)
+        {
+            // The whole selection went with the removed rows: the row that takes their place inherits it.
             this.UpdateSelectionAfterRemoval(shownIndex, removedShownCount);
         }
 
@@ -156,6 +166,7 @@ internal sealed partial class TreeDisplayHelper(
         });
 
         this.LogRemoveItemCompleted(item, removedShownCount, isShown);
+        return true;
     }
 
     /// <summary>
@@ -195,22 +206,27 @@ internal sealed partial class TreeDisplayHelper(
                 // notify start
                 this.LogRemoveMultipleSelectionItemsStarted(selectedIndices.Count);
 
+                var selectedItems = selectedIndices.Select(index => this.shownItems[index]).ToArray();
                 multipleSelection.ClearSelection();
 
                 var removedCount = 0;
-                foreach (var index in selectedIndices)
+                foreach (var item in selectedItems)
                 {
-                    var item = this.shownItems[index];
-                    if (item.IsLocked)
+                    if (!item.IsLocked && await this.RemoveItemAsync(item, updateSelection: false).ConfigureAwait(true))
                     {
-                        continue;
+                        removedCount++;
                     }
-
-                    await this.RemoveItemAsync(item, updateSelection: false).ConfigureAwait(true);
-                    removedCount++;
                 }
 
-                this.UpdateSelectionAfterRemoval(selectedIndices[0], removedCount);
+                if (removedCount == 0)
+                {
+                    // Every removal was refused: nothing moved, so the selection stays as it was.
+                    this.SelectShownItems(selectedItems);
+                }
+                else
+                {
+                    this.UpdateSelectionAfterRemoval(selectedIndices[0], removedCount);
+                }
                 this.LogRemoveMultipleSelectionItemsCompleted(removedCount);
                 break;
         }
@@ -389,6 +405,16 @@ internal sealed partial class TreeDisplayHelper(
 
     private async Task InsertApprovedItemAsync(ITreeItem item, ITreeItem targetParent, int relativeIndex)
     {
+        // Under a parent that is not shown, such as one in a collapsed branch, the item joins the model only; its row
+        // appears when the branch is expanded. A hidden root is not a row, but its children are the top-level rows.
+        if (!targetParent.IsRoot && !this.shownItems.Contains(targetParent))
+        {
+            relativeIndex = this.ClampRelativeIndex(targetParent, relativeIndex);
+            await targetParent.InsertChildAsync(relativeIndex, item).ConfigureAwait(true);
+            this.RaiseItemAdded(item, targetParent, relativeIndex);
+            return;
+        }
+
         this.SelectionModel?.ClearSelection();
         await this.EnsureParentExpandedAsync(targetParent).ConfigureAwait(true);
         relativeIndex = this.ClampRelativeIndex(targetParent, relativeIndex);
@@ -397,13 +423,16 @@ internal sealed partial class TreeDisplayHelper(
         this.shownItems.Insert(treeInsertIndex, item);
         this.LogShownItemsInsert(treeInsertIndex, item);
         this.SelectionModel?.SelectItemAt(treeInsertIndex);
-        this.events.ItemAdded?.Invoke(new TreeItemAddedEventArgs
+        this.RaiseItemAdded(item, targetParent, relativeIndex);
+    }
+
+    private void RaiseItemAdded(ITreeItem item, ITreeItem parent, int relativeIndex)
+        => this.events.ItemAdded?.Invoke(new TreeItemAddedEventArgs
         {
-            Parent = targetParent,
+            Parent = parent,
             TreeItem = item,
             RelativeIndex = relativeIndex,
         });
-    }
 
     private async Task RollbackInsertionsAsync(IReadOnlyList<ITreeItem> items, ITreeItem parent, IReadOnlyList<ITreeItem> selectedItems)
     {
@@ -768,6 +797,23 @@ internal sealed partial class TreeDisplayHelper(
         selection.SelectItemAt(newSelectedIndex);
     }
 
+    private void SelectShownItems(IReadOnlyList<ITreeItem> items)
+    {
+        if (this.SelectionModel is not { } selection)
+        {
+            return;
+        }
+
+        foreach (var item in items)
+        {
+            var index = this.shownItems.IndexOf(item);
+            if (index >= 0)
+            {
+                selection.SelectItemAt(index);
+            }
+        }
+    }
+
     private List<ITreeItem> ExtractShownBlock(ITreeItem item)
     {
         var startIndex = this.shownItems.IndexOf(item);
@@ -819,7 +865,8 @@ internal sealed partial class TreeDisplayHelper(
 
     private void ValidateTargetConstraints(ITreeItem item, ITreeItem targetParent)
     {
-        if (!this.shownItems.Contains(targetParent))
+        // A hidden root is not a row, but its children are the top-level rows.
+        if (!targetParent.IsRoot && !this.shownItems.Contains(targetParent))
         {
             throw new InvalidOperationException("target parent must be shown");
         }

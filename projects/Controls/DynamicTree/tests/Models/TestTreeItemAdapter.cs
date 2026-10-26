@@ -34,12 +34,6 @@ public partial class TestTreeItemAdapter : TreeItemAdapter, ICanBeCloned
 
     public override required string Label { get; set; }
 
-    public void AddChild(TestTreeItemAdapter child)
-    {
-        this.internalChildren.Add(child);
-        this.AddChildAsync(child).GetAwaiter().GetResult();
-    }
-
     public override bool ValidateItemName(string name) => !string.IsNullOrEmpty(name) && !string.Equals(name, InvalidName, StringComparison.Ordinal);
 
     public ITreeItem CloneSelf()

@@ -32,14 +32,15 @@ namespace DroidNet.Controls;
 ///     A view model is shown by one live <see cref="DynamicTree"/> at a time. Its interaction state, which is the
 ///     logical keyboard focus, the scope and displayed source that keyboard navigation and typeahead walk, and the
 ///     bring-into-view requests, belongs to the tree that shows it. A second tree loaded over the same view
-///     model while the first is still loaded is rejected: it shows no rows, the view model logs an error, and Debug
-///     builds throw. A tree lets go when it unloads or moves to another view model, and another tree can then attach.
+///     model while the first is still loaded is rejected, in every build configuration: it shows no rows and the
+///     view model logs an error. A tree lets go when it unloads or moves to another view model, and another tree can then attach.
 ///     Expansion and selection live on the items, so they are the same wherever the items show.</para>
 /// </remarks>
 public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory = null) : ObservableObject, IDisposable
 {
     private readonly ILogger logger = loggerFactory?.CreateLogger<DynamicTreeViewModel>() ?? NullLogger<DynamicTreeViewModel>.Instance;
     private readonly ObservableCollection<ITreeItem> shownItems = [];
+    private readonly Dictionary<ITreeItem, Task> expansionsInFlight = [with(ReferenceEqualityComparer.Instance)];
 
     private TreeDisplayHelper? displayHelper;
     private FocusedItemInfo? focusedItem;
@@ -84,8 +85,8 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
     /// <remarks>
     ///     The owning control assigns this from its <c>SelectionScope</c> and supplies its displayed source
     ///     whenever that scope or source changes. Standalone displayed-scope navigation uses <see cref="FilteredItems"/>.
-    ///     <see cref="TreeSelectionScope.ShownItems"/> preserves the historical behaviour: keyboard
-    ///     navigation and typeahead walk <see cref="ShownItems"/>.
+    ///     <see cref="TreeSelectionScope.ShownItems"/>, the default, makes keyboard navigation and typeahead walk
+    ///     <see cref="ShownItems"/>.
     ///     <see cref="TreeSelectionScope.DisplayedItems"/> restricts them to the displayed
     ///     projection, so a keyboard user cannot land on a row that the filter hid while pointer
     ///     selection is already scoped to it. The control uses <see cref="SelectDisplayedItem"/> for selection ranges;
@@ -200,11 +201,16 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
             this.LoggerFactory);
 
     /// <summary>
-    ///     Expands the specified tree item (which must be visible in the tree) asynchronously.
+    ///     Expands the specified tree item asynchronously.
     /// </summary>
     /// <param name="itemAdapter">The tree item to expand.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when the item is not yet visible in the tree and cannot be expanded.</exception>
+    /// <remarks>
+    ///     An item that is not itself shown, for example a collapsed descendant of a collapsed branch, only
+    ///     records its expanded state; its children show when the branch above it expands. Expanding an item
+    ///     that is already being expanded joins the expansion in progress, so its children are shown once.
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">Thrown when the item's parent is not expanded.</exception>
     public async Task ExpandItemAsync(ITreeItem itemAdapter)
     {
         if (itemAdapter.IsExpanded)
@@ -219,9 +225,22 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
             throw new InvalidOperationException("cannot expand item; its parent is not expanded");
         }
 
-        this.LogExpandItem(itemAdapter);
-        await this.RestoreExpandedChildrenAsync(itemAdapter).ConfigureAwait(true);
-        itemAdapter.IsExpanded = true;
+        if (this.expansionsInFlight.TryGetValue(itemAdapter, out var pending))
+        {
+            await pending.ConfigureAwait(true);
+            return;
+        }
+
+        var expansion = this.ExpandShownItemAsync(itemAdapter);
+        this.expansionsInFlight[itemAdapter] = expansion;
+        try
+        {
+            await expansion.ConfigureAwait(true);
+        }
+        finally
+        {
+            _ = this.expansionsInFlight.Remove(itemAdapter);
+        }
     }
 
     /// <summary>
@@ -230,17 +249,19 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
     /// <param name="itemAdapter">The tree item to collapse.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
     /// <remarks>
-    ///     If the item is already collapsed, this method does nothing.
+    ///     If the item is already collapsed, this method does nothing. Focus that sat on a hidden descendant
+    ///     moves to the collapsed item.
     /// </remarks>
-    public async Task CollapseItemAsync(ITreeItem itemAdapter)
+    public Task CollapseItemAsync(ITreeItem itemAdapter)
     {
         if (!itemAdapter.IsExpanded)
         {
-            return;
+            return Task.CompletedTask;
         }
 
-        await this.HideChildrenAsync(itemAdapter).ConfigureAwait(true);
+        this.HideChildren(itemAdapter);
         itemAdapter.IsExpanded = false;
+        return Task.CompletedTask;
     }
 
     /// <summary>
@@ -269,10 +290,14 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
 
         if (root.IsExpanded)
         {
-            await this.RestoreExpandedChildrenAsync(root).ConfigureAwait(false);
+            await this.RestoreExpandedChildrenAsync(root).ConfigureAwait(true);
         }
 
+        this.ResetFilteringState();
         this.SyncSelectionModelWithItems();
+
+        // Focus established by (re)initialization must not scroll: the control brings a row into view for every origin
+        // but a pointer's, and a reconciliation re-initializes the tree while the user is looking elsewhere.
         _ = this.EnsureFocus(RequestOrigin.PointerInput);
     }
 
@@ -280,10 +305,21 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
     /// <remarks>The clipboard is retained; its domain owner decides whether a document transition invalidates it.</remarks>
     public void ClearRoot()
     {
-        this.SelectionModel?.ClearSelection();
+        if (this.SelectionModel is { IsEmpty: false } || this.ActiveItem is not null)
+        {
+            this.WithSelectionBatch(
+                () =>
+                {
+                    this.SelectionModel?.ClearSelection();
+                    this.SetActiveItem(item: null);
+                });
+        }
+
+        this.displayedSelectionAnchor = null;
         this.ClearFocus();
         this.LogShownItemsClear();
         this.shownItems.Clear();
+        this.ResetFilteringState();
         this.SyncSelectionModelWithItems();
     }
 
@@ -321,7 +357,12 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
     /// </remarks>
     /// <returns>A task representing the asynchronous operation.</returns>
     public virtual async Task RemoveItemAsync(ITreeItem item, bool updateSelection = true)
-        => await this.DisplayHelper.RemoveItemAsync(item, updateSelection).ConfigureAwait(true);
+    {
+        var focusIndex = this.FocusedShownIndex();
+        _ = await this.DisplayHelper.RemoveItemAsync(item, updateSelection).ConfigureAwait(true);
+        this.ForgetRemovedSelectionState();
+        this.RepairFocusAfterRemoval(focusIndex);
+    }
 
     /// <summary>
     ///     Removes the currently selected items from the tree asynchronously.
@@ -336,7 +377,12 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
     ///     batch removes to avoid a burst of selection change events.
     /// </remarks>
     public virtual async Task RemoveSelectedItems()
-        => await this.DisplayHelper.RemoveSelectedItemsAsync().ConfigureAwait(true);
+    {
+        var focusIndex = this.FocusedShownIndex();
+        await this.DisplayHelper.RemoveSelectedItemsAsync().ConfigureAwait(true);
+        this.ForgetRemovedSelectionState();
+        this.RepairFocusAfterRemoval(focusIndex);
+    }
 
     /// <summary>Commits a validated inline rename for a tree item.</summary>
     /// <param name="item">The item captured when rename began.</param>
@@ -377,7 +423,7 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
     {
         ArgumentNullException.ThrowIfNull(request);
         if (request.Items.Count == 0 || request.Items.Any(item => !this.IsShown(item) || item.IsLocked)
-            || !this.IsShown(request.Parent) || !request.Parent.CanAcceptChildren || (request.Parent.IsLocked && !request.Parent.IsRoot))
+            || !this.CanShowChildrenOf(request.Parent) || !request.Parent.CanAcceptChildren || (request.Parent.IsLocked && !request.Parent.IsRoot))
         {
             return TreeDropResult.Rejected;
         }
@@ -694,11 +740,6 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
         }
 
         await this.ExpandItemAsync(focused).ConfigureAwait(true);
-
-        // Ensure the view reapplies focus for the currently focused item,
-        // preserving the original request origin when available.
-        var origin = this.FocusedItem?.Origin ?? RequestOrigin.Programmatic;
-        _ = this.FocusItem(focused, origin);
         return true;
     }
 
@@ -721,11 +762,6 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
         }
 
         await this.CollapseItemAsync(focused).ConfigureAwait(true);
-
-        // Ensure the view reapplies focus for the currently focused item,
-        // preserving the original request origin when available.
-        var origin = this.FocusedItem?.Origin ?? RequestOrigin.Programmatic;
-        _ = this.FocusItem(focused, origin);
         return true;
     }
 
@@ -743,20 +779,15 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
     /// </summary>
     /// <param name="tree">The tree that is loaded with this view model.</param>
     /// <returns>
-    ///     <see langword="true"/> when the tree is attached; <see langword="false"/> when another loaded tree already is.
+    ///     <see langword="true"/> when the tree is attached; <see langword="false"/> when another loaded tree already is,
+    ///     in which case an error is logged and the rejected tree shows no rows.
     /// </returns>
-    /// <exception cref="InvalidOperationException">In Debug builds, when another loaded tree is attached.</exception>
     internal bool TryAttachTree(DynamicTree tree)
     {
         if (this.attachedTree is { IsLoaded: true } current && !ReferenceEquals(current, tree))
         {
             this.LogSecondTreeRejected();
-#if DEBUG
-            throw new InvalidOperationException(
-                $"{this.GetType().Name} is already shown by a loaded {nameof(DynamicTree)}; a view model has one live tree at a time.");
-#else
             return false;
-#endif
         }
 
         this.attachedTree = tree;
@@ -1021,7 +1052,7 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
     ///     will be expanded.
     /// </remarks>
     [RelayCommand]
-    private async Task ToggleExpanded(TreeItemAdapter itemAdapter)
+    private async Task ToggleExpanded(ITreeItem itemAdapter)
     {
         if (itemAdapter.IsExpanded)
         {
@@ -1034,136 +1065,171 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
     }
 
     /// <summary>
-    ///     Restores the expanded state of the children of the specified tree item asynchronously.
+    ///     Expands <paramref name="item"/> once its children are known, showing them only if the item is still shown.
+    /// </summary>
+    /// <param name="item">The collapsed item to expand.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    private async Task ExpandShownItemAsync(ITreeItem item)
+    {
+        if (!this.IsShown(item))
+        {
+            // A collapsed descendant of a collapsed branch: its rows join the shown list when the branch expands.
+            this.LogExpandItemNotShown(item);
+            item.IsExpanded = true;
+            return;
+        }
+
+        this.LogExpandItem(item);
+        var descendants = new List<ITreeItem>();
+        await this.CollectShownDescendantsAsync(item, descendants).ConfigureAwait(true);
+
+        // Loading children awaits; the item may have left the tree meanwhile, and its position is taken only now.
+        if (this.IsShown(item))
+        {
+            this.InsertShownDescendants(item, descendants);
+        }
+
+        item.IsExpanded = true;
+    }
+
+    /// <summary>
+    ///     Shows the children of <paramref name="itemAdapter"/> and, for each expanded child, its own expanded subtree.
     /// </summary>
     /// <param name="itemAdapter">The tree item whose children should be restored.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
     /// <remarks>
-    ///     This method inserts the children of the specified item into the shown items collection,
-    ///     maintaining their expanded state.
+    ///     A hidden root, which is not itself in the shown items collection, has its children inserted at the start.
     /// </remarks>
     private async Task RestoreExpandedChildrenAsync(ITreeItem itemAdapter)
     {
         this.LogRestoreExpandedChildrenStarted(itemAdapter);
-        var insertIndex = this.shownItems.IndexOf(itemAdapter) + 1;
-        _ = await this.RestoreExpandedChildrenRecursive(itemAdapter, insertIndex).ConfigureAwait(true);
+        var descendants = new List<ITreeItem>();
+        await this.CollectShownDescendantsAsync(itemAdapter, descendants).ConfigureAwait(true);
+        this.InsertShownDescendants(itemAdapter, descendants);
     }
 
     /// <summary>
-    ///     Recursively restores the expanded state of the children of the specified tree item.
+    ///     Collects, in display order, the children of <paramref name="parent"/> and the expanded subtrees below them.
     /// </summary>
-    /// <param name="parent">The parent tree item whose children should be restored.</param>
-    /// <param name="insertIndex">The index at which to start inserting the restored children in the ShownItems collection.</param>
-    /// <returns>
-    ///     A task representing the asynchronous operation, with the final insert index after all children have been
-    ///     processed.
-    /// </returns>
-    /// <remarks>
-    ///     This method inserts the children of the specified parent item into the ShownItems
-    ///     collection, maintaining their expanded state. If a child item is expanded, the method is
-    ///     called recursively to restore its children as well.
-    /// </remarks>
-    private async Task<int> RestoreExpandedChildrenRecursive(ITreeItem parent, int insertIndex)
-    {
-        foreach (var child in await parent.Children.ConfigureAwait(true))
-        {
-            this.LogShownItemsInsert(insertIndex, child);
-            this.shownItems.Insert(insertIndex, child);
-            ++insertIndex;
-
-            if (child.IsExpanded)
-            {
-                insertIndex = await this.RestoreExpandedChildrenRecursive(child, insertIndex).ConfigureAwait(true);
-            }
-        }
-
-        return insertIndex;
-    }
-
-    /// <summary>
-    ///     Hides the children of the specified tree item asynchronously.
-    /// </summary>
-    /// <param name="itemAdapter">The tree item whose children should be hidden.</param>
+    /// <param name="parent">The parent whose children are collected.</param>
+    /// <param name="descendants">Receives the items that show when <paramref name="parent"/> is expanded.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
     /// <remarks>
-    ///     This method removes the children of the specified item from the shown items collection,
-    ///     maintaining their collapsed state.
+    ///     Loading children may await, so this only reads: the shown collection is changed afterwards in one
+    ///     synchronous step, with positions that cannot have gone stale.
     /// </remarks>
-    private async Task HideChildrenAsync(ITreeItem itemAdapter)
+    private async Task CollectShownDescendantsAsync(ITreeItem parent, List<ITreeItem> descendants)
+    {
+        foreach (var child in (await parent.Children.ConfigureAwait(true)).ToArray())
+        {
+            descendants.Add(child);
+            if (child.IsExpanded)
+            {
+                await this.CollectShownDescendantsAsync(child, descendants).ConfigureAwait(true);
+            }
+        }
+    }
+
+    /// <summary>
+    ///     Inserts <paramref name="descendants"/> right after <paramref name="parent"/> in the shown items collection.
+    /// </summary>
+    /// <param name="parent">The item the rows belong under; a hidden root has no row, so they go first.</param>
+    /// <param name="descendants">The rows to show, in display order.</param>
+    private void InsertShownDescendants(ITreeItem parent, List<ITreeItem> descendants)
+    {
+        if (descendants.Count == 0)
+        {
+            return;
+        }
+
+        var insertIndex = this.shownItems.IndexOf(parent) + 1;
+        this.ReshapeShownItems(
+            () =>
+            {
+                foreach (var descendant in descendants)
+                {
+                    this.LogShownItemsInsert(insertIndex, descendant);
+                    this.shownItems.Insert(insertIndex, descendant);
+                    ++insertIndex;
+                }
+            });
+    }
+
+    /// <summary>
+    ///     Hides the rows below the specified tree item, leaving each descendant's own expanded state untouched.
+    /// </summary>
+    /// <param name="itemAdapter">The tree item whose descendants should be hidden.</param>
+    /// <remarks>
+    ///     Rows are stored in display order, so the descendants are the run of deeper rows right after the item.
+    ///     Focus on one of them moves to the item; selected descendants are deselected.
+    /// </remarks>
+    private void HideChildren(ITreeItem itemAdapter)
     {
         this.LogHideChildrenStarted(itemAdapter);
 
-        // IndexOf returns -1 when the item is not shown, which makes the derived index 0. The old
-        // guard tested the index against -1, so it could never fire and the real case was silent.
-        var removeIndex = this.shownItems.IndexOf(itemAdapter) + 1;
-        if (removeIndex == 0)
+        var itemIndex = this.shownItems.IndexOf(itemAdapter);
+        if (itemIndex == -1)
         {
-            // The row is not in the flat shown list at all — a collapsed descendant restored during
-            // a search clear, or a second collapse of an already-hidden branch. Its subtree is
-            // already out of the list, so hiding its children has nothing to do; collapsing is still
-            // recorded on the item itself by the caller.
+            // The row is not in the flat shown list at all: a collapsed descendant restored during a search
+            // clear, or a second collapse of an already-hidden branch. Its subtree is already out of the list,
+            // and the caller records the collapse on the item itself.
             this.LogHideChildrenNotShown(itemAdapter);
             return;
         }
 
-        await this.HideChildrenRecursiveAsync(itemAdapter).ConfigureAwait(true);
+        var first = itemIndex + 1;
+        var end = first;
+        while (end < this.shownItems.Count && this.shownItems[end].Depth > itemAdapter.Depth)
+        {
+            end++;
+        }
+
+        if (end == first)
+        {
+            return;
+        }
+
+        if (this.FocusedItem?.Item is { } focused)
+        {
+            for (var index = first; index < end; index++)
+            {
+                if (ReferenceEquals(this.shownItems[index], focused))
+                {
+                    this.FocusedItem = new(itemAdapter, RequestOrigin.Programmatic);
+                    break;
+                }
+            }
+        }
+
+        this.ReshapeShownItems(
+            () =>
+            {
+                for (var index = end - 1; index >= first; index--)
+                {
+                    this.LogShownItemsRemoveAt(index);
+                    this.shownItems.RemoveAt(index);
+                }
+            });
     }
 
+    private int FocusedShownIndex()
+        => this.FocusedItem is { } focused ? this.shownItems.IndexOf(focused.Item) : -1;
+
     /// <summary>
-    ///     Recursively hides the children of the specified tree item.
+    ///     Moves the logical focus off a row that a removal took out of <see cref="ShownItems"/>, onto the row that now
+    ///     occupies its place (or the last row), or clears it when nothing is shown.
     /// </summary>
-    /// <param name="parent">The parent tree item whose children should be hidden.</param>
-    /// <remarks>The method calculates child indices based on the current shown items.</remarks>
-    /// <returns>A task representing the asynchronous operation.</returns>
-    /// <remarks>
-    ///     This method removes the children of the specified parent item from the ShownItems collection,
-    ///     maintaining their collapsed state. If a child item is expanded, the method is called recursively
-    ///     to hide its children as well.
-    /// </remarks>
-    private async Task HideChildrenRecursiveAsync(ITreeItem parent)
+    /// <param name="previousIndex">The shown index of the focused row before the removal, or -1 when it was not shown.</param>
+    private void RepairFocusAfterRemoval(int previousIndex)
     {
-        var children = (await parent.Children.ConfigureAwait(true)).ToList();
-
-        for (var i = children.Count - 1; i >= 0; i--)
+        if (previousIndex < 0 || this.FocusedItem is not { } focused || this.shownItems.Contains(focused.Item))
         {
-            var child = children[i];
-
-            if (ReferenceEquals(this.FocusedItem, child))
-            {
-                this.FocusedItem = new(parent, RequestOrigin.Programmatic);
-            }
-
-            // Find the current index of the child in the shown list.
-            var childIndex = this.shownItems.IndexOf(child);
-            if (childIndex == -1)
-            {
-                // Not shown; skip
-                continue;
-            }
-
-            // First hide descendants (if expanded) starting at the index after the child.
-            if (child.IsExpanded)
-            {
-                await this.HideChildrenRecursiveAsync(child).ConfigureAwait(true);
-            }
-
-            // Try to clear selection for the child and any selection state.
-            var selection = this.SelectionModel;
-            if (selection is not null)
-            {
-                try
-                {
-                    selection.ClearSelection(child);
-                }
-                catch (ArgumentException)
-                {
-                    // Item not found in selection; ignore.
-                }
-            }
-
-            this.LogShownItemsRemoveAt(childIndex);
-            this.shownItems.RemoveAt(childIndex);
+            return;
         }
+
+        this.FocusedItem = this.shownItems.Count == 0
+            ? null
+            : new FocusedItemInfo(this.shownItems[Math.Min(previousIndex, this.shownItems.Count - 1)], focused.Origin);
     }
 
     private ITreeItem? FindSibling(ITreeItem? parent, bool first)

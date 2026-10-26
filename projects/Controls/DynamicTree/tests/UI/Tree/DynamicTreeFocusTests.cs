@@ -5,20 +5,18 @@
 using System.Diagnostics.CodeAnalysis;
 using AwesomeAssertions;
 using DroidNet.Tests;
-using Windows.System;
 using RequestOrigin = DroidNet.Controls.DynamicTreeViewModel.RequestOrigin;
 
 namespace DroidNet.Controls.Tests.Tree;
 
 [TestClass]
 [ExcludeFromCodeCoverage]
-[TestCategory("DynamicTree / UI / Handlers")]
+[TestCategory("DynamicTree")]
+[TestCategory("UITest")]
 public sealed partial class DynamicTreeFocusTests : VisualUserInterfaceTests, IDisposable
 {
     private TestableDynamicTree? tree;
     private TestViewModel? viewModel;
-
-    public TestContext TestContext { get; set; }
 
     public void Dispose() => this.viewModel?.Dispose();
 
@@ -97,18 +95,19 @@ public sealed partial class DynamicTreeFocusTests : VisualUserInterfaceTests, ID
             var root = (TreeItemAdapter)vm.GetShownItemAt(0);
             await vm.ExpandItemAsync(root).ConfigureAwait(true);
 
-            // At initialization a focused item already exists (PointerInput origin). Invoking TreeGotFocus
-            // should not override an existing focused item.
+            // Initializing the root already focused an item. Invoking TreeGotFocus should not override it.
             var original = vm.FocusedItem;
+            _ = original.Should().NotBeNull();
             var testable = this.tree!;
 
             // Simulate the tree control receiving platform focus
             testable.InvokeTreeGotFocus();
 
             _ = vm.FocusedItem.Should().BeSameAs(original);
-            _ = vm.FocusedItem!.Origin.Should().Be(RequestOrigin.PointerInput);
+            _ = vm.FocusedItem!.Origin.Should().Be(original!.Origin);
         });
 
+    [TestMethod]
     public Task OnTreeGotFocus_WhenNoFocusedItem_FocusesFirstShownItem_Async() => EnqueueAsync(
         async () =>
         {
@@ -133,31 +132,6 @@ public sealed partial class DynamicTreeFocusTests : VisualUserInterfaceTests, ID
         });
 
     [TestMethod]
-    public Task OnTreeGotFocus_WhenFocusExists_DoesNotFocusSelectedItem_Async() => EnqueueAsync(
-        async () =>
-        {
-            var vm = this.viewModel!;
-
-            // Ensure the tree items are realized
-            var root = (TreeItemAdapter)vm.GetShownItemAt(0);
-            await vm.ExpandItemAsync(root).ConfigureAwait(true);
-
-            // Select a non-first item (first child)
-            var selected = (TreeItemAdapter)vm.GetShownItemAt(1);
-            vm.ClearAndSelectItem(selected);
-
-            // Focus already exists from initialization (root), so GotFocus should not override it
-            var original = vm.FocusedItem;
-
-            var testable = this.tree!;
-
-            // Simulate the tree control receiving platform focus
-            testable.InvokeTreeGotFocus();
-
-            _ = vm.FocusedItem.Should().BeSameAs(original);
-            _ = vm.FocusedItem!.Origin.Should().Be(RequestOrigin.PointerInput);
-        });
-
     public Task OnTreeGotFocus_WhenNoFocusedItem_FocusesSelectedItem_Async() => EnqueueAsync(
         async () =>
         {
@@ -181,233 +155,6 @@ public sealed partial class DynamicTreeFocusTests : VisualUserInterfaceTests, ID
             _ = vm.FocusedItem.Should().NotBeNull();
             _ = vm.FocusedItem!.Item.Should().BeSameAs(selected);
             _ = vm.FocusedItem!.Origin.Should().Be(RequestOrigin.KeyboardInput);
-        });
-
-    [TestMethod]
-    public Task UpKey_MovesFocusToPreviousItem_Async() => EnqueueAsync(
-        async () =>
-        {
-            var vm = this.viewModel!;
-
-            // Realize root and first child's children
-            var root = (TreeItemAdapter)vm.GetShownItemAt(0);
-            await vm.ExpandItemAsync(root).ConfigureAwait(true);
-            var firstChild = (TreeItemAdapter)vm.GetShownItemAt(1);
-            await vm.ExpandItemAsync(firstChild).ConfigureAwait(true);
-
-            var testable = this.tree!;
-
-            // Start focused on the first grandchild (index 2)
-            var start = (TreeItemAdapter)vm.GetShownItemAt(2);
-            _ = vm.FocusItem(start, RequestOrigin.KeyboardInput);
-
-            var moved = await testable.InvokeHandleKeyDownAsync(VirtualKey.Up).ConfigureAwait(true);
-            _ = moved.Should().BeTrue();
-
-            await EnqueueAsync(() =>
-            {
-                _ = vm.FocusedItem.Should().NotBeNull();
-                _ = vm.FocusedItem!.Item.Should().BeSameAs(vm.GetShownItemAt(1));
-                _ = vm.FocusedItem!.Origin.Should().Be(RequestOrigin.KeyboardInput);
-            }).ConfigureAwait(true);
-
-            // Move up to root
-            moved = await testable.InvokeHandleKeyDownAsync(VirtualKey.Up).ConfigureAwait(true);
-            _ = moved.Should().BeTrue();
-
-            await EnqueueAsync(() =>
-            {
-                _ = vm.FocusedItem.Should().NotBeNull();
-                _ = vm.FocusedItem!.Item.Should().BeSameAs(vm.GetShownItemAt(0));
-                _ = vm.FocusedItem!.Origin.Should().Be(RequestOrigin.KeyboardInput);
-            }).ConfigureAwait(true);
-
-            // Cannot move beyond first
-            moved = await testable.InvokeHandleKeyDownAsync(VirtualKey.Up).ConfigureAwait(true);
-            _ = moved.Should().BeFalse();
-
-            await EnqueueAsync(() =>
-            {
-                _ = vm.FocusedItem.Should().NotBeNull();
-                _ = vm.FocusedItem!.Item.Should().BeSameAs(vm.GetShownItemAt(0));
-                _ = vm.FocusedItem!.Origin.Should().Be(RequestOrigin.KeyboardInput);
-            }).ConfigureAwait(true);
-        });
-
-    [TestMethod]
-    public Task DownKey_MovesFocusToNextItem_Async() => EnqueueAsync(
-        async () =>
-        {
-            var vm = this.viewModel!;
-
-            // Realize root and first child's children
-            var root = (TreeItemAdapter)vm.GetShownItemAt(0);
-            await vm.ExpandItemAsync(root).ConfigureAwait(true);
-            var firstChild = (TreeItemAdapter)vm.GetShownItemAt(1);
-            await vm.ExpandItemAsync(firstChild).ConfigureAwait(true);
-
-            var testable = this.tree!;
-
-            // Start focused on the first child (index 1)
-            var start = (TreeItemAdapter)vm.GetShownItemAt(1);
-            _ = vm.FocusItem(start, RequestOrigin.KeyboardInput);
-
-            var moved = await testable.InvokeHandleKeyDownAsync(VirtualKey.Down).ConfigureAwait(true);
-            _ = moved.Should().BeTrue();
-            await EnqueueAsync(() =>
-            {
-                _ = vm.FocusedItem.Should().NotBeNull();
-                _ = vm.FocusedItem!.Item.Should().BeSameAs(vm.GetShownItemAt(2));
-                _ = vm.FocusedItem!.Origin.Should().Be(RequestOrigin.KeyboardInput);
-            }).ConfigureAwait(true);
-
-            // Move to last shown item step by step
-            while (await testable.InvokeHandleKeyDownAsync(VirtualKey.Down).ConfigureAwait(true))
-            {
-                // iterate
-            }
-
-            await EnqueueAsync(() =>
-            {
-                _ = vm.FocusedItem.Should().NotBeNull();
-                _ = vm.FocusedItem!.Item.Should().BeSameAs(vm.GetShownItemAt(vm.ShownItemsCount - 1));
-                _ = vm.FocusedItem!.Origin.Should().Be(RequestOrigin.KeyboardInput);
-            }).ConfigureAwait(true);
-
-            // Cannot move beyond last
-            var cant = await testable.InvokeHandleKeyDownAsync(VirtualKey.Down).ConfigureAwait(true);
-            _ = cant.Should().BeFalse();
-        });
-
-    [TestMethod]
-    public Task HomeKey_MovesFocusToFirstSibling_Async() => EnqueueAsync(
-        async () =>
-        {
-            var vm = this.viewModel!;
-
-            // Realize root and first child's children
-            var root = (TreeItemAdapter)vm.GetShownItemAt(0);
-            await vm.ExpandItemAsync(root).ConfigureAwait(true);
-            var firstChild = (TreeItemAdapter)vm.GetShownItemAt(1);
-            await vm.ExpandItemAsync(firstChild).ConfigureAwait(true);
-
-            var testable = this.tree!;
-
-            // Focus the second grandchild (R-C1-GC2)
-            var secondGrandChild = (TreeItemAdapter)vm.GetShownItemAt(3);
-            _ = vm.FocusItem(secondGrandChild, RequestOrigin.KeyboardInput);
-
-            var moved = await testable.InvokeHandleKeyDownAsync(VirtualKey.Home).ConfigureAwait(true);
-            _ = moved.Should().BeTrue();
-
-            await EnqueueAsync(() =>
-            {
-                _ = vm.FocusedItem.Should().NotBeNull();
-                _ = vm.FocusedItem!.Item.Should().BeSameAs(vm.GetShownItemAt(2)); // R-C1-GC1
-                _ = vm.FocusedItem!.Origin.Should().Be(RequestOrigin.KeyboardInput);
-            }).ConfigureAwait(true);
-        });
-
-    [TestMethod]
-    public Task EndKey_MovesFocusToLastSibling_Async() => EnqueueAsync(
-        async () =>
-        {
-            var vm = this.viewModel!;
-
-            // Realize root and first child's children
-            var root = (TreeItemAdapter)vm.GetShownItemAt(0);
-            await vm.ExpandItemAsync(root).ConfigureAwait(true);
-            var firstChild = (TreeItemAdapter)vm.GetShownItemAt(1);
-            await vm.ExpandItemAsync(firstChild).ConfigureAwait(true);
-
-            var testable = this.tree!;
-
-            // Focus the first grandchild (R-C1-GC1)
-            var firstGrandChild = (TreeItemAdapter)vm.GetShownItemAt(2);
-            _ = vm.FocusItem(firstGrandChild, RequestOrigin.KeyboardInput);
-
-            var moved = await testable.InvokeHandleKeyDownAsync(VirtualKey.End).ConfigureAwait(true);
-            _ = moved.Should().BeTrue();
-
-            await EnqueueAsync(() =>
-            {
-                _ = vm.FocusedItem.Should().NotBeNull();
-                _ = vm.FocusedItem!.Item.Should().BeSameAs(vm.GetShownItemAt(3)); // R-C1-GC2
-                _ = vm.FocusedItem!.Origin.Should().Be(RequestOrigin.KeyboardInput);
-            }).ConfigureAwait(true);
-        });
-
-    [TestMethod]
-    public Task CtrlHome_FocusesFirstShownItem_Async() => EnqueueAsync(
-        async () =>
-        {
-            var vm = this.viewModel!;
-
-            // Realize the tree
-            var root = (TreeItemAdapter)vm.GetShownItemAt(0);
-            await vm.ExpandItemAsync(root).ConfigureAwait(true);
-            foreach (var item in vm.ShownItems.OfType<TreeItemAdapter>().ToList())
-            {
-                if (!ReferenceEquals(item, root) && item.CanAcceptChildren)
-                {
-                    await vm.ExpandItemAsync(item).ConfigureAwait(true);
-                }
-            }
-
-            // Move focus to last item first
-            _ = vm.FocusLastVisibleItemInTree(RequestOrigin.KeyboardInput);
-            _ = vm.FocusedItem.Should().NotBeNull();
-            _ = vm.FocusedItem!.Item.Should().BeSameAs(vm.GetShownItemAt(vm.ShownItemsCount - 1));
-            _ = vm.FocusedItem!.Origin.Should().Be(RequestOrigin.KeyboardInput);
-
-            var testable = this.tree!;
-
-            // Simulate Ctrl+Home via the control key handler
-            var handled = await testable.InvokeHandleKeyDownAsync(VirtualKey.Home, isControlDown: true, isShiftDown: false).ConfigureAwait(true);
-            _ = handled.Should().BeTrue();
-
-            await EnqueueAsync(() =>
-            {
-                _ = vm.FocusedItem.Should().NotBeNull();
-                _ = vm.FocusedItem!.Item.Should().BeSameAs(vm.GetShownItemAt(0));
-                _ = vm.FocusedItem!.Origin.Should().Be(RequestOrigin.KeyboardInput);
-            }).ConfigureAwait(true);
-        });
-
-    [TestMethod]
-    public Task CtrlEnd_FocusesLastShownItem_Async() => EnqueueAsync(
-        async () =>
-        {
-            var vm = this.viewModel!;
-
-            // Realize the tree
-            var root = (TreeItemAdapter)vm.GetShownItemAt(0);
-            await vm.ExpandItemAsync(root).ConfigureAwait(true);
-            foreach (var item in vm.ShownItems.OfType<TreeItemAdapter>().ToList())
-            {
-                if (!ReferenceEquals(item, root) && item.CanAcceptChildren)
-                {
-                    await vm.ExpandItemAsync(item).ConfigureAwait(true);
-                }
-            }
-
-            // Move focus to first item
-            _ = vm.FocusFirstVisibleItemInTree(RequestOrigin.KeyboardInput);
-            _ = vm.FocusedItem.Should().NotBeNull();
-            _ = vm.FocusedItem!.Item.Should().BeSameAs(vm.GetShownItemAt(0));
-            _ = vm.FocusedItem!.Origin.Should().Be(RequestOrigin.KeyboardInput);
-
-            var testable = this.tree!;
-
-            // Simulate Ctrl+End via the control key handler
-            var handled = await testable.InvokeHandleKeyDownAsync(VirtualKey.End, isControlDown: true, isShiftDown: false).ConfigureAwait(true);
-            _ = handled.Should().BeTrue();
-            await EnqueueAsync(() =>
-            {
-                _ = vm.FocusedItem.Should().NotBeNull();
-                _ = vm.FocusedItem!.Item.Should().BeSameAs(vm.GetShownItemAt(vm.ShownItemsCount - 1));
-                _ = vm.FocusedItem!.Origin.Should().Be(RequestOrigin.KeyboardInput);
-            }).ConfigureAwait(true);
         });
 
     [TestMethod]

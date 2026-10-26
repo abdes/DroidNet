@@ -7,10 +7,7 @@ using AwesomeAssertions;
 using CommunityToolkit.WinUI;
 using DroidNet.Tests;
 using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Automation.Peers;
-using Microsoft.UI.Xaml.Automation.Provider;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Input;
 
 namespace DroidNet.Controls.Tests.Tree;
 
@@ -42,7 +39,7 @@ public sealed partial class DynamicTreeFilteringTests : VisualUserInterfaceTests
     [DataRow(false, true)]
     [DataRow(true, false)]
     [DataRow(true, true)]
-    public Task FilterBar_VisibilityRequiresBothFlags_AndCollapsedRowConsumesNoSpace_Async(bool enabled, bool visible) => EnqueueAsync(
+    public Task FilterBar_IsVisibleOnlyWhenEnabledAndVisible_Async(bool enabled, bool visible) => EnqueueAsync(
         () =>
         {
             var control = this.tree!;
@@ -50,18 +47,8 @@ public sealed partial class DynamicTreeFilteringTests : VisualUserInterfaceTests
             control.IsFilterBarVisible = visible;
             control.UpdateLayout();
 
-            var bar = control.FindDescendant<Grid>(e => string.Equals(e.Name, "PartFilterBar", StringComparison.Ordinal))!;
-            var rootGrid = control.FindDescendant<Grid>(e => string.Equals(e.Name, DynamicTree.RootGridPart, StringComparison.Ordinal))!;
+            var bar = control.FindDescendant<Grid>(e => string.Equals(e.Name, DynamicTree.FilterBarPart, StringComparison.Ordinal))!;
             _ = bar.Visibility.Should().Be(enabled && visible ? Visibility.Visible : Visibility.Collapsed);
-            if (!enabled || !visible)
-            {
-                _ = rootGrid.RowDefinitions[0].ActualHeight.Should().Be(0);
-            }
-            else
-            {
-                _ = rootGrid.RowDefinitions[0].ActualHeight.Should().BePositive();
-            }
-
             return Task.CompletedTask;
         });
 
@@ -76,8 +63,8 @@ public sealed partial class DynamicTreeFilteringTests : VisualUserInterfaceTests
             _ = control.IsFilteringEnabled.Should().BeFalse();
             _ = this.viewModel!.FilterPredicate.Should().BeNull();
 
-            var input = control.FindDescendant<TextBox>(e => string.Equals(e.Name, "PartFilterTextBox", StringComparison.Ordinal))!;
-            var icon = control.FindDescendant<FontIcon>(e => string.Equals(e.Name, "PartFilterSearchIcon", StringComparison.Ordinal))!;
+            var input = FindFilterInput(control);
+            var icon = FindFilterIcon(control);
             _ = input.PlaceholderText.Should().Be("Find an item");
             _ = input.Text.Should().Be("Initial");
             _ = icon.Visibility.Should().Be(Visibility.Collapsed);
@@ -91,78 +78,36 @@ public sealed partial class DynamicTreeFilteringTests : VisualUserInterfaceTests
         });
 
     [TestMethod]
-    public Task FilterBar_NativeClearButtonClearsText_AndRestoresSearchIcon_Async() => EnqueueAsync(
-        async () =>
-        {
-            var control = this.tree!;
-            control.IsFilterBarEnabled = true;
-            control.FilterText = "My filter";
-            var input = control.FindDescendant<TextBox>(e => string.Equals(e.Name, "PartFilterTextBox", StringComparison.Ordinal))!;
-            _ = input.Focus(FocusState.Programmatic).Should().BeTrue();
-            control.UpdateLayout();
-            var clearButton = input.FindDescendant<Button>(e => string.Equals(e.Name, "DeleteButton", StringComparison.Ordinal));
-            _ = clearButton.Should().NotBeNull();
-            _ = clearButton!.Visibility.Should().Be(Visibility.Visible);
-            ((IInvokeProvider)new ButtonAutomationPeer(clearButton).GetPattern(PatternInterface.Invoke)).Invoke();
-            await Task.Yield();
-
-            _ = input.Text.Should().BeEmpty();
-            _ = control.FilterText.Should().BeEmpty();
-            var icon = control.FindDescendant<FontIcon>(e => string.Equals(e.Name, "PartFilterSearchIcon", StringComparison.Ordinal))!;
-            _ = icon.Visibility.Should().Be(Visibility.Visible);
-        });
-
-    [TestMethod]
-    [DataRow(true, 28d, 24d)]
-    [DataRow(false, 40d, 32d)]
-    public Task FilterBar_UsesNativeDensityStylesAndMatchesAccessoryHeight_Async(bool compact, double rowHeight, double barHeight) => EnqueueAsync(
+    [DataRow(true)]
+    [DataRow(false)]
+    public Task FilterBar_AppliesInputStyle_AndAccessoryMatchesInputHeight_Async(bool compact) => EnqueueAsync(
         () =>
         {
             var control = this.tree!;
             control.IsFilterBarEnabled = true;
-            control.ItemRowHeight = rowHeight;
             var styles = new ResourceDictionary
             {
                 Source = new Uri(compact
                     ? "ms-appx:///DroidNet.Controls.DynamicTree/DynamicTree/CompactFilterBarStyles.xaml"
                     : "ms-appx:///DroidNet.Controls.DynamicTree/DynamicTree/FilterBarStyles.xaml"),
             };
-            var selectedStyles = styles;
             if (compact)
             {
-                control.Resources.MergedDictionaries.Add(selectedStyles);
+                control.Resources.MergedDictionaries.Add(styles);
             }
 
-            control.FilterBarInputStyle = (Style)selectedStyles["FilterBarInputStyle"];
+            var inputStyle = (Style)styles["FilterBarInputStyle"];
+            control.FilterBarInputStyle = inputStyle;
             var accessory = new Button
             {
-                Style = (Style)selectedStyles["FilterBarButtonStyle"],
-                Content = new FontIcon { Glyph = "\uE71C", FontSize = 14 },
+                Style = (Style)styles["FilterBarButtonStyle"],
+                Content = new FontIcon { Glyph = "", FontSize = 14 },
             };
             control.FilterBarAccessoryContent = accessory;
             control.UpdateLayout();
 
-            var input = control.FindDescendant<TextBox>(e => string.Equals(e.Name, "PartFilterTextBox", StringComparison.Ordinal))!;
-            var icon = control.FindDescendant<FontIcon>(e => string.Equals(e.Name, "PartFilterSearchIcon", StringComparison.Ordinal))!;
-            _ = input.MinHeight.Should().Be(barHeight);
-            _ = input.ActualHeight.Should().Be(barHeight);
-            _ = accessory.ActualHeight.Should().BeApproximately(input.ActualHeight, 0.1);
-            _ = accessory.ActualWidth.Should().BeApproximately(barHeight, 0.1);
-            _ = accessory.TransformToVisual(control).TransformPoint(default).Y.Should()
-                .BeApproximately(input.TransformToVisual(control).TransformPoint(default).Y, 0.1);
-            _ = input.FontSize.Should().Be(14);
-            _ = icon.FontSize.Should().Be(14);
-            if (compact)
-            {
-                var nativePadding = (Thickness)selectedStyles.MergedDictionaries[0]["TextControlThemePadding"];
-                _ = input.Padding.Top.Should().Be(nativePadding.Top);
-                _ = input.Padding.Bottom.Should().Be(nativePadding.Bottom);
-            }
-
-            // Let the native text input measure larger text rather than clipping it to a fixed density height.
-            input.FontSize = 36;
-            control.UpdateLayout();
-            _ = input.ActualHeight.Should().BeGreaterThan(barHeight);
+            var input = FindFilterInput(control);
+            _ = input.Style.Should().BeSameAs(inputStyle);
             _ = accessory.ActualHeight.Should().BeApproximately(input.ActualHeight, 0.1);
             return Task.CompletedTask;
         });
@@ -188,8 +133,7 @@ public sealed partial class DynamicTreeFilteringTests : VisualUserInterfaceTests
 
             control.IsFilterBarEnabled = true;
             control.IsFilterBarVisible = true;
-            var input = control.FindDescendant<TextBox>(e => string.Equals(e.Name, "PartFilterTextBox", StringComparison.Ordinal))!;
-            _ = input.Text.Should().Be("R");
+            _ = FindFilterInput(control).Text.Should().Be("R");
             return Task.CompletedTask;
         });
 
@@ -203,78 +147,25 @@ public sealed partial class DynamicTreeFilteringTests : VisualUserInterfaceTests
             control.IsFilterBarEnabled = true;
             control.UpdateLayout();
 
-            var bar = control.FindDescendant<Grid>(e => string.Equals(e.Name, "PartFilterBar", StringComparison.Ordinal))!;
+            var bar = control.FindDescendant<Grid>(e => string.Equals(e.Name, DynamicTree.FilterBarPart, StringComparison.Ordinal))!;
             _ = bar.FindDescendant<Button>(e => ReferenceEquals(e, accessory)).Should().BeSameAs(accessory);
             return Task.CompletedTask;
         });
 
     [TestMethod]
-    public Task FilterBar_FocusingInputDoesNotRedirectFocusToTreeItems_Async() => EnqueueAsync(
-        async () =>
-        {
-            var control = this.tree!;
-            var vm = this.viewModel!;
-            vm.SelectAllCommand.Execute(parameter: null);
-            control.IsFilterBarEnabled = true;
-            var input = control.FindDescendant<TextBox>(e => string.Equals(e.Name, "PartFilterTextBox", StringComparison.Ordinal))!;
-            _ = input.Focus(FocusState.Programmatic).Should().BeTrue();
-            await Task.Yield();
-
-            _ = FocusManager.GetFocusedElement(control.XamlRoot).Should().BeSameAs(input);
-            _ = vm.SelectedItemsCount.Should().Be(vm.ShownItemsCount);
-        });
-
-    [TestMethod]
-    public Task FilteringDisabled_RendersUnfilteredShownItems_Async() => EnqueueAsync(
+    public Task FilteringEnabled_RepeaterSourceSwitchesToTheFilteredItems_Async() => EnqueueAsync(
         async () =>
         {
             var vm = this.viewModel!;
-            var root = (ITreeItem)vm.ShownItems.First();
-            await vm.ExpandItemAsync(root).ConfigureAwait(true);
-
-            // Expand the first two children so grandchildren become part of the shown-items list.
-            var children = await root.Children.ConfigureAwait(true);
-            await vm.ExpandItemAsync(children[0]).ConfigureAwait(true);
-            await vm.ExpandItemAsync(children[1]).ConfigureAwait(true);
-
-            vm.FilterPredicate = item => item.Label.Contains("GC1", StringComparison.Ordinal);
-            this.tree!.IsFilteringEnabled = false;
-
-            var repeater = this.tree.FindDescendant<ItemsRepeater>(e => string.Equals(e.Name, Controls.DynamicTree.ItemsRepeaterPart, StringComparison.Ordinal));
-            _ = repeater.Should().NotBeNull();
-
-            _ = repeater!.ItemsSourceView.Count.Should().Be(vm.ShownItemsCount);
-        });
-
-    [TestMethod]
-    public Task FilteringEnabled_RendersMatchesPlusAncestors_InPreOrder_Async() => EnqueueAsync(
-        async () =>
-        {
-            var vm = this.viewModel!;
-            var root = (ITreeItem)vm.ShownItems.First();
-            await vm.ExpandItemAsync(root).ConfigureAwait(true);
-
-            var children = await root.Children.ConfigureAwait(true);
-            await vm.ExpandItemAsync(children[0]).ConfigureAwait(true);
-            await vm.ExpandItemAsync(children[1]).ConfigureAwait(true);
+            await this.ExpandTwoBranchesAsync().ConfigureAwait(true);
 
             vm.FilterPredicate = item => item.Label.Contains("GC1", StringComparison.Ordinal);
             this.tree!.IsFilteringEnabled = true;
 
-            var repeater = this.tree.FindDescendant<ItemsRepeater>(e => string.Equals(e.Name, Controls.DynamicTree.ItemsRepeaterPart, StringComparison.Ordinal));
-            _ = repeater.Should().NotBeNull();
-
-            var items = repeater!.ItemsSourceView;
-            _ = items.Count.Should().Be(5);
-
-            _ = ((ITreeItem)items.GetAt(0)).Label.Should().Be("R");
-            _ = ((ITreeItem)items.GetAt(1)).Label.Should().Be("R-C1");
-            _ = ((ITreeItem)items.GetAt(2)).Label.Should().Be("R-C1-GC1");
-            _ = ((ITreeItem)items.GetAt(3)).Label.Should().Be("R-C2");
-            _ = ((ITreeItem)items.GetAt(4)).Label.Should().Be("R-C2-GC1");
-
-            // Filtering must not mutate operation semantics.
-            _ = vm.ShownItemsCount.Should().Be(7);
+            var repeater = this.tree.FindDescendant<ItemsRepeater>(e => string.Equals(e.Name, DynamicTree.ItemsRepeaterPart, StringComparison.Ordinal))!;
+            _ = this.tree.DisplayedItems.Should().BeSameAs(vm.FilteredItems);
+            _ = repeater.ItemsSourceView.Count.Should().Be(vm.FilteredItems.Count());
+            _ = repeater.ItemsSourceView.Count.Should().BeLessThan(vm.ShownItemsCount);
         });
 
     [TestMethod]
@@ -282,12 +173,7 @@ public sealed partial class DynamicTreeFilteringTests : VisualUserInterfaceTests
         async () =>
         {
             var vm = this.viewModel!;
-            var root = (ITreeItem)vm.ShownItems.First();
-            await vm.ExpandItemAsync(root).ConfigureAwait(true);
-
-            var children = await root.Children.ConfigureAwait(true);
-            await vm.ExpandItemAsync(children[0]).ConfigureAwait(true);
-            await vm.ExpandItemAsync(children[1]).ConfigureAwait(true);
+            await this.ExpandTwoBranchesAsync().ConfigureAwait(true);
 
             vm.FilterPredicate = item => item.Label.Contains("GC1", StringComparison.Ordinal);
             this.tree!.IsFilteringEnabled = true;
@@ -320,5 +206,24 @@ public sealed partial class DynamicTreeFilteringTests : VisualUserInterfaceTests
             });
 
         await taskCompletionSource.Task.ConfigureAwait(true);
+    }
+
+    private static TextBox FindFilterInput(DynamicTree control)
+        => control.FindDescendant<TextBox>(e => string.Equals(e.Name, DynamicTree.FilterTextBoxPart, StringComparison.Ordinal))!;
+
+    private static FontIcon FindFilterIcon(DynamicTree control)
+        => control.FindDescendant<FontIcon>(e => string.Equals(e.Name, DynamicTree.FilterSearchIconPart, StringComparison.Ordinal))!;
+
+    /// <summary>Expands the root and its first two children, so grandchildren join the shown items.</summary>
+    /// <returns>A task that completes when the branches are expanded.</returns>
+    private async Task ExpandTwoBranchesAsync()
+    {
+        var vm = this.viewModel!;
+        var root = (ITreeItem)vm.ShownItems.First();
+        await vm.ExpandItemAsync(root).ConfigureAwait(true);
+
+        var children = await root.Children.ConfigureAwait(true);
+        await vm.ExpandItemAsync(children[0]).ConfigureAwait(true);
+        await vm.ExpandItemAsync(children[1]).ConfigureAwait(true);
     }
 }

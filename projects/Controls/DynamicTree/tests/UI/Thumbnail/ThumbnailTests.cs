@@ -18,204 +18,119 @@ namespace DroidNet.Controls.Tests.Thumbnail;
 public class ThumbnailTests : VisualUserInterfaceTests
 {
     [TestMethod]
-    public Task DoesNotUseDefaultTemplate_WhenContentTemplateIsSet_Async() => EnqueueAsync(
+    public Task ContentTemplate_IsRenderedInsteadOfTheDefault_Async() => EnqueueAsync(
     async () =>
     {
-        // Setup
-        const string customTemplateXaml =
-            """
-              <DataTemplate xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation'
-                            xmlns:x='http://schemas.microsoft.com/winfx/2006/xaml'>
-                  <TextBlock Text='Custom Template Marker' x:Name='CustomMarker' />
-              </DataTemplate>
-            """;
-        var customTemplate = (DataTemplate)XamlReader.Load(customTemplateXaml);
+        var thumbnail = new Controls.Thumbnail { Content = "Test Content", ContentTemplate = MarkerTemplate("Custom Template Marker") };
 
-        var thumbnail = new Controls.Thumbnail()
-        {
-            Content = "Test Content",
-            ContentTemplate = customTemplate,
-        };
-
-        // Act
         await LoadTestContentAsync(thumbnail).ConfigureAwait(true);
 
-        // Assert - verify the custom template is actually rendered in the visual tree
-        var textBlock = FindVisualChild<TextBlock>(thumbnail);
-        _ = textBlock.Should().NotBeNull();
-        _ = textBlock!.Text.Should().Be("Custom Template Marker", "custom template should be rendered");
+        AssertShowsMarker(thumbnail, "Custom Template Marker");
     });
 
     [TestMethod]
-    public Task DoesNotUseDefaultTemplate_WhenContentTemplateSelectorIsSet_Async() => EnqueueAsync(
+    public Task ContentTemplateSelector_IsRenderedInsteadOfTheDefault_Async() => EnqueueAsync(
     async () =>
     {
-        // Setup
-        var customTemplateSelector = new CustomTemplateSelector
-        {
-            DefaultTemplate = (DataTemplate)XamlReader.Load(
-                """
-                    <DataTemplate xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation'
-                                  xmlns:x='http://schemas.microsoft.com/winfx/2006/xaml'>
-                        <TextBlock Text='Selector Template Marker' x:Name='SelectorMarker' />
-                    </DataTemplate>
-                    """),
-        };
-
-        var thumbnail = new Controls.Thumbnail()
+        var thumbnail = new Controls.Thumbnail
         {
             Content = "Test Content",
-            ContentTemplateSelector = customTemplateSelector,
+            ContentTemplateSelector = new CustomTemplateSelector { DefaultTemplate = MarkerTemplate("Selector Template Marker") },
         };
 
-        // Act
         await LoadTestContentAsync(thumbnail).ConfigureAwait(true);
 
-        // Assert - verify the selector's template is actually rendered in the visual tree
-        var textBlock = FindVisualChild<TextBlock>(thumbnail);
-        _ = textBlock.Should().NotBeNull();
-        _ = textBlock!.Text.Should().Be("Selector Template Marker", "selector's template should be rendered");
+        AssertShowsMarker(thumbnail, "Selector Template Marker");
     });
 
     [TestMethod]
-    public Task UsesDefaultTemplate_WhenTemplateAndSelectorAreNull_Async() => EnqueueAsync(
+    public Task WithoutTemplateOrSelector_RendersTheDefaultTemplate_Async() => EnqueueAsync(
     async () =>
     {
-        // Setup
-        var thumbnail = new Controls.Thumbnail() { Content = "Test Content", };
+        var thumbnail = new Controls.Thumbnail { Content = "Test Content" };
 
-        // Act
         await LoadTestContentAsync(thumbnail).ConfigureAwait(true);
 
-        // Assert - verify default template is rendered (it should show the content)
-        // The default template from Thumbnail.xaml should create visual content
-        var contentPresenter = FindVisualChild<ContentPresenter>(thumbnail);
-        _ = contentPresenter.Should().NotBeNull("default template should create a ContentPresenter");
-        _ = thumbnail.ContentTemplate.Should().NotBeNull("default template should be applied");
+        AssertShowsDefaultTemplate(thumbnail);
     });
 
     [TestMethod]
-    public Task UsesDefaultTemplate_WhenTemplateAndSelectorAreNull_AfterTemplateChange_Async() => EnqueueAsync(
+    [DataRow(true)]
+    [DataRow(false)]
+    public Task ClearingTheCustomTemplateOrSelector_RendersTheDefaultTemplate_Async(bool clearTemplate) => EnqueueAsync(
     async () =>
     {
-        // Setup
-        var initialTemplate = (DataTemplate)XamlReader.Load(
-            """
-                <DataTemplate xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation'
-                              xmlns:x='http://schemas.microsoft.com/winfx/2006/xaml'>
-                    <TextBlock Text='Initial Template Marker' x:Name='InitialMarker' />
-                </DataTemplate>
-                """);
-
-        var thumbnail = new Controls.Thumbnail()
+        var thumbnail = new Controls.Thumbnail { Content = "Test Content" };
+        if (clearTemplate)
         {
-            Content = "Test Content",
-            ContentTemplate = initialTemplate,
-        };
+            thumbnail.ContentTemplate = MarkerTemplate("Custom Template Marker");
+        }
+        else
+        {
+            thumbnail.ContentTemplateSelector = new CustomTemplateSelector { DefaultTemplate = MarkerTemplate("Custom Template Marker") };
+        }
 
         await LoadTestContentAsync(thumbnail).ConfigureAwait(true);
+        AssertShowsMarker(thumbnail, "Custom Template Marker");
 
-        // Verify initial template is rendered
-        var initialTextBlock = FindVisualChild<TextBlock>(thumbnail);
-        _ = initialTextBlock.Should().NotBeNull();
-        _ = initialTextBlock!.Text.Should().Be("Initial Template Marker");
+        if (clearTemplate)
+        {
+            thumbnail.ContentTemplate = null;
+        }
+        else
+        {
+            thumbnail.ContentTemplateSelector = null;
+        }
 
-        // Act - clear the template
-        thumbnail.ContentTemplate = null;
         await WaitForRenderAsync().ConfigureAwait(true);
 
-        // Assert - verify default template is now rendered (different from initial)
-        _ = thumbnail.ContentTemplate.Should().NotBeNull("default template should be applied");
-        var defaultContentPresenter = FindVisualChild<ContentPresenter>(thumbnail);
-        _ = defaultContentPresenter.Should().NotBeNull("default template should create a ContentPresenter");
-    });
-
-    [TestMethod]
-    public Task AppliesDefaultTemplate_WhenSelectorIsCleared_Async() => EnqueueAsync(
-    async () =>
-    {
-        // Setup
-        var initialTemplateSelector = new CustomTemplateSelector
-        {
-            DefaultTemplate = (DataTemplate)XamlReader.Load(
-                """
-                <DataTemplate xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation'
-                              xmlns:x='http://schemas.microsoft.com/winfx/2006/xaml'>
-                    <TextBlock Text='Selector Template Marker' x:Name='SelectorMarker' />
-                </DataTemplate>
-                """),
-        };
-
-        var thumbnail = new Controls.Thumbnail()
-        {
-            Content = "Test Content",
-            ContentTemplateSelector = initialTemplateSelector,
-        };
-
-        await LoadTestContentAsync(thumbnail).ConfigureAwait(true);
-
-        // Verify selector's template is rendered
-        var selectorTextBlock = FindVisualChild<TextBlock>(thumbnail);
-        _ = selectorTextBlock.Should().NotBeNull();
-        _ = selectorTextBlock!.Text.Should().Be("Selector Template Marker");
-
-        // Act - clear the selector
-        thumbnail.ContentTemplateSelector = null;
-        await WaitForRenderAsync().ConfigureAwait(true);
-
-        // Assert - verify default template is now rendered (different from selector's template)
-        var defaultContentPresenter = FindVisualChild<ContentPresenter>(thumbnail);
-        _ = defaultContentPresenter.Should().NotBeNull("default template should be applied after selector is cleared");
-        _ = thumbnail.ContentTemplate.Should().NotBeNull();
+        AssertShowsDefaultTemplate(thumbnail);
     });
 
     [TestMethod]
     public Task ReEvaluatesSelector_WhenContentChanges_Async() => EnqueueAsync(
     async () =>
     {
-        // Setup - Create templates with distinct visual elements we can verify
-        var templateSelector = new ContentTypeTemplateSelector
-        {
-            TextTemplate = (DataTemplate)XamlReader.Load(
-                """
-                <DataTemplate xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation'
-                              xmlns:x='http://schemas.microsoft.com/winfx/2006/xaml'>
-                    <TextBlock Text='Text Template' x:Name='TextTemplateMarker' />
-                </DataTemplate>
-                """),
-            NumberTemplate = (DataTemplate)XamlReader.Load(
-                """
-                <DataTemplate xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation'
-                              xmlns:x='http://schemas.microsoft.com/winfx/2006/xaml'>
-                    <TextBlock Text='Number Template' x:Name='NumberTemplateMarker' />
-                </DataTemplate>
-                """),
-        };
-
-        var thumbnail = new Controls.Thumbnail()
+        var thumbnail = new Controls.Thumbnail
         {
             Content = "Text Content",
-            ContentTemplateSelector = templateSelector,
+            ContentTemplateSelector = new ContentTypeTemplateSelector
+            {
+                TextTemplate = MarkerTemplate("Text Template"),
+                NumberTemplate = MarkerTemplate("Number Template"),
+            },
         };
-
         await LoadTestContentAsync(thumbnail).ConfigureAwait(true);
+        AssertShowsMarker(thumbnail, "Text Template");
 
-        // Verify initial template is applied and rendered
-        var initialTextBlock = FindVisualChild<TextBlock>(thumbnail);
-        _ = initialTextBlock.Should().NotBeNull();
-        _ = initialTextBlock!.Text.Should().Be("Text Template");
-
-        // Act - change content to a different type
         thumbnail.Content = 42;
-
-        // Wait for visual tree to update
         await WaitForRenderAsync().ConfigureAwait(true);
 
-        // Assert - verify the visual tree actually changed to show the new template
-        var updatedTextBlock = FindVisualChild<TextBlock>(thumbnail);
-        _ = updatedTextBlock.Should().NotBeNull();
-        _ = updatedTextBlock!.Text.Should().Be("Number Template");
+        AssertShowsMarker(thumbnail, "Number Template");
     });
+
+    private static DataTemplate MarkerTemplate(string marker)
+        => (DataTemplate)XamlReader.Load(
+            $$"""
+            <DataTemplate xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation'>
+                <TextBlock Text='{{marker}}' />
+            </DataTemplate>
+            """);
+
+    private static void AssertShowsMarker(Controls.Thumbnail thumbnail, string marker)
+    {
+        var textBlock = FindVisualChild<TextBlock>(thumbnail);
+        _ = textBlock.Should().NotBeNull();
+        _ = textBlock!.Text.Should().Be(marker);
+    }
+
+    private static void AssertShowsDefaultTemplate(Controls.Thumbnail thumbnail)
+    {
+        // The default template is a text-free border shared by every thumbnail without a custom template.
+        _ = thumbnail.ContentTemplate.Should().BeSameAs(new Controls.Thumbnail().ContentTemplate);
+        _ = FindVisualChild<TextBlock>(thumbnail).Should().BeNull("no custom template remains");
+        _ = FindVisualChild<Border>(thumbnail).Should().NotBeNull("the default template draws a border");
+    }
 
     private static T? FindVisualChild<T>(DependencyObject parent)
         where T : DependencyObject

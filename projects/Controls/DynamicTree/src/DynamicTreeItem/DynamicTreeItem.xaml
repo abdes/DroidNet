@@ -5,21 +5,13 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:DroidNet.Controls">
     <ResourceDictionary.ThemeDictionaries>
+        <!--  Default serves the Light and Dark themes alike: the ListView item resources it maps adapt to both.  -->
         <ResourceDictionary x:Key="Default">
             <!--  Background  -->
-            <!--  Use ListView item theme resources to ensure good contrast in Dark theme  -->
             <StaticResource x:Key="DynamicTreeItemBackground" ResourceKey="ListViewItemBackground" />
             <StaticResource x:Key="DynamicTreeItemBackgroundPointerOver" ResourceKey="ListViewItemBackgroundPointerOver" />
             <StaticResource x:Key="DynamicTreeItemBackgroundSelected" ResourceKey="ListViewItemBackgroundSelected" />
         </ResourceDictionary>
-        <ResourceDictionary x:Key="Light">
-            <!--  Background  -->
-            <!--  Use ListView item theme resources to ensure good contrast in Light theme  -->
-            <StaticResource x:Key="DynamicTreeItemBackground" ResourceKey="ListViewItemBackground" />
-            <StaticResource x:Key="DynamicTreeItemBackgroundPointerOver" ResourceKey="ListViewItemBackgroundPointerOver" />
-            <StaticResource x:Key="DynamicTreeItemBackgroundSelected" ResourceKey="ListViewItemBackgroundSelected" />
-        </ResourceDictionary>
-
         <ResourceDictionary x:Key="HighContrast">
             <!--  Background  -->
             <StaticResource x:Key="DynamicTreeItemBackground" ResourceKey="SystemColorButtonFaceColor" />
@@ -51,7 +43,7 @@
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="0" />
                         </Grid.ColumnDefinitions>
-                        <Grid x:Name="PartContentGrid" MinHeight="{Binding ItemRowHeight, RelativeSource={RelativeSource Mode=TemplatedParent}, Mode=OneWay}">
+                        <Grid x:Name="PartContentGrid" MinHeight="{TemplateBinding ItemRowHeight}">
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto" />
                             </Grid.RowDefinitions>
@@ -61,23 +53,24 @@
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
                             <Border
-                                Width="{Binding ItemIconSize, RelativeSource={RelativeSource Mode=TemplatedParent}, Mode=OneWay}"
-                                Height="{Binding ItemIconSize, RelativeSource={RelativeSource Mode=TemplatedParent}, Mode=OneWay}"
-                                Margin="{Binding ItemIconMargin, RelativeSource={RelativeSource Mode=TemplatedParent}, Mode=OneWay}"
+                                Width="{TemplateBinding ItemIconSize}"
+                                Height="{TemplateBinding ItemIconSize}"
+                                Margin="{TemplateBinding ItemIconMargin}"
                                 VerticalAlignment="Center"
                                 BorderThickness="0">
                                 <local:Expander Name="PartExpander" IsExpanded="{Binding Path=ItemAdapter.IsExpanded, RelativeSource={RelativeSource Mode=TemplatedParent}, Mode=OneWay, FallbackValue=False}" />
                             </Border>
                             <Viewbox
                                 Grid.Column="1"
-                                Width="{Binding ItemIconSize, RelativeSource={RelativeSource Mode=TemplatedParent}, Mode=OneWay}"
-                                Height="{Binding ItemIconSize, RelativeSource={RelativeSource Mode=TemplatedParent}, Mode=OneWay}"
-                                Margin="{Binding ItemIconMargin, RelativeSource={RelativeSource Mode=TemplatedParent}, Mode=OneWay}"
+                                Width="{TemplateBinding ItemIconSize}"
+                                Height="{TemplateBinding ItemIconSize}"
+                                Margin="{TemplateBinding ItemIconMargin}"
                                 VerticalAlignment="Center">
                                 <ContentPresenter Name="PartThumbnailPresenter">
                                     <local:Thumbnail Content="{Binding Path=ItemAdapter, RelativeSource={RelativeSource Mode=TemplatedParent}, Mode=OneWay}" />
                                 </ContentPresenter>
                             </Viewbox>
+                            <!--  The label area is fixed by the template; the row exposes no Content of its own.  -->
                             <ContentPresenter
                                 Name="PartContentPresenter"
                                 Grid.Column="2"
@@ -99,18 +92,17 @@
                                         <Run /><Run Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                     </TextBlock>
 
-                                    <!--  In-place rename part  -->
-                                    <Popup
-                                        x:Name="PartInPlaceRename"
-                                        HorizontalOffset="0"
-                                        IsLightDismissEnabled="True"
-                                        PlacementTarget="{Binding ElementName=PartItemName}"
-                                        VerticalOffset="0">
+                                    <!--  In-place rename part: the row offsets it so the edited text covers the label's text.  -->
+                                    <Popup x:Name="PartInPlaceRename" IsLightDismissEnabled="True">
                                         <StackPanel Orientation="Horizontal" Spacing="5">
                                             <TextBox
                                                 Name="PartItemNameEdit"
+                                                MinWidth="0"
+                                                MinHeight="0"
                                                 Margin="0"
+                                                Padding="4,0,4,0"
                                                 VerticalAlignment="Center"
+                                                FontSize="{Binding ItemFontSize, RelativeSource={RelativeSource Mode=TemplatedParent}, Mode=OneWay}"
                                                 TextAlignment="Left"
                                                 TextWrapping="NoWrap"
                                                 Visibility="Collapsed">
@@ -137,8 +129,8 @@
                             Margin="{StaticResource DynamicTreeItemTrailingContentMargin}"
                             VerticalAlignment="Stretch"
                             HorizontalContentAlignment="Stretch"
-                            Content="{Binding TrailingContent, RelativeSource={RelativeSource Mode=TemplatedParent}, Mode=OneWay}"
-                            ContentTemplate="{Binding TrailingContentTemplate, RelativeSource={RelativeSource Mode=TemplatedParent}, Mode=OneWay}"
+                            Content="{TemplateBinding TrailingContent}"
+                            ContentTemplate="{TemplateBinding TrailingContentTemplate}"
                             Visibility="Collapsed" />
                         <Border
                             x:Name="PartDropIntoIndicator"

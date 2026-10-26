@@ -397,11 +397,22 @@ public async Task PasteItemsAsync(ITreeItem? targetParent = null, int? insertInd
 
 - **Behavior Summary**
 
-  | Clipboard State | Paste Action                                                      |
-  | --------------- | ----------------------------------------------------------------- |
-  | **Copied**      | Clones items and inserts at target; originals remain unchanged    |
-  | **Cut**         | Moves items to target using `MoveItemsAsync`; clears cut markings |
-  | **Empty**       | Throws `InvalidOperationException`                                |
+  | Clipboard State | Paste Action                                                    |
+  | --------------- | --------------------------------------------------------------- |
+  | **Copied**      | Clones items and inserts at target; originals remain unchanged  |
+  | **Cut**         | Moves items to target using `MoveItemsAsync`; empties clipboard |
+  | **Empty**       | Throws `InvalidOperationException`                              |
+
+  A copy paste inserts its root clones as one transaction: the owner approves
+  every root first, and a later refusal rolls back the clones already inserted.
+  A copy can be pasted again; a pasted cut is consumed, so the clipboard empties
+  and its cut marks go. A vetoed paste leaves the clipboard as it was. The
+  clipboard belongs to the view model: it survives `ClearRoot` and the control's
+  unloading, and is released by `ClearClipboardAsync`, Escape, a pasted cut, or
+  the next copy or cut. A derived view model whose payload lives on a domain
+  clipboard stages its rows with `StageClipboard`, releases rows it no longer
+  shows with `ReleaseClipboardRows`, and empties both with `ClearClipboard`
+  (which calls `OnClipboardCleared`).
 
 - **Clipboard Properties**
 
@@ -478,7 +489,7 @@ The control detects copy intent in two ways:
 | **Ctrl key**  | `IsControlKeyDown()` during drag-over | System cursor changes to copy cursor |
 | **Drag flag** | Set during `DragStarting` if Alt+Drag | Maintained throughout drag session   |
 
-When copy intent is detected, drop executes `CopyItemsAsync` followed by `PasteItemsAsync` instead of `MoveItemsAsync`.
+When copy intent is detected, drop executes `DuplicateItemsAsync` instead of `MoveItemsAsync`; the user's clipboard is not changed.
 
 ### 3.6 Cancellation and Recycling
 
@@ -649,26 +660,26 @@ Drag-drop is implemented using WinUI 3's drag-drop APIs:
 
 ### Drag-Drop
 
-| Phase        | Actions                                                                                   |
-| ------------ | ----------------------------------------------------------------------------------------- |
-| **1. Start** | `DragStarting`: Capture selected items; set data package                                  |
-| **2. Over**  | `DragOver`: Compute drop zone; validate target; show indicator; schedule hover-expand     |
-| **3. Leave** | `DragLeave`: Clear indicators; cancel hover-expand                                        |
-| **4. Drop**  | `Drop`: Detect copy intent; call `MoveItemsAsync` or `CopyItemsAsync` + `PasteItemsAsync` |
+| Phase        | Actions                                                                               |
+| ------------ | ------------------------------------------------------------------------------------- |
+| **1. Start** | `DragStarting`: Capture selected items; set data package                              |
+| **2. Over**  | `DragOver`: Compute drop zone; validate target; show indicator; schedule hover-expand |
+| **3. Leave** | `DragLeave`: Clear indicators; cancel hover-expand                                    |
+| **4. Drop**  | `Drop`: Detect copy intent; call `MoveItemsAsync` or `DuplicateItemsAsync`            |
 
 ### Copy-Paste
 
-| Phase        | Actions                                                                       |
-| ------------ | ----------------------------------------------------------------------------- |
-| **1. Copy**  | Expand to include descendants; filter clonable items; store in clipboard      |
-| **2. Paste** | Clone each item recursively; insert clones at target using `InsertChildAsync` |
+| Phase        | Actions                                                                  |
+| ------------ | ------------------------------------------------------------------------ |
+| **1. Copy**  | Expand to include descendants; filter clonable items; store in clipboard |
+| **2. Paste** | Clone each subtree; insert the root clones as one transaction            |
 
 ### Cut-Paste
 
-| Phase        | Actions                                                                |
-| ------------ | ---------------------------------------------------------------------- |
-| **1. Cut**   | Mark items with `IsCut = true`; store in clipboard                     |
-| **2. Paste** | Call `MoveItemsAsync` to relocate; clear cut markings; clear clipboard |
+| Phase        | Actions                                                             |
+| ------------ | ------------------------------------------------------------------- |
+| **1. Cut**   | Mark items with `IsCut = true`; store in clipboard                  |
+| **2. Paste** | Call `MoveItemsAsync` to relocate; empty clipboard and cut markings |
 
 ## 9. Implementation Status
 
@@ -713,7 +724,7 @@ public bool IsClipboardValid { get; }
 ```csharp
 public event EventHandler<TreeItemBeingMovedEventArgs>? ItemBeingMoved;
 public event EventHandler<TreeItemsMovedEventArgs>? ItemMoved;
-public event EventHandler? ClipboardChanged;
+public event EventHandler<ClipboardContentChangedEventArgs>? ClipboardContentChanged;
 ```
 
 ## 11. Example Usage

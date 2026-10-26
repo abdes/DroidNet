@@ -2,16 +2,14 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Collections.Specialized;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
-using Microsoft.UI.Xaml.Markup;
-using Microsoft.UI.Xaml.Media;
 using Windows.System;
 using Windows.UI.Core;
 
@@ -83,53 +81,14 @@ namespace DroidNet.Controls;
 ///     <para>
 ///         <strong>Example Usage</strong>
 ///     </para>
+///     <para>
+///         Rows are created by <see cref="DynamicTree" />: it realizes one <see cref="DynamicTreeItem" /> per displayed
+///         item from its control template and binds <see cref="ItemAdapter" /> to the logical item. Applications do not
+///         create rows; they supply the logical items through the tree's view model and style the rows through the
+///         template parts and visual states documented on this type.
+///     </para>
 ///     <![CDATA[
-/// <!-- Define the data model -->
-/// public class TreeItemViewModel : ITreeItem
-/// {
-///     public string Label { get; set; }
-///     public ObservableCollection<ITreeItem> Children { get; set; }
-///     // Implement other members of ITreeItem
-/// }
-/// <!-- Use the DynamicTree in XAML -->
-/// <Page
-///     x:Class="MyApp.MainPage"
-///     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-///     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-///     xmlns:controls="using:DroidNet.Controls">
-///     <Page.DataContext>
-///         <local:MainViewModel />
-///     </Page.DataContext>
-///     <Grid>
-///         <controls:DynamicTree ItemsSource="{Binding RootItems}">
-///             <controls:DynamicTree.ItemTemplate>
-///                 <DataTemplate>
-///                     <controls:DynamicTreeItem ItemAdapter="{Binding}"/>
-///                 </DataTemplate>
-///             </controls:DynamicTree.ItemTemplate>
-///         </controls:DynamicTree>
-///     </Grid>
-/// </Page>
-/// <!-- ViewModel -->
-/// public class MainViewModel
-/// {
-///     public ObservableCollection<ITreeItem> RootItems { get; set; }
-///     public MainViewModel()
-///     {
-///         RootItems = new ObservableCollection<ITreeItem>
-///         {
-///             new TreeItemViewModel
-///             {
-///                 Label = "Root Item",
-///                 Children = new ObservableCollection<ITreeItem>
-///                 {
-///                     new TreeItemViewModel { Label = "Child Item 1" },
-///                     new TreeItemViewModel { Label = "Child Item 2" },
-///                 }
-///             }
-///         };
-///     }
-/// }
+/// <controls:DynamicTree ViewModel="{x:Bind ViewModel}" ItemRowHeight="28" />
 /// ]]>
 /// </example>
 [TemplateVisualState(Name = NormalVisualState, GroupName = CommonVisualStates)]
@@ -155,8 +114,7 @@ namespace DroidNet.Controls;
 [TemplatePart(Name = ContentGridPart, Type = typeof(Grid))]
 [TemplatePart(Name = DropIntoIndicatorPart, Type = typeof(Border))]
 [TemplatePart(Name = RootGridPart, Type = typeof(Grid))]
-[ContentProperty(Name = nameof(Content))]
-public partial class DynamicTreeItem : ContentControl
+public partial class DynamicTreeItem : Control
 {
     /// <summary>
     /// The name of the thumbnail presenter part used to host thumbnails inside the item template.
@@ -197,6 +155,11 @@ public partial class DynamicTreeItem : ContentControl
     /// <summary>
     /// The name of the text block that displays the item name inside the tree item template.
     /// </summary>
+    /// <remarks>
+    /// When the text block's inlines are exactly two <see cref="Microsoft.UI.Xaml.Documents.Run"/> elements, the row writes
+    /// the item's label to the first and its annotation (in secondary text) to the second. Otherwise the row binds the
+    /// text block's text to the item's label.
+    /// </remarks>
     public const string ItemNamePart = "PartItemName";
 
     /// <summary>
@@ -309,10 +272,6 @@ public partial class DynamicTreeItem : ContentControl
 
     private ILogger logger = NullLogger<DynamicTreeItem>.Instance;
 
-    private long ancestorTreeThumbnailTemplateSelectorChangeCallbackToken;
-    private long ancestorTreeTrailingContentTemplateSelectorChangeCallbackToken;
-    private long ancestorTreeTrailingContentTemplateChangeCallbackToken;
-    private long ancestorTreeTrailingContentWidthChangeCallbackToken;
     private Expander? expander;
     private ColumnDefinition? trailingContentColumn;
     private ContentPresenter? trailingContentPresenter;
@@ -320,6 +279,16 @@ public partial class DynamicTreeItem : ContentControl
     private bool isPointerHandlersAttached;
     private bool isInteractivePointerActive;
     private bool areInteractivePointerHandlersAttached;
+    private bool isApplyingTrailingContent;
+    private bool hasChildrenUpdatePending;
+
+    // The row follows its logical item only while it is realized and loaded: a recycled or unloaded row must not stay
+    // subscribed to the item it last showed.
+    private bool isObservationSuspended;
+
+    // A detached row waits in the repeater's pool: loading it again must not resume following the item it last showed.
+    private bool isDetached;
+    private ITreeItem? observedItem;
 
     private DynamicTree? treeControl;
 
@@ -333,6 +302,9 @@ public partial class DynamicTreeItem : ContentControl
         this.Loaded += this.OnLoaded;
         this.Unloaded += this.OnUnloaded;
     }
+
+    /// <summary>Gets the tree this row is realized by, or <see langword="null"/> when it is not realized by a tree.</summary>
+    internal DynamicTree? OwnerTree => this.treeControl;
 
     /// <summary>
     ///     Updates the margin of the item based on its depth in the tree.
@@ -357,18 +329,119 @@ public partial class DynamicTreeItem : ContentControl
     }
 
     /// <summary>
-    ///     Handles recycling of the tree items inside the tree control to properly reset the tree item. In particular,
-    ///     this works around the issue where the thumbnail ContentTemplateSelector is not applied when a tree item
-    ///     is recycled, resulting in the thumbnail using the wrong template.
+    ///     Binds the row to the tree that realizes it. The tree calls this when the row is prepared or recycled to a new
+    ///     item, so the row never searches the visual tree for its owner.
     /// </summary>
-    internal void OnElementPrepared()
+    /// <param name="tree">The tree realizing this row.</param>
+    internal void AttachTo(DynamicTree tree)
     {
-        this.UpdateAncestorReference();
-        if (this.GetTemplateChild(ThumbnailPresenterPart) is ContentPresenter { Content: Thumbnail thumbnail })
+        ArgumentNullException.ThrowIfNull(tree);
+
+        this.treeControl = tree;
+        this.isDetached = false;
+        this.isObservationSuspended = false;
+        this.ObserveItem(this.ItemAdapter);
+        this.RefreshItemPresentation();
+        this.OnThumbnailTemplateSelectorChanged();
+        this.UpdateTrailingContentFromTree();
+        this.UpdateItemMargin();
+    }
+
+    /// <summary>
+    ///     Releases the row from the tree and from its logical item when the tree recycles it, so the pooled row is
+    ///     neither kept alive by, nor reacting to, the item it last showed.
+    /// </summary>
+    internal void Detach()
+    {
+        this.isDetached = true;
+        this.isObservationSuspended = true;
+        this.ObserveItem(item: null);
+        this.treeControl = null;
+        this.UpdateTrailingContentTemplate(selector: null, item: null);
+        this.ResetRecycledRowState();
+    }
+
+    /// <summary>
+    ///     Clears the per-row interaction presentation so a recycled container carries nothing from
+    ///     the row it used to display.
+    /// </summary>
+    /// <remarks>
+    ///     <see cref="ItemsRepeater"/> recycles element containers, and a container that is cleared
+    ///     mid-press, mid-rename or while it carries the drop cue would otherwise hand that state to
+    ///     the next row it is bound to: a stale interactive flag makes the control cancel drags
+    ///     started on that row, and a stale cue points the user at the wrong drop position.
+    /// </remarks>
+    internal void ResetRecycledRowState()
+    {
+        this.isInteractivePointerActive = false;
+        this.UpdateDropIndicatorVisual(DynamicTree.DropIndicatorPosition.None);
+        if (this.itemNameTextBox?.Visibility == Visibility.Visible)
         {
-            thumbnail.ContentTemplate = thumbnail.ContentTemplateSelector?.SelectTemplate(thumbnail.Content);
+            this.CancelRename();
         }
     }
+
+    /// <summary>Pushes the tree's thumbnail template selector onto this row's thumbnail.</summary>
+    /// <remarks>
+    ///     The thumbnail selects its own template again whenever its content or selector changes, so recycled rows
+    ///     need no further handling.
+    /// </remarks>
+    internal void OnThumbnailTemplateSelectorChanged()
+    {
+        if (this.treeControl is not { } tree
+            || this.GetTemplateChild(ThumbnailPresenterPart) is not ContentPresenter { Content: Thumbnail thumbnail })
+        {
+            return;
+        }
+
+        // A tree that drops its selector gives the thumbnail its own default back.
+        if (tree.ThumbnailTemplateSelector is { } templateSelector)
+        {
+            thumbnail.ContentTemplateSelector = templateSelector;
+        }
+        else
+        {
+            thumbnail.ClearValue(ContentControl.ContentTemplateSelectorProperty);
+        }
+    }
+
+    /// <summary>Applies the tree's trailing-content template, selector and width to this row.</summary>
+    internal void UpdateTrailingContentFromTree()
+    {
+        var tree = this.treeControl;
+        this.UpdateTrailingContentTemplate(tree?.TrailingContentTemplateSelector, this.ItemAdapter, tree?.TrailingContentTemplate);
+        if (tree is not null)
+        {
+            this.UpdateTrailingContentWidth(tree.EffectiveTrailingContentWidth);
+        }
+    }
+
+    /// <summary>Requests expansion or collapse on behalf of an automation client.</summary>
+    /// <param name="expand">Whether to expand; otherwise collapse.</param>
+    internal void RequestExpansion(bool expand)
+    {
+        if (expand)
+        {
+            this.OnExpand(this, EventArgs.Empty);
+        }
+        else
+        {
+            this.OnCollapse(this, EventArgs.Empty);
+        }
+    }
+
+    /// <summary>Requests selection of this row on behalf of an automation client.</summary>
+    /// <param name="toggle">Whether to toggle the row in the current selection; otherwise select only this row.</param>
+    internal void RequestSelection(bool toggle)
+    {
+        if (this.treeControl is { } tree && this.ItemAdapter is { } item)
+        {
+            tree.SelectFromAutomation(item, toggle);
+        }
+    }
+
+    /// <inheritdoc />
+    protected override AutomationPeer OnCreateAutomationPeer() => new DynamicTreeItemAutomationPeer(this);
 
     /// <inheritdoc />
     protected override void OnApplyTemplate()
@@ -383,14 +456,9 @@ public partial class DynamicTreeItem : ContentControl
         this.trailingContentPresenter = this.GetTemplateChild(TrailingContentPresenterPart) as ContentPresenter;
         this.trailingContentColumn = (this.GetTemplateChild(RootGridPart) as Grid)?.ColumnDefinitions.ElementAtOrDefault(1);
         this.dropIntoIndicator = this.GetTemplateChild(DropIntoIndicatorPart) as Border;
-        this.OnTrailingContentTemplateSelectorChanged();
-        this.UpdateTrailingContentPresenter();
+        this.UpdateTrailingContentFromTree();
         this.UpdateItemMargin();
-        this.UpdateExpansionVisualState();
-        this.UpdateHasChildrenVisualState();
-        this.UpdateSelectionVisualState(this.ItemAdapter?.IsSelected == true);
-        this.UpdateCutVisualState(this.ItemAdapter?.IsCut == true);
-        this.UpdateDimVisualState();
+        this.RefreshItemPresentation();
 
         base.OnApplyTemplate();
     }
@@ -428,8 +496,6 @@ public partial class DynamicTreeItem : ContentControl
             this.isPointerHandlersAttached = true;
         }
 
-        this.UpdateAncestorReference();
-
         if (!this.areInteractivePointerHandlersAttached)
         {
             this.AddHandler(UIElement.PointerPressedEvent, new PointerEventHandler(this.OnActionPointerPressed), handledEventsToo: true);
@@ -439,8 +505,10 @@ public partial class DynamicTreeItem : ContentControl
             this.areInteractivePointerHandlersAttached = true;
         }
 
-        // Subscribe to LayoutUpdated to detect parent changes
-        this.LayoutUpdated += this.OnLayoutUpdated;
+        if (!this.isDetached)
+        {
+            this.SetObservationSuspended(suspended: false);
+        }
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
@@ -452,7 +520,6 @@ public partial class DynamicTreeItem : ContentControl
             this.isPointerHandlersAttached = false;
         }
 
-        this.LayoutUpdated -= this.OnLayoutUpdated;
         if (this.areInteractivePointerHandlersAttached)
         {
             this.RemoveHandler(UIElement.PointerPressedEvent, new PointerEventHandler(this.OnActionPointerPressed));
@@ -463,26 +530,7 @@ public partial class DynamicTreeItem : ContentControl
         }
 
         this.ResetRecycledRowState();
-    }
-
-    /// <summary>
-    ///     Clears the per-row interaction presentation so a recycled container carries nothing from
-    ///     the row it used to display.
-    /// </summary>
-    /// <remarks>
-    ///     <see cref="ItemsRepeater"/> recycles element containers, and a container that is cleared
-    ///     mid-press, mid-rename or while it carries the drop cue would otherwise hand that state to
-    ///     the next row it is bound to: a stale interactive flag makes the control cancel drags
-    ///     started on that row, and a stale cue points the user at the wrong drop position.
-    /// </remarks>
-    internal void ResetRecycledRowState()
-    {
-        this.isInteractivePointerActive = false;
-        this.UpdateDropIndicatorVisual(DynamicTree.DropIndicatorPosition.None);
-        if (this.itemNameTextBox?.Visibility == Visibility.Visible)
-        {
-            this.CancelRename();
-        }
+        this.SetObservationSuspended(suspended: true);
     }
 
     private void OnPointerEntered(object sender, PointerRoutedEventArgs args)
@@ -515,14 +563,6 @@ public partial class DynamicTreeItem : ContentControl
         _ = sender;
         _ = args;
         this.isInteractivePointerActive = false;
-    }
-
-    private void OnLayoutUpdated(object? sender, object args)
-    {
-        _ = sender; // unused
-        _ = args; // unused
-
-        this.UpdateAncestorReference();
     }
 
     private void OnExpand(object? sender, EventArgs args)
@@ -577,123 +617,29 @@ public partial class DynamicTreeItem : ContentControl
             this.ItemAdapter?.ChildrenCount > 0 ? WithChildrenVisualState : NoChildrenVisualState,
             useTransitions: true);
 
-    private DynamicTree? FindParentTreeControl()
+    private void SetObservationSuspended(bool suspended)
     {
-        var parent = VisualTreeHelper.GetParent(this);
-
-        while (parent is not null and not DynamicTree)
-        {
-            parent = VisualTreeHelper.GetParent(parent);
-        }
-
-        return parent as DynamicTree;
-    }
-
-    private void TreeItem_ChildrenCollectionChanged(object? sender, NotifyCollectionChangedEventArgs args)
-    {
-        _ = sender; // unused
-        _ = args; // unused
-
-        _ = this.DispatcherQueue.TryEnqueue(this.UpdateHasChildrenVisualState);
-    }
-
-    /// <summary>
-    ///     Updates the reference to the ancestor <see cref="DynamicTree" /> control. This method gets
-    ///     the thumbnail template selector from the ancestor with type <see cref="DynamicTree" /> and
-    ///     registers or un-registers property change callbacks as necessary to keep itself in-sync.
-    ///     This ensures that we handle properly the case where the item is being moved between two tree
-    ///     controls.
-    /// </summary>
-    /// <remarks>
-    ///     This method is called when the layout is updated which happens frequently. It's important to
-    ///     minimize the work it does.
-    /// </remarks>
-    /// <exception cref="InvalidOperationException">
-    ///     Thrown when the <see cref="DynamicTreeItem" /> is not within a <see cref="DynamicTree" />.
-    /// </exception>
-    private void UpdateAncestorReference()
-    {
-        // Get the tree control ancestor amd bailout quickly if it did not change.
-        var newAncestorTreeControl = this.FindParentTreeControl();
-        if (this.treeControl == newAncestorTreeControl)
-        {
-            // Tree control did not change or is null, nothing to do.
-            return;
-        }
-
-        // Un-register callbacks from the old tree control
-        this.treeControl?.UnregisterPropertyChangedCallback(
-            DynamicTree.ThumbnailTemplateSelectorProperty,
-            this.ancestorTreeThumbnailTemplateSelectorChangeCallbackToken);
-        this.treeControl?.UnregisterPropertyChangedCallback(
-            DynamicTree.TrailingContentTemplateSelectorProperty,
-            this.ancestorTreeTrailingContentTemplateSelectorChangeCallbackToken);
-        this.treeControl?.UnregisterPropertyChangedCallback(
-            DynamicTree.TrailingContentTemplateProperty,
-            this.ancestorTreeTrailingContentTemplateChangeCallbackToken);
-        this.treeControl?.UnregisterPropertyChangedCallback(
-            DynamicTree.TrailingContentWidthProperty,
-            this.ancestorTreeTrailingContentWidthChangeCallbackToken);
-
-        this.treeControl = newAncestorTreeControl;
-        if (this.treeControl == null)
-        {
-            this.TrailingContent = null;
-            this.TrailingContentTemplate = null;
-            this.TrailingContentWidth = 0;
-            this.UpdateTrailingContentPresenter();
-            return;
-        }
-
-        // Get the initial value of thumbnail template selector from our ancestor
-        // tree control
-        this.OnThumbnailTemplateSelectorChanged();
-        this.OnTrailingContentTemplateSelectorChanged();
-        this.TrailingContentWidth = this.treeControl.TrailingContentTemplate is null && this.treeControl.TrailingContentTemplateSelector is null
-            ? 0
-            : this.treeControl.TrailingContentWidth;
-
-        // Register callbacks on the new tree control to get the updated template
-        // selector when it changes
-        this.ancestorTreeThumbnailTemplateSelectorChangeCallbackToken
-            = this.treeControl.RegisterPropertyChangedCallback(
-                DynamicTree.ThumbnailTemplateSelectorProperty,
-                (_, _) => this.OnThumbnailTemplateSelectorChanged());
-        this.RegisterTrailingContentCallbacks(this.treeControl);
-    }
-
-    private void RegisterTrailingContentCallbacks(DynamicTree owner)
-    {
-        this.ancestorTreeTrailingContentTemplateSelectorChangeCallbackToken
-            = owner.RegisterPropertyChangedCallback(
-                DynamicTree.TrailingContentTemplateSelectorProperty,
-                (_, _) => this.OnTrailingContentTemplateSelectorChanged());
-        this.ancestorTreeTrailingContentTemplateChangeCallbackToken
-            = owner.RegisterPropertyChangedCallback(
-                DynamicTree.TrailingContentTemplateProperty,
-                (_, _) => this.OnTrailingContentTemplateSelectorChanged());
-        this.ancestorTreeTrailingContentWidthChangeCallbackToken
-            = owner.RegisterPropertyChangedCallback(
-                DynamicTree.TrailingContentWidthProperty,
-                (_, _) => this.TrailingContentWidth = this.treeControl?.TrailingContentTemplate is null && this.treeControl?.TrailingContentTemplateSelector is null
-                    ? 0
-                    : this.treeControl.TrailingContentWidth);
-    }
-
-    private void OnThumbnailTemplateSelectorChanged()
-    {
-        var templateSelector = this.treeControl?.ThumbnailTemplateSelector;
-        if (templateSelector is null)
+        if (this.isObservationSuspended == suspended)
         {
             return;
         }
 
-        if (this.GetTemplateChild(ThumbnailPresenterPart) is ContentPresenter { Content: Thumbnail thumbnail })
+        this.isObservationSuspended = suspended;
+        this.ObserveItem(suspended ? null : this.ItemAdapter);
+        if (!suspended)
         {
-            thumbnail.ContentTemplateSelector = templateSelector;
+            this.RefreshItemPresentation();
         }
     }
 
-    private void OnTrailingContentTemplateSelectorChanged()
-        => this.UpdateTrailingContentTemplate(this.treeControl?.TrailingContentTemplateSelector, this.ItemAdapter, this.treeControl?.TrailingContentTemplate);
+    // Brings every item-driven visual state and the label up to date with the current item.
+    private void RefreshItemPresentation()
+    {
+        this.UpdateExpansionVisualState();
+        this.UpdateHasChildrenVisualState();
+        this.UpdateSelectionVisualState(this.ItemAdapter?.IsSelected == true);
+        this.UpdateCutVisualState(this.ItemAdapter?.IsCut == true);
+        this.UpdateDimVisualState();
+        this.BindItemName();
+    }
 }

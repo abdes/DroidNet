@@ -9,13 +9,10 @@ namespace DroidNet.Controls.Tests;
 
 [TestClass]
 [ExcludeFromCodeCoverage]
-[TestCategory("DynamicTree / ViewModel")]
-[TestCategory("Filtering")]
+[TestCategory($"{nameof(DynamicTree)} / ViewModel / Filtering")]
 public sealed partial class ViewModelFilteringTests : ViewModelTestBase, IDisposable
 {
     private TestViewModel viewModel = null!;
-
-    public TestContext TestContext { get; set; }
 
     public void Dispose() => this.viewModel.Dispose();
 
@@ -38,42 +35,54 @@ public sealed partial class ViewModelFilteringTests : ViewModelTestBase, IDispos
     }
 
     [TestMethod]
-    public async Task FilteredItems_WithPredicate_IncludesMatchesPlusAncestors_InPreOrder()
+    [DataRow("GC1", "R,R-C1,R-C1-GC1,R-C2,R-C2-GC1")]
+    [DataRow("__NO_MATCH__", "")]
+    public async Task FilteredItems_WithPredicate_IncludesMatchesPlusAncestors_InPreOrder(string text, string expectedLabels)
     {
         // Arrange
         var root = CreateExpandedTree();
         await this.viewModel.InitializeRootAsyncPublic(root).ConfigureAwait(false);
 
-        this.viewModel.FilterPredicate = item => item.Label.Contains("GC1", StringComparison.Ordinal);
+        this.viewModel.FilterPredicate = item => item.Label.Contains(text, StringComparison.Ordinal);
 
         // Act
         var labels = this.viewModel.FilteredItems.Select(i => i.Label).ToList();
 
         // Assert
-        _ = this.viewModel.ShownItemsCount.Should().Be(7);
-
-        _ = labels.Should().Equal(
-            "R",
-            "R-C1",
-            "R-C1-GC1",
-            "R-C2",
-            "R-C2-GC1");
+        _ = labels.Should().Equal(expectedLabels.Split(',', StringSplitOptions.RemoveEmptyEntries));
+        _ = this.viewModel.ShownItemsCount.Should().Be(7, "filtering never changes ShownItems");
     }
 
     [TestMethod]
-    public async Task FilteredItems_NoMatches_IsEmpty()
+    public async Task FilteredItems_ClearingPredicate_RestoresAllShownItems()
     {
         // Arrange
         var root = CreateExpandedTree();
         await this.viewModel.InitializeRootAsyncPublic(root).ConfigureAwait(false);
-
-        this.viewModel.FilterPredicate = item => item.Label.Contains("__NO_MATCH__", StringComparison.Ordinal);
+        this.viewModel.FilterPredicate = item => item.Label.Contains("GC1", StringComparison.Ordinal);
+        _ = this.viewModel.FilteredItems.Should().HaveCount(5);
 
         // Act
-        var filtered = this.viewModel.FilteredItems.ToList();
+        this.viewModel.FilterPredicate = null;
 
         // Assert
-        _ = filtered.Should().BeEmpty();
+        _ = this.viewModel.FilteredItems.Should().Equal(this.viewModel.ShownItems);
+    }
+
+    [TestMethod]
+    public async Task FilteredItems_ReplacingPredicate_AppliesTheNewPredicate()
+    {
+        // Arrange
+        var root = CreateExpandedTree();
+        await this.viewModel.InitializeRootAsyncPublic(root).ConfigureAwait(false);
+        this.viewModel.FilterPredicate = item => item.Label.Contains("GC1", StringComparison.Ordinal);
+        _ = this.viewModel.FilteredItems.Should().HaveCount(5);
+
+        // Act
+        this.viewModel.FilterPredicate = item => item.Label.Contains("GC2", StringComparison.Ordinal);
+
+        // Assert
+        _ = this.viewModel.FilteredItems.Select(i => i.Label).Should().Equal("R", "R-C1", "R-C1-GC2");
     }
 
     [TestMethod]
@@ -83,24 +92,18 @@ public sealed partial class ViewModelFilteringTests : ViewModelTestBase, IDispos
         var root = CreateExpandedTree();
         await this.viewModel.InitializeRootAsyncPublic(root).ConfigureAwait(false);
 
-        // Match selected items only.
-        this.viewModel.FilterPredicate = item => item.IsSelected;
-
-        // Force view creation and subscriptions.
-        _ = this.viewModel.FilteredItems.Count();
+        // Match dimmed items only; nothing is locked yet. Reading the view subscribes to the items.
+        this.viewModel.FilterPredicate = item => item is TreeItemAdapter { IsDimmed: true };
+        _ = this.viewModel.FilteredItems.Should().BeEmpty();
 
         var grandChild = this.viewModel.ShownItems.First(i => string.Equals(i.Label, "R-C1-GC2", StringComparison.Ordinal));
 
         // Act
-        grandChild.IsSelected = true;
-        await Task.Delay(DynamicTreeViewModel.FilterDebounceMilliseconds + 100, this.TestContext.CancellationToken).ConfigureAwait(true); // Allow time for async update.
+        ((TreeItemAdapter)grandChild).IsDimmed = true;
+        this.viewModel.RefreshFiltering();
 
         // Assert
-        var labels = this.viewModel.FilteredItems.Select(i => i.Label).ToList();
-        _ = labels.Should().Equal(
-            "R",
-            "R-C1",
-            "R-C1-GC2");
+        _ = this.viewModel.FilteredItems.Select(i => i.Label).Should().Equal("R", "R-C1", "R-C1-GC2");
     }
 
     [TestMethod]
@@ -111,24 +114,19 @@ public sealed partial class ViewModelFilteringTests : ViewModelTestBase, IDispos
         await this.viewModel.InitializeRootAsyncPublic(root).ConfigureAwait(false);
 
         this.viewModel.FilterPredicate = item => item.Label.Contains("GC1", StringComparison.Ordinal);
-
-        // Force view creation and subscriptions before expansion.
-        _ = this.viewModel.FilteredItems.Count();
         _ = this.viewModel.FilteredItems.Should().BeEmpty();
 
         // Act
         await this.viewModel.ExpandItemAsync(root).ConfigureAwait(false);
-        await Task.Delay(DynamicTreeViewModel.FilterDebounceMilliseconds + 100, this.TestContext.CancellationToken).ConfigureAwait(true); // Allow time for async update.
+        this.viewModel.RefreshFiltering();
 
         // Assert
-        var labels = this.viewModel.FilteredItems.Select(i => i.Label).ToList();
-        _ = labels.Should().Equal(
+        _ = this.viewModel.FilteredItems.Select(i => i.Label).Should().Equal(
             "R",
             "R-C1",
             "R-C1-GC1",
             "R-C2",
             "R-C2-GC1");
-
         _ = this.viewModel.ShownItemsCount.Should().Be(7);
     }
 
@@ -164,12 +162,11 @@ public sealed partial class ViewModelFilteringTests : ViewModelTestBase, IDispos
 
         this.viewModel.FilterPredicate = item => item.Label.Contains("MATCH", StringComparison.Ordinal);
 
-        // Force view creation and initial cache compute.
-        _ = this.viewModel.FilteredItems.Count();
+        _ = this.viewModel.FilteredItems.Select(i => i.Label).Should().Equal("R", "P", "MATCH");
 
         // Act: collapse the parent so the matching descendant is removed from ShownItems but remains loaded.
         await this.viewModel.CollapseItemAsync(parent).ConfigureAwait(false);
-        await Task.Delay(DynamicTreeViewModel.FilterDebounceMilliseconds + 100, this.TestContext.CancellationToken).ConfigureAwait(true);
+        this.viewModel.RefreshFiltering();
 
         // Assert: parent remains visible due to loaded-only subtree match.
         var labels = this.viewModel.FilteredItems.Select(i => i.Label).ToList();
@@ -190,15 +187,12 @@ public sealed partial class ViewModelFilteringTests : ViewModelTestBase, IDispos
 
         this.viewModel.FilterPredicate = item => item.Label.Contains("MATCH", StringComparison.Ordinal);
 
-        // Force view creation and subscriptions.
-        _ = this.viewModel.FilteredItems.Count();
-
-        // Act / Assert (unloaded subtree treated as no-match)
+        // Act / Assert (unloaded subtree treated as no-match; reading the view also subscribes to the items)
         _ = this.viewModel.FilteredItems.Should().BeEmpty();
 
         // Act: expand parent, which loads the matching descendant.
         await this.viewModel.ExpandItemAsync(parent).ConfigureAwait(false);
-        await Task.Delay(DynamicTreeViewModel.FilterDebounceMilliseconds + 100, this.TestContext.CancellationToken).ConfigureAwait(true);
+        this.viewModel.RefreshFiltering();
 
         // Assert: now the match is loaded and the lineage becomes visible.
         var labels = this.viewModel.FilteredItems.Select(i => i.Label).ToList();
@@ -206,6 +200,39 @@ public sealed partial class ViewModelFilteringTests : ViewModelTestBase, IDispos
             "R",
             "P",
             "MATCH");
+    }
+
+    [TestMethod]
+    public async Task RefreshFiltering_AfterAPredicateThrew_RecomputesTheWholeCache()
+    {
+        // Arrange: the predicate fails on one row only while it is told to.
+        var throwing = false;
+        bool Predicate(ITreeItem item)
+        {
+            if (throwing && string.Equals(item.Label, "R-C2", StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException("predicate failure");
+            }
+
+            return item.Label.Contains("GC1", StringComparison.Ordinal);
+        }
+
+        var root = CreateExpandedTree();
+        await this.viewModel.InitializeRootAsyncPublic(root).ConfigureAwait(false);
+        this.viewModel.FilterPredicate = new Predicate<ITreeItem>(Predicate);
+        _ = this.viewModel.FilteredItems.Should().HaveCount(5);
+
+        throwing = true;
+        var replace = () => this.viewModel.FilterPredicate = new Predicate<ITreeItem>(Predicate);
+        _ = replace.Should().Throw<InvalidOperationException>();
+
+        // Act
+        throwing = false;
+        this.viewModel.RefreshFiltering();
+
+        // Assert
+        _ = this.viewModel.FilteredItems.Select(item => item.Label)
+            .Should().Equal("R", "R-C1", "R-C1-GC1", "R-C2", "R-C2-GC1");
     }
 
     private static TestTreeItemAdapter CreateExpandedTree()

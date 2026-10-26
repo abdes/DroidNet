@@ -5,15 +5,6 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:DroidNet.Controls">
 
-    <ResourceDictionary.ThemeDictionaries>
-        <ResourceDictionary x:Key="Light">
-            <SolidColorBrush x:Key="EmptyThumbnailBorderColor">Black</SolidColorBrush>
-        </ResourceDictionary>
-        <ResourceDictionary x:Key="Dark">
-            <SolidColorBrush x:Key="EmptyThumbnailBorderColor">White</SolidColorBrush>
-        </ResourceDictionary>
-    </ResourceDictionary.ThemeDictionaries>
-
     <ResourceDictionary.MergedDictionaries>
         <ResourceDictionary Source="ms-appx:///DroidNet.Controls.DynamicTree/CommonResources.xaml" />
     </ResourceDictionary.MergedDictionaries>
@@ -22,7 +13,7 @@
         <Border
             Width="{StaticResource CellContentWidth}"
             Height="{StaticResource CellContentHeight}"
-            BorderBrush="{ThemeResource EmptyThumbnailBorderColor}"
+            BorderBrush="{ThemeResource TextFillColorPrimaryBrush}"
             BorderThickness="1" />
     </DataTemplate>
 

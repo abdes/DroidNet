@@ -34,7 +34,8 @@ internal sealed partial class TestViewModel(bool skipRoot, ILoggerFactory? logge
     public SelectionModel<ITreeItem>? GetSelectionModel() => this.SelectionModel;
 
     /// <summary>
-    /// Compatibility helpers for older tests that expect direct selection/focus APIs.
+    /// Forwards to the production <c>SelectItem</c> command; Ctrl is implied in multiple-selection mode when
+    /// something is already selected, so successive calls accumulate the way a Ctrl-click sequence does.
     /// </summary>
     /// <param name="item">The tree item to select.</param>
     /// <param name="origin">The origin of the selection request.</param>
@@ -44,76 +45,12 @@ internal sealed partial class TestViewModel(bool skipRoot, ILoggerFactory? logge
         this.SelectItemCommand.Execute(new ItemSelectionArgs(item, origin, IsCtrlKeyDown: isCtrl, IsShiftKeyDown: false));
     }
 
-    public void ClearSelection(ITreeItem item)
-    {
-        if (!this.ShownItems.Contains(item))
-        {
-            throw new ArgumentException("item not found", nameof(item));
-        }
-
-        this.ClearSelectionCommand.Execute(item);
-    }
-
-    public void ClearAndSelectItem(ITreeItem item)
-    {
-        if (!this.ShownItems.Contains(item))
-        {
-            throw new ArgumentException("item not found", nameof(item));
-        }
-
-        this.SelectionModel?.ClearAndSelectItem(item);
-    }
-
-    public void ExtendSelectionTo(ITreeItem item)
-    {
-        // Follow the same semantics as the view model's internal ExtendSelectionTo
-        if (this.SelectionMode == SelectionMode.Multiple && this.SelectionModel?.SelectedItem is not null)
-        {
-            ((MultipleSelectionModel<ITreeItem>)this.SelectionModel).SelectRange(this.SelectionModel.SelectedItem, item);
-            return;
-        }
-
-        if (!this.ShownItems.Contains(item))
-        {
-            throw new ArgumentException("item not found", nameof(item));
-        }
-
-        this.SelectionModel?.SelectItem(item);
-    }
-
-    public void ToggleSelectAll() => this.ToggleSelectAllCommand.Execute(parameter: null);
-
-    public bool ToggleSelectionForFocused(bool isControlKeyDown, bool isShiftKeyDown)
-    {
-        var focused = this.FocusedItem?.Item;
-        if (focused is null)
-        {
-            return false;
-        }
-
-        if (isShiftKeyDown)
-        {
-            this.ExtendSelectionTo(focused);
-            return true;
-        }
-
-        if (isControlKeyDown)
-        {
-            if (focused.IsSelected)
-            {
-                this.SelectionModel?.ClearSelection(focused);
-            }
-            else
-            {
-                this.SelectionModel?.SelectItem(focused);
-            }
-
-            return true;
-        }
-
-        this.ClearAndSelectItem(focused);
-        return true;
-    }
+    /// <summary>
+    /// Replaces the selection with <paramref name="item" /> through the selection model, bypassing the view model's
+    /// interactive entry points (used to arrange state).
+    /// </summary>
+    /// <param name="item">The tree item to select exclusively.</param>
+    public void ClearAndSelectItem(ITreeItem item) => this.SelectionModel?.ClearAndSelectItem(item);
 
     public bool TryGetFocusedItem([System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out ITreeItem? item, out RequestOrigin origin)
     {
@@ -152,4 +89,13 @@ internal sealed partial class TestViewModel(bool skipRoot, ILoggerFactory? logge
 
     /// <inheritdoc cref="DynamicTreeViewModel.RemoveSelectedItems"/>
     public async Task RemoveSelectedItemsAsyncPublic() => await this.RemoveSelectedItems().ConfigureAwait(false);
+
+    /// <inheritdoc cref="DynamicTreeViewModel.StageClipboard"/>
+    public void StageClipboardPublic(IReadOnlyList<ITreeItem> items, bool cut) => this.StageClipboard(items, cut);
+
+    /// <inheritdoc cref="DynamicTreeViewModel.ReleaseClipboardRows"/>
+    public void ReleaseClipboardRowsPublic() => this.ReleaseClipboardRows();
+
+    /// <inheritdoc cref="DynamicTreeViewModel.ClearClipboard"/>
+    public void ClearClipboardPublic() => this.ClearClipboard();
 }

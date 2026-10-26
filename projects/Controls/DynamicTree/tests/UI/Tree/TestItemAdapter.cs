@@ -48,7 +48,7 @@ internal sealed partial class TestItemAdapter(TestTreeItem node, bool isRoot = f
             this.AddChildInternal(new TestItemAdapter(childNode));
         }
 
-        // Simulate async operation
-        await Task.Delay(10).ConfigureAwait(false);
+        // Complete asynchronously like a real lazy load, without waiting on a timer.
+        await Task.Yield();
     }
 }

@@ -40,7 +40,7 @@ public partial class DynamicTree
         nameof(TrailingContentWidth),
         typeof(double),
         typeof(DynamicTree),
-        new PropertyMetadata(defaultValue: 0d, (d, e) => ((DynamicTree)d).UpdateTrailingContentWidth((double)e.NewValue)));
+        new PropertyMetadata(defaultValue: 0d, (d, e) => ((DynamicTree)d).OnTrailingContentWidthChanged(e)));
 
     /// <summary>Identifies the interaction scope used by pointer/range selection.</summary>
     public static readonly DependencyProperty SelectionScopeProperty = DependencyProperty.Register(
@@ -57,19 +57,19 @@ public partial class DynamicTree
 
     /// <summary>Identifies the minimum height of each rendered item row.</summary>
     public static readonly DependencyProperty ItemRowHeightProperty = DependencyProperty.Register(
-        nameof(ItemRowHeight), typeof(double), typeof(DynamicTree), new PropertyMetadata(32d, (d, _) => ((DynamicTree)d).UpdateItemLayoutForRealizedItems()));
+        nameof(ItemRowHeight), typeof(double), typeof(DynamicTree), new PropertyMetadata(32d, (d, e) => ((DynamicTree)d).OnItemMetricChanged(e)));
 
     /// <summary>Identifies the font size used by each rendered item label.</summary>
     public static readonly DependencyProperty ItemFontSizeProperty = DependencyProperty.Register(
-        nameof(ItemFontSize), typeof(double), typeof(DynamicTree), new PropertyMetadata(14d, (d, _) => ((DynamicTree)d).UpdateItemLayoutForRealizedItems()));
+        nameof(ItemFontSize), typeof(double), typeof(DynamicTree), new PropertyMetadata(14d, (d, e) => ((DynamicTree)d).OnItemMetricChanged(e)));
 
     /// <summary>Identifies the size of the expander and thumbnail cells in a rendered item row.</summary>
     public static readonly DependencyProperty ItemIconSizeProperty = DependencyProperty.Register(
-        nameof(ItemIconSize), typeof(double), typeof(DynamicTree), new PropertyMetadata(24d, (d, _) => ((DynamicTree)d).UpdateItemLayoutForRealizedItems()));
+        nameof(ItemIconSize), typeof(double), typeof(DynamicTree), new PropertyMetadata(24d, (d, e) => ((DynamicTree)d).OnItemMetricChanged(e)));
 
     /// <summary>Identifies the horizontal indentation applied for each tree depth level.</summary>
     public static readonly DependencyProperty ItemIndentWidthProperty = DependencyProperty.Register(
-        nameof(ItemIndentWidth), typeof(double), typeof(DynamicTree), new PropertyMetadata(34d, (d, _) => ((DynamicTree)d).UpdateItemLayoutForRealizedItems()));
+        nameof(ItemIndentWidth), typeof(double), typeof(DynamicTree), new PropertyMetadata(34d, (d, e) => ((DynamicTree)d).OnItemMetricChanged(e)));
 
     /// <summary>Identifies the horizontal margin around expander and thumbnail cells.</summary>
     public static readonly DependencyProperty ItemIconMarginProperty = DependencyProperty.Register(
@@ -129,9 +129,9 @@ public partial class DynamicTree
     /// <summary>
     ///     Gets or sets the data template selector for the thumbnails in the dynamic tree.
     /// </summary>
-    public DataTemplateSelector ThumbnailTemplateSelector
+    public DataTemplateSelector? ThumbnailTemplateSelector
     {
-        get => (DataTemplateSelector)this.GetValue(ThumbnailTemplateSelectorProperty);
+        get => (DataTemplateSelector?)this.GetValue(ThumbnailTemplateSelectorProperty);
         set => this.SetValue(ThumbnailTemplateSelectorProperty, value);
     }
 
@@ -152,7 +152,10 @@ public partial class DynamicTree
     }
 
     /// <summary>Gets or sets the optional aligned width, in DIPs, of the trailing-content column.</summary>
-    /// <remarks>Zero uses content measurement and collapses the column when it has no template.</remarks>
+    /// <remarks>
+    ///     Zero uses content measurement and collapses the column when it has no template. A negative or non-finite value
+    ///     is rejected by the property setter and restored by the dependency property.
+    /// </remarks>
     public double TrailingContentWidth
     {
         get => (double)this.GetValue(TrailingContentWidthProperty);
@@ -168,7 +171,7 @@ public partial class DynamicTree
     }
 
     /// <summary>Gets or sets whether selection ranges refer to all expanded or only currently displayed items.</summary>
-    /// <remarks>The default preserves historical ShownItems semantics for existing consumers.</remarks>
+    /// <remarks>The default, <see cref="TreeSelectionScope.ShownItems"/>, ranges over every expanded item.</remarks>
     public TreeSelectionScope SelectionScope
     {
         get => (TreeSelectionScope)this.GetValue(SelectionScopeProperty);
@@ -256,6 +259,13 @@ public partial class DynamicTree
     }
 
     /// <summary>
+    ///     Gets the trailing-content width rows use: the configured width while a template or selector provides content,
+    ///     otherwise zero so that the column collapses.
+    /// </summary>
+    internal double EffectiveTrailingContentWidth
+        => this.TrailingContentTemplate is null && this.TrailingContentTemplateSelector is null ? 0 : this.TrailingContentWidth;
+
+    /// <summary>
     /// Gets the drop indicator position attached to the specified element.
     /// </summary>
     /// <param name="element">The element to query.</param>
@@ -271,13 +281,39 @@ public partial class DynamicTree
     public static void SetDropIndicator(DependencyObject element, DropIndicatorPosition value)
         => element.SetValue(DropIndicatorProperty, value);
 
+    private static bool IsValidMetric(object value, bool allowZero)
+        => value is double metric && double.IsFinite(metric) && (allowZero ? metric >= 0 : metric > 0);
+
     private void SetValidatedPositiveDouble(DependencyProperty property, double value)
     {
-        if (!double.IsFinite(value) || value <= 0)
+        if (!IsValidMetric(value, allowZero: false))
         {
             throw new ArgumentOutOfRangeException(nameof(value));
         }
 
         this.SetValue(property, value);
+    }
+
+    // XAML, bindings and styles bypass the CLR setters, so an invalid metric is restored to its previous value here.
+    private void OnItemMetricChanged(DependencyPropertyChangedEventArgs args)
+    {
+        if (!IsValidMetric(args.NewValue, allowZero: false))
+        {
+            this.SetValue(args.Property, args.OldValue);
+            return;
+        }
+
+        this.UpdateItemLayoutForRealizedItems();
+    }
+
+    private void OnTrailingContentWidthChanged(DependencyPropertyChangedEventArgs args)
+    {
+        if (!IsValidMetric(args.NewValue, allowZero: true))
+        {
+            this.SetValue(args.Property, args.OldValue);
+            return;
+        }
+
+        this.UpdateTrailingContentForRealizedItems();
     }
 }

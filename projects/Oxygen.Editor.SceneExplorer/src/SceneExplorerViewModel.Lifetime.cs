@@ -174,8 +174,7 @@ public partial class SceneExplorerViewModel
             this.projection.Clear();
             this.Scene = null;
             this.sceneDocument = null;
-            this.ClearCutMarks();
-            this.ClipboardItemStore = [];
+            this.ReleaseClipboardRows();
             this.FilterPredicate = null;
             this.SearchText = string.Empty;
             this.SearchResultCount = 0;

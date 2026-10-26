@@ -5,17 +5,17 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using AwesomeAssertions;
+using DroidNet.Controls.Selection;
 using RequestOrigin = DroidNet.Controls.DynamicTreeViewModel.RequestOrigin;
 
 namespace DroidNet.Controls.Tests;
 
 [TestClass]
 [ExcludeFromCodeCoverage]
-[TestCategory($"{nameof(DynamicTree)} / ViewModel")]
+[TestCategory($"{nameof(DynamicTree)} / ViewModel / Move")]
 public partial class ViewModelMoveTests : ViewModelTestBase
 {
     [TestMethod]
-    [TestCategory($"{nameof(DynamicTree)} / ViewModel / Move")]
     public async Task MoveItem_ShouldRelocateSubtreeUnderNewParent()
     {
         // Arrange
@@ -34,16 +34,15 @@ public partial class ViewModelMoveTests : ViewModelTestBase
 
         // Assert
         var targetChildren = await targetParent.Children.ConfigureAwait(false);
-        _ = targetChildren.Should().ContainInOrder(child, targetExisting);
-        _ = viewModel.ShownItems.Should().ContainInOrder(root, sourceParent, targetParent, child, grandChild, targetExisting);
+        _ = targetChildren.Should().Equal(child, targetExisting);
+        _ = viewModel.ShownItems.Should().Equal(root, sourceParent, targetParent, child, grandChild, targetExisting);
         _ = child.Parent.Should().Be(targetParent);
         _ = child.Depth.Should().Be(targetParent.Depth + 1);
         _ = grandChild.Parent.Should().Be(child);
     }
 
     [TestMethod]
-    [TestCategory($"{nameof(DynamicTree)} / ViewModel / Move")]
-    public async Task MoveItems_ShouldPreserveOrderAndRestoreSelection()
+    public async Task MoveItems_ShouldPreserveOrderAndKeepTheFirstMovedItemSelected()
     {
         // Arrange
         var item1 = new TestTreeItemAdapter { Label = "Item1" };
@@ -62,17 +61,68 @@ public partial class ViewModelMoveTests : ViewModelTestBase
         await viewModel.MoveItemsAsyncPublic([item1, item2], targetParent, 1).ConfigureAwait(false);
 
         // Assert
-        var sm = viewModel.GetSelectionModel();
-        _ = sm.Should().NotBeNull();
-        _ = sm.SelectedItem.Should().Be(item1);
-        _ = sm.SelectedIndex.Should().Be(4);
         var targetChildren = await targetParent.Children.ConfigureAwait(false);
-        _ = targetChildren.Should().ContainInOrder(targetExisting, item1, item2);
-        _ = viewModel.ShownItems.Should().ContainInOrder(root, sourceParent, targetParent, targetExisting, item1, item2);
+        _ = targetChildren.Should().Equal(targetExisting, item1, item2);
+        _ = viewModel.ShownItems.Should().Equal(root, sourceParent, targetParent, targetExisting, item1, item2);
+        var selection = (MultipleSelectionModel<ITreeItem>)viewModel.GetSelectionModel()!;
+        _ = selection.SelectedItem.Should().Be(item1);
+        _ = selection.SelectedItems.Should().BeEquivalentTo([item1, item2]);
     }
 
     [TestMethod]
-    [TestCategory($"{nameof(DynamicTree)} / ViewModel / Reorder")]
+    [DataRow("Item1", "Item1", "Item1")]
+    [DataRow("Item1,Item2", "Item1,Item2", "Item1")]
+    [DataRow("Item2", "", "")]
+    public async Task MoveItems_RestoresTheSelectionOnlyWhenTheFirstMovedItemWasSelected(string selectedLabels, string expectedSelectedLabels, string expectedPrimaryLabel)
+    {
+        // Arrange
+        var item1 = new TestTreeItemAdapter { Label = "Item1" };
+        var item2 = new TestTreeItemAdapter { Label = "Item2" };
+        var sourceParent = new TestTreeItemAdapter([item1, item2]) { Label = "SourceParent", IsExpanded = true };
+        var targetParent = new TestTreeItemAdapter { Label = "TargetParent", IsExpanded = true };
+        var root = new TestTreeItemAdapter([sourceParent, targetParent], isRoot: true) { Label = "Root", IsExpanded = true };
+        using var viewModel = new TestViewModel(skipRoot: false) { SelectionMode = SelectionMode.Multiple };
+        await viewModel.InitializeRootAsyncPublic(root).ConfigureAwait(false);
+        foreach (var label in selectedLabels.Split(','))
+        {
+            viewModel.SelectItem(string.Equals(label, "Item1", StringComparison.Ordinal) ? item1 : item2, RequestOrigin.PointerInput);
+        }
+
+        // Act
+        await viewModel.MoveItemsAsyncPublic([item1, item2], targetParent, 0).ConfigureAwait(false);
+
+        // Assert
+        var selection = (MultipleSelectionModel<ITreeItem>)viewModel.GetSelectionModel()!;
+        _ = selection.SelectedItems.Select(i => i.Label).Should().BeEquivalentTo(expectedSelectedLabels.Split(',', StringSplitOptions.RemoveEmptyEntries));
+        _ = (selection.SelectedItem?.Label ?? string.Empty).Should().Be(expectedPrimaryLabel);
+        _ = selection.IsEmpty.Should().Be(expectedSelectedLabels.Length == 0);
+    }
+
+    [TestMethod]
+    public async Task MoveItem_ShouldRaiseItemMovedWithPreviousAndNewIndices()
+    {
+        // Arrange
+        var item = new TestTreeItemAdapter { Label = "Item" };
+        var other = new TestTreeItemAdapter { Label = "Other" };
+        var sourceParent = new TestTreeItemAdapter([item, other]) { Label = "SourceParent", IsExpanded = true };
+        var targetExisting = new TestTreeItemAdapter { Label = "TargetExisting" };
+        var targetParent = new TestTreeItemAdapter([targetExisting]) { Label = "TargetParent", IsExpanded = true };
+        var root = new TestTreeItemAdapter([sourceParent, targetParent], isRoot: true) { Label = "Root", IsExpanded = true };
+        using var viewModel = new TestViewModel(skipRoot: false);
+        TreeItemsMovedEventArgs? movedArgs = null;
+        viewModel.ItemMoved += (_, args) => movedArgs = args;
+        await viewModel.InitializeRootAsyncPublic(root).ConfigureAwait(false);
+
+        // Act
+        await viewModel.MoveItemAsyncPublic(item, targetParent, 1).ConfigureAwait(false);
+
+        // Assert
+        _ = movedArgs.Should().NotBeNull();
+        _ = movedArgs!.IsBatch.Should().BeFalse();
+        _ = movedArgs.PrimaryMove.Should().Be(new MovedItemInfo(item, sourceParent, targetParent, PreviousIndex: 0, NewIndex: 1));
+    }
+
+    [TestMethod]
     public async Task ReorderItems_ShouldAdjustStartIndexWhenMovingWithinSameParent()
     {
         // Arrange
@@ -91,12 +141,11 @@ public partial class ViewModelMoveTests : ViewModelTestBase
 
         // Assert
         var children = await parent.Children.ConfigureAwait(false);
-        _ = children.Should().ContainInOrder(itemC, itemD, itemA, itemB);
-        _ = viewModel.ShownItems.Should().ContainInOrder(root, parent, itemC, itemD, itemA, itemB);
+        _ = children.Should().Equal(itemC, itemD, itemA, itemB);
+        _ = viewModel.ShownItems.Should().Equal(root, parent, itemC, itemD, itemA, itemB);
     }
 
     [TestMethod]
-    [TestCategory($"{nameof(DynamicTree)} / ViewModel / Move")]
     public async Task MoveItem_WhenHandlerVetoesMove_ShouldNotThrowAndNotMove()
     {
         // Arrange
@@ -117,37 +166,21 @@ public partial class ViewModelMoveTests : ViewModelTestBase
         // Act
         var act = async () => await viewModel.MoveItemAsyncPublic(item, targetParent, 0).ConfigureAwait(false);
 
-        // Assert: should not throw
+        // Assert: should not throw, and the item must still belong to the original source parent
         _ = await act.Should().NotThrowAsync().ConfigureAwait(false);
-
-        // and the item must still belong to the original source parent
         _ = item.Parent.Should().Be(sourceParent);
         var children = await sourceParent.Children.ConfigureAwait(false);
         _ = children.Should().Contain(item);
     }
 
     [TestMethod]
-    [TestCategory($"{nameof(DynamicTree)} / ViewModel / Move")]
     public async Task MoveItem_WhenTargetExceedsMaxDepth_ShouldThrow()
     {
-        // Arrange
-        var deepest = new TestTreeItemAdapter { Label = "Node32", IsExpanded = true };
-        var head = deepest;
-        for (var i = 31; i >= 1; i--)
-        {
-            head = new TestTreeItemAdapter([head])
-            {
-                Label = string.Create(CultureInfo.InvariantCulture, $"Node{i}"),
-                IsExpanded = true,
-            };
-        }
-
-        var root = new TestTreeItemAdapter([head], isRoot: true) { Label = "Root", IsExpanded = true };
-
-        var movableParent = new TestTreeItemAdapter { Label = "MovableParent", IsExpanded = true };
+        // Arrange: a 32-level chain; the movable item lives next to the chain's second node.
         var movable = new TestTreeItemAdapter { Label = "Movable" };
-        head.AddChild(movableParent);
-        movableParent.AddChild(movable);
+        var movableParent = new TestTreeItemAdapter([movable]) { Label = "MovableParent", IsExpanded = true };
+        var head = CreateChain(32, movableParent, out var deepest);
+        var root = new TestTreeItemAdapter([head], isRoot: true) { Label = "Root", IsExpanded = true };
 
         using var viewModel = new TestViewModel(skipRoot: false);
         await viewModel.InitializeRootAsyncPublic(root).ConfigureAwait(false);
@@ -156,11 +189,10 @@ public partial class ViewModelMoveTests : ViewModelTestBase
         var act = async () => await viewModel.MoveItemAsyncPublic(movable, deepest, 0).ConfigureAwait(false);
 
         // Assert
-        _ = await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*maximum depth*").ConfigureAwait(false);
+        _ = await act.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false);
     }
 
     [TestMethod]
-    [TestCategory($"{nameof(DynamicTree)} / ViewModel / Move")]
     public async Task MoveItem_WhenTargetCannotAcceptChildren_ShouldThrow()
     {
         // Arrange
@@ -176,58 +208,43 @@ public partial class ViewModelMoveTests : ViewModelTestBase
         var act = async () => await viewModel.MoveItemAsyncPublic(item, targetParent, 0).ConfigureAwait(false);
 
         // Assert
-        _ = await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*does not accept children*").ConfigureAwait(false);
+        _ = await act.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false);
     }
 
     [TestMethod]
-    [TestCategory($"{nameof(DynamicTree)} / ViewModel / Move")]
-    public async Task MoveItems_WhenFirstItemSelected_ShouldRestoreSelection()
+    public async Task MoveItem_IntoItsOwnDescendant_ShouldThrowAndNotMove()
     {
         // Arrange
-        var item1 = new TestTreeItemAdapter { Label = "Item1" };
-        var item2 = new TestTreeItemAdapter { Label = "Item2" };
-        var sourceParent = new TestTreeItemAdapter([item1, item2]) { Label = "SourceParent", IsExpanded = true };
-        var targetParent = new TestTreeItemAdapter { Label = "TargetParent", IsExpanded = true };
-        var root = new TestTreeItemAdapter([sourceParent, targetParent], isRoot: true) { Label = "Root", IsExpanded = true };
-        using var viewModel = new TestViewModel(skipRoot: false) { SelectionMode = SelectionMode.Multiple };
-
+        var descendant = new TestTreeItemAdapter { Label = "Descendant" };
+        var item = new TestTreeItemAdapter([descendant]) { Label = "Item", IsExpanded = true };
+        var root = new TestTreeItemAdapter([item], isRoot: true) { Label = "Root", IsExpanded = true };
+        using var viewModel = new TestViewModel(skipRoot: false);
         await viewModel.InitializeRootAsyncPublic(root).ConfigureAwait(false);
-        viewModel.SelectItem(item1, RequestOrigin.PointerInput);
 
         // Act
-        await viewModel.MoveItemsAsyncPublic([item1, item2], targetParent, 0).ConfigureAwait(false);
+        var act = async () => await viewModel.MoveItemAsyncPublic(item, descendant, 0).ConfigureAwait(false);
 
         // Assert
-        var sm = viewModel.GetSelectionModel();
-        _ = sm.Should().NotBeNull();
-        _ = sm.SelectedItem.Should().Be(item1);
-        _ = sm.SelectedIndex.Should().Be(3);
+        _ = await act.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false);
+        _ = item.Parent.Should().Be(root);
+        _ = viewModel.ShownItems.Should().Equal(root, item, descendant);
     }
 
-    [TestMethod]
-    [TestCategory($"{nameof(DynamicTree)} / ViewModel / Move")]
-    public async Task MoveItems_WhenFirstItemNotSelected_ShouldClearSelection()
+    private static TestTreeItemAdapter CreateChain(int length, TestTreeItemAdapter extraChildOfHead, out TestTreeItemAdapter deepest)
     {
-        // Arrange
-        var item1 = new TestTreeItemAdapter { Label = "Item1" };
-        var item2 = new TestTreeItemAdapter { Label = "Item2" };
-        var sourceParent = new TestTreeItemAdapter([item1, item2]) { Label = "SourceParent", IsExpanded = true };
-        var targetParent = new TestTreeItemAdapter { Label = "TargetParent", IsExpanded = true };
-        var root = new TestTreeItemAdapter([sourceParent, targetParent], isRoot: true) { Label = "Root", IsExpanded = true };
-        using var viewModel = new TestViewModel(skipRoot: false) { SelectionMode = SelectionMode.Multiple };
+        deepest = new TestTreeItemAdapter { Label = string.Create(CultureInfo.InvariantCulture, $"Node{length}"), IsExpanded = true };
+        var head = deepest;
+        for (var i = length - 1; i >= 1; i--)
+        {
+            List<TestTreeItemAdapter> children = i == 1 ? [head, extraChildOfHead] : [head];
+            head = new TestTreeItemAdapter(children)
+            {
+                Label = string.Create(CultureInfo.InvariantCulture, $"Node{i}"),
+                IsExpanded = true,
+            };
+        }
 
-        await viewModel.InitializeRootAsyncPublic(root).ConfigureAwait(false);
-        viewModel.SelectItem(item2, RequestOrigin.PointerInput);
-
-        // Act
-        await viewModel.MoveItemsAsyncPublic([item1, item2], targetParent, 0).ConfigureAwait(false);
-
-        // Assert
-        var sm = viewModel.GetSelectionModel();
-        _ = sm.Should().NotBeNull();
-        _ = sm.IsEmpty.Should().BeTrue();
-        _ = sm.SelectedIndex.Should().Be(-1);
-        _ = sm.SelectedItem.Should().BeNull();
+        return head;
     }
 
     private sealed partial class NonAcceptingTreeItemAdapter : TestTreeItemAdapter

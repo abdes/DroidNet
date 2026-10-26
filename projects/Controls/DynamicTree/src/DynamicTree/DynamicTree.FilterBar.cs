@@ -12,28 +12,43 @@ namespace DroidNet.Controls;
 /// Partial implementation of the DynamicTree control that contains the filter-bar
 /// related dependency properties and UI helpers.
 /// </summary>
+[TemplatePart(Name = FilterBarPart, Type = typeof(FrameworkElement))]
+[TemplatePart(Name = FilterTextBoxPart, Type = typeof(TextBox))]
+[TemplatePart(Name = FilterSearchIconPart, Type = typeof(FontIcon))]
 public partial class DynamicTree
 {
+    /// <summary>The name of the filter bar container part in the DynamicTree control template.</summary>
+    public const string FilterBarPart = "PartFilterBar";
+
+    /// <summary>The name of the filter text box part in the DynamicTree control template.</summary>
+    public const string FilterTextBoxPart = "PartFilterTextBox";
+
+    /// <summary>The name of the decorative search icon part, shown over the empty filter text box.</summary>
+    public const string FilterSearchIconPart = "PartFilterSearchIcon";
+
+    // Space, in DIPs, kept between the end of the filter text and the search icon that overlays the empty text box.
+    private const double FilterSearchIconGap = 10;
+
     /// <summary>Identifies the opt-in filter bar capability.</summary>
     public static readonly DependencyProperty IsFilterBarEnabledProperty = DependencyProperty.Register(
         nameof(IsFilterBarEnabled),
         typeof(bool),
         typeof(DynamicTree),
-        new PropertyMetadata(defaultValue: false, (d, _) => ((DynamicTree)d).UpdateFilterBar()));
+        new PropertyMetadata(defaultValue: false, (d, _) => ((DynamicTree)d).UpdateFilterBarVisibility()));
 
     /// <summary>Identifies the requested filter bar visibility.</summary>
     public static readonly DependencyProperty IsFilterBarVisibleProperty = DependencyProperty.Register(
         nameof(IsFilterBarVisible),
         typeof(bool),
         typeof(DynamicTree),
-        new PropertyMetadata(defaultValue: true, (d, _) => ((DynamicTree)d).UpdateFilterBar()));
+        new PropertyMetadata(defaultValue: true, (d, _) => ((DynamicTree)d).UpdateFilterBarVisibility()));
 
     /// <summary>Identifies the text entered in the filter bar.</summary>
     public static readonly DependencyProperty FilterTextProperty = DependencyProperty.Register(
         nameof(FilterText),
         typeof(string),
         typeof(DynamicTree),
-        new PropertyMetadata(string.Empty, (d, _) => ((DynamicTree)d).UpdateFilterBar()));
+        new PropertyMetadata(string.Empty, (d, e) => ((DynamicTree)d).OnFilterTextChanged(e)));
 
     /// <summary>Identifies the filter input placeholder.</summary>
     public static readonly DependencyProperty FilterBarPlaceholderTextProperty = DependencyProperty.Register(
@@ -48,7 +63,7 @@ public partial class DynamicTree
         nameof(FilterBarInputStyle),
         typeof(Style),
         typeof(DynamicTree),
-        new PropertyMetadata(defaultValue: null, (d, _) => ((DynamicTree)d).UpdateFilterBar()));
+        new PropertyMetadata(defaultValue: null, (d, _) => ((DynamicTree)d).ApplyFilterBarInputStyle()));
 
     private FrameworkElement? filterBar;
     private TextBox? filterTextBox;
@@ -102,30 +117,63 @@ public partial class DynamicTree
 
     private void ApplyFilterBarTemplate()
     {
-        this.filterBar = this.GetTemplateChild("PartFilterBar") as FrameworkElement;
-        this.filterTextBox = this.GetTemplateChild("PartFilterTextBox") as TextBox;
-        this.filterSearchIcon = this.GetTemplateChild("PartFilterSearchIcon") as FontIcon;
-        this.UpdateFilterBar();
+        this.filterBar = this.GetTemplateChild(FilterBarPart) as FrameworkElement;
+        this.filterTextBox = this.GetTemplateChild(FilterTextBoxPart) as TextBox;
+        this.filterSearchIcon = this.GetTemplateChild(FilterSearchIconPart) as FontIcon;
+        this.UpdateFilterBarVisibility();
+        this.UpdateFilterSearchIconVisibility();
+        this.ApplyFilterBarInputStyle();
     }
 
-    private void UpdateFilterBar()
+    private void UpdateFilterBarVisibility()
+        => this.filterBar?.Visibility = this.IsFilterBarEnabled && this.IsFilterBarVisible
+            ? Visibility.Visible : Visibility.Collapsed;
+
+    private void UpdateFilterSearchIconVisibility()
+        => this.filterSearchIcon?.Visibility = string.IsNullOrEmpty(this.FilterText)
+            ? Visibility.Visible : Visibility.Collapsed;
+
+    // Only a change between empty and non-empty text moves the icon and the reserved space; typing within one state
+    // changes neither.
+    private void OnFilterTextChanged(DependencyPropertyChangedEventArgs args)
     {
-        this.filterBar?.Visibility = this.IsFilterBarEnabled && this.IsFilterBarVisible
-                ? Visibility.Visible : Visibility.Collapsed;
-
-        this.filterSearchIcon?.Visibility = string.IsNullOrEmpty(this.FilterText)
-                ? Visibility.Visible : Visibility.Collapsed;
-
-        if (this.filterTextBox is not null)
+        if (string.IsNullOrEmpty((string?)args.OldValue) == string.IsNullOrEmpty((string?)args.NewValue))
         {
-            this.filterTextBox.Style = this.FilterBarInputStyle;
-            this.filterTextBox.ClearValue(Control.PaddingProperty);
-            var padding = this.filterTextBox.Padding;
+            return;
+        }
 
-            // Reserve placeholder space for the decorative icon; the native clear button reserves its own space.
-            this.filterTextBox.Padding = string.IsNullOrEmpty(this.FilterText)
-                ? new Thickness(padding.Left, padding.Top, padding.Right + (this.filterSearchIcon?.FontSize ?? 0) + 20, padding.Bottom)
-                : padding;
+        this.UpdateFilterSearchIconVisibility();
+        this.UpdateFilterInputPadding();
+    }
+
+    private void ApplyFilterBarInputStyle()
+    {
+        if (this.filterTextBox is null)
+        {
+            return;
+        }
+
+        this.filterTextBox.Style = this.FilterBarInputStyle;
+        this.UpdateFilterInputPadding();
+    }
+
+    // Reserve placeholder space for the decorative icon; the native clear button reserves its own space.
+    private void UpdateFilterInputPadding()
+    {
+        if (this.filterTextBox is not { } textBox)
+        {
+            return;
+        }
+
+        textBox.ClearValue(Control.PaddingProperty);
+        if (string.IsNullOrEmpty(this.FilterText) && this.filterSearchIcon is { } icon)
+        {
+            var padding = textBox.Padding;
+            textBox.Padding = new Thickness(
+                padding.Left,
+                padding.Top,
+                padding.Right + icon.FontSize + icon.Margin.Right + FilterSearchIconGap,
+                padding.Bottom);
         }
     }
 

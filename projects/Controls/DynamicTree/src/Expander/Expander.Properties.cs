@@ -6,6 +6,7 @@ using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation.Peers;
 
 namespace DroidNet.Controls;
 
@@ -27,10 +28,10 @@ public partial class Expander
 
     /// <summary>
     ///     Identifies the <see cref="LoggerFactory" /> dependency property. Hosts can provide an
-    ///     <see cref="ILoggerFactory" /> to enable logging for NumberBox instances.
+    ///     <see cref="ILoggerFactory" /> to enable logging for <see cref="Expander" /> instances.
     /// </summary>
     public static readonly DependencyProperty LoggerFactoryProperty = DependencyProperty.Register(
-        nameof(ILoggerFactory),
+        nameof(LoggerFactory),
         typeof(ILoggerFactory),
         typeof(Expander),
         new PropertyMetadata(defaultValue: null, (d, e) => ((Expander)d).OnLoggerFactoryChanged((ILoggerFactory?)e.NewValue)));
@@ -73,9 +74,15 @@ public partial class Expander
             oldValue != newValue,
             "expecting SetValue() to not call this method when the value does not change");
         this.UpdateVisualState();
+
+        if (AutomationPeer.ListenerExists(AutomationEvents.PropertyChanged)
+            && FrameworkElementAutomationPeer.FromElement(this) is ExpanderAutomationPeer peer)
+        {
+            peer.RaiseExpandCollapseStateChanged(oldValue, newValue);
+        }
     }
 
-    // Initialize the logger for this NumberBox. Use the NumberBox type as the category.
+    // Initialize the logger for this Expander. Use the Expander type as the category.
     private void OnLoggerFactoryChanged(ILoggerFactory? loggerFactory) =>
         this.logger = loggerFactory?.CreateLogger<Expander>() ?? NullLogger<Expander>.Instance;
 }

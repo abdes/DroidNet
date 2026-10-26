@@ -1,294 +1,302 @@
 # DroidNet DynamicTree
 
-The DynamicTree is a flexible and customizable tree view control for WinUI 3.
-It's designed to handle dynamic and lazy-loaded data structures efficiently and
-provide a rich set of features for displaying and interacting with hierarchical
-information.
+`DynamicTree` is a WinUI 3 tree control for large, lazily loaded hierarchies.
+The control renders a flat list of rows; an application-derived
+`DynamicTreeViewModel` owns which items are shown, selection, focus, the
+clipboard and every mutation, and raises events so the application keeps its
+own model in step.
 
-## Key Features
+## At a glance
 
-- Dynamic Data Binding: Supports binding to dynamic data models, allowing for
-  real-time updates and efficient rendering.
-- Lazy / On-demand Loading: Child nodes can be loaded on demand when a parent is
-  expanded to optimize memory and performance for large trees.
-- Customizable Appearance: Offers extensive styling options through XAML
-  templates and resource dictionaries. Template parts and visual states are
-  exposed for full control.
-- Selection Modes: Supports `None`, `Single`, and `Multiple` selection modes
-  with an internal selection model and commands for common operations.
-- Expand/Collapse Handling: Asynchronous expand/collapse operations with methods
-  on the ViewModel such as `ExpandItemAsync` and `CollapseItemAsync`.
-- Item Add/Remove Events: ViewModel events fire for `ItemBeingAdded`,
-  `ItemAdded`, `ItemBeingRemoved`, and `ItemRemoved` so you can synchronize the
-  underlying model.
-- Item Renaming: Supports in-place renaming UI and visual states for validation.
-- Thumbnails & Template Selectors: Per-item thumbnail area with
-  `ThumbnailTemplateSelector` support.
-- Optional trailing row content through `TrailingContentTemplateSelector`, with
-  an optional aligned `TrailingContentWidth`; the selector and template are
-  consumer-owned and default to no reserved space.
-- Asynchronous owner hooks for inline rename and drop transactions, plus a
-  generic row `ItemContextRequested` event. The library does not infer domain
-  meaning or supply application-specific actions.
-- `TreeSelectionScope` keeps historical `ShownItems` interactions by default
-  and can opt into range/Select All over currently displayed (filtered) items.
+| Concern       | Where it lives                                                                            |
+| ------------- | ----------------------------------------------------------------------------------------- |
+| Rows          | `DynamicTree` hosts an `ItemsRepeater` in a `ScrollView`; each row is a `DynamicTreeItem` |
+| Data          | `ITreeItem`, usually through the abstract `TreeItemAdapter`                               |
+| State         | `DynamicTreeViewModel`: shown items, expansion, selection, focus, filter, clipboard       |
+| Lazy loading  | `TreeItemAdapter.LoadChildren`, called when an item first expands                         |
+| Mutations     | Insert, remove, move, copy/cut/paste, duplicate; vetoable events before, events after     |
+| Owner hooks   | Overridable rename, drop, clipboard and selection-policy members                          |
+| Input         | Pointer, keyboard, type-ahead, drag and drop, in-place rename                             |
+| Accessibility | Automation peers for the tree, its rows and the expander                                  |
 
-## Installation
-
-Install the package (if published) or add the project to your solution. From
-dotnet CLI:
-
-```shell
-dotnet add package DroidNet.Controls.DynamicTree
+```mermaid
+flowchart LR
+    subgraph View
+        Tree["DynamicTree"] --> Repeater["ItemsRepeater"]
+        Repeater --> Row["DynamicTreeItem rows"]
+    end
+    subgraph Model
+        VM["DynamicTreeViewModel<br/>(derived by the app)"]
+        Items["ITreeItem / TreeItemAdapter"]
+    end
+    App["Application model"]
+    Tree -- "ViewModel" --> VM
+    Repeater -- "ShownItems or FilteredItems" --> VM
+    Row -- "ItemAdapter" --> Items
+    VM -- "expands, mutates" --> Items
+    VM -- "ItemAdded, ItemMoved, ..." --> App
+    App -- "overrides CommitDropAsync, CommitRenameAsync, ..." --> VM
 ```
 
-(or reference the local project in your solution during development.)
+## Getting started
 
-## Basic Usage (WinUI 3)
+Reference the `DynamicTree` project and give the control a view model; the
+control binds its rows to the view model itself:
 
-### Optional XAML performance settings
+```xml
+<Page xmlns:dnc="using:DroidNet.Controls">
+    <dnc:DynamicTree ViewModel="{x:Bind ViewModel, Mode=OneWay}" />
+</Page>
+```
 
-Call `DynamicTreeXamlSettings.EnableOptimizations()` before `Application.Start`.
-It enables `IconNoGridOptimization`, `OptimizeApplyStyles`, and
-`DeferContextFlyoutInit`. The switches are process-wide, not per-tree, and do not
-opt into `DefaultStyleOptimizations`; existing default templates remain unchanged.
-Late configuration throws rather than silently ignoring the request.
-
-Oxygen and the controls demo enable this profile at startup. Density workload
-tests verify exact row heights, bounded realization, lazy loading and observer
-lifetime across scrolling and reloads.
-
-### Control setup
-
-1. Import the control namespace in your XAML page:
-
-   ```xml
-   <Page
-       ...
-       xmlns:dnc="using:DroidNet.Controls"
-       ...>
-   ```
-
-2. Add a `DynamicTree` to your layout and bind `ItemsSource` to the ViewModel's
-   shown items. Provide an `ItemTemplate` that uses `DynamicTreeItem`:
-
-   ```xml
-   <dnc:DynamicTree x:Name="treeView"
-                   ItemsSource="{Binding ShownItems}"
-                   SelectionMode="Multiple"
-                   ThumbnailTemplateSelector="{StaticResource MyThumbnailSelector}">
-       <dnc:DynamicTree.ItemTemplate>
-           <DataTemplate x:DataType="local:TreeItemAdapter">
-               <dnc:DynamicTreeItem ItemAdapter="{Binding}" />
-           </DataTemplate>
-       </dnc:DynamicTree.ItemTemplate>
-   </dnc:DynamicTree>
-   ```
-
-> **Notes:**
->
-> - `ItemsSource` should be the `ShownItems` collection exposed by your
->   `DynamicTreeViewModel` (or a derived concrete implementation).
-> - Each item in `ShownItems` should implement `ITreeItem` (or use
->   `TreeItemAdapter`/derived class provided in the control implementation).
-
-## ViewModel and Item Adapter Example
-
-The control ships with an abstract `DynamicTreeViewModel` that manages shown
-items, expansion and collapse, selection state, and provides events. Derive from
-it and implement your concrete item adapter.
-
-C# (ViewModel and adapter sketch):
+Derive the view model and an item adapter. `InitializeRootAsync` builds the
+shown rows; with `skipRoot: true` (the default) the root is hidden and its
+children are the top-level rows.
 
 ```csharp
-public class MyDynamicTreeViewModel : DynamicTreeViewModel
+public sealed class ProjectTreeViewModel : DynamicTreeViewModel
 {
-    public MyDynamicTreeViewModel()
-    {
-        var root = new MyTreeItemAdapter("Root");
-        _ = InitializeRootAsync(root, skipRoot: true);
-    }
+    public Task LoadAsync(Folder root)
+        => this.InitializeRootAsync(new FolderAdapter(root), skipRoot: false);
 }
 
-public class MyTreeItemAdapter : TreeItemAdapter
+public sealed class FolderAdapter(Folder folder) : TreeItemAdapter, ICanBeCloned
 {
-    public MyTreeItemAdapter(string label)
+    public override string Label
     {
-        Label = label;
+        get => folder.Name;
+        set => folder.Name = value;
     }
 
-    public override string Label { get; set; }
+    public override bool ValidateItemName(string name) => !string.IsNullOrWhiteSpace(name);
 
-    protected override int DoGetChildrenCount()
+    public ITreeItem CloneSelf()
     {
-        // return cached/known children count
+        var clone = new FolderAdapter(folder.Copy());
+        this.CopyBasePropertiesTo(clone);
+        return clone;
     }
 
-    protected override async Task LoadChildren()
+    protected override int DoGetChildrenCount() => folder.Children.Count;
+
+    protected override Task LoadChildren()
     {
-        // load children on-demand (async), add them to internal collection
+        foreach (var child in folder.Children)
+        {
+            this.AddChildInternal(new FolderAdapter(child));
+        }
+
+        return Task.CompletedTask;
     }
 }
 ```
 
-> **Important points:**
->
-> - Implement `LoadChildren` to perform any async work required to fetch or
->   build children. The `DynamicTreeViewModel` will call this when expanding
->   nodes.
-> - Use `InitializeRootAsync` to set up the root and build the initial
->   `ShownItems` collection.
+The [demo app](../DemoApp/Tree) shows a complete scene tree with filtering,
+row actions, thumbnails, undo and the clipboard.
 
-## One Tree per View Model
+## Items
 
-A `DynamicTreeViewModel` is shown by one live `DynamicTree` at a time. The
-view model's interaction state (logical keyboard focus, the scope and displayed
-source that keyboard navigation and typeahead walk, and bring-into-view
-requests) belongs to the tree that shows it.
+| Contract          | Meaning                                                                                                                            |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `ITreeItem`       | Label, depth, parent, children, expansion, selection, `IsCut`, `CanAcceptChildren`, name validation                                |
+| `TreeItemAdapter` | Base implementation: depth, async children, change notification; also `DisplayLabel`, `Annotation` and `IsDimmed` for presentation |
+| `ICanBeLocked`    | `IsLocked` items are not moved, cut, removed or given children; the root is always locked                                          |
+| `ICanBeCloned`    | `CloneSelf` returns a detached copy without parent or children; required to copy or duplicate                                      |
 
-- A second tree loaded over the same view model while the first is still
-  loaded is rejected: it shows no rows, the view model logs an error, and Debug
-  builds throw `InvalidOperationException`.
-- A tree lets go when it unloads or moves to another view model; another tree
-  can then attach.
-- Expansion and selection live on the items, so they are the same wherever the
-  items show.
+`LoadChildren` runs once, when the item first needs its children. Children of
+collapsed items are not loaded, so a large tree costs only what is shown.
 
-Hosts that keep one view per view model (`DroidNet.Mvvm.HostedViews`) never
-build a second tree by accident.
+## Expansion
 
-## Selection
+`ExpandItemAsync` and `CollapseItemAsync` change expansion; the rows forward
+the expander, Left and Right to them. Collapsing a parent keeps its
+descendants' expansion, so expanding it again restores the branch as it was.
 
-`DynamicTreeViewModel` exposes a `SelectionMode` property (enum: `None`,
-`Single`, `Multiple`). When set, an internal `SelectionModel` is created and
-synchronized with shown items. Useful commands exposed via the ViewModel:
+## Selection and focus
 
-- `SelectAll` (multiple selection only)
-- `SelectNone`
-- `InvertSelection` (multiple selection only)
-- `ToggleSelectAll` (called by the control on Ctrl+A)
+`SelectionMode` is `None`, `Single` or `Multiple`. Selection is stored on the
+items, so it survives collapsing and re-expanding.
 
-The control also supports keyboard modifiers:
+| Member                                                                                      | Purpose                                                                        |
+| ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `SelectedItem`, `SelectedItemsCount`                                                        | Current selection                                                              |
+| `ActiveItem`                                                                                | The selected item the user last chose explicitly, whatever the selection order |
+| `SelectionSettled`                                                                          | Raised once per selection transaction, with its final membership               |
+| `SelectAllCommand`, `SelectNoneCommand`, `InvertSelectionCommand`, `ToggleSelectAllCommand` | Bulk selection                                                                 |
+| `AllowsCoSelection` (override)                                                              | Makes some rows exclusive, for example a root that never shares a selection    |
+| `IsIncludedInBulk` (override)                                                               | Leaves rows out of ranges, Select All and invert                               |
+| `FocusItem`, `BringItemIntoView`                                                            | Programmatic focus and scrolling                                               |
 
-- Ctrl+Click to toggle selection of a single item
-- Shift+Click to extend the selection
-- Ctrl+A to select all (when selection mode is multiple)
-- Ctrl+Shift+I to invert selection
-
-## Events
-
-Subscribe to ViewModel events to keep your backing model in-sync or to validate
-operations:
-
-- `ItemBeingAdded` (cancellable via `TreeItemBeingAddedEventArgs.Proceed`)
-- `ItemAdded`
-- `ItemBeingRemoved` (cancellable via `TreeItemBeingRemovedEventArgs.Proceed`)
-- `ItemRemoved`
-
-These events allow you to approve or veto add/remove operations and perform
-model updates before and after changes.
-
-## Expand / Collapse and Lazy Loading
-
-Use `ExpandItemAsync(ITreeItem)` and `CollapseItemAsync(ITreeItem)` on the
-ViewModel to programmatically change expansion state. The `DynamicTreeItem` and
-`DynamicTree` controls forward user expansion/collapse gestures to the ViewModel
-which will invoke `LoadChildren` on adapters as needed.
-
-Example: programmatically expand an item
-
-```csharp
-await myViewModel.ExpandItemAsync(myAdapter);
-```
-
-## Templates, Visual States and Customization
-
-`DynamicTreeItem` exposes several template parts and visual states so you can
-fully restyle the control:
-
-Template parts include (names used in templates):
-
-- `PartThumbnailPresenter` (thumbnail ContentPresenter)
-- `PartExpander` (Expander control)
-- `PartContentPresenter`
-- `PartInPlaceRename` (Popup for rename)
-- `PartItemName` / `PartItemNameEdit`
-- `PartContentGrid` / `PartRootGrid`
-
-Visual states (groups):
-
-- Common states: `Normal`, `PointerOver`, `Selected`, `PointerOverSelected`
-- Expansion states: `Expanded`, `Collapsed`
-- Has children states: `WithChildren`, `NoChildren`
-- Rename validation: `NameIsValid`, `NameIsInvalid`
-
-Override the control template in XAML to change layout, icons, and animations.
-The control uses an `ItemsRepeater` internally and updates item margins based on
-item depth to provide indentation. A replacement template must host the repeater
-in a `ScrollView` (`PartScrollView`), not a `ScrollViewer`: the repeater
-virtualizes from the effective viewport its scroll host reports, which a
-`ScrollViewer` leaves stale during animated scrolling, so no rows are realized.
-
-The default item row measures content with a compact minimum height, allowing
-larger text or consumer-owned trailing content to grow the row. Set
-`DynamicTree.TrailingContentTemplateSelector` to a normal WinUI
-`DataTemplateSelector`; it receives the `ITreeItem` and supplies the trailing
-content template. For uniform content, set `TrailingContentTemplate` directly;
-it takes precedence over the selector and binds to the row's `ITreeItem`.
-Set `TrailingContentWidth` to a shared DIP width when sibling actions need
-alignment. With neither template nor selector, the slot reserves no width.
-With either configured, a positive width reserves the same space even when a
-selector returns no template. At width zero empty slots collapse and populated
-slots are content-measured. Interactive trailing controls do not select or drag
-the row, and keyboard navigation does not consume their keys. Plain status text
-and icons retain normal row input behavior.
-
-Applications that commit rename through a document/service override
-`DynamicTreeViewModel.CommitRenameAsync`. The row retains the draft until the
-owner returns `TreeItemRenameResult.Success`; a rejected result keeps the editor
-open and exposes its error as accessible tooltip text. The default implementation
-validates and sets `ITreeItem.Label` for simple standalone trees.
-
-Drag/drop distinguishes `Before`, `Inside`, and `After`. The default
-`DynamicTreeViewModel.CommitDropAsync` applies generic tree moves or duplicates
-without changing the user's clipboard. An application can override the hook to
-validate/commit its domain transaction and reconcile its projection; it must not
-add scene/domain policy to this library. `ItemContextRequested` reports the item,
-realized row anchor and optional pointer position; consumers choose whether and
-how to show a context menu.
-
-`SelectionScope.ShownItems` preserves existing behavior. Consumers may opt into
-`DisplayedItems` for pointer modifiers, keyboard focus (including Home/End),
-typeahead, keyboard selection ranges, Ctrl+A and Ctrl+Shift+I. The scope follows
-the rendered source: disabling filtering exposes all shown rows even if a
-predicate is retained. Range endpoints use displayed items; selection storage
-and tree mutation indices remain canonical ShownItems items. See
+`DynamicTree.SelectionScope` decides what ranges, Select All and keyboard
+navigation walk: `ShownItems` (default) covers every expanded row,
+`DisplayedItems` only the rows the filter shows. See
 [interaction scope](design/filtering.md#interaction-scope).
 
-Escape cancels a pending internal drag before clearing typeahead or clipboard
-staging. Cleared rows discard rename, interactive-pointer and drop-cue state
-before reuse. See [drag cancellation and recycling](design/tree-mutation-ui.md#36-cancellation-and-recycling).
+### Keyboard and pointer
 
-Consumers can tune row presentation without replacing the item template using
-`ItemRowHeight`, `ItemFontSize`, `ItemIconSize`, `ItemIconMargin`, and
-`ItemIndentWidth`. These are presentation properties only; the row height is a
-minimum so consumer templates can request more room when needed.
+| Input                          | Effect                                                            |
+| ------------------------------ | ----------------------------------------------------------------- |
+| Up, Down, PageUp, PageDown     | Move focus                                                        |
+| Home, End (Ctrl for the tree)  | First or last row of the parent, or of the tree                   |
+| Left, Right                    | Collapse or expand the focused item                               |
+| Enter, Space                   | Select the focused item, or deselect it when selected             |
+| Click, Ctrl+Click, Shift+Click | Select, toggle, extend                                            |
+| Ctrl+A, Ctrl+Shift+I           | Select all (toggles), invert selection                            |
+| Letters                        | Type-ahead to the next matching label (`IsTypeAheadEnabled`)      |
+| Escape                         | Cancel a drag, then type-ahead, then the staged clipboard         |
+| Double-tap the label           | Rename (`RenameOnDoubleTap`); elsewhere on the row, `ItemInvoked` |
 
-The optional `TreeDensityStyles.xaml` and `CompactTreeDensityStyles.xaml`
-dictionaries (under `ms-appx:///DroidNet.Controls.DynamicTree/DynamicTree/`)
-provide `TreeDensityStyle`. Merge the selected dictionary into the control's
-resources and assign that style. The compact dictionary scopes WinUI's native
-`DensityStyles/Compact.xaml` to this tree; both profiles use
-`ListViewItemMinHeight` and `ControlContentThemeFontSize`, yielding 40/32-DIP
-minimum rows with 14-point labels. Remove the previous density dictionary when
-switching profiles. Local presentation values take precedence over the style.
-The [demo helper](../DemoApp/Tree/TreePresentation.cs) demonstrates switching
-profiles while keeping icon size, icon spacing and responsive indentation
-specific to the custom row composition.
+Copy, cut, paste, delete and rename have no keyboard shortcuts in the control:
+they are application commands that call the view model.
 
-### Trailing-content examples
+## Filtering
 
-A single accessible action needs no selector class:
+Set `FilterPredicate` on the view model and `IsFilteringEnabled` on the tree.
+`FilteredItems` shows the matches with their ancestors as context; the tree
+switches its rows to it. The built-in filter bar (`IsFilterBarEnabled`,
+`FilterText`, `FilterBarPlaceholderText`, `FilterBarAccessoryContent`,
+`FilterBarInputStyle`) edits the text the application turns into a predicate.
+See [filtering](design/filtering.md).
+
+## Mutations
+
+Every mutation goes through the view model, which raises a vetoable event
+before and a notification after. Set `Proceed = false` on the `Being…` event
+args to refuse.
+
+| Operation                                | Events                            |
+| ---------------------------------------- | --------------------------------- |
+| `InsertItemAsync(item, parent, index)`   | `ItemBeingAdded`, `ItemAdded`     |
+| `RemoveItemAsync`, `RemoveSelectedItems` | `ItemBeingRemoved`, `ItemRemoved` |
+| `MoveItemsAsync`, `ReorderItemsAsync`    | `ItemBeingMoved`, `ItemMoved`     |
+
+- An insert under a shown parent expands it and selects the new row. Under a
+  parent that is not shown, such as one inside a collapsed branch, the item
+  joins its parent only; its row appears when the branch expands.
+- A removal keeps the selection on the same items. When it removes every
+  selected row, the row that takes their place is selected.
+- `ItemRemoved.RelativeIndex` is the item's index in its parent before the
+  removal: use it with `InsertItemAsync` to undo. `ShownItems` indices change
+  with expansion and are not stable.
+- A hidden root accepts children like a shown one: top-level rows can be
+  inserted, moved, dropped and pasted.
+
+See [tree mutation](design/tree-mutation-ui.md) and
+[undo and redo](design/undo-redo.md).
+
+## Clipboard
+
+The clipboard belongs to the view model: it survives `ClearRoot` and the
+control unloading, and is shared by every command that uses it.
+
+| Operation             | Effect                                                                                                 |
+| --------------------- | ------------------------------------------------------------------------------------------------------ |
+| `CopyItemsAsync`      | Stages the items and their subtrees; items that are not `ICanBeCloned` are left out with their subtree |
+| `CutItemsAsync`       | Stages the unlocked items and marks them and their descendants `IsCut`                                 |
+| `PasteItemsAsync`     | Into the given parent, or the focused item; selects what was pasted                                    |
+| `DuplicateItemsAsync` | Copies items to a destination without touching the clipboard (drag-copy uses it)                       |
+| `ClearClipboardAsync` | Empties the clipboard and removes cut marks; Escape calls it                                           |
+
+```mermaid
+stateDiagram-v2
+    [*] --> Empty
+    Empty --> Copied: CopyItemsAsync
+    Empty --> Cut: CutItemsAsync
+    Copied --> Copied: PasteItemsAsync (clones)
+    Cut --> Empty: PasteItemsAsync (moves)
+    Copied --> Cut: CutItemsAsync
+    Cut --> Copied: CopyItemsAsync
+    Copied --> Empty: ClearClipboardAsync
+    Cut --> Empty: ClearClipboardAsync
+```
+
+- A copy can be pasted again. A pasted cut is consumed: the items moved, so
+  the clipboard empties and the cut marks go.
+- A copy paste is one transaction: the owner approves every pasted root first,
+  and a refusal rolls back the clones already inserted. A refused paste leaves
+  the clipboard unchanged.
+- Removing or moving a staged item, or one of its ancestors, makes the
+  clipboard invalid (`IsClipboardValid`); pasting it then throws.
+- `CurrentClipboardState`, `ClipboardItems` and `ClipboardContentChanged`
+  report the clipboard for command state.
+
+An application whose payload lives on its own clipboard (the Scene Explorer
+keeps scene node identities) overrides `CopyItemsAsync`, `CutItemsAsync` and
+`PasteItemsAsync`, and keeps the tree's state in step with:
+
+| Member (protected)     | Use                                                          |
+| ---------------------- | ------------------------------------------------------------ |
+| `StageClipboard`       | Report staged rows as copied or cut; cut rows are dimmed     |
+| `ReleaseClipboardRows` | Drop rows that no longer show the payload, keeping its state |
+| `ClearClipboard`       | Empty the clipboard and the cut marks                        |
+| `OnClipboardCleared`   | Override to clear the application's payload with the tree's  |
+
+## Drag and drop
+
+Rows can be dragged within the tree. The drop position is `Before`, `Inside`
+or `After` the target row, shown by a drop cue; hovering over a collapsed
+parent expands it after a short delay. Holding Ctrl copies instead of moving,
+when every dragged item is `ICanBeCloned`.
+
+The drop calls `CommitDropAsync(TreeDropRequest)`. The default moves the items,
+or duplicates them for a copy, without changing the clipboard. Override it to
+commit a domain transaction and return `TreeDropResult.Committed(items)` or
+`TreeDropResult.Rejected`. `DynamicTree.ItemsDragStarting` lets the
+application add its own formats to the drag's `DataPackage`. See
+[drag and drop](design/tree-mutation-ui.md#3-drag-drop-implementation).
+
+## Rename
+
+`DynamicTree.BeginRenameAsync(item)` scrolls the row into view and opens the
+in-place editor; double-tapping the label does the same unless
+`RenameOnDoubleTap` is off. The editor opens over the label with its text in
+the label's place and font, and has no clear button: Enter commits, Escape
+cancels, and losing focus commits a valid name.
+
+The commit calls `CommitRenameAsync(item, newName)`. The default validates the
+name and sets `Label`. Override it to rename through a document or service:
+return `TreeItemRenameResult.Success`, or `TreeItemRenameResult.Rejected(message)`
+to keep the editor open with the message as its error. Before a command
+changes the selection, `SettleRenameAsync` commits any open rename and reports
+whether it succeeded.
+
+## Context requests
+
+`ItemContextRequested` reports the item, the realized row to anchor a flyout
+to, and the pointer position when the request came from a pointer. The control
+shows no menu; the application decides what to offer.
+
+## Presentation
+
+| Property                                                                             | Effect                                            |
+| ------------------------------------------------------------------------------------ | ------------------------------------------------- |
+| `ItemRowHeight`, `ItemFontSize`                                                      | Minimum row height and label size                 |
+| `ItemIconSize`, `ItemIconMargin`, `ItemIndentWidth`                                  | Thumbnail size and spacing, indentation per level |
+| `ThumbnailTemplateSelector`                                                          | Picks each row's thumbnail template from its item |
+| `TrailingContentTemplate`, `TrailingContentTemplateSelector`, `TrailingContentWidth` | Per-row content after the label, such as actions  |
+
+The row height is a minimum: larger text or trailing content can grow a row.
+
+### Density
+
+`TreeDensityStyles.xaml` and `CompactTreeDensityStyles.xaml`, under
+`ms-appx:///DroidNet.Controls.DynamicTree/DynamicTree/`, provide
+`TreeDensityStyle` with 40 and 32 DIP minimum rows and 14-point labels. Merge
+one dictionary into the tree's resources and assign the style; remove the
+previous dictionary when switching. Local property values take precedence over
+the style. The [demo helper](../DemoApp/Tree/TreePresentation.cs) switches
+profiles while keeping its own icon size and indentation.
+
+### Trailing content
+
+`TrailingContentTemplate` takes precedence over the selector; both bind to the
+row's `ITreeItem`. A positive `TrailingContentWidth` reserves the same width on
+every row, so actions stay aligned across depths. At width zero, empty slots
+collapse and populated ones size to their content. Interactive trailing
+controls do not select or drag the row, and the tree's keyboard handling leaves
+their keys alone.
+
+A single action needs no selector:
 
 ```xml
 <dnc:DynamicTree TrailingContentWidth="56">
@@ -301,9 +309,8 @@ A single accessible action needs no selector class:
 </dnc:DynamicTree>
 ```
 
-For multiple actions, compose fixed-width cells inside the template. Use the
-same column widths on every row; hide their children, not the columns, to avoid
-movement when actions are revealed:
+For several actions, use fixed-width cells and hide their children, not the
+columns, so nothing moves when an action appears:
 
 ```xml
 <Grid>
@@ -318,67 +325,61 @@ movement when actions are revealed:
 </Grid>
 ```
 
-A noninteractive label can share that same layout with an action:
+Commands, state, hover behavior and accessible names belong to the
+application. The demo's `EntityRowActions` shows hover-only lock and
+visibility buttons beside a document icon in three aligned cells.
 
-```xml
-<Grid>
-    <Grid.ColumnDefinitions>
-        <ColumnDefinition Width="80" />
-        <ColumnDefinition Width="32" />
-    </Grid.ColumnDefinitions>
-    <TextBlock Text="{Binding Status}" VerticalAlignment="Center" />
-    <Button Grid.Column="1" Content="…" Command="{Binding MoreCommand}"
-            AutomationProperties.Name="More actions" />
-</Grid>
-```
+### Templates
 
-Commands, state, hover policy, and accessibility names belong to the application.
-The demo's `EntityRowActions` demonstrates hover-only lock/visibility buttons and
-a document icon for loaded content. Its three fixed-width cells remain aligned
-across tree depths and when content is hidden. Demo content residency is metadata,
-not the adapter's lazy-child loading state.
+A replacement `DynamicTree` template must host the repeater in a `ScrollView`
+(`PartScrollView`), not a `ScrollViewer`: the repeater virtualizes from the
+viewport its scroll host reports, which a `ScrollViewer` leaves stale while it
+animates, and no rows are realized.
 
-## Thumbnail Template Selector
+| `DynamicTreeItem` template parts                                                                    |
+| --------------------------------------------------------------------------------------------------- |
+| `PartRootGrid`, `PartContentGrid`, `PartExpander`, `PartThumbnailPresenter`, `PartContentPresenter` |
+| `PartItemName`, `PartInPlaceRename`, `PartItemNameEdit`, `PartItemNameError`                        |
+| `PartTrailingContentPresenter`, `PartDropIntoIndicator`                                             |
 
-The tree supports a `ThumbnailTemplateSelector` property at the `DynamicTree`
-level. `DynamicTreeItem` will pick up the selector from its ancestor tree
-control and apply it to thumbnails. When items are recycled, the control ensures
-the selected template is re-applied.
+| Visual state group     | States                                                     |
+| ---------------------- | ---------------------------------------------------------- |
+| `CommonStates`         | `Normal`, `PointerOver`, `Selected`, `PointerOverSelected` |
+| `ExpansionStates`      | `Expanded`, `Collapsed`                                    |
+| `HasChildrenStates`    | `WithChildren`, `NoChildren`                               |
+| `CutStates`            | `Cut`, `NotCut`                                            |
+| `DimStates`            | `Dimmed`, `NotDimmed`                                      |
+| `NameValidationStates` | `NameIsValid`, `NameIsInvalid`                             |
 
-## Example: Adding and Removing Items
+## One tree per view model
 
-Use `InsertItemAsync` and `RemoveItemAsync` on the ViewModel to manipulate the
-tree. The ViewModel fires events you can hook to update your underlying model.
-`InsertItemAsync` will:
+A `DynamicTreeViewModel` is shown by one live `DynamicTree` at a time: its
+focus, keyboard scope and bring-into-view requests belong to that tree.
 
-- Validate index
-- Ensure parent is expanded (loads children if needed)
-- Fire `ItemBeingAdded` (which can cancel)
-- Insert in parent and shown items
-- Select the new item and fire `ItemAdded`
+- A second tree loaded over a view model that another loaded tree shows is
+  rejected: it shows no rows, the view model logs an error, and Debug builds
+  throw `InvalidOperationException`.
+- A tree lets go when it unloads or moves to another view model; another tree
+  can then attach.
+- Expansion and selection live on the items, so they are the same wherever the
+  items show.
 
-`RemoveItemAsync` will:
+Hosts that keep one view per view model (`DroidNet.Mvvm.HostedViews`) never
+build a second tree by accident.
 
-- Fire `ItemBeingRemoved` (which can cancel)
-- Remove children and the item itself from shown items and parent
-- Update selection accordingly
-- Fire `ItemRemoved`
+## XAML optimizations
 
-## Tips
+`DynamicTreeXamlSettings.EnableOptimizations()`, called before
+`Application.Start`, enables `IconNoGridOptimization`, `OptimizeApplyStyles`
+and `DeferContextFlyoutInit`. The settings are process-wide and leave default
+templates unchanged; calling it after WinUI starts throws. Oxygen and the
+controls demo enable it at startup.
 
-- Implement `ITreeItem` or derive from `TreeItemAdapter` for convenience. The
-  adapter includes depth, selection and async children handling.
-- Prefer lazy-loading child nodes via `LoadChildren` rather than populating
-  everything upfront for very large trees.
-- Handle the ViewModel events when your underlying domain model must reflect the
-  changes performed by the control.
-- Use `ThumbnailTemplateSelector` to pick per-item thumbnail templates (icons,
-  previews).
+## Design documents
 
-## Samples & Demo
-
-Look at the repository demo apps and the control sources for concrete usage
-patterns. The project contains XML/XAML comments and examples showing how to
-derive `DynamicTreeViewModel` and `TreeItemAdapter`.
-
-Happy coding! 🚀
+| Document                                          | Covers                                          |
+| ------------------------------------------------- | ----------------------------------------------- |
+| [Filtering](design/filtering.md)                  | Predicates, ancestor context, interaction scope |
+| [Tree mutation](design/tree-mutation-ui.md)       | Move, clipboard, drag and drop                  |
+| [Type-ahead and focus](design/typeahead-focus.md) | Focus model, type-ahead matching                |
+| [Undo and redo](design/undo-redo.md)              | Reversing mutations from their events           |

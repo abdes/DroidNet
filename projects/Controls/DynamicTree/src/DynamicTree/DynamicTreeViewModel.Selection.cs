@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 using System.ComponentModel;
-using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Controls.Selection;
@@ -22,7 +21,7 @@ public abstract partial class DynamicTreeViewModel
     /// <summary>
     ///     Raised once after a selection entry point has fully settled, so consumers publish the
     ///     completed membership and active identity together instead of re-publishing partial
-    ///     intermediate states for every item notification.
+    ///     intermediate states for every item notification. It is not raised when the entry point failed.
     /// </summary>
     public event EventHandler? SelectionSettled;
 
@@ -37,7 +36,11 @@ public abstract partial class DynamicTreeViewModel
     ///     programmatic selection request — the active identity of the selection, independent of
     ///     selection order. <see langword="null" /> when no selected item was explicitly activated.
     /// </summary>
-    public ITreeItem? ActiveItem { get; private set; }
+    public ITreeItem? ActiveItem
+    {
+        get;
+        private set => this.SetProperty(ref field, value);
+    }
 
     /// <summary>
     ///     Gets the currently selected item, if any.
@@ -48,9 +51,12 @@ public abstract partial class DynamicTreeViewModel
     ///     Gets the number of currently selected items.
     /// </summary>
     public int SelectedItemsCount
-        => this.SelectionModel is MultipleSelectionModel<ITreeItem> multi
-            ? multi.SelectedIndices.Count
-            : this.SelectionModel?.SelectedIndex != -1 ? 1 : 0;
+        => this.SelectionModel switch
+        {
+            MultipleSelectionModel<ITreeItem> multi => multi.SelectedIndices.Count,
+            { IsEmpty: false } => 1,
+            _ => 0,
+        };
 
     /// <summary>
     ///     Gets the current selection model for the tree view.
@@ -94,30 +100,11 @@ public abstract partial class DynamicTreeViewModel
     /// <summary>
     ///     Runs <paramref name="apply" /> as one selection transaction: item notifications raised
     ///     inside it are visible through <see cref="IsSelectionBatchActive" />, and
-    ///     <see cref="SelectionSettled" /> is raised once when the outermost transaction completes.
+    ///     <see cref="SelectionSettled" /> is raised once when the outermost transaction completes
+    ///     successfully.
     /// </summary>
     /// <param name="apply">The selection mutation to batch.</param>
-    protected void WithSelectionBatch(Action apply)
-    {
-        ArgumentNullException.ThrowIfNull(apply);
-        if (this.selectionBatchDepth > 0)
-        {
-            // Already inside a transaction; the outer owner raises the settle notification.
-            apply();
-            return;
-        }
-
-        this.selectionBatchDepth++;
-        try
-        {
-            apply();
-        }
-        finally
-        {
-            this.selectionBatchDepth--;
-            this.SelectionSettled?.Invoke(this, EventArgs.Empty);
-        }
-    }
+    protected void WithSelectionBatch(Action apply) => this.RunSelectionBatch(apply, raiseSettled: null);
 
     /// <summary>Selects an item using a caller-supplied visible range while storing canonical shown-item selection.</summary>
     /// <param name="item">The target item.</param>
@@ -128,12 +115,12 @@ public abstract partial class DynamicTreeViewModel
     {
         ArgumentNullException.ThrowIfNull(item);
         ArgumentNullException.ThrowIfNull(displayedItems);
-        if (this.SelectionMode == SelectionMode.None || !this.shownItems.Contains(item) || !displayedItems.Contains(item))
+        if (this.SelectionMode == SelectionMode.None || !this.shownItems.Contains(item) || IndexOfItem(displayedItems, item) < 0)
         {
             return;
         }
 
-        this.WithSelectionBatch(() => this.ApplyDisplayedSelection(item, displayedItems, isControlDown, isShiftDown));
+        this.WithSelectionBatch(() => this.ApplySelection(item, displayedItems, isControlDown, isShiftDown));
     }
 
     /// <summary>Toggles selection of the items currently displayed by the control.</summary>
@@ -141,7 +128,7 @@ public abstract partial class DynamicTreeViewModel
     public void ToggleDisplayedSelection(IReadOnlyList<ITreeItem> displayedItems)
     {
         ArgumentNullException.ThrowIfNull(displayedItems);
-        if (this.SelectionMode != SelectionMode.Multiple || this.SelectionModel is not { } selection)
+        if (this.SelectionMode != SelectionMode.Multiple || this.SelectionModel is not MultipleSelectionModel<ITreeItem> selection)
         {
             return;
         }
@@ -151,21 +138,14 @@ public abstract partial class DynamicTreeViewModel
             var bulkItems = displayedItems.Where(this.IsIncludedInBulk).ToArray();
             if (bulkItems.Length > 0 && bulkItems.All(static item => item.IsSelected))
             {
-                foreach (var item in bulkItems)
-                {
-                    selection.ClearSelection(item);
-                }
-
+                var bulkIndices = this.ShownIndicesOf(bulkItems).ToHashSet();
+                ReplaceSelection(selection, [.. selection.SelectedIndices.Where(index => !bulkIndices.Contains(index))]);
                 this.ClearExcludedFromSelection();
-                this.ForgetActiveItemIfDeselected();
                 return;
             }
 
             this.ClearExcludedFromSelection();
-            foreach (var item in bulkItems.Where(this.shownItems.Contains))
-            {
-                selection.SelectItem(item);
-            }
+            this.SelectAdditionally(selection, bulkItems);
         });
     }
 
@@ -174,33 +154,12 @@ public abstract partial class DynamicTreeViewModel
     public void InvertDisplayedSelection(IReadOnlyList<ITreeItem> displayedItems)
     {
         ArgumentNullException.ThrowIfNull(displayedItems);
-        if (this.SelectionMode != SelectionMode.Multiple || this.SelectionModel is not { } selection)
+        if (this.SelectionMode != SelectionMode.Multiple || this.SelectionModel is not MultipleSelectionModel<ITreeItem> selection)
         {
             return;
         }
 
-        this.WithSelectionBatch(() =>
-        {
-            this.ClearExcludedFromSelection();
-            foreach (var item in displayedItems.Where(this.IsIncludedInBulk))
-            {
-                if (!this.shownItems.Contains(item))
-                {
-                    continue;
-                }
-
-                if (item.IsSelected)
-                {
-                    selection.ClearSelection(item);
-                }
-                else
-                {
-                    selection.SelectItem(item);
-                }
-            }
-
-            this.ForgetActiveItemIfDeselected();
-        });
+        this.WithSelectionBatch(() => this.InvertAmong(selection, displayedItems));
     }
 
     /// <summary>Synchronizes the replacement selection model with the shown items.</summary>
@@ -208,10 +167,34 @@ public abstract partial class DynamicTreeViewModel
     protected virtual void OnSelectionModelChanged(SelectionModel<ITreeItem>? oldValue) =>
         this.SyncSelectionModelWithItems();
 
+    private static int IndexOfItem(IReadOnlyList<ITreeItem> items, ITreeItem target)
+    {
+        for (var index = 0; index < items.Count; index++)
+        {
+            if (ReferenceEquals(items[index], target))
+            {
+                return index;
+            }
+        }
+
+        return -1;
+    }
+
+    private static void ReplaceSelection(MultipleSelectionModel<ITreeItem> selection, IReadOnlyList<int> indices)
+    {
+        if (indices.Count == 0)
+        {
+            selection.ClearSelection();
+            return;
+        }
+
+        selection.SelectItemsAt([.. indices]);
+    }
+
     [RelayCommand]
     private void SelectItem(ItemSelectionArgs args)
     {
-        if (this.SelectionMode == SelectionMode.None)
+        if (this.SelectionMode == SelectionMode.None || this.SelectionModel is null)
         {
             return;
         }
@@ -222,18 +205,15 @@ public abstract partial class DynamicTreeViewModel
             return;
         }
 
-        var sm = this.SelectionModel;
-        Debug.Assert(sm is not null, "SelectionModel should not be null when SelectionMode is not None.");
-
         if (args.Origin != RequestOrigin.Programmatic)
         {
             if (this.FocusedItem is null || !ReferenceEquals(this.FocusedItem.Item, args.Item))
             {
-                this.LogForgotToFocusItem(args.Item, args.Origin!);
+                this.LogForgotToFocusItem(args.Item, args.Origin);
             }
         }
 
-        this.WithSelectionBatch(() => this.ApplyCommandSelection(sm!, args));
+        this.WithSelectionBatch(() => this.ApplySelection(args.Item, this.shownItems, args.IsCtrlKeyDown, args.IsShiftKeyDown));
     }
 
     /// <summary>
@@ -249,9 +229,9 @@ public abstract partial class DynamicTreeViewModel
 
         this.WithSelectionBatch(() =>
         {
-            var included = this.shownItems.Where(this.IsIncludedInBulk).ToArray();
+            var includedCount = this.shownItems.Count(this.IsIncludedInBulk);
             this.ClearExcludedFromSelection();
-            if (multipleSelection.SelectedIndices.Count == included.Length)
+            if (multipleSelection.SelectedIndices.Count == includedCount)
             {
                 multipleSelection.ClearSelection();
                 this.SetActiveItem(item: null);
@@ -270,6 +250,12 @@ public abstract partial class DynamicTreeViewModel
     [RelayCommand]
     private void ClearSelection(ITreeItem item)
     {
+        // Only a shown row is in the selection model; any other item has no selection to clear.
+        if (!this.IsShown(item))
+        {
+            return;
+        }
+
         this.WithSelectionBatch(() =>
         {
             if (ReferenceEquals(this.ActiveItem, item))
@@ -336,20 +322,7 @@ public abstract partial class DynamicTreeViewModel
                 return;
             }
 
-            this.ClearExcludedFromSelection();
-            foreach (var item in this.shownItems.Where(this.IsIncludedInBulk))
-            {
-                if (item.IsSelected)
-                {
-                    multipleSelection.ClearSelection(item);
-                }
-                else
-                {
-                    multipleSelection.SelectItem(item);
-                }
-            }
-
-            this.ForgetActiveItemIfDeselected();
+            this.InvertAmong(multipleSelection, this.shownItems);
         });
     }
 
@@ -385,6 +358,11 @@ public abstract partial class DynamicTreeViewModel
     partial void OnSelectionModeChanged(SelectionMode value)
     {
         var oldValue = this.SelectionModel;
+        if (value == SelectionMode.None)
+        {
+            // No model will carry the selection, so the rows must not keep claiming it.
+            oldValue?.ClearSelection();
+        }
 
         this.SelectionModel = value switch
         {
@@ -395,6 +373,7 @@ public abstract partial class DynamicTreeViewModel
         };
 
         this.SetActiveItem(null);
+        this.displayedSelectionAnchor = null;
         this.OnSelectionModelChanged(oldValue);
     }
 
@@ -421,210 +400,288 @@ public abstract partial class DynamicTreeViewModel
     }
 
     /// <summary>
-    ///     The display-path selection body, run inside one transaction: the active identity is written
-    ///     before the model mutates, so the notification settled at the end carries the final
-    ///     membership and primary together.
+    ///     Runs <paramref name="apply" /> as the outermost selection transaction, or inside the one already running.
     /// </summary>
-    private void ApplyDisplayedSelection(ITreeItem item, IReadOnlyList<ITreeItem> displayedItems, bool isControlDown, bool isShiftDown)
+    /// <param name="apply">The selection mutation to batch.</param>
+    /// <param name="raiseSettled">
+    ///     Decides, after <paramref name="apply" /> succeeded, whether <see cref="SelectionSettled" /> is raised;
+    ///     <see langword="null" /> always raises it.
+    /// </param>
+    private void RunSelectionBatch(Action apply, Func<bool>? raiseSettled)
     {
-        if (this.SelectionMode == SelectionMode.Single)
+        ArgumentNullException.ThrowIfNull(apply);
+        if (this.selectionBatchDepth > 0)
         {
-            this.SetActiveItem(item);
-            this.SelectionModel?.ClearAndSelectItem(item);
-            this.displayedSelectionAnchor = item;
+            // Already inside a transaction; the outer owner raises the settle notification.
+            apply();
             return;
         }
 
-        var selection = this.SelectionModel;
-        if (selection is null)
+        this.selectionBatchDepth++;
+        try
         {
+            apply();
+        }
+        finally
+        {
+            this.selectionBatchDepth--;
+        }
+
+        if (raiseSettled is null || raiseSettled())
+        {
+            this.SelectionSettled?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    /// <summary>
+    ///     Changes the shown rows while keeping the selection on the same items.
+    /// </summary>
+    /// <param name="reshape">The synchronous insertion or removal of shown rows.</param>
+    /// <remarks>
+    ///     The selection models store row positions, which a change above a selected row silently
+    ///     re-points. The selection is therefore released while the positions still name the right rows,
+    ///     and rebuilt from the items afterwards; items that are no longer shown stay deselected. It is
+    ///     one selection transaction; <see cref="SelectionSettled" /> reports the final state once, and only when
+    ///     the membership or the active item changed, not when the selected rows merely moved.
+    /// </remarks>
+    private void ReshapeShownItems(Action reshape)
+    {
+        if (this.SelectionModel is not { IsEmpty: false } selection)
+        {
+            reshape();
+            this.ForgetHiddenAnchor();
             return;
         }
 
-        if (isShiftDown)
+        var selected = new List<ITreeItem>();
+        if (selection is MultipleSelectionModel<ITreeItem> multi)
         {
-            var anchor = this.displayedSelectionAnchor is { } currentAnchor && displayedItems.Contains(currentAnchor)
-                ? currentAnchor
-                : selection.SelectedItem is { } selected && displayedItems.Contains(selected) ? selected : item;
-            var first = FindDisplayedIndex(displayedItems, anchor);
-            var last = FindDisplayedIndex(displayedItems, item);
-            if (!this.IsCoSelectionAllowed(item) || !this.IsIncludedInBulk(item))
-            {
-                // The clicked end is policy-excluded from ranges (for example an exclusive row):
-                // it becomes the whole selection instead of widening the range onto it.
-                this.SetActiveItem(item);
-                selection.ClearAndSelectItem(item);
-                this.displayedSelectionAnchor = item;
-                return;
-            }
+            selected.AddRange(multi.SelectedIndices.Select(this.GetShownItemAt));
+        }
+        else if (selection.SelectedItem is { } single)
+        {
+            selected.Add(single);
+        }
 
-            this.SetActiveItem(item);
-            if (!isControlDown)
+        var activeBefore = this.ActiveItem;
+        var restoredCount = 0;
+        this.RunSelectionBatch(
+            () =>
             {
                 selection.ClearSelection();
-            }
+                reshape();
 
-            for (var index = Math.Min(first, last); index <= Math.Max(first, last); index++)
-            {
-                var ranged = displayedItems[index];
-                if (this.IsIncludedInBulk(ranged))
+                var indices = this.ShownIndicesOf(selected);
+                restoredCount = indices.Length;
+                if (indices.Length > 0)
                 {
-                    selection.SelectItem(ranged);
+                    if (selection is MultipleSelectionModel<ITreeItem> restoredMulti)
+                    {
+                        restoredMulti.SelectItemsAt(indices);
+                    }
+                    else
+                    {
+                        selection.SelectItemAt(indices[0]);
+                    }
                 }
-            }
 
-            this.displayedSelectionAnchor = anchor;
+                this.ForgetActiveItemIfDeselected();
+                this.ForgetHiddenAnchor();
+            },
+
+            // Rows that only moved keep the same selection and active item: nothing to publish.
+            raiseSettled: () => restoredCount != selected.Count || !ReferenceEquals(this.ActiveItem, activeBefore));
+    }
+
+    /// <summary>
+    ///     Maps <paramref name="items" /> to their shown positions in one pass over the shown rows.
+    /// </summary>
+    /// <param name="items">The items to locate; items that are not shown are skipped.</param>
+    /// <returns>The shown positions, in the order of <paramref name="items" />.</returns>
+    private int[] ShownIndicesOf(IEnumerable<ITreeItem> items)
+    {
+        var positions = new Dictionary<ITreeItem, int>(this.shownItems.Count, ReferenceEqualityComparer.Instance);
+        for (var index = 0; index < this.shownItems.Count; index++)
+        {
+            positions[this.shownItems[index]] = index;
+        }
+
+        var indices = new List<int>();
+        foreach (var item in items)
+        {
+            if (positions.TryGetValue(item, out var position))
+            {
+                indices.Add(position);
+            }
+        }
+
+        return [.. indices];
+    }
+
+    /// <summary>
+    ///     Adds <paramref name="items" /> to the selection in one operation; the last shown one becomes
+    ///     the selected item.
+    /// </summary>
+    private void SelectAdditionally(MultipleSelectionModel<ITreeItem> selection, IEnumerable<ITreeItem> items)
+    {
+        var indices = this.ShownIndicesOf(items);
+        if (indices.Length > 0)
+        {
+            selection.SelectItemsAt([.. selection.SelectedIndices, .. indices]);
+        }
+    }
+
+    /// <summary>
+    ///     Inverts the selection among the included, shown rows of <paramref name="candidates" /> in one operation.
+    /// </summary>
+    private void InvertAmong(MultipleSelectionModel<ITreeItem> selection, IEnumerable<ITreeItem> candidates)
+    {
+        this.ClearExcludedFromSelection();
+
+        var included = this.ShownIndicesOf(candidates.Where(this.IsIncludedInBulk));
+        var includedSet = included.ToHashSet();
+        var selectedSet = selection.SelectedIndices.ToHashSet();
+
+        var result = new List<int>();
+        result.AddRange(selection.SelectedIndices.Where(index => !includedSet.Contains(index)));
+        result.AddRange(included.Where(index => !selectedSet.Contains(index)));
+
+        ReplaceSelection(selection, result);
+        this.ForgetActiveItemIfDeselected();
+    }
+
+    /// <summary>
+    ///     The selection body shared by the pointer, keyboard and command paths, run inside one transaction:
+    ///     the active identity is written before the model mutates, so the notification settled at the end
+    ///     carries the final membership and primary together.
+    /// </summary>
+    /// <param name="item">The clicked or targeted item.</param>
+    /// <param name="candidates">The rows a range may cover, in display order.</param>
+    /// <param name="isControlDown">Whether the gesture toggles or extends instead of replacing.</param>
+    /// <param name="isShiftDown">Whether the gesture selects a range from the anchor.</param>
+    private void ApplySelection(ITreeItem item, IReadOnlyList<ITreeItem> candidates, bool isControlDown, bool isShiftDown)
+    {
+        if (this.SelectionModel is not { } selection)
+        {
             return;
         }
 
-        if (isControlDown)
+        if (selection is not MultipleSelectionModel<ITreeItem> multi || !(isShiftDown || isControlDown))
         {
-            if (item.IsSelected)
-            {
-                if (ReferenceEquals(this.ActiveItem, item))
-                {
-                    this.SetActiveItem(item: null);
-                }
-
-                selection.ClearSelection(item);
-            }
-            else
-            {
-                this.SetActiveItem(item);
-                if (!this.IsCoSelectionAllowed(item))
-                {
-                    selection.ClearAndSelectItem(item);
-                }
-                else
-                {
-                    selection.SelectItem(item);
-                }
-            }
+            this.SelectOnly(selection, item);
+        }
+        else if (isShiftDown)
+        {
+            this.SelectRangeTo(multi, item, candidates, keepExisting: isControlDown);
         }
         else
         {
-            this.SetActiveItem(item);
+            this.ToggleSelected(multi, item);
+        }
+    }
+
+    /// <summary>
+    ///     Makes <paramref name="item" /> the whole selection, the active identity and the range anchor.
+    /// </summary>
+    private void SelectOnly(SelectionModel<ITreeItem> selection, ITreeItem item)
+    {
+        this.SetActiveItem(item);
+
+        // Selecting into an empty model emits an Add instead of the Reset a replace batches into.
+        if (selection.IsEmpty)
+        {
+            selection.SelectItem(item);
+        }
+        else
+        {
             selection.ClearAndSelectItem(item);
         }
 
         this.displayedSelectionAnchor = item;
-
-        static int FindDisplayedIndex(IReadOnlyList<ITreeItem> items, ITreeItem target)
-        {
-            for (var index = 0; index < items.Count; index++)
-            {
-                if (ReferenceEquals(items[index], target))
-                {
-                    return index;
-                }
-            }
-
-            return -1;
-        }
     }
 
     /// <summary>
-    ///     The command-path selection body, run inside one transaction with the active identity
-    ///     written before mutation.
+    ///     Toggles <paramref name="item" /> in the selection (the Ctrl gesture).
     /// </summary>
-    private void ApplyCommandSelection(SelectionModel<ITreeItem> sm, ItemSelectionArgs args)
+    private void ToggleSelected(MultipleSelectionModel<ITreeItem> selection, ITreeItem item)
     {
-        if (this.SelectionMode == SelectionMode.Single)
+        if (item.IsSelected)
         {
-            this.SetActiveItem(args.Item);
-            sm.ClearAndSelectItem(args.Item);
-            return;
-        }
-
-        // When in multiple-selection mode and there is no existing selection, prefer
-        // adding the item (emit Add) rather than using ClearAndSelectItem which may
-        // batch into a Reset notification.
-        if (this.SelectionMode == SelectionMode.Multiple && !args.IsShiftKeyDown && !args.IsCtrlKeyDown && sm.IsEmpty)
-        {
-            this.SetActiveItem(args.Item);
-            sm.SelectItem(args.Item);
-            return;
-        }
-
-        if (args.IsShiftKeyDown)
-        {
-            this.ExtendSelectionTo(args.Item);
-            return;
-        }
-
-        if (args.IsCtrlKeyDown)
-        {
-            if (args.Item.IsSelected)
+            if (ReferenceEquals(this.ActiveItem, item))
             {
-                if (ReferenceEquals(this.ActiveItem, args.Item))
-                {
-                    this.SetActiveItem(item: null);
-                }
-
-                sm.ClearSelection(args.Item);
-            }
-            else
-            {
-                this.SetActiveItem(args.Item);
-                if (!this.IsCoSelectionAllowed(args.Item))
-                {
-                    sm.ClearAndSelectItem(args.Item);
-                }
-                else
-                {
-                    sm.SelectItem(args.Item);
-                }
+                this.SetActiveItem(item: null);
             }
 
-            return;
-        }
-
-        this.SetActiveItem(args.Item);
-        sm.ClearAndSelectItem(args.Item);
-    }
-
-    /// <summary>
-    ///     Extends the selection to the specified item in the tree view.
-    /// </summary>
-    /// <param name="item">The item to extend selection to.</param>
-    private void ExtendSelectionTo(ITreeItem item)
-    {
-        if (this.SelectionMode == SelectionMode.Multiple && this.SelectionModel?.SelectedItem is not null)
-        {
-            var multi = (MultipleSelectionModel<ITreeItem>)this.SelectionModel;
-            this.SetActiveItem(item);
-            if (!this.IsIncludedInBulk(item))
-            {
-                // A policy-excluded target (for example an exclusive row) becomes the whole
-                // selection rather than dragging the range onto it.
-                multi.ClearAndSelectItem(item);
-                return;
-            }
-
-            multi.SelectRange(
-                this.SelectionModel.SelectedItem,
-                item);
-
-            foreach (var index in multi.SelectedIndices.ToArray())
-            {
-                var selected = this.GetShownItemAt(index);
-                if (!this.IsIncludedInBulk(selected))
-                {
-                    multi.ClearSelection(selected);
-                }
-            }
+            selection.ClearSelection(item);
         }
         else
         {
-            // We diverge from the default behavior of SelectItem here to throw an exception if the
-            // item is not shown in the tree
-            if (!this.shownItems.Contains(item))
+            this.SetActiveItem(item);
+            if (this.IsCoSelectionAllowed(item))
             {
-                throw new ArgumentException("item not found", nameof(item));
+                selection.SelectItem(item);
+            }
+            else
+            {
+                selection.ClearAndSelectItem(item);
+            }
+        }
+
+        this.displayedSelectionAnchor = item;
+    }
+
+    /// <summary>
+    ///     Selects the included rows between the range anchor and <paramref name="item" />, which becomes the
+    ///     selected item and the active identity.
+    /// </summary>
+    private void SelectRangeTo(MultipleSelectionModel<ITreeItem> selection, ITreeItem item, IReadOnlyList<ITreeItem> candidates, bool keepExisting)
+    {
+        if (!this.IsCoSelectionAllowed(item) || !this.IsIncludedInBulk(item))
+        {
+            // The clicked end is policy-excluded from ranges (for example an exclusive row):
+            // it becomes the whole selection instead of widening the range onto it.
+            this.SelectOnly(selection, item);
+            return;
+        }
+
+        var anchor = ResolveRangeAnchor();
+        var first = IndexOfItem(candidates, anchor);
+        var last = IndexOfItem(candidates, item);
+
+        // The target goes last so it ends up as the selected item whatever the direction.
+        var range = new List<ITreeItem>();
+        for (var index = Math.Min(first, last); index <= Math.Max(first, last); index++)
+        {
+            var ranged = candidates[index];
+            if (!ReferenceEquals(ranged, item) && this.IsIncludedInBulk(ranged))
+            {
+                range.Add(ranged);
+            }
+        }
+
+        range.Add(item);
+
+        this.SetActiveItem(item);
+        if (keepExisting)
+        {
+            this.SelectAdditionally(selection, range);
+        }
+        else
+        {
+            selection.SelectItemsAt(this.ShownIndicesOf(range));
+        }
+
+        this.displayedSelectionAnchor = anchor;
+
+        // The remembered anchor wins while it is still selected and in range; otherwise the selected item, else the target.
+        ITreeItem ResolveRangeAnchor()
+        {
+            if (this.displayedSelectionAnchor is { IsSelected: true } remembered && IndexOfItem(candidates, remembered) >= 0)
+            {
+                return remembered;
             }
 
-            this.SetActiveItem(item);
-            this.SelectionModel?.SelectItem(item);
+            return selection.SelectedItem is { } selected && IndexOfItem(candidates, selected) >= 0 ? selected : item;
         }
     }
 
@@ -659,15 +716,23 @@ public abstract partial class DynamicTreeViewModel
         {
             foreach (var index in multi.SelectedIndices.ToArray())
             {
-                var item = this.GetShownItemAt(index);
-                if (!this.IsIncludedInBulk(item))
+                if (!this.IsIncludedInBulk(this.GetShownItemAt(index)))
                 {
-                    multi.ClearSelection(item);
+                    multi.ClearSelection(index);
                 }
             }
         }
 
         this.ForgetActiveItemIfDeselected();
+    }
+
+    /// <summary>
+    ///     Drops the active identity and the range anchor that a removal took out of the selection or the shown rows.
+    /// </summary>
+    private void ForgetRemovedSelectionState()
+    {
+        this.ForgetActiveItemIfDeselected();
+        this.ForgetHiddenAnchor();
     }
 
     /// <summary>
@@ -678,6 +743,17 @@ public abstract partial class DynamicTreeViewModel
         if (this.ActiveItem is { IsSelected: false })
         {
             this.SetActiveItem(item: null);
+        }
+    }
+
+    /// <summary>
+    ///     Drops the range anchor when its row is no longer shown.
+    /// </summary>
+    private void ForgetHiddenAnchor()
+    {
+        if (this.displayedSelectionAnchor is { } anchor && !this.shownItems.Contains(anchor))
+        {
+            this.displayedSelectionAnchor = null;
         }
     }
 
@@ -701,10 +777,8 @@ public abstract partial class DynamicTreeViewModel
         {
             this.model = model;
 
-            this.PropertyChanging += (sender, args) =>
+            this.PropertyChanging += (_, args) =>
             {
-                _ = sender; // unused
-
                 var propertyName = args.PropertyName;
                 if (propertyName?.Equals(nameof(this.SelectedItem), StringComparison.Ordinal) == true
                     && this.SelectedItem is not null)
@@ -713,10 +787,8 @@ public abstract partial class DynamicTreeViewModel
                 }
             };
 
-            this.PropertyChanged += (sender, args) =>
+            this.PropertyChanged += (_, args) =>
             {
-                _ = sender; // unused
-
                 var propertyName = args.PropertyName;
                 if ((string.IsNullOrEmpty(propertyName)
                      || propertyName.Equals(nameof(this.SelectedItem), StringComparison.Ordinal))

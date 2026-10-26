@@ -12,8 +12,8 @@ public abstract partial class DynamicTreeViewModel
     private ITreeItem[] clipboardItems = [];
     private ITreeItem[] cutMarkedItems = [];
     private ClipboardState clipboardState = ClipboardState.Empty;
-    private ITreeItem? clipboardSourceParent;
     private bool clipboardIsValid = true;
+    private bool isPastingCutItems;
 
     /// <summary>
     ///     Gets the current clipboard state.
@@ -23,33 +23,12 @@ public abstract partial class DynamicTreeViewModel
     /// <summary>
     ///     Gets the items currently stored in the clipboard, or an empty list when the state is <see cref="ClipboardState.Empty" />.
     /// </summary>
-    public IReadOnlyList<ITreeItem> ClipboardItems => this.clipboardState == ClipboardState.Empty ? [] : this.clipboardItems;
+    public IReadOnlyList<ITreeItem> ClipboardItems => this.clipboardState == ClipboardState.Empty ? [] : Array.AsReadOnly(this.clipboardItems);
 
     /// <summary>
     ///     Gets a value indicating whether the clipboard contents are still valid in the current tree.
     /// </summary>
     public bool IsClipboardValid => this.clipboardIsValid;
-
-    /// <summary>Gets or sets the clipboard items (used by overrides providing domain snapshots).</summary>
-    protected ITreeItem[] ClipboardItemStore
-    {
-        get => this.clipboardItems;
-        set => this.clipboardItems = value;
-    }
-
-    /// <summary>Gets or sets the cut-marked items (used by overrides).</summary>
-    protected ITreeItem[] CutMarkedStore
-    {
-        get => this.cutMarkedItems;
-        set => this.cutMarkedItems = value;
-    }
-
-    /// <summary>Gets or sets the clipboard state (used by overrides).</summary>
-    protected ClipboardState ClipboardStateStore
-    {
-        get => this.clipboardState;
-        set => this.clipboardState = value;
-    }
 
     /// <summary>
     ///     Copies the provided items into the clipboard. Items must be visible in the tree.
@@ -66,25 +45,17 @@ public abstract partial class DynamicTreeViewModel
 
         this.ValidateItemsAreShown(items);
 
-        // Expand selection to include all descendants so copying a node copies its subtree.
-        var expanded = await ExpandSelectionWithDescendantsAsync(items).ConfigureAwait(true);
-        var copyableItems = this.FilterClonableItems(expanded);
+        // Copying a node copies its subtree. Expanding from the top-level roots lists each subtree depth-first, so the
+        // clones get their children back in the original order whatever the order of the selection.
+        var expanded = await ExpandSelectionWithDescendantsAsync(ExtractTopLevelSelection(items)).ConfigureAwait(true);
+        var copyableItems = this.FilterClonableSubtrees(expanded);
         if (copyableItems.Count == 0)
         {
             this.LogCopyIgnoredNoClonableItems(items.Count);
             return;
         }
 
-        this.ClearCutMarks();
-
-        var unique = this.EnsureDistinct(copyableItems);
-        this.clipboardItems = unique;
-        this.clipboardState = ClipboardState.Copied;
-        this.clipboardSourceParent = null;
-        this.clipboardIsValid = true;
-
-        this.RaiseClipboardChanged();
-        return;
+        this.SetClipboard(ClipboardState.Copied, [.. copyableItems], cutMarks: []);
     }
 
     /// <summary>
@@ -109,7 +80,7 @@ public abstract partial class DynamicTreeViewModel
         }
 
         this.ValidateItemsAreShown(items);
-        if (!this.IsShown(targetParent) || !targetParent.CanAcceptChildren || (targetParent.IsLocked && !targetParent.IsRoot))
+        if (!this.CanShowChildrenOf(targetParent) || !CanReceiveChildren(targetParent))
         {
             return [];
         }
@@ -126,30 +97,13 @@ public abstract partial class DynamicTreeViewModel
             return [];
         }
 
-        var clones = await CloneSubtreesAsync(originals).ConfigureAwait(true);
-        var rootClones = roots.Select(root => clones[root]).ToArray();
-        if (!await this.DisplayHelper.InsertItemsAsync(rootClones, targetParent, insertIndex, this.InsertItemAsync).ConfigureAwait(true))
+        var rootClones = await this.InsertClonesAsync(roots, originals, targetParent, insertIndex).ConfigureAwait(true);
+        if (rootClones.Count > 0)
         {
-            return [];
+            this.SelectInsertedItems(rootClones);
         }
 
-        foreach (var clone in rootClones.Where(static item => item.IsExpanded))
-        {
-            await this.RestoreExpandedChildrenAsync(clone).ConfigureAwait(true);
-        }
-
-        this.SelectionModel?.ClearSelection();
-        foreach (var clone in rootClones)
-        {
-            this.SelectionModel?.SelectItem(clone);
-        }
-
-        if (rootClones.Length > 0)
-        {
-            _ = this.FocusItem(rootClones[0], RequestOrigin.Programmatic);
-        }
-
-        return Array.AsReadOnly(rootClones);
+        return rootClones;
     }
 
     /// <summary>
@@ -181,27 +135,7 @@ public abstract partial class DynamicTreeViewModel
             markList.AddRange(await CollectDescendantsAsync(item).ConfigureAwait(true));
         }
 
-        var eligible = topLevel;
-        if (eligible.Length == 0)
-        {
-            throw new InvalidOperationException("no cuttable items were provided");
-        }
-
-        this.ClearCutMarks();
-
-        foreach (var item in markList)
-        {
-            item.IsCut = true;
-        }
-
-        this.clipboardItems = eligible;
-        this.cutMarkedItems = [.. markList];
-        this.clipboardState = ClipboardState.Cut;
-        this.clipboardSourceParent = eligible[0].Parent;
-        this.clipboardIsValid = true;
-
-        this.RaiseClipboardChanged();
-        return;
+        this.SetClipboard(ClipboardState.Cut, topLevel, [.. markList]);
     }
 
     /// <summary>
@@ -217,22 +151,8 @@ public abstract partial class DynamicTreeViewModel
     /// <returns>A completed task.</returns>
     public Task ClearClipboardAsync()
     {
-        this.ClearCutMarks();
-        this.clipboardItems = [];
-        this.clipboardState = ClipboardState.Empty;
-        this.clipboardSourceParent = null;
-        this.clipboardIsValid = true;
-        this.OnClipboardCleared();
-        this.RaiseClipboardChanged();
+        this.ClearClipboard();
         return Task.CompletedTask;
-    }
-
-    /// <summary>
-    ///     Invoked after the base clipboard is cleared so derived types can clear their own
-    ///     clipboard state (for example, staged node identities).
-    /// </summary>
-    protected virtual void OnClipboardCleared()
-    {
     }
 
     /// <summary>
@@ -253,26 +173,21 @@ public abstract partial class DynamicTreeViewModel
             throw new InvalidOperationException("Clipboard items were deleted from tree");
         }
 
-        // If no explicit target parent was provided, require a focused item and a non-empty selection
-        if (targetParent is null && (this.FocusedItem is null || this.SelectionModel?.IsEmpty != false))
-        {
-            throw new InvalidOperationException("paste requires a focused or selected item when no target is specified");
-        }
-
+        // Without an explicit target the focused item receives the paste, as documented.
         var parent = targetParent ?? this.FocusedItem?.Item
-            ?? throw new InvalidOperationException("cannot paste without a target parent");
+            ?? throw new InvalidOperationException("paste requires a target parent or a focused item");
 
-        if (!this.IsShown(parent))
+        if (!this.CanShowChildrenOf(parent))
         {
             throw new InvalidOperationException("target parent must be shown");
         }
 
-        var targetIndex = insertIndex ?? parent.ChildrenCount;
-        if (this.clipboardState == ClipboardState.Cut && !this.IsValidPasteTarget(parent))
+        if (!this.IsValidPasteTarget(parent))
         {
             return;
         }
 
+        var targetIndex = insertIndex ?? parent.ChildrenCount;
         var pastedItems = this.clipboardState switch
         {
             ClipboardState.Copied => await this.PasteCopiedItemsAsync(parent, targetIndex).ConfigureAwait(true),
@@ -280,19 +195,67 @@ public abstract partial class DynamicTreeViewModel
             _ => throw new InvalidOperationException("unsupported clipboard state"),
         };
 
-        this.clipboardItems = [];
-        this.clipboardState = ClipboardState.Empty;
-        this.clipboardSourceParent = null;
-        this.clipboardIsValid = true;
-        this.RaiseClipboardChanged();
-
-        this.SelectionModel?.ClearSelection();
-        foreach (var item in pastedItems)
+        if (pastedItems.Count == 0)
         {
-            this.SelectItem(new(item));
+            // A vetoed move or insertion pastes nothing; the clipboard stays as it was.
+            return;
         }
 
-        _ = this.FocusItem(pastedItems[0], RequestOrigin.Programmatic);
+        // A copy can be pasted again until the next copy or cut replaces it. A cut is a staged move: once the items
+        // moved, nothing is left to paste, so the clipboard empties.
+        if (this.clipboardState == ClipboardState.Cut)
+        {
+            this.ClearClipboard();
+        }
+
+        this.SelectInsertedItems(pastedItems);
+    }
+
+    /// <summary>
+    ///     Invoked after the base clipboard is cleared so derived types can clear their own
+    ///     clipboard state (for example, staged node identities).
+    /// </summary>
+    protected virtual void OnClipboardCleared()
+    {
+    }
+
+    /// <summary>
+    ///     Stages rows whose payload a derived view model keeps on its own domain clipboard, so the tree reports the
+    ///     clipboard state and dims cut rows like its own copy and cut do.
+    /// </summary>
+    /// <param name="items">The staged rows.</param>
+    /// <param name="cut"><see langword="true" /> to stage a cut and mark the rows as cut; otherwise a copy.</param>
+    protected void StageClipboard(IReadOnlyList<ITreeItem> items, bool cut)
+    {
+        ArgumentNullException.ThrowIfNull(items);
+        this.SetClipboard(cut ? ClipboardState.Cut : ClipboardState.Copied, [.. items], cut ? [.. items] : []);
+    }
+
+    /// <summary>
+    ///     Releases the staged rows and their cut marks while the clipboard state stays, for a derived view model whose
+    ///     domain payload outlives the rows that showed it (for example, when another document replaces them).
+    /// </summary>
+    protected void ReleaseClipboardRows()
+    {
+        if (this.clipboardItems.Length == 0 && this.cutMarkedItems.Length == 0)
+        {
+            return;
+        }
+
+        this.ClearCutMarks();
+        this.clipboardItems = [];
+        this.RaiseClipboardChanged();
+    }
+
+    /// <summary>Empties the clipboard, removes any cut marks and lets a derived type clear its own payload.</summary>
+    protected void ClearClipboard()
+    {
+        this.ClearCutMarks();
+        this.clipboardItems = [];
+        this.clipboardState = ClipboardState.Empty;
+        this.clipboardIsValid = true;
+        this.OnClipboardCleared();
+        this.RaiseClipboardChanged();
     }
 
     private static async Task<List<ITreeItem>> CollectDescendantsAsync(ITreeItem node)
@@ -312,6 +275,7 @@ public abstract partial class DynamicTreeViewModel
     private static IReadOnlyList<ITreeItem> ExtractTopLevelSelection(IReadOnlyCollection<ITreeItem> items)
     {
         var set = new HashSet<ITreeItem>(items);
+        var added = new HashSet<ITreeItem>();
         var result = new List<ITreeItem>(items.Count);
 
         foreach (var item in items)
@@ -329,7 +293,7 @@ public abstract partial class DynamicTreeViewModel
                 p = p.Parent;
             }
 
-            if (!isDescendant && !result.Contains(item))
+            if (!isDescendant && added.Add(item))
             {
                 result.Add(item);
             }
@@ -381,8 +345,25 @@ public abstract partial class DynamicTreeViewModel
         return clones;
     }
 
+    private static bool CanReceiveChildren(ITreeItem item) => item.CanAcceptChildren && (!item.IsLocked || item.IsRoot);
+
+    // A hidden root is not a row, but its children are the top-level rows.
+    private bool CanShowChildrenOf(ITreeItem parent) => parent.IsRoot || this.IsShown(parent);
+
     private bool IsValidPasteTarget(ITreeItem targetParent)
     {
+        if (!CanReceiveChildren(targetParent))
+        {
+            this.LogPasteSkippedTargetRejectsChildren(targetParent);
+            return false;
+        }
+
+        // Copies never move a source, so only a cut can paste into itself or one of its descendants.
+        if (this.clipboardState != ClipboardState.Cut)
+        {
+            return true;
+        }
+
         foreach (var item in this.clipboardItems)
         {
             if (ReferenceEquals(item, targetParent))
@@ -407,6 +388,53 @@ public abstract partial class DynamicTreeViewModel
         return true;
     }
 
+    /// <summary>
+    ///     Replaces the selection with freshly inserted items as one selection transaction: the first item that the
+    ///     selection mode and co-selection policy accept becomes the active item and the focus, and
+    ///     <see cref="SelectionSettled" /> is raised once.
+    /// </summary>
+    /// <param name="items">The inserted or moved items.</param>
+    private void SelectInsertedItems(IReadOnlyList<ITreeItem> items)
+    {
+        this.WithSelectionBatch(() =>
+        {
+            this.SetActiveItem(item: null);
+            if (this.SelectionModel is not { } selection)
+            {
+                return;
+            }
+
+            selection.ClearSelection();
+
+            var chosen = new List<ITreeItem>(items.Count);
+            foreach (var item in items)
+            {
+                if (!this.shownItems.Contains(item))
+                {
+                    continue;
+                }
+
+                if (chosen.Count == 0 || (this.SelectionMode == SelectionMode.Multiple && this.AllowsCoSelection(item, chosen)))
+                {
+                    chosen.Add(item);
+                }
+            }
+
+            if (chosen.Count == 0)
+            {
+                return;
+            }
+
+            foreach (var item in chosen)
+            {
+                selection.SelectItem(item);
+            }
+
+            this.SetActiveItem(chosen[0]);
+            _ = this.FocusItem(chosen[0], RequestOrigin.Programmatic);
+        });
+    }
+
     private void InvalidateClipboardDueToMutation()
     {
         if (this.clipboardState == ClipboardState.Empty || !this.clipboardIsValid)
@@ -421,6 +449,12 @@ public abstract partial class DynamicTreeViewModel
 
     private void InvalidateClipboardIfSourcesAffected(IEnumerable<ITreeItem> affectedItems)
     {
+        // Pasting a cut moves its own sources: that is the clipboard being consumed, not mutated.
+        if (this.isPastingCutItems || this.clipboardState == ClipboardState.Empty || !this.clipboardIsValid)
+        {
+            return;
+        }
+
         var affected = affectedItems.ToHashSet();
         foreach (var source in this.clipboardItems)
         {
@@ -435,7 +469,24 @@ public abstract partial class DynamicTreeViewModel
         }
     }
 
-    protected void RaiseClipboardChanged()
+    private void SetClipboard(ClipboardState state, ITreeItem[] items, ITreeItem[] cutMarks)
+    {
+        this.ClearCutMarks();
+
+        foreach (var item in cutMarks)
+        {
+            item.IsCut = true;
+        }
+
+        this.clipboardItems = items;
+        this.cutMarkedItems = cutMarks;
+        this.clipboardState = state;
+        this.clipboardIsValid = true;
+
+        this.RaiseClipboardChanged();
+    }
+
+    private void RaiseClipboardChanged()
         => this.ClipboardContentChanged?.Invoke(
             this,
             new ClipboardContentChangedEventArgs
@@ -445,35 +496,15 @@ public abstract partial class DynamicTreeViewModel
                 IsValid = this.clipboardIsValid,
             });
 
-    protected void ClearCutMarks()
+    // Marks are tracked on their own, not by state, so a cut whose state changed first still loses its marks.
+    private void ClearCutMarks()
     {
-        if (this.clipboardState != ClipboardState.Cut)
-        {
-            return;
-        }
-
         foreach (var item in this.cutMarkedItems)
         {
             item.IsCut = false;
         }
 
         this.cutMarkedItems = [];
-    }
-
-    private ITreeItem[] EnsureDistinct(IReadOnlyCollection<ITreeItem> items)
-    {
-        _ = this.clipboardState;
-        var set = new HashSet<ITreeItem>();
-        var result = new List<ITreeItem>();
-        foreach (var item in items)
-        {
-            if (set.Add(item))
-            {
-                result.Add(item);
-            }
-        }
-
-        return [.. result];
     }
 
     private void ValidateItemsAreShown(IEnumerable<ITreeItem> items)
@@ -487,108 +518,95 @@ public abstract partial class DynamicTreeViewModel
         }
     }
 
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1859:Use concrete types when possible for improved performance", Justification = "keep read-only")]
-    private IReadOnlyList<ITreeItem> FilterClonableItems(IEnumerable<ITreeItem> items)
+    /// <summary>
+    ///     Keeps the clonable items whose copied ancestors are all clonable: a non-clonable item drops its whole
+    ///     copied subtree, since its descendants would otherwise paste as unrelated extra roots.
+    /// </summary>
+    /// <param name="items">The copied items, including descendants.</param>
+    /// <returns>The items to place in the clipboard.</returns>
+    private List<ITreeItem> FilterClonableSubtrees(IReadOnlyList<ITreeItem> items)
     {
-        var copyable = new List<ITreeItem>();
+        var skipped = new HashSet<ITreeItem>();
         foreach (var item in items)
         {
-            if (item is ICanBeCloned)
+            if (item is not ICanBeCloned)
+            {
+                _ = skipped.Add(item);
+                this.LogCopySkippedNonClonableItem(item);
+            }
+        }
+
+        var copyable = new List<ITreeItem>(items.Count - skipped.Count);
+        foreach (var item in items)
+        {
+            if (skipped.Contains(item))
+            {
+                continue;
+            }
+
+            var hasSkippedAncestor = false;
+            for (var ancestor = item.Parent; ancestor is not null && !hasSkippedAncestor; ancestor = ancestor.Parent)
+            {
+                hasSkippedAncestor = skipped.Contains(ancestor);
+            }
+
+            if (!hasSkippedAncestor)
             {
                 copyable.Add(item);
-            }
-            else
-            {
-                this.LogCopySkippedNonClonableItem(item);
             }
         }
 
         return copyable;
     }
 
-    private async Task<List<ITreeItem>> PasteCopiedItemsAsync(ITreeItem targetParent, int insertIndex)
+    // The clipboard holds each copied root followed by its descendants, so its top-level items are the roots to paste.
+    private Task<IReadOnlyList<ITreeItem>> PasteCopiedItemsAsync(ITreeItem targetParent, int insertIndex)
+        => this.InsertClonesAsync(ExtractTopLevelSelection(this.clipboardItems), this.clipboardItems, targetParent, insertIndex);
+
+    /// <summary>
+    ///     Clones the subtrees of <paramref name="roots" /> and inserts the root clones as one transaction: the owner
+    ///     approves every root first, and a later refusal rolls back the clones already inserted.
+    /// </summary>
+    /// <param name="roots">The source roots, in insertion order.</param>
+    /// <param name="originals">The roots and their descendants, each parent listed before its children.</param>
+    /// <param name="targetParent">The destination parent.</param>
+    /// <param name="insertIndex">The destination child insertion index.</param>
+    /// <returns>The inserted root clones, or an empty list when the insertion was refused.</returns>
+    private async Task<IReadOnlyList<ITreeItem>> InsertClonesAsync(IReadOnlyList<ITreeItem> roots, IReadOnlyList<ITreeItem> originals, ITreeItem targetParent, int insertIndex)
     {
-        var clones = await this.CloneClipboardItemsAsync().ConfigureAwait(true);
-        var nextIndex = insertIndex;
-        foreach (var clone in clones)
+        var clones = await CloneSubtreesAsync(originals).ConfigureAwait(true);
+        var rootClones = roots.Select(root => clones[root]).ToArray();
+        if (!await this.DisplayHelper.InsertItemsAsync(rootClones, targetParent, insertIndex, this.InsertItemAsync).ConfigureAwait(true))
         {
-            await this.InsertItemAsync(clone, targetParent, nextIndex).ConfigureAwait(true);
-            nextIndex++;
-            if (clone.IsExpanded)
-            {
-                await this.RestoreExpandedChildrenAsync(clone).ConfigureAwait(true);
-            }
+            return [];
         }
 
-        return clones;
+        foreach (var clone in rootClones.Where(static item => item.IsExpanded))
+        {
+            await this.RestoreExpandedChildrenAsync(clone).ConfigureAwait(true);
+        }
+
+        return Array.AsReadOnly(rootClones);
     }
 
-    private async Task<List<ITreeItem>> CloneClipboardItemsAsync()
+    private async Task<IReadOnlyList<ITreeItem>> PasteCutItemsAsync(ITreeItem targetParent, int insertIndex)
     {
-        var map = new Dictionary<ITreeItem, ITreeItem>(this.clipboardItems.Length);
-        foreach (var original in this.clipboardItems)
-        {
-            if (original is not ICanBeCloned customClone)
-            {
-                throw new InvalidOperationException($"type '{original.GetType()}' must implement {nameof(ICanBeCloned)} to support copy/paste");
-            }
+        var moved = false;
+        void OnMoved(object? sender, TreeItemsMovedEventArgs args) => moved = true;
 
-            map[original] = customClone.CloneSelf();
+        this.isPastingCutItems = true;
+        this.ItemMoved += OnMoved;
+        try
+        {
+            await this.MoveItemsAsync(this.clipboardItems, targetParent, insertIndex).ConfigureAwait(true);
+        }
+        finally
+        {
+            this.ItemMoved -= OnMoved;
+            this.isPastingCutItems = false;
         }
 
-        foreach (var original in this.clipboardItems)
-        {
-            if (original.Parent is not null && map.TryGetValue(original.Parent, out var parentClone))
-            {
-                if (parentClone is TreeItemAdapter adapter)
-                {
-                    await adapter.AddChildAsync(map[original]).ConfigureAwait(true);
-                }
-                else
-                {
-                    throw new InvalidOperationException("parent clone does not support children");
-                }
-            }
-        }
-
-        return [.. map.Where(kvp => kvp.Key.Parent is null || !map.ContainsKey(kvp.Key.Parent)).Select(kvp => kvp.Value)];
-    }
-
-    private async Task<List<ITreeItem>> PasteCutItemsAsync(ITreeItem targetParent, int insertIndex)
-    {
-        this.EnsureNoCycles(targetParent);
-        await this.MoveItemsAsync(this.clipboardItems, targetParent, insertIndex).ConfigureAwait(true);
-
-        // Clear cut visual flags for all marked items (top-level parents + descendants)
-        foreach (var item in this.cutMarkedItems)
-        {
-            item.IsCut = false;
-        }
-
-        this.cutMarkedItems = [];
-
-        return [.. this.clipboardItems];
-    }
-
-    private void EnsureNoCycles(ITreeItem targetParent)
-    {
-        foreach (var item in this.clipboardItems)
-        {
-            if (ReferenceEquals(item, targetParent))
-            {
-                throw new InvalidOperationException("cannot paste into source item");
-            }
-
-            var current = targetParent.Parent;
-            while (current is not null)
-            {
-                if (ReferenceEquals(current, item))
-                {
-                    throw new InvalidOperationException("cannot paste into a descendant of the source item");
-                }
-
-                current = current.Parent;
-            }
-        }
+        // A handler that vetoed the move changed nothing, so the cut stays staged.
+        return moved ? Array.AsReadOnly(this.clipboardItems) : [];
     }
 }

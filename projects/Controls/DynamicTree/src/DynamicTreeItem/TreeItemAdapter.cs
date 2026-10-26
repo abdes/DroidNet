@@ -46,16 +46,17 @@ public abstract partial class TreeItemAdapter : ObservableObject, ITreeItem, ILo
     /// <summary>
     ///     Represents the internal collection of child items in the tree. This collection is lazily initialized.
     /// </summary>
-    /// <seealso cref="childrenLazy" />
+    /// <seealso cref="childrenTask" />
     /// <seealso cref="InitializeChildrenCollectionAsync" />
     private readonly ObservableCollection<ITreeItem> children = [];
 
-    /// <summary>
-    ///     Lazily initialized read-only view of the collection of child items.
-    /// </summary>
-    private readonly Lazy<Task<ReadOnlyObservableCollection<ITreeItem>>> childrenLazy;
-
     private readonly bool isRoot;
+
+    /// <summary>
+    ///     The load of the collection of child items, started on first access. A load that failed or was canceled
+    ///     is not kept: the next access starts it again.
+    /// </summary>
+    private Task<ReadOnlyObservableCollection<ITreeItem>>? childrenTask;
 
     private bool suspendChildrenCollectionNotifications;
 
@@ -88,13 +89,7 @@ public abstract partial class TreeItemAdapter : ObservableObject, ITreeItem, ILo
     {
         this.IsRoot = isRoot;
 
-        this.childrenLazy
-            = new Lazy<Task<ReadOnlyObservableCollection<ITreeItem>>>(this.InitializeChildrenCollectionAsync);
-        this.children.CollectionChanged += (_, args) =>
-        {
-            this.OnPropertyChanged(nameof(this.ChildrenCount));
-            this.ChildrenCollectionChanged?.Invoke(this, args);
-        };
+        this.children.CollectionChanged += (_, _) => this.OnPropertyChanged(nameof(this.ChildrenCount));
 
         this.Depth = isHidden ? -1 : 0;
     }
@@ -182,14 +177,11 @@ public abstract partial class TreeItemAdapter : ObservableObject, ITreeItem, ILo
             field = value;
             this.OnPropertyChanged();
 
-            if (this.childrenLazy.IsValueCreated)
+            foreach (var child in this.children)
             {
-                foreach (var child in this.children)
+                if (child is TreeItemAdapter childAdapter)
                 {
-                    if (child is TreeItemAdapter childAdapter)
-                    {
-                        childAdapter.Depth = field + 1;
-                    }
+                    childAdapter.Depth = field + 1;
                 }
             }
         }
@@ -225,15 +217,24 @@ public abstract partial class TreeItemAdapter : ObservableObject, ITreeItem, ILo
     ///     loading
     ///     of the collection items through the <seealso cref="LoadChildren" />.
     /// </remarks>
-    public Task<ReadOnlyObservableCollection<ITreeItem>> Children => this.childrenLazy.Value;
+    public Task<ReadOnlyObservableCollection<ITreeItem>> Children
+    {
+        get
+        {
+            if (this.childrenTask is null or { IsFaulted: true } or { IsCanceled: true })
+            {
+                this.childrenTask = this.InitializeChildrenCollectionAsync();
+            }
+
+            return this.childrenTask;
+        }
+    }
 
     /// <inheritdoc />
-    public bool AreChildrenLoaded
-        => this.childrenLazy.IsValueCreated
-            && this.childrenLazy.Value.IsCompletedSuccessfully;
+    public bool AreChildrenLoaded => this.childrenTask is { IsCompletedSuccessfully: true };
 
     /// <inheritdoc />
-    public int ChildrenCount => this.childrenLazy.IsValueCreated
+    public int ChildrenCount => this.AreChildrenLoaded
         ? this.children.Count
         : this.DoGetChildrenCount();
 
@@ -253,8 +254,9 @@ public abstract partial class TreeItemAdapter : ObservableObject, ITreeItem, ILo
 
     /// <inheritdoc />
     /// <remarks>
-    ///     Default tree item equality is reference equality. Derived types may override to implement
-    ///     a stable identity-based equality.
+    ///     Default tree item equality is reference equality. A derived type may override it to implement a
+    ///     stable identity-based equality, and must then also override <see cref="GetHashCode" /> so that
+    ///     equal items have equal hash codes; the tree's lookups rely on both.
     /// </remarks>
     public virtual bool Equals(ITreeItem? other) => ReferenceEquals(this, other);
 
@@ -275,14 +277,7 @@ public abstract partial class TreeItemAdapter : ObservableObject, ITreeItem, ILo
     {
         this.CheckCanAddItem(child);
 
-        await this.ManipulateChildrenAsync(this.AddChildInternal, child).ConfigureAwait(false);
-
-        if (!this.suspendChildrenCollectionNotifications)
-        {
-            this.ChildrenCollectionChanged?.Invoke(
-                this,
-                new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Add, child, this.ChildrenCount - 1));
-        }
+        await this.ManipulateChildrenAsync(this.AddChildInternal, child).ConfigureAwait(true);
     }
 
     /// <inheritdoc />
@@ -298,16 +293,10 @@ public abstract partial class TreeItemAdapter : ObservableObject, ITreeItem, ILo
                 {
                     this.children.Insert(index, item);
                     item.Parent = this;
+                    this.NotifyChildrenChanged(new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Add, item, index));
                 },
                 child)
-            .ConfigureAwait(false);
-
-        if (!this.suspendChildrenCollectionNotifications)
-        {
-            this.ChildrenCollectionChanged?.Invoke(
-                this,
-                new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Add, child, index));
-        }
+            .ConfigureAwait(true);
     }
 
     /// <inheritdoc />
@@ -316,29 +305,30 @@ public abstract partial class TreeItemAdapter : ObservableObject, ITreeItem, ILo
     /// </exception>
     public async Task<int> RemoveChildAsync(ITreeItem child)
     {
-        var removeAtIndex = this.children.IndexOf(child);
-        if (removeAtIndex == -1)
+        if (this.children.IndexOf(child) == -1)
         {
             return -1;
         }
 
+        var removedAt = -1;
         await this.ManipulateChildrenAsync(
                 (item) =>
                 {
-                    this.children.RemoveAt(removeAtIndex);
+                    // The position is taken here, after the awaits, so it cannot be stale.
+                    removedAt = this.children.IndexOf(item);
+                    if (removedAt == -1)
+                    {
+                        return;
+                    }
+
+                    this.children.RemoveAt(removedAt);
                     item.Parent = null;
+                    this.NotifyChildrenChanged(new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Remove, item, removedAt));
                 },
                 child)
-            .ConfigureAwait(false);
+            .ConfigureAwait(true);
 
-        if (!this.suspendChildrenCollectionNotifications)
-        {
-            this.ChildrenCollectionChanged?.Invoke(
-                this,
-                new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Remove, child, removeAtIndex));
-        }
-
-        return removeAtIndex;
+        return removedAt;
     }
 
     /// <inheritdoc />
@@ -398,7 +388,11 @@ public abstract partial class TreeItemAdapter : ObservableObject, ITreeItem, ILo
     /// <summary>
     ///     Remove all child elements from the collection of children.
     /// </summary>
-    protected void ClearChildren() => this.children.Clear();
+    protected void ClearChildren()
+    {
+        this.children.Clear();
+        this.NotifyChildrenChanged(new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Reset));
+    }
 
     /// <summary>
     ///     Adds a child item to the children collection synchronously. Used internally, and by derived classes, to populate
@@ -412,6 +406,7 @@ public abstract partial class TreeItemAdapter : ObservableObject, ITreeItem, ILo
     {
         this.children.Add(item);
         item.Parent = this;
+        this.NotifyChildrenChanged(new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Add, item, this.children.Count - 1));
     }
 
     /// <summary>
@@ -420,11 +415,19 @@ public abstract partial class TreeItemAdapter : ObservableObject, ITreeItem, ILo
     /// <param name="item">The child item to remove.</param>
     protected void RemoveChildInternal(TreeItemAdapter item)
     {
-        _ = this.children.Remove(item);
+        var index = this.children.IndexOf(item);
+        if (index == -1)
+        {
+            return;
+        }
+
+        this.children.RemoveAt(index);
         if (ReferenceEquals(item.Parent, this))
         {
             item.Parent = null;
         }
+
+        this.NotifyChildrenChanged(new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Remove, item, index));
     }
 
     private void CheckCanAddItem(ITreeItem child)
@@ -442,17 +445,36 @@ public abstract partial class TreeItemAdapter : ObservableObject, ITreeItem, ILo
     }
 
     /// <summary>
+    ///     Raises <see cref="ChildrenCollectionChanged" /> for a completed change, unless the children are being loaded.
+    /// </summary>
+    /// <param name="args">The change, raised after the child's parent and depth are set.</param>
+    /// <remarks>
+    ///     This is the only place that raises the event for a change of the children, so a change is reported once.
+    ///     While the children load, a single Reset is raised when the load completes instead.
+    /// </remarks>
+    private void NotifyChildrenChanged(NotifyCollectionChangedEventArgs args)
+    {
+        if (!this.suspendChildrenCollectionNotifications)
+        {
+            this.ChildrenCollectionChanged?.Invoke(this, args);
+        }
+    }
+
+    /// <summary>
     ///     Manipulates the child items asynchronously.
     /// </summary>
     /// <param name="action">The action to perform on the child item.</param>
     /// <param name="item">The child item to manipulate.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
-    /// <exception cref="ArgumentException">Thrown when the item does not derive from <see cref="TreeItemAdapter" />.</exception>
+    /// <exception cref="ArgumentException">
+    ///     Thrown when the item does not derive from <see cref="TreeItemAdapter" />. Only an adapter lets its
+    ///     parent assign it, so no other implementation can be a child of an adapter.
+    /// </exception>
     private async Task ManipulateChildrenAsync(Action<TreeItemAdapter> action, ITreeItem item)
     {
         if (item is TreeItemAdapter adapter)
         {
-            _ = await this.Children.ConfigureAwait(false);
+            _ = await this.Children.ConfigureAwait(true);
             action(adapter);
         }
         else
@@ -467,25 +489,41 @@ public abstract partial class TreeItemAdapter : ObservableObject, ITreeItem, ILo
     ///     Initializes the collection of child items asynchronously.
     /// </summary>
     /// <returns>A task representing the asynchronous operation, holding the newly created children collection.</returns>
+    /// <remarks>
+    ///     When loading fails, the items it added are released again, so the next access can load from scratch.
+    /// </remarks>
     private async Task<ReadOnlyObservableCollection<ITreeItem>> InitializeChildrenCollectionAsync()
     {
         Debug.Assert(
             this.children.Count == 0,
             "Ensure that the children collection is loaded before you add things to it");
 
+        this.suspendChildrenCollectionNotifications = true;
         try
         {
-            this.suspendChildrenCollectionNotifications = true;
-            await this.LoadChildren().ConfigureAwait(false);
+            await this.LoadChildren().ConfigureAwait(true);
+        }
+        catch
+        {
+            foreach (var child in this.children)
+            {
+                if (child is TreeItemAdapter adapter && ReferenceEquals(adapter.Parent, this))
+                {
+                    adapter.Parent = null;
+                }
+            }
 
-            this.ChildrenCollectionChanged?.Invoke(
-                this,
-                new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Reset));
+            this.children.Clear();
+            throw;
         }
         finally
         {
             this.suspendChildrenCollectionNotifications = false;
         }
+
+        this.ChildrenCollectionChanged?.Invoke(
+            this,
+            new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Reset));
 
         return new ReadOnlyObservableCollection<ITreeItem>(this.children);
     }

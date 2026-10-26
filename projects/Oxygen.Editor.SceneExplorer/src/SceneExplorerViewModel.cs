@@ -965,10 +965,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     /// <param name="reason">The plain-language explanation shown with the warning.</param>
     private void InvalidateClipboard(string reason)
     {
-        this.OnClipboardCleared();
-        this.ClipboardStateStore = ClipboardState.Empty;
-        this.ClearCutMarks();
-        this.RaiseClipboardChanged();
+        this.ClearClipboard();
 
         if (this.operationResults is not { } publisher || this.statusReducer is not { } reducer)
         {
@@ -1120,8 +1117,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     {
         if (!ReferenceEquals(previousScene, loadedScene))
         {
-            this.ClearCutMarks();
-            this.ClipboardItemStore = [];
+            this.ReleaseClipboardRows();
         }
 
         if (this.clipboard.Payload is not null && !this.ClipboardLifetimeIsCurrent())

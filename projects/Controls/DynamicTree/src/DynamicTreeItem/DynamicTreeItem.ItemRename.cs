@@ -10,6 +10,8 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Documents;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
+using Windows.Foundation;
 using Windows.System;
 
 namespace DroidNet.Controls;
@@ -20,6 +22,11 @@ namespace DroidNet.Controls;
 /// </summary>
 public partial class DynamicTreeItem
 {
+    // The TextBox template's states for its clear button.
+    private const string EditorButtonStatesGroup = "ButtonStates";
+    private const string EditorButtonVisibleState = "ButtonVisible";
+    private const string EditorButtonCollapsedState = "ButtonCollapsed";
+    private VisualStateGroup? editorButtonStates;
     private Popup? inPlaceRenamePart;
     private bool isContextMenuOpen;
     private ContentPresenter? itemContentPart;
@@ -38,7 +45,6 @@ public partial class DynamicTreeItem
     /// <returns><see langword="true"/> if rename UI was opened; otherwise <see langword="false"/>.</returns>
     public bool BeginRename()
     {
-        this.UpdateAncestorReference();
         if (this.itemNameTextBlock is null || this.itemNameTextBox is null || this.ItemAdapter is null || this.renameTarget is not null)
         {
             return false;
@@ -55,14 +61,8 @@ public partial class DynamicTreeItem
         this.itemNameTextBox.Visibility = Visibility.Visible;
         this.itemNameTextBox.SelectAll();
 
-        // Open the rename popup while the label is still visible so it anchors to the label's
-        // position; only then hide the label underneath it.
-#pragma warning disable IDE0031 // cannot be simplified
-        if (this.inPlaceRenamePart != null)
-        {
-            this.inPlaceRenamePart.IsOpen = true;
-        }
-#pragma warning restore IDE0031
+        // Open the rename popup over the label while the label is still laid out; only then hide the label.
+        this.OpenRenameOverLabel(this.itemNameTextBlock, this.itemNameTextBox);
         this.itemNameTextBlock.Visibility = Visibility.Collapsed;
 
         _ = this.itemNameTextBox.Focus(FocusState.Programmatic);
@@ -91,6 +91,10 @@ public partial class DynamicTreeItem
 
     /// <summary>Commits the current draft and ignores completions belonging to an ended rename session.</summary>
     /// <returns>A task that completes when the commit operation finishes.</returns>
+    [SuppressMessage(
+        "Design",
+        "CA1031:Do not catch general exception types",
+        Justification = "any owner failure is logged and shown in the editor; none may escape a fire-and-forget commit")]
     internal async Task CommitRenameDraftAsync()
     {
         Debug.Assert(
@@ -129,8 +133,10 @@ public partial class DynamicTreeItem
                 this.ShowRenameError(editor, result.ErrorMessage);
             }
         }
-        catch (Exception exception) when (exception is InvalidOperationException or ArgumentException)
+        catch (Exception exception) when (exception is not OperationCanceledException)
         {
+            // The owner's failure is reported to the user in the editor and must not escape a fire-and-forget commit.
+            this.LogRenameFailed(exception);
             if (generation != this.renameGeneration || !ReferenceEquals(this.renameTarget, target)
                 || !ReferenceEquals(this.itemNameTextBox, editor))
             {
@@ -174,6 +180,8 @@ public partial class DynamicTreeItem
         }
 
         this.itemNameTextBlock?.DoubleTapped -= this.StartRenameItem;
+        this.editorButtonStates?.CurrentStateChanged -= this.EditorButtonStates_CurrentStateChanged;
+        this.editorButtonStates = null;
 
         this.itemContentPart = this.GetTemplateChild(ContentPresenterPart) as ContentPresenter;
         if (this.itemContentPart is null)
@@ -232,6 +240,66 @@ public partial class DynamicTreeItem
         }
     }
 
+    /// <summary>
+    ///     Opens the rename popup so that the edited text sits exactly where the label's text was: the first character
+    ///     of the text box is placed on the first character of the label, whatever the box's padding and chrome.
+    /// </summary>
+    /// <param name="label">The label being renamed, still laid out.</param>
+    /// <param name="editor">The rename text box, already holding the label's text.</param>
+    private void OpenRenameOverLabel(TextBlock label, TextBox editor)
+    {
+        if (this.inPlaceRenamePart is not { } popup)
+        {
+            return;
+        }
+
+        // Both controls draw their text from the top-left of their text area, which for the label is the label itself
+        // and for the text box is inside its border and padding. Placing the one corner on the other overlays the
+        // text; the text box's character rectangles are not used, as they report its whole line box, not the text.
+        var labelOrigin = label.TransformToVisual(popup).TransformPoint(default);
+
+        popup.HorizontalOffset = 0;
+        popup.VerticalOffset = 0;
+        popup.IsOpen = true;
+        editor.UpdateLayout();
+        this.SuppressClearButton(editor);
+
+        var textAreaCorner = new Point(editor.BorderThickness.Left + editor.Padding.Left, editor.BorderThickness.Top + editor.Padding.Top);
+        var editorOrigin = popup.Child is { } content ? editor.TransformToVisual(content).TransformPoint(textAreaCorner) : textAreaCorner;
+
+        popup.HorizontalOffset = labelOrigin.X - editorOrigin.X;
+        popup.VerticalOffset = labelOrigin.Y - editorOrigin.Y;
+    }
+
+    /// <summary>
+    ///     Keeps the TextBox clear button collapsed: a rename edits the name in place, and Escape cancels it. The
+    ///     TextBox shows the button on its own when it has focus, text and enough width, so the button is held in its
+    ///     collapsed state whenever the TextBox moves it to visible.
+    /// </summary>
+    /// <param name="editor">The rename text box, with its template applied.</param>
+    private void SuppressClearButton(TextBox editor)
+    {
+        if (this.editorButtonStates is null
+            && VisualTreeHelper.GetChildrenCount(editor) > 0
+            && VisualTreeHelper.GetChild(editor, 0) is FrameworkElement templateRoot
+            && VisualStateManager.GetVisualStateGroups(templateRoot)
+                .FirstOrDefault(static group => string.Equals(group.Name, EditorButtonStatesGroup, StringComparison.Ordinal)) is { } buttonStates)
+        {
+            this.editorButtonStates = buttonStates;
+            buttonStates.CurrentStateChanged += this.EditorButtonStates_CurrentStateChanged;
+        }
+
+        _ = VisualStateManager.GoToState(editor, EditorButtonCollapsedState, useTransitions: false);
+    }
+
+    private void EditorButtonStates_CurrentStateChanged(object? sender, VisualStateChangedEventArgs args)
+    {
+        if (string.Equals(args.NewState?.Name, EditorButtonVisibleState, StringComparison.Ordinal) && this.itemNameTextBox is { } editor)
+        {
+            _ = VisualStateManager.GoToState(editor, EditorButtonCollapsedState, useTransitions: false);
+        }
+    }
+
     private void RenameTextBox_LostFocus(object sender, RoutedEventArgs e)
     {
         // Do not commit the rename if we're losing focus because of the TextBox
@@ -251,11 +319,8 @@ public partial class DynamicTreeItem
         }
     }
 
-    [SuppressMessage(
-        "Design",
-        "CA1031:Do not catch general exception types",
-        Justification = "the visual state is used to indicate whether the label is valid or not")]
-    private async void TryCommitRename() => await this.CommitRenameDraftAsync().ConfigureAwait(true);
+    // CommitRenameDraftAsync reports its own failures, so the returned task needs no observer.
+    private void TryCommitRename() => _ = this.CommitRenameDraftAsync();
 
     private void StartRenameItem(object sender, DoubleTappedRoutedEventArgs e)
     {

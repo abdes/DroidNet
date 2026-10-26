@@ -2,10 +2,12 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Collections.Specialized;
 using System.ComponentModel;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation.Peers;
 
 namespace DroidNet.Controls;
 
@@ -27,26 +29,26 @@ public partial class DynamicTreeItem
             (d, e) => ((DynamicTreeItem)d).OnItemAdapterChanged((ITreeItem)e.OldValue, (ITreeItem)e.NewValue)));
 
     /// <summary>
-    ///     Identifies the <see cref="ILoggerFactory" /> dependency property. Hosts can provide an
-    ///     <see cref="ILoggerFactory" /> to enable logging for NumberBox instances.
+    ///     Identifies the <see cref="LoggerFactory" /> dependency property. Hosts can provide an
+    ///     <see cref="ILoggerFactory" /> to enable logging for <see cref="DynamicTreeItem" /> instances.
     /// </summary>
     public static readonly DependencyProperty LoggerFactoryProperty = DependencyProperty.Register(
-        nameof(ILoggerFactory),
+        nameof(LoggerFactory),
         typeof(ILoggerFactory),
         typeof(DynamicTreeItem),
         new PropertyMetadata(defaultValue: null, (d, e) => ((DynamicTreeItem)d).OnLoggerFactoryChanged((ILoggerFactory?)e.NewValue)));
 
     /// <summary>Identifies the optional trailing-content object.</summary>
     public static readonly DependencyProperty TrailingContentProperty = DependencyProperty.Register(
-        nameof(TrailingContent), typeof(object), typeof(DynamicTreeItem), new PropertyMetadata(defaultValue: null, (d, _) => ((DynamicTreeItem)d).UpdateTrailingContentPresenter()));
+        nameof(TrailingContent), typeof(object), typeof(DynamicTreeItem), new PropertyMetadata(defaultValue: null, (d, _) => ((DynamicTreeItem)d).OnTrailingContentPropertyChanged()));
 
     /// <summary>Identifies the optional trailing-content template.</summary>
     public static readonly DependencyProperty TrailingContentTemplateProperty = DependencyProperty.Register(
-        nameof(TrailingContentTemplate), typeof(DataTemplate), typeof(DynamicTreeItem), new PropertyMetadata(defaultValue: null, (d, _) => ((DynamicTreeItem)d).UpdateTrailingContentPresenter()));
+        nameof(TrailingContentTemplate), typeof(DataTemplate), typeof(DynamicTreeItem), new PropertyMetadata(defaultValue: null, (d, _) => ((DynamicTreeItem)d).OnTrailingContentPropertyChanged()));
 
     /// <summary>Identifies the optional shared trailing-content column width.</summary>
     public static readonly DependencyProperty TrailingContentWidthProperty = DependencyProperty.Register(
-        nameof(TrailingContentWidth), typeof(double), typeof(DynamicTreeItem), new PropertyMetadata(defaultValue: 0d, (d, _) => ((DynamicTreeItem)d).UpdateTrailingContentPresenter()));
+        nameof(TrailingContentWidth), typeof(double), typeof(DynamicTreeItem), new PropertyMetadata(defaultValue: 0d, (d, e) => ((DynamicTreeItem)d).OnTrailingContentWidthChanged(e)));
 
     /// <summary>Identifies the minimum height of the rendered item row.</summary>
     public static readonly DependencyProperty ItemRowHeightProperty = DependencyProperty.Register(
@@ -138,54 +140,57 @@ public partial class DynamicTreeItem
     /// <param name="oldItem">The previous value of the <see cref="ItemAdapter" /> property.</param>
     /// <param name="newItem">The new value of the <see cref="ItemAdapter" /> property.</param>
     /// <remarks>
-    ///     This method is called whenever the <see cref="ItemAdapter" /> property changes. It
-    ///     un-registers event handlers from the old item adapter and registers event handlers with the
-    ///     new item adapter.
+    ///     This method is called whenever the <see cref="ItemAdapter" /> property changes. The row stops
+    ///     observing the item it observed, which may differ from <paramref name="oldItem" /> while
+    ///     observation is suspended, and observes the new item adapter.
     /// </remarks>
     protected virtual void OnItemAdapterChanged(ITreeItem? oldItem, ITreeItem? newItem)
     {
-        this.UpdateAncestorReference();
+        _ = oldItem; // the row follows the item it observes, which may differ from oldItem while it is suspended
         if (this.itemNameTextBox?.Visibility == Visibility.Visible)
         {
             this.CancelRename();
         }
 
-        // Un-register event handlers from the old item adapter if any
-        if (oldItem is not null)
+        this.ObserveItem(newItem);
+
+        // A recycled or unloaded row refreshes when it is attached or loaded again.
+        if (this.isObservationSuspended)
         {
-            oldItem.ChildrenCollectionChanged -= this.TreeItem_ChildrenCollectionChanged;
-            if (oldItem is INotifyPropertyChanged oldNotifier)
-            {
-                oldNotifier.PropertyChanged -= this.ItemAdapter_OnPropertyChanged;
-            }
+            return;
         }
 
-        // Update visual state based on the current value of IsSelected in the new TreeItem and
-        // handle future changes to property values in the new TreeItem
-        if (newItem is not null)
-        {
-            this.UpdateExpansionVisualState();
-            this.UpdateHasChildrenVisualState();
-            this.UpdateSelectionVisualState(newItem.IsSelected);
-            this.UpdateCutVisualState(newItem.IsCut);
-            this.UpdateDimVisualState();
-            newItem.ChildrenCollectionChanged += this.TreeItem_ChildrenCollectionChanged;
-            if (newItem is INotifyPropertyChanged newNotifier)
-            {
-                newNotifier.PropertyChanged += this.ItemAdapter_OnPropertyChanged;
-            }
-        }
-        else
-        {
-            this.UpdateCutVisualState(isCut: false);
-            this.UpdateDimVisualState();
-        }
-
-        this.OnTrailingContentTemplateSelectorChanged();
-        this.UpdateTrailingContentPresenter();
-        this.BindItemName();
+        this.RefreshItemPresentation();
+        this.UpdateTrailingContentFromTree();
     }
 
+    private void ObserveItem(ITreeItem? item)
+    {
+        if (this.observedItem is { } previous)
+        {
+            previous.ChildrenCollectionChanged -= this.TreeItem_ChildrenCollectionChanged;
+            if (previous is INotifyPropertyChanged previousNotifier)
+            {
+                previousNotifier.PropertyChanged -= this.ItemAdapter_OnPropertyChanged;
+            }
+
+            this.observedItem = null;
+        }
+
+        if (item is null || this.isObservationSuspended)
+        {
+            return;
+        }
+
+        this.observedItem = item;
+        item.ChildrenCollectionChanged += this.TreeItem_ChildrenCollectionChanged;
+        if (item is INotifyPropertyChanged notifier)
+        {
+            notifier.PropertyChanged += this.ItemAdapter_OnPropertyChanged;
+        }
+    }
+
+    // Items may raise from any thread; the row's visuals change on its own thread only.
     private void ItemAdapter_OnPropertyChanged(object? sender, PropertyChangedEventArgs args)
     {
         if (sender is not ITreeItem adapter)
@@ -193,32 +198,107 @@ public partial class DynamicTreeItem
             return;
         }
 
-        if (string.Equals(args.PropertyName, nameof(ITreeItem.IsSelected), StringComparison.Ordinal))
+        var propertyName = args.PropertyName;
+        if (this.DispatcherQueue.HasThreadAccess)
+        {
+            this.ApplyItemPropertyChange(adapter, propertyName);
+            return;
+        }
+
+        _ = this.DispatcherQueue.TryEnqueue(() => this.ApplyItemPropertyChange(adapter, propertyName));
+    }
+
+    private void TreeItem_ChildrenCollectionChanged(object? sender, NotifyCollectionChangedEventArgs args)
+    {
+        _ = sender; // unused
+        _ = args; // unused
+
+        // A burst of child changes updates the state once.
+        if (this.hasChildrenUpdatePending)
+        {
+            return;
+        }
+
+        this.hasChildrenUpdatePending = true;
+        if (!this.DispatcherQueue.TryEnqueue(this.ApplyPendingHasChildrenUpdate))
+        {
+            this.hasChildrenUpdatePending = false;
+        }
+    }
+
+    private void ApplyPendingHasChildrenUpdate()
+    {
+        this.hasChildrenUpdatePending = false;
+        if (!this.isObservationSuspended)
+        {
+            this.UpdateHasChildrenVisualState();
+        }
+    }
+
+    private void ApplyItemPropertyChange(ITreeItem adapter, string? propertyName)
+    {
+        if (this.isObservationSuspended || !ReferenceEquals(adapter, this.ItemAdapter))
+        {
+            return;
+        }
+
+        if (string.Equals(propertyName, nameof(ITreeItem.IsSelected), StringComparison.Ordinal))
         {
             this.UpdateSelectionVisualState(adapter.IsSelected);
+            (FrameworkElementAutomationPeer.FromElement(this) as DynamicTreeItemAutomationPeer)?.RaiseIsSelectedChanged(adapter.IsSelected);
         }
-        else if (string.Equals(args.PropertyName, nameof(ITreeItem.IsCut), StringComparison.Ordinal))
+        else if (string.Equals(propertyName, nameof(ITreeItem.IsExpanded), StringComparison.Ordinal))
+        {
+            this.UpdateExpansionVisualState();
+            (FrameworkElementAutomationPeer.FromElement(this) as DynamicTreeItemAutomationPeer)?.RaiseExpandCollapseStateChanged(!adapter.IsExpanded, adapter.IsExpanded);
+        }
+        else if (string.Equals(propertyName, nameof(ITreeItem.ChildrenCount), StringComparison.Ordinal))
+        {
+            this.UpdateHasChildrenVisualState();
+        }
+        else if (string.Equals(propertyName, nameof(ITreeItem.IsCut), StringComparison.Ordinal))
         {
             this.UpdateCutVisualState(adapter.IsCut);
         }
-        else if (string.Equals(args.PropertyName, nameof(TreeItemAdapter.IsDimmed), StringComparison.Ordinal))
+        else if (string.Equals(propertyName, nameof(TreeItemAdapter.IsDimmed), StringComparison.Ordinal))
         {
             this.UpdateDimVisualState();
         }
-        else if (args.PropertyName is nameof(TreeItemAdapter.Annotation) or nameof(TreeItemAdapter.DisplayLabel) or nameof(ITreeItem.Label))
+        else if (propertyName is nameof(TreeItemAdapter.Annotation) or nameof(TreeItemAdapter.DisplayLabel) or nameof(ITreeItem.Label))
         {
             this.UpdateItemNameRuns();
         }
-        else if (string.Equals(args.PropertyName, nameof(ITreeItem.Depth), StringComparison.Ordinal))
+        else if (string.Equals(propertyName, nameof(ITreeItem.Depth), StringComparison.Ordinal))
         {
             this.UpdateItemMargin();
             this.UpdateTrailingContentPresenter();
         }
     }
 
-    // Initialize the logger for this NumberBox. Use the NumberBox type as the category.
+    // Initialize the logger for this row. Use the row type as the category.
     private void OnLoggerFactoryChanged(ILoggerFactory? loggerFactory) =>
         this.logger = loggerFactory?.CreateLogger<DynamicTreeItem>() ?? NullLogger<DynamicTreeItem>.Instance;
+
+    private void OnTrailingContentPropertyChanged()
+    {
+        // The template update that writes several of these properties re-measures once itself.
+        if (!this.isApplyingTrailingContent)
+        {
+            this.UpdateTrailingContentPresenter();
+        }
+    }
+
+    // XAML, bindings and styles bypass the CLR setter, so an invalid width is restored here.
+    private void OnTrailingContentWidthChanged(DependencyPropertyChangedEventArgs args)
+    {
+        if (args.NewValue is double width && (!double.IsFinite(width) || width < 0))
+        {
+            this.SetValue(TrailingContentWidthProperty, args.OldValue);
+            return;
+        }
+
+        this.OnTrailingContentPropertyChanged();
+    }
 
     private void OnItemIndentWidthChanged()
     {

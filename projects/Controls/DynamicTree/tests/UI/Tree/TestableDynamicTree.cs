@@ -12,11 +12,8 @@ public sealed partial class TestableDynamicTree : DynamicTree
     public bool InvokeItemPointerPressed(TreeItemAdapter item, bool isControlDown, bool isShiftDown, bool leftButtonPressed)
         => this.OnItemPointerPressed(item, isControlDown, isShiftDown, leftButtonPressed);
 
-    public bool InvokeGenericItemPointerPressed(ITreeItem item)
-        => this.OnTreeItemPointerPressed(item, isControlDown: false, isShiftDown: false, leftButtonPressed: true);
-
-    public bool InvokeItemTapped(TreeItemAdapter item, bool isControlDown, bool isShiftDown)
-        => this.OnItemTapped(item, isControlDown, isShiftDown);
+    public bool InvokeTreeItemPointerPressed(ITreeItem item, bool isControlDown = false, bool isShiftDown = false, bool leftButtonPressed = true)
+        => this.OnTreeItemPointerPressed(item, isControlDown, isShiftDown, leftButtonPressed);
 
     public bool InvokeItemGotFocus(TreeItemAdapter item)
         => this.OnItemGotFocus(item);

@@ -17,6 +17,10 @@ namespace DroidNet.Controls.Tests.Expander;
 [TestCategory("UITest")]
 public class ExpanderTests : VisualUserInterfaceTests
 {
+    // The glyphs are owned by the Expander template (Expander.xaml): down arrow when expanded, right arrow when collapsed.
+    private const string ExpandedGlyph = "\uE70D";
+    private const string CollapsedGlyph = "\uE76C";
+
     private Controls.Expander? expander;
     private TestVisualStateManager? vsm;
 
@@ -24,29 +28,6 @@ public class ExpanderTests : VisualUserInterfaceTests
     public Task InitializesCollapsedByDefault_Async()
         => EnqueueAsync(
             () => _ = this.expander!.IsExpanded.Should().BeFalse());
-
-    [TestMethod]
-    public Task TransitionsToExpandedState_Async() => EnqueueAsync(
-    () =>
-    {
-        // Act
-        this.expander!.IsExpanded = true;
-
-        // Assert
-        _ = this.expander.IsExpanded.Should().BeTrue();
-    });
-
-    [TestMethod]
-    public Task TransitionsToCollapsedState_Async() => EnqueueAsync(
-    () =>
-    {
-        // Act
-        this.expander!.IsExpanded = true;
-        this.expander.IsExpanded = false;
-
-        // Assert
-        _ = this.expander.IsExpanded.Should().BeFalse();
-    });
 
     [TestMethod]
     public Task FiresExpandEventWhenToggleCalled_Async() => EnqueueAsync(
@@ -80,34 +61,21 @@ public class ExpanderTests : VisualUserInterfaceTests
     });
 
     [TestMethod]
-    public Task IconGlyphChangesWhenExpanded_Async() => EnqueueAsync(
+    [DataRow(true, ExpandedGlyph)]
+    [DataRow(false, CollapsedGlyph)]
+    public Task IconShowsTheGlyphOfTheCurrentState_Async(bool expanded, string glyph) => EnqueueAsync(
     () =>
     {
+        // Setup: arrive at the state from the opposite one, so the glyph has to change.
+        this.expander!.IsExpanded = !expanded;
+
         // Act
-        var icon = this.expander!.FindDescendant<FontIcon>(e => string.Equals(e.Name, "Icon", StringComparison.Ordinal));
-        var initialGlyph = icon?.Glyph;
-        this.expander!.IsExpanded = true;
+        this.expander.IsExpanded = expanded;
 
         // Assert
-        _ = icon.Should().NotBeNull();
-        _ = icon!.Glyph.Should().NotBe(initialGlyph);
-    });
-
-    [TestMethod]
-    public Task IconGlyphChangesWhenCollapsed_Async() => EnqueueAsync(
-    () =>
-    {
-        // Setup
-        this.expander!.IsExpanded = true;
-
-        // Act
         var icon = this.expander.FindDescendant<FontIcon>(e => string.Equals(e.Name, "Icon", StringComparison.Ordinal));
-        var initialGlyph = icon?.Glyph;
-        this.expander.IsExpanded = false;
-
-        // Assert
         _ = icon.Should().NotBeNull();
-        _ = icon!.Glyph.Should().NotBe(initialGlyph);
+        _ = icon!.Glyph.Should().Be(glyph);
     });
 
     [TestMethod]
@@ -119,6 +87,7 @@ public class ExpanderTests : VisualUserInterfaceTests
 
         // Assert
         _ = this.vsm!.GetCurrentStates(this.expander).Should().Contain(Controls.Expander.ExpandedVisualState);
+        _ = this.vsm.GetCurrentStates(this.expander).Should().NotContain(Controls.Expander.CollapsedVisualState);
     });
 
     [TestMethod]
@@ -133,6 +102,8 @@ public class ExpanderTests : VisualUserInterfaceTests
 
         // Assert
         _ = this.vsm!.GetCurrentStates(this.expander).Should().Contain(Controls.Expander.CollapsedVisualState);
+        // The state manager logs every state entered; the latest one is the current state.
+        _ = this.vsm.GetCurrentStates(this.expander)!.Last().Should().Be(Controls.Expander.CollapsedVisualState);
     });
 
     protected override async Task TestSetupAsync()

@@ -27,6 +27,15 @@ public partial class DynamicTree
 
     [LoggerMessage(
         SkipEnabledCheck = true,
+        Level = LogLevel.Error,
+        Message = "The dynamic tree operation '{operation}' failed.")]
+    private static partial void LogOperationFailed(ILogger logger, string operation, Exception exception);
+
+    private void LogOperationFailed(string operation, Exception exception)
+        => LogOperationFailed(this.logger, operation, exception);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
         Level = LogLevel.Debug,
         Message = "Key down: {key}")]
     private static partial void LogKeyDown(ILogger logger, VirtualKey key);
@@ -235,7 +244,7 @@ public partial class DynamicTree
     private static partial void LogItemGotFocus(ILogger logger, string? itemLabel, RequestOrigin origin);
 
     [Conditional("DEBUG")]
-    private void LogItemGotFocus(TreeItemAdapter? item, RequestOrigin origin)
+    private void LogItemGotFocus(ITreeItem? item, RequestOrigin origin)
     {
         if (!this.logger.IsEnabled(LogLevel.Debug))
         {

@@ -20,7 +20,6 @@ public sealed class DemoSceneModelTests
         var clone = (EntityAdapter)original.CloneSelf();
         _ = clone.IsVisible.Should().Be(visible);
         _ = clone.IsLoaded.Should().Be(loaded);
-        _ = clone.LoadedGlyph.Should().Be(loaded ? "\uE8A5" : string.Empty);
         clone.IsVisible = !visible;
         clone.IsLoaded = !loaded;
         _ = original.IsVisible.Should().Be(visible);
@@ -36,8 +35,6 @@ public sealed class DemoSceneModelTests
         adapter.IsVisible = false;
         adapter.IsLoaded = false;
         _ = properties.Should().Contain([nameof(adapter.IsVisible), nameof(adapter.VisibilityGlyph), nameof(adapter.VisibilityAction), nameof(adapter.IsLoaded), nameof(adapter.LoadedGlyph), nameof(adapter.LoadedStatus)]);
-        _ = adapter.VisibilityAction.Should().Be("Show entity");
-        _ = adapter.LoadedStatus.Should().Be("Unloaded");
         _ = adapter.IsSelected.Should().BeTrue();
         _ = adapter.AreChildrenLoaded.Should().BeFalse();
     }

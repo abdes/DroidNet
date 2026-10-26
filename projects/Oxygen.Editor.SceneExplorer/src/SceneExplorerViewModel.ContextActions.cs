@@ -201,19 +201,7 @@ public partial class SceneExplorerViewModel
         }
 
         this.clipboard.Stage(payload, cut, authoring.Scene);
-        this.ClearCutMarks();
-        this.ClipboardItemStore = [.. items];
-        this.ClipboardStateStore = cut ? ClipboardState.Cut : ClipboardState.Copied;
-        if (cut)
-        {
-            this.CutMarkedStore = [.. items];
-            foreach (var row in items)
-            {
-                row.IsCut = true;
-            }
-        }
-
-        this.RaiseClipboardChanged();
+        this.StageClipboard(items, cut);
         return Task.CompletedTask;
     }
 
@@ -861,10 +849,7 @@ public partial class SceneExplorerViewModel
         if (result.Succeeded && isCut && this.clipboard.IsCut && clipboardVersion == this.clipboard.Generation
             && ReferenceEquals(payload, this.clipboard.Payload) && ReferenceEquals(this.CurrentAuthoring(), context.Authoring))
         {
-            this.OnClipboardCleared();
-            this.ClipboardStateStore = ClipboardState.Empty;
-            this.ClearCutMarks();
-            this.RaiseClipboardChanged();
+            this.ClearClipboard();
         }
 
         return result;
@@ -872,13 +857,10 @@ public partial class SceneExplorerViewModel
 
     private void OnContextOwnerPropertyChanged(object? sender, PropertyChangedEventArgs args)
     {
+        // Clipboard changes refresh the actions through ClipboardContentChanged.
         if (string.Equals(args.PropertyName, nameof(this.Scene), StringComparison.Ordinal))
         {
             this.OnPropertyChanged(nameof(this.CanChangeCategories));
-        }
-
-        if (args.PropertyName is nameof(this.Scene) or nameof(this.CurrentClipboardState))
-        {
             this.RefreshContextActions();
         }
     }

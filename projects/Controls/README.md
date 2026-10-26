@@ -412,67 +412,57 @@ private void OnUnloaded(object sender, RoutedEventArgs e)
 }
 ```
 
-### Property Change Callback Management
+### Owner Binding and Property Propagation
 
-Manage property change callbacks properly:
+A row never searches the visual tree for its owner and never registers property
+callbacks on it. The owning control binds a realized row when the repeater
+prepares it, pushes its settings to the row, and releases the row when the
+repeater clears it:
 
 ```csharp
-private void UpdateAncestorReference()
-{
-    var newAncestorTreeControl = FindParentTreeControl();
-    if (treeControl == newAncestorTreeControl)
-    {
-        return; // No change, nothing to do
-    }
+// DynamicTree: the repeater prepared a row.
+this.ApplyItemLayout(row);   // row height, font size, icon size, indent, margin
+row.AttachTo(this);          // follow the item, refresh the presentation
 
-    // Un-register callbacks from the old tree control
-    treeControl?.UnregisterPropertyChangedCallback(
-        DynamicTree.ThumbnailTemplateSelectorProperty,
-        ancestorTreeThumbnailTemplateSelectorChangeCallbackToken);
-
-    treeControl = newAncestorTreeControl;
-    if (treeControl == null)
-    {
-        return;
-    }
-
-    // Register callbacks on the new tree control
-    ancestorTreeThumbnailTemplateSelectorChangeCallbackToken
-        = treeControl.RegisterPropertyChangedCallback(
-            DynamicTree.ThumbnailTemplateSelectorProperty,
-            (_, _) => OnThumbnailTemplateSelectorChanged());
-}
+// DynamicTree: the repeater cleared a row.
+row.Detach();                // stop following the item and the tree
 ```
+
+Whenever one of the tree's own properties changes (for example
+`ThumbnailTemplateSelector` or `ItemIndentWidth`), the tree updates the rows it
+currently realizes. A row that is not realized is updated when it is attached.
 
 **Best Practices:**
 
 - Always unregister event handlers in `Unloaded`
-- Clean up property change callbacks
+- Release a recycled row from its logical item so a pooled row keeps no
+  subscription
+- Let the owner push settings to the rows it realizes instead of having rows
+  look up their owner
 - Use weak event patterns when appropriate
 - Avoid circular references
-- Store callback tokens for proper cleanup
 
 ## Template Processing
 
-### Configuration Resource Pattern
+### Configuration Through the Default Style
 
-Allow configuration through application resources:
+Expose configuration as dependency properties and give them their values in the
+control's default XAML style, so that an application restyles the control
+instead of the control reading application resources at construction:
 
-```csharp
-public DynamicTreeItem()
-{
-    DefaultStyleKey = typeof(DynamicTreeItem);
+```xml
+<x:Double x:Key="DynamicTreeItemIndentIncrement">34</x:Double>
 
-    // Try to get the indent increment from XAML resources, fallback to default
-    indentIncrement = DefaultIndentIncrement;
-    if (Application.Current.Resources.TryGetValue(
-            "DynamicTreeItemIndentIncrement",
-            out var indentIncrementObj) && indentIncrementObj is double increment)
-    {
-        indentIncrement = increment;
-    }
-}
+<Style x:Key="DefaultDynamicTreeStyle" TargetType="dnc:DynamicTree">
+    <Setter Property="ItemIndentWidth"
+            Value="{StaticResource DynamicTreeItemIndentIncrement}" />
+    <!-- Template setter omitted -->
+</Style>
 ```
+
+The control constructor only selects the default style (`DefaultStyleKey`). An
+application sets `ItemIndentWidth` on the tree, in its own style, or through
+`TreeDensityStyle`; it does not need to define a resource with the key above.
 
 ### Template Part Validation
 
@@ -490,7 +480,7 @@ protected override void OnApplyTemplate()
 
 **Best Practices:**
 
-- Allow customization through application resources
+- Allow customization through dependency properties and styles
 - Validate critical template parts exist
 - Provide meaningful error messages for missing parts
 - Use fallback values for optional configurations

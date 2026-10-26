@@ -5,6 +5,7 @@
 using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using DroidNet.Collections;
 
 namespace DroidNet.Controls;
@@ -20,7 +21,6 @@ public abstract partial class DynamicTreeViewModel
     public const int FilterDebounceMilliseconds = 250;
 
     // "Loaded-only" subtree filtering cache.
-    private readonly Dictionary<ITreeItem, bool> filterSelfMatch = [with(ReferenceEqualityComparer.Instance)];
     private readonly Dictionary<ITreeItem, bool> filterSubtreeMatch = [with(ReferenceEqualityComparer.Instance)];
     private readonly HashSet<ITreeItem> filteringSubscribedNodes = [with(ReferenceEqualityComparer.Instance)];
 
@@ -55,7 +55,6 @@ public abstract partial class DynamicTreeViewModel
             if (value is null && this.filteredItems is not null)
             {
                 this.DisposeFilteringSubscriptions();
-                this.filteredItems.CollectionChanged -= this.OnFilteredItemsCollectionChanged;
                 this.filteredItems.Dispose();
                 this.filteredItems = null;
                 this.filterOptions = null;
@@ -115,6 +114,9 @@ public abstract partial class DynamicTreeViewModel
         {
             return;
         }
+
+        // Refreshing recomputes synchronously, so a pending debounced pass would only repeat it.
+        this.CancelPendingFilterRecompute();
 
         // Refreshing should recompute the loaded-only closure, then reevaluate the view.
         this.RecomputeFilterCacheNow(reason: "RefreshFiltering");
@@ -215,7 +217,7 @@ public abstract partial class DynamicTreeViewModel
             return cached;
         }
 
-        // Fallback: never force-load. When cache is stale/missing, treat subtree as no-match.
+        // Fallback: never force-load. When the cache is stale or missing, only the item itself is matched.
         // A scheduled recomputation will fill in the closure and then reevaluate the view.
         return predicate(item);
     }
@@ -242,8 +244,7 @@ public abstract partial class DynamicTreeViewModel
             return;
         }
 
-        this.filterCacheDebounceCts?.Cancel();
-        this.filterCacheDebounceCts?.Dispose();
+        this.CancelPendingFilterRecompute();
 
         var cts = new CancellationTokenSource();
         this.filterCacheDebounceCts = cts;
@@ -251,6 +252,17 @@ public abstract partial class DynamicTreeViewModel
         _ = this.DebouncedRecomputeAndRefreshAsync(cts.Token);
     }
 
+    private void CancelPendingFilterRecompute()
+    {
+        this.filterCacheDebounceCts?.Cancel();
+        this.filterCacheDebounceCts?.Dispose();
+        this.filterCacheDebounceCts = null;
+    }
+
+    [SuppressMessage(
+        "Design",
+        "CA1031:Do not catch general exception types",
+        Justification = "runs unobserved after a delay; a throwing consumer predicate must be logged, not left as an unobserved task exception")]
     private async Task DebouncedRecomputeAndRefreshAsync(CancellationToken token)
     {
         try
@@ -272,8 +284,15 @@ public abstract partial class DynamicTreeViewModel
             return;
         }
 
-        this.RecomputeFilterCacheNow(reason: "Debounced");
-        this.filteredItems.ReevaluatePredicate();
+        try
+        {
+            this.RecomputeFilterCacheNow(reason: "Debounced");
+            this.filteredItems.ReevaluatePredicate();
+        }
+        catch (Exception exception)
+        {
+            this.LogFilteringRecomputeFailed(exception);
+        }
     }
 
     private void RecomputeFilterCacheNow(string reason)
@@ -292,9 +311,9 @@ public abstract partial class DynamicTreeViewModel
 
         var sw = Stopwatch.StartNew();
 
-        this.filterCacheDirty = false;
-        this.filterCacheComputedRevision = this.filterCacheRevision;
-        this.filterSelfMatch.Clear();
+        // The cache is only marked clean once every root is computed: a throwing predicate must leave it dirty.
+        var revision = this.filterCacheRevision;
+        var selfMatch = new Dictionary<ITreeItem, bool>(ReferenceEqualityComparer.Instance);
         this.filterSubtreeMatch.Clear();
 
         var visitedNodes = 0;
@@ -302,11 +321,12 @@ public abstract partial class DynamicTreeViewModel
 
         foreach (var root in this.shownItems)
         {
-            if (root is not null)
-            {
-                ComputeForRoot(root);
-            }
+            ComputeForRoot(root);
         }
+
+        this.filterCacheDirty = false;
+        this.filterCacheComputedRevision = revision;
+        this.UnsubscribeUnreachableForFiltering();
 
         sw.Stop();
         this.LogFilteringCacheRecomputed(this.filterCacheComputedRevision, reason, visitedNodes, visitedEdges, sw.ElapsedMilliseconds);
@@ -331,7 +351,7 @@ public abstract partial class DynamicTreeViewModel
                 {
                     this.SubscribeForFiltering(node);
                     var self = predicate(node);
-                    this.filterSelfMatch[node] = self;
+                    selfMatch[node] = self;
                     visitedNodes++;
 
                     if (!TryGetLoadedChildrenNonLoading(node, out children))
@@ -346,13 +366,11 @@ public abstract partial class DynamicTreeViewModel
 
                 if (nextIndex >= children.Count)
                 {
-                    var subtree = this.filterSelfMatch[node];
+                    var subtree = selfMatch[node];
                     for (var i = 0; !subtree && i < children.Count; i++)
                     {
                         var child = children[i];
-                        subtree = child is not null
-                            && this.filterSubtreeMatch.TryGetValue(child, out var childSubtree)
-                            && childSubtree;
+                        subtree = this.filterSubtreeMatch.TryGetValue(child, out var childSubtree) && childSubtree;
                     }
 
                     this.filterSubtreeMatch[node] = subtree;
@@ -363,7 +381,7 @@ public abstract partial class DynamicTreeViewModel
 
                 var nextChild = children[nextIndex];
                 visitedEdges++;
-                if (nextChild is not null && !this.filterSubtreeMatch.ContainsKey(nextChild))
+                if (!this.filterSubtreeMatch.ContainsKey(nextChild))
                 {
                     stack.Push((nextChild, 0, null));
                 }
@@ -404,8 +422,9 @@ public abstract partial class DynamicTreeViewModel
             return;
         }
 
-        // Expand/collapse is purely a ShownItems concern; it must not invalidate the loaded-subtree cache.
-        if (string.Equals(e.PropertyName, nameof(ITreeItem.IsExpanded), StringComparison.Ordinal))
+        // Expansion, selection and cut state are owned by the view model and never feed the predicate; they must
+        // not invalidate the loaded-subtree cache.
+        if (e.PropertyName is nameof(ITreeItem.IsExpanded) or nameof(ITreeItem.IsSelected) or nameof(ITreeItem.IsCut))
         {
             return;
         }
@@ -441,6 +460,20 @@ public abstract partial class DynamicTreeViewModel
             return;
         }
 
+        // Unsubscribe removed nodes together with their loaded subtrees (tree items have a single parent). This
+        // runs before subscribing so a node replaced by itself stays subscribed.
+        if (e.OldItems is not null
+            && (e.Action == NotifyCollectionChangedAction.Remove || e.Action == NotifyCollectionChangedAction.Replace))
+        {
+            foreach (var obj in e.OldItems)
+            {
+                if (obj is ITreeItem item)
+                {
+                    this.UnsubscribeSubtreeForFiltering(item);
+                }
+            }
+        }
+
         // Subscribe to newly loaded/added nodes.
         if (e.NewItems is not null)
         {
@@ -465,20 +498,52 @@ public abstract partial class DynamicTreeViewModel
             }
         }
 
-        // Unsubscribe removed nodes (tree items have a single parent).
-        if (e.OldItems is not null
-            && (e.Action == NotifyCollectionChangedAction.Remove || e.Action == NotifyCollectionChangedAction.Replace))
+        // A Reset does not report the dropped children; the next recomputation unsubscribes every node it can no
+        // longer reach.
+        this.InvalidateFilterCache($"Loaded children changed: {e.Action}");
+    }
+
+    private void UnsubscribeSubtreeForFiltering(ITreeItem root)
+    {
+        var pending = new Stack<ITreeItem>();
+        pending.Push(root);
+        while (pending.Count > 0)
         {
-            foreach (var obj in e.OldItems)
+            var node = pending.Pop();
+            if (node is ILoadedChildrenAccessor accessor && accessor.TryGetLoadedChildren(out var children))
             {
-                if (obj is ITreeItem item)
+                foreach (var child in children)
                 {
-                    this.UnsubscribeForFiltering(item);
+                    pending.Push(child);
                 }
+            }
+
+            this.UnsubscribeForFiltering(node);
+        }
+    }
+
+    private void UnsubscribeUnreachableForFiltering()
+    {
+        // Every node reached by the last computation has a subtree entry; subscribed nodes without one were
+        // removed from the tree (or dropped by a Reset) and must not keep this view model alive.
+        List<ITreeItem>? unreachable = null;
+        foreach (var node in this.filteringSubscribedNodes)
+        {
+            if (!this.filterSubtreeMatch.ContainsKey(node))
+            {
+                (unreachable ??= []).Add(node);
             }
         }
 
-        this.InvalidateFilterCache($"Loaded children changed: {e.Action}");
+        if (unreachable is null)
+        {
+            return;
+        }
+
+        foreach (var node in unreachable)
+        {
+            this.UnsubscribeForFiltering(node);
+        }
     }
 
     private void UnsubscribeForFiltering(ITreeItem node)
@@ -495,11 +560,33 @@ public abstract partial class DynamicTreeViewModel
         }
     }
 
+    /// <summary>
+    ///     Drops every filtering subscription and cached result after the shown tree was cleared or replaced; the
+    ///     cache is invalidated so the next evaluation recomputes it over the new content.
+    /// </summary>
+    private void ResetFilteringState()
+    {
+        this.ReleaseFilteringSubscriptions();
+        this.InvalidateFilterCache("Filtering state reset");
+    }
+
     private void DisposeFilteringSubscriptions()
     {
-        this.filterCacheDebounceCts?.Cancel();
-        this.filterCacheDebounceCts?.Dispose();
-        this.filterCacheDebounceCts = null;
+        this.ReleaseFilteringSubscriptions();
+
+        if (this.filteredItems is not null)
+        {
+            this.filteredItems.CollectionChanged -= this.OnFilteredItemsCollectionChanged;
+        }
+
+        this.filterCacheDirty = false;
+        this.filterCacheRevision = 0;
+        this.filterCacheComputedRevision = 0;
+    }
+
+    private void ReleaseFilteringSubscriptions()
+    {
+        this.CancelPendingFilterRecompute();
 
         foreach (var node in this.filteringSubscribedNodes)
         {
@@ -511,11 +598,7 @@ public abstract partial class DynamicTreeViewModel
         }
 
         this.filteringSubscribedNodes.Clear();
-        this.filterSelfMatch.Clear();
         this.filterSubtreeMatch.Clear();
-        this.filterCacheDirty = false;
-        this.filterCacheRevision = 0;
-        this.filterCacheComputedRevision = 0;
     }
 
     private void OnFilteredItemsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)

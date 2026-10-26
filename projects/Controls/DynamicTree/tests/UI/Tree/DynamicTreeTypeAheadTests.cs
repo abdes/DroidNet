@@ -13,7 +13,8 @@ namespace DroidNet.Controls.Tests.Tree;
 
 [TestClass]
 [ExcludeFromCodeCoverage]
-[TestCategory("DynamicTree / UI / TypeAhead")]
+[TestCategory("DynamicTree")]
+[TestCategory("UITest")]
 public sealed partial class DynamicTreeTypeAheadTests : VisualUserInterfaceTests, IDisposable
 {
     private TestableDynamicTree? tree;
@@ -22,14 +23,13 @@ public sealed partial class DynamicTreeTypeAheadTests : VisualUserInterfaceTests
     public void Dispose() => this.viewModel?.Dispose();
 
     [TestMethod]
-    [TestCategory("DynamicTree / UI / TypeAhead / Focus")]
     public Task TypingLetter_FocusesBestMatch_Async() => EnqueueAsync(
         async () =>
         {
             var vm = this.viewModel!;
             _ = vm.TryGetFocusedItem(out var focusedBefore, out var originBefore).Should().BeTrue();
             _ = focusedBefore!.Label.Should().Be("ALPHA");
-            _ = originBefore.Should().Be(RequestOrigin.PointerInput);
+            _ = originBefore.Should().Be(RequestOrigin.PointerInput, "initializing the root focuses its first item without scrolling to it");
 
             var handled = await this.tree!.InvokeHandleKeyDownAsync(VirtualKey.B).ConfigureAwait(true);
             _ = handled.Should().BeTrue();
@@ -40,7 +40,6 @@ public sealed partial class DynamicTreeTypeAheadTests : VisualUserInterfaceTests
         });
 
     [TestMethod]
-    [TestCategory("DynamicTree / UI / TypeAhead / Focus")]
     public Task TypingLetter_WhenTypeAheadDisabled_IsLeftToTheHost_Async() => EnqueueAsync(
         async () =>
         {
@@ -55,7 +54,6 @@ public sealed partial class DynamicTreeTypeAheadTests : VisualUserInterfaceTests
         });
 
     [TestMethod]
-    [TestCategory("DynamicTree / UI / TypeAhead / Buffer")]
     public Task Escape_WhenBufferHasText_ClearsBufferAndDoesNotChangeFocus_Async() => EnqueueAsync(
         async () =>
         {
@@ -77,7 +75,6 @@ public sealed partial class DynamicTreeTypeAheadTests : VisualUserInterfaceTests
         });
 
     [TestMethod]
-    [TestCategory("DynamicTree / UI / TypeAhead / Buffer")]
     public Task Backspace_WhenBufferEmpty_IsNotHandled_Async() => EnqueueAsync(
         async () =>
         {
@@ -86,7 +83,6 @@ public sealed partial class DynamicTreeTypeAheadTests : VisualUserInterfaceTests
         });
 
     [TestMethod]
-    [TestCategory("DynamicTree / UI / TypeAhead / Buffer")]
     public Task Backspace_WhenOneCharacter_ClearsBufferAndIsHandled_Async() => EnqueueAsync(
         async () =>
         {
@@ -105,7 +101,6 @@ public sealed partial class DynamicTreeTypeAheadTests : VisualUserInterfaceTests
         });
 
     [TestMethod]
-    [TestCategory("DynamicTree / UI / TypeAhead / Modifiers")]
     public Task ShiftDoesNotAffectTypeAhead_Async() => EnqueueAsync(
         async () =>
         {
@@ -157,12 +152,6 @@ public sealed partial class DynamicTreeTypeAheadTests : VisualUserInterfaceTests
             };
 
             await this.InitializeRootAsync(rootItem, skipRoot: true).ConfigureAwait(false);
-        }
-
-        public void Select(string label)
-        {
-            var item = this.ShownItems.Single(shown => string.Equals(shown.Label, label, StringComparison.Ordinal));
-            this.SelectItemCommand.Execute(new ItemSelectionArgs(item, RequestOrigin.PointerInput, IsCtrlKeyDown: false, IsShiftKeyDown: false));
         }
 
         public bool TryGetFocusedItem([NotNullWhen(true)] out ITreeItem? item, out RequestOrigin origin)

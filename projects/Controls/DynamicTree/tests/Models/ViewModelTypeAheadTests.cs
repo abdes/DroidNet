@@ -14,7 +14,6 @@ namespace DroidNet.Controls.Tests;
 public class ViewModelTypeAheadTests : ViewModelTestBase
 {
     [TestMethod]
-    [TestCategory($"{nameof(DynamicTree)} / ViewModel / TypeAhead / Scoring")]
     public async Task FocusNextByPrefix_WithContiguousMatch_PrefersContiguousLabel()
     {
         // Arrange
@@ -31,10 +30,6 @@ public class ViewModelTypeAheadTests : ViewModelTestBase
         using var viewModel = new TestViewModel(skipRoot: true, this.LoggerFactoryInstance);
         await viewModel.InitializeRootAsyncPublic(root).ConfigureAwait(false);
 
-        // Precondition: EnsureFocus should focus the first shown item.
-        _ = viewModel.TryGetFocusedItem(out var focusedBefore, out _).Should().BeTrue();
-        _ = focusedBefore!.Should().Be(nonMatch);
-
         // Act
         var moved = viewModel.FocusNextByPrefix("abc", RequestOrigin.KeyboardInput);
 
@@ -46,7 +41,6 @@ public class ViewModelTypeAheadTests : ViewModelTestBase
     }
 
     [TestMethod]
-    [TestCategory($"{nameof(DynamicTree)} / ViewModel / TypeAhead / Ordering")]
     public async Task FocusNextByPrefix_WhenScoresTie_PrefersNextMatchAfterFocus()
     {
         // Arrange
@@ -74,7 +68,6 @@ public class ViewModelTypeAheadTests : ViewModelTestBase
     }
 
     [TestMethod]
-    [TestCategory($"{nameof(DynamicTree)} / ViewModel / TypeAhead / NoMatch")]
     public async Task FocusNextByPrefix_WhenNoMatch_ReturnsFalseAndLeavesFocusUnchanged()
     {
         // Arrange
@@ -98,5 +91,46 @@ public class ViewModelTypeAheadTests : ViewModelTestBase
         _ = moved.Should().BeFalse();
         _ = viewModel.TryGetFocusedItem(out var focusedAfter, out _).Should().BeTrue();
         _ = focusedAfter.Should().Be(first);
+    }
+
+    [TestMethod]
+    public async Task FocusNextByPrefix_IgnoresCase()
+    {
+        // Arrange
+        var other = new TestTreeItemAdapter { Label = "Other" };
+        var target = new TestTreeItemAdapter { Label = "Alpha" };
+        var root = new TestTreeItemAdapter([other, target], isRoot: true) { Label = "Root", IsExpanded = true };
+        using var viewModel = new TestViewModel(skipRoot: true, this.LoggerFactoryInstance);
+        await viewModel.InitializeRootAsyncPublic(root).ConfigureAwait(false);
+        _ = viewModel.FocusItem(other, RequestOrigin.KeyboardInput);
+
+        // Act
+        var moved = viewModel.FocusNextByPrefix("aLP", RequestOrigin.KeyboardInput);
+
+        // Assert
+        _ = moved.Should().BeTrue();
+        _ = viewModel.TryGetFocusedItem(out var focusedAfter, out _).Should().BeTrue();
+        _ = focusedAfter.Should().Be(target);
+    }
+
+    [TestMethod]
+    public async Task FocusNextByPrefix_WhenOnlyMatchIsInsideACollapsedItem_DoesNotFocusIt()
+    {
+        // Arrange
+        var hiddenMatch = new TestTreeItemAdapter { Label = "Zebra" };
+        var collapsed = new TestTreeItemAdapter([hiddenMatch]) { Label = "Parent", IsExpanded = false };
+        var other = new TestTreeItemAdapter { Label = "Other" };
+        var root = new TestTreeItemAdapter([other, collapsed], isRoot: true) { Label = "Root", IsExpanded = true };
+        using var viewModel = new TestViewModel(skipRoot: true, this.LoggerFactoryInstance);
+        await viewModel.InitializeRootAsyncPublic(root).ConfigureAwait(false);
+        _ = viewModel.FocusItem(other, RequestOrigin.KeyboardInput);
+
+        // Act
+        var moved = viewModel.FocusNextByPrefix("Zeb", RequestOrigin.KeyboardInput);
+
+        // Assert
+        _ = moved.Should().BeFalse();
+        _ = viewModel.TryGetFocusedItem(out var focusedAfter, out _).Should().BeTrue();
+        _ = focusedAfter.Should().Be(other);
     }
 }

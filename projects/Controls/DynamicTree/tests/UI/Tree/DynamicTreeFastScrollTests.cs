@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using AwesomeAssertions;
 using CommunityToolkit.WinUI;
@@ -14,20 +15,20 @@ using TreeItemControl = DroidNet.Controls.DynamicTreeItem;
 namespace DroidNet.Controls.Tests.Tree;
 
 /// <summary>
-/// Expanding a row with hundreds of children and scrolling down at once, as a fast mouse wheel does, leaves every row
-/// the repeater realizes showing its own item: its name and its glyph.
+/// Regression repro: expanding a row with hundreds of children and scrolling down at once, as a fast mouse wheel does,
+/// left realized rows showing another row's item, or blank.
 /// </summary>
 [TestClass]
+[ExcludeFromCodeCoverage]
+[TestCategory("DynamicTree")]
+[TestCategory("UITest")]
 public sealed class DynamicTreeFastScrollTests : VisualUserInterfaceTests
 {
+    // Kept at the size of the original report: a smaller tree may not reproduce the stale rows.
     private const int ChildCount = 700;
 
-    public TestContext TestContext { get; set; } = null!;
-
     [TestMethod]
-    [DataRow(false)]
-    [DataRow(true)]
-    public Task ExpandingAndScrollingAtOnce_RealizesEveryRowWithItsItem(bool dimmed) => EnqueueAsync(async () =>
+    public Task FastWheelScrollAfterExpand_LeavesNoRealizedRowShowingAnotherItemOrBlank_Async() => EnqueueAsync(async () =>
     {
         using var viewModel = new TestViewModel();
         var parent = new LazyTreeItem("Parent", ChildCount, isRoot: true);
@@ -38,66 +39,52 @@ public sealed class DynamicTreeFastScrollTests : VisualUserInterfaceTests
         var scroller = tree.FindDescendant<ScrollView>()!;
 
         await viewModel.ExpandItemAsync(parent).ConfigureAwait(true);
-        if (dimmed)
-        {
-            foreach (var child in viewModel.ShownItems.OfType<LazyTreeItem>().Skip(1))
-            {
-                child.IsDimmed = true;
-                child.Annotation = "Source.glb";
-            }
-        }
+        tree.UpdateLayout();
 
         // A fast wheel: each frame scrolls further down before the previous rows have settled.
-        tree.UpdateLayout();
         for (var step = 1; step <= 10; step++)
         {
             _ = scroller.ScrollTo(0, scroller.ScrollableHeight * step / 10, new ScrollingScrollOptions(ScrollingAnimationMode.Enabled));
-            await RenderAsync().ConfigureAwait(true);
+            await TreeRenderHelpers.RenderAsync().ConfigureAwait(true);
         }
 
         // The wheel stops at the end, whatever the animations still had in flight.
         _ = scroller.ScrollTo(0, scroller.ScrollableHeight, new ScrollingScrollOptions(ScrollingAnimationMode.Disabled));
-
-        for (var frame = 0; frame < 10; frame++)
-        {
-            await RenderAsync().ConfigureAwait(true);
-        }
+        await TreeRenderHelpers.RenderAsync(10).ConfigureAwait(true);
 
         var shown = viewModel.ShownItems.ToList();
         _ = shown.Should().HaveCount(ChildCount + 1);
-        var realized = 0;
-        var problems = new List<string>();
-        for (var index = 0; index < shown.Count; index++)
-        {
-            if (repeater.TryGetElement(index) is not FrameworkElement container
-                || container.FindName(DynamicTree.TreeItemPart) is not TreeItemControl row)
-            {
-                continue;
-            }
+        var realized = TreeRenderHelpers.RealizedRows(repeater, shown.Count);
+        var offending = realized
+            .Select(entry => (entry.Index, Problem: DescribeProblem(entry.Container, entry.Row, shown[entry.Index])))
+            .Where(entry => entry.Problem is not null)
+            .ToList();
 
-            realized++;
-            var label = row.FindDescendant<TextBlock>(block => string.Equals(block.Name, TreeItemControl.ItemNamePart, StringComparison.Ordinal));
-            var name = label?.Inlines.Count > 0 ? ((Run)label.Inlines[0]).Text : null;
-            var thumbnail = row.FindDescendant<ContentPresenter>(presenter => string.Equals(presenter.Name, "PartThumbnailPresenter", StringComparison.Ordinal));
-            if (!ReferenceEquals(row.ItemAdapter, shown[index])
-                || !string.Equals(name, shown[index].Label, StringComparison.Ordinal)
-                || container.Visibility != Visibility.Visible || container.Opacity < 1 || row.Opacity < 1
-                || row.ActualHeight <= 0 || label is null || label.ActualWidth <= 0
-                || thumbnail is null || thumbnail.ActualWidth <= 0)
-            {
-                problems.Add(string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"#{index} '{shown[index].Label}': adapter '{row.ItemAdapter?.Label}', name '{name}', container {container.Visibility}/{container.Opacity}, "
-                    + $"row {row.Opacity}/{row.ActualHeight:F0}, label width {label?.ActualWidth:F0}, thumbnail width {thumbnail?.ActualWidth:F0}"));
-            }
-        }
-
-        _ = realized.Should().BeGreaterThanOrEqualTo(
+        var offset = string.Create(CultureInfo.InvariantCulture, $"{scroller.VerticalOffset:F0} of {scroller.ScrollableHeight:F0}");
+        _ = realized.Count.Should().BeGreaterThanOrEqualTo(
             (int)(scroller.ViewportHeight / tree.ItemRowHeight),
-            string.Create(CultureInfo.InvariantCulture, $"the rows in view at offset {scroller.VerticalOffset:F0} of {scroller.ScrollableHeight:F0} are realized"));
-        _ = problems.Should().BeEmpty($"every realized row of {realized} shows its item at offset {scroller.VerticalOffset:F0}");
+            $"the rows in view at offset {offset} are realized");
+        _ = offending.Select(entry => entry.Index).Should().BeEmpty(
+            $"every realized row of {realized.Count} shows its item at offset {offset}; offending rows: {string.Join("; ", offending.Select(entry => $"#{entry.Index} {entry.Problem}"))}");
     });
 
-    private static async Task RenderAsync()
-        => _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
+    private static string? DescribeProblem(FrameworkElement container, TreeItemControl row, ITreeItem item)
+    {
+        var label = row.FindDescendant<TextBlock>(block => string.Equals(block.Name, TreeItemControl.ItemNamePart, StringComparison.Ordinal));
+        var name = label?.Inlines.Count > 0 ? ((Run)label.Inlines[0]).Text : null;
+        var thumbnail = row.FindDescendant<ContentPresenter>(presenter => string.Equals(presenter.Name, TreeItemControl.ThumbnailPresenterPart, StringComparison.Ordinal));
+        if (ReferenceEquals(row.ItemAdapter, item)
+            && string.Equals(name, item.Label, StringComparison.Ordinal)
+            && container.Visibility == Visibility.Visible && container.Opacity >= 1 && row.Opacity >= 1
+            && row.ActualHeight > 0 && label is not null && label.ActualWidth > 0
+            && thumbnail is not null && thumbnail.ActualWidth > 0)
+        {
+            return null;
+        }
+
+        return string.Create(
+            CultureInfo.InvariantCulture,
+            $"'{item.Label}': adapter '{row.ItemAdapter?.Label}', name '{name}', container {container.Visibility}/{container.Opacity}, "
+            + $"row {row.Opacity}/{row.ActualHeight:F0}, label width {label?.ActualWidth:F0}, thumbnail width {thumbnail?.ActualWidth:F0}");
+    }
 }

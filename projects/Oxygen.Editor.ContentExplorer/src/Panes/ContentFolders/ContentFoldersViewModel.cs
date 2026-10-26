@@ -130,6 +130,7 @@ public partial class ContentFoldersViewModel(
             this.catalogSubscription = catalog.Changes.Subscribe(_ => this.OnCatalogChanged());
             this.folderSubscription = folders.FolderChanges.Subscribe(_ => this.OnFoldersChanged());
             relocationService?.FilesChanged += this.OnFilesChanged;
+            this.SelectionSettled += this.OnTreeSelectionSettled;
 
             this.isSubscribed = true;
         }
@@ -215,6 +216,7 @@ public partial class ContentFoldersViewModel(
             this.catalogSubscription?.Dispose();
             this.folderSubscription?.Dispose();
             relocationService?.FilesChanged -= this.OnFilesChanged;
+            this.SelectionSettled -= this.OnTreeSelectionSettled;
             contentExplorerState.PropertyChanged -= this.OnContentExplorerStatePropertyChanged;
             this.projectRoot?.Dispose();
         }
@@ -462,8 +464,10 @@ public partial class ContentFoldersViewModel(
 
         // Only handle SelectedIndex changes for MultipleSelectionModel to avoid infinite loops
         // SelectedIndex changes when the selection changes, so we only need to listen to this one property
+        // A selection transaction publishes once, when it settles, with its final membership.
         if (this.isUpdatingFromState
             || this.suppressTreeSelectionEvents
+            || this.IsSelectionBatchActive
             || !string.Equals(e.PropertyName, nameof(MultipleSelectionModel<>.SelectedIndex), StringComparison.Ordinal)
             || this.SelectionModel is not MultipleSelectionModel<ITreeItem> multipleSelection)
         {
@@ -475,6 +479,23 @@ public partial class ContentFoldersViewModel(
             return;
         }
 
+        this.PublishTreeSelection(multipleSelection);
+    }
+
+    private void OnTreeSelectionSettled(object? sender, EventArgs e)
+    {
+        if (this.isUpdatingFromState
+            || this.suppressTreeSelectionEvents
+            || this.SelectionModel is not MultipleSelectionModel<ITreeItem> multipleSelection)
+        {
+            return;
+        }
+
+        this.PublishTreeSelection(multipleSelection);
+    }
+
+    private void PublishTreeSelection(MultipleSelectionModel<ITreeItem> multipleSelection)
+    {
         this.LogTreeSelectionChangedUpdatingState(multipleSelection.SelectedIndices.Count);
 
         // Get currently selected folder adapters from ALL selected indices.

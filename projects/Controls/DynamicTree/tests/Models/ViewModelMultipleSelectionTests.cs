@@ -8,7 +8,6 @@ using System.Diagnostics.CodeAnalysis;
 using AwesomeAssertions;
 using DroidNet.Controls.Selection;
 using Moq;
-using RequestOrigin = DroidNet.Controls.DynamicTreeViewModel.RequestOrigin;
 
 namespace DroidNet.Controls.Tests;
 
@@ -18,532 +17,182 @@ namespace DroidNet.Controls.Tests;
 public sealed partial class ViewModelMultipleSelectionTests : ViewModelTestBase, IDisposable
 {
     private readonly TestViewModel viewModel = new(skipRoot: false) { SelectionMode = SelectionMode.Multiple };
-    private readonly Mock<PropertyChangedEventHandler> propertyChangedHandlerMock;
-    private readonly Mock<NotifyCollectionChangedEventHandler> collectionChangedHandlerMock;
+    private TestTreeItemAdapter root = null!;
+    private TestTreeItemAdapter[] items = [];
 
-    public ViewModelMultipleSelectionTests()
-    {
-        this.propertyChangedHandlerMock = new Mock<PropertyChangedEventHandler>();
-        this.collectionChangedHandlerMock = new Mock<NotifyCollectionChangedEventHandler>();
-        this.Selection.PropertyChanged += this.propertyChangedHandlerMock.Object;
-        ((INotifyCollectionChanged)this.Selection.SelectedIndices).CollectionChanged += this.collectionChangedHandlerMock.Object;
-    }
-
-    public TestContext TestContext { get; set; }
-
-    private MultipleSelectionModel<ITreeItem> Selection => (this.viewModel.GetSelectionModel()! as MultipleSelectionModel<ITreeItem>)!;
+    private MultipleSelectionModel<ITreeItem> Selection => (MultipleSelectionModel<ITreeItem>)this.viewModel.GetSelectionModel()!;
 
     public void Dispose() => this.viewModel.Dispose();
 
     [TestMethod]
-    [TestCategory($"{nameof(DynamicTree)} / ViewModel / MultipleSelection / SelectItem")]
-    public async Task SelectItem_ShouldDoNothingIfItemNotShown()
+    public async Task SelectItemCommand_WithCtrl_AddsItemToSelection()
     {
-        // Arrange
-        var item = new TestTreeItemAdapter() { Label = "Item" };
-        var rootItem = new TestTreeItemAdapter([item], isRoot: true) { Label = "Root", IsExpanded = false };
+        await this.InitializeAsync(2).ConfigureAwait(false);
 
-        await this.viewModel.InitializeRootAsyncPublic(rootItem).ConfigureAwait(false);
+        this.viewModel.SelectItemCommand.Execute(new ItemSelectionArgs(this.items[0]));
+        this.viewModel.SelectItemCommand.Execute(new ItemSelectionArgs(this.items[1], IsCtrlKeyDown: true));
 
-        // Act
-        this.ResetChangeHandlers();
-        this.viewModel.SelectItem(item, RequestOrigin.PointerInput);
-
-        // Assert
-        _ = this.Selection.SelectedItem.Should().BeNull();
-        _ = this.Selection.SelectedIndex.Should().Be(-1);
-        this.VerifySelectedItemPropertyChange(Times.Never);
-        this.VerifySelectedIndexPropertyChange(Times.Never);
-        this.VerifyNotifySelectionChangedNever();
+        _ = this.Selection.SelectedItem.Should().Be(this.items[1]);
+        _ = this.Selection.SelectedIndices.Should().BeEquivalentTo([1, 2]);
+        _ = this.viewModel.ActiveItem.Should().Be(this.items[1]);
     }
 
     [TestMethod]
-    [TestCategory($"{nameof(DynamicTree)} / ViewModel / MultipleSelection / SelectItem")]
-    public async Task SelectItem_ShouldAddItemToSelection()
+    public async Task SelectItemCommand_WithoutCtrl_ReplacesSelection()
     {
-        // Arrange
-        var item1 = new TestTreeItemAdapter() { Label = "Item1" };
-        var item2 = new TestTreeItemAdapter() { Label = "Item2" };
-        var rootItem = new TestTreeItemAdapter([item1, item2], isRoot: true) { Label = "Root", IsExpanded = true };
-
-        await this.viewModel.InitializeRootAsyncPublic(rootItem).ConfigureAwait(false);
-
-        // Act
-        this.viewModel.SelectItem(item1, RequestOrigin.PointerInput);
-        this.viewModel.SelectItem(item2, RequestOrigin.PointerInput);
-
-        // Assert
-        _ = this.Selection.SelectedItem.Should().Be(item2);
-        _ = this.Selection.SelectedIndex.Should().Be(2);
-        _ = this.Selection.SelectedIndices.Should().Contain([1, 2]);
-        _ = this.Selection.SelectedItems.Should().Contain([item1, item2]);
-    }
-
-    [TestMethod]
-    [TestCategory($"{nameof(DynamicTree)} / ViewModel / MultipleSelection / SelectItem")]
-    public async Task SelectItem_SelectsFirstOccurrenceOfItem()
-    {
-        // Arrange
-        var item = new TestTreeItemAdapter() { Label = "Item" };
-        var rootItem = new TestTreeItemAdapter([item, item], isRoot: true) { Label = "Root", IsExpanded = true };
-
-        await this.viewModel.InitializeRootAsyncPublic(rootItem).ConfigureAwait(false);
-
-        // Act
-        this.viewModel.SelectItem(item, RequestOrigin.PointerInput);
-
-        // Assert
-        _ = this.Selection.SelectedItem.Should().Be(item);
-        _ = this.Selection.SelectedIndex.Should().Be(1);
-        _ = this.Selection.SelectedItems.Should().ContainSingle().And.Contain([item]);
-    }
-
-    [TestMethod]
-    [TestCategory($"{nameof(DynamicTree)} / ViewModel / MultipleSelection / SelectItem")]
-    public async Task SelectItem_ShouldTriggerPropertyAndCollectionNotifications()
-    {
-        // Arrange
-        var item = new TestTreeItemAdapter() { Label = "Item" };
-        var rootItem = new TestTreeItemAdapter([item], isRoot: true) { Label = "Root", IsExpanded = true };
-
-        await this.viewModel.InitializeRootAsyncPublic(rootItem).ConfigureAwait(false);
-
-        // Act
-        this.ResetChangeHandlers();
-        this.viewModel.SelectItem(item, RequestOrigin.PointerInput);
-
-        // Assert
-        this.VerifySelectedItemPropertyChange(Times.Once);
-        this.VerifySelectedIndexPropertyChange(Times.Once);
-        this.VerifyNotifyAddedToSelection([1]);
-    }
-
-    [TestMethod]
-    [TestCategory($"{nameof(DynamicTree)} / ViewModel / MultipleSelection / ClearSelection")]
-    public async Task ClearSelection_ShouldRemoveItemFromSelection()
-    {
-        // Arrange
-        var item1 = new TestTreeItemAdapter() { Label = "Item1" };
-        var item2 = new TestTreeItemAdapter() { Label = "Item2" };
-        var rootItem = new TestTreeItemAdapter([item1, item2], isRoot: true) { Label = "Root", IsExpanded = true };
-
-        await this.viewModel.InitializeRootAsyncPublic(rootItem).ConfigureAwait(false);
-        this.viewModel.SelectItem(item1, RequestOrigin.PointerInput);
-        this.viewModel.SelectItem(item2, RequestOrigin.PointerInput);
-
-        // Act
-        this.viewModel.ClearSelection(item1);
-
-        // Assert
-        _ = this.Selection.SelectedIndices.Should().BeEquivalentTo([2]);
-        _ = this.Selection.SelectedItem.Should().Be(item2);
-        _ = this.Selection.SelectedIndex.Should().Be(2);
-    }
-
-    [TestMethod]
-    [TestCategory($"{nameof(DynamicTree)} / ViewModel / MultipleSelection / ClearSelection")]
-    public async Task ClearSelection_ShouldTriggerPropertyAndCollectionNotifications()
-    {
-        // Arrange
-        var item = new TestTreeItemAdapter() { Label = "Item" };
-        var rootItem = new TestTreeItemAdapter([item], isRoot: true) { Label = "Root", IsExpanded = true };
-
-        await this.viewModel.InitializeRootAsyncPublic(rootItem).ConfigureAwait(false);
-        this.viewModel.SelectItem(item, RequestOrigin.PointerInput);
-
-        // Act
-        this.ResetChangeHandlers();
-        this.viewModel.ClearSelection(item);
-
-        // Assert
-        this.VerifySelectedItemPropertyChange(Times.Once);
-        this.VerifySelectedIndexPropertyChange(Times.Once);
-        this.VerifyNotifyRemovedFromSelection([1]);
-    }
-
-    [TestMethod]
-    [TestCategory($"{nameof(DynamicTree)} / ViewModel / MultipleSelection / ClearSelection")]
-    public async Task ClearSelection_WhenItemNotShown_ThrowsArgumentException()
-    {
-        // Arrange
-        var item = new TestTreeItemAdapter() { Label = "Item" };
-        var rootItem = new TestTreeItemAdapter([item], isRoot: true) { Label = "Root", IsExpanded = false };
-
-        await this.viewModel.InitializeRootAsyncPublic(rootItem).ConfigureAwait(false);
-        this.viewModel.SelectItem(rootItem, RequestOrigin.PointerInput);
-
-        // Act
-        this.ResetChangeHandlers();
-        var act = () => this.viewModel.ClearSelection(item);
-
-        // Assert
-        _ = act.Should().Throw<ArgumentException>();
-        this.VerifySelectedItemPropertyChange(Times.Never);
-        this.VerifySelectedIndexPropertyChange(Times.Never);
-        this.VerifyNotifySelectionChangedNever();
-        _ = this.Selection.SelectedIndices.Should().BeEquivalentTo([0]);
-    }
-
-    [TestMethod]
-    [TestCategory($"{nameof(DynamicTree)} / ViewModel / MultipleSelection / ClearAndSelect")]
-    public async Task ClearAndSelectItem_WhenItemNotShown_ThrowsArgumentException()
-    {
-        // Arrange
-        var item1 = new TestTreeItemAdapter() { Label = "Item1" };
-        var item2 = new TestTreeItemAdapter() { Label = "Item2" };
-        var rootItem = new TestTreeItemAdapter([item1, item2], isRoot: true) { Label = "Root", IsExpanded = false };
-
-        await this.viewModel.InitializeRootAsyncPublic(rootItem).ConfigureAwait(false);
-        this.viewModel.SelectItem(rootItem, RequestOrigin.PointerInput);
-
-        // Act
-        this.ResetChangeHandlers();
-        var act = () => this.viewModel.ClearAndSelectItem(item2);
-
-        // Assert
-        _ = act.Should().Throw<ArgumentException>();
-        this.VerifySelectedItemPropertyChange(Times.Never);
-        this.VerifySelectedIndexPropertyChange(Times.Never);
-        this.VerifyNotifySelectionChangedNever();
-    }
-
-    [TestMethod]
-    [TestCategory($"{nameof(DynamicTree)} / ViewModel / MultipleSelection / ClearAndSelect")]
-    public async Task ClearAndSelectItem_ShouldClearSelectionAndSelectSpecifiedItem()
-    {
-        // Arrange
-        var item1 = new TestTreeItemAdapter() { Label = "Item1" };
-        var item2 = new TestTreeItemAdapter() { Label = "Item2" };
-        var rootItem = new TestTreeItemAdapter([item1, item2], isRoot: true) { Label = "Root", IsExpanded = true };
-
-        await this.viewModel.InitializeRootAsyncPublic(rootItem).ConfigureAwait(false);
+        await this.InitializeAsync(2).ConfigureAwait(false);
         this.viewModel.SelectAllCommand.Execute(parameter: null);
 
-        // Act
-        this.viewModel.ClearAndSelectItem(item1);
+        this.viewModel.SelectItemCommand.Execute(new ItemSelectionArgs(this.items[0]));
 
-        // Assert
-        _ = this.Selection.SelectedItem.Should().Be(item1);
-        _ = this.Selection.SelectedIndex.Should().Be(1);
+        _ = this.Selection.SelectedItem.Should().Be(this.items[0]);
         _ = this.Selection.SelectedIndices.Should().BeEquivalentTo([1]);
     }
 
     [TestMethod]
-    [TestCategory($"{nameof(DynamicTree)} / ViewModel / MultipleSelection / ClearAndSelect")]
-    public async Task ClearAndSelectItem_ShouldTriggerPropertyAndCollectionNotifications()
+    public async Task SelectItemCommand_CtrlOnSelectedItem_DeselectsItAndKeepsTheRest()
     {
-        // Arrange
-        var item1 = new TestTreeItemAdapter() { Label = "Item1" };
-        var item2 = new TestTreeItemAdapter() { Label = "Item2" };
-        var rootItem = new TestTreeItemAdapter([item1, item2], isRoot: true) { Label = "Root", IsExpanded = true };
+        await this.InitializeAsync(2).ConfigureAwait(false);
+        this.viewModel.SelectItemCommand.Execute(new ItemSelectionArgs(this.items[0]));
+        this.viewModel.SelectItemCommand.Execute(new ItemSelectionArgs(this.items[1], IsCtrlKeyDown: true));
 
-        await this.viewModel.InitializeRootAsyncPublic(rootItem).ConfigureAwait(false);
-        this.viewModel.SelectItem(item1, RequestOrigin.PointerInput);
+        this.viewModel.SelectItemCommand.Execute(new ItemSelectionArgs(this.items[0], IsCtrlKeyDown: true));
 
-        // Act
-        this.ResetChangeHandlers();
-        this.viewModel.ClearAndSelectItem(item2);
-
-        // Assert
-        this.VerifySelectedItemPropertyChange(Times.Once);
-        this.VerifySelectedIndexPropertyChange(Times.Once);
-        this.VerifyNotifySelectionReset();
+        _ = this.Selection.SelectedIndices.Should().BeEquivalentTo([2]);
+        _ = this.Selection.SelectedItem.Should().Be(this.items[1]);
+        _ = this.viewModel.ActiveItem.Should().Be(this.items[1]);
     }
 
     [TestMethod]
-    [TestCategory($"{nameof(DynamicTree)} / ViewModel / MultipleSelection / ExtendSelection")]
-    public async Task ExtendSelectionTo_Up_ShouldAddToSelection()
+    public async Task SelectItemCommand_RaisesPropertyAndCollectionNotifications()
     {
-        // Arrange
-        var item1 = new TestTreeItemAdapter() { Label = "Item1" };
-        var item2 = new TestTreeItemAdapter() { Label = "Item2" };
-        var item3 = new TestTreeItemAdapter() { Label = "Item3" };
-        var item4 = new TestTreeItemAdapter() { Label = "Item4" };
-        var item5 = new TestTreeItemAdapter() { Label = "Item5" };
-        var rootItem =
-            new TestTreeItemAdapter([item1, item2, item3, item4, item5], isRoot: true) { Label = "Root", IsExpanded = true };
+        await this.InitializeAsync(1).ConfigureAwait(false);
+        var propertyChanged = new Mock<PropertyChangedEventHandler>();
+        var collectionChanged = new Mock<NotifyCollectionChangedEventHandler>();
+        this.Selection.PropertyChanged += propertyChanged.Object;
+        ((INotifyCollectionChanged)this.Selection.SelectedIndices).CollectionChanged += collectionChanged.Object;
 
-        await this.viewModel.InitializeRootAsyncPublic(rootItem).ConfigureAwait(false);
-        this.viewModel.SelectItem(item4, RequestOrigin.PointerInput);
+        this.viewModel.SelectItemCommand.Execute(new ItemSelectionArgs(this.items[0]));
 
-        // Act
-        this.viewModel.ExtendSelectionTo(item2);
-
-        // Assert
-        _ = this.Selection.SelectedItem.Should().Be(item2);
-        _ = this.Selection.SelectedIndex.Should().Be(2);
-        _ = this.Selection.SelectedItems.Should().Contain([item2, item3, item4]);
+        VerifyPropertyChange(propertyChanged, nameof(this.Selection.SelectedItem));
+        VerifyPropertyChange(propertyChanged, nameof(this.Selection.SelectedIndex));
+        collectionChanged.Verify(
+            handler => handler(
+                It.IsAny<object>(),
+                It.Is<NotifyCollectionChangedEventArgs>(e => e.Action == NotifyCollectionChangedAction.Add && e.NewItems!.Cast<int>().Contains(1))),
+            Times.Once);
     }
 
     [TestMethod]
-    [TestCategory($"{nameof(DynamicTree)} / ViewModel / MultipleSelection / ExtendSelection")]
-    public async Task ExtendSelectionTo_Down_ShouldAddToSelection()
+    [DataRow(4, 2, new[] { 2, 3, 4 }, DisplayName = "Shift range up")]
+    [DataRow(1, 5, new[] { 1, 2, 3, 4, 5 }, DisplayName = "Shift range down")]
+    public async Task SelectItemCommand_WithShift_SelectsTheRangeFromTheSelectedItem(int anchor, int target, int[] expected)
     {
-        // Arrange
-        var item1 = new TestTreeItemAdapter() { Label = "Item1" };
-        var item2 = new TestTreeItemAdapter() { Label = "Item2" };
-        var item3 = new TestTreeItemAdapter() { Label = "Item3" };
-        var item4 = new TestTreeItemAdapter() { Label = "Item4" };
-        var item5 = new TestTreeItemAdapter() { Label = "Item5" };
-        var rootItem =
-            new TestTreeItemAdapter([item1, item2, item3, item4, item5], isRoot: true) { Label = "Root", IsExpanded = true };
+        await this.InitializeAsync(5).ConfigureAwait(false);
+        this.viewModel.SelectItemCommand.Execute(new ItemSelectionArgs(this.items[anchor - 1]));
 
-        await this.viewModel.InitializeRootAsyncPublic(rootItem).ConfigureAwait(false);
-        this.viewModel.SelectItem(item1, RequestOrigin.PointerInput);
+        this.viewModel.SelectItemCommand.Execute(new ItemSelectionArgs(this.items[target - 1], IsShiftKeyDown: true));
 
-        // Act
-        this.viewModel.ExtendSelectionTo(item5);
-
-        // Assert
-        _ = this.Selection.SelectedItem.Should().Be(item5);
-        _ = this.Selection.SelectedIndex.Should().Be(5);
-        _ = this.Selection.SelectedItems.Should().Contain([item1, item2, item3, item4, item5]);
+        _ = this.Selection.SelectedItems.Should().BeEquivalentTo(expected.Select(n => this.items[n - 1]));
+        _ = this.Selection.SelectedItem.Should().Be(this.items[target - 1]);
+        _ = this.viewModel.ActiveItem.Should().Be(this.items[target - 1]);
     }
 
     [TestMethod]
-    [TestCategory($"{nameof(DynamicTree)} / ViewModel / MultipleSelection / ExtendSelection")]
-    public async Task ExtendSelectionTo_WhenItemNotShown_ThrowsArgumentException()
+    public async Task SelectItemCommand_WithShift_AfterTheSelectionWasReplacedBehindTheAnchor_StartsFromTheSelectedItem()
     {
-        // Arrange
-        var item1 = new TestTreeItemAdapter() { Label = "Item1" };
-        var item2 = new TestTreeItemAdapter() { Label = "Item2" };
-        var rootItem = new TestTreeItemAdapter([item1, item2], isRoot: true) { Label = "Root", IsExpanded = false };
+        await this.InitializeAsync(3).ConfigureAwait(false);
+        this.viewModel.SelectItemCommand.Execute(new ItemSelectionArgs(this.items[0]));
+        this.viewModel.ClearAndSelectItem(this.items[1]);
 
-        await this.viewModel.InitializeRootAsyncPublic(rootItem).ConfigureAwait(false);
-        this.viewModel.SelectItem(rootItem, RequestOrigin.PointerInput);
+        this.viewModel.SelectItemCommand.Execute(new ItemSelectionArgs(this.items[2], IsShiftKeyDown: true));
 
-        // Act
-        this.ResetChangeHandlers();
-        var act = () => this.viewModel.ExtendSelectionTo(item2);
-
-        // Assert
-        _ = act.Should().Throw<ArgumentException>();
-        this.VerifySelectedItemPropertyChange(Times.Never);
-        this.VerifySelectedIndexPropertyChange(Times.Never);
-        this.VerifyNotifySelectionChangedNever();
+        _ = this.Selection.SelectedItems.Should().BeEquivalentTo([this.items[1], this.items[2]]);
+        _ = this.Selection.SelectedItem.Should().Be(this.items[2]);
     }
 
     [TestMethod]
-    [TestCategory($"{nameof(DynamicTree)} / ViewModel / MultipleSelection / ExtendSelection")]
-    public async Task ExtendSelectionTo_ShouldTriggerPropertyAndCollectionNotifications()
+    public async Task ToggleSelectAllCommand_WhenSomeItemsAreNotSelected_SelectsEveryItem()
     {
-        // Arrange
-        var item1 = new TestTreeItemAdapter() { Label = "Item1" };
-        var item2 = new TestTreeItemAdapter() { Label = "Item2" };
-        var item3 = new TestTreeItemAdapter() { Label = "Item3" };
-        var rootItem = new TestTreeItemAdapter([item1, item2, item3], isRoot: true) { Label = "Root", IsExpanded = true };
+        await this.InitializeAsync(2).ConfigureAwait(false);
+        this.viewModel.SelectItemCommand.Execute(new ItemSelectionArgs(this.items[1]));
 
-        await this.viewModel.InitializeRootAsyncPublic(rootItem).ConfigureAwait(false);
-        this.viewModel.SelectItem(item1, RequestOrigin.PointerInput);
+        this.viewModel.ToggleSelectAllCommand.Execute(parameter: null);
 
-        // Act
-        this.ResetChangeHandlers();
-        this.viewModel.ExtendSelectionTo(item3);
-
-        // Assert
-        this.VerifySelectedItemPropertyChange(Times.Once);
-        this.VerifySelectedIndexPropertyChange(Times.Once);
-        this.VerifyNotifySelectionReset();
+        _ = this.Selection.SelectedItems.Should().BeEquivalentTo([this.root, this.items[0], this.items[1]]);
+        _ = this.Selection.SelectedItem.Should().Be(this.items[1]);
     }
 
     [TestMethod]
-    [TestCategory($"{nameof(DynamicTree)} / ViewModel / MultipleSelection / ToggleSelectAll")]
-    public async Task ToggleSelectAll_ShouldSelectAllItemsWhenSomeItemsNotSelected()
+    public async Task ToggleSelectAllCommand_WhenEveryItemIsSelected_ClearsSelection()
     {
-        // Arrange
-        var item1 = new TestTreeItemAdapter() { Label = "Item1" };
-        var item2 = new TestTreeItemAdapter() { Label = "Item2" };
-        var rootItem = new TestTreeItemAdapter([item1, item2], isRoot: true) { Label = "Root", IsExpanded = true };
+        await this.InitializeAsync(2).ConfigureAwait(false);
+        this.viewModel.ToggleSelectAllCommand.Execute(parameter: null);
 
-        await this.viewModel.InitializeRootAsyncPublic(rootItem).ConfigureAwait(false);
-        this.viewModel.SelectItem(item2, RequestOrigin.PointerInput);
+        this.viewModel.ToggleSelectAllCommand.Execute(parameter: null);
 
-        // Act
-        this.viewModel.ToggleSelectAll();
-
-        // Assert
-        _ = this.Selection.SelectedItem.Should().Be(item2);
-        _ = this.Selection.SelectedIndex.Should().Be(2);
-        _ = this.Selection.SelectedItems.Should().Contain([item1, item2]);
-    }
-
-    [TestMethod]
-    [TestCategory($"{nameof(DynamicTree)} / ViewModel / MultipleSelection / ToggleSelectAll")]
-    public async Task ToggleSelectAll_ShouldClearAllSelectionsWhenAllItemsSelected()
-    {
-        // Arrange
-        var item1 = new TestTreeItemAdapter() { Label = "Item1" };
-        var item2 = new TestTreeItemAdapter() { Label = "Item2" };
-        var rootItem = new TestTreeItemAdapter([item1, item2], isRoot: true) { Label = "Root", IsExpanded = true };
-
-        await this.viewModel.InitializeRootAsyncPublic(rootItem).ConfigureAwait(false);
-        this.viewModel.ToggleSelectAll();
-
-        // Act
-        this.viewModel.ToggleSelectAll();
-
-        // Assert
-        _ = this.Selection.SelectedItem.Should().BeNull();
+        _ = this.Selection.IsEmpty.Should().BeTrue();
         _ = this.Selection.SelectedIndex.Should().Be(-1);
-        _ = this.Selection.SelectedItems.Should().BeEmpty();
+        _ = this.viewModel.ActiveItem.Should().BeNull();
     }
 
     [TestMethod]
-    [TestCategory($"{nameof(DynamicTree)} / ViewModel / MultipleSelection / SelectNone")]
-    public async Task SelectNone_ShouldClearCurrentSelectionInMultipleSelectionMode()
+    public async Task SelectAllCommand_SelectsEveryShownItem()
     {
-        // Arrange
-        var item1 = new TestTreeItemAdapter() { Label = "Item1" };
-        var item2 = new TestTreeItemAdapter() { Label = "Item2" };
-        var rootItem = new TestTreeItemAdapter([item1, item2], isRoot: true) { Label = "Root", IsExpanded = true };
+        await this.InitializeAsync(2).ConfigureAwait(false);
 
-        await this.viewModel.InitializeRootAsyncPublic(rootItem).ConfigureAwait(false);
-        this.viewModel.SelectItem(item1, RequestOrigin.PointerInput);
-
-        // Act
-        this.viewModel.SelectNoneCommand.Execute(parameter: null);
-
-        // Assert
-        _ = this.Selection.SelectedItem.Should().BeNull();
-        _ = this.Selection.SelectedIndex.Should().Be(-1);
-        _ = this.Selection.SelectedItems.Should().BeEmpty();
-    }
-
-    [TestMethod]
-    [TestCategory($"{nameof(DynamicTree)} / ViewModel / MultipleSelection / SelectNone")]
-    public async Task SelectNone_ShouldTriggerPropertyAndCollectionNotifications()
-    {
-        // Arrange
-        var item = new TestTreeItemAdapter() { Label = "Item" };
-        var rootItem = new TestTreeItemAdapter([item], isRoot: true) { Label = "Root", IsExpanded = true };
-
-        await this.viewModel.InitializeRootAsyncPublic(rootItem).ConfigureAwait(false);
-        this.viewModel.SelectItem(item);
-
-        // Act
-        this.ResetChangeHandlers();
-        this.viewModel.SelectNoneCommand.Execute(parameter: null);
-
-        // Assert
-        this.VerifySelectedItemPropertyChange(Times.Once);
-        this.VerifySelectedIndexPropertyChange(Times.Once);
-        this.VerifyNotifySelectionReset();
-    }
-
-    [TestMethod]
-    [TestCategory($"{nameof(DynamicTree)} / ViewModel / MultipleSelection / SelectAll")]
-    public void SelectAll_ShouldSelectAllItems()
-    {
-        // Arrange
-        var item1 = new TestTreeItemAdapter() { Label = "Item1" };
-        var item2 = new TestTreeItemAdapter() { Label = "Item2" };
-        var rootItem = new TestTreeItemAdapter([item1, item2], isRoot: true) { Label = "Root", IsExpanded = true };
-
-        this.viewModel.InitializeRootAsyncPublic(rootItem).Wait(this.TestContext.CancellationToken);
-
-        // Act
         this.viewModel.SelectAllCommand.Execute(parameter: null);
 
-        // Assert
-        _ = this.Selection.SelectedItem.Should().Be(item2);
-        _ = this.Selection.SelectedIndex.Should().Be(2);
-        _ = this.Selection.SelectedItems.Should().Contain([item1, item2]);
+        _ = this.Selection.SelectedItems.Should().BeEquivalentTo([this.root, this.items[0], this.items[1]]);
+        _ = this.Selection.SelectedItem.Should().Be(this.items[1]);
     }
 
     [TestMethod]
-    [TestCategory($"{nameof(DynamicTree)} / ViewModel / MultipleSelection / SelectNone")]
-    public async Task SelectAll_ShouldTriggerPropertyAndCollectionNotifications()
+    public async Task InvertSelectionCommand_SelectsTheUnselectedItemsOnly()
     {
-        // Arrange
-        var item = new TestTreeItemAdapter() { Label = "Item" };
-        var rootItem = new TestTreeItemAdapter([item], isRoot: true) { Label = "Root", IsExpanded = true };
+        await this.InitializeAsync(3).ConfigureAwait(false);
+        this.viewModel.SelectItemCommand.Execute(new ItemSelectionArgs(this.items[1]));
 
-        await this.viewModel.InitializeRootAsyncPublic(rootItem).ConfigureAwait(false);
-
-        // Act
-        this.ResetChangeHandlers();
-        this.viewModel.SelectAllCommand.Execute(parameter: null);
-
-        // Assert
-        this.VerifySelectedItemPropertyChange(Times.Once);
-        this.VerifySelectedIndexPropertyChange(Times.Once);
-        this.VerifyNotifySelectionReset();
-    }
-
-    [TestMethod]
-    [TestCategory($"{nameof(DynamicTree)} / ViewModel / MultipleSelection / InvertSelection")]
-    public void InvertSelection_ShouldInvertCurrentSelection()
-    {
-        // Arrange
-        var item1 = new TestTreeItemAdapter() { Label = "Item1" };
-        var item2 = new TestTreeItemAdapter() { Label = "Item2" };
-        var item3 = new TestTreeItemAdapter() { Label = "Item3" };
-        var rootItem = new TestTreeItemAdapter([item1, item2, item3], isRoot: true) { Label = "Root", IsExpanded = true };
-
-        this.viewModel.InitializeRootAsyncPublic(rootItem).Wait(this.TestContext.CancellationToken);
-        this.viewModel.SelectItem(item2);
-
-        // Act
         this.viewModel.InvertSelectionCommand.Execute(parameter: null);
 
-        // Assert
-        _ = this.Selection.SelectedItem.Should().Be(item3); // last selected item
-        _ = this.Selection.SelectedIndex.Should().Be(3);
-        _ = this.Selection.SelectedItems.Should().Contain([rootItem, item1, item3]);
+        _ = this.Selection.SelectedItems.Should().BeEquivalentTo([this.root, this.items[0], this.items[2]]);
+        _ = this.Selection.SelectedItem.Should().Be(this.items[2]);
     }
 
-    private void ResetChangeHandlers()
+    [TestMethod]
+    public async Task InvertDisplayedSelection_InvertsOnlyTheDisplayedItems()
     {
-        this.propertyChangedHandlerMock.Reset();
-        this.collectionChangedHandlerMock.Reset();
+        await this.InitializeAsync(3).ConfigureAwait(false);
+        this.viewModel.SelectItemCommand.Execute(new ItemSelectionArgs(this.items[0]));
+
+        this.viewModel.InvertDisplayedSelection([this.items[0], this.items[1]]);
+
+        _ = this.Selection.SelectedItems.Should().BeEquivalentTo([this.items[1]]);
     }
 
-    private void VerifySelectedItemPropertyChange(Func<Times> times) =>
-        this.propertyChangedHandlerMock.Verify(
-            handler => handler(
-                It.IsAny<object>(),
-                It.Is<PropertyChangedEventArgs>(e => e.PropertyName == nameof(this.Selection.SelectedItem))),
-            times);
-
-    private void VerifySelectedIndexPropertyChange(Func<Times> times) =>
-        this.propertyChangedHandlerMock.Verify(
-            handler => handler(
-                It.IsAny<object>(),
-                It.Is<PropertyChangedEventArgs>(e => e.PropertyName == nameof(this.Selection.SelectedItem))),
-            times);
-
-    private void VerifyNotifyAddedToSelection(int[] args)
+    [TestMethod]
+    public async Task ToggleDisplayedSelection_SelectsDisplayedItemsThenClearsThem()
     {
-        var invocations = this.collectionChangedHandlerMock.Invocations
-            .Where(inv => inv.Arguments.Count >= 2 && inv.Arguments[1] is NotifyCollectionChangedEventArgs)
-            .Select(inv => inv.Arguments[1] as NotifyCollectionChangedEventArgs)
-            .Where(a => a is not null)
-            .Select(a => a!)
-            .ToArray();
+        await this.InitializeAsync(3).ConfigureAwait(false);
+        ITreeItem[] displayed = [this.items[0], this.items[1]];
 
-        var found = invocations.Any(e =>
-            (e.Action == NotifyCollectionChangedAction.Add && e.NewItems != null && args.All(arg => e.NewItems.Cast<int>().Contains(arg))) ||
-            e.Action == NotifyCollectionChangedAction.Reset);
+        this.viewModel.ToggleDisplayedSelection(displayed);
+        _ = this.Selection.SelectedItems.Should().BeEquivalentTo(displayed);
 
-        _ = found.Should().BeTrue($"Expected added indices [{string.Join(',', args)}] but actual invocations were: {string.Join(';', invocations.Select(x => x.Action + ":" + (x.NewItems is null ? "null" : string.Join(',', x.NewItems.Cast<int>()))))}");
+        this.viewModel.ToggleDisplayedSelection(displayed);
+        _ = this.Selection.IsEmpty.Should().BeTrue();
     }
 
-    private void VerifyNotifyRemovedFromSelection(int[] args) => this.collectionChangedHandlerMock.Verify(
-        handler => handler(
-            It.IsAny<object>(),
-            It.Is<NotifyCollectionChangedEventArgs>(
-                e => e.Action == NotifyCollectionChangedAction.Remove &&
-                     args.All(arg => e.OldItems!.Contains(arg)))),
-        Times.Once);
+    private static void VerifyPropertyChange(Mock<PropertyChangedEventHandler> handler, string propertyName)
+        => handler.Verify(
+            h => h(It.IsAny<object>(), It.Is<PropertyChangedEventArgs>(e => string.Equals(e.PropertyName, propertyName, StringComparison.Ordinal))),
+            Times.Once);
 
-    private void VerifyNotifySelectionReset() => this.collectionChangedHandlerMock.Verify(
-        handler => handler(
-            It.IsAny<object>(),
-            It.Is<NotifyCollectionChangedEventArgs>(
-                e => e.Action == NotifyCollectionChangedAction.Reset)),
-        Times.Once);
+    private async Task InitializeAsync(int childCount)
+    {
+        this.items = [.. Enumerable.Range(1, childCount).Select(n => new TestTreeItemAdapter { Label = $"Item{n}" })];
+        this.root = new TestTreeItemAdapter(this.items, isRoot: true) { Label = "Root", IsExpanded = true };
 
-    private void VerifyNotifySelectionChangedNever() => this.collectionChangedHandlerMock.Verify(
-        handler => handler(It.IsAny<object>(), It.IsAny<NotifyCollectionChangedEventArgs>()),
-        Times.Never);
+        await this.viewModel.InitializeRootAsyncPublic(this.root).ConfigureAwait(false);
+    }
 }

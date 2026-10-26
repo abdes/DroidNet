@@ -32,4 +32,13 @@ public partial class DynamicTreeItem
         var depth = itemAdapter.Depth;
         LogItemMarginUpdated(this.logger, label, depth, extraLeftMargin);
     }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Error,
+        Message = "Committing an in-place rename failed.")]
+    private static partial void LogRenameFailed(ILogger logger, Exception exception);
+
+    private void LogRenameFailed(Exception exception)
+        => LogRenameFailed(this.logger, exception);
 }

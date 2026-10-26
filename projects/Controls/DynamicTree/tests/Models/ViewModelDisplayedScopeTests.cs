@@ -9,7 +9,7 @@ using RequestOrigin = DroidNet.Controls.DynamicTreeViewModel.RequestOrigin;
 namespace DroidNet.Controls.Tests;
 
 /// <summary>
-/// C34: with an explicit displayed-interaction scope, keyboard focus and typeahead must stay within
+/// With an explicit displayed-interaction scope, keyboard focus and typeahead must stay within
 /// the displayed (filtered) projection and never land on a row the filter hid. The default
 /// <see cref="TreeSelectionScope.ShownItems"/> behaviour is unchanged and covered elsewhere.
 /// </summary>
@@ -18,55 +18,6 @@ namespace DroidNet.Controls.Tests;
 [TestCategory($"{nameof(DynamicTree)} / ViewModel / DisplayedScope")]
 public sealed class ViewModelDisplayedScopeTests : ViewModelTestBase
 {
-    [TestMethod]
-    public async Task FocusNext_DisplayedScope_EntersScopeAtFirstDisplayedNotNextShown()
-    {
-        // Arrange: A, B, C shown; filter leaves only C displayed.
-        var a = new TestTreeItemAdapter { Label = "A" };
-        var b = new TestTreeItemAdapter { Label = "B" };
-        var c = new TestTreeItemAdapter { Label = "C" };
-        var root = new TestTreeItemAdapter([a, b, c], isRoot: true) { Label = "Root", IsExpanded = true };
-        using var viewModel = new TestViewModel(skipRoot: true, this.LoggerFactoryInstance);
-        await viewModel.InitializeRootAsyncPublic(root).ConfigureAwait(false);
-
-        viewModel.FilterPredicate = item => string.Equals(item.Label, "C", StringComparison.Ordinal);
-        viewModel.InteractionScope = TreeSelectionScope.DisplayedItems;
-        _ = viewModel.FocusItem(a, RequestOrigin.KeyboardInput);
-
-        // Act
-        var moved = viewModel.FocusNextVisibleItem(RequestOrigin.KeyboardInput);
-
-        // Assert: from a focus outside the scope, navigation enters the displayed scope at C — it
-        // must NOT step to B, which the filter hid.
-        _ = moved.Should().BeTrue();
-        _ = viewModel.TryGetFocusedItem(out var focused, out _).Should().BeTrue();
-        _ = focused.Should().Be(c, "displayed scope skips filtered-out B");
-    }
-
-    [TestMethod]
-    public async Task FocusNext_DisplayedScope_DoesNotStepToAHiddenItem()
-    {
-        // Arrange: A, B, C shown; filter leaves only B displayed.
-        var a = new TestTreeItemAdapter { Label = "A" };
-        var b = new TestTreeItemAdapter { Label = "B" };
-        var c = new TestTreeItemAdapter { Label = "C" };
-        var root = new TestTreeItemAdapter([a, b, c], isRoot: true) { Label = "Root", IsExpanded = true };
-        using var viewModel = new TestViewModel(skipRoot: true, this.LoggerFactoryInstance);
-        await viewModel.InitializeRootAsyncPublic(root).ConfigureAwait(false);
-
-        viewModel.FilterPredicate = item => string.Equals(item.Label, "B", StringComparison.Ordinal);
-        viewModel.InteractionScope = TreeSelectionScope.DisplayedItems;
-        _ = viewModel.FocusItem(b, RequestOrigin.KeyboardInput);
-
-        // Act: B is the last displayed item, so there is nothing to move to.
-        var moved = viewModel.FocusNextVisibleItem(RequestOrigin.KeyboardInput);
-
-        // Assert: focus stays on B; it must not advance to the filtered-out C.
-        _ = moved.Should().BeFalse();
-        _ = viewModel.TryGetFocusedItem(out var focused, out _).Should().BeTrue();
-        _ = focused.Should().Be(b, "navigation stops at the end of the displayed scope");
-    }
-
     [TestMethod]
     public async Task TypeAhead_DisplayedScope_IgnoresFilteredOutMatches()
     {
@@ -210,7 +161,14 @@ public sealed class ViewModelDisplayedScopeTests : ViewModelTestBase
     }
 
     [TestMethod]
-    public async Task Navigation_DisplayedScope_WithNoMatches_ClearsFocusAndCannotNavigate()
+    [DataRow(NoMatchAction.Next)]
+    [DataRow(NoMatchAction.Previous)]
+    [DataRow(NoMatchAction.FirstInTree)]
+    [DataRow(NoMatchAction.LastInTree)]
+    [DataRow(NoMatchAction.FirstInParent)]
+    [DataRow(NoMatchAction.LastInParent)]
+    [DataRow(NoMatchAction.EnsureFocus)]
+    public async Task Navigation_DisplayedScope_WithNoMatches_ClearsFocusAndCannotNavigate(NoMatchAction action)
     {
         var item = new TestTreeItemAdapter { Label = "Hidden" };
         var root = new TestTreeItemAdapter([item], isRoot: true) { Label = "Root", IsExpanded = true };
@@ -218,23 +176,33 @@ public sealed class ViewModelDisplayedScopeTests : ViewModelTestBase
         await viewModel.InitializeRootAsyncPublic(root).ConfigureAwait(false);
         viewModel.FilterPredicate = _ => false;
         viewModel.InteractionScope = TreeSelectionScope.DisplayedItems;
+        _ = viewModel.FocusItem(item, RequestOrigin.Programmatic);
 
-        Func<bool>[] actions =
-        [
-            () => viewModel.FocusNextVisibleItem(RequestOrigin.KeyboardInput),
-            () => viewModel.FocusPreviousVisibleItem(RequestOrigin.KeyboardInput),
-            () => viewModel.FocusFirstVisibleItemInTree(RequestOrigin.KeyboardInput),
-            () => viewModel.FocusLastVisibleItemInTree(RequestOrigin.KeyboardInput),
-            () => viewModel.FocusFirstVisibleItemInParent(RequestOrigin.KeyboardInput),
-            () => viewModel.FocusLastVisibleItemInParent(RequestOrigin.KeyboardInput),
-            () => viewModel.EnsureFocus(RequestOrigin.KeyboardInput),
-        ];
-        foreach (var action in actions)
+        var moved = action switch
         {
-            _ = viewModel.FocusItem(item, RequestOrigin.Programmatic);
-            _ = action().Should().BeFalse();
-            _ = viewModel.TryGetFocusedItem(out _, out _).Should().BeFalse();
-        }
+            NoMatchAction.Next => viewModel.FocusNextVisibleItem(RequestOrigin.KeyboardInput),
+            NoMatchAction.Previous => viewModel.FocusPreviousVisibleItem(RequestOrigin.KeyboardInput),
+            NoMatchAction.FirstInTree => viewModel.FocusFirstVisibleItemInTree(RequestOrigin.KeyboardInput),
+            NoMatchAction.LastInTree => viewModel.FocusLastVisibleItemInTree(RequestOrigin.KeyboardInput),
+            NoMatchAction.FirstInParent => viewModel.FocusFirstVisibleItemInParent(RequestOrigin.KeyboardInput),
+            NoMatchAction.LastInParent => viewModel.FocusLastVisibleItemInParent(RequestOrigin.KeyboardInput),
+            NoMatchAction.EnsureFocus => viewModel.EnsureFocus(RequestOrigin.KeyboardInput),
+            _ => throw new ArgumentOutOfRangeException(nameof(action)),
+        };
+
+        _ = moved.Should().BeFalse();
+        _ = viewModel.TryGetFocusedItem(out _, out _).Should().BeFalse();
+    }
+
+    [TestMethod]
+    public async Task TypeAhead_DisplayedScope_WithNoMatches_ReturnsFalse()
+    {
+        var item = new TestTreeItemAdapter { Label = "Hidden" };
+        var root = new TestTreeItemAdapter([item], isRoot: true) { Label = "Root", IsExpanded = true };
+        using var viewModel = new TestViewModel(skipRoot: true, this.LoggerFactoryInstance);
+        await viewModel.InitializeRootAsyncPublic(root).ConfigureAwait(false);
+        viewModel.FilterPredicate = _ => false;
+        viewModel.InteractionScope = TreeSelectionScope.DisplayedItems;
 
         _ = viewModel.FocusNextByPrefix("Hidden", RequestOrigin.KeyboardInput).Should().BeFalse();
     }
@@ -283,5 +251,16 @@ public sealed class ViewModelDisplayedScopeTests : ViewModelTestBase
         _ = viewModel.FocusNextVisibleItem(RequestOrigin.KeyboardInput).Should().BeTrue();
         _ = viewModel.TryGetFocusedItem(out focused, out _).Should().BeTrue();
         _ = focused.Should().BeSameAs(hidden);
+    }
+
+    public enum NoMatchAction
+    {
+        Next,
+        Previous,
+        FirstInTree,
+        LastInTree,
+        FirstInParent,
+        LastInParent,
+        EnsureFocus,
     }
 }

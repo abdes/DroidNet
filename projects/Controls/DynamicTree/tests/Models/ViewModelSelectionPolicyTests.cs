@@ -9,10 +9,9 @@ using Microsoft.Extensions.Logging;
 namespace DroidNet.Controls.Tests;
 
 /// <summary>
-/// C17/C19 seams: the active (explicitly selected) identity is tracked independently of
-/// selection order, and the consumer co-selection/bulk policies reshape interactive,
-/// range and bulk selection. The default policy (everything allowed) must keep the
-/// historical behaviour, which the existing suites prove unchanged.
+/// The active (explicitly selected) identity is tracked independently of selection order,
+/// and the consumer co-selection/bulk policies reshape interactive, range and bulk
+/// selection. The default policy (everything allowed) leaves generic behaviour unchanged.
 /// </summary>
 [TestClass]
 [ExcludeFromCodeCoverage]
@@ -22,35 +21,24 @@ public sealed partial class ViewModelSelectionPolicyTests : ViewModelTestBase
     [TestMethod]
     public async Task ActiveItem_TracksLastExplicitSelectionNotRowOrder()
     {
-        var a = new TestTreeItemAdapter { Label = "A" };
-        var b = new TestTreeItemAdapter { Label = "B" };
-        var root = new TestTreeItemAdapter([a, b], isRoot: true) { Label = "Root", IsExpanded = true };
-        using var viewModel = new TestViewModel(skipRoot: true, this.LoggerFactoryInstance)
-        {
-            SelectionMode = SelectionMode.Multiple,
-        };
-        await viewModel.InitializeRootAsyncPublic(root).ConfigureAwait(false);
-        var shown = viewModel.ShownItems.ToList();
+        var a = Item("A");
+        var b = Item("B");
+        using var viewModel = await this.CreateAsync(a, b).ConfigureAwait(false);
+        var shown = Shown(viewModel);
 
         viewModel.SelectDisplayedItem(b, [b], isControlDown: false, isShiftDown: false);
         viewModel.SelectDisplayedItem(a, shown, isControlDown: true, isShiftDown: false);
 
         _ = viewModel.ActiveItem.Should().Be(a, "the last explicitly clicked row is the active identity");
-        _ = shown.IndexOf(a).Should().BeLessThan(shown.IndexOf(b), "A still precedes B in selection order");
     }
 
     [TestMethod]
     public async Task CtrlDeselectingActiveRow_ClearsActiveAndKeepsRemainingSelection()
     {
-        var a = new TestTreeItemAdapter { Label = "A" };
-        var b = new TestTreeItemAdapter { Label = "B" };
-        var root = new TestTreeItemAdapter([a, b], isRoot: true) { Label = "Root", IsExpanded = true };
-        using var viewModel = new TestViewModel(skipRoot: true, this.LoggerFactoryInstance)
-        {
-            SelectionMode = SelectionMode.Multiple,
-        };
-        await viewModel.InitializeRootAsyncPublic(root).ConfigureAwait(false);
-        var shown = viewModel.ShownItems.ToList();
+        var a = Item("A");
+        var b = Item("B");
+        using var viewModel = await this.CreateAsync(a, b).ConfigureAwait(false);
+        var shown = Shown(viewModel);
 
         viewModel.SelectDisplayedItem(a, shown, isControlDown: false, isShiftDown: false);
         viewModel.SelectDisplayedItem(b, shown, isControlDown: true, isShiftDown: false);
@@ -63,16 +51,11 @@ public sealed partial class ViewModelSelectionPolicyTests : ViewModelTestBase
     [TestMethod]
     public async Task SelectionSettled_FiresOncePerEntryWithFinalActiveIdentity()
     {
-        var a = new TestTreeItemAdapter { Label = "A" };
-        var b = new TestTreeItemAdapter { Label = "B" };
-        var c = new TestTreeItemAdapter { Label = "C" };
-        var root = new TestTreeItemAdapter([a, b, c], isRoot: true) { Label = "Root", IsExpanded = true };
-        using var viewModel = new TestViewModel(skipRoot: true, this.LoggerFactoryInstance)
-        {
-            SelectionMode = SelectionMode.Multiple,
-        };
-        await viewModel.InitializeRootAsyncPublic(root).ConfigureAwait(false);
-        var shown = viewModel.ShownItems.ToList();
+        var a = Item("A");
+        var b = Item("B");
+        var c = Item("C");
+        using var viewModel = await this.CreateAsync(a, b, c).ConfigureAwait(false);
+        var shown = Shown(viewModel);
 
         var settles = 0;
         ITreeItem? activeAtSettle = null;
@@ -92,15 +75,44 @@ public sealed partial class ViewModelSelectionPolicyTests : ViewModelTestBase
     }
 
     [TestMethod]
+    public async Task ShiftRange_Downward_SelectsEveryRowFromTheAnchor()
+    {
+        var a = Item("A");
+        var b = Item("B");
+        var c = Item("C");
+        using var viewModel = await this.CreateAsync(a, b, c).ConfigureAwait(false);
+        var shown = Shown(viewModel);
+
+        viewModel.SelectDisplayedItem(a, shown, isControlDown: false, isShiftDown: false);
+        viewModel.SelectDisplayedItem(c, shown, isControlDown: false, isShiftDown: true);
+
+        _ = shown.Where(item => item.IsSelected).Should().BeEquivalentTo([a, b, c]);
+        _ = viewModel.ActiveItem.Should().Be(c);
+    }
+
+    [TestMethod]
+    public async Task ShiftRange_Upward_SelectsEveryRowFromTheAnchor()
+    {
+        var a = Item("A");
+        var b = Item("B");
+        var c = Item("C");
+        using var viewModel = await this.CreateAsync(a, b, c).ConfigureAwait(false);
+        var shown = Shown(viewModel);
+
+        viewModel.SelectDisplayedItem(c, shown, isControlDown: false, isShiftDown: false);
+        viewModel.SelectDisplayedItem(b, shown, isControlDown: false, isShiftDown: true);
+
+        _ = shown.Where(item => item.IsSelected).Should().BeEquivalentTo([b, c]);
+        _ = viewModel.ActiveItem.Should().Be(b);
+    }
+
+    [TestMethod]
     public async Task CoSelectionPolicy_RefusedCtrlClick_BecomesExclusiveSelection()
     {
-        var a = new TestTreeItemAdapter { Label = "A" };
-        var exclusive = new TestTreeItemAdapter { Label = "Exclusive" };
-        var root = new TestTreeItemAdapter([a, exclusive], isRoot: true) { Label = "Root", IsExpanded = true };
-        using var viewModel = new ExclusiveItemViewModel(this.LoggerFactoryInstance, exclusive);
-        viewModel.SelectionMode = SelectionMode.Multiple;
-        await viewModel.InitializeRootAsync(root, skipRoot: true).ConfigureAwait(false);
-        var shown = viewModel.ShownItems.ToList();
+        var a = Item("A");
+        var exclusive = Item("Exclusive");
+        using var viewModel = await this.CreateExclusiveAsync(exclusive, a, exclusive).ConfigureAwait(false);
+        var shown = Shown(viewModel);
 
         viewModel.SelectDisplayedItem(a, shown, isControlDown: false, isShiftDown: false);
         viewModel.SelectDisplayedItem(exclusive, shown, isControlDown: true, isShiftDown: false);
@@ -113,13 +125,10 @@ public sealed partial class ViewModelSelectionPolicyTests : ViewModelTestBase
     [TestMethod]
     public async Task CoSelectionPolicy_SelectedExclusiveRow_BlocksAddingAnotherRow()
     {
-        var a = new TestTreeItemAdapter { Label = "A" };
-        var exclusive = new TestTreeItemAdapter { Label = "Exclusive" };
-        var root = new TestTreeItemAdapter([a, exclusive], isRoot: true) { Label = "Root", IsExpanded = true };
-        using var viewModel = new ExclusiveItemViewModel(this.LoggerFactoryInstance, exclusive);
-        viewModel.SelectionMode = SelectionMode.Multiple;
-        await viewModel.InitializeRootAsync(root, skipRoot: true).ConfigureAwait(false);
-        var shown = viewModel.ShownItems.ToList();
+        var a = Item("A");
+        var exclusive = Item("Exclusive");
+        using var viewModel = await this.CreateExclusiveAsync(exclusive, a, exclusive).ConfigureAwait(false);
+        var shown = Shown(viewModel);
 
         viewModel.SelectDisplayedItem(exclusive, shown, isControlDown: false, isShiftDown: false);
         viewModel.SelectDisplayedItem(a, shown, isControlDown: true, isShiftDown: false);
@@ -131,13 +140,10 @@ public sealed partial class ViewModelSelectionPolicyTests : ViewModelTestBase
     [TestMethod]
     public async Task ShiftRange_TargetingExcludedRow_SelectsItAlone()
     {
-        var a = new TestTreeItemAdapter { Label = "A" };
-        var exclusive = new TestTreeItemAdapter { Label = "Exclusive" };
-        var root = new TestTreeItemAdapter([a, exclusive], isRoot: true) { Label = "Root", IsExpanded = true };
-        using var viewModel = new ExclusiveItemViewModel(this.LoggerFactoryInstance, exclusive);
-        viewModel.SelectionMode = SelectionMode.Multiple;
-        await viewModel.InitializeRootAsync(root, skipRoot: true).ConfigureAwait(false);
-        var shown = viewModel.ShownItems.ToList();
+        var a = Item("A");
+        var exclusive = Item("Exclusive");
+        using var viewModel = await this.CreateExclusiveAsync(exclusive, a, exclusive).ConfigureAwait(false);
+        var shown = Shown(viewModel);
 
         viewModel.SelectDisplayedItem(a, shown, isControlDown: false, isShiftDown: false);
         viewModel.SelectDisplayedItem(exclusive, shown, isControlDown: false, isShiftDown: true);
@@ -149,14 +155,11 @@ public sealed partial class ViewModelSelectionPolicyTests : ViewModelTestBase
     [TestMethod]
     public async Task ShiftRange_SkipsExcludedRowInsideTheRange()
     {
-        var a = new TestTreeItemAdapter { Label = "A" };
-        var exclusive = new TestTreeItemAdapter { Label = "Exclusive" };
-        var b = new TestTreeItemAdapter { Label = "B" };
-        var root = new TestTreeItemAdapter([a, exclusive, b], isRoot: true) { Label = "Root", IsExpanded = true };
-        using var viewModel = new ExclusiveItemViewModel(this.LoggerFactoryInstance, exclusive);
-        viewModel.SelectionMode = SelectionMode.Multiple;
-        await viewModel.InitializeRootAsync(root, skipRoot: true).ConfigureAwait(false);
-        var shown = viewModel.ShownItems.ToList();
+        var a = Item("A");
+        var exclusive = Item("Exclusive");
+        var b = Item("B");
+        using var viewModel = await this.CreateExclusiveAsync(exclusive, a, exclusive, b).ConfigureAwait(false);
+        var shown = Shown(viewModel);
 
         viewModel.SelectDisplayedItem(a, shown, isControlDown: false, isShiftDown: false);
         viewModel.SelectDisplayedItem(b, shown, isControlDown: false, isShiftDown: true);
@@ -169,16 +172,12 @@ public sealed partial class ViewModelSelectionPolicyTests : ViewModelTestBase
     [TestMethod]
     public async Task SelectAll_NormalizesExistingExcludedSelection_AndSkipsExcludedRows()
     {
-        var a = new TestTreeItemAdapter { Label = "A" };
-        var exclusive = new TestTreeItemAdapter { Label = "Exclusive" };
-        var b = new TestTreeItemAdapter { Label = "B" };
-        var root = new TestTreeItemAdapter([a, exclusive, b], isRoot: true) { Label = "Root", IsExpanded = true };
-        using var viewModel = new ExclusiveItemViewModel(this.LoggerFactoryInstance, exclusive);
-        viewModel.SelectionMode = SelectionMode.Multiple;
-        await viewModel.InitializeRootAsync(root, skipRoot: true).ConfigureAwait(false);
-        var shown = viewModel.ShownItems.ToList();
+        var a = Item("A");
+        var exclusive = Item("Exclusive");
+        var b = Item("B");
+        using var viewModel = await this.CreateExclusiveAsync(exclusive, a, exclusive, b).ConfigureAwait(false);
 
-        viewModel.SelectDisplayedItem(exclusive, shown, isControlDown: false, isShiftDown: false);
+        viewModel.SelectDisplayedItem(exclusive, Shown(viewModel), isControlDown: false, isShiftDown: false);
         viewModel.SelectAllCommand.Execute(parameter: null);
 
         _ = viewModel.SelectedItemsCount.Should().Be(2, "the bulk set replaces the incompatible exclusive selection");
@@ -190,35 +189,26 @@ public sealed partial class ViewModelSelectionPolicyTests : ViewModelTestBase
     [TestMethod]
     public async Task SelectAll_DefaultPolicy_SelectsEveryRow()
     {
-        var a = new TestTreeItemAdapter { Label = "A" };
-        var b = new TestTreeItemAdapter { Label = "B" };
-        var root = new TestTreeItemAdapter([a, b], isRoot: true) { Label = "Root", IsExpanded = true };
-        using var viewModel = new TestViewModel(skipRoot: true, this.LoggerFactoryInstance)
-        {
-            SelectionMode = SelectionMode.Multiple,
-        };
-        await viewModel.InitializeRootAsyncPublic(root).ConfigureAwait(false);
+        var a = Item("A");
+        var b = Item("B");
+        using var viewModel = await this.CreateAsync(a, b).ConfigureAwait(false);
 
         viewModel.SelectAllCommand.Execute(parameter: null);
 
         _ = viewModel.SelectedItemsCount.Should().Be(2, "the default policy changes no generic behaviour");
-        _ = viewModel.ShownItems.Should().BeEquivalentTo([a, b]);
+        _ = Shown(viewModel).Where(item => item.IsSelected).Should().BeEquivalentTo([a, b]);
     }
 
     [TestMethod]
     public async Task ToggleDisplayedSelection_NormalizesAnExistingExcludedSelection()
     {
-        var a = new TestTreeItemAdapter { Label = "A" };
-        var exclusive = new TestTreeItemAdapter { Label = "Exclusive" };
-        var b = new TestTreeItemAdapter { Label = "B" };
-        var root = new TestTreeItemAdapter([a, exclusive, b], isRoot: true) { Label = "Root", IsExpanded = true };
-        using var viewModel = new ExclusiveItemViewModel(this.LoggerFactoryInstance, exclusive);
-        viewModel.SelectionMode = SelectionMode.Multiple;
-        await viewModel.InitializeRootAsync(root, skipRoot: true).ConfigureAwait(false);
-        var shown = viewModel.ShownItems.ToList();
+        var a = Item("A");
+        var exclusive = Item("Exclusive");
+        var b = Item("B");
+        using var viewModel = await this.CreateExclusiveAsync(exclusive, a, exclusive, b).ConfigureAwait(false);
 
         // Start from the incompatible exclusive selection; the bulk add must normalize it away.
-        viewModel.SelectDisplayedItem(exclusive, shown, isControlDown: false, isShiftDown: false);
+        viewModel.SelectDisplayedItem(exclusive, Shown(viewModel), isControlDown: false, isShiftDown: false);
         viewModel.ToggleDisplayedSelection([a, exclusive, b]);
 
         _ = viewModel.SelectedItemsCount.Should().Be(2);
@@ -230,16 +220,12 @@ public sealed partial class ViewModelSelectionPolicyTests : ViewModelTestBase
     [TestMethod]
     public async Task InvertDisplayedSelection_AddsUnselectedIncludedRows_NeverTheExcludedRow()
     {
-        var a = new TestTreeItemAdapter { Label = "A" };
-        var exclusive = new TestTreeItemAdapter { Label = "Exclusive" };
-        var b = new TestTreeItemAdapter { Label = "B" };
-        var root = new TestTreeItemAdapter([a, exclusive, b], isRoot: true) { Label = "Root", IsExpanded = true };
-        using var viewModel = new ExclusiveItemViewModel(this.LoggerFactoryInstance, exclusive);
-        viewModel.SelectionMode = SelectionMode.Multiple;
-        await viewModel.InitializeRootAsync(root, skipRoot: true).ConfigureAwait(false);
-        var shown = viewModel.ShownItems.ToList();
+        var a = Item("A");
+        var exclusive = Item("Exclusive");
+        var b = Item("B");
+        using var viewModel = await this.CreateExclusiveAsync(exclusive, a, exclusive, b).ConfigureAwait(false);
 
-        viewModel.SelectDisplayedItem(a, shown, isControlDown: false, isShiftDown: false);
+        viewModel.SelectDisplayedItem(a, Shown(viewModel), isControlDown: false, isShiftDown: false);
         viewModel.InvertDisplayedSelection([a, exclusive, b]);
 
         _ = a.IsSelected.Should().BeFalse("inverting clears the selected row");
@@ -248,11 +234,37 @@ public sealed partial class ViewModelSelectionPolicyTests : ViewModelTestBase
         _ = viewModel.SelectedItemsCount.Should().Be(1);
     }
 
+    private static TestTreeItemAdapter Item(string label) => new() { Label = label };
+
+    private static List<ITreeItem> Shown(DynamicTreeViewModel viewModel) => [.. viewModel.ShownItems];
+
+    private async Task<TestViewModel> CreateAsync(params TestTreeItemAdapter[] items)
+    {
+        var root = new TestTreeItemAdapter(items, isRoot: true) { Label = "Root", IsExpanded = true };
+        var viewModel = new TestViewModel(skipRoot: true, this.LoggerFactoryInstance)
+        {
+            SelectionMode = SelectionMode.Multiple,
+        };
+        await viewModel.InitializeRootAsyncPublic(root).ConfigureAwait(false);
+        return viewModel;
+    }
+
+    private async Task<ExclusiveItemViewModel> CreateExclusiveAsync(ITreeItem exclusive, params TestTreeItemAdapter[] items)
+    {
+        var root = new TestTreeItemAdapter(items, isRoot: true) { Label = "Root", IsExpanded = true };
+        var viewModel = new ExclusiveItemViewModel(this.LoggerFactoryInstance, exclusive)
+        {
+            SelectionMode = SelectionMode.Multiple,
+        };
+        await viewModel.InitializeRootAsync(root, skipRoot: true).ConfigureAwait(false);
+        return viewModel;
+    }
+
     /// <summary>
     /// Test view model marking one row as exclusive: it never coexists with other rows,
     /// never participates in range or bulk selection, and an existing selection of it is
-    /// normalized away by bulk operations — the generic seam C19 uses for the scene root
-    /// row without the control knowing any scene concept.
+    /// normalized away by bulk operations — the generic seam a consumer uses for a root
+    /// row without the control knowing any consumer concept.
     /// </summary>
     private sealed partial class ExclusiveItemViewModel(ILoggerFactory? loggerFactory, ITreeItem excluded)
         : DynamicTreeViewModel(loggerFactory)

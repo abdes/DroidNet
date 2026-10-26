@@ -7,9 +7,13 @@
 
     <dnc:DropIndicatorEqualsConverter x:Key="DropIndicatorEqualsConverter" />
 
+    <!--  The indentation applied for each tree depth level; the tree style applies it to ItemIndentWidth.  -->
+    <x:Double x:Key="DynamicTreeItemIndentIncrement">34</x:Double>
+
     <Style BasedOn="{StaticResource DefaultDynamicTreeStyle}" TargetType="dnc:DynamicTree" />
 
     <Style x:Key="DefaultDynamicTreeStyle" TargetType="dnc:DynamicTree">
+        <Setter Property="ItemIndentWidth" Value="{StaticResource DynamicTreeItemIndentIncrement}" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="dnc:DynamicTree">

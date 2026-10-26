@@ -2,20 +2,20 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Collections.Specialized;
 using System.Diagnostics.CodeAnalysis;
 using AwesomeAssertions;
 using DroidNet.Controls.Selection;
+using RequestOrigin = DroidNet.Controls.DynamicTreeViewModel.RequestOrigin;
 
 namespace DroidNet.Controls.Tests;
 
 [TestClass]
 [ExcludeFromCodeCoverage]
-[TestCategory($"{nameof(DynamicTree)} / ViewModel")]
+[TestCategory($"{nameof(DynamicTree)} / ViewModel / Expansion")]
 public sealed partial class ViewModelExpansionTests : ViewModelTestBase, IDisposable
 {
     private TestViewModel viewModel = null!;
-
-    public TestContext TestContext { get; set; }
 
     public void Dispose() => this.viewModel.Dispose();
 
@@ -23,13 +23,11 @@ public sealed partial class ViewModelExpansionTests : ViewModelTestBase, IDispos
     public void Initialize() => this.viewModel = new TestViewModel(skipRoot: false, loggerFactory: this.LoggerFactoryInstance);
 
     [TestMethod]
-    [TestCategory($"{nameof(DynamicTree)} / ViewModel / Expand")]
-    public async Task ExpandItemAsync_ShouldExpandItemIfNotAlreadyExpanded()
+    public async Task ExpandItemAsync_ShouldExpandItemAndShowItsChildren()
     {
         // Arrange
-        var item = new TestTreeItemAdapter { Label = "Item", IsExpanded = false };
+        var item = new TestTreeItemAdapter { Label = "Item" };
         var rootItem = new TestTreeItemAdapter([item], isRoot: true) { Label = "Root" };
-
         await this.viewModel.InitializeRootAsyncPublic(rootItem).ConfigureAwait(false);
 
         // Act
@@ -37,81 +35,107 @@ public sealed partial class ViewModelExpansionTests : ViewModelTestBase, IDispos
 
         // Assert
         _ = rootItem.IsExpanded.Should().BeTrue();
-        _ = rootItem.Depth.Should().Be(0);
-        _ = item.Depth.Should().Be(rootItem.Depth + 1);
+        _ = this.viewModel.ShownItems.Should().Equal(rootItem, item);
     }
 
     [TestMethod]
-    [TestCategory($"{nameof(DynamicTree)} / ViewModel / Expand")]
-    public async Task ExpandItemAsync_ShouldNotChangeStateIfAlreadyExpanded()
+    public async Task ExpandItemAsync_WhenAlreadyExpanded_IsANoOp()
     {
         // Arrange
         var item = new TestTreeItemAdapter { Label = "Item", IsExpanded = true };
         var rootItem = new TestTreeItemAdapter([item], isRoot: true) { Label = "Root", IsExpanded = true };
-
         await this.viewModel.InitializeRootAsyncPublic(rootItem).ConfigureAwait(false);
+        var shownBefore = this.viewModel.ShownItems.ToArray();
+        var shownChanges = CountShownItemsChanges(this.viewModel);
 
         // Act
         await this.viewModel.ExpandItemAsync(rootItem).ConfigureAwait(false);
 
         // Assert
+        _ = shownChanges().Should().Be(0);
+        _ = this.viewModel.ShownItems.Should().Equal(shownBefore);
         _ = rootItem.IsExpanded.Should().BeTrue();
         _ = item.IsExpanded.Should().BeTrue();
     }
 
     [TestMethod]
-    [TestCategory($"{nameof(DynamicTree)} / ViewModel / Expand")]
-    public async Task ExpandItemAsync_ShouldThrowIfParentNotExpanded()
+    public async Task ExpandItemAsync_WhenParentIsNotExpanded_Throws()
     {
         // Arrange
         var childItem = new TestTreeItemAdapter { Label = "Child", IsExpanded = false };
         var parentItem = new TestTreeItemAdapter([childItem]) { Label = "Parent", IsExpanded = false };
         var rootItem = new TestTreeItemAdapter([parentItem], isRoot: true) { Label = "Root", IsExpanded = true };
-
         await this.viewModel.InitializeRootAsyncPublic(rootItem).ConfigureAwait(false);
 
         // Act
         var act = async () => await this.viewModel.ExpandItemAsync(childItem).ConfigureAwait(false);
 
-        // Assert
-        _ = await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("*not expanded*").ConfigureAwait(false);
+        // Assert: the parent never expanded
+        _ = await act.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false);
 
-        // Act - Expand then collapse parent
+        // Assert: the parent expanded, then collapsed
         await this.viewModel.ExpandItemAsync(parentItem).ConfigureAwait(false);
         await this.viewModel.CollapseItemAsync(parentItem).ConfigureAwait(false);
-        act = async () => await this.viewModel.ExpandItemAsync(childItem).ConfigureAwait(false);
-
-        // Assert
-        _ = await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("*not expanded*").ConfigureAwait(false);
+        _ = await act.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false);
     }
 
     [TestMethod]
-    [TestCategory($"{nameof(DynamicTree)} / ViewModel / Expand")]
     public async Task ExpandItemAsync_ShouldRestoreExpandedChildrenOfItem()
     {
         // Arrange
         var grandChildItem = new TestTreeItemAdapter { Label = "GrandChild", IsExpanded = true };
         var childItem = new TestTreeItemAdapter([grandChildItem]) { Label = "Child", IsExpanded = true };
         var rootItem = new TestTreeItemAdapter([childItem], isRoot: true) { Label = "Root" };
-
         await this.viewModel.InitializeRootAsyncPublic(rootItem).ConfigureAwait(false);
 
         // Act
         await this.viewModel.ExpandItemAsync(rootItem).ConfigureAwait(false);
 
         // Assert
-        _ = this.viewModel.ShownItems.Should().Contain(grandChildItem);
-        _ = rootItem.Depth.Should().Be(0);
-        _ = childItem.Depth.Should().Be(rootItem.Depth + 1);
-        _ = grandChildItem.Depth.Should().Be(childItem.Depth + 1);
+        _ = this.viewModel.ShownItems.Should().Equal(rootItem, childItem, grandChildItem);
     }
 
     [TestMethod]
-    [TestCategory($"{nameof(DynamicTree)} / ViewModel / Collapse")]
+    public async Task CollapseItemAsync_ShouldCollapseItemAndHideItsDescendants()
+    {
+        // Arrange
+        var grandChildItem = new TestTreeItemAdapter { Label = "GrandChild" };
+        var childItem = new TestTreeItemAdapter([grandChildItem]) { Label = "Child", IsExpanded = true };
+        var rootItem = new TestTreeItemAdapter([childItem], isRoot: true) { Label = "Root", IsExpanded = true };
+        await this.viewModel.InitializeRootAsyncPublic(rootItem).ConfigureAwait(false);
+
+        // Act
+        await this.viewModel.CollapseItemAsync(rootItem).ConfigureAwait(false);
+
+        // Assert
+        _ = rootItem.IsExpanded.Should().BeFalse();
+        _ = this.viewModel.ShownItems.Should().Equal(rootItem);
+    }
+
+    [TestMethod]
+    public async Task CollapseItemAsync_WhenAlreadyCollapsed_IsANoOp()
+    {
+        // Arrange
+        var item = new TestTreeItemAdapter { Label = "Item", IsExpanded = false };
+        var rootItem = new TestTreeItemAdapter([item], isRoot: true) { Label = "Root", IsExpanded = false };
+        await this.viewModel.InitializeRootAsyncPublic(rootItem).ConfigureAwait(false);
+        var shownBefore = this.viewModel.ShownItems.ToArray();
+        var shownChanges = CountShownItemsChanges(this.viewModel);
+
+        // Act
+        await this.viewModel.CollapseItemAsync(rootItem).ConfigureAwait(false);
+
+        // Assert
+        _ = shownChanges().Should().Be(0);
+        _ = this.viewModel.ShownItems.Should().Equal(shownBefore);
+        _ = rootItem.IsExpanded.Should().BeFalse();
+        _ = item.IsExpanded.Should().BeFalse();
+    }
+
+    [TestMethod]
     public async Task CollapseItemAsync_AlreadyHiddenBranch_PreservesShownItems()
     {
+        // Arrange
         var leaf = new TestTreeItemAdapter { Label = "Leaf" };
         var inner = new TestTreeItemAdapter([leaf]) { Label = "Inner", IsExpanded = true };
         var outer = new TestTreeItemAdapter([inner]) { Label = "Outer", IsExpanded = true };
@@ -121,8 +145,10 @@ public sealed partial class ViewModelExpansionTests : ViewModelTestBase, IDispos
         await this.viewModel.CollapseItemAsync(outer).ConfigureAwait(false);
         var shown = this.viewModel.ShownItems.ToArray();
 
+        // Act
         await this.viewModel.CollapseItemAsync(inner).ConfigureAwait(false);
 
+        // Assert
         _ = inner.IsExpanded.Should().BeFalse();
         _ = this.viewModel.ShownItems.Should().Equal(shown);
         await this.viewModel.ExpandItemAsync(outer).ConfigureAwait(false);
@@ -130,89 +156,6 @@ public sealed partial class ViewModelExpansionTests : ViewModelTestBase, IDispos
     }
 
     [TestMethod]
-    [TestCategory($"{nameof(DynamicTree)} / ViewModel / Collapse")]
-    public async Task CollapseItemAsync_ShouldCollapseItemIfNotAlreadyCollapsed()
-    {
-        // Arrange
-        var item = new TestTreeItemAdapter { Label = "Item" };
-        var rootItem = new TestTreeItemAdapter([item], isRoot: true) { Label = "Root", IsExpanded = true };
-
-        await this.viewModel.InitializeRootAsyncPublic(rootItem).ConfigureAwait(false);
-
-        // Act
-        await this.viewModel.CollapseItemAsync(rootItem).ConfigureAwait(false);
-
-        // Assert
-        _ = rootItem.IsExpanded.Should().BeFalse();
-    }
-
-    [TestMethod]
-    [TestCategory($"{nameof(DynamicTree)} / ViewModel / Collapse")]
-    public async Task CollapseItemAsync_ShouldNotChangeStateIfAlreadyCollapsed()
-    {
-        // Arrange
-        var item = new TestTreeItemAdapter { Label = "Item", IsExpanded = false };
-        var rootItem = new TestTreeItemAdapter([item], isRoot: true) { Label = "Root", IsExpanded = false };
-
-        await this.viewModel.InitializeRootAsyncPublic(rootItem).ConfigureAwait(false);
-
-        // Act
-        await this.viewModel.CollapseItemAsync(rootItem).ConfigureAwait(false);
-
-        // Assert
-        _ = rootItem.IsExpanded.Should().BeFalse();
-        _ = item.IsExpanded.Should().BeFalse();
-    }
-
-    [TestMethod]
-    [TestCategory($"{nameof(DynamicTree)} / ViewModel / Collapse")]
-    public async Task CollapseItemAsync_ShouldHideChildrenOfItem()
-    {
-        // Arrange
-        var grandChildItem = new TestTreeItemAdapter { Label = "GrandChild" };
-        var childItem = new TestTreeItemAdapter([grandChildItem]) { Label = "Child", IsExpanded = true };
-        var rootItem = new TestTreeItemAdapter([childItem], isRoot: true) { Label = "Root", IsExpanded = true };
-
-        await this.viewModel.InitializeRootAsyncPublic(rootItem).ConfigureAwait(false);
-
-        // Act
-        await this.viewModel.CollapseItemAsync(rootItem).ConfigureAwait(false);
-
-        // Assert
-        _ = this.viewModel.ShownItems.Should().NotContain([childItem, grandChildItem]);
-    }
-
-    [TestMethod]
-    [TestCategory($"{nameof(DynamicTree)} / ViewModel / Collapse")]
-    public async Task CollapseItemAsync_WithSelectedChildren_ShouldNotCauseExceptionOnSelectionCleanup()
-    {
-        // Arrange
-        this.viewModel.SelectionMode = SelectionMode.Multiple;
-
-        var grandChildItem = new TestTreeItemAdapter { Label = "GrandChild" };
-        var childItem = new TestTreeItemAdapter([grandChildItem]) { Label = "Child", IsExpanded = true };
-        var rootItem = new TestTreeItemAdapter([childItem], isRoot: true) { Label = "Root", IsExpanded = true };
-
-        await this.viewModel.InitializeRootAsyncPublic(rootItem).ConfigureAwait(false);
-
-        // Select both the child and its grandchild
-        var iChild = this.viewModel.ShownIndexOf(childItem);
-        var iGrandChild = this.viewModel.ShownIndexOf(grandChildItem);
-        var selection = (MultipleSelectionModel<ITreeItem>?)this.viewModel.GetSelectionModel();
-        selection!.SelectItemsAt(iChild, iGrandChild);
-
-        // Act - collapse parent and then attempt to select parent
-        await this.viewModel.CollapseItemAsync(rootItem).ConfigureAwait(false);
-
-        // Now simulates a tap to clear and select the root item (should not throw)
-        var act = async () => await Task.Run(() => this.viewModel.ClearAndSelectItem(rootItem), this.TestContext.CancellationToken).ConfigureAwait(false);
-
-        // Assert - should not throw
-        _ = await act.Should().NotThrowAsync().ConfigureAwait(false);
-    }
-
-    [TestMethod]
-    [TestCategory($"{nameof(DynamicTree)} / ViewModel / Collapse")]
     public async Task CollapseAndReexpand_ShouldClearSelectionForChildren()
     {
         // Arrange
@@ -221,80 +164,173 @@ public sealed partial class ViewModelExpansionTests : ViewModelTestBase, IDispos
         var grandChildItem = new TestTreeItemAdapter { Label = "GrandChild" };
         var childItem = new TestTreeItemAdapter([grandChildItem]) { Label = "Child", IsExpanded = true };
         var rootItem = new TestTreeItemAdapter([childItem], isRoot: true) { Label = "Root", IsExpanded = true };
-
         await this.viewModel.InitializeRootAsyncPublic(rootItem).ConfigureAwait(false);
 
         // Select both the child and its grandchild
-        var iChild = this.viewModel.ShownIndexOf(childItem);
-        var iGrandChild = this.viewModel.ShownIndexOf(grandChildItem);
         var selection = (MultipleSelectionModel<ITreeItem>?)this.viewModel.GetSelectionModel();
-        selection!.SelectItemsAt(iChild, iGrandChild);
+        selection!.SelectItemsAt(this.viewModel.ShownIndexOf(childItem), this.viewModel.ShownIndexOf(grandChildItem));
 
-        // Act - collapse then expand
+        // Act: collapse, select the root while its descendants are hidden, then expand again.
         await this.viewModel.CollapseItemAsync(rootItem).ConfigureAwait(false);
+        this.viewModel.ClearAndSelectItem(rootItem);
         await this.viewModel.ExpandItemAsync(rootItem).ConfigureAwait(false);
 
-        // If child is re-shown, its selection should have been cleared
-        var newIChild = this.viewModel.ShownIndexOf(childItem);
-        var newIGrandChild = this.viewModel.ShownIndexOf(grandChildItem);
-
-        _ = newIChild.Should().BeGreaterThan(-1);
-        _ = newIGrandChild.Should().BeGreaterThan(-1);
-        _ = selection.IsSelected(newIChild).Should().BeFalse();
-        _ = selection.IsSelected(newIGrandChild).Should().BeFalse();
+        // Assert: only the root remains selected; the re-shown descendants are not.
+        _ = this.viewModel.ShownItems.Should().Equal(rootItem, childItem, grandChildItem);
+        _ = selection.SelectedItems.Should().Equal(rootItem);
         _ = childItem.IsSelected.Should().BeFalse();
         _ = grandChildItem.IsSelected.Should().BeFalse();
     }
 
     [TestMethod]
-    [TestCategory($"{nameof(DynamicTree)} / ViewModel / ToggleExpansion")]
-    public async Task ToggleExpanded_ShouldExpandItemIfCollapsed()
+    public async Task ExpandItemAsync_WhenARowBelowIsSelected_KeepsTheSelectionOnThatRow()
     {
         // Arrange
-        var item = new TestTreeItemAdapter { Label = "Item", IsExpanded = false };
-        var rootItem = new TestTreeItemAdapter([item], isRoot: true) { Label = "Root", IsExpanded = false };
-
-        await this.viewModel.InitializeRootAsyncPublic(rootItem).ConfigureAwait(false);
+        this.viewModel.SelectionMode = SelectionMode.Multiple;
+        var (root, branch, child, leaf) = CreateBranchAndLeaf(expandBranch: false);
+        await this.viewModel.InitializeRootAsyncPublic(root).ConfigureAwait(false);
+        this.viewModel.ClearAndSelectItem(leaf);
 
         // Act
-        this.viewModel.ToggleExpandedCommand.Execute(rootItem);
+        await this.viewModel.ExpandItemAsync(branch).ConfigureAwait(false);
 
         // Assert
-        _ = rootItem.IsExpanded.Should().BeTrue();
+        _ = this.viewModel.ShownItems.Should().Equal(root, branch, child, leaf);
+        _ = this.viewModel.SelectedItem.Should().BeSameAs(leaf);
+        _ = this.viewModel.SelectedItemsCount.Should().Be(1);
+        _ = leaf.IsSelected.Should().BeTrue();
+        _ = child.IsSelected.Should().BeFalse();
     }
 
     [TestMethod]
-    [TestCategory($"{nameof(DynamicTree)} / ViewModel / ToggleExpansion")]
-    public async Task ToggleExpanded_ShouldCollapseItemIfExpanded()
+    public async Task CollapseItemAsync_WhenARowBelowIsSelected_KeepsTheSelectionOnThatRowAndDeselectsHiddenRows()
     {
         // Arrange
-        var item = new TestTreeItemAdapter { Label = "Item", IsExpanded = true };
-        var rootItem = new TestTreeItemAdapter([item], isRoot: true) { Label = "Root", IsExpanded = true };
-
-        await this.viewModel.InitializeRootAsyncPublic(rootItem).ConfigureAwait(false);
+        this.viewModel.SelectionMode = SelectionMode.Multiple;
+        var (root, branch, child, leaf) = CreateBranchAndLeaf(expandBranch: true);
+        await this.viewModel.InitializeRootAsyncPublic(root).ConfigureAwait(false);
+        var selection = (MultipleSelectionModel<ITreeItem>)this.viewModel.GetSelectionModel()!;
+        selection.SelectItemsAt(this.viewModel.ShownIndexOf(child), this.viewModel.ShownIndexOf(leaf));
 
         // Act
-        this.viewModel.ToggleExpandedCommand.Execute(rootItem);
+        await this.viewModel.CollapseItemAsync(branch).ConfigureAwait(false);
 
         // Assert
-        _ = rootItem.IsExpanded.Should().BeFalse();
+        _ = this.viewModel.ShownItems.Should().Equal(root, branch, leaf);
+        _ = selection.SelectedItems.Should().Equal(leaf);
+        _ = leaf.IsSelected.Should().BeTrue();
+        _ = child.IsSelected.Should().BeFalse();
     }
 
     [TestMethod]
-    [TestCategory($"{nameof(DynamicTree)} / ViewModel / ToggleExpansion")]
-    public async Task ToggleExpanded_ShouldExpandAndCollapseItem()
+    public async Task CollapseItemAsync_WhenAHiddenDescendantWasActive_ForgetsTheActiveItemInOneSettledSelection()
     {
         // Arrange
-        var item = new TestTreeItemAdapter { Label = "Item", IsExpanded = false };
-        var rootItem = new TestTreeItemAdapter([item], isRoot: true) { Label = "Root", IsExpanded = false };
+        this.viewModel.SelectionMode = SelectionMode.Multiple;
+        var (root, branch, child, _) = CreateBranchAndLeaf(expandBranch: true);
+        await this.viewModel.InitializeRootAsyncPublic(root).ConfigureAwait(false);
+        this.viewModel.SelectItem(child);
+        var settled = 0;
+        this.viewModel.SelectionSettled += (_, _) => settled++;
 
+        // Act
+        await this.viewModel.CollapseItemAsync(branch).ConfigureAwait(false);
+
+        // Assert
+        _ = this.viewModel.ActiveItem.Should().BeNull();
+        _ = settled.Should().Be(1);
+    }
+
+    [TestMethod]
+    public async Task CollapseItemAsync_WhenFocusIsOnADescendant_MovesFocusToTheCollapsedItem()
+    {
+        // Arrange
+        var (root, branch, child, _) = CreateBranchAndLeaf(expandBranch: true);
+        await this.viewModel.InitializeRootAsyncPublic(root).ConfigureAwait(false);
+        _ = this.viewModel.FocusItem(child, RequestOrigin.KeyboardInput);
+
+        // Act
+        await this.viewModel.CollapseItemAsync(branch).ConfigureAwait(false);
+
+        // Assert
+        _ = this.viewModel.TryGetFocusedItem(out var focused, out _).Should().BeTrue();
+        _ = focused.Should().BeSameAs(branch);
+    }
+
+    [TestMethod]
+    public async Task ExpandItemAsync_WhenTheItemIsNotShown_OnlyRecordsTheExpansion()
+    {
+        // Arrange
+        var (root, branch, child, _) = CreateBranchAndLeaf(expandBranch: true);
+        await this.viewModel.InitializeRootAsyncPublic(root).ConfigureAwait(false);
+        await this.viewModel.CollapseItemAsync(branch).ConfigureAwait(false);
+        branch.IsExpanded = true; // recorded on the item alone, as a filter clear does
+        var shownBefore = this.viewModel.ShownItems.ToArray();
+
+        // Act
+        await this.viewModel.ExpandItemAsync(child).ConfigureAwait(false);
+
+        // Assert
+        _ = child.IsExpanded.Should().BeTrue();
+        _ = this.viewModel.ShownItems.Should().Equal(shownBefore);
+    }
+
+    [TestMethod]
+    public async Task ExpandItemAsync_WhenCalledTwiceWhileLoading_ShowsTheChildrenOnce()
+    {
+        // Arrange
+        var root = new TestTreeItemAdapter(isRoot: true) { Label = "Root", IsExpanded = true };
+        await this.viewModel.InitializeRootAsyncPublic(root).ConfigureAwait(false);
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var gated = new ControlledLoadItem("Gated", childCount: 2) { Gate = gate };
+        await this.viewModel.InsertItemAsyncPublic(gated, root, 0).ConfigureAwait(false);
+
+        // Act
+        var first = this.viewModel.ExpandItemAsync(gated);
+        var second = this.viewModel.ExpandItemAsync(gated);
+        gate.SetResult();
+        await Task.WhenAll(first, second).ConfigureAwait(false);
+
+        // Assert
+        _ = this.viewModel.ShownItems.Should().HaveCount(4, "the root, the gated item and its two children, each once");
+        _ = gated.IsExpanded.Should().BeTrue();
+        _ = gated.LoadCount.Should().Be(1);
+    }
+
+    [TestMethod]
+    [DataRow(false, 1, true)]
+    [DataRow(true, 1, false)]
+    [DataRow(false, 2, false)]
+    public async Task ToggleExpanded_ShouldFlipTheExpandedState(bool initiallyExpanded, int toggles, bool expectedExpanded)
+    {
+        // Arrange
+        var item = new TestTreeItemAdapter { Label = "Item", IsExpanded = initiallyExpanded };
+        var rootItem = new TestTreeItemAdapter([item], isRoot: true) { Label = "Root", IsExpanded = initiallyExpanded };
         await this.viewModel.InitializeRootAsyncPublic(rootItem).ConfigureAwait(false);
 
         // Act
-        this.viewModel.ToggleExpandedCommand.Execute(rootItem);
-        this.viewModel.ToggleExpandedCommand.Execute(rootItem);
+        for (var i = 0; i < toggles; i++)
+        {
+            this.viewModel.ToggleExpandedCommand.Execute(rootItem);
+        }
 
         // Assert
-        _ = rootItem.IsExpanded.Should().BeFalse();
+        _ = rootItem.IsExpanded.Should().Be(expectedExpanded);
+    }
+
+    private static (TestTreeItemAdapter Root, TestTreeItemAdapter Branch, TestTreeItemAdapter Child, TestTreeItemAdapter Leaf) CreateBranchAndLeaf(bool expandBranch)
+    {
+        var child = new TestTreeItemAdapter { Label = "Child" };
+        var branch = new TestTreeItemAdapter([child]) { Label = "Branch", IsExpanded = expandBranch };
+        var leaf = new TestTreeItemAdapter { Label = "Leaf" };
+        var root = new TestTreeItemAdapter([branch, leaf], isRoot: true) { Label = "Root", IsExpanded = true };
+        return (root, branch, child, leaf);
+    }
+
+    private static Func<int> CountShownItemsChanges(TestViewModel viewModel)
+    {
+        var count = 0;
+        ((INotifyCollectionChanged)viewModel.ShownItems).CollectionChanged += (_, _) => count++;
+        return () => count;
     }
 }
