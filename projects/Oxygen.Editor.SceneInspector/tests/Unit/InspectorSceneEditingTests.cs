@@ -388,7 +388,7 @@ public sealed class InspectorSceneEditingTests
         play.Refresh();
 
         _ = play.CameraChoices.Select(static choice => choice.Name).Should().Contain("Chase cam");
-        _ = play.SelectedCamera!.Id.Should().Be(second.Id);
+        _ = play.SelectedCamera!.Id.Should().Be(NodeReference.To(second.Id));
         _ = play.SelectedCamera.Name.Should().Be("Chase cam");
     }
 
