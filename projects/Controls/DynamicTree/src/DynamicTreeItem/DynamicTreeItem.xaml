@@ -91,11 +91,13 @@
                                         HorizontalAlignment="Left"
                                         VerticalAlignment="Center"
                                         FontSize="{Binding ItemFontSize, RelativeSource={RelativeSource Mode=TemplatedParent}, Mode=OneWay}"
-                                        Text="{Binding Path=ItemAdapter.DisplayLabel, RelativeSource={RelativeSource Mode=TemplatedParent}, Mode=OneWay, FallbackValue='__null__'}"
                                         TextTrimming="CharacterEllipsis"
                                         TextWrapping="NoWrap"
                                         ToolTipService.ToolTip="{Binding Path=ItemAdapter.Label, RelativeSource={RelativeSource Mode=TemplatedParent}, Mode=OneWay}"
-                                        Visibility="Visible" />
+                                        Visibility="Visible">
+                                        <!--  The item's label, then its annotation in secondary text; the item binds both.  -->
+                                        <Run /><Run Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                    </TextBlock>
 
                                     <!--  In-place rename part  -->
                                     <Popup
@@ -180,6 +182,16 @@
                                 <VisualState x:Name="Cut">
                                     <VisualState.Setters>
                                         <Setter Target="PartRootGrid.Opacity" Value="0.6" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                            </VisualStateGroup>
+
+                            <VisualStateGroup x:Name="DimStates">
+                                <VisualState x:Name="NotDimmed" />
+                                <VisualState x:Name="Dimmed">
+                                    <VisualState.Setters>
+                                        <Setter Target="PartItemName.Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+                                        <Setter Target="PartThumbnailPresenter.Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
                                     </VisualState.Setters>
                                 </VisualState>
                             </VisualStateGroup>

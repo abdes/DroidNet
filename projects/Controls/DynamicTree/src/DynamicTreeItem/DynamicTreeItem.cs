@@ -136,6 +136,8 @@ namespace DroidNet.Controls;
 [TemplateVisualState(Name = SelectedVisualState, GroupName = CommonVisualStates)]
 [TemplateVisualState(Name = CutVisualState, GroupName = CutVisualStates)]
 [TemplateVisualState(Name = NotCutVisualState, GroupName = CutVisualStates)]
+[TemplateVisualState(Name = DimmedVisualState, GroupName = DimVisualStates)]
+[TemplateVisualState(Name = NotDimmedVisualState, GroupName = DimVisualStates)]
 [TemplateVisualState(Name = ExpandedVisualState, GroupName = ExpansionVisualStates)]
 [TemplateVisualState(Name = CollapsedVisualState, GroupName = ExpansionVisualStates)]
 [TemplateVisualState(Name = WithChildrenVisualState, GroupName = HasChildrenVisualStates)]
@@ -290,6 +292,21 @@ public partial class DynamicTreeItem : ContentControl
     /// </summary>
     public const string NotCutVisualState = "NotCut";
 
+    /// <summary>
+    /// The name of the VisualStateGroup that indicates whether the item is dimmed (<see cref="TreeItemAdapter.IsDimmed"/>).
+    /// </summary>
+    public const string DimVisualStates = "DimStates";
+
+    /// <summary>
+    /// Visual state name used when the item's name and glyph draw in secondary text.
+    /// </summary>
+    public const string DimmedVisualState = "Dimmed";
+
+    /// <summary>
+    /// Visual state name used when the item draws in primary text.
+    /// </summary>
+    public const string NotDimmedVisualState = "NotDimmed";
+
     private ILogger logger = NullLogger<DynamicTreeItem>.Instance;
 
     private long ancestorTreeThumbnailTemplateSelectorChangeCallbackToken;
@@ -373,6 +390,7 @@ public partial class DynamicTreeItem : ContentControl
         this.UpdateHasChildrenVisualState();
         this.UpdateSelectionVisualState(this.ItemAdapter?.IsSelected == true);
         this.UpdateCutVisualState(this.ItemAdapter?.IsCut == true);
+        this.UpdateDimVisualState();
 
         base.OnApplyTemplate();
     }
@@ -540,6 +558,12 @@ public partial class DynamicTreeItem : ContentControl
             this,
             isCut ? CutVisualState : NotCutVisualState,
             useTransitions: true);
+
+    private void UpdateDimVisualState()
+        => VisualStateManager.GoToState(
+            this,
+            this.ItemAdapter is TreeItemAdapter { IsDimmed: true } ? DimmedVisualState : NotDimmedVisualState,
+            useTransitions: false);
 
     private void UpdateExpansionVisualState()
         => VisualStateManager.GoToState(

@@ -8,6 +8,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
+using Microsoft.UI.Xaml.Documents;
 using Microsoft.UI.Xaml.Input;
 using Windows.System;
 
@@ -187,12 +188,47 @@ public partial class DynamicTreeItem
         if (this.itemNameTextBlock is not null && this.itemNameTextBox is not null)
         {
             this.itemNameTextBlock.DoubleTapped += this.StartRenameItem;
-            this.itemNameTextBlock.SetBinding(TextBlock.TextProperty, new Microsoft.UI.Xaml.Data.Binding
+            this.BindItemName();
+        }
+    }
+
+    /// <summary>
+    /// Shows the item's label: the template's name block holds two runs, the label and the item's annotation in
+    /// secondary text, which follow the item's changes; a template without them binds the label alone.
+    /// </summary>
+    private void BindItemName()
+    {
+        if (this.itemNameTextBlock is not { } label)
+        {
+            return;
+        }
+
+        if (label.Inlines is [Run, Run])
+        {
+            this.UpdateItemNameRuns();
+            return;
+        }
+
+        label.SetBinding(TextBlock.TextProperty, new Microsoft.UI.Xaml.Data.Binding
+        {
+            Source = this.ItemAdapter,
+            Path = new PropertyPath(this.ItemAdapter is TreeItemAdapter ? nameof(TreeItemAdapter.DisplayLabel) : nameof(ITreeItem.Label)),
+            Mode = Microsoft.UI.Xaml.Data.BindingMode.OneWay,
+        });
+    }
+
+    // A run's text is not a dependency property: it is written whenever the item's label or annotation changes.
+    private void UpdateItemNameRuns()
+    {
+        if (this.itemNameTextBlock?.Inlines is [Run name, Run annotation])
+        {
+            name.Text = this.ItemAdapter switch
             {
-                Source = this.ItemAdapter,
-                Path = new PropertyPath(this.ItemAdapter is TreeItemAdapter ? nameof(TreeItemAdapter.DisplayLabel) : nameof(ITreeItem.Label)),
-                Mode = Microsoft.UI.Xaml.Data.BindingMode.OneWay,
-            });
+                TreeItemAdapter adapter => adapter.DisplayLabel,
+                { } item => item.Label,
+                null => string.Empty,
+            };
+            annotation.Text = this.ItemAdapter is TreeItemAdapter { Annotation: { Length: > 0 } text } ? "  " + text : string.Empty;
         }
     }
 

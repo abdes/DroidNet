@@ -111,6 +111,20 @@ public abstract partial class TreeItemAdapter : ObservableObject, ITreeItem, ILo
     [ObservableProperty]
     public partial bool IsCut { get; set; }
 
+    /// <summary>
+    ///     Gets or sets a value indicating whether the item presents content its tree does not own, or that is out of
+    ///     play: its name and glyph draw in secondary text.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool IsDimmed { get; set; }
+
+    /// <summary>
+    ///     Gets or sets a short note the item's name is followed by, in secondary text, such as where the item comes
+    ///     from; <see langword="null"/> or empty for none.
+    /// </summary>
+    [ObservableProperty]
+    public partial string? Annotation { get; set; }
+
     /// <inheritdoc />
     public abstract string Label { get; set; }
 

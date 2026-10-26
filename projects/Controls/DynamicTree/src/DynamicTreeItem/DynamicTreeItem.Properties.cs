@@ -6,8 +6,6 @@ using System.ComponentModel;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Data;
 
 namespace DroidNet.Controls;
 
@@ -170,6 +168,7 @@ public partial class DynamicTreeItem
             this.UpdateHasChildrenVisualState();
             this.UpdateSelectionVisualState(newItem.IsSelected);
             this.UpdateCutVisualState(newItem.IsCut);
+            this.UpdateDimVisualState();
             newItem.ChildrenCollectionChanged += this.TreeItem_ChildrenCollectionChanged;
             if (newItem is INotifyPropertyChanged newNotifier)
             {
@@ -179,19 +178,12 @@ public partial class DynamicTreeItem
         else
         {
             this.UpdateCutVisualState(isCut: false);
+            this.UpdateDimVisualState();
         }
 
         this.OnTrailingContentTemplateSelectorChanged();
         this.UpdateTrailingContentPresenter();
-        if (this.itemNameTextBlock is { } label)
-        {
-            label.SetBinding(TextBlock.TextProperty, new Binding
-            {
-                Source = newItem,
-                Path = new PropertyPath(newItem is TreeItemAdapter ? nameof(TreeItemAdapter.DisplayLabel) : nameof(ITreeItem.Label)),
-                Mode = BindingMode.OneWay,
-            });
-        }
+        this.BindItemName();
     }
 
     private void ItemAdapter_OnPropertyChanged(object? sender, PropertyChangedEventArgs args)
@@ -208,6 +200,14 @@ public partial class DynamicTreeItem
         else if (string.Equals(args.PropertyName, nameof(ITreeItem.IsCut), StringComparison.Ordinal))
         {
             this.UpdateCutVisualState(adapter.IsCut);
+        }
+        else if (string.Equals(args.PropertyName, nameof(TreeItemAdapter.IsDimmed), StringComparison.Ordinal))
+        {
+            this.UpdateDimVisualState();
+        }
+        else if (args.PropertyName is nameof(TreeItemAdapter.Annotation) or nameof(TreeItemAdapter.DisplayLabel) or nameof(ITreeItem.Label))
+        {
+            this.UpdateItemNameRuns();
         }
         else if (string.Equals(args.PropertyName, nameof(ITreeItem.Depth), StringComparison.Ordinal))
         {
