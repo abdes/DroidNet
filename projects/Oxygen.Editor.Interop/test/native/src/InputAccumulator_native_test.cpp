@@ -200,7 +200,7 @@ public:
     }
 
     [TestMethod]
-    void OnFocusLostClearsDeltasKeepsEvents() {
+    void OnFocusLostClearsDeltasKeepsEventsAndReleasesWhatIsHeld() {
         ::InputAccumulatorSUT acc;
         const ::ViewId v{8};
 
@@ -223,9 +223,39 @@ public:
 
         // mouse move should be cleared
         Assert::AreEqual(0, (int)fake_ptr->mouse_moves.size());
-        // key/button events should still be present
-        Assert::AreEqual(1, (int)fake_ptr->keys.size());
-        Assert::AreEqual(1, (int)fake_ptr->buttons.size());
+        // the presses stay, each followed by its release
+        Assert::AreEqual(2, (int)fake_ptr->keys.size());
+        Assert::IsTrue(fake_ptr->keys[0].ev.pressed);
+        Assert::IsFalse(fake_ptr->keys[1].ev.pressed);
+        Assert::AreEqual((int)::oxygen::platform::Key::kA, (int)fake_ptr->keys[1].ev.key);
+        Assert::AreEqual(2, (int)fake_ptr->buttons.size());
+        Assert::IsFalse(fake_ptr->buttons[1].ev.pressed);
+        Assert::AreEqual((int)::oxygen::platform::MouseButton::kLeft, (int)fake_ptr->buttons[1].ev.button);
+    }
+
+    [TestMethod]
+    void OnFocusLostReleasesAKeyPressedInAnEarlierFrameOnlyOnce() {
+        ::InputAccumulatorSUT acc;
+        const ::ViewId v{10};
+        ::EditorKeyEvent d; d.key = ::oxygen::platform::Key::kD; d.pressed = true;
+        ::EditorKeyEvent w; w.key = ::oxygen::platform::Key::kW; w.pressed = true;
+        ::EditorKeyEvent w_up = w; w_up.pressed = false;
+        acc.PushKeyEvent(v, d);
+        acc.PushKeyEvent(v, d); // auto-repeat
+        acc.PushKeyEvent(v, w);
+        acc.PushKeyEvent(v, w_up);
+        (void)acc.DrainPublic(v);
+
+        // The release of D went to whatever took the focus.
+        acc.OnFocusLost(v);
+        const auto released = acc.DrainPublic(v);
+        acc.OnFocusLost(v);
+        const auto again = acc.DrainPublic(v);
+
+        Assert::AreEqual(1, (int)released.key_events.size());
+        Assert::AreEqual((int)::oxygen::platform::Key::kD, (int)released.key_events[0].key);
+        Assert::IsFalse(released.key_events[0].pressed);
+        Assert::AreEqual(0, (int)again.key_events.size());
     }
 
     [TestMethod]

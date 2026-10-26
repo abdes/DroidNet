@@ -6,6 +6,9 @@
 
 #include "pch.h"
 
+#include <algorithm>
+#include <vector>
+
 #include <EditorModule/InputAccumulator.h>
 
 namespace oxygen::interop::module {
@@ -14,6 +17,20 @@ namespace oxygen::interop::module {
     using namespace std::chrono;
     return oxygen::time::PhysicalTime{ steady_clock::now() };
   }
+
+  namespace {
+    //! Follows what a press or release leaves held.
+    template <typename T>
+    void TrackHeld(std::vector<T>& held, const T value, const bool pressed)
+    {
+      const auto found = std::ranges::find(held, value);
+      if (pressed && found == held.end()) {
+        held.push_back(value);
+      } else if (!pressed && found != held.end()) {
+        held.erase(found);
+      }
+    }
+  } // namespace
 
   InputAccumulator::ViewportAccumulator&
     InputAccumulator::EnsureViewport(ViewId view) noexcept {
@@ -54,6 +71,7 @@ namespace oxygen::interop::module {
       ev.timestamp = NowPhysicalTime();
     }
     std::scoped_lock lock(v.mutex);
+    TrackHeld(v.held_keys, ev.key, ev.pressed);
     v.key_events.push_back(ev);
     v.last_position = ev.position;
   }
@@ -65,6 +83,7 @@ namespace oxygen::interop::module {
       ev.timestamp = NowPhysicalTime();
     }
     std::scoped_lock lock(v.mutex);
+    TrackHeld(v.held_buttons, ev.button, ev.pressed);
     v.button_events.push_back(ev);
     v.last_position = ev.position;
   }
@@ -102,6 +121,29 @@ namespace oxygen::interop::module {
     std::scoped_lock lock(v.mutex);
     v.mouse_delta = SubPixelMotion{};
     v.scroll_delta = SubPixelMotion{};
+    // The view never sees these releases, the element that took the focus
+    // does; without them the engine keeps the keys held, and a fly keeps
+    // moving.
+    const auto now = NowPhysicalTime();
+    for (const auto key : v.held_keys) {
+      v.key_events.push_back(EditorKeyEvent {
+        .key = key,
+        .pressed = false,
+        .timestamp = now,
+        .position = v.last_position,
+        .repeat = false,
+      });
+    }
+    for (const auto button : v.held_buttons) {
+      v.button_events.push_back(EditorButtonEvent {
+        .button = button,
+        .pressed = false,
+        .timestamp = now,
+        .position = v.last_position,
+      });
+    }
+    v.held_keys.clear();
+    v.held_buttons.clear();
   }
 
 } // namespace oxygen::interop::module

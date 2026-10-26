@@ -83,8 +83,9 @@ namespace oxygen::interop::module {
     OXGN_EI_API void PushKeyEvent(ViewId view, EditorKeyEvent ev) noexcept;
     OXGN_EI_API void PushButtonEvent(ViewId view, EditorButtonEvent ev) noexcept;
 
-    // On focus lost: discard accumulated deltas (mouse + scroll) but keep ordered
-    // key/button events.
+    // On focus lost: discard accumulated deltas (mouse + scroll), keep ordered
+    // key/button events, and release every key and button still held, whose
+    // release would otherwise go to whatever took the focus.
     OXGN_EI_API void OnFocusLost(ViewId view) noexcept;
 
   protected:
@@ -101,6 +102,9 @@ namespace oxygen::interop::module {
       SubPixelPosition last_position{};
       std::vector<EditorKeyEvent> key_events{};
       std::vector<EditorButtonEvent> button_events{};
+      //! Pressed and not released yet, across drains.
+      std::vector<platform::Key> held_keys{};
+      std::vector<platform::MouseButton> held_buttons{};
     };
 
     // Guard for the map structure itself
