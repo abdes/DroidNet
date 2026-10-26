@@ -402,9 +402,9 @@ Required labels:
 - imported/intermediate output: `DERIVED`
 - build output: `BUILD`
 
-Raw source media rows under `Content/SourceMedia` use `AssetKind.ForeignSource`
-or a more specific source kind. They never use `AssetState.Cooked` unless the
-row represents a cooked artifact from `.cooked`.
+Raw source media rows under `Content/SourceMedia` use their source kind, such as
+`AssetKind.Model` for a model or `AssetKind.Image` for an image. They never use
+`AssetState.Cooked` unless the row represents a cooked artifact from `.cooked`.
 
 ## 6. Ownership
 

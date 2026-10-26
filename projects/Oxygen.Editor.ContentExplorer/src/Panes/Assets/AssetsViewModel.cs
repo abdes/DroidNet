@@ -24,6 +24,7 @@ using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.Models;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Scenes.Views;
 using Oxygen.Editor.Shell.Desktop;
 using Oxygen.Editor.Shell.Documents;
 using Oxygen.Editor.Shell.Windows;
@@ -60,6 +61,7 @@ namespace Oxygen.Editor.ContentExplorer;
 /// <param name="unsavedInputs">Finds the unsaved documents a cook reads; without it a cook does not ask.</param>
 /// <param name="assetReveal">Shows the source of an imported asset; without it Show Source reports it unavailable.</param>
 /// <param name="cookedInspections">Inspects cooked output; without it Inspect and Validate report it unavailable.</param>
+/// <param name="sceneViews">Places instances in the open scene; without it Add to scene is unavailable.</param>
 [RetainedViewModel]
 public partial class AssetsViewModel(
     Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService automaticCooking,
@@ -84,7 +86,8 @@ public partial class AssetsViewModel(
     IDocumentArea? documents = null,
     IUnsavedCookInputs? unsavedInputs = null,
     IAssetReveal? assetReveal = null,
-    ICookedInspections? cookedInspections = null) : AbstractOutletContainer, IRoutingAware
+    ICookedInspections? cookedInspections = null,
+    ISceneViews? sceneViews = null) : AbstractOutletContainer, IRoutingAware
 {
     private bool disposed;
 
@@ -132,6 +135,7 @@ public partial class AssetsViewModel(
             relocation?.Completed += this.OnRelocationCompleted;
             relocation?.HistoryChanged += this.OnRelocationHistoryChanged;
             automaticCooking.PropertyChanged += this.OnAutomaticCookingChanged;
+            documents?.DocumentsChanged += this.OnDocumentsChanged;
 
             // Indexing is started by ContentExplorerViewModel - no need to start here
             this.isInitialized = true;
@@ -223,6 +227,7 @@ public partial class AssetsViewModel(
                 contentExplorerState.PropertyChanged -= this.OnContentExplorerStatePropertyChanged;
                 relocation?.Completed -= this.OnRelocationCompleted;
                 relocation?.HistoryChanged -= this.OnRelocationHistoryChanged;
+                documents?.DocumentsChanged -= this.OnDocumentsChanged;
 
                 this.PropertyChanging -= this.OnLayoutViewModelChanging;
                 this.PropertyChanged -= this.OnLayoutViewModelChanged;
@@ -364,7 +369,7 @@ public partial class AssetsViewModel(
             Debug.WriteLine($"[AssetsViewModel] Navigating to folder: {args.InvokedItem.DisplayPath}");
             await this.NavigateToFolder(args.InvokedItem.DisplayPath).ConfigureAwait(false);
         }
-        else if (args.InvokedItem is { Kind: AssetKind.ForeignSource, SourcePath: { } sourcePath })
+        else if (args.InvokedItem is { Kind: AssetKind.Model, SourcePath: { } sourcePath })
         {
             var project = session.Context;
             if (new ModelImportRecords(project.FileSystem, project.ProjectRoot.FullPath).IsImported(sourcePath.FullPath))

@@ -5,8 +5,10 @@
 using DroidNet.Config;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Cooking;
+using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.LivePreview.Scenes;
 using Oxygen.Editor.Projects;
@@ -31,13 +33,17 @@ internal static class TestSceneEditorServices
     /// <param name="inputCommitter">Completes the focused control's input; by default, does nothing.</param>
     /// <param name="results">Receives the editor's operation results; by default, discards them.</param>
     /// <param name="previewSettings">The preview preferences; by default, a service over the session that stores nothing.</param>
+    /// <param name="assets">The project's assets; by default, none.</param>
+    /// <param name="references">The saved authored references; by default, none.</param>
     /// <returns>The services.</returns>
     public static SceneEditorServices Create(
         IProjectSession session,
         IScenePreview? preview = null,
         IDocumentInputCommitter? inputCommitter = null,
         IOperationResultPublisher? results = null,
-        PreviewSettingsService? previewSettings = null)
+        PreviewSettingsService? previewSettings = null,
+        IAssetFeed? assets = null,
+        IAuthoredReferences? references = null)
     {
         var engine = Mock.Of<IEngineService>();
         var publisher = results ?? Mock.Of<IOperationResultPublisher>();
@@ -62,6 +68,9 @@ internal static class TestSceneEditorServices
             new ViewportStateService(session, settings, publisher, reducer),
             new TransformToolSettingsService(settings: null),
             engineSettings.Object,
-            NullLoggerFactory.Instance);
+            NullLoggerFactory.Instance,
+            play: null,
+            assets,
+            references);
     }
 }

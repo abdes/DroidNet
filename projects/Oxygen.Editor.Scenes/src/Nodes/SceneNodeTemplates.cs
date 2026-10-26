@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Numerics;
+using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.Scenes.Edits.Hierarchy;
 using Oxygen.Editor.Scenes.Edits.Layout;
 using Oxygen.Editor.Scenes.Layout;
@@ -109,6 +110,25 @@ public static class SceneNodeTemplates
     /// <returns>The node's data.</returns>
     public static SceneNodeData Empty(Scene scene, string name = "Node", NodePlacement? placement = null)
         => Finish(new SceneNode(scene, name), placement);
+
+    /// <summary>Creates an instance root: a node named after its source, carrying a scene instance of it with no changes.</summary>
+    /// <param name="scene">The scene the node is for.</param>
+    /// <param name="source">The instanced source: a model's source file, such as <c>Car.glb</c>, or an authored scene.</param>
+    /// <param name="placement">Where the node goes; the scene origin when <see langword="null"/>.</param>
+    /// <returns>The node's data.</returns>
+    /// <exception cref="ArgumentException">The source is neither a model nor a scene.</exception>
+    public static SceneNodeData Instance(Scene scene, AssetPath source, NodePlacement? placement = null)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        if (AssetFileTypes.SceneProductOf(source) is null)
+        {
+            throw new ArgumentException($"'{source}' is neither a model nor a scene.", nameof(source));
+        }
+
+        var node = new SceneNode(scene, SceneContent.NameOf(source.Name));
+        _ = node.AddComponent(new SceneInstanceComponent { Name = "Scene Instance", Source = source });
+        return Finish(node, placement);
+    }
 
     /// <summary>
     /// Builds the insert that appends a new node: last among its parent's children, last in its explorer place, with the

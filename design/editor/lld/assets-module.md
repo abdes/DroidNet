@@ -2,7 +2,7 @@
 
 Status: `agreed`
 
-Last Updated: 2026-10-22 12:17
+Last Updated: 2026-10-26
 
 ## 1. Purpose
 
@@ -394,10 +394,10 @@ the catalog reports a change to it
   `PrimaryBadge` and its tooltip, `TypeDisplayName`, `CanCook`, `CanReimport`
   and `Information` (see 4 for the badges).
 - `AssetKind`: `Folder`, `Material`, `Geometry`, `Scene`, `Texture`, `Image`,
-  `ImportSettings`, `ForeignSource` (a model to import), `CookedData`,
-  `CookedTable`, `Script`, `InputAction`, `InputMappingContext`, `InputFile`,
-  `PhysicsScene` and `Unknown`; `AssetKinds` classifies files and cooked
-  records into it.
+  `ImportSettings`, `Model` (a model's source file, the model itself),
+  `CookedData`, `CookedTable`, `Script`, `InputAction`, `InputMappingContext`,
+  `InputFile`, `PhysicsScene` and `Unknown`; `AssetKinds` classifies files and
+  cooked records into it.
 - `AssetState`: `Packaged` (inside a pak: read-only, nothing to edit or cook),
   `Source`, `Descriptor`, `Cooked`, `Stale` (cooked output older than its
   source), `Missing` (a reference to nothing) and `Broken` (present but

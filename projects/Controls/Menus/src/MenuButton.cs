@@ -70,6 +70,12 @@ public sealed partial class MenuButton : Button, IRootMenuSurface
     public event EventHandler? Opening;
 
     /// <summary>
+    ///     Occurs once the menu has closed and focus is back on the button, so a handler can open
+    ///     what an item asked for, such as a flyout, without the closing menu dismissing it.
+    /// </summary>
+    public event EventHandler? Closed;
+
+    /// <summary>
     ///     Gets a value indicating whether the menu is currently open.
     /// </summary>
     public bool IsMenuOpen
@@ -319,5 +325,6 @@ public sealed partial class MenuButton : Button, IRootMenuSurface
 
         // Return focus to the button
         _ = this.Focus(FocusState.Programmatic);
+        this.Closed?.Invoke(this, EventArgs.Empty);
     }
 }

@@ -21,7 +21,9 @@ The groups are always shown in that order, and an empty group is hidden. The
 origin comes from the asset itself (`AssetEntry.Origin`): anything under
 `/Engine` is Engine, any other packaged asset is a Package, the rest is Content.
 The picker does not decide what a property accepts; its owner does, usually with
-an `AssetRule`, and hands the accepted assets over.
+an `AssetRule`, and hands the accepted assets over. A model is picked as its
+source file: `AssetRule.For(AssetKind.Model)` accepts the imported models, one
+row per source file, and the scene rules never accept a model's scene product.
 
 The library lives outside the Content Explorer and the World Editor because the
 Material Editor and the World Editor both use it, and neither should depend on

@@ -17,9 +17,11 @@ namespace Oxygen.Editor.Scenes.Documents;
 /// <summary>The scene document kind: opens <c>.oscene.json</c> files as scenes of a project session.</summary>
 /// <param name="interaction">The nodes hidden and locked in the editor, if the editor keeps them.</param>
 /// <param name="redirects">The session's asset renames and moves, if the editor tracks them.</param>
+/// <param name="references">The saved authored references instance sources are checked against, if the editor reads them.</param>
 public sealed class SceneDocumentKind(
     ISceneNodeInteraction? interaction = null,
-    IAssetRedirects? redirects = null) : IDocumentKind
+    IAssetRedirects? redirects = null,
+    IAuthoredReferences? references = null) : IDocumentKind
 {
     /// <inheritdoc/>
     public string Name => "Scene";
@@ -72,7 +74,7 @@ public sealed class SceneDocumentKind(
 
         // Every node gets an explorer entry now, so edits always find one and their reverts restore it exactly.
         SceneLayout.Complete(scene, layout);
-        return DocumentDecodeResult.Decoded(new SceneContent(scene, layout, context, interaction, redirects));
+        return DocumentDecodeResult.Decoded(new SceneContent(scene, layout, context, interaction, redirects, references, file.Asset));
     }
 
     private static bool IsLayoutValid(IEnumerable<ExplorerEntryData>? entries, HashSet<NodeId> nodeIds, HashSet<FolderId> folderIds, HashSet<NodeId> layoutNodeIds)

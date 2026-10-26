@@ -10,6 +10,7 @@ using Oxygen.Editor.Documents;
 using Oxygen.Editor.Scenes.Changes;
 using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.World;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Scenes.Authoring;
 
@@ -40,14 +41,15 @@ public sealed partial class SceneAuthoring : IDisposable
     /// <param name="layout">The scene's explorer layout, with an entry for every node.</param>
     /// <param name="interaction">The nodes hidden and locked in the editor, if the editor keeps them.</param>
     /// <param name="redirects">The session's asset renames and moves, if the editor tracks them.</param>
-    internal SceneAuthoring(DocumentDecodeContext document, Scene scene, IList<ExplorerEntryData> layout, ISceneNodeInteraction? interaction, IAssetRedirects? redirects)
+    /// <param name="references">The saved authored references instance sources are checked against, if the editor reads them.</param>
+    internal SceneAuthoring(DocumentDecodeContext document, Scene scene, IList<ExplorerEntryData> layout, ISceneNodeInteraction? interaction, IAssetRedirects? redirects, IAuthoredReferences? references = null)
     {
         this.Document = document.Document;
         this.history = document.History;
         this.Scene = scene;
         this.Layout = layout;
         this.context = SynchronizationContext.Current;
-        this.scope = new SceneEditScope(scene, layout, interaction, redirects);
+        this.scope = new SceneEditScope(scene, layout, interaction, redirects, references);
     }
 
     /// <summary>Occurs on the scene thread after each edit, replay, preview and relocation, naming what changed.</summary>
@@ -65,6 +67,13 @@ public sealed partial class SceneAuthoring : IDisposable
 
     /// <summary>Gets a value indicating whether the authoring is retired: the scene was closed or replaced by a reload.</summary>
     public bool IsRetired { get; private set; }
+
+    /// <summary>Gets or sets the scene's own asset, which no instance in the scene may reach.</summary>
+    internal AssetPath? Asset
+    {
+        get => this.scope.Asset;
+        set => this.scope.Asset = value;
+    }
 
     /// <summary>Executes an edit: checks its targets, validates it, applies it, records its revert and raises the changes.</summary>
     /// <param name="edit">The edit.</param>

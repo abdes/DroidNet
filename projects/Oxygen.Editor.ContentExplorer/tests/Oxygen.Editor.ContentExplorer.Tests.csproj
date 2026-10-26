@@ -17,6 +17,8 @@
         <ProjectReference Include="..\..\Oxygen.Managed.Assets\src\Oxygen.Managed.Assets.csproj" />
         <ProjectReference Include="..\..\Oxygen.Editor.Projects\src\Oxygen.Editor.Projects.csproj" />
         <ProjectReference Include="..\..\Oxygen.Editor.Projects\testing\Oxygen.Editor.Projects.Testing.csproj" />
+        <ProjectReference Include="..\..\Oxygen.Editor.Scenes\testing\Oxygen.Editor.Scenes.Testing.csproj" />
+        <ProjectReference Include="..\..\Oxygen.Editor.Shell\testing\Oxygen.Editor.Shell.Testing.csproj" />
         <ProjectReference Include="..\..\Oxygen.Editor.World\src\Oxygen.Editor.World.csproj" />
     </ItemGroup>
 </Project>

@@ -23,14 +23,14 @@ namespace Oxygen.Editor.SceneEditor.Unit.Tests;
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "MSTest discovers public test classes with the repository's discovery configuration.")]
 public sealed partial class SceneEditorQuickAddMenuTests
 {
-    /// <summary>The menu offers an empty node, then shapes, lights and cameras.</summary>
+    /// <summary>The menu offers an empty node, then shapes, lights, cameras, fog, and instances of a model or a scene.</summary>
     [TestMethod]
-    public void QuickAddMenuOffersEmptyNodeShapesLightsCamerasAndLocalFog()
+    public void QuickAddMenuOffersEmptyNodeShapesLightsCamerasLocalFogAndInstances()
     {
         using var fixture = new Fixture();
         var items = fixture.Editor.QuickAddMenu.Items;
 
-        _ = items.Where(item => !item.IsSeparator).Select(item => item.Text).Should().Equal("Empty node", "Shapes", "Lights", "Cameras", "Local fog volume");
+        _ = items.Where(item => !item.IsSeparator).Select(item => item.Text).Should().Equal("Empty node", "Shapes", "Lights", "Cameras", "Local fog volume", "Model…", "Scene…");
         _ = Submenu(items, "Lights").Select(item => item.Text).Should().Equal("Directional light", "Point light", "Spot light");
         _ = Submenu(items, "Cameras").Select(item => item.Text).Should().Equal("Perspective camera", "Orthographic camera");
     }

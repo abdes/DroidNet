@@ -207,7 +207,7 @@ public sealed partial class AssetFeed : IAssetFeed, IDisposable, IAsyncDisposabl
             {
                 AssetCookFreshness.MissingSource => AssetState.Missing,
                 AssetCookFreshness.InvalidSource => AssetState.Broken,
-                _ => item.Kind == AssetKind.ForeignSource ? AssetState.Source
+                _ => item.Kind == AssetKind.Model ? AssetState.Source
                     : item.ImportSource is not null && item.DescriptorPath is null ? AssetState.Cooked : AssetState.Descriptor,
             },
             DerivedState = !state.HasPublishedOutput ? null
@@ -258,7 +258,7 @@ public sealed partial class AssetFeed : IAssetFeed, IDisposable, IAsyncDisposabl
     {
         // A model is imported when a record names it.
         var records = new Oxygen.Editor.Models.ModelImportRecords(project.FileSystem, project.ProjectRoot.FullPath);
-        source = [.. source.Select(item => item.Kind == AssetKind.ForeignSource && item.SourcePath is { } path
+        source = [.. source.Select(item => item.Kind == AssetKind.Model && item.SourcePath is { } path
             && records.IsImported(path.FullPath)
                 ? item with { ImportSource = item.Identity, ImportSourcePath = path } : item)];
         var candidates = source.Where(item => item.ImportSource is not null

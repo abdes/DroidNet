@@ -4,8 +4,10 @@
 
 using DroidNet.Config;
 using Microsoft.Extensions.Logging;
+using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Cooking;
+using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.LivePreview.Play;
 using Oxygen.Editor.LivePreview.Scenes;
 using Oxygen.Editor.Projects;
@@ -40,6 +42,8 @@ namespace Oxygen.Editor.SceneEditor;
 /// <param name="engineSettings">The engine startup settings, whose logging verbosity the editors edit.</param>
 /// <param name="loggerFactory">The logger factory.</param>
 /// <param name="play">The session's play sessions; without them, the editors have no Play controls.</param>
+/// <param name="assets">The project's assets; without them, Quick Add offers no model or scene to instance.</param>
+/// <param name="references">The saved authored references; without them, only a scene instancing itself is refused.</param>
 public sealed class SceneEditorServices(
     IEngineService engine,
     IScenePreview scenePreview,
@@ -58,7 +62,9 @@ public sealed class SceneEditorServices(
     TransformToolSettingsService transformTools,
     ISettingsService<IEngineStartupSettings> engineSettings,
     ILoggerFactory loggerFactory,
-    PlaySession? play = null)
+    PlaySession? play = null,
+    IAssetFeed? assets = null,
+    IAuthoredReferences? references = null)
 {
     /// <summary>Gets the service that coordinates native engine usage for the documents.</summary>
     public IEngineService Engine { get; } = engine;
@@ -113,4 +119,10 @@ public sealed class SceneEditorServices(
 
     /// <summary>Gets the session's play sessions, if the session has them.</summary>
     public PlaySession? Play { get; } = play;
+
+    /// <summary>Gets the project's assets, which Quick Add offers as instance sources, if the session lists them.</summary>
+    public IAssetFeed? Assets { get; } = assets;
+
+    /// <summary>Gets the saved authored references that instance sources are checked against, if the session reads them.</summary>
+    public IAuthoredReferences? References { get; } = references;
 }

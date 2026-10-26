@@ -33,11 +33,13 @@
         <ProjectReference Include="$(ProjectsRoot)/Controls/ToolBars/src/Controls.ToolBars.csproj" />
         <ProjectReference Include="$(ProjectsRoot)/Documents/src/Documents.csproj" />
         <ProjectReference Include="$(ProjectsRoot)/Mvvm/src/Mvvm.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.Assets/src/Oxygen.Editor.Assets.csproj" />
         <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/src/Oxygen.Editor.ContentPipeline.csproj" />
         <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.Controls/src/Oxygen.Editor.Controls.csproj" />
         <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.Data/src/Oxygen.Editor.Data.csproj" />
         <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.Documents/src/Oxygen.Editor.Documents.csproj" />
         <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.LivePreview/src/Oxygen.Editor.LivePreview.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.Pickers/src/Oxygen.Editor.Pickers.csproj" />
         <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.Projects/src/Oxygen.Editor.Projects.csproj" />
         <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.Runtime/src/Oxygen.Editor.Runtime.csproj" />
         <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.Scenes/src/Oxygen.Editor.Scenes.csproj" />

@@ -41,14 +41,14 @@ public sealed partial class AssetBrowserQuery : ObservableObject
         new("Input files", static asset => asset.Kind == AssetKind.InputFile),
         new("Physics scenes", static asset => asset.Kind == AssetKind.PhysicsScene),
         new("Textures and images", static asset => asset.Kind is AssetKind.Texture or AssetKind.Image),
-        new("Source models", static asset => asset.Kind == AssetKind.ForeignSource),
+        new("Source models", static asset => asset.Kind == AssetKind.Model),
         new("Other", static asset => asset.Kind is AssetKind.Unknown or AssetKind.ImportSettings or AssetKind.CookedData or AssetKind.CookedTable or AssetKind.Folder),
     ];
 
     /// <summary>Gets the status choices; no selection includes every status.</summary>
     public IReadOnlyList<AssetFilterOption> StatusOptions { get; } =
     [
-        new("Not imported", static asset => asset.Kind == AssetKind.ForeignSource && asset.ImportSource is null),
+        new("Not imported", static asset => asset.Kind == AssetKind.Model && asset.ImportSource is null),
         new("Needs cooking", static asset => asset.CookStatus?.Freshness == AssetCookFreshness.NeedsCooking),
         new("Out of date", static asset => asset.CookStatus?.Freshness == AssetCookFreshness.OutOfDate),
         new("Unsaved changes", static asset => asset.CookStatus?.HasUnsavedChanges == true),

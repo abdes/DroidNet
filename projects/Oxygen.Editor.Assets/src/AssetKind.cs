@@ -45,9 +45,9 @@ public enum AssetKind
     ImportSettings,
 
     /// <summary>
-    /// Foreign source asset.
+    /// Model source file (glTF, GLB or FBX): the model itself, which an import turns into usable assets.
     /// </summary>
-    ForeignSource,
+    Model,
 
     /// <summary>
     /// Cooked binary data file.

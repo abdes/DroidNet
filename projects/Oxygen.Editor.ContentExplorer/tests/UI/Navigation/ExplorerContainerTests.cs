@@ -27,7 +27,7 @@ public sealed partial class ExplorerContainerTests : DroidNet.Tests.VisualUserIn
     [TestMethod]
     public Task ContainerProductsAreNotListed() => EnqueueAsync(async () =>
     {
-        var model = CreateNavigationAsset("/Content/Models/Ship/Ship.glb", AssetKind.ForeignSource);
+        var model = CreateNavigationAsset("/Content/Models/Ship/Ship.glb", AssetKind.Model);
         var input = CreateNavigationAsset("/Content/Input/Player.input", AssetKind.InputFile);
         var material = CreateNavigationAsset("/Content/Models/Ship/Ship.glb/Paint.omat", AssetKind.Material);
         var action = CreateNavigationAsset("/Content/Input/Player.input/Jump.oiact", AssetKind.InputAction);

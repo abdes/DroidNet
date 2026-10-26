@@ -29,6 +29,10 @@ public sealed class SceneEditorViews : ISceneViews
     public SceneCameraViewState? CameraStateOf(DocumentId document)
         => this.editors.TryGetValue(document, out var editor) ? editor.CameraViewState() : null;
 
+    /// <inheritdoc/>
+    public Task<bool> AddInstanceAsync(DocumentId document, AssetPath source)
+        => this.editors.TryGetValue(document, out var editor) ? editor.AddInstanceAsync(source) : Task.FromResult(false);
+
     /// <summary>Starts forwarding the requests for an editor's document to it.</summary>
     /// <param name="editor">The scene editor of a document.</param>
     internal void Attach(SceneEditorViewModel editor)

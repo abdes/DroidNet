@@ -30,10 +30,12 @@ public sealed partial class SceneContent : IDocumentContent, IDisposable
     /// <param name="document">The identity and history of the document the scene is decoded for.</param>
     /// <param name="interaction">The nodes hidden and locked in the editor, if the editor keeps them.</param>
     /// <param name="redirects">The session's asset renames and moves, if the editor tracks them.</param>
-    internal SceneContent(Scene scene, IList<ExplorerEntryData> layout, DocumentDecodeContext document, ISceneNodeInteraction? interaction, IAssetRedirects? redirects)
+    /// <param name="references">The saved authored references instance sources are checked against, if the editor reads them.</param>
+    /// <param name="asset">The scene's asset.</param>
+    internal SceneContent(Scene scene, IList<ExplorerEntryData> layout, DocumentDecodeContext document, ISceneNodeInteraction? interaction, IAssetRedirects? redirects, IAuthoredReferences? references = null, AssetPath? asset = null)
     {
         this.Scene = scene;
-        this.Authoring = new SceneAuthoring(document, scene, layout, interaction, redirects);
+        this.Authoring = new SceneAuthoring(document, scene, layout, interaction, redirects, references) { Asset = asset };
     }
 
     /// <summary>Gets the scene.</summary>
@@ -95,6 +97,8 @@ public sealed partial class SceneContent : IDocumentContent, IDisposable
         {
             throw new InvalidOperationException("A scene follows a relocation on its own thread.");
         }
+
+        this.Authoring.Asset = relocation.File.Asset;
     }
 
     /// <inheritdoc/>

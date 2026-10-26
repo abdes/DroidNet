@@ -156,7 +156,7 @@ public sealed partial class CatalogWorkloadBenchmarks : DroidNet.Tests.VisualUse
         await WaitForRenderAsync().WaitAsync(cancellationToken).ConfigureAwait(true);
         var cold = watch.Elapsed;
         var rows = await provider.Items.FirstAsync();
-        _ = rows.Where(static row => !row.IsPackaged && (row.DescriptorPath is not null || row.Kind == AssetKind.ForeignSource)).Should().HaveCount(1000).And.OnlyContain(static row => row.CookStatus != null && row.CookStatus.Freshness == AssetCookFreshness.Current);
+        _ = rows.Where(static row => !row.IsPackaged && (row.DescriptorPath is not null || row.Kind == AssetKind.Model)).Should().HaveCount(1000).And.OnlyContain(static row => row.CookStatus != null && row.CookStatus.Freshness == AssetCookFreshness.Current);
         _ = rows.Should().NotContain(static row => row.RuntimeAvailability == AssetRuntimeAvailability.Updating);
         var selector = view.FindDescendant<ListViewBase>();
         _ = selector.Should().NotBeNull("the browser must realize its asset selector before timing feedback");

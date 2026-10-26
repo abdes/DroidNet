@@ -71,6 +71,7 @@
 
             <dnc:ToolBarElementHost>
                 <menus:MenuButton
+                    x:Name="QuickAddButton"
                     AutomationProperties.Name="Add"
                     Chrome="Transparent"
                     MenuSource="{x:Bind ViewModel.QuickAddMenu, Mode=OneWay}"

@@ -144,6 +144,36 @@ public sealed class AssetRuleTests
         _ = MaterialPreviewColor.TryRead(project.Context, Entry(Stone, AssetState.Broken, selectable: false) with { DescriptorPath = path }).Should().BeNull();
     }
 
+    // Issue #106 decision 6: a model is its source file, picked once an import record names it.
+    [TestMethod]
+    public void TheModelRuleOffersImportedModelsOnly()
+    {
+        var car = AssetPath.Parse("/Content/Vehicles/Car.glb");
+        var ship = AssetPath.Parse("/Content/Vehicles/Ship.fbx");
+        var assets = new[]
+        {
+            Entry(car, AssetState.Source, AssetKind.Model) with { ImportSource = car },
+            Entry(ship, AssetState.Source, AssetKind.Model),
+            Entry(AssetPath.Parse("/Content/Vehicles/Car.glb/Car.oscene"), kind: AssetKind.Scene),
+        };
+
+        _ = AssetRule.For(AssetKind.Model).Apply(assets).Select(static asset => asset.Identity).Should().Equal(car);
+    }
+
+    // Issue #106 decision 6: scene pickers never list a model's scene product.
+    [TestMethod]
+    public void TheSceneRuleOffersAuthoredScenesOnly()
+    {
+        var harbor = AssetPath.Parse("/Content/Scenes/Harbor.oscene");
+        var assets = new[]
+        {
+            Entry(harbor, kind: AssetKind.Scene),
+            Entry(AssetPath.Parse("/Content/Vehicles/Car.glb/Car.oscene"), kind: AssetKind.Scene),
+        };
+
+        _ = AssetRule.For(AssetKind.Scene).Apply(assets).Select(static asset => asset.Identity).Should().Equal(harbor);
+    }
+
     private static AssetEntry Entry(AssetPath identity, AssetState state = AssetState.Descriptor, AssetKind kind = AssetKind.Material, bool selectable = true)
         => new(
             Identity: identity,

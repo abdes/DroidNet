@@ -435,6 +435,14 @@
                             KeyboardAcceleratorTextOverride="Enter"
                             Text="Open"
                             ToolTipService.ToolTip="{x:Bind ViewModel.OpenToolTip, Mode=OneWay}" />
+                        <MenuFlyoutItem
+                            Command="{x:Bind ViewModel.AddToSceneCommand}"
+                            Text="Add to scene"
+                            ToolTipService.ToolTip="{x:Bind ViewModel.AddToSceneToolTip, Mode=OneWay}">
+                            <MenuFlyoutItem.Icon>
+                                <FontIcon Glyph="&#xE710;" />
+                            </MenuFlyoutItem.Icon>
+                        </MenuFlyoutItem>
                         <MenuFlyoutSubItem Text="New">
                             <MenuFlyoutItem
                                 Command="{x:Bind ViewModel.CreateFolderCommand}"

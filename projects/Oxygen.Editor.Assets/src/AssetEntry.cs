@@ -80,7 +80,7 @@ public sealed record AssetEntry(
     /// <summary>Gets the user-facing asset type.</summary>
     public string TypeDisplayName => this.Kind switch
     {
-        AssetKind.ForeignSource => Path.GetExtension(this.Identity.Name).ToUpperInvariant() switch { ".GLTF" => "glTF source", ".GLB" => "GLB source", ".FBX" => "FBX source", _ => "Source model" },
+        AssetKind.Model => Path.GetExtension(this.Identity.Name).ToUpperInvariant() switch { ".GLTF" => "glTF source", ".GLB" => "GLB source", ".FBX" => "FBX source", _ => "Source model" },
         AssetKind.CookedData => "Cooked Data",
         AssetKind.CookedTable => "Cooked Table",
         AssetKind.InputFile => "Input file",
@@ -89,7 +89,7 @@ public sealed record AssetEntry(
 
     /// <summary>Gets the primary asset-state badge.</summary>
     public string PrimaryBadge => this.IsCookedSourceOverridden ? "Overridden"
-        : this.IsPackaged ? this.PackagedBadge : this.Kind == AssetKind.ForeignSource && this.ImportSource is null ? "Not imported"
+        : this.IsPackaged ? this.PackagedBadge : this.Kind == AssetKind.Model && this.ImportSource is null ? "Not imported"
         : AssetStatusText.GetText(this.CookStatus, this.CookActivity, runtimeAvailability: this.RuntimeAvailability) ?? GetBadge(this.PrimaryState);
 
     /// <summary>Gets a concise explanation of engine ownership or the current authored status.</summary>
@@ -98,7 +98,7 @@ public sealed record AssetEntry(
         : this.IsPackaged
         ? $"Packaged in {this.CookedMetadata?.ContainerPath.Name}: read-only, and cooks reference it without copying it."
             + (this.RuntimeReason is null ? string.Empty : " Preview: " + this.RuntimeReason)
-        : this.Kind == AssetKind.ForeignSource && this.ImportSource is null ? "Import this model to create usable geometry, materials and scenes."
+        : this.Kind == AssetKind.Model && this.ImportSource is null ? "Import this model to create usable geometry, materials and scenes."
         : AssetStatusText.GetDescription(this.CookStatus, this.CookActivity, runtimeAvailability: this.RuntimeAvailability, runtimeReason: this.RuntimeReason);
 
     /// <summary>

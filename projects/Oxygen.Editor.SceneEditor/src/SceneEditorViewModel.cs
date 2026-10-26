@@ -56,6 +56,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         this.Document = tab.Document;
         this.scene = (tab.Document.Content as SceneContent)?.Scene;
         this.InitializeTransformTools();
+        this.InitializeInstances();
 
         // The stored layout of the scene is restored with its viewports.
         this.CurrentLayout = SceneViewLayout.OnePane;
@@ -198,6 +199,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
             this.services.Views.Detach(this);
             this.DisposeTransformTools();
             this.DisposePlay();
+            this.DisposeInstances();
 
             foreach (var viewport in this.Viewports)
             {

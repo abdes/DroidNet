@@ -20,6 +20,10 @@ namespace Oxygen.Editor.Assets;
 /// (<see cref="EngineAssets.Internal"/>) are never offered.
 /// </para>
 /// <para>
+/// A model is its source file (<see cref="AssetKind.Model"/>): its rule accepts the models an import record names, one
+/// per source file, and the scene rules never accept a model's scene product, which instancing the model uses.
+/// </para>
+/// <para>
 /// A rule never accepts an asset whose file is missing or broken. <see cref="Apply"/> keeps a property's current
 /// assignment even then, so the user sees what it points to; it never lists an asset of another kind, or an
 /// engine-internal one.
@@ -31,6 +35,7 @@ public sealed class AssetRule
         = AssetFileTypes.Suffixes(AssetFileCategory.Cooked)
             .Select(static suffix => AssetKinds.FromFileName(suffix))
             .Where(static kind => kind != AssetKind.Unknown)
+            .Append(AssetKind.Model)
             .Distinct()
             .ToFrozenDictionary(
                 static kind => kind,
@@ -75,6 +80,7 @@ public sealed class AssetRule
         ArgumentNullException.ThrowIfNull(asset);
         return this.IsOfKind(asset)
             && asset.IsSelectable
+            && (asset.Kind != AssetKind.Model || asset.ImportSource is not null)
             && (!this.Cooked || asset.CookedMetadata is not null || asset.CookStatus?.HasAvailableOutput == true);
     }
 
@@ -119,6 +125,11 @@ public sealed class AssetRule
             ? cooked ? rules.Cooked : rules.Any
             : new AssetRule(kind, cooked, referenceable: false);
 
-    // Engine-internal assets, such as the transform gizmo's arrow, are the engine's own and are never offered.
-    private bool IsOfKind(AssetEntry asset) => this.referenceable && asset.Kind == this.Kind && !asset.Identity.IsSameOrInside(EngineAssets.Internal);
+    // Engine-internal assets, such as the transform gizmo's arrow, are the engine's own and are never offered; a model's
+    // scene product is the model's, picked as the model.
+    private bool IsOfKind(AssetEntry asset)
+        => this.referenceable
+            && asset.Kind == this.Kind
+            && !asset.Identity.IsSameOrInside(EngineAssets.Internal)
+            && (asset.Kind != AssetKind.Scene || AssetFileTypes.ContainerOf(asset.Identity) is null);
 }

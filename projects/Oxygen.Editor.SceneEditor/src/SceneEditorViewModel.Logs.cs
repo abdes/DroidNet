@@ -91,6 +91,24 @@ public partial class SceneEditorViewModel
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Information,
+        Message = "Add an instance of {Source} to document {DocumentId}")]
+    private static partial void LogAddInstanceRequested(ILogger logger, AssetPath source, DocumentId documentId);
+
+    private void LogAddInstanceRequested(AssetPath source)
+        => LogAddInstanceRequested(this.logger, source, this.Document.Id);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Warning,
+        Message = "The instance of {Source} was not placed in document {DocumentId}: {Code}")]
+    private static partial void LogAddInstanceRefused(ILogger logger, AssetPath source, DocumentId documentId, string? code);
+
+    private void LogAddInstanceRefused(AssetPath source, string? code)
+        => LogAddInstanceRefused(this.logger, source, this.Document.Id, code);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Information,
         Message = "The engine shows the scene of document {DocumentId}; restoring layout {Layout}")]
     private static partial void LogSceneLoadedReceived(ILogger logger, DocumentId documentId, SceneViewLayout layout);
 

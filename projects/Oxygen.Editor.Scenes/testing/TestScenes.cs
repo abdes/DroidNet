@@ -27,11 +27,12 @@ public static class TestScenes
     /// The project the scene's file belongs to, when the test already made it for a service of the project's session;
     /// otherwise a new in-memory project.
     /// </param>
+    /// <param name="references">The saved authored references the scene's instance sources are checked against, if any.</param>
     /// <returns>The scene's document; the caller disposes it.</returns>
-    public static TestScene Open(Scene scene, ISceneNodeInteraction? interaction = null, IAssetRedirects? redirects = null, IList<ExplorerEntryData>? layout = null, TestProject? project = null)
+    public static TestScene Open(Scene scene, ISceneNodeInteraction? interaction = null, IAssetRedirects? redirects = null, IList<ExplorerEntryData>? layout = null, TestProject? project = null, IAuthoredReferences? references = null)
     {
         ArgumentNullException.ThrowIfNull(scene);
-        var documents = new TestSceneDocuments(project ?? TestProject.Create(new MockFileSystem(), @"C:\TestScenes"), interaction, redirects);
+        var documents = new TestSceneDocuments(project ?? TestProject.Create(new MockFileSystem(), @"C:\TestScenes"), interaction, redirects, otherKinds: null, references);
         try
         {
             var name = string.IsNullOrEmpty(scene.Name) ? "Scene" : scene.Name;

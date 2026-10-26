@@ -62,4 +62,20 @@ public sealed class MenuButtonTests : VisualUserInterfaceTests
         _ = shown.Should().BeTrue("the Opening handler supplies the menu source before Show reads it");
         _ = openingCount.Should().Be(1);
     });
+
+    [TestMethod]
+    public Task Dismiss_RaisesClosedOnceTheMenuIsClosed_Async() => EnqueueAsync(async () =>
+    {
+        var menuButton = new MenuButton { Content = "Add", MenuSource = new MenuBuilder().AddMenuItem("Model").Build() };
+        var openWhenClosed = new List<bool>();
+        menuButton.Closed += (_, _) => openWhenClosed.Add(menuButton.IsMenuOpen);
+        await LoadTestContentAsync(menuButton).ConfigureAwait(true);
+        _ = menuButton.Show(MenuNavigationMode.Programmatic);
+        await WaitForRenderAsync().ConfigureAwait(true);
+
+        menuButton.Dismiss();
+        await WaitForRenderAsync().ConfigureAwait(true);
+
+        _ = openWhenClosed.Should().Equal(false);
+    });
 }

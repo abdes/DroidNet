@@ -134,6 +134,7 @@ public partial class AssetsViewModel
         this.selectionTargets = null;
         this.OnPropertyChanged(nameof(this.SelectedAssets));
         this.OpenSelectedCommand.NotifyCanExecuteChanged();
+        this.AddToSceneCommand.NotifyCanExecuteChanged();
         this.CopyPathCommand.NotifyCanExecuteChanged();
         this.ShowInFileExplorerCommand.NotifyCanExecuteChanged();
         this.RenameSelectedCommand.NotifyCanExecuteChanged();
@@ -152,6 +153,7 @@ public partial class AssetsViewModel
             nameof(this.ReimportToolTip),
             nameof(this.ShowImportSourceToolTip),
             nameof(this.OpenToolTip),
+            nameof(this.AddToSceneToolTip),
             nameof(this.CopyPathToolTip),
             nameof(this.ShowInFileExplorerToolTip),
             nameof(this.RenameToolTip),

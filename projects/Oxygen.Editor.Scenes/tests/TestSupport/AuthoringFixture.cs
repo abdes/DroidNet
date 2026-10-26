@@ -35,7 +35,7 @@ public sealed partial class AuthoringFixture : IDisposable
 {
     private readonly object historyRoot;
 
-    private AuthoringFixture(TestProject project, DocumentId document, SceneContent content, object historyRoot, HistoryKeeper history, FakeNodeInteraction? interaction, FakeAssetRedirects redirects, SingleThreadContext? thread)
+    private AuthoringFixture(TestProject project, DocumentId document, SceneContent content, object historyRoot, HistoryKeeper history, FakeNodeInteraction? interaction, FakeAssetRedirects redirects, FakeAuthoredReferences references, SingleThreadContext? thread)
     {
         this.Project = project;
         this.Document = document;
@@ -44,6 +44,7 @@ public sealed partial class AuthoringFixture : IDisposable
         this.History = history;
         this.Interaction = interaction;
         this.Redirects = redirects;
+        this.References = references;
         this.Thread = thread;
         this.Changes = new ChangeRecorder(content.Authoring);
     }
@@ -78,6 +79,9 @@ public sealed partial class AuthoringFixture : IDisposable
     /// <summary>Gets the asset moves and deletions the scene's edits see.</summary>
     public FakeAssetRedirects Redirects { get; }
 
+    /// <summary>Gets the saved authored references the scene's instance sources are checked against.</summary>
+    public FakeAuthoredReferences References { get; }
+
     /// <summary>Gets the thread that owns the scene, when it was opened on one.</summary>
     public SingleThreadContext? Thread { get; }
 
@@ -92,12 +96,13 @@ public sealed partial class AuthoringFixture : IDisposable
         ArgumentNullException.ThrowIfNull(data);
         var interaction = withInteraction ? new FakeNodeInteraction() : null;
         var redirects = new FakeAssetRedirects();
+        var references = new FakeAuthoredReferences();
         var root = new object();
         var history = new HistoryKeeper(root);
         var project = TestProject.Create(new MockFileSystem());
         var document = DocumentId.New();
-        var content = await DecodeAsync(project, data, document, interaction, redirects, history).ConfigureAwait(true);
-        return new AuthoringFixture(project, document, content, root, history, interaction, redirects, thread: null);
+        var content = await DecodeAsync(project, data, document, interaction, redirects, references, history).ConfigureAwait(true);
+        return new AuthoringFixture(project, document, content, root, history, interaction, redirects, references, thread: null);
     }
 
     /// <summary>
@@ -113,12 +118,13 @@ public sealed partial class AuthoringFixture : IDisposable
         {
             var interaction = new FakeNodeInteraction();
             var redirects = new FakeAssetRedirects();
+            var references = new FakeAuthoredReferences();
             var root = new object();
             var history = new HistoryKeeper(root);
             var project = TestProject.Create(new MockFileSystem());
             var document = DocumentId.New();
-            var content = await thread.RunAsync(() => DecodeAsync(project, data, document, interaction, redirects, history)).ConfigureAwait(false);
-            return new AuthoringFixture(project, document, content, root, history, interaction, redirects, thread);
+            var content = await thread.RunAsync(() => DecodeAsync(project, data, document, interaction, redirects, references, history)).ConfigureAwait(false);
+            return new AuthoringFixture(project, document, content, root, history, interaction, redirects, references, thread);
         }
         catch
         {
@@ -186,9 +192,9 @@ public sealed partial class AuthoringFixture : IDisposable
         GC.KeepAlive(this.historyRoot);
     }
 
-    private static async Task<SceneContent> DecodeAsync(TestProject project, SceneData data, DocumentId document, FakeNodeInteraction? interaction, FakeAssetRedirects redirects, HistoryKeeper history)
+    private static async Task<SceneContent> DecodeAsync(TestProject project, SceneData data, DocumentId document, FakeNodeInteraction? interaction, FakeAssetRedirects redirects, FakeAuthoredReferences references, HistoryKeeper history)
     {
-        var kind = new SceneDocumentKind(interaction, redirects);
+        var kind = new SceneDocumentKind(interaction, redirects, references);
         var file = new DocumentFile(
             project.PathOf($"/Content/{data.Name}{AssetFileTypes.SceneDescriptor}"),
             AssetPath.Parse($"/Content/{data.Name}{AssetFileTypes.Scene}"));

@@ -11,8 +11,12 @@ using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Projects.Testing;
+using Oxygen.Editor.Scenes.Testing;
+using Oxygen.Editor.Scenes.Views;
 using Oxygen.Editor.Shell.Desktop;
+using Oxygen.Editor.Shell.Testing;
 using Oxygen.Editor.Textures;
+using Oxygen.Editor.World;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
@@ -191,7 +195,48 @@ public sealed class AssetsViewModelCommandTests
         }
     }
 
-    private static async Task<(AssetsViewModel browser, ContentExplorerState state, Mock<IContentFoldersPane> folders, TestSession session)> CreateExplorerAsync(string? root = null, IAssetRelocationWorkflow? relocation = null)
+    /// <summary>
+    /// Add to scene places the one selected imported model or scene in the open scene, after showing it (scene
+    /// instances 6.1); it needs an open scene, and a scene is never placed in itself.
+    /// </summary>
+    /// <returns>The asynchronous check.</returns>
+    [TestMethod]
+    public async Task AddToScenePlacesTheSelectedSourceInTheOpenScene()
+    {
+        using var scene = TestScenes.Open(new Scene { Name = "Harbor" });
+        var area = new TestDocumentArea();
+        var views = new Mock<ISceneViews>();
+        _ = views.Setup(port => port.AddInstanceAsync(It.IsAny<DroidNet.Documents.DocumentId>(), It.IsAny<AssetPath>())).ReturnsAsync(true);
+        var (browser, state, _, session) = await CreateExplorerAsync(documents: area, sceneViews: views.Object).ConfigureAwait(false);
+        using (session)
+        using (browser)
+        {
+            var car = CreateAsset("/Content/Vehicles/Car.glb", AssetKind.Model, descriptor: null) with { ImportSource = AssetPath.Parse("/Content/Vehicles/Car.glb") };
+            state.PublishSelection([car]);
+            _ = browser.AddToSceneCommand.CanExecute(parameter: null).Should().BeFalse("no scene is open");
+
+            area.Add(scene.Document);
+            _ = browser.AddToSceneCommand.CanExecute(parameter: null).Should().BeTrue();
+            await browser.AddToSceneCommand.ExecuteAsync(parameter: null).ConfigureAwait(false);
+            views.Verify(port => port.AddInstanceAsync(scene.Document.Id, car.Identity), Times.Once);
+            _ = area.ActiveDocument.Should().BeSameAs(scene.Document);
+
+            state.PublishSelection([CreateAsset("/Content/Vehicles/Ship.fbx", AssetKind.Model, descriptor: null)]);
+            _ = browser.AddToSceneCommand.CanExecute(parameter: null).Should().BeFalse("a model counts once it is imported");
+
+            state.PublishSelection([CreateAsset(scene.Document.File.Asset.VirtualPath, AssetKind.Scene, descriptor: null)]);
+            _ = browser.AddToSceneCommand.CanExecute(parameter: null).Should().BeFalse("a scene is never placed in itself");
+
+            state.PublishSelection([CreateAsset("/Content/Watchtower.oscene", AssetKind.Scene, descriptor: null)]);
+            _ = browser.AddToSceneCommand.CanExecute(parameter: null).Should().BeTrue();
+        }
+    }
+
+    private static async Task<(AssetsViewModel browser, ContentExplorerState state, Mock<IContentFoldersPane> folders, TestSession session)> CreateExplorerAsync(
+        string? root = null,
+        IAssetRelocationWorkflow? relocation = null,
+        TestDocumentArea? documents = null,
+        ISceneViews? sceneViews = null)
     {
         // A test that names a folder works on the disk; the others in memory.
         var session = new TestSession(TestProject.Create(root is null ? new MockFileSystem() : new RealFileSystem(), root).Context with
@@ -217,7 +262,9 @@ public sealed class AssetsViewModelCommandTests
             Mock.Of<IDesktopIntegration>(),
             new TextureImport(new MockFileSystem()),
             Mock.Of<Oxygen.Editor.Models.IModelImportPrompt>(),
-            relocation);
+            relocation,
+            documents: documents,
+            sceneViews: sceneViews);
         await browser.OnNavigatedToAsync(null!, null!).ConfigureAwait(false);
         return (browser, state, folders, session);
     }

@@ -49,7 +49,7 @@ public static class AssetKinds
         { Category: AssetFileCategory.Script } => AssetKind.Script,
         { Category: AssetFileCategory.Input } => AssetKind.InputFile,
         { Category: AssetFileCategory.Image } => AssetKind.Image,
-        { Category: AssetFileCategory.Model } => AssetKind.ForeignSource,
+        { Category: AssetFileCategory.Model } => AssetKind.Model,
         { Category: AssetFileCategory.ImportSettings } => AssetKind.ImportSettings,
         { Category: AssetFileCategory.CookedResource } type => type.Suffix.Equals(".table", StringComparison.Ordinal) ? AssetKind.CookedTable : AssetKind.CookedData,
         { CookedFileKind: FileKind.TextureDescriptor } => AssetKind.Texture,

@@ -62,6 +62,7 @@ public sealed class ContentPipelineSessionModule : IScopeModule<ISessionLayer>
         scope.Register<IAssetAuthoring, AssetAuthoring>(Reuse.Singleton);
         scope.Register<AssetRedirects>(Reuse.Singleton);
         scope.RegisterMapping<IAssetRedirects, AssetRedirects>();
+        scope.Register<IAuthoredReferences, AuthoredReferences>(Reuse.Singleton);
     }
 
     // The cook, the pipeline service over it and the ports the service implements, the cook's publication and the

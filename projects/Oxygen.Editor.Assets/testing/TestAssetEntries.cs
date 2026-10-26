@@ -32,7 +32,7 @@ public static class TestAssetEntries
     public static AssetEntry ImportedModel(bool imported)
     {
         var asset = AssetPath.Parse("/Content/Models/Crate/model.gltf");
-        return new(asset, "model.gltf", AssetKind.ForeignSource, AssetState.Source, DerivedState: null, AssetRuntimeAvailability.NotApplicable, asset.VirtualPath, FileSystemPath.From("C:/Project/Content/Models/Crate/model.gltf"), DescriptorPath: null, CookedPath: null, AssetGuid: null, [], IsSelectable: true)
+        return new(asset, "model.gltf", AssetKind.Model, AssetState.Source, DerivedState: null, AssetRuntimeAvailability.NotApplicable, asset.VirtualPath, FileSystemPath.From("C:/Project/Content/Models/Crate/model.gltf"), DescriptorPath: null, CookedPath: null, AssetGuid: null, [], IsSelectable: true)
         {
             ImportSource = imported ? asset : null,
             CookStatus = imported

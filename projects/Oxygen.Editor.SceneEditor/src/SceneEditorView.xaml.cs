@@ -7,7 +7,9 @@ using System.ComponentModel;
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
+using Oxygen.Editor.Pickers;
 using Oxygen.Editor.Shell.Documents;
 
 namespace Oxygen.Editor.SceneEditor;
@@ -21,6 +23,8 @@ public sealed partial class SceneEditorView : UserControl, IDocumentEditorView
     private readonly Dictionary<ViewportViewModel, Viewport> viewportControls = [];
     private readonly SemaphoreSlim viewportControlsGate = new(initialCount: 1, maxCount: 1);
     private SceneEditorViewModel? currentViewModel;
+    private Flyout? instanceSourceFlyout;
+    private AssetPicker? instanceSourcePicker;
     private long lifecycleGeneration;
     private bool isDeactivated = true;
 
@@ -122,6 +126,7 @@ public sealed partial class SceneEditorView : UserControl, IDocumentEditorView
         {
             this.currentViewModel.PropertyChanged += this.OnSceneEditorViewModelPropertyChanged;
             this.currentViewModel.Viewports.CollectionChanged += this.OnViewportsChanged;
+            this.currentViewModel.InstanceSourcePickerRequested += this.OnInstanceSourcePickerRequested;
         }
     }
 
@@ -134,6 +139,9 @@ public sealed partial class SceneEditorView : UserControl, IDocumentEditorView
 
         this.currentViewModel.PropertyChanged -= this.OnSceneEditorViewModelPropertyChanged;
         this.currentViewModel.Viewports.CollectionChanged -= this.OnViewportsChanged;
+        this.currentViewModel.InstanceSourcePickerRequested -= this.OnInstanceSourcePickerRequested;
+        this.QuickAddButton.Closed -= this.OnQuickAddClosed;
+        this.instanceSourceFlyout?.Hide();
         this.currentViewModel = null;
     }
 
@@ -315,6 +323,50 @@ public sealed partial class SceneEditorView : UserControl, IDocumentEditorView
         }
 
         viewModel.SetFocusedViewport(viewport.ViewModel);
+    }
+
+    // Quick Add's Model… and Scene… open the source picker under the Add button, once the menu has closed.
+    private void OnInstanceSourcePickerRequested(object? sender, EventArgs e)
+    {
+        if (sender is not SceneEditorViewModel { InstanceSourceChoices: { } choices } viewModel)
+        {
+            return;
+        }
+
+        if (this.instanceSourcePicker is null)
+        {
+            this.instanceSourcePicker = new AssetPicker();
+            this.instanceSourcePicker.ChoiceInvoked += this.OnInstanceSourceInvoked;
+            this.instanceSourceFlyout = new Flyout { Content = this.instanceSourcePicker, Placement = FlyoutPlacementMode.BottomEdgeAlignedLeft };
+        }
+
+        this.instanceSourcePicker.Model = choices;
+        this.instanceSourcePicker.EmptyText = viewModel.InstanceSourceEmptyText;
+
+        // An item runs while its menu is still open; the menu's closing would dismiss a flyout shown now.
+        if (this.QuickAddButton.IsMenuOpen)
+        {
+            this.QuickAddButton.Closed += this.OnQuickAddClosed;
+        }
+        else
+        {
+            this.instanceSourceFlyout?.ShowAt(this.QuickAddButton);
+        }
+    }
+
+    private void OnQuickAddClosed(object? sender, EventArgs e)
+    {
+        this.QuickAddButton.Closed -= this.OnQuickAddClosed;
+        this.instanceSourceFlyout?.ShowAt(this.QuickAddButton);
+    }
+
+    private async void OnInstanceSourceInvoked(object? sender, AssetChoice choice)
+    {
+        this.instanceSourceFlyout?.Hide();
+        if (this.currentViewModel is { } viewModel && choice.Asset is { } source)
+        {
+            _ = await viewModel.AddInstanceAsync(source).ConfigureAwait(true);
+        }
     }
 
     private void OnViewportGotFocus(object sender, RoutedEventArgs e)

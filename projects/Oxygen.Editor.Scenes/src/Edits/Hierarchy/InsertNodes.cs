@@ -17,7 +17,7 @@ namespace Oxygen.Editor.Scenes.Edits.Hierarchy;
 /// <remarks>
 /// The node and component ids are in the data, chosen by the edit's builder, so the caller already holds them. The
 /// places all refer to the scene before the edit; inserted data obeys the component rules, so an insert can never
-/// create a second atmosphere sun. References to moved assets follow the asset.
+/// create a second atmosphere sun or an instance of the scene itself. References to moved assets follow the asset.
 /// </remarks>
 public sealed record InsertNodes : ISceneEdit
 {
@@ -108,10 +108,20 @@ public sealed record InsertNodes : ISceneEdit
             {
                 return SceneDiagnostic.Error(SceneEditCodes.LayoutScopeMismatch, "An inserted node's explorer place is not in the scope of its scene parent.");
             }
+
+            if (CheckInstances(scope, insert.Node) is { } cycle)
+            {
+                return cycle;
+            }
         }
 
         return CheckSuns(scope.Scene, this.Inserts.Select(static insert => insert.Node));
     }
+
+    // An inserted instance may not instance the scene it is inserted in, directly or through its source's references.
+    private static SceneDiagnostic? CheckInstances(SceneEditScope scope, SceneNodeData node)
+        => node.Components.OfType<SceneInstanceComponentData>().Select(instance => scope.CheckInstanceSource(instance.Source, node.Id)).FirstOrDefault(static error => error is not null)
+            ?? (node.Children ?? []).Select(child => CheckInstances(scope, child)).FirstOrDefault(static error => error is not null);
 
     // One atmosphere slot has at most one light: inserted lights may not take a slot the scene, or another insert, has.
     private static SceneDiagnostic? CheckSuns(Scene scene, IEnumerable<SceneNodeData> inserted)

@@ -10,7 +10,7 @@ namespace Oxygen.Editor.Scenes.Views;
 
 /// <summary>
 /// The viewports that show a scene document: what a part asks of them without knowing the editor that owns them, such
-/// as the Scene Explorer framing nodes or looking through a camera.
+/// as the Scene Explorer framing nodes or looking through a camera, or the Content Explorer placing an instance.
 /// </summary>
 /// <remarks>The scene editor implements it; a document no editor shows answers <see langword="false"/> and <see langword="null"/>.</remarks>
 public interface ISceneViews
@@ -32,4 +32,13 @@ public interface ISceneViews
     /// <param name="document">The scene document.</param>
     /// <returns>The viewport's camera state, or <see langword="null"/> when no editor shows the document.</returns>
     public SceneCameraViewState? CameraStateOf(DocumentId document);
+
+    /// <summary>
+    /// Places an instance of a model or a scene in a scene document, in front of its editor's active viewport, and
+    /// selects it, as the scene toolbar's <em>Add</em> menu does.
+    /// </summary>
+    /// <param name="document">The scene document.</param>
+    /// <param name="source">The model's source file or the authored scene to instance.</param>
+    /// <returns><see langword="true"/> when the instance was placed; a refusal is published by the editor.</returns>
+    public Task<bool> AddInstanceAsync(DocumentId document, AssetPath source);
 }

@@ -70,6 +70,9 @@ public static class SceneEditCodes
     /// <summary>A node or a folder would move into itself or under its own descendant.</summary>
     public const string HierarchyCycle = DiagnosticCodes.ScenePrefix + "Hierarchy.Cycle";
 
+    /// <summary>An instance would instance the scene it is in, directly or through the sources it references.</summary>
+    public const string InstanceCycle = DiagnosticCodes.ScenePrefix + "Instance.Cycle";
+
     /// <summary>A layout place is in another scene scope than the node's scene parent.</summary>
     public const string LayoutScopeMismatch = DiagnosticCodes.ScenePrefix + "Layout.ScopeMismatch";
 

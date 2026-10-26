@@ -4,6 +4,7 @@
 
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Scenes.Layout;
+using Oxygen.Editor.Scenes.Nodes;
 using Oxygen.Editor.World;
 using Oxygen.Managed.Core;
 
@@ -19,12 +20,14 @@ public sealed class SceneEditScope
     /// <param name="layout">The scene's explorer layout, which the edit keeps in step with the scene.</param>
     /// <param name="interaction">The nodes hidden and locked in the editor, if the editor keeps them.</param>
     /// <param name="redirects">The session's asset renames and moves, if the editor tracks them.</param>
-    internal SceneEditScope(Scene scene, IList<ExplorerEntryData> layout, ISceneNodeInteraction? interaction, IAssetRedirects? redirects)
+    /// <param name="references">The saved authored references, if the editor reads them.</param>
+    internal SceneEditScope(Scene scene, IList<ExplorerEntryData> layout, ISceneNodeInteraction? interaction, IAssetRedirects? redirects, IAuthoredReferences? references = null)
     {
         this.Scene = scene;
         this.Layout = layout;
         this.Interaction = interaction;
         this.Redirects = redirects;
+        this.References = references;
     }
 
     /// <summary>Gets the scene.</summary>
@@ -41,6 +44,15 @@ public sealed class SceneEditScope
     /// <see langword="null"/> when nothing tracks them.
     /// </summary>
     public IAssetRedirects? Redirects { get; }
+
+    /// <summary>
+    /// Gets the direct references of the project's saved authored assets, which an instance's source must not reach the
+    /// scene through, or <see langword="null"/> when nothing reads them.
+    /// </summary>
+    public IAuthoredReferences? References { get; }
+
+    /// <summary>Gets the scene's own asset, which no instance in it may reach, or <see langword="null"/> when unknown.</summary>
+    public AssetPath? Asset { get; internal set; }
 
     /// <summary>Gets or sets a value indicating whether the scope runs a history replay, which checks no lock.</summary>
     internal bool Replaying { get; set; }
@@ -140,12 +152,31 @@ public sealed class SceneEditScope
         return errors is null ? SceneEditValidation.Valid : SceneEditValidation.Refused(errors);
     }
 
+    /// <summary>
+    /// Checks an instance's source against the scene: a source that is the scene, or references it through the saved
+    /// authored references, would make a cycle (<see cref="InstanceRules.WouldCycle"/>).
+    /// </summary>
+    /// <param name="source">The instance's source.</param>
+    /// <param name="node">The instance root, if it is in the scene.</param>
+    /// <returns>The refusal, or <see langword="null"/> when the source may be instanced here or the scene's asset is unknown.</returns>
+    public SceneDiagnostic? CheckInstanceSource(AssetPath source, NodeId? node = null)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        return this.Asset is { } scene && InstanceRules.WouldCycle(scene, source, asset => this.References?.Of(asset) ?? [])
+            ? SceneDiagnostic.Error(SceneEditCodes.InstanceCycle, $"'{source.Name}' is or instances this scene, which cannot instance itself.", node)
+            : null;
+    }
+
     /// <summary>Creates a scope over another scene, with the same ports, such as a scratch copy to validate a batch on.</summary>
     /// <param name="scene">The scene.</param>
     /// <param name="layout">The scene's explorer layout.</param>
     /// <returns>The scope.</returns>
     internal SceneEditScope On(Scene scene, IList<ExplorerEntryData> layout)
-        => new(scene, layout, this.Interaction is { } interaction ? new ScratchNodeInteraction(interaction) : null, this.Redirects) { Replaying = this.Replaying };
+        => new(scene, layout, this.Interaction is { } interaction ? new ScratchNodeInteraction(interaction) : null, this.Redirects, this.References)
+        {
+            Asset = this.Asset,
+            Replaying = this.Replaying,
+        };
 
     /// <summary>Takes the warnings reported since the last call.</summary>
     /// <returns>The warnings.</returns>

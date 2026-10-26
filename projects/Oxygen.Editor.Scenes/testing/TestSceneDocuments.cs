@@ -34,13 +34,14 @@ public sealed partial class TestSceneDocuments : IDisposable
     /// <param name="interaction">The lock and hide state every scene document's edits respect, if any.</param>
     /// <param name="redirects">The asset moves and deletions every scene document's edits see, if any.</param>
     /// <param name="otherKinds">The kinds of the other documents the test opens beside its scenes, if any.</param>
-    public TestSceneDocuments(TestProject project, ISceneNodeInteraction? interaction = null, IAssetRedirects? redirects = null, IEnumerable<IDocumentKind>? otherKinds = null)
+    /// <param name="references">The saved authored references every scene document's instance sources are checked against, if any.</param>
+    public TestSceneDocuments(TestProject project, ISceneNodeInteraction? interaction = null, IAssetRedirects? redirects = null, IEnumerable<IDocumentKind>? otherKinds = null, IAuthoredReferences? references = null)
     {
         ArgumentNullException.ThrowIfNull(project);
         this.Project = project;
         this.Files = new GatedFileStore(new NativeAtomicFileStore(project.Context.FileSystem), this);
         this.Session = new TestSession(project.Context);
-        this.Kind = new SceneDocumentKind(interaction, redirects);
+        this.Kind = new SceneDocumentKind(interaction, redirects, references);
         this.Open = new OpenDocuments([this.Kind, .. otherKinds ?? []], this.Files);
     }
 

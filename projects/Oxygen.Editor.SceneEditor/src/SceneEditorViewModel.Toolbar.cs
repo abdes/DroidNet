@@ -41,8 +41,9 @@ public partial class SceneEditorViewModel
     private IMenuSource? quickAddMenu;
 
     /// <summary>
-    /// Gets the Quick Add menu: an empty node, the built-in shapes, lights and cameras, each created
-    /// in front of the focused pane's camera and selected.
+    /// Gets the Quick Add menu: an empty node, the built-in shapes, lights, cameras and fog volumes,
+    /// and instances of a model or a scene, each created in front of the focused pane's camera.
+    /// Instances are selected once placed.
     /// </summary>
     public IMenuSource QuickAddMenu => this.quickAddMenu ??= this.BuildQuickAddMenu();
 
@@ -70,6 +71,9 @@ public partial class SceneEditorViewModel
             _ = cameras.AddMenuItem("Orthographic camera", new AsyncRelayCommand(() => this.AddCameraAsync(CameraKind.Orthographic)));
         });
         _ = builder.AddMenuItem("Local fog volume", new AsyncRelayCommand(this.AddLocalFogVolumeAsync));
+        _ = builder.AddSeparator();
+        _ = builder.AddMenuItem("Model…", new RelayCommand(this.PickModel));
+        _ = builder.AddMenuItem("Scene…", new AsyncRelayCommand(this.PickSceneAsync));
         return builder.Build();
     }
 

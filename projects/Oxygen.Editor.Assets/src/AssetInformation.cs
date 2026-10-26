@@ -54,7 +54,7 @@ public sealed record AssetInformation(string Title, AssetKind Kind, string Locat
 
     private static void AddOutputFacts(AssetEntry asset, List<AssetInformationFact> facts)
     {
-        if (asset.Kind == AssetKind.ForeignSource && asset.CookStatus is { Outputs.Length: > 0 } status)
+        if (asset.Kind == AssetKind.Model && asset.CookStatus is { Outputs.Length: > 0 } status)
         {
             var imported = status.Outputs.Where(output => output.SourceAssetUri == asset.Identity).DistinctBy(static output => output.CookedAssetUri).ToArray();
             var text = string.Join(Environment.NewLine, imported.Take(3).Select(static output => AssetIdentityReducer.GetDisplayName(output.CookedAssetUri) + " (" + output.Kind + ")"));
@@ -90,12 +90,12 @@ public sealed record AssetInformation(string Title, AssetKind Kind, string Locat
 
     private static string GetDescription(AssetEntry asset)
     {
-        var description = asset.IsPackaged || asset.IsCookedSourceOverridden || asset.CookStatus is not null || asset.Kind == AssetKind.ForeignSource ? asset.PrimaryBadgeTooltip : asset.PrimaryState switch
+        var description = asset.IsPackaged || asset.IsCookedSourceOverridden || asset.CookStatus is not null || asset.Kind == AssetKind.Model ? asset.PrimaryBadgeTooltip : asset.PrimaryState switch
         {
             AssetState.Missing => "The referenced asset could not be found.",
             AssetState.Broken => "The asset could not be read or validated.",
             AssetState.Cooked => "Cooked content is read-only.",
-            AssetState.Source when asset.Kind == AssetKind.ForeignSource => "Import this source to create usable assets.",
+            AssetState.Source when asset.Kind == AssetKind.Model => "Import this source to create usable assets.",
             AssetState.Descriptor => "Cooking status is not available yet.",
             _ => "Source file.",
         };

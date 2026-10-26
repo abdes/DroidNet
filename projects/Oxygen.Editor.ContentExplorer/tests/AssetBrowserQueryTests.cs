@@ -87,7 +87,7 @@ public sealed class AssetBrowserQueryTests
     [TestMethod]
     public void NotImportedStatusFindsModelSourcesWithoutImportSettings()
     {
-        var model = CreateAsset("model.gltf", AssetKind.ForeignSource, AssetCookFreshness.Current) with { PrimaryState = AssetState.Source, CookStatus = null };
+        var model = CreateAsset("model.gltf", AssetKind.Model, AssetCookFreshness.Current) with { PrimaryState = AssetState.Source, CookStatus = null };
         var query = new AssetBrowserQuery();
         Select(query.StatusOptions, "Not imported");
         _ = query.Matches(model).Should().BeTrue();
