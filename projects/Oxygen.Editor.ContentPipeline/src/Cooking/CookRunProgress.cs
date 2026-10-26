@@ -21,4 +21,7 @@ public sealed record CookRunProgress(
 {
     /// <summary>Gets the recovery scope after original source has been retained.</summary>
     public CookRunRequest? RecoveryRequest { get; init; }
+
+    /// <summary>Gets technical text shown with the message's details, not as a line of its own.</summary>
+    public string? Detail { get; init; }
 }

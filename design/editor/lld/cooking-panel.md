@@ -123,12 +123,13 @@ Keep the following order:
    disabled placeholder.
 2. While running, show useful progress beneath the header. Do not repeat the
    status as a separate paragraph.
-3. Native Expanders explicitly label asset issue groups and counts, such as
-   Issues · Main (1). Native InfoBars carry severity, the short issue message,
-   and an inline recovery action, wrapping automatically when space requires it.
-4. Output, expanded by default, with this run's chronological progress messages
+3. A summary strip of outcome counts, then a switch between Output, Issues and
+   Assets. Issues rows carry severity, the short message, the affected asset or
+   scene, a repeat count and an inline recovery action, wrapping automatically
+   when space requires it.
+4. Output, the default view, with this run's chronological progress messages
    and technical output. It remains available after completion.
-5. Expandable Assets list with each asset's name, type, and adjacent status icon.
+5. Assets view listing, by default, changed and attention assets with each asset's name, type, and adjacent status icon.
    Keep these together; do not place status in a distant right-aligned column.
    Use distinct status icons, accessible names, and concise tooltips for Updated,
    Reused, Failed, Skipped, and pending states. Show dependency-skip reasons when
@@ -152,15 +153,30 @@ Redirected native output must use complete plain lines: no cursor-control
 sequences, terminal padding or terminal-width truncation. The native producer
 keeps interactive terminal presentation separate from redirected transcripts.
 
-The selected run's body scrolls while its compact header remains visible. Output
-and Assets use native Expanders that grow to fit their complete content. Neither
-section owns a scrollbar; the details pane owns all content scrolling.
-Expanded Output has a minimum content height of 160 DIP; expanded Assets has a
-minimum of 120 DIP. A short dock scrolls to these sections instead of clipping
-them. Output is initially open. Follow new messages while the user is at the end; scrolling
-back pauses following and offers Jump to latest. Preserve that reading position,
-expanded state, and selected text across incoming messages and run switches.
-Large transcripts remain accessible through that single scrolling surface.
+The selected run's details are a fixed layout: the compact header, a summary
+strip, a segmented switch between Output, Issues and Assets, and the shown view,
+which takes the remaining height and owns its scrollbar. Only the shown view is
+laid out, and each view is virtualized, so the cost of a run follows the window,
+not the number of lines or assets. Output rows are one line; the full message
+wraps in the console's details pane and copies in full. Follow new messages while
+the user is at the end; scrolling back pauses following. Selected messages
+survive incoming messages and run switches.
+
+The summary strip states the outcome in counts (reused, updated, skipped,
+failed); its warning count opens Issues. Assets lists changed, failed and skipped
+assets; reused assets are a count until Show reused is on. The Output console
+folds repeated lines itself.
+
+Issues is a master-detail view. The list has one row per kind of problem,
+errors first and then by how many places they affect: a severity icon, the
+message, the asset or scene it applies to, a count badge for repeats and its
+recovery action. Selecting a row shows its places in one details pane, a full
+virtualized list of name, path and asset type, as the Assets view shows them, that
+repeats nothing the row says; the row names the types under its message; a Copy button puts the
+message, the count, the scope and every place on the clipboard. The first issue is selected by default and the selection survives updates.
+The details sit beside the list when the Issues view is at least 600 DIP wide, as
+in a bottom dock, and below it otherwise. The Issues tab label carries the number
+of diagnostics.
 
 Use Preparing, Cooking, Validating, and Updating preview as truthful stages.
 Discovery may be indeterminate. Counts reflect known work; elapsed time never

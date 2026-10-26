@@ -20,6 +20,15 @@ namespace Oxygen.Editor.Cooking;
 /// <summary>Maintains stable presentation collections for one session cook.</summary>
 public sealed partial class CookingRunViewModel : ObservableObject
 {
+    /// <summary>The segmented switch's index of the Output view.</summary>
+    internal const int OutputView = 0;
+
+    /// <summary>The segmented switch's index of the Issues view.</summary>
+    internal const int IssuesView = 1;
+
+    /// <summary>The segmented switch's index of the Assets view.</summary>
+    internal const int AssetsView = 2;
+
     private readonly Dictionary<AssetPath, CookingAssetViewModel> assetRows = [];
     private CookRunSnapshot snapshot;
 
@@ -93,44 +102,99 @@ public sealed partial class CookingRunViewModel : ObservableObject
     public bool CanCancel => !this.snapshot.IsCompleted && this.snapshot.State != CookRunState.Cancelling;
 
     /// <summary>Gets this run's transcript, independent of the global console.</summary>
-    public ObservableCollection<OutputLogEntry> Output { get; } = [];
+    public OutputEntryCollection Output { get; } = [];
 
-    /// <summary>Gets the actual participating assets.</summary>
+    /// <summary>Gets the assets the run's Assets view shows: those that changed or need attention, plus reused ones on request.</summary>
     public ObservableCollection<CookingAssetViewModel> Assets { get; } = [];
 
-    /// <summary>Gets actionable issues grouped by source asset.</summary>
-    public ObservableCollection<CookingIssueGroup> IssueGroups { get; } = [];
+    /// <summary>Gets the outcome counts of the run, one sentence the user reads before any list.</summary>
+    public string Summary
+    {
+        get
+        {
+            var counts = this.snapshot.Assets.Values.GroupBy(static asset => asset.State).ToDictionary(static group => group.Key, static group => group.Count());
+            int Of(params CookAssetState[] states) => states.Sum(state => counts.GetValueOrDefault(state));
+            var parts = new List<string>
+            {
+                $"{Of(CookAssetState.Reused)} reused",
+                $"{Of(CookAssetState.Updated)} updated",
+                $"{Of(CookAssetState.Skipped, CookAssetState.Unresolved)} skipped",
+                $"{Of(CookAssetState.Failed)} failed",
+            };
+            return string.Join(" · ", parts);
+        }
+    }
+
+    /// <summary>Gets what the warnings amount to, by kind, or nothing when there are none.</summary>
+    public string WarningSummary
+    {
+        get
+        {
+            var warnings = this.snapshot.Diagnostics.Where(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Warning).ToArray();
+            if (warnings.Length == 0)
+            {
+                return string.Empty;
+            }
+
+            var kinds = warnings.Select(static diagnostic => (diagnostic.Code, diagnostic.Message)).Distinct().Count();
+            return string.Create(System.Globalization.CultureInfo.CurrentCulture, $"{warnings.Length} warnings in {kinds} {(kinds == 1 ? "kind" : "kinds")}");
+        }
+    }
+
+    /// <summary>Gets visibility of the warning summary.</summary>
+    public Visibility WarningSummaryVisibility => this.WarningSummary.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
+
+    /// <summary>Gets the Assets view's label with the number of assets in the run.</summary>
+    public string AssetsLabel => string.Create(System.Globalization.CultureInfo.CurrentCulture, $"Assets · {this.snapshot.Assets.Count}");
+
+    /// <summary>Gets the run's issues, one per kind of problem, most serious first.</summary>
+    public CookingIssueList Issues { get; } = [];
 
     [ObservableProperty]
     public partial bool FollowTail { get; set; } = true;
 
+    /// <summary>Gets or sets the shown view, one of the view indexes. Only the shown one is laid out.</summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsAssetsView))]
     [NotifyPropertyChangedFor(nameof(OutputVisibility))]
-    [NotifyPropertyChangedFor(nameof(OutputChevron))]
-    public partial bool IsOutputExpanded { get; set; } = true;
-
-    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IssuesVisibility))]
     [NotifyPropertyChangedFor(nameof(AssetsVisibility))]
-    [NotifyPropertyChangedFor(nameof(AssetsChevron))]
-    public partial bool IsAssetsExpanded { get; set; }
+    [NotifyPropertyChangedFor(nameof(NoIssuesVisibility))]
+    [NotifyPropertyChangedFor(nameof(IssueDetailsVisibility))]
+    public partial int ViewIndex { get; set; }
 
-    /// <summary>Gets visibility of the selected run's output area.</summary>
-    public Visibility OutputVisibility => this.IsOutputExpanded ? Visibility.Visible : Visibility.Collapsed;
+    /// <summary>Gets or sets the issue whose places the details pane shows.</summary>
+    [ObservableProperty]
+    public partial CookingIssueViewModel? SelectedIssue { get; set; }
 
-    /// <summary>Gets visibility of the asset list.</summary>
-    public Visibility AssetsVisibility => this.IsAssetsExpanded ? Visibility.Visible : Visibility.Collapsed;
+    /// <summary>Gets or sets a value indicating whether reused assets are listed as well.</summary>
+    [ObservableProperty]
+    public partial bool ShowReused { get; set; }
 
-    /// <summary>Gets the output disclosure icon.</summary>
-    public string OutputChevron => this.IsOutputExpanded ? "\uE70D" : "\uE76C";
+    /// <summary>Gets or sets a value indicating whether the Assets view is shown.</summary>
+    public bool IsAssetsView
+    {
+        get => this.ViewIndex == AssetsView;
+        set => this.ViewIndex = value ? AssetsView : OutputView;
+    }
 
-    /// <summary>Gets the asset disclosure icon.</summary>
-    public string AssetsChevron => this.IsAssetsExpanded ? "\uE70D" : "\uE76C";
+    /// <summary>Gets visibility of the Output view.</summary>
+    public Visibility OutputVisibility => this.ViewIndex == OutputView ? Visibility.Visible : Visibility.Collapsed;
 
-    /// <summary>Gets or sets a value indicating whether this run has a retained reader position.</summary>
-    internal bool HasReadingPosition { get; set; }
+    /// <summary>Gets visibility of the Issues view.</summary>
+    public Visibility IssuesVisibility => this.ViewIndex == IssuesView ? Visibility.Visible : Visibility.Collapsed;
 
-    /// <summary>Gets or sets the shared scroller offset for this run.</summary>
-    internal double ReadingOffset { get; set; }
+    /// <summary>Gets visibility of the Assets view.</summary>
+    public Visibility AssetsVisibility => this.IsAssetsView ? Visibility.Visible : Visibility.Collapsed;
+
+    /// <summary>Gets visibility of the empty-Issues message.</summary>
+    public Visibility NoIssuesVisibility => this.ViewIndex == IssuesView && this.Issues.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+
+    /// <summary>Gets visibility of the issue list and its details pane: only a run with issues has them.</summary>
+    public Visibility IssueDetailsVisibility => this.ViewIndex == IssuesView && this.Issues.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+
+    /// <summary>Gets the Issues view's label with the number of diagnostics in the run.</summary>
+    public string IssuesLabel => this.Issues.Total == 0 ? "Issues" : string.Create(System.Globalization.CultureInfo.CurrentCulture, $"Issues · {this.Issues.Total}");
 
     /// <summary>Gets or sets the selected transcript entries retained across view changes.</summary>
     internal IReadOnlyList<OutputLogEntry> SelectedOutputEntries { get; set; } = [];
@@ -145,13 +209,13 @@ public sealed partial class CookingRunViewModel : ObservableObject
         }
 
         this.snapshot = next;
-        for (var index = this.Output.Count; index < next.Messages.Count; index++)
+        if (next.Messages.Count > this.Output.Count)
         {
-            var message = next.Messages[index];
-            this.Output.Add(new OutputLogEntry
+            this.Output.AddRange([.. next.Messages.Skip(this.Output.Count).Select(static message => new OutputLogEntry
             {
                 Timestamp = message.Timestamp,
                 Message = message.Text,
+                Properties = new Dictionary<string, object?>(StringComparer.Ordinal) { ["Detail"] = string.IsNullOrWhiteSpace(message.Detail) ? null : message.Detail },
                 Level = message.Severity switch
                 {
                     DiagnosticSeverity.Warning => LogEventLevel.Warning,
@@ -159,7 +223,7 @@ public sealed partial class CookingRunViewModel : ObservableObject
                     DiagnosticSeverity.Fatal => LogEventLevel.Fatal,
                     _ => LogEventLevel.Information,
                 },
-            });
+            })]);
         }
 
         this.UpdateAssets(next.Assets);
@@ -167,17 +231,13 @@ public sealed partial class CookingRunViewModel : ObservableObject
         foreach (var diagnostic in next.Diagnostics)
         {
             var key = diagnostic.AffectedVirtualPath ?? diagnostic.AffectedEntity?.AssetVirtualPath ?? string.Empty;
-            var group = this.IssueGroups.FirstOrDefault(item => string.Equals(item.Key, key, StringComparison.Ordinal));
-            if (group is null)
-            {
-                group = new(key, diagnostic.AffectedEntity?.SceneName ?? GetAssetName(key, this.Name));
-                this.IssueGroups.Add(group);
-            }
+            this.Issues.Report(diagnostic, diagnostic.AffectedEntity?.SceneName ?? GetAssetName(key, this.Name));
+        }
 
-            if (!group.Issues.Any(issue => issue.Diagnostic.DiagnosticId == diagnostic.DiagnosticId))
-            {
-                group.Issues.Add(new(diagnostic));
-            }
+        this.Issues.Reorder();
+        if (this.SelectedIssue is null || !this.Issues.Contains(this.SelectedIssue))
+        {
+            this.SelectedIssue = this.Issues.FirstOrDefault();
         }
 
         this.OnPropertyChanged(string.Empty);
@@ -216,15 +276,34 @@ public sealed partial class CookingRunViewModel : ObservableObject
         _ => state.ToString(),
     };
 
+    partial void OnShowReusedChanged(bool value) => this.UpdateAssets(this.snapshot.Assets);
+
+    // The switch reports -1 while its items change; a view is always shown.
+    partial void OnViewIndexChanged(int value)
+    {
+        if (value is < OutputView or > AssetsView)
+        {
+            this.ViewIndex = OutputView;
+        }
+    }
+
+    // The list clears its selection when it takes another run's issues; the details pane always shows an issue.
+    partial void OnSelectedIssueChanged(CookingIssueViewModel? value)
+    {
+        if (value is null && this.Issues.Count > 0)
+        {
+            this.SelectedIssue = this.Issues[0];
+        }
+    }
+
+    // Rows exist for every asset, so a reused one that becomes listed keeps its identity; the list holds only those worth reading.
     private void UpdateAssets(ImmutableDictionary<AssetPath, CookRunAsset> assets)
     {
-        foreach (var asset in assets.Values.OrderBy(static asset => asset.AssetUri))
+        foreach (var asset in assets.Values)
         {
             if (!this.assetRows.TryGetValue(asset.AssetUri, out var existing))
             {
-                var row = new CookingAssetViewModel(asset);
-                this.assetRows.Add(asset.AssetUri, row);
-                this.Assets.Add(row);
+                this.assetRows.Add(asset.AssetUri, new CookingAssetViewModel(asset));
             }
             else
             {
@@ -234,8 +313,26 @@ public sealed partial class CookingRunViewModel : ObservableObject
 
         foreach (var removed in this.assetRows.Keys.Where(uri => !assets.ContainsKey(uri)).ToArray())
         {
-            _ = this.Assets.Remove(this.assetRows[removed]);
             _ = this.assetRows.Remove(removed);
+        }
+
+        var listed = this.assetRows.Values.Where(row => this.ShowReused || !row.IsReused).OrderBy(static row => row.Asset.AssetUri).ToList();
+        var wanted = listed.ToHashSet();
+        for (var at = this.Assets.Count - 1; at >= 0; at--)
+        {
+            if (!wanted.Contains(this.Assets[at]))
+            {
+                this.Assets.RemoveAt(at);
+            }
+        }
+
+        // Rows keep their order, so what remains is a prefix-ordered subsequence of the wanted rows.
+        for (var index = 0; index < listed.Count; index++)
+        {
+            if (index >= this.Assets.Count || !ReferenceEquals(this.Assets[index], listed[index]))
+            {
+                this.Assets.Insert(index, listed[index]);
+            }
         }
     }
 }

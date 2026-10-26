@@ -2,24 +2,20 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Collections.Specialized;
 using System.ComponentModel;
 using Microsoft.UI.Dispatching;
-using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Controls;
 
 namespace Oxygen.Editor.Cooking;
 
-/// <summary>Preserves each run's reading position and follows output through the shared details scroller.</summary>
+/// <summary>
+///     Keeps each run's selected messages across run switches and hiding. The console owns scrolling and following
+///     the end of its own transcript; the run keeps whether it follows.
+/// </summary>
 public sealed partial class CookingPanelView
 {
     private CookingPanelViewModel? readingModel;
     private CookingRunViewModel? readingRun;
-    private bool restoreReadingQueued;
-    private bool pendingOutputFollow;
-    private bool restoreOutputSelection;
-    private double observedOffset;
-    private double observedExtent;
+    private bool restoreSelectionQueued;
 
     private void InitializeReadingTracking()
     {
@@ -51,14 +47,8 @@ public sealed partial class CookingPanelView
             model.PropertyChanged -= this.OnReadingModelChanged;
         }
 
-        if (this.readingRun is { } run)
-        {
-            run.Output.CollectionChanged -= this.OnRunOutputChanged;
-        }
-
         this.readingModel = null;
         this.readingRun = null;
-        this.pendingOutputFollow = false;
     }
 
     private void OnReadingModelChanging(object? sender, PropertyChangingEventArgs args)
@@ -87,90 +77,19 @@ public sealed partial class CookingPanelView
 
     private void SelectReadingRun()
     {
-        if (this.readingRun is { } previous)
-        {
-            previous.Output.CollectionChanged -= this.OnRunOutputChanged;
-        }
-
         this.readingRun = this.readingModel?.SelectedRun;
-        this.pendingOutputFollow = false;
-        this.restoreOutputSelection = true;
-        if (this.readingRun is { } next)
+        if (this.readingRun is not null && !this.restoreSelectionQueued)
         {
-            next.Output.CollectionChanged += this.OnRunOutputChanged;
-            this.QueueReadingRestore();
+            this.restoreSelectionQueued = this.DispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, this.RestoreOutputSelection);
         }
     }
 
-    private void OnRunOutputChanged(object? sender, NotifyCollectionChangedEventArgs args)
+    private void RestoreOutputSelection()
     {
-        if (args.Action == NotifyCollectionChangedAction.Add && this.readingRun is { FollowTail: true, IsOutputExpanded: true })
-        {
-            this.pendingOutputFollow = true;
-        }
-    }
-
-    private void OnDetailsContentSizeChanged(object sender, SizeChangedEventArgs args)
-    {
-        if (this.pendingOutputFollow && this.readingRun?.FollowTail == true)
-        {
-            this.QueueReadingRestore();
-        }
-    }
-
-    private void OnDetailsViewChanged(object? sender, ScrollViewerViewChangedEventArgs args)
-    {
-        if (!this.IsLoaded || this.readingRun is not { } run || this.restoreReadingQueued)
-        {
-            return;
-        }
-
-        var offset = this.DetailsScroller.VerticalOffset;
-        var extent = this.DetailsScroller.ScrollableHeight;
-        if (Math.Abs(offset - this.observedOffset) > 0.5 && Math.Abs(extent - this.observedExtent) < 0.5)
-        {
-            run.ReadingOffset = offset;
-            run.FollowTail = extent - offset <= 1;
-            run.HasReadingPosition = true;
-            this.pendingOutputFollow = false;
-        }
-
-        this.observedOffset = offset;
-        this.observedExtent = extent;
-    }
-
-    private void QueueReadingRestore()
-    {
-        if (this.restoreReadingQueued)
-        {
-            return;
-        }
-
-        this.restoreReadingQueued = this.DispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, this.RestoreReadingPosition);
-    }
-
-    private void RestoreReadingPosition()
-    {
-        this.restoreReadingQueued = false;
-        if (!this.IsLoaded || this.readingRun is not { } run)
-        {
-            return;
-        }
-
-        this.DetailsScroller.UpdateLayout();
-        var extent = this.DetailsScroller.ScrollableHeight;
-        var offset = run.HasReadingPosition ? run.FollowTail ? extent : Math.Clamp(run.ReadingOffset, 0, extent) : 0;
-        this.observedOffset = offset;
-        this.observedExtent = extent;
-        _ = this.DetailsScroller.ChangeView(horizontalOffset: null, offset, zoomFactor: null, disableAnimation: true);
-        run.ReadingOffset = offset;
-        run.FollowTail = extent - offset <= 1;
-        run.HasReadingPosition = true;
-        this.pendingOutputFollow = false;
-        if (this.restoreOutputSelection)
+        this.restoreSelectionQueued = false;
+        if (this.IsLoaded && this.readingRun is { } run)
         {
             this.CookOutput.RestoreSelection(run.SelectedOutputEntries);
-            this.restoreOutputSelection = false;
         }
     }
 }

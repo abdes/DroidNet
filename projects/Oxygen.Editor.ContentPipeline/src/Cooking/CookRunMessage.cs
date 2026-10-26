@@ -13,4 +13,5 @@ namespace Oxygen.Editor.ContentPipeline.Cooking;
 /// <param name="Severity">The message's severity.</param>
 /// <param name="Text">The complete readable or native message text.</param>
 /// <param name="AssetUri">The affected asset, when known.</param>
-public sealed record CookRunMessage(long Sequence, DateTimeOffset Timestamp, DiagnosticSeverity Severity, string Text, AssetPath? AssetUri = null);
+/// <param name="Detail">Technical text for the message's details, such as where in its source a problem is; null when there is none.</param>
+public sealed record CookRunMessage(long Sequence, DateTimeOffset Timestamp, DiagnosticSeverity Severity, string Text, AssetPath? AssetUri = null, string? Detail = null);

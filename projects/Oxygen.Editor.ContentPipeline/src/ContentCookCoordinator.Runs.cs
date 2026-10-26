@@ -68,7 +68,7 @@ public sealed partial class ContentCookCoordinator
         var messages = snapshot.Messages;
         if (!string.IsNullOrWhiteSpace(progress.Message))
         {
-            messages = messages.Add(new(messages.Count + 1L, DateTimeOffset.UtcNow, progress.Severity, progress.Message, progress.Asset?.AssetUri));
+            messages = messages.Add(new(messages.Count + 1L, DateTimeOffset.UtcNow, progress.Severity, progress.Message, progress.Asset?.AssetUri, progress.Detail));
         }
 
         return snapshot with
@@ -79,6 +79,17 @@ public sealed partial class ContentCookCoordinator
             Assets = progress.Asset is { } asset ? snapshot.Assets.SetItem(asset.AssetUri, asset) : snapshot.Assets,
             Diagnostics = progress.Diagnostic is { } diagnostic ? snapshot.Diagnostics.Add(diagnostic) : snapshot.Diagnostics,
         };
+    }
+
+    private static CookRunSnapshot ReportDiagnostics(CookRunSnapshot snapshot, IEnumerable<DiagnosticRecord> diagnostics)
+    {
+        var known = snapshot.Diagnostics.Select(static diagnostic => diagnostic.DiagnosticId).ToHashSet();
+        foreach (var diagnostic in diagnostics.Where(diagnostic => known.Add(diagnostic.DiagnosticId)))
+        {
+            snapshot = Append(snapshot, new(diagnostic.Message, diagnostic.Severity, Diagnostic: diagnostic) { Detail = diagnostic.TechnicalMessage });
+        }
+
+        return snapshot;
     }
 
     private static IEnumerable<CookRunAsset> FinishedAssets(IEnumerable<ContentCookedAsset> cooked, CookAssetState state)
@@ -201,14 +212,16 @@ public sealed partial class ContentCookCoordinator
         IEnumerable<CookRunAsset> assets = [];
         if (result is ContentCookResult content)
         {
-            state = content.IsUpToDate && content.Status == OperationStatus.Succeeded ? CookRunState.UpToDate : content.Status switch
+            // An up-to-date result carries the warnings of the earlier cook that made the reused outputs; that cook already reported them.
+            var upToDate = content.IsUpToDate && content.Status is OperationStatus.Succeeded or OperationStatus.SucceededWithWarnings;
+            state = upToDate ? CookRunState.UpToDate : content.Status switch
             {
                 OperationStatus.Succeeded => CookRunState.Succeeded,
                 OperationStatus.SucceededWithWarnings => CookRunState.SucceededWithWarnings,
                 OperationStatus.Cancelled => CookRunState.Cancelled,
                 _ => CookRunState.Failed,
             };
-            diagnostics = content.Diagnostics;
+            diagnostics = upToDate ? [] : content.Diagnostics;
             assets = FinishedAssets(content.CookedAssets, CookAssetState.Updated)
                 .Concat(FinishedAssets(content.ReusedAssets, CookAssetState.Reused));
         }
@@ -272,19 +285,7 @@ public sealed partial class ContentCookCoordinator
             stopped = run.Preempted && state == CookRunState.Cancelled;
             stoppedFor = run.PreemptedFor;
             snapshot = run.Snapshot;
-            foreach (var diagnostic in diagnostics)
-            {
-                if (snapshot.Diagnostics.Any(existing => existing.DiagnosticId == diagnostic.DiagnosticId))
-                {
-                    continue;
-                }
-
-                snapshot = Append(snapshot, new(diagnostic.Message, diagnostic.Severity, Diagnostic: diagnostic));
-                if (!string.IsNullOrWhiteSpace(diagnostic.TechnicalMessage))
-                {
-                    snapshot = Append(snapshot, new(diagnostic.TechnicalMessage, diagnostic.Severity));
-                }
-            }
+            snapshot = ReportDiagnostics(snapshot, diagnostics);
 
             foreach (var asset in assets)
             {

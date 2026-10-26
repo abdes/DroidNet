@@ -44,7 +44,7 @@ public sealed partial class CookingPanelControlTests : VisualUserInterfaceTests
     {
         using var session = CreateSession();
         using var model = CreateModel(session);
-        model.SelectedRun!.IsAssetsExpanded = true;
+        model.SelectedRun!.IsAssetsView = true;
         var view = new CookingPanelView { ViewModel = model, Width = 960, Height = 600 };
         await LoadTestContentAsync(view).ConfigureAwait(true);
         await WaitForRenderAsync().ConfigureAwait(true);
@@ -88,7 +88,7 @@ public sealed partial class CookingPanelControlTests : VisualUserInterfaceTests
     {
         using var session = CreateSession();
         using var model = CreateModel(session);
-        model.SelectedRun!.IsAssetsExpanded = true;
+        model.SelectedRun!.IsAssetsView = true;
         var view = new CookingPanelView { ViewModel = model, Width = width, Height = 340, RequestedTheme = theme };
         var host = (Border)XamlReader.Load("<Border xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' Background='{ThemeResource ApplicationPageBackgroundThemeBrush}' />");
         host.RequestedTheme = theme;
@@ -113,18 +113,19 @@ public sealed partial class CookingPanelControlTests : VisualUserInterfaceTests
 
         AssertCompactHeader(view);
 
-        AssertExpandedContent(view);
-        var scroller = view.FindDescendant<ScrollViewer>(element => string.Equals(element.Name, "DetailsScroller", StringComparison.Ordinal))!;
-        _ = scroller.ScrollableHeight.Should().BePositive();
-        _ = view.FindDescendants().OfType<Expander>().Should().Contain(element => Equals(element.Header, "Issues · Main (1)"));
-        _ = view.FindDescendants().OfType<Expander>().Should().Contain(element => Equals(element.Header, "Issues · OtherScene (1)"));
-        var issue = view.FindDescendant<InfoBar>(element => string.Equals(element.Message, "Aerial Start must be 0 m or greater.", StringComparison.Ordinal))!;
-        _ = issue.Severity.Should().Be(InfoBarSeverity.Error);
-        _ = issue.ActionButton.Should().BeOfType<HyperlinkButton>();
-        _ = issue.ActionButton.Visibility.Should().Be(Visibility.Visible);
+        AssertShownViews(view);
+        model.SelectedRun!.ViewIndex = CookingRunViewModel.IssuesView;
+        await WaitForRenderAsync().ConfigureAwait(true);
+        var issue = view.FindDescendant<TextBlock>(element => string.Equals(element.Text, "Aerial Start must be 0 m or greater.", StringComparison.Ordinal))!;
+        var row = issue.FindAscendant<ListViewItem>()!;
+        var action = row.FindDescendant<HyperlinkButton>(element => Equals(element.Content, "Go to property"))!;
+        _ = action.Visibility.Should().Be(Visibility.Visible);
+        _ = model.SelectedRun.Issues.Select(static item => item.Scope).Should().Equal("OtherScene", "Main");
+        _ = model.SelectedRun.SelectedIssue.Should().BeSameAs(model.SelectedRun.Issues[0], "the first issue is selected by default");
+        var details = view.FindDescendant<Border>(element => string.Equals(element.Name, "IssueDetails", StringComparison.Ordinal))!;
+        _ = Grid.GetColumn(details).Should().Be(width >= 600 ? 1 : 0, "the details sit beside a wide list and below a narrow one");
 
-        AssertResponsiveLayout(view, toolbar, issue, scroller, width);
-        await ScaledXamlHost.ScrollToEndAsync(scroller, this.TestContext.CancellationToken).ConfigureAwait(true);
+        AssertResponsiveLayout(view, toolbar, width);
     });
 
     /// <summary>Inspection is inline with the selected run's recovery actions and does not submit another cook.</summary>
@@ -189,7 +190,7 @@ public sealed partial class CookingPanelControlTests : VisualUserInterfaceTests
                 .Add(output, new(output, ContentCookAssetKind.Geometry, CookAssetState.Updated)),
         });
         var selected = model.SelectedRun!;
-        selected.IsAssetsExpanded = true;
+        selected.IsAssetsView = true;
         var completed = selected.Snapshot;
         var view = new CookingPanelView { ViewModel = model, Width = width, Height = 360 };
         var host = (Border)XamlReader.Load("<Border xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' Background='{ThemeResource ApplicationPageBackgroundThemeBrush}' />");
@@ -347,17 +348,17 @@ public sealed partial class CookingPanelControlTests : VisualUserInterfaceTests
         }
     });
 
-    /// <summary>Long Output and Assets sections grow past the former caps and remain reachable through the parent.</summary>
+    /// <summary>Long Output and Assets views stay inside the pane and scroll by themselves, realizing only visible rows.</summary>
     /// <returns>The asynchronous UI test.</returns>
     [TestMethod]
-    public Task ExpandedSectionsGrowToTheirCompleteContents() => EnqueueAsync(async () =>
+    public Task LongViewsAreBoundedAndVirtualized() => EnqueueAsync(async () =>
     {
         using var session = CreateSession();
         using var model = CreateModel(session);
         var run = model.SelectedRun!;
         var snapshot = run.Snapshot;
         var assets = snapshot.Assets;
-        for (var index = 0; index < 40; index++)
+        for (var index = 0; index < 400; index++)
         {
             var uri = AssetPath.Parse(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"/Content/Materials/Material{index}.omat"));
             assets = assets.Add(uri, new(uri, ContentCookAssetKind.Material, CookAssetState.Skipped));
@@ -367,23 +368,54 @@ public sealed partial class CookingPanelControlTests : VisualUserInterfaceTests
         {
             Revision = snapshot.Revision + 1,
             Assets = assets,
-            Messages = snapshot.Messages.AddRange(Enumerable.Range(0, 40).Select(index => new CookRunMessage(index + 3, DateTimeOffset.UtcNow, DiagnosticSeverity.Info, string.Create(System.Globalization.CultureInfo.InvariantCulture, $"Checking asset {index}.")))),
+            Messages = snapshot.Messages.AddRange(Enumerable.Range(0, 400).Select(index => new CookRunMessage(index + 3, DateTimeOffset.UtcNow, DiagnosticSeverity.Info, string.Create(System.Globalization.CultureInfo.InvariantCulture, $"Checking asset {index}.")))),
         });
-        run.IsAssetsExpanded = true;
         var view = new CookingPanelView { ViewModel = model, Width = 700, Height = 340 };
         await LoadTestContentAsync(view).ConfigureAwait(true);
         await WaitForRenderAsync().ConfigureAwait(true);
         view.UpdateLayout();
         var output = view.FindDescendant<DroidNet.Controls.OutputConsole.OutputConsoleView>()!;
+        var outputList = output.FindDescendant<ListView>()!;
+        _ = output.ActualHeight.Should().BeLessThan(340);
+        _ = outputList.FindDescendant<ScrollViewer>()!.ScrollableHeight.Should().BePositive();
+        _ = outputList.FindDescendants().OfType<ListViewItem>().Count().Should().BeLessThan(100);
+
+        run.IsAssetsView = true;
+        await WaitForRenderAsync().ConfigureAwait(true);
+        view.UpdateLayout();
         var list = view.FindDescendant<ListView>(element => string.Equals(element.Name, "CookAssets", StringComparison.Ordinal))!;
-        var scroller = view.FindDescendant<ScrollViewer>(element => string.Equals(element.Name, "DetailsScroller", StringComparison.Ordinal))!;
-        _ = output.ActualHeight.Should().BeGreaterThan(360);
-        _ = list.ActualHeight.Should().BeGreaterThan(240);
-        _ = output.FindDescendant<ScrollViewer>()!.ScrollableHeight.Should().Be(0);
-        _ = list.FindDescendant<ScrollViewer>()!.ScrollableHeight.Should().Be(0);
-        await ScaledXamlHost.ScrollToEndAsync(scroller, this.TestContext.CancellationToken).ConfigureAwait(true);
-        _ = scroller.VerticalOffset.Should().BeGreaterThan(360);
+        _ = list.ActualHeight.Should().BeLessThan(340);
+        _ = list.FindDescendant<ScrollViewer>()!.ScrollableHeight.Should().BePositive();
+        _ = list.FindDescendants().OfType<ListViewItem>().Count().Should().BeLessThan(100);
     });
+
+    /// <summary>Reused assets are a count until asked for; changed and failed assets are listed.</summary>
+    [TestMethod]
+    public void AssetsViewListsReusedAssetsOnlyOnRequest()
+    {
+        using var session = CreateSession();
+        using var model = CreateModel(session);
+        var run = model.SelectedRun!;
+        var snapshot = run.Snapshot;
+        var assets = snapshot.Assets;
+        for (var index = 0; index < 5; index++)
+        {
+            var uri = AssetPath.Parse(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"/Content/Materials/Material{index}.omat"));
+            assets = assets.Add(uri, new(uri, ContentCookAssetKind.Material, CookAssetState.Reused));
+        }
+
+        run.Apply(snapshot with { Revision = snapshot.Revision + 1, Assets = assets });
+        _ = run.Assets.Should().ContainSingle(row => row.Asset.State == CookAssetState.Failed);
+        _ = run.Assets.Should().NotContain(row => row.IsReused);
+        _ = run.Summary.Should().Contain("5 reused").And.Contain("1 failed");
+        _ = run.AssetsLabel.Should().Contain("6");
+
+        run.ShowReused = true;
+        _ = run.Assets.Should().HaveCount(6);
+        _ = run.Assets.Select(static row => row.Asset.AssetUri).Should().BeInAscendingOrder();
+        run.ShowReused = false;
+        _ = run.Assets.Should().HaveCount(1);
+    }
 
     /// <summary>A burst paints only its latest snapshot while retaining every asset and output message.</summary>
     /// <returns>The asynchronous progress-coalescing regression.</returns>
@@ -466,16 +498,16 @@ public sealed partial class CookingPanelControlTests : VisualUserInterfaceTests
         await WaitForRenderAsync().ConfigureAwait(true);
     }
 
-    private static void AssertExpandedContent(CookingPanelView view)
+    private static void AssertShownViews(CookingPanelView view)
     {
         var output = view.FindDescendant<DroidNet.Controls.OutputConsole.OutputConsoleView>()!;
         var assets = view.FindDescendant<ListView>(element => string.Equals(element.Name, "CookAssets", StringComparison.Ordinal))!;
-        _ = output.ActualHeight.Should().BeGreaterThanOrEqualTo(160);
-        _ = assets.ActualHeight.Should().BeGreaterThanOrEqualTo(120);
-        _ = output.IsScrollEnabled.Should().BeFalse();
-        _ = ScrollViewer.GetVerticalScrollBarVisibility(assets).Should().Be(ScrollBarVisibility.Disabled);
-        _ = ScrollViewer.GetVerticalScrollMode(assets).Should().Be(ScrollMode.Disabled);
-        _ = assets.Items.Should().HaveCount(view.ViewModel!.SelectedRun!.Assets.Count).And.NotBeEmpty();
+        var run = view.ViewModel!.SelectedRun!;
+        _ = run.IsAssetsView.Should().BeTrue();
+        _ = output.Visibility.Should().Be(Visibility.Collapsed);
+        _ = assets.Visibility.Should().Be(Visibility.Visible);
+        _ = assets.ActualHeight.Should().BeGreaterThanOrEqualTo(96);
+        _ = assets.Items.Should().HaveCount(run.Assets.Count).And.NotBeEmpty();
     }
 
     private static void AssertCompactHeader(CookingPanelView view)
@@ -490,22 +522,17 @@ public sealed partial class CookingPanelControlTests : VisualUserInterfaceTests
         _ = (retryPoint.X - pillPoint.X - pill.ActualWidth).Should().BeInRange(0, 16);
     }
 
-    private static void AssertResponsiveLayout(CookingPanelView view, DroidNet.Controls.ToolBar toolbar, InfoBar issue, ScrollViewer scroller, double width)
+    private static void AssertResponsiveLayout(CookingPanelView view, DroidNet.Controls.ToolBar toolbar, double width)
     {
         if (width > 560)
         {
             var list = view.FindDescendant<ListView>(element => string.Equals(element.Name, "RunList", StringComparison.Ordinal))!;
             _ = toolbar.ActualWidth.Should().BeLessThanOrEqualTo(list.ActualWidth);
-            var message = issue.FindDescendant<TextBlock>(element => string.Equals(element.Name, "Message", StringComparison.Ordinal))!;
-            _ = message.Should().NotBeNull();
-            var messagePoint = message.TransformToVisual(issue).TransformPoint(default);
-            var actionPoint = issue.ActionButton.TransformToVisual(issue).TransformPoint(default);
-            _ = Math.Abs(actionPoint.Y - messagePoint.Y).Should().BeLessThan(20);
         }
         else
         {
             _ = view.FindDescendant<ComboBox>(element => string.Equals(element.Name, "NarrowRunPicker", StringComparison.Ordinal))!.Visibility.Should().Be(Visibility.Visible);
-            _ = scroller.ExtentWidth.Should().BeLessThanOrEqualTo(scroller.ViewportWidth + 1);
+            _ = view.FindDescendant<Grid>(element => string.Equals(element.Name, "DetailsHost", StringComparison.Ordinal))!.ActualWidth.Should().BeLessThanOrEqualTo(width);
         }
     }
 

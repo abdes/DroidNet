@@ -48,10 +48,10 @@ public sealed partial class CookingPanelControlTests
         _ = clears.Should().Be(1);
     });
 
-    /// <summary>The shared scroller follows only at the end and restores each run's reading state after switching or hiding.</summary>
+    /// <summary>Each run keeps its selected messages across run switches and hiding; the console owns scrolling.</summary>
     /// <returns>The rendered transcript regression.</returns>
     [TestMethod]
-    public Task TranscriptReadingPositionAndSelectionSurviveUpdatesAndRunSwitches() => EnqueueAsync(async () =>
+    public Task TranscriptSelectionSurvivesUpdatesAndRunSwitches() => EnqueueAsync(async () =>
     {
         var runs = new Mock<ICookRunService>();
         using var session = CreateSession();
@@ -64,32 +64,26 @@ public sealed partial class CookingPanelControlTests
         var second = model.Runs.Single(run => run.Snapshot.OperationId == secondSnapshot.OperationId);
         var view = new CookingPanelView { ViewModel = model, Width = 700, Height = 340 };
         await LoadTestContentAsync(view).ConfigureAwait(true);
-        var scroll = (ScrollViewer)view.FindName("DetailsScroller");
         var output = (OutputConsoleView)view.FindName("CookOutput");
-        await this.WaitForReadingAsync(() => scroll.ScrollableHeight > 600 && first.HasReadingPosition).ConfigureAwait(true);
-        _ = scroll.VerticalOffset.Should().BeApproximately(0, 1);
-        _ = first.FollowTail.Should().BeFalse();
-        await this.CheckReadingFollowAsync(first, scroll, output).ConfigureAwait(true);
-        model.SelectedRun = second;
-        await this.WaitForReadingAsync(() => second.HasReadingPosition && scroll.VerticalOffset < 1).ConfigureAwait(true);
-        _ = scroll.ChangeView(horizontalOffset: null, 220, zoomFactor: null, disableAnimation: true);
-        await this.WaitForReadingAsync(() => Math.Abs(second.ReadingOffset - 220) < 1).ConfigureAwait(true);
-        output.RestoreSelection([second.Output[5]]);
-        model.SelectedRun = first;
-        await this.WaitForReadingAsync(() => Math.Abs(scroll.VerticalOffset - 120) < 1).ConfigureAwait(true);
+        await this.WaitForReadingAsync(() => output.FindDescendant<ListView>()!.Items.Count > 0).ConfigureAwait(true);
+        output.RestoreSelection([first.Output[2], first.Output[3]]);
+        AppendReadingMessages(first, 20);
+        await WaitForRenderAsync().ConfigureAwait(true);
         _ = output.CaptureSelection().Should().Equal(first.Output[2], first.Output[3]);
         model.SelectedRun = second;
-        await this.WaitForReadingAsync(() => Math.Abs(scroll.VerticalOffset - 220) < 1).ConfigureAwait(true);
+        await this.WaitForReadingAsync(() => output.CaptureSelection().Count == 0).ConfigureAwait(true);
+        output.RestoreSelection([second.Output[5]]);
+        model.SelectedRun = first;
+        await this.WaitForReadingAsync(() => output.CaptureSelection().Count == 2).ConfigureAwait(true);
+        _ = output.CaptureSelection().Should().Equal(first.Output[2], first.Output[3]);
+        model.SelectedRun = second;
+        await this.WaitForReadingAsync(() => output.CaptureSelection().Count == 1).ConfigureAwait(true);
         _ = output.CaptureSelection().Should().Equal([second.Output[5]], "returning to the second run restores its selection");
         await LoadTestContentAsync(new Grid()).ConfigureAwait(true);
         AppendReadingMessages(second, 10);
         await LoadTestContentAsync(view).ConfigureAwait(true);
-        await this.WaitForReadingAsync(() => Math.Abs(scroll.VerticalOffset - 220) < 1 && output.CaptureSelection().Count == 1).ConfigureAwait(true);
+        await this.WaitForReadingAsync(() => output.CaptureSelection().Count == 1).ConfigureAwait(true);
         _ = output.CaptureSelection().Should().Equal([second.Output[5]], "hiding and reopening preserves selected messages");
-        var oldExtent = scroll.ScrollableHeight;
-        AppendReadingMessages(second, 10);
-        await this.WaitForReadingAsync(() => scroll.ScrollableHeight > oldExtent).ConfigureAwait(true);
-        _ = scroll.VerticalOffset.Should().BeApproximately(220, 1);
     });
 
     private static void AppendReadingMessages(CookingRunViewModel run, int count)
@@ -101,23 +95,6 @@ public sealed partial class CookingPanelControlTests
             Messages = snapshot.Messages.AddRange(Enumerable.Range(snapshot.Messages.Count, count)
                 .Select(index => new CookRunMessage(index + 1, DateTimeOffset.UtcNow, DiagnosticSeverity.Info, "Processing asset " + index.ToString(System.Globalization.CultureInfo.InvariantCulture)))),
         });
-    }
-
-    private async Task CheckReadingFollowAsync(CookingRunViewModel first, ScrollViewer scroll, OutputConsoleView output)
-    {
-        output.RestoreSelection([first.Output[2], first.Output[3]]);
-        _ = scroll.ChangeView(horizontalOffset: null, scroll.ScrollableHeight, zoomFactor: null, disableAnimation: true);
-        await this.WaitForReadingAsync(() => first.FollowTail).ConfigureAwait(true);
-        var oldExtent = scroll.ScrollableHeight;
-        AppendReadingMessages(first, 20);
-        await this.WaitForReadingAsync(() => scroll.ScrollableHeight > oldExtent && Math.Abs(scroll.VerticalOffset - scroll.ScrollableHeight) < 1).ConfigureAwait(true);
-        _ = output.CaptureSelection().Should().Equal(first.Output[2], first.Output[3]);
-        _ = scroll.ChangeView(horizontalOffset: null, 120, zoomFactor: null, disableAnimation: true);
-        await this.WaitForReadingAsync(() => !first.FollowTail && Math.Abs(scroll.VerticalOffset - 120) < 1).ConfigureAwait(true);
-        oldExtent = scroll.ScrollableHeight;
-        AppendReadingMessages(first, 20);
-        await this.WaitForReadingAsync(() => scroll.ScrollableHeight > oldExtent).ConfigureAwait(true);
-        _ = scroll.VerticalOffset.Should().BeApproximately(120, 1);
     }
 
     // The console shows each message in its own text block; its rows are the console's own model.
