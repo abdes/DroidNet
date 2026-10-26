@@ -310,9 +310,9 @@ NOLINT_TEST_F(AssetLoaderSceneQueryTest, NodeValuesApplyNestedChanges)
   const auto model
     = asset_loader_->ReadMountedSceneNode(ModelKey(), std::array { wheel_ });
 
-  ASSERT_TRUE(street.has_value());
-  ASSERT_TRUE(car.has_value());
-  ASSERT_TRUE(model.has_value());
+  ASSERT_HAS_VALUE(street);
+  ASSERT_HAS_VALUE(car);
+  ASSERT_HAS_VALUE(model);
   EXPECT_EQ(PositionXOf(*street), kStreetX);
   EXPECT_EQ(PositionXOf(*car), kCarX);
   EXPECT_EQ(PositionXOf(*model), kModelX);
@@ -327,9 +327,9 @@ NOLINT_TEST_F(AssetLoaderSceneQueryTest, NodeValuesHoldEveryComponent)
   const auto body = asset_loader_->ReadMountedSceneNode(
     CarKey(), std::array { car_holder_, body_ });
 
-  ASSERT_TRUE(wheel.has_value());
+  ASSERT_HAS_VALUE(wheel);
   EXPECT_EQ(wheel->name, "Wheel");
-  ASSERT_TRUE(wheel->geometry.has_value());
+  ASSERT_HAS_VALUE(wheel->geometry);
   EXPECT_EQ(wheel->geometry->key, WheelGeometryKey());
   EXPECT_EQ(wheel->geometry->virtual_path, kWheelGeometryPath);
   EXPECT_TRUE(ValueOf(*wheel, OverrideId::kPointLightRange).has_value());
@@ -338,13 +338,13 @@ NOLINT_TEST_F(AssetLoaderSceneQueryTest, NodeValuesHoldEveryComponent)
       .has_value());
   const auto paint
     = ValueOf(*wheel, OverrideId::kGeometrySurfaceMaterial, RimSurface());
-  ASSERT_TRUE(paint.has_value());
+  ASSERT_HAS_VALUE(paint);
   const auto* paint_asset = std::get_if<IAssetLoader::SceneNodeAsset>(&*paint);
   ASSERT_NE(paint_asset, nullptr);
   EXPECT_EQ(paint_asset->key, PaintKey());
   EXPECT_EQ(paint_asset->virtual_path, kPaintPath);
 
-  ASSERT_TRUE(body.has_value());
+  ASSERT_HAS_VALUE(body);
   EXPECT_EQ(body->name, "Body");
   EXPECT_FALSE(body->geometry.has_value());
   EXPECT_TRUE(ValueOf(*body, OverrideId::kPerspectiveCameraFieldOfViewDegrees)
@@ -365,7 +365,7 @@ NOLINT_TEST_F(AssetLoaderSceneQueryTest, UnreadableInstancedSceneHasNoNodes)
 
   const auto hierarchy = asset_loader_->ReadMountedSceneHierarchy(GarageKey());
 
-  ASSERT_TRUE(hierarchy.has_value());
+  ASSERT_HAS_VALUE(hierarchy);
   EXPECT_EQ(hierarchy->nodes.size(), 2U);
   ASSERT_EQ(hierarchy->issues.size(), 1U);
   EXPECT_EQ(hierarchy->issues.front().code, SceneIssueCode::kSceneUnavailable);
@@ -388,7 +388,7 @@ NOLINT_TEST_F(AssetLoaderSceneQueryTest, CycleEndsTheComposition)
 
   const auto hierarchy = asset_loader_->ReadMountedSceneHierarchy(LoopAKey());
 
-  ASSERT_TRUE(hierarchy.has_value());
+  ASSERT_HAS_VALUE(hierarchy);
   EXPECT_EQ(hierarchy->nodes.size(), 4U);
   ASSERT_EQ(hierarchy->issues.size(), 1U);
   EXPECT_EQ(hierarchy->issues.front().code, SceneIssueCode::kCycle);
@@ -417,7 +417,7 @@ NOLINT_TEST_F(AssetLoaderSceneQueryTest, HierarchyListsNestedNodes)
 {
   const auto hierarchy = asset_loader_->ReadMountedSceneHierarchy(StreetKey());
 
-  ASSERT_TRUE(hierarchy.has_value());
+  ASSERT_HAS_VALUE(hierarchy);
   EXPECT_TRUE(hierarchy->issues.empty());
   using Path = std::vector<NodeId>;
   const auto paths = std::vector<Path> {

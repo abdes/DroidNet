@@ -10,7 +10,6 @@
 #include <cstddef>
 #include <filesystem>
 #include <fstream>
-#include <numbers>
 #include <optional>
 #include <string>
 #include <string_view>

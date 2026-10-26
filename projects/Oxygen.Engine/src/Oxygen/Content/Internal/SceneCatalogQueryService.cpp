@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -118,7 +119,7 @@ namespace {
     }
 
   private:
-    auto Parse(const data::AssetKey& key) const
+    [[nodiscard]] auto Parse(const data::AssetKey& key) const
       -> std::shared_ptr<const data::SceneAsset>
     {
       const auto source_id = view_->ResolveAsset(key);
@@ -283,7 +284,7 @@ namespace {
     {
     }
 
-    auto Read(
+    [[nodiscard]] auto Read(
       const data::AssetKey& key, const std::span<const data::NodeId> path) const
       -> std::optional<IAssetLoader::SceneNodeValues>
     {

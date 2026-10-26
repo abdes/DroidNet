@@ -13,7 +13,6 @@
 #include <exception>
 #include <filesystem>
 #include <functional>
-#include <ios>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -75,6 +74,7 @@
 #include <Oxygen/Content/LoaderFunctions.h>
 #include <Oxygen/Content/Loaders/BufferLoader.h>
 #include <Oxygen/Content/Loaders/GeometryLoader.h>
+#include <Oxygen/Content/Loaders/Helpers.h>
 #include <Oxygen/Content/Loaders/InputActionLoader.h>
 #include <Oxygen/Content/Loaders/InputMappingContextLoader.h>
 #include <Oxygen/Content/Loaders/MaterialLoader.h>
@@ -94,6 +94,7 @@
 #include <Oxygen/Core/AnyCache.h>
 #include <Oxygen/Core/CachePolicyContract.h>
 #include <Oxygen/Core/EngineTag.h>
+#include <Oxygen/Core/Meta/Data/ResourceIndex.h>
 #include <Oxygen/Core/RefCountedEviction.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/Asset.h>
@@ -104,18 +105,18 @@
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/MeshType.h>
-#include <Oxygen/Data/PakFormatSerioLoaders.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_input.h>
 #include <Oxygen/Data/PakFormat_physics.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Data/PhysicsResource.h>
 #include <Oxygen/Data/SceneAsset.h>
+#include <Oxygen/Data/SceneIds.h>
+#include <Oxygen/Data/ScriptAsset.h>
 #include <Oxygen/Data/ScriptResource.h>
 #include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Data/SourceOrigin.h>
 #include <Oxygen/Data/TextureResource.h>
-#include <Oxygen/Data/TextureResourceDescriptor.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/ParkingLot.h>
@@ -810,25 +811,19 @@ auto AssetLoader::UpdateTelemetrySummaryCVar() -> void
     "asset_requests={},resource_requests={},asset_hits={},resource_hits={}",
     stats.cache.entries, stats.cache.consumed_budget,
     stats.cache.over_budget ? 1 : 0,
-    stats.material_assets.at(requests) + stats.geometry_assets.at(requests)
-      + stats.scene_assets.at(requests)
-      + stats.physics_scene_assets.at(requests)
-      + stats.script_assets.at(requests)
-      + stats.input_action_assets.at(requests)
-      + stats.input_mapping_context_assets.at(requests),
-    stats.texture_resources.at(requests) + stats.buffer_resources.at(requests)
-      + stats.script_resources.at(requests)
-      + stats.physics_resources.at(requests),
-    stats.material_assets.at(cache_hits) + stats.geometry_assets.at(cache_hits)
-      + stats.scene_assets.at(cache_hits)
-      + stats.physics_scene_assets.at(cache_hits)
-      + stats.script_assets.at(cache_hits)
-      + stats.input_action_assets.at(cache_hits)
-      + stats.input_mapping_context_assets.at(cache_hits),
-    stats.texture_resources.at(cache_hits)
-      + stats.buffer_resources.at(cache_hits)
-      + stats.script_resources.at(cache_hits)
-      + stats.physics_resources.at(cache_hits));
+    stats.material_assets[requests] + stats.geometry_assets[requests]
+      + stats.scene_assets[requests] + stats.physics_scene_assets[requests]
+      + stats.script_assets[requests] + stats.input_action_assets[requests]
+      + stats.input_mapping_context_assets[requests],
+    stats.texture_resources[requests] + stats.buffer_resources[requests]
+      + stats.script_resources[requests] + stats.physics_resources[requests],
+    stats.material_assets[cache_hits] + stats.geometry_assets[cache_hits]
+      + stats.scene_assets[cache_hits] + stats.physics_scene_assets[cache_hits]
+      + stats.script_assets[cache_hits] + stats.input_action_assets[cache_hits]
+      + stats.input_mapping_context_assets[cache_hits],
+    stats.texture_resources[cache_hits] + stats.buffer_resources[cache_hits]
+      + stats.script_resources[cache_hits]
+      + stats.physics_resources[cache_hits]);
   (void)console_->SetCVarFromText({ .name = kCVarLastStats, .text = summary },
     {
       .source = commands::CommandSource::kAutomation,
