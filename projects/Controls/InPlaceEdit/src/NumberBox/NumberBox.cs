@@ -106,6 +106,8 @@ public partial class NumberBox : Control
 
     private const string DefaultIndeterminateDisplayText = "-.-";
 
+    private const int MaxRoundingDecimals = 15;
+
     private readonly ScrubGesture scrub = new();
 
     private InputSystemCursor? defaultCursor;
@@ -164,7 +166,7 @@ public partial class NumberBox : Control
 
     private bool IsMouseCaptured => this.scrub.IsScrubbing;
 
-    private (double minimum, double maximum) Range
+    private (double Minimum, double Maximum) Range
         => (double.IsNaN(this.Minimum) ? double.NegativeInfinity : this.Minimum, double.IsNaN(this.Maximum) ? double.PositiveInfinity : this.Maximum);
 
     /// <summary>Completes pending text input before an owning document saves or closes.</summary>
@@ -202,7 +204,7 @@ public partial class NumberBox : Control
         // Leaving indeterminate for editing: do not reset NumberValue, only switch presentation
         this.IsIndeterminate = false;
 
-        this.originalValue = this.NumberValue.ToString(CultureInfo.CurrentCulture);
+        this.originalValue = EditText(this.NumberValue);
         this.isEditing = true;
         this.OnEditSessionStarted(NumberBoxEditInteractionKind.Text);
 
@@ -240,6 +242,18 @@ public partial class NumberBox : Control
         this.LogEditCanceled(wasIndeterminate);
     }
 
+    /// <summary>Gets the value a drag reaches, kept to the decimals of the step and of the value as shown: 12.2 + 0.1
+    /// is 12.3, not 12.299999999999999, and 12.234 + 0.1 is 12.334.</summary>
+    /// <param name="value">The value the drag steps from.</param>
+    /// <param name="steps">The number of steps, negative for a drag down.</param>
+    /// <param name="step">The change one step makes.</param>
+    /// <returns>The value <paramref name="steps"/> steps away from <paramref name="value"/>.</returns>
+    internal static double Stepped(double value, int steps, double step)
+    {
+        var decimals = Math.Max(Decimals(value), StepDecimals(step));
+        return Math.Round(value + (steps * step), decimals, MidpointRounding.AwayFromZero);
+    }
+
     /// <inheritdoc />
     protected override void OnApplyTemplate()
     {
@@ -275,6 +289,42 @@ public partial class NumberBox : Control
         }
 
         base.OnKeyDown(e);
+    }
+
+    // A float widened to double shows the shortest text that reads back as that float (0.3f, not
+    // 0.30000001192092896); any other double shows its own shortest text.
+    private static string ShortestText(double value, IFormatProvider format)
+        => double.IsFinite(value) && (double)(float)value == value
+            ? ((float)value).ToString(format)
+            : value.ToString(format);
+
+    private static string EditText(double value) => ShortestText(value, CultureInfo.CurrentCulture);
+
+    // The decimal places of a value's shortest text, at most the 15 that Math.Round takes.
+    private static int Decimals(double value)
+    {
+        var text = ShortestText(value, CultureInfo.InvariantCulture);
+        if (text.Contains('E', StringComparison.Ordinal))
+        {
+            return MaxRoundingDecimals;
+        }
+
+        var point = text.IndexOf('.', StringComparison.Ordinal);
+        return point < 0 ? 0 : Math.Min(MaxRoundingDecimals, text.Length - point - 1);
+    }
+
+    // A step's decimal places, read through decimal's 15 significant digits so that the Shift step 0.1 × 0.1 counts
+    // as 0.01, not as 0.010000000000000002.
+    private static int StepDecimals(double step)
+    {
+        if (!double.IsFinite(step) || Math.Abs(step) >= (double)decimal.MaxValue)
+        {
+            return 0;
+        }
+
+        // Dividing by 1 with 33 zero decimals drops the trailing zeros the conversion leaves.
+        var normalized = (decimal)step / 1.000000000000000000000000000000000m;
+        return Math.Min(MaxRoundingDecimals, (decimal.GetBits(normalized)[3] >> 16) & 0xFF);
     }
 
     private void SetupValueTextBlockPart()
@@ -602,7 +652,7 @@ public partial class NumberBox : Control
         }
 
         var step = keyModifiers.HasFlag(VirtualKeyModifiers.Shift) ? this.Multiplier * 0.1 : this.Multiplier;
-        this.ApplyNewValueIfValid(this.ClampToRange(this.NumberValue + (steps * step)));
+        this.ApplyNewValueIfValid(this.ClampToRange(Stepped(this.NumberValue, steps, step)));
     }
 
     private void ApplyNewValueIfValid(double newValue)
@@ -677,6 +727,17 @@ public partial class NumberBox : Control
         {
             try
             {
+                if (string.Equals(text, this.originalValue, StringComparison.Ordinal))
+                {
+                    // Unchanged text keeps the value it shows: a widened float's shortest text read back as a double
+                    // would be another value.
+                    this.IsIndeterminate = false;
+                    this.LogEditCommitted(this.NumberValue);
+                    this.OnEditSessionCompleted(NumberBoxEditInteractionKind.Text, NumberBoxEditCompletionKind.Commit, text);
+                    this.EndEdit();
+                    return;
+                }
+
                 if (!NumericInputParser.TryParse(text, this.NumberValue, out var expression))
                 {
                     this.CancelEdit();

@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Globalization;
 using System.Reflection;
 using AwesomeAssertions;
 using CommunityToolkit.WinUI;
@@ -214,6 +215,41 @@ public sealed class NumberBoxSaveTests : VisualUserInterfaceTests
 
         number.CompletePendingTextEdit();
         _ = number.NumberValue.Should().Be(1);
+    });
+
+    /// <summary>A float value widened to double edits as the text it was entered as, not its widened digits.</summary>
+    /// <returns>The test task.</returns>
+    [TestMethod]
+    public Task TextEditOfAWidenedFloatShowsItsShortestText() => EnqueueAsync(async () =>
+    {
+        var number = new NumberBox { NumberValue = 0.3f, Mask = "~.###" };
+        await LoadTestContentAsync(number).ConfigureAwait(true);
+
+        var input = BeginTextInput(number);
+
+        _ = input.Text.Should().Be(0.3.ToString(CultureInfo.CurrentCulture));
+    });
+
+    /// <summary>Committing the text an edit started with keeps the exact value, so a widened float is not rewritten as
+    /// the double its shortest text reads as.</summary>
+    /// <returns>The test task.</returns>
+    [TestMethod]
+    public Task CommittingUnchangedTextKeepsTheValue() => EnqueueAsync(async () =>
+    {
+        const double widened = 0.3f;
+        var number = new NumberBox { NumberValue = widened, Mask = "~.###" };
+        await LoadTestContentAsync(number).ConfigureAwait(true);
+        var changes = 0;
+        _ = number.RegisterPropertyChangedCallback(NumberBox.NumberValueProperty, (_, _) => changes++);
+        var completions = new List<NumberBoxEditCompletionKind?>();
+        number.EditSessionCompleted += (_, args) => completions.Add(args.CompletionKind);
+        _ = BeginTextInput(number);
+
+        number.CompletePendingTextEdit();
+
+        _ = number.NumberValue.Should().Be(widened);
+        _ = changes.Should().Be(0);
+        _ = completions.Should().Equal(NumberBoxEditCompletionKind.Commit);
     });
 
     private static TextBox BeginTextInput(NumberBox number)
