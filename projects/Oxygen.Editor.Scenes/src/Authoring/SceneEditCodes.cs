@@ -73,6 +73,11 @@ public static class SceneEditCodes
     /// <summary>An instance would instance the scene it is in, directly or through the sources it references.</summary>
     public const string InstanceCycle = DiagnosticCodes.ScenePrefix + "Instance.Cycle";
 
+    /// <summary>
+    /// A structural command names a node an instance brought in, whose structure belongs to the instance's source.
+    /// </summary>
+    public const string InstancedStructure = DiagnosticCodes.ScenePrefix + "Instance.Structure";
+
     /// <summary>A layout place is in another scene scope than the node's scene parent.</summary>
     public const string LayoutScopeMismatch = DiagnosticCodes.ScenePrefix + "Layout.ScopeMismatch";
 

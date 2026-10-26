@@ -32,7 +32,7 @@ public sealed partial class SceneNodeInteractionTests
             session.Context.ProjectId,
             new Dictionary<SceneId, SceneNodeInteraction.SceneInteraction>
             {
-                [sceneId] = new([hidden], [NodeReference.To(locked)], SceneCategories.All),
+                [sceneId] = new([NodeReference.To(hidden)], [NodeReference.To(locked)], SceneCategories.All),
             });
         _ = settings
             .Setup(s => s.LoadSettingAsync(
@@ -45,7 +45,7 @@ public sealed partial class SceneNodeInteractionTests
         var service = new SceneNodeInteraction(session, settings.Object, new CapturingOperationResultPublisher(), new OperationStatusReducer());
         await service.RestoreAsync(sceneId).ConfigureAwait(false);
 
-        _ = service.IsHidden(hidden).Should().BeTrue("a stored hidden id reloads on scene restore");
+        _ = service.IsHidden(NodeReference.To(hidden)).Should().BeTrue("a stored hidden id reloads on scene restore");
         _ = service.IsLocked(NodeReference.To(locked)).Should().BeTrue("a stored locked id reloads on scene restore");
     }
 
@@ -85,7 +85,7 @@ public sealed partial class SceneNodeInteractionTests
             Guid.NewGuid(),
             new Dictionary<SceneId, SceneNodeInteraction.SceneInteraction>
             {
-                [sceneId] = new([hidden], [], SceneCategories.All),
+                [sceneId] = new([NodeReference.To(hidden)], [], SceneCategories.All),
             });
         _ = settings
             .Setup(s => s.LoadSettingAsync(
@@ -98,7 +98,7 @@ public sealed partial class SceneNodeInteractionTests
         var service = new SceneNodeInteraction(session, settings.Object, new CapturingOperationResultPublisher(), new OperationStatusReducer());
         await service.RestoreAsync(sceneId).ConfigureAwait(false);
 
-        _ = service.IsHidden(hidden).Should().BeFalse("a record whose ProjectId differs is rejected");
+        _ = service.IsHidden(NodeReference.To(hidden)).Should().BeFalse("a record whose ProjectId differs is rejected");
     }
 
     [TestMethod]
@@ -113,23 +113,23 @@ public sealed partial class SceneNodeInteractionTests
         var settings = CreateStore(store);
         var service = new SceneNodeInteraction(session, settings.Object, new CapturingOperationResultPublisher(), new OperationStatusReducer());
         await service.RestoreAsync(sceneA).ConfigureAwait(false);
-        service.SetHidden(nodeA, isHidden: true);
+        service.SetHidden(NodeReference.To(nodeA), isHidden: true);
         service.SetCategories(new SceneCategories(ShowMeshes: false, ShowLights: true, ShowCameras: false));
         await service.RestoreAsync(sceneB).ConfigureAwait(false);
-        _ = service.HiddenNodeIds().Should().BeEmpty();
+        _ = service.HiddenNodes().Should().BeEmpty();
         _ = service.Categories.Should().Be(SceneCategories.All);
         service.SetLocked(NodeReference.To(nodeB), isLocked: true);
         service.SetCategories(new SceneCategories(ShowMeshes: true, ShowLights: false, ShowCameras: true));
         await service.RestoreAsync(sceneA).ConfigureAwait(false);
 
-        _ = service.IsHidden(nodeA).Should().BeTrue();
+        _ = service.IsHidden(NodeReference.To(nodeA)).Should().BeTrue();
         _ = service.IsLocked(NodeReference.To(nodeB)).Should().BeFalse();
         _ = service.Categories.Should().Be(new SceneCategories(ShowMeshes: false, ShowLights: true, ShowCameras: false));
         _ = store[session.Context.SettingsScope].Scenes.Keys.Should().BeEquivalentTo([sceneA, sceneB]);
         var restarted = new SceneNodeInteraction(session, settings.Object, new CapturingOperationResultPublisher(), new OperationStatusReducer());
         await restarted.RestoreAsync(sceneB).ConfigureAwait(false);
         _ = restarted.IsLocked(NodeReference.To(nodeB)).Should().BeTrue();
-        _ = restarted.IsHidden(nodeA).Should().BeFalse();
+        _ = restarted.IsHidden(NodeReference.To(nodeA)).Should().BeFalse();
         _ = restarted.Categories.Should().Be(new SceneCategories(ShowMeshes: true, ShowLights: false, ShowCameras: true));
     }
 
@@ -145,17 +145,17 @@ public sealed partial class SceneNodeInteractionTests
 
         var firstService = new SceneNodeInteraction(first, settings.Object, new CapturingOperationResultPublisher(), new OperationStatusReducer());
         await firstService.RestoreAsync(sceneId).ConfigureAwait(false);
-        firstService.SetHidden(node, isHidden: true);
+        firstService.SetHidden(NodeReference.To(node), isHidden: true);
 
         var secondService = new SceneNodeInteraction(second, settings.Object, new CapturingOperationResultPublisher(), new OperationStatusReducer());
         await secondService.RestoreAsync(sceneId).ConfigureAwait(false);
-        _ = secondService.IsHidden(node).Should().BeFalse("another project's session has its own state");
+        _ = secondService.IsHidden(NodeReference.To(node)).Should().BeFalse("another project's session has its own state");
         secondService.SetLocked(NodeReference.To(node), isLocked: true);
         await secondService.RestoreAsync(sceneId).ConfigureAwait(false);
 
         var reopened = new SceneNodeInteraction(first, settings.Object, new CapturingOperationResultPublisher(), new OperationStatusReducer());
         await reopened.RestoreAsync(sceneId).ConfigureAwait(false);
-        _ = reopened.IsHidden(node).Should().BeTrue();
+        _ = reopened.IsHidden(NodeReference.To(node)).Should().BeTrue();
         _ = reopened.IsLocked(NodeReference.To(node)).Should().BeFalse("the other session's write does not reach this project");
         _ = store.Keys.Should().BeEquivalentTo([first.Context.SettingsScope, second.Context.SettingsScope]);
     }
@@ -174,10 +174,10 @@ public sealed partial class SceneNodeInteractionTests
 
         // A mount change replaces the context with the same project id and root (scope topology, decision 7).
         session.ChangeContext(before with { CookedContentOrder = [] });
-        service.SetHidden(node, isHidden: true);
+        service.SetHidden(NodeReference.To(node), isHidden: true);
         await service.RestoreAsync(sceneId).ConfigureAwait(false);
 
-        _ = service.IsHidden(node).Should().BeTrue();
+        _ = service.IsHidden(NodeReference.To(node)).Should().BeTrue();
         _ = store.Keys.Should().Equal([before.SettingsScope], "the project's settings scope is its root, which a mount change keeps");
     }
 
@@ -197,7 +197,7 @@ public sealed partial class SceneNodeInteractionTests
 
         await service.RestoreAsync(SceneId.New()).ConfigureAwait(false);
 
-        _ = service.HiddenNodeIds().Should().BeEmpty();
+        _ = service.HiddenNodes().Should().BeEmpty();
         _ = service.Categories.Should().Be(SceneCategories.All);
         _ = results.Published.SelectMany(result => result.Diagnostics).Should()
             .Contain(diagnostic => diagnostic.Code == DiagnosticCodes.SettingsPrefix + "INVALID_STATE");
@@ -225,13 +225,13 @@ public sealed partial class SceneNodeInteractionTests
             session.Context.ProjectId,
             new Dictionary<SceneId, SceneNodeInteraction.SceneInteraction>
             {
-                [sceneId] = new([hidden], [], new SceneCategories(ShowMeshes: false, ShowLights: false, ShowCameras: false)),
+                [sceneId] = new([NodeReference.To(hidden)], [], new SceneCategories(ShowMeshes: false, ShowLights: false, ShowCameras: false)),
             }));
 
         await restoration.ConfigureAwait(false);
 
         _ = service.ActiveSceneId.Should().Be(SceneId.Empty);
-        _ = service.IsHidden(hidden).Should().BeFalse();
+        _ = service.IsHidden(NodeReference.To(hidden)).Should().BeFalse();
         _ = service.Categories.Should().Be(SceneCategories.All);
     }
 
@@ -279,7 +279,7 @@ public sealed partial class SceneNodeInteractionTests
     }
 
     [TestMethod]
-    public async Task DropUnresolvedLocks_DropsOnlyThePathsTheSourceNoLongerHolds()
+    public async Task DropUnresolvedNodes_DropsOnlyThePathsTheSourceNoLongerHolds()
     {
         using var session = OpenSession();
         var sceneId = SceneId.New();
@@ -293,20 +293,26 @@ public sealed partial class SceneNodeInteractionTests
         foreach (var node in new[] { kept, gone, otherInstance, NodeReference.To(root) })
         {
             service.SetLocked(node, isLocked: true);
+            service.SetHidden(node, isHidden: true);
         }
 
         var changes = 0;
         service.StateChanged += (_, _) => changes++;
-        service.DropUnresolvedLocks(root, path => path.Equals(kept.Path));
+        service.DropUnresolvedNodes(root, path => path.Equals(kept.Path));
 
         _ = service.IsLocked(gone).Should().BeFalse("a swap, reimport or removed change took its node away");
+        _ = service.IsHidden(gone).Should().BeFalse("the Eye of a node that is gone goes with it");
         _ = service.IsLocked(kept).Should().BeTrue();
+        _ = service.IsHidden(kept).Should().BeTrue();
         _ = service.IsLocked(otherInstance).Should().BeTrue("another instance's nodes are not this structure's");
+        _ = service.IsHidden(otherInstance).Should().BeTrue();
         _ = service.IsLocked(NodeReference.To(root)).Should().BeTrue("the instance root is a node of the scene");
+        _ = service.IsHidden(NodeReference.To(root)).Should().BeTrue();
         _ = changes.Should().Be(1);
         _ = store[session.Context.SettingsScope].Scenes[sceneId].LockedNodeIds.Should().NotContain(gone);
+        _ = store[session.Context.SettingsScope].Scenes[sceneId].HiddenNodeIds.Should().NotContain(gone);
 
-        service.DropUnresolvedLocks(root, _ => true);
+        service.DropUnresolvedNodes(root, _ => true);
         _ = changes.Should().Be(1, "nothing dropped, nothing changed");
     }
 
@@ -323,7 +329,7 @@ public sealed partial class SceneNodeInteractionTests
 
         _ = service.ActiveSceneId.Should().Be(SceneId.Empty);
         _ = service.Categories.Should().Be(SceneCategories.All);
-        _ = service.HiddenNodeIds().Should().BeEmpty();
+        _ = service.HiddenNodes().Should().BeEmpty();
     }
 
     private static Scene CreateScene() => new() { Name = "Test Scene" };

@@ -28,10 +28,10 @@ namespace Oxygen.Editor.Scenes.Interaction;
 /// and <see cref="IsHidden"/> deliberately answers only the first.
 /// </para>
 /// <para>
-/// Entries key on the stable authored node id, so renaming, regrouping or reordering a node keeps
-/// its state. Locks key on the node's reference, so a node an instance brought in is locked by its
-/// instance root and node path; a lock the instance's source no longer holds is dropped when its
-/// structure is read (<see cref="DropUnresolvedLocks"/>). The whole set for a project is one typed
+/// Entries key on the node's reference, so renaming, regrouping or reordering a node keeps its
+/// state, and a node an instance brought in is hidden or locked by its instance root and node path;
+/// an entry the instance's source no longer holds is dropped when its structure is read
+/// (<see cref="DropUnresolvedNodes"/>). The whole set for a project is one typed
 /// setting (<see cref="Key"/>) holding per-scene subrecords: one atomic write survives a restart, and a scene that is no longer in the
 /// project is dropped when the project is next restored.
 /// </para>
@@ -64,7 +64,7 @@ public sealed partial class SceneNodeInteraction(
     private ProjectInteraction? pendingWrite;
 
     private SceneId activeSceneId;
-    private HashSet<NodeId> hiddenNodeIds = [];
+    private HashSet<NodeReference> hiddenNodes = [];
     private HashSet<NodeReference> lockedNodes = [];
     private Dictionary<SceneId, SceneInteraction> scenes = [];
     private long activationGeneration;
@@ -120,7 +120,7 @@ public sealed partial class SceneNodeInteraction(
     public Task RestoreAsync(SceneId sceneId)
     {
         this.activeSceneId = sceneId;
-        this.hiddenNodeIds = [];
+        this.hiddenNodes = [];
         this.lockedNodes = [];
         this.Categories = SceneCategories.All;
         var generation = ++this.activationGeneration;
@@ -140,21 +140,21 @@ public sealed partial class SceneNodeInteraction(
     {
         this.activationGeneration++;
         this.activeSceneId = SceneId.Empty;
-        this.hiddenNodeIds = [];
+        this.hiddenNodes = [];
         this.lockedNodes = [];
         this.Categories = SceneCategories.All;
         this.RaiseStateChanged();
     }
 
-    /// <summary>Gets whether <paramref name="nodeId"/> is hidden in the editing viewports.</summary>
-    /// <param name="nodeId">The stable authored node id.</param>
+    /// <summary>Gets whether <paramref name="node"/> is hidden in the editing viewports.</summary>
+    /// <param name="node">The node: a node of the scene, or a node an instance brought in.</param>
     /// <returns><see langword="true"/> when the node itself is in the hidden set.</returns>
     /// <remarks>
     /// Descendant closure is <em>not</em> applied here: only the scene graph knows real ancestry, so
     /// the Explorer computes the effective set (see the plan's R1) and this service stays a store of
     /// explicitly stated entries.
     /// </remarks>
-    public bool IsHidden(NodeId nodeId) => this.hiddenNodeIds.Contains(nodeId);
+    public bool IsHidden(NodeReference node) => this.hiddenNodes.Contains(node);
 
     /// <summary>Gets whether <paramref name="node"/> is locked against editing.</summary>
     /// <param name="node">The node: a node of the scene, or a node an instance brought in.</param>
@@ -196,18 +196,19 @@ public sealed partial class SceneNodeInteraction(
         return scene.Id == this.activeSceneId ? FindLockOwner(scene, node, this.IsLocked) : null;
     }
 
-    /// <summary>Gets a snapshot of the explicitly hidden node ids of the active scene.</summary>
-    /// <returns>The hidden ids in no particular order.</returns>
-    public IReadOnlyCollection<NodeId> HiddenNodeIds() => [.. this.hiddenNodeIds];
+    /// <summary>Gets a snapshot of the explicitly hidden nodes of the active scene.</summary>
+    /// <returns>The hidden nodes in no particular order.</returns>
+    public IReadOnlyCollection<NodeReference> HiddenNodes() => [.. this.hiddenNodes];
 
-    /// <summary>Hides or shows <paramref name="nodeId"/> in the editing viewports.</summary>
-    /// <param name="nodeId">The stable authored node id.</param>
+    /// <summary>Hides or shows <paramref name="node"/> in the editing viewports.</summary>
+    /// <param name="node">The node: a node of the scene, or a node an instance brought in.</param>
     /// <param name="isHidden">The requested state.</param>
-    public void SetHidden(NodeId nodeId, bool isHidden)
+    public void SetHidden(NodeReference node, bool isHidden)
     {
-        if (!nodeId.IsEmpty)
+        ArgumentNullException.ThrowIfNull(node);
+        if (!node.Node.IsEmpty)
         {
-            this.Mutate(nodeId, isHidden, this.hiddenNodeIds, "node was hidden in the editor", "node is shown in the editor again");
+            this.Mutate(node, isHidden, this.hiddenNodes, "node was hidden in the editor", "node is shown in the editor again");
         }
     }
 
@@ -217,19 +218,23 @@ public sealed partial class SceneNodeInteraction(
     public void SetLocked(NodeReference node, bool isLocked)
     {
         ArgumentNullException.ThrowIfNull(node);
-        this.Mutate(node, isLocked, this.lockedNodes, "node was locked", "node was unlocked");
+        if (!node.Node.IsEmpty)
+        {
+            this.Mutate(node, isLocked, this.lockedNodes, "node was locked", "node was unlocked");
+        }
     }
 
     /// <summary>
-    /// Drops the locks of an instance's nodes that its source no longer holds, as after a swap, a reimport or the
-    /// removal of a kept change. Called whenever the instance's structure is read.
+    /// Drops the hidden and locked entries of an instance's nodes that its source no longer holds, as after a swap, a
+    /// reimport or the removal of a kept change. Called whenever the instance's structure is read.
     /// </summary>
     /// <param name="instanceRoot">The instance root of the active scene.</param>
     /// <param name="sourceHolds">Whether the structure the source has now holds a node path, as <c>SceneStructure.Find</c> answers.</param>
-    public void DropUnresolvedLocks(NodeId instanceRoot, Func<NodePath, bool> sourceHolds)
+    public void DropUnresolvedNodes(NodeId instanceRoot, Func<NodePath, bool> sourceHolds)
     {
         ArgumentNullException.ThrowIfNull(sourceHolds);
-        if (this.lockedNodes.RemoveWhere(node => node.Node == instanceRoot && !node.IsOwned && !sourceHolds(node.Path)) == 0)
+        bool Unresolved(NodeReference node) => node.Node == instanceRoot && !node.IsOwned && !sourceHolds(node.Path);
+        if (this.lockedNodes.RemoveWhere(Unresolved) + this.hiddenNodes.RemoveWhere(Unresolved) == 0)
         {
             return;
         }
@@ -241,12 +246,12 @@ public sealed partial class SceneNodeInteraction(
     /// <summary>Clears every hidden entry of the active scene, leaving locked entries alone.</summary>
     public void ShowAll()
     {
-        if (this.hiddenNodeIds.Count == 0)
+        if (this.hiddenNodes.Count == 0)
         {
             return;
         }
 
-        this.hiddenNodeIds = [];
+        this.hiddenNodes = [];
         this.RaiseStateChanged();
         this.ScheduleSave();
     }
@@ -305,7 +310,7 @@ public sealed partial class SceneNodeInteraction(
         }
 
         this.scenes[this.activeSceneId] = new SceneInteraction(
-            [.. this.hiddenNodeIds], [.. this.lockedNodes], this.Categories);
+            [.. this.hiddenNodes], [.. this.lockedNodes], this.Categories);
         this.pendingWrite = new ProjectInteraction(session.Context.ProjectId, new Dictionary<SceneId, SceneInteraction>(this.scenes));
 
         // Chain onto the serialized queue so a fast sequence of toggles cannot interleave writes.
@@ -381,7 +386,7 @@ public sealed partial class SceneNodeInteraction(
         this.scenes = [with(stored.Scenes)];
         if (this.scenes.TryGetValue(sceneId, out var scene))
         {
-            this.hiddenNodeIds = [.. scene.HiddenNodeIds];
+            this.hiddenNodes = [.. scene.HiddenNodeIds];
             this.lockedNodes = [.. scene.LockedNodeIds];
             this.Categories = scene.Categories;
             this.RaiseStateChanged();
@@ -412,14 +417,17 @@ public sealed partial class SceneNodeInteraction(
         IReadOnlyDictionary<SceneId, SceneInteraction> Scenes);
 
     /// <summary>The saved interaction state for one scene.</summary>
-    /// <param name="HiddenNodeIds">Nodes hidden in the editing viewports.</param>
+    /// <param name="HiddenNodeIds">
+    /// Nodes hidden in the editing viewports, by reference. A node of the scene's reference is its ID, so a record
+    /// stored before instanced nodes could be hidden reads unchanged.
+    /// </param>
     /// <param name="LockedNodeIds">
     /// Nodes locked against editing, by reference. A node of the scene's reference is its ID, so a record stored
     /// before instanced nodes could be locked reads unchanged.
     /// </param>
     /// <param name="Categories">The Scene Explorer category filter.</param>
     internal sealed record SceneInteraction(
-        IReadOnlyList<NodeId> HiddenNodeIds,
+        IReadOnlyList<NodeReference> HiddenNodeIds,
         IReadOnlyList<NodeReference> LockedNodeIds,
         SceneCategories Categories);
 }

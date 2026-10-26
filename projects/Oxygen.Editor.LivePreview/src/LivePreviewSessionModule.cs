@@ -7,6 +7,7 @@ using DryIoc;
 using Microsoft.Extensions.Logging;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.Assets.Runtime;
+using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.ContentPipeline.Mounting;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.LivePreview.Assets;
@@ -64,6 +65,8 @@ public sealed class LivePreviewSessionModule : IScopeModule<ISessionLayer>
                 resolver.Resolve<IOperationResultPublisher>(),
                 resolver.Resolve<IAssetFeed>()),
             Reuse.Singleton);
+        scope.RegisterDelegate(
+            resolver => (ISceneStructureProvider)resolver.Resolve<IScenePreview>(), Reuse.Singleton);
         scope.Register<PreviewSession>(Reuse.Singleton);
         scope.RegisterMapping<IContentMountChanges, PreviewSession>();
     }

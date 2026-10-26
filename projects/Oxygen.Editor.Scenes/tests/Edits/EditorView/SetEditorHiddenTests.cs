@@ -7,6 +7,7 @@ using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Changes;
 using Oxygen.Editor.Scenes.Edits.EditorView;
 using Oxygen.Editor.Scenes.Tests.TestSupport;
+using Oxygen.Editor.World;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Scenes.Tests.Edits.EditorView;
@@ -25,15 +26,15 @@ public sealed class SetEditorHiddenTests
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
         var before = fixture.Snapshot();
 
-        var result = await fixture.Authoring.ExecuteAsync(new SetEditorHidden([SampleScene.B], hidden: true)).ConfigureAwait(false);
+        var result = await fixture.Authoring.ExecuteAsync(new SetEditorHidden([NodeReference.To(SampleScene.B)], hidden: true)).ConfigureAwait(false);
 
         SceneAssert.Applied(result);
-        _ = fixture.Interaction!.IsHidden(SampleScene.B).Should().BeTrue();
-        SceneAssert.Changes(fixture.Changes.Only(), new SceneChange.EditorVisibilityChanged([SampleScene.B]));
+        _ = fixture.Interaction!.IsHidden(NodeReference.To(SampleScene.B)).Should().BeTrue();
+        SceneAssert.Changes(fixture.Changes.Only(), new SceneChange.EditorVisibilityChanged([NodeReference.To(SampleScene.B)]));
         _ = fixture.Snapshot().Document.Should().Be(before.Document, "hiding is not authoring");
         _ = fixture.History.UndoStack.Should().ContainSingle().Which.ChangesState.Should().BeFalse();
         _ = (await fixture.Authoring.UndoAsync().ConfigureAwait(false)).Outcome.Should().Be(SceneEditOutcome.Applied);
-        _ = fixture.Interaction.IsHidden(SampleScene.B).Should().BeFalse("undo shows the node again");
+        _ = fixture.Interaction.IsHidden(NodeReference.To(SampleScene.B)).Should().BeFalse("undo shows the node again");
     }
 
     [TestMethod]
@@ -43,7 +44,7 @@ public sealed class SetEditorHiddenTests
         fixture.Interaction!.Hide(SampleScene.B);
         var before = fixture.Snapshot();
 
-        var result = await fixture.Authoring.ExecuteAsync(new SetEditorHidden([SampleScene.B], hidden: true)).ConfigureAwait(false);
+        var result = await fixture.Authoring.ExecuteAsync(new SetEditorHidden([NodeReference.To(SampleScene.B)], hidden: true)).ConfigureAwait(false);
 
         SceneAssert.Applied(result);
         SceneAssert.Unchanged(fixture, before);
@@ -56,13 +57,13 @@ public sealed class SetEditorHiddenTests
         fixture.Interaction!.Hide(SampleScene.B);
         var before = fixture.Snapshot();
 
-        var result = await fixture.Authoring.ExecuteAsync(new SetEditorHidden([SampleScene.B, SampleScene.Cam], hidden: true)).ConfigureAwait(false);
+        var result = await fixture.Authoring.ExecuteAsync(new SetEditorHidden([NodeReference.To(SampleScene.B), NodeReference.To(SampleScene.Cam)], hidden: true)).ConfigureAwait(false);
 
         SceneAssert.Applied(result);
         _ = fixture.Snapshot().UndoCount.Should().Be(before.UndoCount + 1);
-        SceneAssert.Changes(fixture.Changes.Only(), new SceneChange.EditorVisibilityChanged([SampleScene.Cam]));
+        SceneAssert.Changes(fixture.Changes.Only(), new SceneChange.EditorVisibilityChanged([NodeReference.To(SampleScene.Cam)]));
         _ = (await fixture.Authoring.UndoAsync().ConfigureAwait(false)).Outcome.Should().Be(SceneEditOutcome.Applied);
-        _ = fixture.Interaction.Hidden.Should().Equal([SampleScene.B], "undo shows only the node the edit hid");
+        _ = fixture.Interaction.Hidden.Should().Equal([NodeReference.To(SampleScene.B)], "undo shows only the node the edit hid");
     }
 
     [TestMethod]
@@ -71,10 +72,10 @@ public sealed class SetEditorHiddenTests
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
         fixture.Interaction!.Lock(SampleScene.B);
 
-        var result = await fixture.Authoring.ExecuteAsync(new SetEditorHidden([SampleScene.B], hidden: true)).ConfigureAwait(false);
+        var result = await fixture.Authoring.ExecuteAsync(new SetEditorHidden([NodeReference.To(SampleScene.B)], hidden: true)).ConfigureAwait(false);
 
         SceneAssert.Applied(result);
-        _ = fixture.Interaction.IsHidden(SampleScene.B).Should().BeTrue();
+        _ = fixture.Interaction.IsHidden(NodeReference.To(SampleScene.B)).Should().BeTrue();
     }
 
     [TestMethod]
@@ -83,10 +84,35 @@ public sealed class SetEditorHiddenTests
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
         var missing = NodeId.New();
 
-        var result = await fixture.Authoring.ExecuteAsync(new SetEditorHidden([SampleScene.B, missing], hidden: true)).ConfigureAwait(false);
+        var result = await fixture.Authoring.ExecuteAsync(new SetEditorHidden([NodeReference.To(SampleScene.B), NodeReference.To(missing)], hidden: true)).ConfigureAwait(false);
 
         SceneAssert.Applied(result);
-        _ = fixture.Interaction!.Hidden.Should().Equal([SampleScene.B]);
+        _ = fixture.Interaction!.Hidden.Should().Equal([NodeReference.To(SampleScene.B)]);
+    }
+
+    [TestMethod]
+    public async Task ANodeAnInstanceBroughtIn_IsHiddenByItsReference()
+    {
+        using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
+        var instanced = new NodeReference(SampleScene.B, NodePath.Of(NodeId.New()));
+
+        var result = await fixture.Authoring.ExecuteAsync(new SetEditorHidden([instanced], hidden: true)).ConfigureAwait(false);
+
+        SceneAssert.Applied(result);
+        _ = fixture.Interaction!.Hidden.Should().Equal([instanced], "the instance root is not hidden with it");
+        SceneAssert.Changes(fixture.Changes.Only(), new SceneChange.EditorVisibilityChanged([instanced]));
+    }
+
+    [TestMethod]
+    public async Task ANodeOfAMissingInstanceRoot_IsSkipped()
+    {
+        using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
+        var before = fixture.Snapshot();
+
+        var result = await fixture.Authoring.ExecuteAsync(new SetEditorHidden([new NodeReference(NodeId.New(), NodePath.Of(NodeId.New()))], hidden: true)).ConfigureAwait(false);
+
+        SceneAssert.Applied(result);
+        SceneAssert.Unchanged(fixture, before);
     }
 
     [TestMethod]
@@ -95,7 +121,7 @@ public sealed class SetEditorHiddenTests
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
         var before = fixture.Snapshot();
 
-        var result = await fixture.Authoring.ExecuteAsync(new SetEditorHidden([NodeId.New()], hidden: true)).ConfigureAwait(false);
+        var result = await fixture.Authoring.ExecuteAsync(new SetEditorHidden([NodeReference.To(NodeId.New())], hidden: true)).ConfigureAwait(false);
 
         SceneAssert.Applied(result);
         SceneAssert.Unchanged(fixture, before);
@@ -119,7 +145,7 @@ public sealed class SetEditorHiddenTests
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build(), withInteraction: false).ConfigureAwait(false);
         var before = fixture.Snapshot();
 
-        var result = await fixture.Authoring.ExecuteAsync(new SetEditorHidden([SampleScene.B], hidden: true)).ConfigureAwait(false);
+        var result = await fixture.Authoring.ExecuteAsync(new SetEditorHidden([NodeReference.To(SampleScene.B)], hidden: true)).ConfigureAwait(false);
 
         SceneAssert.Invalid(result, SceneEditCodes.InteractionPortMissing);
         SceneAssert.Unchanged(fixture, before);

@@ -13,6 +13,7 @@ using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.SceneEditor.Unit.Tests.TestSupport;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Documents;
+using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.Scenes.Testing;
 using Oxygen.Editor.Shell.Commands;
 using Oxygen.Editor.Shell.Documents;
@@ -146,6 +147,23 @@ public sealed class SceneEditorInstanceTests
         _ = elsewhere.Should().BeFalse();
         _ = placed.Should().BeTrue();
         _ = fixture.Scene.RootNodes.Should().ContainSingle(node => node.Components.OfType<SceneInstanceComponent>().Any());
+    }
+
+    [TestMethod]
+    public async Task Duplicate_OfASelectionHoldingAnInstancedNode_IsRefusedWholeAndReported()
+    {
+        using var fixture = new Fixture();
+        _ = await fixture.Editor.AddInstanceAsync(Car).ConfigureAwait(false);
+        var root = fixture.Scene.RootNodes.Single(node => node.Components.OfType<SceneInstanceComponent>().Any());
+        var door = new NodeReference(root.Id, NodePath.Of(NodeId.New()));
+        fixture.Services.Selection.Publish(fixture.Metadata.Document.Id, SceneSelectionContext.ForNodes([NodeReference.To(root.Id), door]), "Viewport");
+
+        await fixture.Editor.ExecuteAsync(SceneEditorCommands.Duplicate.Id).ConfigureAwait(false);
+
+        _ = fixture.Scene.RootNodes.Should().ContainSingle(node => node.Components.OfType<SceneInstanceComponent>().Any(), "no batch applies to part of the selection");
+        fixture.Results.Verify(
+            results => results.Publish(It.Is<OperationResult>(result => result.Diagnostics.Any(diagnostic => diagnostic.Code == SceneEditCodes.InstancedStructure))),
+            Times.Once);
     }
 
     private static System.Windows.Input.ICommand MenuItem(Fixture fixture, string text)

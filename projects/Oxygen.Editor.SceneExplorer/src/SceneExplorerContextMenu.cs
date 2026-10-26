@@ -70,6 +70,9 @@ public enum SceneExplorerCommandKind
 
     /// <summary>Move the primary camera node to the active viewport's editor camera.</summary>
     AlignCameraToView,
+
+    /// <summary>Select the instance root of the primary node an instance brought in.</summary>
+    SelectInstance,
 }
 
 /// <summary>

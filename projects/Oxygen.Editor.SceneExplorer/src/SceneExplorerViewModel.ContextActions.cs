@@ -228,9 +228,9 @@ public partial class SceneExplorerViewModel
         var selected = this.GetSelectedItems().ToArray();
 
         // Authoritative identities can include collapsed/unrealized rows. Never silently shrink that batch.
-        foreach (var id in selection.OwnedNodeIds)
+        foreach (var row in this.RowsOf(selection.SelectedNodes))
         {
-            if (this.projection.GetNode(id) is { } row && !selected.Contains(row))
+            if (!selected.Contains(row))
             {
                 selected = [.. selected, row];
             }
@@ -295,6 +295,7 @@ public partial class SceneExplorerViewModel
     private bool IsCurrentContextRow(ITreeItem row) => row switch
     {
         SceneNodeAdapter node => ReferenceEquals(this.projection.GetNode(node.AttachedObject.Id), row),
+        InstancedNodeAdapter instanced => ReferenceEquals(this.projection.GetRow(instanced.Reference), row),
         FolderAdapter folder => ReferenceEquals(this.projection.GetFolder(folder.Id), row),
         SceneAdapter scene => ReferenceEquals(this.Scene, scene),
         _ => false,
@@ -306,10 +307,16 @@ public partial class SceneExplorerViewModel
         var root = targets.Count == 0;
         var single = targets.Count == 1;
         var node = single ? targets[0] as SceneNodeAdapter : null;
+        var instanced = single ? targets[0] as InstancedNodeAdapter : null;
         var folder = single ? targets[0] as FolderAdapter : null;
+        if (instanced is not null)
+        {
+            yield return (SceneExplorerCommandKind.SelectInstance, "Select instance", "instance");
+        }
+
         if (root || single)
         {
-            yield return (SceneExplorerCommandKind.NewNode, node is not null ? "New child node" : folder is not null ? "New node in folder" : "New node", "create");
+            yield return (SceneExplorerCommandKind.NewNode, node is not null || instanced is not null ? "New child node" : folder is not null ? "New node in folder" : "New node", "create");
             yield return (SceneExplorerCommandKind.NewFolder, folder is not null ? "New subfolder" : node is not null ? "New folder beside node" : "New folder", "create");
         }
 
@@ -365,10 +372,11 @@ public partial class SceneExplorerViewModel
             yield return (SceneExplorerCommandKind.AlignCameraToView, "Align camera to view", "camera");
         }
 
-        if (targets.Count > 0 && targets.All(static row => row is SceneNodeAdapter))
+        if (targets.Count > 0 && targets.All(static row => row is NodeRowAdapter))
         {
-            var hidden = single && (node!.IsEffectivelyHiddenInEditor || this.interaction?.IsHidden(node.AttachedObject.Id) == true);
-            var locked = single && this.FindLockedContextRow(node!) is not null;
+            var row = single ? (NodeRowAdapter)targets[0] : null;
+            var hidden = row is not null && (row.IsEffectivelyHiddenInEditor || this.interaction?.IsHidden(row.Reference) == true);
+            var locked = row is not null && this.FindLockedContextRow(row) is not null;
             if (!single || !hidden)
             {
                 yield return (SceneExplorerCommandKind.Hide, single ? "Hide in editor" : "Hide selected", "state");
@@ -390,7 +398,7 @@ public partial class SceneExplorerViewModel
             }
         }
 
-        if (root && this.projection.Nodes.Any(row => this.interaction?.IsHidden(row.AttachedObject.Id) == true))
+        if (root && this.interaction?.HiddenNodes().Count > 0)
         {
             yield return (SceneExplorerCommandKind.ShowAll, "Show all in editor", "state");
         }
@@ -405,8 +413,18 @@ public partial class SceneExplorerViewModel
 
         var targets = context.Targets;
         var nodes = targets.OfType<SceneNodeAdapter>().ToArray();
+        var rows = targets.OfType<NodeRowAdapter>().ToArray();
         var single = targets.Count == 1;
         var creation = kind is SceneExplorerCommandKind.NewNode or SceneExplorerCommandKind.NewFolder;
+        if (kind == SceneExplorerCommandKind.SelectInstance)
+        {
+            return single && targets[0] is InstancedNodeAdapter ? null : "Select one node an instance brought in.";
+        }
+
+        if (this.GetInstancedRefusal(kind, context) is { } refusal)
+        {
+            return refusal;
+        }
         if (kind is SceneExplorerCommandKind.LookThroughCamera or SceneExplorerCommandKind.PilotCamera or SceneExplorerCommandKind.AlignCameraToView)
         {
             return this.GetCameraActionDisabledReason(kind, nodes, single);
@@ -433,7 +451,7 @@ public partial class SceneExplorerViewModel
             return "The scene root cannot be edited by this action.";
         }
 
-        if (workspace && (this.interaction is null || nodes.Length != targets.Count || nodes.Length == 0))
+        if (workspace && (this.interaction is null || rows.Length != targets.Count || rows.Length == 0))
         {
             return "Editor state requires a node-only selection and the workspace service.";
         }
@@ -489,13 +507,13 @@ public partial class SceneExplorerViewModel
 
         if (kind is SceneExplorerCommandKind.Show or SceneExplorerCommandKind.Unlock)
         {
-            foreach (var row in nodes)
+            foreach (var row in rows)
             {
-                for (var parent = row.AttachedObject.Hierarchy.Parent; parent is not null; parent = parent.Hierarchy.Parent)
+                foreach (var parent in AncestorsOf(context.Authoring.Scene, row.Reference))
                 {
-                    if (kind == SceneExplorerCommandKind.Show ? this.interaction!.IsHidden(parent.Id) : this.interaction!.IsLocked(NodeReference.To(parent.Id)))
+                    if (kind == SceneExplorerCommandKind.Show ? this.interaction!.IsHidden(parent) : this.interaction!.IsLocked(parent))
                     {
-                        return $"{(kind == SceneExplorerCommandKind.Show ? "Hidden" : "Locked")} by {parent.Metadata.Name}.";
+                        return $"{(kind == SceneExplorerCommandKind.Show ? "Hidden" : "Locked")} by {this.projection.GetRow(parent)?.Label ?? parent.ToString()}.";
                     }
                 }
             }
@@ -536,6 +554,45 @@ public partial class SceneExplorerViewModel
         return null;
     }
 
+    /// <summary>
+    /// Refuses a structural command whose targets or selection hold a node an instance brought in, or that would paste
+    /// under one, as a whole (scene instances 6.2, 8.3).
+    /// </summary>
+    /// <param name="kind">The command.</param>
+    /// <param name="context">The captured context.</param>
+    /// <returns>The refusal, naming the node and its source; otherwise, <see langword="null"/>.</returns>
+    private string? GetInstancedRefusal(SceneExplorerCommandKind kind, CapturedExplorerContext context)
+    {
+        if (kind == SceneExplorerCommandKind.Copy)
+        {
+            return context.Targets.Any(static row => row is InstancedNodeAdapter)
+                ? "Copying a node an instance brought in is not available."
+                : null;
+        }
+
+        var structural = kind is SceneExplorerCommandKind.NewNode or SceneExplorerCommandKind.NewFolder or SceneExplorerCommandKind.Rename
+            or SceneExplorerCommandKind.Cut or SceneExplorerCommandKind.Delete or SceneExplorerCommandKind.Paste
+            or SceneExplorerCommandKind.PasteAsChild or SceneExplorerCommandKind.RemoveFromFolder or SceneExplorerCommandKind.MoveToSceneRoot;
+        if (!structural)
+        {
+            return null;
+        }
+
+        // A command over the selection covers its rows that are not realized too.
+        IEnumerable<NodeReference> nodes = context.Targets.OfType<NodeRowAdapter>().Select(static row => row.Reference);
+        if (context.Targets.Count > 1 || (context.Targets.Count == 1 && context.SelectedRows.Contains(context.Targets[0])))
+        {
+            nodes = nodes.Concat(context.Selection.SelectedNodes);
+        }
+
+        if (kind == SceneExplorerCommandKind.Paste && context.Destination is InstancedNodeAdapter destination)
+        {
+            nodes = nodes.Append(destination.Reference);
+        }
+
+        return InstanceRules.RefusesStructure(context.Authoring.Scene, nodes, node => (this.projection.GetRow(node) as InstancedNodeAdapter)?.Name)?.Message;
+    }
+
     private ITreeItem? FindLockedContextRow(ITreeItem row)
     {
         if (row is SceneNodeAdapter node)
@@ -544,6 +601,13 @@ public partial class SceneExplorerViewModel
             {
                 return this.projection.GetNode(lockOwner.Id) ?? row;
             }
+        }
+
+        if (row is InstancedNodeAdapter instanced && this.Scene?.AttachedObject is { } scene)
+        {
+            return this.interaction?.GetLockOwner(scene, instanced.Reference) is { } lockOwner
+                ? this.projection.GetRow(lockOwner) ?? row
+                : null;
         }
 
         if (row is FolderAdapter)
@@ -582,6 +646,7 @@ public partial class SceneExplorerViewModel
     private async Task ExecuteContextActionCoreAsync(SceneExplorerCommandKind kind, CapturedExplorerContext context)
     {
         var nodes = context.Targets.OfType<SceneNodeAdapter>().Select(static row => row.AttachedObject.Id).ToArray();
+        var references = context.Targets.OfType<NodeRowAdapter>().Select(static row => row.Reference).ToArray();
         var folders = context.Targets.OfType<FolderAdapter>().Select(static row => row.Id).ToArray();
         var target = context.Targets.FirstOrDefault();
         var selectionGeneration = this.selectionApplyGeneration;
@@ -647,23 +712,26 @@ public partial class SceneExplorerViewModel
                 break;
             case SceneExplorerCommandKind.Hide:
             case SceneExplorerCommandKind.Show:
-                result = await authoring.ExecuteAsync(new SetEditorHidden(nodes, kind == SceneExplorerCommandKind.Hide)).ConfigureAwait(true);
+                result = await authoring.ExecuteAsync(new SetEditorHidden(references, kind == SceneExplorerCommandKind.Hide)).ConfigureAwait(true);
                 break;
             case SceneExplorerCommandKind.Lock:
             case SceneExplorerCommandKind.Unlock:
-                foreach (var id in nodes)
+                foreach (var reference in references)
                 {
-                    this.interaction!.SetLocked(NodeReference.To(id), kind == SceneExplorerCommandKind.Lock);
+                    this.interaction!.SetLocked(reference, kind == SceneExplorerCommandKind.Lock);
                 }
 
                 break;
+            case SceneExplorerCommandKind.SelectInstance:
+                _ = await this.SetSelectedNodes([((InstancedNodeAdapter)target!).Reference.Node], focusPrimary: true).ConfigureAwait(true);
+                return;
             case SceneExplorerCommandKind.LookThroughCamera:
             case SceneExplorerCommandKind.PilotCamera:
             case SceneExplorerCommandKind.AlignCameraToView:
                 await this.RequestCameraCommandAsync(kind, nodes[0]).ConfigureAwait(true);
                 return;
             case SceneExplorerCommandKind.ShowAll:
-                result = await authoring.ExecuteAsync(new SetEditorHidden([.. this.projection.Nodes.Select(static row => row.AttachedObject.Id)], hidden: false)).ConfigureAwait(true);
+                result = await authoring.ExecuteAsync(new SetEditorHidden([.. this.interaction!.HiddenNodes()], hidden: false)).ConfigureAwait(true);
                 break;
         }
 

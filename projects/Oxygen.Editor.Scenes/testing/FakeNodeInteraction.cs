@@ -17,16 +17,16 @@ public sealed class FakeNodeInteraction : ISceneNodeInteraction
 {
     private readonly Lock gate = new();
     private readonly HashSet<NodeReference> locked = [];
-    private readonly HashSet<NodeId> hidden = [];
+    private readonly HashSet<NodeReference> hidden = [];
 
     /// <summary>Gets the hidden nodes, sorted, so two reads compare by value.</summary>
-    public IReadOnlyList<NodeId> Hidden
+    public IReadOnlyList<NodeReference> Hidden
     {
         get
         {
             lock (this.gate)
             {
-                return [.. this.hidden.OrderBy(static id => id.Value)];
+                return [.. this.hidden.OrderBy(static node => node.ToString(), StringComparer.Ordinal)];
             }
         }
     }
@@ -62,16 +62,16 @@ public sealed class FakeNodeInteraction : ISceneNodeInteraction
     {
         lock (this.gate)
         {
-            this.hidden.UnionWith(nodes);
+            this.hidden.UnionWith(nodes.Select(NodeReference.To));
         }
     }
 
     /// <inheritdoc/>
-    public bool IsHidden(NodeId nodeId)
+    public bool IsHidden(NodeReference node)
     {
         lock (this.gate)
         {
-            return this.hidden.Contains(nodeId);
+            return this.hidden.Contains(node);
         }
     }
 
@@ -104,11 +104,11 @@ public sealed class FakeNodeInteraction : ISceneNodeInteraction
         => SceneNodeInteraction.FindLockOwner(scene, node, this.IsLocked);
 
     /// <inheritdoc/>
-    public void SetHidden(NodeId nodeId, bool isHidden)
+    public void SetHidden(NodeReference node, bool isHidden)
     {
         lock (this.gate)
         {
-            _ = isHidden ? this.hidden.Add(nodeId) : this.hidden.Remove(nodeId);
+            _ = isHidden ? this.hidden.Add(node) : this.hidden.Remove(node);
         }
     }
 }

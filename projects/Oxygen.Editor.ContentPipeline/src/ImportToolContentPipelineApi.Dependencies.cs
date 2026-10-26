@@ -9,15 +9,11 @@ using Oxygen.Managed.Core.Compatibility;
 namespace Oxygen.Editor.ContentPipeline;
 
 /// <summary>Uses the installed Inspector under the same native ownership boundary as cooking.</summary>
-public sealed partial class ImportToolContentPipelineApi : ICookedDependencyInspector, ICookedAssetKeyProvider, ICookedGeometryInspector, ICookedSceneInspector, ICookedScriptInspector
+public sealed partial class ImportToolContentPipelineApi : ICookedDependencyInspector, ICookedAssetKeyProvider, ICookedGeometryInspector, ICookedScriptInspector
 {
     /// <inheritdoc />
     public Task<CookedGeometryReport> InspectGeometryAsync(string operationRoot, string cookedRoot, string virtualPath, CancellationToken cancellationToken, NativeArtifactLease? artifacts = null)
         => this.RunInspectorAsync(operationRoot, ["geometries", Path.GetFullPath(cookedRoot), "--virtual-path", virtualPath], request: null, CookedGeometryReport.Parse, artifacts, cancellationToken);
-
-    /// <inheritdoc />
-    public Task<CookedSceneReport> InspectScenesAsync(string operationRoot, string cookedRoot, string virtualPath, CancellationToken cancellationToken, NativeArtifactLease? artifacts = null)
-        => this.RunInspectorAsync(operationRoot, ["scenes", Path.GetFullPath(cookedRoot), "--virtual-path", virtualPath], request: null, CookedSceneReport.Parse, artifacts, cancellationToken);
 
     /// <inheritdoc />
     public Task<CookedScriptReport> InspectScriptsAsync(string operationRoot, string cookedRoot, string virtualPath, CancellationToken cancellationToken, NativeArtifactLease? artifacts = null)

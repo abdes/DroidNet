@@ -27,6 +27,11 @@ public partial class ThumbnailTemplateSelector : DataTemplateSelector
     public DataTemplate? EntityTemplate { get; set; }
 
     /// <summary>
+    ///     Gets or sets the template used for instance roots: the entity glyph with the link badge.
+    /// </summary>
+    public DataTemplate? InstanceRootTemplate { get; set; }
+
+    /// <summary>
     ///     Gets or sets the template used for folders.
     /// </summary>
     public DataTemplate? FolderTemplate { get; set; }
@@ -44,7 +49,8 @@ public partial class ThumbnailTemplateSelector : DataTemplateSelector
         => item switch
         {
             SceneAdapter => this.SceneTemplate,
-            SceneNodeAdapter => this.EntityTemplate,
+            SceneNodeAdapter { IsInstanceRoot: true } => this.InstanceRootTemplate,
+            SceneNodeAdapter or InstancedNodeAdapter => this.EntityTemplate,
             FolderAdapter => this.FolderTemplate,
             _ => null,
         };

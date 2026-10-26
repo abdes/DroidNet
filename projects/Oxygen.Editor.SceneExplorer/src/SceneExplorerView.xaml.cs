@@ -60,7 +60,9 @@ public sealed partial class SceneExplorerView
         Justification = "Search is an async void UI event boundary; failures are logged instead of becoming unhandled dispatcher exceptions.")]
     private async void SearchBox_TextChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)
     {
-        if (args.Reason != AutoSuggestionBoxTextChangeReason.UserInput || this.ViewModel is not { } model)
+        // The box can raise a change it queued before the view was unloaded and disposed: only a loaded view's model
+        // searches, and the view's own properties are not read.
+        if (args.Reason != AutoSuggestionBoxTextChangeReason.UserInput || this.subscribedViewModel is not { } model)
         {
             return;
         }
@@ -92,11 +94,14 @@ public sealed partial class SceneExplorerView
             model.FindRequested += this.ViewModel_FindRequested;
             model.ContextMenuInvalidated += this.ViewModel_ContextMenuInvalidated;
         }
+
+        this.SearchBox.TextChanged += this.SearchBox_TextChanged;
     }
 
     private void SceneExplorerView_Unloaded(object sender, RoutedEventArgs e)
     {
         this.CloseContextMenu();
+        this.SearchBox.TextChanged -= this.SearchBox_TextChanged;
         if (this.subscribedViewModel is { } model)
         {
             model.RenameRequested -= this.ViewModel_RenameRequested;

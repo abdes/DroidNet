@@ -28,7 +28,7 @@ public sealed partial class SceneRowActions : UserControl
         new PropertyMetadata(defaultValue: null));
 
     private DynamicTreeItem? row;
-    private SceneNodeAdapter? item;
+    private NodeRowAdapter? item;
     private bool hovered;
 
     /// <summary>Initializes a new instance of the <see cref="SceneRowActions"/> class.</summary>
@@ -83,7 +83,7 @@ public sealed partial class SceneRowActions : UserControl
             }
         }
 
-        this.ObserveItem(this.DataContext as SceneNodeAdapter);
+        this.ObserveItem(this.DataContext as NodeRowAdapter);
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs args)
@@ -105,10 +105,10 @@ public sealed partial class SceneRowActions : UserControl
     private void OnDataContextChanged(FrameworkElement sender, DataContextChangedEventArgs args)
     {
         _ = sender;
-        this.ObserveItem(this.IsLoaded ? args.NewValue as SceneNodeAdapter : null);
+        this.ObserveItem(this.IsLoaded ? args.NewValue as NodeRowAdapter : null);
     }
 
-    private void ObserveItem(SceneNodeAdapter? adapter)
+    private void ObserveItem(NodeRowAdapter? adapter)
     {
         if (this.item is { } previous)
         {

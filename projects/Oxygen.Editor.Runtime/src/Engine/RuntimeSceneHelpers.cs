@@ -2,15 +2,18 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using Oxygen.Managed.Core;
+using Oxygen.Editor.World;
 
 namespace Oxygen.Editor.Runtime.Engine;
 
 /// <summary>The workspace state the editing views' light and camera helpers follow.</summary>
-/// <param name="HiddenNodeIds">Workspace-hidden nodes: no icon or helper, and not pickable.</param>
-/// <param name="LockedNodeIds">Locked nodes: their helpers' handles cannot be dragged.</param>
+/// <param name="HiddenNodes">
+/// Workspace-hidden nodes, which may be nodes an instance brought in: no icon or helper for them or their descendants,
+/// and not pickable.
+/// </param>
+/// <param name="LockedNodes">Locked nodes, which may be nodes an instance brought in: their helpers' handles cannot be dragged.</param>
 /// <param name="DisplayScale">Physical pixels per device-independent pixel, which sizes icons and handles.</param>
 public sealed record RuntimeSceneHelpers(
-    IReadOnlyList<NodeId> HiddenNodeIds,
-    IReadOnlyList<NodeId> LockedNodeIds,
+    IReadOnlyList<NodeReference> HiddenNodes,
+    IReadOnlyList<NodeReference> LockedNodes,
     float DisplayScale);

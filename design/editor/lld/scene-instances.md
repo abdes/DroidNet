@@ -2,7 +2,7 @@
 
 Status: **design for owner review** (ED-M09 item 14, #77 slice 77.8).
 
-Last Updated: 2026-10-25
+Last Updated: 2026-10-26
 
 Summary: a node of a scene can **instance** an imported model (`Car.glb`) or
 another authored scene (`Watchtower.oscene`). The instanced hierarchy appears
@@ -990,12 +990,14 @@ starts through the first camera, with an issue.
 **What.** The Inspector reports a cooked scene composed: every node, owned and
 instanced, with its values and the scene each value comes from.
 
-**Why.** The editor shows instanced nodes and their source values (sections 6.2
-and 6.3) without decoding cooked bytes. The Inspector's `scenes` verb
-(`Cooker/Tools/Inspector/SceneMetadata.cpp`) reports each scene alone: per node
+**Why.** A cooked scene's composed values must be inspectable outside the
+editor, from the tools and in tests. The editor itself reads an instance's
+hierarchy from the mounted descriptors through the engine (section 8.2), never
+by running the Inspector, so the report has tools and tests as its only
+consumers. Before NGN11, the Inspector's `scenes` verb
+(`Cooker/Tools/Inspector/SceneMetadata.cpp`) reported each scene alone: per node
 its index, ID, name, parent and flags, and the perspective cameras; no
-transform, no other component, no instance. No editor code reads it yet, so it
-changes with no compatibility to keep.
+transform, no other component, no instance.
 
 **How.**
 
@@ -1489,46 +1491,50 @@ load; duplicate, copy and paste and undo carry the changes; relocating
 
 ### 8.2 Structure reading (ED2)
 
-**What.** For any source, the editor reads its composed structure from the
-cooked content: every instanced node by node path, with its name, parent,
-components and the value of each changeable property with the scene that
-supplies it.
+**What.** For any source, the editor reads what an instance of it contains:
+every instanced node by node path, with its name and parent, and the scene it
+instances when it is a nested instance root. Values are read per selected node,
+not per source (section 8.5).
 
 **Why.** The Scene Explorer, the inspector, selection, swap and kept changes
-all need to know what an instance contains (sections 6.2 to 6.5), and the
-engine owns composition (section 7.6). The editor already reads geometry
-surfaces this way (`IGeometrySurfaceProvider`,
-`Oxygen.Editor.ContentPipeline/src/Inspection/IGeometrySurfaceProvider.cs:11`);
-it has nothing for scenes.
+all need to know what an instance contains (sections 6.2 to 6.5). Structure is
+the source's own: an instance changes values only (SI-5), so the hierarchy is
+in the cooked scene descriptors and nothing has to be composed. A model can be
+gigabytes of geometry; its hierarchy is a few records per node.
 
 **How.**
 
+- The engine reads it: `IAssetLoader::ReadMountedSceneHierarchy(key)`
+  (`Oxygen.Engine/src/Oxygen/Content/IAssetLoader.h`), beside
+  `EnumerateMountedScenes` in `SceneCatalogQueryService`, reads the scene's
+  descriptor through the mounted source that provides its key, parse-only,
+  then each scene its `SceneInstanceRecord`s name, once per key. It loads no
+  geometry, material, texture or other dependency and caches nothing. An
+  instanced scene that is not mounted, a cycle or an instance record naming no
+  node is an issue of the hierarchy, which keeps every other node.
+- Interop's `ReadSceneHierarchyCommand` runs it on the engine thread for a
+  virtual path; `OxygenWorld.ReadSceneHierarchyAsync` and the runtime's
+  `IRuntimeWorldCommands.ReadSceneHierarchyAsync` carry it to the editor for a
+  scene activation, as node observations are.
 - `ISceneStructureProvider.ReadAsync(project, source, cancellationToken)` in
-  `Oxygen.Editor.ContentPipeline/src/Inspection/`, implemented by
-  `ContentPipelineService` beside `GeometryMetadata`, returns a
-  `SceneStructure`, or none when the source is not cooked or its cook is stale.
-- A model source maps to its scene product (`Car.glb` to `Car.glb/Car.oscene`)
-  through `AssetFileTypes.SceneProductOf`, beside `ContainerOf`
-  (`Oxygen.Managed.Assets/src/AssetFileTypes.cs:189`) in the module shared
-  with the engine's tools, the one place that names products.
-- It runs the Inspector's `scenes <cookedRoot> --virtual-path <vp>` through
-  `ImportToolContentPipelineApi`, as `geometries` runs today
-  (`ImportToolContentPipelineApi.Dependencies.cs:12-62`), and validates the
-  report against its embedded copy of `oxygen.cooked-scenes.v2`, as
-  `CookedGeometryReport` does.
+  `Oxygen.Editor.ContentPipeline/src/Inspection/` is implemented by Live
+  Preview's `ScenePreview`, which reads through the activation that shows the
+  active scene and returns a `SceneStructure`, or none while no scene is shown
+  or the source is not mounted. A model source maps to its scene product
+  (`Car.glb` to `Car.glb/Car.oscene`) through `AssetFileTypes.SceneProductOf`.
+- The provider's `Changed` event fires when a document becomes ready and
+  whenever the engine mounts the project's content again, as after a cook or a
+  reimport: a scene shown before its content was mounted stays ready while the
+  content arrives. A view reads its sources again then.
 - `SceneStructure` holds `StructureNode`s by `NodePath`: name, parent path,
-  component kinds, each changeable property's value in schema units with its
-  supplying scene, and the source of each nested instance root. It also holds
-  the report's unresolved changes.
-- A per-session cache keys structures by source and cooked index digest, and a
-  source's publication invalidates its entry, so every open view reads one
-  copy.
-- While a newly placed source's first cook runs, there is no structure yet:
-  the instance root shows "Cooking…", its changes stay as they are, and the
-  views fill when the cook publishes.
+  defining scene and the scene each nested instance root instances, and the
+  hierarchy's issues.
+- While a newly placed source's first cook runs it is not mounted: the instance
+  root shows no rows until the cook mounts it.
 
-**Done when.** The structure of a two-level nested scene matches the report;
-republishing the source refreshes it; an uncooked source yields none.
+**Done when.** The structure of a two-level nested scene lists every node by
+its path; remounting after a cook reads it again; a source that is not mounted
+yields none; reading a model reads no geometry.
 
 ### 8.3 Instance edits (ED3)
 
@@ -1616,11 +1622,12 @@ nodes would double every section and let them drift.
 
 **How.**
 
-- The structure materializes, per selected instanced node, **transient
-  components**: World component instances (`TransformComponent`,
-  `GeometryComponent`, a camera, a light) holding the effective values, with
-  this scene's changes as their overrides. The existing sections bind to them
-  unchanged.
+- Per selected instanced node, the engine reads its effective values from the
+  mounted descriptors, as it reads the hierarchy (section 8.2, which carries
+  structure only), and they materialize as **transient components**: World
+  component instances (`TransformComponent`, `GeometryComponent`, a camera, a
+  light) holding the effective values, with this scene's changes as their
+  overrides. The existing sections bind to them unchanged.
 - Sections write through a `ComponentWriteTarget`: `Owned(NodeId)` keeps
   today's edits; `Instanced(root, path)` turns every property write into an
   `OverrideWrite` with the node path (ED3), so a section never knows which it

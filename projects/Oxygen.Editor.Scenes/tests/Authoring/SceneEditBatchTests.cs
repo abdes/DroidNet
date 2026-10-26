@@ -10,6 +10,7 @@ using Oxygen.Editor.Scenes.Edits.Hierarchy;
 using Oxygen.Editor.Scenes.Edits.Layout;
 using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.Scenes.Tests.TestSupport;
+using Oxygen.Editor.World;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Core;
 
@@ -165,7 +166,7 @@ public sealed class SceneEditBatchTests
     {
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
         fixture.Interaction!.Hide(SampleScene.Cam);
-        var batch = new SceneEditBatch("Nothing to do", [new RenameNode(SampleScene.A, "A"), new SetEditorHidden([SampleScene.Cam], hidden: true)]);
+        var batch = new SceneEditBatch("Nothing to do", [new RenameNode(SampleScene.A, "A"), new SetEditorHidden([NodeReference.To(SampleScene.Cam)], hidden: true)]);
         var before = fixture.Snapshot();
 
         var result = await fixture.Authoring.ExecuteAsync(batch).ConfigureAwait(false);
@@ -195,8 +196,8 @@ public sealed class SceneEditBatchTests
     public void ChangesDocument(Mix mix, bool expected)
     {
         ISceneEdit[] edits = mix == Mix.AllHide
-            ? [new SetEditorHidden([SampleScene.Cam], hidden: true), new SetEditorHidden([SampleScene.Sun], hidden: true)]
-            : [new SetEditorHidden([SampleScene.Cam], hidden: true), new RenameNode(SampleScene.B, "Box")];
+            ? [new SetEditorHidden([NodeReference.To(SampleScene.Cam)], hidden: true), new SetEditorHidden([NodeReference.To(SampleScene.Sun)], hidden: true)]
+            : [new SetEditorHidden([NodeReference.To(SampleScene.Cam)], hidden: true), new RenameNode(SampleScene.B, "Box")];
         var batch = new SceneEditBatch("Mixed", edits);
 
         var changesDocument = batch.ChangesDocument;

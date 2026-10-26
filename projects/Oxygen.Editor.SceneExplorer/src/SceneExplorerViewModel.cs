@@ -13,6 +13,7 @@ using DroidNet.Routing;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Xaml;
+using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scenes;
@@ -62,6 +63,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     private readonly Oxygen.Editor.Shell.Windows.IPlacementService? placement;
     private readonly ISceneViews? views;
     private readonly ISceneAvailability? availability;
+    private readonly ISceneStructureProvider? structures;
     private readonly IDisposable? commandRegistration;
     private readonly SceneExplorerProjection projection = new();
     private readonly SemaphoreSlim searchGate = new(1, 1);
@@ -146,6 +148,10 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     ///     Optional clipboard of the session's scene nodes, which copies and cuts stage and pastes read. Without it the
     ///     explorer keeps a clipboard of its own.
     /// </param>
+    /// <param name="structures">
+    ///     Optional reader of what an instance's source contains, whose nodes the explorer shows under each instance
+    ///     root. Without it an instance root shows no instanced rows.
+    /// </param>
     public SceneExplorerViewModel(
         IRouter router,
         IDocumentArea documentArea,
@@ -162,10 +168,13 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         ISceneViews? views = null,
         ISceneAvailability? availability = null,
         ICommandService? commands = null,
-        ISceneNodeClipboard? clipboard = null)
+        ISceneNodeClipboard? clipboard = null,
+        ISceneStructureProvider? structures = null)
         : base(loggerFactory)
     {
         this.clipboard = clipboard ?? new SceneNodeClipboard();
+        this.structures = structures;
+        structures?.Changed += this.OnStructuresChanged;
         this.views = views;
         this.availability = availability;
         this.relocation = relocation;
@@ -380,6 +389,8 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         {
             SceneAdapter => await this.RenameSceneAssetAsync(trimmed).ConfigureAwait(true),
             SceneNodeAdapter node => Renamed(await authoring.ExecuteAsync(new RenameNode(node.AttachedObject.Id, trimmed)).ConfigureAwait(true)),
+            InstancedNodeAdapter instanced when InstanceRules.RefusesStructure(authoring.Scene, [instanced.Reference], _ => instanced.Name) is { } refusal
+                => TreeItemRenameResult.Rejected(refusal.Message),
             FolderAdapter folder => await RenameFolderAsync(authoring, folder, trimmed).ConfigureAwait(true),
             _ => TreeItemRenameResult.Rejected("The rename was rejected."),
         };
@@ -485,6 +496,17 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             return TreeDropResult.Rejected;
         }
 
+        // Nodes an instance brought in are neither moved nor given children (scene instances 6.2).
+        var instanced = request.Items.Append(request.Parent).OfType<InstancedNodeAdapter>().ToList();
+        if (InstanceRules.RefusesStructure(
+                authoring.Scene,
+                instanced.Select(static row => row.Reference),
+                reference => instanced.Find(row => row.Reference == reference)?.Name) is { } refusal)
+        {
+            this.ReportInstancedStructureRefused(refusal);
+            return TreeDropResult.Rejected;
+        }
+
         var folderIds = request.Items.OfType<FolderAdapter>().Select(folder => folder.Id).ToList();
         var nodeIds = request.Items.OfType<SceneNodeAdapter>().Select(adapter => adapter.AttachedObject.Id).ToList();
         if (this.CreateDropEdit(request, authoring, nodeIds, folderIds) is not { } edit)
@@ -536,10 +558,10 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
 
         var hasScene = items.Any(static item => item is SceneAdapter);
         var hasFolder = items.Any(static item => item is FolderAdapter);
-        var hasNode = items.Any(static item => item is SceneNodeAdapter);
+        var hasNode = items.Any(static item => item is NodeRowAdapter);
         var kind = SceneSelectionContext.Classify(hasScene, hasFolder, hasNode);
 
-        var nodes = items.OfType<SceneNodeAdapter>().Select(adapter => NodeReference.To(adapter.AttachedObject.Id)).ToList();
+        var nodes = items.OfType<NodeRowAdapter>().Select(static row => row.Reference).ToList();
         var folderIds = items.OfType<FolderAdapter>().Select(folder => folder.Id).ToList();
 
         // The explicit active row is the primary identity; selection order is only the fallback
@@ -550,7 +572,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             kind,
             nodes,
             folderIds,
-            primary is SceneNodeAdapter primaryNode ? NodeReference.To(primaryNode.AttachedObject.Id) : null,
+            primary is NodeRowAdapter primaryNode ? primaryNode.Reference : null,
             primary is FolderAdapter primaryFolder ? primaryFolder.Id : null);
     }
 
@@ -594,6 +616,8 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             {
                 service.StateChanged -= this.OnInteractionStateChanged;
             }
+
+            this.structures?.Changed -= this.OnStructuresChanged;
 
             this.commandRegistration?.Dispose();
             if (this.availability is { } source)
@@ -717,9 +741,9 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             return targets.FirstOrDefault(target => target is FolderAdapter folder && folder.Id == folderId);
         }
 
-        if (context.OwnedPrimaryNodeId is { } nodeId)
+        if (context.PrimaryNode is { } node)
         {
-            return targets.FirstOrDefault(target => target is SceneNodeAdapter node && node.AttachedObject.Id == nodeId);
+            return targets.FirstOrDefault(target => target is NodeRowAdapter row && row.Reference == node);
         }
 
         return null;
@@ -733,7 +757,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     {
         for (var parent = node.Hierarchy.Parent; parent is not null; parent = parent.Hierarchy.Parent)
         {
-            if (service.IsHidden(parent.Id))
+            if (service.IsHidden(NodeReference.To(parent.Id)))
             {
                 return true;
             }
@@ -1055,6 +1079,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         await this.WithProjectionSyncAsync(async () =>
         {
             await this.InitializeRootAsync(this.Scene, skipRoot: false).ConfigureAwait(true);
+            this.AddInstancedRows(this.Scene);
             this.projection.Rebuild(this.Scene);
 
             // Reload what a previous session stored before the first rows are presented, otherwise
@@ -1072,6 +1097,9 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             this.selectionService.GetContext(this.SceneDocumentId),
             forcePublish: true).ConfigureAwait(true);
         this.ReleaseStaleClipboard(previousScene, loadedScene);
+
+        // The instances' rows come once their sources are read; the scene does not wait for them.
+        _ = this.ReadInstanceStructuresAsync();
     }
 
     // A loaded scene starts a fresh view session: a previous scene's transient search
@@ -1355,7 +1383,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
                 return false;
             }
 
-            if (item is not SceneNodeAdapter and not FolderAdapter)
+            if (item is not NodeRowAdapter and not FolderAdapter)
             {
                 return false;
             }
@@ -1590,7 +1618,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
 
         IReadOnlyList<NodeReference>? nodes = args.TreeItem switch
         {
-            SceneNodeAdapter node => [NodeReference.To(node.AttachedObject.Id)],
+            NodeRowAdapter node => [node.Reference],
             SceneAdapter => [],
             _ => null,
         };
@@ -1681,7 +1709,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         {
             // The Inspector asks to inspect a node: a search that hides its row ends, and the row takes the focus.
             var inspecting = string.Equals(args.Source, InspectorSelectionSource, StringComparison.Ordinal)
-                && args.Context.OwnedNodeIds.Any(id => this.projection.GetNode(id) is not null);
+                && this.RowsOf(args.Context.SelectedNodes).Any();
             if (inspecting)
             {
                 await this.ClearSearchAsync().ConfigureAwait(true);
@@ -1728,7 +1756,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
 
         // True when every identity the context names resolves to one of the applied rows.
         var fullyResolved =
-            context.SelectedNodes.Count == targets.OfType<SceneNodeAdapter>().Count()
+            context.SelectedNodes.Count == targets.OfType<NodeRowAdapter>().Count()
             && context.SelectedFolderIds.Count == targets.OfType<FolderAdapter>().Count()
             && (context.Kind != SceneSelectionKind.Scene || targets.OfType<SceneAdapter>().Any());
 
@@ -1759,9 +1787,9 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             targets.Add(sceneAdapter);
         }
 
-        foreach (var nodeId in context.OwnedNodeIds)
+        foreach (var node in context.SelectedNodes)
         {
-            if (this.projection.GetNode(nodeId) is { } nodeAdapter)
+            if (this.projection.GetRow(node) is { } nodeAdapter)
             {
                 await this.RevealRowAsync(nodeAdapter).ConfigureAwait(true);
                 if (this.ShownItems.Contains(nodeAdapter))
@@ -1886,7 +1914,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         }
 
         if (args.Changes.Any(static change => change is SceneChange.NodesAdded or SceneChange.NodesRemoved or SceneChange.NodesPlaced
-            or SceneChange.NodeRenamed or SceneChange.LayoutChanged))
+            or SceneChange.NodeRenamed or SceneChange.LayoutChanged) || this.ChangesInstanceRoots(args.Changes))
         {
             _ = this.RefreshProjectionAsync();
         }
@@ -2092,6 +2120,8 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         // Replacing adapters must not publish intermediate empty selection over the store.
         await this.WithProjectionSyncAsync(async () =>
         {
+            // The rebuild replaces every node row: the expanded ones are expanded again, parents before children.
+            NodeReference[] expanded = [.. this.ShownItems.OfType<NodeRowAdapter>().Where(static row => row.IsExpanded).Select(static row => row.Reference)];
             var expandedFolderIds = sceneAdapter.GetExpandedFolderIds();
             await sceneAdapter.ReloadChildrenAsync(
                 expandedFolderIds,
@@ -2099,6 +2129,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
                 transientlyExpandedFolderIds: sceneAdapter.GetExpandedFolderIds(transientOnly: true)).ConfigureAwait(true);
 
             await this.InitializeRootAsync(sceneAdapter, skipRoot: false).ConfigureAwait(true);
+            this.AddInstancedRows(sceneAdapter);
             this.projection.Rebuild(sceneAdapter);
             this.ApplyWorkspaceInteractionState();
             _ = this.selectionService.Reconcile(this.SceneDocumentId, sceneAdapter.AttachedObject, sceneAdapter.Layout);
@@ -2112,6 +2143,8 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
                     await this.ExpandItemAsync(node).ConfigureAwait(true);
                 }
             }
+
+            await this.RestoreExpansionAsync(expanded).ConfigureAwait(true);
         }).ConfigureAwait(true);
 
         // A foreign writer may change selection while the refill awaits. Restore the latest
@@ -2120,6 +2153,9 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         {
             await this.ApplySelectionContextAsync(this.selectionService.GetContext(this.SceneDocumentId)).ConfigureAwait(true);
         }
+
+        // An edit may have placed an instance of a source not read yet.
+        _ = this.ReadInstanceStructuresAsync();
     }
 
     /// <summary>
@@ -2161,12 +2197,26 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         foreach (var node in this.projection.Nodes)
         {
             var nodeId = node.AttachedObject.Id;
-            var isExplicitlyHidden = service.IsHidden(nodeId);
+            var isExplicitlyHidden = service.IsHidden(NodeReference.To(nodeId));
             node.IsHiddenInEditor = isExplicitlyHidden;
             node.IsEffectivelyHiddenInEditor = isExplicitlyHidden || HasHiddenSceneAncestor(node.AttachedObject, service);
+
+            // A hidden node's row dims like the content the scene does not own.
+            node.IsDimmed = node.IsEffectivelyHiddenInEditor;
             if (!node.IsRoot)
             {
                 node.IsLocked = service.IsLocked(NodeReference.To(nodeId));
+            }
+        }
+
+        // A node an instance brought in is hidden through its instanced ancestors and its instance root's ancestry too.
+        if (this.Scene?.AttachedObject is { } scene)
+        {
+            foreach (var row in this.projection.InstancedNodes)
+            {
+                row.IsHiddenInEditor = service.IsHidden(row.Reference);
+                row.IsEffectivelyHiddenInEditor = row.IsHiddenInEditor || AncestorsOf(scene, row.Reference).Any(service.IsHidden);
+                row.IsLocked = service.IsLocked(row.Reference);
             }
         }
 
@@ -2291,16 +2341,16 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             return;
         }
 
-        var ids = this.ResolveWorkspaceTargetIds(anchor);
-        if (ids.Count == 0 || this.CurrentAuthoring() is not { } authoring)
+        var nodes = this.ResolveWorkspaceTargets(anchor);
+        if (nodes.Count == 0 || this.CurrentAuthoring() is not { } authoring)
         {
             return;
         }
 
         // One intent, one undo step: the batch target is decided from the first row so a mixed
         // selection hides or shows uniformly, the way Delete and Reparent batches already do.
-        var hide = !service.IsHidden(ids[0]);
-        _ = await authoring.ExecuteAsync(new SetEditorHidden(ids, hide)).ConfigureAwait(true);
+        var hide = !service.IsHidden(nodes[0]);
+        _ = await authoring.ExecuteAsync(new SetEditorHidden(nodes, hide)).ConfigureAwait(true);
     }
 
     /// <summary>Locks or unlocks the anchor row, or the whole selection, against editing.</summary>
@@ -2314,7 +2364,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             return;
         }
 
-        foreach (var node in this.ResolveWorkspaceTargetIds(anchor).Select(NodeReference.To))
+        foreach (var node in this.ResolveWorkspaceTargets(anchor))
         {
             service.SetLocked(node, !service.IsLocked(node));
         }
@@ -2333,7 +2383,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             return;
         }
 
-        var hidden = service.HiddenNodeIds();
+        var hidden = service.HiddenNodes();
         if (hidden.Count == 0)
         {
             return;
@@ -2352,15 +2402,36 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     /// otherwise the current selection. Folder rows carry no node identity and are skipped.
     /// </summary>
     /// <param name="anchor">The invoked row, or <see langword="null"/> for the selection.</param>
-    /// <returns>The stable authored ids to toggle.</returns>
-    private IReadOnlyList<NodeId> ResolveWorkspaceTargetIds(ITreeItem? anchor)
+    /// <returns>The references of the nodes to toggle, which may be nodes an instance brought in.</returns>
+    private IReadOnlyList<NodeReference> ResolveWorkspaceTargets(ITreeItem? anchor)
     {
-        if (anchor is SceneNodeAdapter single)
+        if (anchor is NodeRowAdapter single)
         {
-            return [single.AttachedObject.Id];
+            return [single.Reference];
         }
 
-        return [.. this.GetSelectedItems().OfType<SceneNodeAdapter>().Select(node => node.AttachedObject.Id)];
+        return [.. this.GetSelectedItems().OfType<NodeRowAdapter>().Select(static node => node.Reference)];
+    }
+
+    /// <summary>Reports a drop refused because it moves a node an instance brought in, or gives one a child.</summary>
+    /// <param name="refusal">The <see cref="SceneEditCodes.InstancedStructure"/> refusal.</param>
+    private void ReportInstancedStructureRefused(SceneDiagnostic refusal)
+    {
+        this.LogInstancedDropRefused(refusal.Node);
+        if (this.operationResults is not { } publisher || this.statusReducer is not { } reducer)
+        {
+            return;
+        }
+
+        _ = SceneOperationResults.PublishFailure(
+            publisher,
+            reducer,
+            SceneOperationKinds.NodeReparent,
+            FailureDomain.SceneAuthoring,
+            refusal.Code,
+            "Nodes not moved",
+            refusal.Message,
+            new AffectedScope { SceneId = this.Scene?.AttachedObject.Id });
     }
 
     /// <summary>

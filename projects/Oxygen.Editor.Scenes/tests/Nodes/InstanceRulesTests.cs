@@ -3,14 +3,19 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
+using Oxygen.Editor.Scenes.Authoring;
+using Oxygen.Editor.Scenes.Edits.Hierarchy;
 using Oxygen.Editor.Scenes.Nodes;
+using Oxygen.Editor.Scenes.Tests.TestSupport;
+using Oxygen.Editor.World;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Scenes.Tests.Nodes;
 
 /// <summary>
-/// <see cref="InstanceRules.WouldCycle"/> (scene instances 8.3): a source makes a cycle when it is the scene or reaches it
-/// through the references the cook dependency graph follows.
+/// <see cref="InstanceRules"/> (scene instances 6.2, 8.3): a source makes a cycle when it is the scene or reaches it
+/// through the references the cook dependency graph follows; a structural command over targets holding a node an
+/// instance brought in is refused as a whole with <see cref="SceneEditCodes.InstancedStructure"/>.
 /// </summary>
 [TestClass]
 public sealed class InstanceRulesTests
@@ -48,6 +53,49 @@ public sealed class InstanceRulesTests
     [TestMethod]
     public void ACycleAmongOtherScenes_Terminates()
         => _ = InstanceRules.WouldCycle(Harbor, Village, References((Village, [Watchtower]), (Watchtower, [Village]))).Should().BeFalse();
+
+    [TestMethod]
+    public async Task NodesOfTheScene_AreNotRefused()
+    {
+        using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
+        var root = await PlaceCarAsync(fixture).ConfigureAwait(false);
+
+        _ = InstanceRules.RefusesStructure(fixture.Scene, [NodeReference.To(SampleScene.B), NodeReference.To(root)]).Should().BeNull(
+            "the instance root is a node of the scene, and every operation applies to it");
+    }
+
+    [TestMethod]
+    public async Task ANodeAnInstanceBroughtIn_IsRefusedOnItsInstanceRoot()
+    {
+        using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
+        var root = await PlaceCarAsync(fixture).ConfigureAwait(false);
+        var door = new NodeReference(root, NodePath.Of(NodeId.New()));
+
+        var refusal = InstanceRules.RefusesStructure(fixture.Scene, [door], node => node == door ? "Door_FL" : null);
+
+        _ = refusal.Should().NotBeNull();
+        _ = refusal!.IsError.Should().BeTrue();
+        _ = refusal.Code.Should().Be(SceneEditCodes.InstancedStructure);
+        _ = refusal.Node.Should().Be(root);
+    }
+
+    [TestMethod]
+    public async Task ASelectionHoldingAnInstancedNode_IsRefusedWhole()
+    {
+        using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
+        var root = await PlaceCarAsync(fixture).ConfigureAwait(false);
+
+        var refusal = InstanceRules.RefusesStructure(fixture.Scene, [NodeReference.To(SampleScene.B), new NodeReference(root, NodePath.Of(NodeId.New()))]);
+
+        _ = refusal?.Code.Should().Be(SceneEditCodes.InstancedStructure);
+    }
+
+    private static async Task<NodeId> PlaceCarAsync(AuthoringFixture fixture)
+    {
+        var node = SceneNodeTemplates.Instance(fixture.Scene, Car);
+        SceneAssert.Applied(await fixture.Authoring.ExecuteAsync(new InsertNodes([SceneNodeTemplates.Append(fixture.Scene, fixture.Layout, node)])).ConfigureAwait(false));
+        return node.Id;
+    }
 
     private static Func<AssetPath, IEnumerable<AssetPath>> References(params (AssetPath Asset, AssetPath[] Referenced)[] edges)
     {

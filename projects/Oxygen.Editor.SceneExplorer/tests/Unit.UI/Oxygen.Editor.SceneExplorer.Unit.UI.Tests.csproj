@@ -8,6 +8,7 @@
     </PropertyGroup>
     <ItemGroup>
         <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.SceneExplorer/src/Oxygen.Editor.SceneExplorer.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testing/Oxygen.Editor.ContentPipeline.Testing.csproj" />
         <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.Materials/src/Oxygen.Editor.Materials.csproj" />
         <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.Projects/testing/Oxygen.Editor.Projects.Testing.csproj" />
         <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.Scenes/testing/Oxygen.Editor.Scenes.Testing.csproj" />

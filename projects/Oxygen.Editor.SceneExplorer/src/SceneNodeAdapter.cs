@@ -5,6 +5,7 @@
 using DroidNet.Controls;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.SceneExplorer;
 
@@ -13,18 +14,33 @@ namespace Oxygen.Editor.SceneExplorer;
 /// This adapter supports the "Overlay" layout concept where the visual hierarchy
 /// (folders, reordering) can differ from the scene graph.
 /// </summary>
-public sealed partial class SceneNodeAdapter : LayoutItemAdapter, ITreeItem<SceneNode>, ICanBeCloned
+public sealed partial class SceneNodeAdapter : NodeRowAdapter, ITreeItem<SceneNode>, ICanBeCloned
 {
     public SceneNodeAdapter(SceneNode payload)
     {
         this.AttachedObject = payload ?? throw new ArgumentNullException(nameof(payload));
         this.AttachedObject.Metadata.PropertyChanged += this.OnPayloadPropertyChanged;
+        this.InstanceSource = payload.Components.OfType<SceneInstanceComponent>().FirstOrDefault()?.Source;
+        this.Annotation = this.InstanceSource?.Name;
     }
 
     /// <summary>
     /// Gets the wrapped scene node payload.
     /// </summary>
     public SceneNode AttachedObject { get; }
+
+    /// <inheritdoc />
+    public override NodeReference Reference => NodeReference.To(this.AttachedObject.Id);
+
+    /// <summary>
+    /// Gets the source the node instanced when the row was made, if it was an instance root then, whose row carries the
+    /// link badge and the source's file name; otherwise, <see langword="null"/>. The tree makes the row again when the
+    /// node gains or loses its instance.
+    /// </summary>
+    public AssetPath? InstanceSource { get; }
+
+    /// <summary>Gets a value indicating whether the node is an instance root.</summary>
+    public bool IsInstanceRoot => this.InstanceSource is not null;
 
     public override string Label
     {

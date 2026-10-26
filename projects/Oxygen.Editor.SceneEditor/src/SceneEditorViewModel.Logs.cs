@@ -108,6 +108,15 @@ public partial class SceneEditorViewModel
 
     [LoggerMessage(
         SkipEnabledCheck = true,
+        Level = LogLevel.Warning,
+        Message = "{Command} was refused in document {DocumentId}: the selection holds a node of instance {InstanceRoot}")]
+    private static partial void LogInstancedStructureRefused(ILogger logger, ViewportEditCommand command, DocumentId documentId, NodeId? instanceRoot);
+
+    private void LogInstancedStructureRefused(ViewportEditCommand command, NodeId? instanceRoot)
+        => LogInstancedStructureRefused(this.logger, command, this.Document.Id, instanceRoot);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
         Level = LogLevel.Information,
         Message = "The engine shows the scene of document {DocumentId}; restoring layout {Layout}")]
     private static partial void LogSceneLoadedReceived(ILogger logger, DocumentId documentId, SceneViewLayout layout);

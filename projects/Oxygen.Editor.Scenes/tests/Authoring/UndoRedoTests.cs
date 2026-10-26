@@ -166,7 +166,7 @@ public sealed class UndoRedoTests
             new SetProperties(
                 new Dictionary<NodeId, PropertyEdit> { [SampleScene.A] = PropertyEdit.SingleEdit(SceneSchema.Transform.PositionX, 7f) },
                 "Move"),
-            new SetEditorHidden([SampleScene.Sun], hidden: true),
+            new SetEditorHidden([NodeReference.To(SampleScene.Sun)], hidden: true),
         };
         var recorded = new List<string> { State(fixture) };
         foreach (var edit in edits)
@@ -197,13 +197,13 @@ public sealed class UndoRedoTests
     public async Task Undo_HideInEditor_KeepsTheDocumentClean()
     {
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
-        _ = await fixture.Authoring.ExecuteAsync(new SetEditorHidden([SampleScene.Cam], hidden: true)).ConfigureAwait(false);
+        _ = await fixture.Authoring.ExecuteAsync(new SetEditorHidden([NodeReference.To(SampleScene.Cam)], hidden: true)).ConfigureAwait(false);
 
         var undone = await fixture.Authoring.UndoAsync().ConfigureAwait(false);
 
         // The entry the undo leaves for redo is still an editor-view change, not a document change.
         SceneAssert.Applied(undone);
-        _ = fixture.Interaction!.IsHidden(SampleScene.Cam).Should().BeFalse();
+        _ = fixture.Interaction!.IsHidden(NodeReference.To(SampleScene.Cam)).Should().BeFalse();
         _ = fixture.History.RedoStack.Should().ContainSingle().Which.ChangesState.Should().BeFalse();
     }
 

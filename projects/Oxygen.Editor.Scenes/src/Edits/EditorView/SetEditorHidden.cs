@@ -5,6 +5,7 @@
 using System.Globalization;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Changes;
+using Oxygen.Editor.World;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Scenes.Edits.EditorView;
@@ -18,17 +19,17 @@ namespace Oxygen.Editor.Scenes.Edits.EditorView;
 public sealed record SetEditorHidden : ISceneEdit
 {
     /// <summary>Initializes a new instance of the <see cref="SetEditorHidden"/> class.</summary>
-    /// <param name="nodes">The nodes to hide or show.</param>
+    /// <param name="nodes">The nodes to hide or show: nodes of the scene, or nodes an instance brought in.</param>
     /// <param name="hidden">Whether to hide the nodes; otherwise they are shown.</param>
-    public SetEditorHidden(IReadOnlyList<NodeId> nodes, bool hidden)
+    public SetEditorHidden(IReadOnlyList<NodeReference> nodes, bool hidden)
     {
         ArgumentNullException.ThrowIfNull(nodes);
-        this.Nodes = [.. nodes.Where(static id => !id.IsEmpty).Distinct()];
+        this.Nodes = [.. nodes.Where(static node => !node.Node.IsEmpty).Distinct()];
         this.Hidden = hidden;
     }
 
     /// <summary>Gets the nodes to hide or show.</summary>
-    public IReadOnlyList<NodeId> Nodes { get; }
+    public IReadOnlyList<NodeReference> Nodes { get; }
 
     /// <summary>Gets a value indicating whether the nodes are hidden; otherwise they are shown.</summary>
     public bool Hidden { get; }
@@ -59,8 +60,9 @@ public sealed record SetEditorHidden : ISceneEdit
         ArgumentNullException.ThrowIfNull(scope);
         var interaction = scope.Interaction!;
 
-        // A node no longer in the scene is skipped: a stale id must not fail the whole selection.
-        NodeId[] affected = [.. this.Nodes.Where(id => scope.FindNode(id) is not null && interaction.IsHidden(id) != this.Hidden)];
+        // A node no longer in the scene is skipped: a stale reference must not fail the whole selection. A node an
+        // instance brought in stays while its instance root does.
+        NodeReference[] affected = [.. this.Nodes.Where(node => scope.FindNode(node.Node) is not null && interaction.IsHidden(node) != this.Hidden)];
         foreach (var node in affected)
         {
             interaction.SetHidden(node, this.Hidden);

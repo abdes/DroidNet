@@ -1013,8 +1013,8 @@ namespace Oxygen::Interop {
   }
 
   auto EngineRunner::TrySetSceneHelpers(EngineContext^ ctx,
-    array<System::Guid>^ hidden, array<System::Guid>^ locked,
-    float displayScale) -> bool
+    array<NodeReferenceManaged^>^ hidden,
+    array<NodeReferenceManaged^>^ locked, float displayScale) -> bool
   {
     if (ctx == nullptr) {
       throw gcnew ArgumentNullException("ctx");
@@ -1036,15 +1036,13 @@ namespace Oxygen::Interop {
     oxygen::interop::module::SceneHelperSettings settings;
     settings.display_scale = displayScale > 0.0F ? displayScale : 1.0F;
     if (hidden != nullptr) {
-      for each (System::Guid id in hidden) {
-        settings.hidden.push_back(
-          detail::ToNativeKey<oxygen::interop::module::UuidKey>(id));
+      for each (NodeReferenceManaged^ reference in hidden) {
+        settings.hidden.push_back(NodeReferenceManaged::ToNative(reference));
       }
     }
     if (locked != nullptr) {
-      for each (System::Guid id in locked) {
-        settings.locked.push_back(
-          detail::ToNativeKey<oxygen::interop::module::UuidKey>(id));
+      for each (NodeReferenceManaged^ reference in locked) {
+        settings.locked.push_back(NodeReferenceManaged::ToNative(reference));
       }
     }
     try {

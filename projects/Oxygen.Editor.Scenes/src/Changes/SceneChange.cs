@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Editor.World;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Scenes.Changes;
@@ -63,8 +64,8 @@ public abstract record SceneChange
     public sealed record LayoutChanged : SceneChange;
 
     /// <summary>Nodes were hidden or shown in the editor.</summary>
-    /// <param name="Nodes">The nodes.</param>
-    public sealed record EditorVisibilityChanged(IReadOnlyList<NodeId> Nodes) : SceneChange;
+    /// <param name="Nodes">The nodes: nodes of the scene, or nodes an instance brought in.</param>
+    public sealed record EditorVisibilityChanged(IReadOnlyList<NodeReference> Nodes) : SceneChange;
 
     /// <summary>The camera node the scene starts viewing through changed.</summary>
     public sealed record StartingCameraChanged : SceneChange;

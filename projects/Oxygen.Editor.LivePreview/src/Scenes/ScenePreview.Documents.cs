@@ -144,6 +144,7 @@ internal sealed partial class ScenePreview
     private void FollowDocuments()
     {
         this.engineService.StateChanged += this.OnRuntimeStateChanged;
+        this.engineService.ContentStatusChanged += this.OnContentStatusChanged;
         this.documents.Opened += this.OnDocumentOpened;
         this.documents.Closed += this.OnDocumentClosed;
         foreach (var document in this.documents.Documents.ToArray())
@@ -155,6 +156,7 @@ internal sealed partial class ScenePreview
     private void StopFollowingDocuments()
     {
         this.engineService.StateChanged -= this.OnRuntimeStateChanged;
+        this.engineService.ContentStatusChanged -= this.OnContentStatusChanged;
         this.documents.Opened -= this.OnDocumentOpened;
         this.documents.Closed -= this.OnDocumentClosed;
         foreach (var entry in this.followed)
@@ -341,6 +343,12 @@ internal sealed partial class ScenePreview
         if (changed)
         {
             lifetime.Owner.Queue(() => this.ReadyChanged?.Invoke(this, new ScenePreviewEventArgs(lifetime.DocumentId)));
+        }
+
+        // A ready document's content is mounted, possibly again after a cook: structures read before may differ.
+        if (changed && isReady)
+        {
+            lifetime.Owner.Queue(() => this.StructuresChanged?.Invoke(this, EventArgs.Empty));
         }
     }
 

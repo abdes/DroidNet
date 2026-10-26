@@ -299,11 +299,11 @@ public partial class SceneEditorViewModel
     private async Task SetSceneHelpersAsync(float displayScale)
     {
         var interaction = this.Interaction;
-        var selected = this.SelectionService.GetContext(this.Document.Id).OwnedNodeIds.ToHashSet();
-        IReadOnlyList<NodeId> locked = this.scene is null
+        var selected = this.SelectionService.GetContext(this.Document.Id).SelectedNodes;
+        IReadOnlyList<NodeReference> locked = this.scene is not { } scene
             ? []
-            : [.. this.scene.AllNodes.Where(node => selected.Contains(node.Id) && interaction.GetLockOwner(node) is not null).Select(static node => node.Id)];
-        var helpers = new RuntimeSceneHelpers([.. interaction.HiddenNodeIds()], locked, displayScale);
+            : [.. selected.Where(node => scene.Holds(node) && interaction.GetLockOwner(scene, node) is not null)];
+        var helpers = new RuntimeSceneHelpers([.. interaction.HiddenNodes()], locked, displayScale);
         try
         {
             if (!await this.services.Engine.SetSceneHelpersAsync(helpers).ConfigureAwait(true))
@@ -437,6 +437,9 @@ public partial class SceneEditorViewModel
 
         switch (command)
         {
+            case ViewportEditCommand.Duplicate when this.RefusesInstancedStructure(command):
+            case ViewportEditCommand.Delete when this.RefusesInstancedStructure(command):
+                break;
             case ViewportEditCommand.Duplicate:
                 var selected = this.SelectionService.GetContext(this.Document.Id).OwnedNodeIds;
                 var roots = this.FindSelectionRoots(selected);

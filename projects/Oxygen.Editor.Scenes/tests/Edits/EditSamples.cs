@@ -495,9 +495,9 @@ public static class EditSamples
     private static EditSample SetEditorHiddenSample =>
         new(
             nameof(SetEditorHidden),
-            static _ => new SetEditorHidden([SampleScene.B], hidden: true),
-            [new SceneChange.EditorVisibilityChanged([SampleScene.B])],
-            [new SceneChange.EditorVisibilityChanged([SampleScene.B])]);
+            static _ => new SetEditorHidden([NodeReference.To(SampleScene.B)], hidden: true),
+            [new SceneChange.EditorVisibilityChanged([NodeReference.To(SampleScene.B)])],
+            [new SceneChange.EditorVisibilityChanged([NodeReference.To(SampleScene.B)])]);
 
     // A batch raises its inner changes in order; its revert raises the inner reverts' in reverse order (3.5).
     private static EditSample BatchSample =>
@@ -517,10 +517,10 @@ public static class EditSamples
                 "Outer",
                 [
                     new RenameNode(SampleScene.A, "X"),
-                    new SceneEditBatch("Inner", [new RenameNode(SampleScene.B, "Y"), new SetEditorHidden([SampleScene.Cam], hidden: true)]),
+                    new SceneEditBatch("Inner", [new RenameNode(SampleScene.B, "Y"), new SetEditorHidden([NodeReference.To(SampleScene.Cam)], hidden: true)]),
                 ]),
-            [new SceneChange.NodeRenamed(SampleScene.A), new SceneChange.NodeRenamed(SampleScene.B), new SceneChange.EditorVisibilityChanged([SampleScene.Cam])],
-            [new SceneChange.EditorVisibilityChanged([SampleScene.Cam]), new SceneChange.NodeRenamed(SampleScene.B), new SceneChange.NodeRenamed(SampleScene.A)])
+            [new SceneChange.NodeRenamed(SampleScene.A), new SceneChange.NodeRenamed(SampleScene.B), new SceneChange.EditorVisibilityChanged([NodeReference.To(SampleScene.Cam)])],
+            [new SceneChange.EditorVisibilityChanged([NodeReference.To(SampleScene.Cam)]), new SceneChange.NodeRenamed(SampleScene.B), new SceneChange.NodeRenamed(SampleScene.A)])
         {
             ChangesInOrder = true,
         };

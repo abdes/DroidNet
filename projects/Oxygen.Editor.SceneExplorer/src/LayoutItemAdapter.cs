@@ -211,9 +211,9 @@ public abstract class LayoutItemAdapter : TreeItemAdapter
         this.OnPropertyChanged(nameof(this.IconGlyph));
         this.OnPropertyChanged(nameof(this.HasChildren));
 
-        // If we are expanded, we must keep the base class's internal collection in sync
-        // to ensure the UI updates immediately without requiring a full reload.
-        if (this.IsExpanded)
+        // Once the base class's collection is loaded, collapsed or not, it must stay in sync: the tree
+        // counts a loaded row's children from it, and a row it counts none for shows no expander.
+        if (this.IsExpanded || this.AreChildrenLoaded)
         {
             this.MaterializeChildren(e);
         }

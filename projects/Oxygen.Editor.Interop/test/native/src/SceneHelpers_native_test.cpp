@@ -356,7 +356,7 @@ public:
     const auto unlocked = CollectHelperNodes(
       *lamp.scene, HelperNodeFilter { .selected = { Ref(8) } });
     const auto locked = CollectHelperNodes(*lamp.scene,
-      HelperNodeFilter { .locked = { Id(8) }, .selected = { Ref(8) } });
+      HelperNodeFilter { .locked = { Ref(8) }, .selected = { Ref(8) } });
 
     const auto* free = Find(unlocked, Ref(8));
     const auto* held = Find(locked, Ref(8));
@@ -370,7 +370,18 @@ public:
     const LampScene lamp;
 
     const auto nodes = CollectHelperNodes(
-      *lamp.scene, HelperNodeFilter { .hidden = { Id(7) } });
+      *lamp.scene, HelperNodeFilter { .hidden = { Ref(7) } });
+
+    Assert::AreEqual(std::size_t { 1 }, nodes.size());
+    Assert::IsTrue(nodes[0].node == Ref(8));
+  }
+
+  [TestMethod]
+  void AHiddenInstancedNodeHasNoHelper() {
+    const LampScene lamp;
+
+    const auto nodes = CollectHelperNodes(
+      *lamp.scene, HelperNodeFilter { .hidden = { lamp.bulb } });
 
     Assert::AreEqual(std::size_t { 1 }, nodes.size());
     Assert::IsTrue(nodes[0].node == Ref(8));

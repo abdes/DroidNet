@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 using Oxygen.Editor.World;
-using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Scenes.Authoring;
 
@@ -11,10 +10,10 @@ namespace Oxygen.Editor.Scenes.Authoring;
 /// <param name="live">The workspace's interaction state, which the scratch reads and never writes.</param>
 internal sealed class ScratchNodeInteraction(ISceneNodeInteraction live) : ISceneNodeInteraction
 {
-    private readonly Dictionary<NodeId, bool> hidden = [];
+    private readonly Dictionary<NodeReference, bool> hidden = [];
 
     /// <inheritdoc/>
-    public bool IsHidden(NodeId nodeId) => this.hidden.TryGetValue(nodeId, out var isHidden) ? isHidden : live.IsHidden(nodeId);
+    public bool IsHidden(NodeReference node) => this.hidden.TryGetValue(node, out var isHidden) ? isHidden : live.IsHidden(node);
 
     /// <inheritdoc/>
     public bool IsLocked(NodeReference node) => live.IsLocked(node);
@@ -26,5 +25,5 @@ internal sealed class ScratchNodeInteraction(ISceneNodeInteraction live) : IScen
     public NodeReference? GetLockOwner(Scene scene, NodeReference node) => live.GetLockOwner(scene, node);
 
     /// <inheritdoc/>
-    public void SetHidden(NodeId nodeId, bool isHidden) => this.hidden[nodeId] = isHidden;
+    public void SetHidden(NodeReference node, bool isHidden) => this.hidden[node] = isHidden;
 }

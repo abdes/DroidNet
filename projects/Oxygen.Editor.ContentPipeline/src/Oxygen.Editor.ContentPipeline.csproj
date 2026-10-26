@@ -20,8 +20,6 @@
                           LogicalName="oxygen.cooked-geometries.schema.json" />
         <EmbeddedResource Include="$(OxygenSdkSchemasDir)\oxygen.lod-policy.schema.json"
                           LogicalName="oxygen.lod-policy.schema.json" />
-        <EmbeddedResource Include="$(OxygenSdkSchemasDir)\oxygen.cooked-scenes.schema.json"
-                          LogicalName="oxygen.cooked-scenes.schema.json" />
         <EmbeddedResource Include="$(OxygenSdkSchemasDir)\oxygen.cooked-scripts.schema.json"
                           LogicalName="oxygen.cooked-scripts.schema.json" />
         <EmbeddedResource Include="$(OxygenSdkSchemasDir)\oxygen.cooked-inventory.schema.json"

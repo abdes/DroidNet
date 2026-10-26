@@ -30,6 +30,18 @@
                     Symbol="{x:Bind scene:ThumbnailGenerator.GetThumbnailForEntity((dnc:TreeItemAdapter))}" />
             </DataTemplate>
 
+            <!--  An instance root: the entity glyph with the link badge (scene instances 6.2).  -->
+            <DataTemplate x:Key="InstanceRootThumbnailTemplate" x:DataType="dnc:TreeItemAdapter">
+                <Grid Width="24" Height="24">
+                    <SymbolIcon Symbol="{x:Bind scene:ThumbnailGenerator.GetThumbnailForEntity((dnc:TreeItemAdapter))}" />
+                    <FontIcon
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Bottom"
+                        FontSize="12"
+                        Glyph="&#xE71B;" />
+                </Grid>
+            </DataTemplate>
+
             <DataTemplate x:Key="FolderThumbnailTemplate" x:DataType="scene:FolderAdapter">
                 <FontIcon
                     Width="24"
@@ -41,6 +53,7 @@
                 x:Key="ThumbnailTemplateSelector"
                 EntityTemplate="{StaticResource EntityThumbnailTemplate}"
                 FolderTemplate="{StaticResource FolderThumbnailTemplate}"
+                InstanceRootTemplate="{StaticResource InstanceRootThumbnailTemplate}"
                 SceneTemplate="{StaticResource SceneThumbnailTemplate}" />
 
             <!--  Every row reserves the slots; only node rows expose editor-state actions.  -->
@@ -164,8 +177,7 @@
                 MinHeight="34"
                 AutomationProperties.Name="Search scene hierarchy"
                 PlaceholderText="Find an object..."
-                Text="{x:Bind ViewModel.SearchText, Mode=OneWay}"
-                TextChanged="SearchBox_TextChanged">
+                Text="{x:Bind ViewModel.SearchText, Mode=OneWay}">
                 <AutoSuggestBox.QueryIcon>
                     <FontIcon FontSize="14" Glyph="&#xE721;" />
                 </AutoSuggestBox.QueryIcon>

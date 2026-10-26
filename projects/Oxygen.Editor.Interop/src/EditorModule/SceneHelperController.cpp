@@ -170,9 +170,13 @@ namespace oxygen::interop::module {
       if (!node.IsAlive()) {
         continue;
       }
+      // The editor's viewport cameras are neither its nodes nor instanced.
       const auto id = NodeRegistry::ReverseLookup(node.GetHandle());
-      const auto hidden
-        = parent_hidden || (id.has_value() && filter.hidden.contains(*id));
+      auto reference = id.has_value()
+        ? std::optional(NodeReferenceKey { .node = *id, .path = {} })
+        : NodeRegistry::ReverseLookup(scene, node.GetHandle());
+      const auto hidden = parent_hidden
+        || (reference.has_value() && filter.hidden.contains(*reference));
       for (auto child = node.GetFirstChild(); child.has_value();
         child = child->GetNextSibling()) {
         pending.emplace_back(*child, hidden);
@@ -209,10 +213,6 @@ namespace oxygen::interop::module {
       } else {
         continue;
       }
-      // The editor's viewport cameras are neither its nodes nor instanced.
-      auto reference = id.has_value()
-        ? std::optional(NodeReferenceKey { .node = *id, .path = {} })
-        : NodeRegistry::ReverseLookup(scene, node.GetHandle());
       if (!reference.has_value()) {
         continue;
       }
@@ -234,7 +234,7 @@ namespace oxygen::interop::module {
       // Handles write the node's own light; a node an instance brought in
       // changes through its instance instead.
       helper.editable = helper.selected && helper.node.path.empty()
-        && !filter.locked.contains(helper.node.node);
+        && !filter.locked.contains(helper.node);
       nodes.push_back(std::move(helper));
     }
     return nodes;

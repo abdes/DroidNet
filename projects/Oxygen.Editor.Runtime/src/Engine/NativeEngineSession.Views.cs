@@ -110,7 +110,11 @@ internal sealed partial class NativeEngineSession
 
     /// <inheritdoc />
     public override bool SetSceneHelpers(RuntimeSceneHelpers helpers)
-        => this.Runner.TrySetSceneHelpers(this.context, [.. helpers.HiddenNodeIds.Select(static id => id.Value)], [.. helpers.LockedNodeIds.Select(static id => id.Value)], helpers.DisplayScale);
+        => this.Runner.TrySetSceneHelpers(
+            this.context,
+            [.. helpers.HiddenNodes.Select(static node => NativeSessionConversions.ToNative(node))],
+            [.. helpers.LockedNodes.Select(static node => NativeSessionConversions.ToNative(node))],
+            helpers.DisplayScale);
 
     /// <inheritdoc />
     public override bool SetTransformGizmoListener(Action<RuntimeGizmoEvent>? listener)

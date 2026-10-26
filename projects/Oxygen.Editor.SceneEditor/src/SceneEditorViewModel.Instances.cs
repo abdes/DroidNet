@@ -116,6 +116,33 @@ public partial class SceneEditorViewModel
         this.InstanceSourcePickerRequested?.Invoke(this, EventArgs.Empty);
     }
 
+    /// <summary>
+    /// Refuses a structural viewport command, Delete or Duplicate, over a selection that holds a node an instance
+    /// brought in: the command is refused as a whole and says why (scene instances 6.2).
+    /// </summary>
+    /// <param name="command">The viewport command.</param>
+    /// <returns><see langword="true"/> when the command is refused.</returns>
+    private bool RefusesInstancedStructure(ViewportEditCommand command)
+    {
+        if (this.scene is not { } scene
+            || InstanceRules.RefusesStructure(scene, this.SelectionService.GetContext(this.Document.Id).SelectedNodes) is not { } refusal)
+        {
+            return false;
+        }
+
+        this.LogInstancedStructureRefused(command, refusal.Node);
+        _ = SceneOperationResults.PublishFailure(
+            this.services.OperationResults,
+            this.services.StatusReducer,
+            command == ViewportEditCommand.Delete ? SceneOperationKinds.NodeDelete : SceneOperationKinds.NodeDuplicate,
+            FailureDomain.SceneAuthoring,
+            refusal.Code,
+            command == ViewportEditCommand.Delete ? "Nodes not deleted" : "Nodes not duplicated",
+            refusal.Message,
+            this.SceneScope());
+        return true;
+    }
+
     private void PublishInstanceRefused(AssetPath source, SceneEditResult result)
     {
         var error = result.Diagnostics.FirstOrDefault(static diagnostic => diagnostic.IsError);

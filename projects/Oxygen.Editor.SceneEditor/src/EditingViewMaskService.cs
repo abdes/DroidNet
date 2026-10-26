@@ -77,7 +77,7 @@ public sealed partial class EditingViewMaskService(
     /// </summary>
     /// <remarks>
     /// The intended dispatch, once the runtime transport lands, is a revisioned full snapshot of
-    /// <see cref="SceneNodeInteraction.HiddenNodeIds"/> targeted at the active scene
+    /// <see cref="SceneNodeInteraction.HiddenNodes"/> targeted at the active scene
     /// activation, ordered after any preceding world commands so a node created in the same batch
     /// is covered (D8a R7/DD3).
     /// </remarks>

@@ -4,6 +4,7 @@
 
 using DroidNet.Controls;
 using Oxygen.Editor.Scenes.Layout;
+using Oxygen.Editor.World;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.SceneExplorer;
@@ -17,6 +18,7 @@ namespace Oxygen.Editor.SceneExplorer;
 public sealed class SceneExplorerProjection
 {
     private readonly Dictionary<NodeId, SceneNodeAdapter> nodeAdapters = [];
+    private readonly Dictionary<NodeReference, InstancedNodeAdapter> instancedAdapters = [];
     private readonly Dictionary<FolderId, FolderAdapter> folderAdapters = [];
     private readonly HashSet<ITreeItem> trackedItems = [];
     private readonly List<LayoutFolder> layoutFolders = [];
@@ -26,6 +28,12 @@ public sealed class SceneExplorerProjection
 
     /// <summary>Gets the indexed node adapters.</summary>
     public IReadOnlyCollection<SceneNodeAdapter> Nodes => this.nodeAdapters.Values;
+
+    /// <summary>Gets the indexed rows of nodes instances brought in.</summary>
+    public IReadOnlyCollection<InstancedNodeAdapter> InstancedNodes => this.instancedAdapters.Values;
+
+    /// <summary>Gets the indexed rows of every node, of the scene and brought in by instances.</summary>
+    public IEnumerable<NodeRowAdapter> NodeRows => this.nodeAdapters.Values.Concat<NodeRowAdapter>(this.instancedAdapters.Values);
 
     /// <summary>Gets the indexed folder adapters.</summary>
     public IReadOnlyCollection<FolderAdapter> Folders => this.folderAdapters.Values;
@@ -38,6 +46,14 @@ public sealed class SceneExplorerProjection
     /// <returns>The adapter, or <see langword="null"/>.</returns>
     public SceneNodeAdapter? GetNode(NodeId nodeId)
         => this.nodeAdapters.TryGetValue(nodeId, out var adapter) ? adapter : null;
+
+    /// <summary>Gets the row of a node, of the scene or brought in by an instance, or <see langword="null"/> when not realized.</summary>
+    /// <param name="node">The node's reference.</param>
+    /// <returns>The row, or <see langword="null"/>.</returns>
+    public NodeRowAdapter? GetRow(NodeReference node)
+        => node.IsOwned
+            ? this.GetNode(node.Node)
+            : this.instancedAdapters.TryGetValue(node, out var adapter) ? adapter : null;
 
     /// <summary>Gets the folder adapter for the given identity, or <see langword="null"/> when not realized.</summary>
     /// <param name="folderId">The folder identity.</param>
@@ -120,6 +136,7 @@ public sealed class SceneExplorerProjection
     public void Clear()
     {
         this.nodeAdapters.Clear();
+        this.instancedAdapters.Clear();
         this.folderAdapters.Clear();
         this.layoutFolders.Clear();
         this.nodeLayoutChains.Clear();
@@ -142,6 +159,9 @@ public sealed class SceneExplorerProjection
             case SceneNodeAdapter node:
                 this.nodeAdapters[node.AttachedObject.Id] = node;
                 break;
+            case InstancedNodeAdapter instanced:
+                this.instancedAdapters[instanced.Reference] = instanced;
+                break;
             case FolderAdapter folder:
                 this.folderAdapters[folder.Id] = folder;
                 break;
@@ -157,6 +177,9 @@ public sealed class SceneExplorerProjection
         {
             case SceneNodeAdapter node:
                 _ = this.nodeAdapters.Remove(node.AttachedObject.Id);
+                break;
+            case InstancedNodeAdapter instanced:
+                _ = this.instancedAdapters.Remove(instanced.Reference);
                 break;
             case FolderAdapter folder:
                 _ = this.folderAdapters.Remove(folder.Id);

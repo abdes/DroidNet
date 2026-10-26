@@ -14,9 +14,9 @@ namespace Oxygen.Editor.Scenes.Authoring;
 public interface ISceneNodeInteraction
 {
     /// <summary>Gets whether a node is hidden in the editing viewports.</summary>
-    /// <param name="nodeId">The stable authored node id.</param>
-    /// <returns><see langword="true"/> when the node is hidden.</returns>
-    public bool IsHidden(NodeId nodeId);
+    /// <param name="node">The node: a node of the scene, or a node an instance brought in.</param>
+    /// <returns><see langword="true"/> when the node itself is hidden.</returns>
+    public bool IsHidden(NodeReference node);
 
     /// <summary>Gets whether a node is locked against editing.</summary>
     /// <param name="node">The node: a node of the scene, or a node an instance brought in.</param>
@@ -38,7 +38,7 @@ public interface ISceneNodeInteraction
     public NodeReference? GetLockOwner(Scene scene, NodeReference node);
 
     /// <summary>Hides or shows a node in the editing viewports.</summary>
-    /// <param name="nodeId">The stable authored node id.</param>
+    /// <param name="node">The node: a node of the scene, or a node an instance brought in.</param>
     /// <param name="isHidden">The requested state.</param>
-    public void SetHidden(NodeId nodeId, bool isHidden);
+    public void SetHidden(NodeReference node, bool isHidden);
 }

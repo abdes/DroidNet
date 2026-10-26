@@ -2,6 +2,10 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Globalization;
+using Oxygen.Editor.Scenes.Authoring;
+using Oxygen.Editor.World;
+using Oxygen.Editor.World.Components;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 
@@ -43,5 +47,37 @@ public static class InstanceRules
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// Checks whether a structural command (rename, delete, cut, duplicate, drag, reparent, reorder, paste into, a new
+    /// child, adding or removing a component) must refuse its targets: a command over targets that hold a node an
+    /// instance brought in is refused as a whole, since that node's structure belongs to the instance's source.
+    /// </summary>
+    /// <param name="scene">The scene the targets are in.</param>
+    /// <param name="targets">The command's targets.</param>
+    /// <param name="nameOf">The name of a node an instance brought in, when the caller knows it.</param>
+    /// <returns>
+    /// The <see cref="SceneEditCodes.InstancedStructure"/> error naming the first such node, its source and what to do
+    /// instead; otherwise, <see langword="null"/>.
+    /// </returns>
+    public static SceneDiagnostic? RefusesStructure(Scene scene, IEnumerable<NodeReference> targets, Func<NodeReference, string?>? nameOf = null)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        ArgumentNullException.ThrowIfNull(targets);
+        if (targets.FirstOrDefault(static target => !target.IsOwned) is not { } instanced)
+        {
+            return null;
+        }
+
+        var root = scene.AllNodes.FirstOrDefault(node => node.Id == instanced.Node);
+        var rootName = root?.Metadata.Name ?? instanced.Node.ToString();
+        var source = root?.Components.OfType<SceneInstanceComponent>().FirstOrDefault()?.Source.Name;
+        var subject = nameOf?.Invoke(instanced) is { Length: > 0 } name ? $"'{name}'" : $"This node of {rootName}";
+        var origin = source is null ? $"{subject} comes from its instance's source." : $"{subject} comes from {source}.";
+        return SceneDiagnostic.Error(
+            SceneEditCodes.InstancedStructure,
+            string.Create(CultureInfo.InvariantCulture, $"{origin} Unpack {rootName} to change its structure."),
+            instanced.Node);
     }
 }

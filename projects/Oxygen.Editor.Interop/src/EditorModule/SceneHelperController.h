@@ -33,10 +33,11 @@ namespace oxygen::interop::module {
 
   //! Workspace state the helpers follow; set from the UI thread.
   struct SceneHelperSettings {
-    //! Workspace-hidden nodes: no icon, no helper, not pickable.
-    std::vector<UuidKey> hidden;
+    //! Workspace-hidden nodes, which may be nodes an instance brought in: no
+    //! icon, no helper, not pickable.
+    std::vector<NodeReferenceKey> hidden;
     //! Locked nodes keep their helpers but their handles cannot be dragged.
-    std::vector<UuidKey> locked;
+    std::vector<NodeReferenceKey> locked;
     //! Physical pixels per device-independent pixel.
     float display_scale { 1.0F };
   };
@@ -44,8 +45,8 @@ namespace oxygen::interop::module {
   //! What the helpers show of the workspace state and the selection.
   struct HelperNodeFilter {
     //! Workspace-hidden nodes, which hide their descendants too.
-    std::unordered_set<UuidKey, UuidKeyHash> hidden;
-    std::unordered_set<UuidKey, UuidKeyHash> locked;
+    std::unordered_set<NodeReferenceKey, NodeReferenceKeyHash> hidden;
+    std::unordered_set<NodeReferenceKey, NodeReferenceKeyHash> locked;
     std::unordered_set<NodeReferenceKey, NodeReferenceKeyHash> selected;
     std::optional<NodeReferenceKey> active;
   };

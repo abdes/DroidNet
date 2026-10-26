@@ -7,6 +7,7 @@ using Moq;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Scenes.Interaction;
+using Oxygen.Editor.World;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 using Testably.Abstractions.Testing;
@@ -34,14 +35,14 @@ internal sealed partial class EditingViewMaskServiceTests
 
         // First change on the active scene reports the pending native suppression once (Q2), even
         // though several hidden entries follow within the same activation.
-        interaction.SetHidden(NodeId.New(), isHidden: true);
-        interaction.SetHidden(NodeId.New(), isHidden: true);
+        interaction.SetHidden(NodeReference.To(NodeId.New()), isHidden: true);
+        interaction.SetHidden(NodeReference.To(NodeId.New()), isHidden: true);
         _ = MaskWarnings(results).Should().Be(1, "one mask per scene activation (Q3)");
 
         // A different scene activation is allowed to warn again.
         var sceneB = SceneId.New();
         await interaction.RestoreAsync(sceneB).ConfigureAwait(false);
-        interaction.SetHidden(NodeId.New(), isHidden: true);
+        interaction.SetHidden(NodeReference.To(NodeId.New()), isHidden: true);
         _ = MaskWarnings(results).Should().Be(2, "a new activation re-reports");
     }
 

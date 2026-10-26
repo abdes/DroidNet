@@ -371,10 +371,12 @@ namespace Oxygen::Interop {
 
     /// <summary>
     /// Sets the workspace state the light and camera helpers follow: hidden
-    /// nodes have no icon or helper, locked nodes no draggable handles.
+    /// nodes, which may be nodes an instance brought in, have no icon or
+    /// helper, locked nodes no draggable handles.
     /// </summary>
-    auto TrySetSceneHelpers(EngineContext^ ctx, array<System::Guid>^ hidden,
-      array<System::Guid>^ locked, float displayScale) -> bool;
+    auto TrySetSceneHelpers(EngineContext^ ctx,
+      array<NodeReferenceManaged^>^ hidden,
+      array<NodeReferenceManaged^>^ locked, float displayScale) -> bool;
 
     /// <summary>
     /// Receives the gizmo's and the scene helpers' hover, drag and triad
