@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <optional>
 #include <vector>
 
 #include <Oxygen/Content/IAssetLoader.h>
@@ -19,6 +20,12 @@ public:
   [[nodiscard]] auto EnumerateMountedScenes(
     const ContentSourceRegistry& source_registry) const
     -> std::vector<IAssetLoader::MountedSceneEntry>;
+
+  //! The hierarchy of the mounted scene `key`, read from scene descriptors.
+  [[nodiscard]] auto ReadSceneHierarchy(
+    const ContentSourceRegistry& source_registry,
+    const data::AssetKey& key) const
+    -> std::optional<IAssetLoader::SceneHierarchy>;
 };
 
 } // namespace oxygen::content::internal

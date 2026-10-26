@@ -305,6 +305,9 @@ public:
     -> ResidencyPolicyState override;
   OXGN_CNTT_NDAPI auto EnumerateMountedScenes() const
     -> std::vector<IAssetLoader::MountedSceneEntry> override;
+  OXGN_CNTT_NDAPI auto ReadMountedSceneHierarchy(
+    const data::AssetKey& key) const
+    -> std::optional<IAssetLoader::SceneHierarchy> override;
   OXGN_CNTT_NDAPI auto EnumerateMountedInputContexts() const
     -> std::vector<IAssetLoader::MountedInputContextEntry> override;
   OXGN_CNTT_NDAPI auto EnumerateMountedSources() const

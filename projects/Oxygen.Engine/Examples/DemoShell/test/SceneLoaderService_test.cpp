@@ -711,6 +711,13 @@ namespace {
     {
       return {};
     }
+
+    [[nodiscard]] auto ReadMountedSceneHierarchy(
+      const data::AssetKey& /*key*/) const
+      -> std::optional<SceneHierarchy> override
+    {
+      return std::nullopt;
+    }
     [[nodiscard]] auto EnumerateMountedInputContexts() const
       -> std::vector<MountedInputContextEntry> override
     {

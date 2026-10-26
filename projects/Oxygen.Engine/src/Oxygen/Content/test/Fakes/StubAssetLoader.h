@@ -172,6 +172,11 @@ public:
   {
     return {};
   }
+  auto ReadMountedSceneHierarchy(const data::AssetKey& /*key*/) const
+    -> std::optional<SceneHierarchy> override
+  {
+    return std::nullopt;
+  }
   auto EnumerateMountedInputContexts() const
     -> std::vector<MountedInputContextEntry> override
   {

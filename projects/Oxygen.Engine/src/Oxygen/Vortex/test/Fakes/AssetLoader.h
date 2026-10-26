@@ -233,6 +233,13 @@ public:
     return {};
   }
 
+  [[nodiscard]] auto ReadMountedSceneHierarchy(
+    const data::AssetKey& /*key*/) const
+    -> std::optional<SceneHierarchy> override
+  {
+    return std::nullopt;
+  }
+
   [[nodiscard]] auto EnumerateMountedSources() const
     -> std::vector<MountedSourceEntry> override
   {

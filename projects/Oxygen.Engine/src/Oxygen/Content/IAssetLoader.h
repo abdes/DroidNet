@@ -10,6 +10,7 @@
 #include <filesystem>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -37,6 +38,7 @@
 #include <Oxygen/Data/PhysicsResource.h>
 #include <Oxygen/Data/PhysicsSceneAsset.h>
 #include <Oxygen/Data/SceneAsset.h>
+#include <Oxygen/Data/SceneIds.h>
 #include <Oxygen/Data/ScriptAsset.h>
 #include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Data/TextureResource.h>
@@ -119,6 +121,53 @@ public:
     data::SourceInstanceId source_id { 0 };
     ContentSourceKind source_kind { ContentSourceKind::kPak };
     std::filesystem::path source_path;
+  };
+
+  //! A node of a mounted scene's hierarchy: one of the scene's own nodes, or
+  //! one an instance of it brings in, at any depth.
+  struct SceneHierarchyNode final {
+    //! The node IDs from the scene read down to the node, shallowest first:
+    //! every ID but the last names an instance root.
+    std::vector<data::NodeId> path;
+    std::string name;
+    //! The parent's index in `SceneHierarchy::nodes`; none for a root of the
+    //! scene read.
+    std::optional<uint32_t> parent;
+    //! The scene whose descriptor defines the node.
+    data::AssetKey scene_key;
+    //! The scene the node instances, when it is an instance root.
+    std::optional<data::AssetKey> instance;
+  };
+
+  //! Why part of a scene's hierarchy could not be read.
+  enum class SceneHierarchyIssueCode : uint8_t {
+    //! An instanced scene is not in the mounted content, or its descriptor
+    //! cannot be read.
+    kSceneUnavailable = 0,
+    //! An instanced scene instances, directly or not, the scene it is in.
+    kCycle = 1,
+    //! An instance record names a node the scene does not have.
+    kInvalidInstance = 2,
+  };
+
+  //! A part of a scene's hierarchy that could not be read; the rest is.
+  struct SceneHierarchyIssue final {
+    SceneHierarchyIssueCode code { SceneHierarchyIssueCode::kSceneUnavailable };
+    //! The instance root the issue is on, as its index in
+    //! `SceneHierarchy::nodes`, when there is one.
+    std::optional<uint32_t> node;
+    //! The scene the issue names: the instanced scene, or for an invalid
+    //! instance record the scene that holds it.
+    data::AssetKey scene_key;
+  };
+
+  //! The hierarchy of a mounted scene with every scene it instances.
+  struct SceneHierarchy final {
+    data::AssetKey scene_key;
+    //! The scene's own nodes in descriptor order, then each instance's nodes
+    //! after them.
+    std::vector<SceneHierarchyNode> nodes;
+    std::vector<SceneHierarchyIssue> issues;
   };
 
   struct HydratedScriptSlot final {
@@ -431,6 +480,20 @@ public:
   //! Enumerate scene entries available from currently mounted sources.
   [[nodiscard]] virtual auto EnumerateMountedScenes() const
     -> std::vector<MountedSceneEntry> = 0;
+
+  //! Read the hierarchy of a mounted scene and of every scene it instances.
+  /*!
+   Reads only the scene descriptors, through the mounted source that provides
+   each key: no geometry, material, texture or other dependency is loaded and
+   nothing is cached. Structure cannot be changed by an instance (instances
+   change values only), so the hierarchy is the descriptors' own. An instanced
+   scene that cannot be read, or that would make a cycle, is reported in
+   `SceneHierarchy::issues` and contributes no nodes.
+
+   @return The hierarchy, or none when `key` names no mounted, readable scene.
+  */
+  [[nodiscard]] virtual auto ReadMountedSceneHierarchy(
+    const data::AssetKey& key) const -> std::optional<SceneHierarchy> = 0;
 
   //! Enumerate input mapping-context entries from currently mounted sources.
   [[nodiscard]] virtual auto EnumerateMountedInputContexts() const
