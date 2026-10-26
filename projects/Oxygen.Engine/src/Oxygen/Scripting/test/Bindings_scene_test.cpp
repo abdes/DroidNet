@@ -177,9 +177,8 @@ end
   const auto& target = roots.back();
   const auto expected = source.GetTransform().GetLocalRotation();
   const auto actual = target.GetTransform().GetLocalRotation();
-  ASSERT_TRUE(expected.has_value());
-  ASSERT_TRUE(actual.has_value());
-  // NOLINTNEXTLINE(bugprone-unchecked-optional-access) - asserted above
+  ASSERT_HAS_VALUE(expected);
+  ASSERT_HAS_VALUE(actual);
   EXPECT_NEAR(glm::dot(*expected, *actual), 1.0F, 1e-5F);
 }
 
@@ -1266,9 +1265,8 @@ end
 
   EXPECT_FALSE(context.HasErrors());
   const auto active = scene->ActiveCamera();
-  ASSERT_TRUE(active.has_value());
-  // NOLINTNEXTLINE(bugprone-unchecked-optional-access) - asserted above
-  EXPECT_EQ(active.value().GetName(), "Second");
+  ASSERT_HAS_VALUE(active);
+  EXPECT_EQ(active->GetName(), "Second");
 }
 
 } // namespace oxygen::scripting::test

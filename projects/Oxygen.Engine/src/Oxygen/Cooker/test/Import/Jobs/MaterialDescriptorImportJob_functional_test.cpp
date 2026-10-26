@@ -214,15 +214,13 @@ namespace {
     const auto key
       = index.FindAssetKeyByVirtualPath("/.cooked/Materials/woodfloor007.omat");
     ASSERT_HAS_VALUE(key);
-    // NOLINTBEGIN(bugprone-unchecked-optional-access) - asserted above
-    const auto references = index.FindAssetReferences(key.value());
+    const auto references = index.FindAssetReferences(*key);
     ASSERT_HAS_VALUE(references);
-    EXPECT_THAT(references.value().Resources(),
+    EXPECT_THAT(references->Resources(),
       ::testing::ElementsAre(data::ResourceBinding {
         .kind = data::ResourceKind::kTexture,
         .index = kTextureIndex,
       }));
-    // NOLINTEND(bugprone-unchecked-optional-access)
   }
 
   //! A descriptor under another name, such as a hashed one, is not the
@@ -334,15 +332,12 @@ namespace {
       const auto key
         = index.FindAssetKeyByVirtualPath("/.cooked/Materials/Tiles.omat");
       ASSERT_HAS_VALUE(key);
-      // NOLINTBEGIN(bugprone-unchecked-optional-access) - asserted above
-      const auto references = index.FindAssetReferences(key.value());
+      const auto references = index.FindAssetReferences(*key);
       ASSERT_HAS_VALUE(references);
-      const auto target
-        = references.value().ResolveTexture(desc.base_color_texture);
-      ASSERT_TRUE(target.has_value());
+      const auto target = references->ResolveTexture(desc.base_color_texture);
+      ASSERT_HAS_VALUE(target);
       EXPECT_EQ(std::get<data::AssetKey>(*target),
         data::TextureKeyFromVirtualPath(kGrid));
-      // NOLINTEND(bugprone-unchecked-optional-access)
     }
   }
 

@@ -268,11 +268,9 @@ namespace {
     const auto scene_key
       = index.FindAssetKeyByVirtualPath("/.cooked/Scenes/Level.oscene");
     ASSERT_HAS_VALUE(scene_key);
-    // NOLINTNEXTLINE(bugprone-unchecked-optional-access) - asserted above
-    const auto references = index.FindAssetReferences(scene_key.value());
+    const auto references = index.FindAssetReferences(*scene_key);
     ASSERT_HAS_VALUE(references);
-    // NOLINTNEXTLINE(bugprone-unchecked-optional-access) - asserted above
-    EXPECT_THAT(references.value().Keys(),
+    EXPECT_THAT(references->Keys(),
       ::testing::UnorderedElementsAre(
         data::KeyReference {
           .key = model_key,
@@ -398,10 +396,9 @@ namespace {
     const auto changes = scene.GetComponents<world::OverrideRecord>();
     ASSERT_EQ(changes.size(), 1U);
     const auto eye = data::NodeId::FromString(kEye);
-    ASSERT_TRUE(eye.has_value());
-    // NOLINTNEXTLINE(bugprone-unchecked-optional-access) - asserted above
-    EXPECT_EQ(scene.GetNodePath(CheckedAt(changes, 0).target),
-      std::vector { eye.value() });
+    ASSERT_HAS_VALUE(eye);
+    EXPECT_EQ(
+      scene.GetNodePath(CheckedAt(changes, 0).target), std::vector { *eye });
   }
 
   auto WriteTextureSidecar(const std::filesystem::path& root,
@@ -468,11 +465,9 @@ namespace {
     const auto scene_key
       = index.FindAssetKeyByVirtualPath("/.cooked/Scenes/MaskScene.oscene");
     ASSERT_HAS_VALUE(scene_key);
-    // NOLINTNEXTLINE(bugprone-unchecked-optional-access) - asserted above
-    const auto references = index.FindAssetReferences(scene_key.value());
+    const auto references = index.FindAssetReferences(*scene_key);
     ASSERT_HAS_VALUE(references);
-    // NOLINTNEXTLINE(bugprone-unchecked-optional-access) - asserted above
-    EXPECT_THAT(references.value().Resources(),
+    EXPECT_THAT(references->Resources(),
       ::testing::ElementsAre(data::ResourceBinding {
         .kind = data::ResourceKind::kTexture,
         .index = ResourceIndexT { 4U },
@@ -502,7 +497,6 @@ namespace {
       data::AssetKey {}, ReadBytes(root / "Scenes/MaskScene.oscene"))
                             .TryGetPostProcessVolumeEnvironment();
     ASSERT_HAS_VALUE(unmasked);
-    // NOLINTNEXTLINE(bugprone-unchecked-optional-access) - asserted above
     EXPECT_EQ(
       unmasked->auto_exposure_metering_mask, data::kNoResourceReference);
   }
@@ -542,17 +536,15 @@ namespace {
     const auto scene_key
       = index.FindAssetKeyByVirtualPath("/.cooked/Scenes/MaskScene.oscene");
     ASSERT_HAS_VALUE(scene_key);
-    // NOLINTBEGIN(bugprone-unchecked-optional-access) - asserted above
-    const auto references = index.FindAssetReferences(scene_key.value());
+    const auto references = index.FindAssetReferences(*scene_key);
     ASSERT_HAS_VALUE(references);
     const auto exposure = data::SceneAsset(
       data::AssetKey {}, ReadBytes(root / "Scenes/MaskScene.oscene"))
                             .TryGetPostProcessVolumeEnvironment();
     ASSERT_HAS_VALUE(exposure);
-    const auto target = references.value().ResolveTexture(
-      exposure->auto_exposure_metering_mask);
-    // NOLINTEND(bugprone-unchecked-optional-access)
-    ASSERT_TRUE(target.has_value());
+    const auto target
+      = references->ResolveTexture(exposure->auto_exposure_metering_mask);
+    ASSERT_HAS_VALUE(target);
     EXPECT_EQ(std::get<data::AssetKey>(*target),
       data::TextureKeyFromVirtualPath(kMask));
   }
@@ -1223,13 +1215,13 @@ namespace {
     const auto scene_key = index.FindAssetKeyByVirtualPath(
       "/.cooked/Scenes/EnvironmentScene.oscene");
     ASSERT_HAS_VALUE(scene_key);
-    // NOLINTNEXTLINE(bugprone-unchecked-optional-access) - asserted above
-    const auto references = index.FindAssetReferences(scene_key.value());
+    const auto references = index.FindAssetReferences(*scene_key);
     ASSERT_HAS_VALUE(references);
+    const auto& asset_references = *references;
     const auto texture_of
-      = [&](const data::ResourceReferenceIndex reference) -> uint32_t {
-      // NOLINTNEXTLINE(bugprone-unchecked-optional-access) - asserted above
-      const auto resolved = references.value().ResolveResource(
+      = [&asset_references](
+          const data::ResourceReferenceIndex reference) -> uint32_t {
+      const auto resolved = asset_references.ResolveResource(
         reference, data::ResourceKind::kTexture);
       return resolved && resolved->has_value() ? resolved->value().get() : 0U;
     };

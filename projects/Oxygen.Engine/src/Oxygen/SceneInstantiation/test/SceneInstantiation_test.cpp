@@ -414,13 +414,12 @@ NOLINT_TEST_F(SceneInstantiationTest, CreatesNodesWithHierarchyAndTransforms)
   EXPECT_EQ(instance.nodes.at(0).GetName(), "Root");
   EXPECT_EQ(instance.nodes.at(2).GetName(), "Node2");
   auto child_node = instance.nodes.at(1);
-  ASSERT_TRUE(child_node.GetParent().has_value());
-  // NOLINTNEXTLINE(bugprone-unchecked-optional-access) - asserted above
-  EXPECT_EQ(child_node.GetParent().value().GetName(), "Root");
+  const auto parent = child_node.GetParent();
+  ASSERT_HAS_VALUE(parent);
+  EXPECT_EQ(parent->GetName(), "Root");
   const auto position = child_node.GetTransform().GetLocalPosition();
-  ASSERT_TRUE(position.has_value());
-  // NOLINTNEXTLINE(bugprone-unchecked-optional-access) - asserted above
-  EXPECT_FLOAT_EQ(position.value().y, 2.0F);
+  ASSERT_HAS_VALUE(position);
+  EXPECT_FLOAT_EQ(position->y, 2.0F);
 }
 
 //! The authored starting camera becomes the active camera.
@@ -436,9 +435,8 @@ NOLINT_TEST_F(SceneInstantiationTest, StartingCameraBecomesActive)
   const auto instance = Run(builder.Build());
 
   const auto active = Scene().ActiveCamera();
-  ASSERT_TRUE(active.has_value());
-  // NOLINTNEXTLINE(bugprone-unchecked-optional-access) - asserted above
-  EXPECT_EQ(active.value().GetName(), "Second");
+  ASSERT_HAS_VALUE(active);
+  EXPECT_EQ(active->GetName(), "Second");
   EXPECT_TRUE(instance.issues.empty());
 }
 
@@ -455,9 +453,8 @@ NOLINT_TEST_F(SceneInstantiationTest, FirstCameraIsUsedWhenNoneIsAuthored)
   const auto instance = Run(builder.Build());
 
   const auto active = Scene().ActiveCamera();
-  ASSERT_TRUE(active.has_value());
-  // NOLINTNEXTLINE(bugprone-unchecked-optional-access) - asserted above
-  EXPECT_EQ(active.value().GetName(), "Eye");
+  ASSERT_HAS_VALUE(active);
+  EXPECT_EQ(active->GetName(), "Eye");
   EXPECT_TRUE(HasIssue(instance, issue_codes::kStartingCameraMissing));
 }
 
@@ -488,14 +485,11 @@ NOLINT_TEST_F(SceneInstantiationTest, InstancedScenesLoadUnderTheirNodes)
 
   auto holder = instance.nodes.at(0);
   auto child = holder.GetFirstChild();
-  ASSERT_TRUE(child.has_value());
-  // NOLINTNEXTLINE(bugprone-unchecked-optional-access) - asserted above
-  EXPECT_EQ(child.value().GetName(), "ModelRoot");
-  // NOLINTNEXTLINE(bugprone-unchecked-optional-access) - asserted above
-  auto wheel = child.value().GetFirstChild();
-  ASSERT_TRUE(wheel.has_value());
-  // NOLINTNEXTLINE(bugprone-unchecked-optional-access) - asserted above
-  EXPECT_EQ(wheel.value().GetName(), "Wheel");
+  ASSERT_HAS_VALUE(child);
+  EXPECT_EQ(child->GetName(), "ModelRoot");
+  auto wheel = child->GetFirstChild();
+  ASSERT_HAS_VALUE(wheel);
+  EXPECT_EQ(wheel->GetName(), "Wheel");
   EXPECT_TRUE(HasIssue(
     instance, data::to_string(data::CompositionIssueCode::kSceneMissing)));
 }
@@ -581,9 +575,8 @@ NOLINT_TEST_F(SceneInstantiationTest, AppliesSurfaceAndLodPolicyOverrides)
   EXPECT_FALSE(unlit_renderable.SubmeshCastsShadows(first, submesh));
   EXPECT_TRUE(unlit_renderable.HasLodPolicyOverride());
   const auto policy = unlit_renderable.GetLodPolicy();
-  ASSERT_TRUE(policy.has_value());
-  // NOLINTNEXTLINE(bugprone-unchecked-optional-access) - asserted above
-  const auto* resolved = std::get_if<scene::DistancePolicy>(&policy.value());
+  ASSERT_HAS_VALUE(policy);
+  const auto* resolved = std::get_if<scene::DistancePolicy>(&*policy);
   ASSERT_NE(resolved, nullptr);
   ASSERT_EQ(resolved->thresholds.size(), 1U);
   EXPECT_FLOAT_EQ(resolved->thresholds.front(), kLodDistance);
@@ -657,33 +650,27 @@ NOLINT_TEST_F(SceneInstantiationTest, AttachesEveryNodeRecordFamily)
     material);
   const auto eye_camera
     = instance.nodes.at(eye).GetCameraAs<scene::PerspectiveCamera>();
-  ASSERT_TRUE(eye_camera.has_value());
-  // NOLINTNEXTLINE(bugprone-unchecked-optional-access) - asserted above
+  ASSERT_HAS_VALUE(eye_camera);
   EXPECT_FLOAT_EQ(eye_camera->get().GetFieldOfView(), kFieldOfView);
   const auto map_camera
     = instance.nodes.at(map).GetCameraAs<scene::OrthographicCamera>();
-  ASSERT_TRUE(map_camera.has_value());
-  // NOLINTNEXTLINE(bugprone-unchecked-optional-access) - asserted above
+  ASSERT_HAS_VALUE(map_camera);
   EXPECT_FLOAT_EQ(map_camera->get().GetExtents().at(1), kOrthoHalfWidth);
   const auto sun_light
     = instance.nodes.at(sun).GetLightAs<scene::DirectionalLight>();
-  ASSERT_TRUE(sun_light.has_value());
-  // NOLINTNEXTLINE(bugprone-unchecked-optional-access) - asserted above
+  ASSERT_HAS_VALUE(sun_light);
   EXPECT_FLOAT_EQ(sun_light->get().GetIntensityLux(), kSunLux);
   const auto bulb_light
     = instance.nodes.at(bulb).GetLightAs<scene::PointLight>();
-  ASSERT_TRUE(bulb_light.has_value());
-  // NOLINTNEXTLINE(bugprone-unchecked-optional-access) - asserted above
+  ASSERT_HAS_VALUE(bulb_light);
   EXPECT_FLOAT_EQ(bulb_light->get().GetLuminousFluxLm(), kBulbFlux);
   const auto spot_component
     = instance.nodes.at(spot).GetLightAs<scene::SpotLight>();
-  ASSERT_TRUE(spot_component.has_value());
+  ASSERT_HAS_VALUE(spot_component);
   EXPECT_FLOAT_EQ(
-    // NOLINTNEXTLINE(bugprone-unchecked-optional-access) - asserted above
     spot_component->get().GetOuterConeAngleRadians(), kSpotOuterCone);
   const auto haze_impl = instance.nodes.at(haze).GetImpl();
-  ASSERT_TRUE(haze_impl.has_value());
-  // NOLINTNEXTLINE(bugprone-unchecked-optional-access) - asserted above
+  ASSERT_HAS_VALUE(haze_impl);
   const auto& haze_node = haze_impl->get();
   ASSERT_TRUE(haze_node.HasComponent<scene::environment::LocalFogVolume>());
   EXPECT_EQ(haze_node.GetComponent<scene::environment::LocalFogVolume>()
@@ -747,9 +734,8 @@ NOLINT_TEST_F(SceneInstantiationTest, InstancedScenesContributeNoStartState)
 
   EXPECT_TRUE(instance.issues.empty());
   const auto active = Scene().ActiveCamera();
-  ASSERT_TRUE(active.has_value());
-  // NOLINTNEXTLINE(bugprone-unchecked-optional-access) - asserted above
-  EXPECT_EQ(active.value().GetName(), "Eye");
+  ASSERT_HAS_VALUE(active);
+  EXPECT_EQ(active->GetName(), "Eye");
   EXPECT_EQ(Input().GetMappingContextByKey(model_context), nullptr);
   const auto environment = Scene().GetEnvironment();
   EXPECT_TRUE(environment == nullptr
@@ -923,14 +909,12 @@ NOLINT_TEST_F(SceneInstantiationTest, PlacesAModelTwice)
   const auto path = std::vector { wheel };
   auto left_wheel = left_root.GetInstance().Find(path);
   auto right_wheel = right_root.GetInstance().Find(path);
-  ASSERT_TRUE(left_wheel.has_value());
-  ASSERT_TRUE(right_wheel.has_value());
-  // NOLINTBEGIN(bugprone-unchecked-optional-access) - asserted above
+  ASSERT_HAS_VALUE(left_wheel);
+  ASSERT_HAS_VALUE(right_wheel);
   EXPECT_EQ(left_wheel->GetName(), "Wheel");
   EXPECT_NE(left_wheel->GetHandle(), right_wheel->GetHandle());
   EXPECT_FLOAT_EQ(LocalX(*left_wheel), kModelX);
   EXPECT_FLOAT_EQ(LocalX(*right_wheel), kChangedX);
-  // NOLINTEND(bugprone-unchecked-optional-access)
 }
 
 //! Nesting two levels deep builds the composed tree: the outer scene's
@@ -982,12 +966,10 @@ NOLINT_TEST_F(SceneInstantiationTest, BuildsTwoNestingLevels)
   auto root = instance.nodes.at(parked);
   const auto path = std::vector { holder_id, wheel };
   auto found = root.GetInstance().Find(path);
-  ASSERT_TRUE(found.has_value());
-  // NOLINTNEXTLINE(bugprone-unchecked-optional-access) - asserted above
+  ASSERT_HAS_VALUE(found);
   EXPECT_FLOAT_EQ(LocalX(*found), kOuterX);
   auto nested = root.GetInstance().Find(std::span(path).first(1U));
-  ASSERT_TRUE(nested.has_value());
-  // NOLINTNEXTLINE(bugprone-unchecked-optional-access) - asserted above
+  ASSERT_HAS_VALUE(nested);
   EXPECT_EQ(nested->GetInstance().Source()->GetAssetKey(), model_key);
 }
 
@@ -1026,8 +1008,7 @@ NOLINT_TEST_F(SceneInstantiationTest, UnresolvedChangeIsAnIssue)
   EXPECT_EQ(issue->node_path, std::vector { stranger });
   auto root = instance.nodes.at(holder);
   auto found = root.GetInstance().Find(std::vector { wheel });
-  ASSERT_TRUE(found.has_value());
-  // NOLINTNEXTLINE(bugprone-unchecked-optional-access) - asserted above
+  ASSERT_HAS_VALUE(found);
   EXPECT_FLOAT_EQ(LocalX(*found), kModelX);
 }
 
@@ -1082,8 +1063,7 @@ NOLINT_TEST_F(SceneInstantiationTest, StartsThroughAnInstancedCamera)
 
   EXPECT_FALSE(HasIssue(instance, issue_codes::kStartingCameraUnresolved));
   const auto active = Scene().ActiveCamera();
-  ASSERT_TRUE(active.has_value());
-  // NOLINTNEXTLINE(bugprone-unchecked-optional-access) - asserted above
+  ASSERT_HAS_VALUE(active);
   EXPECT_EQ(active->GetName(), "RigEye");
 }
 
@@ -1100,8 +1080,7 @@ NOLINT_TEST_F(SceneInstantiationTest, MissingInstancedCameraFallsBack)
 
   EXPECT_TRUE(HasIssue(instance, issue_codes::kStartingCameraUnresolved));
   const auto active = Scene().ActiveCamera();
-  ASSERT_TRUE(active.has_value());
-  // NOLINTNEXTLINE(bugprone-unchecked-optional-access) - asserted above
+  ASSERT_HAS_VALUE(active);
   EXPECT_EQ(active->GetName(), "Eye");
 }
 
@@ -1202,12 +1181,10 @@ NOLINT_TEST_F(SceneInstantiationTest, InstancesUnderALiveNode)
   EXPECT_EQ(host.GetInstance().Changes().size(), 1U);
   auto body = placed.nodes.at(0);
   const auto parent = body.GetParent();
-  ASSERT_TRUE(parent.has_value());
-  // NOLINTNEXTLINE(bugprone-unchecked-optional-access) - asserted above
+  ASSERT_HAS_VALUE(parent);
   EXPECT_EQ(parent->GetHandle(), host.GetHandle());
   auto found = host.GetInstance().Find(std::vector { wheel });
-  ASSERT_TRUE(found.has_value());
-  // NOLINTNEXTLINE(bugprone-unchecked-optional-access) - asserted above
+  ASSERT_HAS_VALUE(found);
   EXPECT_FLOAT_EQ(LocalX(*found), kChangedX);
 }
 
@@ -1260,8 +1237,7 @@ NOLINT_TEST_F(SceneInstantiationTest, SetThenClearRestoresTheSourceValue)
   auto host = Scene().CreateNode("Host");
   (void)Place(host, model_key);
   auto found = host.GetInstance().Find(std::vector { wheel });
-  ASSERT_TRUE(found.has_value());
-  // NOLINTBEGIN(bugprone-unchecked-optional-access) - asserted above
+  ASSERT_HAS_VALUE(found);
 
   const auto set = SetChange(host, MoveX({ wheel }, kChangedX), Loader());
   const auto changed_x = LocalX(*found);
@@ -1272,7 +1248,6 @@ NOLINT_TEST_F(SceneInstantiationTest, SetThenClearRestoresTheSourceValue)
   EXPECT_TRUE(cleared.issues.empty());
   EXPECT_FLOAT_EQ(LocalX(*found), kModelX);
   EXPECT_TRUE(host.GetInstance().Changes().empty());
-  // NOLINTEND(bugprone-unchecked-optional-access)
 }
 
 //! Two levels down, clearing the outer change restores the nested scene's
@@ -1285,9 +1260,8 @@ NOLINT_TEST_F(SceneInstantiationTest, SetThenClearAtTheNestedLevel)
   const auto path = std::vector { street.holder_id, street.wheel };
   auto found = root.GetInstance().Find(path);
   auto holder = root.GetInstance().Find(std::span(path).first(1U));
-  ASSERT_TRUE(found.has_value());
-  ASSERT_TRUE(holder.has_value());
-  // NOLINTBEGIN(bugprone-unchecked-optional-access) - asserted above
+  ASSERT_HAS_VALUE(found);
+  ASSERT_HAS_VALUE(holder);
 
   const auto outer = SetChange(root, MoveX(path, kOuterX), Loader());
   const auto outer_x = LocalX(*found);
@@ -1307,7 +1281,6 @@ NOLINT_TEST_F(SceneInstantiationTest, SetThenClearAtTheNestedLevel)
   EXPECT_FLOAT_EQ(cleared_x, kInnerX);
   EXPECT_TRUE(inner_cleared.issues.empty());
   EXPECT_FLOAT_EQ(LocalX(*found), kModelX);
-  // NOLINTEND(bugprone-unchecked-optional-access)
 }
 
 //! A change whose address does not resolve returns an issue and changes
@@ -1338,8 +1311,7 @@ NOLINT_TEST_F(SceneInstantiationTest, UnresolvedLiveChangeChangesNothing)
   EXPECT_EQ(not_root.issues.front().code, issue_codes::kNotInstanceRoot);
   ASSERT_EQ(host.GetInstance().Changes().size(), 1U);
   auto found = host.GetInstance().Find(std::vector { wheel });
-  ASSERT_TRUE(found.has_value());
-  // NOLINTNEXTLINE(bugprone-unchecked-optional-access) - asserted above
+  ASSERT_HAS_VALUE(found);
   EXPECT_FLOAT_EQ(LocalX(*found), kChangedX);
 }
 
@@ -1374,10 +1346,9 @@ NOLINT_TEST_F(SceneInstantiationTest, SurfaceChangeSetsAndClearsLive)
   const auto instance = Run(builder.Build());
   auto root = instance.nodes.at(holder);
   auto found = root.GetInstance().Find(std::vector { prop });
-  ASSERT_TRUE(found.has_value());
+  ASSERT_HAS_VALUE(found);
   const auto first = data::LodIndex { 0U };
   const auto submesh = data::SubmeshIndex { 0U };
-  // NOLINTBEGIN(bugprone-unchecked-optional-access) - asserted above
 
   const auto set = SetChange(root,
     InstanceChange {
@@ -1404,7 +1375,6 @@ NOLINT_TEST_F(SceneInstantiationTest, SurfaceChangeSetsAndClearsLive)
   EXPECT_TRUE(hidden);
   EXPECT_TRUE(cleared.issues.empty());
   EXPECT_TRUE(found->GetRenderable().IsSubmeshVisible(first, submesh));
-  // NOLINTEND(bugprone-unchecked-optional-access)
 }
 
 //! A host's LOD policy applies when the instance is placed; a live change
@@ -1449,8 +1419,7 @@ NOLINT_TEST_F(SceneInstantiationTest, HostLodPolicySetsAndClearsLive)
   const auto placed = Place(host, model_key,
     { InstanceChange { .path = { prop }, .change = distance(kLodDistance) } });
   auto found = host.GetInstance().Find(std::vector { prop });
-  ASSERT_TRUE(found.has_value());
-  // NOLINTBEGIN(bugprone-unchecked-optional-access) - asserted above
+  ASSERT_HAS_VALUE(found);
   const auto placed_threshold = threshold(*found);
   const auto set = SetChange(host,
     InstanceChange {
@@ -1480,7 +1449,6 @@ NOLINT_TEST_F(SceneInstantiationTest, HostLodPolicySetsAndClearsLive)
   EXPECT_EQ(held, 1U) << "a new value of the same change reuses its policy";
   EXPECT_TRUE(cleared.issues.empty());
   EXPECT_FALSE(found->GetRenderable().HasLodPolicyOverride());
-  // NOLINTEND(bugprone-unchecked-optional-access)
 }
 
 //! Detach destroys what the instance brought in and keeps the root and its
@@ -1505,19 +1473,17 @@ NOLINT_TEST_F(SceneInstantiationTest, DetachKeepsTheRootAndOwnedChildren)
   auto root = instance.nodes.at(holder);
   auto owned_node = instance.nodes.at(owned);
   auto found = root.GetInstance().Find(std::vector { wheel });
-  ASSERT_TRUE(found.has_value());
+  ASSERT_HAS_VALUE(found);
 
   const auto detached = Detach(Scene(), root);
 
   EXPECT_TRUE(detached);
   EXPECT_TRUE(root.IsAlive());
   EXPECT_FALSE(root.GetInstance().IsInstanceRoot());
-  // NOLINTNEXTLINE(bugprone-unchecked-optional-access) - asserted above
   EXPECT_FALSE(found->IsAlive());
   ASSERT_TRUE(owned_node.IsAlive());
   const auto parent = owned_node.GetParent();
-  ASSERT_TRUE(parent.has_value());
-  // NOLINTNEXTLINE(bugprone-unchecked-optional-access) - asserted above
+  ASSERT_HAS_VALUE(parent);
   EXPECT_EQ(parent->GetHandle(), root.GetHandle());
   EXPECT_FALSE(Detach(Scene(), root));
 }
@@ -1585,8 +1551,7 @@ NOLINT_TEST_F(SceneInstantiationTest, HostNodeParameterBindsItsNode)
 
   const auto placed = Place(host, model_key, { Target({ door_id }, garage) });
   auto door = host.GetInstance().Find(std::vector { door_id });
-  ASSERT_TRUE(door.has_value());
-  // NOLINTBEGIN(bugprone-unchecked-optional-access) - asserted above
+  ASSERT_HAS_VALUE(door);
   const auto placed_target = TargetOf(*door);
   const auto set
     = SetChange(host, Target({ door_id }, shed), Loader(), Scripts());
@@ -1601,7 +1566,6 @@ NOLINT_TEST_F(SceneInstantiationTest, HostNodeParameterBindsItsNode)
   EXPECT_TRUE(set.scripts.front().diagnostics.empty());
   EXPECT_EQ(set_target, shed.GetHandle());
   EXPECT_TRUE(again.issues.empty());
-  // NOLINTEND(bugprone-unchecked-optional-access)
 }
 
 //! A node value given as a scene's node index names no node of a host, so it
@@ -1683,11 +1647,10 @@ NOLINT_TEST_F(SceneInstantiationTest, OuterNodeValueRebindsLive)
   const auto path = std::vector { holder_id, door_id };
   auto door = root.GetInstance().Find(path);
   auto nested = root.GetInstance().Find(std::span(path).first(1U));
-  ASSERT_TRUE(door.has_value());
-  ASSERT_TRUE(nested.has_value());
+  ASSERT_HAS_VALUE(door);
+  ASSERT_HAS_VALUE(nested);
   auto shed = Scene().CreateNode("Shed");
   const auto garage_node = instance.nodes.at(garage);
-  // NOLINTBEGIN(bugprone-unchecked-optional-access) - asserted above
   const auto built_target = TargetOf(*door);
 
   const auto inner
@@ -1710,7 +1673,6 @@ NOLINT_TEST_F(SceneInstantiationTest, OuterNodeValueRebindsLive)
   EXPECT_EQ(inner_target, garage_node.GetHandle());
   EXPECT_TRUE(cleared.issues.empty());
   EXPECT_EQ(TargetOf(*door), shed.GetHandle());
-  // NOLINTEND(bugprone-unchecked-optional-access)
 }
 
 } // namespace oxygen::instantiation::test
