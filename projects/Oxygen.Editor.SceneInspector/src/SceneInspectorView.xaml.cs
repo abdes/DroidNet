@@ -40,6 +40,16 @@ public sealed partial class SceneInspectorView : UserControl
         this.Unloaded += (_, _) => this.StopObservingModel();
     }
 
+    // A section's fields take input only while the selection can be authored: a locked node, or one an instance brings
+    // in, shows its values disabled.
+    private static void EnableInput(UIElement view, bool enabled)
+    {
+        if (view is Control control)
+        {
+            control.IsEnabled = enabled;
+        }
+    }
+
     /// <summary>
     ///     Follows the sections of the current model. The model keeps its sections for its whole life and only hides the
     ///     ones that do not apply, so a section's view is kept while hidden and shown again when the section returns; the
@@ -69,6 +79,8 @@ public sealed partial class SceneInspectorView : UserControl
             {
                 continue;
             }
+
+            EnableInput(view, this.sectionsOwner?.CanEditSelectedNodes ?? false);
 
             var current = children.IndexOf(view);
             if (current != index)
@@ -116,6 +128,14 @@ public sealed partial class SceneInspectorView : UserControl
         if (string.Equals(args.PropertyName, nameof(SceneInspectorViewModel.SelectedComponentType), StringComparison.Ordinal))
         {
             _ = this.PropertyScroll.ChangeView(horizontalOffset: null, verticalOffset: 0, zoomFactor: null, disableAnimation: true);
+        }
+        else if (string.Equals(args.PropertyName, nameof(SceneInspectorViewModel.CanEditSelectedNodes), StringComparison.Ordinal)
+            && sender is SceneInspectorViewModel model)
+        {
+            foreach (var view in this.PropertySections.Children)
+            {
+                EnableInput(view, model.CanEditSelectedNodes);
+            }
         }
     }
 

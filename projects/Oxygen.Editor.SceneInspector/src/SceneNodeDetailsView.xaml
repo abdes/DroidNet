@@ -21,9 +21,45 @@
             Grid.Column="1"
             VerticalAlignment="Center"
             Text="{x:Bind ViewModel.Name, Mode=TwoWay}"
-            ToolTipService.ToolTip="{x:Bind ViewModel.Name, Mode=OneWay}">
+            ToolTipService.ToolTip="{x:Bind ViewModel.Name, Mode=OneWay}"
+            Visibility="{x:Bind ViewModel.IsOwned, Mode=OneWay}">
             <TextBlock TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" />
         </controls:InPlaceEditableLabel>
+        <StackPanel
+            Grid.Column="1"
+            VerticalAlignment="Center"
+            Visibility="{x:Bind ViewModel.IsInstanced, Mode=OneWay}">
+            <TextBlock
+                x:Name="InstancedName"
+                Text="{x:Bind ViewModel.Name, Mode=OneWay}"
+                TextTrimming="CharacterEllipsis"
+                TextWrapping="NoWrap"
+                ToolTipService.ToolTip="{x:Bind ViewModel.Name, Mode=OneWay}" />
+            <Grid ColumnSpacing="6">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock
+                    x:Name="InstancedOrigin"
+                    VerticalAlignment="Center"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Style="{StaticResource CaptionTextBlockStyle}"
+                    Text="{x:Bind ViewModel.Origin, Mode=OneWay}"
+                    TextTrimming="CharacterEllipsis"
+                    TextWrapping="NoWrap"
+                    ToolTipService.ToolTip="{x:Bind ViewModel.Origin, Mode=OneWay}" />
+                <HyperlinkButton
+                    x:Name="SelectInstanceButton"
+                    Grid.Column="1"
+                    Padding="2,0"
+                    AutomationProperties.Name="Select instance"
+                    Command="{x:Bind ViewModel.SelectInstanceCommand, Mode=OneWay}"
+                    Content="Select instance"
+                    FontSize="12"
+                    ToolTipService.ToolTip="Select the instance this node comes from" />
+            </Grid>
+        </StackPanel>
         <controls:ToolBar
             Grid.Column="2"
             Background="Transparent"
@@ -46,8 +82,9 @@
                 <menus:MenuButton
                     AutomationProperties.Name="Add component"
                     Chrome="Transparent"
+                    IsEnabled="{x:Bind ViewModel.CanAddComponents, Mode=OneWay}"
                     MenuSource="{x:Bind ViewModel.AddComponentMenu, Mode=OneWay}"
-                    ToolTipService.ToolTip="Add component">
+                    ToolTipService.ToolTip="{x:Bind ViewModel.AddComponentToolTip, Mode=OneWay}">
                     <FontIcon FontSize="14" Glyph="&#xE710;" />
                 </menus:MenuButton>
             </controls:ToolBarElementHost>
@@ -57,7 +94,8 @@
                 Click="OnDeleteComponentClicked"
                 IsEnabled="{x:Bind ViewModel.CanDeleteSelectedComponent, Mode=OneWay}"
                 Label="Remove component"
-                ToolBarLabelPosition="Collapsed">
+                ToolBarLabelPosition="Collapsed"
+                ToolTipService.ToolTip="{x:Bind ViewModel.RemoveComponentToolTip, Mode=OneWay}">
                 <controls:ToolBarButton.Icon>
                     <FontIconSource Glyph="&#xE74D;" />
                 </controls:ToolBarButton.Icon>

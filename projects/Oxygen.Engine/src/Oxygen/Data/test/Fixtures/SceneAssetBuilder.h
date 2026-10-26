@@ -196,16 +196,14 @@ public:
       Append(bytes, table.bytes);
     }
     Append(bytes, std::as_bytes(std::span(slots_)));
-    if (environment_count_ != 0U) {
-      const auto header = pak::world::SceneEnvironmentBlockHeader {
-        .byte_size
-        = static_cast<uint32_t>(sizeof(pak::world::SceneEnvironmentBlockHeader)
-          + environment_.size()),
-        .systems_count = environment_count_,
-      };
-      Append(bytes, std::as_bytes(std::span(&header, 1)));
-      Append(bytes, environment_);
-    }
+    // A cooked scene always ends with its environment block, empty or not.
+    const auto header = pak::world::SceneEnvironmentBlockHeader {
+      .byte_size = static_cast<uint32_t>(
+        sizeof(pak::world::SceneEnvironmentBlockHeader) + environment_.size()),
+      .systems_count = environment_count_,
+    };
+    Append(bytes, std::as_bytes(std::span(&header, 1)));
+    Append(bytes, environment_);
     return bytes;
   }
 

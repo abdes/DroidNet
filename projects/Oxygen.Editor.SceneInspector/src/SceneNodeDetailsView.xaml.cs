@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Windows.Input;
 using DroidNet.Mvvm.Generators;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
@@ -52,6 +53,18 @@ public sealed partial class SceneNodeDetailsView : UserControl
         typeof(SceneNodeDetailsView),
         new PropertyMetadata(defaultValue: null, OnLoggerFactoryChanged));
 
+    /// <summary>Identifies the <see cref="Origin"/> dependency property.</summary>
+    public static readonly DependencyProperty OriginProperty = DependencyProperty.Register(
+        nameof(Origin), typeof(string), typeof(SceneNodeDetailsView), new PropertyMetadata(defaultValue: null, OnOriginChanged));
+
+    /// <summary>Identifies the <see cref="StructureRefusal"/> dependency property.</summary>
+    public static readonly DependencyProperty StructureRefusalProperty = DependencyProperty.Register(
+        nameof(StructureRefusal), typeof(string), typeof(SceneNodeDetailsView), new PropertyMetadata(defaultValue: null, OnStructureRefusalChanged));
+
+    /// <summary>Identifies the <see cref="SelectInstanceCommand"/> dependency property.</summary>
+    public static readonly DependencyProperty SelectInstanceCommandProperty = DependencyProperty.Register(
+        nameof(SelectInstanceCommand), typeof(ICommand), typeof(SceneNodeDetailsView), new PropertyMetadata(defaultValue: null, OnSelectInstanceCommandChanged));
+
     /// <summary>
     /// Initializes a new instance of the <see cref="SceneNodeDetailsView"/> class.
     /// </summary>
@@ -63,6 +76,9 @@ public sealed partial class SceneNodeDetailsView : UserControl
         this.ViewModel.Node = this.Node;
         this.ViewModel.NodeEdits = this.NodeEdits;
         this.ViewModel.LoggerFactory = this.LoggerFactory;
+        this.ViewModel.Origin = NullIfEmpty(this.Origin);
+        this.ViewModel.StructureRefusal = NullIfEmpty(this.StructureRefusal);
+        this.ViewModel.SelectInstanceCommand = this.SelectInstanceCommand;
     }
 
     /// <summary>Occurs when the user asks to clear the component filter.</summary>
@@ -111,6 +127,30 @@ public sealed partial class SceneNodeDetailsView : UserControl
         set => this.SetValue(LoggerFactoryProperty, value);
     }
 
+    /// <summary>
+    /// Gets or sets the instance and source of a node an instance brings in, shown under its name; <see langword="null"/>
+    /// for a node of the scene.
+    /// </summary>
+    public string? Origin
+    {
+        get => (string?)this.GetValue(OriginProperty);
+        set => this.SetValue(OriginProperty, value);
+    }
+
+    /// <summary>Gets or sets why a node an instance brings in refuses structural commands.</summary>
+    public string? StructureRefusal
+    {
+        get => (string?)this.GetValue(StructureRefusalProperty);
+        set => this.SetValue(StructureRefusalProperty, value);
+    }
+
+    /// <summary>Gets or sets what selects the instance root of a node an instance brings in.</summary>
+    public ICommand? SelectInstanceCommand
+    {
+        get => (ICommand?)this.GetValue(SelectInstanceCommandProperty);
+        set => this.SetValue(SelectInstanceCommandProperty, value);
+    }
+
     /// <summary>Requests removal of the current unlocked component using the existing document command path.</summary>
     /// <returns>Whether an applicable removal was requested.</returns>
     public bool DeleteSelectedComponent()
@@ -144,6 +184,33 @@ public sealed partial class SceneNodeDetailsView : UserControl
 
         view.ViewModel!.Node = (Oxygen.Editor.World.SceneNode?)e.NewValue;
         view.SyncSelectedComponent();
+    }
+
+    // x:Bind sets an empty string where its source is null.
+    private static string? NullIfEmpty(string? value) => string.IsNullOrEmpty(value) ? null : value;
+
+    private static void OnOriginChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is SceneNodeDetailsView view)
+        {
+            view.ViewModel!.Origin = NullIfEmpty((string?)e.NewValue);
+        }
+    }
+
+    private static void OnStructureRefusalChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is SceneNodeDetailsView view)
+        {
+            view.ViewModel!.StructureRefusal = NullIfEmpty((string?)e.NewValue);
+        }
+    }
+
+    private static void OnSelectInstanceCommandChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is SceneNodeDetailsView view)
+        {
+            view.ViewModel!.SelectInstanceCommand = (ICommand?)e.NewValue;
+        }
     }
 
     private static void OnNodeEditsChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)

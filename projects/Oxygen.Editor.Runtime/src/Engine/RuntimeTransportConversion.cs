@@ -347,6 +347,33 @@ internal static class RuntimeTransportConversion
         _ => throw new ArgumentOutOfRangeException(nameof(value)),
     };
 
+    /// <summary>Converts a property of a mounted scene's node; its value keeps the schema's units.</summary>
+    /// <param name="property">The native property.</param>
+    /// <returns>The property, or <see langword="null"/> for an asset no mounted source provides.</returns>
+    public static RuntimeSceneNodeProperty? FromNative(SceneNodePropertyManaged property)
+    {
+        RuntimeInstanceValue? value = property.Kind switch
+        {
+            InstanceValueKind.Bool => new RuntimeInstanceValue.Flag(property.BoolValue),
+            InstanceValueKind.Int32 => new RuntimeInstanceValue.Integer(property.Int32Value),
+            InstanceValueKind.Float => new RuntimeInstanceValue.Scalar(property.FloatValue),
+            InstanceValueKind.Vector3 => new RuntimeInstanceValue.Vector(property.Vector3Value),
+            InstanceValueKind.Asset => string.IsNullOrEmpty(property.AssetPath) ? null : new RuntimeInstanceValue.Asset(property.AssetPath),
+            InstanceValueKind.LodPolicy => new RuntimeInstanceValue.LodPolicyValue(FromNative(property.LodPolicy)),
+            _ => throw new ArgumentOutOfRangeException(nameof(property), property.Kind, "Unknown property value kind."),
+        };
+        return value is null ? null : new RuntimeSceneNodeProperty((RuntimeOverrideId)property.OverrideId, property.PartId, property.LayoutRevision, value);
+    }
+
+    private static LodPolicy FromNative(LodPolicyManaged policy)
+        => policy.Type switch
+        {
+            FixedLodPolicy => new LodPolicy.Fixed(policy.LodIndex),
+            DistanceLodPolicy => new LodPolicy.Distance([.. policy.Thresholds ?? []], policy.HysteresisRatio),
+            ScreenSpaceErrorLodPolicy => new LodPolicy.ScreenSpaceError([.. policy.EnterFinerSse ?? []], [.. policy.ExitCoarserSse ?? []]),
+            _ => throw new ArgumentOutOfRangeException(nameof(policy), policy.Type, "Unknown LOD policy type."),
+        };
+
     private static LodPolicyManaged ToNative(LodPolicy policy)
         => policy switch
         {

@@ -1651,6 +1651,15 @@ auto AssetLoader::ReadMountedSceneHierarchy(const data::AssetKey& key) const
     impl_->source_registry, key);
 }
 
+auto AssetLoader::ReadMountedSceneNode(
+  const data::AssetKey& key, const std::span<const data::NodeId> path) const
+  -> std::optional<IAssetLoader::SceneNodeValues>
+{
+  AssertOwningThread();
+  return scene_catalog_query_service_->ReadSceneNode(
+    impl_->source_registry, key, path);
+}
+
 auto AssetLoader::EnumerateMountedInputContexts() const
   -> std::vector<IAssetLoader::MountedInputContextEntry>
 {

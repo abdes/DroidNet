@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Editor.World;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Runtime.Engine;
@@ -32,6 +33,16 @@ internal sealed partial class RuntimeCommandDispatcher
         ArgumentNullException.ThrowIfNull(virtualPath);
         var (outcome, hierarchy) = await this.ObserveAsync(operationId, target, transport => transport.ReadSceneHierarchyAsync(virtualPath), cancellationToken).ConfigureAwait(false);
         return new(outcome, hierarchy);
+    }
+
+    /// <inheritdoc/>
+    public async Task<RuntimeSceneNodeObservation> ReadSceneNodeAsync(
+        Guid operationId, RuntimeSceneTarget target, string virtualPath, NodePath path, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(virtualPath);
+        ArgumentNullException.ThrowIfNull(path);
+        var (outcome, values) = await this.ObserveAsync(operationId, target, transport => transport.ReadSceneNodeAsync(virtualPath, path), cancellationToken).ConfigureAwait(false);
+        return new(outcome, values);
     }
 
     private async Task<(RuntimeCommandResult Outcome, TState? State)> ObserveAsync<TState>(

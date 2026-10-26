@@ -308,6 +308,9 @@ public:
   OXGN_CNTT_NDAPI auto ReadMountedSceneHierarchy(
     const data::AssetKey& key) const
     -> std::optional<IAssetLoader::SceneHierarchy> override;
+  OXGN_CNTT_NDAPI auto ReadMountedSceneNode(
+    const data::AssetKey& key, std::span<const data::NodeId> path) const
+    -> std::optional<IAssetLoader::SceneNodeValues> override;
   OXGN_CNTT_NDAPI auto EnumerateMountedInputContexts() const
     -> std::vector<IAssetLoader::MountedInputContextEntry> override;
   OXGN_CNTT_NDAPI auto EnumerateMountedSources() const

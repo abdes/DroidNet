@@ -7,6 +7,7 @@
 #pragma once
 
 #include <optional>
+#include <span>
 #include <vector>
 
 #include <Oxygen/Content/IAssetLoader.h>
@@ -26,6 +27,12 @@ public:
     const ContentSourceRegistry& source_registry,
     const data::AssetKey& key) const
     -> std::optional<IAssetLoader::SceneHierarchy>;
+
+  //! The effective values of the node `path` names in the composition of the
+  //! mounted scene `key`, read from scene descriptors.
+  [[nodiscard]] auto ReadSceneNode(const ContentSourceRegistry& source_registry,
+    const data::AssetKey& key, std::span<const data::NodeId> path) const
+    -> std::optional<IAssetLoader::SceneNodeValues>;
 };
 
 } // namespace oxygen::content::internal

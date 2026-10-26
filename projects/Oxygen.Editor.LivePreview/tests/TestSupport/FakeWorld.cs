@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Editor.World;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.LivePreview.Tests.TestSupport;
@@ -132,4 +133,8 @@ internal sealed class FakeWorld : IRuntimeWorldCommands
     /// <inheritdoc/>
     public Task<RuntimeSceneHierarchyObservation> ReadSceneHierarchyAsync(Guid operationId, RuntimeSceneTarget target, string virtualPath, CancellationToken cancellationToken = default)
         => throw new NotSupportedException("Scene preview tests do not read scene hierarchies.");
+
+    /// <inheritdoc/>
+    public Task<RuntimeSceneNodeObservation> ReadSceneNodeAsync(Guid operationId, RuntimeSceneTarget target, string virtualPath, NodePath path, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException("Scene preview tests do not read scene nodes.");
 }

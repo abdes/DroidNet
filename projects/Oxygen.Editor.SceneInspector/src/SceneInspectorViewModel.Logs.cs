@@ -56,4 +56,11 @@ public partial class SceneInspectorViewModel
 
     [Conditional("DEBUG")]
     private void LogUnexpectedException(string operation, Exception ex) => LogUnexpectedException(this.logger, operation, ex);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "The values of the selected instanced nodes could not be shown.")]
+    private static partial void LogInstancedReadFailed(ILogger logger, Exception ex);
+
+    private void LogInstancedReadFailed(Exception ex) => LogInstancedReadFailed(this.logger, ex);
 }

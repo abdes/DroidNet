@@ -120,4 +120,26 @@ public sealed class RuntimeTransportConversionTests
         _ = policy.Kind.Should().Be(InstanceValueKind.LodPolicy);
         _ = policy.LodPolicy.LodIndex.Should().Be(1);
     }
+
+    [TestMethod]
+    public void SceneNodeProperty_ReadsTheMemberOfItsKind()
+    {
+        var surface = Guid.NewGuid();
+        const string revision = "0101010101010101010101010101010101010101010101010101010101010101";
+
+        var vector = RuntimeTransportConversion.FromNative(new SceneNodePropertyManaged { OverrideId = (ushort)RuntimeOverrideId.TransformRotation, Kind = InstanceValueKind.Vector3, Vector3Value = new Vector3(1, 2, 3) });
+        var material = RuntimeTransportConversion.FromNative(new SceneNodePropertyManaged { OverrideId = (ushort)RuntimeOverrideId.GeometrySurfaceMaterial, PartId = surface, LayoutRevision = revision, Kind = InstanceValueKind.Asset, AssetPath = "/Content/Red.omat" });
+        var unmounted = RuntimeTransportConversion.FromNative(new SceneNodePropertyManaged { OverrideId = (ushort)RuntimeOverrideId.GeometrySurfaceMaterial, PartId = surface, Kind = InstanceValueKind.Asset, AssetPath = string.Empty });
+        var policy = RuntimeTransportConversion.FromNative(new SceneNodePropertyManaged
+        {
+            OverrideId = (ushort)RuntimeOverrideId.GeometryLodPolicy,
+            Kind = InstanceValueKind.LodPolicy,
+            LodPolicy = new LodPolicyManaged { Type = 1, Thresholds = [10f, 20f], HysteresisRatio = 0.1f, EnterFinerSse = [], ExitCoarserSse = [] },
+        });
+
+        _ = vector.Should().Be(new RuntimeSceneNodeProperty(RuntimeOverrideId.TransformRotation, Guid.Empty, LayoutRevision: null, new RuntimeInstanceValue.Vector(new Vector3(1, 2, 3))));
+        _ = material.Should().Be(new RuntimeSceneNodeProperty(RuntimeOverrideId.GeometrySurfaceMaterial, surface, revision, new RuntimeInstanceValue.Asset("/Content/Red.omat")));
+        _ = unmounted.Should().BeNull("an asset no mounted source provides has no path to name it by");
+        _ = policy!.Value.Should().Be(new RuntimeInstanceValue.LodPolicyValue(new Oxygen.Editor.World.Serialization.LodPolicy.Distance([10f, 20f], 0.1f)));
+    }
 }

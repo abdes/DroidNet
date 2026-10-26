@@ -7,7 +7,7 @@ using Oxygen.Editor.World.Serialization;
 
 namespace Oxygen.Editor.Runtime.Engine;
 
-/// <summary>The value of an instance change, in the scene schema's units.</summary>
+/// <summary>The value of an instance change, or of an instanced node's property, in the scene schema's units.</summary>
 /// <remarks>An enum is its member's wire value; a material is the engine path of its cooked asset.</remarks>
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1034:Nested types should not be visible", Justification = "The closed set of value kinds belongs with its base.")]
 public abstract record RuntimeInstanceValue

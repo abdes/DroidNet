@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Editor.World;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Runtime.Engine;
@@ -77,4 +78,16 @@ public interface IRuntimeWorldCommands
     /// <param name="cancellationToken">Cancels the observation wait.</param>
     /// <returns>The hierarchy only if the requested activation remains current.</returns>
     public Task<RuntimeSceneHierarchyObservation> ReadSceneHierarchyAsync(Guid operationId, RuntimeSceneTarget target, string virtualPath, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Reads the effective values of a node of a scene of the content the activation mounts, from the scene descriptors
+    /// alone.
+    /// </summary>
+    /// <param name="operationId">The observation identity.</param>
+    /// <param name="target">The scene activation whose mounted content is read.</param>
+    /// <param name="virtualPath">The scene's virtual path.</param>
+    /// <param name="path">The node: one node ID per nesting level, the first a node of the scene.</param>
+    /// <param name="cancellationToken">Cancels the observation wait.</param>
+    /// <returns>The values only if the requested activation remains current.</returns>
+    public Task<RuntimeSceneNodeObservation> ReadSceneNodeAsync(Guid operationId, RuntimeSceneTarget target, string virtualPath, NodePath path, CancellationToken cancellationToken = default);
 }

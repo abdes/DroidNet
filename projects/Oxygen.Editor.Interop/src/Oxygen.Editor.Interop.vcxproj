@@ -201,6 +201,7 @@
     <ClInclude Include="Commands\ObserveEnvironmentCommand.h" />
     <ClInclude Include="Commands\ObserveNodeCommand.h" />
     <ClInclude Include="Commands\ReadSceneHierarchyCommand.h" />
+    <ClInclude Include="Commands\ReadSceneNodeCommand.h" />
     <ClInclude Include="Utils\EditorRotation.h" />
     <ClInclude Include="Utils\Utf8Marshaling.h" />
     <ClInclude Include="World\EnvironmentStateManaged.h" />

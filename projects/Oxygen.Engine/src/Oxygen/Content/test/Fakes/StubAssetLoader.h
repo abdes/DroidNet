@@ -9,6 +9,7 @@
 #include <filesystem>
 #include <memory>
 #include <optional>
+#include <span>
 #include <stdexcept>
 #include <string_view>
 #include <vector>
@@ -174,6 +175,12 @@ public:
   }
   auto ReadMountedSceneHierarchy(const data::AssetKey& /*key*/) const
     -> std::optional<SceneHierarchy> override
+  {
+    return std::nullopt;
+  }
+  auto ReadMountedSceneNode(
+    const data::AssetKey& /*key*/, std::span<const data::NodeId> /*path*/) const
+    -> std::optional<SceneNodeValues> override
   {
     return std::nullopt;
   }

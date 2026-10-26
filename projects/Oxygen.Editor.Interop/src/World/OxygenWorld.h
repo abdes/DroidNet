@@ -173,6 +173,39 @@ value struct PropertyValueEntry {
     array<SceneHierarchyIssueManaged>^ Issues;
   };
 
+  //! A property of a mounted scene's node with its effective value, in the
+  //! schema's units: an enum is its member's wire value, a rotation the
+  //! editor's Y-X-Z Euler angles in degrees, an asset the virtual path of its
+  //! cooked asset (empty when no mounted source provides it), a LOD policy its
+  //! record's values. `Kind` names the member that holds the value; the
+  //! others stay at their defaults.
+  public value struct SceneNodePropertyManaged {
+    System::UInt16 OverrideId;
+    //! The surface of a surface property; empty otherwise.
+    System::Guid PartId;
+    //! The geometry layout revision of a surface property, as lowercase
+    //! hexadecimal; null otherwise.
+    System::String^ LayoutRevision;
+    InstanceValueKind Kind;
+    bool BoolValue;
+    System::Int32 Int32Value;
+    float FloatValue;
+    System::Numerics::Vector3 Vector3Value;
+    System::String^ AssetPath;
+    LodPolicyManaged LodPolicy;
+  };
+
+  //! The effective values of a node of a mounted scene's composition.
+  public value struct SceneNodeValuesManaged {
+    //! Whether the virtual path names a mounted, readable scene with the node.
+    bool Exists;
+    System::String^ Name;
+    //! The virtual path of the geometry the node renders: null when it
+    //! renders none, empty when no mounted source provides it.
+    System::String^ GeometryPath;
+    array<SceneNodePropertyManaged>^ Properties;
+  };
+
   public
   ref class OxygenWorld {
   public:
@@ -259,6 +292,12 @@ value struct PropertyValueEntry {
     //! scene it instances, from the scene descriptors alone.
     System::Threading::Tasks::Task<SceneHierarchyManaged>^
       ReadSceneHierarchyAsync(String^ virtualPath);
+
+    //! Reads the effective values of the node `path` names in the composition
+    //! of the mounted scene at `virtualPath`, from the scene descriptors
+    //! alone: one node ID per nesting level, the first a node of the scene.
+    System::Threading::Tasks::Task<SceneNodeValuesManaged>^
+      ReadSceneNodeAsync(String^ virtualPath, array<System::Guid>^ path);
 
     void SetEnvironment(bool atmosphereEnabled, bool sunDiskEnabled,
       float planetRadiusMeters, float atmosphereHeightMeters,

@@ -240,6 +240,13 @@ public:
     return std::nullopt;
   }
 
+  [[nodiscard]] auto ReadMountedSceneNode(
+    const data::AssetKey& /*key*/, std::span<const data::NodeId> /*path*/) const
+    -> std::optional<SceneNodeValues> override
+  {
+    return std::nullopt;
+  }
+
   [[nodiscard]] auto EnumerateMountedSources() const
     -> std::vector<MountedSourceEntry> override
   {

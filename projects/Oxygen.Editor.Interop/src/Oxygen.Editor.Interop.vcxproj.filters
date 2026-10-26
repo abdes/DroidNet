@@ -368,6 +368,9 @@
     <ClInclude Include="Commands\ReadSceneHierarchyCommand.h">
       <Filter>Commands</Filter>
     </ClInclude>
+    <ClInclude Include="Commands\ReadSceneNodeCommand.h">
+      <Filter>Commands</Filter>
+    </ClInclude>
     <ClInclude Include="Utils\EditorRotation.h">
       <Filter>Utils</Filter>
     </ClInclude>

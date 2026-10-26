@@ -61,6 +61,8 @@ public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNo
     private readonly InspectorSelectionObserver selectionObserver;
     private readonly SceneSettingsViewModel sceneSettings;
     private readonly ISceneSelectionService sceneSelectionService;
+    private readonly IProjectSession session;
+    private readonly ISceneStructureProvider? structures;
 
     // The nodes whose property changes refresh the panel's own properties.
     private readonly List<SceneNode> observedNodes = [];
@@ -103,6 +105,10 @@ public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNo
     /// <param name="codeEditor">The code editor, for editing a slot's script.</param>
     /// <param name="scriptCreation">What creates a script for a slot, with New Script.</param>
     /// <param name="problems">What shows a script's problem in the Problems panel.</param>
+    /// <param name="structures">
+    /// What reads the effective values of the nodes an instance brings in; without it, selected instanced nodes show
+    /// nothing.
+    /// </param>
     public SceneInspectorViewModel(
         HostingContext hosting,
         ViewModelToView vmToViewConverter,
@@ -119,7 +125,8 @@ public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNo
         IScripts? scripts = null,
         ICodeEditorService? codeEditor = null,
         IScriptCreation? scriptCreation = null,
-        IProblemReveal? problems = null)
+        IProblemReveal? problems = null,
+        ISceneStructureProvider? structures = null)
     {
         this.logger = loggerFactory?.CreateLogger<SceneInspectorViewModel>() ?? NullLogger<SceneInspectorViewModel>.Instance;
         this.LoggerFactory = loggerFactory;
@@ -129,6 +136,8 @@ public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNo
         this.scenePreview = scenePreview;
         this.interaction = interaction;
         this.sceneSelectionService = selectionService;
+        this.session = session;
+        this.structures = structures;
         this.VmToViewConverter = vmToViewConverter;
         this.dispatcher = hosting.Dispatcher;
         this.scenePreview.PendingFieldsChanged += this.OnPendingFieldsChanged;
@@ -180,6 +189,8 @@ public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNo
         this.LogConstructed(this.items.Count);
 
         this.sceneSelectionService.SelectionChanged += this.OnSelectionServiceChanged;
+        structures?.Changed += this.OnStructuresChanged;
+        this.ReadInstancedSelection(this.activeScene);
     }
 
     /// <summary>Gets the sections shown for the selection: the scene's settings, or the selected nodes' components.</summary>
@@ -231,28 +242,31 @@ public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNo
 
     /// <summary>Gets a value indicating whether a grouping summary or unresolved selection notice is visible.</summary>
     public bool HasSelectionNotice => this.HasSelectionSummary
-        || (this.selectionContext.Kind == SceneSelectionKind.Node && !this.HasItems);
+        || (this.selectionContext.Kind == SceneSelectionKind.Node && !this.HasItems && !this.isReadingInstancedNodes);
 
-    /// <summary>Gets a value indicating whether the current node selection can be authored.</summary>
-    public bool CanEditSelectedNodes => this.items.All(node => this.interaction?.GetLockOwner(node) is null);
+    /// <summary>
+    /// Gets a value indicating whether the current node selection can be authored: no node is locked, and none is one an
+    /// instance brings in, which the pane shows read-only.
+    /// </summary>
+    public bool CanEditSelectedNodes => !this.HasInstancedSelection && this.items.All(node => this.LockOf(node) is null);
 
     /// <summary>Gets a value indicating whether a lock protects any node in the current selection.</summary>
-    public bool HasLockedSelection => this.items.Any(node => this.interaction?.GetLockOwner(node) is not null);
+    public bool HasLockedSelection => this.items.Any(node => this.LockOf(node) is not null);
 
     /// <summary>Gets the explanation shown when a selected node is protected by a lock.</summary>
     public string LockedEditingMessage
     {
         get
         {
-            var node = this.items.FirstOrDefault(candidate => this.interaction?.GetLockOwner(candidate) is not null);
-            if (node is null || this.interaction?.GetLockOwner(node) is not { } lockOwner)
+            var node = this.items.FirstOrDefault(candidate => this.LockOf(candidate) is not null);
+            if (node is null || this.LockOf(node) is not { } lockOwner)
             {
                 return string.Empty;
             }
 
-            return ReferenceEquals(node, lockOwner)
+            return lockOwner.IsSelf
                 ? $"'{node.Metadata.Name}' is locked. It remains selectable for inspection, but its properties cannot be changed."
-                : $"'{node.Metadata.Name}' is protected by locked parent '{lockOwner.Metadata.Name}'. Its properties cannot be changed.";
+                : $"'{node.Metadata.Name}' is protected by locked parent '{lockOwner.Name}'. Its properties cannot be changed.";
         }
     }
 
@@ -378,6 +392,7 @@ public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNo
         this.sceneSelectionService.PropertyFocusRequested -= this.OnPropertyFocusRequested;
         this.sceneSelectionService.SelectionChanged -= this.OnSelectionServiceChanged;
         this.scenePreview.ReadyChanged -= this.OnPreviewReadyChanged;
+        this.structures?.Changed -= this.OnStructuresChanged;
         this.documents.Dispose();
         if (this.interaction is { } interactionService)
         {
@@ -655,6 +670,7 @@ public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNo
         this.NotifySelectionRoutingChanged();
         this.ShowItems();
         this.SubscribeToComponentCollections();
+        this.ReadInstancedSelection(scene);
         this.ApplyPendingEnvironmentFocus();
     }
 
@@ -668,6 +684,7 @@ public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNo
 
         _ = documentId;
         this.items = [];
+        this.ReadInstancedSelection(scene: null);
         this.SubscribeToComponentCollections();
         this.activeScene = null;
         this.activeDocumentId = null;
@@ -726,6 +743,7 @@ public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNo
         this.LogSelectionChanged(this.items.Count);
         this.ShowItems();
         this.SubscribeToComponentCollections();
+        this.ReadInstancedSelection(scene);
         this.ApplyPendingAtmosphereFilter();
     }
 
@@ -738,6 +756,7 @@ public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNo
 
         this.pendingEnvironmentFocus = null;
         this.items = [];
+        this.ReadInstancedSelection(scene: null);
         this.sceneSettings.SetScene(this.activeScene);
         this.ShowItems();
         this.sceneSettings.RequestFieldFocus(target.property);
@@ -798,6 +817,10 @@ public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNo
         this.OnPropertyChanged(nameof(this.CanEditSelectedNodes));
         this.OnPropertyChanged(nameof(this.HasLockedSelection));
         this.OnPropertyChanged(nameof(this.LockedEditingMessage));
+        this.OnPropertyChanged(nameof(this.CanUseNodeHeader));
+        this.OnPropertyChanged(nameof(this.SelectedNodeOrigin));
+        this.OnPropertyChanged(nameof(this.SelectedNodeStructureRefusal));
+        this.SelectInstanceCommand.NotifyCanExecuteChanged();
     }
 
     private void RefreshPendingLiveSyncState()

@@ -3,13 +3,14 @@
 // SPDX-License-Identifier: MIT
 
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.World;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Inspection;
 
 /// <summary>
-/// Reads what an instance of a source contains: its nodes and those of the scenes it instances, from the cooked scene
-/// descriptors of the mounted content, without loading what they reference.
+/// Reads what an instance of a source contains: its nodes and those of the scenes it instances, and a node's effective
+/// values, from the cooked scene descriptors of the mounted content, without loading what they reference.
 /// </summary>
 public interface ISceneStructureProvider
 {
@@ -25,4 +26,14 @@ public interface ISceneStructureProvider
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>The structure, or null when the source is not instanceable or not in the mounted content.</returns>
     public Task<SceneStructure?> ReadAsync(ProjectContext project, AssetPath source, CancellationToken cancellationToken = default);
+
+    /// <summary>Gets the effective values of a node an instance of the source brings in.</summary>
+    /// <param name="project">The originating project.</param>
+    /// <param name="source">A model's source file or an authored scene.</param>
+    /// <param name="path">The node's path below an instance root of the source.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>
+    /// The values, or null when the source is not instanceable or not in the mounted content, or holds no such node.
+    /// </returns>
+    public Task<InstancedNodeValues?> ReadNodeAsync(ProjectContext project, AssetPath source, NodePath path, CancellationToken cancellationToken = default);
 }

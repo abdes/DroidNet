@@ -27,6 +27,9 @@ internal static partial class SceneWire
 
     private static readonly FrozenDictionary<PropertyId, RuntimeOverrideId> ChangeIds = BuildChangeIds();
 
+    private static readonly FrozenDictionary<RuntimeOverrideId, PropertyId> ChangeProperties
+        = ChangeIds.ToFrozenDictionary(static pair => pair.Value, static pair => pair.Key);
+
     /// <summary>Gets every property the engine takes as fields.</summary>
     public static IEnumerable<PropertyId> Properties => Mappings.Keys;
 
@@ -47,6 +50,12 @@ internal static partial class SceneWire
     /// <param name="id">The override id, when the property is changeable.</param>
     /// <returns><see langword="true"/> when an instance change can set the property.</returns>
     public static bool TryGetChangeId(PropertyId property, out RuntimeOverrideId id) => ChangeIds.TryGetValue(property, out id);
+
+    /// <summary>Gets the property a scene can change in an instance that an override id names.</summary>
+    /// <param name="id">The override id.</param>
+    /// <param name="property">The property, when the id names a changeable one.</param>
+    /// <returns><see langword="true"/> when the id names a property an instance change can set.</returns>
+    public static bool TryGetChangeProperty(RuntimeOverrideId id, out PropertyId property) => ChangeProperties.TryGetValue(id, out property!);
 
     /// <summary>Gets a value indicating whether a node has the component that an engine component id addresses.</summary>
     /// <param name="node">The node.</param>

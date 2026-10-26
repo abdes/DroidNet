@@ -2,20 +2,22 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Numerics;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World;
+using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.LivePreview.Scenes;
 
 /// <summary>
-/// What an instance of a source contains (scene instances 8.2), read by the engine that shows the active scene from
-/// the cooked scene descriptors of the content it mounts: the source's nodes and those of the scenes it instances,
-/// without loading geometry or anything else they reference.
+/// What an instance of a source contains (scene instances 8.2) and the effective values of each of its nodes (8.5),
+/// read by the engine that shows the active scene from the cooked scene descriptors of the content it mounts: the
+/// source's nodes and those of the scenes it instances, without loading geometry or anything else they reference.
 /// </summary>
 internal sealed partial class ScenePreview : ISceneStructureProvider
 {
@@ -46,6 +48,23 @@ internal sealed partial class ScenePreview : ISceneStructureProvider
         return observation.Outcome.Succeeded && observation.Hierarchy is { Exists: true } hierarchy
             ? ToStructure(source, ContentPipelinePaths.ToCookedScenePath(scene), hierarchy)
             : null;
+    }
+
+    /// <inheritdoc/>
+    async Task<InstancedNodeValues?> ISceneStructureProvider.ReadNodeAsync(ProjectContext project, AssetPath source, NodePath path, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(project);
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(path);
+        if (!ReferenceEquals(this.session.Context, project)
+            || AssetFileTypes.SceneProductOf(source) is not { } scene
+            || this.activeWorld is not { } world)
+        {
+            return null;
+        }
+
+        var observation = await world.Commands.ReadSceneNodeAsync(Guid.NewGuid(), world.Target, ContentPipelinePaths.ToCookedScenePath(scene), path, cancellationToken).ConfigureAwait(false);
+        return observation.Outcome.Succeeded && observation.Values is { Exists: true } values ? ToNodeValues(values) : null;
     }
 
     /// <summary>Converts the engine's hierarchy of a source's scene into the source's structure.</summary>
@@ -88,6 +107,43 @@ internal sealed partial class ScenePreview : ISceneStructureProvider
                     issue.SceneKey)),
             ]);
     }
+
+    /// <summary>Converts the engine's values of a node into the values of a node an instance brings in.</summary>
+    /// <param name="values">The values the engine read.</param>
+    /// <returns>The values, each property's value of the type <see cref="SceneSchema.Changeable"/> gives it.</returns>
+    /// <exception cref="InvalidOperationException">The engine read a property the editor's schema does not hold as it does.</exception>
+    internal static InstancedNodeValues ToNodeValues(RuntimeSceneNodeValues values)
+    {
+        ArgumentNullException.ThrowIfNull(values);
+        return new InstancedNodeValues(
+            values.Name,
+            string.IsNullOrEmpty(values.GeometryPath) ? null : AssetPath.Parse(values.GeometryPath),
+            [.. values.Properties.Select(ToInstancedValue)]);
+    }
+
+    private static InstancedValue ToInstancedValue(RuntimeSceneNodeProperty property)
+    {
+        if (!SceneWire.TryGetChangeProperty(property.Id, out var id) || !SceneSchema.Changeable.TryGetValue(id, out var type))
+        {
+            throw new InvalidOperationException($"The engine read property {property.Id}, which the editor's scene schema cannot change.");
+        }
+
+        return new InstancedValue(id, property.PartId, property.LayoutRevision, ValueOf(id, type, property.Value));
+    }
+
+    // The engine's value in the schema's units: an enum is its member's wire value, an asset its virtual path.
+    private static object ValueOf(PropertyId property, Type type, RuntimeInstanceValue value)
+        => value switch
+        {
+            RuntimeInstanceValue.Flag flag when type == typeof(bool) => flag.Value,
+            RuntimeInstanceValue.Integer number when type == typeof(int) => number.Value,
+            RuntimeInstanceValue.Integer number when type.IsEnum => Enum.ToObject(type, number.Value),
+            RuntimeInstanceValue.Scalar number when type == typeof(float) => number.Value,
+            RuntimeInstanceValue.Vector vector when type == typeof(Vector3) => vector.Value,
+            RuntimeInstanceValue.Asset asset when type == typeof(AssetPath) => AssetPath.Parse(asset.Path),
+            RuntimeInstanceValue.LodPolicyValue policy when type == typeof(LodPolicy) => policy.Policy,
+            _ => throw new InvalidOperationException($"The engine read a {value.GetType().Name} for '{property}', whose values are {type.Name}."),
+        };
 
     private static string IssueCodeOf(RuntimeSceneHierarchyIssueCode code) => code switch
     {

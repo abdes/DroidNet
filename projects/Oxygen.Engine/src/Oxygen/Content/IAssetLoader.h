@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <filesystem>
 #include <functional>
@@ -15,11 +16,13 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/NamedType.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Content/ContentMounts.h>
 #include <Oxygen/Content/EvictionEvents.h>
 #include <Oxygen/Content/ResidencyPin.h>
@@ -35,12 +38,15 @@
 #include <Oxygen/Data/InputMappingContextAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Data/PhysicsResource.h>
 #include <Oxygen/Data/PhysicsSceneAsset.h>
 #include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Data/SceneIds.h>
+#include <Oxygen/Data/Schema/Generated.SceneComponents.h>
 #include <Oxygen/Data/ScriptAsset.h>
 #include <Oxygen/Data/SourceKey.h>
+#include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/OxCo/Co.h>
 
@@ -168,6 +174,44 @@ public:
     //! after them.
     std::vector<SceneHierarchyNode> nodes;
     std::vector<SceneHierarchyIssue> issues;
+  };
+
+  //! An asset a property of a mounted scene's node names.
+  struct SceneNodeAsset final {
+    data::AssetKey key;
+    //! The asset's virtual path in the mounted source that provides it;
+    //! empty when no mounted source provides the asset.
+    std::string virtual_path;
+
+    auto operator==(const SceneNodeAsset&) const -> bool = default;
+  };
+
+  //! A property value in the schema's units: a bool, an int32 (an int, or the
+  //! wire value of an enum member), a float, the three floats of a vec3 (a
+  //! rotation as the editor's Y-X-Z Euler angles, in degrees), an asset, or
+  //! a LOD policy.
+  using SceneNodeValue = std::variant<bool, std::int32_t, float,
+    std::array<float, 3>, SceneNodeAsset, data::pak::geometry::LodPolicyRecord>;
+
+  //! One property of a mounted scene's node and its effective value.
+  struct SceneNodeProperty final {
+    data::schema::OverrideId override_id = data::schema::OverrideId::kInvalid;
+    //! The surface of a surface property; nil otherwise.
+    data::SurfaceId part_id;
+    //! The geometry layout revision a surface property was resolved against;
+    //! zero otherwise.
+    base::Sha256Digest layout_revision {};
+    SceneNodeValue value;
+  };
+
+  //! The effective values of a node of a mounted scene's composition.
+  struct SceneNodeValues final {
+    std::string name;
+    //! The geometry the node renders, when it has a renderable.
+    std::optional<SceneNodeAsset> geometry;
+    //! Every property the node's records hold, then the geometry values it
+    //! replaces, each with every change of the composition applied.
+    std::vector<SceneNodeProperty> properties;
   };
 
   struct HydratedScriptSlot final {
@@ -494,6 +538,23 @@ public:
   */
   [[nodiscard]] virtual auto ReadMountedSceneHierarchy(
     const data::AssetKey& key) const -> std::optional<SceneHierarchy> = 0;
+
+  //! Read the effective values of one node of a mounted scene's composition.
+  /*!
+   Composes the scene `key` names, as an instance of it would be, from the
+   scene descriptors alone, as `ReadMountedSceneHierarchy` reads them, and
+   returns the values of the node `path` names: one node ID per nesting
+   level, shallowest first, the first a node of the scene itself. Every change
+   the scene and the scenes it instances make is applied; asset keys resolve
+   to their virtual paths in the mounted content.
+
+   @return The values, or none when `key` names no mounted, readable scene or
+   `path` names no node of its composition, as below an instanced scene that
+   cannot be read or that would make a cycle.
+  */
+  [[nodiscard]] virtual auto ReadMountedSceneNode(
+    const data::AssetKey& key, std::span<const data::NodeId> path) const
+    -> std::optional<SceneNodeValues> = 0;
 
   //! Enumerate input mapping-context entries from currently mounted sources.
   [[nodiscard]] virtual auto EnumerateMountedInputContexts() const

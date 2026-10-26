@@ -4,6 +4,7 @@
 
 using System.Collections.Specialized;
 using System.ComponentModel;
+using System.Windows.Input;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Controls.Menus;
@@ -161,6 +162,43 @@ public sealed partial class SceneNodeDetailsViewModel : ObservableObject
     public partial GameComponent? SelectedComponent { get; set; }
 
     /// <summary>
+    /// Gets or sets the instance and source of a node an instance brings in, such as "in Car3 · Car.glb (model)";
+    /// <see langword="null"/> for a node of the scene. A node an instance brings in keeps its source's name and
+    /// components.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsInstanced))]
+    [NotifyPropertyChangedFor(nameof(IsOwned))]
+    [NotifyPropertyChangedFor(nameof(CanAddComponents))]
+    [NotifyPropertyChangedFor(nameof(CanDeleteSelectedComponent))]
+    public partial string? Origin { get; set; }
+
+    /// <summary>Gets or sets why a node an instance brings in refuses structural commands, shown on the disabled ones.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(AddComponentToolTip))]
+    [NotifyPropertyChangedFor(nameof(RemoveComponentToolTip))]
+    public partial string? StructureRefusal { get; set; }
+
+    /// <summary>Gets or sets what selects the instance root of a node an instance brings in.</summary>
+    [ObservableProperty]
+    public partial ICommand? SelectInstanceCommand { get; set; }
+
+    /// <summary>Gets a value indicating whether the node is one an instance brings in.</summary>
+    public bool IsInstanced => this.Origin is not null;
+
+    /// <summary>Gets a value indicating whether the node is a node of the scene, whose name can be edited.</summary>
+    public bool IsOwned => !this.IsInstanced;
+
+    /// <summary>Gets a value indicating whether components can be added: not to a node an instance brings in.</summary>
+    public bool CanAddComponents => !this.IsInstanced;
+
+    /// <summary>Gets the tooltip of <i>Add component</i>: the refusal when it is disabled.</summary>
+    public string AddComponentToolTip => this.StructureRefusal ?? "Add component";
+
+    /// <summary>Gets the tooltip of <i>Remove component</i>: the refusal when it is disabled.</summary>
+    public string RemoveComponentToolTip => this.StructureRefusal ?? "Remove selected component";
+
+    /// <summary>
     /// Gets a value indicating whether the current component selection can be removed.
     /// </summary>
     public bool CanDeleteSelectedComponent => this.CanDeleteComponent(this.SelectedComponent);
@@ -174,7 +212,7 @@ public sealed partial class SceneNodeDetailsViewModel : ObservableObject
     // The scene's authoring renames the node, as one step of its history; a refused name shows the node's own again.
     partial void OnNameChanged(string? value)
     {
-        if (this.doNotPropagateName || this.Node is not { } node || value is null || string.Equals(value, node.Metadata.Name, StringComparison.Ordinal))
+        if (this.doNotPropagateName || this.IsInstanced || this.Node is not { } node || value is null || string.Equals(value, node.Metadata.Name, StringComparison.Ordinal))
         {
             return;
         }
@@ -187,6 +225,12 @@ public sealed partial class SceneNodeDetailsViewModel : ObservableObject
         _ = value;
         this.DeleteComponentCommand.NotifyCanExecuteChanged();
         this.OnPropertyChanged(nameof(this.CanDeleteSelectedComponent));
+    }
+
+    partial void OnOriginChanged(string? value)
+    {
+        _ = value;
+        this.NotifyComponentCommandsChanged();
     }
 
     private IMenuSource BuildAddComponentMenu()
@@ -209,7 +253,7 @@ public sealed partial class SceneNodeDetailsViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanAddGeometry))]
     private void AddGeometry() => this.AddComponent(SceneComponents.Geometry);
 
-    private bool CanAddGeometry() => this.Node is not null && this.Node.Components.OfType<GeometryComponent>().FirstOrDefault() is null;
+    private bool CanAddGeometry() => this.CanAddComponents && this.Node is not null && this.Node.Components.OfType<GeometryComponent>().FirstOrDefault() is null;
 
     [RelayCommand(CanExecute = nameof(CanAddPerspectiveCamera))]
     private void AddPerspectiveCamera() => this.AddComponent(SceneComponents.PerspectiveCamera);
@@ -230,19 +274,19 @@ public sealed partial class SceneNodeDetailsViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanAddLight))]
     private void AddSpotLight() => this.AddComponent(SceneComponents.SpotLight);
 
-    private bool CanAddLight() => this.Node is not null && this.Node.Components.OfType<LightComponent>().FirstOrDefault() is null;
+    private bool CanAddLight() => this.CanAddComponents && this.Node is not null && this.Node.Components.OfType<LightComponent>().FirstOrDefault() is null;
 
     [RelayCommand(CanExecute = nameof(CanAddLocalFogVolume))]
     private void AddLocalFogVolume() => this.AddComponent(SceneComponents.LocalFogVolume);
 
-    private bool CanAddLocalFogVolume() => this.Node is not null && !this.Node.Components.OfType<LocalFogVolumeComponent>().Any();
+    private bool CanAddLocalFogVolume() => this.CanAddComponents && this.Node is not null && !this.Node.Components.OfType<LocalFogVolumeComponent>().Any();
 
     [RelayCommand(CanExecute = nameof(CanAddScripting))]
     private void AddScripting() => this.AddComponent(SceneComponents.Scripting);
 
-    private bool CanAddScripting() => this.Node is not null && !this.Node.Components.OfType<ScriptingComponent>().Any();
+    private bool CanAddScripting() => this.CanAddComponents && this.Node is not null && !this.Node.Components.OfType<ScriptingComponent>().Any();
 
-    private bool CanAddCamera() => this.Node is not null && this.Node.Components.OfType<CameraComponent>().FirstOrDefault() is null;
+    private bool CanAddCamera() => this.CanAddComponents && this.Node is not null && this.Node.Components.OfType<CameraComponent>().FirstOrDefault() is null;
 
     [RelayCommand(CanExecute = nameof(CanDeleteComponent))]
     private void DeleteComponent(GameComponent? comp)
@@ -255,7 +299,7 @@ public sealed partial class SceneNodeDetailsViewModel : ObservableObject
         _ = this.NodeEdits?.RemoveComponentAsync(this.Node, comp);
     }
 
-    private bool CanDeleteComponent(GameComponent? comp) => this.Node is not null && this.IsCurrentComponent(comp) && comp?.IsLocked == false;
+    private bool CanDeleteComponent(GameComponent? comp) => !this.IsInstanced && this.Node is not null && this.IsCurrentComponent(comp) && comp?.IsLocked == false;
 
     // Scenes creates the component, with its defaults, from its schema kind.
     private void AddComponent(string kind)
@@ -331,6 +375,11 @@ public sealed partial class SceneNodeDetailsViewModel : ObservableObject
             this.SelectedComponent = null;
         }
 
+        this.NotifyComponentCommandsChanged();
+    }
+
+    private void NotifyComponentCommandsChanged()
+    {
         this.DeleteComponentCommand.NotifyCanExecuteChanged();
         this.OnPropertyChanged(nameof(this.CanDeleteSelectedComponent));
         this.AddGeometryCommand.NotifyCanExecuteChanged();

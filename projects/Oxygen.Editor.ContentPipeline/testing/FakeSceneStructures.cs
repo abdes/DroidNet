@@ -19,6 +19,7 @@ public sealed class FakeSceneStructures : ISceneStructureProvider
 {
     private readonly Lock gate = new();
     private readonly Dictionary<AssetPath, SceneStructure> structures = [];
+    private readonly Dictionary<(AssetPath Source, NodePath Path), InstancedNodeValues> values = [];
 
     /// <inheritdoc />
     public event EventHandler? Changed;
@@ -48,13 +49,32 @@ public sealed class FakeSceneStructures : ISceneStructureProvider
         return structure;
     }
 
-    /// <summary>Withdraws a source's structure, as when its cook goes stale.</summary>
+    /// <summary>Publishes the effective values of a node an instance of a source brings in, replacing earlier ones.</summary>
+    /// <param name="source">The source: a model's source file or an authored scene.</param>
+    /// <param name="path">The node's path below an instance root of the source.</param>
+    /// <param name="nodeValues">The values.</param>
+    public void PublishValues(AssetPath source, NodePath path, InstancedNodeValues nodeValues)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(path);
+        ArgumentNullException.ThrowIfNull(nodeValues);
+        lock (this.gate)
+        {
+            this.values[(source, path)] = nodeValues;
+        }
+    }
+
+    /// <summary>Withdraws a source's structure and node values, as when its cook goes stale.</summary>
     /// <param name="source">The source.</param>
     public void Withdraw(AssetPath source)
     {
         lock (this.gate)
         {
             _ = this.structures.Remove(source);
+            foreach (var key in this.values.Keys.Where(key => key.Source == source).ToList())
+            {
+                _ = this.values.Remove(key);
+            }
         }
     }
 
@@ -70,6 +90,19 @@ public sealed class FakeSceneStructures : ISceneStructureProvider
         lock (this.gate)
         {
             return Task.FromResult(this.structures.GetValueOrDefault(source));
+        }
+    }
+
+    /// <inheritdoc />
+    public Task<InstancedNodeValues?> ReadNodeAsync(ProjectContext project, AssetPath source, NodePath path, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(project);
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(path);
+        cancellationToken.ThrowIfCancellationRequested();
+        lock (this.gate)
+        {
+            return Task.FromResult(this.values.GetValueOrDefault((source, path)));
         }
     }
 }

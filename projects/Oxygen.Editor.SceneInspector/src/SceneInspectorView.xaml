@@ -76,11 +76,14 @@
                             x:Name="NodeDetails"
                             AllComponentsRequested="OnAllComponentsRequested"
                             IsAllComponentsSelected="{x:Bind ViewModel.IsAllComponentsSelected, Mode=OneWay}"
-                            IsEnabled="{x:Bind ViewModel.CanEditSelectedNodes, Mode=OneWay}"
+                            IsEnabled="{x:Bind ViewModel.CanUseNodeHeader, Mode=OneWay}"
                             LoggerFactory="{x:Bind ViewModel.LoggerFactory}"
                             Node="{x:Bind ViewModel.SelectedNode, Mode=OneWay}"
                             NodeEdits="{x:Bind ViewModel, Mode=OneWay}"
+                            Origin="{x:Bind ViewModel.SelectedNodeOrigin, Mode=OneWay}"
+                            SelectInstanceCommand="{x:Bind ViewModel.SelectInstanceCommand}"
                             SelectedComponent="{x:Bind ViewModel.SelectedComponent, Mode=OneWay}"
+                            StructureRefusal="{x:Bind ViewModel.SelectedNodeStructureRefusal, Mode=OneWay}"
                             Visibility="{x:Bind ViewModel.IsSingleItemSelected, Mode=OneWay, Converter={StaticResource HasSelectionToVisibilityConverter}, ConverterParameter=False}" />
                         <Grid MinHeight="32" Visibility="{x:Bind ViewModel.HasMultipleItems, Mode=OneWay, Converter={StaticResource HasSelectionToVisibilityConverter}, ConverterParameter=False}">
                             <Grid.ColumnDefinitions>

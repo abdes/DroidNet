@@ -64,6 +64,7 @@ m_gtest_program(
     "AssetLoader_lifetime_test.cpp"
     "AssetLoader_loading_test.cpp"
     "AssetLoader_scene_test.cpp"
+    "AssetLoader_scene_query_test.cpp"
     "AssetLoader_texture_path_test.cpp"
     "AssetLoader_scripting_test.cpp"
     "AssetLoader_test_fixture.cpp"

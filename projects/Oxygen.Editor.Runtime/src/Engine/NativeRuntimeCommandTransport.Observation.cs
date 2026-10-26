@@ -47,6 +47,17 @@ internal sealed partial class NativeRuntimeCommandTransport
     }
 
     /// <inheritdoc/>
+    public async Task<RuntimeSceneNodeValues> ReadSceneNodeAsync(string virtualPath, NodePath path)
+    {
+        var values = await this.world.ReadSceneNodeAsync(virtualPath, RuntimeTransportConversion.ToNative(path)).ConfigureAwait(false);
+        return new(
+            values.Exists,
+            values.Name ?? string.Empty,
+            values.GeometryPath,
+            [.. values.Properties.Select(RuntimeTransportConversion.FromNative).OfType<RuntimeSceneNodeProperty>()]);
+    }
+
+    /// <inheritdoc/>
     public async Task<RuntimeEnvironmentState> ObserveEnvironmentAsync()
     {
         var state = await this.world.ObserveEnvironmentAsync().ConfigureAwait(false);

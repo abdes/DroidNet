@@ -30,7 +30,8 @@ internal sealed partial class SceneAuthoringFixture : IDisposable
     /// Creates the workspace interaction state the document's edits respect, for the fixture's project session; none
     /// when <see langword="null"/>.
     /// </param>
-    public SceneAuthoringFixture(Func<IProjectSession, SceneNodeInteraction>? interaction = null)
+    /// <param name="instanceSource">The source of an instance root named Car3 the scene also holds; none when <see langword="null"/>.</param>
+    public SceneAuthoringFixture(Func<IProjectSession, SceneNodeInteraction>? interaction = null, AssetPath? instanceSource = null)
     {
         var project = TestProject.Create(new MockFileSystem());
         this.Session = new TestSession(project.Context);
@@ -49,6 +50,13 @@ internal sealed partial class SceneAuthoringFixture : IDisposable
         });
         _ = node.AddComponent(new DirectionalLightComponent { Name = "Sun" });
         scene.RootNodes.Add(node);
+        if (instanceSource is not null)
+        {
+            var root = new SceneNode(scene, "Car3");
+            _ = root.AddComponent(new SceneInstanceComponent { Name = "Scene Instance", Source = instanceSource });
+            scene.RootNodes.Add(root);
+        }
+
         this.TestScene = TestScenes.Open(scene, this.Interaction, project: project);
         this.Scene = this.TestScene.Scene;
         this.Node = this.TestScene.NodeOf(node);
@@ -88,6 +96,12 @@ internal sealed partial class SceneAuthoringFixture : IDisposable
 
     /// <summary>Gets the engine preview the views read.</summary>
     public Mock<IScenePreview> Preview { get; } = new();
+
+    /// <summary>Gets the values of the nodes instances bring in, as the engine reads them from the mounted scenes.</summary>
+    public FakeSceneStructures Structures { get; } = new();
+
+    /// <summary>Gets the instance root the scene holds when the fixture has an instance source.</summary>
+    public SceneNode? InstanceRoot => this.Scene.RootNodes.FirstOrDefault(static node => string.Equals(node.Metadata.Name, "Car3", StringComparison.Ordinal));
 
     public static SurfaceTarget TargetFor(AssetPath geometry) => new(geometry, Guid.Parse("10000000-0000-0000-0000-000000000001"), new string('a', 64));
 

@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Editor.World;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Runtime.Engine;
@@ -42,6 +43,12 @@ internal interface IRuntimeCommandTransport
     /// <param name="virtualPath">The scene's virtual path.</param>
     /// <returns>The hierarchy; not existing when no mounted scene has the path.</returns>
     public Task<RuntimeSceneHierarchy> ReadSceneHierarchyAsync(string virtualPath);
+
+    /// <summary>Reads the effective values of a node of a mounted scene's composition, from the scene descriptors alone.</summary>
+    /// <param name="virtualPath">The scene's virtual path.</param>
+    /// <param name="path">The node: one node ID per nesting level, the first a node of the scene.</param>
+    /// <returns>The values; not existing when no mounted scene has the path or the node.</returns>
+    public Task<RuntimeSceneNodeValues> ReadSceneNodeAsync(string virtualPath, NodePath path);
 
     /// <summary>Performs the native ExecuteInput operation.</summary>
     /// <param name="viewId">The viewId transport value.</param>

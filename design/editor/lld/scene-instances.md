@@ -314,7 +314,15 @@ An instanced node's property resolves to the first present of: this scene's
 change; the changes of the deeper nesting levels, from the shallowest down; the
 value in the scene that defines the node; then, for a property with an asset
 source, the asset default and the schema default. Node flags keep Inherit as a value: a change can set Inherit over
-a source's Hidden. The engine's hierarchy inheritance then applies. Reset
+a source's Hidden. The engine's hierarchy inheritance then applies.
+
+A model's nodes are cooked with Scene Visibility, Casts Shadows and Receives
+Shadows set to Inherit, except a node the source file hides, which keeps a local
+Hidden. Setting those flags on the instance root, an owned node, therefore
+governs every instanced node that inherits them, at any depth; a change on an
+instanced node sets them locally there and below. Static and Ray-cast
+selectable have no source mode: they are values, set on an instanced node by a
+change like any other value. Reset
 removes this scene's change and shows the source value; it never writes the
 source value as a change.
 
@@ -1624,10 +1632,19 @@ nodes would double every section and let them drift.
 
 - Per selected instanced node, the engine reads its effective values from the
   mounted descriptors, as it reads the hierarchy (section 8.2, which carries
-  structure only), and they materialize as **transient components**: World
-  component instances (`TransformComponent`, `GeometryComponent`, a camera, a
-  light) holding the effective values, with this scene's changes as their
-  overrides. The existing sections bind to them unchanged.
+  structure only): `IAssetLoader::ReadMountedSceneNode(key, path)` composes the
+  source with `ComposeInstance`, as an instance of it would be, and returns the
+  node's name, its geometry and every property its records hold, with the
+  geometry values it replaces, in the schema's units and assets by their
+  mounted virtual paths. Interop's `ReadSceneNodeCommand` and
+  `IRuntimeWorldCommands.ReadSceneNodeAsync` carry it to
+  `ISceneStructureProvider.ReadNodeAsync`, which types each value by
+  `SceneSchema.Changeable`. The values materialize as **transient
+  components**: a node in no scene's tree whose World component instances
+  (`TransformComponent`, `GeometryComponent`, a camera, a light) hold the
+  effective values, written through the component descriptors, with this
+  scene's changes as their overrides. The existing sections bind to them
+  unchanged. Content mounted again reads the selected nodes again.
 - Sections write through a `ComponentWriteTarget`: `Owned(NodeId)` keeps
   today's edits; `Instanced(root, path)` turns every property write into an
   `OverrideWrite` with the node path (ED3), so a section never knows which it
