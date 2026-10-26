@@ -966,6 +966,7 @@ auto ImportSourceAnalysis::ToJson() const -> std::string
         { "message", diagnostic.message },
         { "source_path", diagnostic.source_path },
         { "object_path", diagnostic.object_path },
+        { "object_name", diagnostic.object_name },
       });
     }
     auto serialized = json {

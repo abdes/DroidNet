@@ -48,6 +48,11 @@ struct ImportDiagnostic final {
 
   //! Optional hierarchical object path (node/material/mesh).
   std::string object_path {};
+
+  //! Optional name of the object the diagnostic is about, as the source file
+  //! names it (a material, mesh or node); empty when the object has no name or
+  //! the diagnostic is about the whole source.
+  std::string object_name {};
 };
 
 } // namespace oxygen::content::import

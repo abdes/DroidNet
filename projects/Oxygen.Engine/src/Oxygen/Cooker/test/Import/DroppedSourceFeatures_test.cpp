@@ -240,6 +240,7 @@ NOLINT_TEST(DroppedSourceFeaturesTest, FbxTextureWrapModesAreReported)
   texture.wrap_u = UFBX_WRAP_CLAMP;
   texture.wrap_v = UFBX_WRAP_REPEAT;
   auto material = ufbx_material {};
+  material.name = { .data = "Bun", .length = 3 };
   material.pbr.base_color.texture = &texture;
   material.pbr.base_color.texture_enabled = true;
   auto* material_pointer = &material;
@@ -248,7 +249,8 @@ NOLINT_TEST(DroppedSourceFeaturesTest, FbxTextureWrapModesAreReported)
   auto diagnostics = std::vector<ImportDiagnostic> {};
   ReportDroppedSourceFeatures(source, "wrap.fbx", diagnostics);
   EXPECT_TRUE(std::ranges::any_of(diagnostics, [](const auto& issue) -> auto {
-    return issue.code == kDropped && issue.object_path == "/Materials/0";
+    return issue.code == kDropped && issue.object_path == "/Materials/0"
+      && issue.object_name == "Bun";
   }));
 }
 
@@ -405,7 +407,9 @@ NOLINT_TEST(DroppedSourceFeaturesTest, CustomSamplingIsReported)
   sampler.wrap_t = cgltf_wrap_mode_repeat;
   auto texture = cgltf_texture {};
   texture.sampler = &sampler;
+  auto name = std::string("Bun");
   auto material = cgltf_material {};
+  material.name = name.data();
   material.pbr_metallic_roughness.base_color_texture.texture = &texture;
   auto source = cgltf_data {};
   source.materials = &material;
@@ -416,6 +420,31 @@ NOLINT_TEST(DroppedSourceFeaturesTest, CustomSamplingIsReported)
 
   ASSERT_EQ(diagnostics.size(), 1U);
   EXPECT_TRUE(AllDropWarnings(diagnostics));
+  // A material's report names the material as the file does, so a person can
+  // tell which of a file's materials it is about.
+  EXPECT_EQ(diagnostics.front().object_name, "Bun");
+  EXPECT_EQ(diagnostics.front().object_path, "/materials/0");
+}
+
+NOLINT_TEST(
+  DroppedSourceFeaturesTest, UnsupportedMaterialExtensionsAreNamedInOneReport)
+{
+  auto material = cgltf_material {};
+  material.has_iridescence = 1;
+  material.has_emissive_strength = 1;
+  auto source = cgltf_data {};
+  source.materials = &material;
+  source.materials_count = 1U;
+  auto diagnostics = std::vector<ImportDiagnostic> {};
+
+  ReportDroppedSourceFeatures(source, "glow.gltf", diagnostics);
+
+  ASSERT_EQ(diagnostics.size(), 1U);
+  EXPECT_TRUE(AllDropWarnings(diagnostics));
+  EXPECT_THAT(diagnostics.front().message,
+    ::testing::HasSubstr("iridescence and emissive strength"));
+  EXPECT_TRUE(diagnostics.front().object_name.empty())
+    << "an unnamed material has no name to report";
 }
 
 NOLINT_TEST(DroppedSourceFeaturesTest, UnmappedScalarFieldsAreReported)

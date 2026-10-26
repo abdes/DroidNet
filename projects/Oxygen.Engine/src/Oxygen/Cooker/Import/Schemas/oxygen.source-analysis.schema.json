@@ -163,6 +163,10 @@
         },
         "object_path": {
           "type": "string"
+        },
+        "object_name": {
+          "description": "The name the source file gives the object the diagnostic is about, such as a material, mesh or node; empty when it has none or the diagnostic is about the whole source.",
+          "type": "string"
         }
       }
     },
