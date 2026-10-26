@@ -29,6 +29,14 @@ public class MainShellTitleBarTests : VisualUserInterfaceTests
     public required TestContext TestContext { get; set; }
 
     [TestMethod]
+    [DataRow(138d, 1.5d, 92d)]
+    [DataRow(138d, 0d, null)]
+    [DataRow(double.NaN, 1d, null)]
+    [DataRow(-4d, 1d, null)]
+    public void ReservedRightWidth_IsTheInsetInViewPixelsOrNoneWhenTheWindowReportsNoScale(double inset, double scale, double? expected)
+        => _ = MainShellView.ReservedRightWidth(inset, scale).Should().Be(expected, "GridLength takes no infinite, NaN or negative width");
+
+    [TestMethod]
     [DataRow(false)]
     [DataRow(true)]
     public Task TitleBar_PreservesAuraLayoutAsync(bool withDocumentTabs) => EnqueueAsync(async () =>

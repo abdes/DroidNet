@@ -116,6 +116,22 @@ public sealed partial class MainShellView : INotifyPropertyChanged
     /// </summary>
     public double MinWindowWidth => this.minWindowWidth;
 
+    /// <summary>
+    /// Gets the width to reserve for the caption buttons, in view pixels, from the title bar's right inset in physical
+    /// pixels.
+    /// </summary>
+    /// <param name="rightInset">The title bar's right inset, in physical pixels.</param>
+    /// <param name="scale">The view's rasterization scale.</param>
+    /// <returns>
+    /// The width; <see langword="null"/> when the inputs make none, as while the window changes its display state and
+    /// its scale reads 0.
+    /// </returns>
+    internal static double? ReservedRightWidth(double rightInset, double scale)
+    {
+        var width = rightInset / scale;
+        return scale > 0 && double.IsFinite(width) && width >= 0 ? width : null;
+    }
+
     private void InitializeLogger(object? sender, ViewModelChangedEventArgs<MainShellViewModel> args)
     {
         _ = sender; // unused
@@ -370,7 +386,12 @@ public sealed partial class MainShellView : INotifyPropertyChanged
         {
             // The system insets tell us how much space Windows needs for the caption buttons.
             // We must reserve this full space with empty padding columns.
-            var rightInset = appWindow.TitleBar.RightInset / scaleAdjustment;
+            // A window changing its display state can report a scale of 0; the width is set again on the next change.
+            if (ReservedRightWidth(appWindow.TitleBar.RightInset, scaleAdjustment) is not { } rightInset)
+            {
+                return;
+            }
+
             var previousReserved = this.SystemReservedRight.Width.Value;
 
             // Only update the reserved width when the numeric value meaningfully changed. Re-assigning
