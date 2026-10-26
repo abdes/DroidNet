@@ -2437,6 +2437,8 @@ namespace {
     };
     const auto& axes = scene.settings.axes;
     auto facts = ModelSourceFacts {
+      .format = "fbx",
+      .format_version = std::nullopt,
       .unit_meters = std::nullopt,
       .right = axis_name(axes.right),
       .up = axis_name(axes.up),
@@ -2450,6 +2452,13 @@ namespace {
     };
     if (ufbx_coordinate_axes_valid(axes)) {
       facts.left_handed = IsLeftHandedAxes(axes);
+    }
+    // FBX states its version as major * 1000 + minor * 100, such as 7400.
+    if (const auto version = scene.metadata.version; version != 0U) {
+      constexpr auto kMajor = 1000U;
+      constexpr auto kMinor = 100U;
+      facts.format_version = std::to_string(version / kMajor) + "."
+        + std::to_string(version % kMajor / kMinor);
     }
     const auto* units
       = ufbx_find_prop(&scene.settings.props, "UnitScaleFactor");

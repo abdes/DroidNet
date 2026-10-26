@@ -483,6 +483,8 @@ namespace {
   [[nodiscard]] auto DescribeGltf(const cgltf_data& data) -> ModelSourceFacts
   {
     auto facts = ModelSourceFacts {
+      .format = data.file_type == cgltf_file_type_glb ? "glb" : "gltf",
+      .format_version = std::nullopt,
       .unit_meters = 1.0,
       .right = "+X",
       .up = "+Y",
@@ -494,6 +496,9 @@ namespace {
       .materials = {},
       .textures = {},
     };
+    if (data.asset.version != nullptr) {
+      facts.format_version = std::string(data.asset.version);
+    }
     const auto default_scene = DefaultGltfScene(data);
     for (const auto& [index, scene] :
       std::views::enumerate(std::span(data.scenes, data.scenes_count))) {

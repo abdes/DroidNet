@@ -64,6 +64,7 @@ oxygen_cooker_test(
     "Import/SceneSource_test.cpp"
     "Import/Schemas/CollisionShapeDescriptorSchema_test.cpp"
     "Import/Schemas/GeometryDescriptorSchema_test.cpp"
+    "Import/Schemas/ImportManifestSchema_test.cpp"
     "Import/Schemas/InputSchema_test.cpp"
     "Import/Schemas/MaterialDescriptorSchema_test.cpp"
     "Import/Schemas/NameSchema_test.cpp"

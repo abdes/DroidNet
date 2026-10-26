@@ -13,37 +13,120 @@
       "const": 1
     },
     "thread_pool_size": {
+      "description": "Worker threads of the import's CPU work pool. Default: the processor count.",
       "type": "integer",
       "minimum": 1
     },
     "max_in_flight_jobs": {
+      "description": "Jobs processed at once. Default: the processor count.",
       "type": "integer",
       "minimum": 1
     },
     "job_admission_capacity": {
+      "description": "Jobs admitted and not yet finished; further jobs are held back until one finishes.",
       "type": "integer",
-      "minimum": 1
+      "minimum": 1,
+      "default": 64
     },
     "concurrency": {
+      "description": "Each pipeline's workers and queue capacity; an unset value takes its default.",
       "type": "object",
       "properties": {
         "texture": {
-          "$ref": "#/definitions/concurrency_item"
+          "description": "The texture pipeline.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/concurrency_item"
+            }
+          ],
+          "properties": {
+            "workers": {
+              "default": 2
+            },
+            "queue_capacity": {
+              "default": 64
+            }
+          }
         },
         "buffer": {
-          "$ref": "#/definitions/concurrency_item"
+          "description": "The buffer pipeline.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/concurrency_item"
+            }
+          ],
+          "properties": {
+            "workers": {
+              "default": 2
+            },
+            "queue_capacity": {
+              "default": 64
+            }
+          }
         },
         "material": {
-          "$ref": "#/definitions/concurrency_item"
+          "description": "The material pipeline.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/concurrency_item"
+            }
+          ],
+          "properties": {
+            "workers": {
+              "default": 2
+            },
+            "queue_capacity": {
+              "default": 64
+            }
+          }
         },
         "mesh_build": {
-          "$ref": "#/definitions/concurrency_item"
+          "description": "The mesh build pipeline.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/concurrency_item"
+            }
+          ],
+          "properties": {
+            "workers": {
+              "default": 2
+            },
+            "queue_capacity": {
+              "default": 32
+            }
+          }
         },
         "geometry": {
-          "$ref": "#/definitions/concurrency_item"
+          "description": "The geometry pipeline.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/concurrency_item"
+            }
+          ],
+          "properties": {
+            "workers": {
+              "default": 1
+            },
+            "queue_capacity": {
+              "default": 16
+            }
+          }
         },
         "scene": {
-          "$ref": "#/definitions/concurrency_item"
+          "description": "The scene pipeline.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/concurrency_item"
+            }
+          ],
+          "properties": {
+            "workers": {
+              "default": 1
+            },
+            "queue_capacity": {
+              "default": 8
+            }
+          }
         }
       },
       "additionalProperties": false
@@ -73,15 +156,16 @@
       "type": "object",
       "properties": {
         "workers": {
+          "description": "Worker coroutines of the pipeline.",
           "type": "integer",
           "minimum": 1
         },
         "queue_capacity": {
+          "description": "Bounded capacity of the pipeline's work queues.",
           "type": "integer",
           "minimum": 1
         }
       },
-      "required": ["workers", "queue_capacity"],
       "additionalProperties": false
     },
     "job_item": {

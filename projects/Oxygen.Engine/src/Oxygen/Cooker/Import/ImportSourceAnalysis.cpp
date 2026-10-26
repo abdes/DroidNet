@@ -325,11 +325,17 @@ namespace {
     return report;
   }
 
-  //! The bytes the metadata parse of a glTF source needs: a `.glb`'s JSON
-  //! chunk alone, found from its 12-byte header and first chunk header, so its
-  //! binary chunk is never read; any other file whole.
+  //! The bytes the metadata parse of a glTF source needs.
+  struct GltfMetadata final {
+    std::vector<std::byte> bytes;
+    //! Whether the source is a binary glTF container.
+    bool glb = false;
+  };
+
+  //! A `.glb`'s JSON chunk alone, found from its 12-byte header and first
+  //! chunk header, so its binary chunk is never read; any other file whole.
   auto ReadGltfMetadata(AnalysisContext& context,
-    const std::filesystem::path& path) -> co::Co<std::vector<std::byte>>
+    const std::filesystem::path& path) -> co::Co<GltfMetadata>
   {
     constexpr auto kHeadersSize = uint64_t { 20 };
     constexpr auto kChunkLengthOffset = size_t { 12 };
@@ -354,16 +360,22 @@ namespace {
     if (headers.size() < kHeadersSize || word(0) != kGlbMagic
       || word(kChunkTypeOffset) != kJsonChunk
       || word(kChunkLengthOffset) == 0U) {
-      co_return co_await context.Read(path);
+      co_return GltfMetadata {
+        .bytes = co_await context.Read(path),
+        .glb = false,
+      };
     }
     const auto json_size = uint64_t { word(kChunkLengthOffset) };
-    co_return co_await context.Read(path,
-      ReadOptions {
-        .offset = kHeadersSize,
-        .max_bytes = json_size,
-        .size_hint = json_size,
-        .alignment = 0U,
-      });
+    co_return GltfMetadata {
+      .bytes = co_await context.Read(path,
+        ReadOptions {
+          .offset = kHeadersSize,
+          .max_bytes = json_size,
+          .size_hint = json_size,
+          .alignment = 0U,
+        }),
+      .glb = true,
+    };
   }
 
   //! The array `field` of `parent`, or an empty array.
@@ -684,8 +696,11 @@ namespace {
       }
       request->loose_cooked_layout = layout;
       auto bytes = std::vector<std::byte> {};
+      auto glb = false;
       if (request->GetFormat() == ImportFormat::kGltf) {
-        bytes = co_await ReadGltfMetadata(context, report.source_path);
+        auto metadata = co_await ReadGltfMetadata(context, report.source_path);
+        bytes = std::move(metadata.bytes);
+        glb = metadata.glb;
       } else {
         bytes = co_await context.Read(report.source_path);
       }
@@ -700,6 +715,10 @@ namespace {
         });
       report.outputs = std::move(facts.outputs);
       report.model = std::move(facts.model);
+      // The parse saw the JSON chunk of a container alone.
+      if (glb && report.model.has_value()) {
+        report.model->format = "glb";
+      }
       AppendDiagnostics(report.diagnostics, std::move(facts.diagnostics));
       for (const auto& file : facts.files) {
         context.AddFile(file.path, file.required);
@@ -809,7 +828,13 @@ namespace {
     if (facts.left_handed.has_value()) {
       left_handed = *facts.left_handed;
     }
+    auto format_version = json(nullptr);
+    if (facts.format_version.has_value()) {
+      format_version = *facts.format_version;
+    }
     return {
+      { "format", facts.format },
+      { "format_version", std::move(format_version) },
       { "unit_meters", std::move(unit_meters) },
       { "right", facts.right },
       { "up", facts.up },

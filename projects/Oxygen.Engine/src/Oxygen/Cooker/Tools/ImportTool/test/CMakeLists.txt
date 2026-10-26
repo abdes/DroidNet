@@ -56,3 +56,19 @@ set_tests_properties(
     LABELS
       "cooker;functional"
 )
+
+add_test(
+  NAME "Oxygen.Cooker.ImportTool.ImportSession.Cli"
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/import_session_cli_test.py"
+    "$<TARGET_FILE:oxygen-cooker-importtool>"
+)
+set_tests_properties(
+  "Oxygen.Cooker.ImportTool.ImportSession.Cli"
+  PROPERTIES
+    TIMEOUT
+      300
+    LABELS
+      "cooker;functional"
+)

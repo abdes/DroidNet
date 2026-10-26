@@ -478,6 +478,9 @@ namespace {
       EXPECT_FALSE(job.observations.front().reads.empty());
       // Each reports its source facts; only glTF has scenes.
       ASSERT_HAS_VALUE(job.model) << report.ToJson();
+      EXPECT_EQ(job.model->format, job.job_type);
+      EXPECT_EQ(
+        job.model->format_version, job.job_type == "gltf" ? "2.0" : "7.4");
       EXPECT_EQ(job.model->mesh_count, 1U);
       EXPECT_FALSE(job.model->up.empty());
       EXPECT_EQ(job.model->materials.size(),
@@ -496,7 +499,8 @@ namespace {
   //! selector the `gltf_scene` setting names it by (`#N` when the name is
   //! missing or shared), the default, and its root and reachable node counts.
   //! Every scene but the one imported is reported dropped. glTF is in metres,
-  //! +Y up and right-handed.
+  //! +Y up and right-handed; the format version is the file's
+  //! `asset.version`.
   NOLINT_TEST_F(ImportSourceAnalysisTest, GltfJobListsTheFilesScenes)
   {
     const auto source = Write("rooms.gltf", R"({
@@ -520,6 +524,8 @@ namespace {
     const auto& result = report.jobs.front();
     ASSERT_HAS_VALUE(result.model) << report.ToJson();
     const auto& model = *result.model;
+    EXPECT_EQ(model.format, "gltf");
+    EXPECT_EQ(model.format_version, "2.0");
     EXPECT_EQ(model.unit_meters, 1.0);
     EXPECT_EQ(model.right, "+X");
     EXPECT_EQ(model.up, "+Y");
@@ -580,8 +586,8 @@ namespace {
   }
 
   //! The metadata of a `.glb` comes from its JSON chunk alone: the analysis
-  //! never reads the whole file, and its facts equal a parse of the whole
-  //! file.
+  //! never reads the whole file, and its facts, the `glb` format included,
+  //! equal a parse of the whole file.
   NOLINT_TEST_F(ImportSourceAnalysisTest, GlbAnalysisReadsOnlyItsJsonChunk)
   {
     const auto source
@@ -598,6 +604,8 @@ namespace {
     ASSERT_EQ(report.jobs.size(), 1U);
     const auto& result = report.jobs.front();
     ASSERT_HAS_VALUE(result.model) << report.ToJson();
+    EXPECT_EQ(result.model->format, "glb");
+    EXPECT_EQ(result.model->format_version, "2.0");
     const auto primary = std::ranges::find(result.observations,
       std::filesystem::absolute(source).lexically_normal(),
       &ImportSourceObservation::path);

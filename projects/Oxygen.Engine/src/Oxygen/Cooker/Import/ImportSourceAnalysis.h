@@ -62,6 +62,11 @@ struct ModelSourceScene final {
 
 //! What a model source holds, from its metadata parse.
 struct ModelSourceFacts final {
+  //! The file format: `gltf`, `glb` or `fbx`.
+  std::string format;
+  //! The version the file states (glTF `asset.version`, the FBX file version
+  //! such as `7.4`); none when the file states none.
+  std::optional<std::string> format_version;
   //! Metres per source unit; none when the file does not state its unit.
   std::optional<double> unit_meters;
   //! Source axes as signed axis names (`+X`, `-Z`), or `unknown`.

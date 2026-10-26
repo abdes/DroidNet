@@ -194,8 +194,9 @@ textures are imported for the whole file whichever scene is chosen. A document
 that fails `cgltf_validate` (`gltf.validation_failed`), or whose model scene
 reaches one node twice (`import.gltf_node_reached_twice`), is refused.
 
-`analyze-sources` reports, for each `gltf` or `fbx` job, the source's unit,
-axes and handedness, node and mesh counts, the names of the materials and
+`analyze-sources` reports, for each `gltf` or `fbx` job, the source's format
+(`gltf`, `glb` or `fbx`) and the version it states (glTF `asset.version`, the
+FBX file version such as `7.4`), its unit, axes and handedness, node and mesh counts, the names of the materials and
 textures the import produces, and for glTF each scene with its selector. It
 reads a `.glb`'s JSON chunk only, never its binary chunk.
 
@@ -641,6 +642,12 @@ Top-level fields:
   "jobs": []
 }
 ```
+
+Execution settings are optional; the schema states each default.
+`thread_pool_size` and `max_in_flight_jobs` default to the processor count,
+`job_admission_capacity` to 64, and each `concurrency` pipeline's `workers`
+and `queue_capacity` to the values of `ImportConcurrency.h`. A pipeline may set
+one of the two and leave the other at its default.
 
 Job rules:
 

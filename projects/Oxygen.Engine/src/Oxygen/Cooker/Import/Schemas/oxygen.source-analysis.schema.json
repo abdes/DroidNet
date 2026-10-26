@@ -215,6 +215,8 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
+        "format",
+        "format_version",
         "unit_meters",
         "right",
         "up",
@@ -227,6 +229,14 @@
         "textures"
       ],
       "properties": {
+        "format": {
+          "description": "The source's file format: a glTF JSON file, a binary glTF container or an FBX file.",
+          "enum": ["gltf", "glb", "fbx"]
+        },
+        "format_version": {
+          "description": "The format version the file states: glTF `asset.version` (such as \"2.0\"), the FBX file version (such as \"7.4\"); null when the file states none.",
+          "type": ["string", "null"]
+        },
         "unit_meters": {
           "description": "Metres per source unit; null when the file does not state its unit.",
           "anyOf": [
