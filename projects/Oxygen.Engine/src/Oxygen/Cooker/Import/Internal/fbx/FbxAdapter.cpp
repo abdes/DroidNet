@@ -3499,8 +3499,9 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
     rec.node_id = identity.Emit(node.anchor);
     rec.scene_name_offset = build.strings.Add(name);
     rec.parent_index = node.parent_index;
-    rec.node_flags = detail::BuildImportedNodeFlags(
-      node.visible, node.has_renderable, node.has_light);
+    const auto flags = detail::BuildImportedNodeFlags(node.visible);
+    rec.node_flags = flags.node_flags;
+    rec.inherited_flags = flags.inherited_flags;
     rec.translation[0] = translation.x;
     rec.translation[1] = translation.y;
     rec.translation[2] = translation.z;

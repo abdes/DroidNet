@@ -12,27 +12,28 @@
 
 namespace oxygen::content::import::detail {
 
-[[nodiscard]] constexpr auto BuildImportedNodeFlags(const bool visible,
-  const bool has_renderable, const bool has_light) noexcept -> std::uint32_t
+//! The flags of an imported model node, as `NodeRecord` stores them.
+struct ImportedNodeFlags {
+  uint32_t node_flags = 0U;
+  uint32_t inherited_flags = 0U;
+};
+
+//! An imported node's flags: visibility, shadow casting and shadow receiving
+//! inherit from its parent, so a scene that instances the model governs them
+//! from the instance root, down to any node a change sets locally. A node the
+//! source hides keeps a local Hidden. Static and ray-casting selectable have
+//! no source mode and stay off.
+[[nodiscard]] constexpr auto BuildImportedNodeFlags(const bool visible) noexcept
+  -> ImportedNodeFlags
 {
-  auto flags = visible ? data::pak::world::kSceneNodeFlag_Visible : 0U;
-
-  // Imported renderable nodes should behave like authored scene nodes:
-  // opaque/standard mesh nodes cast and receive shadows by default unless
-  // explicitly overridden later in authored scene data.
-  if (has_renderable) {
-    flags |= data::pak::world::kSceneNodeFlag_CastsShadows
-      | data::pak::world::kSceneNodeFlag_ReceivesShadows;
-  }
-
-  // Light shadowing is additionally gated by the owning node's shadow flag, so
-  // imported light nodes default that capability on. Receiving shadows is not a
-  // meaningful node-level concept for light-only helpers.
-  if (has_light) {
-    flags |= data::pak::world::kSceneNodeFlag_CastsShadows;
-  }
-
-  return flags;
+  using data::pak::world::kSceneNodeFlag_Visible;
+  using data::pak::world::kSceneNodeFlags_Inheritable;
+  return ImportedNodeFlags {
+    .node_flags = 0U,
+    .inherited_flags = visible
+      ? kSceneNodeFlags_Inheritable
+      : kSceneNodeFlags_Inheritable & ~kSceneNodeFlag_Visible,
+  };
 }
 
 } // namespace oxygen::content::import::detail

@@ -435,7 +435,6 @@ NOLINT_TEST_F(
     SCOPED_TRACE(item.pass);
     const auto& scene = item.scene;
     const auto& names = item.names;
-    const auto source_count = item.source_count;
     ASSERT_EQ(scene->GetNodes().size(), names.size());
     // A model node's ID derives from its anchor and the model's source
     // identity, never from where the model lives: every pass gives the same.
@@ -445,19 +444,10 @@ NOLINT_TEST_F(
       EXPECT_EQ(scene->GetNodeName(node), names.at(index));
       EXPECT_FALSE(node.node_id.IsNil());
       EXPECT_TRUE(world::HasCanonicalNodeFlags(node));
-      if (index >= source_count) {
-        EXPECT_EQ(node.node_flags, 0U);
-        EXPECT_EQ(node.inherited_flags, world::kSceneNodeFlags_Inheritable);
-      } else {
-        EXPECT_EQ(node.inherited_flags, 0U);
-        const bool is_mesh
-          = index == 1 || index == 2 || index == 4 || index == 5;
-        const auto expected_flags = world::kSceneNodeFlag_Visible
-          | (names.at(index) == "Empty" ? 0U
-                                        : world::kSceneNodeFlag_CastsShadows)
-          | (is_mesh ? world::kSceneNodeFlag_ReceivesShadows : 0U);
-        EXPECT_EQ(node.node_flags, expected_flags);
-      }
+      // Source nodes and added attachments alike inherit their visibility and
+      // shadow flags, so the instance root governs them.
+      EXPECT_EQ(node.node_flags, 0U);
+      EXPECT_EQ(node.inherited_flags, world::kSceneNodeFlags_Inheritable);
       ids.push_back(node.node_id);
     }
     if (item.pass == 0) {
@@ -1320,9 +1310,10 @@ NOLINT_TEST_F(AsyncGltfImporterFullTest, AsyncBackendImportsFullTabuleiroScene)
   ASSERT_FALSE(scene.renderables.empty());
   for (const auto& renderable : scene.renderables) {
     ASSERT_LT(renderable.node_index, scene.nodes.size());
-    const auto node_flags = scene.nodes.at(renderable.node_index).node_flags;
-    EXPECT_NE(node_flags & world::kSceneNodeFlag_CastsShadows, 0U);
-    EXPECT_NE(node_flags & world::kSceneNodeFlag_ReceivesShadows, 0U);
+    const auto inherited
+      = scene.nodes.at(renderable.node_index).inherited_flags;
+    EXPECT_NE(inherited & world::kSceneNodeFlag_CastsShadows, 0U);
+    EXPECT_NE(inherited & world::kSceneNodeFlag_ReceivesShadows, 0U);
   }
 
   GTEST_LOG_(INFO) << "Cooked root: " << run_result.report.cooked_root.string();

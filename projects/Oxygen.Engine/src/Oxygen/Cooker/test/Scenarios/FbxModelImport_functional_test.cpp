@@ -90,9 +90,10 @@ NOLINT_TEST_F(AsyncFbxImporterFullTest, ImportsTexturedFbxScene)
   ASSERT_FALSE(scene.renderables.empty());
   for (const auto& renderable : scene.renderables) {
     ASSERT_LT(renderable.node_index, scene.nodes.size());
-    const auto node_flags = scene.nodes.at(renderable.node_index).node_flags;
-    EXPECT_NE(node_flags & world::kSceneNodeFlag_CastsShadows, 0U);
-    EXPECT_NE(node_flags & world::kSceneNodeFlag_ReceivesShadows, 0U);
+    const auto inherited
+      = scene.nodes.at(renderable.node_index).inherited_flags;
+    EXPECT_NE(inherited & world::kSceneNodeFlag_CastsShadows, 0U);
+    EXPECT_NE(inherited & world::kSceneNodeFlag_ReceivesShadows, 0U);
   }
 
   GTEST_LOG_(INFO) << "Cooked root: " << run_result.report.cooked_root.string();

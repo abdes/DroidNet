@@ -15,53 +15,44 @@ namespace {
 using oxygen::content::import::detail::BuildImportedNodeFlags;
 namespace world = oxygen::data::pak::world;
 
-NOLINT_TEST(SceneNodeImportDefaultsTest, EmptyHelperNodeKeepsOnlyVisibility)
+//! A visible node inherits visibility and both shadow flags, and holds no local
+//! value: the instance root governs them.
+NOLINT_TEST(
+  SceneNodeImportDefaultsTest, VisibleNodeInheritsEveryInheritableFlag)
 {
-  const auto visible_flags = BuildImportedNodeFlags(
-    /*visible=*/true, /*has_renderable=*/false, /*has_light=*/false);
-  EXPECT_EQ(visible_flags, world::kSceneNodeFlag_Visible);
+  const auto flags = BuildImportedNodeFlags(/*visible=*/true);
 
-  const auto hidden_flags = BuildImportedNodeFlags(
-    /*visible=*/false, /*has_renderable=*/false, /*has_light=*/false);
-  EXPECT_EQ(hidden_flags, 0U);
+  EXPECT_EQ(flags.inherited_flags, world::kSceneNodeFlags_Inheritable);
+  EXPECT_EQ(flags.node_flags, 0U);
 }
 
-NOLINT_TEST(SceneNodeImportDefaultsTest,
-  RenderableNodesCastAndReceiveByDefaultEvenWhenInitiallyHidden)
+//! A node the source hides keeps a local Hidden and inherits its shadow flags.
+NOLINT_TEST(SceneNodeImportDefaultsTest, HiddenNodeKeepsLocalHidden)
 {
-  const auto visible_flags = BuildImportedNodeFlags(
-    /*visible=*/true, /*has_renderable=*/true, /*has_light=*/false);
-  EXPECT_EQ(visible_flags,
-    world::kSceneNodeFlag_Visible | world::kSceneNodeFlag_CastsShadows
-      | world::kSceneNodeFlag_ReceivesShadows);
+  const auto flags = BuildImportedNodeFlags(/*visible=*/false);
 
-  const auto hidden_flags = BuildImportedNodeFlags(
-    /*visible=*/false, /*has_renderable=*/true, /*has_light=*/false);
-  EXPECT_EQ(hidden_flags,
+  EXPECT_EQ(flags.inherited_flags,
     world::kSceneNodeFlag_CastsShadows | world::kSceneNodeFlag_ReceivesShadows);
+  EXPECT_EQ(flags.node_flags & world::kSceneNodeFlag_Visible, 0U);
 }
 
-NOLINT_TEST(SceneNodeImportDefaultsTest,
-  LightNodesDefaultNodeLevelShadowCastingCapabilityOn)
+//! Static and ray-casting selectable have no source mode and stay off; every
+//! result is a record the loader accepts.
+NOLINT_TEST(SceneNodeImportDefaultsTest, FlagsAreCanonical)
 {
-  const auto visible_flags = BuildImportedNodeFlags(
-    /*visible=*/true, /*has_renderable=*/false, /*has_light=*/true);
-  EXPECT_EQ(visible_flags,
-    world::kSceneNodeFlag_Visible | world::kSceneNodeFlag_CastsShadows);
+  for (const auto visible : { true, false }) {
+    const auto flags = BuildImportedNodeFlags(visible);
+    auto record = world::NodeRecord {};
+    record.node_flags = flags.node_flags;
+    record.inherited_flags = flags.inherited_flags;
 
-  const auto hidden_flags = BuildImportedNodeFlags(
-    /*visible=*/false, /*has_renderable=*/false, /*has_light=*/true);
-  EXPECT_EQ(hidden_flags, world::kSceneNodeFlag_CastsShadows);
-}
-
-NOLINT_TEST(SceneNodeImportDefaultsTest,
-  NodesWithRenderableAndLightKeepRenderableShadowDefaults)
-{
-  const auto flags = BuildImportedNodeFlags(
-    /*visible=*/true, /*has_renderable=*/true, /*has_light=*/true);
-  EXPECT_EQ(flags,
-    world::kSceneNodeFlag_Visible | world::kSceneNodeFlag_CastsShadows
-      | world::kSceneNodeFlag_ReceivesShadows);
+    EXPECT_TRUE(world::HasCanonicalNodeFlags(record)) << visible;
+    EXPECT_EQ(flags.node_flags
+        & (world::kSceneNodeFlag_Static
+          | world::kSceneNodeFlag_RayCastingSelectable),
+      0U)
+      << visible;
+  }
 }
 
 } // namespace
