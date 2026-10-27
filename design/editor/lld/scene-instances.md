@@ -2,7 +2,7 @@
 
 Status: **design for owner review** (ED-M09 item 14, #77 slice 77.8).
 
-Last Updated: 2026-10-26
+Last Updated: 2026-10-27
 
 Summary: a node of a scene can **instance** an imported model (`Car.glb`) or
 another authored scene (`Watchtower.oscene`). The instanced hierarchy appears
@@ -1524,16 +1524,23 @@ gigabytes of geometry; its hierarchy is a few records per node.
   virtual path; `OxygenWorld.ReadSceneHierarchyAsync` and the runtime's
   `IRuntimeWorldCommands.ReadSceneHierarchyAsync` carry it to the editor for a
   scene activation, as node observations are.
-- `ISceneStructureProvider.ReadAsync(project, source, cancellationToken)` in
-  `Oxygen.Editor.ContentPipeline/src/Inspection/` is implemented by Live
-  Preview's `ScenePreview`, which reads through the activation that shows the
-  active scene and returns a `SceneStructure`, or none while no scene is shown
-  or the source is not mounted. A model source maps to its scene product
-  (`Car.glb` to `Car.glb/Car.oscene`) through `AssetFileTypes.SceneProductOf`.
-- The provider's `Changed` event fires when a document becomes ready and
-  whenever the engine mounts the project's content again, as after a cook or a
-  reimport: a scene shown before its content was mounted stays ready while the
-  content arrives. A view reads its sources again then.
+- The session's `SceneStructureStore` (`ISceneStructures`, in
+  `Oxygen.Editor.ContentPipeline/src/Inspection/`) holds the editor's one copy
+  of each structure: the last read of each source, kept until a newer read
+  replaces it. It depends on nothing, so documents, their edit checks and the
+  lock rule can use it while Live Preview follows those documents.
+  `Find(project, source)` looks one up synchronously from any thread; it finds
+  none while the source was never read: no scene shows it, or it is not
+  mounted yet.
+- Live Preview's `ScenePreview` fills the store. It reads, through the
+  activation that shows the active scene, the structure of every source that
+  scene instances: when the scene becomes ready, when an instance of a source
+  not read yet is placed, and whenever the engine mounts the project's content
+  again, as after a cook or a reimport. A model source maps to its scene
+  product (`Car.glb` to `Car.glb/Car.oscene`) through
+  `AssetFileTypes.SceneProductOf`.
+- The store's `Changed` event fires on the thread that read the structures;
+  views rebuild from `Find` then.
 - `SceneStructure` holds `StructureNode`s by `NodePath`: name, parent path,
   defining scene and the scene each nested instance root instances, and the
   hierarchy's issues.
@@ -1638,7 +1645,7 @@ nodes would double every section and let them drift.
   geometry values it replaces, in the schema's units and assets by their
   mounted virtual paths. Interop's `ReadSceneNodeCommand` and
   `IRuntimeWorldCommands.ReadSceneNodeAsync` carry it to
-  `ISceneStructureProvider.ReadNodeAsync`, which types each value by
+  `IInstancedNodeReader.ReadNodeAsync`, implemented by `ScenePreview`, which types each value by
   `SceneSchema.Changeable`. The values materialize as **transient
   components**: a node in no scene's tree whose World component instances
   (`TransformComponent`, `GeometryComponent`, a camera, a light) hold the
@@ -1714,10 +1721,26 @@ handles single clicks only (`ViewportViewModel.Selection.cs:45`).
 - `PickAsync` maps a click on an instanced node to its outermost instance
   root. `Viewport` handles `DoubleTapped`: it picks at the point and selects the
   hit node with its path, however deep.
-- Lock state (`Oxygen.Editor.Scenes/src/Interaction/SceneNodeInteraction.cs:127`)
+- Lock state (`Oxygen.Editor.Scenes/src/Interaction/SceneNodeInteraction.cs`)
   is keyed by `NodeReference`, as settings LLD 5.1 states. A key that no
   longer resolves after a swap, a reimport or kept-change removal is dropped
   when the structure is read; Unpack retargets its nodes' keys first.
+- A lock protects the node and every node below it, instanced or not.
+  `ISceneNodeInteraction.GetLock(scene, reference)` returns a `NodeLock`: the
+  closest locked node among the node, its ancestors in its instance's
+  structure (`StructureNode.Parent`, across nesting levels), the instance root
+  and the root's ancestors. The structure comes from the store (section
+  8.2). Until it is read, nothing tells whether an ancestor is locked, so the
+  lock is the unread instance and edits are refused: "The contents of 'Car3'
+  are not available yet, so its nodes cannot be edited."
+  (`SceneEditCodes.InstanceUnavailable`). The Explorer, the inspector, the
+  gizmo and `SceneEditScope` all ask this one rule.
+- Deleting or moving a subtree is refused when a node an instance in it brings
+  in is locked, as for a locked owned descendant.
+- The transform gizmo moves the selection's roots. A target whose instance
+  root or scene ancestor is selected is dropped by the editor; a target below
+  another target in the same instance is dropped by the native gizmo, which
+  reads the live tree.
 
 **Done when.** A click on a door selects `Car3`, a double-click selects
 `Door_FL`; the selection survives switching between the tree, viewport and
