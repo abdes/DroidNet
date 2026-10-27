@@ -18,6 +18,8 @@ namespace Oxygen.Editor.World.Components;
 /// </remarks>
 public partial class SceneInstanceComponent : GameComponent
 {
+    private InstanceChanges changes = InstanceChanges.None;
+
     static SceneInstanceComponent()
     {
         // Register the factory that creates the component from its data when a scene is hydrated.
@@ -54,9 +56,9 @@ public partial class SceneInstanceComponent : GameComponent
     /// <exception cref="ArgumentNullException">The value is <see langword="null"/>.</exception>
     public InstanceChanges Changes
     {
-        get;
-        set => _ = this.SetProperty(ref field, value ?? throw new ArgumentNullException(nameof(value)));
-    } = InstanceChanges.None;
+        get => this.changes;
+        set => _ = this.SetProperty(ref this.changes, value ?? throw new ArgumentNullException(nameof(value)));
+    }
 
     /// <inheritdoc/>
     public override void Hydrate(ComponentData data)

@@ -11,7 +11,7 @@ using Oxygen.Editor.World.Serialization;
 namespace Oxygen.Editor.SceneInspector.Unit.Tests;
 
 [TestClass]
-public sealed class InspectorSearchModelTests
+internal sealed class InspectorSearchModelTests
 {
     [TestMethod]
     public void Catalog_RegistersEveryScenePropertyAndAllNinetyThreeCards()

@@ -10,7 +10,7 @@ using Oxygen.Managed.Core;
 namespace Oxygen.Editor.SceneInspector.Unit.Tests;
 
 [TestClass]
-public sealed class InspectorFieldDiagnosticsTests
+internal sealed class InspectorFieldDiagnosticsTests
 {
     [TestMethod]
     public void ErrorStateIsUiIndependentAndNotifiesWhenTheMessageChanges()

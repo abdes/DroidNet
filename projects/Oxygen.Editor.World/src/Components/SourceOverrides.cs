@@ -96,7 +96,7 @@ public sealed class SourceOverrides : IEquatable<SourceOverrides>
     public static SourceOverrides For(string componentKind)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(componentKind);
-        return new(componentKind, SceneSchema.Overridable, ImmutableDictionary<PropertyId, object>.Empty, ImmutableDictionary<PartId, PartOverrides>.Empty);
+        return new(componentKind, SceneSchema.Overridable, [], []);
     }
 
     /// <summary>
@@ -107,8 +107,16 @@ public sealed class SourceOverrides : IEquatable<SourceOverrides>
     public static SourceOverrides ChangesOf(string componentKind)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(componentKind);
-        return new(componentKind, SceneSchema.Changeable, ImmutableDictionary<PropertyId, object>.Empty, ImmutableDictionary<PartId, PartOverrides>.Empty);
+        return new(componentKind, SceneSchema.Changeable, [], []);
     }
+
+    /// <summary>
+    /// Tests whether a text is a layout revision: a lowercase hexadecimal SHA-256 digest.
+    /// </summary>
+    /// <param name="revision">The text.</param>
+    /// <returns>Whether it is a layout revision.</returns>
+    public static bool IsLayoutRevision([NotNullWhen(true)] string? revision)
+        => revision is { Length: 64 } && revision.All(static digit => char.IsAsciiDigit(digit) || char.IsAsciiHexDigitLower(digit));
 
     /// <summary>
     /// Gets the value type of a property these overrides may hold.
@@ -122,14 +130,6 @@ public sealed class SourceOverrides : IEquatable<SourceOverrides>
         return this.valueTypes.TryGetValue(property, out type)
             && string.Equals(property.ComponentKind, this.ComponentKind, StringComparison.Ordinal);
     }
-
-    /// <summary>
-    /// Tests whether a text is a layout revision: a lowercase hexadecimal SHA-256 digest.
-    /// </summary>
-    /// <param name="revision">The text.</param>
-    /// <returns>Whether it is a layout revision.</returns>
-    public static bool IsLayoutRevision([NotNullWhen(true)] string? revision)
-        => revision is { Length: 64 } && revision.All(static digit => char.IsAsciiDigit(digit) || char.IsAsciiHexDigitLower(digit));
 
     /// <summary>
     /// Gets the override of a property of the component itself.
@@ -225,7 +225,7 @@ public sealed class SourceOverrides : IEquatable<SourceOverrides>
             return new(this.ComponentKind, this.valueTypes, this.Values.SetItem(entry.Property, entry.Value), this.Parts);
         }
 
-        var values = this.Parts.GetValueOrDefault(part)?.Values ?? ImmutableDictionary<PropertyId, object>.Empty;
+        var values = this.Parts.GetValueOrDefault(part)?.Values ?? [];
         var updated = new PartOverrides(entry.LayoutRevision!, values.SetItem(entry.Property, entry.Value));
         return new(this.ComponentKind, this.valueTypes, this.Values, this.Parts.SetItem(part, updated));
     }

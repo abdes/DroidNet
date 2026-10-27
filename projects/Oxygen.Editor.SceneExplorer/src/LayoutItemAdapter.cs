@@ -284,8 +284,8 @@ public abstract class LayoutItemAdapter : TreeItemAdapter
     {
         try
         {
-            await this.Children.ConfigureAwait(true);
-            await this.RemoveChildAsync(child).ConfigureAwait(true);
+            _ = await this.Children.ConfigureAwait(true);
+            _ = await this.RemoveChildAsync(child).ConfigureAwait(true);
         }
         catch (Exception ex) when (ex is InvalidOperationException or ArgumentException)
         {

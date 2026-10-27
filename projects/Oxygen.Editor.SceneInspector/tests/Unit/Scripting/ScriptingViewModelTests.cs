@@ -22,7 +22,7 @@ namespace Oxygen.Editor.SceneInspector.Unit.Tests.Scripting;
 /// slot edits.
 /// </summary>
 [TestClass]
-public sealed partial class ScriptingViewModelTests : IDisposable
+internal sealed partial class ScriptingViewModelTests : IDisposable
 {
     private const string MovePath = @"C:\Project\Content\Player\move.lua";
     private static readonly AssetPath MoveScript = AssetPath.Parse("/Content/Player/move.oscript");

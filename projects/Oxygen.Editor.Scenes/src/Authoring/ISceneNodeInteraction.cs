@@ -54,4 +54,12 @@ public interface ISceneNodeInteraction
     /// <param name="node">The node: a node of the scene, or a node an instance brought in.</param>
     /// <param name="isHidden">The requested state.</param>
     public void SetHidden(NodeReference node, bool isHidden);
+
+    /// <summary>
+    /// Moves the hidden and locked state of nodes that are now other nodes, as when Unpack makes an instance's nodes the
+    /// scene's own (scene instances 6.8).
+    /// </summary>
+    /// <param name="map">The node a reference names now, or <see langword="null"/> when it names the same node.</param>
+    /// <returns>The nodes hidden now in place of the nodes they were.</returns>
+    public IReadOnlyList<NodeReference> Retarget(Func<NodeReference, NodeReference?> map);
 }

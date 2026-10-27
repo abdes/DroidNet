@@ -9,10 +9,12 @@ using DroidNet.Controls;
 using DroidNet.Controls.Menus;
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Scenes;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.Scenes.Edits.EditorView;
 using Oxygen.Editor.Scenes.Edits.Hierarchy;
+using Oxygen.Editor.Scenes.Edits.Instances;
 using Oxygen.Editor.Scenes.Edits.Layout;
 using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.Scenes.Nodes;
@@ -21,6 +23,7 @@ using Oxygen.Editor.Scenes.Views;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Managed.Core;
+using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.SceneExplorer;
 
@@ -213,6 +216,12 @@ public partial class SceneExplorerViewModel
             yield return (SceneExplorerCommandKind.SelectInstance, "Select instance", "instance");
         }
 
+        if (node is { IsInstanceRoot: true })
+        {
+            yield return (SceneExplorerCommandKind.Unpack, "Unpack", "instance");
+            yield return (SceneExplorerCommandKind.UnpackCompletely, "Unpack completely", "instance");
+        }
+
         if (targets.Count == 0 || single)
         {
             yield return (SceneExplorerCommandKind.NewNode, node is not null || instanced is not null ? "New child node" : folder is not null ? "New node in folder" : "New node", "create");
@@ -377,21 +386,78 @@ public partial class SceneExplorerViewModel
             SceneExplorerCommandKind.Delete,
             this.CaptureExplorerContext(anchor: null, background: false)) is null;
 
-    private Task StageExplorerClipboardAsync(IReadOnlyList<ITreeItem> items, bool cut)
+    // Copied nodes an instance brought in go as owned subtrees with their resolved values, linked to nothing (scene
+    // instances 6.2).
+    private async Task StageExplorerClipboardAsync(IReadOnlyList<ITreeItem> items, bool cut)
     {
-        if (this.CurrentAuthoring() is not { } authoring
-            || SceneClipboard.Capture(
-                authoring.Scene,
-                authoring.Layout,
-                [.. items.OfType<SceneNodeAdapter>().Select(static row => row.AttachedObject.Id)],
-                [.. items.OfType<FolderAdapter>().Select(static row => row.Id)]) is not { } payload)
+        if (this.CurrentAuthoring() is not { } authoring)
         {
-            return Task.CompletedTask;
+            return;
+        }
+
+        var payload = SceneClipboard.Capture(
+            authoring.Scene,
+            authoring.Layout,
+            [.. items.OfType<SceneNodeAdapter>().Select(static row => row.AttachedObject.Id)],
+            [.. items.OfType<FolderAdapter>().Select(static row => row.Id)]);
+        NodeReference[] instanced = [.. items.OfType<InstancedNodeAdapter>().Select(static row => row.Reference)];
+        if (!cut && instanced.Length != 0)
+        {
+            if (this.Conversion() is not { } conversion)
+            {
+                return;
+            }
+
+            var copied = await conversion.CopyAsync(authoring.Scene, instanced, this.StructureOf).ConfigureAwait(true);
+            if (copied.Value is not { } nodes)
+            {
+                this.PublishInstanceResult(SceneOperationKinds.NodeDuplicate, "Nodes not copied", SceneEditResult.Of(SceneEditValidation.Refused(copied.Refusal!)));
+                return;
+            }
+
+            if (!ReferenceEquals(this.CurrentAuthoring(), authoring))
+            {
+                return;
+            }
+
+            var copies = SceneClipboard.Of(nodes);
+            payload = payload is null ? copies : new SceneClipboard([.. payload.Entries, .. copies.Entries], [.. payload.Nodes, .. copies.Nodes], worldNodes: null);
+        }
+
+        if (payload is null)
+        {
+            return;
         }
 
         this.clipboard.Stage(payload, cut, authoring.Scene);
         this.StageClipboard(items, cut);
-        return Task.CompletedTask;
+    }
+
+    // Unpack takes one instance root that is not locked, and needs the contents of its source.
+    private string? GetUnpackDisabledReason(CapturedExplorerContext context)
+        => context.Targets is not [SceneNodeAdapter { IsInstanceRoot: true } root] ? "Select one instance root."
+            : this.Conversion() is null ? ContentsUnreadable
+            : this.FindLockedContextRow(root) is { } locked ? $"Locked by {locked.Label}."
+            : null;
+
+    // What makes owned nodes of an instance's nodes, when the window reads them.
+    private InstanceConversion? Conversion()
+        => this.session?.Context is { } project && this.nodes is { } reader ? new InstanceConversion(project, reader) : null;
+
+    private async Task<SceneEditResult> UnpackAsync(SceneAuthoring authoring, NodeId instance, InstanceUnpack depth)
+    {
+        var result = await this.Conversion()!.ExecuteUnpackAsync(authoring, instance, depth).ConfigureAwait(true);
+        this.PublishInstanceResult(SceneOperationKinds.EditInstance, "Instance not unpacked", result);
+        return result;
+    }
+
+    // Tells the user why an instance command did nothing, or what it dropped.
+    private void PublishInstanceResult(string operationKind, string failureTitle, SceneEditResult result)
+    {
+        if (this.operationResults is { } publisher && this.statusReducer is { } reducer)
+        {
+            SceneOperationResults.PublishEditResult(publisher, reducer, operationKind, failureTitle, "Changes dropped", result, new AffectedScope { SceneId = this.Scene?.AttachedObject.Id });
+        }
     }
 
     private CapturedExplorerContext? CaptureExplorerContext(ITreeItem? anchor, bool background)
@@ -538,6 +604,11 @@ public partial class SceneExplorerViewModel
         if (kind == SceneExplorerCommandKind.SelectInstance)
         {
             return single && targets[0] is InstancedNodeAdapter ? null : "Select one node an instance brought in.";
+        }
+
+        if (kind is SceneExplorerCommandKind.Unpack or SceneExplorerCommandKind.UnpackCompletely)
+        {
+            return this.GetUnpackDisabledReason(context);
         }
 
         if (this.GetInstancedRefusal(kind, context) is { } refusal)
@@ -704,8 +775,8 @@ public partial class SceneExplorerViewModel
     {
         if (kind == SceneExplorerCommandKind.Copy)
         {
-            return context.Targets.Any(static row => row is InstancedNodeAdapter)
-                ? "Copying a node an instance brought in is not available."
+            return context.Targets.Any(static row => row is InstancedNodeAdapter) && this.Conversion() is null
+                ? ContentsUnreadable
                 : null;
         }
 
@@ -878,6 +949,10 @@ public partial class SceneExplorerViewModel
             SceneExplorerCommandKind.Hide or SceneExplorerCommandKind.Show
                 => await authoring.ExecuteAsync(new SetEditorHidden(ReferencesOf(context), kind == SceneExplorerCommandKind.Hide)).ConfigureAwait(true),
             SceneExplorerCommandKind.ShowAll => await authoring.ExecuteAsync(new SetEditorHidden([.. this.interaction!.HiddenNodes()], hidden: false)).ConfigureAwait(true),
+            SceneExplorerCommandKind.Unpack or SceneExplorerCommandKind.UnpackCompletely => await this.UnpackAsync(
+                authoring,
+                ((SceneNodeAdapter)target!).AttachedObject.Id,
+                kind == SceneExplorerCommandKind.Unpack ? InstanceUnpack.One : InstanceUnpack.Complete).ConfigureAwait(true),
             _ => null,
         };
     }

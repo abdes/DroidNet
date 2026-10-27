@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Diagnostics.CodeAnalysis;
 using AwesomeAssertions;
 using Oxygen.Editor.ContentPipeline.Testing;
 using Oxygen.Editor.Projects.Testing;
@@ -75,6 +76,7 @@ public sealed class SurfaceEditsTests
     }
 
     [TestMethod]
+    [SuppressMessage("Reliability", "CA2025:Do not pass 'IDisposable' instances into unawaited tasks", Justification = "The finally block awaits the read before the provider and the gate it uses are disposed.")]
     public async Task GeometryChangedDuringRead_EditIsStale()
     {
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
@@ -94,6 +96,7 @@ public sealed class SurfaceEditsTests
             gate.Release();
             built = await reading.ConfigureAwait(false);
         }
+
         var before = fixture.Snapshot();
 
         var result = await fixture.Authoring.ExecuteAsync(built.Edit!).ConfigureAwait(false);

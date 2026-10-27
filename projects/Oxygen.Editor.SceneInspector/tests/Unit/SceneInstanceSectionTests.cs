@@ -16,6 +16,7 @@ using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.SceneInspector.Components.Cameras;
 using Oxygen.Editor.SceneInspector.Components.Instances;
 using Oxygen.Editor.SceneInspector.SceneSettings;
+using Oxygen.Editor.Scenes.Edits.Instances;
 using Oxygen.Editor.Scenes.Testing;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
@@ -30,7 +31,7 @@ namespace Oxygen.Editor.SceneInspector.Unit.Tests;
 /// the cameras instances bring in under their instance root, and keeps a lost one with the caution glyph.
 /// </summary>
 [TestClass]
-public sealed class SceneInstanceSectionTests
+internal sealed partial class SceneInstanceSectionTests
 {
     private static readonly AssetPath Car = AssetPath.Parse("/Content/Vehicles/Car.glb");
     private static readonly AssetPath Van = AssetPath.Parse("/Content/Vehicles/Van.glb");
@@ -51,6 +52,22 @@ public sealed class SceneInstanceSectionTests
         _ = harness.Instance.Source.Should().Be(Van);
         _ = (section.SourceLabel, section.SourceKind, section.ChangeCount).Should().Be(("Van.glb", "Model", "No changes"));
         harness.Dialogs.VerifyNoOtherCalls();
+    }
+
+    [TestMethod]
+    public async Task Unpack_MakesTheInstancesNodesTheScenesOwn_WithItsChanges()
+    {
+        using var harness = Harness.Open(changed: true);
+        harness.ServeCarNodes();
+        using var section = harness.Section();
+        _ = section.CanUnpack.Should().BeTrue();
+
+        await section.UnpackAsync(InstanceUnpack.One).ConfigureAwait(false);
+
+        _ = section.HasError.Should().BeFalse(section.ErrorMessage);
+        _ = harness.Root.Components.OfType<SceneInstanceComponent>().Should().BeEmpty();
+        _ = harness.Root.Hierarchy.Children.Select(static node => node.Metadata.Name).Should().Equal("Body", "Rig");
+        _ = harness.Root.Hierarchy.Children[0].Transform.LocalPosition.X.Should().Be(2f, "the change is the unpacked node's value");
     }
 
     [TestMethod]
@@ -200,7 +217,7 @@ public sealed class SceneInstanceSectionTests
     /// Harbor with Car3, an instance of Car.glb (Body, and Rig holding the camera Lens), maybe with a change of Body;
     /// Van.glb holds Body.
     /// </summary>
-    private sealed class Harness : IDisposable
+    private sealed partial class Harness : IDisposable
     {
         private Harness(TestScene scene, TestSession session, FakeSceneStructures structures, Mock<IAuthoredReferences> references, IReadOnlyList<AssetEntry> assets)
         {
@@ -275,6 +292,15 @@ public sealed class SceneInstanceSectionTests
                 new InspectorInstanceServices(feed.Object, this.References.Object, this.Structures, this.Nodes.Object, this.Dialogs.Object));
             section.UpdateValues([this.Root]);
             return section;
+        }
+
+        // Car.glb's nodes as the mounted content holds them, with no values of their own.
+        public void ServeCarNodes()
+        {
+            var structure = this.Structures.Find(this.Session.Context, Car)!;
+            _ = this.Nodes.Setup(nodes => nodes.ReadStructureAsync(It.IsAny<ProjectContext>(), Car, It.IsAny<CancellationToken>())).ReturnsAsync(structure);
+            _ = this.Nodes.Setup(nodes => nodes.ReadNodeAsync(It.IsAny<ProjectContext>(), Car, It.IsAny<NodePath>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync((ProjectContext _, AssetPath _, NodePath path, CancellationToken _) => new InstancedNodeValues(structure.Find(path)!.Name, Geometry: null, []));
         }
 
         public void Answer(DialogButton button)

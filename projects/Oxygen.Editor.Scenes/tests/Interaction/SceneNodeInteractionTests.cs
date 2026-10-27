@@ -17,7 +17,7 @@ namespace Oxygen.Editor.Scenes.Tests.Interaction;
 
 /// <summary>Node lock and visibility persistence, reload and scene activation within a project session.</summary>
 [TestClass]
-public sealed partial class SceneNodeInteractionTests
+public sealed class SceneNodeInteractionTests
 {
     private static readonly AssetPath CarSource = AssetPath.Parse("/Content/Vehicles/Car.glb");
 

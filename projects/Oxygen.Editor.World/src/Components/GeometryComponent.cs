@@ -51,6 +51,8 @@ public partial class GeometryComponent : GameComponent, IOverridableComponent
     /// Overrides are kept when the geometry changes; those of a surface the new geometry does not have stay unresolved
     /// until they are removed.
     /// </remarks>
+#pragma warning disable SA1500 // Braces for multi-line statements should not share line
+#pragma warning disable SA1513 // Closing brace should be followed by blank line
     public SourceOverrides Overrides
     {
         get;
@@ -65,6 +67,8 @@ public partial class GeometryComponent : GameComponent, IOverridableComponent
             _ = this.SetProperty(ref field, value);
         }
     } = SourceOverrides.For(SceneSchema.Geometry.Kind);
+#pragma warning restore SA1513 // Closing brace should be followed by blank line
+#pragma warning restore SA1500 // Braces for multi-line statements should not share line
 
     /// <inheritdoc/>
     public AssetPath? PartOwner(string partKind)

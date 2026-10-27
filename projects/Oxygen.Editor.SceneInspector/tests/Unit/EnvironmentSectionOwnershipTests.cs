@@ -10,7 +10,7 @@ using Oxygen.Editor.SceneInspector.TestSupport;
 namespace Oxygen.Editor.SceneInspector.Unit.Tests;
 
 [TestClass]
-public sealed class EnvironmentSectionOwnershipTests
+internal sealed class EnvironmentSectionOwnershipTests
 {
     [TestMethod]
     public async Task SectionEdits_ShareOneSceneGestureAndCanonicalDiagnostics()

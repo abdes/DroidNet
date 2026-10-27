@@ -11,7 +11,7 @@ using Oxygen.Editor.World.Serialization;
 namespace Oxygen.Editor.SceneInspector.Unit.Tests;
 
 [TestClass]
-public sealed class ExposureCurveEditorTests
+internal sealed class ExposureCurveEditorTests
 {
     [TestMethod]
     public async Task CurveKeys_AddRemoveAndHistoryUseTheExistingSceneOwner()

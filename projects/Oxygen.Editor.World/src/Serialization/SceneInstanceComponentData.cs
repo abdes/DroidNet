@@ -21,8 +21,8 @@ public record SceneInstanceComponentData : ComponentData
     public required AssetPath Source { get; init; }
 
     /// <summary>
-    /// Gets or sets the changes, one entry per changed node, or <see langword="null"/> when there are none.
+    /// Gets or initializes the changes, one entry per changed node, or <see langword="null"/> when there are none.
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public IList<InstancedNodeChangesData>? Changes { get; set; }
+    public IList<InstancedNodeChangesData>? Changes { get; init; }
 }

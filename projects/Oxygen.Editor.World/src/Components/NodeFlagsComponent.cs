@@ -115,23 +115,17 @@ public sealed class NodeFlagsComponent : GameComponent
     /// <summary>Resolves the node's scene visibility.</summary>
     /// <returns>Whether the node is shown, and the node whose local mode decides it.</returns>
     public ResolvedNodeFlag ResolveVisibility()
-        => this.Resolve(static flags => flags.Visibility switch
-        {
-            VisibilitySource.Shown => true,
-            VisibilitySource.Hidden => false,
-            _ => null,
-        },
-        SceneSchema.Node.RootDefaults.Visibility == VisibilitySource.Shown);
+        => this.Resolve(static flags => Local(flags.Visibility), Local(SceneSchema.Node.RootDefaults.Visibility) == true);
 
     /// <summary>Resolves whether the node's geometry casts shadows.</summary>
     /// <returns>Whether it casts, and the node whose local mode decides it.</returns>
     public ResolvedNodeFlag ResolveCastsShadows()
-        => this.Resolve(static flags => Local(flags.CastsShadows), SceneSchema.Node.RootDefaults.CastsShadows == ShadowSource.On);
+        => this.Resolve(static flags => Local(flags.CastsShadows), Local(SceneSchema.Node.RootDefaults.CastsShadows) == true);
 
     /// <summary>Resolves whether the node's geometry receives shadows.</summary>
     /// <returns>Whether it receives, and the node whose local mode decides it.</returns>
     public ResolvedNodeFlag ResolveReceivesShadows()
-        => this.Resolve(static flags => Local(flags.ReceivesShadows), SceneSchema.Node.RootDefaults.ReceivesShadows == ShadowSource.On);
+        => this.Resolve(static flags => Local(flags.ReceivesShadows), Local(SceneSchema.Node.RootDefaults.ReceivesShadows) == true);
 
     /// <inheritdoc/>
     /// <exception cref="ArgumentOutOfRangeException">A source mode is not one the scene schema declares; nothing changes.</exception>
@@ -174,6 +168,13 @@ public sealed class NodeFlagsComponent : GameComponent
             IsRayCastingSelectable = this.IsRayCastingSelectable,
             IgnoreParentTransform = this.IgnoreParentTransform,
         };
+
+    private static bool? Local(VisibilitySource source) => source switch
+    {
+        VisibilitySource.Shown => true,
+        VisibilitySource.Hidden => false,
+        _ => null,
+    };
 
     private static bool? Local(ShadowSource source) => source switch
     {

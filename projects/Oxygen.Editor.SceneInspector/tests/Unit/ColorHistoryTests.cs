@@ -14,7 +14,7 @@ using static Oxygen.Editor.SceneInspector.TestSupport.SceneTestData;
 namespace Oxygen.Editor.SceneInspector.Unit.Tests;
 
 [TestClass]
-public sealed class ColorHistoryTests
+internal sealed class ColorHistoryTests
 {
     public TestContext TestContext { get; set; } = null!;
 

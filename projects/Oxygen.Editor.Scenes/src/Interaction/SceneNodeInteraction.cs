@@ -107,6 +107,21 @@ public sealed partial class SceneNodeInteraction(
             : NodeLock.None;
     }
 
+    /// <summary>Moves each entry of a set of nodes that the map names another node for to that node.</summary>
+    /// <param name="nodes">The hidden or locked nodes.</param>
+    /// <param name="map">The node a reference names now, or <see langword="null"/> when it names the same node.</param>
+    /// <returns>The nodes the moved entries name now.</returns>
+    public static IReadOnlyList<NodeReference> Retarget(HashSet<NodeReference> nodes, Func<NodeReference, NodeReference?> map)
+    {
+        ArgumentNullException.ThrowIfNull(nodes);
+        ArgumentNullException.ThrowIfNull(map);
+        var moved = nodes.Select(node => (From: node, To: map(node))).Where(static entry => entry.To is not null && entry.To != entry.From).ToList();
+        nodes.ExceptWith(moved.Select(static entry => entry.From));
+        NodeReference[] targets = [.. moved.Select(static entry => entry.To!)];
+        nodes.UnionWith(targets);
+        return targets;
+    }
+
     /// <summary>
     /// Loads the stored interaction state for a scene of the session's project, replacing any
     /// previously active scene.
@@ -225,6 +240,20 @@ public sealed partial class SceneNodeInteraction(
         {
             this.Mutate(node, isLocked, this.lockedNodes, "node was locked", "node was unlocked");
         }
+    }
+
+    /// <inheritdoc/>
+    public IReadOnlyList<NodeReference> Retarget(Func<NodeReference, NodeReference?> map)
+    {
+        ArgumentNullException.ThrowIfNull(map);
+        var hidden = Retarget(this.hiddenNodes, map);
+        if (hidden.Count + Retarget(this.lockedNodes, map).Count != 0)
+        {
+            this.RaiseStateChanged();
+            this.ScheduleSave();
+        }
+
+        return hidden;
     }
 
     /// <summary>

@@ -2,7 +2,10 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Text.Json;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Scenes.Layout;
+using Oxygen.Editor.World;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Assets.Catalog;
@@ -105,6 +108,32 @@ public static class SceneFiles
         return context.DefaultSceneId is { } defaultSceneId
             ? (await FindByIdAsync(catalog, context, defaultSceneId).ConfigureAwait(true))?.Identity
             : null;
+    }
+
+    /// <summary>Reads an authored scene of the project, as an instance of it brings its nodes in.</summary>
+    /// <param name="project">The project, through whose file system the file is read.</param>
+    /// <param name="scene">The scene's asset.</param>
+    /// <param name="cancellationToken">Cancels reading the file.</param>
+    /// <returns>The scene, in no document; <see langword="null"/> when the asset is not a readable scene of the project.</returns>
+    /// <remarks>The scene's identity, such as <c>Watchtower.oscene</c>, is read from its source, <c>Watchtower.oscene.json</c>.</remarks>
+    public static async Task<Scene?> ReadAsync(ProjectContext project, AssetPath scene, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(project);
+        ArgumentNullException.ThrowIfNull(scene);
+        if (project.FindSource(scene) is not { IsProjectFile: true } location)
+        {
+            return null;
+        }
+
+        try
+        {
+            var bytes = await project.FileSystem.File.ReadAllBytesAsync(location.File.FullPath, cancellationToken).ConfigureAwait(true);
+            return JsonSerializer.Deserialize(bytes, SceneFileJsonContext.Default.SceneFileData) is { } data ? Scene.CreateAndHydrate(data) : null;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException or ArgumentException)
+        {
+            return null;
+        }
     }
 
     /// <summary>Reads the identity a scene file of the project holds.</summary>

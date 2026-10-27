@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Oxygen.Managed.Core;
@@ -26,6 +27,7 @@ public record SceneNodeData
     /// <summary>
     /// Gets or sets the node's components, required ones included.
     /// </summary>
+    [SuppressMessage("Usage", "CA2227:Collection properties should be read only", Justification = "System.Text.Json source generation sets an absent init-only property to null, losing the empty default; the setter keeps it (SceneJsonDefaultsTests).")]
     public IList<ComponentData> Components { get; set; } = [];
 
     /// <summary>

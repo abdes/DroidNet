@@ -50,6 +50,7 @@ public static class SceneEditJson
                 new ScriptSlotJsonConverter(),
                 new ScriptValueJsonConverter(),
                 new InstanceChangesJsonConverter(),
+                new NodePathJsonConverter(),
             },
         };
         options.MakeReadOnly();
@@ -233,6 +234,21 @@ public static class SceneEditJson
 
             writer.WriteEndArray();
         }
+    }
+
+    /// <summary>Writes a node path in its canonical form, the node IDs joined by <c>/</c>.</summary>
+    private sealed class NodePathJsonConverter : JsonConverter<NodePath>
+    {
+        public override NodePath Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        {
+            var text = reader.TokenType == JsonTokenType.String ? reader.GetString() : null;
+            return NodePath.TryParse(text, out var path)
+                ? path
+                : throw new JsonException($"'{text}' is not a node path: node IDs joined by '/'.");
+        }
+
+        public override void Write(Utf8JsonWriter writer, NodePath value, JsonSerializerOptions options)
+            => writer.WriteStringValue(value.ToString());
     }
 
     /// <summary>Writes a script parameter value in its saved form.</summary>

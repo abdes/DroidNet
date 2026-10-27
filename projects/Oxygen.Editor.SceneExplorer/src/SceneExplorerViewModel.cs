@@ -49,6 +49,9 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     // The selection source of the Inspector's "inspect this node" requests; the row is revealed and focused.
     private const string InspectorSelectionSource = "Inspector";
 
+    // Why Unpack and Copy of instanced nodes are unavailable in a window that cannot read the nodes' values.
+    private const string ContentsUnreadable = "The contents of instances cannot be read in this window.";
+
     private readonly ILogger<SceneExplorerViewModel> logger;
     private readonly IRouter router;
     private readonly IDocumentArea documentArea;
@@ -64,6 +67,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     private readonly ISceneViews? views;
     private readonly ISceneAvailability? availability;
     private readonly ISceneStructures? structures;
+    private readonly IInstancedNodeReader? nodes;
     private readonly IDisposable? commandRegistration;
     private readonly SceneExplorerProjection projection = new();
     private readonly SemaphoreSlim searchGate = new(1, 1);
@@ -152,6 +156,10 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     ///     Optional store of what each instance's source contains, as read, whose nodes the explorer shows under each
     ///     instance root. Without it an instance root shows no instanced rows.
     /// </param>
+    /// <param name="nodes">
+    ///     Optional reader of the values the nodes an instance brings in hold, which Unpack and Copy make owned nodes
+    ///     of. Without it neither is available.
+    /// </param>
     public SceneExplorerViewModel(
         IRouter router,
         IDocumentArea documentArea,
@@ -169,9 +177,11 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         ISceneAvailability? availability = null,
         ICommandService? commands = null,
         ISceneNodeClipboard? clipboard = null,
-        ISceneStructures? structures = null)
+        ISceneStructures? structures = null,
+        IInstancedNodeReader? nodes = null)
         : base(loggerFactory)
     {
+        this.nodes = nodes;
         this.clipboard = clipboard ?? new SceneNodeClipboard();
         this.structures = structures;
         structures?.Changed += this.OnStructuresChanged;

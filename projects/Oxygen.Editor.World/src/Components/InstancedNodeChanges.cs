@@ -150,6 +150,19 @@ public sealed class InstancedNodeChanges : IEquatable<InstancedNodeChanges>
     }
 
     /// <summary>
+    /// Re-points node-valued parameter changes at other nodes, as when an unpacked instance's nodes become the scene's.
+    /// </summary>
+    /// <param name="map">The node a reference names now, or <see langword="null"/> to keep the reference.</param>
+    /// <returns>The changes with re-pointed node values.</returns>
+    public InstancedNodeChanges MapNodes(Func<NodeReference, NodeReference?> map)
+    {
+        ArgumentNullException.ThrowIfNull(map);
+        return this.MapParameters(value => value.Kind == ScriptValueKind.NodeValue && value.Node is { } reference && map(reference) is { } target && target != reference
+            ? ScriptValue.FromNode(target)
+            : value);
+    }
+
+    /// <summary>
     /// Records the node's last known names.
     /// </summary>
     /// <param name="names">The names, or <see langword="null"/> when they are not known.</param>

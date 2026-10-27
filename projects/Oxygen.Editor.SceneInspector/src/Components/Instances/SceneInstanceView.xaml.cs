@@ -4,7 +4,9 @@
 
 using System.Diagnostics;
 using DroidNet.Mvvm.Generators;
+using Microsoft.UI.Xaml;
 using Oxygen.Editor.Pickers;
+using Oxygen.Editor.Scenes.Edits.Instances;
 
 namespace Oxygen.Editor.SceneInspector.Components.Instances;
 
@@ -31,5 +33,21 @@ public sealed partial class SceneInstanceView
         {
             await this.ViewModel.SwapAsync(source).ConfigureAwait(true);
         }
+    }
+
+    private async void OnUnpackClick(object sender, RoutedEventArgs args)
+    {
+        _ = sender;
+        _ = args;
+        Debug.Assert(this.ViewModel is not null, "ViewModel should not be null when unpacking.");
+        await this.ViewModel.UnpackAsync(InstanceUnpack.One).ConfigureAwait(true);
+    }
+
+    private async void OnUnpackCompletelyClick(object sender, RoutedEventArgs args)
+    {
+        _ = sender;
+        _ = args;
+        Debug.Assert(this.ViewModel is not null, "ViewModel should not be null when unpacking.");
+        await this.ViewModel.UnpackAsync(InstanceUnpack.Complete).ConfigureAwait(true);
     }
 }

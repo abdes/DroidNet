@@ -25,7 +25,7 @@ public sealed class InstanceChanges : IEquatable<InstanceChanges>
     /// <summary>
     /// Gets the changes that change nothing.
     /// </summary>
-    public static InstanceChanges None { get; } = new(ImmutableDictionary<NodePath, InstancedNodeChanges>.Empty);
+    public static InstanceChanges None { get; } = new([]);
 
     /// <summary>
     /// Gets the changes of each node path that has any.

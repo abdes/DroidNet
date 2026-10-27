@@ -15,6 +15,7 @@ using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Pickers;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Scenes;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Edits.Instances;
 using Oxygen.Editor.Scenes.Nodes;
@@ -22,13 +23,15 @@ using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
+using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.SceneInspector.Components.Instances;
 
 /// <summary>
 /// The Scene Instance section of an instance root (scene instances 8.5): its source, which the source picker swaps
-/// for another model or authored scene (6.5), the number of changes the scene makes to the instance, and, for an
-/// instanced scene, that its environment and start state apply only when it runs as a level.
+/// for another model or authored scene (6.5), the number of changes the scene makes to the instance, <i>Unpack</i> and
+/// <i>Unpack completely</i> (6.8), and, for an instanced scene, that its environment and start state apply only when it
+/// runs as a level.
 /// </summary>
 /// <remarks>
 /// A swap of an instance with changes first asks whether to keep them by name or discard them. Keeping them needs the
@@ -44,6 +47,8 @@ public sealed partial class SceneInstanceViewModel : ComponentPropertyEditor, ID
     private readonly ISceneStructures? structures;
     private readonly IInstancedNodeReader? reader;
     private readonly IDialogService? dialogs;
+    private readonly IOperationResultPublisher? operationResults;
+    private readonly IStatusReducer? statusReducer;
     private readonly ILogger logger;
     private IReadOnlyList<AssetEntry> latestAssets = [];
     private IDisposable? assetSubscription;
@@ -76,6 +81,8 @@ public sealed partial class SceneInstanceViewModel : ComponentPropertyEditor, ID
         this.structures = services.Structures;
         this.reader = services.Nodes;
         this.dialogs = services.Dialogs;
+        this.operationResults = services.OperationResults;
+        this.statusReducer = services.StatusReducer;
         this.logger = loggerFactory?.CreateLogger<SceneInstanceViewModel>() ?? NullLogger<SceneInstanceViewModel>.Instance;
     }
 
@@ -109,13 +116,19 @@ public sealed partial class SceneInstanceViewModel : ComponentPropertyEditor, ID
     /// <summary>Gets a value indicating whether the source can be swapped: one instance root of the inspected scene is selected.</summary>
     public bool CanSwap => !this.disposed && !this.isBusy && !this.isMixed && this.IsInputEnabled && this.instance is not null;
 
+    /// <summary>
+    /// Gets a value indicating whether the instance can be unpacked: one instance root of the inspected scene is selected,
+    /// and the values of its nodes can be read.
+    /// </summary>
+    public bool CanUnpack => this.CanSwap && this.reader is not null;
+
     /// <inheritdoc />
     public override string Header => "Scene Instance";
 
     /// <inheritdoc />
-    public override string Description => "The model or scene this node instances, and how many of its values this scene changes.";
+    public override string Description => "The model or scene this node instances, how many of its values this scene changes, and unpacking it into the scene's own nodes.";
 
-    /// <summary>Gets completion of the swap in flight.</summary>
+    /// <summary>Gets completion of the swap or unpack in flight.</summary>
     internal Task Pending => this.pending;
 
     /// <inheritdoc />
@@ -176,8 +189,22 @@ public sealed partial class SceneInstanceViewModel : ComponentPropertyEditor, ID
         return this.pending;
     }
 
+    /// <summary>Unpacks the selected instance: its nodes become the scene's own, with their resolved values.</summary>
+    /// <param name="depth">Whether the instances its source holds stay instances or are unpacked too.</param>
+    /// <returns>A task that completes once the unpack applied or was refused.</returns>
+    internal Task UnpackAsync(InstanceUnpack depth)
+    {
+        if (!this.CanUnpack || this.root is not { } node)
+        {
+            return Task.CompletedTask;
+        }
+
+        this.pending = this.UnpackCoreAsync(node, depth);
+        return this.pending;
+    }
+
     /// <inheritdoc />
-    protected override void OnInputEnabledChanged(bool enabled) => this.OnPropertyChanged(nameof(this.CanSwap));
+    protected override void OnInputEnabledChanged(bool enabled) => this.NotifyCommandsChanged();
 
     private static int CountChanges(InstanceChanges changes)
         => changes.Nodes.Values.Sum(static node => node.Components.Values.Sum(static component => component.All.Count()) + node.Parameters.Values.Sum(static values => values.Count));
@@ -194,7 +221,7 @@ public sealed partial class SceneInstanceViewModel : ComponentPropertyEditor, ID
     {
         this.isBusy = true;
         this.ErrorMessage = string.Empty;
-        this.OnPropertyChanged(nameof(this.CanSwap));
+        this.NotifyCommandsChanged();
         try
         {
             var swap = current.Changes.IsEmpty ? InstanceSwap.KeepByName : await this.AskAsync(current, source).ConfigureAwait(true);
@@ -220,8 +247,47 @@ public sealed partial class SceneInstanceViewModel : ComponentPropertyEditor, ID
         finally
         {
             this.isBusy = false;
-            this.OnPropertyChanged(nameof(this.CanSwap));
+            this.NotifyCommandsChanged();
         }
+    }
+
+    private async Task UnpackCoreAsync(NodeId node, InstanceUnpack depth)
+    {
+        if (this.authoringProvider() is not { } authoring)
+        {
+            return;
+        }
+
+        this.isBusy = true;
+        this.ErrorMessage = string.Empty;
+        this.NotifyCommandsChanged();
+        try
+        {
+            this.LogUnpackRequested(depth);
+            var result = await new InstanceConversion(this.session.Context, this.reader!).ExecuteUnpackAsync(authoring, node, depth).ConfigureAwait(true);
+            if (!result.Succeeded)
+            {
+                var error = result.Diagnostics.FirstOrDefault(static diagnostic => diagnostic.IsError);
+                this.LogUnpackRefused(error?.Code);
+                this.ErrorMessage = error?.Message ?? "The instance could not be unpacked.";
+            }
+
+            if (this.operationResults is { } publisher && this.statusReducer is { } reducer)
+            {
+                SceneOperationResults.PublishEditResult(publisher, reducer, SceneOperationKinds.EditInstance, "Instance not unpacked", "Changes dropped", result, new AffectedScope { SceneId = authoring.Scene.Id });
+            }
+        }
+        finally
+        {
+            this.isBusy = false;
+            this.NotifyCommandsChanged();
+        }
+    }
+
+    private void NotifyCommandsChanged()
+    {
+        this.OnPropertyChanged(nameof(this.CanSwap));
+        this.OnPropertyChanged(nameof(this.CanUnpack));
     }
 
     // Asks what to do with the changes; null when the user cancels, or when no one can be asked.
@@ -302,7 +368,7 @@ public sealed partial class SceneInstanceViewModel : ComponentPropertyEditor, ID
         this.SourceKind = this.isMixed || shown is null ? string.Empty : isModel ? "Model" : "Scene";
         this.ChangeCount = this.isMixed || shown is null ? string.Empty : Changes(CountChanges(shown.Changes));
         this.IsPrefab = !this.isMixed && shown is not null && !isModel;
-        this.OnPropertyChanged(nameof(this.CanSwap));
+        this.NotifyCommandsChanged();
         this.UpdateChoices();
     }
 

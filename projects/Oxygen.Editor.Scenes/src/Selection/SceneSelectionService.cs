@@ -69,10 +69,17 @@ public sealed class SceneSelectionService : ISceneSelectionService
         FolderId? primaryFolder = context.PrimaryFolderId is { } folderId && survivingFolderIds.Contains(folderId)
             ? folderId
             : null;
+        // Without a surviving primary, the first surviving node leads, else the first surviving folder.
         if (primaryNode is null && primaryFolder is null)
         {
-            primaryNode = survivingNodes.Length > 0 ? survivingNodes[0] : null;
-            primaryFolder = primaryNode is null && survivingFolderIds.Length > 0 ? survivingFolderIds[0] : null;
+            if (survivingNodes.Length > 0)
+            {
+                primaryNode = survivingNodes[0];
+            }
+            else if (survivingFolderIds.Length > 0)
+            {
+                primaryFolder = survivingFolderIds[0];
+            }
         }
 
         var kind = SceneSelectionContext.Classify(

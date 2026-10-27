@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.Scenes;
@@ -84,6 +85,37 @@ public static class SceneOperationResults
             affectedScope,
             exception,
             technicalMessage);
+
+    /// <summary>
+    /// Publishes what the user should know about an edit's result: its first error when it failed, else its first
+    /// warning, such as changes an unpack dropped; nothing for an edit that applied cleanly.
+    /// </summary>
+    /// <param name="publisher">The operation result publisher.</param>
+    /// <param name="statusReducer">The reducer that derives the result status and severity.</param>
+    /// <param name="operationKind">The operation kind.</param>
+    /// <param name="failureTitle">The result title when the edit failed.</param>
+    /// <param name="warningTitle">The result title when the edit applied with a warning.</param>
+    /// <param name="result">The edit's result.</param>
+    /// <param name="affectedScope">The scope the operation affected.</param>
+    public static void PublishEditResult(
+        IOperationResultPublisher publisher,
+        IStatusReducer statusReducer,
+        string operationKind,
+        string failureTitle,
+        string warningTitle,
+        SceneEditResult result,
+        AffectedScope affectedScope)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+        if (!result.Succeeded && result.Diagnostics.FirstOrDefault(static diagnostic => diagnostic.IsError) is { } error)
+        {
+            _ = PublishFailure(publisher, statusReducer, operationKind, FailureDomain.SceneAuthoring, error.Code, failureTitle, error.Message, affectedScope);
+        }
+        else if (result.Succeeded && result.Diagnostics.FirstOrDefault(static diagnostic => !diagnostic.IsError) is { } warning)
+        {
+            _ = PublishWarning(publisher, statusReducer, operationKind, FailureDomain.SceneAuthoring, warning.Code, warningTitle, warning.Message, affectedScope);
+        }
+    }
 
     private static Guid Publish(
         IOperationResultPublisher publisher,

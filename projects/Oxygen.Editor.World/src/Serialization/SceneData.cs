@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json.Serialization;
 using Oxygen.Managed.Core;
 
@@ -21,6 +22,7 @@ public record SceneData : NamedData
     /// <summary>
     /// Gets or sets the list of root nodes in the scene.
     /// </summary>
+    [SuppressMessage("Usage", "CA2227:Collection properties should be read only", Justification = "System.Text.Json source generation sets an absent init-only property to null, losing the empty default; the setter keeps it (SceneJsonDefaultsTests).")]
     public IList<SceneNodeData> RootNodes { get; set; } = [];
 
     /// <summary>

@@ -110,15 +110,15 @@ public sealed partial class AuthoringFixture : IDisposable
         var history = new HistoryKeeper(root);
         var project = TestProject.Create(new MockFileSystem());
         var document = DocumentId.New();
-        var ports = Ports.For(project, interaction);
+        var created = Ports.For(project, interaction);
         try
         {
-            var content = await DecodeAsync(project, data, document, interaction, redirects, references, ports, history).ConfigureAwait(true);
-            return new AuthoringFixture(project, document, content, root, history, interaction, redirects, references, ports, thread: null);
+            var content = await DecodeAsync(project, data, document, interaction, redirects, references, created, history).ConfigureAwait(true);
+            return new AuthoringFixture(project, document, content, root, history, interaction, redirects, references, created, thread: null);
         }
         catch
         {
-            ports.Dispose();
+            created.Dispose();
             throw;
         }
     }
@@ -132,7 +132,7 @@ public sealed partial class AuthoringFixture : IDisposable
     {
         ArgumentNullException.ThrowIfNull(data);
         var thread = new SingleThreadContext();
-        Ports? ports = null;
+        Ports? owned = null;
         try
         {
             var interaction = new FakeNodeInteraction();
@@ -143,13 +143,13 @@ public sealed partial class AuthoringFixture : IDisposable
             var project = TestProject.Create(new MockFileSystem());
             var document = DocumentId.New();
             var created = Ports.For(project, interaction);
-            ports = created;
+            owned = created;
             var content = await thread.RunAsync(() => DecodeAsync(project, data, document, interaction, redirects, references, created, history)).ConfigureAwait(false);
             return new AuthoringFixture(project, document, content, root, history, interaction, redirects, references, created, thread);
         }
         catch
         {
-            ports?.Dispose();
+            owned?.Dispose();
             thread.Dispose();
             throw;
         }
@@ -227,7 +227,7 @@ public sealed partial class AuthoringFixture : IDisposable
     }
 
     // The session and the structures the scene's edits and the interaction's locks read alike; it owns the session.
-    private sealed class Ports : IDisposable
+    private sealed partial class Ports : IDisposable
     {
         private Ports(TestProject project)
         {

@@ -95,7 +95,7 @@ public sealed record SetOverrides : ISceneEdit
                 }
             }
 
-            if (writes.GroupBy(static write => (write.Path?.ToString(), write.Property, write.Part)).FirstOrDefault(static group => group.Count() > 1) is { } repeated)
+            if (writes.GroupBy(static write => (write.Path?.ToString(), write.Property, write.Part)).FirstOrDefault(static group => group.Skip(1).Any()) is { } repeated)
             {
                 return SceneEditValidation.Invalid(SceneDiagnostic.Error(SceneEditCodes.OverrideInvalid, $"{repeated.Key.Property} is written twice on one part.", id, repeated.Key.Property));
             }
@@ -169,7 +169,7 @@ public sealed record SetOverrides : ISceneEdit
 
     private static SceneDiagnostic? CheckComponent(SceneEditScope scope, SceneNode? node, OverrideWrite write)
     {
-        if (ComponentOf(node, write.Property) is not { } component)
+        if (ComponentOf(node, write.Property) is not { })
         {
             return SceneDiagnostic.Error(SceneEditCodes.ComponentMissing, $"The node has no {write.Property.ComponentKind} component.", property: write.Property);
         }

@@ -150,7 +150,7 @@ public static class LightValidation
             return new(LightRule.ExtentNotRepresentable, [rangeId, radiusId]);
         }
 
-        if (1.0 / range < MinimumNormal || 1.0 / range > float.MaxValue)
+        if (1.0 / range is < MinimumNormal or > float.MaxValue)
         {
             return new(LightRule.InverseRangeNotRepresentable, [rangeId]);
         }

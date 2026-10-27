@@ -8,7 +8,7 @@ namespace Oxygen.Editor.SceneInspector.Unit.Tests;
 
 [TestClass]
 [TestCategory("Scene Inspector")]
-public sealed class SceneInspectorModuleTests
+internal sealed class SceneInspectorModuleTests
 {
     [TestMethod]
     public void SceneInspectorModule_ContributesThePropertiesPanelAndNoCommand()

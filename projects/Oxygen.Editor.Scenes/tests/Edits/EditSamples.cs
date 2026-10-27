@@ -66,6 +66,12 @@ public static class EditSamples
 
     private static ComponentId AddedGeometry { get; } = ComponentId.FromValue(SampleScene.Tagged(2, "3B"));
 
+    private static ComponentId RestoredInstance { get; } = ComponentId.FromValue(SampleScene.Tagged(2, "3C"));
+
+    private static NodeId UnpackedBody { get; } = NodeId.FromValue(SampleScene.Tagged(1, "1B"));
+
+    private static NodePath CarBody { get; } = NodePath.Of(NodeId.FromValue(SampleScene.Tagged(1, "1D")));
+
     private static FolderId NewFolder { get; } = FolderId.FromValue(SampleScene.Tagged(3, "2A"));
 
     private static FolderId RestoredFolder { get; } = FolderId.FromValue(SampleScene.Tagged(3, "2B"));
@@ -108,6 +114,8 @@ public static class EditSamples
         ResetOverridesSample,
         SetStartingCameraSample,
         SetInstanceSourceSample,
+        UnpackInstanceSample,
+        RestoreInstanceSample,
         SetStartingInputContextsSample,
         SetSceneReferencesSample,
         SetScriptSlotsSample,
@@ -401,6 +409,44 @@ public static class EditSamples
             AssetNode = SampleScene.Car,
         };
 
+    private static EditSample UnpackInstanceSample =>
+        new(
+            nameof(UnpackInstance),
+            static _ => Unpacking([SceneBuilder.NodeData(UnpackedBody, "Body")]),
+            [new SceneChange.ComponentRemoved(SampleScene.Car, SampleScene.CarInstance, SceneSchema.SceneInstance.Kind), new SceneChange.NodesAdded([UnpackedBody]), new SceneChange.LayoutChanged()],
+            [new SceneChange.NodesRemoved([UnpackedBody]), new SceneChange.LayoutChanged(), new SceneChange.ComponentAdded(SampleScene.Car, SampleScene.CarInstance)])
+        {
+            HasTargets = true,
+            Tamper = static _ =>
+            {
+                var body = SceneBuilder.NodeData(UnpackedBody, "Body");
+                var contents = new List<SceneNodeData> { body };
+                return new TamperedEdit(
+                    Unpacking(contents),
+                    () =>
+                    {
+                        body.Components.Clear();
+                        contents.Clear();
+                    });
+            },
+        };
+
+    // A11 stands for the copy of a node of an instance A1 was unpacked from.
+    private static EditSample RestoreInstanceSample =>
+        new(
+            nameof(RestoreInstance),
+            static _ => new RestoreInstance(
+                SampleScene.A1,
+                InstanceUnpack.One,
+                new SceneInstanceComponentData { Id = RestoredInstance, Name = "Scene Instance", Source = SampleScene.CarModel },
+                Index: 4,
+                [new UnpackedNode(CarBody, SampleScene.A11)]),
+            [new SceneChange.NodesRemoved([SampleScene.A11]), new SceneChange.LayoutChanged(), new SceneChange.ComponentAdded(SampleScene.A1, RestoredInstance)],
+            [new SceneChange.ComponentRemoved(SampleScene.A1, RestoredInstance, SceneSchema.SceneInstance.Kind), new SceneChange.NodesAdded([SampleScene.A11]), new SceneChange.LayoutChanged()])
+        {
+            HasTargets = true,
+        };
+
     private static EditSample SetStartingCameraSample =>
         new(
             nameof(SetStartingCamera),
@@ -586,6 +632,15 @@ public static class EditSamples
             InsertedNode,
             "Inserted",
             components: [new GeometryComponentData { Id = InsertedGeometry, Name = "Geometry", GeometryUri = SampleScene.SphereGeometry }]);
+
+    private static UnpackInstance Unpacking(IReadOnlyList<SceneNodeData> contents)
+        => new(SampleScene.Car, InstanceUnpack.One)
+        {
+            Source = SampleScene.CarModel,
+            Changes = InstanceChanges.None,
+            Contents = contents,
+            Copies = [new UnpackedNode(CarBody, UnpackedBody)],
+        };
 
     private static NodeInsert InsertAtA2(SceneNodeData node)
         => new(node, new NodePosition(SampleScene.A2, Index: 0), LayoutPosition.UnderNode(SampleScene.A2, 0));

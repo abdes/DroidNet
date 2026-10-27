@@ -46,6 +46,24 @@
                     Text="{x:Bind ViewModel.ChangeCount, Mode=OneWay}" />
             </editorcontrols:PropertyCard>
 
+            <!--  Unpack: the instance's nodes become the scene's own.  -->
+            <editorcontrols:PropertyCard PropertyName="Unpack">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Button
+                        AutomationProperties.Name="Unpack"
+                        Click="OnUnpackClick"
+                        Content="Unpack"
+                        IsEnabled="{x:Bind ViewModel.CanUnpack, Mode=OneWay}"
+                        ToolTipService.ToolTip="Make this instance's nodes the scene's own. Instances its source holds stay instances." />
+                    <Button
+                        AutomationProperties.Name="Unpack completely"
+                        Click="OnUnpackCompletelyClick"
+                        Content="Unpack completely"
+                        IsEnabled="{x:Bind ViewModel.CanUnpack, Mode=OneWay}"
+                        ToolTipService.ToolTip="Make this instance's nodes the scene's own, down to the deepest instance." />
+                </StackPanel>
+            </editorcontrols:PropertyCard>
+
             <TextBlock
                 FontSize="12"
                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"

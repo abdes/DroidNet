@@ -13,7 +13,7 @@ namespace Oxygen.Editor.SceneExplorer;
 /// </summary>
 /// <param name="execute">The frozen invocation.</param>
 /// <param name="canExecute">The frozen eligibility check.</param>
-public sealed class SceneExplorerCommandAdapter(Action execute, Func<bool> canExecute) : ICommand
+public sealed partial class SceneExplorerCommandAdapter(Action execute, Func<bool> canExecute) : ICommand
 {
     private readonly Action execute = execute ?? throw new ArgumentNullException(nameof(execute));
     private readonly Func<bool> canExecute = canExecute ?? throw new ArgumentNullException(nameof(canExecute));

@@ -215,7 +215,7 @@ public sealed class InstanceChangesTests
 
         _ = fixture.Node(SampleScene.A).Transform.LocalPosition.X.Should().Be(4f);
         _ = ChangeOf(fixture, root, PositionX).Should().Be(2f);
-        _ = fixture.History.UndoStack.Count.Should().Be(undoDepth + 1);
+        _ = fixture.History.UndoStack.Should().HaveCount(undoDepth + 1);
         _ = await fixture.Authoring.UndoAsync().ConfigureAwait(false);
         _ = fixture.Node(SampleScene.A).Transform.LocalPosition.X.Should().Be(before);
         _ = InstanceOf(fixture, root).Changes.IsEmpty.Should().BeTrue();

@@ -39,6 +39,7 @@ using Oxygen.Editor.Shell.Windows;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Managed.Core;
+using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.SceneInspector;
 
@@ -118,6 +119,8 @@ public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNo
     /// </param>
     /// <param name="references">The saved authored references, which leave the scenes that would make a cycle out of the instance source picker.</param>
     /// <param name="dialogs">What asks whether a swap keeps or discards an instance's changes; without it, only instances without changes swap.</param>
+    /// <param name="operationResults">What tells the user about the changes an unpack dropped.</param>
+    /// <param name="statusReducer">The reducer paired with <paramref name="operationResults"/>.</param>
     public SceneInspectorViewModel(
         HostingContext hosting,
         ViewModelToView vmToViewConverter,
@@ -138,7 +141,9 @@ public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNo
         ISceneStructures? structures = null,
         IInstancedNodeReader? nodes = null,
         IAuthoredReferences? references = null,
-        IDialogService? dialogs = null)
+        IDialogService? dialogs = null,
+        IOperationResultPublisher? operationResults = null,
+        IStatusReducer? statusReducer = null)
     {
         this.logger = loggerFactory?.CreateLogger<SceneInspectorViewModel>() ?? NullLogger<SceneInspectorViewModel>.Instance;
         this.LoggerFactory = loggerFactory;
@@ -168,7 +173,7 @@ public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNo
             this.SelectNode,
             this.ReferenceOf,
             new InspectorScriptServices(scripts, codeEditor, scriptCreation, problems),
-            new InspectorInstanceServices(assetProvider, references, structures, nodes, dialogs));
+            new InspectorInstanceServices(assetProvider, references, structures, nodes, dialogs, operationResults, statusReducer));
         this.sceneSettings = new SceneSettingsViewModel(
             this.AuthoringOf,
             assetProvider,

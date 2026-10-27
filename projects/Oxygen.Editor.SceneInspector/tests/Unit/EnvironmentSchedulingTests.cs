@@ -15,7 +15,7 @@ using Oxygen.Managed.Core;
 namespace Oxygen.Editor.SceneInspector.Unit.Tests;
 
 [TestClass]
-public sealed class EnvironmentSchedulingTests
+internal sealed class EnvironmentSchedulingTests
 {
     public TestContext TestContext { get; set; } = null!;
 

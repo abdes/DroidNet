@@ -167,7 +167,7 @@ public sealed class SceneEditScope
 
             foreach (var instance in (IEnumerable<SceneNode>)[root, .. root.Descendants()])
             {
-                if (lockedInstanced.Any(node => node.Node == instance.Id))
+                if (lockedInstanced.Exists(node => node.Node == instance.Id))
                 {
                     (errors ??= []).Add(SceneDiagnostic.Error(SceneEditCodes.TargetLocked, $"A node of '{instance.Metadata.Name}' is locked.", instance.Id));
                 }

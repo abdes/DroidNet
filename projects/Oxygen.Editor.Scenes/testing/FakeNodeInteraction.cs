@@ -131,4 +131,15 @@ public sealed class FakeNodeInteraction : ISceneNodeInteraction
             _ = isHidden ? this.hidden.Add(node) : this.hidden.Remove(node);
         }
     }
+
+    /// <inheritdoc/>
+    public IReadOnlyList<NodeReference> Retarget(Func<NodeReference, NodeReference?> map)
+    {
+        ArgumentNullException.ThrowIfNull(map);
+        lock (this.gate)
+        {
+            _ = SceneNodeInteraction.Retarget(this.locked, map);
+            return SceneNodeInteraction.Retarget(this.hidden, map);
+        }
+    }
 }

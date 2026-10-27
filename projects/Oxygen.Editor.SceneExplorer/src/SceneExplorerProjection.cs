@@ -15,7 +15,7 @@ namespace Oxygen.Editor.SceneExplorer;
 /// scanning the tree or force-loading collapsed subtrees, and removed/reloaded adapters have their
 /// model observers detached.
 /// </summary>
-public sealed class SceneExplorerProjection
+internal sealed class SceneExplorerProjection
 {
     private readonly Dictionary<NodeId, SceneNodeAdapter> nodeAdapters = [];
     private readonly Dictionary<NodeReference, InstancedNodeAdapter> instancedAdapters = [];

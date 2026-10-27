@@ -80,10 +80,16 @@ public static class SceneEditCodes
 
     /// <summary>
     /// An edit needs the contents of an instance's source, which are not available yet: whether an ancestor of a node
-    /// an instance brings in is locked, or where a swap finds a change's node by name. The diagnostic names the instance
-    /// root.
+    /// an instance brings in is locked, where a swap finds a change's node by name, or the nodes and values Unpack and
+    /// Copy make owned nodes of. The diagnostic names the instance root.
     /// </summary>
     public const string InstanceUnavailable = DiagnosticCodes.ScenePrefix + "Instance.Unavailable";
+
+    /// <summary>
+    /// A change of an instance names a node path its source does not hold, a kept change: Unpack drops it and lists it in
+    /// a warning naming the instance root.
+    /// </summary>
+    public const string NodePathUnresolved = DiagnosticCodes.ScenePrefix + "Instance.NodePathUnresolved";
 
     /// <summary>A layout place is in another scene scope than the node's scene parent.</summary>
     public const string LayoutScopeMismatch = DiagnosticCodes.ScenePrefix + "Layout.ScopeMismatch";

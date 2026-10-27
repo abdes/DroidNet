@@ -9,7 +9,7 @@ using Oxygen.Editor.SceneInspector.SceneSettings;
 namespace Oxygen.Editor.SceneInspector.Unit.Tests;
 
 [TestClass]
-public sealed class SkyLightRuntimeStatusTests
+internal sealed class SkyLightRuntimeStatusTests
 {
     [TestMethod]
     [DataRow(SkyLightUnavailableReason.MissingCubemap, "No cubemap is selected")]

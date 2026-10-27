@@ -53,7 +53,7 @@ public sealed class SetInstanceSourceTests
         _ = ValueOf(instance, VanSecondMirror).Should().Be(2f);
         _ = instance.Changes.Of(VanSecondMirror).Names.Should().Be("Body/Mirror[2]");
         _ = instance.Changes.Of(VanSecondMirror).CarriedFrom.Should().BeNull("the change found its node");
-        _ = fixture.Changes.All.Last().Changes.Should().ContainEquivalentOf(new SceneChange.InstanceSourceChanged(SampleScene.Car));
+        _ = fixture.Changes.All[fixture.Changes.All.Count - 1].Changes.Should().ContainEquivalentOf(new SceneChange.InstanceSourceChanged(SampleScene.Car));
     }
 
     [TestMethod]

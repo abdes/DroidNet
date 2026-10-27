@@ -9,7 +9,7 @@ using Oxygen.Editor.SceneInspector.TestSupport;
 namespace Oxygen.Editor.SceneInspector.Unit.Tests;
 
 [TestClass]
-public sealed class CameraBindingOwnershipTests
+internal sealed class CameraBindingOwnershipTests
 {
     [TestMethod]
     public async Task CameraBinding_RejectsRestoresAndDetachesWithoutParallelScalarState()

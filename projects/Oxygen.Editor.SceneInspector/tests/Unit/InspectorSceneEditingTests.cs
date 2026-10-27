@@ -26,7 +26,7 @@ namespace Oxygen.Editor.SceneInspector.Unit.Tests;
 /// </summary>
 [TestClass]
 [TestCategory("Inspector")]
-public sealed class InspectorSceneEditingTests
+internal sealed class InspectorSceneEditingTests
 {
     private static readonly AssetPath GameplayContext = AssetPath.Parse("/Content/Input/Gameplay.oimap");
     private static readonly AssetPath MenuContext = AssetPath.Parse("/Content/Input/Menu.oimap");

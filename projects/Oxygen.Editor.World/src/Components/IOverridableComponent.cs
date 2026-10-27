@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Diagnostics.CodeAnalysis;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Components;
@@ -16,6 +17,7 @@ public interface IOverridableComponent
     /// Gets or sets the values this scene stores over the component's sources.
     /// </summary>
     /// <exception cref="ArgumentException">The value holds overrides of another component kind.</exception>
+    [SuppressMessage("Naming", "CA1716:Identifiers should not match keywords", Justification = "Overrides is the scene format's name for the values stored over a source (the JSON member and the reference fields use it); only C# implements this editor interface.")]
     public SourceOverrides Overrides { get; set; }
 
     /// <summary>

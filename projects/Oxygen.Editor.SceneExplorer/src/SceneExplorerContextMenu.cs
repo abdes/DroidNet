@@ -7,83 +7,6 @@ using Oxygen.Editor.Scenes.Selection;
 namespace Oxygen.Editor.SceneExplorer;
 
 /// <summary>
-/// Identifies an Explorer authoring action shared by the toolbar, context menu and keyboard.
-/// </summary>
-public enum SceneExplorerCommandKind
-{
-    /// <summary>Create a new scene node.</summary>
-    NewNode,
-
-    /// <summary>Create a new explorer folder.</summary>
-    NewFolder,
-
-    /// <summary>Rename the primary selected row.</summary>
-    Rename,
-
-    /// <summary>Stage the selection as a move (cut).</summary>
-    Cut,
-
-    /// <summary>Snapshot the selection (copy).</summary>
-    Copy,
-
-    /// <summary>Paste at the resolved destination.</summary>
-    Paste,
-
-    /// <summary>Paste as a child of a node, preserving world pose.</summary>
-    PasteAsChild,
-
-    /// <summary>Delete the selected nodes/folders.</summary>
-    Delete,
-
-    /// <summary>Remove the primary node from its folder (grouping-only).</summary>
-    RemoveFromFolder,
-
-    /// <summary>Move the primary node to the scene root.</summary>
-    MoveToSceneRoot,
-
-    /// <summary>Expand the primary row.</summary>
-    Expand,
-
-    /// <summary>Collapse the primary row.</summary>
-    Collapse,
-
-    /// <summary>Hide every captured node in editing viewports.</summary>
-    Hide,
-
-    /// <summary>Show every captured node in editing viewports.</summary>
-    Show,
-
-    /// <summary>Lock every captured node.</summary>
-    Lock,
-
-    /// <summary>Unlock every captured node.</summary>
-    Unlock,
-
-    /// <summary>Show all nodes of the captured scene in editing viewports.</summary>
-    ShowAll,
-
-    /// <summary>Look through the primary camera node in the active viewport, or return to the editor camera.</summary>
-    LookThroughCamera,
-
-    /// <summary>Pilot the primary camera node in the active viewport, or stop piloting it.</summary>
-    PilotCamera,
-
-    /// <summary>Move the primary camera node to the active viewport's editor camera.</summary>
-    AlignCameraToView,
-
-    /// <summary>Select the instance root of the primary node an instance brought in.</summary>
-    SelectInstance,
-}
-
-/// <summary>
-/// A single context-menu entry: the shared action identity, its label and whether it is currently available.
-/// </summary>
-/// <param name="Kind">The shared action identity.</param>
-/// <param name="Label">The contextual display label.</param>
-/// <param name="IsEnabled">Whether the action can currently be invoked.</param>
-public sealed record SceneExplorerMenuEntry(SceneExplorerCommandKind Kind, string Label, bool IsEnabled);
-
-/// <summary>
 /// Builds the context-menu shape for a captured Explorer selection. This is the single owner of the
 /// action definitions; the toolbar and keyboard surface resolve their availability through the same rules.
 /// </summary>
@@ -102,73 +25,75 @@ public static class SceneExplorerContextMenu
         bool primaryIsInFolder,
         bool primaryHasChildren,
         bool primaryIsUnlocked)
-    {
-        var entries = new List<SceneExplorerMenuEntry>();
-        switch (kind)
+        => kind switch
         {
-            case SceneSelectionKind.Node:
-                entries.Add(new(SceneExplorerCommandKind.NewNode, "New child node", IsEnabled: true));
-                entries.Add(new(SceneExplorerCommandKind.NewFolder, "New folder", IsEnabled: true));
-                entries.Add(new(SceneExplorerCommandKind.Rename, "Rename", primaryIsUnlocked));
-                entries.Add(new(SceneExplorerCommandKind.Cut, "Cut", primaryIsUnlocked));
-                entries.Add(new(SceneExplorerCommandKind.Copy, "Copy", IsEnabled: true));
-                entries.Add(new(SceneExplorerCommandKind.Paste, "Paste", IsEnabled: true));
-                entries.Add(new(SceneExplorerCommandKind.PasteAsChild, "Paste as child", IsEnabled: true));
-                entries.Add(new(SceneExplorerCommandKind.Delete, "Delete node", primaryIsUnlocked));
-                if (primaryIsInFolder)
-                {
-                    entries.Add(new(SceneExplorerCommandKind.RemoveFromFolder, "Remove from folder", IsEnabled: true));
-                }
-                else
-                {
-                    entries.Add(new(SceneExplorerCommandKind.MoveToSceneRoot, "Move to scene root", IsEnabled: true));
-                }
+            SceneSelectionKind.Node => NodeEntries(primaryIsInFolder, primaryHasChildren, primaryIsUnlocked),
+            SceneSelectionKind.Folder => FolderEntries(primaryHasChildren, primaryIsUnlocked),
+            SceneSelectionKind.Scene or SceneSelectionKind.Empty => RootEntries(kind == SceneSelectionKind.Scene),
+            SceneSelectionKind.Mixed => MixedEntries(primaryIsUnlocked),
+            _ => [],
+        };
 
-                if (primaryHasChildren)
-                {
-                    entries.Add(new(SceneExplorerCommandKind.Expand, "Expand", IsEnabled: true));
-                }
-
-                break;
-
-            case SceneSelectionKind.Folder:
-                entries.Add(new(SceneExplorerCommandKind.NewNode, "New node in folder", IsEnabled: true));
-                entries.Add(new(SceneExplorerCommandKind.NewFolder, "New subfolder", IsEnabled: true));
-                entries.Add(new(SceneExplorerCommandKind.Rename, "Rename", primaryIsUnlocked));
-                entries.Add(new(SceneExplorerCommandKind.Cut, "Cut", IsEnabled: true));
-                entries.Add(new(SceneExplorerCommandKind.Copy, "Copy", IsEnabled: true));
-                entries.Add(new(SceneExplorerCommandKind.Paste, "Paste", IsEnabled: true));
-                entries.Add(new(SceneExplorerCommandKind.Delete, "Remove folder", IsEnabled: true));
-                if (primaryHasChildren)
-                {
-                    entries.Add(new(SceneExplorerCommandKind.Collapse, "Collapse", IsEnabled: true));
-                }
-
-                break;
-
-            case SceneSelectionKind.Scene:
-            case SceneSelectionKind.Empty:
-                if (kind == SceneSelectionKind.Scene)
-                {
-                    entries.Add(new(SceneExplorerCommandKind.Rename, "Rename scene", IsEnabled: true));
-                }
-
-                entries.Add(new(SceneExplorerCommandKind.NewNode, "New node", IsEnabled: true));
-                entries.Add(new(SceneExplorerCommandKind.NewFolder, "New folder", IsEnabled: true));
-                entries.Add(new(SceneExplorerCommandKind.Paste, "Paste", IsEnabled: true));
-                break;
-
-            case SceneSelectionKind.Mixed:
-                entries.Add(new(SceneExplorerCommandKind.Cut, "Cut", primaryIsUnlocked));
-                entries.Add(new(SceneExplorerCommandKind.Copy, "Copy", IsEnabled: true));
-                entries.Add(new(SceneExplorerCommandKind.Paste, "Paste", IsEnabled: true));
-                entries.Add(new(SceneExplorerCommandKind.Delete, "Delete selected items", primaryIsUnlocked));
-                break;
-
-            default:
-                break;
+    private static List<SceneExplorerMenuEntry> NodeEntries(bool primaryIsInFolder, bool primaryHasChildren, bool primaryIsUnlocked)
+    {
+        List<SceneExplorerMenuEntry> entries =
+        [
+            new(SceneExplorerCommandKind.NewNode, "New child node", IsEnabled: true),
+            new(SceneExplorerCommandKind.NewFolder, "New folder", IsEnabled: true),
+            new(SceneExplorerCommandKind.Rename, "Rename", primaryIsUnlocked),
+            new(SceneExplorerCommandKind.Cut, "Cut", primaryIsUnlocked),
+            new(SceneExplorerCommandKind.Copy, "Copy", IsEnabled: true),
+            new(SceneExplorerCommandKind.Paste, "Paste", IsEnabled: true),
+            new(SceneExplorerCommandKind.PasteAsChild, "Paste as child", IsEnabled: true),
+            new(SceneExplorerCommandKind.Delete, "Delete node", primaryIsUnlocked),
+            primaryIsInFolder
+                ? new(SceneExplorerCommandKind.RemoveFromFolder, "Remove from folder", IsEnabled: true)
+                : new(SceneExplorerCommandKind.MoveToSceneRoot, "Move to scene root", IsEnabled: true),
+        ];
+        if (primaryHasChildren)
+        {
+            entries.Add(new(SceneExplorerCommandKind.Expand, "Expand", IsEnabled: true));
         }
 
         return entries;
     }
+
+    private static List<SceneExplorerMenuEntry> FolderEntries(bool primaryHasChildren, bool primaryIsUnlocked)
+    {
+        List<SceneExplorerMenuEntry> entries =
+        [
+            new(SceneExplorerCommandKind.NewNode, "New node in folder", IsEnabled: true),
+            new(SceneExplorerCommandKind.NewFolder, "New subfolder", IsEnabled: true),
+            new(SceneExplorerCommandKind.Rename, "Rename", primaryIsUnlocked),
+            new(SceneExplorerCommandKind.Cut, "Cut", IsEnabled: true),
+            new(SceneExplorerCommandKind.Copy, "Copy", IsEnabled: true),
+            new(SceneExplorerCommandKind.Paste, "Paste", IsEnabled: true),
+            new(SceneExplorerCommandKind.Delete, "Remove folder", IsEnabled: true),
+        ];
+        if (primaryHasChildren)
+        {
+            entries.Add(new(SceneExplorerCommandKind.Collapse, "Collapse", IsEnabled: true));
+        }
+
+        return entries;
+    }
+
+    // The scene row, or no selection: creating and pasting at the root.
+    private static List<SceneExplorerMenuEntry> RootEntries(bool isScene)
+    {
+        List<SceneExplorerMenuEntry> entries = isScene ? [new(SceneExplorerCommandKind.Rename, "Rename scene", IsEnabled: true)] : [];
+        entries.Add(new(SceneExplorerCommandKind.NewNode, "New node", IsEnabled: true));
+        entries.Add(new(SceneExplorerCommandKind.NewFolder, "New folder", IsEnabled: true));
+        entries.Add(new(SceneExplorerCommandKind.Paste, "Paste", IsEnabled: true));
+        return entries;
+    }
+
+    private static List<SceneExplorerMenuEntry> MixedEntries(bool primaryIsUnlocked)
+        =>
+        [
+            new(SceneExplorerCommandKind.Cut, "Cut", primaryIsUnlocked),
+            new(SceneExplorerCommandKind.Copy, "Copy", IsEnabled: true),
+            new(SceneExplorerCommandKind.Paste, "Paste", IsEnabled: true),
+            new(SceneExplorerCommandKind.Delete, "Delete selected items", primaryIsUnlocked),
+        ];
 }

@@ -4,9 +4,11 @@
 
 using AwesomeAssertions;
 using CommunityToolkit.Mvvm.Input;
+using DroidNet.Controls;
 using DroidNet.Controls.Menus;
 using DroidNet.Routing;
 using Moq;
+using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.ContentPipeline.Testing;
 using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Scenes.Edits.Hierarchy;
@@ -15,14 +17,16 @@ using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.Scenes.Testing;
 using Oxygen.Editor.Shell.Testing;
 using Oxygen.Editor.World;
+using Oxygen.Editor.World.Components;
 using Oxygen.Managed.Core;
 using Testably.Abstractions.Testing;
 
 namespace Oxygen.Editor.SceneExplorer.Unit.UI.Tests;
 
 /// <summary>
-/// The row menu of a node an instance brought in (scene instances 6.2, 6.9, 8.4): <em>Select instance</em> selects
-/// the instance root, and every structural command stays in the menu, disabled, with the refusal as its tooltip.
+/// The row menu of a node an instance brought in (scene instances 6.2, 6.8, 6.9, 8.4): <em>Select instance</em> selects
+/// the instance root, <em>Copy</em> stages an owned copy, every structural command stays in the menu, disabled, with
+/// the refusal as its tooltip; the instance root's menu unpacks it.
 /// </summary>
 [TestClass]
 internal sealed partial class SceneExplorerInstanceMenuTests : DroidNet.Tests.VisualUserInterfaceTests
@@ -61,7 +65,41 @@ internal sealed partial class SceneExplorerInstanceMenuTests : DroidNet.Tests.Vi
         }
     });
 
-    private static MenuItemData MenuItem(SceneExplorerViewModel explorer, InstancedNodeAdapter row, string label)
+    [TestMethod]
+    public Task Copy_StagesAnOwnedCopyOfTheInstancedNode() => EnqueueAsync(async () =>
+    {
+        using var harness = await InstanceMenuHarness.CreateAsync().ConfigureAwait(true);
+        using var explorer = await harness.OpenAsync().ConfigureAwait(true);
+        var door = harness.Reveal(explorer);
+
+        var item = MenuItem(explorer, door, "Copy");
+        _ = item.IsEnabled.Should().BeTrue();
+        await ((IAsyncRelayCommand)item.Command!).ExecuteAsync(parameter: null).ConfigureAwait(true);
+
+        var copy = harness.Clipboard.Payload!.Nodes.Should().ContainSingle().Subject;
+        _ = copy.Name.Should().Be("Door_FL");
+        _ = copy.Id.Should().NotBe(harness.Door.Path.Nodes[0]);
+    });
+
+    [TestMethod]
+    public Task Unpack_MakesTheInstancesNodesTheScenesOwn() => EnqueueAsync(async () =>
+    {
+        using var harness = await InstanceMenuHarness.CreateAsync().ConfigureAwait(true);
+        using var explorer = await harness.OpenAsync().ConfigureAwait(true);
+        harness.Selection.Publish(harness.Document.DocumentId, SceneSelectionContext.ForNodes([NodeReference.To(harness.Root)]), "Viewport");
+        var root = explorer.RowsOf([NodeReference.To(harness.Root)]).Single();
+
+        var item = MenuItem(explorer, root, "Unpack");
+        _ = item.IsEnabled.Should().BeTrue();
+        _ = MenuItem(explorer, root, "Unpack completely").IsEnabled.Should().BeTrue();
+        await ((IAsyncRelayCommand)item.Command!).ExecuteAsync(parameter: null).ConfigureAwait(true);
+
+        var node = harness.Document.Scene.AllNodes.Single(node => node.Id == harness.Root);
+        _ = node.Components.OfType<SceneInstanceComponent>().Should().BeEmpty();
+        _ = node.Hierarchy.Children.Select(static child => child.Metadata.Name).Should().Equal("Door_FL");
+    });
+
+    private static MenuItemData MenuItem(SceneExplorerViewModel explorer, ITreeItem row, string label)
         => explorer.BuildContextMenuSource(row).Items.Single(item => string.Equals(item.Text, label, StringComparison.Ordinal));
 
     /// <summary>A scene with an instance of <c>Car.glb</c>, whose structure holds the root node <c>Door_FL</c>.</summary>
@@ -78,6 +116,7 @@ internal sealed partial class SceneExplorerInstanceMenuTests : DroidNet.Tests.Vi
             this.Root = root;
             this.Door = new NodeReference(root, NodePath.Of(NodeId.New()));
             _ = this.structures.Publish(Car, (this.Door.Path, "Door_FL", null));
+            this.structures.PublishValues(Car, this.Door.Path, new InstancedNodeValues("Door_FL", Geometry: null, []));
             this.documents.Activate(document.Document);
         }
 
@@ -88,6 +127,8 @@ internal sealed partial class SceneExplorerInstanceMenuTests : DroidNet.Tests.Vi
         public NodeReference Door { get; }
 
         public SceneSelectionService Selection { get; } = new();
+
+        public SceneNodeClipboard Clipboard { get; } = new();
 
         public static async Task<InstanceMenuHarness> CreateAsync()
         {
@@ -107,7 +148,9 @@ internal sealed partial class SceneExplorerInstanceMenuTests : DroidNet.Tests.Vi
                 this.Document.Documents,
                 this.Selection,
                 session: this.session,
-                structures: this.structures);
+                clipboard: this.Clipboard,
+                structures: this.structures,
+                nodes: this.structures);
             await explorer.HandleDocumentOpenedAsync(this.Document.Scene).ConfigureAwait(true);
             return explorer;
         }

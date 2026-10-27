@@ -41,6 +41,34 @@ public sealed partial class SceneInstanceViewModel
 
     [LoggerMessage(
         SkipEnabledCheck = true,
+        Level = LogLevel.Information,
+        Message = "Unpacking the instance ({Depth}).")]
+    private static partial void LogUnpackRequested(ILogger logger, InstanceUnpack depth);
+
+    private void LogUnpackRequested(InstanceUnpack depth)
+    {
+        if (this.logger.IsEnabled(LogLevel.Information))
+        {
+            LogUnpackRequested(this.logger, depth);
+        }
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Warning,
+        Message = "The instance was not unpacked: {Code}.")]
+    private static partial void LogUnpackRefused(ILogger logger, string code);
+
+    private void LogUnpackRefused(string? code)
+    {
+        if (this.logger.IsEnabled(LogLevel.Warning))
+        {
+            LogUnpackRefused(this.logger, code ?? "no diagnostic");
+        }
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
         Level = LogLevel.Warning,
         Message = "The shared content catalog feed failed; the instance source picker stops following it.")]
     private static partial void LogCatalogFeedFailed(ILogger logger, Exception exception);

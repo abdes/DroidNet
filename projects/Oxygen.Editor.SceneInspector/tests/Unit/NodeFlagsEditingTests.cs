@@ -19,7 +19,7 @@ namespace Oxygen.Editor.SceneInspector.Unit.Tests;
 /// </summary>
 [TestClass]
 [TestCategory("Inspector")]
-public sealed class NodeFlagsEditingTests
+internal sealed class NodeFlagsEditingTests
 {
     [TestMethod]
     public async Task RenderingSection_SettingStatic_WritesTheNodeFlagsAndIsUndoable()

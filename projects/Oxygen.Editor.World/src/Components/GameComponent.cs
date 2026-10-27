@@ -98,15 +98,6 @@ public abstract class GameComponent : ScopedObservableObject, INamed, IPersisten
     public abstract ComponentData Dehydrate();
 
     /// <summary>
-    /// Validates a name before it is set. Components whose name carries meaning, such as the node name a
-    /// <see cref="MetadataComponent"/> holds, reject the names they cannot take.
-    /// </summary>
-    /// <param name="value">The name to set.</param>
-    protected virtual void ValidateName(string value)
-    {
-    }
-
-    /// <summary>
     /// Register a creator for the given DTO type. The creator receives the strongly-typed DTO
     /// and must return a hydrated component instance. Intended for use by concrete
     /// <see cref="GameComponent"/> derived types to self-register their creators.
@@ -118,6 +109,15 @@ public abstract class GameComponent : ScopedObservableObject, INamed, IPersisten
     {
         ArgumentNullException.ThrowIfNull(creator);
         Factories[typeof(TDto)] = dto => creator((TDto)dto);
+    }
+
+    /// <summary>
+    /// Validates a name before it is set. Components whose name carries meaning, such as the node name a
+    /// <see cref="MetadataComponent"/> holds, reject the names they cannot take.
+    /// </summary>
+    /// <param name="value">The name to set.</param>
+    protected virtual void ValidateName(string value)
+    {
     }
 
     private static void EnsureBuiltInFactories()
