@@ -2,7 +2,9 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.Scenes.Nodes;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
@@ -13,13 +15,20 @@ namespace Oxygen.Editor.SceneInspector;
 
 /// <content>
 /// Nodes an instance brings in (scene instances 6.2, 8.5): each selected one shows as a transient node whose components
-/// hold its effective values, read from the mounted cooked scenes. The pane shows it read-only, its header naming its
-/// source and refusing structural commands.
+/// hold its effective values, read from the mounted cooked scenes with this scene's changes over them. The pane shows it
+/// read-only, its header naming its source and refusing structural commands, and shows each change the scene makes of
+/// it, as from the viewport, when the change is made.
 /// </content>
 public sealed partial class SceneInspectorViewModel
 {
     // The transient node shown for each selected node an instance brings in.
-    private readonly Dictionary<SceneNode, NodeReference> instancedNodes = new(ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<SceneNode, NodeReference> instancedNodes = [with(ReferenceEqualityComparer.Instance)];
+
+    // The values read of each transient node, which this scene's changes override.
+    private readonly Dictionary<SceneNode, InstancedNodeValues> instancedValues = [with(ReferenceEqualityComparer.Instance)];
+
+    // The instance components whose changes the transient nodes show.
+    private readonly HashSet<SceneInstanceComponent> observedInstances = [];
 
     // Grows with each read of the instanced selection, so a read that a newer selection replaced is dropped.
     private int instancedReadGeneration;
@@ -50,7 +59,10 @@ public sealed partial class SceneInspectorViewModel
     public bool CanUseNodeHeader => this.CanEditSelectedNodes || this.SelectedInstancedNode() is not null;
 
     // Whether any selected node is one an instance brings in; the pane shows those read-only.
-    private bool HasInstancedSelection => this.items.Any(this.instancedNodes.ContainsKey);
+    private bool HasInstancedSelection => this.items.Exists(this.instancedNodes.ContainsKey);
+
+    private static SceneInstanceComponent? InstanceOf(Scene scene, NodeReference reference)
+        => scene.AllNodes.FirstOrDefault(node => node.Id == reference.Node)?.Components.OfType<SceneInstanceComponent>().FirstOrDefault();
 
     // The node an instance brings in when it is the single selected node.
     private NodeReference? SelectedInstancedNode()
@@ -77,9 +89,15 @@ public sealed partial class SceneInspectorViewModel
             return interaction.GetLockOwner(node) is { } owner ? (ReferenceEquals(owner, node), owner.Metadata.Name) : null;
         }
 
-        return interaction.GetLockOwner(node.Scene, reference) is { } lockOwner
-            ? (lockOwner == reference, node.Scene.AllNodes.FirstOrDefault(candidate => candidate.Id == lockOwner.Node)?.Metadata.Name ?? string.Empty)
-            : null;
+        // Contents not read yet protect the node through its instance root.
+        return interaction.GetLock(node.Scene, reference) switch
+        {
+            { Owner: { } lockOwner } => (lockOwner == reference, NameOf(lockOwner.Node)),
+            { UnreadInstance: { } root } => (false, NameOf(root)),
+            _ => null,
+        };
+
+        string NameOf(NodeId id) => node.Scene.AllNodes.FirstOrDefault(candidate => candidate.Id == id)?.Metadata.Name ?? string.Empty;
     }
 
     // Selects the instance root of the single selected node an instance brings in.
@@ -97,8 +115,21 @@ public sealed partial class SceneInspectorViewModel
     // A new selection drops the transient nodes of the last one and reads those it holds.
     private void ReadInstancedSelection(Scene? scene)
     {
-        this.instancedNodes.Clear();
+        this.ForgetInstancedNodes();
         this.RereadInstancedSelection(scene);
+    }
+
+    // Drops the transient nodes and stops following their instances' changes.
+    private void ForgetInstancedNodes()
+    {
+        this.instancedNodes.Clear();
+        this.instancedValues.Clear();
+        foreach (var instance in this.observedInstances)
+        {
+            instance.PropertyChanged -= this.OnInstanceChanged;
+        }
+
+        this.observedInstances.Clear();
     }
 
     // Reads the effective values of each selected node an instance brings in; the nodes show once all are read, after
@@ -106,7 +137,7 @@ public sealed partial class SceneInspectorViewModel
     private void RereadInstancedSelection(Scene? scene)
     {
         var generation = ++this.instancedReadGeneration;
-        var references = this.HasSelectionSummary || scene is null || this.structures is null
+        var references = this.HasSelectionSummary || scene is null || this.nodes is null
             ? []
             : this.selectionContext.SelectedNodes.Where(static reference => !reference.IsOwned).ToArray();
         this.isReadingInstancedNodes = references.Length != 0;
@@ -118,16 +149,22 @@ public sealed partial class SceneInspectorViewModel
 
     private async Task ReadInstancedNodesAsync(Scene scene, IReadOnlyList<NodeReference> references, int generation)
     {
-        var read = new List<(SceneNode Node, NodeReference Reference)>();
+        var read = new List<(SceneNode Node, NodeReference Reference, InstancedNodeValues Values)>();
+        var lifetime = this.session.Lifetime;
         try
         {
             foreach (var reference in references)
             {
-                if (await this.ReadInstancedNodeAsync(scene, reference).ConfigureAwait(true) is { } node)
+                if (await this.ReadInstancedNodeAsync(scene, reference, lifetime).ConfigureAwait(true) is { } node)
                 {
-                    read.Add((node, reference));
+                    read.Add((node.Node, reference, node.Values));
                 }
             }
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested)
+        {
+            // The project is closing: there is nothing left to show.
+            return;
         }
         catch (Exception ex) when (ex is InvalidOperationException or ArgumentException)
         {
@@ -142,10 +179,15 @@ public sealed partial class SceneInspectorViewModel
 
         this.isReadingInstancedNodes = false;
         var owned = this.items.Where(node => !this.instancedNodes.ContainsKey(node)).ToList();
-        this.instancedNodes.Clear();
-        foreach (var (node, reference) in read)
+        this.ForgetInstancedNodes();
+        foreach (var (node, reference, values) in read)
         {
             this.instancedNodes[node] = reference;
+            this.instancedValues[node] = values;
+            if (InstanceOf(scene, reference) is { } instance && this.observedInstances.Add(instance))
+            {
+                instance.PropertyChanged += this.OnInstanceChanged;
+            }
         }
 
         this.items = [.. owned, .. read.Select(static entry => entry.Node)];
@@ -154,20 +196,51 @@ public sealed partial class SceneInspectorViewModel
         this.SubscribeToComponentCollections();
     }
 
-    private async Task<SceneNode?> ReadInstancedNodeAsync(Scene scene, NodeReference reference)
+    private async Task<(SceneNode Node, InstancedNodeValues Values)?> ReadInstancedNodeAsync(Scene scene, NodeReference reference, CancellationToken cancellationToken)
     {
-        if (this.structures is not { } structures
-            || this.InstanceSourceOf(scene, reference) is not { } source
-            || await structures.ReadNodeAsync(this.session.Context, source, reference.Path).ConfigureAwait(true) is not { } values)
+        if (this.nodes is not { } nodes
+            || InstanceOf(scene, reference) is not { } instance
+            || await nodes.ReadNodeAsync(this.session.Context, instance.Source, reference.Path, cancellationToken).ConfigureAwait(true) is not { } values)
         {
             return null;
         }
 
-        return InstancedNodes.Build(scene, reference, values);
+        return (InstancedNodes.Build(scene, reference, values, instance.Changes.Of(reference.Path)), values);
     }
 
-    private AssetPath? InstanceSourceOf(Scene scene, NodeReference reference)
-        => scene.AllNodes.FirstOrDefault(node => node.Id == reference.Node)?.Components.OfType<SceneInstanceComponent>().FirstOrDefault()?.Source;
+    // The scene changed an instance's nodes, as a viewport drag does: each transient node shows its values again.
+    private void OnInstanceChanged(object? sender, PropertyChangedEventArgs args)
+    {
+        if (sender is not SceneInstanceComponent changed
+            || !string.Equals(args.PropertyName, nameof(SceneInstanceComponent.Changes), StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        if (this.dispatcher is { HasThreadAccess: false })
+        {
+            _ = this.dispatcher.TryEnqueue(() => this.ShowInstanceChanges(changed));
+            return;
+        }
+
+        this.ShowInstanceChanges(changed);
+    }
+
+    private void ShowInstanceChanges(SceneInstanceComponent changed)
+    {
+        if (this.isDisposed || this.InspectedScene is not { } scene)
+        {
+            return;
+        }
+
+        foreach (var (node, reference) in this.instancedNodes)
+        {
+            if (ReferenceEquals(InstanceOf(scene, reference), changed) && this.instancedValues.TryGetValue(node, out var values))
+            {
+                InstancedNodes.Write(scene, node, values, changed.Changes.Of(reference.Path));
+            }
+        }
+    }
 
     // Content mounted again, as after a cook: the selected instanced nodes may hold other values now.
     private void OnStructuresChanged(object? sender, EventArgs args)

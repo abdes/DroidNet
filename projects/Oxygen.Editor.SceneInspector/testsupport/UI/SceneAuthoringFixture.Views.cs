@@ -35,6 +35,6 @@ internal sealed partial class SceneAuthoringFixture
         _ = catalog.SetupGet(value => value.Items).Returns(System.Reactive.Linq.Observable.Empty<IReadOnlyList<Oxygen.Editor.Assets.AssetEntry>>());
         _ = catalog.Setup(value => value.RefreshAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
         var dispatcher = VisualUserInterfaceTestsApp.DispatcherQueue;
-        return new(new HostingContext { Application = Application.Current, Dispatcher = dispatcher, DispatcherScheduler = new System.Reactive.Concurrency.DispatcherQueueScheduler(dispatcher) }, new ViewModelToView(locator.Object), Mock.Of<IAssetReveal>(), this.Area, assetProvider ?? catalog.Object, this.Preview.Object, this.Selection, this.Surfaces, this.Session, new FakeInputSources(), interaction: this.Interaction, structures: this.Structures);
+        return new(new HostingContext { Application = Application.Current, Dispatcher = dispatcher, DispatcherScheduler = new System.Reactive.Concurrency.DispatcherQueueScheduler(dispatcher) }, new ViewModelToView(locator.Object), Mock.Of<IAssetReveal>(), this.Area, assetProvider ?? catalog.Object, this.Preview.Object, this.Selection, this.Surfaces, this.Session, new FakeInputSources(), interaction: this.Interaction, structures: this.Structures, nodes: this.Structures);
     }
 }

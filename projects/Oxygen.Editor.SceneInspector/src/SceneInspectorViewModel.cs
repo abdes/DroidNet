@@ -62,17 +62,18 @@ public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNo
     private readonly SceneSettingsViewModel sceneSettings;
     private readonly ISceneSelectionService sceneSelectionService;
     private readonly IProjectSession session;
-    private readonly ISceneStructureProvider? structures;
+    private readonly ISceneStructures? structures;
+    private readonly IInstancedNodeReader? nodes;
 
     // The nodes whose property changes refresh the panel's own properties.
     private readonly List<SceneNode> observedNodes = [];
-    private (DocumentId document, string property)? pendingEnvironmentFocus;
+    private (DocumentId Document, string Property)? pendingEnvironmentFocus;
 
     // The atmosphere source the inspector selected, whose directional light it shows once the selection arrives.
     private NodeId? pendingAtmosphereSource;
 
     private bool isDisposed;
-    private ICollection<SceneNode> items;
+    private List<SceneNode> items;
     private Scene? activeScene;
 
     // The document that edits the active scene; selection and scene lifetime messages name it.
@@ -106,6 +107,9 @@ public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNo
     /// <param name="scriptCreation">What creates a script for a slot, with New Script.</param>
     /// <param name="problems">What shows a script's problem in the Problems panel.</param>
     /// <param name="structures">
+    /// What the instances' sources contain, as read; selected instanced nodes are read again when it is read again.
+    /// </param>
+    /// <param name="nodes">
     /// What reads the effective values of the nodes an instance brings in; without it, selected instanced nodes show
     /// nothing.
     /// </param>
@@ -126,7 +130,8 @@ public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNo
         ICodeEditorService? codeEditor = null,
         IScriptCreation? scriptCreation = null,
         IProblemReveal? problems = null,
-        ISceneStructureProvider? structures = null)
+        ISceneStructures? structures = null,
+        IInstancedNodeReader? nodes = null)
     {
         this.logger = loggerFactory?.CreateLogger<SceneInspectorViewModel>() ?? NullLogger<SceneInspectorViewModel>.Instance;
         this.LoggerFactory = loggerFactory;
@@ -138,6 +143,7 @@ public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNo
         this.sceneSelectionService = selectionService;
         this.session = session;
         this.structures = structures;
+        this.nodes = nodes;
         this.VmToViewConverter = vmToViewConverter;
         this.dispatcher = hosting.Dispatcher;
         this.scenePreview.PendingFieldsChanged += this.OnPendingFieldsChanged;
@@ -175,22 +181,7 @@ public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNo
             ? this.sceneSelectionService.GetSelectedNodes(shownDocument, shownScene).ToList()
             : [];
         this.activeDocumentId = this.items.Count == 0 ? null : activeDocument;
-
-        if (interaction is { } interactionService)
-        {
-            interactionService.StateChanged += this.OnWorkspaceInteractionStateChanged;
-        }
-
-        this.NotifyLockEligibilityChanged();
-        this.RefreshPendingLiveSyncState();
-        this.sceneSettings.SetScene(this.HasSceneSettings ? this.activeScene : null);
-        this.ShowItems();
-        this.SubscribeToComponentCollections();
-        this.LogConstructed(this.items.Count);
-
-        this.sceneSelectionService.SelectionChanged += this.OnSelectionServiceChanged;
-        structures?.Changed += this.OnStructuresChanged;
-        this.ReadInstancedSelection(this.activeScene);
+        this.ShowInitialSelection();
     }
 
     /// <summary>Gets the sections shown for the selection: the scene's settings, or the selected nodes' components.</summary>
@@ -393,6 +384,7 @@ public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNo
         this.sceneSelectionService.SelectionChanged -= this.OnSelectionServiceChanged;
         this.scenePreview.ReadyChanged -= this.OnPreviewReadyChanged;
         this.structures?.Changed -= this.OnStructuresChanged;
+        this.ForgetInstancedNodes();
         this.documents.Dispose();
         if (this.interaction is { } interactionService)
         {
@@ -574,9 +566,7 @@ public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNo
 
     // Ctrl+B's navigation: the Content Explorer shows and selects the asset.
     private async Task RevealAssetAsync(AssetPath asset)
-    {
-        _ = await this.assetReveal.RevealAsync([asset]).ConfigureAwait(true);
-    }
+        => _ = await this.assetReveal.RevealAsync([asset]).ConfigureAwait(true);
 
     // Selects a node of the inspected scene, such as the ancestor an inherited node flag comes from.
     private void SelectNode(NodeId nodeId)
@@ -628,7 +618,7 @@ public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNo
         var keysToCheck = new HashSet<Type>(this.propertyEditorFactories.Keys);
         foreach (var entity in this.items)
         {
-            keysToCheck.RemoveWhere(key => entity.Components.All(component => component.GetType() != key));
+            _ = keysToCheck.RemoveWhere(key => entity.Components.All(component => component.GetType() != key));
         }
 
         return keysToCheck;
@@ -696,6 +686,26 @@ public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNo
     }
 
     // A selection of the active scene document written by any source (the explorer, the viewport, an inspector request).
+    // Shows the startup selection, then follows the lock state, the selection and the instances' contents.
+    private void ShowInitialSelection()
+    {
+        if (this.interaction is { } interactionService)
+        {
+            interactionService.StateChanged += this.OnWorkspaceInteractionStateChanged;
+        }
+
+        this.NotifyLockEligibilityChanged();
+        this.RefreshPendingLiveSyncState();
+        this.sceneSettings.SetScene(this.HasSceneSettings ? this.activeScene : null);
+        this.ShowItems();
+        this.SubscribeToComponentCollections();
+        this.LogConstructed(this.items.Count);
+
+        this.sceneSelectionService.SelectionChanged += this.OnSelectionServiceChanged;
+        this.structures?.Changed += this.OnStructuresChanged;
+        this.ReadInstancedSelection(this.activeScene);
+    }
+
     private void OnSelectionServiceChanged(object? sender, SceneSelectionChangedEventArgs args)
     {
         _ = sender;
@@ -749,7 +759,7 @@ public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNo
 
     private void ApplyPendingEnvironmentFocus()
     {
-        if (this.pendingEnvironmentFocus is not { } target || this.activeScene is null || this.activeDocumentId != target.document)
+        if (this.pendingEnvironmentFocus is not { } target || this.activeScene is null || this.activeDocumentId != target.Document)
         {
             return;
         }
@@ -759,7 +769,7 @@ public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNo
         this.ReadInstancedSelection(scene: null);
         this.sceneSettings.SetScene(this.activeScene);
         this.ShowItems();
-        this.sceneSettings.RequestFieldFocus(target.property);
+        this.sceneSettings.RequestFieldFocus(target.Property);
     }
 
     // The scene's properties show once the scene is the shown one; until then the request waits.
