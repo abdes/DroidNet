@@ -72,22 +72,30 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
             static input => input.AssetUri,
             input => scope.NativeJobs.TryGetValue(input.AssetUri, out var job) ? job.Id : BuildJobId(input));
 
-        foreach (var descriptor in sceneDescriptors.OrderBy(static item => item.DescriptorPath, StringComparer.Ordinal))
-        {
-            var dependencyIds = descriptor.Dependencies
-                .Select(static dependency => dependency.AssetUri)
-                .Concat(scope.InputDependencies.GetValueOrDefault(descriptor.SceneAssetUri, []))
-                .Where(jobIdsBySource.ContainsKey)
-                .Select(uri => jobIdsBySource[uri])
-                .Distinct(StringComparer.Ordinal)
-                .ToList();
-            var sceneDescriptorInput = new ContentCookInput(
+        // A scene that instances another scene of this cook reads its cooked output, so it waits for that scene's job.
+        var scenes = sceneDescriptors.OrderBy(static item => item.DescriptorPath, StringComparer.Ordinal)
+            .Select(descriptor => (Descriptor: descriptor, Input: new ContentCookInput(
                 descriptor.SceneAssetUri,
                 ContentCookAssetKind.Scene,
                 mountName,
                 ToProjectRelativePath(scope.InputRoot, descriptor.DescriptorPath),
                 FileSystemPath.From(descriptor.DescriptorPath),
-                ContentCookInputRole.GeneratedDescriptor);
+                ContentCookInputRole.GeneratedDescriptor)))
+            .ToList();
+        foreach (var (descriptor, input) in scenes)
+        {
+            jobIdsBySource[descriptor.SceneAssetUri] = scope.NativeJobs.TryGetValue(descriptor.SceneAssetUri, out var job) ? job.Id : BuildJobId(input);
+        }
+
+        foreach (var (descriptor, sceneDescriptorInput) in scenes)
+        {
+            var dependencyIds = descriptor.Dependencies
+                .Select(static dependency => dependency.AssetUri)
+                .Concat(scope.InputDependencies.GetValueOrDefault(descriptor.SceneAssetUri, []))
+                .Where(uri => uri != descriptor.SceneAssetUri && jobIdsBySource.ContainsKey(uri))
+                .Select(uri => jobIdsBySource[uri])
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
             var sceneJob = scope.NativeJobs.GetValueOrDefault(descriptor.SceneAssetUri) ?? this.BuildJob(sceneDescriptorInput, dependencyIds);
             jobs.Add(sceneJob with { DependsOn = dependencyIds });
             if (descriptor.HasScriptSidecar)

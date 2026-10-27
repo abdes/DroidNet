@@ -251,6 +251,28 @@ internal sealed partial class ContentImportManifestBuilderTests
             ".pipeline/Scenes/Main.oscene.json");
     }
 
+    [TestMethod]
+    public void BuildSceneManifestsMakeASceneWaitForTheScenesItInstances()
+    {
+        using var workspace = new ManifestWorkspace();
+        var main = AssetPath.Parse("/Content/Scenes/Main.oscene");
+        var village = AssetPath.Parse("/Content/Scenes/Village.oscene");
+        var scope = CreateScope(workspace) with
+        {
+            InputDependencies = System.Collections.Immutable.ImmutableDictionary<AssetPath, System.Collections.Immutable.ImmutableArray<AssetPath>>.Empty
+                .Add(main, [village]),
+        };
+        SceneDescriptorGenerationResult Descriptor(AssetPath scene, string name)
+            => new(scene, Path.Combine(workspace.Root, ".pipeline", "Scenes", name + ".oscene.json"), scene.VirtualPath, [], Diagnostics: []);
+
+        var manifest = new ContentImportManifestBuilder().BuildSceneManifests(scope, [Descriptor(main, "Main"), Descriptor(village, "Village")]);
+
+        var mainJob = manifest.Jobs.Single(job => string.Equals(job.Source, ".pipeline/Scenes/Main.oscene.json", StringComparison.Ordinal));
+        var villageJob = manifest.Jobs.Single(job => string.Equals(job.Source, ".pipeline/Scenes/Village.oscene.json", StringComparison.Ordinal));
+        _ = mainJob.DependsOn.Should().Equal(villageJob.Id);
+        _ = villageJob.DependsOn.Should().BeEmpty();
+    }
+
     private static ContentCookInput CreateMaterialInput(ManifestWorkspace workspace, string sourceRelativePath)
         => new(
             AssetPath.Parse("/" + sourceRelativePath.Replace('\\', '/')[..^5]),
