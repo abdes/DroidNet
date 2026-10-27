@@ -35,7 +35,7 @@ public sealed class CookedScriptReport
         foreach (var row in document.RootElement.GetProperty("scripts").EnumerateArray())
         {
             var parameters = row.GetProperty("parameters").EnumerateArray().Select(ParseParameter).ToImmutableArray();
-            if (parameters.Select(static parameter => parameter.Name).Distinct(StringComparer.Ordinal).Count() != parameters.Length)
+            if (parameters.Select(static parameter => parameter.Name).Distinct(StringComparer.Ordinal).Take(parameters.Length + 1).Count() != parameters.Length)
             {
                 throw new InvalidDataException("The native script report declares a parameter twice.");
             }

@@ -120,7 +120,7 @@ internal static class CookIncrementalPlanner
 
         return new(fingerprints, reused.ToImmutable(), sharedRoots.ToImmutable())
         {
-            VerifiedOutputs = validOutputs.ToImmutableHashSet(),
+            VerifiedOutputs = [.. validOutputs],
             PriorInventories = inventories,
             RemovedSources = removedSources?.ToImmutableHashSet() ?? [],
         };

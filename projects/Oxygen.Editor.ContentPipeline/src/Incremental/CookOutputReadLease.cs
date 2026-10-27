@@ -83,8 +83,7 @@ internal sealed partial class CookOutputReadLease : IAsyncDisposable, IDisposabl
     public IReadOnlyList<CookedFileEntry> GetFiles()
     {
         this.CheckMembership();
-        return this.files.OrderBy(static pair => pair.Key, StringComparer.Ordinal)
-            .Select(static pair => new CookedFileEntry(pair.Key, checked((ulong)pair.Value.Length))).ToArray();
+        return [.. this.files.OrderBy(static pair => pair.Key, StringComparer.Ordinal).Select(static pair => new CookedFileEntry(pair.Key, checked((ulong)pair.Value.Length)))];
     }
 
     /// <inheritdoc />
@@ -160,8 +159,8 @@ internal sealed partial class CookOutputReadLease : IAsyncDisposable, IDisposabl
         if (verification is not null)
         {
             // Observe completion without replacing the operation's original failure.
-            await verification.ContinueWith(
-                static completed => { _ = completed.Exception; },
+            _ = await verification.ContinueWith(
+                static completed => _ = completed.Exception,
                 CancellationToken.None,
                 TaskContinuationOptions.ExecuteSynchronously,
                 TaskScheduler.Default).ConfigureAwait(false);

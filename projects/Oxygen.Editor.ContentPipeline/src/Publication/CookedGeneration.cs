@@ -5,7 +5,7 @@
 namespace Oxygen.Editor.ContentPipeline.Publication;
 
 /// <summary>Physical lifetime operations for immutable, project-owned cooked generations.</summary>
-internal sealed class CookedGeneration : IDisposable
+internal sealed partial class CookedGeneration : IDisposable
 {
     internal const string MarkerFileName = ".generation.lock";
 

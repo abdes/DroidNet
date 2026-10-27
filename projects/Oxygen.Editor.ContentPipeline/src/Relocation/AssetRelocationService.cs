@@ -119,7 +119,7 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
             if (this.cached?.IsFaulted != false || this.cached.IsCanceled || !ReferenceEquals(this.cachedProject, project))
             {
                 this.cachedProject = project;
-                this.cached = Task.Run(() => AuthoredReferenceIndex.BuildAsync(project, CancellationToken.None));
+                this.cached = Task.Run(() => AuthoredReferenceIndex.BuildAsync(project, CancellationToken.None), session.Lifetime);
             }
 
             index = this.cached;

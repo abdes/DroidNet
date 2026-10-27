@@ -58,8 +58,7 @@ public sealed class SourceAnalysisReuseTests
 
         AssertCookSucceeded(repaired);
         _ = api.Analyzed.SelectMany(static execution => execution.Jobs).Should().NotContain(job => job.AttributedSource.Contains("Second", StringComparison.Ordinal));
-        _ = api.Imported.SelectMany(static execution => execution.Manifest.Jobs).Where(static job => string.Equals(job.Type, "geometry-descriptor", StringComparison.Ordinal))
-            .Should().BeEmpty();
+        _ = api.Imported.SelectMany(static execution => execution.Manifest.Jobs).Should().NotContain(static job => string.Equals(job.Type, "geometry-descriptor", StringComparison.Ordinal));
     }
 
     /// <summary>Repairing an unchanged scene's output does not launch another source-analysis worker.</summary>

@@ -9,7 +9,6 @@ using Oxygen.Editor.ContentPipeline.TestSupport;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Managed.Core;
-using static Oxygen.Editor.ContentPipeline.TestSupport.CookScenario;
 using static Oxygen.Editor.ContentPipeline.TestSupport.DependencyScenario;
 
 namespace Oxygen.Editor.ContentPipeline.Integration.Tests.Cooking;
@@ -68,7 +67,7 @@ public sealed class NestedDescriptorCookTests
             .Should().HaveCount(2).And.OnlyHaveUniqueItems().And.NotContainNulls();
 
         _ = (await service.CookCurrentSceneAsync(AssetPath.Parse("/" + scene), this.TestContext.CancellationToken).ConfigureAwait(false)).IsUpToDate.Should().BeTrue();
-        _ = (await service.ReadAsync(workspace.ProjectContext, inputs.Select(static path => AssetPath.Parse("/" + path)).ToArray(), this.TestContext.CancellationToken).ConfigureAwait(false))
+        _ = (await service.ReadAsync(workspace.ProjectContext, [.. inputs.Select(static path => AssetPath.Parse("/" + path))], this.TestContext.CancellationToken).ConfigureAwait(false))
             .Should().OnlyContain(static status => status.Freshness == AssetCookFreshness.Current);
     }
 }

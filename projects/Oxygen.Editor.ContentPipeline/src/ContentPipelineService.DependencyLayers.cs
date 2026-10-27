@@ -40,7 +40,7 @@ public sealed partial class ContentPipelineService
         }
         while (expanded);
 
-        return remaining.Values.Where(input => ready.Contains(input.AssetUri)).ToArray();
+        return [.. remaining.Values.Where(input => ready.Contains(input.AssetUri))];
     }
 
     private static ContentCookResult SkipDependentInputs(ContentCookOperation operation, CookTargetKind targetKind, IReadOnlyList<ContentCookInput> inputs, bool cycle)
@@ -123,7 +123,7 @@ public sealed partial class ContentPipelineService
             var ready = ReadyInputs(remaining, graph);
             if (ready.Length == 0)
             {
-                results.Add(SkipDependentInputs(operation, targetKind, remaining.Values.ToArray(), cycle: true));
+                results.Add(SkipDependentInputs(operation, targetKind, [.. remaining.Values], cycle: true));
                 break;
             }
 
@@ -134,7 +134,7 @@ public sealed partial class ContentPipelineService
                 {
                     Snapshot = snapshot,
                     Artifacts = artifacts,
-                    ReusableSources = completed.ToImmutableHashSet(),
+                    ReusableSources = [.. completed],
                     PreviousProvenance = previous,
                     PreviousInventories = plan.PriorInventories,
                     NativeJobs = graph.NativeJobs,

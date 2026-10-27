@@ -111,7 +111,7 @@ public sealed partial class SceneNodeInteraction(
     /// <param name="nodes">The hidden or locked nodes.</param>
     /// <param name="map">The node a reference names now, or <see langword="null"/> when it names the same node.</param>
     /// <returns>The nodes the moved entries name now.</returns>
-    public static IReadOnlyList<NodeReference> Retarget(HashSet<NodeReference> nodes, Func<NodeReference, NodeReference?> map)
+    public static IReadOnlyList<NodeReference> Retarget(ISet<NodeReference> nodes, Func<NodeReference, NodeReference?> map)
     {
         ArgumentNullException.ThrowIfNull(nodes);
         ArgumentNullException.ThrowIfNull(map);
@@ -358,7 +358,7 @@ public sealed partial class SceneNodeInteraction(
             this.pendingWrite = null;
             try
             {
-                await settings.SaveSettingAsync(Key, write, session.Context.SettingsScope).ConfigureAwait(true);
+                await settings.SaveSettingAsync(Key, write, session.Context.SettingsScope, ct: session.Lifetime).ConfigureAwait(true);
             }
             catch (Exception failure)
             {
@@ -384,7 +384,7 @@ public sealed partial class SceneNodeInteraction(
         ProjectInteraction? stored;
         try
         {
-            stored = await settings.LoadSettingAsync(Key, session.Context.SettingsScope).ConfigureAwait(true);
+            stored = await settings.LoadSettingAsync(Key, session.Context.SettingsScope, ct: session.Lifetime).ConfigureAwait(true);
         }
         catch (Exception failure)
         {

@@ -30,7 +30,7 @@ internal static class IncrementalCookScenario
         var headPath = global::Oxygen.Editor.ContentPipeline.Publication.CookPublicationPaths.Head(projectRoot);
         if (!File.Exists(headPath))
         {
-            return new(StringComparer.Ordinal);
+            return [with(StringComparer.Ordinal)];
         }
 
         var head = System.Text.Json.JsonSerializer.Deserialize<global::Oxygen.Editor.ContentPipeline.Publication.CookPublicationHead>(File.ReadAllBytes(headPath), global::Oxygen.Editor.ContentPipeline.Publication.CookPublicationDocument.JsonOptions)!;
@@ -44,7 +44,7 @@ internal static class IncrementalCookScenario
         var node = new SceneNode(workspace.Scene, "Cube");
         var geometry = new GeometryComponent { Name = "Geometry", Geometry = EngineAssets.BasicShape("Cube") };
         await ApplySurfaceMaterialOverrideAsync(
-            workspace, inspector, geometry, AssetPath.Parse("/Content/Materials/Blue.omat")).ConfigureAwait(false);
+            workspace, inspector, geometry, AssetPath.Parse("/Content/Materials/Blue.omat"), workspace.Session.Lifetime).ConfigureAwait(false);
         _ = node.AddComponent(geometry);
         workspace.Scene.RootNodes.Add(node);
         workspace.Scene.SetEnvironment(new SceneEnvironmentData { PostProcess = new PostProcessEnvironmentData { ExposureMode = ExposureMode.Auto } });

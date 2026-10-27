@@ -8,7 +8,7 @@ using Oxygen.Editor.Projects;
 namespace Oxygen.Editor.ContentPipeline.Relocation;
 
 /// <summary>The relocations of the session project's assets, as open documents follow them.</summary>
-public sealed class DocumentRelocationFeed : IDocumentRelocations, IDisposable
+public sealed partial class DocumentRelocationFeed : IDocumentRelocations, IDisposable
 {
     private readonly IAssetRelocationService relocation;
     private readonly IProjectSession session;

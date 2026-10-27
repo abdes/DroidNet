@@ -127,7 +127,7 @@ internal sealed class CookStagingArea : IAsyncDisposable
                 || !string.Equals(name, name.TrimEnd(' ', '.'), StringComparison.Ordinal)
                 || name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 || name.Contains('/', StringComparison.Ordinal) || name.Contains('\\', StringComparison.Ordinal))
             ? throw new ArgumentException("Cooking requires distinct mount names that are single directory names.", nameof(mounts))
-            : names.Order(StringComparer.Ordinal).ToArray();
+            : [.. names.Order(StringComparer.Ordinal)];
     }
 
     internal static async Task<CookStagingArea> CreateAsync(

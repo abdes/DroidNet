@@ -66,7 +66,7 @@ public sealed class AssetRelocationTests
     public async Task RelocationRewritesReferenceFieldsAndLeavesText()
     {
         using var workspace = CreateContent();
-        var named = """
+        const string named = """
             { "Id": "0b0e6b8c-3c5a-4a0e-9a8f-1b1f2a3c4d5e", "Name": "Named",
               "RootNodes": [ { "Id": "3d9a2b1c-0000-4000-8000-000000000003", "Components": [ { "$type": "Metadata", "Name": "asset:///Content/Materials/Red.omat" }, { "$type": "Transform", "Name": "Transform" }, { "$type": "NodeFlags", "Name": "Rendering" }, { "$type": "Scripting", "Name": "Scripting", "Slots": [ {
                 "Id": "0f8fad5b-d9cb-469f-a165-70867728950e", "Script": "asset:///Content/Scripts/paint.oscript",
@@ -74,7 +74,7 @@ public sealed class AssetRelocationTests
                   "label": { "Type": "string", "Value": "asset:///Content/Materials/Red.omat" },
                   "paint": { "Type": "asset", "Value": "asset:///Content/Materials/Red.omat" } } } ] } ] } ] }
             """;
-        var box = """
+        const string box = """
             { "name": "/Content/Materials/Red.omat", "virtual_path": "/Content/Shapes/Box.ocshape", "shape_type": "box", "material_ref": "/Content/Materials/Red.opmat" }
             """;
         _ = workspace.Write("Content/Scenes/Named.oscene.json", named);
@@ -183,7 +183,7 @@ public sealed class AssetRelocationTests
     public async Task MovingMultiSourceTextureRewritesEveryImage()
     {
         using var workspace = CreateContent();
-        var layers = """
+        const string layers = """
             { "virtual_path": "/Content/Shared/layers.otex", "source": "../Textures/Wood.png",
               "sources": [ { "file": "../Textures/Wood.png", "layer": 1 } ], "mips": { "policy": "none" } }
             """;
@@ -854,16 +854,16 @@ public sealed class AssetRelocationTests
     private static RelocationWorkspace CreateInput()
     {
         var workspace = new RelocationWorkspace();
-        var player = """
+        const string player = """
             {
               "actions": [ { "name": "Jump", "type": "bool" }, { "name": "Dash", "type": "bool" } ],
               "contexts": [ { "name": "OnFoot", "mappings": [ { "action": "Jump", "slot": "Space" } ] } ]
             }
             """;
-        var vehicle = """
+        const string vehicle = """
             { "contexts": [ { "name": "Driving", "mappings": [ { "action": "/Content/Input/Player.input/Jump.oiact", "slot": "Space" } ] } ] }
             """;
-        var main = """
+        const string main = """
             { "Id": "6a1f2c0e-6c1e-4a59-9a77-1f6a3e4b2d10", "Name": "Main", "RootNodes": [],
               "StartingInputContexts": [ { "Context": "asset:///Content/Input/Player.input/OnFoot.oimap" } ] }
             """;

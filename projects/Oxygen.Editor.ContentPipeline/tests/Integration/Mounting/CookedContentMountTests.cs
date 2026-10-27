@@ -11,7 +11,6 @@ using Oxygen.Editor.ContentPipeline.Incremental;
 using Oxygen.Editor.ContentPipeline.Mounting;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.Testing;
-using Oxygen.Editor.ContentPipeline.TestSupport;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Projects.Testing;
 using Oxygen.Managed.Assets.Persistence;
@@ -25,7 +24,7 @@ namespace Oxygen.Editor.ContentPipeline.Integration.Tests.Mounting;
 
 [TestClass]
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "MSTest discovers public test classes with the repository discovery configuration.")]
-public sealed class CookedContentMountTests
+public sealed partial class CookedContentMountTests
 {
     public TestContext TestContext { get; set; } = null!;
 
@@ -286,7 +285,7 @@ public sealed class CookedContentMountTests
         public (string Path, PakDocument Document) WritePak(string name, Guid identity, byte digestByte)
         {
             var path = Path.Combine(this.directory.FullName, name);
-            var document = new PakDocument(1, identity, Convert.ToHexString(Enumerable.Repeat(digestByte, 32).ToArray()), [new(new AssetKey(1, 2), 1, "/Props/Materials/Rock.omat", 0, 16)]);
+            var document = new PakDocument(1, identity, Convert.ToHexString([.. Enumerable.Repeat(digestByte, 32)]), [new(new AssetKey(1, 2), 1, "/Props/Materials/Rock.omat", 0, 16)]);
             using var stream = File.Create(path);
             PakFixture.Write(stream, document);
             return (path, document);

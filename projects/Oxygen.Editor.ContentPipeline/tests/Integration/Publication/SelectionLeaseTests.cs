@@ -10,7 +10,7 @@ using Oxygen.Managed.Core;
 namespace Oxygen.Editor.ContentPipeline.Integration.Tests.Publication;
 
 [TestClass]
-public sealed class SelectionLeaseTests
+internal sealed class SelectionLeaseTests
 {
     public TestContext TestContext { get; set; } = null!;
 

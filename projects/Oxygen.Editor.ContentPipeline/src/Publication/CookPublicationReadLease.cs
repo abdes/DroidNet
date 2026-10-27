@@ -12,7 +12,7 @@ using Oxygen.Managed.Core;
 namespace Oxygen.Editor.ContentPipeline.Publication;
 
 /// <summary>A captured publication and the lifetime ownership of its immutable document and generations.</summary>
-public sealed class CookPublicationReadLease : ICookPublicationReadLease
+public sealed partial class CookPublicationReadLease : ICookPublicationReadLease
 {
     private readonly SharedState state;
     private bool disposed;
@@ -240,7 +240,7 @@ public sealed class CookPublicationReadLease : ICookPublicationReadLease
                 throw new InvalidDataException("The publication document has a different identity than its head.");
             }
 
-            handles.EnsureCapacity(checked(document.Roots.Length + 1));
+            _ = handles.EnsureCapacity(checked(document.Roots.Length + 1));
             var (unavailable, unsealed) = await OpenRootsAsync(project, document, handles, cancellationToken).ConfigureAwait(false);
             return new(new(project, selection, document, handles, unavailable, unsealed));
         }

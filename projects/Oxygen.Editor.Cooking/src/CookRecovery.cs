@@ -51,7 +51,7 @@ public sealed class CookRecovery(
     public Task<bool> SaveInputsAsync(CookRunRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
-        return documents.SaveBeforeAsync(SaveBeforeOperation.Cook, token => unsaved.FindAsync(request, token));
+        return documents.SaveBeforeAsync(SaveBeforeOperation.Cook, token => unsaved.FindAsync(request, token), session.Lifetime);
     }
 
     /// <inheritdoc />
@@ -118,13 +118,13 @@ public sealed class CookRecovery(
             || issue.SuggestedAction?.Payload.TryGetValue("PropertyPath", out var property) != true
             || property is null
             || (FindNode(issue, property) is null && !IsSceneProperty(property))
-            || await SceneFiles.FindByIdAsync(catalog, project, sceneId).ConfigureAwait(true) is not { } scene
+            || await SceneFiles.FindByIdAsync(catalog, project, sceneId, session.Lifetime).ConfigureAwait(true) is not { } scene
             || issue.AffectedPath is not { } sourcePath || !project.FileSystem.File.Exists(sourcePath))
         {
             return false;
         }
 
-        var opened = await placement.OpenDocumentAsync(scene.Identity).ConfigureAwait(true);
+        var opened = await placement.OpenDocumentAsync(scene.Identity, cancellationToken: session.Lifetime).ConfigureAwait(true);
         if (opened.Document is not { Content: SceneContent content } document)
         {
             return false;

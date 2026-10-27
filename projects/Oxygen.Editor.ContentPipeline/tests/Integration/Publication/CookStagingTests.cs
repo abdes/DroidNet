@@ -17,7 +17,7 @@ namespace Oxygen.Editor.ContentPipeline.Integration.Tests.Publication;
 
 [TestClass]
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "MSTest discovers public test classes with the repository discovery configuration.")]
-public sealed class CookStagingTests
+public sealed partial class CookStagingTests
 {
     public TestContext TestContext { get; set; } = null!;
 
@@ -110,7 +110,7 @@ public sealed class CookStagingTests
         _ = Directory.CreateDirectory(root);
         var path = Path.Combine(root, "asset.bin");
         await File.WriteAllTextAsync(path, "keep", this.TestContext.CancellationToken).ConfigureAwait(false);
-        await project.CaptureBaselineAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = await project.CaptureBaselineAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         var external = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
         await using var externalLifetime = external.ConfigureAwait(false);
         Func<Task> prepare = () => project.StageAsync(["Content"], this.TestContext.CancellationToken);

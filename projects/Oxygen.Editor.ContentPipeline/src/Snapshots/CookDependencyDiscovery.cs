@@ -143,7 +143,7 @@ internal sealed class CookDependencyDiscovery(
                 NativeJobs = this.jobs.ToImmutableDictionary(),
                 GeneratedInputs = [.. this.generatedInputs.Values],
                 SourceFacts = this.sourceFacts.ToImmutableDictionary(),
-                SourcesNeedingAnalysis = this.requiresAnalysis.ToImmutableHashSet(),
+                SourcesNeedingAnalysis = [.. this.requiresAnalysis],
                 ResourceDependencies = this.resourceDependencies.ToImmutableDictionary(),
             };
         }

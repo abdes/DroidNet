@@ -12,7 +12,7 @@ namespace Oxygen.Editor.ContentPipeline.Cooking;
 /// The cook's warnings about kept changes, for the Problems pane (scene instances 8.10): each cook of a scene replaces
 /// that scene's warnings with its own.
 /// </summary>
-public sealed class KeptChangeProblems : IAssetProblemSource, IDisposable
+public sealed partial class KeptChangeProblems : IAssetProblemSource, IDisposable
 {
     private readonly ICookRunService runs;
     private readonly SubscriberEvent<EventHandler> problemsChanged = new();

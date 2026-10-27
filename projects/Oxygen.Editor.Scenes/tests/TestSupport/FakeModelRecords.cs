@@ -14,9 +14,10 @@ namespace Oxygen.Editor.Scenes.Tests.TestSupport;
 public sealed class FakeModelRecords : IModelImportRecordFiles
 {
     private readonly Dictionary<AssetPath, byte[]> records = [];
+    private readonly List<AssetPath> reimported = [];
 
     /// <summary>Gets the models whose replacement was requested, each reimported, in order.</summary>
-    public List<AssetPath> Reimported { get; } = [];
+    public IReadOnlyList<AssetPath> Reimported => this.reimported;
 
     /// <summary>Sets a model's record.</summary>
     /// <param name="model">The model's source.</param>
@@ -32,7 +33,7 @@ public sealed class FakeModelRecords : IModelImportRecordFiles
         if (this.records.TryGetValue(model, out var current) && current.AsSpan().SequenceEqual(expected.Span))
         {
             this.records[model] = replacement.ToArray();
-            this.Reimported.Add(model);
+            this.reimported.Add(model);
         }
     }
 }

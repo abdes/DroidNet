@@ -67,7 +67,8 @@ public sealed class CookPublicationWorkflowTests
         using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         var publication = workspace.Publication;
         var operation = new ContentCookOperation(Guid.NewGuid(), workspace.ProjectContext, 1);
-        using var owner = CookOutputLease.AcquireOperation(workspace.ProjectContext.ProjectRoot, operation.OperationId);
+        var owner = CookOutputLease.AcquireOperation(workspace.ProjectContext.ProjectRoot, operation.OperationId);
+        await using var ownerLifetime = owner.ConfigureAwait(false);
         using var baseline = await publication.AcquireReadAsync(workspace.ProjectContext, this.TestContext.CancellationToken).ConfigureAwait(false);
         var staging = await CookStagingArea.CreateAsync(operation, baseline, ["Content"], workspace.Files, workspace.Manager, this.TestContext.CancellationToken).ConfigureAwait(false);
         await using var stagingLifetime = staging.ConfigureAwait(false);

@@ -71,8 +71,7 @@ public sealed class ImportSourceRetention(IContentCookCoordinator coordinator)
         return new RetainedImportSource(
             Path.GetRelativePath(operation.Project.ProjectRoot.FullPath, destination).Replace('\\', '/'),
             snapshot.Inputs.Single(file => string.Equals(file.RelativePath, primary, FileSystemPath.NameComparison)).RelativePath,
-            snapshot.Inputs.Where(static file => file.Kind == CookSnapshotInputKind.File)
-                .Select(static file => new RetainedImportSourceFile(file.RelativePath, file.DiscoveryHash)).ToImmutableArray());
+            [.. snapshot.Inputs.Where(static file => file.Kind == CookSnapshotInputKind.File).Select(static file => new RetainedImportSourceFile(file.RelativePath, file.DiscoveryHash))]);
     }
 
     /// <summary>Resolves the folder of an existing retained bundle from its project-relative path.</summary>

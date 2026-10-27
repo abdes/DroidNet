@@ -8,7 +8,6 @@ using Oxygen.Editor.ContentPipeline.Incremental;
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets;
-using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Compatibility;
 using Oxygen.Managed.Core.Diagnostics;
@@ -154,8 +153,8 @@ public sealed partial class ContentPipelineService(
                 CookedRoot: string.Join(Path.PathSeparator, inspections.Select(static item => item.CookedRoot)),
                 Succeeded: true,
                 SourceIdentity: null,
-                inspections.SelectMany(static item => item.Assets).ToList(),
-                inspections.SelectMany(static item => item.Files).ToList(),
+                [.. inspections.SelectMany(static item => item.Assets)],
+                [.. inspections.SelectMany(static item => item.Files)],
                 Diagnostics: []);
 
         return new ContentCookResult(
@@ -193,7 +192,7 @@ public sealed partial class ContentPipelineService(
         ProjectContext project,
         Guid operationId,
         IEnumerable<ContentCookInput> inputs)
-        => inputs
+        => [.. inputs
             .Where(input => IsGone(project, input))
             .Select(input => new DiagnosticRecord
             {
@@ -204,17 +203,15 @@ public sealed partial class ContentPipelineService(
                 Message = $"Cook source is missing: {input.SourceRelativePath}.",
                 AffectedVirtualPath = input.AssetUri.VirtualPath,
                 AffectedPath = input.SourceAbsolutePath.FullPath,
-            })
-            .ToList();
+            })];
 
     private static List<DiagnosticRecord> NormalizeDiagnostics(
         Guid operationId,
         IEnumerable<DiagnosticRecord> diagnostics)
-        => diagnostics
+        => [.. diagnostics
             .Select(diagnostic => diagnostic.OperationId == operationId
                 ? diagnostic
-                : diagnostic with { OperationId = operationId })
-            .ToList();
+                : diagnostic with { OperationId = operationId })];
 
     private static OperationStatus GetStatus(
         IReadOnlyList<DiagnosticRecord> descriptorDiagnostics,
@@ -302,11 +299,10 @@ public sealed partial class ContentPipelineService(
 
         var absoluteFolder = project.Find(folderUri)!.File.FullPath;
         var files = project.FileSystem;
-        return !files.Directory.Exists(absoluteFolder) ? [] : files.Directory.EnumerateFiles(absoluteFolder, "*", SearchOption.AllDirectories)
+        return !files.Directory.Exists(absoluteFolder) ? [] : [.. files.Directory.EnumerateFiles(absoluteFolder, "*", SearchOption.AllDirectories)
             .Where(file => IsCookableDescriptorFile(project, file))
             .Select(file => ResolveFileInput(project, mount, file, ContentCookInputRole.Primary))
-            .OrderBy(static input => input.SourceRelativePath, StringComparer.Ordinal)
-            .ToList();
+            .OrderBy(static input => input.SourceRelativePath, StringComparer.Ordinal)];
     }
 
     private static List<ContentCookInput> ResolveMountInputs(
@@ -315,11 +311,10 @@ public sealed partial class ContentPipelineService(
     {
         var mountRoot = project.ProjectRoot.Combine(mount.RelativePath);
         var files = project.FileSystem;
-        return !files.Directory.Exists(mountRoot.FullPath) ? [] : files.Directory.EnumerateFiles(mountRoot.FullPath, "*", SearchOption.AllDirectories)
+        return !files.Directory.Exists(mountRoot.FullPath) ? [] : [.. files.Directory.EnumerateFiles(mountRoot.FullPath, "*", SearchOption.AllDirectories)
             .Where(file => IsCookableDescriptorFile(project, file))
             .Select(file => ResolveFileInput(project, mount, file, ContentCookInputRole.Primary))
-            .OrderBy(static input => input.SourceRelativePath, StringComparer.Ordinal)
-            .ToList();
+            .OrderBy(static input => input.SourceRelativePath, StringComparer.Ordinal)];
     }
 
     private static ContentCookInput ResolveFileInput(
@@ -346,11 +341,11 @@ public sealed partial class ContentPipelineService(
         return manifest with
         {
             SourceKey = sourceKey,
-            Jobs = keptJobs.Select(job => job with
+            Jobs = [.. keptJobs.Select(job => job with
             {
-                DependsOn = job.DependsOn.Where(keptIds.Contains).ToArray(),
+                DependsOn = [.. job.DependsOn.Where(keptIds.Contains)],
                 CookedContextRoots = job.Type is "material-descriptor" or "scene-descriptor" or "geometry-descriptor" or "script-sidecar" or "input" && scope.CookedContextRoots.Count > 0 ? scope.CookedContextRoots : null,
-            }).ToArray(),
+            })],
         };
     }
 
@@ -378,7 +373,7 @@ public sealed partial class ContentPipelineService(
     private static ContentCookResult WithAuxiliaryFiles(ContentCookResult validated, ContentCookScope scope, NativeImportResult importResult)
     {
         var resources = validated.NativeInventory?.Files.Where(static file => file.Value.Kind is { } kind && LooseCookedFileKinds.IsPathKeyed(kind))
-            .Select(static file => file.Key).ToHashSet(StringComparer.Ordinal) ?? new HashSet<string>(StringComparer.Ordinal);
+            .Select(static file => file.Key).ToHashSet(StringComparer.Ordinal) ?? [with(StringComparer.Ordinal)];
         return validated with
         {
             ModelImports = importResult.ModelImports,
@@ -417,8 +412,7 @@ public sealed partial class ContentPipelineService(
     private Task<ContentCookResult> CookProjectCoreAsync(ContentCookOperation operation, CancellationToken cancellationToken)
         => this.CookCapturedScopesAsync(
             operation,
-            () => operation.Project.AuthoringMounts.Where(static mount => !ProjectOutputFolders.Contains(mount))
-                .Select(mount => this.CreateScope(operation.Project, ResolveMountInputs(operation.Project, mount), CookTargetKind.Project)).ToArray(),
+            () => [.. operation.Project.AuthoringMounts.Where(static mount => !ProjectOutputFolders.Contains(mount)).Select(mount => this.CreateScope(operation.Project, ResolveMountInputs(operation.Project, mount), CookTargetKind.Project))],
             CookTargetKind.Project,
             cancellationToken);
 
@@ -443,7 +437,7 @@ public sealed partial class ContentPipelineService(
             scope.TargetKind,
             prepared,
             manifest,
-            descriptors.SelectMany(static descriptor => descriptor.Diagnostics).ToArray(),
+            [.. descriptors.SelectMany(static descriptor => descriptor.Diagnostics)],
             cancellationToken).ConfigureAwait(false);
         return result with
         {
@@ -475,11 +469,11 @@ public sealed partial class ContentPipelineService(
             manifest = manifest.WithRun(scope.Run);
         }
 
-        scope = scope with { Inputs = scope.Inputs.Where(input => !scope.ReusableSources.Contains(input.AssetUri)).ToArray() };
+        scope = scope with { Inputs = [.. scope.Inputs.Where(input => !scope.ReusableSources.Contains(input.AssetUri))] };
         var manifestDiagnostics = this.manifestValidator.Validate(operationId, manifest);
         if (HasError(manifestDiagnostics))
         {
-            return CreateFailedImport(operationId, targetKind, diagnostics.Concat(manifestDiagnostics).ToList());
+            return CreateFailedImport(operationId, targetKind, [.. diagnostics, .. manifestDiagnostics]);
         }
 
         await output.PrepareWriteAsync().ConfigureAwait(false);

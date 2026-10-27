@@ -11,7 +11,7 @@ namespace Oxygen.Editor.ContentPipeline.Publication;
 ///     Holds a pak file open for shared reading, so no writer replaces it while a cook or runtime uses the metadata read
 ///     through the same handle.
 /// </summary>
-internal sealed class PakReadLease : IDisposable
+internal sealed partial class PakReadLease : IDisposable
 {
     private readonly FileStream stream;
 

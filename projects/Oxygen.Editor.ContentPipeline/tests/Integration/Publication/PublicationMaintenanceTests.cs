@@ -18,7 +18,7 @@ using static Oxygen.Editor.ContentPipeline.TestSupport.GenerationScenario;
 namespace Oxygen.Editor.ContentPipeline.Integration.Tests.Publication;
 
 [TestClass]
-public sealed class PublicationMaintenanceTests
+internal sealed class PublicationMaintenanceTests
 {
     public TestContext TestContext { get; set; } = null!;
 
@@ -71,7 +71,8 @@ public sealed class PublicationMaintenanceTests
         }
 
         var marker = Path.Combine(oldPath, CookedGeneration.MarkerFileName);
-        using var nativeReader = WindowsCookFile.OpenGenerationReader(marker);
+        var nativeReader = WindowsCookFile.OpenGenerationReader(marker);
+        await using var nativeReaderLifetime = nativeReader.ConfigureAwait(false);
         if (removeMarker)
         {
             File.Delete(marker);
@@ -93,7 +94,8 @@ public sealed class PublicationMaintenanceTests
         using var session = new TestSession(context);
         var service = MaintenanceService(files, session);
         var operation = new ContentCookOperation(Guid.NewGuid(), context, 1);
-        using var owner = CookOutputLease.AcquireOperation(FileSystemPath.From(project.Root), operation.OperationId);
+        var owner = CookOutputLease.AcquireOperation(FileSystemPath.From(project.Root), operation.OperationId);
+        await using var ownerLifetime = owner.ConfigureAwait(false);
         using var baseline = await service.AcquireReadAsync(context, this.TestContext.CancellationToken).ConfigureAwait(false);
         var transaction = await CookPublicationTransaction.ReserveAsync(
             operation,
@@ -106,8 +108,9 @@ public sealed class PublicationMaintenanceTests
         var directory = Path.Combine(project.Root, ".build", "cook", operation.OperationId.ToString("N"));
         var input = Path.Combine(directory, "replacement-input.gltf");
         await File.WriteAllTextAsync(input, "retry bytes", this.TestContext.CancellationToken).ConfigureAwait(false);
-        using var retry = CookOutputLease.TryAcquireRetryInput(FileSystemPath.From(project.Root), operation.OperationId);
+        var retry = CookOutputLease.TryAcquireRetryInput(FileSystemPath.From(project.Root), operation.OperationId);
         _ = retry.Should().NotBeNull();
+        await using var retryLifetime = retry!.ConfigureAwait(false);
         await owner.DisposeAsync().ConfigureAwait(false);
         _ = (await service.MaintainAsync(context, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().BeEmpty();
         _ = (await File.ReadAllTextAsync(input, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Be("retry bytes");
@@ -125,7 +128,8 @@ public sealed class PublicationMaintenanceTests
         using var session = new TestSession(context);
         var service = MaintenanceService(files, session);
         var id = Guid.NewGuid();
-        using var operation = CookOutputLease.AcquireOperation(FileSystemPath.From(project.Root), id);
+        var operation = CookOutputLease.AcquireOperation(FileSystemPath.From(project.Root), id);
+        await using var operationLifetime = operation.ConfigureAwait(false);
         var directory = Path.Combine(project.Root, ".build", "cook", id.ToString("N"));
         var inputs = Directory.CreateDirectory(Path.Combine(directory, "inputs"));
         var captured = Path.Combine(inputs.FullName, "source.gltf");

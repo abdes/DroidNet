@@ -7,7 +7,7 @@ using Oxygen.Managed.Core;
 namespace Oxygen.Editor.ContentPipeline.Publication;
 
 /// <summary>Owns the project selection gate through commit or rollback.</summary>
-internal sealed class CookOutputWriteLease : IDisposable
+internal sealed partial class CookOutputWriteLease : IDisposable
 {
     private readonly Lock sync = new();
     private FileStream? gate;

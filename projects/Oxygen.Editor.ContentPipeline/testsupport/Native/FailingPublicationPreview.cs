@@ -6,7 +6,7 @@ using Oxygen.Editor.ContentPipeline.Publication;
 
 namespace Oxygen.Editor.ContentPipeline.TestSupport;
 
-internal sealed partial class FailingPublicationPreview : ICookPublicationPreview
+internal sealed class FailingPublicationPreview : ICookPublicationPreview
 {
     public bool IsRuntimeAvailable => true;
 

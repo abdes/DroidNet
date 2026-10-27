@@ -210,7 +210,7 @@ public sealed partial class CookPublicationService
         {
             var head = JsonSerializer.Deserialize<CookPublicationHead>(snapshot.Content.AsSpan(), CookPublicationDocument.JsonOptions)
                 ?? throw new InvalidDataException("A recovery head is empty.");
-            documents.Add(head.PublicationId);
+            _ = documents.Add(head.PublicationId);
         }
     }
 
@@ -239,7 +239,7 @@ public sealed partial class CookPublicationService
             using var selected = await CookPublicationReadLease.OpenUnderGateAsync(project, files, gate, token).ConfigureAwait(false);
             if (selected.PublicationId is { } id)
             {
-                batch.RetainedDocuments.Add(id);
+                _ = batch.RetainedDocuments.Add(id);
             }
 
             batch.RetainedGenerations.UnionWith(selected.Roots.Where(static root => root.Owner == CookPublicationRootOwner.Project).Select(static root => root.SourceKey));
@@ -289,7 +289,7 @@ public sealed partial class CookPublicationService
                 {
                     if (id != completedOperation || transaction.Phase != CookPublicationPhase.Committed)
                     {
-                        batch.RetainedDocuments.Add(id);
+                        _ = batch.RetainedDocuments.Add(id);
                         RetainHead(transaction.PreviousHead, batch.RetainedDocuments);
                         batch.RetainedGenerations.UnionWith(transaction.CandidateGenerations);
                     }
@@ -317,7 +317,7 @@ public sealed partial class CookPublicationService
         }
     }
 
-    private sealed class MaintenanceBatch : IDisposable
+    private sealed partial class MaintenanceBatch : IDisposable
     {
         internal FileStream? Maintenance { get; set; }
 
@@ -372,7 +372,7 @@ public sealed partial class CookPublicationService
         }
     }
 
-    private sealed class OperationClaim(string directory, FileStream ownership) : IDisposable
+    private sealed partial class OperationClaim(string directory, FileStream ownership) : IDisposable
     {
         internal string Directory { get; } = directory;
 
@@ -387,7 +387,7 @@ public sealed partial class CookPublicationService
         }
     }
 
-    private sealed class DocumentClaim(string path, FileStream handle) : IDisposable
+    private sealed partial class DocumentClaim(string path, FileStream handle) : IDisposable
     {
         internal string Path { get; } = path;
 

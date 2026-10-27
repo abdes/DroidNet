@@ -49,11 +49,11 @@ public sealed record NativeSourceAnalysisReport(bool Complete, ImmutableArray<Na
             item.GetProperty("complete").GetBoolean(),
             ReadLogical(item.GetProperty("outputs")),
             ReadLogical(item.GetProperty("references")),
-            item.GetProperty("files").EnumerateArray().Select(static file => new NativeSourceFileDependency(
+            [.. item.GetProperty("files").EnumerateArray().Select(static file => new NativeSourceFileDependency(
                 ReadPath(file.GetProperty("path")),
-                file.GetProperty("required").GetBoolean())).ToImmutableArray(),
-            item.GetProperty("observations").EnumerateArray().Select(ReadObservation).ToImmutableArray(),
-            item.GetProperty("diagnostics").EnumerateArray().Select(issue => new DiagnosticRecord
+                file.GetProperty("required").GetBoolean()))],
+            [.. item.GetProperty("observations").EnumerateArray().Select(ReadObservation)],
+            [.. item.GetProperty("diagnostics").EnumerateArray().Select(issue => new DiagnosticRecord
             {
                 OperationId = operationId,
                 Domain = FailureDomain.AssetImport,
@@ -68,17 +68,17 @@ public sealed record NativeSourceAnalysisReport(bool Complete, ImmutableArray<Na
                 AffectedPath = issue.GetProperty("source_path").GetString(),
                 TechnicalMessage = issue.GetProperty("object_path").GetString(),
                 AffectedEntity = NativeSourceObject.Read(issue),
-            }).ToImmutableArray())
+            })])
         {
             Model = item.TryGetProperty("model", out var model) ? ModelSourceFacts.Read(model) : null,
         };
 
     private static ImmutableArray<NativeLogicalDependency> ReadLogical(JsonElement entries)
-        => entries.EnumerateArray().Select(static item => new NativeLogicalDependency(
+        => [.. entries.EnumerateArray().Select(static item => new NativeLogicalDependency(
             item.GetProperty("virtual_path").GetString()!,
             item.GetProperty("kind").GetString()!,
             item.GetProperty("object_path").GetString()!,
-            item.GetProperty("required").GetBoolean())).ToImmutableArray();
+            item.GetProperty("required").GetBoolean()))];
 
     private static NativeSourceObservation ReadObservation(JsonElement item)
     {
@@ -86,10 +86,10 @@ public sealed record NativeSourceAnalysisReport(bool Complete, ImmutableArray<Na
             ReadPath(item.GetProperty("path")),
             item.GetProperty("exists").GetBoolean(),
             ReadMetadata(item.GetProperty("metadata")),
-            item.GetProperty("reads").EnumerateArray().Select(static read => new NativeSourceReadProof(
+            [.. item.GetProperty("reads").EnumerateArray().Select(static read => new NativeSourceReadProof(
                 read.GetProperty("offset").GetUInt64(),
                 read.GetProperty("max_bytes").GetUInt64(),
-                read.GetProperty("sha256").GetString()!)).ToImmutableArray());
+                read.GetProperty("sha256").GetString()!))]);
         if (!observation.Exists && (observation.Metadata is not null || !observation.Reads.IsEmpty))
         {
             throw new InvalidDataException("An absent native source observation contains metadata or consumed bytes.");

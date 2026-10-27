@@ -277,13 +277,13 @@ public sealed class SourceDependencyDiscoveryTests
         var graph = await NativeSourceFactsFixture.CreateDiscovery(workspace).DiscoverAsync(workspace.ProjectContext, [input], this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = graph.Diagnostics.Should().BeEmpty();
         _ = graph.Assets.Should().HaveCount(4);
-        _ = graph.Dependencies[materialUri].Should().BeEquivalentTo(new[]
-        {
+        _ = graph.Dependencies[materialUri].Should().BeEquivalentTo(
+        [
             AssetPath.Parse("/Content/Textures/Shared.otex"),
             AssetPath.Parse("/Content/Textures/Metal.otex"),
             AssetPath.Parse("/Content/Textures/Rough.otex"),
             AssetPath.Parse("/Library/Textures/Emit.otex"),
-        });
+        ]);
         _ = graph.Files.Count(static file => file.RelativePath.EndsWith(".png", StringComparison.Ordinal)).Should().Be(3);
         _ = graph.PublishedReferences.Should().ContainSingle().Which.Should().Be(AssetPath.Parse("/Library/Textures/Emit.otex"));
         var capture = new CookInputSnapshotCapture(workspace.CookCoordinator);

@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Collections.Immutable;
 using Oxygen.Editor.ContentPipeline.Incremental;
 using Oxygen.Editor.ContentPipeline.Inspection;
 
@@ -82,11 +81,9 @@ internal sealed class CookStagingRoot(string mount, Guid sourceKey, string path)
         if (!this.sealedRoot)
         {
             var marker = System.IO.Path.Combine(this.Path, CookedGeneration.MarkerFileName);
-            using (var created = new FileStream(marker, FileMode.CreateNew, FileAccess.Write, FileShare.Read))
-            {
-                this.sealedRoot = true;
-                created.Flush(flushToDisk: true);
-            }
+            using var created = new FileStream(marker, FileMode.CreateNew, FileAccess.Write, FileShare.Read);
+            this.sealedRoot = true;
+            created.Flush(flushToDisk: true);
         }
 
         opening.RetainGeneration();

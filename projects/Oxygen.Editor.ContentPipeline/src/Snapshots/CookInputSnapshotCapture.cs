@@ -38,7 +38,7 @@ public sealed partial class CookInputSnapshotCapture(IContentCookCoordinator coo
             coordinator.VerifyWriter(operation);
             var attemptRoot = Path.Combine(operationRoot, "capture-" + attempt.ToString(System.Globalization.CultureInfo.InvariantCulture));
             EnsureNewDirectory(attemptRoot);
-            Directory.CreateDirectory(attemptRoot);
+            _ = Directory.CreateDirectory(attemptRoot);
             try
             {
                 var captured = await CopyInputsAsync(inputs, attemptRoot, cancellationToken).ConfigureAwait(false);
@@ -136,7 +136,7 @@ public sealed partial class CookInputSnapshotCapture(IContentCookCoordinator coo
                 captured[input.SourcePath] = new(hash, Exists: true, ReadNativeMetadata(input.SourcePath.FullPath, source));
                 source.Position = 0;
                 var destination = Path.Combine(attemptRoot, input.RelativePath);
-                Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+                _ = Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
                 var output = new FileStream(destination, FileMode.CreateNew, FileAccess.Write, FileShare.None, 65536, FileOptions.Asynchronous);
                 await using (output.ConfigureAwait(false))
                 {

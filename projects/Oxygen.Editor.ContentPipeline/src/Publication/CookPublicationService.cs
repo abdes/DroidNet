@@ -56,7 +56,7 @@ public sealed partial class CookPublicationService(IContentCookCoordinator coord
         CookPublicationReadLease? accepted = null;
         try
         {
-            await coordinator.RunAsync(
+            _ = await coordinator.RunAsync(
                 async (operation, token) =>
                 {
                     if (!ReferenceEquals(operation.Project, project))

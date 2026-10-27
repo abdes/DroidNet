@@ -2,13 +2,11 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Collections.Immutable;
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.ContentPipeline.Snapshots;
-using Oxygen.Editor.Projects;
 using Oxygen.Editor.Projects.Testing;
 using Oxygen.Managed.Core;
 using Testably.Abstractions;
@@ -44,7 +42,7 @@ internal sealed partial class RetentionWorkspace : IDisposable
     }
 
     public Task<RetainedImportSource> RetainAsync(string name, IReadOnlyList<CookSnapshotInput> inputs, CancellationToken cancellationToken)
-        => this.Coordinator.RunAsync((owner, token) => this.Retention.RetainAsync(owner, AssetPath.Parse("/Content/Models"), name, _ => Task.FromResult(new ImportSourceBundle(inputs[0].RelativePath, inputs.ToImmutableArray())), token), cancellationToken);
+        => this.Coordinator.RunAsync((owner, token) => this.Retention.RetainAsync(owner, AssetPath.Parse("/Content/Models"), name, _ => Task.FromResult(new ImportSourceBundle(inputs[0].RelativePath, [.. inputs])), token), cancellationToken);
 
     public void Dispose()
     {

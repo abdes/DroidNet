@@ -201,7 +201,7 @@ public sealed partial class SceneDescriptorGenerator : ISceneDescriptorGenerator
             return new(sceneInput.AssetUri, descriptorPath, descriptorVirtualPath, dependencyInputs, diagnostics);
         }
 
-        Directory.CreateDirectory(Path.GetDirectoryName(descriptorPath)!);
+        _ = Directory.CreateDirectory(Path.GetDirectoryName(descriptorPath)!);
         var stream = File.Create(descriptorPath);
         await using (stream.ConfigureAwait(false))
         {
@@ -763,8 +763,7 @@ public sealed partial class SceneDescriptorGenerator : ISceneDescriptorGenerator
             AutoExposureBlackInfluence: authored.AutoExposureBlackInfluence,
             AutoExposureTransitionDistanceEv: authored.AutoExposureTransitionDistanceEv,
             AutoExposureMeteringMask: GetTexturePath(authored.AutoExposureMeteringMask),
-            AutoExposureCompensationCurve: authored.AutoExposureCompensationCurve
-                .Select(static key => new NativeExposureCompensationKey(key.MeteredEv, key.CompensationEv)).ToArray(),
+            AutoExposureCompensationCurve: [.. authored.AutoExposureCompensationCurve.Select(static key => new NativeExposureCompensationKey(key.MeteredEv, key.CompensationEv))],
             BloomIntensity: authored.BloomIntensity,
             BloomThreshold: authored.BloomThreshold,
             Saturation: authored.Saturation,

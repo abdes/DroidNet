@@ -5,7 +5,6 @@
 using System.Globalization;
 using Oxygen.Editor.Scripting;
 using Oxygen.Editor.World;
-using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -94,8 +93,7 @@ public static class ScriptSlotDiagnostics
     }
 
     /// <summary>
-    /// Names a slot for messages, such as <c>slot 2 of 'Player'</c>, or <c>a script slot of 'Body/Guard' in the instance
-    /// under 'Tower'</c> for a slot of an instanced node.
+    /// Names a slot for messages, such as <c>slot 2 of 'Player'</c>, or <c>a script slot of 'Body/Guard' in the instance under 'Tower'</c> for a slot of an instanced node.
     /// </summary>
     /// <param name="site">The node and slot.</param>
     /// <returns>The description.</returns>

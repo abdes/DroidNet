@@ -198,15 +198,14 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
         ContentCookScope scope,
         string mountName,
         IReadOnlyList<SceneDescriptorGenerationResult> sceneDescriptors)
-        => sceneDescriptors.OrderBy(static item => item.DescriptorPath, StringComparer.Ordinal)
+        => [.. sceneDescriptors.OrderBy(static item => item.DescriptorPath, StringComparer.Ordinal)
             .Select(descriptor => (Descriptor: descriptor, Input: new ContentCookInput(
                 descriptor.SceneAssetUri,
                 ContentCookAssetKind.Scene,
                 mountName,
                 ToProjectRelativePath(scope.InputRoot, descriptor.DescriptorPath),
                 FileSystemPath.From(descriptor.DescriptorPath),
-                ContentCookInputRole.GeneratedDescriptor)))
-            .ToList();
+                ContentCookInputRole.GeneratedDescriptor)))];
 
     private static string GetSingleMountName(ContentCookScope scope)
     {

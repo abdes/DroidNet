@@ -157,7 +157,7 @@ public sealed class PublicationTransactionTests
         _ = preview.Resumed.Should().BeTrue();
     }
 
-    private sealed partial class Preview(string projectRoot) : ICookPublicationPreview
+    private sealed class Preview(string projectRoot) : ICookPublicationPreview
     {
         private global::Oxygen.Editor.ContentPipeline.Mounting.CookedContentMountSet? reader;
 

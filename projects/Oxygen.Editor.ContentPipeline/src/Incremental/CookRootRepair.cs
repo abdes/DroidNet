@@ -173,7 +173,7 @@ internal sealed record CookRootRepair(ImmutableHashSet<string> EmptyRoots, Immut
         }
         else if (prior is not null)
         {
-            empty.Add(mount);
+            _ = empty.Add(mount);
             sources.UnionWith(owners.Select(static product => product.SourceUri));
         }
     }
@@ -191,7 +191,7 @@ internal sealed record CookRootRepair(ImmutableHashSet<string> EmptyRoots, Immut
         ImmutableHashSet<AssetPath>.Builder sources,
         List<DiagnosticRecord> diagnostics)
     {
-        if (prior is null || !prior.Matches(inventory))
+        if (prior?.Matches(inventory) != true)
         {
             diagnostics.Add(Failure(path, "Damaged cooked content has no matching source ownership record."));
             return true;
@@ -218,7 +218,7 @@ internal sealed record CookRootRepair(ImmutableHashSet<string> EmptyRoots, Immut
             }
             else if (!retired.Contains(owner[0]))
             {
-                sources.Add(owner[0].SourceUri);
+                _ = sources.Add(owner[0].SourceUri);
             }
         }
 
@@ -229,7 +229,7 @@ internal sealed record CookRootRepair(ImmutableHashSet<string> EmptyRoots, Immut
 
         var kept = owners.Where(product => !retired.Contains(product)).ToArray();
         VerifyRebuildOwnership(path, mount, owners, inventory, diagnostics);
-        empty.Add(mount);
+        _ = empty.Add(mount);
         sources.UnionWith(kept.Select(static product => product.SourceUri));
         if (owners.Length == 0)
         {

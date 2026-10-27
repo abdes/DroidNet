@@ -83,14 +83,15 @@ internal sealed record CookPublicationDocument(
                 || (root.Owner == CookPublicationRootOwner.Library && (root.LibraryPath is null || !Path.IsPathFullyQualified(root.LibraryPath)))
                 || root.Container is not (CookPublicationRootContainer.LooseFolder or CookPublicationRootContainer.PakFile)
                 || (root.Owner == CookPublicationRootOwner.Project && root.Container != CookPublicationRootContainer.LooseFolder))
-            || this.Roots.Select(static root => (root.Owner, root.Name.ToUpperInvariant())).Distinct().Count() != this.Roots.Length
+            || this.Roots.Select(static root => (root.Owner, root.Name.ToUpperInvariant())).Distinct().Take(this.Roots.Length
++ 1).Count() != this.Roots.Length
             || (!this.Products.IsEmpty && this.CookInputs is null))
         {
             throw new InvalidDataException("The publication document has invalid ownership, identities or root bindings.");
         }
 
         var paths = this.Roots.Select(root => FileSystemPath.From(root.ResolvePath(project.ProjectRoot.FullPath))).ToArray();
-        if (paths.Distinct().Count() != paths.Length || !this.ProductState.IsValid(project))
+        if (paths.Distinct().Take(paths.Length + 1).Count() != paths.Length || !this.ProductState.IsValid(project))
         {
             throw new InvalidDataException("The publication contains duplicate physical roots or invalid product provenance.");
         }

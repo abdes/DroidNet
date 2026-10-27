@@ -32,7 +32,7 @@ public sealed partial class ContentCookCoordinator
         {
             lock (this.stateLock)
             {
-                return this.runs.Values.Select(static entry => entry.Snapshot).ToArray();
+                return [.. this.runs.Values.Select(static entry => entry.Snapshot)];
             }
         }
     }

@@ -209,7 +209,7 @@ public sealed partial class ContentPipelineService
             return new(
                 Path.GetRelativePath(operation.Project.ProjectRoot.FullPath, bundleRoot).Replace('\\', '/'),
                 discovered.PrimaryRelativePath,
-                discovered.Files.Where(static file => file.Kind == Oxygen.Editor.ContentPipeline.Snapshots.CookSnapshotInputKind.File).Select(static file => new RetainedImportSourceFile(file.RelativePath, file.DiscoveryHash)).ToImmutableArray());
+                [.. discovered.Files.Where(static file => file.Kind == Oxygen.Editor.ContentPipeline.Snapshots.CookSnapshotInputKind.File).Select(static file => new RetainedImportSourceFile(file.RelativePath, file.DiscoveryHash))]);
         }
 
         return await new ImportSourceRetention(this.cookCoordinator).RetainAsync(

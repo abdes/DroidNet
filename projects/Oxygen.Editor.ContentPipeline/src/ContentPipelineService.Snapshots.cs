@@ -228,7 +228,7 @@ public sealed partial class ContentPipelineService
             previous = baseline.ProductState;
             var requestedScopes = resolveScopes;
             resolveScopes = () => [.. requestedScopes().Select(Import.ImportedOutputs.ResolveScope)];
-            primaryInputs = resolveScopes().SelectMany(static scope => scope.Inputs).ToArray();
+            primaryInputs = [.. resolveScopes().SelectMany(static scope => scope.Inputs)];
         }
         catch (Exception failure) when (failure is IOException or InvalidDataException or UnauthorizedAccessException or InvalidOperationException)
         {

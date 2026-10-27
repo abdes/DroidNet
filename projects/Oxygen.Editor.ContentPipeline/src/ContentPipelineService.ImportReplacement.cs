@@ -42,7 +42,7 @@ public sealed partial class ContentPipelineService
     private static CookSnapshotInput[] MapReplacementFiles(ContentCookOperation operation, ContentCookInput source, SceneImportReplacement replacement, string incoming, ImportSourceBundle bundle)
     {
         var sourceRoot = operation.Project.ProjectRoot.Combine(replacement.BundleRoot);
-        return bundle.Files.Select(file =>
+        return [.. bundle.Files.Select(file =>
         {
             var primary = string.Equals(file.RelativePath, bundle.PrimaryRelativePath, FileSystemPath.NameComparison);
             var target = primary ? source.SourceAbsolutePath : source.SourceAbsolutePath.Parent!.Combine(Path.GetRelativePath(Path.GetDirectoryName(incoming)!, file.SourcePath.FullPath));
@@ -50,7 +50,7 @@ public sealed partial class ContentPipelineService
             return !inside && !(file.Kind == CookSnapshotInputKind.Probe && file.Metadata?.IsDirectory == true && target == sourceRoot)
                 ? throw new InvalidDataException("The incoming dependency layout cannot preserve the existing source location. Import it into a new destination.")
                 : file with { AssetUri = primary ? source.AssetUri : null, RelativePath = target.GetPathBelow(operation.Project.ProjectRoot) };
-        }).ToArray();
+        })];
     }
 
     private static void RetainRolledBackReplacement(ContentCookScope scope, CookInputSnapshot snapshot)
@@ -224,7 +224,7 @@ public sealed partial class ContentPipelineService
                 var prepared = CreateReplacementGraph(source, primaryHash, replacementFiles, discovery.RecordRelative, discovery.Previous);
                 var scopes = discovery.ResolveScopes();
                 graph = await this.CreateDependencyDiscovery(operation, artifacts, discovery.Previous, discovery.Libraries)
-                    .DiscoverAsync(operation.Project, scopes.SelectMany(static value => value.Inputs).ToArray(), prepared, token).ConfigureAwait(false);
+                    .DiscoverAsync(operation.Project, [.. scopes.SelectMany(static value => value.Inputs)], prepared, token).ConfigureAwait(false);
                 graph = graph with { ImportedReferences = [.. graph.ImportedReferences.Union(scopes.SelectMany(static value => value.RequiredImportedOutputs))] };
                 RequireCompleteReplacementBundle(operation, replacement, replacementFiles, graph);
                 return HasError(graph.Diagnostics) ? throw new CookInputDiscoveryException(graph.Diagnostics) : graph.Files;

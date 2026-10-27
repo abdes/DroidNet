@@ -61,22 +61,22 @@ internal sealed partial class CookPublicationTransaction
         CancellationToken cancellationToken,
         Func<string, Task>? checkpoint = null)
     {
-        if (generations.Any(static id => id == Guid.Empty) || generations.Distinct().Count() != generations.Length)
+        if (!generations.Any(static id => id == Guid.Empty) && generations.Distinct().Take(generations.Length + 1).Count() == generations.Length)
         {
-            throw new InvalidDataException("Candidate generation identities must be distinct and nonempty.");
+            var reservation = new CookPublicationJournal(
+                CookPublicationJournal.CurrentVersion,
+                operation.Project.ProjectId,
+                operation.OperationId,
+                CookPublicationPhase.Building,
+                generations,
+                baseline.Head,
+                CandidateHead: null);
+            var transaction = new CookPublicationTransaction(operation.Project, files, projectManager, reservation, FileVersion.Missing, checkpoint);
+            await transaction.WriteJournalAsync(CookPublicationPhase.Building, cancellationToken).ConfigureAwait(false);
+            return transaction;
         }
 
-        var reservation = new CookPublicationJournal(
-            CookPublicationJournal.CurrentVersion,
-            operation.Project.ProjectId,
-            operation.OperationId,
-            CookPublicationPhase.Building,
-            generations,
-            baseline.Head,
-            CandidateHead: null);
-        var transaction = new CookPublicationTransaction(operation.Project, files, projectManager, reservation, FileVersion.Missing, checkpoint);
-        await transaction.WriteJournalAsync(CookPublicationPhase.Building, cancellationToken).ConfigureAwait(false);
-        return transaction;
+        throw new InvalidDataException("Candidate generation identities must be distinct and nonempty.");
     }
 
     internal Task AbandonBuildAsync() => this.Phase == CookPublicationPhase.Building
@@ -103,7 +103,7 @@ internal sealed partial class CookPublicationTransaction
         }
 
         producedSourceFiles = producedSourceFiles.IsDefault ? [] : producedSourceFiles;
-        if (producedSourceFiles.Select(static file => file.RelativePath).Distinct(FileSystemPath.NameComparer).Count() != producedSourceFiles.Length)
+        if (producedSourceFiles.Select(static file => file.RelativePath).Distinct(FileSystemPath.NameComparer).Take(producedSourceFiles.Length + 1).Count() != producedSourceFiles.Length)
         {
             throw new InvalidDataException("A publication cannot update the same source settings twice.");
         }

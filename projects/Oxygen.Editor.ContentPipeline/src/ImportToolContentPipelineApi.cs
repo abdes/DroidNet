@@ -220,7 +220,7 @@ public sealed partial class ImportToolContentPipelineApi(
     {
         cancellationToken.ThrowIfCancellationRequested();
         var toolPath = this.GetCompatibleToolPath(artifacts);
-        Directory.CreateDirectory(Path.GetDirectoryName(manifestPath)!);
+        _ = Directory.CreateDirectory(Path.GetDirectoryName(manifestPath)!);
         await WriteManifestAsync(execution.Manifest, manifestPath, cancellationToken).ConfigureAwait(false);
         var request = CreateImportRequest(toolPath, execution.Manifest.Output, manifestPath, execution.InputRoot) with
         {

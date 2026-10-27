@@ -11,7 +11,7 @@ using static Oxygen.Editor.ContentPipeline.TestSupport.GenerationScenario;
 namespace Oxygen.Editor.ContentPipeline.Integration.Tests.Publication;
 
 [TestClass]
-public sealed class GenerationReclamationTests
+internal sealed class GenerationReclamationTests
 {
     public TestContext TestContext { get; set; } = null!;
 
@@ -62,7 +62,8 @@ public sealed class GenerationReclamationTests
     {
         using var project = new ProjectDirectory();
         await File.WriteAllTextAsync(Path.Combine(project.Root, "container.index.bin"), "index", this.TestContext.CancellationToken).ConfigureAwait(false);
-        using var content = await CookOutputReadLease.AcquireAsync(project.Root, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var content = await CookOutputReadLease.AcquireAsync(project.Root, this.TestContext.CancellationToken).ConfigureAwait(false);
+        await using var contentLifetime = content.ConfigureAwait(false);
         var before = content.GetFiles();
         var marker = Path.Combine(project.Root, ".generation.lock");
         await File.WriteAllBytesAsync(marker, [], this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -70,8 +71,9 @@ public sealed class GenerationReclamationTests
         _ = content.GetFiles().Should().Equal(before);
         _ = WindowsCookFile.TryClaimGeneration(marker).Should().BeNull();
         await content.DisposeAsync().ConfigureAwait(false);
-        using var reclaimed = WindowsCookFile.TryClaimGeneration(marker);
+        var reclaimed = WindowsCookFile.TryClaimGeneration(marker);
         _ = reclaimed.Should().NotBeNull();
+        await using var reclaimedLifetime = reclaimed!.ConfigureAwait(false);
     }
 
     /// <summary>A failed payload deletion retains the ownership marker for a safe retry.</summary>

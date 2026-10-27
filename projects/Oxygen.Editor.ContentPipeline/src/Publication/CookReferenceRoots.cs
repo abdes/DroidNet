@@ -53,7 +53,7 @@ internal sealed partial class CookReferenceRoots : IDisposable
                 paths.Add(mount, path);
             }
 
-            result.Paths = paths.OrderBy(static pair => pair.Key, StringComparer.Ordinal).Select(static pair => pair.Value).ToArray();
+            result.Paths = [.. paths.OrderBy(static pair => pair.Key, StringComparer.Ordinal).Select(static pair => pair.Value)];
             return result;
         }
         catch

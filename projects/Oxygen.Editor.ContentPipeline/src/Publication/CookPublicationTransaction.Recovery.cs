@@ -179,9 +179,9 @@ internal sealed partial class CookPublicationTransaction
         if (journal.Version != CookPublicationJournal.CurrentVersion || journal.ProjectId != projectId || journal.OperationId != operationId
             || !Enum.IsDefined(journal.Phase) || journal.CandidateGenerations.IsDefault
             || journal.CandidateGenerations.Any(static id => id == Guid.Empty)
-            || journal.CandidateGenerations.Distinct().Count() != journal.CandidateGenerations.Length
+            || journal.CandidateGenerations.Distinct().Take(journal.CandidateGenerations.Length + 1).Count() != journal.CandidateGenerations.Length
             || journal.SourceFiles.IsDefault || journal.SourceFiles.Any(static file => file is null)
-            || journal.SourceFiles.Select(static file => file.RelativePath).Distinct(FileSystemPath.NameComparer).Count() != journal.SourceFiles.Length
+            || journal.SourceFiles.Select(static file => file.RelativePath).Distinct(FileSystemPath.NameComparer).Take(journal.SourceFiles.Length + 1).Count() != journal.SourceFiles.Length
             || (journal.Phase is not (CookPublicationPhase.Building or CookPublicationPhase.RolledBack) && journal.CandidateHead is null))
         {
             throw new InvalidDataException("The publication journal does not identify a complete operation for this project.");
@@ -202,7 +202,7 @@ internal sealed partial class CookPublicationTransaction
     private static void ValidateHeadSnapshot(FileSnapshot snapshot)
     {
         if (snapshot?.Version is null || snapshot.Content.IsDefault
-            || snapshot.Version != (snapshot.Version.Exists ? Version(snapshot.Content.ToArray()) : FileVersion.Missing)
+            || snapshot.Version != (snapshot.Version.Exists ? Version([.. snapshot.Content]) : FileVersion.Missing)
             || (!snapshot.Version.Exists && !snapshot.Content.IsEmpty))
         {
             throw new InvalidDataException("A journaled head has an invalid byte identity.");

@@ -19,7 +19,7 @@ using static Oxygen.Editor.ContentPipeline.TestSupport.GenerationScenario;
 namespace Oxygen.Editor.ContentPipeline.Integration.Tests.Publication;
 
 [TestClass]
-public sealed class PublicationReadTests
+internal sealed class PublicationReadTests
 {
     public TestContext TestContext { get; set; } = null!;
 

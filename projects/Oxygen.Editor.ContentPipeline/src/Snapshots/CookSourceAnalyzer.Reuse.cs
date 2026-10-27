@@ -50,7 +50,7 @@ internal sealed partial class CookSourceAnalyzer
     private async Task<Dictionary<AssetPath, CookSourceFacts>> ReadReusableFactsAsync(IReadOnlyList<ContentCookInput> inputs, CancellationToken cancellationToken)
     {
         var reused = new Dictionary<AssetPath, CookSourceFacts>();
-        if (previous is null || previous.Products.IsEmpty)
+        if (previous?.Products.IsEmpty != false)
         {
             return reused;
         }

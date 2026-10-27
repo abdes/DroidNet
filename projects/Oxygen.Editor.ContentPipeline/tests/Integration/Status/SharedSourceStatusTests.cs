@@ -14,7 +14,5 @@ public sealed class SharedSourceStatusTests
 
     [TestMethod]
     public async Task SharedSourceStatusPreservesEachOutputWithoutStartingWorkers()
-    {
-        _ = await SharedSourceStatusScenario.RunAsync(this.TestContext, 3).ConfigureAwait(false);
-    }
+        => _ = await SharedSourceStatusScenario.RunAsync(this.TestContext, 3).ConfigureAwait(false);
 }

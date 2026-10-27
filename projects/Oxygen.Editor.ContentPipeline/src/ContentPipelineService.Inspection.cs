@@ -8,7 +8,6 @@ using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets;
-using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -107,7 +106,7 @@ public sealed partial class ContentPipelineService
         var mounts = project.AuthoringMounts.Where(mount => !ProjectOutputFolders.Contains(mount)
             && (path.Length == 0 || string.Equals(mount.Name, mountName, StringComparison.Ordinal))).ToArray();
         return mounts.Length == 0 ? throw new InvalidDataException("The inspection scope does not belong to a project content mount.")
-            : mounts.Select(mount => new InspectionRoot(mount.Name, publication.FindProjectRoot(mount.Name)?.FullPath, path, IsLocal: false)).ToArray();
+            : [.. mounts.Select(mount => new InspectionRoot(mount.Name, publication.FindProjectRoot(mount.Name)?.FullPath, path, IsLocal: false))];
     }
 
     private static CookedAssetProvenance[] GetInspectionProvenance(
@@ -127,13 +126,13 @@ public sealed partial class ContentPipelineService
             return [];
         }
 
-        return provenance.Products.SelectMany(product => product.Outputs
+        return [.. provenance.Products.SelectMany(product => product.Outputs
                 .Where(output => string.Equals(output.RootMount, root.Name, StringComparison.Ordinal)
                     && output.Asset.DescriptorRelativePath is { } path && valid.Contains(path))
                 .Select(output => new CookedAssetProvenance(output.Asset.CookedAssetUri, product.SourceUri, product.Dependencies)))
             .GroupBy(static association => association.CookedAssetUri)
             .Where(static group => group.Take(2).Count() == 1)
-            .Select(static group => group.Single()).ToArray();
+            .Select(static group => group.Single())];
     }
 
     private static bool IsInspectedAssetInScope(CookedAssetEntry asset, InspectionRoot root, IReadOnlyList<CookedAssetProvenance> provenance)
@@ -174,7 +173,7 @@ public sealed partial class ContentPipelineService
             roots[group.Key] = root with { ImportedScopes = [.. group.Select(static path => path.Trim('/'))] };
         }
 
-        return roots.Values.ToArray();
+        return [.. roots.Values];
     }
 
     private async Task<CookedRootReport> InspectRootAsync(InspectionRoot root, CookProvenance provenance, bool validate, CancellationToken cancellationToken)
@@ -198,7 +197,7 @@ public sealed partial class ContentPipelineService
             var validation = validate ? actual.ToValidation(root.Path) : null;
             var known = root.IsLocal ? null : provenance.Roots.FirstOrDefault(item => string.Equals(item.Mount, root.Name, StringComparison.Ordinal));
             var origins = GetInspectionProvenance(root, provenance, actual);
-            if (validation is not null && known is not null && !known.Matches(actual))
+            if (validation is not null && known?.Matches(actual) == false)
             {
                 validation = validation with
                 {
@@ -209,7 +208,7 @@ public sealed partial class ContentPipelineService
 
             var scoped = inspection with
             {
-                Assets = inspection.Assets.Where(asset => IsInspectedAssetInScope(asset, root, origins)).ToArray(),
+                Assets = [.. inspection.Assets.Where(asset => IsInspectedAssetInScope(asset, root, origins))],
                 Files = lease.GetFiles(),
             };
             return new(root.Name, IsPresent: true, scoped, validation, origins);
