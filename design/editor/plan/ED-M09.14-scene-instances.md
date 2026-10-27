@@ -2,7 +2,7 @@
 
 Status: `in_progress`
 
-Last Updated: 2026-10-26
+Last Updated: 2026-10-27
 
 **Summary:** the implementation plan of
 [ED-M09](ED-M09-v01-gaps-and-blocking-issues.md) item 14, #77 slice 77.8:
@@ -169,32 +169,32 @@ The last slice's commit carries `Fixes #77`.
 
 ED-M09 item 14 points here and is `done` when every slice below is.
 
-| Slice | State | Commit                                                           |
-| ----- | ----- | ---------------------------------------------------------------- |
-| E1    | done  | 37285ea2b                                                        |
-| E2    | done  | 701dc3ef8                                                        |
-| E3    | done  | 4406449eb                                                        |
-| E4    | done  | 92d6333e3                                                        |
-| E5    | done  | 0571f6896                                                        |
-| E6    | done  | 2f62748d6, e4f5383c3                                             |
-| E7    | done  | 219e7f2d3                                                        |
-| E8    | done  | d7abbad2f                                                        |
-| E9    | open  | -                                                                |
-| E10   | open  | -                                                                |
-| E11   | done  | dc4c70efe, a42a7e355                                             |
-| D1    | done  | -                                                                |
-| D2    | done  | 48fbde4e2                                                        |
-| D3    | done  | 947bfe9c7, 62dacdb42                                             |
-| D4    | done  | c3696483c                                                        |
-| D5    | done  | a9240e0d5, 2500718ed, a1a852469, 0b148cb53                       |
-| D6    | done  | fe0a9ff2f                                                        |
-| D7a   | done  | ec5573076, 9ac7a475f, e2bd519f1, 1ac113a4f, 0b3a8122f, b403bc3cd |
-| D7b   | done  | 27d70a8c8, 45f033af9                                             |
-| D8    | open  | -                                                                |
-| D9    | open  | -                                                                |
-| D10   | open  | -                                                                |
-| D11   | open  | -                                                                |
-| D12   | open  | -                                                                |
-| D13   | open  | -                                                                |
-| D14   | open  | -                                                                |
-| D15   | open  | -                                                                |
+| Slice | State | Commit                                                                      |
+| ----- | ----- | --------------------------------------------------------------------------- |
+| E1    | done  | 37285ea2b                                                                   |
+| E2    | done  | 701dc3ef8                                                                   |
+| E3    | done  | 4406449eb                                                                   |
+| E4    | done  | 92d6333e3                                                                   |
+| E5    | done  | 0571f6896                                                                   |
+| E6    | done  | 2f62748d6, e4f5383c3                                                        |
+| E7    | done  | 219e7f2d3                                                                   |
+| E8    | done  | d7abbad2f                                                                   |
+| E9    | open  | -                                                                           |
+| E10   | open  | -                                                                           |
+| E11   | done  | dc4c70efe, a42a7e355                                                        |
+| D1    | done  | -                                                                           |
+| D2    | done  | 48fbde4e2                                                                   |
+| D3    | done  | 947bfe9c7, 62dacdb42                                                        |
+| D4    | done  | c3696483c                                                                   |
+| D5    | done  | a9240e0d5, 2500718ed, a1a852469, 0b148cb53                                  |
+| D6    | done  | fe0a9ff2f                                                                   |
+| D7a   | done  | ec5573076, 9ac7a475f, e2bd519f1, 1ac113a4f, 0b3a8122f, b403bc3cd            |
+| D7b   | done  | 27d70a8c8, 45f033af9                                                        |
+| D8    | done  | a2a587229, daffe56cd, af015c964, 770f50620, 86be73591, db30e445e, 2a8cb5698 |
+| D9    | open  | -                                                                           |
+| D10   | open  | -                                                                           |
+| D11   | open  | -                                                                           |
+| D12   | open  | -                                                                           |
+| D13   | open  | -                                                                           |
+| D14   | open  | -                                                                           |
+| D15   | open  | -                                                                           |
