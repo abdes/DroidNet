@@ -441,4 +441,19 @@ NOLINT_TEST_F(AssetLoaderSceneQueryTest, HierarchyListsNestedNodes)
   EXPECT_FALSE(hierarchy->nodes.at(0).parent.has_value());
 }
 
+//! Each node names the geometry it renders, by its mounted virtual path; a
+//! node that renders nothing names none.
+NOLINT_TEST_F(AssetLoaderSceneQueryTest, HierarchyNodesNameTheirGeometry)
+{
+  const auto hierarchy = asset_loader_->ReadMountedSceneHierarchy(StreetKey());
+
+  ASSERT_HAS_VALUE(hierarchy);
+  const auto& wheel = hierarchy->nodes.at(5);
+  const auto& body = hierarchy->nodes.at(4);
+  ASSERT_HAS_VALUE(wheel.geometry);
+  EXPECT_EQ(wheel.geometry->key, WheelGeometryKey());
+  EXPECT_EQ(wheel.geometry->virtual_path, kWheelGeometryPath);
+  EXPECT_FALSE(body.geometry.has_value());
+}
+
 } // namespace

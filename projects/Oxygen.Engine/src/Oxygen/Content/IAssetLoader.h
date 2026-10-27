@@ -129,6 +129,16 @@ public:
     std::filesystem::path source_path;
   };
 
+  //! An asset a property of a mounted scene's node names.
+  struct SceneNodeAsset final {
+    data::AssetKey key;
+    //! The asset's virtual path in the mounted source that provides it;
+    //! empty when no mounted source provides the asset.
+    std::string virtual_path;
+
+    auto operator==(const SceneNodeAsset&) const -> bool = default;
+  };
+
   //! A node of a mounted scene's hierarchy: one of the scene's own nodes, or
   //! one an instance of it brings in, at any depth.
   struct SceneHierarchyNode final {
@@ -143,6 +153,9 @@ public:
     data::AssetKey scene_key;
     //! The scene the node instances, when it is an instance root.
     std::optional<data::AssetKey> instance;
+    //! The geometry the node renders, with the changes of every scene that
+    //! instances its own applied; none for a node that renders nothing.
+    std::optional<SceneNodeAsset> geometry;
   };
 
   //! Why part of a scene's hierarchy could not be read.
@@ -152,8 +165,6 @@ public:
     kSceneUnavailable = 0,
     //! An instanced scene instances, directly or not, the scene it is in.
     kCycle = 1,
-    //! An instance record names a node the scene does not have.
-    kInvalidInstance = 2,
   };
 
   //! A part of a scene's hierarchy that could not be read; the rest is.
@@ -162,28 +173,18 @@ public:
     //! The instance root the issue is on, as its index in
     //! `SceneHierarchy::nodes`, when there is one.
     std::optional<uint32_t> node;
-    //! The scene the issue names: the instanced scene, or for an invalid
-    //! instance record the scene that holds it.
+    //! The instanced scene the issue names.
     data::AssetKey scene_key;
   };
 
-  //! The hierarchy of a mounted scene with every scene it instances.
+  //! The hierarchy of a mounted scene with every scene it instances, as the
+  //! scene composes them.
   struct SceneHierarchy final {
     data::AssetKey scene_key;
-    //! The scene's own nodes in descriptor order, then each instance's nodes
-    //! after them.
+    //! The scene's own nodes in descriptor order, then each instance's nodes,
+    //! depth first.
     std::vector<SceneHierarchyNode> nodes;
     std::vector<SceneHierarchyIssue> issues;
-  };
-
-  //! An asset a property of a mounted scene's node names.
-  struct SceneNodeAsset final {
-    data::AssetKey key;
-    //! The asset's virtual path in the mounted source that provides it;
-    //! empty when no mounted source provides the asset.
-    std::string virtual_path;
-
-    auto operator==(const SceneNodeAsset&) const -> bool = default;
   };
 
   //! A property value in the schema's units: a bool, an int32 (an int, or the

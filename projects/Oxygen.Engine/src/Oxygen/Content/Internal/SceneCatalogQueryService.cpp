@@ -160,8 +160,8 @@ namespace {
       loaded_;
   };
 
-  //! Reads a mounted scene's hierarchy from its descriptor and those of the
-  //! scenes it instances.
+  //! Reads a mounted scene's hierarchy from its composition: each occurrence's
+  //! nodes in turn, with the geometry the composition gives them.
   class SceneHierarchyReader final {
   public:
     explicit SceneHierarchyReader(MountedScenes& scenes)
@@ -169,83 +169,95 @@ namespace {
     {
     }
 
-    auto Read(const data::AssetKey& key)
+    [[nodiscard]] auto Read(const data::AssetKey& key) const
       -> std::optional<IAssetLoader::SceneHierarchy>
     {
-      const auto scene = scenes_->Load(key);
-      if (!scene) {
+      if (!scenes_->Load(key)) {
         return std::nullopt;
       }
-      hierarchy_.scene_key = key;
-      auto ancestry = std::vector<data::AssetKey> { key };
-      this->Append(*scene, {}, std::nullopt, ancestry);
-      return std::move(hierarchy_);
+      const auto composed = data::ComposeInstance(
+        data::InstanceComposition {
+          .source = key,
+          .instance_root = 0U,
+          .changes = {},
+          .ancestors = {},
+        },
+        [scenes = scenes_](const data::AssetKey& scene)
+          -> std::shared_ptr<const data::SceneAsset> {
+          return scenes->Load(scene);
+        });
+
+      auto hierarchy = IAssetLoader::SceneHierarchy { .scene_key = key };
+      // The index of each occurrence's first node in the hierarchy.
+      auto bases = std::vector<uint32_t> {};
+      bases.reserve(composed.occurrences.size());
+      for (const auto& occurrence : composed.occurrences) {
+        const auto base = static_cast<uint32_t>(hierarchy.nodes.size());
+        bases.push_back(base);
+        // An occurrence's roots are children of its instance root.
+        const auto instance_root = occurrence.parent.has_value()
+          ? std::optional(
+              bases.at(*occurrence.parent) + occurrence.instance_root)
+          : std::nullopt;
+        if (instance_root.has_value()) {
+          hierarchy.nodes.at(*instance_root).instance
+            = occurrence.scene->GetAssetKey();
+        }
+        for (const auto& [index, node] :
+          std::views::enumerate(occurrence.nodes)) {
+          const auto own = static_cast<uint32_t>(index);
+          hierarchy.nodes.push_back(IAssetLoader::SceneHierarchyNode {
+            .path = node.path,
+            .name = std::string(occurrence.scene->GetNodeName(node.node)),
+            .parent = node.node.parent_index == own
+              ? instance_root
+              : std::optional(base + node.node.parent_index),
+            .scene_key = occurrence.scene->GetAssetKey(),
+            .instance = std::nullopt,
+            .geometry = node.renderable.has_value()
+              ? std::optional(scenes_->AssetOf(node.renderable->geometry_key))
+              : std::nullopt,
+          });
+        }
+      }
+
+      // Issues on values are the value reader's; an instance the composition
+      // could not follow is one of the hierarchy's.
+      for (const auto& issue : composed.issues) {
+        const auto code = HierarchyIssueOf(issue.code);
+        if (!code.has_value() || !issue.node_index.has_value()
+          || issue.occurrence >= bases.size()) {
+          continue;
+        }
+        const auto node = bases.at(issue.occurrence) + *issue.node_index;
+        hierarchy.nodes.at(node).instance = issue.scene;
+        hierarchy.issues.push_back(IAssetLoader::SceneHierarchyIssue {
+          .code = *code,
+          .node = node,
+          .scene_key = issue.scene,
+        });
+      }
+      return hierarchy;
     }
 
   private:
-    //! Appends `scene`'s nodes below `prefix`, its roots parented to
-    //! `parent`, then the nodes of each scene it instances.
-    auto Append(const data::SceneAsset& scene,
-      const std::span<const data::NodeId> prefix,
-      const std::optional<uint32_t> parent,
-      std::vector<data::AssetKey>& ancestry) -> void
+    [[nodiscard]] static auto HierarchyIssueOf(
+      const data::CompositionIssueCode code)
+      -> std::optional<IAssetLoader::SceneHierarchyIssueCode>
     {
-      const auto base = static_cast<uint32_t>(hierarchy_.nodes.size());
-      const auto records = scene.GetNodes();
-      for (const auto& [index, record] : std::views::enumerate(records)) {
-        auto path = std::vector<data::NodeId>(prefix.begin(), prefix.end());
-        path.push_back(record.node_id);
-        const auto own = static_cast<uint32_t>(index);
-        hierarchy_.nodes.push_back(IAssetLoader::SceneHierarchyNode {
-          .path = std::move(path),
-          .name = std::string(scene.GetNodeName(record)),
-          .parent = record.parent_index == own
-            ? parent
-            : std::optional(base + record.parent_index),
-          .scene_key = scene.GetAssetKey(),
-          .instance = std::nullopt,
-        });
+      switch (code) {
+      case data::CompositionIssueCode::kSceneMissing:
+        return IAssetLoader::SceneHierarchyIssueCode::kSceneUnavailable;
+      case data::CompositionIssueCode::kCycle:
+        return IAssetLoader::SceneHierarchyIssueCode::kCycle;
+      case data::CompositionIssueCode::kChangeInvalid:
+      case data::CompositionIssueCode::kRecordInvalid:
+        return std::nullopt;
       }
-
-      for (const auto& instance :
-        scene.GetComponents<data::pak::world::SceneInstanceRecord>()) {
-        if (instance.node_index >= records.size()) {
-          hierarchy_.issues.push_back(IAssetLoader::SceneHierarchyIssue {
-            .code = IAssetLoader::SceneHierarchyIssueCode::kInvalidInstance,
-            .node = std::nullopt,
-            .scene_key = scene.GetAssetKey(),
-          });
-          continue;
-        }
-        const auto root = base + instance.node_index;
-        hierarchy_.nodes.at(root).instance = instance.scene_key;
-        if (std::ranges::contains(ancestry, instance.scene_key)) {
-          hierarchy_.issues.push_back(IAssetLoader::SceneHierarchyIssue {
-            .code = IAssetLoader::SceneHierarchyIssueCode::kCycle,
-            .node = root,
-            .scene_key = instance.scene_key,
-          });
-          continue;
-        }
-        const auto instanced = scenes_->Load(instance.scene_key);
-        if (!instanced) {
-          hierarchy_.issues.push_back(IAssetLoader::SceneHierarchyIssue {
-            .code = IAssetLoader::SceneHierarchyIssueCode::kSceneUnavailable,
-            .node = root,
-            .scene_key = instance.scene_key,
-          });
-          continue;
-        }
-        // The root's path is copied: appending may reallocate the nodes.
-        const auto root_path = hierarchy_.nodes.at(root).path;
-        ancestry.push_back(instance.scene_key);
-        this->Append(*instanced, root_path, root, ancestry);
-        ancestry.pop_back();
-      }
+      return std::nullopt;
     }
 
     observer_ptr<MountedScenes> scenes_;
-    IAssetLoader::SceneHierarchy hierarchy_;
   };
 
   //! The value of the property `id` in whichever of the node's records holds
