@@ -8,7 +8,6 @@ using DroidNet.Documents;
 using DroidNet.Routing;
 using Moq;
 using Oxygen.Editor.ContentPipeline.Testing;
-using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Scenes.Edits.Hierarchy;
 using Oxygen.Editor.Scenes.Interaction;
@@ -18,7 +17,6 @@ using Oxygen.Editor.Scenes.Testing;
 using Oxygen.Editor.Shell.Testing;
 using Oxygen.Editor.World;
 using Oxygen.Managed.Core;
-using Oxygen.Managed.Core.Diagnostics;
 using Testably.Abstractions.Testing;
 
 namespace Oxygen.Editor.SceneExplorer.Unit.Tests;
@@ -150,6 +148,22 @@ public sealed class SceneExplorerInstanceTests
     }
 
     [TestMethod]
+    public async Task AnInstancedRow_StaysHiddenAndLockedThroughItsInstancedParent()
+    {
+        using var harness = await InstanceHarness.CreateAsync().ConfigureAwait(false);
+        using var explorer = await harness.OpenAsync().ConfigureAwait(false);
+        _ = await harness.RevealAsync(explorer, harness.Door).ConfigureAwait(false);
+        harness.Interaction.SetHidden(harness.Door, isHidden: true);
+        harness.Interaction.SetLocked(harness.Door, isLocked: true);
+        harness.Interaction.SetHidden(harness.Body, isHidden: true);
+        harness.Interaction.SetLocked(harness.Body, isLocked: true);
+        harness.SelectionService.Publish(harness.Document, SceneSelectionContext.ForNodes([harness.Door]), "Viewport");
+
+        _ = explorer.GetActionCommand(SceneExplorerCommandKind.Show).CanExecute(parameter: null).Should().BeFalse("the door stays hidden with the body");
+        _ = explorer.GetActionCommand(SceneExplorerCommandKind.Unlock).CanExecute(parameter: null).Should().BeFalse("the door stays locked with the body");
+    }
+
+    [TestMethod]
     public async Task ReadingAStructure_DropsTheEntriesOfNodesItNoLongerHolds()
     {
         using var harness = await InstanceHarness.CreateAsync().ConfigureAwait(false);
@@ -159,8 +173,8 @@ public sealed class SceneExplorerInstanceTests
         harness.Interaction.SetHidden(gone, isHidden: true);
         harness.Interaction.SetLocked(harness.Door, isLocked: true);
 
-        // Any edit the Explorer reconciles reads the structures again.
-        await explorer.AddEntityCommand.ExecuteAsync(parameter: null).ConfigureAwait(false);
+        // Structures read again, as after a cook, drop the entries of nodes their sources no longer hold.
+        harness.Structures.RaiseChanged();
 
         _ = harness.Interaction.IsLocked(gone).Should().BeFalse("the source no longer holds the node");
         _ = harness.Interaction.IsHidden(gone).Should().BeFalse();
@@ -185,14 +199,16 @@ public sealed class SceneExplorerInstanceTests
         private readonly TestSession session;
         private readonly TestScene testScene;
 
-        private InstanceHarness(TestSession session, TestScene testScene, SceneNodeInteraction interaction, NodeId root)
+        private InstanceHarness(TestSession session, TestScene testScene, SceneNodeInteraction interaction, FakeSceneStructures structures, NodeId root)
         {
             this.session = session;
             this.testScene = testScene;
             this.Interaction = interaction;
+            this.Structures = structures;
             this.Root = root;
             this.Body = new NodeReference(root, NodePath.Of(NodeId.New()));
-            this.Door = new NodeReference(root, NodePath.Of([.. this.Body.Path.Nodes, NodeId.New()]));
+            // As a cooked source holds them: the door's parent is the body in the contents, not in its path.
+            this.Door = new NodeReference(root, NodePath.Of(NodeId.New()));
             _ = this.Structures.Publish(Car, (this.Body.Path, "Body", null), (this.Door.Path, "Door_FL", this.Body.Path));
             this.Documents.Activate(testScene.Document);
         }
@@ -207,7 +223,7 @@ public sealed class SceneExplorerInstanceTests
 
         public NodeReference Door { get; }
 
-        public FakeSceneStructures Structures { get; } = new();
+        public FakeSceneStructures Structures { get; }
 
         public SceneSelectionService SelectionService { get; } = new();
 
@@ -219,12 +235,13 @@ public sealed class SceneExplorerInstanceTests
         {
             var project = TestProject.Create(new MockFileSystem(), @"C:\InstanceHarness");
             var session = new TestSession(project.Context);
-            var interaction = new SceneNodeInteraction(session, Mock.Of<IEditorSettingsManager>(), Mock.Of<IOperationResultPublisher>(), Mock.Of<IStatusReducer>());
+            var structures = new FakeSceneStructures();
+            var interaction = new SceneInteractionKit(structures).Create(session);
             var testScene = TestScenes.Open(new Scene { Name = "Harbor" }, interaction, project: project);
             var node = SceneNodeTemplates.Instance(testScene.Scene, Car);
             var result = await testScene.Authoring.ExecuteAsync(new InsertNodes([SceneNodeTemplates.Append(testScene.Scene, testScene.Layout, node)])).ConfigureAwait(false);
             _ = result.Succeeded.Should().BeTrue();
-            return new InstanceHarness(session, testScene, interaction, node.Id);
+            return new InstanceHarness(session, testScene, interaction, structures, node.Id);
         }
 
         public async Task<SceneExplorerViewModel> OpenAsync()

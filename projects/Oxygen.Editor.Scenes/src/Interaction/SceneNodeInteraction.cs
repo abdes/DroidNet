@@ -5,6 +5,7 @@
 using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Data.Settings;
 using Oxygen.Editor.Projects;
@@ -44,12 +45,14 @@ namespace Oxygen.Editor.Scenes.Interaction;
 /// <param name="settings">The editor settings manager, accessed serially by this service.</param>
 /// <param name="results">The visible diagnostic publisher.</param>
 /// <param name="status">The diagnostic status reducer.</param>
+/// <param name="structures">What the instances of the shown scene contain, which tells the ancestors of their nodes.</param>
 /// <param name="loggerFactory">The optional logger factory.</param>
 public sealed partial class SceneNodeInteraction(
     IProjectSession session,
     IEditorSettingsManager settings,
     IOperationResultPublisher results,
     IStatusReducer status,
+    ISceneStructures structures,
     ILoggerFactory? loggerFactory = null) : ISceneNodeInteraction
 {
     /// <summary>The project-scoped interaction identity in the editor database.</summary>
@@ -78,37 +81,30 @@ public sealed partial class SceneNodeInteraction(
     /// <summary>Gets the scene whose state this service currently presents.</summary>
     public SceneId ActiveSceneId => this.activeSceneId;
 
-    /// <summary>Finds the closest locked node that protects a node from editing, by a lock test.</summary>
+    /// <summary>Finds what protects a node from editing, by a lock test and its instance's contents.</summary>
     /// <param name="scene">The scene the node is in.</param>
     /// <param name="node">The node, which an instance may have brought in.</param>
     /// <param name="isLocked">Whether a node itself is locked.</param>
-    /// <returns>The node or the closest of its ancestors that is locked; otherwise, <see langword="null"/>.</returns>
-    public static NodeReference? FindLockOwner(Scene scene, NodeReference node, Func<NodeReference, bool> isLocked)
+    /// <param name="structureOf">The contents read of a source, or <see langword="null"/> when they are not read.</param>
+    /// <returns>
+    /// The closest locked node among the node, its ancestors in its instance's contents (each nesting level's included),
+    /// its instance root and the root's ancestors in the scene; for a node an instance brings in that its instance's
+    /// contents do not hold yet, that instance; otherwise, <see cref="NodeLock.None"/>.
+    /// </returns>
+    public static NodeLock FindLock(Scene scene, NodeReference node, Func<NodeReference, bool> isLocked, Func<AssetPath, SceneStructure?> structureOf)
     {
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(node);
         ArgumentNullException.ThrowIfNull(isLocked);
-
-        // The instanced levels first, deepest first, then the instance root's own ancestry.
-        for (var length = node.Path.Count; length > 0; length--)
+        ArgumentNullException.ThrowIfNull(structureOf);
+        if (NodeAncestry.Of(scene, node, structureOf) is not { } ancestors)
         {
-            var candidate = new NodeReference(node.Node, NodePath.Of(node.Path.Nodes.Take(length)));
-            if (isLocked(candidate))
-            {
-                return candidate;
-            }
+            return NodeLock.Unread(node.Node);
         }
 
-        for (var current = scene.AllNodes.FirstOrDefault(owned => owned.Id == node.Node); current is not null; current = current.Hierarchy.Parent)
-        {
-            var candidate = NodeReference.To(current.Id);
-            if (isLocked(candidate))
-            {
-                return candidate;
-            }
-        }
-
-        return null;
+        return isLocked(node) ? NodeLock.By(node)
+            : ancestors.FirstOrDefault(isLocked) is { } owner ? NodeLock.By(owner)
+            : NodeLock.None;
     }
 
     /// <summary>
@@ -183,22 +179,29 @@ public sealed partial class SceneNodeInteraction(
         return null;
     }
 
-    /// <summary>Finds the closest locked node that protects <paramref name="node"/> from editing.</summary>
-    /// <param name="scene">The scene the node is in.</param>
-    /// <param name="node">The node, which an instance may have brought in.</param>
-    /// <returns>
-    /// The node itself, an instanced ancestor on its path, or the instance root or one of its ancestors, that is
-    /// locked; otherwise, <see langword="null"/>.
-    /// </returns>
-    public NodeReference? GetLockOwner(Scene scene, NodeReference node)
+    /// <inheritdoc/>
+    public IReadOnlyList<NodeReference>? GetAncestors(Scene scene, NodeReference node)
     {
         ArgumentNullException.ThrowIfNull(scene);
-        return scene.Id == this.activeSceneId ? FindLockOwner(scene, node, this.IsLocked) : null;
+        return NodeAncestry.Of(scene, node, source => structures.Find(session.Context, source));
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>A scene other than the active one has no lock state here, so nothing protects its nodes.</remarks>
+    public NodeLock GetLock(Scene scene, NodeReference node)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        return scene.Id == this.activeSceneId
+            ? FindLock(scene, node, this.IsLocked, source => structures.Find(session.Context, source))
+            : NodeLock.None;
     }
 
     /// <summary>Gets a snapshot of the explicitly hidden nodes of the active scene.</summary>
     /// <returns>The hidden nodes in no particular order.</returns>
     public IReadOnlyCollection<NodeReference> HiddenNodes() => [.. this.hiddenNodes];
+
+    /// <inheritdoc/>
+    public IReadOnlyCollection<NodeReference> LockedNodes() => [.. this.lockedNodes];
 
     /// <summary>Hides or shows <paramref name="node"/> in the editing viewports.</summary>
     /// <param name="node">The node: a node of the scene, or a node an instance brought in.</param>

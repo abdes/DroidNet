@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Interaction;
 using Oxygen.Editor.World;
@@ -28,6 +29,21 @@ public sealed class FakeNodeInteraction : ISceneNodeInteraction
             {
                 return [.. this.hidden.OrderBy(static node => node.ToString(), StringComparer.Ordinal)];
             }
+        }
+    }
+
+    /// <summary>
+    /// Gets or sets what an instance of a source contains, which tells the ancestors of its nodes. By default no contents
+    /// are read, so every node an instance brings in is protected by its unread instance.
+    /// </summary>
+    public Func<AssetPath, SceneStructure?> StructureOf { get; set; } = static _ => null;
+
+    /// <inheritdoc/>
+    public IReadOnlyCollection<NodeReference> LockedNodes()
+    {
+        lock (this.gate)
+        {
+            return [.. this.locked];
         }
     }
 
@@ -100,8 +116,12 @@ public sealed class FakeNodeInteraction : ISceneNodeInteraction
     }
 
     /// <inheritdoc/>
-    public NodeReference? GetLockOwner(Scene scene, NodeReference node)
-        => SceneNodeInteraction.FindLockOwner(scene, node, this.IsLocked);
+    public IReadOnlyList<NodeReference>? GetAncestors(Scene scene, NodeReference node)
+        => NodeAncestry.Of(scene, node, this.StructureOf);
+
+    /// <inheritdoc/>
+    public NodeLock GetLock(Scene scene, NodeReference node)
+        => SceneNodeInteraction.FindLock(scene, node, this.IsLocked, this.StructureOf);
 
     /// <inheritdoc/>
     public void SetHidden(NodeReference node, bool isHidden)

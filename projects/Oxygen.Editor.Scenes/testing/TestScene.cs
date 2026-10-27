@@ -13,7 +13,7 @@ using Oxygen.Editor.World;
 namespace Oxygen.Editor.Scenes.Testing;
 
 /// <summary>A scene document a test opened, with the open documents that hold it; disposing it closes them.</summary>
-public sealed class TestScene : IDisposable
+public sealed partial class TestScene : IDisposable
 {
     private readonly TestSceneDocuments documents;
 
@@ -25,7 +25,7 @@ public sealed class TestScene : IDisposable
     {
         ArgumentNullException.ThrowIfNull(documents);
         this.documents = documents;
-        var opening = this.documents.Open.OpenAsync(file);
+        var opening = this.documents.Open.OpenAsync(file, this.documents.Session.Lifetime);
         if (!opening.IsCompletedSuccessfully || opening.Result.Document is not { } document)
         {
             var problem = opening.IsCompletedSuccessfully ? $"The scene does not decode: {opening.Result.Problem}" : "An in-memory scene document opens at once.";

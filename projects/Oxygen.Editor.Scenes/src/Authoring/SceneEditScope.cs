@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.Scenes.Nodes;
@@ -50,6 +51,12 @@ public sealed class SceneEditScope
     /// scene through, or <see langword="null"/> when nothing reads them.
     /// </summary>
     public IAuthoredReferences? References { get; }
+
+    /// <summary>
+    /// Gets what an instance of a source contains (scene instances 8.2), as last read, or <see langword="null"/> when
+    /// nothing reads it; the lookup answers <see langword="null"/> for a source not read.
+    /// </summary>
+    public Func<AssetPath, SceneStructure?>? StructureOf { get; init; }
 
     /// <summary>Gets the scene's own asset, which no instance in it may reach, or <see langword="null"/> when unknown.</summary>
     public AssetPath? Asset { get; internal set; }
@@ -115,6 +122,14 @@ public sealed class SceneEditScope
             }
         }
 
+        foreach (var target in edit.InstancedTargets)
+        {
+            if (this.CheckTarget(target) is { } error)
+            {
+                (errors ??= []).Add(error);
+            }
+        }
+
         return errors is null ? SceneEditValidation.Valid : SceneEditValidation.Refused(errors);
     }
 
@@ -128,7 +143,8 @@ public sealed class SceneEditScope
     /// <summary>Checks that no node under the given roots is locked, for edits that remove or move whole subtrees.</summary>
     /// <remarks>
     /// The frame checks the targets and their ancestors; an edit that changes a subtree also changes the nodes under its
-    /// root. A replay skips the check, as the frame skips its lock check.
+    /// root, the nodes the subtree's instances bring in included. A replay skips the check, as the frame skips its lock
+    /// check.
     /// </remarks>
     /// <param name="roots">The subtrees' roots; missing ids are skipped.</param>
     /// <returns>The validation; refused when a descendant is locked, naming it.</returns>
@@ -141,11 +157,20 @@ public sealed class SceneEditScope
         }
 
         List<SceneDiagnostic>? errors = null;
+        var lockedInstanced = interaction.LockedNodes().Where(static node => !node.IsOwned).ToList();
         foreach (var root in roots.Select(this.FindNode).OfType<SceneNode>())
         {
             foreach (var locked in root.Descendants().Where(node => interaction.IsLocked(NodeReference.To(node.Id))))
             {
                 (errors ??= []).Add(SceneDiagnostic.Error(SceneEditCodes.TargetLocked, $"'{locked.Metadata.Name}' is locked.", locked.Id));
+            }
+
+            foreach (var instance in (IEnumerable<SceneNode>)[root, .. root.Descendants()])
+            {
+                if (lockedInstanced.Any(node => node.Node == instance.Id))
+                {
+                    (errors ??= []).Add(SceneDiagnostic.Error(SceneEditCodes.TargetLocked, $"A node of '{instance.Metadata.Name}' is locked.", instance.Id));
+                }
             }
         }
 
@@ -176,6 +201,7 @@ public sealed class SceneEditScope
         {
             Asset = this.Asset,
             Replaying = this.Replaying,
+            StructureOf = this.StructureOf,
         };
 
     /// <summary>Takes the warnings reported since the last call.</summary>
@@ -212,5 +238,40 @@ public sealed class SceneEditScope
         }
 
         return null;
+    }
+
+    // A node an instance brings in: its instance root must be in the scene, and the closest lock that protects it, in its
+    // instance's contents or above its root, refuses the edit, as do contents not read yet.
+    private SceneDiagnostic? CheckTarget(NodeReference target)
+    {
+        if (this.FindNode(target.Node) is not { } root)
+        {
+            return SceneDiagnostic.Error(SceneEditCodes.TargetMissing, "The instance the node belongs to no longer exists.", target.Node);
+        }
+
+        if (this.Interaction is not { } interaction || this.Replaying)
+        {
+            return null;
+        }
+
+        var nodeLock = interaction.GetLock(this.Scene, target);
+        if (nodeLock.UnreadInstance is not null)
+        {
+            return SceneDiagnostic.Error(
+                SceneEditCodes.InstanceUnavailable,
+                $"The contents of '{root.Metadata.Name}' are not available yet, so its nodes cannot be edited. Try again in a moment.",
+                target.Node);
+        }
+
+        if (nodeLock.Owner is not { } owner)
+        {
+            return null;
+        }
+
+        var name = target.IsOwned ? $"'{root.Metadata.Name}'" : $"A node of '{root.Metadata.Name}'";
+        var message = owner == target ? $"{name} is locked."
+            : owner.IsOwned && this.FindNode(owner.Node) is { } locked ? $"{name} is locked by '{locked.Metadata.Name}'."
+            : $"{name} is locked by a node of '{root.Metadata.Name}' above it.";
+        return SceneDiagnostic.Error(SceneEditCodes.TargetLocked, message, target.Node);
     }
 }

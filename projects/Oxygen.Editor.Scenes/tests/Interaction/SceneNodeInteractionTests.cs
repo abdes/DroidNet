@@ -3,12 +3,12 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
-using Moq;
-using Oxygen.Editor.Data.Services;
-using Oxygen.Editor.Data.Settings;
 using Oxygen.Editor.Projects.Testing;
+using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Interaction;
+using Oxygen.Editor.Scenes.Testing;
 using Oxygen.Editor.World;
+using Oxygen.Editor.World.Components;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 using Testably.Abstractions.Testing;
@@ -19,6 +19,8 @@ namespace Oxygen.Editor.Scenes.Tests.Interaction;
 [TestClass]
 public sealed partial class SceneNodeInteractionTests
 {
+    private static readonly AssetPath CarSource = AssetPath.Parse("/Content/Vehicles/Car.glb");
+
     [TestMethod]
     public async Task RestoreAsync_LoadsStoredHiddenAndLock()
     {
@@ -26,23 +28,18 @@ public sealed partial class SceneNodeInteractionTests
         var sceneId = SceneId.New();
         var hidden = NodeId.New();
         var locked = NodeId.New();
+        var kit = new SceneInteractionKit();
+        kit.Settings.Store(
+            SceneNodeInteraction.Key,
+            session.Context.SettingsScope,
+            new SceneNodeInteraction.ProjectInteraction(
+                session.Context.ProjectId,
+                new Dictionary<SceneId, SceneNodeInteraction.SceneInteraction>
+                {
+                    [sceneId] = new([NodeReference.To(hidden)], [NodeReference.To(locked)], SceneCategories.All),
+                }));
+        var service = kit.Create(session);
 
-        var settings = new Mock<IEditorSettingsManager>(MockBehavior.Loose);
-        var stored = new SceneNodeInteraction.ProjectInteraction(
-            session.Context.ProjectId,
-            new Dictionary<SceneId, SceneNodeInteraction.SceneInteraction>
-            {
-                [sceneId] = new([NodeReference.To(hidden)], [NodeReference.To(locked)], SceneCategories.All),
-            });
-        _ = settings
-            .Setup(s => s.LoadSettingAsync(
-                It.IsAny<SettingKey<SceneNodeInteraction.ProjectInteraction>>(),
-                It.IsAny<SettingContext>(),
-                It.IsAny<IProgress<SettingsProgress>>(),
-                It.IsAny<CancellationToken>()))
-            .ReturnsAsync(stored);
-
-        var service = new SceneNodeInteraction(session, settings.Object, new CapturingOperationResultPublisher(), new OperationStatusReducer());
         await service.RestoreAsync(sceneId).ConfigureAwait(false);
 
         _ = service.IsHidden(NodeReference.To(hidden)).Should().BeTrue("a stored hidden id reloads on scene restore");
@@ -59,9 +56,7 @@ public sealed partial class SceneNodeInteractionTests
         parent.Hierarchy.AddChild(child);
         scene.RootNodes.Add(parent);
         var otherSceneNode = new SceneNode(CreateScene(), "Other Scene Node");
-
-        var settings = new Mock<IEditorSettingsManager>(MockBehavior.Loose);
-        var service = new SceneNodeInteraction(session, settings.Object, new CapturingOperationResultPublisher(), new OperationStatusReducer());
+        var service = new SceneInteractionKit().Create(session);
         await service.RestoreAsync(scene.Id).ConfigureAwait(false);
         service.SetLocked(NodeReference.To(parent.Id), isLocked: true);
 
@@ -76,26 +71,21 @@ public sealed partial class SceneNodeInteractionTests
         using var session = OpenSession();
         var sceneId = SceneId.New();
         var hidden = NodeId.New();
-
-        var settings = new Mock<IEditorSettingsManager>(MockBehavior.Loose);
+        var kit = new SceneInteractionKit();
 
         // Same path-scope but a different ProjectId: the settings scope is reused by path, so a
         // copied project must not inherit a stranger's hidden set.
-        var stored = new SceneNodeInteraction.ProjectInteraction(
-            Guid.NewGuid(),
-            new Dictionary<SceneId, SceneNodeInteraction.SceneInteraction>
-            {
-                [sceneId] = new([NodeReference.To(hidden)], [], SceneCategories.All),
-            });
-        _ = settings
-            .Setup(s => s.LoadSettingAsync(
-                It.IsAny<SettingKey<SceneNodeInteraction.ProjectInteraction>>(),
-                It.IsAny<SettingContext>(),
-                It.IsAny<IProgress<SettingsProgress>>(),
-                It.IsAny<CancellationToken>()))
-            .ReturnsAsync(stored);
+        kit.Settings.Store(
+            SceneNodeInteraction.Key,
+            session.Context.SettingsScope,
+            new SceneNodeInteraction.ProjectInteraction(
+                Guid.NewGuid(),
+                new Dictionary<SceneId, SceneNodeInteraction.SceneInteraction>
+                {
+                    [sceneId] = new([NodeReference.To(hidden)], [], SceneCategories.All),
+                }));
+        var service = kit.Create(session);
 
-        var service = new SceneNodeInteraction(session, settings.Object, new CapturingOperationResultPublisher(), new OperationStatusReducer());
         await service.RestoreAsync(sceneId).ConfigureAwait(false);
 
         _ = service.IsHidden(NodeReference.To(hidden)).Should().BeFalse("a record whose ProjectId differs is rejected");
@@ -109,9 +99,8 @@ public sealed partial class SceneNodeInteractionTests
         var sceneB = SceneId.New();
         var nodeA = NodeId.New();
         var nodeB = NodeId.New();
-        var store = new Dictionary<SettingContext, SceneNodeInteraction.ProjectInteraction>();
-        var settings = CreateStore(store);
-        var service = new SceneNodeInteraction(session, settings.Object, new CapturingOperationResultPublisher(), new OperationStatusReducer());
+        var kit = new SceneInteractionKit();
+        var service = kit.Create(session);
         await service.RestoreAsync(sceneA).ConfigureAwait(false);
         service.SetHidden(NodeReference.To(nodeA), isHidden: true);
         service.SetCategories(new SceneCategories(ShowMeshes: false, ShowLights: true, ShowCameras: false));
@@ -125,8 +114,8 @@ public sealed partial class SceneNodeInteractionTests
         _ = service.IsHidden(NodeReference.To(nodeA)).Should().BeTrue();
         _ = service.IsLocked(NodeReference.To(nodeB)).Should().BeFalse();
         _ = service.Categories.Should().Be(new SceneCategories(ShowMeshes: false, ShowLights: true, ShowCameras: false));
-        _ = store[session.Context.SettingsScope].Scenes.Keys.Should().BeEquivalentTo([sceneA, sceneB]);
-        var restarted = new SceneNodeInteraction(session, settings.Object, new CapturingOperationResultPublisher(), new OperationStatusReducer());
+        _ = StoredFor(kit, session).Scenes.Keys.Should().BeEquivalentTo([sceneA, sceneB]);
+        var restarted = kit.Create(session);
         await restarted.RestoreAsync(sceneB).ConfigureAwait(false);
         _ = restarted.IsLocked(NodeReference.To(nodeB)).Should().BeTrue();
         _ = restarted.IsHidden(NodeReference.To(nodeA)).Should().BeFalse();
@@ -140,24 +129,23 @@ public sealed partial class SceneNodeInteractionTests
         using var second = OpenSession("Second");
         var sceneId = SceneId.New();
         var node = NodeId.New();
-        var store = new Dictionary<SettingContext, SceneNodeInteraction.ProjectInteraction>();
-        var settings = CreateStore(store);
+        var kit = new SceneInteractionKit();
 
-        var firstService = new SceneNodeInteraction(first, settings.Object, new CapturingOperationResultPublisher(), new OperationStatusReducer());
+        var firstService = kit.Create(first);
         await firstService.RestoreAsync(sceneId).ConfigureAwait(false);
         firstService.SetHidden(NodeReference.To(node), isHidden: true);
 
-        var secondService = new SceneNodeInteraction(second, settings.Object, new CapturingOperationResultPublisher(), new OperationStatusReducer());
+        var secondService = kit.Create(second);
         await secondService.RestoreAsync(sceneId).ConfigureAwait(false);
         _ = secondService.IsHidden(NodeReference.To(node)).Should().BeFalse("another project's session has its own state");
         secondService.SetLocked(NodeReference.To(node), isLocked: true);
         await secondService.RestoreAsync(sceneId).ConfigureAwait(false);
 
-        var reopened = new SceneNodeInteraction(first, settings.Object, new CapturingOperationResultPublisher(), new OperationStatusReducer());
+        var reopened = kit.Create(first);
         await reopened.RestoreAsync(sceneId).ConfigureAwait(false);
         _ = reopened.IsHidden(NodeReference.To(node)).Should().BeTrue();
         _ = reopened.IsLocked(NodeReference.To(node)).Should().BeFalse("the other session's write does not reach this project");
-        _ = store.Keys.Should().BeEquivalentTo([first.Context.SettingsScope, second.Context.SettingsScope]);
+        _ = kit.Settings.ContextsOf(SceneNodeInteraction.Key).Should().BeEquivalentTo([first.Context.SettingsScope, second.Context.SettingsScope]);
     }
 
     [TestMethod]
@@ -166,9 +154,8 @@ public sealed partial class SceneNodeInteractionTests
         using var session = OpenSession();
         var sceneId = SceneId.New();
         var node = NodeId.New();
-        var store = new Dictionary<SettingContext, SceneNodeInteraction.ProjectInteraction>();
-        var settings = CreateStore(store);
-        var service = new SceneNodeInteraction(session, settings.Object, new CapturingOperationResultPublisher(), new OperationStatusReducer());
+        var kit = new SceneInteractionKit();
+        var service = kit.Create(session);
         await service.RestoreAsync(sceneId).ConfigureAwait(false);
         var before = session.Context;
 
@@ -178,28 +165,25 @@ public sealed partial class SceneNodeInteractionTests
         await service.RestoreAsync(sceneId).ConfigureAwait(false);
 
         _ = service.IsHidden(NodeReference.To(node)).Should().BeTrue();
-        _ = store.Keys.Should().Equal([before.SettingsScope], "the project's settings scope is its root, which a mount change keeps");
+        _ = kit.Settings.ContextsOf(SceneNodeInteraction.Key).Should().Equal([before.SettingsScope], "the project's settings scope is its root, which a mount change keeps");
     }
 
     [TestMethod]
     public async Task InvalidSavedState_PublishesFailureAndKeepsDefaults()
     {
         using var session = OpenSession();
-        var settings = new Mock<IEditorSettingsManager>();
-        _ = settings.Setup(value => value.LoadSettingAsync(
-                SceneNodeInteraction.Key,
-                It.IsAny<SettingContext>(),
-                It.IsAny<IProgress<SettingsProgress>>(),
-                It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new SceneNodeInteraction.ProjectInteraction(session.Context.ProjectId, null!));
-        var results = new CapturingOperationResultPublisher();
-        var service = new SceneNodeInteraction(session, settings.Object, results, new OperationStatusReducer());
+        var kit = new SceneInteractionKit();
+        kit.Settings.Store(
+            SceneNodeInteraction.Key,
+            session.Context.SettingsScope,
+            new SceneNodeInteraction.ProjectInteraction(session.Context.ProjectId, null!));
+        var service = kit.Create(session);
 
         await service.RestoreAsync(SceneId.New()).ConfigureAwait(false);
 
         _ = service.HiddenNodes().Should().BeEmpty();
         _ = service.Categories.Should().Be(SceneCategories.All);
-        _ = results.Published.SelectMany(result => result.Diagnostics).Should()
+        _ = kit.Published.SelectMany(result => result.Diagnostics).Should()
             .Contain(diagnostic => diagnostic.Code == DiagnosticCodes.SettingsPrefix + "INVALID_STATE");
     }
 
@@ -209,24 +193,22 @@ public sealed partial class SceneNodeInteractionTests
         using var session = OpenSession();
         var sceneId = SceneId.New();
         var hidden = NodeId.New();
-        var load = new TaskCompletionSource<SceneNodeInteraction.ProjectInteraction?>(
-            TaskCreationOptions.RunContinuationsAsynchronously);
-        var settings = new Mock<IEditorSettingsManager>();
-        _ = settings.Setup(value => value.LoadSettingAsync(
-                SceneNodeInteraction.Key,
-                It.IsAny<SettingContext>(),
-                It.IsAny<IProgress<SettingsProgress>>(),
-                It.IsAny<CancellationToken>()))
-            .Returns(load.Task);
-        var service = new SceneNodeInteraction(session, settings.Object, new CapturingOperationResultPublisher(), new OperationStatusReducer());
+        var load = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var kit = new SceneInteractionKit();
+        kit.Settings.BeforeLoad = () => load.Task;
+        kit.Settings.Store(
+            SceneNodeInteraction.Key,
+            session.Context.SettingsScope,
+            new SceneNodeInteraction.ProjectInteraction(
+                session.Context.ProjectId,
+                new Dictionary<SceneId, SceneNodeInteraction.SceneInteraction>
+                {
+                    [sceneId] = new([NodeReference.To(hidden)], [], new SceneCategories(ShowMeshes: false, ShowLights: false, ShowCameras: false)),
+                }));
+        var service = kit.Create(session);
         var restoration = service.RestoreAsync(sceneId);
         service.ClearActiveScene();
-        load.SetResult(new SceneNodeInteraction.ProjectInteraction(
-            session.Context.ProjectId,
-            new Dictionary<SceneId, SceneNodeInteraction.SceneInteraction>
-            {
-                [sceneId] = new([NodeReference.To(hidden)], [], new SceneCategories(ShowMeshes: false, ShowLights: false, ShowCameras: false)),
-            }));
+        load.SetResult();
 
         await restoration.ConfigureAwait(false);
 
@@ -241,13 +223,12 @@ public sealed partial class SceneNodeInteractionTests
         using var session = OpenSession();
         var sceneId = SceneId.New();
         var door = new NodeReference(NodeId.New(), NodePath.Of(NodeId.New(), NodeId.New()));
-        var store = new Dictionary<SettingContext, SceneNodeInteraction.ProjectInteraction>();
-        var settings = CreateStore(store);
-        var service = new SceneNodeInteraction(session, settings.Object, new CapturingOperationResultPublisher(), new OperationStatusReducer());
+        var kit = new SceneInteractionKit();
+        var service = kit.Create(session);
         await service.RestoreAsync(sceneId).ConfigureAwait(false);
 
         service.SetLocked(door, isLocked: true);
-        var restarted = new SceneNodeInteraction(session, settings.Object, new CapturingOperationResultPublisher(), new OperationStatusReducer());
+        var restarted = kit.Create(session);
         await restarted.RestoreAsync(sceneId).ConfigureAwait(false);
 
         _ = restarted.IsLocked(door).Should().BeTrue("settings LLD 5.1: an instanced node is locked by its instance root and node path");
@@ -255,27 +236,129 @@ public sealed partial class SceneNodeInteractionTests
     }
 
     [TestMethod]
-    public async Task GetLockOwner_OfAnInstancedNodeChecksItsPathThenTheInstanceRootsAncestry()
+    public async Task GetLock_OfAnInstancedNode_IsOwnedByTheClosestLockedAncestorInItsInstance()
     {
         using var session = OpenSession();
-        var scene = CreateScene();
-        var group = new SceneNode(scene, "Group");
-        var car = new SceneNode(scene, "Car");
-        group.Hierarchy.AddChild(car);
-        scene.RootNodes.Add(group);
-        var wheel = new NodeReference(car.Id, NodePath.Of(NodeId.New()));
-        var rim = new NodeReference(car.Id, wheel.Path.Append(NodeId.New()));
-        var service = new SceneNodeInteraction(session, new Mock<IEditorSettingsManager>().Object, new CapturingOperationResultPublisher(), new OperationStatusReducer());
-        await service.RestoreAsync(scene.Id).ConfigureAwait(false);
+        var world = CarWorld();
+        var kit = new SceneInteractionKit();
+        _ = kit.Structures.Publish(CarSource, world.Structure);
+        var service = kit.Create(session);
+        await service.RestoreAsync(world.Scene.Id).ConfigureAwait(false);
 
-        _ = service.GetLockOwner(scene, rim).Should().BeNull();
+        _ = service.GetLock(world.Scene, world.Bolt).Should().Be(NodeLock.None);
 
-        service.SetLocked(NodeReference.To(group.Id), isLocked: true);
-        _ = service.GetLockOwner(scene, rim).Should().Be(NodeReference.To(group.Id), "an ancestor of the instance root locks what the instance brought in");
+        service.SetLocked(world.Wheel, isLocked: true);
+        _ = service.GetLock(world.Scene, world.Bolt).Owner.Should().Be(world.Wheel, "a locked ancestor in the same instance protects what is below it, across nesting levels");
+        _ = service.GetLock(world.Scene, world.Rim).Owner.Should().Be(world.Wheel);
+        _ = service.GetLock(world.Scene, world.Wheel).Owner.Should().Be(world.Wheel, "a locked node is protected by itself");
+        _ = service.GetLock(world.Scene, world.Spare).Should().Be(NodeLock.None, "a node outside the locked node's subtree is not protected by it");
 
-        service.SetLocked(wheel, isLocked: true);
-        _ = service.GetLockOwner(scene, rim).Should().Be(wheel, "the closest locked node owns the lock");
-        _ = service.GetLockOwner(CreateScene(), rim).Should().BeNull("an inactive scene must not inherit the active scene's lock state");
+        service.SetLocked(world.Rim, isLocked: true);
+        _ = service.GetLock(world.Scene, world.Bolt).Owner.Should().Be(world.Rim, "the closest locked node owns the lock");
+        _ = service.GetLock(world.Scene, world.Wheel).Owner.Should().Be(world.Wheel, "a lock below a node does not protect it");
+    }
+
+    [TestMethod]
+    public async Task GetLock_OfAnInstancedNode_FallsBackToTheInstanceRootThenTheSceneAncestors()
+    {
+        using var session = OpenSession();
+        var world = CarWorld();
+        var kit = new SceneInteractionKit();
+        _ = kit.Structures.Publish(CarSource, world.Structure);
+        var service = kit.Create(session);
+        await service.RestoreAsync(world.Scene.Id).ConfigureAwait(false);
+
+        service.SetLocked(NodeReference.To(world.Group.Id), isLocked: true);
+        _ = service.GetLock(world.Scene, world.Bolt).Owner.Should().Be(NodeReference.To(world.Group.Id), "an ancestor of the instance root locks what the instance brought in");
+
+        service.SetLocked(NodeReference.To(world.Car.Id), isLocked: true);
+        _ = service.GetLock(world.Scene, world.Bolt).Owner.Should().Be(NodeReference.To(world.Car.Id), "the instance root is closer than its ancestors");
+
+        service.SetLocked(world.Wheel, isLocked: true);
+        _ = service.GetLock(world.Scene, world.Bolt).Owner.Should().Be(world.Wheel, "a node of the instance is closer than the instance root");
+        _ = service.GetLock(world.Scene, world.Spare).Owner.Should().Be(NodeReference.To(world.Car.Id));
+    }
+
+    [TestMethod]
+    public async Task GetAncestors_ListsTheInstancesParentsThenTheInstanceRootThenItsSceneAncestors()
+    {
+        using var session = OpenSession();
+        var world = CarWorld();
+        var kit = new SceneInteractionKit();
+        var service = kit.Create(session);
+
+        _ = service.GetAncestors(world.Scene, world.Bolt).Should().BeNull("the instance's contents are not read");
+
+        _ = kit.Structures.Publish(CarSource, world.Structure);
+
+        _ = service.GetAncestors(world.Scene, world.Bolt).Should().Equal(
+            world.Rim,
+            world.Wheel,
+            NodeReference.To(world.Car.Id),
+            NodeReference.To(world.Group.Id));
+        _ = service.GetAncestors(world.Scene, world.Spare).Should().Equal(NodeReference.To(world.Car.Id), NodeReference.To(world.Group.Id));
+        _ = service.GetAncestors(world.Scene, NodeReference.To(world.Car.Id)).Should().Equal(NodeReference.To(world.Group.Id));
+    }
+
+    [TestMethod]
+    public async Task GetLock_OfAnInstancedNode_WhoseInstanceIsNotReadIsProtectedByTheInstance()
+    {
+        using var session = OpenSession();
+        var world = CarWorld();
+        var kit = new SceneInteractionKit();
+        var service = kit.Create(session);
+        await service.RestoreAsync(world.Scene.Id).ConfigureAwait(false);
+
+        var unread = service.GetLock(world.Scene, world.Bolt);
+
+        _ = unread.Protects.Should().BeTrue("without the instance's contents nothing tells whether an ancestor is locked");
+        _ = unread.UnreadInstance.Should().Be(world.Car.Id);
+        _ = unread.Owner.Should().BeNull();
+
+        _ = kit.Structures.Publish(CarSource, world.Structure.Where(node => !node.Path.Equals(world.Bolt.Path)));
+        _ = service.GetLock(world.Scene, world.Bolt).UnreadInstance.Should().Be(world.Car.Id, "a node the read contents do not hold is still unread");
+
+        _ = kit.Structures.Publish(CarSource, world.Structure);
+        _ = service.GetLock(world.Scene, world.Bolt).Should().Be(NodeLock.None);
+        _ = service.GetLock(world.Scene, NodeReference.To(world.Car.Id)).Should().Be(NodeLock.None, "a node of the scene needs no contents");
+    }
+
+    [TestMethod]
+    public async Task GetLock_InAnInactiveScene_IsNone()
+    {
+        using var session = OpenSession();
+        var world = CarWorld();
+        var kit = new SceneInteractionKit();
+        _ = kit.Structures.Publish(CarSource, world.Structure);
+        var service = kit.Create(session);
+        await service.RestoreAsync(world.Scene.Id).ConfigureAwait(false);
+        service.SetLocked(NodeReference.To(world.Group.Id), isLocked: true);
+
+        _ = service.GetLock(CreateScene(), world.Bolt).Should().Be(NodeLock.None, "an inactive scene must not inherit the active scene's lock state");
+    }
+
+    [TestMethod]
+    public async Task LockedNodes_IsASnapshotOfTheActiveScenesLocks()
+    {
+        using var session = OpenSession();
+        var sceneId = SceneId.New();
+        var plain = NodeReference.To(NodeId.New());
+        var instanced = new NodeReference(NodeId.New(), NodePath.Of(NodeId.New()));
+        var hiddenOnly = NodeReference.To(NodeId.New());
+        var service = new SceneInteractionKit().Create(session);
+        await service.RestoreAsync(sceneId).ConfigureAwait(false);
+        service.SetLocked(plain, isLocked: true);
+        service.SetLocked(instanced, isLocked: true);
+        service.SetHidden(hiddenOnly, isHidden: true);
+
+        var snapshot = service.LockedNodes();
+        service.SetLocked(plain, isLocked: false);
+
+        _ = snapshot.Should().BeEquivalentTo([plain, instanced], "hidden nodes are not locked, and the snapshot does not follow later changes");
+        _ = service.LockedNodes().Should().BeEquivalentTo([instanced]);
+
+        await service.RestoreAsync(SceneId.New()).ConfigureAwait(false);
+        _ = service.LockedNodes().Should().BeEmpty("another scene has its own locks");
     }
 
     [TestMethod]
@@ -287,8 +370,8 @@ public sealed partial class SceneNodeInteractionTests
         var kept = new NodeReference(root, NodePath.Of(NodeId.New()));
         var gone = new NodeReference(root, NodePath.Of(NodeId.New()));
         var otherInstance = new NodeReference(NodeId.New(), gone.Path);
-        var store = new Dictionary<SettingContext, SceneNodeInteraction.ProjectInteraction>();
-        var service = new SceneNodeInteraction(session, CreateStore(store).Object, new CapturingOperationResultPublisher(), new OperationStatusReducer());
+        var kit = new SceneInteractionKit();
+        var service = kit.Create(session);
         await service.RestoreAsync(sceneId).ConfigureAwait(false);
         foreach (var node in new[] { kept, gone, otherInstance, NodeReference.To(root) })
         {
@@ -309,8 +392,8 @@ public sealed partial class SceneNodeInteractionTests
         _ = service.IsLocked(NodeReference.To(root)).Should().BeTrue("the instance root is a node of the scene");
         _ = service.IsHidden(NodeReference.To(root)).Should().BeTrue();
         _ = changes.Should().Be(1);
-        _ = store[session.Context.SettingsScope].Scenes[sceneId].LockedNodeIds.Should().NotContain(gone);
-        _ = store[session.Context.SettingsScope].Scenes[sceneId].HiddenNodeIds.Should().NotContain(gone);
+        _ = StoredFor(kit, session).Scenes[sceneId].LockedNodeIds.Should().NotContain(gone);
+        _ = StoredFor(kit, session).Scenes[sceneId].HiddenNodeIds.Should().NotContain(gone);
 
         service.DropUnresolvedNodes(root, _ => true);
         _ = changes.Should().Be(1, "nothing dropped, nothing changed");
@@ -320,8 +403,7 @@ public sealed partial class SceneNodeInteractionTests
     public async Task ClearActiveScene_ResetsCategoriesWithoutSavingEmptyScene()
     {
         using var session = OpenSession();
-        var settings = new Mock<IEditorSettingsManager>();
-        var service = new SceneNodeInteraction(session, settings.Object, new CapturingOperationResultPublisher(), new OperationStatusReducer());
+        var service = new SceneInteractionKit().Create(session);
         await service.RestoreAsync(SceneId.New()).ConfigureAwait(false);
         service.SetCategories(new SceneCategories(ShowMeshes: false, ShowLights: false, ShowCameras: false));
 
@@ -337,46 +419,43 @@ public sealed partial class SceneNodeInteractionTests
     private static TestSession OpenSession(string name = "Project")
         => new(TestProject.Create(new MockFileSystem(), Path.Combine(Path.GetTempPath(), "Oxygen.SceneInteraction", name)).Context);
 
-    // A settings store that keeps one interaction record per settings scope.
-    private static Mock<IEditorSettingsManager> CreateStore(Dictionary<SettingContext, SceneNodeInteraction.ProjectInteraction> store)
+    private static SceneNodeInteraction.ProjectInteraction StoredFor(SceneInteractionKit kit, TestSession session)
+        => kit.Settings.Stored(SceneNodeInteraction.Key, session.Context.SettingsScope)
+            ?? throw new InvalidOperationException("The service saved nothing for the project.");
+
+    // A scene whose Group holds a Car, an instance of CarSource. The source brings in a Wheel with a Rim with a Bolt, and
+    // a Spare beside the Wheel; the Structure lists them as the source's contents.
+    private static CarScene CarWorld()
     {
-        var settings = new Mock<IEditorSettingsManager>();
-        _ = settings.Setup(value => value.LoadSettingAsync(
-                SceneNodeInteraction.Key,
-                It.IsAny<SettingContext>(),
-                It.IsAny<IProgress<SettingsProgress>>(),
-                It.IsAny<CancellationToken>()))
-            .Returns((SettingKey<SceneNodeInteraction.ProjectInteraction> _, SettingContext context, IProgress<SettingsProgress> _, CancellationToken _)
-                => Task.FromResult(store.GetValueOrDefault(context)));
-        _ = settings.Setup(value => value.SaveSettingAsync(
-                SceneNodeInteraction.Key,
-                It.IsAny<SceneNodeInteraction.ProjectInteraction>(),
-                It.IsAny<SettingContext>(),
-                It.IsAny<IProgress<SettingsProgress>>(),
-                It.IsAny<CancellationToken>()))
-            .Callback((
-                SettingKey<SceneNodeInteraction.ProjectInteraction> _,
-                SceneNodeInteraction.ProjectInteraction value,
-                SettingContext context,
-                IProgress<SettingsProgress> _,
-                CancellationToken _) => store[context] = value)
-            .Returns(Task.CompletedTask);
-        return settings;
+        var scene = CreateScene();
+        var group = new SceneNode(scene, "Group");
+        var car = new SceneNode(scene, "Car");
+        _ = car.AddComponent(new SceneInstanceComponent { Name = "Scene Instance", Source = CarSource });
+        group.Hierarchy.AddChild(car);
+        scene.RootNodes.Add(group);
+
+        var wheel = NodePath.Of(NodeId.New());
+        var rim = wheel.Append(NodeId.New());
+        var bolt = rim.Append(NodeId.New());
+        var spare = NodePath.Of(NodeId.New());
+        return new CarScene(
+            scene,
+            group,
+            car,
+            new NodeReference(car.Id, wheel),
+            new NodeReference(car.Id, rim),
+            new NodeReference(car.Id, bolt),
+            new NodeReference(car.Id, spare),
+            [(wheel, "Wheel", null), (rim, "Rim", wheel), (bolt, "Bolt", rim), (spare, "Spare", null)]);
     }
 
-    private sealed class CapturingOperationResultPublisher : IOperationResultPublisher
-    {
-        public List<OperationResult> Published { get; } = [];
-
-        public void Publish(OperationResult result) => this.Published.Add(result);
-
-        public IDisposable Subscribe(IObserver<OperationResult> observer) => new NoopDisposable();
-    }
-
-    private sealed partial class NoopDisposable : IDisposable
-    {
-        public void Dispose()
-        {
-        }
-    }
+    private sealed record CarScene(
+        Scene Scene,
+        SceneNode Group,
+        SceneNode Car,
+        NodeReference Wheel,
+        NodeReference Rim,
+        NodeReference Bolt,
+        NodeReference Spare,
+        IReadOnlyList<(NodePath Path, string Name, NodePath? Parent)> Structure);
 }

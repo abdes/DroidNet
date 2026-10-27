@@ -22,7 +22,13 @@ internal sealed class ScratchNodeInteraction(ISceneNodeInteraction live) : IScen
     public SceneNode? GetLockOwner(SceneNode node) => live.GetLockOwner(node);
 
     /// <inheritdoc/>
-    public NodeReference? GetLockOwner(Scene scene, NodeReference node) => live.GetLockOwner(scene, node);
+    public IReadOnlyList<NodeReference>? GetAncestors(Scene scene, NodeReference node) => live.GetAncestors(scene, node);
+
+    /// <inheritdoc/>
+    public NodeLock GetLock(Scene scene, NodeReference node) => live.GetLock(scene, node);
+
+    /// <inheritdoc/>
+    public IReadOnlyCollection<NodeReference> LockedNodes() => live.LockedNodes();
 
     /// <inheritdoc/>
     public void SetHidden(NodeReference node, bool isHidden) => this.hidden[node] = isHidden;

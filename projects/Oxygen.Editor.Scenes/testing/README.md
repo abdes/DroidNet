@@ -18,6 +18,13 @@ reference it.
   disposing it closes them.
 - `FakeNodeInteraction` is an in-memory `ISceneNodeInteraction`: the lock and
   hide state a test sets, with descendants locked through a locked ancestor.
+- `SceneInteractionKit` builds the real `SceneNodeInteraction` for the tests
+  that need it, such as those of a service that takes the concrete type or of
+  its persistence and lock rule: `Create(session)` returns a service over the
+  kit's `InMemoryEditorSettings` (what it saves a test reads with `Stored`,
+  what a test `Store`s it loads; `BeforeLoad` holds a load), the kit's
+  `Structures` (a `FakeSceneStructures`) and a publisher whose results are the
+  kit's `Published`. A second `Create` over the same kit is a restart.
 
 Fakes of the pipeline ports a scene document takes come from
 `Oxygen.Editor.ContentPipeline.Testing`.

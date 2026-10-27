@@ -11,7 +11,7 @@ namespace Oxygen.Editor.SceneExplorer;
 /// A row for a node an instance brought in, read from the instance source's structure: dimmed, since the scene does not
 /// own it, and refusing every structural command (scene instances 6.2, 8.4).
 /// </summary>
-public sealed class InstancedNodeAdapter : NodeRowAdapter
+public sealed partial class InstancedNodeAdapter : NodeRowAdapter
 {
     /// <summary>Initializes a new instance of the <see cref="InstancedNodeAdapter"/> class.</summary>
     /// <param name="instanceRoot">The instance root of the scene the node is below.</param>

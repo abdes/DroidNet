@@ -31,7 +31,7 @@ namespace Oxygen.Editor.SceneExplorer.Unit.UI.Tests;
 /// the source's structure is read again while the root is expanded.
 /// </summary>
 [TestClass]
-internal sealed class SceneExplorerInstanceRowsTests : DroidNet.Tests.VisualUserInterfaceTests
+internal sealed partial class SceneExplorerInstanceRowsTests : DroidNet.Tests.VisualUserInterfaceTests
 {
     private const int NodeCount = 700;
 
@@ -95,7 +95,7 @@ internal sealed class SceneExplorerInstanceRowsTests : DroidNet.Tests.VisualUser
         var problems = RealizedRowProblems(explorer, tree, out var realized);
         var rowsInView = (int)(scroller.ViewportHeight / tree.ItemRowHeight);
         _ = realized.Should().BeGreaterThanOrEqualTo(rowsInView, DescribeRepeater(explorer, tree, scroller));
-        _ = problems.Should().BeEmpty($"every realized row of {realized} shows its node at offset {scroller.VerticalOffset:F0}");
+        _ = problems.Should().BeEmpty(string.Create(CultureInfo.InvariantCulture, $"every realized row of {realized} shows its node at offset {scroller.VerticalOffset:F0}"));
     });
 
     [TestMethod]
@@ -121,8 +121,8 @@ internal sealed class SceneExplorerInstanceRowsTests : DroidNet.Tests.VisualUser
 
         var problems = RealizedRowProblems(explorer, tree, out var realized);
         var rowsInView = (int)(scroller.ViewportHeight / tree.ItemRowHeight);
-        _ = realized.Should().BeGreaterThanOrEqualTo(rowsInView, $"the rows in view at offset {scroller.VerticalOffset:F0} of {scroller.ScrollableHeight:F0} are realized");
-        _ = problems.Should().BeEmpty($"every realized row of {realized} shows its node at offset {scroller.VerticalOffset:F0}");
+        _ = realized.Should().BeGreaterThanOrEqualTo(rowsInView, string.Create(CultureInfo.InvariantCulture, $"the rows in view at offset {scroller.VerticalOffset:F0} of {scroller.ScrollableHeight:F0} are realized"));
+        _ = problems.Should().BeEmpty(string.Create(CultureInfo.InvariantCulture, $"every realized row of {realized} shows its node at offset {scroller.VerticalOffset:F0}"));
     });
 
     private static List<InstancedNodeAdapter> InstancedRows(SceneExplorerViewModel explorer)
@@ -150,13 +150,13 @@ internal sealed class SceneExplorerInstanceRowsTests : DroidNet.Tests.VisualUser
                 }
 
                 realized++;
-                _ = row.ItemAdapter.Should().BeSameAs(shown[index], $"the row realized at index {index} shows the item there");
+                _ = row.ItemAdapter.Should().BeSameAs(shown[index], string.Create(CultureInfo.InvariantCulture, $"the row realized at index {index} shows the item there"));
                 _ = row.Visibility.Should().Be(Visibility.Visible);
                 var name = row.FindDescendant<TextBlock>(block => string.Equals(block.Name, DynamicTreeItem.ItemNamePart, StringComparison.Ordinal))!;
-                _ = ((Run)name.Inlines[0]).Text.Should().Be(shown[index].Label, $"the row at index {index} names its item");
+                _ = ((Run)name.Inlines[0]).Text.Should().Be(shown[index].Label, string.Create(CultureInfo.InvariantCulture, $"the row at index {index} names its item"));
             }
 
-            _ = realized.Should().BePositive($"the repeater realizes rows at offset {offset}");
+            _ = realized.Should().BePositive(string.Create(CultureInfo.InvariantCulture, $"the repeater realizes rows at offset {offset}"));
         }
     }
 
@@ -187,8 +187,7 @@ internal sealed class SceneExplorerInstanceRowsTests : DroidNet.Tests.VisualUser
             {
                 problems.Add(string.Create(
                     CultureInfo.InvariantCulture,
-                    $"#{index} '{shown[index].Label}': adapter '{row.ItemAdapter?.Label}', name '{name}', container {container.Visibility}/{container.Opacity}, "
-                    + $"row {row.Opacity}/{row.ActualHeight:F0}, label width {label?.ActualWidth:F0}, thumbnail width {thumbnail?.ActualWidth:F0}"));
+                    $"#{index} '{shown[index].Label}': adapter '{row.ItemAdapter?.Label}', name '{name}', container {container.Visibility}/{container.Opacity}, row {row.Opacity}/{row.ActualHeight:F0}, label width {label?.ActualWidth:F0}, thumbnail width {thumbnail?.ActualWidth:F0}"));
             }
         }
 
@@ -206,8 +205,7 @@ internal sealed class SceneExplorerInstanceRowsTests : DroidNet.Tests.VisualUser
                 $"[{repeater.GetElementIndex(child)} {child.Visibility} y={child.TransformToVisual(repeater).TransformPoint(default).Y:F0}]"));
         return string.Create(
             CultureInfo.InvariantCulture,
-            $"offset {scroller.VerticalOffset:F0} of {scroller.ScrollableHeight:F0}, extent {scroller.ExtentHeight:F0}, viewport {scroller.ViewportHeight:F0}; "
-            + $"repeater height {repeater.ActualHeight:F0}, shown items {explorer.ShownItems.Count()}; children {string.Join(' ', children)}");
+            $"offset {scroller.VerticalOffset:F0} of {scroller.ScrollableHeight:F0}, extent {scroller.ExtentHeight:F0}, viewport {scroller.ViewportHeight:F0}; repeater height {repeater.ActualHeight:F0}, shown items {explorer.ShownItems.Count()}; children {string.Join(' ', children)}");
     }
 
     private static string NameOf(int index) => "Part_" + index.ToString("D3", CultureInfo.InvariantCulture);
@@ -236,13 +234,11 @@ internal sealed class SceneExplorerInstanceRowsTests : DroidNet.Tests.VisualUser
         var instanced = InstancedRows(explorer);
         return string.Create(
             CultureInfo.InvariantCulture,
-            $"root rows shown {roots.Count}, expanded {string.Join(',', roots.Select(static row => row.IsExpanded))}, "
-            + $"children {string.Join(',', roots.Select(static row => row.ChildrenCount))}; shown items {explorer.ShownItems.Count()}, "
-            + $"instanced rows {instanced.Count}, distinct {instanced.Distinct().Count()}, distinct labels {instanced.Select(static row => row.Label).Distinct(StringComparer.Ordinal).Count()}");
+            $"root rows shown {roots.Count}, expanded {string.Join(',', roots.Select(static row => row.IsExpanded))}, children {string.Join(',', roots.Select(static row => row.ChildrenCount))}; shown items {explorer.ShownItems.Count()}, instanced rows {instanced.Count}, distinct {instanced.Distinct().Count()}, distinct labels {instanced.Select(static row => row.Label).Distinct(StringComparer.Ordinal).Count()}");
     }
 
     /// <summary>A scene with one instance of a model whose structure holds <see cref="NodeCount"/> root nodes.</summary>
-    private sealed class LargeInstanceHarness : IDisposable
+    private sealed partial class LargeInstanceHarness : IDisposable
     {
         private readonly TestSession session;
         private readonly TestDocumentArea documents = new();

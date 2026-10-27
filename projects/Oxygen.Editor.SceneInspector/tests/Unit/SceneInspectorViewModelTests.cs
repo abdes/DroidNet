@@ -10,7 +10,6 @@ using DroidNet.Mvvm.Converters;
 using Moq;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline.Testing;
-using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Input.Testing;
 using Oxygen.Editor.LivePreview.Scenes;
 using Oxygen.Editor.Projects;
@@ -23,7 +22,6 @@ using Oxygen.Editor.Shell.Testing;
 using Oxygen.Editor.Shell.Windows;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
-using Oxygen.Managed.Core.Diagnostics;
 using Testably.Abstractions.Testing;
 
 namespace Oxygen.Editor.SceneInspector.Unit.Tests;
@@ -61,11 +59,7 @@ internal sealed class SceneInspectorViewModelTests
         scene.RootNodes.Add(parent);
         var project = TestProject.Create(new MockFileSystem());
         using var session = new TestSession(project.Context);
-        var interaction = new SceneNodeInteraction(
-            session,
-            new Mock<IEditorSettingsManager>(MockBehavior.Loose).Object,
-            Mock.Of<IOperationResultPublisher>(),
-            new OperationStatusReducer());
+        var interaction = new SceneInteractionKit().Create(session);
         await interaction.RestoreAsync(scene.Id).ConfigureAwait(false);
         interaction.SetLocked(NodeReference.To(parent.Id), isLocked: true);
 

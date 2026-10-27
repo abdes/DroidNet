@@ -6,10 +6,8 @@ using System.Runtime.InteropServices.WindowsRuntime;
 using AwesomeAssertions;
 using CommunityToolkit.WinUI;
 using DroidNet.Controls;
-using DroidNet.Documents;
 using DroidNet.Routing;
 using DroidNet.Tests;
-using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Automation.Provider;
@@ -17,10 +15,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Moq;
-using Oxygen.Editor.Data.Services;
-using Oxygen.Editor.Projects;
 using Oxygen.Editor.Projects.Testing;
-using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Interaction;
 using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.Scenes.Selection;
@@ -29,7 +24,6 @@ using Oxygen.Editor.Shell.Testing;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
-using Oxygen.Managed.Core.Diagnostics;
 using Testably.Abstractions.Testing;
 using Windows.Foundation;
 
@@ -121,7 +115,7 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
     public Task Selection_AndRuntimeVisibility_DoNotControlTheEditorSlots() => EnqueueAsync(async () =>
     {
         using var host = await CreateRowHostAsync().ConfigureAwait(true);
-        host.ViewModel.SelectDisplayedItem(host.Adapter, host.ViewModel.ShownItems.ToArray(), isControlDown: false, isShiftDown: false);
+        host.ViewModel.SelectDisplayedItem(host.Adapter, [.. host.ViewModel.ShownItems], isControlDown: false, isShiftDown: false);
         host.Node.Flags.Visibility = VisibilitySource.Hidden;
         await WaitForRenderAsync().ConfigureAwait(true);
         _ = host.Adapter.IsSelected.Should().BeTrue();
@@ -130,7 +124,7 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
 
         host.Interaction.SetHidden(NodeReference.To(host.Node.Id), isHidden: true);
         host.Interaction.SetLocked(NodeReference.To(host.Node.Id), isLocked: true);
-        host.ViewModel.SelectDisplayedItem(host.SecondaryAdapter, host.ViewModel.ShownItems.ToArray(), isControlDown: false, isShiftDown: false);
+        host.ViewModel.SelectDisplayedItem(host.SecondaryAdapter, [.. host.ViewModel.ShownItems], isControlDown: false, isShiftDown: false);
         await WaitForRenderAsync().ConfigureAwait(true);
         AssertSlot(Button(host.Actions, "EyeButton"), suppressed: true, hovered: false);
         AssertSlot(Button(host.Actions, "LockButton"), suppressed: true, hovered: false);
@@ -146,7 +140,7 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
     {
         using var host = await CreateRowHostAsync().ConfigureAwait(true);
         host.Interaction.SetLocked(NodeReference.To(host.Node.Id), locked);
-        host.ViewModel.SelectDisplayedItem(host.SecondaryAdapter, host.ViewModel.ShownItems.ToArray(), isControlDown: false, isShiftDown: false);
+        host.ViewModel.SelectDisplayedItem(host.SecondaryAdapter, [.. host.ViewModel.ShownItems], isControlDown: false, isShiftDown: false);
         var authoredVisibility = host.Node.Flags.Visibility;
         host.Actions.SetRowHovered(hovered: true);
         await InvokeEyeAsync(host).ConfigureAwait(true);
@@ -161,11 +155,11 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
         _ = host.Node.Flags.Visibility.Should().Be(authoredVisibility);
         AssertSlot(Button(host.Actions, "LockButton"), locked, hovered: true);
 
-        await host.TestScene.Document.History.UndoAsync().ConfigureAwait(true);
+        await host.TestScene.Document.History.UndoAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
         await WaitForRenderAsync().ConfigureAwait(true);
         _ = host.Adapter.IsHiddenInEditor.Should().BeFalse();
         _ = Glyph(host.Actions, "EyeGlyph").Glyph.Should().Be("\uE890");
-        await host.TestScene.Document.History.RedoAsync().ConfigureAwait(true);
+        await host.TestScene.Document.History.RedoAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
         await WaitForRenderAsync().ConfigureAwait(true);
         _ = host.Adapter.IsHiddenInEditor.Should().BeTrue();
         _ = Glyph(host.Actions, "EyeGlyph").Glyph.Should().Be("\uED1A");
@@ -187,7 +181,7 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
     {
         using var host = await CreateRowHostAsync().ConfigureAwait(true);
         host.Interaction.SetHidden(NodeReference.To(host.Node.Id), hidden);
-        host.ViewModel.SelectDisplayedItem(host.SecondaryAdapter, host.ViewModel.ShownItems.ToArray(), isControlDown: false, isShiftDown: false);
+        host.ViewModel.SelectDisplayedItem(host.SecondaryAdapter, [.. host.ViewModel.ShownItems], isControlDown: false, isShiftDown: false);
         host.Actions.SetRowHovered(hovered: true);
         Invoke(Button(host.Actions, "LockButton"));
         await WaitForRenderAsync().ConfigureAwait(true);
@@ -457,11 +451,7 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
         SceneExplorerViewModel? viewModel = null;
         try
         {
-            var interaction = new SceneNodeInteraction(
-                session,
-                Mock.Of<IEditorSettingsManager>(),
-                Mock.Of<IOperationResultPublisher>(),
-                new OperationStatusReducer());
+            var interaction = new SceneInteractionKit().Create(session);
             testScene = TestScenes.Open(RowScene(), interaction, project: project);
             var scene = testScene.Scene;
             var node = scene.RootNodes[0];
@@ -546,11 +536,11 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
 
     private static void AssertDistinctGlyphShapes(byte[] original, byte[] opposite, string because)
     {
-        _ = original.Length.Should().Be(opposite.Length);
+        _ = original.Should().HaveCount(opposite.Length);
         var originalThreshold = original.Max() * 0.5d;
         var oppositeThreshold = opposite.Max() * 0.5d;
-        _ = originalThreshold.Should().BeGreaterThan(0);
-        _ = oppositeThreshold.Should().BeGreaterThan(0);
+        _ = originalThreshold.Should().BePositive();
+        _ = oppositeThreshold.Should().BePositive();
         var originalMask = original.Select(alpha => alpha > originalThreshold);
         var oppositeMask = opposite.Select(alpha => alpha > oppositeThreshold);
         var pairs = originalMask.Zip(oppositeMask).ToArray();
@@ -559,12 +549,12 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
         _ = difference.Should().BeGreaterThan(union / 20, because);
     }
 
-    private static async Task<(int width, byte[] alpha)> CaptureAsync(FrameworkElement element)
+    private static async Task<(int Width, byte[] Alpha)> CaptureAsync(FrameworkElement element)
     {
         var bitmap = new RenderTargetBitmap();
         await bitmap.RenderAsync(element);
-        _ = bitmap.PixelWidth.Should().BeGreaterThan(0);
-        _ = bitmap.PixelHeight.Should().BeGreaterThan(0);
+        _ = bitmap.PixelWidth.Should().BePositive();
+        _ = bitmap.PixelHeight.Should().BePositive();
         var buffer = await bitmap.GetPixelsAsync();
         var pixels = buffer.ToArray();
         return (bitmap.PixelWidth, Enumerable.Range(0, pixels.Length / 4).Select(index => pixels[(index * 4) + 3]).ToArray());
@@ -583,7 +573,7 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
     /// <param name="Row">The primary realized row.</param>
     /// <param name="Actions">The primary row's action controls.</param>
     /// <param name="Session">The project session of the scene's project.</param>
-    internal sealed record RowHost(
+    internal sealed partial record RowHost(
         TestScene TestScene,
         SceneNode Node,
         SceneExplorerViewModel ViewModel,

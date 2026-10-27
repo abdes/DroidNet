@@ -28,14 +28,27 @@ public interface ISceneNodeInteraction
     /// <returns>The node itself or an ancestor that is locked; otherwise, <see langword="null"/>.</returns>
     public SceneNode? GetLockOwner(SceneNode node);
 
-    /// <summary>Finds the closest locked node that protects a node, which an instance may have brought in, from editing.</summary>
+    /// <summary>Gets a node's ancestors, nearest first, which hiding and locking follow down to it.</summary>
+    /// <param name="scene">The scene the node is in.</param>
+    /// <param name="node">The node, which an instance may have brought in.</param>
+    /// <returns>
+    /// The ancestors in its instance's contents, its instance root and the root's ancestors; <see langword="null"/> for a
+    /// node an instance brings in whose instance's contents are not read yet.
+    /// </returns>
+    public IReadOnlyList<NodeReference>? GetAncestors(Scene scene, NodeReference node);
+
+    /// <summary>Finds what protects a node, which an instance may have brought in, from editing.</summary>
     /// <param name="scene">The scene the node is in.</param>
     /// <param name="node">The node.</param>
     /// <returns>
-    /// The node itself, an instanced ancestor on its path, or the instance root or one of its ancestors, that is locked;
-    /// otherwise, <see langword="null"/>.
+    /// The closest locked node among the node, its ancestors in its instance's contents, its instance root and the
+    /// root's ancestors; for a node an instance brings in whose instance's contents are not read yet, that instance.
     /// </returns>
-    public NodeReference? GetLockOwner(Scene scene, NodeReference node);
+    public NodeLock GetLock(Scene scene, NodeReference node);
+
+    /// <summary>Gets the nodes locked themselves in the active scene.</summary>
+    /// <returns>A snapshot of the locked nodes, in no particular order.</returns>
+    public IReadOnlyCollection<NodeReference> LockedNodes();
 
     /// <summary>Hides or shows a node in the editing viewports.</summary>
     /// <param name="node">The node: a node of the scene, or a node an instance brought in.</param>

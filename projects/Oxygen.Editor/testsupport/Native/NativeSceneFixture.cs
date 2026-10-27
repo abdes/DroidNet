@@ -21,10 +21,10 @@ using Moq;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Cooking;
+using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.ContentPipeline.Mounting;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.Relocation;
-using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.Cooking;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.LivePreview.Content;
@@ -41,9 +41,9 @@ using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.Scenes.Edits.Assets;
 using Oxygen.Editor.Scenes.Edits.Properties;
-using Oxygen.Editor.Scenes.Interaction;
 using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.Scenes.Selection;
+using Oxygen.Editor.Scenes.Testing;
 using Oxygen.Editor.Shell.Commands;
 using Oxygen.Editor.Shell.Documents;
 using Oxygen.Editor.Shell.Testing;
@@ -82,6 +82,9 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
     private readonly HostingContext hosting;
     private readonly BehaviorSubject<IReadOnlyList<Oxygen.Editor.Assets.AssetEntry>> feedAssets = new([]);
     private readonly SceneDocumentKind sceneKind;
+
+    // The session's structures, which the preview reads and the lock rule looks up.
+    private readonly SceneStructureStore structures = new();
     private IScenePreview? preview;
     private RuntimeSceneTarget? target;
     private PreviewSession? contentSession;
@@ -389,7 +392,7 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
         }
 
         // One preview shows a scene on an engine, as in a workspace: the fixture's starts once it initializes.
-        this.preview ??= ScenePreviews.Create(this.previewEngine, this.OpenDocuments, this.Session, operationResults: this.previewResults);
+        this.preview ??= ScenePreviews.Create(this.previewEngine, this.OpenDocuments, this.Session, this.structures, operationResults: this.previewResults);
 
         await this.SynchronizeAsync(stale: null, cancellationToken).ConfigureAwait(true);
     }
@@ -435,33 +438,6 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
         SeedShadowTransitionScene(next, cascades);
         this.OpenScene(this.WriteScene(next));
         await this.SynchronizeAsync(stale, cancellationToken).ConfigureAwait(true);
-    }
-
-    // The session's scene editor services over the fixture's engine and project, without play sessions.
-    private SceneEditorServices CreateSceneEditorServices(CatalogWorkloadServices services, IDocumentService documents, IOperationResultPublisher publisher)
-    {
-        var reducer = new OperationStatusReducer();
-        var settings = Mock.Of<Oxygen.Editor.Data.Services.IEditorSettingsManager>();
-        var engineSettings = new Mock<ISettingsService<IEngineStartupSettings>>();
-        _ = engineSettings.SetupGet(value => value.Settings).Returns(new EngineStartupSettings());
-        return new SceneEditorServices(
-            this.Runtime,
-            this.Preview,
-            Mock.Of<IDocumentInputCommitter>(),
-            publisher,
-            reducer,
-            services.Pipeline,
-            this.Session,
-            documents,
-            Mock.Of<IUnsavedCookInputs>(),
-            new SceneSelectionService(),
-            new SceneNodeInteraction(this.Session, settings, publisher, reducer, NullLoggerFactory.Instance),
-            new SceneEditorViews(),
-            new PreviewSettingsService(this.Runtime, settings, this.Session, publisher, reducer),
-            new ViewportStateService(this.Session, settings, publisher, reducer),
-            new TransformToolSettingsService(settings: null),
-            engineSettings.Object,
-            NullLoggerFactory.Instance);
     }
 
     /// <summary>Starts the project's preview session over the cook services, as the workspace does.</summary>
@@ -517,6 +493,33 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
     {
         _ = Disk.Directory.CreateDirectory(path.Parent!.FullPath);
         Disk.File.WriteAllBytes(path.FullPath, System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(data, SceneFileJsonContext.Default.SceneFileData));
+    }
+
+    // The session's scene editor services over the fixture's engine and project, without play sessions.
+    private SceneEditorServices CreateSceneEditorServices(CatalogWorkloadServices services, IDocumentService documents, IOperationResultPublisher publisher)
+    {
+        var reducer = new OperationStatusReducer();
+        var settings = Mock.Of<Oxygen.Editor.Data.Services.IEditorSettingsManager>();
+        var engineSettings = new Mock<ISettingsService<IEngineStartupSettings>>();
+        _ = engineSettings.SetupGet(value => value.Settings).Returns(new EngineStartupSettings());
+        return new SceneEditorServices(
+            this.Runtime,
+            this.Preview,
+            Mock.Of<IDocumentInputCommitter>(),
+            publisher,
+            reducer,
+            services.Pipeline,
+            this.Session,
+            documents,
+            Mock.Of<IUnsavedCookInputs>(),
+            new SceneSelectionService(),
+            new SceneInteractionKit().Create(this.Session, publisher, reducer, this.structures),
+            new SceneEditorViews(),
+            new PreviewSettingsService(this.Runtime, settings, this.Session, publisher, reducer),
+            new ViewportStateService(this.Session, settings, publisher, reducer),
+            new TransformToolSettingsService(settings: null),
+            engineSettings.Object,
+            NullLoggerFactory.Instance);
     }
 
     private Oxygen.Editor.ContentPipeline.Testing.NativeContentPipelineFixture MaterialPipelineFor(FileSystemPath root)

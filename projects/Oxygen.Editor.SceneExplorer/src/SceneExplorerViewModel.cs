@@ -63,7 +63,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     private readonly Oxygen.Editor.Shell.Windows.IPlacementService? placement;
     private readonly ISceneViews? views;
     private readonly ISceneAvailability? availability;
-    private readonly ISceneStructureProvider? structures;
+    private readonly ISceneStructures? structures;
     private readonly IDisposable? commandRegistration;
     private readonly SceneExplorerProjection projection = new();
     private readonly SemaphoreSlim searchGate = new(1, 1);
@@ -149,8 +149,8 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     ///     explorer keeps a clipboard of its own.
     /// </param>
     /// <param name="structures">
-    ///     Optional reader of what an instance's source contains, whose nodes the explorer shows under each instance
-    ///     root. Without it an instance root shows no instanced rows.
+    ///     Optional store of what each instance's source contains, as read, whose nodes the explorer shows under each
+    ///     instance root. Without it an instance root shows no instanced rows.
     /// </param>
     public SceneExplorerViewModel(
         IRouter router,
@@ -169,7 +169,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         ISceneAvailability? availability = null,
         ICommandService? commands = null,
         ISceneNodeClipboard? clipboard = null,
-        ISceneStructureProvider? structures = null)
+        ISceneStructures? structures = null)
         : base(loggerFactory)
     {
         this.clipboard = clipboard ?? new SceneNodeClipboard();
@@ -301,20 +301,26 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         }
 
         var gateAcquired = false;
+        var lifetime = this.session?.Lifetime ?? CancellationToken.None;
         try
         {
             var generation = Interlocked.Increment(ref this.searchGeneration);
             this.SearchText = query ?? string.Empty;
-            await this.searchGate.WaitAsync().ConfigureAwait(true);
+            await this.searchGate.WaitAsync(lifetime).ConfigureAwait(true);
             gateAcquired = true;
 
             return await this.SearchCoreAsync(query ?? string.Empty, generation).ConfigureAwait(true);
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested)
+        {
+            // The project is closing: the search stops.
+            return 0;
         }
         finally
         {
             if (gateAcquired)
             {
-                this.searchGate.Release();
+                _ = this.searchGate.Release();
             }
 
             this.EndSearchOperation();
@@ -331,23 +337,28 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         }
 
         var gateAcquired = false;
+        var lifetime = this.session?.Lifetime ?? CancellationToken.None;
         try
         {
             _ = Interlocked.Increment(ref this.searchGeneration);
             this.SearchText = string.Empty;
             this.SearchResultCount = 0;
-            await this.searchGate.WaitAsync().ConfigureAwait(true);
+            await this.searchGate.WaitAsync(lifetime).ConfigureAwait(true);
             gateAcquired = true;
             if (!this.isDisposed)
             {
                 await this.ClearSearchCoreAsync().ConfigureAwait(true);
             }
         }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested)
+        {
+            // The project is closing: nothing is left to clear.
+        }
         finally
         {
             if (gateAcquired)
             {
-                this.searchGate.Release();
+                _ = this.searchGate.Release();
             }
 
             this.EndSearchOperation();
@@ -356,12 +367,10 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
 
     /// <inheritdoc />
     [RelayCommand(CanExecute = nameof(CanRemoveContextItems))]
-    public override async Task RemoveSelectedItems()
-    {
-        await this.ExecuteContextActionAsync(
+    public override Task RemoveSelectedItems()
+        => this.ExecuteContextActionAsync(
             SceneExplorerCommandKind.Delete,
-            this.CaptureExplorerContext(anchor: null, background: false)).ConfigureAwait(true);
-    }
+            this.CaptureExplorerContext(anchor: null, background: false));
 
     /// <inheritdoc />
     public override async Task<TreeItemRenameResult> CommitRenameAsync(ITreeItem item, string newName)
@@ -477,7 +486,8 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             return;
         }
 
-        await this.ExecuteContextActionAsync(SceneExplorerCommandKind.Paste,
+        await this.ExecuteContextActionAsync(
+            SceneExplorerCommandKind.Paste,
             this.CaptureExplorerContext(targetParent, background: false)).ConfigureAwait(true);
     }
 
@@ -624,7 +634,6 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             {
                 source.SceneUnavailable -= this.OnSceneUnavailable;
             }
-
 
             // Ensure any in-flight scene load is cancelled and the CTS is disposed.
             try
@@ -782,15 +791,29 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             return TreeItemRenameResult.Rejected(invalid.ToMessage());
         }
 
-        var relocation = this.relocation;
-        if (!await this.documentArea.SaveBeforeAsync(Oxygen.Editor.Shell.Documents.SaveBeforeOperation.Rename, _ => Task.FromResult(relocation.FindUnsavedDocuments())).ConfigureAwait(true))
+        var currentRelocation = this.relocation;
+        var lifetime = this.session?.Lifetime ?? CancellationToken.None;
+        bool saved;
+        try
+        {
+            saved = await this.documentArea.SaveBeforeAsync(
+                Oxygen.Editor.Shell.Documents.SaveBeforeOperation.Rename,
+                _ => Task.FromResult(currentRelocation.FindUnsavedDocuments()),
+                lifetime).ConfigureAwait(true);
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested)
+        {
+            return TreeItemRenameResult.Rejected("Not renamed: the project is closing.");
+        }
+
+        if (!saved)
         {
             return TreeItemRenameResult.Rejected("Not renamed: the documents were not saved.");
         }
 
         try
         {
-            _ = await relocation.RelocateAsync(
+            _ = await currentRelocation.RelocateAsync(
                 new Oxygen.Editor.ContentPipeline.Relocation.AssetRelocationRequest { Moves = [new(location.Path, target)] },
                 "Rename",
                 this.histories.GlobalHistory,
@@ -1050,7 +1073,15 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         // or the retirement of the previous scene.
         if (this.placement is { } placement)
         {
-            _ = await placement.OpenDocumentAsync(sceneDocument.File.Asset).ConfigureAwait(true);
+            var lifetime = this.session?.Lifetime ?? CancellationToken.None;
+            try
+            {
+                _ = await placement.OpenDocumentAsync(sceneDocument.File.Asset, cancellationToken: lifetime).ConfigureAwait(true);
+            }
+            catch (OperationCanceledException) when (lifetime.IsCancellationRequested)
+            {
+                // The project is closing: the scene is not opened.
+            }
         }
     }
 
@@ -1090,13 +1121,13 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         // reselecting the adapters that resolve. forcePublish makes the switch itself a visible
         // selection change, so panels following the loaded document converge on its own selection.
         _ = this.selectionService.Reconcile(this.SceneDocumentId, loadedScene, layout);
-        await this.ApplySelectionContextAsync(
+        _ = await this.ApplySelectionContextAsync(
             this.selectionService.GetContext(this.SceneDocumentId),
             forcePublish: true).ConfigureAwait(true);
         this.ReleaseStaleClipboard(previousScene, loadedScene);
 
-        // The instances' rows come once their sources are read; the scene does not wait for them.
-        _ = this.ReadInstanceStructuresAsync();
+        // The instances' rows come from the structures read so far; later reads rebuild them.
+        this.DropUnresolvedInstancedNodes(loadedScene);
     }
 
     // A loaded scene starts a fresh view session: a previous scene's transient search
@@ -1607,7 +1638,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     private void OnTreeItemInvoked(object? sender, DynamicTreeEventArgs args)
     {
         _ = sender;
-        if (this.Scene is not { } sceneAdapter)
+        if (this.Scene is null)
         {
             return;
         }
@@ -1644,14 +1675,14 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
 
         var items = this.GetSelectedItems();
         this.NotifySelectionDependentCommands();
-        this.HasUnlockedSelectedItems = items.Any(static item => !item.IsLocked);
+        this.HasUnlockedSelectedItems = items.Exists(static item => !item.IsLocked);
         this.PublishCurrentSelection(this.pendingAuthoritativeContext);
         this.RefreshContextActions();
     }
 
     private void PublishCurrentSelection(SceneSelectionContext? authoritativeContext = null)
     {
-        if (this.Scene is not { } sceneAdapter)
+        if (this.Scene is null)
         {
             return;
         }
@@ -1690,7 +1721,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         }
 
         if (this.isDisposed || this.selectionSyncDepth > 0
-            || this.Scene is not { } sceneAdapter || this.SceneDocumentId != args.DocumentId)
+            || this.Scene is null || this.SceneDocumentId != args.DocumentId)
         {
             return;
         }
@@ -1752,8 +1783,8 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
 
         // True when every identity the context names resolves to one of the applied rows.
         var fullyResolved =
-            context.SelectedNodes.Count == targets.OfType<NodeRowAdapter>().Count()
-            && context.SelectedFolderIds.Count == targets.OfType<FolderAdapter>().Count()
+            targets.OfType<NodeRowAdapter>().Take(context.SelectedNodes.Count + 1).Count() == context.SelectedNodes.Count
+            && targets.OfType<FolderAdapter>().Take(context.SelectedFolderIds.Count + 1).Count() == context.SelectedFolderIds.Count
             && (context.Kind != SceneSelectionKind.Scene || targets.OfType<SceneAdapter>().Any());
 
         if (!forcePublish && this.SelectionMatchesTargets(targets, primary))
@@ -1824,7 +1855,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     {
         var current = this.GetSelectedItems();
         return current.Count == targets.Count
-            && targets.All(current.Contains)
+            && targets.TrueForAll(current.Contains)
             && ReferenceEquals(this.ActiveItem, primary);
     }
 
@@ -2147,11 +2178,8 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         // authoritative context, never the snapshot from before the refill.
         if (ReferenceEquals(this.Scene, sceneAdapter))
         {
-            await this.ApplySelectionContextAsync(this.selectionService.GetContext(this.SceneDocumentId)).ConfigureAwait(true);
+            _ = await this.ApplySelectionContextAsync(this.selectionService.GetContext(this.SceneDocumentId)).ConfigureAwait(true);
         }
-
-        // An edit may have placed an instance of a source not read yet.
-        _ = this.ReadInstanceStructuresAsync();
     }
 
     /// <summary>
@@ -2211,7 +2239,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             foreach (var row in this.projection.InstancedNodes)
             {
                 row.IsHiddenInEditor = service.IsHidden(row.Reference);
-                row.IsEffectivelyHiddenInEditor = row.IsHiddenInEditor || AncestorsOf(scene, row.Reference).Any(service.IsHidden);
+                row.IsEffectivelyHiddenInEditor = row.IsHiddenInEditor || (service.GetAncestors(scene, row.Reference) ?? []).Any(service.IsHidden);
                 row.IsLocked = service.IsLocked(row.Reference);
             }
         }

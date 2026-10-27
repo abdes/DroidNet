@@ -3,10 +3,8 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
-using Moq;
-using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Projects.Testing;
-using Oxygen.Editor.Scenes.Interaction;
+using Oxygen.Editor.Scenes.Testing;
 using Oxygen.Editor.World;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
@@ -23,8 +21,7 @@ internal sealed partial class EditingViewMaskServiceTests
     public async Task EditingViewMaskService_WarnsOncePerSceneActivation()
     {
         using var session = new TestSession(TestProject.Create(new MockFileSystem()).Context);
-        var settings = new Mock<IEditorSettingsManager>(MockBehavior.Loose);
-        var interaction = new SceneNodeInteraction(session, settings.Object, new CapturingOperationResultPublisher(), new OperationStatusReducer());
+        var interaction = new SceneInteractionKit().Create(session);
         var results = new CapturingOperationResultPublisher();
 
         using var mask = new EditingViewMaskService(interaction, results, new OperationStatusReducer());

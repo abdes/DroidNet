@@ -78,6 +78,12 @@ public static class SceneEditCodes
     /// </summary>
     public const string InstancedStructure = DiagnosticCodes.ScenePrefix + "Instance.Structure";
 
+    /// <summary>
+    /// A target is a node an instance brings in, and the instance's contents are not available yet, so whether one of
+    /// its ancestors is locked is unknown; the diagnostic names the instance root.
+    /// </summary>
+    public const string InstanceUnavailable = DiagnosticCodes.ScenePrefix + "Instance.Unavailable";
+
     /// <summary>A layout place is in another scene scope than the node's scene parent.</summary>
     public const string LayoutScopeMismatch = DiagnosticCodes.ScenePrefix + "Layout.ScopeMismatch";
 

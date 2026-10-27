@@ -5,6 +5,7 @@
 using DroidNet.Composition;
 using DryIoc;
 using Microsoft.Extensions.Logging;
+using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scenes.Authoring;
@@ -41,6 +42,7 @@ public sealed class ScenesSessionModule : IScopeModule<ISessionLayer>
                 resolver.Resolve<IEditorSettingsManager>(),
                 resolver.Resolve<IOperationResultPublisher>(),
                 resolver.Resolve<IStatusReducer>(),
+                resolver.Resolve<ISceneStructures>(),
                 resolver.Resolve<ILoggerFactory>()),
             Reuse.Singleton);
 

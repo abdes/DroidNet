@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Editor.World;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Scenes.Authoring;
@@ -27,6 +28,12 @@ public interface ISceneEdit
 
     /// <summary>Gets the nodes that must exist and be unlocked for the edit to apply.</summary>
     public IReadOnlyCollection<NodeId> Targets { get; }
+
+    /// <summary>
+    /// Gets the nodes an instance brings in that the edit changes; each must be below an instance root of the scene, and
+    /// neither it nor any of its ancestors, instanced or not, may be locked.
+    /// </summary>
+    public IReadOnlyCollection<NodeReference> InstancedTargets => [];
 
     /// <summary>
     /// Gets a value indicating whether the edit changes the document, as opposed to only how the editor shows it; an edit

@@ -93,7 +93,7 @@ public partial class SceneExplorerViewModel
             return false;
         }
 
-        this.SelectDisplayedItem(anchor, this.ShownItems.ToArray(), isControlDown: false, isShiftDown: false);
+        this.SelectDisplayedItem(anchor, [.. this.ShownItems], isControlDown: false, isShiftDown: false);
         return true;
     }
 
@@ -172,7 +172,7 @@ public partial class SceneExplorerViewModel
         }
     }
 
-    private static IconSource? GetContextActionIcon(SceneExplorerCommandKind kind) => kind switch
+    private static SymbolIconSource? GetContextActionIcon(SceneExplorerCommandKind kind) => kind switch
     {
         SceneExplorerCommandKind.NewNode => new SymbolIconSource { Symbol = Symbol.Add },
         SceneExplorerCommandKind.NewFolder => new SymbolIconSource { Symbol = Symbol.Folder },
@@ -184,8 +184,197 @@ public partial class SceneExplorerViewModel
         _ => null,
     };
 
+    private static ITreeItem? ResolveSharedPasteTarget(ITreeItem[] targets)
+    {
+        var first = targets[0];
+        if (targets.All(item => ReferenceEquals(item.Parent, first.Parent)))
+        {
+            return targets.LastOrDefault(static row => row is SceneNodeAdapter) ?? first.Parent;
+        }
+
+        return null;
+    }
+
+    private static bool SameSelection(SceneSelectionContext left, SceneSelectionContext right)
+        => left.Kind == right.Kind && left.PrimaryNode == right.PrimaryNode && left.PrimaryFolderId == right.PrimaryFolderId
+            && left.SelectedNodes.SequenceEqual(right.SelectedNodes)
+            && left.SelectedFolderIds.SequenceEqual(right.SelectedFolderIds);
+
+    // Selecting the instance, then the rows a command creates at or under the context.
+    private static IEnumerable<(SceneExplorerCommandKind Kind, string Label, string Group)> CreationActions(CapturedExplorerContext context)
+    {
+        var targets = context.Targets;
+        var single = targets.Count == 1;
+        var node = single ? targets[0] as SceneNodeAdapter : null;
+        var instanced = single ? targets[0] as InstancedNodeAdapter : null;
+        var folder = single ? targets[0] as FolderAdapter : null;
+        if (instanced is not null)
+        {
+            yield return (SceneExplorerCommandKind.SelectInstance, "Select instance", "instance");
+        }
+
+        if (targets.Count == 0 || single)
+        {
+            yield return (SceneExplorerCommandKind.NewNode, node is not null || instanced is not null ? "New child node" : folder is not null ? "New node in folder" : "New node", "create");
+            yield return (SceneExplorerCommandKind.NewFolder, folder is not null ? "New subfolder" : node is not null ? "New folder beside node" : "New folder", "create");
+        }
+    }
+
+    // Renaming, the clipboard and deleting.
+    private static IEnumerable<(SceneExplorerCommandKind Kind, string Label, string Group)> EditActions(CapturedExplorerContext context)
+    {
+        var targets = context.Targets;
+        var root = targets.Count == 0;
+        var single = targets.Count == 1;
+        if (context.Anchor is SceneAdapter && !context.Background)
+        {
+            yield return (SceneExplorerCommandKind.Rename, "Rename scene", "edit");
+        }
+
+        if (!root)
+        {
+            if (single)
+            {
+                yield return (SceneExplorerCommandKind.Rename, "Rename", "edit");
+            }
+
+            yield return (SceneExplorerCommandKind.Cut, "Cut", "edit");
+            yield return (SceneExplorerCommandKind.Copy, "Copy", "edit");
+        }
+
+        yield return (SceneExplorerCommandKind.Paste, root ? "Paste at scene root" : "Paste", "edit");
+        if (single && targets[0] is SceneNodeAdapter)
+        {
+            yield return (SceneExplorerCommandKind.PasteAsChild, "Paste as child (keep world pose)", "edit");
+        }
+
+        if (!root)
+        {
+            yield return (SceneExplorerCommandKind.Delete, single && targets[0] is FolderAdapter ? "Remove folder (keep objects)" : single ? "Delete node" : "Delete selected items", "edit");
+        }
+    }
+
+    // Expanding the anchor, and moving a node out of its folder or parent.
+    private static IEnumerable<(SceneExplorerCommandKind Kind, string Label, string Group)> HierarchyActions(CapturedExplorerContext context)
+    {
+        var targets = context.Targets;
+        var single = targets.Count == 1;
+        var node = single ? targets[0] as SceneNodeAdapter : null;
+        if (!context.Background && context.Anchor is LayoutItemAdapter { HasChildren: true } anchor && (targets.Count == 0 || single))
+        {
+            yield return (anchor.IsExpanded ? SceneExplorerCommandKind.Collapse : SceneExplorerCommandKind.Expand,
+                anchor.IsExpanded ? "Collapse" : "Expand", "hierarchy");
+        }
+
+        if (node?.Parent is FolderAdapter)
+        {
+            yield return (SceneExplorerCommandKind.RemoveFromFolder, "Remove from folder", "hierarchy");
+        }
+
+        if (node is not null && (node.AttachedObject.Hierarchy.Parent is not null || node.Parent is FolderAdapter))
+        {
+            yield return (SceneExplorerCommandKind.MoveToSceneRoot, "Move to scene root", "hierarchy");
+        }
+    }
+
+    private static NodeReference[] ReferencesOf(CapturedExplorerContext context)
+        => [.. context.Targets.OfType<NodeRowAdapter>().Select(static row => row.Reference)];
+
+    // A new folder at the end of the target folder, beside the target node, or at the scene root.
+    private static Task<SceneEditResult> CreateFolderAsync(SceneAuthoring authoring, ITreeItem? target)
+    {
+        var container = (target is SceneNodeAdapter ? target.Parent : target) switch
+        {
+            FolderAdapter folderRow => LayoutPosition.InFolder(folderRow.Id, 0),
+            SceneNodeAdapter nodeRow => LayoutPosition.UnderNode(nodeRow.AttachedObject.Id, 0),
+            _ => LayoutPosition.AtRoot(0),
+        };
+        return authoring.ExecuteAsync(new CreateFolder(FolderId.New(), LayoutScopes.EndOf(authoring.Layout, container), "New Folder"));
+    }
+
+    private static (NodeId? ParentId, FolderId? FolderId, NodeId? InsertAfterId) ResolveCapturedPasteDestination(CapturedExplorerContext context, bool asChild)
+    {
+        var target = asChild ? context.Targets[0] : context.Destination;
+        var node = target as SceneNodeAdapter;
+        var folder = target as FolderAdapter ?? (!asChild ? node?.Parent as FolderAdapter : null);
+        var parentId = asChild ? node!.AttachedObject.Id : node?.AttachedObject.Hierarchy.Parent?.Id;
+        if (!asChild && context.Targets.Count > 1
+            && context.Targets.All(row => ReferenceEquals(row.Parent, target)))
+        {
+            parentId = node?.AttachedObject.Id;
+            node = null;
+        }
+
+        if (node is null && folder is not null)
+        {
+            for (var owner = folder.Parent; owner is not null; owner = owner.Parent)
+            {
+                if (owner is SceneNodeAdapter scope)
+                {
+                    parentId = scope.AttachedObject.Id;
+                    break;
+                }
+            }
+        }
+
+        return (parentId, folder?.Id, !asChild ? node?.AttachedObject.Id : null);
+    }
+
+    private static PasteTarget PasteTargetOf(CapturedExplorerContext context, bool asChild)
+    {
+        var (parentId, folderId, insertAfterId) = ResolveCapturedPasteDestination(context, asChild);
+        return new PasteTarget(parentId, folderId, insertAfterId);
+    }
+
+    // Deleting folders deletes what they hold: their nodes first, then the folders, innermost first.
+    private static SceneEditBatch DeleteEdit(IList<ExplorerEntryData> layout, IReadOnlyList<NodeId> nodes, IReadOnlyList<FolderId> folders)
+    {
+        var heldNodes = new List<NodeId>(nodes);
+        var heldFolders = new List<FolderId>();
+        void Collect(FolderId folder)
+        {
+            foreach (var entry in LayoutScopes.EntriesOf(layout, LayoutPosition.InFolder(folder, 0)))
+            {
+                if (entry.Folder is { } inner)
+                {
+                    Collect(inner);
+                }
+                else if (entry.Node is { } node)
+                {
+                    heldNodes.Add(node);
+                }
+            }
+
+            heldFolders.Add(folder);
+        }
+
+        foreach (var folder in folders)
+        {
+            Collect(folder);
+        }
+
+        List<ISceneEdit> edits = [];
+        if (heldNodes.Count > 0)
+        {
+            edits.Add(new RemoveNodes([.. heldNodes.Distinct()]));
+        }
+
+        edits.AddRange(heldFolders.Distinct().Select(static folder => new RemoveFolder(folder, PromoteChildren: false)));
+        return new SceneEditBatch("Delete", edits);
+    }
+
+    // The entries go right after the folder, in the folder's own container.
+    private static Task<SceneEditResult> OutOfFolderAsync(SceneAuthoring authoring, IReadOnlyList<NodeId> nodes, FolderId folder)
+        => LayoutScopes.PositionOf(authoring.Layout, LayoutEntryId.Of(folder)) is { } place
+            ? authoring.ExecuteAsync(new MoveLayoutEntries([.. nodes.Select(LayoutEntryId.Of)], place with { Index = place.Index + 1 }))
+            : Task.FromResult(new SceneEditResult(SceneEditOutcome.Invalid, [SceneDiagnostic.Error(SceneEditCodes.FolderMissing, "The folder no longer exists.")]));
+
+    private static bool IsCameraNode(SceneNodeAdapter node)
+        => node.AttachedObject.Components.OfType<CameraComponent>().Any();
+
     private bool CanRemoveContextItems()
-        => this.GetContextDisabledReason(SceneExplorerCommandKind.Delete,
+        => this.GetContextDisabledReason(
+            SceneExplorerCommandKind.Delete,
             this.CaptureExplorerContext(anchor: null, background: false)) is null;
 
     private Task StageExplorerClipboardAsync(IReadOnlyList<ITreeItem> items, bool cut)
@@ -233,35 +422,30 @@ public partial class SceneExplorerViewModel
         }
 
         anchor = background ? this.Scene : anchor ?? this.ActiveItem ?? selected.FirstOrDefault() ?? this.Scene;
-        var targets = background || anchor is SceneAdapter ? Array.Empty<ITreeItem>() : selected;
-        if (!background && anchor is not SceneAdapter && anchor is not null && !targets.Contains(anchor))
+        var targets = background || anchor is SceneAdapter ? [] : selected;
+        if (!background && anchor is not SceneAdapter and not null && !targets.Contains(anchor))
         {
             targets = [anchor];
         }
 
         var destination = background || anchor is SceneAdapter || targets.Length == 0
             ? this.Scene
-            : targets.Length == 1 ? targets[0] : this.ResolveSharedPasteTarget(targets);
-        return new(authoring, this.session?.Project, selection, Array.AsReadOnly(selected),
-            Array.AsReadOnly(targets), anchor, destination, background,
-            selected.Select(static row => (Row: row, Parent: row.Parent,
-                SceneParent: (row as SceneNodeAdapter)?.AttachedObject.Hierarchy.Parent)).ToArray(), this.session?.Context);
-    }
-
-    private ITreeItem? ResolveSharedPasteTarget(IReadOnlyList<ITreeItem> targets)
-    {
-        var first = targets[0];
-        if (targets.All(item => ReferenceEquals(item.Parent, first.Parent)))
-        {
-            return targets.LastOrDefault(static row => row is SceneNodeAdapter) ?? first.Parent;
-        }
-
-        return null;
+            : targets.Length == 1 ? targets[0] : ResolveSharedPasteTarget(targets);
+        return new(
+            authoring,
+            this.session?.Project,
+            selection,
+            Array.AsReadOnly(selected),
+            Array.AsReadOnly(targets),
+            anchor,
+            destination,
+            background,
+            [.. selected.Select(static row => (Row: row, row.Parent, SceneParent: (row as SceneNodeAdapter)?.AttachedObject.Hierarchy.Parent))],
+            this.session?.Context);
     }
 
     private bool IsContextCurrent(CapturedExplorerContext context)
-    {
-        return !this.isDisposed
+        => !this.isDisposed
             && ReferenceEquals(this.session?.Project, context.Project)
             && ReferenceEquals(this.session?.Context, context.ProjectActivation)
             && ReferenceEquals(this.CurrentAuthoring(), context.Authoring)
@@ -273,12 +457,6 @@ public partial class SceneExplorerViewModel
             && context.Parentage.All(static captured => ReferenceEquals(captured.Row.Parent, captured.Parent)
                 && ReferenceEquals((captured.Row as SceneNodeAdapter)?.AttachedObject.Hierarchy.Parent, captured.SceneParent))
             && (context.Anchor is null || this.IsCurrentContextRow(context.Anchor));
-    }
-
-    private static bool SameSelection(SceneSelectionContext left, SceneSelectionContext right)
-        => left.Kind == right.Kind && left.PrimaryNode == right.PrimaryNode && left.PrimaryFolderId == right.PrimaryFolderId
-            && left.SelectedNodes.SequenceEqual(right.SelectedNodes)
-            && left.SelectedFolderIds.SequenceEqual(right.SelectedFolderIds);
 
     private bool IsCurrentContextRow(ITreeItem row) => row switch
     {
@@ -290,76 +468,32 @@ public partial class SceneExplorerViewModel
     };
 
     private IEnumerable<(SceneExplorerCommandKind Kind, string Label, string Group)> GetContextActions(CapturedExplorerContext context)
+        => CreationActions(context)
+            .Concat(EditActions(context))
+            .Concat(HierarchyActions(context))
+            .Concat(this.CameraActions(context))
+            .Concat(this.StateActions(context));
+
+    // Viewing through, piloting and aligning a single camera node.
+    private IEnumerable<(SceneExplorerCommandKind Kind, string Label, string Group)> CameraActions(CapturedExplorerContext context)
+    {
+        if (context.Targets is not [SceneNodeAdapter node] || !IsCameraNode(node))
+        {
+            yield break;
+        }
+
+        var viewport = this.QueryCameraViewport();
+        var viewing = viewport?.ViewedCameraId == node.AttachedObject.Id;
+        yield return (SceneExplorerCommandKind.LookThroughCamera, viewing ? "Return to editor camera" : "Look through camera", "camera");
+        yield return (SceneExplorerCommandKind.PilotCamera, viewing && viewport!.IsPiloting ? "Stop piloting camera" : "Pilot camera", "camera");
+        yield return (SceneExplorerCommandKind.AlignCameraToView, "Align camera to view", "camera");
+    }
+
+    // Hiding and locking the selected node rows, and showing every hidden node from the scene root.
+    private IEnumerable<(SceneExplorerCommandKind Kind, string Label, string Group)> StateActions(CapturedExplorerContext context)
     {
         var targets = context.Targets;
-        var root = targets.Count == 0;
         var single = targets.Count == 1;
-        var node = single ? targets[0] as SceneNodeAdapter : null;
-        var instanced = single ? targets[0] as InstancedNodeAdapter : null;
-        var folder = single ? targets[0] as FolderAdapter : null;
-        if (instanced is not null)
-        {
-            yield return (SceneExplorerCommandKind.SelectInstance, "Select instance", "instance");
-        }
-
-        if (root || single)
-        {
-            yield return (SceneExplorerCommandKind.NewNode, node is not null || instanced is not null ? "New child node" : folder is not null ? "New node in folder" : "New node", "create");
-            yield return (SceneExplorerCommandKind.NewFolder, folder is not null ? "New subfolder" : node is not null ? "New folder beside node" : "New folder", "create");
-        }
-
-        if (context.Anchor is SceneAdapter && !context.Background)
-        {
-            yield return (SceneExplorerCommandKind.Rename, "Rename scene", "edit");
-        }
-
-        if (!root)
-        {
-            if (single)
-            {
-                yield return (SceneExplorerCommandKind.Rename, "Rename", "edit");
-            }
-
-            yield return (SceneExplorerCommandKind.Cut, "Cut", "edit");
-            yield return (SceneExplorerCommandKind.Copy, "Copy", "edit");
-        }
-
-        yield return (SceneExplorerCommandKind.Paste, root ? "Paste at scene root" : "Paste", "edit");
-        if (node is not null)
-        {
-            yield return (SceneExplorerCommandKind.PasteAsChild, "Paste as child (keep world pose)", "edit");
-        }
-
-        if (!root)
-        {
-            yield return (SceneExplorerCommandKind.Delete, folder is not null ? "Remove folder (keep objects)" : single ? "Delete node" : "Delete selected items", "edit");
-        }
-
-        if (!context.Background && context.Anchor is LayoutItemAdapter { HasChildren: true } anchor && (root || single))
-        {
-            yield return (anchor.IsExpanded ? SceneExplorerCommandKind.Collapse : SceneExplorerCommandKind.Expand,
-                anchor.IsExpanded ? "Collapse" : "Expand", "hierarchy");
-        }
-
-        if (node?.Parent is FolderAdapter)
-        {
-            yield return (SceneExplorerCommandKind.RemoveFromFolder, "Remove from folder", "hierarchy");
-        }
-
-        if (node is not null && (node.AttachedObject.Hierarchy.Parent is not null || node.Parent is FolderAdapter))
-        {
-            yield return (SceneExplorerCommandKind.MoveToSceneRoot, "Move to scene root", "hierarchy");
-        }
-
-        if (node is not null && IsCameraNode(node))
-        {
-            var viewport = this.QueryCameraViewport();
-            var viewing = viewport?.ViewedCameraId == node.AttachedObject.Id;
-            yield return (SceneExplorerCommandKind.LookThroughCamera, viewing ? "Return to editor camera" : "Look through camera", "camera");
-            yield return (SceneExplorerCommandKind.PilotCamera, viewing && viewport!.IsPiloting ? "Stop piloting camera" : "Pilot camera", "camera");
-            yield return (SceneExplorerCommandKind.AlignCameraToView, "Align camera to view", "camera");
-        }
-
         if (targets.Count > 0 && targets.All(static row => row is NodeRowAdapter))
         {
             var row = single ? (NodeRowAdapter)targets[0] : null;
@@ -386,7 +520,7 @@ public partial class SceneExplorerViewModel
             }
         }
 
-        if (root && this.interaction?.HiddenNodes().Count > 0)
+        if (targets.Count == 0 && this.interaction?.HiddenNodes().Count > 0)
         {
             yield return (SceneExplorerCommandKind.ShowAll, "Show all in editor", "state");
         }
@@ -400,10 +534,7 @@ public partial class SceneExplorerViewModel
         }
 
         var targets = context.Targets;
-        var nodes = targets.OfType<SceneNodeAdapter>().ToArray();
-        var rows = targets.OfType<NodeRowAdapter>().ToArray();
         var single = targets.Count == 1;
-        var creation = kind is SceneExplorerCommandKind.NewNode or SceneExplorerCommandKind.NewFolder;
         if (kind == SceneExplorerCommandKind.SelectInstance)
         {
             return single && targets[0] is InstancedNodeAdapter ? null : "Select one node an instance brought in.";
@@ -413,18 +544,30 @@ public partial class SceneExplorerViewModel
         {
             return refusal;
         }
+
         if (kind is SceneExplorerCommandKind.LookThroughCamera or SceneExplorerCommandKind.PilotCamera or SceneExplorerCommandKind.AlignCameraToView)
         {
-            return this.GetCameraActionDisabledReason(kind, nodes, single);
+            return this.GetCameraActionDisabledReason(kind, [.. targets.OfType<SceneNodeAdapter>()], single);
         }
 
-        var workspace = kind is SceneExplorerCommandKind.Hide or SceneExplorerCommandKind.Show or SceneExplorerCommandKind.Lock or SceneExplorerCommandKind.Unlock;
         if (kind == SceneExplorerCommandKind.Rename && context.Anchor is SceneAdapter && !context.Background)
         {
             return null;
         }
 
-        if (creation && targets.Count > 1)
+        return this.GetSelectionDisabledReason(kind, context)
+            ?? this.GetLockDisabledReason(kind, context)
+            ?? this.GetInheritedStateDisabledReason(kind, context)
+            ?? this.GetPasteDisabledReason(kind, context);
+    }
+
+    // Whether the selection has the shape the command needs: how many rows, which kinds, and the editor state service.
+    private string? GetSelectionDisabledReason(SceneExplorerCommandKind kind, CapturedExplorerContext context)
+    {
+        var targets = context.Targets;
+        var single = targets.Count == 1;
+        var rows = targets.Count(static row => row is NodeRowAdapter);
+        if (kind is SceneExplorerCommandKind.NewNode or SceneExplorerCommandKind.NewFolder && targets.Count > 1)
         {
             return "Select one creation destination.";
         }
@@ -439,34 +582,33 @@ public partial class SceneExplorerViewModel
             return "The scene root cannot be edited by this action.";
         }
 
-        if (workspace && (this.interaction is null || rows.Length != targets.Count || rows.Length == 0))
+        if (kind is SceneExplorerCommandKind.Hide or SceneExplorerCommandKind.Show or SceneExplorerCommandKind.Lock or SceneExplorerCommandKind.Unlock
+            && (this.interaction is null || rows != targets.Count || rows == 0))
         {
             return "Editor state requires a node-only selection and the workspace service.";
         }
 
-        if (targets.Any(static row => row is SceneAdapter)
-            && kind is SceneExplorerCommandKind.Rename or SceneExplorerCommandKind.Delete or SceneExplorerCommandKind.Cut or SceneExplorerCommandKind.Copy)
-        {
-            return "The scene root is not a selection edit target.";
-        }
+        return targets.Any(static row => row is SceneAdapter)
+            && kind is SceneExplorerCommandKind.Rename or SceneExplorerCommandKind.Delete or SceneExplorerCommandKind.Cut or SceneExplorerCommandKind.Copy
+            ? "The scene root is not a selection edit target."
+            : null;
+    }
 
-        var manipulates = creation || kind is SceneExplorerCommandKind.Rename or SceneExplorerCommandKind.Cut
-            or SceneExplorerCommandKind.Delete or SceneExplorerCommandKind.RemoveFromFolder
+    // Whether a lock protects a row the command changes, or a node below one it moves or removes.
+    private string? GetLockDisabledReason(SceneExplorerCommandKind kind, CapturedExplorerContext context)
+    {
+        var targets = context.Targets;
+        var manipulates = kind is SceneExplorerCommandKind.NewNode or SceneExplorerCommandKind.NewFolder or SceneExplorerCommandKind.Rename
+            or SceneExplorerCommandKind.Cut or SceneExplorerCommandKind.Delete or SceneExplorerCommandKind.RemoveFromFolder
             or SceneExplorerCommandKind.MoveToSceneRoot;
-        if (manipulates)
+        if (manipulates && targets.Select(this.FindLockedContextRow).FirstOrDefault(static locked => locked is not null) is { } lockedTarget)
         {
-            foreach (var row in targets)
-            {
-                if (this.FindLockedContextRow(row) is { } locked)
-                {
-                    return $"Locked by {locked.Label}.";
-                }
-            }
+            return $"Locked by {lockedTarget.Label}.";
         }
 
         if (kind is SceneExplorerCommandKind.Cut or SceneExplorerCommandKind.Delete or SceneExplorerCommandKind.MoveToSceneRoot)
         {
-            var ids = nodes.Select(static row => row.AttachedObject.Id).ToHashSet();
+            var ids = targets.OfType<SceneNodeAdapter>().Select(static row => row.AttachedObject.Id).ToHashSet();
             foreach (var descendant in this.projection.Nodes)
             {
                 for (var parent = descendant.AttachedObject.Hierarchy.Parent; parent is not null; parent = parent.Hierarchy.Parent)
@@ -493,53 +635,62 @@ public partial class SceneExplorerViewModel
             }
         }
 
-        if (kind is SceneExplorerCommandKind.Show or SceneExplorerCommandKind.Unlock)
+        return null;
+    }
+
+    // Whether showing or unlocking a row would leave it hidden or locked through an ancestor.
+    private string? GetInheritedStateDisabledReason(SceneExplorerCommandKind kind, CapturedExplorerContext context)
+    {
+        if (kind is not (SceneExplorerCommandKind.Show or SceneExplorerCommandKind.Unlock))
         {
-            foreach (var row in rows)
+            return null;
+        }
+
+        foreach (var row in context.Targets.OfType<NodeRowAdapter>())
+        {
+            foreach (var parent in this.interaction!.GetAncestors(context.Authoring.Scene, row.Reference) ?? [])
             {
-                foreach (var parent in AncestorsOf(context.Authoring.Scene, row.Reference))
+                if (kind == SceneExplorerCommandKind.Show ? this.interaction!.IsHidden(parent) : this.interaction!.IsLocked(parent))
                 {
-                    if (kind == SceneExplorerCommandKind.Show ? this.interaction!.IsHidden(parent) : this.interaction!.IsLocked(parent))
-                    {
-                        return $"{(kind == SceneExplorerCommandKind.Show ? "Hidden" : "Locked")} by {this.projection.GetRow(parent)?.Label ?? parent.ToString()}.";
-                    }
+                    return $"{(kind == SceneExplorerCommandKind.Show ? "Hidden" : "Locked")} by {this.projection.GetRow(parent)?.Label ?? parent.ToString()}.";
                 }
             }
         }
 
-        if (kind is SceneExplorerCommandKind.Paste or SceneExplorerCommandKind.PasteAsChild)
+        return null;
+    }
+
+    // Whether the clipboard can paste at the command's destination.
+    private string? GetPasteDisabledReason(SceneExplorerCommandKind kind, CapturedExplorerContext context)
+    {
+        if (kind is not (SceneExplorerCommandKind.Paste or SceneExplorerCommandKind.PasteAsChild))
         {
-            var destination = kind == SceneExplorerCommandKind.PasteAsChild
-                ? single && targets[0] is SceneNodeAdapter ? targets[0] : null
-                : context.Destination;
-            if (destination is null)
-            {
-                return "The selection has no unambiguous paste destination.";
-            }
-
-            if (this.clipboard.Payload is null || !this.ClipboardLifetimeIsCurrent())
-            {
-                return "The clipboard has no payload for this scene.";
-            }
-
-            if (destination is not SceneAdapter && this.FindLockedContextRow(destination) is { } locked)
-            {
-                return $"Locked by {locked.Label}.";
-            }
-
-            if (this.clipboard.Payload is not { } payload)
-            {
-                return "The clipboard has no payload for this scene.";
-            }
-
-            var asChild = kind == SceneExplorerCommandKind.PasteAsChild;
-            if (!payload.TryPaste(context.Authoring.Scene, context.Authoring.Layout, this.PasteTargetOf(context, asChild), this.clipboard.IsCut, preserveWorld: asChild, out _, out var refused))
-            {
-                return refused.Message;
-            }
+            return null;
         }
 
-        return null;
+        var targets = context.Targets;
+        var asChild = kind == SceneExplorerCommandKind.PasteAsChild;
+        var destination = asChild
+            ? targets is [SceneNodeAdapter] ? targets[0] : null
+            : context.Destination;
+        if (destination is null)
+        {
+            return "The selection has no unambiguous paste destination.";
+        }
+
+        if (this.clipboard.Payload is not { } payload || !this.ClipboardLifetimeIsCurrent())
+        {
+            return "The clipboard has no payload for this scene.";
+        }
+
+        if (destination is not SceneAdapter && this.FindLockedContextRow(destination) is { } locked)
+        {
+            return $"Locked by {locked.Label}.";
+        }
+
+        return payload.TryPaste(context.Authoring.Scene, context.Authoring.Layout, PasteTargetOf(context, asChild), this.clipboard.IsCut, preserveWorld: asChild, out _, out var refused)
+            ? null
+            : refused.Message;
     }
 
     /// <summary>
@@ -567,7 +718,7 @@ public partial class SceneExplorerViewModel
         }
 
         // A command over the selection covers its rows that are not realized too.
-        IEnumerable<NodeReference> nodes = context.Targets.OfType<NodeRowAdapter>().Select(static row => row.Reference);
+        var nodes = context.Targets.OfType<NodeRowAdapter>().Select(static row => row.Reference);
         if (context.Targets.Count > 1 || (context.Targets.Count == 1 && context.SelectedRows.Contains(context.Targets[0])))
         {
             nodes = nodes.Concat(context.Selection.SelectedNodes);
@@ -593,9 +744,13 @@ public partial class SceneExplorerViewModel
 
         if (row is InstancedNodeAdapter instanced && this.Scene?.AttachedObject is { } scene)
         {
-            return this.interaction?.GetLockOwner(scene, instanced.Reference) is { } lockOwner
-                ? this.projection.GetRow(lockOwner) ?? row
-                : null;
+            // Contents not read yet protect the node through its instance root.
+            return this.interaction?.GetLock(scene, instanced.Reference) switch
+            {
+                { Owner: { } lockOwner } => this.projection.GetRow(lockOwner) ?? row,
+                { UnreadInstance: { } root } => this.projection.GetNode(root) ?? row,
+                _ => null,
+            };
         }
 
         if (row is FolderAdapter)
@@ -633,94 +788,12 @@ public partial class SceneExplorerViewModel
 
     private async Task ExecuteContextActionCoreAsync(SceneExplorerCommandKind kind, CapturedExplorerContext context)
     {
-        var nodes = context.Targets.OfType<SceneNodeAdapter>().Select(static row => row.AttachedObject.Id).ToArray();
-        var references = context.Targets.OfType<NodeRowAdapter>().Select(static row => row.Reference).ToArray();
-        var folders = context.Targets.OfType<FolderAdapter>().Select(static row => row.Id).ToArray();
-        var target = context.Targets.FirstOrDefault();
         var selectionGeneration = this.selectionApplyGeneration;
-        var anchorIndex = context.Anchor is { } anchor ? this.ShownIndexOf(anchor) : -1;
-        var neighbors = kind == SceneExplorerCommandKind.Delete
-            ? this.ShownItems.Skip(anchorIndex + 1).Concat(this.ShownItems.Take(Math.Max(0, anchorIndex)).Reverse())
-                .Where(row => !context.Targets.Contains(row)).ToArray()
-            : [];
-        var authoring = context.Authoring;
-        var scene = authoring.Scene;
-        SceneEditResult? result = null;
-        switch (kind)
+        var neighbors = kind == SceneExplorerCommandKind.Delete ? this.DeleteNeighbors(context) : [];
+        var (result, refresh) = await this.RunContextCommandAsync(kind, context).ConfigureAwait(true);
+        if (!refresh)
         {
-            case SceneExplorerCommandKind.NewNode:
-                var node = SceneNodeTemplates.Empty(scene, this.GetNextEntityName());
-                var folder = (target as FolderAdapter)?.Id;
-                NodeId? parent = (target as SceneNodeAdapter)?.AttachedObject.Id;
-                if (folder is { } inFolder && LayoutScopes.TryScopeOf(authoring.Layout, LayoutEntryId.Of(inFolder), out var folderScope))
-                {
-                    parent = folderScope;
-                }
-
-                result = await authoring.ExecuteAsync(new InsertNodes([SceneNodeTemplates.Append(scene, authoring.Layout, node, parent, folder)])).ConfigureAwait(true);
-                break;
-            case SceneExplorerCommandKind.NewFolder:
-                var container = (target is SceneNodeAdapter ? target.Parent : target) switch
-                {
-                    FolderAdapter folderRow => LayoutPosition.InFolder(folderRow.Id, 0),
-                    SceneNodeAdapter nodeRow => LayoutPosition.UnderNode(nodeRow.AttachedObject.Id, 0),
-                    _ => LayoutPosition.AtRoot(0),
-                };
-                result = await authoring.ExecuteAsync(new CreateFolder(FolderId.New(), LayoutScopes.EndOf(authoring.Layout, container), "New Folder")).ConfigureAwait(true);
-                break;
-            case SceneExplorerCommandKind.Rename:
-                this.RenameRequested?.Invoke(this, new RenameRequestedEventArgs(target ?? context.Anchor!));
-                return;
-            case SceneExplorerCommandKind.Copy:
-                await this.CopyItemsAsync(context.Targets).ConfigureAwait(true);
-                break;
-            case SceneExplorerCommandKind.Cut:
-                await this.CutItemsAsync(context.Targets).ConfigureAwait(true);
-                break;
-            case SceneExplorerCommandKind.Delete:
-                result = await authoring.ExecuteAsync(DeleteEdit(authoring.Layout, nodes, folders)).ConfigureAwait(true);
-                break;
-            case SceneExplorerCommandKind.Paste:
-            case SceneExplorerCommandKind.PasteAsChild:
-                result = await this.PasteCapturedAsync(context, kind == SceneExplorerCommandKind.PasteAsChild).ConfigureAwait(true);
-                break;
-            case SceneExplorerCommandKind.RemoveFromFolder:
-                result = await OutOfFolderAsync(authoring, nodes, ((FolderAdapter)target!.Parent!).Id).ConfigureAwait(true);
-                break;
-            case SceneExplorerCommandKind.MoveToSceneRoot:
-                result = target!.Parent is FolderAdapter sourceFolder && ((SceneNodeAdapter)target).AttachedObject.Hierarchy.Parent is null
-                    ? await OutOfFolderAsync(authoring, nodes, sourceFolder.Id).ConfigureAwait(true)
-                    : await authoring.ExecuteAsync(new ReparentNodes(nodes, parent: null, preserveWorld: false)).ConfigureAwait(true);
-                break;
-            case SceneExplorerCommandKind.Expand:
-                await this.ExpandItemAsync(context.Anchor!).ConfigureAwait(true);
-                break;
-            case SceneExplorerCommandKind.Collapse:
-                await this.CollapseItemAsync(context.Anchor!).ConfigureAwait(true);
-                break;
-            case SceneExplorerCommandKind.Hide:
-            case SceneExplorerCommandKind.Show:
-                result = await authoring.ExecuteAsync(new SetEditorHidden(references, kind == SceneExplorerCommandKind.Hide)).ConfigureAwait(true);
-                break;
-            case SceneExplorerCommandKind.Lock:
-            case SceneExplorerCommandKind.Unlock:
-                foreach (var reference in references)
-                {
-                    this.interaction!.SetLocked(reference, kind == SceneExplorerCommandKind.Lock);
-                }
-
-                break;
-            case SceneExplorerCommandKind.SelectInstance:
-                _ = await this.SetSelectedNodes([((InstancedNodeAdapter)target!).Reference.Node], focusPrimary: true).ConfigureAwait(true);
-                return;
-            case SceneExplorerCommandKind.LookThroughCamera:
-            case SceneExplorerCommandKind.PilotCamera:
-            case SceneExplorerCommandKind.AlignCameraToView:
-                await this.RequestCameraCommandAsync(kind, nodes[0]).ConfigureAwait(true);
-                return;
-            case SceneExplorerCommandKind.ShowAll:
-                result = await authoring.ExecuteAsync(new SetEditorHidden([.. this.interaction!.HiddenNodes()], hidden: false)).ConfigureAwait(true);
-                break;
+            return;
         }
 
         // A command may have awaited live sync while the user changed documents. Only reconcile its original owner.
@@ -735,103 +808,122 @@ public partial class SceneExplorerViewModel
             if (restoreDeleteNeighbor && this.SelectedItemsCount == 0
                 && ReferenceEquals(this.CurrentAuthoring(), context.Authoring))
             {
-                foreach (var oldRow in neighbors)
-                {
-                    ITreeItem? neighbor = oldRow switch
-                    {
-                        SceneNodeAdapter node => this.projection.GetNode(node.AttachedObject.Id),
-                        FolderAdapter folder => this.projection.GetFolder(folder.Id),
-                        SceneAdapter => this.Scene,
-                        _ => null,
-                    };
-                    if (neighbor is not null && this.IsShown(neighbor))
-                    {
-                        this.SelectDisplayedItem(neighbor, this.ShownItems.ToArray(), isControlDown: false, isShiftDown: false);
-                        _ = this.FocusItem(neighbor, RequestOrigin.Programmatic);
-                        break;
-                    }
-                }
+                this.SelectFirstShown(neighbors);
             }
         }
 
         this.RefreshContextActions();
     }
 
-    private (NodeId? ParentId, FolderId? FolderId, NodeId? InsertAfterId) ResolveCapturedPasteDestination(CapturedExplorerContext context, bool asChild)
+    // Runs a command. One that hands its work to another view, as renaming or viewing through a camera, needs no refresh.
+    private async Task<(SceneEditResult? Result, bool Refresh)> RunContextCommandAsync(SceneExplorerCommandKind kind, CapturedExplorerContext context)
     {
-        var target = asChild ? context.Targets[0] : context.Destination;
-        var node = target as SceneNodeAdapter;
-        var folder = target as FolderAdapter ?? (!asChild ? node?.Parent as FolderAdapter : null);
-        var parentId = asChild ? node!.AttachedObject.Id : node?.AttachedObject.Hierarchy.Parent?.Id;
-        if (!asChild && context.Targets.Count > 1
-            && context.Targets.All(row => ReferenceEquals(row.Parent, target)))
+        var target = context.Targets.Count > 0 ? context.Targets[0] : null;
+        switch (kind)
         {
-            parentId = node?.AttachedObject.Id;
-            node = null;
-        }
-
-        if (node is null && folder is not null)
-        {
-            for (var owner = folder.Parent; owner is not null; owner = owner.Parent)
-            {
-                if (owner is SceneNodeAdapter scope)
+            case SceneExplorerCommandKind.Rename:
+                this.RenameRequested?.Invoke(this, new RenameRequestedEventArgs(target ?? context.Anchor!));
+                return (null, false);
+            case SceneExplorerCommandKind.Copy:
+                await this.CopyItemsAsync(context.Targets).ConfigureAwait(true);
+                return (null, true);
+            case SceneExplorerCommandKind.Cut:
+                await this.CutItemsAsync(context.Targets).ConfigureAwait(true);
+                return (null, true);
+            case SceneExplorerCommandKind.Expand:
+                await this.ExpandItemAsync(context.Anchor!).ConfigureAwait(true);
+                return (null, true);
+            case SceneExplorerCommandKind.Collapse:
+                await this.CollapseItemAsync(context.Anchor!).ConfigureAwait(true);
+                return (null, true);
+            case SceneExplorerCommandKind.Lock:
+            case SceneExplorerCommandKind.Unlock:
+                foreach (var reference in ReferencesOf(context))
                 {
-                    parentId = scope.AttachedObject.Id;
-                    break;
+                    this.interaction!.SetLocked(reference, kind == SceneExplorerCommandKind.Lock);
                 }
-            }
-        }
 
-        return (parentId, folder?.Id, !asChild ? node?.AttachedObject.Id : null);
+                return (null, true);
+            case SceneExplorerCommandKind.SelectInstance:
+                _ = await this.SetSelectedNodes([((InstancedNodeAdapter)target!).Reference.Node], focusPrimary: true).ConfigureAwait(true);
+                return (null, false);
+            case SceneExplorerCommandKind.LookThroughCamera:
+            case SceneExplorerCommandKind.PilotCamera:
+            case SceneExplorerCommandKind.AlignCameraToView:
+                await this.RequestCameraCommandAsync(kind, context.Targets.OfType<SceneNodeAdapter>().First().AttachedObject.Id).ConfigureAwait(true);
+                return (null, false);
+            default:
+                return (await this.RunEditCommandAsync(kind, context).ConfigureAwait(true), true);
+        }
     }
 
-    // Deleting folders deletes what they hold: their nodes first, then the folders, innermost first.
-    private static SceneEditBatch DeleteEdit(IList<ExplorerEntryData> layout, IReadOnlyList<NodeId> nodes, IReadOnlyList<FolderId> folders)
+    // The commands that edit the scene through its authoring.
+    private async Task<SceneEditResult?> RunEditCommandAsync(SceneExplorerCommandKind kind, CapturedExplorerContext context)
     {
-        var heldNodes = new List<NodeId>(nodes);
-        var heldFolders = new List<FolderId>();
-        void Collect(FolderId folder)
+        var authoring = context.Authoring;
+        var target = context.Targets.Count > 0 ? context.Targets[0] : null;
+        NodeId[] nodes = [.. context.Targets.OfType<SceneNodeAdapter>().Select(static row => row.AttachedObject.Id)];
+        return kind switch
         {
-            foreach (var entry in LayoutScopes.EntriesOf(layout, LayoutPosition.InFolder(folder, 0)))
-            {
-                if (entry.Folder is { } inner)
-                {
-                    Collect(inner);
-                }
-                else if (entry.Node is { } node)
-                {
-                    heldNodes.Add(node);
-                }
-            }
-
-            heldFolders.Add(folder);
-        }
-
-        foreach (var folder in folders)
-        {
-            Collect(folder);
-        }
-
-        List<ISceneEdit> edits = [];
-        if (heldNodes.Count > 0)
-        {
-            edits.Add(new RemoveNodes([.. heldNodes.Distinct()]));
-        }
-
-        edits.AddRange(heldFolders.Distinct().Select(static folder => new RemoveFolder(folder, PromoteChildren: false)));
-        return new SceneEditBatch("Delete", edits);
+            SceneExplorerCommandKind.NewNode => await this.CreateNodeAsync(authoring, target).ConfigureAwait(true),
+            SceneExplorerCommandKind.NewFolder => await CreateFolderAsync(authoring, target).ConfigureAwait(true),
+            SceneExplorerCommandKind.Delete => await authoring.ExecuteAsync(
+                DeleteEdit(authoring.Layout, nodes, [.. context.Targets.OfType<FolderAdapter>().Select(static row => row.Id)])).ConfigureAwait(true),
+            SceneExplorerCommandKind.Paste or SceneExplorerCommandKind.PasteAsChild
+                => await this.PasteCapturedAsync(context, kind == SceneExplorerCommandKind.PasteAsChild).ConfigureAwait(true),
+            SceneExplorerCommandKind.RemoveFromFolder => await OutOfFolderAsync(authoring, nodes, ((FolderAdapter)target!.Parent!).Id).ConfigureAwait(true),
+            SceneExplorerCommandKind.MoveToSceneRoot => target!.Parent is FolderAdapter sourceFolder && ((SceneNodeAdapter)target).AttachedObject.Hierarchy.Parent is null
+                ? await OutOfFolderAsync(authoring, nodes, sourceFolder.Id).ConfigureAwait(true)
+                : await authoring.ExecuteAsync(new ReparentNodes(nodes, parent: null, preserveWorld: false)).ConfigureAwait(true),
+            SceneExplorerCommandKind.Hide or SceneExplorerCommandKind.Show
+                => await authoring.ExecuteAsync(new SetEditorHidden(ReferencesOf(context), kind == SceneExplorerCommandKind.Hide)).ConfigureAwait(true),
+            SceneExplorerCommandKind.ShowAll => await authoring.ExecuteAsync(new SetEditorHidden([.. this.interaction!.HiddenNodes()], hidden: false)).ConfigureAwait(true),
+            _ => null,
+        };
     }
 
-    // The entries go right after the folder, in the folder's own container.
-    private static Task<SceneEditResult> OutOfFolderAsync(SceneAuthoring authoring, IReadOnlyList<NodeId> nodes, FolderId folder)
-        => LayoutScopes.PositionOf(authoring.Layout, LayoutEntryId.Of(folder)) is { } place
-            ? authoring.ExecuteAsync(new MoveLayoutEntries([.. nodes.Select(LayoutEntryId.Of)], place with { Index = place.Index + 1 }))
-            : Task.FromResult(new SceneEditResult(SceneEditOutcome.Invalid, [SceneDiagnostic.Error(SceneEditCodes.FolderMissing, "The folder no longer exists.")]));
-
-    private PasteTarget PasteTargetOf(CapturedExplorerContext context, bool asChild)
+    // A new empty node: under the target node, in the target folder, or at the scene root.
+    private Task<SceneEditResult> CreateNodeAsync(SceneAuthoring authoring, ITreeItem? target)
     {
-        var (parentId, folderId, insertAfterId) = this.ResolveCapturedPasteDestination(context, asChild);
-        return new PasteTarget(parentId, folderId, insertAfterId);
+        var scene = authoring.Scene;
+        var node = SceneNodeTemplates.Empty(scene, this.GetNextEntityName());
+        var folder = (target as FolderAdapter)?.Id;
+        var parent = (target as SceneNodeAdapter)?.AttachedObject.Id;
+        if (folder is { } inFolder && LayoutScopes.TryScopeOf(authoring.Layout, LayoutEntryId.Of(inFolder), out var folderScope))
+        {
+            parent = folderScope;
+        }
+
+        return authoring.ExecuteAsync(new InsertNodes([SceneNodeTemplates.Append(scene, authoring.Layout, node, parent, folder)]));
+    }
+
+    // The rows shown after the anchor, then those before it nearest first, which a delete leaves for the selection.
+    private ITreeItem[] DeleteNeighbors(CapturedExplorerContext context)
+    {
+        var anchorIndex = context.Anchor is { } anchor ? this.ShownIndexOf(anchor) : -1;
+        return [.. this.ShownItems.Skip(anchorIndex + 1).Concat(this.ShownItems.Take(Math.Max(0, anchorIndex)).Reverse())
+            .Where(row => !context.Targets.Contains(row))];
+    }
+
+    // Selects the first of the rows a delete left that is still shown, by its row now.
+    private void SelectFirstShown(IEnumerable<ITreeItem> neighbors)
+    {
+        foreach (var oldRow in neighbors)
+        {
+            ITreeItem? neighbor = oldRow switch
+            {
+                SceneNodeAdapter node => this.projection.GetNode(node.AttachedObject.Id),
+                FolderAdapter folder => this.projection.GetFolder(folder.Id),
+                SceneAdapter => this.Scene,
+                _ => null,
+            };
+            if (neighbor is not null && this.IsShown(neighbor))
+            {
+                this.SelectDisplayedItem(neighbor, [.. this.ShownItems], isControlDown: false, isShiftDown: false);
+                _ = this.FocusItem(neighbor, RequestOrigin.Programmatic);
+                return;
+            }
+        }
     }
 
     private async Task<SceneEditResult?> PasteCapturedAsync(CapturedExplorerContext context, bool asChild)
@@ -839,7 +931,7 @@ public partial class SceneExplorerViewModel
         var isCut = this.clipboard.IsCut;
         var clipboardVersion = this.clipboard.Generation;
         if (this.clipboard.Payload is not { } payload
-            || !payload.TryPaste(context.Authoring.Scene, context.Authoring.Layout, this.PasteTargetOf(context, asChild), isCut, preserveWorld: asChild, out var paste, out var refused))
+            || !payload.TryPaste(context.Authoring.Scene, context.Authoring.Layout, PasteTargetOf(context, asChild), isCut, preserveWorld: asChild, out var paste, out var refused))
         {
             return null;
         }
@@ -849,7 +941,7 @@ public partial class SceneExplorerViewModel
         if (result.Succeeded && isCut && this.clipboard.IsCut && clipboardVersion == this.clipboard.Generation
             && ReferenceEquals(payload, this.clipboard.Payload) && ReferenceEquals(this.CurrentAuthoring(), context.Authoring))
         {
-            this.ClearClipboard();
+            await this.ClearClipboardAsync().ConfigureAwait(true);
         }
 
         return result;
@@ -864,9 +956,6 @@ public partial class SceneExplorerViewModel
             this.RefreshContextActions();
         }
     }
-
-    private static bool IsCameraNode(SceneNodeAdapter node)
-        => node.AttachedObject.Components.OfType<CameraComponent>().Any();
 
     /// <summary>What the window's active viewport shows, or null when no scene viewport exists.</summary>
     private SceneCameraViewState? QueryCameraViewport()
@@ -885,7 +974,7 @@ public partial class SceneExplorerViewModel
         }
 
         var piloting = viewport.IsPiloting && viewport.ViewedCameraId == node.AttachedObject.Id;
-        if (kind is SceneExplorerCommandKind.PilotCamera && !piloting || kind is SceneExplorerCommandKind.AlignCameraToView)
+        if ((kind is SceneExplorerCommandKind.PilotCamera && !piloting) || kind is SceneExplorerCommandKind.AlignCameraToView)
         {
             if (this.FindLockedContextRow(node) is { } locked)
             {

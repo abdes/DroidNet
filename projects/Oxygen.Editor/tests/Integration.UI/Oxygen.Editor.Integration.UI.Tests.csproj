@@ -16,6 +16,7 @@
         <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.Shell/testing/Oxygen.Editor.Shell.Testing.csproj" />
         <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testing/Oxygen.Editor.ContentPipeline.Testing.csproj" />
         <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.Projects/testing/Oxygen.Editor.Projects.Testing.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.Scenes/testing/Oxygen.Editor.Scenes.Testing.csproj" />
         <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.Scripting/testing/Oxygen.Editor.Scripting.Testing.csproj" />
         <ProjectReference Include="$(ProjectsRoot)/Oxygen.Managed.Assets/testing/Oxygen.Managed.Assets.Testing.csproj" />
         <ProjectReference Include="$(ProjectsRoot)/Oxygen.Managed.Core/testing/Oxygen.Managed.Core.Testing.csproj" />

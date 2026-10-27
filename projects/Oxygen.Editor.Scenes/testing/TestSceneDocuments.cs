@@ -117,7 +117,7 @@ public sealed partial class TestSceneDocuments : IDisposable
     /// <exception cref="InvalidOperationException">The file did not open.</exception>
     public async Task<Document> OpenAsync(DocumentFile file)
     {
-        var opened = await this.Open.OpenAsync(file).ConfigureAwait(true);
+        var opened = await this.Open.OpenAsync(file, this.Session.Lifetime).ConfigureAwait(true);
         return opened.Document ?? throw new InvalidOperationException($"The test scene did not open: {opened.Problem}");
     }
 
