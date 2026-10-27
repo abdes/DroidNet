@@ -5,7 +5,7 @@
 using System.Text;
 using System.Text.Json;
 using AwesomeAssertions;
-using Oxygen.Editor.Models.TestSupport;
+using Oxygen.Editor.Models.Tests.TestSupport;
 
 namespace Oxygen.Editor.Models.Tests;
 
@@ -48,7 +48,7 @@ public sealed class ImportRunSettingsTests
         _ = document.RootElement.GetProperty("concurrency").EnumerateObject().Select(static pipeline => pipeline.Name).Should().Equal("texture");
         _ = document.RootElement.GetProperty("concurrency").GetProperty("texture").TryGetProperty("queue_capacity", out _).Should().BeFalse();
         _ = read.ThreadPoolSize.Should().Be(8);
-        _ = read.Concurrency["texture"].Should().Be(new ImportPipelineSettings(4, null));
+        _ = read.Concurrency["texture"].Should().Be(new ImportPipelineSettings(4, QueueCapacity: null));
         _ = ImportRunSettings.None.IsEmpty.Should().BeTrue();
         _ = run.IsEmpty.Should().BeFalse();
     }

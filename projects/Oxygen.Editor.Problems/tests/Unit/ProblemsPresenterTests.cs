@@ -15,7 +15,7 @@ namespace Oxygen.Editor.Problems.Unit.Tests;
 
 /// <summary>The Problems tab shows the counts, and the panel comes forward for a runtime error and for a requested problem.</summary>
 [TestClass]
-internal sealed class ProblemsPresenterTests : IDisposable
+internal sealed partial class ProblemsPresenterTests : IDisposable
 {
     private readonly TestSession session = TestProblems.CreateSession();
     private readonly Mock<IPlacementService> placement = new();
@@ -62,7 +62,7 @@ internal sealed class ProblemsPresenterTests : IDisposable
         var problem = Error();
         this.runtime.Report(problem);
         this.placement.Invocations.Clear();
-        _ = this.placement.Setup(service => service.ShowPanelAsync(ProblemsModule.PanelId, It.IsAny<WindowPlacement>())).ReturnsAsync(true);
+        _ = this.placement.Setup(service => service.ShowPanelAsync(ProblemsModule.PanelId, It.IsAny<WindowPlacement>())).ReturnsAsync(value: true);
 
         var shown = await presenter.RevealAsync(problem).ConfigureAwait(false);
 

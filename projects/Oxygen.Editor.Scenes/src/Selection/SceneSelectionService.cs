@@ -128,6 +128,24 @@ public sealed class SceneSelectionService : ISceneSelectionService
         this.PropertyFocusRequested?.Invoke(this, new ScenePropertyFocusEventArgs(documentId, propertyPath, source));
     }
 
+    // The primary node and folder that survive; without either, the first surviving node leads, else the first
+    // surviving folder.
+    private static (NodeReference? Node, FolderId? Folder) PrimariesOf(SceneSelectionContext context, NodeReference[] nodes, FolderId[] folders)
+    {
+        var folder = context.PrimaryFolderId is { } primaryFolder && folders.Contains(primaryFolder) ? primaryFolder : default(FolderId?);
+        if (context.PrimaryNode is { } primary && nodes.Contains(primary))
+        {
+            return (primary, folder);
+        }
+
+        if (folder is not null)
+        {
+            return (null, folder);
+        }
+
+        return nodes.Length > 0 ? (nodes[0], null) : (null, folders.Length > 0 ? folders[0] : null);
+    }
+
     private static HashSet<FolderId> GetFolderIds(IList<ExplorerEntryData> layout)
     {
         var ids = new HashSet<FolderId>();
@@ -157,16 +175,5 @@ public sealed class SceneSelectionService : ISceneSelectionService
         this.SelectionChanged?.Invoke(
             this,
             new SceneSelectionChangedEventArgs(documentId, context, source));
-    }
-
-    // The primary node and folder that survive; without either, the first surviving node leads, else the first
-    // surviving folder.
-    private static (NodeReference? Node, FolderId? Folder) PrimariesOf(SceneSelectionContext context, NodeReference[] nodes, FolderId[] folders)
-    {
-        NodeReference? node = context.PrimaryNode is { } primary && nodes.Contains(primary) ? primary : null;
-        FolderId? folder = context.PrimaryFolderId is { } folderId && folders.Contains(folderId) ? folderId : null;
-        return node is not null || folder is not null ? (node, folder)
-            : nodes.Length > 0 ? (nodes[0], null)
-            : (null, folders.Length > 0 ? folders[0] : null);
     }
 }

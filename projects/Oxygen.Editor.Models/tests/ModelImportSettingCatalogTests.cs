@@ -4,7 +4,7 @@
 
 using System.Text.Json;
 using AwesomeAssertions;
-using Oxygen.Editor.Models.TestSupport;
+using Oxygen.Editor.Models.Tests.TestSupport;
 
 namespace Oxygen.Editor.Models.Tests;
 
@@ -66,7 +66,7 @@ public sealed class ModelImportSettingCatalogTests
     {
         var defaults = ModelImportSettings.DefaultSettings("Car");
 
-        foreach (var property in defaults.EnumerateObject().Where(static property => property.Name != ModelImportSettingCatalog.NameKey))
+        foreach (var property in defaults.EnumerateObject().Where(static property => !string.Equals(property.Name, ModelImportSettingCatalog.NameKey, StringComparison.Ordinal)))
         {
             var setting = ModelImportSettingCatalog.All.Single(candidate => string.Equals(candidate.Key, property.Name, StringComparison.Ordinal));
             _ = setting.ReadFrom(defaults).Should().Be(setting.Default, "a new model's explicit settings equal the importer's defaults");

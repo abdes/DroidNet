@@ -14,12 +14,12 @@ namespace Oxygen.Editor.Models.Tests;
 [TestClass]
 public sealed class ModelImportSettingTests
 {
-    private static readonly JsonElement Settings = JsonSerializer.SerializeToElement(new Dictionary<string, object>
+    private static readonly JsonElement Settings = JsonSerializer.SerializeToElement(new Dictionary<string, object>(StringComparer.Ordinal)
     {
         ["name"] = "Car",
         ["unit_policy"] = "custom",
         ["unit_scale"] = 0.5,
-        ["texture_overrides"] = new Dictionary<string, object> { ["Paint_N"] = new Dictionary<string, object> { ["max_size"] = 512 } },
+        ["texture_overrides"] = new Dictionary<string, object>(StringComparer.Ordinal) { ["Paint_N"] = new Dictionary<string, object>(StringComparer.Ordinal) { ["max_size"] = 512 } },
     });
 
     [TestMethod]
@@ -33,10 +33,10 @@ public sealed class ModelImportSettingTests
     [TestMethod]
     public void WriteTo_SetsOrRemovesTheKeyAndKeepsTheOthers()
     {
-        var set = ModelImportSettingCatalog.ImportLights.WriteTo(Settings, false);
+        var set = ModelImportSettingCatalog.ImportLights.WriteTo(Settings, value: false);
         var removed = ModelImportSettingCatalog.UnitScale.WriteTo(set, value: null);
 
-        _ = ModelImportSettingCatalog.ImportLights.ReadFrom(removed).Should().Be(false);
+        _ = ModelImportSettingCatalog.ImportLights.ReadFrom(removed).Should().Be(expected: false);
         _ = removed.TryGetProperty("unit_scale", out _).Should().BeFalse();
         _ = removed.GetProperty("texture_overrides").GetRawText().Should().Be(Settings.GetProperty("texture_overrides").GetRawText());
         _ = removed.GetProperty("name").GetString().Should().Be("Car");
@@ -67,7 +67,7 @@ public sealed class ModelImportSettingTests
     [TestMethod]
     public void ReadFrom_RefusesAValueOfAnotherKind()
     {
-        var wrong = JsonSerializer.SerializeToElement(new Dictionary<string, object> { ["import_lights"] = "yes" });
+        var wrong = JsonSerializer.SerializeToElement(new Dictionary<string, object>(StringComparer.Ordinal) { ["import_lights"] = "yes" });
 
         var read = () => ModelImportSettingCatalog.ImportLights.ReadFrom(wrong);
 

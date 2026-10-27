@@ -10,7 +10,7 @@ using DroidNet.Controls.OutputConsole.Model;
 namespace Oxygen.Editor.Cooking;
 
 /// <summary>A transcript that reports a batch of new lines as one change, so the console applies it once.</summary>
-public sealed class OutputEntryCollection : ObservableCollection<OutputLogEntry>
+public sealed partial class OutputEntryCollection : ObservableCollection<OutputLogEntry>
 {
     /// <summary>Appends entries and raises a single collection change for all of them.</summary>
     /// <param name="entries">The new lines, in order.</param>

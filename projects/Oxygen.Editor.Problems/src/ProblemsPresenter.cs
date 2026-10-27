@@ -43,7 +43,6 @@ public sealed partial class ProblemsPresenter : IProblemReveal, IDisposable
         runtime.ProblemsChanged += this.OnRuntimeProblemsChanged;
     }
 
-    /// <inheritdoc />
     public async Task<bool> RevealAsync(AssetProblem problem)
     {
         ArgumentNullException.ThrowIfNull(problem);

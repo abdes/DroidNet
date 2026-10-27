@@ -222,5 +222,4 @@ public sealed partial class SurfaceCardViewModel : ObservableObject
 
     [RelayCommand]
     private Task ResetCastsShadowsAsync() => this.owner.ResetSurfaceValueAsync(this, SceneSchema.Geometry.Surface.CastsShadows.Id, "Reset Surface Cast Shadows");
-
 }

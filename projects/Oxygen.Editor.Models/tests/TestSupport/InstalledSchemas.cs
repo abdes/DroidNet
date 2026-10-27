@@ -4,7 +4,7 @@
 
 using System.Text.Json.Nodes;
 
-namespace Oxygen.Editor.Models.TestSupport;
+namespace Oxygen.Editor.Models.Tests.TestSupport;
 
 /// <summary>The installed engine schemas, copied beside the tests, which the module's vocabulary must match.</summary>
 internal static class InstalledSchemas

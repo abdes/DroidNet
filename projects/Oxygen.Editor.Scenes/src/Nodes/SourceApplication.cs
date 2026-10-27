@@ -260,7 +260,7 @@ public sealed class SourceApplication(ProjectContext project)
     // Reads the file of the scene at the target's level, which the path must still pass through.
     private async Task<(byte[] Bytes, SceneFileData Data)?> ReadTargetAsync(AssetPath source, ChangeSelection selection, ApplyTarget target, CancellationToken cancellationToken)
     {
-        AssetPath? scene = source;
+        var scene = source;
         for (var level = 0; level < target.Level && scene is not null; level++)
         {
             scene = await this.NestedSourceAsync(scene, selection.Node!.Nodes[level], cancellationToken).ConfigureAwait(true);

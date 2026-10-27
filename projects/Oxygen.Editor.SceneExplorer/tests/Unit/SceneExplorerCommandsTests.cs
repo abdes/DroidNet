@@ -26,7 +26,7 @@ public sealed class SceneExplorerCommandsTests
 
         _ = module.Panels.Should().ContainSingle().Which.Id.Should().Be(SceneExplorerModule.PanelId);
         _ = module.Commands.Should().Equal(SceneExplorerCommands.All);
-        _ = module.Commands.Select(static command => command.Id).Should().OnlyHaveUniqueItems();
+        _ = module.Commands.Should().OnlyHaveUniqueItems(static command => command.Id);
     }
 
     private static void AssertKey(CommandDescriptor command, VirtualKey key, VirtualKeyModifiers modifiers)

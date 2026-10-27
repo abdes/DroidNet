@@ -101,7 +101,7 @@ public static class ModelImportSettingCatalog
     public static ModelImportSetting MaxTextureSize { get; } = new()
     {
         Key = "max_size",
-        Kind = ModelImportSettingKind.Integer,
+        Kind = ModelImportSettingKind.WholeNumber,
         Minimum = 1,
     };
 

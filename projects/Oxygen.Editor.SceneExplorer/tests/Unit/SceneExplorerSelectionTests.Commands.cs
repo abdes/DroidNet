@@ -84,6 +84,6 @@ public sealed partial class SceneExplorerSelectionTests
         await explorer.ExecuteAsync(ShellCommands.Paste.Id).ConfigureAwait(false);
 
         // Assert
-        _ = scene.AllNodes.Count().Should().Be(before + 1);
+        _ = scene.AllNodes.Should().HaveCount(before + 1);
     }
 }

@@ -8,7 +8,7 @@ using Oxygen.Managed.Core.Diagnostics;
 namespace Oxygen.Editor.Cooking;
 
 /// <summary>The issues of one run: diagnostics that say the same thing share one issue, most serious first.</summary>
-public sealed class CookingIssueList : ObservableCollection<CookingIssueViewModel>
+public sealed partial class CookingIssueList : ObservableCollection<CookingIssueViewModel>
 {
     private readonly HashSet<Guid> seen = [];
 

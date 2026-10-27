@@ -21,6 +21,7 @@ public sealed class ProblemsSessionModule : IScopeModule<ISessionLayer>
     public void Register(IRegistrator scope)
     {
         ArgumentNullException.ThrowIfNull(scope);
+
         // The session's own sources, in registration order: a collection resolved here sees only the session's.
         scope.RegisterDelegate<IAssetProblemSources>(
             resolver => new AssetProblemSources(resolver.ResolveMany<IAssetProblemSource>()),

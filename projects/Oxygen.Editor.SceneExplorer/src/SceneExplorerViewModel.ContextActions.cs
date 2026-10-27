@@ -434,8 +434,8 @@ public partial class SceneExplorerViewModel
                 return;
             }
 
-            var copied = await conversion.CopyAsync(authoring.Scene, instanced, this.StructureOf).ConfigureAwait(true);
-            if (copied.Value is not { } nodes)
+            var copied = await conversion.CopyAsync(authoring.Scene, instanced, this.StructureOf, this.session?.Lifetime ?? CancellationToken.None).ConfigureAwait(true);
+            if (copied.Value is not { } copiedNodes)
             {
                 this.PublishInstanceResult(SceneOperationKinds.NodeDuplicate, "Nodes not copied", SceneEditResult.Of(SceneEditValidation.Refused(copied.Refusal!)));
                 return;
@@ -446,7 +446,7 @@ public partial class SceneExplorerViewModel
                 return;
             }
 
-            var copies = SceneClipboard.Of(nodes);
+            var copies = SceneClipboard.Of(copiedNodes);
             payload = payload is null ? copies : new SceneClipboard([.. payload.Entries, .. copies.Entries], [.. payload.Nodes, .. copies.Nodes], worldNodes: null);
         }
 
@@ -470,12 +470,12 @@ public partial class SceneExplorerViewModel
             || anchor is not (SceneNodeAdapter { IsInstanceRoot: true } or InstancedNodeAdapter)
             || anchor is not NodeRowAdapter { Reference: var reference }
             || authoring.Scene.AllNodes.FirstOrDefault(node => node.Id == reference.Node)?.Components.OfType<SceneInstanceComponent>().FirstOrDefault() is not { } instance
-            || !instance.Changes.Nodes.Any(entry => !ApplySelectionOf(reference).Select(entry.Key, entry.Value).IsEmpty))
+            || instance.Changes.Nodes.All(entry => ApplySelectionOf(reference).Select(entry.Key, entry.Value).IsEmpty))
         {
             return null;
         }
 
-        return (reference, await new SourceApplication(project).TargetsAsync(authoring.Scene, reference).ConfigureAwait(true));
+        return (reference, await new SourceApplication(project).TargetsAsync(authoring.Scene, reference, this.session.Lifetime).ConfigureAwait(true));
     }
 
     // One Apply to item per authored scene the menu's single instance row can apply its changes to.
@@ -510,7 +510,7 @@ public partial class SceneExplorerViewModel
             return;
         }
 
-        var result = await new SourceApplication(project).ExecuteAsync(authoring, node.Node, ApplySelectionOf(node), target).ConfigureAwait(true);
+        var result = await new SourceApplication(project).ExecuteAsync(authoring, node.Node, ApplySelectionOf(node), target, this.session.Lifetime).ConfigureAwait(true);
         this.PublishInstanceResult(SceneOperationKinds.EditInstance, "Changes not applied", result, "Changes kept on the instance");
     }
 
@@ -527,7 +527,7 @@ public partial class SceneExplorerViewModel
 
     private async Task<SceneEditResult> UnpackAsync(SceneAuthoring authoring, NodeId instance, InstanceUnpack depth)
     {
-        var result = await this.Conversion()!.ExecuteUnpackAsync(authoring, instance, depth).ConfigureAwait(true);
+        var result = await this.Conversion()!.ExecuteUnpackAsync(authoring, instance, depth, this.session?.Lifetime ?? CancellationToken.None).ConfigureAwait(true);
         this.PublishInstanceResult(SceneOperationKinds.EditInstance, "Instance not unpacked", result);
         return result;
     }
@@ -870,18 +870,18 @@ public partial class SceneExplorerViewModel
         }
 
         // A command over the selection covers its rows that are not realized too.
-        var nodes = context.Targets.OfType<NodeRowAdapter>().Select(static row => row.Reference);
+        var targetNodes = context.Targets.OfType<NodeRowAdapter>().Select(static row => row.Reference);
         if (context.Targets.Count > 1 || (context.Targets.Count == 1 && context.SelectedRows.Contains(context.Targets[0])))
         {
-            nodes = nodes.Concat(context.Selection.SelectedNodes);
+            targetNodes = targetNodes.Concat(context.Selection.SelectedNodes);
         }
 
         if (kind == SceneExplorerCommandKind.Paste && context.Destination is InstancedNodeAdapter destination)
         {
-            nodes = nodes.Append(destination.Reference);
+            targetNodes = targetNodes.Append(destination.Reference);
         }
 
-        return InstanceRules.RefusesStructure(context.Authoring.Scene, nodes, node => (this.projection.GetRow(node) as InstancedNodeAdapter)?.Name)?.Message;
+        return InstanceRules.RefusesStructure(context.Authoring.Scene, targetNodes, node => (this.projection.GetRow(node) as InstancedNodeAdapter)?.Name)?.Message;
     }
 
     private ITreeItem? FindLockedContextRow(ITreeItem row)
@@ -1014,19 +1014,19 @@ public partial class SceneExplorerViewModel
     {
         var authoring = context.Authoring;
         var target = context.Targets.Count > 0 ? context.Targets[0] : null;
-        NodeId[] nodes = [.. context.Targets.OfType<SceneNodeAdapter>().Select(static row => row.AttachedObject.Id)];
+        NodeId[] targetNodes = [.. context.Targets.OfType<SceneNodeAdapter>().Select(static row => row.AttachedObject.Id)];
         return kind switch
         {
             SceneExplorerCommandKind.NewNode => await this.CreateNodeAsync(authoring, target).ConfigureAwait(true),
             SceneExplorerCommandKind.NewFolder => await CreateFolderAsync(authoring, target).ConfigureAwait(true),
             SceneExplorerCommandKind.Delete => await authoring.ExecuteAsync(
-                DeleteEdit(authoring.Layout, nodes, [.. context.Targets.OfType<FolderAdapter>().Select(static row => row.Id)])).ConfigureAwait(true),
+                DeleteEdit(authoring.Layout, targetNodes, [.. context.Targets.OfType<FolderAdapter>().Select(static row => row.Id)])).ConfigureAwait(true),
             SceneExplorerCommandKind.Paste or SceneExplorerCommandKind.PasteAsChild
                 => await this.PasteCapturedAsync(context, kind == SceneExplorerCommandKind.PasteAsChild).ConfigureAwait(true),
-            SceneExplorerCommandKind.RemoveFromFolder => await OutOfFolderAsync(authoring, nodes, ((FolderAdapter)target!.Parent!).Id).ConfigureAwait(true),
+            SceneExplorerCommandKind.RemoveFromFolder => await OutOfFolderAsync(authoring, targetNodes, ((FolderAdapter)target!.Parent!).Id).ConfigureAwait(true),
             SceneExplorerCommandKind.MoveToSceneRoot => target!.Parent is FolderAdapter sourceFolder && ((SceneNodeAdapter)target).AttachedObject.Hierarchy.Parent is null
-                ? await OutOfFolderAsync(authoring, nodes, sourceFolder.Id).ConfigureAwait(true)
-                : await authoring.ExecuteAsync(new ReparentNodes(nodes, parent: null, preserveWorld: false)).ConfigureAwait(true),
+                ? await OutOfFolderAsync(authoring, targetNodes, sourceFolder.Id).ConfigureAwait(true)
+                : await authoring.ExecuteAsync(new ReparentNodes(targetNodes, parent: null, preserveWorld: false)).ConfigureAwait(true),
             SceneExplorerCommandKind.Hide or SceneExplorerCommandKind.Show
                 => await authoring.ExecuteAsync(new SetEditorHidden(ReferencesOf(context), kind == SceneExplorerCommandKind.Hide)).ConfigureAwait(true),
             SceneExplorerCommandKind.ShowAll => await authoring.ExecuteAsync(new SetEditorHidden([.. this.interaction!.HiddenNodes()], hidden: false)).ConfigureAwait(true),

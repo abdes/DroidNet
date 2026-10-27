@@ -431,13 +431,14 @@ public sealed partial class SceneExplorerSelectionTests
 
             this.SelectionService = new SceneSelectionService();
             this.SelectionService.SelectionChanged += (_, args) => this.Received.Add(args);
-            _ = this.Views.Setup(views => views.FrameAsync(It.IsAny<DocumentId>(), It.IsAny<IReadOnlyList<NodeReference>>())).ReturnsAsync(true);
+            _ = this.Views.Setup(views => views.FrameAsync(It.IsAny<DocumentId>(), It.IsAny<IReadOnlyList<NodeReference>>())).ReturnsAsync(value: true);
         }
 
         public TestDocumentArea Documents { get; }
 
         /// <summary>Gets the open documents that hold the harness's first scene.</summary>
         public Editor.Documents.OpenDocuments OpenDocuments => this.openDocuments[0].Documents;
+
         public SceneSelectionService SelectionService { get; }
 
         /// <summary>Gets the scene views the Explorer asks to frame nodes.</summary>

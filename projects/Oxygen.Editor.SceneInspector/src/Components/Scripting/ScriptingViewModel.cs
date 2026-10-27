@@ -11,6 +11,7 @@ using CommunityToolkit.Mvvm.Input;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.Pickers;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.SceneInspector.Editing;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Edits.Scripting;
 using Oxygen.Editor.Scripting;
@@ -43,8 +44,8 @@ public sealed partial class ScriptingViewModel : ComponentPropertyEditor, IDispo
     private readonly Dictionary<AssetPath, ScriptRead?> libraryScripts = [];
     private readonly List<AssetEntry> assets = [];
     private IReadOnlyList<AssetPath> scriptAssets = [];
-    private IDisposable? assetSubscription;
-    private IDisposable? scriptSubscription;
+    private CancellationTokenSource? assetSubscription;
+    private CancellationTokenSource? scriptSubscription;
     private SceneNode? node;
     private ScriptingComponent? scripting;
     private Task pending = Task.CompletedTask;
@@ -81,12 +82,19 @@ public sealed partial class ScriptingViewModel : ComponentPropertyEditor, IDispo
 
         // The facts raise a change on the context that subscribed; the scheduler brings it to the UI thread wherever
         // the section is created.
-        this.scriptSubscription = scripts is null ? null : Observable.FromEventPattern<ScriptChangedEventArgs>(
+        var lifetime = session?.Lifetime ?? CancellationToken.None;
+        this.scriptSubscription = scripts is null ? null : LifetimeSubscription.Subscribe(
+            Observable.FromEventPattern<ScriptChangedEventArgs>(
                 handler => scripts.Changed += handler,
                 handler => scripts.Changed -= handler)
-            .ObserveOn(observer)
-            .Subscribe(change => this.OnScriptsChanged(change.EventArgs));
-        this.assetSubscription = assetProvider?.Items.ObserveOn(observer).Subscribe(this.OnAssets, static _ => { });
+            .ObserveOn(observer),
+            change => this.OnScriptsChanged(change.EventArgs),
+            lifetime);
+        this.assetSubscription = assetProvider is null ? null : LifetimeSubscription.Subscribe(
+            assetProvider.Items.ObserveOn(observer),
+            this.OnAssets,
+            static _ => { },
+            lifetime);
     }
 
     /// <inheritdoc />
@@ -147,10 +155,8 @@ public sealed partial class ScriptingViewModel : ComponentPropertyEditor, IDispo
         }
 
         this.disposed = true;
-        this.scriptSubscription?.Dispose();
-        this.scriptSubscription = null;
-        this.assetSubscription?.Dispose();
-        this.assetSubscription = null;
+        LifetimeSubscription.End(ref this.scriptSubscription);
+        LifetimeSubscription.End(ref this.assetSubscription);
         this.Bind(value: null);
     }
 

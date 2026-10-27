@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.Immutable;
-using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
@@ -15,7 +14,7 @@ namespace Oxygen.Editor.Models;
 /// A setting the settings do not hold takes its <see cref="Default"/>, the importer's own, so an editor import and an
 /// ImportTool import of the same settings agree. Values are <see cref="string"/> for <see cref="ModelImportSettingKind.Choice"/>
 /// and <see cref="ModelImportSettingKind.Text"/>, <see cref="double"/> for <see cref="ModelImportSettingKind.Number"/>,
-/// <see cref="int"/> for <see cref="ModelImportSettingKind.Integer"/> and <see cref="bool"/> for
+/// <see cref="int"/> for <see cref="ModelImportSettingKind.WholeNumber"/> and <see cref="bool"/> for
 /// <see cref="ModelImportSettingKind.Toggle"/>.
 /// </remarks>
 public sealed record ModelImportSetting
@@ -60,7 +59,7 @@ public sealed record ModelImportSetting
         {
             (ModelImportSettingKind.Choice or ModelImportSettingKind.Text, JsonValueKind.String) => value.GetString(),
             (ModelImportSettingKind.Number, JsonValueKind.Number) => value.GetDouble(),
-            (ModelImportSettingKind.Integer, JsonValueKind.Number) when value.TryGetInt32(out var number) => number,
+            (ModelImportSettingKind.WholeNumber, JsonValueKind.Number) when value.TryGetInt32(out var number) => number,
             (ModelImportSettingKind.Toggle, JsonValueKind.True or JsonValueKind.False) => value.GetBoolean(),
             _ => throw new InvalidDataException($"The import setting '{this.Key}' holds a value of another kind."),
         };
@@ -96,7 +95,7 @@ public sealed record ModelImportSetting
             (ModelImportSettingKind.Choice, string choice) => this.Choices.Contains(choice, StringComparer.Ordinal),
             (ModelImportSettingKind.Text, string text) => text.Length != 0,
             (ModelImportSettingKind.Number, double number) => this.InRange(number),
-            (ModelImportSettingKind.Integer, int number) => this.InRange(number),
+            (ModelImportSettingKind.WholeNumber, int number) => this.InRange(number),
             (ModelImportSettingKind.Toggle, bool) => true,
             _ => false,
         };
@@ -106,12 +105,12 @@ public sealed record ModelImportSetting
             && (this.Minimum is not { } minimum || (this.IsMinimumExclusive ? value > minimum : value >= minimum))
             && (this.Maximum is not { } maximum || value <= maximum);
 
-    private JsonNode ToNode(object value)
+    private JsonValue ToNode(object value)
     {
         if (!this.Accepts(value))
         {
             throw new ArgumentException(
-                string.Create(CultureInfo.InvariantCulture, $"'{value}' is not a value of the import setting '{this.Key}'."),
+                $"'{value}' is not a value of the import setting '{this.Key}'.",
                 nameof(value));
         }
 

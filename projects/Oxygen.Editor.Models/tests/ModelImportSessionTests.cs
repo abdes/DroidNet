@@ -69,7 +69,7 @@ public sealed class ModelImportSessionTests
     [TestMethod]
     public void JobsThatAreNotModelsAreLeftOutAndNamed()
     {
-        var manifest = """
+        const string manifest = """
             {
               "version": 1,
               "jobs": [

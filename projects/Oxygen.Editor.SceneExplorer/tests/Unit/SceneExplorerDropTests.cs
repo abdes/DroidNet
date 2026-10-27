@@ -147,6 +147,7 @@ public sealed partial class SceneExplorerDropTests
 
         /// <summary>Gets the open documents that hold the harness's first scene.</summary>
         public Editor.Documents.OpenDocuments OpenDocuments => this.Metadata.Documents;
+
         public SceneAdapter? SceneAdapter { get; private set; }
 
         public void Dispose() => this.Metadata.Dispose();

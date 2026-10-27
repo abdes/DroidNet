@@ -25,7 +25,7 @@ public sealed class ModelImportRecords
     {
         ArgumentNullException.ThrowIfNull(fileSystem);
         this.Folder = Path.Combine(Path.GetFullPath(projectRoot), ModelImportSettings.RecordsFolder);
-        var records = ImmutableArray.CreateBuilder<ModelImportRecord>();
+        var found = ImmutableArray.CreateBuilder<ModelImportRecord>();
         var problems = ImmutableArray.CreateBuilder<ModelImportRecordProblem>();
         if (fileSystem.Directory.Exists(this.Folder))
         {
@@ -35,7 +35,7 @@ public sealed class ModelImportRecords
                 try
                 {
                     var settings = ModelImportSettings.Parse(path, fileSystem.File.ReadAllBytes(path));
-                    records.Add(new(path, settings, settings.ResolveSource(path)));
+                    found.Add(new(path, settings, settings.ResolveSource(path)));
                 }
                 catch (Exception failure) when (failure is IOException or InvalidDataException or System.Text.Json.JsonException or UnauthorizedAccessException)
                 {
@@ -44,7 +44,7 @@ public sealed class ModelImportRecords
             }
         }
 
-        this.records = records.ToImmutable();
+        this.records = found.ToImmutable();
         this.Problems = problems.ToImmutable();
     }
 

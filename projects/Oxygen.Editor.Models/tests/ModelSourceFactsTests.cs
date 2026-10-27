@@ -5,7 +5,7 @@
 using System.Text.Json;
 using AwesomeAssertions;
 using Json.Schema;
-using Oxygen.Editor.Models.TestSupport;
+using Oxygen.Editor.Models.Tests.TestSupport;
 
 namespace Oxygen.Editor.Models.Tests;
 

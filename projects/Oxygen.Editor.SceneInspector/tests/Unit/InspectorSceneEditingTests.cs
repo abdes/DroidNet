@@ -483,7 +483,7 @@ internal sealed class InspectorSceneEditingTests
         _ = firstToggle.IsAutomatic.Should().BeTrue();
     }
 
-    private static Scene CreateScene() => new Scene { Name = "Inspector Scene" };
+    private static Scene CreateScene() => new() { Name = "Inspector Scene" };
 
     private static SceneNode CameraNode(Scene scene, float fieldOfView)
     {

@@ -4,6 +4,7 @@
 
 using System.Collections.Immutable;
 using System.Collections.ObjectModel;
+using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using DroidNet.Controls.OutputConsole.Model;
 using Microsoft.UI.Xaml;
@@ -116,10 +117,10 @@ public sealed partial class CookingRunViewModel : ObservableObject
             int Of(params CookAssetState[] states) => states.Sum(state => counts.GetValueOrDefault(state));
             var parts = new List<string>
             {
-                $"{Of(CookAssetState.Reused)} reused",
-                $"{Of(CookAssetState.Updated)} updated",
-                $"{Of(CookAssetState.Skipped, CookAssetState.Unresolved)} skipped",
-                $"{Of(CookAssetState.Failed)} failed",
+                string.Create(CultureInfo.InvariantCulture, $"{Of(CookAssetState.Reused)} reused"),
+                string.Create(CultureInfo.InvariantCulture, $"{Of(CookAssetState.Updated)} updated"),
+                string.Create(CultureInfo.InvariantCulture, $"{Of(CookAssetState.Skipped, CookAssetState.Unresolved)} skipped"),
+                string.Create(CultureInfo.InvariantCulture, $"{Of(CookAssetState.Failed)} failed"),
             };
             return string.Join(" · ", parts);
         }

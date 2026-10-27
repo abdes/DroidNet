@@ -11,31 +11,23 @@ using Oxygen.Managed.Core.Diagnostics;
 namespace Oxygen.Editor.Cooking;
 
 /// <summary>Presents one kind of issue with where it applies and its scoped recovery action.</summary>
-public sealed partial class CookingIssueViewModel : ObservableObject
+/// <param name="diagnostic">The first diagnostic of the issue, including its navigation identity.</param>
+/// <param name="scope">The name of the asset or scene it applies to.</param>
+public sealed partial class CookingIssueViewModel(DiagnosticRecord diagnostic, string scope) : ObservableObject
 {
     private int count = 1;
 
-    /// <summary>Initializes a new instance of the <see cref="CookingIssueViewModel"/> class.</summary>
-    /// <param name="diagnostic">The first diagnostic of the issue, including its navigation identity.</param>
-    /// <param name="scope">The name of the asset or scene it applies to.</param>
-    public CookingIssueViewModel(DiagnosticRecord diagnostic, string scope)
-    {
-        this.Diagnostic = diagnostic;
-        this.Scope = scope;
-        this.Places = [CookingIssuePlace.Of(diagnostic, scope)];
-    }
-
     /// <summary>Gets the first structured diagnostic of this issue.</summary>
-    public DiagnosticRecord Diagnostic { get; }
+    public DiagnosticRecord Diagnostic { get; } = diagnostic;
 
     /// <summary>Gets the asset or scene the first diagnostic applies to.</summary>
-    public string Scope { get; }
+    public string Scope { get; } = scope;
 
     /// <summary>Gets the readable problem.</summary>
     public string Message => this.Diagnostic.Message;
 
     /// <summary>Gets where each summarized diagnostic applies, in the order they were reported.</summary>
-    public ObservableCollection<CookingIssuePlace> Places { get; }
+    public ObservableCollection<CookingIssuePlace> Places { get; } = [CookingIssuePlace.Of(diagnostic, scope)];
 
     /// <summary>Gets how many diagnostics this issue summarizes.</summary>
     public int Count => this.count;

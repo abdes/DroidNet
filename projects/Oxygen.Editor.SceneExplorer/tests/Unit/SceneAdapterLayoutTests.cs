@@ -161,7 +161,5 @@ public sealed class SceneAdapterLayoutTests
     }
 
     private static Scene CreateScene()
-    {
-        return new Scene { Name = "Scene" };
-    }
+        => new() { Name = "Scene" };
 }

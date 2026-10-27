@@ -266,7 +266,7 @@ internal sealed partial class TransformEditController(
         }
 
         var hasSession = this.activeSessions.TryGetValue(property, out var session);
-        IReadOnlyList<SceneNode> nodes = hasSession ? session!.Nodes : [.. this.selectedItems];
+        var nodes = hasSession ? session!.Nodes : this.selectedItems.ToList();
         var edits = new Dictionary<NodeReference, PropertyEdit>();
         foreach (var node in nodes)
         {

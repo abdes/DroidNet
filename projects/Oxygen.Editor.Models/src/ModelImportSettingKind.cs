@@ -14,7 +14,7 @@ public enum ModelImportSettingKind
     Number,
 
     /// <summary>A whole number, such as <c>max_size</c>.</summary>
-    Integer,
+    WholeNumber,
 
     /// <summary>A boolean, such as <c>import_lights</c>.</summary>
     Toggle,

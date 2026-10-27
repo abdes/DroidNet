@@ -318,7 +318,7 @@ public sealed partial class CookingPanelViewModel : ObservableObject, IDisposabl
 
             if (request.IsReimport)
             {
-                _ = await this.pipeline.ReimportSourceAsync(request.ScopeUri!, this.session.Context,CancellationToken.None).ConfigureAwait(true);
+                _ = await this.pipeline.ReimportSourceAsync(request.ScopeUri!, this.session.Context, CancellationToken.None).ConfigureAwait(true);
                 return;
             }
 
