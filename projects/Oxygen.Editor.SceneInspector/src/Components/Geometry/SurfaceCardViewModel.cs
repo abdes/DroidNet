@@ -6,8 +6,9 @@ using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Oxygen.Editor.ContentPipeline.Inspection;
-using Oxygen.Editor.Controls;
+using Oxygen.Editor.Controls.PropertyEditors;
 using Oxygen.Editor.Pickers;
+using Oxygen.Editor.SceneInspector.Editing;
 using Oxygen.Editor.Scenes.Edits.Assets;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
@@ -39,6 +40,15 @@ public sealed partial class SurfaceCardViewModel : ObservableObject
         this.owner = owner;
         this.Target = target;
     }
+
+    /// <summary>Gets the commands the Material row offers besides reset.</summary>
+    public IOverrideActionSource MaterialActions => new InspectorOverrideActions(() => this.owner.ApplyActionsAsync([SceneSchema.Geometry.Surface.Material.Id], this.Target.Part));
+
+    /// <summary>Gets the commands the Visible row offers besides reset.</summary>
+    public IOverrideActionSource VisibleActions => new InspectorOverrideActions(() => this.owner.ApplyActionsAsync([SceneSchema.Geometry.Surface.Visibility.Id], this.Target.Part));
+
+    /// <summary>Gets the commands the Cast Shadows row offers besides reset.</summary>
+    public IOverrideActionSource CastsShadowsActions => new InspectorOverrideActions(() => this.owner.ApplyActionsAsync([SceneSchema.Geometry.Surface.CastsShadows.Id], this.Target.Part));
 
     /// <summary>Gets the surface, with the geometry and inventory revision it is shown from.</summary>
     public SurfaceTarget Target { get; private set; }
@@ -179,18 +189,6 @@ public sealed partial class SurfaceCardViewModel : ObservableObject
         this.ResetToolTip = overridden.Count == 0 ? string.Empty : ResetText($"Reset {Join(overridden)} to the asset's values", anyOverride, nodes.Count);
     }
 
-    [RelayCommand]
-    private Task ResetAsync() => this.owner.ResetSurfaceAsync(this);
-
-    [RelayCommand]
-    private Task ResetMaterialAsync() => this.owner.ResetSurfaceValueAsync(this, SceneSchema.Geometry.Surface.Material.Id, "Reset Surface Material");
-
-    [RelayCommand]
-    private Task ResetVisibleAsync() => this.owner.ResetSurfaceValueAsync(this, SceneSchema.Geometry.Surface.Visibility.Id, "Reset Surface Visibility");
-
-    [RelayCommand]
-    private Task ResetCastsShadowsAsync() => this.owner.ResetSurfaceValueAsync(this, SceneSchema.Geometry.Surface.CastsShadows.Id, "Reset Surface Cast Shadows");
-
     private static (OverrideState State, int Count) StateOf(IReadOnlyList<GeometryOverrides> nodes, PropertyId property, PartId part)
     {
         var count = nodes.Count(overrides => overrides.Changes.Find(property, part) is not null);
@@ -212,4 +210,17 @@ public sealed partial class SurfaceCardViewModel : ObservableObject
 
     private static string Join(List<string> names)
         => names.Count == 1 ? names[0] : string.Join(", ", names.Take(names.Count - 1)) + " and " + names[^1];
+
+    [RelayCommand]
+    private Task ResetAsync() => this.owner.ResetSurfaceAsync(this);
+
+    [RelayCommand]
+    private Task ResetMaterialAsync() => this.owner.ResetSurfaceValueAsync(this, SceneSchema.Geometry.Surface.Material.Id, "Reset Surface Material");
+
+    [RelayCommand]
+    private Task ResetVisibleAsync() => this.owner.ResetSurfaceValueAsync(this, SceneSchema.Geometry.Surface.Visibility.Id, "Reset Surface Visibility");
+
+    [RelayCommand]
+    private Task ResetCastsShadowsAsync() => this.owner.ResetSurfaceValueAsync(this, SceneSchema.Geometry.Surface.CastsShadows.Id, "Reset Surface Cast Shadows");
+
 }

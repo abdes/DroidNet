@@ -30,13 +30,15 @@ namespace Oxygen.Editor.Scenes.Tests.TestSupport;
 /// Ortho    orthographic, size 10               ├─ B
 /// Sun      directional, slot Primary           └─ folder G (collapsed, empty)
 /// Moon     directional, slot None              Cam, Ortho, Sun, Moon, Lamp,
-/// Lamp     point light, source radius 0.05     Spot, Fog, Mesh, Script, Car
-/// Spot     spot light, cones 0.4 / 0.6
+/// Lamp     point light, source radius 0.05     Spot, Fog, Mesh, Script, Car,
+/// Spot     spot light, cones 0.4 / 0.6         Tower
 /// Fog      local fog volume
 /// Mesh     Cube.ogeo, one surface material override (Red.omat)
 /// Script   two script slots: Move.oscript with "target" = node B, then Move.oscript with no values
 /// Car      an instance of Car.glb, with no changes
+/// Tower    an instance of Tower.oscene, moving its node Post to x = 2
 /// </code>
+/// Tower.oscene, which every fixture's project holds (<see cref="TowerFile"/>), owns one node, Post, at the origin.
 /// Every id is fixed, so two builds are the same document. Ids end in readable tags: nodes are <c>...-0001-...</c>,
 /// components <c>...-0002-...</c>, folders <c>...-0003-...</c>, slots <c>...-0004-...</c>; a node's transform is
 /// <see cref="SceneBuilder.TransformId"/>.
@@ -116,6 +118,24 @@ public static class SampleScene
 
     public static ComponentId CarInstance { get; } = ComponentTag("1C");
 
+    public static NodeId Tower { get; } = NodeTag("70E");
+
+    public static ComponentId TowerInstance { get; } = ComponentTag("70E");
+
+    /// <summary>Gets the only node of <see cref="TowerScene"/>, which <see cref="Tower"/> moves to x = 2.</summary>
+    public static NodePath Post { get; } = NodePath.Of(NodeTag("905"));
+
+    /// <summary>Gets the authored scene <see cref="Tower"/> instances.</summary>
+    public static AssetPath TowerScene { get; } = AssetPath.Parse("/Content/Prefabs/Tower.oscene");
+
+    /// <summary>Gets where the project keeps <see cref="TowerScene"/>'s source.</summary>
+    public static string TowerFile => "/Content/Prefabs/Tower.oscene.json";
+
+    /// <summary>Gets the changes <see cref="Tower"/> makes: Post's position x is 2.</summary>
+    public static InstanceChanges TowerChanges { get; } = InstanceChanges.None.With(
+        Post,
+        InstancedNodeChanges.None.With(SourceOverrides.ChangesOf(SceneSchema.Transform.Kind).With(new SourceOverride(SceneSchema.Transform.PositionX.Id, Part: null, LayoutRevision: null, 2f))).WithNames("Post"));
+
     public static Guid CubeSurface { get; } = Tagged(4, "C1");
 
     public static Guid MoveSlot { get; } = Tagged(4, "51");
@@ -138,7 +158,7 @@ public static class SampleScene
     public static ScriptParameter SurfaceParameter { get; } = new() { Name = "surface", Kind = ScriptParameterKind.AssetParameter, AssetType = (byte)AssetType.Material };
 
     /// <summary>Gets every node, in declaration order.</summary>
-    public static IReadOnlyList<NodeId> AllNodes { get; } = [A, A1, A11, A2, B, Cam, Ortho, Sun, Moon, Lamp, Spot, Fog, Mesh, Script, Car];
+    public static IReadOnlyList<NodeId> AllNodes { get; } = [A, A1, A11, A2, B, Cam, Ortho, Sun, Moon, Lamp, Spot, Fog, Mesh, Script, Car, Tower];
 
     /// <summary>
     /// Builds a new copy of the sample scene's data.
@@ -171,7 +191,20 @@ public static class SampleScene
             .Node(Fog, "Fog", components: [new LocalFogVolumeData { Id = FogVolume, Name = "Fog" }])
             .Node(Mesh, "Mesh", components: [CubeWithRedSurface()])
             .Node(Script, "Script", components: [MoveTowardB()])
-            .Node(Car, "Car", components: [new SceneInstanceComponentData { Id = CarInstance, Name = "Scene Instance", Source = CarModel }]);
+            .Node(Car, "Car", components: [new SceneInstanceComponentData { Id = CarInstance, Name = "Scene Instance", Source = CarModel }])
+            .Node(Tower, "Tower", components: [new SceneInstanceComponentData { Id = TowerInstance, Name = "Scene Instance", Source = TowerScene, Changes = InstanceChangesJson.Write(TowerChanges) }]);
+
+    /// <summary>Builds the file of <see cref="TowerScene"/>, as the project holds it.</summary>
+    /// <param name="postX">Post's position x.</param>
+    /// <returns>The file's bytes.</returns>
+    public static byte[] TowerSource(float postX = 0f)
+        => JsonSerializer.SerializeToUtf8Bytes(
+            new SceneBuilder()
+                .WithId(SceneId.FromValue(Tagged(0, "70E")))
+                .Named("Tower")
+                .Node(Post.Nodes[0], "Post", transform: Transform(position: new Vector3(postX, 0, 0)))
+                .Build(),
+            SceneFileJsonContext.Default.SceneFileData);
 
     /// <summary>
     /// Makes a fixed id with a readable tag, such as <c>00000000-0000-0000-0001-0000000000a1</c>.

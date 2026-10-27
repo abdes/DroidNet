@@ -4,6 +4,7 @@
 
 using System.Collections.ObjectModel;
 using DroidNet.Documents;
+using Oxygen.Editor.SceneInspector.Editing;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 
@@ -91,7 +92,7 @@ public sealed partial class SceneInspectorViewModel
         {
             if (this.boundEditors.Add(editor))
             {
-                editor.UpdateValues(this.items.ToArray());
+                editor.UpdateValues([.. this.items]);
             }
 
             editor.SetInputEnabled(this.IsEditorInputEnabled(editor));
@@ -123,9 +124,9 @@ public sealed partial class SceneInspectorViewModel
         var selectedType = this.selectedComponentType;
         if (!ReferenceEquals(this.filterScene, this.activeScene) || this.filterDocument != document
             || this.filterNodes.Length != this.items.Count
-            || this.filterNodes.Any(previous => !this.items.Any(current => ReferenceEquals(previous, current))))
+            || this.filterNodes.Any(previous => !this.items.Exists(current => ReferenceEquals(previous, current))))
         {
-            this.filterNodes = this.items.ToArray();
+            this.filterNodes = [.. this.items];
             this.filterScene = this.activeScene;
             this.filterDocument = document;
             selectedType = null;
@@ -145,7 +146,7 @@ public sealed partial class SceneInspectorViewModel
             var option = this.ComponentFilters.FirstOrDefault(candidate => candidate.ComponentType == type);
             if (option is null)
             {
-                option = new(type, ComponentLabel(type));
+                option = new(type, ComponentLabel(type)) { ApplyActions = new InspectorOverrideActions(() => this.ComponentApplyActionsAsync(type)) };
                 this.ComponentFilters.Add(option);
             }
 

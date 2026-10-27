@@ -15,6 +15,7 @@
                         <local:PropertyCard
                             HorizontalContentAlignment="Stretch"
                             FontSize="{TemplateBinding FontSize}"
+                            OverrideActions="{TemplateBinding OverrideActions}"
                             OverrideState="{TemplateBinding OverrideState}"
                             PropertyName="{TemplateBinding Label}"
                             ResetCommand="{TemplateBinding ResetCommand}"

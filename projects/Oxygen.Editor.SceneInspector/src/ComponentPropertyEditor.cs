@@ -17,6 +17,12 @@ public abstract class ComponentPropertyEditor : InspectorSection
     /// <summary>Gets how the panel names a selected node; a node of the scene by its ID when unset.</summary>
     internal Func<SceneNode, NodeReference>? References { get; init; }
 
+    /// <summary>
+    /// Gets what applies a selected node's changes to the authored scenes on its path (scene instances 6.7), which the
+    /// section's changed rows offer; <see langword="null"/> when the pane does not offer it.
+    /// </summary>
+    internal Components.Instances.InspectorSourceApply? SourceApply { get; init; }
+
     /// <summary>Shows the section's values for the selected nodes and targets its edits at them.</summary>
     /// <param name="items">The selected nodes, all of which have the section's component.</param>
     public abstract void UpdateValues(ICollection<SceneNode> items);

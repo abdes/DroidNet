@@ -31,6 +31,7 @@
                 Green="{x:Bind ViewModel.ColorG, Mode=TwoWay}"
                 HasError="{x:Bind ViewModel.ColorRDiagnostic.HasError, Mode=OneWay}"
                 Label="Color"
+                OverrideActions="{x:Bind ViewModel.ColorOverride}"
                 OverrideState="{x:Bind ViewModel.ColorOverride.State, Mode=OneWay}"
                 PickerAutomationName="Pick light color"
                 Red="{x:Bind ViewModel.ColorR, Mode=TwoWay}"
@@ -43,6 +44,7 @@
                 HasError="{x:Bind ViewModel.IntensityLuxDiagnostic.HasError, Mode=OneWay}"
                 Label="Illuminance"
                 NumberValue="{x:Bind ViewModel.IntensityLux, Mode=TwoWay}"
+                OverrideActions="{x:Bind ViewModel.IntensityLuxOverride}"
                 OverrideState="{x:Bind ViewModel.IntensityLuxOverride.State, Mode=OneWay}"
                 ResetCommand="{x:Bind ViewModel.IntensityLuxOverride.ResetCommand}"
                 Tag="IntensityLux"
@@ -55,6 +57,7 @@
                 Label="Angular diameter"
                 Mask="~.####"
                 NumberValue="{x:Bind ViewModel.AngularDiameterDegrees, Mode=TwoWay}"
+                OverrideActions="{x:Bind ViewModel.AngularSizeRadiansOverride}"
                 OverrideState="{x:Bind ViewModel.AngularSizeRadiansOverride.State, Mode=OneWay}"
                 ResetCommand="{x:Bind ViewModel.AngularSizeRadiansOverride.ResetCommand}"
                 Tag="AngularSizeRadians"
@@ -67,6 +70,7 @@
                 Label="Azimuth"
                 Mask="~.#"
                 NumberValue="{x:Bind ViewModel.SunAzimuth, Mode=TwoWay}"
+                OverrideActions="{x:Bind ViewModel.SunDirectionOverride}"
                 OverrideState="{x:Bind ViewModel.SunDirectionOverride.State, Mode=OneWay}"
                 ResetCommand="{x:Bind ViewModel.SunDirectionOverride.ResetCommand}"
                 Tag="SunAzimuth"
@@ -79,11 +83,13 @@
                 Label="Elevation"
                 Mask="~.#"
                 NumberValue="{x:Bind ViewModel.SunElevation, Mode=TwoWay}"
+                OverrideActions="{x:Bind ViewModel.SunDirectionOverride}"
                 OverrideState="{x:Bind ViewModel.SunDirectionOverride.State, Mode=OneWay}"
                 ResetCommand="{x:Bind ViewModel.SunDirectionOverride.ResetCommand}"
                 Tag="SunElevation"
                 Unit="°" />
             <editorcontrols:PropertyCard
+                OverrideActions="{x:Bind ViewModel.AtmosphereSlotOverride}"
                 OverrideState="{x:Bind ViewModel.AtmosphereSlotOverride.State, Mode=OneWay}"
                 PropertyName="Source assignment"
                 ResetCommand="{x:Bind ViewModel.AtmosphereSlotOverride.ResetCommand}">
@@ -100,6 +106,7 @@
                 </StackPanel>
             </editorcontrols:PropertyCard>
             <editorcontrols:PropertyCard
+                OverrideActions="{x:Bind ViewModel.UsePerPixelAtmosphereTransmittanceOverride}"
                 OverrideState="{x:Bind ViewModel.UsePerPixelAtmosphereTransmittanceOverride.State, Mode=OneWay}"
                 PropertyName="Per-pixel transmittance"
                 ResetCommand="{x:Bind ViewModel.UsePerPixelAtmosphereTransmittanceOverride.ResetCommand}">
@@ -115,11 +122,13 @@
                 HasError="{x:Bind ViewModel.AtmosphereDiskLuminanceScaleRgbDiagnostic.HasError, Mode=OneWay}"
                 Kind="Multiplier"
                 Label="Disk luminance scale"
+                OverrideActions="{x:Bind ViewModel.AtmosphereDiskLuminanceScaleRgbOverride}"
                 OverrideState="{x:Bind ViewModel.AtmosphereDiskLuminanceScaleRgbOverride.State, Mode=OneWay}"
                 Red="{x:Bind ViewModel.DiskScaleR, Mode=TwoWay}"
                 ResetCommand="{x:Bind ViewModel.AtmosphereDiskLuminanceScaleRgbOverride.ResetCommand}"
                 Tag="DiskScale" />
             <editorcontrols:PropertyCard
+                OverrideActions="{x:Bind ViewModel.AffectsWorldOverride}"
                 OverrideState="{x:Bind ViewModel.AffectsWorldOverride.State, Mode=OneWay}"
                 PropertyName="Affects world"
                 ResetCommand="{x:Bind ViewModel.AffectsWorldOverride.ResetCommand}">
@@ -132,6 +141,7 @@
                 HasError="{x:Bind ViewModel.ExposureCompensationDiagnostic.HasError, Mode=OneWay}"
                 Label="Exposure"
                 NumberValue="{x:Bind ViewModel.ExposureCompensation, Mode=TwoWay}"
+                OverrideActions="{x:Bind ViewModel.ExposureCompensationOverride}"
                 OverrideState="{x:Bind ViewModel.ExposureCompensationOverride.State, Mode=OneWay}"
                 ResetCommand="{x:Bind ViewModel.ExposureCompensationOverride.ResetCommand}"
                 Tag="ExposureCompensation"

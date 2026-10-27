@@ -4,6 +4,7 @@
 
 using System.Reactive.Concurrency;
 using System.Reactive.Linq;
+using System.Text.Json;
 using AwesomeAssertions;
 using DroidNet.Aura.Dialogs;
 using Moq;
@@ -16,11 +17,14 @@ using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.SceneInspector.Components.Cameras;
 using Oxygen.Editor.SceneInspector.Components.Instances;
 using Oxygen.Editor.SceneInspector.SceneSettings;
+using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.Scenes.Edits.Instances;
+using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.Scenes.Testing;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Managed.Core;
+using Testably.Abstractions.Testing;
 
 namespace Oxygen.Editor.SceneInspector.Unit.Tests;
 
@@ -40,6 +44,8 @@ internal sealed partial class SceneInstanceSectionTests
     private static readonly NodePath CarRig = NodePath.Of(NodeId.New());
     private static readonly NodePath CarLens = NodePath.Of(NodeId.New());
     private static readonly NodePath VanBody = NodePath.Of(NodeId.New());
+
+    public TestContext TestContext { get; set; } = null!;
 
     [TestMethod]
     public async Task AnInstanceWithoutChanges_SwapsWithoutAsking()
@@ -68,6 +74,35 @@ internal sealed partial class SceneInstanceSectionTests
         _ = harness.Root.Components.OfType<SceneInstanceComponent>().Should().BeEmpty();
         _ = harness.Root.Hierarchy.Children.Select(static node => node.Metadata.Name).Should().Equal("Body", "Rig");
         _ = harness.Root.Hierarchy.Children[0].Transform.LocalPosition.X.Should().Be(2f, "the change is the unpacked node's value");
+    }
+
+    [TestMethod]
+    public async Task ApplyToSource_MovesTheChangesIntoTheAuthoredScene()
+    {
+        using var harness = Harness.Open(changed: false);
+        var body = harness.WriteWatchtower();
+        harness.Instance.Source = Watchtower;
+        harness.Instance.Changes = InstanceChanges.None.With(NodePath.Of(body), InstancedNodeChanges.None.With(SourceOverrides.ChangesOf(SceneSchema.Transform.Kind).With(SceneSchema.Transform.PositionX, 4f)));
+        using var section = harness.Section();
+        _ = (section.ApplyLabel, section.CanApply).Should().Be(("Apply to Watchtower", true));
+
+        await section.ApplyAsync().ConfigureAwait(false);
+
+        _ = section.HasError.Should().BeFalse(section.ErrorMessage);
+        _ = harness.Instance.Changes.IsEmpty.Should().BeTrue("the changes left the instance");
+        var watchtower = await SceneFiles.ReadAsync(harness.Scene.Project, Watchtower, this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = watchtower!.AllNodes.Single(node => node.Id == body).Transform.LocalPosition.X.Should().Be(4f, "the change is the source scene's value now");
+        _ = (section.CanApply, section.ChangeCount).Should().Be((false, "No changes"));
+    }
+
+    [TestMethod]
+    public void AModelInstance_CannotApplyToItsSource_AndSaysWhy()
+    {
+        using var harness = Harness.Open(changed: true);
+        using var section = harness.Section();
+
+        _ = (section.ApplyLabel, section.CanApply).Should().Be(("Apply to source", false));
+        _ = section.ApplyToolTip.Should().Be("Car.glb is an imported model, not an authored scene: its import makes its nodes and a reimport rewrites them, so changes stay on the instance.");
     }
 
     [TestMethod]
@@ -118,7 +153,7 @@ internal sealed partial class SceneInstanceSectionTests
     public async Task ASourceThatInstancesTheScene_IsRefusedWithItsMessage()
     {
         using var harness = Harness.Open(changed: false);
-        harness.References.Setup(references => references.Of(Watchtower)).Returns([harness.SceneAsset]);
+        _ = harness.References.Setup(references => references.Of(Watchtower)).Returns([harness.SceneAsset]);
         using var section = harness.Section();
 
         await section.SwapAsync(Watchtower).ConfigureAwait(false);
@@ -132,7 +167,7 @@ internal sealed partial class SceneInstanceSectionTests
     {
         var harbor = AssetPath.Parse("/Content/Harbor.oscene");
         using var harness = Harness.Open(changed: false, [Model(Van), Scene(Watchtower), Scene(harbor)]);
-        harness.References.Setup(references => references.Of(harbor)).Returns([harness.SceneAsset]);
+        _ = harness.References.Setup(references => references.Of(harbor)).Returns([harness.SceneAsset]);
         using var section = harness.Section();
 
         await section.PrepareChoicesAsync().ConfigureAwait(false);
@@ -245,6 +280,8 @@ internal sealed partial class SceneInstanceSectionTests
 
         public SceneInstanceComponent Instance => this.Root.Components.OfType<SceneInstanceComponent>().Single();
 
+        public TestProject Project { get; private init; } = null!;
+
         public AssetPath SceneAsset => this.Scene.Authoring.Asset!;
 
         private IReadOnlyList<AssetEntry> Assets { get; }
@@ -259,6 +296,7 @@ internal sealed partial class SceneInstanceSectionTests
                 structures.Publish(van);
             }
 
+            var project = TestProject.Create(new MockFileSystem(), @"C:\TestScenes");
             var built = new Scene { Name = "Harbor" };
             var root = new SceneNode(built, "Car3");
             built.RootNodes.Add(root);
@@ -273,8 +311,8 @@ internal sealed partial class SceneInstanceSectionTests
             var references = new Mock<IAuthoredReferences>();
             _ = references.Setup(saved => saved.RefreshAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
             _ = references.Setup(saved => saved.Of(It.IsAny<AssetPath>())).Returns([]);
-            var scene = TestScenes.Open(built, references: references.Object, structures: structures);
-            var opened = new Harness(scene, new TestSession(scene.Project), structures, references, assets ?? []);
+            var scene = TestScenes.Open(built, project: project, references: references.Object, structures: structures);
+            var opened = new Harness(scene, new TestSession(scene.Project), structures, references, assets ?? []) { Project = project };
             _ = opened.Nodes.Setup(nodes => nodes.ReadStructureAsync(It.IsAny<ProjectContext>(), Van, It.IsAny<CancellationToken>()))
                 .Callback(() => structures.Publish(van))
                 .ReturnsAsync(van);
@@ -289,9 +327,23 @@ internal sealed partial class SceneInstanceSectionTests
                 () => this.Scene.Authoring,
                 this.Session,
                 ImmediateScheduler.Instance,
-                new InspectorInstanceServices(feed.Object, this.References.Object, this.Structures, this.Nodes.Object, this.Dialogs.Object));
+                new InspectorInstanceServices(feed.Object, this.References.Object, this.Structures, this.Nodes.Object, this.Dialogs.Object))
+            {
+                SourceApply = new InspectorSourceApply(this.Session, () => this.Scene.Authoring),
+            };
             section.UpdateValues([this.Root]);
             return section;
+        }
+
+        // Watchtower.oscene, which owns one node, Body, at the origin; the structure the swap to it reads.
+        public NodeId WriteWatchtower()
+        {
+            var watchtower = new Scene { Name = "Watchtower" };
+            var body = new SceneNode(watchtower, "Body");
+            watchtower.RootNodes.Add(body);
+            _ = this.Project.WriteFile("/Content/Prefabs/Watchtower.oscene.json", JsonSerializer.SerializeToUtf8Bytes(new SceneFileData(watchtower.Dehydrate(), explorerLayout: null), SceneFileJsonContext.Default.SceneFileData));
+            this.Structures.Publish(Structure(Watchtower, (NodePath.Of(body.Id), "Body", null, false)));
+            return body.Id;
         }
 
         // Car.glb's nodes as the mounted content holds them, with no values of their own.

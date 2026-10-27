@@ -23,6 +23,7 @@
                             FontWeight="{TemplateBinding FontWeight}"
                             LabelWidth="{TemplateBinding LabelWidth}"
                             Layout="{TemplateBinding Layout}"
+                            OverrideActions="{TemplateBinding OverrideActions}"
                             OverrideState="{TemplateBinding OverrideState}"
                             PropertyName="{TemplateBinding Label}"
                             Qualifier="{TemplateBinding Qualifier}"

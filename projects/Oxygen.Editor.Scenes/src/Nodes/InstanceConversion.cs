@@ -130,22 +130,6 @@ public sealed class InstanceConversion(ProjectContext project, IInstancedNodeRea
             $"The contents of '{root.Metadata.Name}' are not available yet: {source.Name} could not be read. Try again once it is cooked.",
             root.Id);
 
-    // This scene's changes of a node of an instance that stays one, over the instance's own changes of it: this scene's
-    // values win, the instance's names and origin stay.
-    private static InstancedNodeChanges Over(InstancedNodeChanges inner, InstancedNodeChanges outer)
-    {
-        var merged = outer.Components.Values.Aggregate(
-            inner,
-            static (all, changes) => all.With(changes.All.Aggregate(all.Of(changes.ComponentKind), static (kind, value) => kind.With(value))));
-        merged = outer.Parameters
-            .SelectMany(static slot => slot.Value.Select(parameter => (Slot: slot.Key, parameter.Key, parameter.Value)))
-            .Aggregate(merged, static (all, parameter) => all.WithParameter(parameter.Slot, parameter.Key, parameter.Value));
-
-        // The outer names start with the level that was unpacked.
-        var separator = outer.Names?.IndexOf('/', StringComparison.Ordinal) ?? -1;
-        return merged.WithNames(inner.Names ?? (separator < 0 ? null : outer.Names![(separator + 1)..]));
-    }
-
     // Moves new children before a node's existing children.
     private static void InsertFirst(SceneNode parent, IReadOnlyList<SceneNode> children)
     {
@@ -175,7 +159,7 @@ public sealed class InstanceConversion(ProjectContext project, IInstancedNodeRea
             else if (node.Components.OfType<SceneInstanceComponent>().FirstOrDefault() is { } nested)
             {
                 var rest = NodePath.Of(path.Nodes.Skip(1));
-                nested.Changes = nested.Changes.With(rest, Over(nested.Changes.Of(rest), nodeChanges));
+                nested.Changes = nested.Changes.With(rest, InstanceChangeMerge.Over(nested.Changes.Of(rest), nodeChanges, levels: 1));
             }
         }
     }

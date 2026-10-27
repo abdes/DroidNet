@@ -31,7 +31,7 @@ public sealed partial class PerspectiveCameraViewModel : ComponentPropertyEditor
         this.StartingCamera = new(authoringProvider);
         if (authoringProvider is not null)
         {
-            this.edits = new(authoringProvider, "Edit Camera", this.RefreshValues);
+            this.edits = new(authoringProvider, "Edit Camera", this.RefreshValues, sourceApply: () => this.SourceApply);
             this.edits.Diagnostics.Relate(this.NearPlane.Id.Id, this.FarPlane.Id.Id);
         }
 
@@ -166,7 +166,7 @@ public sealed partial class PerspectiveCameraViewModel : ComponentPropertyEditor
     /// <inheritdoc />
     public override void UpdateValues(ICollection<SceneNode> items)
     {
-        this.edits?.Bind(items.Where(node => node.Components.OfType<PerspectiveCamera>().Any()).Select(this.ReferenceOf).ToArray());
+        this.edits?.Bind([.. items.Where(node => node.Components.OfType<PerspectiveCamera>().Any()).Select(this.ReferenceOf)]);
         this.selectedItems = items;
         var targets = items.Where(node => node.Components.OfType<PerspectiveCamera>().Any())
             .ToDictionary(this.ReferenceOf, static node => (object?)node.Components.OfType<PerspectiveCamera>().First());

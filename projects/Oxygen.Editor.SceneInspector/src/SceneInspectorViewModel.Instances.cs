@@ -3,9 +3,14 @@
 // SPDX-License-Identifier: MIT
 
 using System.ComponentModel;
+using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using DroidNet.Controls.Menus;
 using Oxygen.Editor.ContentPipeline.Inspection;
+using Oxygen.Editor.Controls.PropertyEditors;
+using Oxygen.Editor.SceneInspector.Components.Instances;
 using Oxygen.Editor.Scenes.Nodes;
+using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Managed.Assets;
@@ -33,6 +38,18 @@ public sealed partial class SceneInspectorViewModel
     // Grows with each read of the instanced selection, so a read that a newer selection replaced is dropped.
     private int instancedReadGeneration;
     private bool isReadingInstancedNodes;
+
+    // The authored scenes the single selected instanced node's path passes through, read once per selection.
+    private (NodeReference Node, IReadOnlyList<ApplyTarget> Targets)? applyTargets;
+    private int applyTargetsGeneration;
+
+    /// <summary>
+    /// Gets the menu that applies the single selected instanced node's changes to each authored scene its path passes
+    /// through (scene instances 6.7), such as <i>Apply to Watchtower</i>; <see langword="null"/> when it has no change
+    /// to apply or comes from a model.
+    /// </summary>
+    [ObservableProperty]
+    public partial IMenuSource? SelectedNodeApplyMenu { get; private set; }
 
     /// <summary>
     /// Gets the second line of the header for a node an instance brings in, naming its instance and the instance's source,
@@ -127,6 +144,9 @@ public sealed partial class SceneInspectorViewModel
     // Drops the transient nodes and stops following their instances' changes.
     private void ForgetInstancedNodes()
     {
+        this.applyTargets = null;
+        ++this.applyTargetsGeneration;
+        this.SelectedNodeApplyMenu = null;
         this.instancedNodes.Clear();
         this.instancedValues.Clear();
         foreach (var instance in this.observedInstances)
@@ -199,6 +219,7 @@ public sealed partial class SceneInspectorViewModel
         this.NotifySelectionRoutingChanged();
         this.ShowItems();
         this.SubscribeToComponentCollections();
+        _ = this.ReadApplyTargetsAsync();
     }
 
     private async Task<(SceneNode Node, InstancedNodeValues Values)?> ReadInstancedNodeAsync(Scene scene, NodeReference reference, CancellationToken cancellationToken)
@@ -259,6 +280,7 @@ public sealed partial class SceneInspectorViewModel
 
         // A change that leaves a value as it was, as a reset to the source's own value, still changes the override bars.
         this.RefreshPropertyEditorValues();
+        this.ShowApplyMenu();
     }
 
     // Content mounted again, as after a cook: the selected instanced nodes may hold other values now.
@@ -273,5 +295,64 @@ public sealed partial class SceneInspectorViewModel
         }
 
         this.RereadInstancedSelection(this.activeScene);
+    }
+
+    // Reads which authored scenes the single selected instanced node's path passes through, then offers its changes.
+    private async Task ReadApplyTargetsAsync()
+    {
+        var generation = ++this.applyTargetsGeneration;
+        if (this.SelectedInstancedNode() is not { } reference)
+        {
+            return;
+        }
+
+        var targets = await this.sourceApply.TargetsAsync(reference).ConfigureAwait(true);
+        if (generation != this.applyTargetsGeneration || this.isDisposed)
+        {
+            return;
+        }
+
+        this.applyTargets = (reference, targets);
+        this.ShowApplyMenu();
+    }
+
+    // Offers the selected instanced node's changes to each scene on its path, while it has changes.
+    private void ShowApplyMenu()
+    {
+        if (this.applyTargets is not { } read || this.SelectedInstancedNode() != read.Node || !this.sourceApply.HasChanges(read.Node, ChangeSelection.OfNode(read.Node.Path)))
+        {
+            this.SelectedNodeApplyMenu = null;
+            return;
+        }
+
+        var builder = new MenuBuilder();
+        foreach (var action in read.Targets.Select(target => this.sourceApply.ActionOf(read.Node.Node, ChangeSelection.OfNode(read.Node.Path), target)))
+        {
+            _ = builder.AddMenuItem(new MenuItemData { Text = action.Label, Command = action.Command });
+        }
+
+        this.SelectedNodeApplyMenu = read.Targets.Count == 0 ? null : builder.Build();
+    }
+
+    // The commands a component's row offers: applying the selected instanced node's changes of that component to each
+    // scene on its path.
+    private Task<IReadOnlyList<OverrideAction>> ComponentApplyActionsAsync(Type componentType)
+    {
+        if (this.SelectedInstancedNode() is not { } reference
+            || this.SelectedNode is not { } shown
+            || this.InspectedScene is not { } scene
+            || InstanceOf(scene, reference)?.Changes.Of(reference.Path) is not { } changes
+            || changes.Components.Keys.FirstOrDefault(kind => ComponentOf(shown, kind) is { } target && componentType.IsInstanceOfType(target)) is not { } kind)
+        {
+            return Task.FromResult<IReadOnlyList<OverrideAction>>([]);
+        }
+
+        return this.sourceApply.ActionsAsync(reference, ChangeSelection.OfComponent(reference.Path, kind));
+
+        // The component of a transient node that holds a kind's values.
+        static object? ComponentOf(SceneNode node, string kind)
+            => string.Equals(kind, SceneSchema.Geometry.Kind, StringComparison.Ordinal)
+                ? node.Components.OfType<GeometryComponent>().FirstOrDefault()
+                : SceneProperties.RulesOf(kind)?.TargetOf(node.Scene, node);
     }
 }

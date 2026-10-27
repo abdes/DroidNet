@@ -6,6 +6,7 @@ using System.Windows.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
+using Oxygen.Editor.Controls.PropertyEditors;
 using Windows.Foundation;
 using IPreferredWidthSource = DroidNet.Controls.IPreferredWidthSource;
 using NumberBox = DroidNet.Controls.NumberBox;
@@ -21,7 +22,8 @@ namespace Oxygen.Editor.Controls;
 /// <remarks>
 ///     A row whose value overrides its source, such as a surface's asset default, shows a bar in the gutter before it:
 ///     full strength when every edited object overrides it, half strength when only some do. While it is marked and has
-///     a <see cref="ResetCommand"/>, a trailing button resets it to the source.
+///     a <see cref="ResetCommand"/>, a trailing button resets it to the source, and its context menu offers reset and
+///     the commands of <see cref="OverrideActions"/>.
 /// </remarks>
 [TemplateVisualState(Name = NormalState, GroupName = CommonStates)]
 [TemplateVisualState(Name = PointerOverState, GroupName = CommonStates)]
@@ -171,6 +173,7 @@ public partial class PropertyCard : ContentControl
         this.appliedLayout = null;
         this.UpdateOverrideVisuals();
         this.IsEnabledChanged -= this.OnIsEnabledChanged;
+        this.ContextRequested -= this.OnContextRequested;
         this.PointerEntered -= this.OnPointerEntered;
         this.PointerExited -= this.OnPointerExited;
         this.CheckInitialVisualState();
@@ -178,6 +181,7 @@ public partial class PropertyCard : ContentControl
         this.PointerEntered += this.OnPointerEntered;
         this.PointerExited += this.OnPointerExited;
         this.IsEnabledChanged += this.OnIsEnabledChanged;
+        this.ContextRequested += this.OnContextRequested;
     }
 
     /// <inheritdoc />
@@ -234,21 +238,7 @@ public partial class PropertyCard : ContentControl
 
             if (chosenLayout != this.appliedLayout)
             {
-                this.layoutRoot.ColumnDefinitions.Clear();
-                this.layoutRoot.RowDefinitions.Clear();
-                this.layoutRoot.ColumnSpacing = chosenLayout == PropertyLayout.Inline ? 12 : 0;
-                this.layoutRoot.RowSpacing = this.IsHeaderVisible && chosenLayout == PropertyLayout.Stacked ? 4 : 0;
-                this.layoutRoot.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(chosenLayout == PropertyLayout.Inline ? InlineLabelWidthRatio : 1, GridUnitType.Star) });
-                if (chosenLayout == PropertyLayout.Inline)
-                {
-                    this.layoutRoot.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1 - InlineLabelWidthRatio, GridUnitType.Star) });
-                }
-
-                this.layoutRoot.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-                this.layoutRoot.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-                Grid.SetRow(valueGroup, chosenLayout == PropertyLayout.Inline ? 0 : 1);
-                Grid.SetColumn(valueGroup, chosenLayout == PropertyLayout.Inline ? 1 : 0);
-                this.appliedLayout = chosenLayout;
+                this.ApplyLayout(this.layoutRoot, valueGroup, chosenLayout);
             }
         }
 
@@ -270,6 +260,26 @@ public partial class PropertyCard : ContentControl
             card.UpdateOverrideVisuals();
             card.InvalidateMeasure();
         }));
+
+    // Rebuilds the row's grid for a layout: label and value side by side, or the value below the label.
+    private void ApplyLayout(Grid root, FrameworkElement valueGroup, PropertyLayout layout)
+    {
+        root.ColumnDefinitions.Clear();
+        root.RowDefinitions.Clear();
+        root.ColumnSpacing = layout == PropertyLayout.Inline ? 12 : 0;
+        root.RowSpacing = this.IsHeaderVisible && layout == PropertyLayout.Stacked ? 4 : 0;
+        root.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(layout == PropertyLayout.Inline ? InlineLabelWidthRatio : 1, GridUnitType.Star) });
+        if (layout == PropertyLayout.Inline)
+        {
+            root.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1 - InlineLabelWidthRatio, GridUnitType.Star) });
+        }
+
+        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        Grid.SetRow(valueGroup, layout == PropertyLayout.Inline ? 0 : 1);
+        Grid.SetColumn(valueGroup, layout == PropertyLayout.Inline ? 1 : 0);
+        this.appliedLayout = layout;
+    }
 
     private void UpdateOverrideVisuals()
     {

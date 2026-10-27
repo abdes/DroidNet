@@ -6,7 +6,8 @@ using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Oxygen.Editor.ContentPipeline.Inspection;
-using Oxygen.Editor.Controls;
+using Oxygen.Editor.Controls.PropertyEditors;
+using Oxygen.Editor.SceneInspector.Editing;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
@@ -36,8 +37,11 @@ public sealed partial class LodPolicyViewModel : ObservableObject
     /// <param name="owner">The geometry section that edits the policy.</param>
     internal LodPolicyViewModel(GeometryViewModel owner) => this.owner = owner;
 
+    /// <summary>Gets the commands the policy row offers besides reset.</summary>
+    public IOverrideActionSource Actions => new InspectorOverrideActions(() => this.owner.ApplyActionsAsync([SceneSchema.Geometry.LodPolicy.Id], part: null));
+
     /// <summary>Gets the names of the policy kinds, as the kind list offers them.</summary>
-    public IReadOnlyList<string> Kinds => LodPolicyShapes.KindNames;
+    public IReadOnlyList<string> Kinds { get; } = LodPolicyShapes.KindNames;
 
     /// <summary>
     /// Gets a value indicating whether the rows show: the selected nodes share one geometry whose inventory is read, and
@@ -126,7 +130,7 @@ public sealed partial class LodPolicyViewModel : ObservableObject
 
             if (value != Math.Floor(value) || value < 0 || value >= this.lodCount)
             {
-                this.ShowError(null, string.Create(CultureInfo.CurrentCulture, $"The LOD must be a whole number from 0 to {this.lodCount - 1}."));
+                this.ShowError(error: null, string.Create(CultureInfo.CurrentCulture, $"The LOD must be a whole number from 0 to {this.lodCount - 1}."));
                 this.OnPropertyChanged(nameof(this.FixedLod));
                 return;
             }
@@ -194,7 +198,7 @@ public sealed partial class LodPolicyViewModel : ObservableObject
         this.kind = -1;
         this.IsAvailable = false;
         this.Transitions = [];
-        this.ShowError(null);
+        this.ShowError(error: null);
     }
 
     /// <summary>Shows why an edit was refused, or clears it.</summary>

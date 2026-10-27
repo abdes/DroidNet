@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Text.Json;
 using AwesomeAssertions;
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Controls;
@@ -11,7 +12,9 @@ using Moq;
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.ContentPipeline.Testing;
 using Oxygen.Editor.Projects.Testing;
+using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.Scenes.Edits.Hierarchy;
+using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.Scenes.Nodes;
 using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.Scenes.Testing;
@@ -26,15 +29,19 @@ namespace Oxygen.Editor.SceneExplorer.Unit.UI.Tests;
 /// <summary>
 /// The row menu of a node an instance brought in (scene instances 6.2, 6.8, 6.9, 8.4): <em>Select instance</em> selects
 /// the instance root, <em>Copy</em> stages an owned copy, every structural command stays in the menu, disabled, with
-/// the refusal as its tooltip; the instance root's menu unpacks it.
+/// the refusal as its tooltip; the instance root's menu unpacks it; a changed node of an authored scene's instance offers
+/// <em>Apply to</em> that scene, which a model's never does.
 /// </summary>
 [TestClass]
 internal sealed partial class SceneExplorerInstanceMenuTests : DroidNet.Tests.VisualUserInterfaceTests
 {
     private static readonly AssetPath Car = AssetPath.Parse("/Content/Vehicles/Car.glb");
+    private static readonly AssetPath Watchtower = AssetPath.Parse("/Content/Prefabs/Watchtower.oscene");
 
     // The row menu's commands that change structure, which a node an instance brings in refuses.
     private static readonly string[] StructuralCommands = ["Rename", "Delete node", "Cut", "New child node", "Paste"];
+
+    public TestContext TestContext { get; set; } = null!;
 
     [TestMethod]
     public Task SelectInstance_SelectsTheInstanceRoot() => EnqueueAsync(async () =>
@@ -99,24 +106,59 @@ internal sealed partial class SceneExplorerInstanceMenuTests : DroidNet.Tests.Vi
         _ = node.Hierarchy.Children.Select(static child => child.Metadata.Name).Should().Equal("Door_FL");
     });
 
+    [TestMethod]
+    public Task ApplyTo_MovesAChangedNodesChangeIntoTheAuthoredScene() => EnqueueAsync(async () =>
+    {
+        using var harness = await InstanceMenuHarness.CreateAsync(Watchtower).ConfigureAwait(true);
+        using var explorer = await harness.OpenAsync().ConfigureAwait(true);
+        harness.ChangeDoor(4f);
+        var door = harness.Reveal(explorer);
+
+        _ = await explorer.PrepareContextMenuAsync(door).ConfigureAwait(true);
+        var item = MenuItem(explorer, door, "Apply to Watchtower");
+        _ = item.IsEnabled.Should().BeTrue();
+        await ((IAsyncRelayCommand)item.Command!).ExecuteAsync(parameter: null).ConfigureAwait(true);
+
+        var instance = harness.Document.Scene.AllNodes.Single(node => node.Id == harness.Root).Components.OfType<SceneInstanceComponent>().Single();
+        _ = instance.Changes.IsEmpty.Should().BeTrue();
+        var watchtower = await SceneFiles.ReadAsync(harness.Document.Project, Watchtower, this.TestContext.CancellationToken).ConfigureAwait(true);
+        _ = watchtower!.AllNodes.Single(node => node.Id == harness.Door.Path.Nodes[0]).Transform.LocalPosition.X.Should().Be(4f);
+    });
+
+    [TestMethod]
+    public Task AModelsNode_OffersNoApplyTo() => EnqueueAsync(async () =>
+    {
+        using var harness = await InstanceMenuHarness.CreateAsync().ConfigureAwait(true);
+        using var explorer = await harness.OpenAsync().ConfigureAwait(true);
+        harness.ChangeDoor(4f);
+        var door = harness.Reveal(explorer);
+
+        _ = await explorer.PrepareContextMenuAsync(door).ConfigureAwait(true);
+
+        _ = explorer.BuildContextMenuSource(door).Items.Should().NotContain(item => item.Text != null && item.Text.StartsWith("Apply to", StringComparison.Ordinal));
+    });
+
     private static MenuItemData MenuItem(SceneExplorerViewModel explorer, ITreeItem row, string label)
         => explorer.BuildContextMenuSource(row).Items.Single(item => string.Equals(item.Text, label, StringComparison.Ordinal));
 
-    /// <summary>A scene with an instance of <c>Car.glb</c>, whose structure holds the root node <c>Door_FL</c>.</summary>
+    /// <summary>
+    /// A scene with an instance of <c>Car.glb</c>, or of <c>Watchtower.oscene</c>, whose structure holds the root node
+    /// <c>Door_FL</c>.
+    /// </summary>
     private sealed partial class InstanceMenuHarness : IDisposable
     {
         private readonly TestSession session;
         private readonly FakeSceneStructures structures = new();
         private readonly TestDocumentArea documents = new();
 
-        private InstanceMenuHarness(TestSession session, TestScene document, NodeId root)
+        private InstanceMenuHarness(TestSession session, TestScene document, NodeId root, AssetPath source, NodePath door)
         {
             this.session = session;
             this.Document = document;
             this.Root = root;
-            this.Door = new NodeReference(root, NodePath.Of(NodeId.New()));
-            _ = this.structures.Publish(Car, (this.Door.Path, "Door_FL", null));
-            this.structures.PublishValues(Car, this.Door.Path, new InstancedNodeValues("Door_FL", Geometry: null, []));
+            this.Door = new NodeReference(root, door);
+            _ = this.structures.Publish(source, (this.Door.Path, "Door_FL", null));
+            this.structures.PublishValues(source, this.Door.Path, new InstancedNodeValues("Door_FL", Geometry: null, []));
             this.documents.Activate(document.Document);
         }
 
@@ -130,14 +172,33 @@ internal sealed partial class SceneExplorerInstanceMenuTests : DroidNet.Tests.Vi
 
         public SceneNodeClipboard Clipboard { get; } = new();
 
-        public static async Task<InstanceMenuHarness> CreateAsync()
+        public static async Task<InstanceMenuHarness> CreateAsync(AssetPath? source = null)
         {
             var project = TestProject.Create(new MockFileSystem(), @"C:\InstanceMenuHarness");
+            var door = NodeId.New();
+            if (source is { } scene)
+            {
+                // The authored scene's file holds the door at the origin.
+                var watchtower = new Scene { Name = "Watchtower" };
+                var doorNode = new SceneNode(watchtower, "Door_FL");
+                watchtower.RootNodes.Add(doorNode);
+                door = doorNode.Id;
+                _ = project.WriteFile(scene.VirtualPath + ".json", JsonSerializer.SerializeToUtf8Bytes(new SceneFileData(watchtower.Dehydrate(), explorerLayout: null), SceneFileJsonContext.Default.SceneFileData));
+            }
+
             var document = TestScenes.Open(new Scene { Name = "Harbor" }, project: project);
-            var node = SceneNodeTemplates.Instance(document.Scene, Car);
+            var node = SceneNodeTemplates.Instance(document.Scene, source ?? Car);
             _ = (await document.Authoring.ExecuteAsync(new InsertNodes([SceneNodeTemplates.Append(document.Scene, document.Layout, node)])).ConfigureAwait(true))
                 .Succeeded.Should().BeTrue();
-            return new InstanceMenuHarness(new TestSession(project.Context), document, node.Id);
+            return new InstanceMenuHarness(new TestSession(project.Context), document, node.Id, source ?? Car, NodePath.Of(door));
+        }
+
+        /// <summary>Moves the door, as the Properties pane does: a change of the instance root.</summary>
+        /// <param name="x">The door's position x.</param>
+        public void ChangeDoor(float x)
+        {
+            var instance = this.Document.Scene.AllNodes.Single(node => node.Id == this.Root).Components.OfType<SceneInstanceComponent>().Single();
+            instance.Changes = InstanceChanges.None.With(this.Door.Path, InstancedNodeChanges.None.With(SourceOverrides.ChangesOf(SceneSchema.Transform.Kind).With(SceneSchema.Transform.PositionX, x)));
         }
 
         public async Task<SceneExplorerViewModel> OpenAsync()

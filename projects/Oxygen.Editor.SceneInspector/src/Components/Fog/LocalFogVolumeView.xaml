@@ -19,6 +19,7 @@
         IsExpanded="{x:Bind ViewModel.IsExpanded, Mode=TwoWay}">
         <editorcontrols:PropertiesExpander.Items>
             <editorcontrols:PropertyCard
+                OverrideActions="{x:Bind ViewModel.EnabledOverride}"
                 OverrideState="{x:Bind ViewModel.EnabledOverride.State, Mode=OneWay}"
                 PropertyName="Enabled"
                 ResetCommand="{x:Bind ViewModel.EnabledOverride.ResetCommand}">
@@ -32,6 +33,7 @@
                 IsMixed="{x:Bind ViewModel.RadialFogExtinction.IsMixed, Mode=OneWay}"
                 Label="Density"
                 NumberValue="{x:Bind ViewModel.RadialFogExtinction.Number, Mode=TwoWay}"
+                OverrideActions="{x:Bind ViewModel.RadialFogExtinctionOverride}"
                 OverrideState="{x:Bind ViewModel.RadialFogExtinctionOverride.State, Mode=OneWay}"
                 ResetCommand="{x:Bind ViewModel.RadialFogExtinctionOverride.ResetCommand}"
                 Tag="RadialFogExtinction"
@@ -44,6 +46,7 @@
                 IsMixed="{x:Bind ViewModel.HeightFogExtinction.IsMixed, Mode=OneWay}"
                 Label="Height density"
                 NumberValue="{x:Bind ViewModel.HeightFogExtinction.Number, Mode=TwoWay}"
+                OverrideActions="{x:Bind ViewModel.HeightFogExtinctionOverride}"
                 OverrideState="{x:Bind ViewModel.HeightFogExtinctionOverride.State, Mode=OneWay}"
                 ResetCommand="{x:Bind ViewModel.HeightFogExtinctionOverride.ResetCommand}"
                 Tag="HeightFogExtinction"
@@ -56,6 +59,7 @@
                 IsMixed="{x:Bind ViewModel.HeightFogFalloff.IsMixed, Mode=OneWay}"
                 Label="Height falloff"
                 NumberValue="{x:Bind ViewModel.HeightFogFalloff.Number, Mode=TwoWay}"
+                OverrideActions="{x:Bind ViewModel.HeightFogFalloffOverride}"
                 OverrideState="{x:Bind ViewModel.HeightFogFalloffOverride.State, Mode=OneWay}"
                 ResetCommand="{x:Bind ViewModel.HeightFogFalloffOverride.ResetCommand}"
                 Tag="HeightFogFalloff" />
@@ -67,6 +71,7 @@
                 IsMixed="{x:Bind ViewModel.HeightFogOffset.IsMixed, Mode=OneWay}"
                 Label="Height offset"
                 NumberValue="{x:Bind ViewModel.HeightFogOffset.Number, Mode=TwoWay}"
+                OverrideActions="{x:Bind ViewModel.HeightFogOffsetOverride}"
                 OverrideState="{x:Bind ViewModel.HeightFogOffsetOverride.State, Mode=OneWay}"
                 ResetCommand="{x:Bind ViewModel.HeightFogOffsetOverride.ResetCommand}"
                 Tag="HeightFogOffset"
@@ -79,6 +84,7 @@
                 IsMixed="{x:Bind ViewModel.FogPhaseG.IsMixed, Mode=OneWay}"
                 Label="Phase"
                 NumberValue="{x:Bind ViewModel.FogPhaseG.Number, Mode=TwoWay}"
+                OverrideActions="{x:Bind ViewModel.FogPhaseGOverride}"
                 OverrideState="{x:Bind ViewModel.FogPhaseGOverride.State, Mode=OneWay}"
                 ResetCommand="{x:Bind ViewModel.FogPhaseGOverride.ResetCommand}"
                 Tag="FogPhaseG" />
@@ -92,6 +98,7 @@
                 Green="{x:Bind ViewModel.AlbedoG, Mode=TwoWay}"
                 HasError="{x:Bind ViewModel.AlbedoDiagnostic.HasError, Mode=OneWay}"
                 Label="Albedo"
+                OverrideActions="{x:Bind ViewModel.AlbedoOverride}"
                 OverrideState="{x:Bind ViewModel.AlbedoOverride.State, Mode=OneWay}"
                 PickerAutomationName="Pick fog albedo color"
                 Red="{x:Bind ViewModel.AlbedoR, Mode=TwoWay}"
@@ -107,6 +114,7 @@
                 HasError="{x:Bind ViewModel.EmissiveDiagnostic.HasError, Mode=OneWay}"
                 Kind="Luminance"
                 Label="Emissive"
+                OverrideActions="{x:Bind ViewModel.EmissiveOverride}"
                 OverrideState="{x:Bind ViewModel.EmissiveOverride.State, Mode=OneWay}"
                 PickerAutomationName="Pick fog emissive color"
                 Red="{x:Bind ViewModel.EmissiveR, Mode=TwoWay}"
@@ -120,6 +128,7 @@
                 Label="Sort priority"
                 Mask="~."
                 NumberValue="{x:Bind ViewModel.SortPriority, Mode=TwoWay}"
+                OverrideActions="{x:Bind ViewModel.SortPriorityOverride}"
                 OverrideState="{x:Bind ViewModel.SortPriorityOverride.State, Mode=OneWay}"
                 ResetCommand="{x:Bind ViewModel.SortPriorityOverride.ResetCommand}"
                 Tag="SortPriority" />

@@ -31,7 +31,7 @@ public sealed partial class OrthographicCameraViewModel : ComponentPropertyEdito
         this.StartingCamera = new(authoringProvider);
         if (authoringProvider is not null)
         {
-            this.edits = new(authoringProvider, "Edit Camera", this.RefreshValues);
+            this.edits = new(authoringProvider, "Edit Camera", this.RefreshValues, sourceApply: () => this.SourceApply);
             this.edits.Diagnostics.Relate(this.NearPlane.Id.Id, this.FarPlane.Id.Id);
         }
 

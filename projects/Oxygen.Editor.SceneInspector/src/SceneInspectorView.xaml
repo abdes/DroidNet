@@ -75,6 +75,7 @@
                         <local:SceneNodeDetailsView
                             x:Name="NodeDetails"
                             AllComponentsRequested="OnAllComponentsRequested"
+                            ApplyMenu="{x:Bind ViewModel.SelectedNodeApplyMenu, Mode=OneWay}"
                             IsAllComponentsSelected="{x:Bind ViewModel.IsAllComponentsSelected, Mode=OneWay}"
                             IsEnabled="{x:Bind ViewModel.CanUseNodeHeader, Mode=OneWay}"
                             LoggerFactory="{x:Bind ViewModel.LoggerFactory}"
@@ -137,6 +138,7 @@
                                             AutomationProperties.HelpText="{x:Bind UnavailableReason, Mode=OneWay}"
                                             AutomationProperties.Name="{x:Bind Label}"
                                             Checked="OnComponentFilterChanged"
+                                            ContextRequested="OnComponentFilterContextRequested"
                                             IsChecked="{x:Bind IsSelected, Mode=OneWay}"
                                             IsEnabled="{x:Bind IsAvailable, Mode=OneWay}"
                                             Tag="{x:Bind}"

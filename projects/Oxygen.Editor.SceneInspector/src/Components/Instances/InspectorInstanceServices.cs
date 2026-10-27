@@ -10,7 +10,10 @@ using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.SceneInspector.Components.Instances;
 
-/// <summary>The services the Scene Instance section swaps and unpacks an instance with, those the host provides.</summary>
+/// <summary>
+/// The services the Scene Instance section swaps, unpacks and applies an instance with, and the Properties pane applies
+/// changes to their sources with, those the host provides.
+/// </summary>
 /// <param name="Assets">The content catalog the source picker lists models and scenes from.</param>
 /// <param name="References">The saved authored references, which leave out the scenes that would make a cycle.</param>
 /// <param name="Structures">What the instances of the shown scene contain.</param>
@@ -21,6 +24,7 @@ namespace Oxygen.Editor.SceneInspector.Components.Instances;
 /// <param name="Dialogs">Asks whether to keep or discard the changes.</param>
 /// <param name="OperationResults">Tells the user about the changes an unpack dropped.</param>
 /// <param name="StatusReducer">The reducer paired with <paramref name="OperationResults"/>.</param>
+/// <param name="SourceApply">Applies changes of an instance to the authored scenes on their node paths.</param>
 internal sealed record InspectorInstanceServices(
     IAssetFeed? Assets,
     IAuthoredReferences? References = null,
@@ -28,4 +32,5 @@ internal sealed record InspectorInstanceServices(
     IInstancedNodeReader? Nodes = null,
     IDialogService? Dialogs = null,
     IOperationResultPublisher? OperationResults = null,
-    IStatusReducer? StatusReducer = null);
+    IStatusReducer? StatusReducer = null,
+    InspectorSourceApply? SourceApply = null);

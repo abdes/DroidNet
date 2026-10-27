@@ -39,11 +39,22 @@
                     ToolTipService.ToolTip="{x:Bind ViewModel.SourceKind, Mode=OneWay}" />
             </editorcontrols:PropertyCard>
 
+            <!--  Changes: how many, and applying them to the authored scene the instance comes from; a model refuses with the reason.  -->
             <editorcontrols:PropertyCard PropertyName="Changes">
-                <TextBlock
-                    VerticalAlignment="Center"
-                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                    Text="{x:Bind ViewModel.ChangeCount, Mode=OneWay}" />
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <TextBlock
+                        VerticalAlignment="Center"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Text="{x:Bind ViewModel.ChangeCount, Mode=OneWay}" />
+                    <Grid ToolTipService.ToolTip="{x:Bind ViewModel.ApplyToolTip, Mode=OneWay}">
+                        <Button
+                            AutomationProperties.HelpText="{x:Bind ViewModel.ApplyToolTip, Mode=OneWay}"
+                            AutomationProperties.Name="{x:Bind ViewModel.ApplyLabel, Mode=OneWay}"
+                            Click="OnApplyClick"
+                            Content="{x:Bind ViewModel.ApplyLabel, Mode=OneWay}"
+                            IsEnabled="{x:Bind ViewModel.CanApply, Mode=OneWay}" />
+                    </Grid>
+                </StackPanel>
             </editorcontrols:PropertyCard>
 
             <!--  Unpack: the instance's nodes become the scene's own.  -->

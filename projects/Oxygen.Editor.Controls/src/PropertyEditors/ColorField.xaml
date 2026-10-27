@@ -21,6 +21,7 @@
                             HorizontalContentAlignment="Stretch"
                             FontSize="{TemplateBinding FontSize}"
                             IsCompound="True"
+                            OverrideActions="{TemplateBinding OverrideActions}"
                             OverrideState="{TemplateBinding OverrideState}"
                             PropertyName="{TemplateBinding Label}"
                             QualifierGroup="{TemplateBinding QualifierGroup}"

@@ -30,9 +30,18 @@ namespace Oxygen.Editor.SceneExplorer;
 /// <summary>Captured command surfaces for the Explorer.</summary>
 public partial class SceneExplorerViewModel
 {
+    // The menu group of the commands on an instance: selecting it, unpacking it and applying its changes to its source.
+    private const string InstanceGroup = "instance";
+
     private readonly Dictionary<SceneExplorerCommandKind, AsyncRelayCommand> contextToolbarCommands = [];
     private readonly Dictionary<MenuItemData, SceneExplorerCommandKind> openMenuActions = [];
+
+    // The open menu's Apply to items, by the row whose changes they apply.
+    private readonly Dictionary<MenuItemData, ITreeItem> openMenuApply = [];
     private CapturedExplorerContext? openMenuContext;
+
+    // The authored scenes the menu's instance row can apply its changes to, read when the menu opens.
+    private (NodeReference Node, IReadOnlyList<ApplyTarget> Targets)? menuApplyTargets;
     private IMenuSource? openMenuSource;
 
     /// <summary>Raised when the open menu's immutable targets are no longer current.</summary>
@@ -85,19 +94,19 @@ public partial class SceneExplorerViewModel
             return false;
         }
 
-        if (anchor is null || this.GetSelectedItems().Contains(anchor))
+        if (anchor is not null && !this.GetSelectedItems().Contains(anchor))
         {
-            return true;
+            await authoring.FinishEditsAsync().ConfigureAwait(true);
+            if (!ReferenceEquals(this.CurrentAuthoring(), authoring) || !this.IsShown(anchor))
+            {
+                return false;
+            }
+
+            this.SelectDisplayedItem(anchor, [.. this.ShownItems], isControlDown: false, isShiftDown: false);
         }
 
-        await authoring.FinishEditsAsync().ConfigureAwait(true);
-        if (!ReferenceEquals(this.CurrentAuthoring(), authoring) || !this.IsShown(anchor))
-        {
-            return false;
-        }
-
-        this.SelectDisplayedItem(anchor, [.. this.ShownItems], isControlDown: false, isShiftDown: false);
-        return true;
+        this.menuApplyTargets = await this.ReadApplyTargetsAsync(authoring, anchor).ConfigureAwait(true);
+        return ReferenceEquals(this.CurrentAuthoring(), authoring);
     }
 
     /// <summary>Builds a frozen row or background menu; execution never substitutes a later selection.</summary>
@@ -109,6 +118,7 @@ public partial class SceneExplorerViewModel
         var builder = new MenuBuilder();
         this.openMenuContext = context;
         this.openMenuActions.Clear();
+        this.openMenuApply.Clear();
         if (context is not null)
         {
             string? lastGroup = null;
@@ -116,6 +126,11 @@ public partial class SceneExplorerViewModel
             {
                 if (lastGroup is not null && !string.Equals(lastGroup, group, StringComparison.Ordinal))
                 {
+                    if (string.Equals(lastGroup, InstanceGroup, StringComparison.Ordinal))
+                    {
+                        this.AddApplyItems(builder, context);
+                    }
+
                     _ = builder.AddSeparator();
                 }
 
@@ -133,6 +148,11 @@ public partial class SceneExplorerViewModel
                 };
                 this.openMenuActions.Add(item, kind);
                 _ = builder.AddMenuItem(item);
+            }
+
+            if (string.Equals(lastGroup, InstanceGroup, StringComparison.Ordinal))
+            {
+                this.AddApplyItems(builder, context);
             }
         }
 
@@ -167,13 +187,19 @@ public partial class SceneExplorerViewModel
         {
             foreach (var item in source.Items.Where(static item => !item.IsSeparator))
             {
-                var reason = this.GetContextDisabledReason(this.openMenuActions[item], context);
+                var reason = this.openMenuApply.TryGetValue(item, out var row)
+                    ? this.GetApplyDisabledReason(row)
+                    : this.GetContextDisabledReason(this.openMenuActions[item], context);
                 item.IsEnabled = reason is null;
                 item.HelpText = reason;
                 (item.Command as AsyncRelayCommand)?.NotifyCanExecuteChanged();
             }
         }
     }
+
+    // Which changes a row's Apply to moves: all of an instance root's, or a node's own.
+    private static ChangeSelection ApplySelectionOf(NodeReference node)
+        => node.IsOwned ? ChangeSelection.Instance : ChangeSelection.OfNode(node.Path);
 
     private static SymbolIconSource? GetContextActionIcon(SceneExplorerCommandKind kind) => kind switch
     {
@@ -213,13 +239,13 @@ public partial class SceneExplorerViewModel
         var folder = single ? targets[0] as FolderAdapter : null;
         if (instanced is not null)
         {
-            yield return (SceneExplorerCommandKind.SelectInstance, "Select instance", "instance");
+            yield return (SceneExplorerCommandKind.SelectInstance, "Select instance", InstanceGroup);
         }
 
         if (node is { IsInstanceRoot: true })
         {
-            yield return (SceneExplorerCommandKind.Unpack, "Unpack", "instance");
-            yield return (SceneExplorerCommandKind.UnpackCompletely, "Unpack completely", "instance");
+            yield return (SceneExplorerCommandKind.Unpack, "Unpack", InstanceGroup);
+            yield return (SceneExplorerCommandKind.UnpackCompletely, "Unpack completely", InstanceGroup);
         }
 
         if (targets.Count == 0 || single)
@@ -433,6 +459,61 @@ public partial class SceneExplorerViewModel
         this.StageClipboard(items, cut);
     }
 
+    // Apply to takes the row's own changes, or all of an instance root's, while neither the row nor an ancestor is locked.
+    private string? GetApplyDisabledReason(ITreeItem row)
+        => this.FindLockedContextRow(row) is { } locked ? $"Locked by {locked.Label}." : null;
+
+    // The authored scenes an instance root's or instanced row's changes can go to, while it has any; null for another row.
+    private async Task<(NodeReference Node, IReadOnlyList<ApplyTarget> Targets)?> ReadApplyTargetsAsync(SceneAuthoring authoring, ITreeItem? anchor)
+    {
+        if (this.session?.Context is not { } project
+            || anchor is not (SceneNodeAdapter { IsInstanceRoot: true } or InstancedNodeAdapter)
+            || anchor is not NodeRowAdapter { Reference: var reference }
+            || authoring.Scene.AllNodes.FirstOrDefault(node => node.Id == reference.Node)?.Components.OfType<SceneInstanceComponent>().FirstOrDefault() is not { } instance
+            || !instance.Changes.Nodes.Any(entry => !ApplySelectionOf(reference).Select(entry.Key, entry.Value).IsEmpty))
+        {
+            return null;
+        }
+
+        return (reference, await new SourceApplication(project).TargetsAsync(authoring.Scene, reference).ConfigureAwait(true));
+    }
+
+    // One Apply to item per authored scene the menu's single instance row can apply its changes to.
+    private void AddApplyItems(MenuBuilder builder, CapturedExplorerContext context)
+    {
+        if (this.menuApplyTargets is not { } read || context.Targets is not [NodeRowAdapter row] || row.Reference != read.Node)
+        {
+            return;
+        }
+
+        foreach (var target in read.Targets)
+        {
+            var reason = this.GetApplyDisabledReason(row);
+            var item = new MenuItemData
+            {
+                Text = target.Label,
+                HelpText = reason,
+                IsEnabled = reason is null,
+                Command = new AsyncRelayCommand(
+                    () => this.ApplyToSourceAsync(context.Authoring, read.Node, target),
+                    () => this.GetApplyDisabledReason(row) is null),
+            };
+            this.openMenuApply.Add(item, row);
+            _ = builder.AddMenuItem(item);
+        }
+    }
+
+    private async Task ApplyToSourceAsync(SceneAuthoring authoring, NodeReference node, ApplyTarget target)
+    {
+        if (this.session?.Context is not { } project)
+        {
+            return;
+        }
+
+        var result = await new SourceApplication(project).ExecuteAsync(authoring, node.Node, ApplySelectionOf(node), target).ConfigureAwait(true);
+        this.PublishInstanceResult(SceneOperationKinds.EditInstance, "Changes not applied", result, "Changes kept on the instance");
+    }
+
     // Unpack takes one instance root that is not locked, and needs the contents of its source.
     private string? GetUnpackDisabledReason(CapturedExplorerContext context)
         => context.Targets is not [SceneNodeAdapter { IsInstanceRoot: true } root] ? "Select one instance root."
@@ -452,11 +533,11 @@ public partial class SceneExplorerViewModel
     }
 
     // Tells the user why an instance command did nothing, or what it dropped.
-    private void PublishInstanceResult(string operationKind, string failureTitle, SceneEditResult result)
+    private void PublishInstanceResult(string operationKind, string failureTitle, SceneEditResult result, string warningTitle = "Changes dropped")
     {
         if (this.operationResults is { } publisher && this.statusReducer is { } reducer)
         {
-            SceneOperationResults.PublishEditResult(publisher, reducer, operationKind, failureTitle, "Changes dropped", result, new AffectedScope { SceneId = this.Scene?.AttachedObject.Id });
+            SceneOperationResults.PublishEditResult(publisher, reducer, operationKind, failureTitle, warningTitle, result, new AffectedScope { SceneId = this.Scene?.AttachedObject.Id });
         }
     }
 

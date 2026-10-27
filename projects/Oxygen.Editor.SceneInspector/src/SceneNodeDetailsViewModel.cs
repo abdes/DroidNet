@@ -183,6 +183,17 @@ public sealed partial class SceneNodeDetailsViewModel : ObservableObject
     [ObservableProperty]
     public partial ICommand? SelectInstanceCommand { get; set; }
 
+    /// <summary>
+    /// Gets or sets the menu that applies the changes of a node an instance brings in to the authored scenes on its path
+    /// (scene instances 6.7); <see langword="null"/> when it has none to apply.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanApply))]
+    public partial IMenuSource? ApplyMenu { get; set; }
+
+    /// <summary>Gets a value indicating whether the node has changes to apply to an authored scene.</summary>
+    public bool CanApply => this.ApplyMenu is not null;
+
     /// <summary>Gets a value indicating whether the node is one an instance brings in.</summary>
     public bool IsInstanced => this.Origin is not null;
 
@@ -279,12 +290,12 @@ public sealed partial class SceneNodeDetailsViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanAddLocalFogVolume))]
     private void AddLocalFogVolume() => this.AddComponent(SceneComponents.LocalFogVolume);
 
-    private bool CanAddLocalFogVolume() => this.CanAddComponents && this.Node is not null && !this.Node.Components.OfType<LocalFogVolumeComponent>().Any();
+    private bool CanAddLocalFogVolume() => this.CanAddComponents && this.Node?.Components.OfType<LocalFogVolumeComponent>().Any() == false;
 
     [RelayCommand(CanExecute = nameof(CanAddScripting))]
     private void AddScripting() => this.AddComponent(SceneComponents.Scripting);
 
-    private bool CanAddScripting() => this.CanAddComponents && this.Node is not null && !this.Node.Components.OfType<ScriptingComponent>().Any();
+    private bool CanAddScripting() => this.CanAddComponents && this.Node?.Components.OfType<ScriptingComponent>().Any() == false;
 
     private bool CanAddCamera() => this.CanAddComponents && this.Node is not null && this.Node.Components.OfType<CameraComponent>().FirstOrDefault() is null;
 

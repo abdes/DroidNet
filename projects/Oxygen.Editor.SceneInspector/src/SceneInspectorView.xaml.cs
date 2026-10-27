@@ -1,4 +1,4 @@
-﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
+// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
@@ -11,6 +11,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
+using Oxygen.Editor.Controls.PropertyEditors;
 
 namespace Oxygen.Editor.SceneInspector;
 
@@ -144,6 +145,15 @@ public sealed partial class SceneInspectorView : UserControl
         foreach (var number in this.PropertySections.FindDescendants().OfType<DroidNet.Controls.NumberBox>())
         {
             number.CompletePendingTextEdit();
+        }
+    }
+
+    // A component's context menu applies the selected instanced node's changes of it to the scenes on its path.
+    private void OnComponentFilterContextRequested(UIElement sender, ContextRequestedEventArgs args)
+    {
+        if (this.ViewModel is not null && sender is ToggleButton { Tag: InspectorComponentFilter { ApplyActions: { } actions } } button)
+        {
+            _ = OverrideActionMenu.ShowAsync(button, args, actions);
         }
     }
 

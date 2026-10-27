@@ -68,6 +68,7 @@ public sealed class MoveLayoutEntriesTests
         LayoutEntryId.Of(SampleScene.Mesh),
         LayoutEntryId.Of(SampleScene.Script),
         LayoutEntryId.Of(SampleScene.Car),
+        LayoutEntryId.Of(SampleScene.Tower),
     ];
 
     [TestMethod]

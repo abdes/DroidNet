@@ -35,6 +35,14 @@ public sealed partial class SceneInstanceView
         }
     }
 
+    private async void OnApplyClick(object sender, RoutedEventArgs args)
+    {
+        _ = sender;
+        _ = args;
+        Debug.Assert(this.ViewModel is not null, "ViewModel should not be null when applying.");
+        await this.ViewModel.ApplyAsync().ConfigureAwait(true);
+    }
+
     private async void OnUnpackClick(object sender, RoutedEventArgs args)
     {
         _ = sender;

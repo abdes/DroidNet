@@ -15,13 +15,13 @@ public sealed partial class SceneInstanceViewModel
         SkipEnabledCheck = true,
         Level = LogLevel.Information,
         Message = "Swapping an instance's source from {From} to {To}; its changes: {Swap}.")]
-    private static partial void LogSwapRequested(ILogger logger, string from, string to, InstanceSwap swap);
+    private static partial void LogSwapRequested(ILogger logger, AssetPath from, AssetPath to, InstanceSwap swap);
 
     private void LogSwapRequested(AssetPath from, AssetPath to, InstanceSwap swap)
     {
         if (this.logger.IsEnabled(LogLevel.Information))
         {
-            LogSwapRequested(this.logger, from.ToString(), to.ToString(), swap);
+            LogSwapRequested(this.logger, from, to, swap);
         }
     }
 
@@ -64,6 +64,34 @@ public sealed partial class SceneInstanceViewModel
         if (this.logger.IsEnabled(LogLevel.Warning))
         {
             LogUnpackRefused(this.logger, code ?? "no diagnostic");
+        }
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Information,
+        Message = "Applying the instance's changes to {Scene}.")]
+    private static partial void LogApplyRequested(ILogger logger, AssetPath scene);
+
+    private void LogApplyRequested(AssetPath scene)
+    {
+        if (this.logger.IsEnabled(LogLevel.Information))
+        {
+            LogApplyRequested(this.logger, scene);
+        }
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Warning,
+        Message = "The instance's changes were not applied: {Code}.")]
+    private static partial void LogApplyRefused(ILogger logger, string code);
+
+    private void LogApplyRefused(string? code)
+    {
+        if (this.logger.IsEnabled(LogLevel.Warning))
+        {
+            LogApplyRefused(this.logger, code ?? "no diagnostic");
         }
     }
 

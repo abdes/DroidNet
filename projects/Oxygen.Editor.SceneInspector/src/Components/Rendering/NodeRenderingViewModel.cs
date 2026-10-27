@@ -47,7 +47,7 @@ public sealed partial class NodeRenderingViewModel : ComponentPropertyEditor, ID
     {
         if (authoringProvider is not null)
         {
-            this.edits = new(authoringProvider, "Edit Rendering", this.RefreshValues);
+            this.edits = new(authoringProvider, "Edit Rendering", this.RefreshValues, sourceApply: () => this.SourceApply);
         }
 
         this.Visibility = new NodeFlagSourceField(
@@ -149,13 +149,13 @@ public sealed partial class NodeRenderingViewModel : ComponentPropertyEditor, ID
     /// <inheritdoc />
     public override void UpdateValues(ICollection<SceneNode> items)
     {
-        var targets = items.ToDictionary(node => this.ReferenceOf(node), static node => (object?)node.Flags);
+        var targets = items.ToDictionary(this.ReferenceOf, static node => (object?)node.Flags);
         var nodes = targets.Keys.ToArray();
         this.edits?.Bind(nodes);
         this.selectedItems = items;
         foreach (var registration in this.registrations)
         {
-            registration.Refresh(nodes, id => targets.GetValueOrDefault(id));
+            registration.Refresh(nodes, targets.GetValueOrDefault);
         }
 
         this.RefreshFields();
@@ -182,16 +182,16 @@ public sealed partial class NodeRenderingViewModel : ComponentPropertyEditor, ID
     private static bool HasGeometry(SceneNode node) => node.Components.OfType<GeometryComponent>().Any();
 
     // Hiding a node hides its children that inherit.
-    private static string? VisibilityNotice(IReadOnlyCollection<SceneNode> nodes)
+    private static string? VisibilityNotice(List<SceneNode> nodes)
         => nodes.Count > 0
-            && nodes.All(static node => node.Flags.Visibility == VisibilitySource.Hidden)
-            && nodes.Any(static node => node.Hierarchy.Children.Any(static child => child.Flags.Visibility == VisibilitySource.Inherit))
+            && nodes.TrueForAll(static node => node.Flags.Visibility == VisibilitySource.Hidden)
+            && nodes.Exists(static node => node.Hierarchy.Children.Any(static child => child.Flags.Visibility == VisibilitySource.Inherit))
                 ? "Children that inherit are hidden too."
                 : null;
 
     // A node without geometry casts and receives nothing itself; its modes reach its children that inherit.
-    private static string? ShadowNotice(IReadOnlyCollection<SceneNode> nodes)
-        => nodes.Count > 0 && !nodes.Any(HasGeometry) ? "Applies to children that inherit." : null;
+    private static string? ShadowNotice(List<SceneNode> nodes)
+        => nodes.Count > 0 && !nodes.Exists(HasGeometry) ? "Applies to children that inherit." : null;
 
     /// <summary>Gets the override bar of a field.</summary>
     /// <param name="ids">The properties the field shows.</param>

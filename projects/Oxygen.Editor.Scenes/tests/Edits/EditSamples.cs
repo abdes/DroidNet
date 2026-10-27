@@ -116,6 +116,8 @@ public static class EditSamples
         SetInstanceSourceSample,
         UnpackInstanceSample,
         RestoreInstanceSample,
+        ApplyToSourceSample,
+        RestoreSourceSample,
         SetStartingInputContextsSample,
         SetSceneReferencesSample,
         SetScriptSlotsSample,
@@ -447,6 +449,44 @@ public static class EditSamples
             HasTargets = true,
         };
 
+    // Tower's move of Post goes into Tower.oscene, whose file the fixture's project holds.
+    private static EditSample ApplyToSourceSample =>
+        new(
+            nameof(ApplyToSource),
+            static _ => ApplyingTower(SampleScene.TowerSource(), SampleScene.TowerSource(postX: 2f)),
+            [new SceneChange.OverridesChanged(SampleScene.Tower, [SceneSchema.Transform.PositionX.Id])],
+            [new SceneChange.OverridesChanged(SampleScene.Tower, [SceneSchema.Transform.PositionX.Id])])
+        {
+            HasTargets = false,
+            Tamper = static _ =>
+            {
+                var previous = SampleScene.TowerSource();
+                var applied = SampleScene.TowerSource(postX: 2f);
+                return new TamperedEdit(ApplyingTower(previous, applied), () =>
+                {
+                    Array.Clear(previous);
+                    Array.Clear(applied);
+                });
+            },
+        };
+
+    // An apply undone: the file holds what it wrote, Tower.oscene as the project holds it, and gets back other bytes.
+    private static EditSample RestoreSourceSample =>
+        new(
+            nameof(RestoreSource),
+            static _ => new RestoreSource(SampleScene.Tower, SampleScene.TowerScene)
+            {
+                Changes = SampleScene.TowerChanges,
+                Restored = InstanceChanges.None,
+                Applied = SampleScene.TowerSource(),
+                Previous = SampleScene.TowerSource(postX: 5f),
+            },
+            [new SceneChange.OverridesChanged(SampleScene.Tower, [SceneSchema.Transform.PositionX.Id])],
+            [new SceneChange.OverridesChanged(SampleScene.Tower, [SceneSchema.Transform.PositionX.Id])])
+        {
+            HasTargets = false,
+        };
+
     private static EditSample SetStartingCameraSample =>
         new(
             nameof(SetStartingCamera),
@@ -632,6 +672,15 @@ public static class EditSamples
             InsertedNode,
             "Inserted",
             components: [new GeometryComponentData { Id = InsertedGeometry, Name = "Geometry", GeometryUri = SampleScene.SphereGeometry }]);
+
+    private static ApplyToSource ApplyingTower(byte[] previous, byte[] applied)
+        => new(SampleScene.Tower, SampleScene.TowerScene)
+        {
+            Changes = SampleScene.TowerChanges,
+            Remaining = InstanceChanges.None,
+            Previous = previous,
+            Applied = applied,
+        };
 
     private static UnpackInstance Unpacking(IReadOnlyList<SceneNodeData> contents)
         => new(SampleScene.Car, InstanceUnpack.One)

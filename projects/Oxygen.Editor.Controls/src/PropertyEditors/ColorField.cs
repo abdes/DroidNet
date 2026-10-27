@@ -7,6 +7,7 @@ using DroidNet.Controls;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
+using Oxygen.Editor.Controls.PropertyEditors;
 
 namespace Oxygen.Editor.Controls;
 
@@ -83,6 +84,9 @@ public sealed partial class ColorField : Control
 
     /// <summary>Identifies the reset button's tooltip and automation name.</summary>
     public static readonly DependencyProperty ResetToolTipProperty = Register<string>(nameof(ResetToolTip), "Reset to the source value");
+
+    /// <summary>Identifies the source of the commands the row's context menu offers besides reset.</summary>
+    public static readonly DependencyProperty OverrideActionsProperty = Register<IOverrideActionSource>(nameof(OverrideActions), defaultValue: null);
 
     private const string CardPartName = "PART_Card";
     private const string ColorBoxPartName = "PART_ColorBox";
@@ -162,6 +166,9 @@ public sealed partial class ColorField : Control
 
     /// <summary>Gets or sets the reset button's tooltip, which names the source.</summary>
     public string ResetToolTip { get => (string)this.GetValue(ResetToolTipProperty); set => this.SetValue(ResetToolTipProperty, value); }
+
+    /// <summary>Gets or sets the source of the commands the row's context menu offers while the value is overridden.</summary>
+    public IOverrideActionSource? OverrideActions { get => (IOverrideActionSource?)this.GetValue(OverrideActionsProperty); set => this.SetValue(OverrideActionsProperty, value); }
 
     /// <summary>Gets or sets the current validation text.</summary>
     public string ErrorText { get => (string)this.GetValue(ErrorTextProperty); set => this.SetValue(ErrorTextProperty, value); }

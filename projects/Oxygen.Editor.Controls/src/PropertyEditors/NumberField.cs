@@ -6,6 +6,7 @@ using System.Windows.Input;
 using DroidNet.Controls;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Oxygen.Editor.Controls.PropertyEditors;
 using NumberBox = DroidNet.Controls.NumberBox;
 
 namespace Oxygen.Editor.Controls;
@@ -69,6 +70,9 @@ public sealed partial class NumberField : Control
 
     /// <summary>Identifies the reset button's tooltip and automation name.</summary>
     public static readonly DependencyProperty ResetToolTipProperty = Register<string>(nameof(ResetToolTip), "Reset to the source value");
+
+    /// <summary>Identifies the source of the commands the row's context menu offers besides reset.</summary>
+    public static readonly DependencyProperty OverrideActionsProperty = Register<IOverrideActionSource>(nameof(OverrideActions), defaultValue: null);
 
     private const string NumberBoxPartName = "PART_NumberBox";
     private const string ErrorTextPartName = "PART_ErrorText";
@@ -142,6 +146,9 @@ public sealed partial class NumberField : Control
 
     /// <summary>Gets or sets the reset button's tooltip, which names the source.</summary>
     public string ResetToolTip { get => (string)this.GetValue(ResetToolTipProperty); set => this.SetValue(ResetToolTipProperty, value); }
+
+    /// <summary>Gets or sets the source of the commands the row's context menu offers while the value is overridden.</summary>
+    public IOverrideActionSource? OverrideActions { get => (IOverrideActionSource?)this.GetValue(OverrideActionsProperty); set => this.SetValue(OverrideActionsProperty, value); }
 
     /// <summary>Retrieves the template parts and forwards the NumberBox's events, detaching from a previous template.</summary>
     protected override void OnApplyTemplate()

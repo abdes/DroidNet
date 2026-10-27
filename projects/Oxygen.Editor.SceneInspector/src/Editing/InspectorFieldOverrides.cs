@@ -2,8 +2,10 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using Oxygen.Editor.Controls;
+using Oxygen.Editor.Controls.PropertyEditors;
+using Oxygen.Editor.SceneInspector.Components.Instances;
 using Oxygen.Editor.Scenes.Edits.Properties;
+using Oxygen.Editor.Scenes.Nodes;
 using Oxygen.Editor.World;
 using Oxygen.Managed.Core;
 
@@ -14,7 +16,11 @@ namespace Oxygen.Editor.SceneInspector.Editing;
 /// brings in by its instance root's changes (scene instances 8.5), a node of the scene by its component's overrides.
 /// </summary>
 /// <param name="reset">Resets properties to the source's value on the edited nodes.</param>
-internal sealed class InspectorFieldOverrides(Action<IReadOnlyList<PropertyId>> reset)
+/// <param name="sourceApply">
+/// Applies a node's changes to the authored scenes on its path, when the pane offers it: a field of a single node an
+/// instance brings in offers it for the changes the field shows.
+/// </param>
+internal sealed class InspectorFieldOverrides(Action<IReadOnlyList<PropertyId>> reset, Func<InspectorSourceApply?>? sourceApply = null)
 {
     private readonly Dictionary<string, (PropertyId[] Properties, InspectorFieldOverride Field)> fields = [with(StringComparer.Ordinal)];
     private Scene? scene;
@@ -28,7 +34,7 @@ internal sealed class InspectorFieldOverrides(Action<IReadOnlyList<PropertyId>> 
         var key = string.Join('|', properties.Select(static property => property.ToString()));
         if (!this.fields.TryGetValue(key, out var entry))
         {
-            entry = (properties, new InspectorFieldOverride(() => reset(properties)));
+            entry = (properties, new InspectorFieldOverride(() => reset(properties), () => this.ActionsAsync(properties)));
             entry.Field.State = this.StateOf(properties);
             this.fields[key] = entry;
         }
@@ -71,6 +77,14 @@ internal sealed class InspectorFieldOverrides(Action<IReadOnlyList<PropertyId>> 
 
         return overriding;
     }
+
+    // The commands that apply the single edited instanced node's changes of the properties to the scenes on its path.
+    private Task<IReadOnlyList<OverrideAction>> ActionsAsync(IReadOnlyList<PropertyId> properties)
+        => sourceApply?.Invoke() is { } apply
+            && this.nodes is [{ IsOwned: false } node]
+            && this.Overriding(properties).GetValueOrDefault(node) is { } overridden
+            ? apply.ActionsAsync(node, ChangeSelection.OfValues(node.Path, overridden))
+            : Task.FromResult<IReadOnlyList<OverrideAction>>([]);
 
     private OverrideState StateOf(IReadOnlyList<PropertyId> properties)
     {

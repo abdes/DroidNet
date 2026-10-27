@@ -43,6 +43,11 @@ selection header and the Scene Explorer.
   button (`E777`), the pattern script parameters use today. Rows that follow
   their source are unmarked. A half-opacity bar means some selected nodes
   override the value.
+- **Apply to source.** The context menu of an overridden row holds _Reset_,
+  named as its tooltip, then, on a node an instance of an authored scene
+  brings in, one _Apply to …_ per scene on the node's path (scene instances
+  6.7). The component list's entries offer the same for a component's
+  changes, and the header's _Apply to…_ menu for all of the node's changes.
 - **The source is named where it is needed:** in the reset tooltip ("Reset to
   the model value (Inherit)"), in the summary of a disclosure ("4 LODs, from
   the asset") and in the Inherit caption. Reset never writes the source's value

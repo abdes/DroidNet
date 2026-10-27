@@ -7,11 +7,13 @@ using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Oxygen.Editor.ContentPipeline.Inspection;
+using Oxygen.Editor.Controls.PropertyEditors;
 using Oxygen.Editor.Pickers;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Edits.Assets;
 using Oxygen.Editor.Scenes.Edits.Properties;
+using Oxygen.Editor.Scenes.Nodes;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Managed.Core;
@@ -60,10 +62,10 @@ public sealed partial class GeometryViewModel
     /// <summary>Gets the number of surfaces, shown after the list's title.</summary>
     public string SurfaceCount => this.Surfaces.Count.ToString(CultureInfo.CurrentCulture);
 
-    /// <summary>Gets whether the selection keeps changes for surfaces its geometry no longer has.</summary>
+    /// <summary>Gets a value indicating whether the selection keeps changes for surfaces its geometry no longer has.</summary>
     public bool HasKeptChanges => this.KeptChanges.Count > 0;
 
-    /// <summary>Gets whether the list has a notice to show.</summary>
+    /// <summary>Gets a value indicating whether the list has a notice to show.</summary>
     public bool HasSurfaceNotice => this.SurfaceNotice.Length > 0;
 
     /// <summary>Resets the selection's overrides of surfaces their geometry does not have, as one undoable edit.</summary>
@@ -76,7 +78,7 @@ public sealed partial class GeometryViewModel
             return;
         }
 
-        var built = await SurfaceEdits.ClearUnresolvedAsync(this.surfaces, this.session.Context, authoring.Scene, this.OwnedIds(nodes)).ConfigureAwait(true);
+        var built = await SurfaceEdits.ClearUnresolvedAsync(this.surfaces, this.session.Context, authoring.Scene, this.OwnedIds(nodes), this.session.Lifetime).ConfigureAwait(true);
         await this.ExecuteSurfaceEditAsync(nodes, authoring, built).ConfigureAwait(true);
     }
 
@@ -90,7 +92,11 @@ public sealed partial class GeometryViewModel
             return;
         }
 
-        this.surfaceRefresh?.Cancel();
+        if (this.surfaceRefresh is { } previous)
+        {
+            await previous.CancelAsync().ConfigureAwait(true);
+        }
+
         var request = new CancellationTokenSource();
         this.surfaceRefresh = request;
         var nodes = this.selectedItems?.ToList() ?? [];
@@ -99,44 +105,17 @@ public sealed partial class GeometryViewModel
         this.IsSurfaceLoading = true;
         try
         {
-            if (nodes.Count == 0 || geometryUri is null)
+            if (this.SurfacesUnreadable(nodes, geometryUri) is { } unavailable)
             {
-                this.SetSurfacesUnavailable("Select geometry to view its surfaces.");
+                this.SetSurfacesUnavailable(unavailable);
                 return;
             }
 
-            // The inspected scene is a document of the active project's workspace; a node of another scene is stale.
-            if (this.authoringProvider?.Invoke() is not { } authoring || nodes.Exists(node => !ReferenceEquals(node.Scene, authoring.Scene)))
+            var read = await this.surfaces.ReadAsync(project, geometryUri!, request.Token).ConfigureAwait(true);
+            if (!request.IsCancellationRequested)
             {
-                this.SetSurfacesUnavailable("The selection is no longer in the inspected scene.");
-                return;
+                this.ShowInventory(read, project, nodes, geometryUri!);
             }
-
-            if (nodes.Exists(node => GeometryOf(node)?.Geometry != geometryUri))
-            {
-                this.SetSurfacesUnavailable("Select nodes that share one geometry.");
-                return;
-            }
-
-            var read = await this.surfaces.ReadAsync(project, geometryUri, request.Token).ConfigureAwait(true);
-            if (request.IsCancellationRequested || !this.IsCurrentSelection(nodes)
-                || !ReferenceEquals(project, this.session.Context)
-                || nodes.Exists(node => GeometryOf(node)?.Geometry != geometryUri))
-            {
-                return;
-            }
-
-            if (read is null)
-            {
-                this.SetSurfacesFailed("Surfaces unavailable. Cook this geometry, then refresh its surfaces.");
-                return;
-            }
-
-            this.inventory = read;
-            this.inventoryProject = project;
-            this.LevelOfDetail.ShowError(error: null);
-            this.IsSurfaceInventoryFailed = false;
-            this.SurfaceNotice = read.Surfaces.IsEmpty ? "This geometry has no surfaces." : string.Empty;
         }
         catch (OperationCanceledException) when (request.IsCancellationRequested)
         {
@@ -181,7 +160,7 @@ public sealed partial class GeometryViewModel
             return;
         }
 
-        var built = await SurfaceEdits.SetAsync(this.surfaces, this.session.Context, nodes.ConvertAll(this.ReferenceOf), card.Target, property, value, label).ConfigureAwait(true);
+        var built = await SurfaceEdits.SetAsync(this.surfaces, this.session.Context, nodes.ConvertAll(this.ReferenceOf), card.Target, property, value, label, this.session.Lifetime).ConfigureAwait(true);
         await this.ExecuteSurfaceEditAsync(nodes, authoring, built).ConfigureAwait(true);
     }
 
@@ -212,6 +191,18 @@ public sealed partial class GeometryViewModel
         }
     }
 
+    /// <summary>
+    /// Gets the commands that apply the single selected instanced node's changes of geometry values to the authored scenes
+    /// on its path (scene instances 6.7).
+    /// </summary>
+    /// <param name="properties">The values a row shows.</param>
+    /// <param name="part">The surface they belong to, or <see langword="null"/> for values of the component.</param>
+    /// <returns>One command per scene; none for a node of the scene, several nodes or values the scene does not change.</returns>
+    internal Task<IReadOnlyList<OverrideAction>> ApplyActionsAsync(IReadOnlyList<PropertyId> properties, PartId? part)
+        => this.SourceApply is { } apply && this.selectedItems is { Count: 1 } selected && this.ReferenceOf(selected.First()) is { IsOwned: false } reference
+            ? apply.ActionsAsync(reference, ChangeSelection.OfValues(reference.Path, properties, part))
+            : Task.FromResult<IReadOnlyList<OverrideAction>>([]);
+
     /// <summary>Applies the changes kept for a lost surface to a current one.</summary>
     /// <param name="kept">The kept changes.</param>
     /// <param name="target">The surface that takes them.</param>
@@ -224,7 +215,7 @@ public sealed partial class GeometryViewModel
             return;
         }
 
-        var built = await SurfaceEdits.RetargetAsync(this.surfaces, this.session.Context, authoring.Scene, this.OwnedIds(nodes), kept.Part, target.Target).ConfigureAwait(true);
+        var built = await SurfaceEdits.RetargetAsync(this.surfaces, this.session.Context, authoring.Scene, this.OwnedIds(nodes), kept.Part, target.Target, this.session.Lifetime).ConfigureAwait(true);
         await this.ExecuteSurfaceEditAsync(nodes, authoring, built).ConfigureAwait(true);
     }
 
@@ -251,7 +242,7 @@ public sealed partial class GeometryViewModel
 
         // The picker keeps listing the material the surface uses now, even when it is gone.
         this.pickedMaterial = materials.Count == 1 ? materials[0] : null;
-        await this.assetProvider.RefreshAsync().ConfigureAwait(true);
+        await this.assetProvider.RefreshAsync(this.session.Lifetime).ConfigureAwait(true);
         this.ApplyContentMaterials();
     }
 
@@ -270,7 +261,7 @@ public sealed partial class GeometryViewModel
             return;
         }
 
-        var built = await SurfaceEdits.SetAsync(this.surfaces, this.session.Context, picker.Nodes.ConvertAll(this.ReferenceOf), picker.Target, SceneSchema.Geometry.Surface.Material.Id, material, "Edit Surface Material").ConfigureAwait(true);
+        var built = await SurfaceEdits.SetAsync(this.surfaces, this.session.Context, picker.Nodes.ConvertAll(this.ReferenceOf), picker.Target, SceneSchema.Geometry.Surface.Material.Id, material, "Edit Surface Material", this.session.Lifetime).ConfigureAwait(true);
         await this.ExecuteSurfaceEditAsync(picker.Nodes, picker.Authoring, built).ConfigureAwait(true);
     }
 
@@ -353,8 +344,8 @@ public sealed partial class GeometryViewModel
         {
             var target = new SurfaceTarget(read.GeometryUri, surface.SurfaceId, read.LayoutRevision);
             var card = this.Surfaces.FirstOrDefault(existing => existing.Target.Part == target.Part) ?? new SurfaceCardViewModel(this, target);
-            var name = string.IsNullOrWhiteSpace(surface.DisplayName) ? $"Surface {index + 1}"
-                : labels[surface.DisplayName] > 1 ? $"{surface.DisplayName} ({index + 1})" : surface.DisplayName;
+            var name = string.IsNullOrWhiteSpace(surface.DisplayName) ? string.Create(CultureInfo.CurrentCulture, $"Surface {index + 1}")
+                : labels[surface.DisplayName] > 1 ? string.Create(CultureInfo.CurrentCulture, $"{surface.DisplayName} ({index + 1})") : surface.DisplayName;
             card.Update(target, surface, name, overrides, this.ResolveMaterialDisplayName, canEdit);
             cards.Add(card);
         }
@@ -421,6 +412,47 @@ public sealed partial class GeometryViewModel
     {
         _ = value;
         this.ProjectSurfaces();
+    }
+
+    // Why the selection's surfaces cannot be read, or null when they can: one geometry the selected nodes of the inspected
+    // scene share.
+    private string? SurfacesUnreadable(List<SceneNode> nodes, AssetPath? geometryUri)
+    {
+        if (nodes.Count == 0 || geometryUri is null)
+        {
+            return "Select geometry to view its surfaces.";
+        }
+
+        // The inspected scene is a document of the active project's workspace; a node of another scene is stale.
+        if (this.authoringProvider?.Invoke() is not { } authoring || nodes.Exists(node => !ReferenceEquals(node.Scene, authoring.Scene)))
+        {
+            return "The selection is no longer in the inspected scene.";
+        }
+
+        return nodes.Exists(node => GeometryOf(node)?.Geometry != geometryUri) ? "Select nodes that share one geometry." : null;
+    }
+
+    // Shows a surface inventory read for the selection, or that none could be read; nothing when the selection, the
+    // project or the nodes' geometry changed during the read.
+    private void ShowInventory(GeometrySurfaceMetadata? read, ProjectContext project, List<SceneNode> nodes, AssetPath geometryUri)
+    {
+        if (!this.IsCurrentSelection(nodes) || !ReferenceEquals(project, this.session.Context)
+            || nodes.Exists(node => GeometryOf(node)?.Geometry != geometryUri))
+        {
+            return;
+        }
+
+        if (read is null)
+        {
+            this.SetSurfacesFailed("Surfaces unavailable. Cook this geometry, then refresh its surfaces.");
+            return;
+        }
+
+        this.inventory = read;
+        this.inventoryProject = project;
+        this.LevelOfDetail.ShowError(error: null);
+        this.IsSurfaceInventoryFailed = false;
+        this.SurfaceNotice = read.Surfaces.IsEmpty ? "This geometry has no surfaces." : string.Empty;
     }
 
     private sealed record MaterialPickerEdit(SceneAuthoring Authoring, List<SceneNode> Nodes, SurfaceTarget Target);

@@ -43,7 +43,7 @@ public abstract partial class LocalLightViewModel : ComponentPropertyEditor, IDi
     {
         if (authoringProvider is not null)
         {
-            this.edits = new(authoringProvider, label, this.RefreshValues);
+            this.edits = new(authoringProvider, label, this.RefreshValues, sourceApply: () => this.SourceApply);
         }
 
         this.colorBinding = new(descriptors.ColorDescriptor);

@@ -15,8 +15,10 @@ using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Pickers;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.SceneInspector.Editing;
 using Oxygen.Editor.Scenes;
 using Oxygen.Editor.Scenes.Authoring;
+using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.Scenes.Edits.Instances;
 using Oxygen.Editor.Scenes.Nodes;
 using Oxygen.Editor.World;
@@ -29,8 +31,8 @@ namespace Oxygen.Editor.SceneInspector.Components.Instances;
 
 /// <summary>
 /// The Scene Instance section of an instance root (scene instances 8.5): its source, which the source picker swaps
-/// for another model or authored scene (6.5), the number of changes the scene makes to the instance, <i>Unpack</i> and
-/// <i>Unpack completely</i> (6.8), and, for an instanced scene, that its environment and start state apply only when it
+/// for another model or authored scene (6.5), the number of changes the scene makes to the instance, <i>Apply to</i> its
+/// source when it is an authored scene (6.7), <i>Unpack</i> and <i>Unpack completely</i> (6.8), and, for an instanced scene, that its environment and start state apply only when it
 /// runs as a level.
 /// </summary>
 /// <remarks>
@@ -51,7 +53,7 @@ public sealed partial class SceneInstanceViewModel : ComponentPropertyEditor, ID
     private readonly IStatusReducer? statusReducer;
     private readonly ILogger logger;
     private IReadOnlyList<AssetEntry> latestAssets = [];
-    private IDisposable? assetSubscription;
+    private CancellationTokenSource? assetSubscription;
     private SceneInstanceComponent? instance;
     private NodeId? root;
     private bool isMixed;
@@ -101,6 +103,14 @@ public sealed partial class SceneInstanceViewModel : ComponentPropertyEditor, ID
     [ObservableProperty]
     public partial string ChangeCount { get; private set; } = string.Empty;
 
+    /// <summary>Gets the label of the command that applies the instance's changes to its source, such as <c>Apply to Watchtower</c>.</summary>
+    [ObservableProperty]
+    public partial string ApplyLabel { get; private set; } = "Apply to source";
+
+    /// <summary>Gets what applying does, or why it cannot: a model is not an authored scene, or nothing is changed.</summary>
+    [ObservableProperty]
+    public partial string ApplyToolTip { get; private set; } = string.Empty;
+
     /// <summary>Gets a value indicating whether the instanced source is an authored scene, whose level settings do not apply.</summary>
     [ObservableProperty]
     public partial bool IsPrefab { get; private set; }
@@ -122,11 +132,18 @@ public sealed partial class SceneInstanceViewModel : ComponentPropertyEditor, ID
     /// </summary>
     public bool CanUnpack => this.CanSwap && this.reader is not null;
 
+    /// <summary>
+    /// Gets a value indicating whether the instance's changes can be applied to its source (scene instances 6.7): one
+    /// instance root of the inspected scene is selected, its source is an authored scene, and it has changes.
+    /// </summary>
+    public bool CanApply => this.CanSwap && this.SourceApply is not null && this.instance is { } shown
+        && SourceApplication.RefusalOf(shown.Source) is null && !shown.Changes.IsEmpty;
+
     /// <inheritdoc />
     public override string Header => "Scene Instance";
 
     /// <inheritdoc />
-    public override string Description => "The model or scene this node instances, how many of its values this scene changes, and unpacking it into the scene's own nodes.";
+    public override string Description => "The model or scene this node instances, how many of its values this scene changes, applying them to the scene it instances, and unpacking it into the scene's own nodes.";
 
     /// <summary>Gets completion of the swap or unpack in flight.</summary>
     internal Task Pending => this.pending;
@@ -140,8 +157,7 @@ public sealed partial class SceneInstanceViewModel : ComponentPropertyEditor, ID
         }
 
         this.disposed = true;
-        this.assetSubscription?.Dispose();
-        this.assetSubscription = null;
+        LifetimeSubscription.End(ref this.assetSubscription);
         this.Observe(component: null);
     }
 
@@ -154,9 +170,9 @@ public sealed partial class SceneInstanceViewModel : ComponentPropertyEditor, ID
             .Where(static entry => entry.Instance is not null)
             .ToList();
         this.isMixed = instances.Select(static entry => entry.Instance!.Source).Distinct().Skip(1).Any();
-        var single = instances.Count == 1 && this.ReferenceOf(instances[0].Node).IsOwned ? instances[0] : default;
-        this.root = single.Node?.Id;
-        this.Observe(single.Instance);
+        var (singleNode, singleInstance) = instances.Count == 1 && this.ReferenceOf(instances[0].Node).IsOwned ? instances[0] : default;
+        this.root = singleNode?.Id;
+        this.Observe(singleInstance);
         this.ErrorMessage = string.Empty;
         this.StartAssets();
         this.Refresh(instances.Count == 0 ? null : instances[0].Instance);
@@ -200,6 +216,22 @@ public sealed partial class SceneInstanceViewModel : ComponentPropertyEditor, ID
         }
 
         this.pending = this.UnpackCoreAsync(node, depth);
+        return this.pending;
+    }
+
+    /// <summary>
+    /// Applies every change of the selected instance to its source: the source scene's file takes them, and every
+    /// instance of it gets them once it is cooked.
+    /// </summary>
+    /// <returns>A task that completes once the apply applied or was refused.</returns>
+    internal Task ApplyAsync()
+    {
+        if (!this.CanApply || this.root is not { } node || this.instance is not { } current)
+        {
+            return Task.CompletedTask;
+        }
+
+        this.pending = this.ApplyCoreAsync(node, new ApplyTarget(current.Source, Level: 0));
         return this.pending;
     }
 
@@ -264,7 +296,7 @@ public sealed partial class SceneInstanceViewModel : ComponentPropertyEditor, ID
         try
         {
             this.LogUnpackRequested(depth);
-            var result = await new InstanceConversion(this.session.Context, this.reader!).ExecuteUnpackAsync(authoring, node, depth).ConfigureAwait(true);
+            var result = await new InstanceConversion(this.session.Context, this.reader!).ExecuteUnpackAsync(authoring, node, depth, this.session.Lifetime).ConfigureAwait(true);
             if (!result.Succeeded)
             {
                 var error = result.Diagnostics.FirstOrDefault(static diagnostic => diagnostic.IsError);
@@ -284,10 +316,33 @@ public sealed partial class SceneInstanceViewModel : ComponentPropertyEditor, ID
         }
     }
 
+    private async Task ApplyCoreAsync(NodeId node, ApplyTarget target)
+    {
+        this.isBusy = true;
+        this.ErrorMessage = string.Empty;
+        this.NotifyCommandsChanged();
+        try
+        {
+            this.LogApplyRequested(target.Scene);
+            if (await this.SourceApply!.ApplyAsync(node, ChangeSelection.Instance, target).ConfigureAwait(true) is { Succeeded: false } result)
+            {
+                var error = result.Diagnostics.FirstOrDefault(static diagnostic => diagnostic.IsError);
+                this.LogApplyRefused(error?.Code);
+                this.ErrorMessage = error?.Message ?? $"The changes could not be applied to {target.Name}.";
+            }
+        }
+        finally
+        {
+            this.isBusy = false;
+            this.NotifyCommandsChanged();
+        }
+    }
+
     private void NotifyCommandsChanged()
     {
         this.OnPropertyChanged(nameof(this.CanSwap));
         this.OnPropertyChanged(nameof(this.CanUnpack));
+        this.OnPropertyChanged(nameof(this.CanApply));
     }
 
     // Asks what to do with the changes; null when the user cancels, or when no one can be asked.
@@ -308,7 +363,7 @@ public sealed partial class SceneInstanceViewModel : ComponentPropertyEditor, ID
             CloseButtonText = "Cancel",
             DefaultButton = DialogButton.Primary,
         };
-        return await prompt.ShowAsync(spec).ConfigureAwait(true) switch
+        return await prompt.ShowAsync(spec, this.session.Lifetime).ConfigureAwait(true) switch
         {
             DialogButton.Primary => InstanceSwap.KeepByName,
             DialogButton.Secondary => InstanceSwap.Discard,
@@ -322,7 +377,7 @@ public sealed partial class SceneInstanceViewModel : ComponentPropertyEditor, ID
         var project = this.session.Context;
         if (this.structures?.Find(project, source) is null && this.reader is { } nodes)
         {
-            _ = await nodes.ReadStructureAsync(project, source).ConfigureAwait(true);
+            _ = await nodes.ReadStructureAsync(project, source, this.session.Lifetime).ConfigureAwait(true);
         }
     }
 
@@ -339,10 +394,7 @@ public sealed partial class SceneInstanceViewModel : ComponentPropertyEditor, ID
         }
 
         this.instance = component;
-        if (component is not null)
-        {
-            component.PropertyChanged += this.OnInstanceChanged;
-        }
+        component?.PropertyChanged += this.OnInstanceChanged;
     }
 
     private void OnInstanceChanged(object? sender, PropertyChangedEventArgs args)
@@ -368,6 +420,12 @@ public sealed partial class SceneInstanceViewModel : ComponentPropertyEditor, ID
         this.SourceKind = this.isMixed || shown is null ? string.Empty : isModel ? "Model" : "Scene";
         this.ChangeCount = this.isMixed || shown is null ? string.Empty : Changes(CountChanges(shown.Changes));
         this.IsPrefab = !this.isMixed && shown is not null && !isModel;
+        var target = this.isMixed || shown is null ? null : SceneContent.NameOf(shown.Source.Name);
+        this.ApplyLabel = target is null || isModel ? "Apply to source" : $"Apply to {target}";
+        this.ApplyToolTip = target is null ? string.Empty
+            : SourceApplication.RefusalOf(shown!.Source) is { } refusal ? refusal
+            : shown!.Changes.IsEmpty ? $"This instance changes nothing of {target}."
+            : $"Move this instance's changes into {target}: every instance of it gets them, and they leave this one.";
         this.NotifyCommandsChanged();
         this.UpdateChoices();
     }
@@ -379,9 +437,11 @@ public sealed partial class SceneInstanceViewModel : ComponentPropertyEditor, ID
             return;
         }
 
-        this.assetSubscription = this.assets.Items
-            .ObserveOn(this.scheduler)
-            .Subscribe(this.OnAssets, this.LogCatalogFeedFailed);
+        this.assetSubscription = LifetimeSubscription.Subscribe(
+            this.assets.Items.ObserveOn(this.scheduler),
+            this.OnAssets,
+            this.LogCatalogFeedFailed,
+            this.session.Lifetime);
     }
 
     private void OnAssets(IReadOnlyList<AssetEntry> value)

@@ -21,7 +21,7 @@ namespace Oxygen.Editor.Scenes.Tests.Edits.Layout;
 public sealed class RemoveFolderTests
 {
     // The sample's root after F: Cam, Ortho, Sun, Moon, Lamp, Spot, Fog, Mesh, Script, Car.
-    private static NodeId[] RootAfterF => [SampleScene.Cam, SampleScene.Ortho, SampleScene.Sun, SampleScene.Moon, SampleScene.Lamp, SampleScene.Spot, SampleScene.Fog, SampleScene.Mesh, SampleScene.Script, SampleScene.Car];
+    private static NodeId[] RootAfterF => [SampleScene.Cam, SampleScene.Ortho, SampleScene.Sun, SampleScene.Moon, SampleScene.Lamp, SampleScene.Spot, SampleScene.Fog, SampleScene.Mesh, SampleScene.Script, SampleScene.Car, SampleScene.Tower];
 
     [TestMethod]
     public async Task PromoteChildren_PutsThemAtTheFolderPositionInOrder()

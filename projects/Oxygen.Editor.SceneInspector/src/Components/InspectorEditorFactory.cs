@@ -50,16 +50,16 @@ internal static class InspectorEditorFactory
         InspectorInstanceServices? instances = null)
         => new()
         {
-            [typeof(TransformComponent)] = () => new TransformViewModel(logger, authoring) { References = references },
-            [typeof(NodeFlagsComponent)] = () => new NodeRenderingViewModel(authoring, selectNode) { References = references },
-            [typeof(GeometryComponent)] = () => new GeometryViewModel(hosting, assets, surfaces, session, authoring, logger) { References = references },
-            [typeof(PerspectiveCamera)] = () => new PerspectiveCameraViewModel(authoring) { References = references },
-            [typeof(OrthographicCamera)] = () => new OrthographicCameraViewModel(authoring) { References = references },
-            [typeof(DirectionalLightComponent)] = () => new DirectionalLightViewModel(authoring) { References = references },
-            [typeof(PointLightComponent)] = () => new PointLightViewModel(authoring) { References = references },
-            [typeof(SpotLightComponent)] = () => new SpotLightViewModel(authoring) { References = references },
-            [typeof(LocalFogVolumeComponent)] = () => new LocalFogVolumeViewModel(authoring) { References = references },
-            [typeof(SceneInstanceComponent)] = () => new SceneInstanceViewModel(authoring, session, hosting.DispatcherScheduler, instances ?? new InspectorInstanceServices(assets), logger) { References = references },
+            [typeof(TransformComponent)] = () => new TransformViewModel(logger, authoring) { References = references, SourceApply = instances?.SourceApply },
+            [typeof(NodeFlagsComponent)] = () => new NodeRenderingViewModel(authoring, selectNode) { References = references, SourceApply = instances?.SourceApply },
+            [typeof(GeometryComponent)] = () => new GeometryViewModel(hosting, assets, surfaces, session, authoring, logger) { References = references, SourceApply = instances?.SourceApply },
+            [typeof(PerspectiveCamera)] = () => new PerspectiveCameraViewModel(authoring) { References = references, SourceApply = instances?.SourceApply },
+            [typeof(OrthographicCamera)] = () => new OrthographicCameraViewModel(authoring) { References = references, SourceApply = instances?.SourceApply },
+            [typeof(DirectionalLightComponent)] = () => new DirectionalLightViewModel(authoring) { References = references, SourceApply = instances?.SourceApply },
+            [typeof(PointLightComponent)] = () => new PointLightViewModel(authoring) { References = references, SourceApply = instances?.SourceApply },
+            [typeof(SpotLightComponent)] = () => new SpotLightViewModel(authoring) { References = references, SourceApply = instances?.SourceApply },
+            [typeof(LocalFogVolumeComponent)] = () => new LocalFogVolumeViewModel(authoring) { References = references, SourceApply = instances?.SourceApply },
+            [typeof(SceneInstanceComponent)] = () => new SceneInstanceViewModel(authoring, session, hosting.DispatcherScheduler, instances ?? new InspectorInstanceServices(assets), logger) { References = references, SourceApply = instances?.SourceApply },
             [typeof(ScriptingComponent)] = () => new ScriptingViewModel(authoring, assets, scripts?.Scripts, scripts?.CodeEditor, scripts?.Creation, scripts?.Problems, session, hosting.DispatcherScheduler),
         };
 }

@@ -11,7 +11,6 @@ using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.Schemas.Bindings;
 using Oxygen.Editor.World;
-using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Utils;
 using Oxygen.Managed.Core;
 
@@ -51,7 +50,7 @@ public sealed partial class TransformViewModel : ComponentPropertyEditor, IDispo
         this.controller = new(loggerFactory, authoringProvider ?? (static () => null), this.ReferenceOf, () => this.IsInputEnabled && !this.disposed, this.UpdateValues, this.diagnostics);
         if (authoringProvider is not null)
         {
-            this.flagEdits = new(authoringProvider, "Edit Transform", this.RefreshFlagValues);
+            this.flagEdits = new(authoringProvider, "Edit Transform", this.RefreshFlagValues, sourceApply: () => this.SourceApply);
         }
 
         this.ignoreParentTransformRegistration = new(
@@ -264,7 +263,7 @@ public sealed partial class TransformViewModel : ComponentPropertyEditor, IDispo
 
     private void UpdateFlagValues(ICollection<SceneNode> items)
     {
-        var targets = items.ToDictionary(node => this.ReferenceOf(node), static node => (object?)node.Flags);
+        var targets = items.ToDictionary(this.ReferenceOf, static node => (object?)node.Flags);
         var nodes = targets.Keys.ToArray();
         this.flagEdits?.Bind(nodes);
         this.selectedItems = items;
@@ -283,7 +282,7 @@ public sealed partial class TransformViewModel : ComponentPropertyEditor, IDispo
     private void UpdateRotationValues(ICollection<SceneNode> items)
     {
         var descriptor = SceneProperties.Transform.RotationDescriptor;
-        var targets = items.ToDictionary(node => this.ReferenceOf(node), static node => (object?)node.Transform);
+        var targets = items.ToDictionary(this.ReferenceOf, static node => (object?)node.Transform);
         this.RefreshSourceFeedback(descriptor, targets);
         var angles = items.Select(node => descriptor.Read(node.Transform)).ToList();
         var first = angles.Count > 0 ? angles[0] : Vector3.Zero;
@@ -300,7 +299,7 @@ public sealed partial class TransformViewModel : ComponentPropertyEditor, IDispo
     private void UpdateBindingValue(NumberBinding<float> binding, ICollection<SceneNode> items, Action<float> setValue, Action<bool> setMixed)
     {
         var nodes = items.Select(this.ReferenceOf).ToArray();
-        var targets = items.ToDictionary(node => this.ReferenceOf(node), static node => (object?)node.Transform);
+        var targets = items.ToDictionary(this.ReferenceOf, static node => (object?)node.Transform);
         this.RefreshSourceFeedback(binding.Descriptor, targets);
         binding.UpdateFromModel(nodes, id => targets.GetValueOrDefault(id));
         var value = binding.HasValue ? binding.Value : 0;

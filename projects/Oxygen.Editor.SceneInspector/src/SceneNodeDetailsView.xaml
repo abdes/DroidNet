@@ -39,6 +39,7 @@
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <TextBlock
                     x:Name="InstancedOrigin"
@@ -58,6 +59,17 @@
                     Content="Select instance"
                     FontSize="12"
                     ToolTipService.ToolTip="Select the instance this node comes from" />
+                <menus:MenuButton
+                    x:Name="ApplyToSourceButton"
+                    Grid.Column="2"
+                    Padding="4,0"
+                    AutomationProperties.Name="Apply to source"
+                    Chrome="Transparent"
+                    MenuSource="{x:Bind ViewModel.ApplyMenu, Mode=OneWay}"
+                    ToolTipService.ToolTip="Apply this node's changes to the scene it comes from"
+                    Visibility="{x:Bind ViewModel.CanApply, Mode=OneWay}">
+                    <TextBlock FontSize="12" Text="Apply to…" />
+                </menus:MenuButton>
             </Grid>
         </StackPanel>
         <controls:ToolBar

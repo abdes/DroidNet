@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using DroidNet.Controls;
+using Oxygen.Editor.SceneInspector.Components.Instances;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Edits.Properties;
 using Oxygen.Editor.Schemas;
@@ -21,10 +22,11 @@ internal sealed partial class InspectorEditSessionCoordinator(
     string label,
     Action refresh,
     bool environment = false,
-    InspectorFieldDiagnostics? diagnostics = null) : IDisposable
+    InspectorFieldDiagnostics? diagnostics = null,
+    Func<InspectorSourceApply?>? sourceApply = null) : IDisposable
 {
-    private static readonly TimeSpan WheelIdleDelay = TimeSpan.FromMilliseconds(250);
     private const string ResetLabel = "Reset to Source";
+    private static readonly TimeSpan WheelIdleDelay = TimeSpan.FromMilliseconds(250);
     private static readonly SceneEditResult Nothing = new(SceneEditOutcome.Applied, []);
     private readonly List<Task> pending = [];
 
@@ -42,7 +44,7 @@ internal sealed partial class InspectorEditSessionCoordinator(
     public InspectorFieldDiagnostics Diagnostics { get; } = diagnostics ?? new();
 
     /// <summary>Gets the override bars of the bound fields, from what the targets override of their sources.</summary>
-    public InspectorFieldOverrides Overrides => this.overrides ??= new(this.Reset);
+    public InspectorFieldOverrides Overrides => this.overrides ??= new(this.Reset, sourceApply);
 
     /// <summary>Gets the identity of the current binding lifetime.</summary>
     public Guid ScopeId { get; private set; } = Guid.NewGuid();

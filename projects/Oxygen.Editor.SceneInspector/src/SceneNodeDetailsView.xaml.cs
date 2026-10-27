@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Windows.Input;
+using DroidNet.Controls.Menus;
 using DroidNet.Mvvm.Generators;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
@@ -65,6 +66,10 @@ public sealed partial class SceneNodeDetailsView : UserControl
     public static readonly DependencyProperty SelectInstanceCommandProperty = DependencyProperty.Register(
         nameof(SelectInstanceCommand), typeof(ICommand), typeof(SceneNodeDetailsView), new PropertyMetadata(defaultValue: null, OnSelectInstanceCommandChanged));
 
+    /// <summary>Identifies the <see cref="ApplyMenu"/> dependency property.</summary>
+    public static readonly DependencyProperty ApplyMenuProperty = DependencyProperty.Register(
+        nameof(ApplyMenu), typeof(IMenuSource), typeof(SceneNodeDetailsView), new PropertyMetadata(defaultValue: null, OnApplyMenuChanged));
+
     /// <summary>
     /// Initializes a new instance of the <see cref="SceneNodeDetailsView"/> class.
     /// </summary>
@@ -79,6 +84,7 @@ public sealed partial class SceneNodeDetailsView : UserControl
         this.ViewModel.Origin = NullIfEmpty(this.Origin);
         this.ViewModel.StructureRefusal = NullIfEmpty(this.StructureRefusal);
         this.ViewModel.SelectInstanceCommand = this.SelectInstanceCommand;
+        this.ViewModel.ApplyMenu = this.ApplyMenu;
     }
 
     /// <summary>Occurs when the user asks to clear the component filter.</summary>
@@ -151,6 +157,16 @@ public sealed partial class SceneNodeDetailsView : UserControl
         set => this.SetValue(SelectInstanceCommandProperty, value);
     }
 
+    /// <summary>
+    /// Gets or sets the menu that applies the changes of a node an instance brings in to the authored scenes on its path;
+    /// <see langword="null"/> when it has none to apply.
+    /// </summary>
+    public IMenuSource? ApplyMenu
+    {
+        get => (IMenuSource?)this.GetValue(ApplyMenuProperty);
+        set => this.SetValue(ApplyMenuProperty, value);
+    }
+
     /// <summary>Requests removal of the current unlocked component using the existing document command path.</summary>
     /// <returns>Whether an applicable removal was requested.</returns>
     public bool DeleteSelectedComponent()
@@ -213,6 +229,14 @@ public sealed partial class SceneNodeDetailsView : UserControl
         }
     }
 
+    private static void OnApplyMenuChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is SceneNodeDetailsView view)
+        {
+            view.ViewModel!.ApplyMenu = (IMenuSource?)e.NewValue;
+        }
+    }
+
     private static void OnNodeEditsChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         if (d is not SceneNodeDetailsView view)
@@ -235,6 +259,9 @@ public sealed partial class SceneNodeDetailsView : UserControl
 
     private void OnAllComponentsChanged(object sender, RoutedEventArgs args)
     {
+        _ = sender;
+        _ = args;
+
         if (sender is not ToggleButton button)
         {
             return;
@@ -250,6 +277,12 @@ public sealed partial class SceneNodeDetailsView : UserControl
         }
     }
 
-    private void OnDeleteComponentClicked(object sender, RoutedEventArgs e)
-        => _ = this.DeleteSelectedComponent();
+    private void OnDeleteComponentClicked(object sender, RoutedEventArgs args)
+    {
+        _ = sender;
+        _ = args;
+
+        ArgumentNullException.ThrowIfNull(sender);
+        _ = this.DeleteSelectedComponent();
+    }
 }

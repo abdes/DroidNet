@@ -4,21 +4,27 @@
 
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using Oxygen.Editor.Controls;
+using Oxygen.Editor.Controls.PropertyEditors;
 
 namespace Oxygen.Editor.SceneInspector.Editing;
 
 /// <summary>
-/// The override bar and reset of one field: how many of the edited nodes change its value from their source, and the
-/// command that resets it to the source's value.
+/// The override bar and reset of one field: how many of the edited nodes change its value from their source, the
+/// command that resets it to the source's value, and the commands its context menu offers besides, such as applying a
+/// node's change to the authored scene it comes from.
 /// </summary>
 /// <param name="reset">Resets the field's properties on the edited nodes.</param>
-public sealed partial class InspectorFieldOverride(Action reset) : ObservableObject
+/// <param name="actions">Reads the commands the field offers besides reset, or <see langword="null"/> when there are none.</param>
+public sealed partial class InspectorFieldOverride(Action reset, Func<Task<IReadOnlyList<OverrideAction>>>? actions = null) : ObservableObject, IOverrideActionSource
 {
     /// <summary>Gets how many of the edited nodes change the field's value from their source.</summary>
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(ResetCommand))]
     public partial OverrideState State { get; internal set; }
+
+    /// <inheritdoc/>
+    public Task<IReadOnlyList<OverrideAction>> GetActionsAsync()
+        => actions is null || this.State == OverrideState.None ? Task.FromResult<IReadOnlyList<OverrideAction>>([]) : actions();
 
     private bool CanReset() => this.State != OverrideState.None;
 

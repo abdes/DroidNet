@@ -42,6 +42,7 @@ public sealed class LayoutScopesTests
                 LayoutEntryId.Of(SampleScene.Mesh),
                 LayoutEntryId.Of(SampleScene.Script),
                 LayoutEntryId.Of(SampleScene.Car),
+                LayoutEntryId.Of(SampleScene.Tower),
             ])) { DisplayName = "Root" },
         new(new EntriesCase(LayoutPosition.UnderNode(SampleScene.A, 0), [LayoutEntryId.Of(SampleScene.A1), LayoutEntryId.Of(SampleScene.AF)])) { DisplayName = "NodeA" },
         new(new EntriesCase(LayoutPosition.InFolder(SampleScene.F, 0), [LayoutEntryId.Of(SampleScene.B), LayoutEntryId.Of(SampleScene.G)])) { DisplayName = "FolderF" },

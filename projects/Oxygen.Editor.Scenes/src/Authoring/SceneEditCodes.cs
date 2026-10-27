@@ -91,6 +91,12 @@ public static class SceneEditCodes
     /// </summary>
     public const string NodePathUnresolved = DiagnosticCodes.ScenePrefix + "Instance.NodePathUnresolved";
 
+    /// <summary>
+    /// The file of a scene an edit changes outside the open scene, the source <i>Apply to source</i> writes, no longer
+    /// holds what the edit expects: it changed since it was read, or since the edit wrote it.
+    /// </summary>
+    public const string SourceChanged = DiagnosticCodes.ScenePrefix + "Instance.SourceChanged";
+
     /// <summary>A layout place is in another scene scope than the node's scene parent.</summary>
     public const string LayoutScopeMismatch = DiagnosticCodes.ScenePrefix + "Layout.ScopeMismatch";
 

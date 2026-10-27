@@ -4,6 +4,7 @@
 
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.ContentPipeline.Relocation;
+using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.Scenes.Nodes;
 using Oxygen.Editor.World;
@@ -57,6 +58,12 @@ public sealed class SceneEditScope
     /// nothing reads it; the lookup answers <see langword="null"/> for a source not read.
     /// </summary>
     public Func<AssetPath, SceneStructure?>? StructureOf { get; init; }
+
+    /// <summary>
+    /// Gets the files of the project's authored scenes, which an edit that changes another scene reads and writes, or
+    /// <see langword="null"/> when no project is open.
+    /// </summary>
+    public IAuthoredSceneFiles? SceneFiles { get; init; }
 
     /// <summary>Gets the scene's own asset, which no instance in it may reach, or <see langword="null"/> when unknown.</summary>
     public AssetPath? Asset { get; internal set; }

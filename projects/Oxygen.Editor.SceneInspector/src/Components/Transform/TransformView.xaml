@@ -44,6 +44,7 @@
                 <editorcontrols:PropertyCard
                     IsCompound="True"
                     IsEnabled="{x:Bind ViewModel.PositionProperty.IsEnabled, Mode=OneWay}"
+                    OverrideActions="{x:Bind ViewModel.PositionOverride}"
                     OverrideState="{x:Bind ViewModel.PositionOverride.State, Mode=OneWay}"
                     PropertyName="Position"
                     Qualifier="m"
@@ -93,6 +94,7 @@
                 <editorcontrols:PropertyCard
                     IsCompound="True"
                     IsEnabled="{x:Bind ViewModel.RotationProperty.IsEnabled, Mode=OneWay}"
+                    OverrideActions="{x:Bind ViewModel.RotationOverride}"
                     OverrideState="{x:Bind ViewModel.RotationOverride.State, Mode=OneWay}"
                     PropertyName="Rotation"
                     Qualifier="°"
@@ -127,6 +129,7 @@
                 <editorcontrols:PropertyCard
                     IsCompound="True"
                     IsEnabled="{x:Bind ViewModel.ScaleProperty.IsEnabled, Mode=OneWay}"
+                    OverrideActions="{x:Bind ViewModel.ScaleOverride}"
                     OverrideState="{x:Bind ViewModel.ScaleOverride.State, Mode=OneWay}"
                     PropertyName="Scale"
                     Qualifier="x"
@@ -172,6 +175,7 @@
                 </TextBlock>
             </StackPanel>
             <editorcontrols:PropertyCard
+                OverrideActions="{x:Bind ViewModel.IgnoreParentTransformOverride}"
                 OverrideState="{x:Bind ViewModel.IgnoreParentTransformOverride.State, Mode=OneWay}"
                 PropertyName="Ignore parent transform"
                 ResetCommand="{x:Bind ViewModel.IgnoreParentTransformOverride.ResetCommand}">

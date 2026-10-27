@@ -67,7 +67,7 @@ public sealed partial class DirectionalLightViewModel : ComponentPropertyEditor,
     {
         if (authoringProvider is not null)
         {
-            this.edits = new(authoringProvider, "Edit Directional Light", this.RefreshValues);
+            this.edits = new(authoringProvider, "Edit Directional Light", this.RefreshValues, sourceApply: () => this.SourceApply);
         }
 
         this.colorBinding.ValueRequested += this.OnLightVectorValueRequested;
@@ -429,7 +429,7 @@ public sealed partial class DirectionalLightViewModel : ComponentPropertyEditor,
     /// <inheritdoc />
     public override void UpdateValues(ICollection<SceneNode> items)
     {
-        this.edits?.Bind(items.Where(node => node.Components.Any(component => component is DirectionalLightComponent)).Select(this.ReferenceOf).ToArray());
+        this.edits?.Bind([.. items.Where(node => node.Components.Any(component => component is DirectionalLightComponent)).Select(this.ReferenceOf)]);
         this.selectedItems = items;
         var targets = items
             .Select(static node => new { Node = node, Light = node.Components.OfType<DirectionalLightComponent>().FirstOrDefault() })
@@ -693,16 +693,16 @@ public sealed partial class DirectionalLightViewModel : ComponentPropertyEditor,
         this.edits?.Submit(perTarget);
     }
 
-    private void UpdateSunDirectionValues(IReadOnlyList<SceneNode> nodes)
+    private void UpdateSunDirectionValues(List<SceneNode> nodes)
     {
-        if (nodes.FirstOrDefault() is not { } node)
+        if (nodes.Count == 0)
         {
             this.SunAzimuth = 0f;
             this.SunElevation = 0f;
             return;
         }
 
-        var (azimuth, elevation) = DirectionalLightOrientation.DisplayAngles(node);
+        var (azimuth, elevation) = DirectionalLightOrientation.DisplayAngles(nodes[0]);
         this.SunAzimuth = azimuth;
         this.SunElevation = elevation;
     }
@@ -715,7 +715,5 @@ public sealed partial class DirectionalLightViewModel : ComponentPropertyEditor,
     }
 
     private void NotifyColorChanged()
-    {
-        this.OnPropertyChanged(nameof(this.ColorValue));
-    }
+        => this.OnPropertyChanged(nameof(this.ColorValue));
 }

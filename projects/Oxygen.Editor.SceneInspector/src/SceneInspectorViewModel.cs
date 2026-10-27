@@ -68,6 +68,7 @@ public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNo
     private readonly IProjectSession session;
     private readonly ISceneStructures? structures;
     private readonly IInstancedNodeReader? nodes;
+    private readonly InspectorSourceApply sourceApply;
 
     // The nodes whose property changes refresh the panel's own properties.
     private readonly List<SceneNode> observedNodes = [];
@@ -156,6 +157,7 @@ public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNo
         this.session = session;
         this.structures = structures;
         this.nodes = nodes;
+        this.sourceApply = new InspectorSourceApply(session, this.AuthoringOf, operationResults, statusReducer);
         this.VmToViewConverter = vmToViewConverter;
         this.dispatcher = hosting.Dispatcher;
         this.scenePreview.PendingFieldsChanged += this.OnPendingFieldsChanged;
@@ -173,7 +175,7 @@ public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNo
             this.SelectNode,
             this.ReferenceOf,
             new InspectorScriptServices(scripts, codeEditor, scriptCreation, problems),
-            new InspectorInstanceServices(assetProvider, references, structures, nodes, dialogs, operationResults, statusReducer));
+            new InspectorInstanceServices(assetProvider, references, structures, nodes, dialogs, operationResults, statusReducer, this.sourceApply));
         this.sceneSettings = new SceneSettingsViewModel(
             this.AuthoringOf,
             assetProvider,
@@ -193,7 +195,7 @@ public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNo
         this.activeScene = this.documents.SceneOf(activeDocument);
         this.selectionContext = this.sceneSelectionService.GetContext(activeDocument ?? DocumentId.Empty);
         this.items = this.activeScene is { } shownScene && activeDocument is { } shownDocument && !this.HasSelectionSummary
-            ? this.sceneSelectionService.GetSelectedNodes(shownDocument, shownScene).ToList()
+            ? [.. this.sceneSelectionService.GetSelectedNodes(shownDocument, shownScene)]
             : [];
         this.activeDocumentId = this.items.Count == 0 ? null : activeDocument;
         this.ShowInitialSelection();
@@ -223,7 +225,7 @@ public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNo
     /// Gets the single selected node, or <see langword="null"/> when the selection is empty or contains multiple nodes.
     /// Intended for binding into <see cref="SceneNodeDetailsView"/>.
     /// </summary>
-    public SceneNode? SelectedNode => this.items.Count == 1 ? this.items.First() : null;
+    public SceneNode? SelectedNode => this.items.Count == 1 ? this.items[0] : null;
 
     /// <summary>
     /// Gets a value indicating whether the inspector has node or scene-level content to show.
@@ -254,10 +256,10 @@ public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNo
     /// Gets a value indicating whether the current node selection can be authored: no node is locked. A node an instance
     /// brings in is authored through its instance root's changes.
     /// </summary>
-    public bool CanEditSelectedNodes => this.items.All(node => this.LockOf(node) is null);
+    public bool CanEditSelectedNodes => this.items.TrueForAll(node => this.LockOf(node) is null);
 
     /// <summary>Gets a value indicating whether a lock protects any node in the current selection.</summary>
-    public bool HasLockedSelection => this.items.Any(node => this.LockOf(node) is not null);
+    public bool HasLockedSelection => this.items.Exists(node => this.LockOf(node) is not null);
 
     /// <summary>Gets the explanation shown when a selected node is protected by a lock.</summary>
     public string LockedEditingMessage
@@ -617,7 +619,7 @@ public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNo
 
     private void ApplyPendingAtmosphereFilter()
     {
-        if (this.pendingAtmosphereSource is not { } source || this.items.Count != 1 || this.items.First().Id != source)
+        if (this.pendingAtmosphereSource is not { } source || this.items.Count != 1 || this.items[0].Id != source)
         {
             return;
         }
@@ -666,7 +668,7 @@ public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNo
         // A fresh document session hydrates the authoritative typed context for that
         // document: a folder selection reopens as the grouping summary, not scene properties.
         this.selectionContext = this.sceneSelectionService.GetContext(document.Id);
-        this.items = this.HasSelectionSummary ? [] : this.sceneSelectionService.GetSelectedNodes(document.Id, scene).ToList();
+        this.items = this.HasSelectionSummary ? [] : [.. this.sceneSelectionService.GetSelectedNodes(document.Id, scene)];
 
         this.activeScene = scene;
         this.activeDocumentId = document.Id;
@@ -755,7 +757,7 @@ public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNo
         var scene = this.documents.SceneOf(args.DocumentId);
         this.items = this.HasSelectionSummary || scene is null
             ? []
-            : this.sceneSelectionService.GetSelectedNodes(args.DocumentId, scene).ToList();
+            : [.. this.sceneSelectionService.GetSelectedNodes(args.DocumentId, scene)];
         if (this.items.FirstOrDefault()?.Scene is { } selectedScene)
         {
             this.activeScene = selectedScene;

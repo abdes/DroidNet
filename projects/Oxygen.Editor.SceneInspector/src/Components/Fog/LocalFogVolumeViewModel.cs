@@ -37,7 +37,7 @@ public sealed partial class LocalFogVolumeViewModel : ComponentPropertyEditor, I
     {
         if (authoringProvider is not null)
         {
-            this.edits = new(authoringProvider, "Edit Local Fog Volume", this.RefreshValues);
+            this.edits = new(authoringProvider, "Edit Local Fog Volume", this.RefreshValues, sourceApply: () => this.SourceApply);
         }
 
         this.Register(this.enabledBinding, nameof(this.Enabled));

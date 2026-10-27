@@ -10,6 +10,7 @@
     xmlns:local="using:Oxygen.Editor.SceneInspector.Components.Geometry"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:pickers="using:Oxygen.Editor.Pickers"
+    xmlns:propertyeditors="using:Oxygen.Editor.Controls.PropertyEditors"
     xmlns:ui="using:CommunityToolkit.WinUI"
     x:Name="root"
     mc:Ignorable="d">
@@ -43,7 +44,7 @@
                             HorizontalAlignment="Left"
                             VerticalAlignment="Stretch"
                             Fill="{ThemeResource AccentFillColorDefaultBrush}"
-                            Opacity="{x:Bind editorcontrols:OverrideStates.BarOpacity(OverrideState), Mode=OneWay}"
+                            Opacity="{x:Bind propertyeditors:OverrideStates.BarOpacity(OverrideState), Mode=OneWay}"
                             RadiusX="1"
                             RadiusY="1" />
                         <Expander
@@ -84,7 +85,7 @@
                                         IsEnabled="{x:Bind CanEdit, Mode=OneWay}"
                                         Style="{StaticResource QuietActionButtonStyle}"
                                         ToolTipService.ToolTip="{x:Bind ResetToolTip, Mode=OneWay}"
-                                        Visibility="{x:Bind editorcontrols:OverrideStates.ResetVisibility(OverrideState), Mode=OneWay}">
+                                        Visibility="{x:Bind propertyeditors:OverrideStates.ResetVisibility(OverrideState), Mode=OneWay}">
                                         <FontIcon FontSize="12" Glyph="&#xE777;" />
                                     </Button>
                                 </Grid>
@@ -92,6 +93,7 @@
                             <StackPanel Padding="0,4,0,0" Spacing="4">
                                 <editorcontrols:PropertyCard
                                     IsEnabled="{x:Bind CanEdit, Mode=OneWay}"
+                                    OverrideActions="{x:Bind MaterialActions}"
                                     OverrideState="{x:Bind MaterialOverrideState, Mode=OneWay}"
                                     PropertyName="Material"
                                     ResetCommand="{x:Bind ResetMaterialCommand}"
@@ -105,18 +107,20 @@
                                 </editorcontrols:PropertyCard>
                                 <editorcontrols:ToggleField
                                     IsEnabled="{x:Bind CanEdit, Mode=OneWay}"
+                                    IsOn="{x:Bind Visible, Mode=TwoWay}"
                                     Label="Visible"
+                                    OverrideActions="{x:Bind VisibleActions}"
                                     OverrideState="{x:Bind VisibleOverrideState, Mode=OneWay}"
                                     ResetCommand="{x:Bind ResetVisibleCommand}"
-                                    ResetToolTip="{x:Bind VisibleResetToolTip, Mode=OneWay}"
-                                    Value="{x:Bind Visible, Mode=TwoWay}" />
+                                    ResetToolTip="{x:Bind VisibleResetToolTip, Mode=OneWay}" />
                                 <editorcontrols:ToggleField
                                     IsEnabled="{x:Bind CanEdit, Mode=OneWay}"
+                                    IsOn="{x:Bind CastsShadows, Mode=TwoWay}"
                                     Label="Cast shadows"
+                                    OverrideActions="{x:Bind CastsShadowsActions}"
                                     OverrideState="{x:Bind CastsShadowsOverrideState, Mode=OneWay}"
                                     ResetCommand="{x:Bind ResetCastsShadowsCommand}"
-                                    ResetToolTip="{x:Bind CastsShadowsResetToolTip, Mode=OneWay}"
-                                    Value="{x:Bind CastsShadows, Mode=TwoWay}" />
+                                    ResetToolTip="{x:Bind CastsShadowsResetToolTip, Mode=OneWay}" />
                             </StackPanel>
                         </Expander>
                     </Grid>
@@ -236,6 +240,7 @@
                 <StackPanel Spacing="4" Visibility="{x:Bind ViewModel.LevelOfDetail.IsAvailable, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
                     <editorcontrols:PropertyCard
                         IsEnabled="{x:Bind ViewModel.LevelOfDetail.CanEdit, Mode=OneWay}"
+                        OverrideActions="{x:Bind ViewModel.LevelOfDetail.Actions}"
                         OverrideState="{x:Bind ViewModel.LevelOfDetail.OverrideState, Mode=OneWay}"
                         PropertyName="Level of detail"
                         ResetCommand="{x:Bind ViewModel.LevelOfDetail.ResetCommand}"

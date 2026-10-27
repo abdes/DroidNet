@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using CommunityToolkit.Mvvm.ComponentModel;
+using Oxygen.Editor.Controls.PropertyEditors;
 
 namespace Oxygen.Editor.SceneInspector;
 
@@ -13,6 +14,12 @@ public sealed partial class InspectorComponentFilter(Type componentType, string 
 {
     /// <summary>Gets the component type represented by this row.</summary>
     public Type ComponentType { get; } = componentType;
+
+    /// <summary>
+    /// Gets the commands the component's context menu offers, applying the selected instanced node's changes of the
+    /// component to the authored scenes on its path; <see langword="null"/> when there are none.
+    /// </summary>
+    public IOverrideActionSource? ApplyActions { get; init; }
 
     /// <summary>Gets the friendly component type label.</summary>
     public string Label { get; } = label;

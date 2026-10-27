@@ -5,6 +5,7 @@
 using System.Text.Json;
 using DroidNet.Documents;
 using DroidNet.TimeMachine;
+using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.ContentPipeline.Testing;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.Projects.Testing;
@@ -241,6 +242,11 @@ public sealed partial class AuthoringFixture : IDisposable
         public static Ports For(TestProject project, FakeNodeInteraction? interaction)
         {
             var ports = new Ports(project);
+
+            // The sample scene's Tower instances Tower.oscene, which the project holds and whose contents are read.
+            _ = project.WriteFile(SampleScene.TowerFile, SampleScene.TowerSource());
+            var tower = new StructureScene(Guid.NewGuid(), SampleScene.TowerScene.VirtualPath);
+            ports.Structures.Publish(new SceneStructure(SampleScene.TowerScene, tower, [new StructureNode(SampleScene.Post, "Post", Parent: null, tower, Instance: null, Geometry: null, HasCamera: false)], []));
             interaction?.StructureOf = source => ports.Structures.Find(project.Context, source);
             return ports;
         }

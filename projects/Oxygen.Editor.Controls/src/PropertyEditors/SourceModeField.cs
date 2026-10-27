@@ -7,6 +7,7 @@ using CommunityToolkit.WinUI.Controls;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
+using Oxygen.Editor.Controls.PropertyEditors;
 
 namespace Oxygen.Editor.Controls;
 
@@ -30,7 +31,7 @@ public sealed partial class SourceModeField : Control
     public static readonly DependencyProperty LabelProperty = Register<string>(nameof(Label), string.Empty);
 
     /// <summary>Identifies the mode names, in index order.</summary>
-    public static readonly DependencyProperty ModeNamesProperty = Register<IReadOnlyList<string>>(nameof(ModeNames), null, OnModesChanged);
+    public static readonly DependencyProperty ModeNamesProperty = Register<IReadOnlyList<string>>(nameof(ModeNames), defaultValue: null, OnModesChanged);
 
     /// <summary>Identifies the selected mode's index.</summary>
     public static readonly DependencyProperty SelectedIndexProperty = Register<int>(nameof(SelectedIndex), -1, OnModesChanged);
@@ -49,6 +50,9 @@ public sealed partial class SourceModeField : Control
 
     /// <summary>Identifies the reset button's tooltip and automation name.</summary>
     public static readonly DependencyProperty ResetToolTipProperty = Register<string>(nameof(ResetToolTip), "Reset to the source value");
+
+    /// <summary>Identifies the source of the commands the row's context menu offers besides reset.</summary>
+    public static readonly DependencyProperty OverrideActionsProperty = Register<IOverrideActionSource>(nameof(OverrideActions), defaultValue: null);
 
     private const string ModesPartName = "PART_Modes";
     private const string CaptionRowPartName = "PART_CaptionRow";
@@ -92,6 +96,9 @@ public sealed partial class SourceModeField : Control
 
     /// <summary>Gets or sets the reset button's tooltip, which names the source.</summary>
     public string ResetToolTip { get => (string)this.GetValue(ResetToolTipProperty); set => this.SetValue(ResetToolTipProperty, value); }
+
+    /// <summary>Gets or sets the source of the commands the row's context menu offers while the value is overridden.</summary>
+    public IOverrideActionSource? OverrideActions { get => (IOverrideActionSource?)this.GetValue(OverrideActionsProperty); set => this.SetValue(OverrideActionsProperty, value); }
 
     /// <summary>Retrieves the template parts, shows the modes and listens to them, detaching from a previous template.</summary>
     protected override void OnApplyTemplate()
