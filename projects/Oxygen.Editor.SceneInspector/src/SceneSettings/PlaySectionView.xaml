@@ -99,11 +99,27 @@
                     MinWidth="180"
                     VerticalAlignment="Center"
                     AutomationProperties.Name="Starting camera"
-                    DisplayMemberPath="Name"
                     IsEnabled="{x:Bind ViewModel.CanEdit, Mode=OneWay}"
                     ItemsSource="{x:Bind ViewModel.CameraChoices}"
                     SelectedItem="{x:Bind ViewModel.SelectedCamera, Mode=TwoWay}"
-                    ToolTipService.ToolTip="The camera the game first shows. Scripts can switch cameras while it runs." />
+                    ToolTipService.ToolTip="The camera the game first shows. Scripts can switch cameras while it runs.">
+                    <!--  A camera the scene no longer has shows with the caution glyph.  -->
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate x:DataType="local:StartingCameraChoice">
+                            <StackPanel
+                                AutomationProperties.Name="{x:Bind Name}"
+                                Orientation="Horizontal"
+                                Spacing="6">
+                                <FontIcon
+                                    FontSize="12"
+                                    Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                                    Glyph="&#xE7BA;"
+                                    Visibility="{x:Bind IsMissing, Converter={StaticResource BoolToVisibility}}" />
+                                <TextBlock Text="{x:Bind Name}" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
 
                 <VisualStateManager.VisualStateGroups>
                     <!--  A narrow inspector puts the list under the title.  -->

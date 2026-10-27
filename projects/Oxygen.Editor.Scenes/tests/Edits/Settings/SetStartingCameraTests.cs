@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
+using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Changes;
 using Oxygen.Editor.Scenes.Edits.Settings;
@@ -81,6 +82,30 @@ public sealed class SetStartingCameraTests
         SceneAssert.Applied(result);
         _ = fixture.Scene.StartingCamera.Should().Be(camera);
         SceneAssert.Changes(fixture.Changes.Only(), new SceneChange.StartingCameraChanged());
+    }
+
+    [TestMethod]
+    public async Task AnInstancedNodeWithACamera_IsAccepted_AndOneWithout_IsInvalid()
+    {
+        using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
+        var rig = NodePath.Of(NodeId.New());
+        var lens = NodePath.Of(NodeId.New());
+        var scene = new StructureScene(Guid.NewGuid(), SampleScene.CarModel.VirtualPath);
+        fixture.Structures.Publish(new SceneStructure(
+            SampleScene.CarModel,
+            scene,
+            [
+                new StructureNode(rig, "Rig", Parent: null, scene, Instance: null, Geometry: null, HasCamera: false),
+                new StructureNode(lens, "Lens", rig, scene, Instance: null, Geometry: null, HasCamera: true),
+            ],
+            []));
+
+        var refused = await fixture.Authoring.ExecuteAsync(new SetStartingCamera(new NodeReference(SampleScene.Car, rig))).ConfigureAwait(false);
+        var accepted = await fixture.Authoring.ExecuteAsync(new SetStartingCamera(new NodeReference(SampleScene.Car, lens))).ConfigureAwait(false);
+
+        SceneAssert.Invalid(refused, SceneEditCodes.StartingCameraInvalid);
+        SceneAssert.Applied(accepted);
+        _ = fixture.Scene.StartingCamera.Should().Be(new NodeReference(SampleScene.Car, lens));
     }
 
     [TestMethod]

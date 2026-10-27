@@ -70,11 +70,11 @@ public sealed partial class SceneAuthoring : IDisposable
     /// <summary>Gets a value indicating whether the authoring is retired: the scene was closed or replaced by a reload.</summary>
     public bool IsRetired { get; private set; }
 
-    /// <summary>Gets or sets the scene's own asset, which no instance in the scene may reach.</summary>
-    internal AssetPath? Asset
+    /// <summary>Gets the scene's own asset, which no instance in the scene may reach; null while the scene has no file.</summary>
+    public AssetPath? Asset
     {
         get => this.scope.Asset;
-        set => this.scope.Asset = value;
+        internal set => this.scope.Asset = value;
     }
 
     /// <summary>Executes an edit: checks its targets, validates it, applies it, records its revert and raises the changes.</summary>

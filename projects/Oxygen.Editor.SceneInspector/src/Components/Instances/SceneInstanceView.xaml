@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="Oxygen.Editor.SceneInspector.Components.Instances.SceneInstanceView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:editorcontrols="using:Oxygen.Editor.Controls"
+    xmlns:pickers="using:Oxygen.Editor.Pickers"
+    xmlns:ui="using:CommunityToolkit.WinUI">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="ms-appx:///Oxygen.Editor.SceneInspector/SceneInspectorStyles.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <editorcontrols:PropertiesExpander
+        Description="{x:Bind ViewModel.Description, Mode=OneWay}"
+        Header="{x:Bind ViewModel.Header, Mode=OneWay}"
+        HeaderIcon="{ui:FontIcon Glyph='&#xE71B;'}"
+        IsExpanded="{x:Bind ViewModel.IsExpanded, Mode=TwoWay}">
+        <editorcontrols:PropertiesExpander.Items>
+            <TextBlock
+                FontSize="12"
+                Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                Text="{x:Bind ViewModel.ErrorMessage, Mode=OneWay}"
+                TextWrapping="Wrap"
+                Visibility="{x:Bind ViewModel.HasError, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
+
+            <!--  Source: the picker swaps it for another model or scene.  -->
+            <editorcontrols:PropertyCard PropertyName="Source">
+                <pickers:AssetPickerButton
+                    AutomationName="Source"
+                    ChoiceInvoked="OnSourceChoiceInvoked"
+                    IsEnabled="{x:Bind ViewModel.CanSwap, Mode=OneWay}"
+                    Label="{x:Bind ViewModel.SourceLabel, Mode=OneWay}"
+                    Model="{x:Bind ViewModel.SourceChoices}"
+                    PickerOpening="OnSourcePickerOpening"
+                    ToolTipService.ToolTip="{x:Bind ViewModel.SourceKind, Mode=OneWay}" />
+            </editorcontrols:PropertyCard>
+
+            <editorcontrols:PropertyCard PropertyName="Changes">
+                <TextBlock
+                    VerticalAlignment="Center"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Text="{x:Bind ViewModel.ChangeCount, Mode=OneWay}" />
+            </editorcontrols:PropertyCard>
+
+            <TextBlock
+                FontSize="12"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                Text="This scene's environment and start state apply only when it runs as a level."
+                TextWrapping="Wrap"
+                Visibility="{x:Bind ViewModel.IsPrefab, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
+        </editorcontrols:PropertiesExpander.Items>
+    </editorcontrols:PropertiesExpander>
+</UserControl>

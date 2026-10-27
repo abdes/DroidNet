@@ -25,7 +25,7 @@ public sealed class TestSupportTests
 
         _ = fixture.Scene.AllNodes.Select(static node => node.Id).Should().Equal(SampleScene.AllNodes);
         _ = Outline(fixture.Scene, fixture.Layout).Should().Be(
-            "A(A1(A11) AF+(A2)) F+(B G-()) Cam Ortho Sun Moon Lamp Spot Fog Mesh Script");
+            "A(A1(A11) AF+(A2)) F+(B G-()) Cam Ortho Sun Moon Lamp Spot Fog Mesh Script Car");
         _ = fixture.Scene.AllNodes.Single(static node => node.Id == SampleScene.A11).Hierarchy.Parent!.Id.Should().Be(SampleScene.A1);
         _ = fixture.Scene.AllNodes.Single(static node => node.Id == SampleScene.A2).Hierarchy.Parent!.Id.Should().Be(SampleScene.A);
     }

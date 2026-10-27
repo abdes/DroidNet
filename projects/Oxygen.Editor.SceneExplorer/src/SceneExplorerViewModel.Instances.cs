@@ -70,11 +70,14 @@ public partial class SceneExplorerViewModel
     }
 
     /// <summary>
-    /// Gets whether the changes give a node its instance component or take it away, which a rebuild shows: rows are
-    /// built for what a node is when they are made.
+    /// Gets whether the changes give a node its instance component, take it away or swap its source, which a rebuild
+    /// shows: rows are built for what a node is when they are made.
     /// </summary>
     /// <param name="changes">The scene's changes.</param>
-    /// <returns><see langword="true"/> when a realized row is an instance root and its node no longer is, or the reverse.</returns>
+    /// <returns>
+    /// <see langword="true"/> when a realized row's node is no longer the instance root of the source the row shows, or
+    /// the reverse.
+    /// </returns>
     private bool ChangesInstanceRoots(IEnumerable<SceneChange> changes)
     {
         foreach (var change in changes)
@@ -83,6 +86,7 @@ public partial class SceneExplorerViewModel
             {
                 SceneChange.ComponentAdded added => added.Node,
                 SceneChange.ComponentRemoved removed => removed.Node,
+                SceneChange.InstanceSourceChanged swapped => swapped.Node,
                 _ => NodeId.Empty,
             };
             if (!node.IsEmpty && this.projection.GetNode(node) is { } row

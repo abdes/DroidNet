@@ -28,7 +28,8 @@ public sealed record RuntimeSceneHierarchy(bool Exists, Guid SceneKey, Immutable
 /// The virtual path of the geometry the node renders: <see langword="null"/> when it renders nothing, empty when no
 /// mounted source provides it.
 /// </param>
-public sealed record RuntimeSceneHierarchyNode(NodePath Path, string Name, int? Parent, Guid SceneKey, Guid? InstanceKey, string? GeometryPath);
+/// <param name="HasCamera">Whether the node has a camera, perspective or orthographic.</param>
+public sealed record RuntimeSceneHierarchyNode(NodePath Path, string Name, int? Parent, Guid SceneKey, Guid? InstanceKey, string? GeometryPath, bool HasCamera);
 
 /// <summary>A part of a scene's hierarchy that could not be read.</summary>
 /// <param name="Code">Why it could not be read.</param>

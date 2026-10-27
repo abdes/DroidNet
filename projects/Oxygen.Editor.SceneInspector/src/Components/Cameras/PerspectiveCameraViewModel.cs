@@ -171,7 +171,7 @@ public sealed partial class PerspectiveCameraViewModel : ComponentPropertyEditor
         var targets = items.Where(node => node.Components.OfType<PerspectiveCamera>().Any())
             .ToDictionary(this.ReferenceOf, static node => (object?)node.Components.OfType<PerspectiveCamera>().First());
         var nodes = targets.Keys.ToArray();
-        this.StartingCamera.Bind([.. items.Where(node => targets.ContainsKey(this.ReferenceOf(node)) && this.ReferenceOf(node).IsOwned)]);
+        this.StartingCamera.Bind(items.FirstOrDefault()?.Scene, nodes);
         foreach (var registration in this.registrations)
         {
             registration.Refresh(nodes, id => targets.GetValueOrDefault(id));

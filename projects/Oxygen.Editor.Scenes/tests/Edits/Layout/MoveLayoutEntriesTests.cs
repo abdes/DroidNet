@@ -55,7 +55,7 @@ public sealed class MoveLayoutEntriesTests
         new(new CycleCase(SampleScene.F, SampleScene.G)) { DisplayName = "FIntoG" },
     ];
 
-    // The sample's root after F: Cam, Ortho, Sun, Moon, Lamp, Spot, Fog, Mesh, Script.
+    // The sample's root after F: Cam, Ortho, Sun, Moon, Lamp, Spot, Fog, Mesh, Script, Car.
     private static LayoutEntryId[] RootAfterF =>
     [
         LayoutEntryId.Of(SampleScene.Cam),
@@ -67,6 +67,7 @@ public sealed class MoveLayoutEntriesTests
         LayoutEntryId.Of(SampleScene.Fog),
         LayoutEntryId.Of(SampleScene.Mesh),
         LayoutEntryId.Of(SampleScene.Script),
+        LayoutEntryId.Of(SampleScene.Car),
     ];
 
     [TestMethod]

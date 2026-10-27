@@ -9,8 +9,10 @@ using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Oxygen.Editor.Assets;
+using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.Input;
 using Oxygen.Editor.Pickers;
+using Oxygen.Editor.Projects;
 using Oxygen.Editor.SceneInspector.Presentation;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Edits.Settings;
@@ -28,20 +30,24 @@ namespace Oxygen.Editor.SceneInspector.SceneSettings;
 public sealed partial class PlaySectionViewModel : ObservableObject, IDisposable
 {
     private const string SearchText = "Play Starting camera Starting input contexts Priority Game start";
+    private const string PathSeparator = " › ";
 
     private readonly Func<SceneAuthoring?>? authoringProvider;
     private readonly IAssetFeed? assetProvider;
     private readonly IScheduler observerScheduler;
     private readonly Func<AssetPath, InputContextSource> contextSource;
     private readonly IInputSources? inputSources;
+    private readonly IProjectSession? session;
+    private readonly ISceneStructures? structures;
     private readonly Func<NodeId, Task>? inspectSceneNode;
     private readonly Func<AssetPath, Task>? revealAsset;
     private readonly List<AssetEntry> assets = [];
     private IDisposable? assetSubscription;
     private IDisposable? inputSubscription;
+    private IDisposable? structureSubscription;
     private bool catalogLoaded;
     private Scene? scene;
-    private NodeId? automaticCamera;
+    private NodeReference? automaticCamera;
     private Task pending = Task.CompletedTask;
     private bool isBusy;
     private bool inputEnabled = true;
@@ -58,6 +64,8 @@ public sealed partial class PlaySectionViewModel : ObservableObject, IDisposable
     /// <param name="inspectSceneNode">Selects a node in the Scene Explorer.</param>
     /// <param name="revealAsset">Shows an asset in the Content Explorer.</param>
     /// <param name="inputSources">The project's input sources; a change to one reads the contexts again.</param>
+    /// <param name="session">The project session the scene belongs to, whose instances' structures are read.</param>
+    /// <param name="structures">What the scene's instances contain, which lists the cameras they bring in.</param>
     internal PlaySectionViewModel(
         Func<SceneAuthoring?>? authoringProvider,
         IAssetFeed? assetProvider,
@@ -65,7 +73,9 @@ public sealed partial class PlaySectionViewModel : ObservableObject, IDisposable
         Func<AssetPath, InputContextSource>? contextSource,
         Func<NodeId, Task>? inspectSceneNode = null,
         Func<AssetPath, Task>? revealAsset = null,
-        IInputSources? inputSources = null)
+        IInputSources? inputSources = null,
+        IProjectSession? session = null,
+        ISceneStructures? structures = null)
     {
         this.authoringProvider = authoringProvider;
         this.assetProvider = assetProvider;
@@ -74,9 +84,22 @@ public sealed partial class PlaySectionViewModel : ObservableObject, IDisposable
         this.inspectSceneNode = inspectSceneNode;
         this.revealAsset = revealAsset;
         this.inputSources = inputSources;
+        this.session = session;
+        this.structures = structures;
+        if (structures is not null)
+        {
+            this.structureSubscription = Observable.FromEventPattern(
+                    handler => structures.Changed += handler,
+                    handler => structures.Changed -= handler)
+                .ObserveOn(observerScheduler)
+                .Subscribe(_ => this.Refresh());
+        }
     }
 
-    /// <summary>Gets the starting camera list: Automatic, then every camera in hierarchy order.</summary>
+    /// <summary>
+    /// Gets the starting camera list: Automatic, every camera in hierarchy order, then the cameras each instance brings
+    /// in, named under their instance root.
+    /// </summary>
     public ObservableCollection<StartingCameraChoice> CameraChoices { get; } = [];
 
     /// <summary>Gets or sets the chosen starting camera.</summary>
@@ -149,6 +172,8 @@ public sealed partial class PlaySectionViewModel : ObservableObject, IDisposable
         this.assetSubscription = null;
         this.inputSubscription?.Dispose();
         this.inputSubscription = null;
+        this.structureSubscription?.Dispose();
+        this.structureSubscription = null;
         this.Bind(value: null);
     }
 
@@ -275,7 +300,7 @@ public sealed partial class PlaySectionViewModel : ObservableObject, IDisposable
 
     [RelayCommand]
     private Task InspectAutomaticCameraAsync()
-        => this.automaticCamera is { } camera && this.inspectSceneNode is { } inspect ? inspect(camera) : Task.CompletedTask;
+        => this.automaticCamera is { } camera && this.inspectSceneNode is { } inspect ? inspect(camera.Node) : Task.CompletedTask;
 
     private bool CanAdd(AssetPath? context) => this.CanEdit && context is not null;
 
@@ -323,38 +348,83 @@ public sealed partial class PlaySectionViewModel : ObservableObject, IDisposable
 
     private void RefreshCameras()
     {
-        var cameras = this.scene?.AllNodes.Where(IsCamera).ToArray() ?? [];
+        var owned = this.scene?.AllNodes.Where(IsCamera).Select(static camera => (Id: (NodeReference)NodeReference.To(camera.Id), Name: camera.Metadata.Name)).ToArray() ?? [];
+        List<(NodeReference Id, string Name)> instanced = this.scene is { } current ? this.InstancedCameras(current) : [];
+        var cameras = owned.Concat(instanced).ToArray();
         var authored = this.scene?.StartingCamera;
-        var gone = authored is { } id && cameras.All(camera => NodeReference.To(camera.Id) != id);
-        var goneName = gone ? this.scene?.AllNodes.FirstOrDefault(node => authored is { IsOwned: true } && node.Id == authored.Node)?.Metadata.Name : null;
+        var gone = authored is { } id && cameras.All(camera => camera.Id != id);
+        var goneRoot = gone && authored is { IsOwned: false } lost ? this.scene?.AllNodes.FirstOrDefault(node => node.Id == lost.Node)?.Metadata.Name : null;
+        var goneName = !gone ? null
+            : authored is { IsOwned: true } ? this.scene?.AllNodes.FirstOrDefault(node => node.Id == authored.Node)?.Metadata.Name
+            : goneRoot is null ? null : goneRoot + PathSeparator + "missing camera";
 
         // Automatic, every camera, and the authored camera when it is gone, so the list shows what is authored.
-        var wanted = new List<(NodeReference? Id, string Name)> { (null, "Automatic") };
-        wanted.AddRange(cameras.Select(static camera => ((NodeReference?)NodeReference.To(camera.Id), camera.Metadata.Name)));
+        var wanted = new List<(NodeReference? Id, string Name, bool IsMissing)> { (null, "Automatic", false) };
+        wanted.AddRange(cameras.Select(static camera => ((NodeReference?)camera.Id, camera.Name, false)));
         if (gone)
         {
-            wanted.Add((authored, goneName ?? "Missing camera"));
+            wanted.Add((authored, goneName ?? "Missing camera", true));
         }
 
-        if (!this.CameraChoices.Select(static choice => (choice.Id, choice.Name)).SequenceEqual(wanted))
+        if (!this.CameraChoices.Select(static choice => (choice.Id, choice.Name, choice.IsMissing)).SequenceEqual(wanted))
         {
             this.CameraChoices.Clear();
-            foreach (var (choiceId, name) in wanted)
+            foreach (var (choiceId, name, isMissing) in wanted)
             {
-                this.CameraChoices.Add(new StartingCameraChoice(choiceId, name));
+                this.CameraChoices.Add(new StartingCameraChoice(choiceId, name) { IsMissing = isMissing });
             }
         }
 
+        // Without a starting camera, Play starts through the first camera the composed scene holds: the scene's own
+        // cameras come before those its instances bring in.
+        var automatic = authored is null && cameras.Length > 0 ? cameras[0] : default;
         this.SelectedCamera = this.CameraChoices.First(choice => choice.Id == authored);
-        this.automaticCamera = authored is null ? cameras.FirstOrDefault()?.Id : null;
-        this.AutomaticCameraName = authored is null ? cameras.FirstOrDefault()?.Metadata.Name ?? string.Empty : string.Empty;
+        this.automaticCamera = authored is null && cameras.Length > 0 ? automatic.Id : null;
+        this.AutomaticCameraName = automatic.Name ?? string.Empty;
         this.ShowsAutomaticCamera = authored is null && cameras.Length > 0;
         this.ShowsNoCamera = authored is null && cameras.Length == 0;
         this.CameraError = !gone
             ? string.Empty
-            : goneName is null
-                ? "The starting camera was deleted. Pick another camera, or return to Automatic."
-                : $"'{goneName}' is no longer a camera. Pick another camera, or return to Automatic.";
+            : goneRoot is not null
+                ? $"'{goneRoot}' no longer brings in the starting camera. Play starts through the first camera; pick another camera, or return to Automatic."
+                : goneName is null
+                    ? "The starting camera was deleted. Pick another camera, or return to Automatic."
+                    : $"'{goneName}' is no longer a camera. Pick another camera, or return to Automatic.";
+    }
+
+    // The cameras the scene's instances bring in, each named by its instance root and the names down to it, such as
+    // "CameraRig › Rig › MainCam"; an instance whose structure is not read lists none.
+    private List<(NodeReference Id, string Name)> InstancedCameras(Scene current)
+    {
+        var cameras = new List<(NodeReference Id, string Name)>();
+        if (this.structures is not { } read || this.session?.Context is not { } project)
+        {
+            return cameras;
+        }
+
+        foreach (var root in current.AllNodes)
+        {
+            if (root.Components.OfType<SceneInstanceComponent>().FirstOrDefault() is not { } instance
+                || read.Find(project, instance.Source) is not { } structure)
+            {
+                continue;
+            }
+
+            foreach (var camera in structure.Nodes.Where(static node => node.HasCamera))
+            {
+                var names = new List<string>();
+                for (var node = camera; node is not null; node = node.Parent is { } parent ? structure.Find(parent) : null)
+                {
+                    names.Add(node.Name);
+                }
+
+                names.Add(root.Metadata.Name);
+                names.Reverse();
+                cameras.Add((new NodeReference(root.Id, camera.Path), string.Join(PathSeparator, names)));
+            }
+        }
+
+        return cameras;
     }
 
     private void RefreshContexts()

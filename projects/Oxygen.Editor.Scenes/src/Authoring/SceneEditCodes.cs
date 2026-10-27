@@ -79,8 +79,9 @@ public static class SceneEditCodes
     public const string InstancedStructure = DiagnosticCodes.ScenePrefix + "Instance.Structure";
 
     /// <summary>
-    /// A target is a node an instance brings in, and the instance's contents are not available yet, so whether one of
-    /// its ancestors is locked is unknown; the diagnostic names the instance root.
+    /// An edit needs the contents of an instance's source, which are not available yet: whether an ancestor of a node
+    /// an instance brings in is locked, or where a swap finds a change's node by name. The diagnostic names the instance
+    /// root.
     /// </summary>
     public const string InstanceUnavailable = DiagnosticCodes.ScenePrefix + "Instance.Unavailable";
 

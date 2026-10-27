@@ -150,6 +150,8 @@ value struct PropertyValueEntry {
     //! The virtual path of the geometry the node renders: null when it
     //! renders nothing, empty when no mounted source provides it.
     System::String^ GeometryPath;
+    //! Whether the node has a camera, perspective or orthographic.
+    bool HasCamera;
   };
 
   //! Why part of a scene's hierarchy could not be read.

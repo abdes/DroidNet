@@ -190,6 +190,9 @@ internal sealed partial class ScenePreview
                 RecordOverrideParts(lifetime, [node]);
                 await this.AttachGeometryWhenMountedAsync(lifetime, node, cancellationToken).ConfigureAwait(true);
                 break;
+            case SceneChange.InstanceSourceChanged swapped:
+                await this.ProjectInstanceAsync(lifetime, swapped.Node, cancellationToken).ConfigureAwait(true);
+                break;
             case SceneChange.OverridesChanged overrides when FindNode(scene, overrides.Node) is { } node:
                 // An instance root's changes and its own geometry's overrides are projected apart.
                 if (InstanceOf(node) is not null || lifetime.Instances.ContainsKey(node.Id))

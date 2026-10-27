@@ -44,6 +44,21 @@ internal sealed partial class ScenePreview : IInstancedNodeReader
         return observation.Outcome.Succeeded && observation.Values is { Exists: true } values ? ToNodeValues(values) : null;
     }
 
+    /// <inheritdoc/>
+    async Task<SceneStructure?> IInstancedNodeReader.ReadStructureAsync(ProjectContext project, AssetPath source, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(project);
+        ArgumentNullException.ThrowIfNull(source);
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!ReferenceEquals(this.session.Context, project))
+        {
+            return null;
+        }
+
+        await this.ReadStructuresAsync([source]).ConfigureAwait(true);
+        return this.structureStore.Find(project, source);
+    }
+
     /// <summary>Converts the engine's hierarchy of a source's scene into the source's structure.</summary>
     /// <param name="source">The source.</param>
     /// <param name="virtualPath">The virtual path of the source's cooked scene.</param>
@@ -75,7 +90,8 @@ internal sealed partial class ScenePreview : IInstancedNodeReader
                     node.Parent is { } parent ? nodes[parent].Path : null,
                     SceneOf(node.SceneKey),
                     node.InstanceKey is { } instance ? SceneOf(instance) : null,
-                    string.IsNullOrEmpty(node.GeometryPath) ? null : AssetPath.Parse(node.GeometryPath))),
+                    string.IsNullOrEmpty(node.GeometryPath) ? null : AssetPath.Parse(node.GeometryPath),
+                    node.HasCamera)),
             ],
             [
                 .. hierarchy.Issues.Select(issue => new StructureIssue(

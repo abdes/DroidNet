@@ -10,6 +10,7 @@ using Oxygen.Editor.Scenes.Edits.Assets;
 using Oxygen.Editor.Scenes.Edits.Components;
 using Oxygen.Editor.Scenes.Edits.EditorView;
 using Oxygen.Editor.Scenes.Edits.Hierarchy;
+using Oxygen.Editor.Scenes.Edits.Instances;
 using Oxygen.Editor.Scenes.Edits.Layout;
 using Oxygen.Editor.Scenes.Edits.Properties;
 using Oxygen.Editor.Scenes.Edits.Scripting;
@@ -79,6 +80,8 @@ public static class EditSamples
 
     private static AssetPath JumpScript { get; } = AssetPath.Parse("/Content/Jump.oscript");
 
+    private static AssetPath VanModel { get; } = AssetPath.Parse("/Content/Vehicles/Van.glb");
+
     private static SurfaceTarget CubeSurfaceTarget => new(SampleScene.CubeGeometry, SampleScene.CubeSurface, SampleScene.CubeLayoutRevision);
 
     private static IReadOnlyList<EditSample> Samples =>
@@ -104,6 +107,7 @@ public static class EditSamples
         SetOverridesSample,
         ResetOverridesSample,
         SetStartingCameraSample,
+        SetInstanceSourceSample,
         SetStartingInputContextsSample,
         SetSceneReferencesSample,
         SetScriptSlotsSample,
@@ -382,6 +386,19 @@ public static class EditSamples
             [new SceneChange.OverridesChanged(SampleScene.Mesh, [SceneSchema.Geometry.Surface.Material.Id])])
         {
             HasTargets = true,
+        };
+
+    private static EditSample SetInstanceSourceSample =>
+        new(
+            nameof(SetInstanceSource),
+            static _ => new SetInstanceSource(SampleScene.Car, VanModel, InstanceSwap.KeepByName),
+            [new SceneChange.InstanceSourceChanged(SampleScene.Car)],
+            [new SceneChange.InstanceSourceChanged(SampleScene.Car)])
+        {
+            HasTargets = true,
+            CarriesAssetReference = true,
+            Asset = VanModel,
+            AssetNode = SampleScene.Car,
         };
 
     private static EditSample SetStartingCameraSample =>

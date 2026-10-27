@@ -31,7 +31,7 @@ public sealed class ScenePreviewStructureTests
     /// <summary>
     /// Outpost owns Ground and Watch; Watch instances Tower, which owns Holder; Holder instances Torch, which is not
     /// mounted. Parents map from indices to paths, each node keeps its defining scene and the geometry a mounted source
-    /// provides, and the issue names its instance root by path.
+    /// provides and whether it has a camera, and the issue names its instance root by path.
     /// </summary>
     [TestMethod]
     public void TheHierarchyBecomesTheStructureByNodePath()
@@ -40,9 +40,9 @@ public sealed class ScenePreviewStructureTests
             Exists: true,
             Outpost,
             [
-                new(NodePath.Of(Ground), "Ground", Parent: null, Outpost, InstanceKey: null, "/Content/Ground.ogeo"),
-                new(NodePath.Of(Watch), "Watch", Parent: null, Outpost, Tower, GeometryPath: null),
-                new(NodePath.Of(Watch, Holder), "Holder", Parent: 1, Tower, Torch, GeometryPath: string.Empty),
+                new(NodePath.Of(Ground), "Ground", Parent: null, Outpost, InstanceKey: null, "/Content/Ground.ogeo", HasCamera: false),
+                new(NodePath.Of(Watch), "Watch", Parent: null, Outpost, Tower, GeometryPath: null, HasCamera: false),
+                new(NodePath.Of(Watch, Holder), "Holder", Parent: 1, Tower, Torch, GeometryPath: string.Empty, HasCamera: true),
             ],
             [new(RuntimeSceneHierarchyIssueCode.SceneUnavailable, Node: 2, Torch)]);
 
@@ -60,6 +60,8 @@ public sealed class ScenePreviewStructureTests
         _ = structure.Find(NodePath.Of(Ground))!.Geometry.Should().Be(AssetPath.Parse("/Content/Ground.ogeo"));
         _ = structure.Find(NodePath.Of(Watch))!.Geometry.Should().BeNull("the node renders nothing");
         _ = holder.Geometry.Should().BeNull("no mounted source provides its geometry");
+        _ = holder.HasCamera.Should().BeTrue();
+        _ = structure.Find(NodePath.Of(Ground))!.HasCamera.Should().BeFalse();
         var issue = structure.Issues.Should().ContainSingle().Subject;
         _ = issue.Code.Should().Be("scene.instance.unavailable");
         _ = issue.Node.Should().Be(NodePath.Of(Watch, Holder));
@@ -74,8 +76,8 @@ public sealed class ScenePreviewStructureTests
             Exists: true,
             Outpost,
             [
-                new(NodePath.Of(Ground), "Ground", Parent: null, Outpost, InstanceKey: null, GeometryPath: null),
-                new(NodePath.Of(Ground), "Again", Parent: null, Outpost, InstanceKey: null, GeometryPath: null),
+                new(NodePath.Of(Ground), "Ground", Parent: null, Outpost, InstanceKey: null, GeometryPath: null, HasCamera: false),
+                new(NodePath.Of(Ground), "Again", Parent: null, Outpost, InstanceKey: null, GeometryPath: null, HasCamera: false),
             ],
             []);
 

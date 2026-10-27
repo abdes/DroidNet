@@ -456,4 +456,16 @@ NOLINT_TEST_F(AssetLoaderSceneQueryTest, HierarchyNodesNameTheirGeometry)
   EXPECT_FALSE(body.geometry.has_value());
 }
 
+//! Each node says whether it has a camera, so a scene can start through a
+//! camera an instance brings in.
+NOLINT_TEST_F(
+  AssetLoaderSceneQueryTest, HierarchyNodesSayWhetherTheyHaveACamera)
+{
+  const auto hierarchy = asset_loader_->ReadMountedSceneHierarchy(StreetKey());
+
+  ASSERT_HAS_VALUE(hierarchy);
+  EXPECT_TRUE(hierarchy->nodes.at(4).camera);
+  EXPECT_FALSE(hierarchy->nodes.at(5).camera);
+}
+
 } // namespace

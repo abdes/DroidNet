@@ -19,6 +19,9 @@ public sealed class StartingCameraChoice(NodeReference? id, string name)
     /// <summary>Gets the text the list shows.</summary>
     public string Name { get; } = name;
 
+    /// <summary>Gets a value indicating whether the choice is the authored camera, which the scene no longer has.</summary>
+    public bool IsMissing { get; init; }
+
     /// <inheritdoc />
     public override string ToString() => this.Name;
 }

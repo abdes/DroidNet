@@ -30,11 +30,12 @@ namespace Oxygen.Editor.Scenes.Tests.TestSupport;
 /// Ortho    orthographic, size 10               ├─ B
 /// Sun      directional, slot Primary           └─ folder G (collapsed, empty)
 /// Moon     directional, slot None              Cam, Ortho, Sun, Moon, Lamp,
-/// Lamp     point light, source radius 0.05     Spot, Fog, Mesh, Script
+/// Lamp     point light, source radius 0.05     Spot, Fog, Mesh, Script, Car
 /// Spot     spot light, cones 0.4 / 0.6
 /// Fog      local fog volume
 /// Mesh     Cube.ogeo, one surface material override (Red.omat)
 /// Script   two script slots: Move.oscript with "target" = node B, then Move.oscript with no values
+/// Car      an instance of Car.glb, with no changes
 /// </code>
 /// Every id is fixed, so two builds are the same document. Ids end in readable tags: nodes are <c>...-0001-...</c>,
 /// components <c>...-0002-...</c>, folders <c>...-0003-...</c>, slots <c>...-0004-...</c>; a node's transform is
@@ -51,6 +52,8 @@ public static class SampleScene
     public static AssetPath MoveScript { get; } = AssetPath.Parse("/Content/Move.oscript");
 
     public static AssetPath PlayInput { get; } = AssetPath.Parse("/Content/Play.oimap");
+
+    public static AssetPath CarModel { get; } = AssetPath.Parse("/Content/Vehicles/Car.glb");
 
     /// <summary>Gets the layout revision of the cube's surface inventory: 64 hex digits, as a cooked inventory has.</summary>
     public static string CubeLayoutRevision { get; } = new('c', 64);
@@ -85,6 +88,8 @@ public static class SampleScene
 
     public static NodeId Script { get; } = NodeTag("5C");
 
+    public static NodeId Car { get; } = NodeTag("1C");
+
     public static FolderId AF { get; } = FolderId.FromValue(Tagged(3, "AF"));
 
     public static FolderId F { get; } = FolderId.FromValue(Tagged(3, "F"));
@@ -109,6 +114,8 @@ public static class SampleScene
 
     public static ComponentId ScriptScripting { get; } = ComponentTag("5C");
 
+    public static ComponentId CarInstance { get; } = ComponentTag("1C");
+
     public static Guid CubeSurface { get; } = Tagged(4, "C1");
 
     public static Guid MoveSlot { get; } = Tagged(4, "51");
@@ -131,7 +138,7 @@ public static class SampleScene
     public static ScriptParameter SurfaceParameter { get; } = new() { Name = "surface", Kind = ScriptParameterKind.AssetParameter, AssetType = (byte)AssetType.Material };
 
     /// <summary>Gets every node, in declaration order.</summary>
-    public static IReadOnlyList<NodeId> AllNodes { get; } = [A, A1, A11, A2, B, Cam, Ortho, Sun, Moon, Lamp, Spot, Fog, Mesh, Script];
+    public static IReadOnlyList<NodeId> AllNodes { get; } = [A, A1, A11, A2, B, Cam, Ortho, Sun, Moon, Lamp, Spot, Fog, Mesh, Script, Car];
 
     /// <summary>
     /// Builds a new copy of the sample scene's data.
@@ -163,7 +170,8 @@ public static class SampleScene
             .Node(Spot, "Spot", components: [new SpotLightData { Id = SpotLight, Name = "Light", InnerConeAngleRadians = 0.4f, OuterConeAngleRadians = 0.6f }])
             .Node(Fog, "Fog", components: [new LocalFogVolumeData { Id = FogVolume, Name = "Fog" }])
             .Node(Mesh, "Mesh", components: [CubeWithRedSurface()])
-            .Node(Script, "Script", components: [MoveTowardB()]);
+            .Node(Script, "Script", components: [MoveTowardB()])
+            .Node(Car, "Car", components: [new SceneInstanceComponentData { Id = CarInstance, Name = "Scene Instance", Source = CarModel }]);
 
     /// <summary>
     /// Makes a fixed id with a readable tag, such as <c>00000000-0000-0000-0001-0000000000a1</c>.

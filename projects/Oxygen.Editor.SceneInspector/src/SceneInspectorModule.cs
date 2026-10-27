@@ -6,6 +6,7 @@ using DryIoc;
 using Oxygen.Editor.SceneInspector.Components.Cameras;
 using Oxygen.Editor.SceneInspector.Components.Fog;
 using Oxygen.Editor.SceneInspector.Components.Geometry;
+using Oxygen.Editor.SceneInspector.Components.Instances;
 using Oxygen.Editor.SceneInspector.Components.Lights;
 using Oxygen.Editor.SceneInspector.Components.Rendering;
 using Oxygen.Editor.SceneInspector.Components.Scripting;
@@ -55,5 +56,6 @@ public sealed class SceneInspectorModule : IFeatureModule
         scope.Register<NodeRenderingView>(Reuse.Transient);
         scope.Register<SceneSettingsView>(Reuse.Transient);
         scope.Register<GeometryView>(Reuse.Transient);
+        scope.Register<SceneInstanceView>(Reuse.Transient);
     }
 }

@@ -7,6 +7,7 @@ using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.LivePreview.Scenes;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.Scenes.Edits.Components;
+using Oxygen.Editor.Scenes.Edits.Instances;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
@@ -22,6 +23,7 @@ namespace Oxygen.Editor.LivePreview.Tests.Scenes;
 public sealed partial class ScenePreviewTests
 {
     private static readonly AssetPath CarModel = AssetPath.Parse("/Content/Vehicles/Car.glb");
+    private static readonly AssetPath VanModel = AssetPath.Parse("/Content/Vehicles/Van.glb");
 
     [TestMethod]
     public async Task SyncedInstance_IsBuiltWithItsChanges()
@@ -78,6 +80,31 @@ public sealed partial class ScenePreviewTests
         _ = await authoring.UndoAsync().ConfigureAwait(false);
 
         _ = fixture.World.Commands.OfType<RuntimeInstantiateScene>().Should().ContainSingle("undoing the removal builds the instance again");
+    }
+
+    [TestMethod]
+    public async Task SwappedInstance_IsBuiltFromTheNewSource_AndUndoBuildsTheOldOne()
+    {
+        using var fixture = new PreviewFixture();
+        var built = new Scene { Name = "Test Scene" };
+        var root = new SceneNode(built, "Car");
+        built.RootNodes.Add(root);
+        root.Components.Add(new SceneInstanceComponent { Name = "Scene Instance", Source = CarModel });
+        var document = await fixture.OpenAsync(built).ConfigureAwait(false);
+        _ = await fixture.Preview.SyncSceneAsync(PreviewFixture.SceneOf(document), this.TestContext.CancellationToken).ConfigureAwait(false);
+        fixture.Requests.Clear();
+        var authoring = PreviewFixture.AuthoringOf(document);
+
+        _ = await authoring.ExecuteAsync(new SetInstanceSource(root.Id, VanModel, InstanceSwap.KeepByName)).ConfigureAwait(false);
+
+        _ = fixture.World.Commands.OfType<RuntimeInstantiateScene>().Should().ContainSingle()
+            .Which.SourcePath.Should().Be(ContentPipelinePaths.ToCookedScenePath(AssetFileTypes.SceneProductOf(VanModel)!));
+        fixture.Requests.Clear();
+
+        _ = await authoring.UndoAsync().ConfigureAwait(false);
+
+        _ = fixture.World.Commands.OfType<RuntimeInstantiateScene>().Should().ContainSingle()
+            .Which.SourcePath.Should().Be(ContentPipelinePaths.ToCookedScenePath(AssetFileTypes.SceneProductOf(CarModel)!), "undoing the swap builds the old source again");
     }
 
     [TestMethod]

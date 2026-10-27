@@ -1542,8 +1542,13 @@ gigabytes of geometry; its hierarchy is a few records per node.
 - The store's `Changed` event fires on the thread that read the structures;
   views rebuild from `Find` then.
 - `SceneStructure` holds `StructureNode`s by `NodePath`: name, parent path,
-  defining scene and the scene each nested instance root instances, and the
-  hierarchy's issues.
+  defining scene, the scene each nested instance root instances, the geometry
+  it renders and whether it has a camera (perspective or orthographic, for the
+  starting camera, section 8.12), and the hierarchy's issues.
+- A structure the store does not hold yet is read on demand with
+  `IInstancedNodeReader.ReadStructureAsync`, which `ScenePreview` implements as
+  it reads the others and keeps the result in the store: a swap that keeps
+  changes by name reads the new source first (section 8.3).
 - While a newly placed source's first cook runs it is not mounted: the instance
   root shows no rows until the cook mounts it.
 
@@ -1566,15 +1571,15 @@ message.
 
 **How.**
 
-| Edit                 | Effect                                                                                                                                                                                                                                                                                                                                                                                            |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `InsertNodes`        | With `SceneNodeTemplates.Instance(source)` (`Oxygen.Editor.Scenes/src/Nodes/SceneNodeTemplates.cs:18`), creates the instance root named after its source                                                                                                                                                                                                                                          |
-| `SetOverrides`       | `OverrideWrite` gains an optional `NodePath`. With one, the write lands in the instance root's `Changes`; validation uses `SceneSchema.Overridable`, and a surface part's owner comes from one function, `PartOwners.Resolve(target)`: the component's `PartOwner` for an owned node, the instanced node's geometry in the structure (ED2) for an instanced one                                   |
-| `SetInstanceSource`  | Sets `Source`; refuses a source that instances this scene (`SceneEditCodes.InstanceCycle`), by `InstanceRules.WouldCycle` over the cook dependency graph, the rule the pickers use; with changes, keeps them by name path or discards them (section 6.5), marking unmatched ones `CarriedFrom` the old source                                                                                     |
-| `UnpackInstance`     | `One` or `Complete` (section 6.8): owned `SceneNode`s with new `NodeId`s replace the component, nested instance roots stay one with their changes re-rooted, and a starting camera or lock on an unpacked node is retargeted. A rotation is written as the change's angles where a change set it, else decomposed from the composed quaternion (YXZ): the same rotation, possibly as other angles |
-| `ApplyToSource`      | Moves changes into an authored scene on the node path (section 6.7); records the source file's previous bytes, and Undo refuses with `SceneEditCodes.SourceChanged` when the file changed since                                                                                                                                                                                                   |
-| `ReassignKeptChange` | Repairs a kept change where it was lost (section 6.4): in the model's import settings, with their previous bytes recorded and a reimport, or by rewriting the change's node path                                                                                                                                                                                                                  |
-| Kept change removal  | A `SetOverrides` that resets the listed changes, labelled _Remove kept changes_                                                                                                                                                                                                                                                                                                                   |
+| Edit                 | Effect                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `InsertNodes`        | With `SceneNodeTemplates.Instance(source)` (`Oxygen.Editor.Scenes/src/Nodes/SceneNodeTemplates.cs:18`), creates the instance root named after its source                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `SetOverrides`       | `OverrideWrite` gains an optional `NodePath`. With one, the write lands in the instance root's `Changes`; validation uses `SceneSchema.Overridable`, and a surface part's owner comes from one function, `PartOwners.Resolve(target)`: the component's `PartOwner` for an owned node, the instanced node's geometry in the structure (ED2) for an instanced one                                                                                                                                                                                                                                                                                                                                     |
+| `SetInstanceSource`  | Sets `Source`; refuses a source that instances this scene (`SceneEditCodes.InstanceCycle`), by `InstanceRules.WouldCycle` over the cook dependency graph, the rule the pickers use; with changes, keeps them by name path (`InstanceSwap.KeepByName`, through `InstanceNamePaths`, which records each change's `Names`) or discards them (section 6.5), marking unmatched ones `CarriedFrom` the old source. Keeping them while the new source's structure is not read is refused with `InstanceUnavailable`. Its revert (`InstanceSwap.Replace`) restores the source and the exact changes; it raises `InstanceSourceChanged`, which Live Preview and the Scene Explorer rebuild the instance from |
+| `UnpackInstance`     | `One` or `Complete` (section 6.8): owned `SceneNode`s with new `NodeId`s replace the component, nested instance roots stay one with their changes re-rooted, and a starting camera or lock on an unpacked node is retargeted. A rotation is written as the change's angles where a change set it, else decomposed from the composed quaternion (YXZ): the same rotation, possibly as other angles                                                                                                                                                                                                                                                                                                   |
+| `ApplyToSource`      | Moves changes into an authored scene on the node path (section 6.7); records the source file's previous bytes, and Undo refuses with `SceneEditCodes.SourceChanged` when the file changed since                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `ReassignKeptChange` | Repairs a kept change where it was lost (section 6.4): in the model's import settings, with their previous bytes recorded and a reimport, or by rewriting the change's node path                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| Kept change removal  | A `SetOverrides` that resets the listed changes, labelled _Remove kept changes_                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 
 - `SceneEditCodes` (`Oxygen.Editor.Scenes/src/Authoring/SceneEditCodes.cs:11`)
   gains `InstancedStructure`, `InstanceCycle`, `NodePathUnresolved` and
@@ -1671,7 +1676,10 @@ nodes would double every section and let them drift.
   a button that selects the instance root; _Add component_ and _Remove
   component_ are disabled with the refusal.
 - `SceneInstanceSectionView` and its view model: Source, an `AssetPicker` of
-  models and authored scenes (section 6.1's filter); the change count; the
+  models and authored scenes (section 6.1's filter, `InstanceSources` in
+  `Oxygen.Editor.Pickers`, shared with _Add > Model…_ and _Add > Scene…_),
+  which swaps the source: with changes, a dialog asks _Keep changes by name_,
+  _Discard changes_ or _Cancel_; the change count; the
   caution box with each kept change's name path and property, _Reassign…_,
   _Remove_ and _Remove all_ (ED10); and, on a prefab instance, the notice that
   the scene's environment and start state apply only when it runs as a level.
@@ -1898,7 +1906,10 @@ the Play section or with the camera section's toggle (SI-15).
   `NodeReference?` (ED1), and `StartingCameraChoice` holds one; the descriptor
   writes it as the cooked `NodeRef` (ED9).
 - `PlaySectionViewModel` lists instanced cameras under their instance root,
-  from the structure, with their names (`CameraRig › Rig › MainCam`).
+  from the structure, with their names (`CameraRig › Rig › MainCam`). Without
+  a starting camera, Automatic names the first camera in composed order: the
+  scene's own cameras, then those its instances bring in. A lost one stays
+  listed with the caution glyph and the message naming its instance root.
 - `StartingCameraToggle` (`Components/Cameras/StartingCameraToggle.cs:19`)
   works on a transient camera component (ED5) through the instanced write
   target.

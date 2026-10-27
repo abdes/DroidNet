@@ -18,7 +18,7 @@ namespace Oxygen.Editor.SceneInspector.Components.Cameras;
 /// <param name="authoringProvider">The authoring of the scene being inspected.</param>
 public sealed partial class StartingCameraToggle(Func<SceneAuthoring?>? authoringProvider) : ObservableObject, IDisposable
 {
-    private SceneNode? camera;
+    private NodeReference? camera;
     private Scene? scene;
     private bool updating;
     private Task pending = Task.CompletedTask;
@@ -44,19 +44,21 @@ public sealed partial class StartingCameraToggle(Func<SceneAuthoring?>? authorin
     internal Task Pending => this.pending;
 
     /// <summary>Binds the selected cameras.</summary>
-    /// <param name="cameras">The selected nodes that have a camera.</param>
-    public void Bind(IReadOnlyList<SceneNode> cameras)
+    /// <param name="selected">The scene the cameras are in.</param>
+    /// <param name="cameras">The selected nodes that have a camera: nodes of the scene, or nodes an instance brings in.</param>
+    public void Bind(Scene? selected, IReadOnlyList<NodeReference> cameras)
     {
         ArgumentNullException.ThrowIfNull(cameras);
         var single = cameras.Count == 1 ? cameras[0] : null;
-        if (!ReferenceEquals(this.scene, single?.Scene))
+        var singleScene = single is null ? null : selected;
+        if (!ReferenceEquals(this.scene, singleScene))
         {
             if (this.scene is { } previous)
             {
                 previous.PropertyChanged -= this.OnSceneChanged;
             }
 
-            this.scene = single?.Scene;
+            this.scene = singleScene;
             if (this.scene is { } current)
             {
                 current.PropertyChanged += this.OnSceneChanged;
@@ -68,7 +70,7 @@ public sealed partial class StartingCameraToggle(Func<SceneAuthoring?>? authorin
     }
 
     /// <inheritdoc />
-    public void Dispose() => this.Bind([]);
+    public void Dispose() => this.Bind(selected: null, []);
 
     partial void OnIsCheckedChanged(bool value)
     {
@@ -86,14 +88,14 @@ public sealed partial class StartingCameraToggle(Func<SceneAuthoring?>? authorin
 
     private async Task ApplyAsync(bool isStartingCamera)
     {
-        if (this.camera is not { } node || this.scene is not { } current
+        if (this.camera is not { } reference || this.scene is not { } current
             || authoringProvider?.Invoke() is not { } authoring || !ReferenceEquals(authoring.Scene, current))
         {
             this.Refresh();
             return;
         }
 
-        NodeReference? camera = isStartingCamera ? NodeReference.To(node.Id) : null;
+        var camera = isStartingCamera ? reference : null;
         if (camera != current.StartingCamera)
         {
             _ = await authoring.ExecuteAsync(new SetStartingCamera(camera)).ConfigureAwait(true);
@@ -108,9 +110,9 @@ public sealed partial class StartingCameraToggle(Func<SceneAuthoring?>? authorin
         try
         {
             this.IsAvailable = this.camera is not null;
-            this.IsChecked = this.camera is { } node && this.scene?.StartingCamera == NodeReference.To(node.Id);
+            this.IsChecked = this.camera is { } reference && this.scene?.StartingCamera == reference;
             this.IsAutomatic = this.camera is { } automatic && this.scene is { StartingCamera: null } current
-                && current.EffectiveStartingCamera == NodeReference.To(automatic.Id);
+                && current.EffectiveStartingCamera == automatic;
         }
         finally
         {

@@ -20,13 +20,15 @@ namespace Oxygen.Editor.ContentPipeline.Inspection;
 /// The geometry the node renders, which no change of an instance replaces, or null when it renders nothing or no
 /// mounted source provides it.
 /// </param>
+/// <param name="HasCamera">Whether the node has a camera, perspective or orthographic.</param>
 public sealed record StructureNode(
     NodePath Path,
     string Name,
     NodePath? Parent,
     StructureScene DefiningScene,
     StructureScene? Instance,
-    AssetPath? Geometry);
+    AssetPath? Geometry,
+    bool HasCamera);
 
 /// <summary>A scene of the structure: the source itself, or one it instances at any depth.</summary>
 /// <param name="Key">The scene's asset key.</param>

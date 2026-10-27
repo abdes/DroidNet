@@ -8,6 +8,7 @@ using DroidNet.Controls;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.Assets;
+using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.Input;
 using Oxygen.Editor.LivePreview.Scenes;
 using Oxygen.Editor.Projects;
@@ -38,6 +39,7 @@ public sealed partial class SceneSettingsViewModel : InspectorSection, IDisposab
     /// the cube textures.</param>
     /// <param name="inputSources">The project's input sources, whose changes the Play section follows.</param>
     /// <param name="loggerFactory">Creates the loggers that report catalog failures.</param>
+    /// <param name="structures">What the scene's instances contain, which lists the cameras they bring in for Play.</param>
     public SceneSettingsViewModel(
         Func<SceneAuthoring?>? authoringProvider = null,
         IAssetFeed? assetProvider = null,
@@ -48,7 +50,8 @@ public sealed partial class SceneSettingsViewModel : InspectorSection, IDisposab
         Func<AssetPath, Task>? revealAsset = null,
         IProjectSession? session = null,
         IInputSources? inputSources = null,
-        ILoggerFactory? loggerFactory = null)
+        ILoggerFactory? loggerFactory = null,
+        ISceneStructures? structures = null)
     {
         this.observeEnvironment = observeEnvironment;
         this.EditOwner = new(authoringProvider, this.RefreshFromScene, this.ValidationFeedback);
@@ -62,7 +65,7 @@ public sealed partial class SceneSettingsViewModel : InspectorSection, IDisposab
         this.PostProcessing = new(this.EditOwner);
         this.AtmosphereLights = new(this.EditOwner, authoringProvider, inspectSceneNode);
         this.SceneReferences = new(authoringProvider, assetProvider, observerScheduler ?? ImmediateScheduler.Instance, loggerFactory?.CreateLogger<SceneReferencesSectionViewModel>() ?? NullLogger<SceneReferencesSectionViewModel>.Instance);
-        this.Play = new(authoringProvider, assetProvider, scheduler, inputContextSource, inspectSceneNode, revealAsset, inputSources);
+        this.Play = new(authoringProvider, assetProvider, scheduler, inputContextSource, inspectSceneNode, revealAsset, inputSources, session, structures);
     }
 
     /// <summary>Occurs when diagnostic navigation requests realization and focus.</summary>

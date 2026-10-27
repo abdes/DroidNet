@@ -49,6 +49,7 @@ public static class SceneEditJson
                 new OverrideWriteJsonConverter(),
                 new ScriptSlotJsonConverter(),
                 new ScriptValueJsonConverter(),
+                new InstanceChangesJsonConverter(),
             },
         };
         options.MakeReadOnly();
@@ -199,6 +200,38 @@ public static class SceneEditJson
         {
             var scripting = new ScriptingComponent { Name = ScriptingComponent.DefaultName, Slots = [value] };
             JsonSerializer.Serialize(writer, ((ScriptingData)scripting.Dehydrate()).Slots[0], SceneJsonContext.Default.ScriptSlotData);
+        }
+    }
+
+    /// <summary>Writes an instance root's changes as a scene file writes them: one entry per changed node.</summary>
+    private sealed class InstanceChangesJsonConverter : JsonConverter<InstanceChanges>
+    {
+        public override InstanceChanges Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        {
+            if (reader.TokenType != JsonTokenType.StartArray)
+            {
+                throw new JsonException("An instance's changes are an array of node changes.");
+            }
+
+            var nodes = new List<InstancedNodeChangesData>();
+            while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
+            {
+                nodes.Add(JsonSerializer.Deserialize(ref reader, SceneJsonContext.Default.InstancedNodeChangesData)
+                    ?? throw new JsonException("An instance's node changes cannot be null."));
+            }
+
+            return InstanceChangesJson.Read(nodes);
+        }
+
+        public override void Write(Utf8JsonWriter writer, InstanceChanges value, JsonSerializerOptions options)
+        {
+            writer.WriteStartArray();
+            foreach (var node in InstanceChangesJson.Write(value) ?? [])
+            {
+                JsonSerializer.Serialize(writer, node, SceneJsonContext.Default.InstancedNodeChangesData);
+            }
+
+            writer.WriteEndArray();
         }
     }
 

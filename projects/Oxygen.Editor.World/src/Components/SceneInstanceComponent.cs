@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Text.Json;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Core;
 
@@ -72,7 +71,7 @@ public partial class SceneInstanceComponent : GameComponent
         using (this.SuppressNotifications())
         {
             this.Source = AssetPathData.Require(instance.Source, nameof(instance.Source));
-            this.Changes = ReadChanges(instance.Changes);
+            this.Changes = InstanceChangesJson.Read(instance.Changes);
         }
     }
 
@@ -83,65 +82,6 @@ public partial class SceneInstanceComponent : GameComponent
             Id = this.Id,
             Name = this.Name,
             Source = this.Source,
-            Changes = this.Changes.IsEmpty ? null : [.. this.Changes.Ordered.Select(static entry => WriteChanges(entry.Key, entry.Value))],
-        };
-
-    private static InstanceChanges ReadChanges(IList<InstancedNodeChangesData>? data)
-    {
-        var changes = InstanceChanges.None;
-        foreach (var node in data ?? [])
-        {
-            var path = node.Path.Count == 0
-                ? throw new JsonException("An instance change names a node below the instance root: its path cannot be empty.")
-                : NodePath.Of(node.Path);
-            if (changes.Nodes.ContainsKey(path))
-            {
-                throw new JsonException($"The instance changes node {path} twice.");
-            }
-
-            var entry = InstancedNodeChanges.None.WithNames(node.Names).WithCarriedFrom(node.CarriedFrom);
-            foreach (var (kind, overrides) in node.Components)
-            {
-                var componentChanges = SourceOverridesJson.ReadChanges(kind, overrides);
-                entry = componentChanges.IsEmpty
-                    ? throw new JsonException($"The changes of the {kind} component of node {path} hold no value.")
-                    : entry.With(componentChanges);
-            }
-
-            foreach (var (slot, values) in node.Parameters ?? new Dictionary<Guid, IDictionary<string, ScriptValueData>>())
-            {
-                if (slot == Guid.Empty || values.Count == 0)
-                {
-                    throw new JsonException($"The parameter changes of node {path} name a script slot and hold a value.");
-                }
-
-                foreach (var (name, value) in values)
-                {
-                    entry = entry.WithParameter(slot, name, ScriptValueJson.Read(name, value));
-                }
-            }
-
-            changes = entry.IsEmpty
-                ? throw new JsonException($"The changes of node {path} change no component and no script parameter.")
-                : changes.With(path, entry);
-        }
-
-        return changes;
-    }
-
-    private static InstancedNodeChangesData WriteChanges(NodePath path, InstancedNodeChanges changes)
-        => new()
-        {
-            Path = [.. path.Nodes],
-            Names = changes.Names,
-            CarriedFrom = changes.CarriedFrom,
-            Components = changes.Components
-                .OrderBy(static entry => entry.Key, StringComparer.Ordinal)
-                .ToDictionary(static entry => entry.Key, static entry => SourceOverridesJson.Write(entry.Value)!, StringComparer.Ordinal),
-            Parameters = changes.Parameters.IsEmpty
-                ? null
-                : changes.Parameters.ToDictionary(
-                    static slot => slot.Key,
-                    static slot => (IDictionary<string, ScriptValueData>)slot.Value.ToDictionary(static value => value.Key, static value => ScriptValueJson.Write(value.Value), StringComparer.Ordinal)),
+            Changes = InstanceChangesJson.Write(this.Changes),
         };
 }

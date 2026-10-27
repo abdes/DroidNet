@@ -174,7 +174,7 @@ public sealed partial class OrthographicCameraViewModel : ComponentPropertyEdito
         var nodes = targets.Keys.ToArray();
         this.edits?.Bind(nodes);
         this.selectedItems = items;
-        this.StartingCamera.Bind([.. items.Where(node => targets.ContainsKey(this.ReferenceOf(node)) && this.ReferenceOf(node).IsOwned)]);
+        this.StartingCamera.Bind(items.FirstOrDefault()?.Scene, nodes);
         foreach (var registration in this.registrations)
         {
             registration.Refresh(nodes, id => targets.GetValueOrDefault(id));

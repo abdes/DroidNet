@@ -40,7 +40,7 @@ public sealed class FakeSceneStructures : ISceneStructures, IInstancedNodeReader
         var structure = new SceneStructure(
             source,
             scene,
-            [.. nodes.Select(node => new StructureNode(node.Path, node.Name, node.Parent, scene, Instance: null, Geometry: null))],
+            [.. nodes.Select(node => new StructureNode(node.Path, node.Name, node.Parent, scene, Instance: null, Geometry: null, HasCamera: false))],
             []);
         lock (this.gate)
         {
@@ -101,6 +101,19 @@ public sealed class FakeSceneStructures : ISceneStructures, IInstancedNodeReader
         lock (this.gate)
         {
             return this.structures.GetValueOrDefault(source);
+        }
+    }
+
+    /// <inheritdoc />
+    /// <remarks>Reads what was published.</remarks>
+    public Task<SceneStructure?> ReadStructureAsync(ProjectContext project, AssetPath source, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(project);
+        ArgumentNullException.ThrowIfNull(source);
+        cancellationToken.ThrowIfCancellationRequested();
+        lock (this.gate)
+        {
+            return Task.FromResult(this.structures.GetValueOrDefault(source));
         }
     }
 

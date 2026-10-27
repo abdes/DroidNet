@@ -21,9 +21,6 @@ namespace Oxygen.Editor.SceneEditor;
 /// </summary>
 public partial class SceneEditorViewModel
 {
-    private const string ModelGlyph = "";
-    private const string SceneGlyph = "";
-
     private IReadOnlyList<AssetEntry> latestAssets = [];
     private IDisposable? assetSubscription;
 
@@ -37,10 +34,10 @@ public partial class SceneEditorViewModel
     public string InstanceSourceEmptyText { get; private set; } = string.Empty;
 
     /// <summary>Gets the models Quick Add's <em>Model…</em> offers: one row per imported model's source file.</summary>
-    internal AssetPickerModel ModelChoices { get; } = new(static asset => AssetChoice.For(asset, "Model", ModelGlyph));
+    internal AssetPickerModel ModelChoices { get; } = InstanceSources.CreateModelPicker();
 
     /// <summary>Gets the scenes Quick Add's <em>Scene…</em> offers: authored scenes that would not instance this one.</summary>
-    internal AssetPickerModel SceneChoices { get; } = new(static asset => AssetChoice.For(asset, "Scene", SceneGlyph));
+    internal AssetPickerModel SceneChoices { get; } = InstanceSources.CreateScenePicker();
 
     /// <summary>
     /// Places an instance of a model or a scene in front of the focused pane's camera, named after its source, and
@@ -88,7 +85,7 @@ public partial class SceneEditorViewModel
     private void PickModel()
     {
         this.LogQuickAddRequested("Model");
-        this.ModelChoices.Update(AssetRule.For(AssetKind.Model).Apply(this.latestAssets));
+        this.ModelChoices.Update(InstanceSources.Models(this.latestAssets));
         this.RequestInstanceSourcePicker(this.ModelChoices, "No imported models. Import one from the Content Explorer.");
     }
 
@@ -101,8 +98,7 @@ public partial class SceneEditorViewModel
         }
 
         var scene = this.Document.File.Asset;
-        this.SceneChoices.Update([.. AssetRule.For(AssetKind.Scene).Apply(this.latestAssets)
-            .Where(asset => !this.WouldCycle(scene, asset.Identity))]);
+        this.SceneChoices.Update(InstanceSources.Scenes(this.latestAssets, source => this.WouldCycle(scene, source)));
         this.RequestInstanceSourcePicker(this.SceneChoices, "No other scene can be instanced here.");
     }
 

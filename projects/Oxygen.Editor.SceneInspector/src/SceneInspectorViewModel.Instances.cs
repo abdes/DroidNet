@@ -213,11 +213,22 @@ public sealed partial class SceneInspectorViewModel
         return (InstancedNodes.Build(scene, reference, values, instance.Changes.Of(reference.Path)), values);
     }
 
-    // The scene changed an instance's nodes, as a viewport drag does: each transient node shows its values again.
+    // The scene changed an instance's nodes, as a viewport drag does: each transient node shows its values again. A swap
+    // of its source brings in other nodes, which are read again.
     private void OnInstanceChanged(object? sender, PropertyChangedEventArgs args)
     {
-        if (sender is not SceneInstanceComponent changed
-            || !string.Equals(args.PropertyName, nameof(SceneInstanceComponent.Changes), StringComparison.Ordinal))
+        if (sender is not SceneInstanceComponent changed)
+        {
+            return;
+        }
+
+        if (string.Equals(args.PropertyName, nameof(SceneInstanceComponent.Source), StringComparison.Ordinal))
+        {
+            this.OnStructuresChanged(sender, EventArgs.Empty);
+            return;
+        }
+
+        if (!string.Equals(args.PropertyName, nameof(SceneInstanceComponent.Changes), StringComparison.Ordinal))
         {
             return;
         }

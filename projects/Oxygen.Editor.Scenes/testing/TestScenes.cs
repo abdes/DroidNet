@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Scenes.Authoring;
@@ -28,11 +29,12 @@ public static class TestScenes
     /// otherwise a new in-memory project.
     /// </param>
     /// <param name="references">The saved authored references the scene's instance sources are checked against, if any.</param>
+    /// <param name="structures">What the scene's instances contain, if the test publishes it.</param>
     /// <returns>The scene's document; the caller disposes it.</returns>
-    public static TestScene Open(Scene scene, ISceneNodeInteraction? interaction = null, IAssetRedirects? redirects = null, IList<ExplorerEntryData>? layout = null, TestProject? project = null, IAuthoredReferences? references = null)
+    public static TestScene Open(Scene scene, ISceneNodeInteraction? interaction = null, IAssetRedirects? redirects = null, IList<ExplorerEntryData>? layout = null, TestProject? project = null, IAuthoredReferences? references = null, ISceneStructures? structures = null)
     {
         ArgumentNullException.ThrowIfNull(scene);
-        var documents = new TestSceneDocuments(project ?? TestProject.Create(new MockFileSystem(), @"C:\TestScenes"), interaction, redirects, otherKinds: null, references);
+        var documents = new TestSceneDocuments(project ?? TestProject.Create(new MockFileSystem(), @"C:\TestScenes"), interaction, redirects, otherKinds: null, references, structures);
         try
         {
             var name = string.IsNullOrEmpty(scene.Name) ? "Scene" : scene.Name;

@@ -156,6 +156,8 @@ public:
     //! The geometry the node renders, with the changes of every scene that
     //! instances its own applied; none for a node that renders nothing.
     std::optional<SceneNodeAsset> geometry;
+    //! Whether the node has a camera, perspective or orthographic.
+    bool camera { false };
   };
 
   //! Why part of a scene's hierarchy could not be read.

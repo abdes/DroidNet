@@ -5,6 +5,7 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
+using DroidNet.Aura.Dialogs;
 using DroidNet.Documents;
 using DroidNet.Hosting.WinUI;
 using DroidNet.Mvvm.Converters;
@@ -15,11 +16,13 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Dispatching;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline.Inspection;
+using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.Input;
 using Oxygen.Editor.LivePreview.Scenes;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.SceneInspector.Components;
+using Oxygen.Editor.SceneInspector.Components.Instances;
 using Oxygen.Editor.SceneInspector.Components.Scripting;
 using Oxygen.Editor.SceneInspector.SceneSettings;
 using Oxygen.Editor.Scenes.Authoring;
@@ -113,6 +116,8 @@ public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNo
     /// What reads the effective values of the nodes an instance brings in; without it, selected instanced nodes show
     /// nothing.
     /// </param>
+    /// <param name="references">The saved authored references, which leave the scenes that would make a cycle out of the instance source picker.</param>
+    /// <param name="dialogs">What asks whether a swap keeps or discards an instance's changes; without it, only instances without changes swap.</param>
     public SceneInspectorViewModel(
         HostingContext hosting,
         ViewModelToView vmToViewConverter,
@@ -131,7 +136,9 @@ public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNo
         IScriptCreation? scriptCreation = null,
         IProblemReveal? problems = null,
         ISceneStructures? structures = null,
-        IInstancedNodeReader? nodes = null)
+        IInstancedNodeReader? nodes = null,
+        IAuthoredReferences? references = null,
+        IDialogService? dialogs = null)
     {
         this.logger = loggerFactory?.CreateLogger<SceneInspectorViewModel>() ?? NullLogger<SceneInspectorViewModel>.Instance;
         this.LoggerFactory = loggerFactory;
@@ -160,7 +167,8 @@ public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNo
             this.AuthoringOf,
             this.SelectNode,
             this.ReferenceOf,
-            new InspectorScriptServices(scripts, codeEditor, scriptCreation, problems));
+            new InspectorScriptServices(scripts, codeEditor, scriptCreation, problems),
+            new InspectorInstanceServices(assetProvider, references, structures, nodes, dialogs));
         this.sceneSettings = new SceneSettingsViewModel(
             this.AuthoringOf,
             assetProvider,
@@ -171,7 +179,8 @@ public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNo
             asset => this.RevealAssetAsync(asset),
             session,
             inputSources,
-            loggerFactory);
+            loggerFactory,
+            structures);
 
         // Startup hydrates the authoritative typed context with the nodes: a folder-only selection
         // must initialize as the grouping summary, not as "scene properties".

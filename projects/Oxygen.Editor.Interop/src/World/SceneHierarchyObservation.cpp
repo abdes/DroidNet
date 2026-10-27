@@ -79,6 +79,7 @@ auto ToManaged(const Hierarchy& hierarchy) -> SceneHierarchyManaged
     entry.GeometryPath = node.geometry.has_value()
       ? FromUtf8(node.geometry->virtual_path)
       : nullptr;
+    entry.HasCamera = node.camera;
     result.Nodes[index] = entry;
   }
   result.Issues = gcnew array<SceneHierarchyIssueManaged>(

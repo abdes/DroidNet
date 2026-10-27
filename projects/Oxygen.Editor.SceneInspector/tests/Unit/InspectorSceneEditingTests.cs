@@ -462,8 +462,8 @@ public sealed class InspectorSceneEditingTests
         using var testScene = Open(scene, CameraNode(scene, 60), CameraNode(scene, 60), out var first, out var second);
         using var firstToggle = new StartingCameraToggle(() => testScene.Authoring);
         using var secondToggle = new StartingCameraToggle(() => testScene.Authoring);
-        firstToggle.Bind([first]);
-        secondToggle.Bind([second]);
+        firstToggle.Bind(testScene.Scene, [NodeReference.To(first.Id)]);
+        secondToggle.Bind(testScene.Scene, [NodeReference.To(second.Id)]);
 
         _ = (firstToggle.IsChecked, firstToggle.IsAutomatic, secondToggle.IsAutomatic).Should().Be((false, true, false));
 

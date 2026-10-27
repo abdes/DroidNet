@@ -9,7 +9,9 @@ using DroidNet.Routing;
 using Moq;
 using Oxygen.Editor.ContentPipeline.Testing;
 using Oxygen.Editor.Projects.Testing;
+using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Edits.Hierarchy;
+using Oxygen.Editor.Scenes.Edits.Instances;
 using Oxygen.Editor.Scenes.Interaction;
 using Oxygen.Editor.Scenes.Nodes;
 using Oxygen.Editor.Scenes.Selection;
@@ -31,6 +33,7 @@ namespace Oxygen.Editor.SceneExplorer.Unit.Tests;
 public sealed class SceneExplorerInstanceTests
 {
     private static readonly AssetPath Car = AssetPath.Parse("/Content/Vehicles/Car.glb");
+    private static readonly AssetPath Van = AssetPath.Parse("/Content/Vehicles/Van.glb");
 
     [TestMethod]
     public async Task AnInstanceRoot_HoldsTheRowsOfItsSourcesNodes()
@@ -193,6 +196,23 @@ public sealed class SceneExplorerInstanceTests
         _ = root.CurrentChildren.Should().BeEmpty();
     }
 
+    [TestMethod]
+    public async Task SwappingTheSource_ShowsTheNewSourcesRows()
+    {
+        using var harness = await InstanceHarness.CreateAsync().ConfigureAwait(false);
+        var chassis = NodePath.Of(NodeId.New());
+        _ = harness.Structures.Publish(Van, (chassis, "Chassis", null));
+        using var explorer = await harness.OpenAsync().ConfigureAwait(false);
+
+        var result = await harness.Authoring.ExecuteAsync(new SetInstanceSource(harness.Root, Van, InstanceSwap.KeepByName)).ConfigureAwait(false);
+
+        _ = result.Succeeded.Should().BeTrue();
+        var root = (SceneNodeAdapter)(await explorer.FindAdapterByNodeIdAsync(harness.Root).ConfigureAwait(false))!;
+        _ = root.Annotation.Should().Be("Van.glb", "the instance root names its new source");
+        _ = root.CurrentChildren.OfType<InstancedNodeAdapter>().Should().ContainSingle()
+            .Which.Reference.Should().Be(new NodeReference(harness.Root, chassis));
+    }
+
     /// <summary>A scene with an instance of <c>Car.glb</c>, whose structure holds <c>Body</c> and its child <c>Door_FL</c>.</summary>
     private sealed class InstanceHarness : IDisposable
     {
@@ -214,6 +234,8 @@ public sealed class SceneExplorerInstanceTests
         }
 
         public Scene Scene => this.testScene.Scene;
+
+        public SceneAuthoring Authoring => this.testScene.Authoring;
 
         public DocumentId Document => this.testScene.DocumentId;
 

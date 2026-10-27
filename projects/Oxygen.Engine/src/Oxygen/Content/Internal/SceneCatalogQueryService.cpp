@@ -217,6 +217,8 @@ namespace {
             .geometry = node.renderable.has_value()
               ? std::optional(scenes_->AssetOf(node.renderable->geometry_key))
               : std::nullopt,
+            .camera = node.perspective_camera.has_value()
+              || node.orthographic_camera.has_value(),
           });
         }
       }

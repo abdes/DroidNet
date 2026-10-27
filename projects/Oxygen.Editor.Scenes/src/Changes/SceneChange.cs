@@ -60,6 +60,10 @@ public abstract record SceneChange
     /// <param name="Properties">The properties whose overrides changed, on any part.</param>
     public sealed record OverridesChanged(NodeId Node, IReadOnlyList<PropertyId> Properties) : SceneChange;
 
+    /// <summary>An instance root's source changed, so the instance brings in other nodes.</summary>
+    /// <param name="Node">The instance root.</param>
+    public sealed record InstanceSourceChanged(NodeId Node) : SceneChange;
+
     /// <summary>The explorer layout changed.</summary>
     public sealed record LayoutChanged : SceneChange;
 

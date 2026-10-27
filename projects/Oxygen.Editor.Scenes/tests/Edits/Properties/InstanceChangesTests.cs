@@ -291,8 +291,8 @@ public sealed class InstanceChangesTests
                 Car,
                 scene,
                 [
-                    new StructureNode(NodePath.Of(Body), "Body", Parent: null, scene, Instance: null, Geometry: null),
-                    new StructureNode(WheelPath, "Wheel", NodePath.Of(Body), scene, Instance: null, SampleScene.CubeGeometry),
+                    new StructureNode(NodePath.Of(Body), "Body", Parent: null, scene, Instance: null, Geometry: null, HasCamera: false),
+                    new StructureNode(WheelPath, "Wheel", NodePath.Of(Body), scene, Instance: null, SampleScene.CubeGeometry, HasCamera: false),
                 ],
                 []));
         }

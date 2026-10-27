@@ -30,15 +30,16 @@ public sealed record SetStartingCamera(NodeReference? Camera) : ISceneEdit
             return SceneEditValidation.Valid;
         }
 
-        // A reference with a path names a node an instance brings in; that node is not part of the scene's own
-        // nodes, so only the instance root can be checked until instanced nodes are resolvable here.
+        // A reference with a path names a node an instance brings in, which has a camera in its source's structure;
+        // while that structure is not read, the instance root is all there is to check.
         var valid = scope.Scene.AllNodes.Any(node => node.Id == camera.Node
             && (camera.IsOwned
                 ? node.Components.OfType<CameraComponent>().Any()
-                : node.Components.OfType<SceneInstanceComponent>().Any()));
+                : node.Components.OfType<SceneInstanceComponent>().FirstOrDefault() is { } instance
+                    && (scope.StructureOf?.Invoke(instance.Source) is not { } structure || structure.Find(camera.Path) is { HasCamera: true })));
         return valid
             ? SceneEditValidation.Valid
-            : SceneEditValidation.Invalid(SceneDiagnostic.Error(SceneEditCodes.StartingCameraInvalid, "The starting camera must be a camera node of this scene, or a node of a scene instance in it."));
+            : SceneEditValidation.Invalid(SceneDiagnostic.Error(SceneEditCodes.StartingCameraInvalid, "The starting camera must be a camera node of this scene, or a camera an instance in it brings in."));
     }
 
     /// <inheritdoc/>
