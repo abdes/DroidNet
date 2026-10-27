@@ -13,7 +13,6 @@
         <PackageReference Include="Testably.Abstractions.Testing" />
         <!-- The module's own dialog fixture, shared by its unit and UI tests. -->
         <Compile Include="../TestSupport/ImportDialogs.cs" Link="TestSupport/ImportDialogs.cs" />
-        <Compile Include="$(ProjectsRoot)/UITests.Shared/testsupport/UiTestHosting.cs" Link="Support/UiTestHosting.cs" />
     </ItemGroup>
     <Import Project="$(ProjectsRoot)/UITests.Shared/src/UITests.Shared.projitems" Label="Shared" />
 </Project>

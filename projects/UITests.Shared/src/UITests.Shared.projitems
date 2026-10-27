@@ -28,5 +28,6 @@
     <Compile Include="$(MSBuildThisFileDirectory)UnhandledUiExceptions.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)VisualUserInterfaceTests.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)VisualUserInterfaceTestsApp.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)WindowsAppSdkSuppressions.cs" />
   </ItemGroup>
 </Project>

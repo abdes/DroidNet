@@ -9,7 +9,6 @@
     <ItemGroup>
         <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.SceneEditor/src/Oxygen.Editor.SceneEditor.csproj" />
         <PackageReference Include="Moq" />
-        <Compile Include="$(MyTopLevelDirectory)projects/UITests.Shared/testsupport/UiTestHosting.cs" Link="Support/UiTestHosting.cs" />
     </ItemGroup>
     <Import Project="$(ProjectsRoot)/UITests.Shared/src/UITests.Shared.projitems" Label="Shared" />
 </Project>

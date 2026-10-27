@@ -11,7 +11,6 @@
         <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.Projects/testing/Oxygen.Editor.Projects.Testing.csproj" />
         <PackageReference Include="Moq" />
         <PackageReference Include="Testably.Abstractions.Testing" />
-        <Compile Include="$(MyTopLevelDirectory)projects/UITests.Shared/testsupport/UiTestHosting.cs" Link="Support/UiTestHosting.cs" />
     </ItemGroup>
     <Import Project="$(ProjectsRoot)/UITests.Shared/src/UITests.Shared.projitems" Label="Shared" />
 </Project>

@@ -15,7 +15,6 @@ using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
-using static DroidNet.Tests.UiTestHosting;
 using static Oxygen.Editor.CookedInspector.Unit.UI.Tests.TestSupport.TestProjects;
 
 namespace Oxygen.Editor.CookedInspector.Unit.UI.Tests;
