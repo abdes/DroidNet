@@ -131,7 +131,7 @@ public sealed class SetOverridesTests
         var policy = new LodPolicy.Distance([10f, 25f], 0.1f);
         OverrideWrite[] writes =
         [
-            new(SceneSchema.Geometry.Surface.Visibility.Id, CubeTarget.Part, CubeTarget.LayoutRevision, false) { PartOwner = CubeTarget.Geometry },
+            new(SceneSchema.Geometry.Surface.Visibility.Id, CubeTarget.Part, CubeTarget.LayoutRevision, Value: false) { PartOwner = CubeTarget.Geometry },
             new(SceneSchema.Geometry.LodPolicy.Id, Part: null, LayoutRevision: null, policy),
         ];
 

@@ -21,21 +21,28 @@ public sealed class NativeScriptAnalyzerTests
     public async Task TheAnalyzerWaitsUntilTheEngineHasVerifiedTheSdk()
     {
         var engine = new FakeEngine(EngineServiceState.Initializing);
-        using var analyzer = new NativeScriptAnalyzer(engine);
+        await using (engine.ConfigureAwait(false))
+        {
+            using var analyzer = new NativeScriptAnalyzer(engine);
 
-        var available = analyzer.WaitUntilAvailableAsync(this.TestContext.CancellationToken);
-        _ = available.IsCompleted.Should().BeFalse("the SDK is not verified yet");
+            var available = analyzer.WaitUntilAvailableAsync(this.TestContext.CancellationToken);
+            _ = available.IsCompleted.Should().BeFalse("the SDK is not verified yet");
 
-        engine.ChangeState(EngineServiceState.Ready);
+            engine.ChangeState(EngineServiceState.Ready);
 
-        await available.WaitAsync(TimeSpan.FromSeconds(10), this.TestContext.CancellationToken).ConfigureAwait(false);
+            await available.WaitAsync(TimeSpan.FromSeconds(10), this.TestContext.CancellationToken).ConfigureAwait(false);
+        }
     }
 
     [TestMethod]
-    public void AnEngineAlreadyRunningMakesTheAnalyzerAvailable()
+    public async Task AnEngineAlreadyRunningMakesTheAnalyzerAvailable()
     {
-        using var analyzer = new NativeScriptAnalyzer(new FakeEngine(EngineServiceState.Running));
+        var engine = new FakeEngine(EngineServiceState.Running);
+        await using (engine.ConfigureAwait(false))
+        {
+            using var analyzer = new NativeScriptAnalyzer(engine);
 
-        _ = analyzer.WaitUntilAvailableAsync(this.TestContext.CancellationToken).IsCompletedSuccessfully.Should().BeTrue();
+            _ = analyzer.WaitUntilAvailableAsync(this.TestContext.CancellationToken).IsCompletedSuccessfully.Should().BeTrue();
+        }
     }
 }

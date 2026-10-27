@@ -91,7 +91,7 @@ public interface IEditorSettingsManager
     /// <param name="progress">Optional progress reporter for the load operation.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>List of tuples containing Scope, ScopeId and value as raw object.</returns>
-    public Task<IReadOnlyList<(SettingScope scope, string? scopeId, object? value)>> GetAllValuesAsync(string key, IProgress<SettingsProgress>? progress = null, CancellationToken ct = default);
+    public Task<IReadOnlyList<(SettingScope Scope, string? ScopeId, object? Value)>> GetAllValuesAsync(string key, IProgress<SettingsProgress>? progress = null, CancellationToken ct = default);
 
     /// <summary>
     /// Returns all persisted values for a specific key across all scopes deserialized into <typeparamref name="T"/>.
@@ -101,7 +101,7 @@ public interface IEditorSettingsManager
     /// <param name="progress">Optional progress reporter for the typed load operation.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>List of tuples containing Scope, ScopeId and typed value.</returns>
-    public Task<IReadOnlyList<(SettingScope scope, string? scopeId, T? value)>> GetAllValuesAsync<T>(string key, IProgress<SettingsProgress>? progress = null, CancellationToken ct = default);
+    public Task<IReadOnlyList<(SettingScope Scope, string? ScopeId, T? Value)>> GetAllValuesAsync<T>(string key, IProgress<SettingsProgress>? progress = null, CancellationToken ct = default);
 
     /// <summary>
     /// Attempts to get values for a key deserialized to <typeparamref name="T"/>.

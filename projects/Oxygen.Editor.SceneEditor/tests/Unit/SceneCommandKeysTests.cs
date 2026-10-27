@@ -10,7 +10,7 @@ namespace Oxygen.Editor.SceneEditor.Unit.Tests;
 
 [TestClass]
 [TestCategory("Viewport Tools")]
-public sealed class SceneCommandKeysTests
+internal sealed class SceneCommandKeysTests
 {
     [TestMethod]
     public void SceneEditorCommands_BindTheEditorWideChordsAfterTheFocusedPart()

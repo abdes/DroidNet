@@ -197,7 +197,7 @@ public partial class EditorSettingsManager(PersistentState context, IDescriptorP
     }
 
     /// <inheritdoc/>
-    public async Task<IReadOnlyList<(SettingScope scope, string? scopeId, object? value)>> GetAllValuesAsync(string key, IProgress<SettingsProgress>? progress = null, CancellationToken ct = default)
+    public async Task<IReadOnlyList<(SettingScope Scope, string? ScopeId, object? Value)>> GetAllValuesAsync(string key, IProgress<SettingsProgress>? progress = null, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
         if (string.IsNullOrWhiteSpace(key))
@@ -229,7 +229,7 @@ public partial class EditorSettingsManager(PersistentState context, IDescriptorP
     }
 
     /// <inheritdoc/>
-    public async Task<IReadOnlyList<(SettingScope scope, string? scopeId, T? value)>> GetAllValuesAsync<T>(string key, IProgress<SettingsProgress>? progress = null, CancellationToken ct = default)
+    public async Task<IReadOnlyList<(SettingScope Scope, string? ScopeId, T? Value)>> GetAllValuesAsync<T>(string key, IProgress<SettingsProgress>? progress = null, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
         if (string.IsNullOrWhiteSpace(key))

@@ -11,21 +11,12 @@ namespace Oxygen.Editor.SceneExplorer;
 /// the captured context (not the later selection) drives the invoked command. MenuItemData passes
 /// itself to <see cref="ICommand"/>; the adapter ignores that parameter and forwards the frozen state.
 /// </summary>
-public sealed class SceneExplorerCommandAdapter : ICommand
+/// <param name="execute">The frozen invocation.</param>
+/// <param name="canExecute">The frozen eligibility check.</param>
+public sealed class SceneExplorerCommandAdapter(Action execute, Func<bool> canExecute) : ICommand
 {
-    private readonly Action execute;
-    private readonly Func<bool> canExecute;
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="SceneExplorerCommandAdapter"/> class.
-    /// </summary>
-    /// <param name="execute">The frozen invocation.</param>
-    /// <param name="canExecute">The frozen eligibility check.</param>
-    public SceneExplorerCommandAdapter(Action execute, Func<bool> canExecute)
-    {
-        this.execute = execute ?? throw new ArgumentNullException(nameof(execute));
-        this.canExecute = canExecute ?? throw new ArgumentNullException(nameof(canExecute));
-    }
+    private readonly Action execute = execute ?? throw new ArgumentNullException(nameof(execute));
+    private readonly Func<bool> canExecute = canExecute ?? throw new ArgumentNullException(nameof(canExecute));
 
     /// <inheritdoc />
     // ICommand requires the event, but the adapter's eligibility is frozen at construction and

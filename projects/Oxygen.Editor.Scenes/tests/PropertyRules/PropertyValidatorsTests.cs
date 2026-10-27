@@ -107,9 +107,4 @@ public sealed class PropertyValidatorsTests
 
     private static TestDataRow<ValidatorCase> Row<T>(string name, PropertyDescriptor<T> descriptor, T value, string code)
         => new(new ValidatorCase(descriptor, value, code)) { DisplayName = name };
-
-    public sealed record ValidatorCase(PropertyDescriptor Descriptor, object? Value, string Code)
-    {
-        public override string ToString() => this.Descriptor.Id.Qualified();
-    }
 }

@@ -150,7 +150,8 @@ internal sealed partial class PreviewSessionTests
 
         public void Dispose()
         {
-            _ = this.Session.DisposeAsync().AsTask().Wait(TimeSpan.FromSeconds(5));
+            // The session's own lifetime ends with this disposal, so no token can cancel the wait.
+            _ = this.Session.DisposeAsync().AsTask().Wait(TimeSpan.FromSeconds(5), CancellationToken.None);
             this.coordinator.Dispose();
             this.sessions.Dispose();
             try

@@ -25,9 +25,12 @@ namespace Oxygen.Editor.SceneExplorer.Unit.UI.Tests;
 /// the instance root, and every structural command stays in the menu, disabled, with the refusal as its tooltip.
 /// </summary>
 [TestClass]
-internal sealed class SceneExplorerInstanceMenuTests : DroidNet.Tests.VisualUserInterfaceTests
+internal sealed partial class SceneExplorerInstanceMenuTests : DroidNet.Tests.VisualUserInterfaceTests
 {
     private static readonly AssetPath Car = AssetPath.Parse("/Content/Vehicles/Car.glb");
+
+    // The row menu's commands that change structure, which a node an instance brings in refuses.
+    private static readonly string[] StructuralCommands = ["Rename", "Delete node", "Cut", "New child node", "Paste"];
 
     [TestMethod]
     public Task SelectInstance_SelectsTheInstanceRoot() => EnqueueAsync(async () =>
@@ -50,7 +53,7 @@ internal sealed class SceneExplorerInstanceMenuTests : DroidNet.Tests.VisualUser
         using var explorer = await harness.OpenAsync().ConfigureAwait(true);
         var door = harness.Reveal(explorer);
 
-        foreach (var label in new[] { "Rename", "Delete node", "Cut", "New child node", "Paste" })
+        foreach (var label in StructuralCommands)
         {
             var item = MenuItem(explorer, door, label);
             _ = item.IsEnabled.Should().BeFalse(label);
@@ -62,7 +65,7 @@ internal sealed class SceneExplorerInstanceMenuTests : DroidNet.Tests.VisualUser
         => explorer.BuildContextMenuSource(row).Items.Single(item => string.Equals(item.Text, label, StringComparison.Ordinal));
 
     /// <summary>A scene with an instance of <c>Car.glb</c>, whose structure holds the root node <c>Door_FL</c>.</summary>
-    private sealed class InstanceMenuHarness : IDisposable
+    private sealed partial class InstanceMenuHarness : IDisposable
     {
         private readonly TestSession session;
         private readonly FakeSceneStructures structures = new();

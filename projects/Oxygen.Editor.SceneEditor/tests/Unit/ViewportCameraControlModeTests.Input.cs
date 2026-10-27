@@ -9,6 +9,7 @@ using Oxygen.Editor.Runtime.Engine;
 
 namespace Oxygen.Editor.SceneEditor.Unit.Tests;
 
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "hclass has a forced public part")]
 public sealed partial class ViewportCameraControlModeTests
 {
     [TestMethod]

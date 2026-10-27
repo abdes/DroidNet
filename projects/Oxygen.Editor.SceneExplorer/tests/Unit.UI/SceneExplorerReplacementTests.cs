@@ -23,7 +23,6 @@ using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.Scenes.Testing;
 using Oxygen.Editor.Shell.Documents;
 using Oxygen.Editor.World;
-using Oxygen.Editor.World.Components;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 using Testably.Abstractions.Testing;
@@ -246,7 +245,6 @@ public sealed partial class SceneExplorerReplacementTests : VisualUserInterfaceT
     /// </summary>
     private sealed partial class LifetimeFixture : IDisposable
     {
-
         private LifetimeFixture()
         {
             var results = Mock.Of<IOperationResultPublisher>();
@@ -323,7 +321,7 @@ public sealed partial class SceneExplorerReplacementTests : VisualUserInterfaceT
             var fixture = new LifetimeFixture();
             try
             {
-                _ = (await fixture.OpenAsync(fixture.Scenes.FileOf("First").Asset).ConfigureAwait(true)).Should().BeTrue();
+                _ = (await fixture.OpenAsync(fixture.Scenes.FileOf("First").Asset, fixture.Session.Lifetime).ConfigureAwait(true)).Should().BeTrue();
                 fixture.FirstDocument = fixture.Scenes.Open.Find(fixture.PathOf("First"))!;
                 var adapter = await fixture.Explorer.FindAdapterByNodeIdAsync(fixture.First.RootNodes[0].Id).ConfigureAwait(true);
                 fixture.Explorer.SelectDisplayedItem(adapter!, [.. fixture.Explorer.ShownItems], isControlDown: false, isShiftDown: false);
@@ -438,7 +436,7 @@ public sealed partial class SceneExplorerReplacementTests : VisualUserInterfaceT
         }
 
         public async Task<bool> SaveForCloseAsync()
-            => this.SaveSucceeds && (await fixture.FirstDocument.SaveAsync().ConfigureAwait(true)).Succeeded;
+            => this.SaveSucceeds && (await fixture.FirstDocument.SaveAsync(fixture.Session.Lifetime).ConfigureAwait(true)).Succeeded;
 
         public Task CloseAsync(bool discard)
         {

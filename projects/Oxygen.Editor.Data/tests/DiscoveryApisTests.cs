@@ -198,12 +198,12 @@ public class DiscoveryApisTests : DatabaseTests
             var all = await mgr.GetAllValuesAsync("Discovery/ScopedKey", ct: this.CancellationToken).ConfigureAwait(false);
             _ = all.Should().HaveCount(2);
 
-            var app = all.First(i => i.scope == SettingScope.Application);
-            var appValue = app.value is JsonElement appJe ? appJe.GetString() : app.value?.ToString();
+            var app = all.First(i => i.Scope == SettingScope.Application);
+            var appValue = app.Value is JsonElement appJe ? appJe.GetString() : app.Value?.ToString();
             _ = appValue.Should().Be("appVal");
 
-            var proj = all.First(i => i.scope == SettingScope.Project && string.Equals(i.scopeId, "proj1", StringComparison.Ordinal));
-            var projValue = proj.value is JsonElement projJe ? projJe.GetString() : proj.value?.ToString();
+            var proj = all.First(i => i.Scope == SettingScope.Project && string.Equals(i.ScopeId, "proj1", StringComparison.Ordinal));
+            var projValue = proj.Value is JsonElement projJe ? projJe.GetString() : proj.Value?.ToString();
             _ = projValue.Should().Be("projVal");
         }
     }
@@ -223,11 +223,11 @@ public class DiscoveryApisTests : DatabaseTests
             var all = await mgr.GetAllValuesAsync<string>("Discovery/TypedKey", ct: this.CancellationToken).ConfigureAwait(false);
             _ = all.Should().HaveCount(2);
 
-            var app = all.First(i => i.scope == SettingScope.Application);
-            _ = app.value.Should().Be("appVal");
+            var app = all.First(i => i.Scope == SettingScope.Application);
+            _ = app.Value.Should().Be("appVal");
 
-            var proj = all.First(i => i.scope == SettingScope.Project && string.Equals(i.scopeId, "proj1", StringComparison.Ordinal));
-            _ = proj.value.Should().Be("projVal");
+            var proj = all.First(i => i.Scope == SettingScope.Project && string.Equals(i.ScopeId, "proj1", StringComparison.Ordinal));
+            _ = proj.Value.Should().Be("projVal");
         }
     }
 

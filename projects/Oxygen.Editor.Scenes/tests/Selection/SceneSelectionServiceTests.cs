@@ -359,8 +359,5 @@ public sealed class SceneSelectionServiceTests
         return (root, new NodeReference(root.Id, NodePath.Of(NodeId.New())));
     }
 
-    private static Scene CreateScene()
-    {
-        return new Scene { Name = "Test Scene" };
-    }
+    private static Scene CreateScene() => new() { Name = "Test Scene" };
 }

@@ -43,7 +43,7 @@ internal static class SceneGraph
     /// <param name="node">The node.</param>
     /// <returns>The local transform.</returns>
     public static TransformData LocalOf(SceneNode node)
-        => new TransformData { Name = node.Transform.Name, Position = node.Transform.LocalPosition, Rotation = node.Transform.LocalRotation, Scale = node.Transform.LocalScale };
+        => new() { Name = node.Transform.Name, Position = node.Transform.LocalPosition, Rotation = node.Transform.LocalRotation, Scale = node.Transform.LocalScale };
 
     /// <summary>Writes a node's local transform.</summary>
     /// <param name="node">The node.</param>

@@ -77,7 +77,7 @@ internal sealed class ViewportHudViewTests : DroidNet.Tests.VisualUserInterfaceT
         var engine = new Mock<IEngineService>();
         _ = engine
             .Setup(service => service.AttachViewportAsync(It.IsAny<ViewportSurfaceRequest>(), It.IsAny<SwapChainPanel>(), It.IsAny<CancellationToken>()))
-            .Returns(ValueTask.FromCanceled<IViewportSurfaceLease>(new CancellationToken(canceled: true)));
+            .Returns(() => ValueTask.FromCanceled<IViewportSurfaceLease>(new CancellationToken(canceled: true)));
         return new ViewportViewModel(
             DocumentId.New(),
             engine.Object,

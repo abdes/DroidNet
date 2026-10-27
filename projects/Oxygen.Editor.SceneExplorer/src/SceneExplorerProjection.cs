@@ -24,7 +24,7 @@ public sealed class SceneExplorerProjection
     private readonly List<LayoutFolder> layoutFolders = [];
     private readonly Dictionary<NodeId, LayoutAncestor[]> nodeLayoutChains = [];
     private readonly Dictionary<FolderId, LayoutAncestor[]> folderLayoutChains = [];
-    private readonly Dictionary<ITreeItem, ITreeItem> parentAdapters = new(ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<ITreeItem, ITreeItem> parentAdapters = [with(ReferenceEqualityComparer.Instance)];
 
     /// <summary>Gets the indexed node adapters.</summary>
     public IReadOnlyCollection<SceneNodeAdapter> Nodes => this.nodeAdapters.Values;
@@ -101,7 +101,7 @@ public sealed class SceneExplorerProjection
             item = parent;
         }
 
-        return ancestors.ToArray();
+        return [.. ancestors];
     }
 
     /// <summary>Rebuilds the node and folder indexes from the realized adapter tree without force-loading collapsed subtrees, and reindexes the authored layout domain.</summary>

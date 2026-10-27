@@ -137,7 +137,7 @@ internal sealed partial class PreviewSessionTests
         var threads = new List<int>();
         fixture.Session.PropertyChanged += (_, args) =>
         {
-            if (args.PropertyName == nameof(PreviewSession.State))
+            if (string.Equals(args.PropertyName, nameof(PreviewSession.State), StringComparison.Ordinal))
             {
                 threads.Add(Environment.CurrentManagedThreadId);
             }

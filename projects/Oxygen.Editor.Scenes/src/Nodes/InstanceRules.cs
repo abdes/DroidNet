@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Globalization;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
@@ -77,7 +76,7 @@ public static class InstanceRules
         var origin = source is null ? $"{subject} comes from its instance's source." : $"{subject} comes from {source}.";
         return SceneDiagnostic.Error(
             SceneEditCodes.InstancedStructure,
-            string.Create(CultureInfo.InvariantCulture, $"{origin} Unpack {rootName} to change its structure."),
+            $"{origin} Unpack {rootName} to change its structure.",
             instanced.Node);
     }
 }

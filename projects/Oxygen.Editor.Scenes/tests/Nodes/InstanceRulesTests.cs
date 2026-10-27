@@ -87,7 +87,8 @@ public sealed class InstanceRulesTests
 
         var refusal = InstanceRules.RefusesStructure(fixture.Scene, [NodeReference.To(SampleScene.B), new NodeReference(root, NodePath.Of(NodeId.New()))]);
 
-        _ = refusal?.Code.Should().Be(SceneEditCodes.InstancedStructure);
+        _ = refusal.Should().NotBeNull();
+        _ = refusal!.Code.Should().Be(SceneEditCodes.InstancedStructure);
     }
 
     private static async Task<NodeId> PlaceCarAsync(AuthoringFixture fixture)

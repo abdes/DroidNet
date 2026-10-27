@@ -18,7 +18,7 @@ namespace Oxygen.Editor.SceneEditor.Unit.Tests;
 /// </summary>
 [TestClass]
 [TestCategory("Viewport HUD")]
-public sealed class ViewportHudTests
+internal sealed class ViewportHudTests
 {
     private static readonly RuntimeViewId ViewId = new(71);
 

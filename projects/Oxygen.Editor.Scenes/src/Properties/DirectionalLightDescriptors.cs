@@ -238,7 +238,8 @@ public sealed class DirectionalLightDescriptors
             reader: static target => ((DirectionalLightComponent)target).Color,
             writer: static (target, value) => ((DirectionalLightComponent)target).Color = value,
             validator: PropertyValidators.Of(SceneSchema.DirectionalLight.Color, "Color"),
-            annotation: Annotation(SceneSchema.DirectionalLight.Color.Id.JsonPointer,
+            annotation: Annotation(
+                SceneSchema.DirectionalLight.Color.Id.JsonPointer,
                 new EditorAnnotation { Group = "Light", Label = "Color", Renderer = "color-rgb" }));
 
     private static PropertyDescriptor<Vector3> BuildDiskScaleDescriptor()

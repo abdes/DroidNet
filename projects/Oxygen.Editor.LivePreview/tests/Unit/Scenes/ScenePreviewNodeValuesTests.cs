@@ -39,7 +39,7 @@ public sealed class ScenePreviewNodeValuesTests
                 Property(RuntimeOverrideId.TransformPositionX, new RuntimeInstanceValue.Scalar(2f)),
                 Property(RuntimeOverrideId.TransformRotation, new RuntimeInstanceValue.Vector(new Vector3(0f, 90f, 0f))),
                 Property(RuntimeOverrideId.NodeVisibility, new RuntimeInstanceValue.Integer((int)VisibilitySource.Hidden)),
-                Property(RuntimeOverrideId.NodeIsStatic, new RuntimeInstanceValue.Flag(true)),
+                Property(RuntimeOverrideId.NodeIsStatic, new RuntimeInstanceValue.Flag(Value: true)),
                 Property(RuntimeOverrideId.DirectionalLightCascadeCount, new RuntimeInstanceValue.Integer(3)),
                 new RuntimeSceneNodeProperty(RuntimeOverrideId.GeometrySurfaceMaterial, Rim, Revision, new RuntimeInstanceValue.Asset("/Content/Car.glb/Paint.omat")),
                 Property(RuntimeOverrideId.GeometryLodPolicy, new RuntimeInstanceValue.LodPolicyValue(policy)),
@@ -53,7 +53,7 @@ public sealed class ScenePreviewNodeValuesTests
         _ = byProperty[SceneSchema.Transform.PositionX.Id].Value.Should().Be(2f);
         _ = byProperty[SceneSchema.Transform.Rotation.Id].Value.Should().Be(new Vector3(0f, 90f, 0f));
         _ = byProperty[SceneSchema.Node.Visibility.Id].Value.Should().Be(VisibilitySource.Hidden);
-        _ = byProperty[SceneSchema.Node.IsStatic.Id].Value.Should().Be(true);
+        _ = byProperty[SceneSchema.Node.IsStatic.Id].Value.Should().Be(expected: true);
         _ = byProperty[SceneSchema.DirectionalLight.CascadeCount.Id].Value.Should().Be(3);
         _ = byProperty[SceneSchema.Geometry.LodPolicy.Id].Value.Should().Be(policy);
         var paint = byProperty[SceneSchema.Geometry.Surface.Material.Id];
@@ -82,7 +82,7 @@ public sealed class ScenePreviewNodeValuesTests
             Exists: true,
             "Wheel",
             GeometryPath: null,
-            [Property(RuntimeOverrideId.TransformPositionX, new RuntimeInstanceValue.Flag(true))]);
+            [Property(RuntimeOverrideId.TransformPositionX, new RuntimeInstanceValue.Flag(Value: true))]);
 
         var read = () => ScenePreview.ToNodeValues(values);
 

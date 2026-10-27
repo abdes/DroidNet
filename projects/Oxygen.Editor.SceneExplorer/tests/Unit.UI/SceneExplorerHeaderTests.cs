@@ -43,7 +43,7 @@ public sealed class SceneExplorerHeaderTests : VisualUserInterfaceTests
         _ = (lightToggle.ActualWidth + cameraToggle.ActualWidth).Should()
             .BeApproximately(categoryPanel.ActualWidth - (2 * categoryPanel.ColumnSpacing), 2);
 
-        lightToggle.ApplyTemplate();
+        _ = lightToggle.ApplyTemplate();
         var categoryBackground = lightToggle.FindDescendant<Border>(static element => string.Equals(element.Name, "CategoryBackground", StringComparison.Ordinal))!;
         lightToggle.IsChecked = false;
         await WaitForRenderAsync().ConfigureAwait(true);

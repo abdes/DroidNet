@@ -202,8 +202,8 @@ internal sealed class ViewportStateServiceTests
         public static async Task<Fixture> CreateAsync()
         {
             var fixture = new Fixture();
-            await fixture.database.Database.OpenConnectionAsync().ConfigureAwait(false);
-            _ = await fixture.database.Database.EnsureCreatedAsync().ConfigureAwait(false);
+            await fixture.database.Database.OpenConnectionAsync(fixture.Session.Lifetime).ConfigureAwait(false);
+            _ = await fixture.database.Database.EnsureCreatedAsync(fixture.Session.Lifetime).ConfigureAwait(false);
             _ = fixture.publisher.Setup(value => value.Publish(It.IsAny<OperationResult>())).Callback<OperationResult>(fixture.Results.Add);
             return fixture;
         }

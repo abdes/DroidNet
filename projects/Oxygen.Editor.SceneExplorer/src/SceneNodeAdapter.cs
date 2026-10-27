@@ -52,12 +52,11 @@ public sealed partial class SceneNodeAdapter : NodeRowAdapter, ITreeItem<SceneNo
     protected override string DefaultIconGlyph => "\uE7C1";
 
     /// <inheritdoc />
-    public ITreeItem CloneSelf()
-    {
-        // Return a new adapter with the same payload (SceneNode).
-        // The Service will handle the actual duplication of the SceneNode if needed.
-        return new SceneNodeAdapter(this.AttachedObject);
-    }
+    /// <remarks>
+    /// Return a new adapter with the same payload (SceneNode).
+    /// The Service will handle the actual duplication of the SceneNode if needed.
+    /// </remarks>
+    public ITreeItem CloneSelf() => new SceneNodeAdapter(this.AttachedObject);
 
     /// <summary>
     /// Detaches this adapter from its payload model, releasing the property-change

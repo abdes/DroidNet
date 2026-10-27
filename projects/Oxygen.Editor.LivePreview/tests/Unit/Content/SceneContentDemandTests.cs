@@ -206,9 +206,10 @@ public sealed partial class SceneContentDemandTests
 
         public void CompleteAll()
         {
+            // The fixture ends the cooks; no token cancels them.
             foreach (var cook in this.cooks)
             {
-                _ = cook.TrySetCanceled();
+                _ = cook.TrySetCanceled(CancellationToken.None);
             }
         }
 

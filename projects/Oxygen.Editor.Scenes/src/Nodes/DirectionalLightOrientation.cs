@@ -4,7 +4,6 @@
 
 using System.Numerics;
 using Oxygen.Editor.World;
-using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Utils;
 
 namespace Oxygen.Editor.Scenes.Nodes;
@@ -42,7 +41,7 @@ public static class DirectionalLightOrientation
     /// <summary>Reads world direction using the engine's emitted-forward convention.</summary>
     /// <param name="node">The light's node.</param>
     /// <returns>The world azimuth, in [-180, 180), and elevation, in degrees.</returns>
-    public static (float azimuth, float elevation) DisplayAngles(SceneNode node)
+    public static (float Azimuth, float Elevation) DisplayAngles(SceneNode node)
     {
         var emitted = NormalizeOrFallback(Vector3.Transform(EngineForward, WorldRotation(node)), EngineForward);
         var direction = -emitted;

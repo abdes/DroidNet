@@ -12,7 +12,7 @@ namespace Oxygen.Editor.SceneExplorer;
 /// Folders only exist in the explorer UI and reference nodes by adapter objects — they
 /// do not correspond to SceneNode instances in the scene graph.
 /// </summary>
-public sealed class FolderAdapter : LayoutItemAdapter, ICanBeCloned
+public sealed partial class FolderAdapter : LayoutItemAdapter, ICanBeCloned
 {
     /// <summary>The display name used for folder entries without an authored name.</summary>
     internal const string FallbackName = "Folder";
@@ -60,11 +60,10 @@ public sealed class FolderAdapter : LayoutItemAdapter, ICanBeCloned
     internal bool IsExpansionTransient => this.isExpansionTransient;
 
     /// <inheritdoc />
-    public ITreeItem CloneSelf()
-    {
-        // Return a new folder with a new ID but same name.
-        return new FolderAdapter(FolderId.New(), this.Name);
-    }
+    /// <remarks>
+    /// Return a new folder with a new ID but same name.
+    /// </remarks>
+    public ITreeItem CloneSelf() => new FolderAdapter(FolderId.New(), this.Name);
 
     /// <summary>
     ///     Controls whether expansion changes are persisted to the authored layout entry. Search

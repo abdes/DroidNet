@@ -104,10 +104,11 @@ public sealed partial class ScenePreviewTests
         _ = camera.AspectMode.Should().Be(CameraAspectMode.Fixed);
         _ = camera.NearPlane.Should().Be(0.5f);
         _ = camera.FarPlane.Should().Be(50f);
+
         // Source modes go as their int32 wire values: Inherit 0, the local on value 1 and the local off value 2; the
         // other flags go as bools.
-        _ = Flags(parent.Id).Should().Equal(Mode(2), Mode(1), Mode(2), Flag(false), Flag(true), Flag(false));
-        _ = Flags(child.Id).Should().Equal(Mode(1), Mode(0), Mode(0), Flag(false), Flag(true), Flag(false));
+        _ = Flags(parent.Id).Should().Equal(Mode(2), Mode(1), Mode(2), Flag(value: false), Flag(value: true), Flag(value: false));
+        _ = Flags(child.Id).Should().Equal(Mode(1), Mode(0), Mode(0), Flag(value: false), Flag(value: true), Flag(value: false));
 
         IEnumerable<RuntimeFieldValue> Flags(NodeId nodeId)
             => fixture.World.PropertiesOf(nodeId, RuntimeComponentId.Node).OrderBy(static entry => entry.FieldId).Select(static entry => entry.Value);
@@ -135,7 +136,7 @@ public sealed partial class ScenePreviewTests
             (ushort)NodeField.Static,
             (ushort)NodeField.RayCastingSelectable,
             (ushort)NodeField.IgnoreParentTransform);
-        _ = sent.Select(static entry => entry.Value).Should().Equal(Mode(0), Mode(0), Mode(0), Flag(true), Flag(false), Flag(true));
+        _ = sent.Select(static entry => entry.Value).Should().Equal(Mode(0), Mode(0), Mode(0), Flag(value: true), Flag(value: false), Flag(value: true));
     }
 
     [TestMethod]
@@ -175,9 +176,9 @@ public sealed partial class ScenePreviewTests
         var policy = new LodPolicy.Distance([12f, 30f], 0.1f);
         var geometry = new GeometryComponent { Name = "Geometry", Geometry = target.Geometry };
         geometry.Overrides = geometry.Overrides
-            .With(SceneSchema.Geometry.LodPolicy, (LodPolicy)policy)
-            .With(SceneSchema.Geometry.Surface.Visibility, target.Part, target.LayoutRevision, false)
-            .With(SceneSchema.Geometry.Surface.CastsShadows, target.Part, target.LayoutRevision, true)
+            .With(SceneSchema.Geometry.LodPolicy, policy)
+            .With(SceneSchema.Geometry.Surface.Visibility, target.Part, target.LayoutRevision, value: false)
+            .With(SceneSchema.Geometry.Surface.CastsShadows, target.Part, target.LayoutRevision, value: true)
             .With(SceneSchema.Geometry.Surface.Material, target.Part, target.LayoutRevision, AssetPath.Parse("/Content/Materials/Saved.omat"));
         node.Components.Add(geometry);
         var document = await fixture.OpenAsync(built).ConfigureAwait(false);
@@ -194,12 +195,12 @@ public sealed partial class ScenePreviewTests
         _ = surface.Overrides.Should().BeEquivalentTo(
         [
             new RuntimeOverride(RuntimeOverrideId.GeometrySurfaceMaterial, new RuntimeOverrideValue.Asset("/Content/Materials/Saved.omat")),
-            new RuntimeOverride(RuntimeOverrideId.GeometrySurfaceVisibility, new RuntimeOverrideValue.Flag(false)),
-            new RuntimeOverride(RuntimeOverrideId.GeometrySurfaceCastsShadows, new RuntimeOverrideValue.Flag(true)),
+            new RuntimeOverride(RuntimeOverrideId.GeometrySurfaceVisibility, new RuntimeOverrideValue.Flag(Value: false)),
+            new RuntimeOverride(RuntimeOverrideId.GeometrySurfaceCastsShadows, new RuntimeOverrideValue.Flag(Value: true)),
         ]);
     }
 
-    private static RuntimeFieldValue Mode(int value) => new RuntimeFieldValue.Integer(value);
+    private static RuntimeFieldValue.Integer Mode(int value) => new(value);
 
-    private static RuntimeFieldValue Flag(bool value) => new RuntimeFieldValue.Flag(value);
+    private static RuntimeFieldValue.Flag Flag(bool value) => new(value);
 }

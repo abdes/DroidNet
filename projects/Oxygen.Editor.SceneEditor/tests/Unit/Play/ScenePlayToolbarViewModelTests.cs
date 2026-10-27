@@ -27,7 +27,7 @@ namespace Oxygen.Editor.SceneEditor.Unit.Tests.Play;
 /// </summary>
 [TestClass]
 [TestCategory("Play")]
-public sealed class ScenePlayToolbarViewModelTests
+internal sealed partial class ScenePlayToolbarViewModelTests
 {
     [TestMethod]
     public async Task PlayAsync_WhenTheDocumentsStayUnsaved_DoesNotPlay()
@@ -68,7 +68,7 @@ public sealed class ScenePlayToolbarViewModelTests
         _ = fixture.Session.Status.Activity.Should().Be(PlayActivity.Idle);
     }
 
-    private sealed class ToolbarFixture : IDisposable
+    private sealed partial class ToolbarFixture : IDisposable
     {
         private readonly DirectoryInfo directory = Directory.CreateTempSubdirectory("Oxygen-PlayToolbar-");
         private readonly TestSession session;
