@@ -15,7 +15,6 @@ namespace Oxygen.Editor.SceneExplorer.Unit.UI.Tests;
 [TestClass]
 [TestCategory("UITest")]
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "MSTest discovers public test classes with the repository discovery configuration.")]
-[System.Diagnostics.CodeAnalysis.SuppressMessage("Naming", "CA1707:Identifiers should not contain underscores", Justification = "Scenario-based test names follow the repository MSTest convention.")]
 public sealed class SceneExplorerHeaderTests : VisualUserInterfaceTests
 {
     /// <summary>Gets or sets the current test context.</summary>

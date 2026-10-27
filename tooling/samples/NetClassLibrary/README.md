@@ -82,15 +82,7 @@ To use this project template for a real library, follow these steps to customize
    </Project>
    ```
 
-5. **Update GlobalSuppressions.cs file in the test project**:
-   - Open the `tests/YourLibraryTests/GlobalSuppressions.cs` file.
-   - Update the namespace for exclusion to match your real library's namespace.
-
-   ```csharp
-   [assembly: SuppressMessage("Naming", "CA1707:Identifiers should not contain underscores", Justification = "Test method names are more readable with underscores", Scope = "namespaceanddescendants", Target = "~N:DroidNet.YourLibrary.Tests")]
-   ```
-
-6. **Change the namespace in all source code files**:
+5. **Change the namespace in all source code files**:
    - Update the namespace declaration in all `.cs` files to match your real library's namespace.
    ```csharp
    namespace DroidNet.YourLibrary...;

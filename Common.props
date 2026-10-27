@@ -154,6 +154,8 @@
                 <EnableMSTestV2CopyResources>false</EnableMSTestV2CopyResources>
                 <!-- Windows-only TFMs already prevent these tests from running on other OS families. -->
                 <NoWarn>$(NoWarn);MSTEST0084</NoWarn>
+                <!-- Test method names separate the scenario and the expected behavior with underscores. -->
+                <NoWarn>$(NoWarn);CA1707</NoWarn>
                 <!--
                     The coverage extension resolves every referenced project's source roots before compiling, one
                     serial MSBuild call per reference. Coverage runs opt in with
