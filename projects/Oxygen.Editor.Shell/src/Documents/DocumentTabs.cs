@@ -172,15 +172,16 @@ public partial class DocumentTabs(DocumentCloseCoordinator coordinator, ILoggerF
     /// <inheritdoc/>
     /// <remarks>
     ///     The document stays open without a tab until a window attaches it; its tab is the same metadata wherever it is
-    ///     attached. A pinned tab never moves, such as the scene's, and neither does a tab of a window that is closing:
-    ///     their detach is refused and the tab stays where it is.
+    ///     attached. A pinned tab never moves, such as the scene's, nor does a tab that cannot leave its window, such as a
+    ///     model's, or a tab of a window that is closing: their detach is refused and the tab stays where it is.
     /// </remarks>
     public Task<IDocumentMetadata?> DetachDocumentAsync(WindowId windowId, DocumentId documentId)
     {
         if (this.closingWindows.Contains(windowId)
             || !this.windowDocs.TryGetValue(windowId, out var docs)
             || !docs.TryGetValue(documentId, out var metadata)
-            || metadata.IsPinnedHint)
+            || metadata.IsPinnedHint
+            || !metadata.CanTearOut)
         {
             this.LogDetachRefused(windowId.Value, documentId);
             return Task.FromResult<IDocumentMetadata?>(null);

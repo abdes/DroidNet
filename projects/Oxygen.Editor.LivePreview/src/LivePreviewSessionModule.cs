@@ -9,13 +9,17 @@ using Oxygen.Editor.Assets;
 using Oxygen.Editor.Assets.Runtime;
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.ContentPipeline.Mounting;
+using Oxygen.Editor.Data;
+using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.LivePreview.Assets;
 using Oxygen.Editor.LivePreview.Play;
 using Oxygen.Editor.LivePreview.Scenes;
 using Oxygen.Editor.LivePreview.Session;
+using Oxygen.Editor.LivePreview.Settings;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Managed.Assets.Diagnostics;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -23,7 +27,7 @@ namespace Oxygen.Editor.LivePreview;
 
 /// <summary>
 ///     The engine in a project session's scope: the preview of the session's open scene documents, the project's
-///     preview session, the runtime status of its assets, and Play.
+///     preview session, the runtime status of its assets, Play, and the preview settings that apply to them.
 /// </summary>
 /// <remarks>
 ///     The project's preview also applies the content-mount changes the Content Explorer confirms. The player runs the
@@ -52,6 +56,7 @@ public sealed class LivePreviewSessionModule : IScopeModule<ISessionLayer>
         scope.Register<IAssetRuntimeStatusSource, AssetRuntimeStatusSource>(Reuse.Singleton);
         RegisterPreview(scope);
         RegisterPlay(scope);
+        RegisterPreviewSettings(scope);
     }
 
     private static void RegisterPreview(IRegistrator scope)
@@ -60,6 +65,7 @@ public sealed class LivePreviewSessionModule : IScopeModule<ISessionLayer>
             resolver => ScenePreviews.Create(
                 resolver.Resolve<IEngineService>(),
                 resolver.Resolve<OpenDocuments>(),
+                resolver.Resolve<DocumentScenes>(),
                 resolver.Resolve<IProjectSession>(),
                 resolver.Resolve<SceneStructureStore>(),
                 resolver.Resolve<ILoggerFactory>(),
@@ -70,6 +76,21 @@ public sealed class LivePreviewSessionModule : IScopeModule<ISessionLayer>
             resolver => (IInstancedNodeReader)resolver.Resolve<IScenePreview>(), Reuse.Singleton);
         scope.Register<PreviewSession>(Reuse.Singleton);
         scope.RegisterMapping<IContentMountChanges, PreviewSession>();
+    }
+
+    private static void RegisterPreviewSettings(IRegistrator scope)
+    {
+        // A dedicated manager owns the session's own database context; preview I/O is serialized by its service.
+        scope.Register<IEditorSettingsManager, EditorSettingsManager>(Reuse.Singleton, serviceKey: nameof(PreviewSettingsService));
+        scope.RegisterDelegate(
+            resolver => new PreviewSettingsService(
+                resolver.Resolve<IEngineService>(),
+                resolver.Resolve<IEditorSettingsManager>(serviceKey: nameof(PreviewSettingsService)),
+                resolver.Resolve<IProjectSession>(),
+                resolver.Resolve<IOperationResultPublisher>(),
+                resolver.Resolve<IStatusReducer>(),
+                resolver.Resolve<ILoggerFactory>()),
+            Reuse.Singleton);
     }
 
     private static void RegisterPlay(IRegistrator scope)

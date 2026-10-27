@@ -144,10 +144,10 @@
                     </ItemsPanelTemplate>
                 </seg:Segmented.ItemsPanel>
                 <seg:SegmentedItem Content="All" />
-                <seg:SegmentedItem Content="Play" />
+                <seg:SegmentedItem Content="Play" Visibility="{x:Bind ViewModel.HasSceneOwnSettings, Mode=OneWay}" />
                 <seg:SegmentedItem Content="Environment" />
                 <seg:SegmentedItem Content="Post-processing" />
-                <seg:SegmentedItem Content="References" />
+                <seg:SegmentedItem Content="References" Visibility="{x:Bind ViewModel.HasSceneOwnSettings, Mode=OneWay}" />
             </seg:Segmented>
         </StackPanel>
         <ScrollViewer

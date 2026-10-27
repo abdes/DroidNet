@@ -277,14 +277,20 @@
                 OverflowButtonVisibility="Collapsed">
                 <dnc:ToolBar.PrimaryItems>
                     <!--  New scene node  -->
-                    <dnc:ToolBarButton Command="{x:Bind ViewModel.NewNodeAction}" Label="New Node">
+                    <dnc:ToolBarButton
+                        Command="{x:Bind ViewModel.NewNodeAction}"
+                        Label="New Node"
+                        ToolTipService.ToolTip="{x:Bind scene:SceneExplorerViewModel.ToolTipOf(ViewModel.ReadOnlyReason, 'New Node'), Mode=OneWay}">
                         <dnc:ToolBarButton.Icon>
                             <SymbolIconSource Symbol="Add" />
                         </dnc:ToolBarButton.Icon>
                     </dnc:ToolBarButton>
 
                     <!--  New folder from selection  -->
-                    <dnc:ToolBarButton Command="{x:Bind ViewModel.NewFolderAction}" Label="New Folder">
+                    <dnc:ToolBarButton
+                        Command="{x:Bind ViewModel.NewFolderAction}"
+                        Label="New Folder"
+                        ToolTipService.ToolTip="{x:Bind scene:SceneExplorerViewModel.ToolTipOf(ViewModel.ReadOnlyReason, 'New Folder'), Mode=OneWay}">
                         <dnc:ToolBarButton.Icon>
                             <SymbolIconSource Symbol="Folder" />
                         </dnc:ToolBarButton.Icon>
@@ -293,25 +299,37 @@
                     <dnc:ToolBarSeparator />
 
                     <!--  Rename / Cut / Copy / Paste / Delete  -->
-                    <dnc:ToolBarButton Command="{x:Bind ViewModel.RenameAction}" Label="Rename">
+                    <dnc:ToolBarButton
+                        Command="{x:Bind ViewModel.RenameAction}"
+                        Label="Rename"
+                        ToolTipService.ToolTip="{x:Bind scene:SceneExplorerViewModel.ToolTipOf(ViewModel.ReadOnlyReason, 'Rename'), Mode=OneWay}">
                         <dnc:ToolBarButton.Icon>
                             <SymbolIconSource Symbol="Rename" />
                         </dnc:ToolBarButton.Icon>
                     </dnc:ToolBarButton>
 
-                    <dnc:ToolBarButton Command="{x:Bind ViewModel.CutAction}" Label="Cut">
+                    <dnc:ToolBarButton
+                        Command="{x:Bind ViewModel.CutAction}"
+                        Label="Cut"
+                        ToolTipService.ToolTip="{x:Bind scene:SceneExplorerViewModel.ToolTipOf(ViewModel.ReadOnlyReason, 'Cut'), Mode=OneWay}">
                         <dnc:ToolBarButton.Icon>
                             <SymbolIconSource Symbol="Cut" />
                         </dnc:ToolBarButton.Icon>
                     </dnc:ToolBarButton>
 
-                    <dnc:ToolBarButton Command="{x:Bind ViewModel.CopyAction}" Label="Copy">
+                    <dnc:ToolBarButton
+                        Command="{x:Bind ViewModel.CopyAction}"
+                        Label="Copy"
+                        ToolTipService.ToolTip="{x:Bind scene:SceneExplorerViewModel.ToolTipOf(ViewModel.ReadOnlyReason, 'Copy'), Mode=OneWay}">
                         <dnc:ToolBarButton.Icon>
                             <SymbolIconSource Symbol="Copy" />
                         </dnc:ToolBarButton.Icon>
                     </dnc:ToolBarButton>
 
-                    <dnc:ToolBarButton Command="{x:Bind ViewModel.PasteAction}" Label="Paste">
+                    <dnc:ToolBarButton
+                        Command="{x:Bind ViewModel.PasteAction}"
+                        Label="Paste"
+                        ToolTipService.ToolTip="{x:Bind scene:SceneExplorerViewModel.ToolTipOf(ViewModel.ReadOnlyReason, 'Paste'), Mode=OneWay}">
                         <dnc:ToolBarButton.Icon>
                             <SymbolIconSource Symbol="Paste" />
                         </dnc:ToolBarButton.Icon>
@@ -320,7 +338,7 @@
                     <dnc:ToolBarButton
                         Command="{x:Bind ViewModel.DeleteAction}"
                         Label="Delete"
-                        ToolTipService.ToolTip="Delete (Del)">
+                        ToolTipService.ToolTip="{x:Bind scene:SceneExplorerViewModel.ToolTipOf(ViewModel.ReadOnlyReason, 'Delete (Del)'), Mode=OneWay}">
                         <dnc:ToolBarButton.Icon>
                             <SymbolIconSource Symbol="Delete" />
                         </dnc:ToolBarButton.Icon>

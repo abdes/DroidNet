@@ -25,12 +25,6 @@ public static class SceneEditorCommands
     /// <summary>Gets the command that makes the scale tool the active transform tool.</summary>
     public static CommandDescriptor ScaleTool { get; } = Scene("Scene.Tool.Scale", "Scale Tool", VirtualKey.R);
 
-    /// <summary>Gets the command that frames the selected nodes in the active viewport.</summary>
-    public static CommandDescriptor FrameSelection { get; } = Scene("Scene.FrameSelection", "Frame Selection", VirtualKey.F);
-
-    /// <summary>Gets the command that frames the whole scene in the active viewport.</summary>
-    public static CommandDescriptor FrameAll { get; } = Scene("Scene.FrameAll", "Frame All", VirtualKey.F, VirtualKeyModifiers.Shift);
-
     /// <summary>Gets the command that duplicates the selected nodes beside themselves.</summary>
     public static CommandDescriptor Duplicate { get; } = Scene("Scene.Duplicate", "Duplicate", VirtualKey.D, VirtualKeyModifiers.Control);
 
@@ -41,7 +35,7 @@ public static class SceneEditorCommands
     public static CommandDescriptor StopPlay { get; } = Scene("Scene.StopPlay", "Stop", VirtualKey.F5, VirtualKeyModifiers.Shift);
 
     /// <summary>Gets every command of the scene editor.</summary>
-    public static IReadOnlyList<CommandDescriptor> All { get; } = [SelectTool, MoveTool, RotateTool, ScaleTool, FrameSelection, FrameAll, Duplicate, Play, StopPlay];
+    public static IReadOnlyList<CommandDescriptor> All { get; } = [SelectTool, MoveTool, RotateTool, ScaleTool, Duplicate, Play, StopPlay];
 
     private static CommandDescriptor Scene(string id, string label, VirtualKey key, VirtualKeyModifiers modifiers = VirtualKeyModifiers.None)
         => new(id, label)

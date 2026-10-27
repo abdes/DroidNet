@@ -56,6 +56,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     private readonly IRouter router;
     private readonly IDocumentArea documentArea;
     private readonly OpenDocuments openDocuments;
+    private readonly DocumentScenes scenes;
     private readonly ISceneSelectionService selectionService;
     private readonly IOperationResultPublisher? operationResults;
     private readonly IStatusReducer? statusReducer;
@@ -124,8 +125,9 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     ///     Initializes a new instance of the <see cref="SceneExplorerViewModel" /> class.
     /// </summary>
     /// <param name="router">The router service used for navigation events.</param>
-    /// <param name="documentArea">The window's document area, whose active scene document the explorer shows.</param>
-    /// <param name="openDocuments">The open documents: the explorer shows the scene document opened last, and follows its reloads.</param>
+    /// <param name="documentArea">The window's document area, whose active document's scene the explorer shows.</param>
+    /// <param name="openDocuments">The open documents: the explorer shows the scene of the document opened last, and follows its reloads.</param>
+    /// <param name="scenes">The scene each open document shows: a scene document's own, a model document's preview scene.</param>
     /// <param name="selectionService">The document selection service.</param>
     /// <param name="loggerFactory">
     ///     Optional factory for creating loggers. If provided, enables detailed logging of the
@@ -164,6 +166,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         IRouter router,
         IDocumentArea documentArea,
         OpenDocuments openDocuments,
+        DocumentScenes scenes,
         ISceneSelectionService selectionService,
         ILoggerFactory? loggerFactory = null,
         IOperationResultPublisher? operationResults = null,
@@ -204,6 +207,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         this.router = router;
         this.documentArea = documentArea;
         this.openDocuments = openDocuments;
+        this.scenes = scenes;
         this.selectionService = selectionService;
         this.selectionService.SelectionChanged += this.OnSelectionServiceChanged;
         this.SelectionSettled += this.OnTreeSelectionSettled;
@@ -214,7 +218,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         // Default selection mode for Scene Explorer is multiple selection.
         this.SelectionMode = SelectionMode.Multiple;
 
-        // The explorer shows the window's active scene document.
+        // The explorer shows the scene of the window's active document.
         documentArea.ActiveDocumentChanged += this.OnActiveDocumentChanged;
         this.RegisterSceneLifetime();
         this.commandRegistration = commands?.Register(this);
@@ -1065,8 +1069,8 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
 
     private async void OnActiveDocumentChanged(object? sender, EventArgs e)
     {
-        // Only scene documents replace the shown scene; another document leaves it in place.
-        if (this.documentArea.ActiveDocument is not { Content: SceneContent } sceneDocument)
+        // Only a document that shows a scene replaces the shown scene; another document leaves it in place.
+        if (this.documentArea.ActiveDocument is not { } sceneDocument || this.scenes.Of(sceneDocument) is null)
         {
             return;
         }
@@ -1078,6 +1082,13 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         }
 
         this.LogDocumentActivated(sceneDocument.Id);
+
+        // A model and the scene beside it are both open: activating either shows its scene, and replaces nothing.
+        if (DocumentScenes.ShowsModel(sceneDocument) || (this.sceneDocument is { } shown && DocumentScenes.ShowsModel(shown)))
+        {
+            _ = await this.InstallOpenedSceneAsync(sceneDocument).ConfigureAwait(true);
+            return;
+        }
 
         // Scene replacement belongs to the Shell's document service; tab activation must not bypass its close guards
         // or the retirement of the previous scene.
@@ -1101,7 +1112,8 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         var previousScene = this.Scene?.AttachedObject;
         this.ResetSearchSession();
 
-        // Build the scene layout from the loaded scene
+        // Build the scene layout from the loaded scene. A model's preview lists the model only.
+        var showsModel = this.sceneDocument is { } shown && DocumentScenes.ShowsModel(shown);
         this.Scene?.Detach();
         this.Scene = new SceneAdapter(loadedScene, layout)
         {
@@ -1109,6 +1121,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             IsLocked = true,
             IsRoot = true,
             UseLayoutAdapters = true,
+            ListsUnseatedNodes = !showsModel,
         };
         this.NotifyCategoryAvailabilityChanged();
 
@@ -1202,7 +1215,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     private async Task<bool> LoadSceneAsync(Scene scene)
     {
         var loadedDocument = this.documentArea.Documents
-            .FirstOrDefault(document => document.Content is SceneContent content && ReferenceEquals(content.Scene, scene));
+            .FirstOrDefault(document => ReferenceEquals(this.scenes.Of(document)?.Scene, scene));
         if (loadedDocument is null)
         {
             return false;
@@ -2049,7 +2062,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
 
     // The authoring of the shown scene; none while the document shows another scene or is gone.
     private SceneAuthoring? CurrentAuthoring()
-        => !this.isDisposed && this.sceneDocument?.Content is SceneContent { Authoring: var authoring }
+        => !this.isDisposed && this.sceneDocument is { } document && this.scenes.Of(document) is { Authoring: var authoring }
             && ReferenceEquals(authoring.Scene, this.Scene?.AttachedObject)
                 ? authoring
                 : null;
@@ -2084,13 +2097,14 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
 
     private async Task<bool> InstallLoadedSceneAsync(Scene loadedScene, Document sceneDocument, CancellationToken ct)
     {
-        if (sceneDocument.Content is not SceneContent content)
+        if (this.scenes.Of(sceneDocument) is not { } content)
         {
             return false;
         }
 
         this.WatchSceneDocument(sceneDocument);
         this.ObserveAuthoring(content.Authoring);
+        this.ReadOnlyReason = content.Authoring.ReadOnlyReason;
 
         await this.InitializeLoadedSceneAsync(loadedScene, content.Authoring.Layout).ConfigureAwait(true);
         return !ct.IsCancellationRequested && ReferenceEquals(this.Scene?.AttachedObject, loadedScene);

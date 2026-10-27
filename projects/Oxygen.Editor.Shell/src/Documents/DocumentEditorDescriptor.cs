@@ -27,6 +27,12 @@ public sealed class DocumentEditorDescriptor(IDocumentKind kind, Func<DocumentTa
     public bool IsClosable { get; init; } = true;
 
     /// <summary>
+    ///     Gets a value indicating whether the tab of a document of this kind can leave its window: be torn out into a new
+    ///     window or moved to another one. A tab that cannot still reorders within its window.
+    /// </summary>
+    public bool CanTearOut { get; init; } = true;
+
+    /// <summary>
     ///     Gets a value indicating whether the tab of a document of this kind is pinned.
     /// </summary>
     public bool IsPinned { get; init; }

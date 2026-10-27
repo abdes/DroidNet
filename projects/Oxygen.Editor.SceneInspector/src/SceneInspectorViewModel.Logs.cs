@@ -4,6 +4,7 @@
 
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.SceneInspector;
 
@@ -63,4 +64,11 @@ public partial class SceneInspectorViewModel
     private static partial void LogInstancedReadFailed(ILogger logger, Exception ex);
 
     private void LogInstancedReadFailed(Exception ex) => LogInstancedReadFailed(this.logger, ex);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "The facts of model '{Source}' could not be read.")]
+    private static partial void LogModelFactsFailed(ILogger logger, string source, Exception ex);
+
+    private void LogModelFactsFailed(AssetPath source, Exception ex) => LogModelFactsFailed(this.logger, source.ToString(), ex);
 }

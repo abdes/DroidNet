@@ -4,6 +4,7 @@
 
 using DryIoc;
 using Oxygen.Editor.Shell.Commands;
+using Oxygen.Editor.Viewports;
 
 namespace Oxygen.Editor.SceneEditor;
 
@@ -28,7 +29,7 @@ public partial class SceneEditorViewModel : ICommandHandler
                 || Is(commandId, SceneEditorCommands.RotateTool)
                 || Is(commandId, SceneEditorCommands.ScaleTool)
                 || Is(commandId, SceneEditorCommands.Duplicate) => true,
-            _ when Is(commandId, SceneEditorCommands.FrameSelection) || Is(commandId, SceneEditorCommands.FrameAll)
+            _ when Is(commandId, ShellCommands.FrameSelection) || Is(commandId, ShellCommands.FrameAll)
                 => this.GetActiveViewport() is not null,
             _ when Is(commandId, SceneEditorCommands.Play) || Is(commandId, SceneEditorCommands.StopPlay)
                 => this.Play is not null,
@@ -60,11 +61,11 @@ public partial class SceneEditorViewModel : ICommandHandler
         {
             this.TransformTools.UseScaleToolCommand.Execute(parameter: null);
         }
-        else if (Is(commandId, SceneEditorCommands.FrameSelection))
+        else if (Is(commandId, ShellCommands.FrameSelection))
         {
             await this.GetActiveViewport()!.FrameSelectionAsync().ConfigureAwait(true);
         }
-        else if (Is(commandId, SceneEditorCommands.FrameAll))
+        else if (Is(commandId, ShellCommands.FrameAll))
         {
             await this.GetActiveViewport()!.FrameAllAsync().ConfigureAwait(true);
         }

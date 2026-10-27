@@ -53,11 +53,14 @@ public sealed partial class SceneInspectorViewModel
 
     /// <summary>
     /// Gets the second line of the header for a node an instance brings in, naming its instance and the instance's source,
-    /// such as "in Car3 · Car.glb (model)"; <see langword="null"/> for any other selection.
+    /// such as "in Car3 · Car.glb (model)", or the source alone when the instance bears its name, such as "in Car.glb
+    /// (model)" in the model's own document; <see langword="null"/> for any other selection.
     /// </summary>
     public string? SelectedNodeOrigin
         => this.SelectedInstancedNode() is { } reference && this.InstanceRootOf(reference) is { } root
-            ? $"in {root.Node.Metadata.Name} · {root.Source.Name} ({(AssetFileTypes.Is(root.Source.Name, AssetFileCategory.Model) ? "model" : "scene")})"
+            ? string.Equals(root.Node.Metadata.Name, root.Source.Name, StringComparison.Ordinal)
+                ? $"in {root.Source.Name} ({KindOf(root.Source)})"
+                : $"in {root.Node.Metadata.Name} · {root.Source.Name} ({KindOf(root.Source)})"
             : null;
 
     /// <summary>
@@ -77,6 +80,8 @@ public sealed partial class SceneInspectorViewModel
 
     // Whether any selected node is one an instance brings in; the pane shows those read-only.
     private bool HasInstancedSelection => this.items.Exists(this.instancedNodes.ContainsKey);
+
+    private static string KindOf(AssetPath source) => AssetFileTypes.Is(source.Name, AssetFileCategory.Model) ? "model" : "scene";
 
     private static SceneInstanceComponent? InstanceOf(Scene scene, NodeReference reference)
         => scene.AllNodes.FirstOrDefault(node => node.Id == reference.Node)?.Components.OfType<SceneInstanceComponent>().FirstOrDefault();

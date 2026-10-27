@@ -13,6 +13,9 @@ public static class SceneEditCodes
     /// <summary>The scene was closed or replaced by a reload.</summary>
     public const string Retired = DiagnosticCodes.ScenePrefix + "Edit.Retired";
 
+    /// <summary>The scene takes no edit: it previews a model, whose structure and values are read-only.</summary>
+    public const string SceneReadOnly = DiagnosticCodes.ScenePrefix + "Scene.ReadOnly";
+
     /// <summary>A target node no longer exists.</summary>
     public const string TargetMissing = DiagnosticCodes.ScenePrefix + "Target.Missing";
 

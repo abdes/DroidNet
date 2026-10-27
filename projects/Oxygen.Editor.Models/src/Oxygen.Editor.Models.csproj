@@ -5,7 +5,7 @@
         <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
 
         <Title>Oxygen Editor Models</Title>
-        <Description>Model family module: a model's import record and settings, source facts, import sessions and the import dialog's port, without any UI.</Description>
+        <Description>Model family module: the model document, a model's import record and settings, source facts, import sessions and the import dialog's port, without any UI.</Description>
         <PackageReadmeFile>README.md</PackageReadmeFile>
         <PackageTags>oxygen;editor;models</PackageTags>
         <PackageReleaseNotes>Initial version.</PackageReleaseNotes>
@@ -28,6 +28,7 @@
     </ItemGroup>
 
     <ItemGroup>
+        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Documents\src\Oxygen.Editor.Documents.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Managed.Assets\src\Oxygen.Managed.Assets.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Managed.Core\src\Oxygen.Managed.Core.csproj" />
     </ItemGroup>

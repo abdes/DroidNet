@@ -207,6 +207,7 @@ internal sealed partial class SceneExplorerInstanceMenuTests : DroidNet.Tests.Vi
                 Mock.Of<IRouter>(),
                 this.documents,
                 this.Document.Documents,
+                new DocumentScenes(this.Document.Documents, session: this.session, structures: this.structures),
                 this.Selection,
                 session: this.session,
                 clipboard: this.Clipboard,

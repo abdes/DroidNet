@@ -64,6 +64,13 @@ public sealed partial class TabItem : ObservableObject, IDragPayload, IEquatable
     public partial bool IsClosable { get; set; } = true;
 
     /// <summary>
+    ///     Gets or sets a value indicating whether the tab can leave its strip: be torn out into a new window or dropped
+    ///     on another window's strip. A tab that cannot still reorders within its strip.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool CanTearOut { get; set; } = true;
+
+    /// <summary>
     ///     Gets or sets a value indicating whether the tab is pinned (always visible and not draggable). While
     ///     <see cref="IsPinLocked"/> is set the value cannot change.
     /// </summary>
@@ -113,6 +120,7 @@ public sealed partial class TabItem : ObservableObject, IDragPayload, IEquatable
             Command = this.Command,
             CommandParameter = this.CommandParameter,
             IsClosable = this.IsClosable,
+            CanTearOut = this.CanTearOut,
             IsPinned = this.IsPinned,
             IsPinLocked = this.IsPinLocked,
             IsSelected = this.IsSelected,

@@ -28,6 +28,11 @@ them. It holds no view, view model or dialog.
   import and the run's settings, as an ImportTool import manifest.
 - `IModelImportPrompt` is the port of the Import model dialog: a UI surface asks
   it which models to import and gets a `ModelImportPlan`.
+- `ModelDocumentKind` opens a model source file as a document titled with its
+  extension; its `ModelContent` names the model and follows its source when it
+  moves, and refuses to be written.
+- `IModelFacts` is the port that reads a model's `ModelFacts`: its source, last
+  import and counts, which Properties shows on the model's root.
 
 The content pipeline, which cooks and imports models, depends on this module;
 this module depends only on the shared asset formats.

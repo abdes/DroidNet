@@ -42,6 +42,9 @@ public partial class TestDocumentMetadata(DocumentId? documentId = null) : IDocu
     /// <inheritdoc/>
     public bool IsClosable { get; set => this.Set(ref field, value); } = true;
 
+    /// <inheritdoc/>
+    public bool CanTearOut { get; set => this.Set(ref field, value); } = true;
+
     private void Set<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
     {
         if (!EqualityComparer<T>.Default.Equals(field, value))

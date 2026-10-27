@@ -2,7 +2,7 @@
 
 Status: `agreed`
 
-Last Updated: 2026-10-22
+Last Updated: 2026-10-28
 
 ## 1. Purpose
 
@@ -237,8 +237,10 @@ edit:
      Shell's, the viewport's included.
    - **Views.** `ISceneViews` frames nodes, runs camera commands and reports
      the camera state of the active viewport of the editor that shows a scene
-     document, keyed by `DocumentId`. The scene editor implements it
-     (`SceneEditorViews`).
+     document, keyed by `DocumentId`, and places an instance in a scene. The
+     shared Viewports module implements it (`SceneViews`); each editor that
+     shows a scene, the scene editor and the Model Editor, joins it through
+     `ISceneView`.
    - **Availability.** `ISceneAvailability` reports that the scene a window was
      asked to show did not open (`SceneUnavailable`) and reopens the one it
      showed before (`ReloadPreviousAsync`). The window's scene document

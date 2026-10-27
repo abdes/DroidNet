@@ -7,6 +7,7 @@ using AwesomeAssertions;
 using DroidNet.Routing;
 using DroidNet.TimeMachine;
 using Moq;
+using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.Scenes.Testing;
 using Oxygen.Editor.Shell.Testing;
@@ -31,7 +32,7 @@ public sealed class SceneExplorerOpenDocumentTests
         node = metadata.NodeOf(node);
         var documents = new TestDocumentArea();
         documents.Activate(metadata.Document);
-        using var explorer = new SceneExplorerViewModel(Mock.Of<IRouter>(), documents, metadata.Documents, new SceneSelectionService());
+        using var explorer = new SceneExplorerViewModel(Mock.Of<IRouter>(), documents, metadata.Documents, new DocumentScenes(metadata.Documents), new SceneSelectionService());
 
         await explorer.HandleDocumentOpenedAsync(scene).ConfigureAwait(false);
         var adapter = await explorer.FindAdapterByNodeIdAsync(node.Id).ConfigureAwait(false);
@@ -54,7 +55,7 @@ public sealed class SceneExplorerOpenDocumentTests
         node = metadata.NodeOf(node);
         var documents = new TestDocumentArea();
         documents.Activate(metadata.Document);
-        using var explorer = new SceneExplorerViewModel(Mock.Of<IRouter>(), documents, metadata.Documents, new SceneSelectionService());
+        using var explorer = new SceneExplorerViewModel(Mock.Of<IRouter>(), documents, metadata.Documents, new DocumentScenes(metadata.Documents), new SceneSelectionService());
 
         await explorer.HandleDocumentOpenedAsync(scene).ConfigureAwait(false);
         var adapter = await explorer.FindAdapterByNodeIdAsync(node.Id).ConfigureAwait(false);
@@ -77,7 +78,7 @@ public sealed class SceneExplorerOpenDocumentTests
         node = metadata.NodeOf(node);
         var documents = new TestDocumentArea();
         documents.Activate(metadata.Document);
-        using var explorer = new SceneExplorerViewModel(Mock.Of<IRouter>(), documents, metadata.Documents, new SceneSelectionService());
+        using var explorer = new SceneExplorerViewModel(Mock.Of<IRouter>(), documents, metadata.Documents, new DocumentScenes(metadata.Documents), new SceneSelectionService());
 
         await explorer.HandleDocumentOpenedAsync(scene).ConfigureAwait(false);
         var adapter = await explorer.FindAdapterByNodeIdAsync(node.Id).ConfigureAwait(false);
@@ -103,7 +104,7 @@ public sealed class SceneExplorerOpenDocumentTests
         originalNode = metadata.NodeOf(originalNode);
         var documents = new TestDocumentArea();
         documents.Activate(metadata.Document);
-        using var explorer = new SceneExplorerViewModel(Mock.Of<IRouter>(), documents, metadata.Documents, new SceneSelectionService());
+        using var explorer = new SceneExplorerViewModel(Mock.Of<IRouter>(), documents, metadata.Documents, new DocumentScenes(metadata.Documents), new SceneSelectionService());
         await explorer.HandleDocumentOpenedAsync(original).ConfigureAwait(false);
         var previousAdapter = await explorer.FindAdapterByNodeIdAsync(originalNode.Id).ConfigureAwait(false);
 
@@ -144,6 +145,7 @@ public sealed class SceneExplorerOpenDocumentTests
             Mock.Of<IRouter>(),
             documents,
             firstMetadata.Documents,
+            new DocumentScenes(firstMetadata.Documents),
             new SceneSelectionService());
 
         await explorer.HandleDocumentOpenedAsync(first).ConfigureAwait(false);

@@ -197,6 +197,14 @@ public partial class SceneExplorerViewModel
         }
     }
 
+    // The commands that change the scene, as opposed to those that only show, select or protect its nodes.
+    private static bool ChangesScene(SceneExplorerCommandKind kind)
+        => kind is SceneExplorerCommandKind.NewNode or SceneExplorerCommandKind.NewFolder or SceneExplorerCommandKind.Rename
+            or SceneExplorerCommandKind.Cut or SceneExplorerCommandKind.Copy or SceneExplorerCommandKind.Paste
+            or SceneExplorerCommandKind.PasteAsChild or SceneExplorerCommandKind.Delete or SceneExplorerCommandKind.RemoveFromFolder
+            or SceneExplorerCommandKind.MoveToSceneRoot or SceneExplorerCommandKind.PilotCamera or SceneExplorerCommandKind.AlignCameraToView
+            or SceneExplorerCommandKind.Unpack or SceneExplorerCommandKind.UnpackCompletely;
+
     // Which changes a row's Apply to moves: all of an instance root's, or a node's own.
     private static ChangeSelection ApplySelectionOf(NodeReference node)
         => node.IsOwned ? ChangeSelection.Instance : ChangeSelection.OfNode(node.Path);
@@ -678,6 +686,12 @@ public partial class SceneExplorerViewModel
         if (context is null || !this.IsContextCurrent(context))
         {
             return "The scene document or captured selection is no longer available.";
+        }
+
+        // A model's preview scene is read-only: what changes it is refused, with the model's reason.
+        if (ChangesScene(kind) && this.CurrentAuthoring()?.ReadOnlyReason is { } readOnly)
+        {
+            return readOnly;
         }
 
         var targets = context.Targets;

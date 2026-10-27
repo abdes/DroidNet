@@ -15,6 +15,7 @@ using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.Scenes.Testing;
 using Oxygen.Editor.World;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 using Testably.Abstractions.Testing;
 
@@ -40,10 +41,13 @@ internal sealed partial class PreviewFixture : IDisposable
         this.World.OnExecute = this.Decide;
         var publisher = new Mock<IOperationResultPublisher>();
         _ = publisher.Setup(value => value.Publish(It.IsAny<OperationResult>())).Callback<OperationResult>(this.Results.Add);
-        this.Preview = new ScenePreview(this.Engine, this.Documents.Open, this.Documents.Session, this.Structures, operationResults: publisher.Object);
+        this.Scenes = new DocumentScenes(this.Documents.Open);
+        this.Preview = new ScenePreview(this.Engine, this.Documents.Open, this.Scenes, this.Documents.Session, this.Structures, operationResults: publisher.Object);
     }
 
     public TestSceneDocuments Documents { get; } = new(TestProject.Create(new MockFileSystem(), @"C:\LivePreviewTests"));
+
+    public DocumentScenes Scenes { get; }
 
     public FakeEngine Engine { get; }
 
@@ -76,6 +80,7 @@ internal sealed partial class PreviewFixture : IDisposable
     public void Dispose()
     {
         this.Preview.Dispose();
+        this.Scenes.Dispose();
         this.Documents.Dispose();
     }
 
@@ -103,6 +108,25 @@ internal sealed partial class PreviewFixture : IDisposable
         try
         {
             var document = await this.Documents.OpenAsync(scene.Dehydrate()).ConfigureAwait(false);
+            this.opened.Add(document);
+            return document;
+        }
+        finally
+        {
+            this.Engine.SetState(state);
+        }
+    }
+
+    /// <summary>Opens a model source as a model document while the engine is ready, as <see cref="OpenAsync"/> does.</summary>
+    /// <param name="source">The model's source file.</param>
+    /// <returns>The document.</returns>
+    public async Task<Document> OpenModelAsync(AssetPath source)
+    {
+        var state = this.Engine.State;
+        this.Engine.SetState(EngineServiceState.Ready);
+        try
+        {
+            var document = await this.Documents.OpenModelAsync(source).ConfigureAwait(false);
             this.opened.Add(document);
             return document;
         }

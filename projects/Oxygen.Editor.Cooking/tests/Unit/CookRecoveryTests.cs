@@ -254,7 +254,7 @@ public sealed class CookRecoveryTests
         this.ArrangeScene(scenes, document);
         var issue = Issue(id, scenes.FileOf(SceneName).Path.FullPath, KeptChangeDiagnostics.PropertyPath, node.Id);
 
-        var result = await this.CreateRecovery().GoToPropertyAsync(issue).ConfigureAwait(false);
+        var result = await this.CreateRecovery().RevealAsync(issue).ConfigureAwait(false);
 
         _ = result.Should().BeTrue();
         _ = this.selection.GetContext(document.Id).OwnedNodeIds.Should().ContainSingle().Which.Should().Be(node.Id);

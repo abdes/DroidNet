@@ -29,13 +29,13 @@ using Oxygen.Editor.Documents;
 using Oxygen.Editor.LivePreview.Content;
 using Oxygen.Editor.LivePreview.Scenes;
 using Oxygen.Editor.LivePreview.Session;
+using Oxygen.Editor.LivePreview.Settings;
 using Oxygen.Editor.MaterialEditor;
 using Oxygen.Editor.Materials.Documents;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.SceneEditor;
-using Oxygen.Editor.SceneEditor.Settings;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.Scenes.Edits.Assets;
@@ -47,6 +47,8 @@ using Oxygen.Editor.Shell.Commands;
 using Oxygen.Editor.Shell.Documents;
 using Oxygen.Editor.Shell.Testing;
 using Oxygen.Editor.Shell.Windows;
+using Oxygen.Editor.Viewports;
+using Oxygen.Editor.Viewports.Settings;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
@@ -333,7 +335,7 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
     /// <param name="provider">The asset feed the demand resolves references with.</param>
     /// <returns>The demand; disposing it cancels its cooks.</returns>
     public IDisposable CreateImportedAssetDemand(CatalogWorkloadServices services, AssetFeed provider)
-        => ContentDemands.Start(this.OpenDocuments, provider, services.Pipeline, services.Session);
+        => ContentDemands.Start(this.OpenDocuments, new DocumentScenes(this.OpenDocuments), provider, services.Pipeline, services.Session);
 
     public async Task<SurfaceTarget> ReadSingleSurfaceAsync(NodeId nodeId, CancellationToken cancellationToken)
     {
@@ -391,7 +393,7 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
         }
 
         // One preview shows a scene on an engine, as in a workspace: the fixture's starts once it initializes.
-        this.preview ??= ScenePreviews.Create(this.previewEngine, this.OpenDocuments, this.Session, this.structures, operationResults: this.previewResults);
+        this.preview ??= ScenePreviews.Create(this.previewEngine, this.OpenDocuments, new DocumentScenes(this.OpenDocuments), this.Session, this.structures, operationResults: this.previewResults);
 
         await this.SynchronizeAsync(stale: null, cancellationToken).ConfigureAwait(true);
     }
@@ -501,6 +503,7 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
         var settings = Mock.Of<Oxygen.Editor.Data.Services.IEditorSettingsManager>();
         var engineSettings = new Mock<ISettingsService<IEngineStartupSettings>>();
         _ = engineSettings.SetupGet(value => value.Settings).Returns(new EngineStartupSettings());
+        var previewSettings = new PreviewSettingsService(this.Runtime, settings, this.Session, publisher, reducer);
         return new SceneEditorServices(
             this.Runtime,
             this.Preview,
@@ -513,11 +516,11 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
             Mock.Of<IUnsavedCookInputs>(),
             new SceneSelectionService(),
             new SceneInteractionKit().Create(this.Session, publisher, reducer, this.structures),
-            new SceneEditorViews(),
-            new PreviewSettingsService(this.Runtime, settings, this.Session, publisher, reducer),
+            new SceneViews(),
+            new ViewportServices(this.Runtime, previewSettings, engineSettings.Object, publisher, reducer),
+            previewSettings,
             new ViewportStateService(this.Session, settings, publisher, reducer),
             new TransformToolSettingsService(settings: null),
-            engineSettings.Object,
             NullLoggerFactory.Instance);
     }
 

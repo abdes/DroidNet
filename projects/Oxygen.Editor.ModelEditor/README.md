@@ -1,8 +1,24 @@
 # Oxygen.Editor.ModelEditor
 
-The model family's UI: the **Import model** dialog and its import settings
-panel. The Content Explorer opens the dialog through `IModelImportPrompt`, a port
-of `Oxygen.Editor.Models`, and never references this project.
+The model family's UI: the **Model Editor** of model documents, and the
+**Import model** dialog and its import settings panel. The Content Explorer
+opens the dialog through `IModelImportPrompt` and Properties reads a model's
+facts through `IModelFacts`, ports of `Oxygen.Editor.Models`; neither references
+this project.
+
+## The Model Editor
+
+A model document opens from the Content Explorer (double-click an imported
+model) and shows the model's preview scene, which `DocumentScenes` builds
+(`Oxygen.Editor.Scenes`), in one viewport of the `Viewing` profile: no transform
+tools, layouts or maximize, a click selects the node under the cursor, and Show
+and the view mode offer _Preview environment_ and the exposure. The toolbar
+saves, reimports when the source changed or the last import failed, places the
+model in the open scene (_Add to scene_), browses to the selection's geometries
+or the model file, and says where the import stands. Its tab stays in its
+window (`CanTearOut` is false). `ModelFactsReader` reads the facts Properties
+shows on the model's root: the source analysis's counts, the last import and
+the LODs of the imported geometries.
 
 ## The Import model dialog
 
@@ -42,9 +58,11 @@ The dialog returns a `ModelImportPlan`; the Content Explorer imports it with
 
 ## Dependencies
 
-`Oxygen.Editor.Models`, `Oxygen.Editor.ContentPipeline`, `Oxygen.Editor.Controls`,
-`Oxygen.Editor.Pickers`, `Oxygen.Editor.Assets` and Aura's dialog service. It
-never references `Oxygen.Editor.SceneInspector`.
+`Oxygen.Editor.Models`, `Oxygen.Editor.Scenes`, `Oxygen.Editor.LivePreview`,
+`Oxygen.Editor.Viewports`, `Oxygen.Editor.ContentPipeline`,
+`Oxygen.Editor.Controls`, `Oxygen.Editor.Pickers`, `Oxygen.Editor.Assets` and
+Aura's dialog service. It never references `Oxygen.Editor.SceneInspector` or
+the engine runtime: its viewport comes from `ViewportServices`.
 
 ## Tests
 

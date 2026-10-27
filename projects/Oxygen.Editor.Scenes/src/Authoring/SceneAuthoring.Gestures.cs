@@ -155,7 +155,7 @@ public sealed partial class SceneAuthoring
     }
 
     // The targets of a gesture, checked once when it begins, the way an edit's targets are.
-    private sealed record GestureTargets(IReadOnlyCollection<NodeId> Targets, IReadOnlyCollection<NodeReference> InstancedTargets, string Label) : ISceneEdit
+    internal sealed record GestureTargets(IReadOnlyCollection<NodeId> Targets, IReadOnlyCollection<NodeReference> InstancedTargets, string Label) : ISceneEdit
     {
         public SceneEditValidation Validate(SceneEditScope scope) => SceneEditValidation.Valid;
 

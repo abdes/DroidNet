@@ -34,7 +34,7 @@ public sealed class ScenePreviewEngineTests : DroidNet.Tests.VisualUserInterface
         try
         {
             using var documents = new TestSceneDocuments(TestProject.Create(new MockFileSystem(), @"C:\LivePreviewTests"));
-            using var preview = new ScenePreview(engine, documents.Open, documents.Session, new SceneStructureStore());
+            using var preview = new ScenePreview(engine, documents.Open, new DocumentScenes(documents.Open), documents.Session, new SceneStructureStore());
             var built = new Scene { Name = "Test Scene" };
             built.RootNodes.Add(new SceneNode(built, "Cube"));
             var document = await documents.OpenAsync(built.Dehydrate()).ConfigureAwait(true);

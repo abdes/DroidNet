@@ -36,10 +36,11 @@ public sealed partial class SceneContent : IDocumentContent, IDisposable
     /// <param name="structureOf">What an instance of a source contains, as last read, if the editor reads it.</param>
     /// <param name="sceneFiles">The files of the project's authored scenes, if a project is open.</param>
     /// <param name="modelRecords">The model import records of the project's models, if a project is open.</param>
-    internal SceneContent(Scene scene, IList<ExplorerEntryData> layout, DocumentDecodeContext document, ISceneNodeInteraction? interaction, IAssetRedirects? redirects, IAuthoredReferences? references = null, AssetPath? asset = null, Func<AssetPath, SceneStructure?>? structureOf = null, IAuthoredSceneFiles? sceneFiles = null, IModelImportRecordFiles? modelRecords = null)
+    /// <param name="readOnly">What a read-only scene, such as a model's preview, still takes; <see langword="null"/> when it takes every edit.</param>
+    internal SceneContent(Scene scene, IList<ExplorerEntryData> layout, DocumentDecodeContext document, ISceneNodeInteraction? interaction, IAssetRedirects? redirects, IAuthoredReferences? references = null, AssetPath? asset = null, Func<AssetPath, SceneStructure?>? structureOf = null, IAuthoredSceneFiles? sceneFiles = null, IModelImportRecordFiles? modelRecords = null, SceneReadOnly? readOnly = null)
     {
         this.Scene = scene;
-        this.Authoring = new SceneAuthoring(document, scene, layout, interaction, redirects, references, structureOf, sceneFiles, modelRecords) { Asset = asset };
+        this.Authoring = new SceneAuthoring(document, scene, layout, interaction, redirects, references, structureOf, sceneFiles, modelRecords, readOnly) { Asset = asset };
     }
 
     /// <summary>Gets the scene.</summary>
@@ -96,17 +97,24 @@ public sealed partial class SceneContent : IDocumentContent, IDisposable
     public void ApplyRelocation(DocumentRelocation relocation)
     {
         ArgumentNullException.ThrowIfNull(relocation);
-        var applied = this.Authoring.ChangeOutsideHistoryAsync(scene => Relocate(scene, relocation));
-        if (!applied.IsCompleted)
-        {
-            throw new InvalidOperationException("A scene follows a relocation on its own thread.");
-        }
-
+        this.FollowReferences(relocation);
         this.Authoring.Asset = relocation.File.Asset;
     }
 
     /// <inheritdoc/>
     public void Dispose() => this.Authoring.Dispose();
+
+    /// <summary>Re-points the scene's references at the assets a relocation moved; the scene keeps its own asset.</summary>
+    /// <param name="relocation">The relocation.</param>
+    /// <remarks>A model's preview scene follows its model this way. Nothing enters the history.</remarks>
+    internal void FollowReferences(DocumentRelocation relocation)
+    {
+        var applied = this.Authoring.ChangeOutsideHistoryAsync(scene => Relocate(scene, relocation));
+        if (!applied.IsCompleted)
+        {
+            throw new InvalidOperationException("A scene follows a relocation on its own thread.");
+        }
+    }
 
     // Script slots have no runtime projection; the projector attaches the re-pointed geometry once it is mounted.
     private static List<SceneChange> Relocate(Scene scene, DocumentRelocation relocation)

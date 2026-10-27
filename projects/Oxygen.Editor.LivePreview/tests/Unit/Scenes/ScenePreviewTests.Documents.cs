@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Editor.Scenes.Documents;
 using System.Numerics;
 using AwesomeAssertions;
 using Oxygen.Editor.ContentPipeline.Inspection;
@@ -122,7 +123,7 @@ public sealed partial class ScenePreviewTests
         using var documents = new TestSceneDocuments(TestProject.Create(new MockFileSystem(), @"C:\LivePreviewTests"));
         var document = await documents.OpenAsync(new Scene { Name = "Test Scene" }.Dehydrate()).ConfigureAwait(false);
 
-        using var preview = new ScenePreview(engine, documents.Open, documents.Session, new SceneStructureStore());
+        using var preview = new ScenePreview(engine, documents.Open, new DocumentScenes(documents.Open), documents.Session, new SceneStructureStore());
 
         _ = preview.IsReady(document.Id).Should().BeTrue();
     }

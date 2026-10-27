@@ -415,9 +415,10 @@ public partial class AssetsViewModel(
         else if (args.InvokedItem is { Kind: AssetKind.Model, SourcePath: { } sourcePath })
         {
             var project = session.Context;
+            // An imported model opens in its Model Editor; Reimport is a command of its own.
             if (new ModelImportRecords(project.FileSystem, project.ProjectRoot.FullPath).IsImported(sourcePath.FullPath))
             {
-                await this.RunSourceImportAsync(project, () => contentPipelineService.ReimportSourceAsync(args.InvokedItem.Identity, project, CancellationToken.None)).ConfigureAwait(true);
+                await this.OpenDocumentAsync(args.InvokedItem.Identity).ConfigureAwait(true);
             }
             else
             {

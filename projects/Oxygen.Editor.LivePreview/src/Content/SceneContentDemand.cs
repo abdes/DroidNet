@@ -28,6 +28,7 @@ namespace Oxygen.Editor.LivePreview.Content;
 internal sealed partial class SceneContentDemand : IDisposable
 {
     private readonly OpenDocuments documents;
+    private readonly DocumentScenes scenes;
     private readonly IAssetFeed assets;
     private readonly IContentPipelineService pipeline;
     private readonly IProjectSession session;
@@ -37,13 +38,15 @@ internal sealed partial class SceneContentDemand : IDisposable
 
     /// <summary>Initializes a new instance of the <see cref="SceneContentDemand"/> class, following the open documents.</summary>
     /// <param name="documents">The workspace's open documents.</param>
+    /// <param name="scenes">The scene each open document shows, a model document's preview scene included.</param>
     /// <param name="assets">Resolves each asset's identity and cook state.</param>
     /// <param name="pipeline">Cooks an asset for preview.</param>
     /// <param name="session">The project session, whose current content mounts a demand cooks in.</param>
     /// <param name="loggerFactory">The optional logger factory.</param>
-    public SceneContentDemand(OpenDocuments documents, IAssetFeed assets, IContentPipelineService pipeline, IProjectSession session, ILoggerFactory? loggerFactory = null)
+    public SceneContentDemand(OpenDocuments documents, DocumentScenes scenes, IAssetFeed assets, IContentPipelineService pipeline, IProjectSession session, ILoggerFactory? loggerFactory = null)
     {
         this.documents = documents ?? throw new ArgumentNullException(nameof(documents));
+        this.scenes = scenes ?? throw new ArgumentNullException(nameof(scenes));
         this.assets = assets ?? throw new ArgumentNullException(nameof(assets));
         this.pipeline = pipeline ?? throw new ArgumentNullException(nameof(pipeline));
         this.session = session ?? throw new ArgumentNullException(nameof(session));
@@ -85,7 +88,7 @@ internal sealed partial class SceneContentDemand : IDisposable
 
     private void OnDocumentOpened(object? sender, DocumentEventArgs args)
     {
-        if (this.disposed || args.Document.Content is not SceneContent || this.followed.Exists(entry => ReferenceEquals(entry.Document, args.Document)))
+        if (this.disposed || this.scenes.Of(args.Document) is null || this.followed.Exists(entry => ReferenceEquals(entry.Document, args.Document)))
         {
             return;
         }
@@ -138,7 +141,12 @@ internal sealed partial class SceneContentDemand : IDisposable
             previous.Authoring.Changed -= entry.OnChanged;
         }
 
-        var content = SceneContent.Of(entry.Document);
+        if (this.scenes.Of(entry.Document) is not { } content)
+        {
+            entry.Content = null;
+            return;
+        }
+
         entry.Content = content;
         content.Authoring.Changed += entry.OnChanged;
         this.Refresh(entry, demandAll);

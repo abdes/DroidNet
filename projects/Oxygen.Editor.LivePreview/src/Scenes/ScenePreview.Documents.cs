@@ -19,6 +19,7 @@ internal sealed partial class ScenePreview
 {
     private readonly Lock documentGate = new();
     private readonly OpenDocuments documents;
+    private readonly DocumentScenes scenes;
     private readonly Dictionary<SceneId, DocumentLifetime> openScenes = [];
 
     // In the order they opened: the engine shows the last one.
@@ -40,6 +41,26 @@ internal sealed partial class ScenePreview
         {
             return this.ready.Contains(document);
         }
+    }
+
+    /// <inheritdoc/>
+    public bool Show(DocumentId document)
+    {
+        if (this.disposed || this.followed.Find(entry => entry.Document.Id == document) is not { } entry)
+        {
+            return false;
+        }
+
+        lock (this.documentGate)
+        {
+            if (this.shown == document)
+            {
+                return true;
+            }
+        }
+
+        this.Show(entry);
+        return true;
     }
 
     /// <inheritdoc/>
@@ -169,7 +190,7 @@ internal sealed partial class ScenePreview
 
     private void OnDocumentOpened(object? sender, DocumentEventArgs args)
     {
-        if (this.disposed || args.Document.Content is not SceneContent || this.followed.Exists(entry => ReferenceEquals(entry.Document, args.Document)))
+        if (this.disposed || this.scenes.Of(args.Document) is null || this.followed.Exists(entry => ReferenceEquals(entry.Document, args.Document)))
         {
             return;
         }
@@ -185,7 +206,7 @@ internal sealed partial class ScenePreview
 
     private void OnContentReplaced(FollowedDocument entry)
     {
-        if (this.disposed || entry.Document.Content is not SceneContent content)
+        if (this.disposed || this.scenes.Of(entry.Document) is not { } content)
         {
             return;
         }
@@ -237,8 +258,7 @@ internal sealed partial class ScenePreview
     // The engine shows one scene: showing a document retires the projection of the one shown before.
     private void Show(FollowedDocument entry)
     {
-        var content = SceneContent.Of(entry.Document);
-        if (!this.RegisterDocument(content, entry.Owner))
+        if (this.scenes.Of(entry.Document) is not { } content || !this.RegisterDocument(content, entry.Owner))
         {
             return;
         }

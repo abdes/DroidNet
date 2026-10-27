@@ -11,8 +11,9 @@ using Oxygen.Editor.Shell.Contributions;
 namespace Oxygen.Editor.ModelEditor;
 
 /// <summary>
-///     The model family's UI in a project session's scope: the Import model dialog, which the Content Explorer opens
-///     through <see cref="IModelImportPrompt"/>.
+///     The model family's UI in a project session's scope: the Model Editor of model documents, the Import model
+///     dialog, which the Content Explorer opens through <see cref="IModelImportPrompt"/>, and the model facts that
+///     Properties shows through <see cref="IModelFacts"/>.
 /// </summary>
 public sealed class ModelEditorSessionModule : IScopeModule<ISessionLayer>
 {
@@ -27,5 +28,8 @@ public sealed class ModelEditorSessionModule : IScopeModule<ISessionLayer>
     {
         ArgumentNullException.ThrowIfNull(scope);
         scope.Register<IModelImportPrompt, ModelImportPrompt>(Reuse.Singleton);
+        scope.Register<IModelFacts, ModelFactsReader>(Reuse.Singleton);
+        scope.Register<IDocumentEditorProvider, ModelEditorProvider>(Reuse.Singleton);
+        scope.Register<ModelEditorServices>(Reuse.Singleton);
     }
 }

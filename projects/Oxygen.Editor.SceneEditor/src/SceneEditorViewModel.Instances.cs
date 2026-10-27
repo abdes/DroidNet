@@ -9,6 +9,7 @@ using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Edits.Hierarchy;
 using Oxygen.Editor.Scenes.Nodes;
 using Oxygen.Editor.Scenes.Selection;
+using Oxygen.Editor.Viewports;
 using Oxygen.Editor.World;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
@@ -45,7 +46,7 @@ public partial class SceneEditorViewModel
     /// </summary>
     /// <param name="source">The model's source file or the authored scene.</param>
     /// <returns><see langword="true"/> when the instance was placed.</returns>
-    internal async Task<bool> AddInstanceAsync(AssetPath source)
+    public async Task<bool> AddInstanceAsync(AssetPath source)
     {
         ArgumentNullException.ThrowIfNull(source);
         this.LogAddInstanceRequested(source);

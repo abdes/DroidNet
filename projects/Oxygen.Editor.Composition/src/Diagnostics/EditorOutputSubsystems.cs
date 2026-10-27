@@ -113,6 +113,7 @@ public static class EditorOutputSubsystems
         new("Oxygen.Editor.SceneEditor", Scene),
         new("Oxygen.Editor.SceneExplorer", Scene),
         new("Oxygen.Editor.SceneInspector", Scene),
+        new("Oxygen.Editor.Viewports", Scene),
 
         new("Oxygen.Editor.Scripting", Scripting),
 

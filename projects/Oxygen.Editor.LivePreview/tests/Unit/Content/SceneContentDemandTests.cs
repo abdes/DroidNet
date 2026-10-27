@@ -160,7 +160,7 @@ public sealed partial class SceneContentDemandTests
                     this.cooks.Add(cook);
                     return cook.Task.WaitAsync(token);
                 });
-            this.demand = new SceneContentDemand(this.Documents.Open, this.assets.Object, this.pipeline.Object, this.Documents.Session);
+            this.demand = new SceneContentDemand(this.Documents.Open, new DocumentScenes(this.Documents.Open), this.assets.Object, this.pipeline.Object, this.Documents.Session);
         }
 
         public TestSceneDocuments Documents { get; } = new(TestProject.Create(new MockFileSystem(), @"C:\LivePreviewTests"));

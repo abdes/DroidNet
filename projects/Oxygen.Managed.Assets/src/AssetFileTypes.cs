@@ -89,6 +89,9 @@ public static class AssetFileTypes
     /// <summary>The suffix of the import settings stored beside a model.</summary>
     public const string ImportSettings = ".import.json";
 
+    /// <summary>The suffix of a model's preview, after the model's whole file name: <c>Car.glb.preview.json</c>.</summary>
+    public const string ModelPreview = ".preview.json";
+
     private static readonly (string Extension, AssetType Type)[] CookedAssets =
     [
         (Material, AssetType.Material),
@@ -114,6 +117,7 @@ public static class AssetFileTypes
                 ReferenceFields = [new("contexts/*/mappings/*/action")],
             },
             new(ImportSettings, AssetFileCategory.ImportSettings, CookedExtension: null, AssetType.Unknown),
+            new(ModelPreview, AssetFileCategory.ModelPreview, CookedExtension: null, AssetType.Unknown),
             new(LuaScript, AssetFileCategory.Script, Script, AssetType.Script),
             new(LuauScript, AssetFileCategory.Script, Script, AssetType.Script),
             new(TextureDescriptor, AssetFileCategory.Descriptor, Texture, AssetType.Unknown) { CookedFileKind = FileKind.TextureDescriptor },
@@ -228,6 +232,15 @@ public static class AssetFileTypes
     /// <returns><see langword="true"/> when the file is a known type of that category.</returns>
     public static bool Is(string path, AssetFileCategory category) => Find(path)?.Category == category;
 
+    /// <summary>Gets the name of a model's preview file, beside the model: <c>Car.glb</c> has <c>Car.glb.preview.json</c>.</summary>
+    /// <param name="modelPath">The model's file name, path or virtual path.</param>
+    /// <returns>The preview's file name, path or virtual path.</returns>
+    public static string PreviewOf(string modelPath)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(modelPath);
+        return modelPath + ModelPreview;
+    }
+
     /// <summary>Removes a file's type suffix, leaving the name an asset is known by.</summary>
     /// <param name="path">A file name, path or virtual path.</param>
     /// <returns>The path without its type suffix, or the path itself when its type is unknown.</returns>
@@ -238,7 +251,7 @@ public static class AssetFileTypes
     /// Gets the identity of the asset a source file stands for: the cooked descriptor it is or cooks into
     /// (<c>Red.omat.json</c> and <c>Red.omat</c> are <c>Red.omat</c>, <c>Orbit.lua</c> is <c>Orbit.oscript</c>), and
     /// otherwise the file without its authoring suffix (<c>Player.input.json</c> is the container
-    /// <c>Player.input</c>). Import settings stand for no asset and keep their path.
+    /// <c>Player.input</c>). Import settings and model previews stand for no asset and keep their path.
     /// </summary>
     /// <param name="source">The source file's path.</param>
     /// <returns>The identity.</returns>
@@ -247,7 +260,7 @@ public static class AssetFileTypes
         ArgumentNullException.ThrowIfNull(source);
         return Find(source.Name) switch
         {
-            { Category: AssetFileCategory.ImportSettings } => source,
+            { Category: AssetFileCategory.ImportSettings or AssetFileCategory.ModelPreview } => source,
             { CookedExtension: { } extension } type => source.WithName(source.Name[..^type.Suffix.Length] + extension),
             _ => source.WithoutAuthoringSuffix(),
         };

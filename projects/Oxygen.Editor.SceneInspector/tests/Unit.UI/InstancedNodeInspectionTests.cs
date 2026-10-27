@@ -117,6 +117,26 @@ internal sealed class InstancedNodeInspectionTests : DroidNet.Tests.VisualUserIn
         return Task.CompletedTask;
     });
 
+    /// <summary>
+    /// The header names the source alone when the instance bears its name, as the model's own document places it
+    /// (model editor 5.4).
+    /// </summary>
+    /// <returns>The test task.</returns>
+    [TestMethod]
+    public Task HeaderNamesTheSourceAloneWhenTheInstanceBearsItsName() => EnqueueAsync(() =>
+    {
+        using var fixture = new SceneAuthoringFixture(instanceSource: Car);
+        fixture.Structures.PublishValues(Car, NodePath.Of(Door), DoorValues(positionX: 2f));
+        var root = fixture.InstanceRoot!;
+        using var host = fixture.CreateInspectorHost("Transform");
+        root.Metadata.Name = Car.Name;
+
+        fixture.Selection.SetSelection(fixture.TestScene.DocumentId, [new NodeReference(root.Id, NodePath.Of(Door))], "Test");
+
+        _ = host.SelectedNodeOrigin.Should().Be("in Car.glb (model)");
+        return Task.CompletedTask;
+    });
+
     /// <summary><i>Select instance</i> selects the instance root.</summary>
     /// <returns>The test task.</returns>
     [TestMethod]

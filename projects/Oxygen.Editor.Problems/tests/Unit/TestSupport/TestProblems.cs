@@ -3,9 +3,9 @@
 // SPDX-License-Identifier: MIT
 
 using Moq;
-using Oxygen.Editor.Cooking;
 using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Shell.Desktop;
+using Oxygen.Editor.Shell.Windows;
 using Oxygen.Managed.Assets.Diagnostics;
 using Testably.Abstractions.Testing;
 
@@ -26,6 +26,6 @@ internal static class TestProblems
     /// <param name="nodes">What shows the node a runtime problem names.</param>
     /// <param name="cookIssues">What shows the node a cook's problem names; one that accepts nothing by default.</param>
     /// <returns>The view model.</returns>
-    internal static ProblemsViewModel CreateModel(TestSession session, IEnumerable<IAssetProblemSource> sources, ICodeEditorService codeEditor, IRuntimeProblemNodes nodes, ICookRecovery? cookIssues = null)
-        => new(new AssetProblemSources(sources), codeEditor, session, nodes, cookIssues ?? Mock.Of<ICookRecovery>());
+    internal static ProblemsViewModel CreateModel(TestSession session, IEnumerable<IAssetProblemSource> sources, ICodeEditorService codeEditor, IRuntimeProblemNodes nodes, ICookIssueReveal? cookIssues = null)
+        => new(new AssetProblemSources(sources), codeEditor, session, nodes, cookIssues ?? Mock.Of<ICookIssueReveal>());
 }

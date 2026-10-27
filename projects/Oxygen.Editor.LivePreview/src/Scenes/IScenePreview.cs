@@ -25,6 +25,15 @@ public interface IScenePreview
     /// <returns><see langword="true"/> when the engine shows the document's current content.</returns>
     public bool IsReady(DocumentId document);
 
+    /// <summary>
+    /// Shows the scene of an open document in the engine, as the workspace's active document; the engine shows one scene,
+    /// so the one shown before is retired. Assets it loaded stay loaded.
+    /// </summary>
+    /// <param name="document">An open document that shows a scene: a scene document or a model document.</param>
+    /// <returns><see langword="false"/> when no open document with a scene has this identity.</returns>
+    /// <remarks>Call it on the documents' thread. Showing the document already shown changes nothing.</remarks>
+    public bool Show(DocumentId document);
+
     /// <summary>Gets the number of a scene document's fields still waiting for the engine.</summary>
     /// <param name="document">The scene document.</param>
     /// <returns>The number of fields, zero when none waits or the document is not open.</returns>

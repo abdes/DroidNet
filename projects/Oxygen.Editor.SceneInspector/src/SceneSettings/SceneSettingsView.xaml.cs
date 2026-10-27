@@ -69,13 +69,14 @@ public sealed partial class SceneSettingsView
         {
             this.observedModel = model;
             model.FieldFocusRequested += this.OnFieldFocusRequested;
+            model.PropertyChanged += this.OnSectionPropertyChanged;
             model.Exposure.PropertyChanged += this.OnSectionPropertyChanged;
             model.PostProcessing.PropertyChanged += this.OnSectionPropertyChanged;
             model.Backdrop.PropertyChanged += this.OnSectionPropertyChanged;
             model.SkyLight.PropertyChanged += this.OnSectionPropertyChanged;
             model.SceneReferences.PropertyChanged += this.OnSectionPropertyChanged;
             model.Play.PropertyChanged += this.OnSectionPropertyChanged;
-            this.ApplyScenePropertyFilter();
+            this.ShowApplicableScope();
             this.FocusPendingField();
         }
     }
@@ -85,6 +86,7 @@ public sealed partial class SceneSettingsView
         if (this.observedModel is { } model)
         {
             model.FieldFocusRequested -= this.OnFieldFocusRequested;
+            model.PropertyChanged -= this.OnSectionPropertyChanged;
             model.Exposure.PropertyChanged -= this.OnSectionPropertyChanged;
             model.PostProcessing.PropertyChanged -= this.OnSectionPropertyChanged;
             model.Backdrop.PropertyChanged -= this.OnSectionPropertyChanged;
@@ -97,6 +99,12 @@ public sealed partial class SceneSettingsView
 
     private void OnSectionPropertyChanged(object? sender, PropertyChangedEventArgs args)
     {
+        if (ReferenceEquals(sender, this.observedModel) && args.PropertyName is nameof(SceneSettingsViewModel.HasSceneOwnSettings))
+        {
+            this.ShowApplicableScope();
+            return;
+        }
+
         if (ReferenceEquals(sender, this.observedModel?.SceneReferences) || ReferenceEquals(sender, this.observedModel?.Play))
         {
             this.ApplyScenePropertyFilter();
@@ -153,14 +161,31 @@ public sealed partial class SceneSettingsView
         this.registry.Apply(this.ScenePropertySearchBox.Text, this.propertyScope, modes);
         this.EnvironmentHeading.Visibility = this.search.IsScopeVisible(InspectorPropertyScope.Environment) ? Visibility.Visible : Visibility.Collapsed;
         this.PostProcessingHeading.Visibility = this.search.IsScopeVisible(InspectorPropertyScope.PostProcessing) ? Visibility.Visible : Visibility.Collapsed;
-        var showReferences = (this.propertyScope is InspectorPropertyScope.All or InspectorPropertyScope.SceneReferences)
+        // A model's preview has no Play settings or references of its own: their sections never show.
+        var showReferences = model.HasSceneOwnSettings
+            && (this.propertyScope is InspectorPropertyScope.All or InspectorPropertyScope.SceneReferences)
             && model.SceneReferences.MatchesSearch(this.ScenePropertySearchBox.Text);
         this.SceneReferencesView.Visibility = showReferences ? Visibility.Visible : Visibility.Collapsed;
-        var showPlay = (this.propertyScope is InspectorPropertyScope.All or InspectorPropertyScope.Play)
+        var showPlay = model.HasSceneOwnSettings
+            && (this.propertyScope is InspectorPropertyScope.All or InspectorPropertyScope.Play)
             && model.Play.MatchesSearch(this.ScenePropertySearchBox.Text);
         this.PlayView.Visibility = showPlay ? Visibility.Visible : Visibility.Collapsed;
         this.ClearPropertySearchButton.Visibility = this.search.IsSearching ? Visibility.Visible : Visibility.Collapsed;
         this.NoScenePropertyMatches.Visibility = this.search.HasNoMatches && !showReferences && !showPlay ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    // The Play and References scopes hide on a model's preview, which has neither: a scope that hides while selected
+    // gives way to All, whose selection applies the filter.
+    private void ShowApplicableScope()
+    {
+        if (this.observedModel is { HasSceneOwnSettings: false }
+            && this.propertyScope is InspectorPropertyScope.Play or InspectorPropertyScope.SceneReferences)
+        {
+            this.ScenePropertyScopeSelector.SelectedIndex = 0;
+            return;
+        }
+
+        this.ApplyScenePropertyFilter();
     }
 
     private void OnFieldFocusRequested(object? sender, EventArgs args) => this.FocusPendingField();

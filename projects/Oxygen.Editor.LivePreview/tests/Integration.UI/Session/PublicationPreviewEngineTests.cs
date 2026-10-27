@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Editor.Scenes.Documents;
 using System.Numerics;
 using AwesomeAssertions;
 using Oxygen.Editor.ContentPipeline;
@@ -40,7 +41,7 @@ public sealed partial class PublicationPreviewEngineTests : DroidNet.Tests.Visua
         await using var sessionLifetime = session.ConfigureAwait(true);
         _ = (await session.StartAsync(token).ConfigureAwait(true)).Should().BeTrue();
         using var documents = new TestSceneDocuments(TestProject.Create(new MockFileSystem(), @"C:\LivePreviewTests"));
-        using var preview = new ScenePreview(engine, documents.Open, documents.Session, new SceneStructureStore());
+        using var preview = new ScenePreview(engine, documents.Open, new DocumentScenes(documents.Open), documents.Session, new SceneStructureStore());
         var built = new Scene { Name = "Test Scene" };
         built.RootNodes.Add(new SceneNode(built, "Cube"));
         var document = await documents.OpenAsync(built.Dehydrate()).ConfigureAwait(true);

@@ -8,6 +8,7 @@ using DroidNet.Controls.Menus;
 using DroidNet.Documents;
 using DroidNet.Routing;
 using Moq;
+using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.Scenes.Testing;
@@ -339,6 +340,7 @@ internal sealed partial class SceneExplorerContextMenuTests : DroidNet.Tests.Vis
                 Mock.Of<IRouter>(),
                 this.Documents,
                 this.OpenDocuments,
+                new DocumentScenes(this.OpenDocuments),
                 new SceneSelectionService(),
                 views: views);
     }

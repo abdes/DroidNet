@@ -22,14 +22,15 @@ public static class DocumentKinds
             .MaxBy(static suffix => suffix.Length);
     }
 
-    /// <summary>Gets a file's name without the suffix of its kind.</summary>
+    /// <summary>Gets a file's name without the suffix of its kind, unless the kind's titles keep it.</summary>
     /// <param name="kind">The kind.</param>
     /// <param name="path">The file's path.</param>
     /// <returns>The document's title.</returns>
     public static string TitleOf(IDocumentKind kind, FileSystemPath path)
     {
+        ArgumentNullException.ThrowIfNull(kind);
         ArgumentNullException.ThrowIfNull(path);
         var name = path.Name;
-        return SuffixOf(kind, path) is { } suffix ? name[..^suffix.Length] : name;
+        return !kind.TitleKeepsSuffix && SuffixOf(kind, path) is { } suffix ? name[..^suffix.Length] : name;
     }
 }

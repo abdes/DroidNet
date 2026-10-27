@@ -3,7 +3,7 @@
 Status: **design for owner review** (ED-M09 item 14, with
 [scene instances](scene-instances.md)).
 
-Last Updated: 2026-10-26
+Last Updated: 2026-10-28
 
 ## 1. Purpose
 
@@ -79,23 +79,47 @@ imports but states no family rule), `ModelDocumentKind`, `ModelContent` and the
 model's problems; `Oxygen.Editor.ModelEditor` holds the document's view and
 view model, as `Oxygen.Editor.MaterialEditor` does for materials.
 
-`ModelDocumentKind` opens a model source file (`.glb`, `.gltf`, `.fbx`). The
-document's content, `ModelContent`, holds:
+`ModelDocumentKind` opens a model source file (`.glb`, `.gltf`, `.fbx`); the
+tab's title keeps the extension (`Car.glb`). The document's content,
+`ModelContent`, holds the model's source and follows it when it moves, and the
+model's import settings, `ModelImportSettings`, read from its model import
+record (`<ProjectRoot>/imports/<source_identity>.import.json`,
+[scene instances](scene-instances.md) NGN14), which Save writes atomically and
+its history records. The editor never writes the source file.
 
-- the model's import settings, `ModelImportSettings`, read from its model
-  import record (`<ProjectRoot>/imports/<source_identity>.import.json`,
-  [scene instances](scene-instances.md) NGN14), which Save writes atomically
-  and its history records;
-- a **preview scene**, built in memory when the document opens and never
-  saved: one instance root of the model (a model instance, scene instances
-  section 3) at the origin and a preview environment (a sky light, one
-  directional light and the ground grid).
+The **preview scene** is built in memory when the document is first shown and
+never saved: one instance root of the model (a model instance, scene instances
+section 3) at the origin, named after the model, and a preview environment: a
+physical sky, a directional light that is the sky's sun (100 000 lx), a sky
+light captured from the sky, and a fixed manual exposure (EV100 14), so the
+background never drives the model's exposure. Models ranks below Scenes, so
+`DocumentScenes` in `Oxygen.Editor.Scenes` owns it: it answers which scene any
+open document shows, a scene document's own or a model document's preview, and
+Live Preview, the Scene Explorer and the Properties pane all ask it. The preview
+is kept in a file beside the model, `Car.glb.preview.json` (the model's whole
+file name, so `Car.glb` and `Car.fbx` each have their own): its environment and
+its sun, in the editor's scene format, without the model it places. The file is
+written shortly after each change and when the document closes, and read when
+the preview is built; a missing or unreadable file shows the default preview.
+It stands for no asset: the Content Explorer does not list it and the cook
+ignores it, it moves, renames and is deleted with its model, and a relocation
+rewrites the references in it as in a scene. Whether it is shared through
+version control is the project's choice. The preview scene's identity is the
+model's source identity, so per-user view state, the viewport's camera and view
+options, is kept across renames as a scene's is (`ViewportStateService`). The model
+in the preview is read-only (`SceneReadOnly`): every edit of the model or of
+the scene's structure is refused with `Scene.ReadOnly`, whose reason names the
+model. How the model is looked at stays editable: the environment and the sun
+take edits, recorded in the preview's own history so the model's document
+never shows a change; the viewport's _Preview environment_ and exposure change
+the preview outside any history.
 
 Live Preview projects the preview scene like any scene: the instancing, the
 picking and the instanced-node selection of
 [scene instances](scene-instances.md) do all the work. One Model Editor exists
-per model; opening the model again activates its tab. Closing the tab asks to
-save unsaved settings.
+per model; opening the model again activates its tab, and double-clicking an
+imported model in the Content Explorer opens it. Closing the tab asks to save
+unsaved settings.
 
 ## 5. Layout
 
@@ -115,7 +139,7 @@ equivalents sit:
 | First group          | Save (Ctrl+S), Cook scene         | Save (Ctrl+S): writes the import settings and reimports; Reimport, enabled when the source changed or the last import failed                                     |
 | Second group         | Add, Browse to asset, Environment | Add to scene, with its label; Browse to asset (Ctrl+B): the selected node's geometry or material, else the model file                                            |
 | Transport and status | Play, Stop, "Ready · Standalone"  | The import status: "Imported", "Source changed", "Importing…", "Import failed", followed by the problem count, a link to the Problems pane filtered to the model |
-| End                  | Settings                          | Settings: the same preview settings flyout (frame pacing, grid), shared with the scene editor                                                                    |
+| End                  | Settings                          | Settings: the same preview settings flyout (frame pacing, grid), shared with the scene editor; _Reset preview_ returns the sky, sun and exposure to the defaults |
 
 The scene's Add menu, Environment and the Play transport do not apply to a
 model and are absent, not disabled.
@@ -129,8 +153,9 @@ follows. In `Viewing`:
 | Viewport element                                  | Viewing profile                                                                                |
 | ------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
 | View camera (Turntable / Fly, direction, lens)    | Shown                                                                                          |
-| View mode (Lit, Unlit, Wireframe, …)              | Shown                                                                                          |
+| View mode (Lit, Unlit, Wireframe, …)              | Shown, with an Exposure slider: stops added to the preview's fixed exposure, −4 to +4          |
 | Show (grid, selection outline, icons, statistics) | Shown; the camera preview entry is hidden (a model has no authored cameras to preview through) |
+| Preview environment (in Show)                     | Shown: lights the model with the preview's sky and sun; cleared, only the model's own lights   |
 | Frame selection (F, Shift+F)                      | Shown                                                                                          |
 | Select, Move, Rotate, Scale tool strip            | Hidden; a click selects                                                                        |
 | Transform space, snapping and its increments      | Hidden                                                                                         |
@@ -270,15 +295,23 @@ opens the same flyout ([scene instances](scene-instances.md) 6.4). Mockup:
 
 ### 5.4 The docked panes on a model
 
-- **Scene Explorer:** the model's nodes, rooted at `Car.glb`, from the preview
-  scene's instance with the instance root not shown. Rows are the read-only
-  instanced rows of scene instances section 6.2, with the Meshes, Lights and
-  Cameras filters; the add, folder, rename, cut, copy, paste and delete
-  buttons at its foot are disabled with a tooltip naming the model.
-- **Properties:** the Scene Inspector on the selected node, read-only, with
-  "in Car.glb (model)" in its header. On the root, it shows the model's facts:
-  source file, last import, and the counts of nodes, meshes, triangles, LODs,
-  materials and textures.
+- **Scene Explorer:** the preview scene's row, `Car.glb preview`, holding the
+  model's root, `Car.glb`, and its nodes; the sun that lights the preview is
+  not listed. The model's rows are the read-only instanced rows of scene
+  instances section 6.2, with the Meshes, Lights and Cameras filters; the add,
+  folder, rename, cut, copy, paste and delete buttons at its foot are disabled
+  with a tooltip naming the model.
+- **Properties:** three views, as the selection is:
+  - the preview scene's row, or nothing selected: the preview's scene
+    settings, how the model is looked at: the sun (azimuth, elevation,
+    intensity), the sky, fog, exposure and post-processing. The Play and
+    References scopes, which a model has none of, are hidden.
+  - the model's root: one card titled with the model's name and its facts
+    (source file, last import, and the counts of nodes, meshes, triangles,
+    LODs, materials and textures), without the node header, its commands,
+    the notice or the root's component sections, which are the preview's.
+  - one of the model's nodes: the Scene Inspector, read-only, with "in
+    Car.glb (model)" in its header and a _Read-only_ notice naming the model.
 - **Problems:** the model's last import diagnostics, kept with its publication
   so they show whenever the document opens; each names its node, mesh,
   material or texture, and selecting it selects that node.

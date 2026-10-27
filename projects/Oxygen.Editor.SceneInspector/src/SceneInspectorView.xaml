@@ -45,150 +45,197 @@
                 Message="{x:Bind ViewModel.PendingLiveSyncMessage, Mode=OneWay}"
                 Severity="Warning"
                 Visibility="{x:Bind ViewModel.HasPendingLiveSyncEdits, Mode=OneWay, Converter={StaticResource HasSelectionToVisibilityConverter}, ConverterParameter=False}" />
-            <Border
-                x:Name="CompactNodeHeader"
-                Grid.Row="1"
-                Margin="0,0,0,4"
-                Padding="8,6"
-                Background="{ThemeResource LayerFillColorDefaultBrush}">
-                <StackPanel Spacing="6">
-                    <Grid ColumnSpacing="8">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <FontIcon FontSize="18" Glyph="&#xE9E9;" />
-                        <TextBlock
-                            Grid.Column="1"
-                            FontSize="16"
-                            FontWeight="SemiBold"
-                            Text="{x:Bind ViewModel.InspectorTitle, Mode=OneWay}" />
-                        <FontIcon
-                            Grid.Column="2"
-                            FontSize="14"
-                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                            Glyph="&#xE897;"
-                            ToolTipService.ToolTip="Scene and object properties" />
-                    </Grid>
-                    <Grid>
-                        <local:SceneNodeDetailsView
-                            x:Name="NodeDetails"
-                            AllComponentsRequested="OnAllComponentsRequested"
-                            ApplyMenu="{x:Bind ViewModel.SelectedNodeApplyMenu, Mode=OneWay}"
-                            IsAllComponentsSelected="{x:Bind ViewModel.IsAllComponentsSelected, Mode=OneWay}"
-                            IsEnabled="{x:Bind ViewModel.CanUseNodeHeader, Mode=OneWay}"
-                            LoggerFactory="{x:Bind ViewModel.LoggerFactory}"
-                            Node="{x:Bind ViewModel.SelectedNode, Mode=OneWay}"
-                            NodeEdits="{x:Bind ViewModel, Mode=OneWay}"
-                            Origin="{x:Bind ViewModel.SelectedNodeOrigin, Mode=OneWay}"
-                            SelectInstanceCommand="{x:Bind ViewModel.SelectInstanceCommand}"
-                            SelectedComponent="{x:Bind ViewModel.SelectedComponent, Mode=OneWay}"
-                            StructureRefusal="{x:Bind ViewModel.SelectedNodeStructureRefusal, Mode=OneWay}"
-                            Visibility="{x:Bind ViewModel.IsSingleItemSelected, Mode=OneWay, Converter={StaticResource HasSelectionToVisibilityConverter}, ConverterParameter=False}" />
-                        <Grid MinHeight="32" Visibility="{x:Bind ViewModel.HasMultipleItems, Mode=OneWay, Converter={StaticResource HasSelectionToVisibilityConverter}, ConverterParameter=False}">
+            <StackPanel Grid.Row="1">
+                <!--  The model as a whole, its root or nothing selected in its own document: its name and its facts  -->
+                <Border
+                    x:Name="ModelCard"
+                    Margin="0,0,0,4"
+                    Padding="8,6"
+                    AutomationProperties.Name="Model facts"
+                    Background="{ThemeResource LayerFillColorDefaultBrush}"
+                    Visibility="{x:Bind ViewModel.ShowsModelCard, Mode=OneWay, Converter={StaticResource HasSelectionToVisibilityConverter}, ConverterParameter=False}">
+                    <StackPanel Spacing="8">
+                        <Grid ColumnSpacing="8">
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
-                            <TextBlock VerticalAlignment="Center" FontWeight="SemiBold">
-                                <Run Text="{x:Bind ViewModel.ItemsCount, Mode=OneWay}" />
-                                <Run Text=" objects" />
-                            </TextBlock>
-                            <controls:ToolBar
+                            <FontIcon FontSize="18" Glyph="&#xF158;" />
+                            <TextBlock
                                 Grid.Column="1"
-                                Background="Transparent"
-                                IsCompact="True">
-                                <controls:ToolBarToggleButton
-                                    x:Name="MultiAllComponentsButton"
-                                    AutomationProperties.Name="All components"
-                                    Checked="OnAllComponentsChanged"
-                                    IsChecked="{x:Bind ViewModel.IsAllComponentsSelected, Mode=OneWay}"
-                                    Label="All components"
-                                    ToolBarLabelPosition="Collapsed"
-                                    ToolTipService.ToolTip="Show all component properties"
-                                    Unchecked="OnAllComponentsChanged">
-                                    <controls:ToolBarToggleButton.Icon>
-                                        <SymbolIconSource Symbol="AllApps" />
-                                    </controls:ToolBarToggleButton.Icon>
-                                </controls:ToolBarToggleButton>
-                            </controls:ToolBar>
+                                FontSize="16"
+                                FontWeight="SemiBold"
+                                Text="{x:Bind ViewModel.ModelTitle, Mode=OneWay}"
+                                TextTrimming="CharacterEllipsis" />
                         </Grid>
-                    </Grid>
-                    <ScrollViewer
-                        x:Name="ComponentScroll"
-                        MaxHeight="128"
-                        HorizontalScrollBarVisibility="Disabled"
-                        HorizontalScrollMode="Disabled"
-                        PreviewKeyDown="OnComponentsKeyDown"
-                        VerticalScrollBarVisibility="Auto"
-                        Visibility="{x:Bind ViewModel.HasItems, Mode=OneWay, Converter={StaticResource HasSelectionToVisibilityConverter}, ConverterParameter=False}">
-                        <ItemsRepeater x:Name="ComponentSelector" ItemsSource="{x:Bind ViewModel.ComponentFilters}">
+                        <ItemsRepeater ItemsSource="{x:Bind ViewModel.ModelFactRows, Mode=OneWay}">
                             <ItemsRepeater.Layout>
-                                <StackLayout />
+                                <StackLayout Spacing="2" />
                             </ItemsRepeater.Layout>
                             <ItemsRepeater.ItemTemplate>
-                                <DataTemplate x:DataType="local:InspectorComponentFilter">
-                                    <Grid ToolTipService.ToolTip="{x:Bind ToolTip, Mode=OneWay}">
-                                        <ToggleButton
-                                            Height="32"
-                                            Padding="6,2"
-                                            HorizontalAlignment="Stretch"
-                                            HorizontalContentAlignment="Stretch"
-                                            AutomationProperties.HelpText="{x:Bind UnavailableReason, Mode=OneWay}"
-                                            AutomationProperties.Name="{x:Bind Label}"
-                                            Checked="OnComponentFilterChanged"
-                                            ContextRequested="OnComponentFilterContextRequested"
-                                            IsChecked="{x:Bind IsSelected, Mode=OneWay}"
-                                            IsEnabled="{x:Bind IsAvailable, Mode=OneWay}"
-                                            Tag="{x:Bind}"
-                                            Unchecked="OnComponentFilterChanged">
-                                            <Grid ColumnSpacing="8">
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="16" />
-                                                    <ColumnDefinition Width="*" />
-                                                    <ColumnDefinition Width="Auto" />
-                                                </Grid.ColumnDefinitions>
-                                                <FontIcon FontSize="14" Glyph="{x:Bind ComponentType, Converter={StaticResource ComponentToGlyphConverter}}" />
-                                                <TextBlock
-                                                    Grid.Column="1"
-                                                    VerticalAlignment="Center"
-                                                    Text="{x:Bind Label}"
-                                                    TextTrimming="CharacterEllipsis" />
-                                                <StackPanel
-                                                    Grid.Column="2"
-                                                    VerticalAlignment="Center"
-                                                    Orientation="Horizontal"
-                                                    Spacing="4">
-                                                    <FontIcon
-                                                        AutomationProperties.Name="Component validation error"
-                                                        FontSize="12"
-                                                        Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                                                        Glyph="&#xEA39;"
-                                                        Visibility="{x:Bind HasValidationErrors, Mode=OneWay, Converter={StaticResource HasSelectionToVisibilityConverter}, ConverterParameter=False}" />
-                                                    <TextBlock
-                                                        VerticalAlignment="Center"
-                                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                        Text="{x:Bind StatusLabel, Mode=OneWay}" />
-                                                </StackPanel>
-                                            </Grid>
-                                        </ToggleButton>
+                                <DataTemplate x:DataType="local:ModelFactRow">
+                                    <Grid ColumnSpacing="8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="96" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{x:Bind Label}" />
+                                        <TextBlock
+                                            Grid.Column="1"
+                                            IsTextSelectionEnabled="True"
+                                            Text="{x:Bind Value}"
+                                            TextWrapping="Wrap" />
                                     </Grid>
                                 </DataTemplate>
                             </ItemsRepeater.ItemTemplate>
                         </ItemsRepeater>
-                    </ScrollViewer>
-                </StackPanel>
-            </Border>
+                    </StackPanel>
+                </Border>
+                <Border
+                    x:Name="CompactNodeHeader"
+                    Margin="0,0,0,4"
+                    Padding="8,6"
+                    Background="{ThemeResource LayerFillColorDefaultBrush}"
+                    Visibility="{x:Bind ViewModel.ShowsModelCard, Mode=OneWay, Converter={StaticResource HasSelectionToVisibilityConverter}, ConverterParameter=True}">
+                    <StackPanel Spacing="6">
+                        <Grid ColumnSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <FontIcon FontSize="18" Glyph="&#xE9E9;" />
+                            <TextBlock
+                                Grid.Column="1"
+                                FontSize="16"
+                                FontWeight="SemiBold"
+                                Text="{x:Bind ViewModel.InspectorTitle, Mode=OneWay}" />
+                            <FontIcon
+                                Grid.Column="2"
+                                FontSize="14"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Glyph="&#xE897;"
+                                ToolTipService.ToolTip="Scene and object properties" />
+                        </Grid>
+                        <Grid>
+                            <local:SceneNodeDetailsView
+                                x:Name="NodeDetails"
+                                AllComponentsRequested="OnAllComponentsRequested"
+                                ApplyMenu="{x:Bind ViewModel.SelectedNodeApplyMenu, Mode=OneWay}"
+                                IsAllComponentsSelected="{x:Bind ViewModel.IsAllComponentsSelected, Mode=OneWay}"
+                                IsEnabled="{x:Bind ViewModel.CanUseNodeHeader, Mode=OneWay}"
+                                LoggerFactory="{x:Bind ViewModel.LoggerFactory}"
+                                Node="{x:Bind ViewModel.SelectedNode, Mode=OneWay}"
+                                NodeEdits="{x:Bind ViewModel, Mode=OneWay}"
+                                Origin="{x:Bind ViewModel.SelectedNodeOrigin, Mode=OneWay}"
+                                SelectInstanceCommand="{x:Bind ViewModel.SelectInstanceCommand}"
+                                SelectedComponent="{x:Bind ViewModel.SelectedComponent, Mode=OneWay}"
+                                StructureRefusal="{x:Bind ViewModel.SelectedNodeStructureRefusal, Mode=OneWay}"
+                                Visibility="{x:Bind ViewModel.IsSingleItemSelected, Mode=OneWay, Converter={StaticResource HasSelectionToVisibilityConverter}, ConverterParameter=False}" />
+                            <Grid MinHeight="32" Visibility="{x:Bind ViewModel.HasMultipleItems, Mode=OneWay, Converter={StaticResource HasSelectionToVisibilityConverter}, ConverterParameter=False}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock VerticalAlignment="Center" FontWeight="SemiBold">
+                                    <Run Text="{x:Bind ViewModel.ItemsCount, Mode=OneWay}" />
+                                    <Run Text=" objects" />
+                                </TextBlock>
+                                <controls:ToolBar
+                                    Grid.Column="1"
+                                    Background="Transparent"
+                                    IsCompact="True">
+                                    <controls:ToolBarToggleButton
+                                        x:Name="MultiAllComponentsButton"
+                                        AutomationProperties.Name="All components"
+                                        Checked="OnAllComponentsChanged"
+                                        IsChecked="{x:Bind ViewModel.IsAllComponentsSelected, Mode=OneWay}"
+                                        Label="All components"
+                                        ToolBarLabelPosition="Collapsed"
+                                        ToolTipService.ToolTip="Show all component properties"
+                                        Unchecked="OnAllComponentsChanged">
+                                        <controls:ToolBarToggleButton.Icon>
+                                            <SymbolIconSource Symbol="AllApps" />
+                                        </controls:ToolBarToggleButton.Icon>
+                                    </controls:ToolBarToggleButton>
+                                </controls:ToolBar>
+                            </Grid>
+                        </Grid>
+                        <ScrollViewer
+                            x:Name="ComponentScroll"
+                            MaxHeight="128"
+                            HorizontalScrollBarVisibility="Disabled"
+                            HorizontalScrollMode="Disabled"
+                            PreviewKeyDown="OnComponentsKeyDown"
+                            VerticalScrollBarVisibility="Auto"
+                            Visibility="{x:Bind ViewModel.HasComponentSections, Mode=OneWay, Converter={StaticResource HasSelectionToVisibilityConverter}, ConverterParameter=False}">
+                            <ItemsRepeater x:Name="ComponentSelector" ItemsSource="{x:Bind ViewModel.ComponentFilters}">
+                                <ItemsRepeater.Layout>
+                                    <StackLayout />
+                                </ItemsRepeater.Layout>
+                                <ItemsRepeater.ItemTemplate>
+                                    <DataTemplate x:DataType="local:InspectorComponentFilter">
+                                        <Grid ToolTipService.ToolTip="{x:Bind ToolTip, Mode=OneWay}">
+                                            <ToggleButton
+                                                Height="32"
+                                                Padding="6,2"
+                                                HorizontalAlignment="Stretch"
+                                                HorizontalContentAlignment="Stretch"
+                                                AutomationProperties.HelpText="{x:Bind UnavailableReason, Mode=OneWay}"
+                                                AutomationProperties.Name="{x:Bind Label}"
+                                                Checked="OnComponentFilterChanged"
+                                                ContextRequested="OnComponentFilterContextRequested"
+                                                IsChecked="{x:Bind IsSelected, Mode=OneWay}"
+                                                IsEnabled="{x:Bind IsAvailable, Mode=OneWay}"
+                                                Tag="{x:Bind}"
+                                                Unchecked="OnComponentFilterChanged">
+                                                <Grid ColumnSpacing="8">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="16" />
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="Auto" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <FontIcon FontSize="14" Glyph="{x:Bind ComponentType, Converter={StaticResource ComponentToGlyphConverter}}" />
+                                                    <TextBlock
+                                                        Grid.Column="1"
+                                                        VerticalAlignment="Center"
+                                                        Text="{x:Bind Label}"
+                                                        TextTrimming="CharacterEllipsis" />
+                                                    <StackPanel
+                                                        Grid.Column="2"
+                                                        VerticalAlignment="Center"
+                                                        Orientation="Horizontal"
+                                                        Spacing="4">
+                                                        <FontIcon
+                                                            AutomationProperties.Name="Component validation error"
+                                                            FontSize="12"
+                                                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                                            Glyph="&#xEA39;"
+                                                            Visibility="{x:Bind HasValidationErrors, Mode=OneWay, Converter={StaticResource HasSelectionToVisibilityConverter}, ConverterParameter=False}" />
+                                                        <TextBlock
+                                                            VerticalAlignment="Center"
+                                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                            Text="{x:Bind StatusLabel, Mode=OneWay}" />
+                                                    </StackPanel>
+                                                </Grid>
+                                            </ToggleButton>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsRepeater.ItemTemplate>
+                            </ItemsRepeater>
+                        </ScrollViewer>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
             <InfoBar
-                Title="Locked for editing"
+                Title="{x:Bind ViewModel.EditingNoticeTitle, Mode=OneWay}"
                 Grid.Row="2"
                 Margin="4,0,4,6"
                 IsClosable="False"
-                IsOpen="{x:Bind ViewModel.HasLockedSelection, Mode=OneWay}"
-                Message="{x:Bind ViewModel.LockedEditingMessage, Mode=OneWay}"
+                IsOpen="{x:Bind ViewModel.HasEditingNotice, Mode=OneWay}"
+                Message="{x:Bind ViewModel.EditingNotice, Mode=OneWay}"
                 Severity="Warning"
-                Visibility="{x:Bind ViewModel.HasLockedSelection, Mode=OneWay, Converter={StaticResource HasSelectionToVisibilityConverter}, ConverterParameter=False}" />
+                Visibility="{x:Bind ViewModel.HasEditingNotice, Mode=OneWay, Converter={StaticResource HasSelectionToVisibilityConverter}, ConverterParameter=False}" />
             <TextBlock
                 Grid.Row="3"
                 Margin="8,4"

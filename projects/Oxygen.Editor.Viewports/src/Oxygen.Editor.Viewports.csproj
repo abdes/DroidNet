@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <UseWinUI>true</UseWinUI>
+        <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+
+        <Title>Oxygen Editor Viewports</Title>
+        <Description>The viewport control shared by the document editors that show a scene: its view model, transform tools and HUD, and the transform tool settings.</Description>
+        <PackageTags>oxygen;gameengine;viewport</PackageTags>
+        <RootNamespace>Oxygen.Editor.Viewports</RootNamespace>
+        <AssemblyName>$(MSBuildProjectName)</AssemblyName>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="CommunityToolkit.Mvvm" />
+        <PackageReference Include="CommunityToolkit.WinUI.Controls.Segmented" />
+        <PackageReference Include="CommunityToolkit.WinUI.Converters" />
+        <PackageReference Include="DryIoc.dll" />
+        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+        <PackageReference Include="Microsoft.WindowsAppSDK" />
+        <PackageReference Include="Microsoft.Windows.SDK.BuildTools" />
+        <PackageReference Include="System.Reactive" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="$(ProjectsRoot)/Composition/src/Composition.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)/Config/src/Config.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)/Controls/InPlaceEdit/src/Controls.InPlaceEdit.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)/Documents/src/Documents.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.Controls/src/Oxygen.Editor.Controls.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.Data/src/Oxygen.Editor.Data.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.Projects/src/Oxygen.Editor.Projects.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.LivePreview/src/Oxygen.Editor.LivePreview.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.Runtime/src/Oxygen.Editor.Runtime.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.Scenes/src/Oxygen.Editor.Scenes.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.World/src/Oxygen.Editor.World.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)/Oxygen.Managed.Core/src/Oxygen.Managed.Core.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <InternalsVisibleTo Include="Oxygen.Editor.Viewports.Unit.Tests" />
+        <InternalsVisibleTo Include="Oxygen.Editor.Viewports.Unit.UI.Tests" />
+    </ItemGroup>
+
+</Project>

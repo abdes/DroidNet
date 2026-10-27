@@ -46,6 +46,12 @@ public interface IDragPayload : IEquatable<IDragPayload>
     public bool IsClosable { get; }
 
     /// <summary>
+    ///     Gets a value indicating whether the item can leave its strip: be torn out into a new window or dropped on
+    ///     another strip. An item that cannot still reorders within its strip.
+    /// </summary>
+    public bool CanTearOut { get; }
+
+    /// <summary>
     ///     Produces a shallow clone with a distinct object identity while preserving the underlying
     ///     content references and <see cref="ContentId"/>. The clone enables safe tear-out and
     ///     re-insertion without creating ambiguous object identity.

@@ -48,6 +48,23 @@ public static class ShellCommands
     /// <remarks>It has no key: each part keeps its own Delete key until one Delete key serves every part (#86).</remarks>
     public static CommandDescriptor Delete { get; } = new("Edit.Delete", "Delete") { Category = "Edit" };
 
+    /// <summary>
+    /// Gets the command that frames the selected nodes in the active viewport of the editor the user works in: a scene's
+    /// or a model's.
+    /// </summary>
+    public static CommandDescriptor FrameSelection { get; } = new("View.FrameSelection", "Frame Selection")
+    {
+        Category = "View",
+        KeyGestures = [new(VirtualKey.F, VirtualKeyModifiers.None) { AfterFocusedPart = true }],
+    };
+
+    /// <summary>Gets the command that frames everything the active viewport shows.</summary>
+    public static CommandDescriptor FrameAll { get; } = new("View.FrameAll", "Frame All")
+    {
+        Category = "View",
+        KeyGestures = [new(VirtualKey.F, VirtualKeyModifiers.Shift) { AfterFocusedPart = true }],
+    };
+
     /// <summary>Gets every command the Shell contributes.</summary>
-    public static IReadOnlyList<CommandDescriptor> All { get; } = [Undo, Redo, Cut, Copy, Paste, Delete];
+    public static IReadOnlyList<CommandDescriptor> All { get; } = [Undo, Redo, Cut, Copy, Paste, Delete, FrameSelection, FrameAll];
 }

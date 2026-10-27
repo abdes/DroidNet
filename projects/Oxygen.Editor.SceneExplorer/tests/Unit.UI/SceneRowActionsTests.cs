@@ -16,6 +16,7 @@ using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Moq;
 using Oxygen.Editor.Projects.Testing;
+using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.Scenes.Interaction;
 using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.Scenes.Selection;
@@ -463,6 +464,7 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
                 Mock.Of<IRouter>(),
                 new TestDocumentArea(testScene.Document),
                 testScene.Documents,
+                new DocumentScenes(testScene.Documents, interaction, session: session),
                 new SceneSelectionService(),
                 interaction: interaction,
                 session: session);

@@ -17,6 +17,7 @@ using Oxygen.Editor.MaterialEditor;
 using Oxygen.Editor.ModelEditor;
 using Oxygen.Editor.Materials;
 using Oxygen.Editor.Materials.Documents;
+using Oxygen.Editor.Models.Documents;
 using Oxygen.Editor.Problems;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.SceneEditor.Settings;
@@ -25,6 +26,7 @@ using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.Scripting;
 using Oxygen.Editor.Shell;
 using Oxygen.Editor.Shell.Desktop;
+using Oxygen.Editor.Viewports;
 
 namespace Oxygen.Editor.Sessions;
 
@@ -73,6 +75,7 @@ public sealed class ProjectSessionModule : IScopeModule<ISessionLayer>
             new ProblemsSessionModule(),
             new MaterialsSessionModule(),
             new ScenesSessionModule(),
+            new ViewportsSessionModule(),
             new SceneEditorSessionModule(),
             new MaterialEditorSessionModule(),
             new ModelEditorSessionModule(),
@@ -84,12 +87,13 @@ public sealed class ProjectSessionModule : IScopeModule<ISessionLayer>
     {
         ArgumentNullException.ThrowIfNull(scope);
         scope.Register<IProjectFolder, ProjectFolder>(Reuse.Singleton);
+        scope.Register<ModelDocumentKind>(Reuse.Singleton);
 
         // Each file opens once in the session, as a document of the kind registered for its suffix, whichever window
         // shows it.
         scope.RegisterDelegate(
             resolver => new OpenDocuments(
-                [resolver.Resolve<SceneDocumentKind>(), resolver.Resolve<MaterialDocumentKind>()],
+                [resolver.Resolve<SceneDocumentKind>(), resolver.Resolve<MaterialDocumentKind>(), resolver.Resolve<ModelDocumentKind>()],
                 resolver.Resolve<IAtomicFileStore>(),
                 resolver.Resolve<ILoggerFactory>()),
             Reuse.Singleton);
@@ -97,11 +101,12 @@ public sealed class ProjectSessionModule : IScopeModule<ISessionLayer>
         scope.RegisterDelegate<PersistentState>(EditorDataModule.CreatePersistentState, Reuse.Singleton);
     }
 
-    // The preview content demand follows the open scene documents.
+    // The preview content demand follows the scenes of the open documents, a model's preview scene included.
     private static void RegisterPreviewContentDemand(IRegistrator scope)
         => scope.RegisterDelegate(
             resolver => new PreviewContentDemand(ContentDemands.Start(
                 resolver.Resolve<OpenDocuments>(),
+                resolver.Resolve<DocumentScenes>(),
                 resolver.Resolve<IAssetFeed>(),
                 resolver.Resolve<IContentPipelineService>(),
                 resolver.Resolve<IProjectSession>(),

@@ -23,6 +23,19 @@ public partial class SceneExplorerViewModel
     [NotifyCanExecuteChangedFor(nameof(ReloadPreviousSceneCommand))]
     public partial bool CanReloadPreviousScene { get; private set; }
 
+    /// <summary>
+    /// Gets why the shown scene takes no edit, such as a model's preview scene, which the footer's disabled buttons say;
+    /// <see langword="null"/> when it takes them.
+    /// </summary>
+    [ObservableProperty]
+    public partial string? ReadOnlyReason { get; private set; }
+
+    /// <summary>Gets a footer button's tooltip: why the shown scene takes no edit, else the button's own.</summary>
+    /// <param name="readOnlyReason">Why the shown scene takes no edit, if it takes none.</param>
+    /// <param name="toolTip">The button's own tooltip.</param>
+    /// <returns>The tooltip.</returns>
+    public static string ToolTipOf(string? readOnlyReason, string toolTip) => readOnlyReason ?? toolTip;
+
     private void RegisterSceneLifetime()
     {
         this.openDocuments.Opened += this.OnSceneDocumentOpened;
@@ -43,10 +56,10 @@ public partial class SceneExplorerViewModel
         }
     }
 
-    // The explorer shows the scene document opened last: a scene that opens replaces the one shown.
+    // The explorer shows the scene of the document opened last: a scene or a model that opens replaces the one shown.
     private void OnSceneDocumentOpened(object? sender, DocumentEventArgs args)
     {
-        if (!this.isDisposed && args.Document.Content is SceneContent)
+        if (!this.isDisposed && this.scenes.Of(args.Document) is not null)
         {
             _ = this.InstallOpenedSceneAsync(args.Document);
         }
@@ -55,7 +68,11 @@ public partial class SceneExplorerViewModel
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Installing runs from a document event; a failure is logged and leaves the tree empty instead of terminating the editor.")]
     private async Task<bool> InstallOpenedSceneAsync(Document document)
     {
-        var content = SceneContent.Of(document);
+        if (this.scenes.Of(document) is not { } content)
+        {
+            return false;
+        }
+
         var scene = content.Scene;
         if (this.sceneDocument is { } previous && !ReferenceEquals(previous, document))
         {
@@ -103,8 +120,9 @@ public partial class SceneExplorerViewModel
 
         this.ReleaseShownScene(args.Document);
 
-        // A replacement that did not commit closes the incoming scene: the one still open is shown again.
-        if (!this.isDisposed && this.openDocuments.Documents.LastOrDefault(static document => document.Content is SceneContent) is { } remaining)
+        // A replacement that did not commit closes the incoming scene, and a closed model leaves its scene beside it:
+        // the one still open is shown again.
+        if (!this.isDisposed && this.openDocuments.Documents.LastOrDefault(document => this.scenes.Of(document) is not null) is { } remaining)
         {
             _ = this.InstallOpenedSceneAsync(remaining);
         }
@@ -113,7 +131,7 @@ public partial class SceneExplorerViewModel
     // A reload replaced the shown document's scene: the tree shows the new one.
     private void OnShownContentReplaced(object? sender, DocumentContentReplacedEventArgs args)
     {
-        if (!this.isDisposed && sender is Document document && ReferenceEquals(this.sceneDocument, document) && args.Current is SceneContent content)
+        if (!this.isDisposed && sender is Document document && ReferenceEquals(this.sceneDocument, document) && this.scenes.Of(document) is { } content)
         {
             _ = this.ReloadShownSceneAsync(document, content.Scene);
         }
@@ -174,6 +192,7 @@ public partial class SceneExplorerViewModel
             this.projection.Clear();
             this.Scene = null;
             this.sceneDocument = null;
+            this.ReadOnlyReason = null;
             this.ReleaseClipboardRows();
             this.FilterPredicate = null;
             this.SearchText = string.Empty;

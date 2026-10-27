@@ -2,10 +2,9 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.Scenes.Selection;
+using Oxygen.Editor.Viewports;
 using Oxygen.Editor.World;
-using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.SceneEditor;
 
@@ -20,7 +19,7 @@ public partial class SceneEditorViewModel
     /// <summary>Frames nodes in the focused viewport; no nodes frame the whole scene.</summary>
     /// <param name="nodes">The nodes to frame.</param>
     /// <returns>Whether a viewport framed them.</returns>
-    internal async Task<bool> FrameNodesAsync(IReadOnlyList<NodeReference> nodes)
+    public async Task<bool> FrameNodesAsync(IReadOnlyList<NodeReference> nodes)
     {
         if (this.isDisposed || this.GetActiveViewport() is not { } viewport)
         {
@@ -56,30 +55,5 @@ public partial class SceneEditorViewModel
 
     /// <summary>Outlines the document's selection in the editing views; only the active scene renders.</summary>
     private void UpdateSelectionOutline(SceneSelectionContext context)
-        => _ = this.SetSelectionOutlineAsync(context.SelectedNodes, context.PrimaryNode);
-
-    private async Task SetSelectionOutlineAsync(IReadOnlyList<NodeReference> nodes, NodeReference? activeNode)
-    {
-        try
-        {
-            if (!await this.services.Engine.SetSelectionOutlineAsync(nodes, activeNode).ConfigureAwait(true))
-            {
-                this.LogSelectionOutlineRejected();
-            }
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            this.services.OperationResults.Publish(new OperationResult
-            {
-                OperationId = Guid.NewGuid(),
-                OperationKind = RuntimeOperationKinds.SelectionOutline,
-                Status = OperationStatus.Failed,
-                Severity = DiagnosticSeverity.Warning,
-                Title = "Selection outline failed",
-                Message = "The runtime could not outline the selection.",
-                AffectedScope = this.SceneScope(),
-                CompletedAt = DateTimeOffset.UtcNow,
-            });
-        }
-    }
+        => _ = this.services.Viewports.OutlineSelectionAsync(this.Document.Id, context.SelectedNodes, context.PrimaryNode, this.SceneScope());
 }

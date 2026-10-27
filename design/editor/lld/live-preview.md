@@ -2,7 +2,7 @@
 
 Status: `agreed`
 
-Last Updated: 2026-10-20 01:32
+Last Updated: 2026-10-28
 
 ## 1. Purpose
 
@@ -204,9 +204,9 @@ Actors:
     verbosity control binds to it. It is app-wide, since one engine serves the
     process, and `EngineService.InitializeAsync` applies it, so `PreviewSession`
     only starts the engine. The preview settings (frame rate cap, VSync,
-    always-render panes, ground grid) are the scene editor's view preferences
-    ([scenes-module.md](scenes-module.md)) and belong to the SceneEditor module.
-    `PreviewSettingsService` loads the stored preferences when the scene editor
+    always-render panes, ground grid) are view preferences that every editor
+    showing a scene shares, the scene editor's and the Model Editor's; LivePreview
+    owns them because it applies them to the engine. `PreviewSettingsService` loads the stored preferences when the scene editor
     opens, applies them only while the engine is `Ready` or `Running` (its
     setters throw otherwise), and re-applies them on
     `IEngineService.StateChanged` whenever the engine enters `Ready` or
@@ -234,9 +234,13 @@ ContentPipeline never do. It grants internals to its own test projects only.
 | `Assets/`  | `AssetRuntimeStatusSource` (implements `IAssetRuntimeStatusSource`)                                                                                                                                                                                               |
 | `Play/`    | `PlaySession`, `PlaySettings`, `PlayerWindowSizeOption`, `PlayStatus`, `PlayActivity`, `PlayFailure`, `PlayStage`, `PlayerLogEventArgs`, `IRuntimeProblemSource`; internal: player connection, settings sync, runtime problem reader                              |
 
-Outside LivePreview: the viewports, viewport state, transform tool settings,
-preview and ground grid settings (`PreviewSettingsService`, `GroundGrid*`), the
-play bar (`ScenePlayToolbarViewModel`) and its presentation enums (`PlayPanel`,
+LivePreview also shows the active document (`IScenePreview.Show`), any open
+document that shows a scene, and asks `DocumentScenes` which scene that is: a
+model document shows its preview scene.
+
+Outside LivePreview: the viewports and transform tool settings belong to the
+shared Viewports module; the viewport state, the play bar
+(`ScenePlayToolbarViewModel`) and its presentation enums (`PlayPanel`,
 `PlayStatusTarget`, `PlayStatusTone`, `PlayPrimaryAccent`) belong to the
 SceneEditor module; script analysis is Scripting's `IScriptAnalyzer` port, whose
 native call LivePreview implements.

@@ -39,7 +39,7 @@ public sealed class CookRecovery(
     IPlacementService placement,
     ISceneSelectionService selection,
     IAssetReveal reveal,
-    ICookedInspections inspections) : ICookRecovery
+    ICookedInspections inspections) : ICookRecovery, ICookIssueReveal
 {
     /// <summary>The source the selection names.</summary>
     public const string SelectionSource = "Cooking";
@@ -67,7 +67,7 @@ public sealed class CookRecovery(
     }
 
     /// <inheritdoc />
-    public async Task<bool> GoToPropertyAsync(DiagnosticRecord issue)
+    public async Task<bool> RevealAsync(DiagnosticRecord issue)
     {
         ArgumentNullException.ThrowIfNull(issue);
         return await this.ShowTargetAsync(issue).ConfigureAwait(true)

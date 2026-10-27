@@ -10,6 +10,7 @@ using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.Shell.Commands;
+using Oxygen.Editor.Viewports;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Utils;

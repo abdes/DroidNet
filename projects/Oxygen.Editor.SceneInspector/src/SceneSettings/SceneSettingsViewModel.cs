@@ -4,6 +4,7 @@
 
 using System.ComponentModel;
 using System.Reactive.Concurrency;
+using CommunityToolkit.Mvvm.ComponentModel;
 using DroidNet.Controls;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -103,6 +104,13 @@ public sealed partial class SceneSettingsViewModel : InspectorSection, IDisposab
 
     /// <summary>Gets the current scene identity.</summary>
     public string SceneName => this.scene?.Name ?? string.Empty;
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the settings are a scene's own, with its Play settings and references; a
+    /// model's preview shows only how it is looked at: its environment and post-processing.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool HasSceneOwnSettings { get; set; } = true;
 
     /// <inheritdoc />
     public Guid EditScopeId => this.EditOwner.EditScopeId;

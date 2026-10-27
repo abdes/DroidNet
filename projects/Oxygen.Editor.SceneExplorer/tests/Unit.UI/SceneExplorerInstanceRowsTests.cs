@@ -14,6 +14,7 @@ using Microsoft.UI.Xaml.Media;
 using Moq;
 using Oxygen.Editor.ContentPipeline.Testing;
 using Oxygen.Editor.Projects.Testing;
+using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.Scenes.Edits.Hierarchy;
 using Oxygen.Editor.Scenes.Nodes;
 using Oxygen.Editor.Scenes.Selection;
@@ -275,6 +276,7 @@ internal sealed partial class SceneExplorerInstanceRowsTests : DroidNet.Tests.Vi
                 Mock.Of<IRouter>(),
                 this.documents,
                 this.Document.Documents,
+                new DocumentScenes(this.Document.Documents, session: this.session, structures: this.Structures),
                 this.selection,
                 session: this.session,
                 structures: this.Structures);

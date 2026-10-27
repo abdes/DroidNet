@@ -285,6 +285,7 @@ public sealed partial class SceneExplorerReplacementTests : VisualUserInterfaceT
                 Mock.Of<IRouter>(),
                 this.Area,
                 this.Scenes.Open,
+                new DocumentScenes(this.Scenes.Open, session: this.Session),
                 selection,
                 session: this.Session);
             this.Participant = new SceneParticipant(this);

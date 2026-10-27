@@ -10,7 +10,8 @@ error and warning counts (`IPlacementService.SetPanelTitle`), brings the panel
 forward when the running scene reports an error, and implements the Shell's
 `IProblemReveal`, through which a script slot's badge shows its problem.
 `RuntimeProblemNodes` shows the scene document a runtime problem names and
-selects its node through `ISceneSelectionService`.
+selects its node through `ISceneSelectionService`; a cook's problem shows what
+it names through the Shell's `ICookIssueReveal`, which Cooking implements.
 
 The panel presents problems only; producing them belongs to the family modules
 and to LivePreview.

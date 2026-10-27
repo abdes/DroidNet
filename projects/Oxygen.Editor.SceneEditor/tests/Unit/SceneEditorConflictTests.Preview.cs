@@ -6,9 +6,9 @@ using AwesomeAssertions;
 using Moq;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Data.Settings;
+using Oxygen.Editor.LivePreview.Settings;
 using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Runtime.Engine;
-using Oxygen.Editor.SceneEditor.Settings;
 using Oxygen.Managed.Core.Diagnostics;
 using Testably.Abstractions.Testing;
 

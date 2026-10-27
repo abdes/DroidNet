@@ -8,6 +8,7 @@ using DroidNet.Storage.Native;
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Documents;
+using Oxygen.Editor.Models.Documents;
 using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Documents;
@@ -44,7 +45,7 @@ public sealed partial class TestSceneDocuments : IDisposable
         this.Files = new GatedFileStore(new NativeAtomicFileStore(project.Context.FileSystem), this);
         this.Session = new TestSession(project.Context);
         this.Kind = new SceneDocumentKind(interaction, redirects, references, this.Session, structures);
-        this.Open = new OpenDocuments([this.Kind, .. otherKinds ?? []], this.Files);
+        this.Open = new OpenDocuments([this.Kind, this.ModelKind, .. otherKinds ?? []], this.Files);
     }
 
     /// <summary>Gets the project the scenes belong to.</summary>
@@ -55,6 +56,9 @@ public sealed partial class TestSceneDocuments : IDisposable
 
     /// <summary>Gets the scene kind every document opens with.</summary>
     public SceneDocumentKind Kind { get; }
+
+    /// <summary>Gets the kind model sources open with, beside the scenes.</summary>
+    public ModelDocumentKind ModelKind { get; } = new();
 
     /// <summary>Gets the open documents.</summary>
     public OpenDocuments Open { get; }
@@ -121,6 +125,22 @@ public sealed partial class TestSceneDocuments : IDisposable
     {
         var opened = await this.Open.OpenAsync(file, this.Session.Lifetime).ConfigureAwait(true);
         return opened.Document ?? throw new InvalidOperationException($"The test scene did not open: {opened.Problem}");
+    }
+
+    /// <summary>Writes a model source file and opens it as a model document.</summary>
+    /// <param name="source">The model's source file, such as <c>/Content/Car.glb</c>.</param>
+    /// <returns>The open document.</returns>
+    /// <exception cref="InvalidOperationException">The file did not open.</exception>
+    /// <remarks>The editor never reads a model's bytes, so the file holds a placeholder.</remarks>
+    public async Task<Document> OpenModelAsync(AssetPath source)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        var path = this.Project.PathOf(source.ToString());
+        var files = this.Project.Context.FileSystem;
+        _ = files.Directory.CreateDirectory(files.Path.GetDirectoryName(path.FullPath)!);
+        files.File.WriteAllBytes(path.FullPath, "glTF"u8.ToArray());
+        var opened = await this.Open.OpenAsync(new DocumentFile(path, source), this.Session.Lifetime).ConfigureAwait(true);
+        return opened.Document ?? throw new InvalidOperationException($"The test model did not open: {opened.Problem}");
     }
 
     /// <inheritdoc/>

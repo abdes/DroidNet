@@ -113,6 +113,7 @@ internal static class AssetRelocationPlanner
         if (!isDirectory)
         {
             AddTextureCompanions(project, index, map, source, target);
+            AddModelPreview(project, map, source, target);
         }
     }
 
@@ -202,6 +203,21 @@ internal static class AssetRelocationPlanner
         }
 
         map.AddMove(new(source, target, IsDirectory: false));
+    }
+
+    // A model's preview is named after the model's whole file name and stays beside it: it moves and renames with it.
+    private static void AddModelPreview(ProjectContext project, RelocationMap map, FileSystemPath source, FileSystemPath target)
+    {
+        if (!AssetFileTypes.Is(source.Name, AssetFileCategory.Model))
+        {
+            return;
+        }
+
+        var preview = FileSystemPath.From(AssetFileTypes.PreviewOf(source.FullPath));
+        if (project.FileSystem.File.Exists(preview.FullPath) && !map.IsMoved(preview))
+        {
+            AddFile(project, map, preview, FileSystemPath.From(AssetFileTypes.PreviewOf(target.FullPath)));
+        }
     }
 
     // A texture descriptor and the image beside it are one asset: each moves with the other, and a rename

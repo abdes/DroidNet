@@ -349,7 +349,9 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
             var files = import.Files;
             if (path == import.PrimaryPath)
             {
+                // The model's preview, beside it, goes with it.
                 var owned = files.ToHashSet();
+                _ = owned.Add(FileSystemPath.From(AssetFileTypes.PreviewOf(path.FullPath)));
                 var onlyThisModel = fileSystem.Directory.Exists(modelFolder.FullPath)
                     && fileSystem.Directory.EnumerateFiles(modelFolder.FullPath, "*", SearchOption.AllDirectories).All(file => owned.Contains(FileSystemPath.From(file)));
                 return onlyThisModel && modelFolder != root
@@ -368,7 +370,8 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
             : GetDeletedTextureFiles(project, index, path);
     }
 
-    // A file or folder goes with the texture descriptors that name it as their image, and with the records of the models it holds.
+    // A file or folder goes with the texture descriptors that name it as their image, a model with its preview, and a folder
+    // with the records of the models it holds.
     private static List<FileSystemPath> GetDeletedFilesWithDescriptors(ProjectContext project, AuthoredReferenceIndex index, FileSystemPath path, bool isDirectory, List<FileSystemPath> records)
     {
         var fileSystem = project.FileSystem;
@@ -376,7 +379,11 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
             && descriptor.Location.Parent == path.Parent
             && AuthoredReferenceFormat.ReadTextureSources(project, descriptor.Location, fileSystem.File.ReadAllBytes(descriptor.Location.FullPath)).Contains(path))
             .Select(static descriptor => descriptor.Location);
-        return [path, .. descriptors, .. records];
+        FileSystemPath[] preview = !isDirectory && AssetFileTypes.Is(path.Name, AssetFileCategory.Model)
+            && FileSystemPath.From(AssetFileTypes.PreviewOf(path.FullPath)) is var previewPath && fileSystem.File.Exists(previewPath.FullPath)
+                ? [previewPath]
+                : [];
+        return [path, .. descriptors, .. preview, .. records];
     }
 
     private static List<FileSystemPath> GetDeletedTextureFiles(ProjectContext project, AuthoredReferenceIndex index, FileSystemPath path)

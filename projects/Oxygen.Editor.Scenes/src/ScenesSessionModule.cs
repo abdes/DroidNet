@@ -53,6 +53,9 @@ public sealed class ScenesSessionModule : IScopeModule<ISessionLayer>
         // of its models, which repairing a kept change in its model writes and reimports.
         scope.Register<IModelImportRecordFiles, ProjectModelRecords>(Reuse.Singleton);
         scope.Register<SceneDocumentKind>(Reuse.Singleton);
+
+        // Each open document's scene, a model document's preview scene included, for the views that show scenes.
+        scope.Register<DocumentScenes>(Reuse.Singleton);
         scope.Register<ISceneSelectionService, SceneSelectionService>(Reuse.Singleton);
         scope.Register<ISceneNodeClipboard, SceneNodeClipboard>(Reuse.Singleton);
     }

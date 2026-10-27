@@ -24,7 +24,6 @@
     <ItemGroup>
         <ProjectReference Include="$(ProjectsRoot)/Mvvm/src/Mvvm.csproj" />
         <ProjectReference Include="$(ProjectsRoot)/Routing/Routing.Abstractions/src/Routing.Abstractions.csproj" />
-        <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.Cooking/src/Oxygen.Editor.Cooking.csproj" />
         <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.LivePreview/src/Oxygen.Editor.LivePreview.csproj" />
         <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.Projects/src/Oxygen.Editor.Projects.csproj" />
         <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.Scenes/src/Oxygen.Editor.Scenes.csproj" />

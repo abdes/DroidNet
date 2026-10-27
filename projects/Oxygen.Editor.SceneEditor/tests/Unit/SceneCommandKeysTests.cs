@@ -19,8 +19,8 @@ internal sealed class SceneCommandKeysTests
         AssertKey(SceneEditorCommands.MoveTool, VirtualKey.W, VirtualKeyModifiers.None);
         AssertKey(SceneEditorCommands.RotateTool, VirtualKey.E, VirtualKeyModifiers.None);
         AssertKey(SceneEditorCommands.ScaleTool, VirtualKey.R, VirtualKeyModifiers.None);
-        AssertKey(SceneEditorCommands.FrameSelection, VirtualKey.F, VirtualKeyModifiers.None);
-        AssertKey(SceneEditorCommands.FrameAll, VirtualKey.F, VirtualKeyModifiers.Shift);
+        AssertKey(ShellCommands.FrameSelection, VirtualKey.F, VirtualKeyModifiers.None);
+        AssertKey(ShellCommands.FrameAll, VirtualKey.F, VirtualKeyModifiers.Shift);
         AssertKey(SceneEditorCommands.Duplicate, VirtualKey.D, VirtualKeyModifiers.Control);
         AssertKey(SceneEditorCommands.Play, VirtualKey.F5, VirtualKeyModifiers.None);
         AssertKey(SceneEditorCommands.StopPlay, VirtualKey.F5, VirtualKeyModifiers.Shift);

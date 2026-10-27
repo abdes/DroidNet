@@ -6,7 +6,8 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Documents;
 using Oxygen.Editor.Documents;
-using Oxygen.Editor.SceneEditor.Settings;
+using Oxygen.Editor.Viewports;
+using Oxygen.Editor.Viewports.Settings;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.SceneEditor;
@@ -159,12 +160,7 @@ public partial class SceneEditorViewModel
 
     private ViewportViewModel CreateViewport(DocumentId documentId)
     {
-        var viewport = new ViewportViewModel(
-            documentId,
-            this.services.Engine,
-            this.services.OperationResults,
-            this.services.StatusReducer,
-            this.services.LoggerFactory);
+        var viewport = this.services.Viewports.CreateViewport(documentId);
         viewport.ToggleMaximizeCommand = new RelayCommand(() => this.ToggleMaximize(viewport));
         viewport.OnLayoutRequested = requestedLayout => this.ChangeLayoutCommand.Execute(requestedLayout);
         viewport.PilotStarting = this.StopOtherPilotsAsync;

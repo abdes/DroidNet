@@ -97,4 +97,48 @@ public partial class TabDragCoordinatorTests
 
         await Task.CompletedTask.ConfigureAwait(true);
     });
+
+    [TestMethod]
+    public Task HandleReorderModeTransitions_WithItemThatCannotTearOut_DoesNotSwitchToTearOutMode_Async() => EnqueueAsync(async () =>
+    {
+        // Arrange
+        var visualElement = await CreateLoadedVisualElementAsync().ConfigureAwait(true);
+        const int draggedIndex = 0;
+        var builder = new TabStripMockBuilder()
+            .WithWindowId(VisualUserInterfaceTestsApp.MainWindow.AppWindow.Id)
+            .WithItemSnapshot(draggedIndex);
+        var (tabStripMock, stripElement) = builder.BuildWithElement();
+        var draggedItem = builder.GetItem(0)!;
+        draggedItem.CanTearOut = false; // Its tab stays in its strip
+
+        // Update mapper to use the visual element
+        this.mapper = new SpatialMapper(VisualUserInterfaceTestsApp.MainWindow, visualElement);
+
+        var initialElementPoint = new Point(120, 30).AsElement();
+
+        // Setup drag visual service mock
+        var dragServiceMock = new DragVisualServiceMockBuilder()
+            .WithSessionToken(default)
+            .WithDescriptor(new DragVisualDescriptor())
+            .Build();
+
+        var coordinator = this.CreateCoordinator(dragService: dragServiceMock.Object);
+        coordinator.StartDrag(draggedItem, draggedIndex, tabStripMock.Object, visualElement, visualElement, initialElementPoint, new Point(0, 0));
+
+        // Act: Invoke HandleReorderModeTransitions with a point far away (outside strip)
+        var method = typeof(TabDragCoordinator).GetMethod(
+            "HandleReorderModeTransitions",
+            BindingFlags.Instance | BindingFlags.NonPublic);
+
+        var farAwayPoint = this.ToPhysical(10000, 10000);
+        _ = method?.Invoke(coordinator, [farAwayPoint]);
+
+        // Assert
+        // Verify DetachTab was NOT called (which would happen if SwitchToTearOutMode was called)
+        tabStripMock.Verify(s => s.DetachTab(It.IsAny<object>()), Times.Never());
+
+        coordinator.Abort();
+
+        await Task.CompletedTask.ConfigureAwait(true);
+    });
 }

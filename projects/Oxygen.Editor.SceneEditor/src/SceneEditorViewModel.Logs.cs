@@ -5,6 +5,7 @@
 using System.Diagnostics;
 using DroidNet.Documents;
 using Microsoft.Extensions.Logging;
+using Oxygen.Editor.Viewports;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.SceneEditor;
@@ -132,16 +133,6 @@ public partial class SceneEditorViewModel
 
     private void LogRestoredCameraMissing(int pane, NodeId cameraId)
         => LogRestoredCameraMissing(this.logger, pane, this.Document.Id, cameraId);
-
-    [LoggerMessage(
-        SkipEnabledCheck = true,
-        Level = LogLevel.Debug,
-        Message = "The runtime rejected the selection outline of document {DocumentId}; no engine session is running")]
-    private static partial void LogSelectionOutlineRejected(ILogger logger, DocumentId documentId);
-
-    [Conditional("DEBUG")]
-    private void LogSelectionOutlineRejected()
-        => LogSelectionOutlineRejected(this.logger, this.Document.Id);
 
     [LoggerMessage(
         SkipEnabledCheck = true,

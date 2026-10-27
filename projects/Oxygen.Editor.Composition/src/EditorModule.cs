@@ -17,9 +17,9 @@ using Oxygen.Editor.ProjectExplorer;
 using Oxygen.Editor.ProjectExplorer.ViewModels;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Engine;
-using Oxygen.Editor.SceneEditor.Settings;
 using Oxygen.Editor.Shell;
 using Oxygen.Editor.Textures;
+using Oxygen.Editor.Viewports.Settings;
 using Oxygen.Editor.Workspace;
 
 namespace Oxygen.Editor;
@@ -45,7 +45,7 @@ public static class EditorModule
         new LivePreviewModule(),
         new MaterialsModule(),
         new TexturesModule(),
-        new SceneEditorSettingsModule(),
+        new ViewportsSettingsModule(),
         new ApplicationModule(),
         new EditorDataModule(),
         new DiagnosticsModule(),

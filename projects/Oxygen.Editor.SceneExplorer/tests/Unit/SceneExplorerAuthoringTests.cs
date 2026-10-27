@@ -10,6 +10,7 @@ using Moq;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Projects.Testing;
+using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.Scenes.Testing;
@@ -226,6 +227,7 @@ public sealed partial class SceneExplorerAuthoringTests
                 Mock.Of<IRouter>(),
                 this.Documents,
                 this.OpenDocuments,
+                new DocumentScenes(this.OpenDocuments),
                 new SceneSelectionService(),
                 session: session,
                 relocation: relocation,

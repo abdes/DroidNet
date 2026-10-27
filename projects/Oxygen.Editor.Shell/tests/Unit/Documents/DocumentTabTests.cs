@@ -59,6 +59,20 @@ public sealed class DocumentTabTests
         _ = plain.IsPinLockedHint.Should().BeFalse();
     }
 
+    /// <summary>A tab tears out of its window unless its editor keeps it there, as a model's does (model editor M-ED7).</summary>
+    /// <returns>The asynchronous test.</returns>
+    [TestMethod]
+    public async Task ADescriptorThatKeepsItsTabYieldsATabThatCannotTearOut()
+    {
+        using var notes = new Notes();
+        var document = await notes.OpenAsync("Intro", this.TestContext.CancellationToken).ConfigureAwait(false);
+        using var kept = new DocumentTab(document, new DocumentEditorDescriptor(notes.Kind, static _ => new object()) { CanTearOut = false });
+        using var plain = new DocumentTab(document, new DocumentEditorDescriptor(notes.Kind, static _ => new object()));
+
+        _ = kept.CanTearOut.Should().BeFalse();
+        _ = plain.CanTearOut.Should().BeTrue();
+    }
+
     /// <summary>A document whose file disappears shows as unsaved, and a reload of the file shows as saved.</summary>
     /// <returns>The asynchronous test.</returns>
     [TestMethod]

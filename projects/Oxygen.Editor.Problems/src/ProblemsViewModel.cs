@@ -8,11 +8,11 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Routing;
 using Oxygen.Editor.ContentPipeline.Cooking;
-using Oxygen.Editor.Cooking;
 using Oxygen.Editor.LivePreview.Play;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scripting;
 using Oxygen.Editor.Shell.Desktop;
+using Oxygen.Editor.Shell.Windows;
 using Oxygen.Managed.Assets.Diagnostics;
 using Oxygen.Managed.Core;
 
@@ -42,7 +42,7 @@ public sealed partial class ProblemsViewModel : ObservableObject, IDisposable
     private readonly IScripts? scripts;
     private readonly IRuntimeProblemSource? runtime;
     private readonly IRuntimeProblemNodes nodes;
-    private readonly ICookRecovery cookIssues;
+    private readonly ICookIssueReveal cookIssues;
 
     /// <summary>Initializes a new instance of the <see cref="ProblemsViewModel"/> class.</summary>
     /// <param name="sources">The session's problem sources: the family facts, and the running scene's problems.</param>
@@ -50,7 +50,7 @@ public sealed partial class ProblemsViewModel : ObservableObject, IDisposable
     /// <param name="session">The project session the panel lives in, for project-relative file names.</param>
     /// <param name="nodes">What shows the node a runtime problem names.</param>
     /// <param name="cookIssues">What shows the node or property a cook's problem names.</param>
-    public ProblemsViewModel(IAssetProblemSources sources, ICodeEditorService codeEditor, IProjectSession session, IRuntimeProblemNodes nodes, ICookRecovery cookIssues)
+    public ProblemsViewModel(IAssetProblemSources sources, ICodeEditorService codeEditor, IProjectSession session, IRuntimeProblemNodes nodes, ICookIssueReveal cookIssues)
     {
         ArgumentNullException.ThrowIfNull(sources);
         ArgumentNullException.ThrowIfNull(nodes);
@@ -194,7 +194,7 @@ public sealed partial class ProblemsViewModel : ObservableObject, IDisposable
                 _ = await this.nodes.SelectAsync(problem).ConfigureAwait(true);
                 break;
             case CookProblem problem:
-                _ = await this.cookIssues.GoToPropertyAsync(problem.Issue).ConfigureAwait(true);
+                _ = await this.cookIssues.RevealAsync(problem.Issue).ConfigureAwait(true);
                 break;
         }
     }

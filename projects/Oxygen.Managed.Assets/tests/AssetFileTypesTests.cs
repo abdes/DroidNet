@@ -21,6 +21,7 @@ public sealed class AssetFileTypesTests
     [DataRow("/Content/Scripts/Door.luau", AssetFileCategory.Script, "/Content/Scripts/Door.oscript", AssetType.Script)]
     [DataRow("/Content/Input/Player.input.json", AssetFileCategory.Input, null, AssetType.Unknown)]
     [DataRow("C:/Models/Crate.gltf.import.json", AssetFileCategory.ImportSettings, null, AssetType.Unknown)]
+    [DataRow("/Content/Models/Crate.glb.preview.json", AssetFileCategory.ModelPreview, null, AssetType.Unknown)]
     [DataRow("C:/Models/Crate.FBX", AssetFileCategory.Model, null, AssetType.Unknown)]
     [DataRow("C:/Images/Sky.hdr", AssetFileCategory.Image, null, AssetType.Unknown)]
     [DataRow("textures.table", AssetFileCategory.CookedResource, null, AssetType.Unknown)]
@@ -134,5 +135,14 @@ public sealed class AssetFileTypesTests
         _ = ((byte)AssetType.Material).Should().Be(1);
         _ = ((byte)AssetType.InputMappingContext).Should().Be(6);
         _ = ((byte)AssetType.PhysicsScene).Should().Be(9);
+    }
+
+    [TestMethod]
+    public void ModelPreview_IsBesideTheModelAndStandsForNoAsset()
+    {
+        var preview = AssetFileTypes.PreviewOf("/Content/Models/Crate.glb");
+
+        _ = preview.Should().Be("/Content/Models/Crate.glb" + AssetFileTypes.ModelPreview, "it keeps the model's whole name, so Crate.glb and Crate.fbx each have their own");
+        _ = AssetFileTypes.ToIdentity(AssetPath.Parse(preview)).Should().Be(AssetPath.Parse(preview), "a preview is no asset of its own");
     }
 }

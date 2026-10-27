@@ -56,6 +56,7 @@ DOMAIN_RANK: dict[str, int] = {
     "Oxygen.Editor.Projects": 0,
     "Oxygen.Editor.Scripting": 1,
     "Oxygen.Editor.Input": 1,
+    "Oxygen.Editor.Models": 1,
     "Oxygen.Editor.Textures": 1,
     "Oxygen.Editor.ContentPipeline": 2,
     "Oxygen.Editor.Assets": 3,
@@ -73,6 +74,7 @@ EDITOR_LAYERS: dict[str, Layer] = {
     "Oxygen.Editor.CookedInspector": Layer.FEATURE,
     "Oxygen.Editor.Cooking": Layer.FEATURE,
     "Oxygen.Editor.MaterialEditor": Layer.FEATURE,
+    "Oxygen.Editor.ModelEditor": Layer.FEATURE,
     "Oxygen.Editor.Output": Layer.FEATURE,
     "Oxygen.Editor.Problems": Layer.FEATURE,
     "Oxygen.Editor.ProjectExplorer": Layer.FEATURE,
@@ -80,6 +82,7 @@ EDITOR_LAYERS: dict[str, Layer] = {
     "Oxygen.Editor.SceneExplorer": Layer.FEATURE,
     "Oxygen.Editor.SceneInspector": Layer.FEATURE,
     "Oxygen.Editor.Pickers": Layer.SHARED_UI,
+    "Oxygen.Editor.Viewports": Layer.SHARED_UI,
     **{name: Layer.DOMAIN for name in DOMAIN_RANK},
     "Oxygen.Editor.Controls": Layer.UI_KIT,
     "Oxygen.Editor.Routing": Layer.FOUNDATION,
@@ -111,10 +114,12 @@ ENGINE_USERS = (
 # them; the application host is the only project that references it.
 ROOT_REFERENCES = frozenset({("Oxygen.Editor.App", "Oxygen.Editor.Composition")})
 
-# The one exception: the scene editor's viewports draw through Runtime's
-# surfaces, views and input, and never reach Interop (section 11).
+# The exceptions: the scene editor's scene-view glue and the shared viewports
+# draw through Runtime's surfaces, views and input, and never reach Interop
+# (section 11).
 ENGINE_EXCEPTIONS: dict[str, frozenset[str]] = {
     "Oxygen.Editor.SceneEditor": frozenset({"Oxygen.Editor.Runtime"}),
+    "Oxygen.Editor.Viewports": frozenset({"Oxygen.Editor.Runtime"}),
 }
 
 # Violations the tree still has, each with the work that removes it. An entry

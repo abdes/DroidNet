@@ -18,6 +18,13 @@ public interface IDocumentKind
     /// <remarks>No two kinds open the same suffix; the longest suffix that ends a file's name chooses its kind.</remarks>
     public IReadOnlyList<string> FileSuffixes { get; }
 
+    /// <summary>Gets a value indicating whether a document's title keeps its file's suffix, such as <c>Car.glb</c>.</summary>
+    /// <remarks>
+    /// A kind whose files differ only by their suffix in one folder, such as <c>Car.glb</c> and <c>Car.fbx</c>, keeps it;
+    /// by default the title drops it.
+    /// </remarks>
+    public bool TitleKeepsSuffix => false;
+
     /// <summary>Turns a file's bytes into the content a document edits.</summary>
     /// <param name="file">The file the bytes were read from.</param>
     /// <param name="content">The file's complete bytes.</param>

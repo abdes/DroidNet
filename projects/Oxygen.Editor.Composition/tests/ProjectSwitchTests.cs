@@ -10,11 +10,12 @@ using DryIoc;
 using Oxygen.Editor.Composition.UI.Tests.TestSupport;
 using Oxygen.Editor.Data;
 using Oxygen.Editor.Data.Services;
-using Oxygen.Editor.SceneEditor.Settings;
+using Oxygen.Editor.LivePreview.Settings;
 using Oxygen.Editor.Scenes.Interaction;
 using Oxygen.Editor.Scenes.Nodes;
 using Oxygen.Editor.Shell.Documents;
 using Oxygen.Editor.Shell.Windows;
+using Oxygen.Editor.Viewports.Settings;
 
 namespace Oxygen.Editor.Composition.UI.Tests;
 

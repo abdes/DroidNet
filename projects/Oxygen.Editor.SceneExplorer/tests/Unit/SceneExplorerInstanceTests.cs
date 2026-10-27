@@ -10,6 +10,7 @@ using Moq;
 using Oxygen.Editor.ContentPipeline.Testing;
 using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Scenes.Authoring;
+using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.Scenes.Edits.Hierarchy;
 using Oxygen.Editor.Scenes.Edits.Instances;
 using Oxygen.Editor.Scenes.Edits.Properties;
@@ -298,6 +299,7 @@ public sealed partial class SceneExplorerInstanceTests
                 Mock.Of<IRouter>(),
                 this.Documents,
                 this.testScene.Documents,
+                new DocumentScenes(this.testScene.Documents, this.Interaction, session: this.session, structures: this.Structures),
                 this.SelectionService,
                 interaction: this.Interaction,
                 session: this.session,

@@ -10,6 +10,7 @@ using Oxygen.Editor.Scenes.Interaction;
 using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.Scenes.Views;
 using Oxygen.Editor.Schemas;
+using Oxygen.Editor.Viewports;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Utils;
@@ -33,14 +34,14 @@ public partial class SceneEditorViewModel
     /// <param name="nodeId">The camera node.</param>
     /// <param name="command">The command.</param>
     /// <returns>Whether the command ran.</returns>
-    internal Task<bool> RunCameraCommandAsync(NodeId nodeId, SceneCameraCommand command)
+    public Task<bool> RunCameraCommandAsync(NodeId nodeId, SceneCameraCommand command)
         => !this.isDisposed && this.IsActiveDocument()
             ? this.ExecuteCameraCommandAsync(nodeId, command)
             : Task.FromResult(false);
 
     /// <summary>Gets what the focused viewport shows, while this editor is the window's active one.</summary>
     /// <returns>The viewport's camera state, or <see langword="null"/> when this editor has no viewport to ask.</returns>
-    internal SceneCameraViewState? CameraViewState()
+    public SceneCameraViewState? CameraViewState()
         => !this.isDisposed && this.IsActiveDocument() && this.GetActiveViewport() is { } viewport
             ? new SceneCameraViewState(viewport.SceneCamera?.NodeId, viewport.IsPilotingSceneCamera)
             : null;

@@ -28,6 +28,7 @@ internal static class TabItemExtensions
             ContentId = documentId.Value,
             Header = metadata?.Title ?? string.Empty,
             IsClosable = metadata?.IsClosable ?? true,
+            CanTearOut = metadata?.CanTearOut ?? true,
             IsPinned = metadata?.IsPinnedHint ?? false,
             IsPinLocked = metadata?.IsPinLockedHint ?? false,
             IsDirty = metadata?.IsDirty ?? false,
@@ -60,6 +61,7 @@ internal static class TabItemExtensions
         tab.IsPinned = metadata?.IsPinnedHint ?? false;
         tab.IsPinLocked = metadata?.IsPinLockedHint ?? false;
         tab.IsClosable = metadata?.IsClosable ?? tab.IsClosable;
+        tab.CanTearOut = metadata?.CanTearOut ?? tab.CanTearOut;
         tab.IsDirty = metadata?.IsDirty ?? false;
 
         if (metadata?.IconUri is { } parsedUri)

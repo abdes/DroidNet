@@ -8,6 +8,7 @@ using Oxygen.Editor.ContentExplorer;
 using Oxygen.Editor.CookedInspector;
 using Oxygen.Editor.Cooking;
 using Oxygen.Editor.MaterialEditor;
+using Oxygen.Editor.ModelEditor;
 using Oxygen.Editor.Output;
 using Oxygen.Editor.Problems;
 using Oxygen.Editor.SceneEditor;
@@ -49,5 +50,6 @@ internal sealed class WorkspaceModule : IScopeModule<IApplicationLayer>
 
         // The views of the editors whose documents move between the session's windows.
         scope.Register<IDocumentViewModule, MaterialEditorModule>(Reuse.Singleton);
+        scope.Register<IDocumentViewModule, ModelEditorModule>(Reuse.Singleton);
     }
 }

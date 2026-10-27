@@ -28,10 +28,10 @@ public sealed class SceneEditorModule : IFeatureModule
 
     /// <inheritdoc />
     /// <remarks>
-    /// The window's scenes are followed from the start: the last scene reopens when one becomes unavailable, and the
-    /// hidden nodes' notice ends with the window.
+    /// The window's scenes are followed from the start: the last scene reopens when one becomes unavailable, the engine
+    /// shows the active document's scene, and the hidden nodes' notice ends with the window.
     /// </remarks>
-    public IReadOnlyList<Type> Activation { get; } = [typeof(SceneDocumentLifetime), typeof(EditingViewMaskService)];
+    public IReadOnlyList<Type> Activation { get; } = [typeof(SceneDocumentLifetime), typeof(ShownDocumentFollower), typeof(EditingViewMaskService)];
 
     /// <inheritdoc />
     public void Register(IRegistrator scope)
@@ -40,6 +40,7 @@ public sealed class SceneEditorModule : IFeatureModule
         scope.Register<SceneEditorView>(Reuse.Transient);
         scope.Register<SceneDocumentLifetime>(Reuse.Singleton);
         scope.RegisterMapping<ISceneAvailability, SceneDocumentLifetime>();
+        scope.Register<ShownDocumentFollower>(Reuse.Singleton);
 
         // Per window on purpose: it observes this window's hidden nodes and ends with the window, so a second window
         // cannot inherit a stale notice.

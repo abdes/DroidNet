@@ -8,6 +8,7 @@ using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.LivePreview.Scenes;
@@ -19,6 +20,7 @@ public static class ScenePreviews
     /// <remarks>The preview is disposable; the workspace container that holds it disposes it.</remarks>
     /// <param name="engine">The embedded engine.</param>
     /// <param name="documents">The workspace's open documents.</param>
+    /// <param name="scenes">The scene each open document shows, a model document's preview scene included.</param>
     /// <param name="session">The project session whose scene documents the preview shows.</param>
     /// <param name="structureStore">Keeps the structures the preview reads of the instanced sources.</param>
     /// <param name="loggerFactory">The optional logger factory.</param>
@@ -28,10 +30,11 @@ public static class ScenePreviews
     public static IScenePreview Create(
         IEngineService engine,
         OpenDocuments documents,
+        DocumentScenes scenes,
         IProjectSession session,
         SceneStructureStore structureStore,
         ILoggerFactory? loggerFactory = null,
         IOperationResultPublisher? operationResults = null,
         IAssetFeed? assetFeed = null)
-        => new ScenePreview(engine, documents, session, structureStore, loggerFactory, operationResults, assetFeed);
+        => new ScenePreview(engine, documents, scenes, session, structureStore, loggerFactory, operationResults, assetFeed);
 }

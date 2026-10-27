@@ -30,4 +30,10 @@ public enum AssetFileCategory
 
     /// <summary>The import settings stored beside a model.</summary>
     ImportSettings,
+
+    /// <summary>
+    /// How a model is looked at in the Model Editor, beside the model: its preview's environment and sun, in the
+    /// editor's scene format. It stands for no asset and never cooks.
+    /// </summary>
+    ModelPreview,
 }

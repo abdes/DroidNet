@@ -112,8 +112,11 @@ internal sealed class AssetIdentityReducer
             _ => false,
         };
 
+    // Import settings and model previews belong to their model and stand for no asset of their own.
     private static bool IsBrowsableRecord(AssetPath path)
-        => !AssetFileTypes.Is(path.Name, AssetFileCategory.ImportSettings) && !IsDerivedRootMount(path.Mount);
+        => !AssetFileTypes.Is(path.Name, AssetFileCategory.ImportSettings)
+            && !AssetFileTypes.Is(path.Name, AssetFileCategory.ModelPreview)
+            && !IsDerivedRootMount(path.Mount);
 
     private static bool IsDerivedRootMount(string mountPoint)
         => string.Equals(mountPoint, "Cooked", StringComparison.Ordinal)

@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using DroidNet.Config;
 using Microsoft.Extensions.Logging;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline;
@@ -10,12 +9,14 @@ using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.LivePreview.Play;
 using Oxygen.Editor.LivePreview.Scenes;
+using Oxygen.Editor.LivePreview.Settings;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Engine;
-using Oxygen.Editor.SceneEditor.Settings;
 using Oxygen.Editor.Scenes.Interaction;
 using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.Shell.Documents;
+using Oxygen.Editor.Viewports;
+using Oxygen.Editor.Viewports.Settings;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.SceneEditor;
@@ -56,11 +57,11 @@ public sealed class SceneEditorServices(
     IUnsavedCookInputs unsavedInputs,
     ISceneSelectionService selection,
     SceneNodeInteraction interaction,
-    SceneEditorViews views,
+    SceneViews views,
+    ViewportServices viewports,
     PreviewSettingsService previewSettings,
     ViewportStateService viewportStates,
     TransformToolSettingsService transformTools,
-    ISettingsService<IEngineStartupSettings> engineSettings,
     ILoggerFactory loggerFactory,
     PlaySession? play = null,
     IAssetFeed? assets = null,
@@ -100,7 +101,10 @@ public sealed class SceneEditorServices(
     public SceneNodeInteraction Interaction { get; } = interaction;
 
     /// <summary>Gets the registry of the editors that frame and move cameras.</summary>
-    public SceneEditorViews Views { get; } = views;
+    public SceneViews Views { get; } = views;
+
+    /// <summary>Gets what creates the viewports and outlines the selection in them.</summary>
+    public ViewportServices Viewports { get; } = viewports;
 
     /// <summary>Gets the shared project preview preferences.</summary>
     public PreviewSettingsService PreviewSettings { get; } = previewSettings;
@@ -110,9 +114,6 @@ public sealed class SceneEditorServices(
 
     /// <summary>Gets the gizmo preferences.</summary>
     public TransformToolSettingsService TransformTools { get; } = transformTools;
-
-    /// <summary>Gets the engine startup settings.</summary>
-    public ISettingsService<IEngineStartupSettings> EngineSettings { get; } = engineSettings;
 
     /// <summary>Gets the logger factory.</summary>
     public ILoggerFactory LoggerFactory { get; } = loggerFactory;

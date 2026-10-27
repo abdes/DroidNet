@@ -1,0 +1,9 @@
+// Distributed under the MIT License. See accompanying file LICENSE or copy
+// at https://opensource.org/licenses/MIT.
+// SPDX-License-Identifier: MIT
+
+using System.Diagnostics.CodeAnalysis;
+
+[assembly: SuppressMessage("StyleCop.CSharp.DocumentationRules", "SA1600:Elements should be documented", Justification = "Test cases do not require XMLDoc comments", Scope = "module")]
+[assembly: SuppressMessage("StyleCop.CSharp.DocumentationRules", "SA1601:Partial elements should be documented", Justification = "Test cases do not require XMLDoc comments", Scope = "module")]
+[assembly: SuppressMessage("StyleCop.CSharp.DocumentationRules", "SA1615:Element return value should be documented", Justification = "Test cases do not require XMLDoc comments", Scope = "module")]

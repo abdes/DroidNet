@@ -11,6 +11,7 @@ using DroidNet.TimeMachine;
 using Moq;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Documents;
+using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Relocation;
@@ -222,6 +223,45 @@ public sealed class AssetRelocationTests
         _ = renamed.Settings.GetProperty("unit_policy").GetString().Should().Be("normalize");
         _ = workspace.Exists("Content/Models/Bot/hero.gltf").Should().BeTrue();
         _ = workspace.FileSystem.Directory.EnumerateFiles(workspace.PathOf("imports")).Should().ContainSingle().Which.Should().Be(workspace.PathOf(recordPath));
+    }
+
+    /// <summary>A model's preview, named after the model's file, renames and moves with it.</summary>
+    /// <returns>The asynchronous test.</returns>
+    [TestMethod]
+    public async Task RenamingModelRenamesItsPreview()
+    {
+        using var workspace = CreateContent();
+        _ = workspace.WriteModel("Content/Models/Robot", "robot.gltf");
+        _ = workspace.Write("Content/Models/Robot/robot.gltf" + AssetFileTypes.ModelPreview, "{}");
+
+        _ = await workspace.Service.RelocateAsync(Move("/Content/Models/Robot/robot.gltf", "/Content/Models/Robot/hero.gltf"), "Move", new HistoryKeeper(this), this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        _ = workspace.Exists("Content/Models/Robot/hero.gltf" + AssetFileTypes.ModelPreview).Should().BeTrue();
+        _ = workspace.Exists("Content/Models/Robot/robot.gltf" + AssetFileTypes.ModelPreview).Should().BeFalse();
+    }
+
+    /// <summary>Deleting a model recycles its preview with it, even when the model's folder holds other files.</summary>
+    /// <returns>The asynchronous test.</returns>
+    [TestMethod]
+    public async Task DeletingModelRecyclesItsPreview()
+    {
+        using var workspace = CreateContent();
+        _ = workspace.WriteModel("Content/Models/Robot", "robot.gltf");
+        _ = workspace.Write("Content/Models/Robot/robot.gltf" + AssetFileTypes.ModelPreview, "{}");
+        _ = workspace.Write("Content/Models/Robot/notes.txt", "kept");
+        var recycled = new List<string>();
+
+        await workspace.Service.DeleteAsync(
+            [AssetPath.Parse("/Content/Models/Robot/robot.gltf")],
+            paths =>
+            {
+                recycled.AddRange(paths);
+                return Task.CompletedTask;
+            },
+            this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        _ = recycled.Should().Contain(workspace.PathOf("Content/Models/Robot/robot.gltf" + AssetFileTypes.ModelPreview))
+            .And.NotContain(workspace.PathOf("Content/Models/Robot/notes.txt"));
     }
 
     /// <summary>

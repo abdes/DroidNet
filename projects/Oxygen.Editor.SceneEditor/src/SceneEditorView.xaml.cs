@@ -11,6 +11,7 @@ using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using Oxygen.Editor.Pickers;
 using Oxygen.Editor.Shell.Documents;
+using Oxygen.Editor.Viewports;
 
 namespace Oxygen.Editor.SceneEditor;
 

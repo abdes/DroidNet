@@ -146,6 +146,19 @@ public sealed partial class AssetIdentityReducerTests
     }
 
     [TestMethod]
+    public void Reduce_WhenModelPreviewExists_ShouldNotPublishBrowsableRow()
+    {
+        using var workspace = new TempWorkspace();
+        var previewPath = workspace.SourcePath("Content/Models/Crate.glb.preview.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(previewPath)!);
+        File.WriteAllText(previewPath, "{}");
+
+        var rows = Reduce(workspace, [new AssetRecord(AssetPath.Parse("/Content/Models/Crate.glb.preview.json"))]);
+
+        _ = rows.Should().BeEmpty("a model's preview belongs to the model and is no asset of its own");
+    }
+
+    [TestMethod]
     public void Reduce_WhenCookedFolderIsExposedAsMount_ShouldIgnoreDerivedRootRows()
     {
         using var workspace = new TempWorkspace();

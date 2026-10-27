@@ -45,6 +45,12 @@ public partial class SceneAdapter : TreeItemAdapter, ITreeItem<Scene>
     /// <summary>Gets a value indicating whether the tree uses the authored explorer layout.</summary>
     internal bool UseLayoutAdapters { get; init; }
 
+    /// <summary>
+    /// Gets a value indicating whether nodes without a layout seat are listed too, as a scene's new nodes are. A model's
+    /// preview lists only what its layout seats, the model, and not the sun that lights it.
+    /// </summary>
+    internal bool ListsUnseatedNodes { get; init; } = true;
+
     /// <summary>Gets the root-level items in layout order without triggering lazy child loading.</summary>
     internal IReadOnlyList<ITreeItem> RootItems => this.rootItemsCache;
 
@@ -171,6 +177,11 @@ public partial class SceneAdapter : TreeItemAdapter, ITreeItem<Scene>
                     pending.Push(child);
                 }
             }
+        }
+
+        if (!this.ListsUnseatedNodes)
+        {
+            return;
         }
 
         foreach (var node in this.AttachedObject.RootNodes)

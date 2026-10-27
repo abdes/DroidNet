@@ -21,6 +21,7 @@ using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.Input;
 using Oxygen.Editor.LivePreview.Scenes;
+using Oxygen.Editor.Models;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.SceneInspector.Components;
 using Oxygen.Editor.SceneInspector.Components.Instances;
@@ -70,6 +71,7 @@ public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNo
     private readonly ISceneStructures? structures;
     private readonly IInstancedNodeReader? nodes;
     private readonly InspectorSourceApply sourceApply;
+    private readonly IModelFacts? modelFacts;
 
     // The nodes whose property changes refresh the panel's own properties.
     private readonly List<SceneNode> observedNodes = [];
@@ -100,6 +102,7 @@ public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNo
     /// <param name="vmToViewConverter">The converter for resolving views from viewmodels.</param>
     /// <param name="assetReveal">What shows assets in the Content Explorer.</param>
     /// <param name="documentArea">The window's document area, whose active scene document the inspector shows.</param>
+    /// <param name="scenes">The scene each open document shows: a scene document's own, a model document's preview scene.</param>
     /// <param name="assetProvider">The shared asset identity and availability feed.</param>
     /// <param name="scenePreview">The engine preview, which reports the fields still waiting for the engine.</param>
     /// <param name="selectionService">The authoritative document selection owner, used to hydrate the typed context at startup.</param>
@@ -126,11 +129,13 @@ public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNo
     /// <param name="dialogs">What asks whether a swap keeps or discards an instance's changes; without it, only instances without changes swap.</param>
     /// <param name="operationResults">What tells the user about the changes an unpack dropped.</param>
     /// <param name="statusReducer">The reducer paired with <paramref name="operationResults"/>.</param>
+    /// <param name="modelFacts">Reads the facts the pane shows on a model's root, if the editor reads them.</param>
     public SceneInspectorViewModel(
         HostingContext hosting,
         ViewModelToView vmToViewConverter,
         IAssetReveal assetReveal,
         IDocumentArea documentArea,
+        DocumentScenes scenes,
         IAssetFeed assetProvider,
         IScenePreview scenePreview,
         ISceneSelectionService selectionService,
@@ -148,19 +153,21 @@ public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNo
         IAuthoredReferences? references = null,
         IDialogService? dialogs = null,
         IOperationResultPublisher? operationResults = null,
-        IStatusReducer? statusReducer = null)
+        IStatusReducer? statusReducer = null,
+        IModelFacts? modelFacts = null)
     {
         this.logger = loggerFactory?.CreateLogger<SceneInspectorViewModel>() ?? NullLogger<SceneInspectorViewModel>.Instance;
         this.LoggerFactory = loggerFactory;
 
         this.assetReveal = assetReveal;
-        this.documents = new InspectedSceneDocuments(documentArea, this.ShowDocument, this.ClearClosedDocument);
+        this.documents = new InspectedSceneDocuments(documentArea, scenes, this.ShowDocument, this.ClearClosedDocument);
         this.scenePreview = scenePreview;
         this.interaction = interaction;
         this.sceneSelectionService = selectionService;
         this.session = session;
         this.structures = structures;
         this.nodes = nodes;
+        this.modelFacts = modelFacts;
         this.sourceApply = new InspectorSourceApply(session, this.AuthoringOf, operationResults, statusReducer);
         this.VmToViewConverter = vmToViewConverter;
         this.dispatcher = hosting.Dispatcher;
@@ -257,10 +264,29 @@ public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNo
         || (this.selectionContext.Kind == SceneSelectionKind.Node && !this.HasItems && !this.isReadingInstancedNodes);
 
     /// <summary>
-    /// Gets a value indicating whether the current node selection can be authored: no node is locked. A node an instance
-    /// brings in is authored through its instance root's changes.
+    /// Gets a value indicating whether the current node selection can be authored: the scene takes edits of every node,
+    /// and no node is locked. A node an instance brings in is authored through its instance root's changes.
     /// </summary>
-    public bool CanEditSelectedNodes => this.items.TrueForAll(node => this.LockOf(node) is null);
+    public bool CanEditSelectedNodes => this.ReadOnlyReason is null && this.items.TrueForAll(node => this.LockOf(node) is null);
+
+    /// <summary>
+    /// Gets why the inspected scene takes no edit of a selected node, such as a node of a model in its preview, which the
+    /// pane says above the properties it shows read-only; <see langword="null"/> when it takes edits of every one.
+    /// </summary>
+    public string? ReadOnlyReason
+        => this.documents.AuthoringOf(this.activeScene) is { ReadOnlyReason: { } reason } authoring
+            && this.items.Exists(node => !authoring.TakesEditsOf(this.ReferenceOf(node).Node))
+                ? reason
+                : null;
+
+    /// <summary>Gets a value indicating whether the pane says why the selected nodes' properties cannot be changed.</summary>
+    public bool HasEditingNotice => this.HasItems && !this.ShowsModelCard && (this.ReadOnlyReason is not null || this.HasLockedSelection);
+
+    /// <summary>Gets the title of the notice that says why the selected nodes' properties cannot be changed.</summary>
+    public string EditingNoticeTitle => this.ReadOnlyReason is not null ? "Read-only" : "Locked for editing";
+
+    /// <summary>Gets why the selected nodes' properties cannot be changed: the scene is read-only, or a lock protects one.</summary>
+    public string EditingNotice => this.ReadOnlyReason ?? this.LockedEditingMessage;
 
     /// <summary>Gets a value indicating whether a lock protects any node in the current selection.</summary>
     public bool HasLockedSelection => this.items.Exists(node => this.LockOf(node) is not null);
@@ -283,9 +309,19 @@ public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNo
     }
 
     /// <summary>Gets a value indicating whether the scene settings editor is the active surface.</summary>
+    /// <remarks>
+    /// On a model's preview scene, they are how the model is looked at: its sun, sky, exposure and post-processing,
+    /// without the Play settings and references, which a model has none of.
+    /// </remarks>
     public bool HasSceneSettings => !this.HasItems
         && this.selectionContext.Kind is SceneSelectionKind.Empty or SceneSelectionKind.Scene
         && this.activeScene is not null;
+
+    /// <summary>
+    /// Gets a value indicating whether the pane shows the selected nodes' component list and sections: a model's root
+    /// shows the model's facts instead.
+    /// </summary>
+    public bool HasComponentSections => this.HasItems && !this.ShowsModelCard;
 
     /// <summary>Gets the aggregate description shown for folder and mixed selections.</summary>
     public string SelectionSummaryText => this.selectionContext.Kind switch
@@ -443,6 +479,7 @@ public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNo
         this.RefreshOwnProperties();
         this.RefreshPropertyEditors();
         this.ApplyPendingKeptChangesFocus();
+        this.ReadModelFacts();
     }
 
     private void ObserveNodes(IEnumerable<SceneNode> nodes)
@@ -524,6 +561,7 @@ public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNo
     private List<InspectorSection> FilterPropertyEditors()
     {
         var result = new List<InspectorSection>();
+        this.sceneSettings.HasSceneOwnSettings = !this.ShowsModel;
         this.sceneSettings.SetScene(this.HasSceneSettings ? this.activeScene : null);
         if (this.HasSceneSettings)
         {
@@ -537,7 +575,7 @@ public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNo
             keysToCheck.IntersectWith([selected]);
         }
 
-        if (this.items.Count == 0)
+        if (this.items.Count == 0 || this.ShowsModelCard)
         {
             return result;
         }
@@ -574,6 +612,8 @@ public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNo
         this.OnPropertyChanged(nameof(this.HasSelectionSummary));
         this.OnPropertyChanged(nameof(this.HasSelectionNotice));
         this.OnPropertyChanged(nameof(this.HasSceneSettings));
+        this.OnPropertyChanged(nameof(this.HasComponentSections));
+        this.OnPropertyChanged(nameof(this.ShowsModelCard));
         this.OnPropertyChanged(nameof(this.SelectionSummaryText));
         this.OnPropertyChanged(nameof(this.InspectorTitle));
     }
@@ -660,15 +700,14 @@ public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNo
         return instance;
     }
 
-    // A scene document that became active, or reloaded while active: the inspector shows its scene.
+    // A document with a scene that became active, or reloaded while active: the inspector shows its scene.
     private void ShowDocument(Document document)
     {
-        if (this.isDisposed)
+        if (this.isDisposed || this.documents.SceneOf(document.Id) is not { } scene)
         {
             return;
         }
 
-        var scene = SceneContent.Of(document).Scene;
 
         // A fresh document session hydrates the authoritative typed context for that
         // document: a folder selection reopens as the grouping summary, not scene properties.
@@ -868,6 +907,10 @@ public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNo
     {
         this.OnPropertyChanged(nameof(this.CanEditSelectedNodes));
         this.OnPropertyChanged(nameof(this.HasLockedSelection));
+        this.OnPropertyChanged(nameof(this.ReadOnlyReason));
+        this.OnPropertyChanged(nameof(this.HasEditingNotice));
+        this.OnPropertyChanged(nameof(this.EditingNoticeTitle));
+        this.OnPropertyChanged(nameof(this.EditingNotice));
         this.OnPropertyChanged(nameof(this.LockedEditingMessage));
         this.OnPropertyChanged(nameof(this.CanUseNodeHeader));
         this.OnPropertyChanged(nameof(this.SelectedNodeOrigin));

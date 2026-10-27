@@ -10,11 +10,12 @@ using Microsoft.Extensions.Logging;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.LivePreview.Scenes;
+using Oxygen.Editor.LivePreview.Settings;
 using Oxygen.Editor.Runtime.Engine;
-using Oxygen.Editor.SceneEditor.Settings;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.Shell.Documents;
+using Oxygen.Editor.Viewports;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -27,7 +28,7 @@ namespace Oxygen.Editor.SceneEditor;
 /// The editor belongs to the project session. The window that shows its scene lends it the window's area, commands,
 /// placement and asset reveal (<see cref="IDocumentWindowEditor"/>); without a window, what needs one does nothing.
 /// </remarks>
-public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, IDocumentCloseParticipant, IDocumentWindowEditor, IDisposable
+public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, IDocumentCloseParticipant, IDocumentWindowEditor, ISceneView, IDisposable
 {
     private readonly ILogger logger;
     private readonly SceneEditorServices services;
@@ -49,8 +50,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         this.logger = services.LoggerFactory.CreateLogger<SceneEditorViewModel>();
         this.services = services;
 
-        // The scene editor owns the preview preferences: they are restored when it opens and reach the engine once it runs.
-        _ = services.PreviewSettings.EnsureRestoredAsync();
+        this.PreviewSettingsPanel = services.Viewports.CreatePreviewSettings();
         this.Viewports = [];
         this.Tab = tab ?? throw new ArgumentNullException(nameof(tab));
         this.Document = tab.Document;
@@ -64,7 +64,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         // Defer creating viewports until the engine shows the document's scene: the preview's readiness triggers the
         // layout restoration, which avoids creating engine views before the scene exists ("frame context has no scene").
         this.RegisterSubscriptions();
-        services.Views.Attach(this);
+        services.Views.Attach(this.Document.Id, this);
         this.Document.ContentReplaced += this.OnDocumentContentReplaced;
         this.InitializePlay();
         this.services.ScenePreview.ReadyChanged += this.OnPreviewReadyChanged;
@@ -103,19 +103,8 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
     /// <summary>Gets the shared project preview preferences.</summary>
     public PreviewSettingsService PreviewSettings => this.services.PreviewSettings;
 
-    /// <summary>Gets or sets the native engine logging verbosity, an engine startup setting the running engine takes live.</summary>
-    public int EngineLoggingVerbosity
-    {
-        get => this.services.EngineSettings.Settings.LoggingVerbosity;
-        set
-        {
-            if (this.services.EngineSettings.Settings.LoggingVerbosity != value)
-            {
-                this.services.EngineSettings.Settings.LoggingVerbosity = value;
-                this.OnPropertyChanged();
-            }
-        }
-    }
+    /// <summary>Gets the preview settings the toolbar's Settings flyout edits.</summary>
+    public PreviewSettingsViewModel PreviewSettingsPanel { get; }
 
     /// <inheritdoc/>
     public void AttachWindow(DocumentWindowServices window)
@@ -196,7 +185,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
 
             this.services.ScenePreview.ReadyChanged -= this.OnPreviewReadyChanged;
             this.UnregisterSubscriptions();
-            this.services.Views.Detach(this);
+            this.services.Views.Detach(this.Document.Id, this);
             this.DisposeTransformTools();
             this.DisposePlay();
             this.DisposeInstances();

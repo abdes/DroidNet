@@ -393,6 +393,30 @@ public partial class DocumentTabPresenterTests : TabStripTestsBase
     });
 
     [TestMethod]
+    public Task MetadataThatCannotTearOut_OpensATabThatStaysInItsStrip_Async() => EnqueueAsync(async () =>
+    {
+        // Arrange
+        var tabStrip = this.CreateTabStrip(0);
+        await LoadTestContentAsync(tabStrip).ConfigureAwait(true);
+
+        var window = VisualUserInterfaceTestsApp.MainWindow;
+        var ds = new TestDocumentTabSource();
+        var ctx = ManagedWindowFactory.CreateForWindow(window);
+        using var presenter = new DocumentTabPresenter(tabStrip, ds, ctx, DispatcherQueue.GetForCurrentThread(), this.mockLoggerFactory.Object.CreateLogger<DocumentTabPresenter>());
+        var kept = new TestDocumentMetadata { Title = "Car.glb", CanTearOut = false };
+        var plain = new TestDocumentMetadata { Title = "Notes" };
+
+        // Act
+        _ = await ds.OpenDocumentAsync(ctx.Id, kept, -1, shouldSelect: true).ConfigureAwait(true);
+        _ = await ds.OpenDocumentAsync(ctx.Id, plain, -1, shouldSelect: false).ConfigureAwait(true);
+        await WaitForRenderCompletion().ConfigureAwait(true);
+
+        // Assert
+        _ = tabStrip.Items.Single(tab => string.Equals(tab.Header, "Car.glb", StringComparison.Ordinal)).CanTearOut.Should().BeFalse();
+        _ = tabStrip.Items.Single(tab => string.Equals(tab.Header, "Notes", StringComparison.Ordinal)).CanTearOut.Should().BeTrue();
+    });
+
+    [TestMethod]
     public Task PinLockedMetadata_OpensPinnedAndLockedTab_Async() => EnqueueAsync(async () =>
     {
         // Arrange
@@ -759,6 +783,8 @@ public partial class DocumentTabPresenterTests : TabStripTestsBase
         public bool IsPinLockedHint { get; set => this.Set(ref field, value); }
 
         public bool IsClosable { get; set => this.Set(ref field, value); } = true;
+
+        public bool CanTearOut { get; set => this.Set(ref field, value); } = true;
 
         public bool HasListeners => this.PropertyChanged is not null;
 

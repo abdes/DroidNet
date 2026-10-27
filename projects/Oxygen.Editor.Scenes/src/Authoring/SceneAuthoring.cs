@@ -47,14 +47,15 @@ public sealed partial class SceneAuthoring : IDisposable
     /// <param name="structureOf">What an instance of a source contains, as last read, if the editor reads it.</param>
     /// <param name="sceneFiles">The files of the project's authored scenes, if a project is open.</param>
     /// <param name="modelRecords">The model import records of the project's models, if a project is open.</param>
-    internal SceneAuthoring(DocumentDecodeContext document, Scene scene, IList<ExplorerEntryData> layout, ISceneNodeInteraction? interaction, IAssetRedirects? redirects, IAuthoredReferences? references = null, Func<AssetPath, SceneStructure?>? structureOf = null, IAuthoredSceneFiles? sceneFiles = null, IModelImportRecordFiles? modelRecords = null)
+    /// <param name="readOnly">What a read-only scene, such as a model's preview, still takes; <see langword="null"/> when it takes every edit.</param>
+    internal SceneAuthoring(DocumentDecodeContext document, Scene scene, IList<ExplorerEntryData> layout, ISceneNodeInteraction? interaction, IAssetRedirects? redirects, IAuthoredReferences? references = null, Func<AssetPath, SceneStructure?>? structureOf = null, IAuthoredSceneFiles? sceneFiles = null, IModelImportRecordFiles? modelRecords = null, SceneReadOnly? readOnly = null)
     {
         this.Document = document.Document;
         this.history = document.History;
         this.Scene = scene;
         this.Layout = layout;
         this.context = SynchronizationContext.Current;
-        this.scope = new SceneEditScope(scene, layout, interaction, redirects, references) { StructureOf = structureOf, SceneFiles = sceneFiles, ModelRecords = modelRecords };
+        this.scope = new SceneEditScope(scene, layout, interaction, redirects, references) { StructureOf = structureOf, SceneFiles = sceneFiles, ModelRecords = modelRecords, ReadOnly = readOnly };
     }
 
     /// <summary>Occurs on the scene thread after each edit, replay, preview and relocation, naming what changed.</summary>
@@ -62,6 +63,21 @@ public sealed partial class SceneAuthoring : IDisposable
 
     /// <summary>Gets the scene's document.</summary>
     public DocumentId Document { get; }
+
+    /// <summary>Gets why the scene refuses an edit, such as a model's preview; <see langword="null"/> when it takes every edit.</summary>
+    /// <remarks>
+    /// Every edit and gesture <see cref="SceneReadOnly"/> does not allow is refused with
+    /// <see cref="SceneEditCodes.SceneReadOnly"/> and this reason.
+    /// </remarks>
+    public string? ReadOnlyReason => this.scope.ReadOnlyReason;
+
+    /// <summary>Gets a value indicating whether the scene takes edits of a node's properties.</summary>
+    /// <param name="node">The node.</param>
+    /// <returns><see langword="true"/> unless the scene is read-only and the node is not one it takes edits of.</returns>
+    public bool TakesEditsOf(NodeId node) => this.scope.ReadOnly is not { } readOnly || readOnly.Allows(node);
+
+    /// <summary>Gets the history the authoring records into: its document's, or a preview's own.</summary>
+    public HistoryKeeper History => this.history;
 
     /// <summary>Gets the scene, for views and queries to read; only edits change it.</summary>
     public Scene Scene { get; }

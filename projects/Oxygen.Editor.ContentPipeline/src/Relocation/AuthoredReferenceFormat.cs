@@ -34,9 +34,9 @@ internal static class AuthoredReferenceFormat
 
     /// <summary>Tests whether a file is an authored source whose JSON may reference other assets.</summary>
     /// <param name="path">The file path.</param>
-    /// <returns>Whether the file is an authored descriptor or an input file.</returns>
+    /// <returns>Whether the file is an authored descriptor, an input file or a model's preview.</returns>
     public static bool IsReferencingSource(string path)
-        => AssetFileTypes.Find(path)?.Category is AssetFileCategory.Descriptor or AssetFileCategory.Input;
+        => AssetFileTypes.Find(path)?.Category is AssetFileCategory.Descriptor or AssetFileCategory.Input or AssetFileCategory.ModelPreview;
 
     /// <summary>Reads the asset identities a descriptor references in its reference fields.</summary>
     /// <param name="path">The descriptor.</param>
@@ -138,9 +138,10 @@ internal static class AuthoredReferenceFormat
         return changed ? Serialize(root!, content.Span) : content.ToArray();
     }
 
-    // The editor authors scenes in its own format; the engine's formats are described by their file types.
+    // The editor authors scenes, and a model's preview, in its own format; the engine's formats are described by their
+    // file types.
     private static IReadOnlyList<AssetReferenceField> ReferenceFields(FileSystemPath path)
-        => path.Name.EndsWith(AssetFileTypes.SceneDescriptor, StringComparison.Ordinal)
+        => path.Name.EndsWith(AssetFileTypes.SceneDescriptor, StringComparison.Ordinal) || AssetFileTypes.Is(path.Name, AssetFileCategory.ModelPreview)
             ? SceneReferenceFields.All
             : AssetFileTypes.Find(path.Name)?.ReferenceFields ?? [];
 

@@ -7,6 +7,7 @@ using DroidNet.Controls;
 using DroidNet.Routing;
 using Moq;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.Scenes.Testing;
@@ -158,6 +159,7 @@ public sealed partial class SceneExplorerDropTests
                 Mock.Of<IRouter>(),
                 this.Documents,
                 this.OpenDocuments,
+                new DocumentScenes(this.OpenDocuments),
                 new SceneSelectionService());
             this.SceneAdapter = explorer.Scene;
             return explorer;

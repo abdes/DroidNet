@@ -6,7 +6,6 @@ using AwesomeAssertions;
 using Moq;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Cooking;
-using Oxygen.Editor.Cooking;
 using Oxygen.Editor.Input;
 using Oxygen.Editor.Input.Testing;
 using Oxygen.Editor.LivePreview.Play;
@@ -15,6 +14,7 @@ using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Scripting;
 using Oxygen.Editor.Scripting.Testing;
 using Oxygen.Editor.Shell.Desktop;
+using Oxygen.Editor.Shell.Windows;
 using Oxygen.Managed.Assets.Authoring.Input;
 using Oxygen.Managed.Assets.Diagnostics;
 using Oxygen.Managed.Core;
@@ -156,8 +156,8 @@ internal sealed partial class ProblemsViewModelTests : IDisposable
         };
         var cook = new Mock<IAssetProblemSource>();
         _ = cook.SetupGet(static source => source.Problems).Returns([new CookProblem(issue)]);
-        var recovery = new Mock<ICookRecovery>();
-        _ = recovery.Setup(static target => target.GoToPropertyAsync(It.IsAny<DiagnosticRecord>())).ReturnsAsync(value: true);
+        var recovery = new Mock<ICookIssueReveal>();
+        _ = recovery.Setup(static target => target.RevealAsync(It.IsAny<DiagnosticRecord>())).ReturnsAsync(value: true);
         using var model = TestProblems.CreateModel(this.session, [cook.Object], this.codeEditor.Object, this.runtime, recovery.Object);
 
         model.Selected = model.Groups[0].Entries[0];
@@ -165,7 +165,7 @@ internal sealed partial class ProblemsViewModelTests : IDisposable
         _ = model.CanSelectNode.Should().BeTrue();
         _ = model.OpenSelectedCommand.CanExecute(parameter: null).Should().BeFalse("a scene file is no code to open");
         await model.SelectNodeCommand.ExecuteAsync(parameter: null).ConfigureAwait(false);
-        recovery.Verify(target => target.GoToPropertyAsync(issue), Times.Once);
+        recovery.Verify(target => target.RevealAsync(issue), Times.Once);
     }
 
     [TestMethod]

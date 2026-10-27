@@ -45,25 +45,25 @@ remains in the project and content-pipeline contracts.
 For every listed setting, this matrix is normative. Implementation must reject
 storing a setting outside its row.
 
-| Setting                                                       | Scope                           | Owning service                                    | Storage                                          | Mutation API                             | Dirties scene?   | Live-applied?                                                    |
-| ------------------------------------------------------------- | ------------------------------- | ------------------------------------------------- | ------------------------------------------------ | ---------------------------------------- | ---------------- | ---------------------------------------------------------------- |
-| `TransformComponent.LocalPosition/Rotation/Scale`             | Scene component                 | `ISceneDocumentCommandService.EditTransformAsync` | scene file (`TransformData`)                     | command                                  | yes              | yes (sync)                                                       |
-| `GeometryComponent.Geometry` (URI)                            | Scene component                 | `EditGeometryAsync`                               | `GeometryComponentData.GeometryUri`              | command                                  | yes              | yes                                                              |
-| Material overrides by geometry identity/SurfaceId             | Scene component                 | Surface material command                          | Canonical scene override records                 | command                                  | yes              | yes; observed effect qualified in M08                            |
-| `PerspectiveCamera.{FOV, Near, Far, AspectMode, FixedAspect}` | Scene component                 | Camera command                                    | Canonical perspective-camera data                | command                                  | yes              | yes; target resize changes only effective view state             |
-| Node visibility / geometry cast-receive source modes          | Scene node                      | Property command                                  | Local/Inherit source modes in scene data         | command                                  | yes              | yes                                                              |
-| Directional atmosphere assignment                             | Light component                 | Light command                                     | None/Primary/Secondary in light data             | command                                  | yes              | yes; scene summary is read-only                                  |
-| `DirectionalLightComponent.*`                                 | Scene component                 | `EditDirectionalLightAsync`                       | `DirectionalLightData`                           | command                                  | yes              | yes                                                              |
-| `Scene.Environment.*`                                         | Scene                           | `EditSceneEnvironmentAsync`                       | `SceneData.Environment`                          | command                                  | yes              | per-field, see env LLD                                           |
-| Preview FPS                                                   | User/project                    | `PreviewSettingsService` → `IEngineService`       | project-scoped SQLite setting                    | preview preference                       | no               | yes (immediate)                                                  |
-| Native log verbosity                                          | User/project                    | `PreviewSettingsService` → `IEngineService`       | project-scoped SQLite setting                    | preview preference                       | no               | yes (immediate)                                                  |
-| `IEngineStartupSettings` (startup)                            | Editor preference               | `ISettingsService<IEngineStartupSettings>`        | DroidNet user-local settings                     | `ISettingsService.Save`                  | no               | only on next engine init                                         |
-| Appearance (theme, density)                                   | Editor preference               | `ISettingsService<IAppearanceSettings>`           | DroidNet user-local settings                     | `ISettingsService`                       | no               | yes (immediate, every open window)                               |
-| Workspace docking, recent docs                                | Workspace                       | existing editor data services                     | user-local                                       | workspace services                       | no               | n/a                                                              |
-| Viewport layout and per-pane camera state                     | Workspace per project and scene | WorldEditor viewport-state service                | `IEditorSettingsManager`, project-scoped setting | viewport UI, not authoring command       | no               | restored when the scene's panes are created                      |
-| Editor Hide / Show All                                        | Workspace per project and scene | WorldEditor workspace-visibility service          | `IEditorSettingsManager`, project-scoped setting | workspace command, not authoring command | no               | all editing viewports of the active scene; drops draw and shadow |
-| Transform tool space and snapping                             | Editor preference               | WorldEditor `TransformToolSettingsService`        | `IEditorSettingsManager`, application setting    | viewport tools, not authoring command    | no               | next gizmo update in every open scene                            |
-| Project content roots, cook scope                             | Project                         | `Oxygen.Editor.Projects`                          | project metadata                                 | project/content commands                 | no scene changes | ordered mount/publication workflow                               |
+| Setting                                                       | Scope                           | Owning service                                          | Storage                                          | Mutation API                             | Dirties scene?   | Live-applied?                                                    |
+| ------------------------------------------------------------- | ------------------------------- | ------------------------------------------------------- | ------------------------------------------------ | ---------------------------------------- | ---------------- | ---------------------------------------------------------------- |
+| `TransformComponent.LocalPosition/Rotation/Scale`             | Scene component                 | `ISceneDocumentCommandService.EditTransformAsync`       | scene file (`TransformData`)                     | command                                  | yes              | yes (sync)                                                       |
+| `GeometryComponent.Geometry` (URI)                            | Scene component                 | `EditGeometryAsync`                                     | `GeometryComponentData.GeometryUri`              | command                                  | yes              | yes                                                              |
+| Material overrides by geometry identity/SurfaceId             | Scene component                 | Surface material command                                | Canonical scene override records                 | command                                  | yes              | yes; observed effect qualified in M08                            |
+| `PerspectiveCamera.{FOV, Near, Far, AspectMode, FixedAspect}` | Scene component                 | Camera command                                          | Canonical perspective-camera data                | command                                  | yes              | yes; target resize changes only effective view state             |
+| Node visibility / geometry cast-receive source modes          | Scene node                      | Property command                                        | Local/Inherit source modes in scene data         | command                                  | yes              | yes                                                              |
+| Directional atmosphere assignment                             | Light component                 | Light command                                           | None/Primary/Secondary in light data             | command                                  | yes              | yes; scene summary is read-only                                  |
+| `DirectionalLightComponent.*`                                 | Scene component                 | `EditDirectionalLightAsync`                             | `DirectionalLightData`                           | command                                  | yes              | yes                                                              |
+| `Scene.Environment.*`                                         | Scene                           | `EditSceneEnvironmentAsync`                             | `SceneData.Environment`                          | command                                  | yes              | per-field, see env LLD                                           |
+| Preview FPS                                                   | User/project                    | LivePreview `PreviewSettingsService` → `IEngineService` | project-scoped SQLite setting                    | preview preference                       | no               | yes (immediate)                                                  |
+| Native log verbosity                                          | User/project                    | LivePreview `PreviewSettingsService` → `IEngineService` | project-scoped SQLite setting                    | preview preference                       | no               | yes (immediate)                                                  |
+| `IEngineStartupSettings` (startup)                            | Editor preference               | `ISettingsService<IEngineStartupSettings>`              | DroidNet user-local settings                     | `ISettingsService.Save`                  | no               | only on next engine init                                         |
+| Appearance (theme, density)                                   | Editor preference               | `ISettingsService<IAppearanceSettings>`                 | DroidNet user-local settings                     | `ISettingsService`                       | no               | yes (immediate, every open window)                               |
+| Workspace docking, recent docs                                | Workspace                       | existing editor data services                           | user-local                                       | workspace services                       | no               | n/a                                                              |
+| Viewport layout and per-pane camera state                     | Workspace per project and scene | Viewports `ViewportStateService`                        | `IEditorSettingsManager`, project-scoped setting | viewport UI, not authoring command       | no               | restored when the scene's panes are created                      |
+| Editor Hide / Show All                                        | Workspace per project and scene | WorldEditor workspace-visibility service                | `IEditorSettingsManager`, project-scoped setting | workspace command, not authoring command | no               | all editing viewports of the active scene; drops draw and shadow |
+| Transform tool space and snapping                             | Editor preference               | Viewports `TransformToolSettingsService`                | `IEditorSettingsManager`, application setting    | viewport tools, not authoring command    | no               | next gizmo update in every open scene                            |
+| Project content roots, cook scope                             | Project                         | `Oxygen.Editor.Projects`                                | project metadata                                 | project/content commands                 | no scene changes | ordered mount/publication workflow                               |
 
 The owning service enforces each mutation boundary.
 
@@ -145,10 +145,12 @@ development-run option, not a persistent editor/project preference.
 
 ### 5.2 Viewport state storage and lifetime
 
-WorldEditor owns the typed `WorldEditor/SceneViewports` setting through a
-viewport-state service and the existing `IEditorSettingsManager`, with
-`SettingContext.Project` on the canonical project root, as in §5.1. The
-versioned payload contains the project ID and a map of scene IDs to the layout,
+Viewports owns the typed `WorldEditor/SceneViewports` setting through
+`ViewportStateService` and the existing `IEditorSettingsManager`, with
+`SettingContext.Project` on the canonical project root, as in §5.1. The scene
+editor and the Model Editor both keep their panes there: a model's preview scene
+is identified by the model's source identity, so its camera survives renames.
+The versioned payload contains the project ID and a map of scene IDs to the layout,
 the focused pane index, and per pane (by layout index) the editor camera
 position, rotation and orbit focus point, view preset, orthographic size, camera
 control mode and viewed scene camera node ID. Identity is the stable authored
@@ -162,7 +164,7 @@ authoring mounts, cooked output or validation requests.
 
 ### 5.3 Transform tool preferences
 
-WorldEditor owns the typed `WorldEditor/TransformTools` setting through
+Viewports owns the typed `WorldEditor/TransformTools` setting through
 `TransformToolSettingsService` and `IEditorSettingsManager`, with
 `SettingScope.Application`, so the choice follows the user across projects. The
 versioned payload holds the snap toggle, the translation, rotation and scale
@@ -172,20 +174,20 @@ not persisted. Nothing is written to scene documents, history or cooked output.
 
 ### 5.4 Ground grid preferences
 
-`PreviewSettingsService` owns the typed `WorldEditor/GroundGrid` setting with
-`SettingScope.Application`, so the grid follows the user across projects. It
-holds every `GroundGridConfig` field the engine renders: enabled, spacing, major
-lines every N, line, major and axis thickness, fade start and power, horizon
-boost, origin, smooth motion and its time, and the minor, major, X axis, Y axis
-and origin colors. Each edit applies to every viewport pane through
-`IEngineService.SetGroundGrid`, which reaches `Renderer::SetGroundGridConfig` as
-an editor command that re-renders every pane. The setting is restored and
-applied with the project preview preferences whenever the workspace starts or
-resumes the engine. An edit outside the engine's range is clamped, and one that
-is not a number keeps the current value; a stored value outside its range
-restores its default. A pane's own grid toggle is viewport state (§5.2) and
-still hides the grid in that pane. Nothing is written to scene documents,
-history or cooked output.
+LivePreview's `PreviewSettingsService` owns the typed `WorldEditor/GroundGrid`
+setting with `SettingScope.Application`, so the grid follows the user across
+projects. It holds every `GroundGridConfig` field the engine renders: enabled,
+spacing, major lines every N, line, major and axis thickness, fade start and
+power, horizon boost, origin, smooth motion and its time, and the minor, major,
+X axis, Y axis and origin colors. Each edit applies to every viewport pane
+through `IEngineService.SetGroundGrid`, which reaches
+`Renderer::SetGroundGridConfig` as an editor command that re-renders every pane.
+The setting is restored and applied with the project preview preferences
+whenever the workspace starts or resumes the engine. An edit outside the
+engine's range is clamped, and one that is not a number keeps the current value;
+a stored value outside its range restores its default. A pane's own grid toggle
+is viewport state (§5.2) and still hides the grid in that pane. Nothing is
+written to scene documents, history or cooked output.
 
 ### 5.5 Play session preferences
 
@@ -225,17 +227,18 @@ The command path:
 
 ### 6.2 Project preview preferences
 
-`PreviewSettingsService` owns the embedded engine's settings for the active
-project: VSync, an optional frame-rate cap, whether idle viewports render every
-frame, and native log verbosity. The defaults are **VSync on**, **no cap** (the
-cap value, kept while off, starts at 60), **idle viewports render on change**
-and **Error (`-2`)**; the editor imposes no frame rate of its own. Preferences
-saved before these settings existed restore with these defaults and keep their
-log verbosity. Every scene tab binds to the same service; edits apply through
-`IEngineService` and save automatically using `IEditorSettingsManager`, key
-`WorldEditor/Preview`, with `SettingContext.Project` for the canonical,
-case-insensitive Windows project root. The payload includes the project ID; a
-different project reusing that path starts with defaults.
+LivePreview's `PreviewSettingsService` owns the embedded engine's settings for
+the active project: VSync, an optional frame-rate cap, whether idle viewports
+render every frame, and native log verbosity. The defaults are **VSync on**,
+**no cap** (the cap value, kept while off, starts at 60), **idle viewports
+render on change** and **Error (`-2`)**; the editor imposes no frame rate of its
+own. Preferences saved before these settings existed restore with these defaults
+and keep their log verbosity. Every scene tab binds to the same service; edits
+apply through `IEngineService` and save automatically using
+`IEditorSettingsManager`, key `WorldEditor/Preview`, with
+`SettingContext.Project` for the canonical, case-insensitive Windows project
+root. The payload includes the project ID; a different project reusing that path
+starts with defaults.
 
 These are personal editing preferences, stored in the user-local SQLite
 database. They never dirty scenes, enter `Project.oxy`, affect cooking or travel

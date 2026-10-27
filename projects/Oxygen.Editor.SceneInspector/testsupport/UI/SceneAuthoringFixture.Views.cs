@@ -9,6 +9,7 @@ using DroidNet.Tests;
 using Microsoft.UI.Xaml;
 using Moq;
 using Oxygen.Editor.Input.Testing;
+using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.Shell.Windows;
 using Oxygen.Editor.World;
 using Oxygen.Managed.Core;
@@ -35,6 +36,6 @@ internal sealed partial class SceneAuthoringFixture
         _ = catalog.SetupGet(value => value.Items).Returns(System.Reactive.Linq.Observable.Empty<IReadOnlyList<Oxygen.Editor.Assets.AssetEntry>>());
         _ = catalog.Setup(value => value.RefreshAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
         var dispatcher = VisualUserInterfaceTestsApp.DispatcherQueue;
-        return new(new HostingContext { Application = Application.Current, Dispatcher = dispatcher, DispatcherScheduler = new System.Reactive.Concurrency.DispatcherQueueScheduler(dispatcher) }, new ViewModelToView(locator.Object), Mock.Of<IAssetReveal>(), this.Area, assetProvider ?? catalog.Object, this.Preview.Object, this.Selection, this.Surfaces, this.Session, new FakeInputSources(), interaction: this.Interaction, structures: this.Structures, nodes: this.Structures);
+        return new(new HostingContext { Application = Application.Current, Dispatcher = dispatcher, DispatcherScheduler = new System.Reactive.Concurrency.DispatcherQueueScheduler(dispatcher) }, new ViewModelToView(locator.Object), Mock.Of<IAssetReveal>(), this.Area, new DocumentScenes(this.TestScene.Documents, this.Interaction, session: this.Session, structures: this.Structures), assetProvider ?? catalog.Object, this.Preview.Object, this.Selection, this.Surfaces, this.Session, new FakeInputSources(), interaction: this.Interaction, structures: this.Structures, nodes: this.Structures);
     }
 }

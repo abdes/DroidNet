@@ -15,6 +15,7 @@ using Oxygen.Editor.LivePreview.Scenes;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.SceneInspector.Components.Lights;
+using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.Scenes.Interaction;
 using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.Scenes.Testing;
@@ -175,6 +176,7 @@ internal sealed class SceneInspectorViewModelTests
             new ViewModelToView(new Mock<IViewLocator>().Object),
             Mock.Of<IAssetReveal>(),
             documents,
+            new DocumentScenes(testScene.Documents, interaction),
             Mock.Of<IAssetFeed>(feed => feed.Items == Observable.Never<IReadOnlyList<AssetEntry>>()),
             scenePreview,
             selectionService,

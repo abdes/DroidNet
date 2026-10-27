@@ -74,6 +74,12 @@ public sealed class SceneEditScope
     /// <summary>Gets the scene's own asset, which no instance in it may reach, or <see langword="null"/> when unknown.</summary>
     public AssetPath? Asset { get; internal set; }
 
+    /// <summary>Gets what a read-only scene, such as a model's preview, still takes; <see langword="null"/> when it takes every edit.</summary>
+    public SceneReadOnly? ReadOnly { get; init; }
+
+    /// <summary>Gets why the scene refuses an edit; <see langword="null"/> when it takes every edit.</summary>
+    public string? ReadOnlyReason => this.ReadOnly?.Reason;
+
     /// <summary>Gets or sets a value indicating whether the scope runs a history replay, which checks no lock.</summary>
     internal bool Replaying { get; set; }
 
@@ -122,10 +128,15 @@ public sealed class SceneEditScope
 
     /// <summary>Checks that each of an edit's targets exists, and that neither it nor one of its ancestors is locked.</summary>
     /// <param name="edit">The edit.</param>
-    /// <returns>The validation; refused when a target is missing or locked.</returns>
+    /// <returns>The validation; refused when the scene is read-only, or a target is missing or locked.</returns>
     public SceneEditValidation CheckTargets(ISceneEdit edit)
     {
         ArgumentNullException.ThrowIfNull(edit);
+        if (this.ReadOnly is { } readOnly && !readOnly.Allows(edit))
+        {
+            return SceneEditValidation.Refused(SceneDiagnostic.Error(SceneEditCodes.SceneReadOnly, readOnly.Reason));
+        }
+
         List<SceneDiagnostic>? errors = null;
         foreach (var target in edit.Targets)
         {

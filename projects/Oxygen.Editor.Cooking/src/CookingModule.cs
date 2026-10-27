@@ -5,6 +5,7 @@
 using DryIoc;
 using Oxygen.Editor.Shell.Commands;
 using Oxygen.Editor.Shell.Contributions;
+using Oxygen.Editor.Shell.Windows;
 
 namespace Oxygen.Editor.Cooking;
 
@@ -33,7 +34,7 @@ public sealed class CookingModule : IFeatureModule
     public void Register(IRegistrator scope)
     {
         ArgumentNullException.ThrowIfNull(scope);
-        scope.Register<ICookRecovery, CookRecovery>(Reuse.Singleton);
+        scope.RegisterMany([typeof(ICookRecovery), typeof(ICookIssueReveal)], typeof(CookRecovery), Reuse.Singleton);
         scope.Register<CookingPanelViewModel>(Reuse.Singleton);
         scope.Register<CookingPanelView>(Reuse.Transient);
         scope.Register<CookingPresenter>(Reuse.Singleton);

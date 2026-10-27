@@ -62,6 +62,21 @@ public sealed class DocumentTabsTransferTests
         _ = this.events.Should().NotContain(@event => @event.StartsWith("detached", StringComparison.Ordinal));
     }
 
+    /// <summary>A document whose editor keeps its tab in its window, as a model's (model editor M-ED7), is never torn out.</summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public async Task DetachDocumentAsync_OfATabThatCannotTearOut_IsRefused()
+    {
+        var model = new TestDocumentMetadata { Title = "Car.glb", CanTearOut = false };
+        _ = await this.tabs.OpenDocumentAsync(this.workspace, model).ConfigureAwait(false);
+
+        var detached = await this.tabs.DetachDocumentAsync(this.workspace, model.DocumentId).ConfigureAwait(false);
+
+        _ = detached.Should().BeNull();
+        _ = this.tabs.FindWindow(model.DocumentId).Should().Be(this.workspace);
+        _ = this.events.Should().NotContain(@event => @event.StartsWith("detached", StringComparison.Ordinal));
+    }
+
     [TestMethod]
     public async Task DetachDocumentAsync_OfATabTheWindowDoesNotHave_IsRefused()
     {

@@ -10,6 +10,7 @@ using Oxygen.Editor.Documents;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Diagnostics;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
@@ -22,9 +23,10 @@ namespace Oxygen.Editor.LivePreview.Scenes;
 
 /// <summary>Projects the open scene documents into the embedded engine.</summary>
 /// <remarks>
-/// The preview follows the scene documents of the workspace's open documents: it shows the one opened last, projects
-/// its changes in the order the scene raised them, takes its reloaded content and retires it when it closes. Whatever
-/// the engine does not take yet waits and is replayed once the engine runs.
+/// The preview follows the open documents that show a scene, a model document's preview scene included: it shows the one
+/// opened last until <see cref="Show"/> names another, projects its changes in the order the scene raised them, takes its
+/// reloaded content and retires it when it closes. Whatever the engine does not take yet waits and is replayed once the
+/// engine runs.
 /// </remarks>
 internal sealed partial class ScenePreview : IScenePreview, IDisposable
 {
@@ -46,6 +48,7 @@ internal sealed partial class ScenePreview : IScenePreview, IDisposable
     /// <summary>Initializes a new instance of the <see cref="ScenePreview"/> class, following the open documents.</summary>
     /// <param name="engineService">The embedded engine.</param>
     /// <param name="documents">The workspace's open documents.</param>
+    /// <param name="scenes">The scene each open document shows, a model document's preview scene included.</param>
     /// <param name="session">The project session whose scene documents the preview shows.</param>
     /// <param name="structureStore">Keeps the structures the preview reads of the instanced sources.</param>
     /// <param name="loggerFactory">The optional diagnostic logger factory.</param>
@@ -54,6 +57,7 @@ internal sealed partial class ScenePreview : IScenePreview, IDisposable
     public ScenePreview(
         IEngineService engineService,
         OpenDocuments documents,
+        DocumentScenes scenes,
         IProjectSession session,
         SceneStructureStore structureStore,
         ILoggerFactory? loggerFactory = null,
@@ -62,6 +66,7 @@ internal sealed partial class ScenePreview : IScenePreview, IDisposable
     {
         this.engineService = engineService ?? throw new ArgumentNullException(nameof(engineService));
         this.documents = documents ?? throw new ArgumentNullException(nameof(documents));
+        this.scenes = scenes ?? throw new ArgumentNullException(nameof(scenes));
         this.session = session ?? throw new ArgumentNullException(nameof(session));
         this.structureStore = structureStore ?? throw new ArgumentNullException(nameof(structureStore));
         this.logger = loggerFactory?.CreateLogger<ScenePreview>() ?? NullLogger<ScenePreview>.Instance;

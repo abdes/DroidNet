@@ -80,7 +80,7 @@ The modules of this design exist with the references of section 5.4;
 Composition root        Oxygen.Editor
 Shell                   Oxygen.Editor.Shell
 Feature UI              editors, explorers, inspectors, passive panels
-Shared feature UI       Oxygen.Editor.Pickers
+Shared feature UI       Oxygen.Editor.Pickers, Oxygen.Editor.Viewports
 Domain services         Scenes, Assets, LivePreview, ContentPipeline, Projects
                         families: Scripting, Input, Textures, Materials
 UI kit                  Oxygen.Editor.Controls
@@ -91,10 +91,10 @@ Foundation              World, Documents, Schemas, Data, Runtime, Interop,
 
 References point down only. A feature references the Shell, the domain modules
 it uses, the shared feature UI and the UI kit. The shared feature UI is what
-several features show alike (the asset picker); it references domain modules,
-the UI kit and foundation, never the Shell or a feature. A domain module references other domain modules below it
-and foundation, never the Shell or a feature. The Shell references foundation
-only. The composition root references everything and is the only project that
+several features show alike (the asset picker, the viewport); it references
+domain modules, the UI kit and foundation, never the Shell or a feature. A
+domain module references other domain modules below it and foundation, never the
+Shell or a feature. The Shell references foundation only. The composition root references everything and is the only project that
 does: `Oxygen.Editor.Composition` holds its registrations, so that tests can
 compose them, and only the application host, `Oxygen.Editor`, references it.
 
@@ -134,6 +134,7 @@ flowchart TB
         SEx["SceneExplorer"]
         SIn["SceneInspector"]
         SEd["SceneEditor"]
+        MdlEd["ModelEditor"]
         CEx["ContentExplorer"]
         MEd["MaterialEditor"]
         TEd["TextureEditor"]
@@ -142,6 +143,9 @@ flowchart TB
         Ck["Cooking"]
         Out["Output"]
         His["History"]
+    end
+    subgraph Shared["Shared feature UI"]
+        Vp["Viewports<br/>viewport control, transform tools, HUD"]
     end
     Shell["Shell - application frame<br/>IDocumentService, histories, Undo and Redo"]
     subgraph Domain["Domain modules - shared, headless, engine or native work"]
@@ -170,6 +174,9 @@ flowchart TB
     SIn --> Assets
     SEd --> Scenes
     SEd --> Live
+    SEd --> Vp
+    MdlEd --> Vp
+    Vp --> RT
     CEx --> Assets
     CEx --> CP
     MEd --> Assets
@@ -219,7 +226,8 @@ Interop, World and `Oxygen.Managed.Core` only; it does not reference
 | `Oxygen.Editor`                    | Root      | `Program`, module composition (`Oxygen.Editor.Composition`), the project session host, workspace presets, activation of the first window                                                                                                                                                                             | Feature policy, services                                                   |
 | `Oxygen.Editor.Shell`              | Shell     | Window kinds and their factory, docking workspace, document service, areas and tabs, histories, panel registry, placement, workbench context, command routing, context menus, close and exit, layout store, activity, clipboard and drag, notifications (contract, result policy, presentation), desktop integration | Scene, asset or pipeline policy                                            |
 | `Oxygen.Editor.ProjectExplorer`    | Explorer  | Start experience: recent projects, templates, create and open                                                                                                                                                                                                                                                        | Project persistence rules (Projects)                                       |
-| `Oxygen.Editor.SceneEditor`        | Editor    | Scene document editor: viewports, gizmos, transform tools, toolbar, play bar                                                                                                                                                                                                                                         | Scene commands (Scenes), engine sync (LivePreview)                         |
+| `Oxygen.Editor.SceneEditor`        | Editor    | Scene document editor: toolbar, play bar, scene-view glue (framing, cameras, gizmo edits), per-scene pane layout and camera persistence; hosts Viewports                                                                                                                                                             | Scene commands (Scenes), engine sync (LivePreview)                         |
+| `Oxygen.Editor.Viewports`          | Shared UI | The viewport control and view model, HUD, transform tools and their preferences (`TransformToolSettingsService`), the preview settings panel, the per-user pane layout and cameras of each scene and model (`ViewportStateService`)                                                                                  | Engine sync (LivePreview)                                                  |
 | `Oxygen.Editor.SceneExplorer`      | Explorer  | Hierarchy panel, drag and drop, adapter tree                                                                                                                                                                                                                                                                         | Mutation and organizer model (Scenes)                                      |
 | `Oxygen.Editor.SceneInspector`     | Inspector | Node and component property editing                                                                                                                                                                                                                                                                                  | Commands and edit sessions' model (Scenes)                                 |
 | `Oxygen.Editor.ContentExplorer`    | Explorer  | Asset navigation, filtering, views, import dialogs                                                                                                                                                                                                                                                                   | Relocation and creation logic (ContentPipeline, Assets)                    |
@@ -233,7 +241,7 @@ Interop, World and `Oxygen.Managed.Core` only; it does not reference
 | `Oxygen.Editor.History`            | Passive   | The active document's history and the global history; undo or redo to a chosen entry                                                                                                                                                                                                                                 | The histories (Shell)                                                      |
 | `Oxygen.Editor.Scenes`             | Domain    | The scene document kind, scene authoring (`SceneAuthoring`) and its edits, selection, clipboard model, node lock and visibility                                                                                                                                                                                      | WinUI views, engine calls, histories (Shell)                               |
 | `Oxygen.Editor.Assets`             | Domain    | The editor's live view of a project's assets: asset catalog and feed, identity rules, the rules of properties that reference assets; owns the `IAssetRuntimeStatusSource` port                                                                                                                                       | Browser state, engine calls, asset formats and file types (Managed.Assets) |
-| `Oxygen.Editor.LivePreview`        | Domain    | Engine sync, content demand, mount changes, play session, runtime session start, the preview of open scene documents (`IScenePreview`), the engine adapters for the ports of Assets and Scripting (`IScriptAnalyzer`), runtime problems                                                                              | Authoring state                                                            |
+| `Oxygen.Editor.LivePreview`        | Domain    | Engine sync, content demand, mount changes, play session, runtime session start, the preview of open scene documents (`IScenePreview`), the engine adapters for the ports of Assets and Scripting (`IScriptAnalyzer`), runtime problems, the preview preferences that reach the engine (`PreviewSettingsService`)    | Authoring state                                                            |
 | `Oxygen.Editor.ContentPipeline`    | Domain    | Import, cook, publication, relocation, inspection, the asset creation workflow over the families' templates; implements Scripting's `IScriptLibrary`                                                                                                                                                                 | Panels, prompts, family rules                                              |
 | `Oxygen.Editor.Scripting`          | Family    | `Script`, `ScriptParameter`, script slot rules, script facts, the `IScriptAnalyzer` and `IScriptLibrary` ports, script tooling, templates and codes                                                                                                                                                                  | Views, the native call (LivePreview)                                       |
 | `Oxygen.Editor.Input`              | Family    | `InputContainer`, `InputAction`, `InputMappingContext`, input rules and starting context priorities, input facts, templates                                                                                                                                                                                          | Views, the cook                                                            |
@@ -311,9 +319,11 @@ with its owner.
 Feature UI projects (editors, explorers, inspectors, passive panels) contain
 views, view models and presentation only (decision 3). They plug into the Shell
 through contributions and consume its services (decision 2). One reaches the
-engine: the SceneEditor's viewports draw through Runtime's surfaces, views and
-input, which need the `SwapChainPanel` ([live preview](live-preview.md) decision
-5); it never references Interop.
+engine through the shared Viewports project: the viewports draw through
+Runtime's surfaces, views and input, which need the `SwapChainPanel` ([live
+preview](live-preview.md) decision 5); it never references Interop. The
+SceneEditor, whose scene-view glue also uses Runtime, and the model editor host
+it.
 
 ## 10. Persistence And Round Trip
 
@@ -325,8 +335,8 @@ through their owners, cooked content through ContentPipeline.
 
 ContentPipeline owns import, cook, publication, relocation and inspection;
 LivePreview owns everything that applies authoring state to the embedded engine.
-No other module references the engine, except the SceneEditor, whose viewports
-use Runtime's surfaces, views and input and never Interop (section 9).
+No other module references the engine, except Viewports and the SceneEditor,
+which use Runtime's surfaces, views and input and never Interop (section 9).
 
 ## 12. Operation Results And Diagnostics
 
@@ -366,8 +376,8 @@ folder. The test checks:
   rank: Projects; then Scripting, Input and Textures; then ContentPipeline; then
   Assets, Materials and Scenes; then LivePreview.
 - **Engine rule.** Only LivePreview and the composition root reference
-  `Oxygen.Editor.Runtime` and `Oxygen.Editor.Interop`, with one exception: the
-  SceneEditor references Runtime, never Interop (section 9).
+  `Oxygen.Editor.Runtime` and `Oxygen.Editor.Interop`, with two exceptions:
+  the SceneEditor and Viewports reference Runtime, never Interop (section 9).
 - **Internals rule.** A production project grants its internals only to its own
   module's non-production projects outside `samples` (its tests, test kit, test
   hosts and probes), and to `DynamicProxyGenAssembly2` for Moq (decision 4). A

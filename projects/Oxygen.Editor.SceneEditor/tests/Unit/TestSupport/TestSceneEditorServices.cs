@@ -11,12 +11,14 @@ using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.LivePreview.Scenes;
+using Oxygen.Editor.LivePreview.Settings;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Engine;
-using Oxygen.Editor.SceneEditor.Settings;
 using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.Scenes.Testing;
 using Oxygen.Editor.Shell.Documents;
+using Oxygen.Editor.Viewports;
+using Oxygen.Editor.Viewports.Settings;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.SceneEditor.Unit.Tests.TestSupport;
@@ -75,11 +77,11 @@ internal static class TestSceneEditorServices
             Mock.Of<IUnsavedCookInputs>(),
             new SceneSelectionService(),
             new SceneInteractionKit().Create(session, publisher, reducer),
-            new SceneEditorViews(),
+            new SceneViews(),
+            new ViewportServices(engine, previewSettings, engineSettings.Object, publisher, reducer),
             previewSettings,
             new ViewportStateService(session, settings, publisher, reducer),
             new TransformToolSettingsService(settings: null),
-            engineSettings.Object,
             NullLoggerFactory.Instance,
             play: null,
             assets,

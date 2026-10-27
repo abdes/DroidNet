@@ -27,6 +27,8 @@ internal sealed class NoteKind(params string[] suffixes) : IDocumentKind
 
     public IReadOnlyList<string> FileSuffixes { get; } = suffixes;
 
+    public bool TitleKeepsSuffix { get; init; }
+
     public int Decodes { get; private set; }
 
     public static byte[] Encode(AssetPath identity, string text, params AssetPath[] references)
