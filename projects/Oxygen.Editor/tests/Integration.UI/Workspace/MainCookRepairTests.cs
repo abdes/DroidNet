@@ -60,7 +60,7 @@ public sealed partial class MainCookRepairTests : DroidNet.Tests.VisualUserInter
         await fixture.SaveAndReopenAsync(timeout.Token).ConfigureAwait(true);
         _ = fixture.Source.Environment.SkyAtmosphere.AerialPerspectiveStartDepthMeters.Should().Be(100);
         _ = (await fixture.ReadNativeAsync(timeout.Token).ConfigureAwait(true)).AerialPerspectiveStartDepthMeters.Should().Be(100);
-        _ = services.Runs.Runs.Single(run => run.OperationId == failed.OperationId).Messages.Should().Contain(message => message.Text.Contains("= -1", StringComparison.Ordinal));
+        _ = services.Runs.Runs.Single(run => run.OperationId == failed.OperationId).Messages.Should().Contain(message => message.Detail != null && message.Detail.Contains("= -1", StringComparison.Ordinal));
     });
 
     // The failed run keeps the captured value and names the property that repairs it.
@@ -72,7 +72,7 @@ public sealed partial class MainCookRepairTests : DroidNet.Tests.VisualUserInter
             await Task.Delay(20, cancellationToken).ConfigureAwait(true);
         }
 
-        _ = run.Messages.Should().Contain(message => message.Text.Contains("= -1", StringComparison.Ordinal));
+        _ = run.Messages.Should().Contain(message => message.Detail != null && message.Detail.Contains("= -1", StringComparison.Ordinal));
         _ = run.Diagnostics.Should().Contain(value => value.Message.Contains("0 m", StringComparison.Ordinal)
             && value.SuggestedAction != null
             && string.Equals(value.SuggestedAction.Payload["PropertyPath"], SceneEnvironmentConstraints.AerialStartPropertyPath, StringComparison.Ordinal));
