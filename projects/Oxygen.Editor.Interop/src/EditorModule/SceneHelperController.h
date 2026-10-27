@@ -72,7 +72,7 @@ namespace oxygen::interop::module {
     using Listener = TransformGizmoController::Listener;
 
     //! Replaces the settings. Callable from any thread.
-    void SetSettings(SceneHelperSettings settings);
+    OXGN_EI_API void SetSettings(SceneHelperSettings settings);
     //! Cancels a running handle drag at the next frame. Callable from any
     //! thread.
     void RequestCancel() noexcept;
@@ -80,8 +80,10 @@ namespace oxygen::interop::module {
     void SetListener(Listener listener);
 
     //! Reads this frame's lights and cameras; the engine thread calls it
-    //! before input. A new scene generation cancels a drag.
-    void BeginFrame(scene::Scene* scene, std::uint64_t scene_generation,
+    //! before input. A new scene generation cancels a drag. Returns whether
+    //! it applied new settings, which every view draws differently.
+    OXGN_EI_NDAPI auto BeginFrame(scene::Scene* scene,
+      std::uint64_t scene_generation,
       const std::vector<NodeReferenceKey>& selected,
       std::optional<NodeReferenceKey> active);
     [[nodiscard]] auto IsDragging() const noexcept -> bool

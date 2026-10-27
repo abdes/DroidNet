@@ -36,8 +36,12 @@ using oxygen::interop::module::kTriadAxisPixels;
 using oxygen::interop::module::NodeReferenceKey;
 using oxygen::interop::module::NodeRegistry;
 using oxygen::interop::module::PickHelperIcons;
+using oxygen::interop::module::SceneHelperController;
 using oxygen::interop::module::SceneHelperKind;
 using oxygen::interop::module::SceneHelperNode;
+using oxygen::interop::module::SceneHelperSettings;
+using oxygen::interop::module::TransformGizmoController;
+using oxygen::interop::module::TransformGizmoSettings;
 using oxygen::interop::module::TriadAxis;
 using oxygen::interop::module::TriadCenter;
 using oxygen::interop::module::UuidKey;
@@ -525,3 +529,29 @@ public:
 };
 
 } // namespace InteropTests
+
+  [TestMethod]
+  void NewGizmoSettingsAreReportedOnceForEveryPaneToDraw() {
+    TransformGizmoController gizmo;
+    (void)gizmo.BeginFrame(nullptr, 0U);
+    TransformGizmoSettings settings;
+    settings.targets.push_back(Ref(7));
+
+    gizmo.SetSettings(settings);
+
+    Assert::IsTrue(gizmo.BeginFrame(nullptr, 0U));
+    Assert::IsFalse(gizmo.BeginFrame(nullptr, 0U));
+  }
+
+  [TestMethod]
+  void NewHelperSettingsAreReportedOnceForEveryPaneToDraw() {
+    SceneHelperController helpers;
+    (void)helpers.BeginFrame(nullptr, 0U, {}, std::nullopt);
+    SceneHelperSettings settings;
+    settings.hidden.push_back(Ref(7));
+
+    helpers.SetSettings(settings);
+
+    Assert::IsTrue(helpers.BeginFrame(nullptr, 0U, {}, std::nullopt));
+    Assert::IsFalse(helpers.BeginFrame(nullptr, 0U, {}, std::nullopt));
+  }

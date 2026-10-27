@@ -433,7 +433,11 @@ namespace oxygen::interop::module {
     // Drain and dispatch input from the accumulator to the engine's input
     // system. The transform gizmo, then the scene helpers, take their drags
     // out first; a running helper drag keeps the pointer from the gizmo.
-    transform_gizmo_.BeginFrame(scene_.get(), scene_generation_->load());
+    // New gizmo or helper settings, such as another selection to move, draw
+    // in every pane.
+    if (transform_gizmo_.BeginFrame(scene_.get(), scene_generation_->load())) {
+      scene_changed_ = true;
+    }
     {
       std::vector<NodeReferenceKey> selected;
       std::optional<NodeReferenceKey> active;
@@ -442,8 +446,10 @@ namespace oxygen::interop::module {
         selected = outline_nodes_;
         active = outline_active_;
       }
-      scene_helpers_.BeginFrame(
-        scene_.get(), scene_generation_->load(), selected, active);
+      if (scene_helpers_.BeginFrame(
+            scene_.get(), scene_generation_->load(), selected, active)) {
+        scene_changed_ = true;
+      }
     }
     // Hover feedback draws only in the hovered view: when it moves, the view
     // it left and the view it entered both draw differently.

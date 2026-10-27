@@ -114,14 +114,16 @@ namespace oxygen::interop::module {
     listener_ = std::move(listener);
   }
 
-  void SceneHelperController::BeginFrame(scene::Scene* scene,
+  auto SceneHelperController::BeginFrame(scene::Scene* scene,
     const std::uint64_t scene_generation,
     const std::vector<NodeReferenceKey>& selected,
     std::optional<NodeReferenceKey> active)
   {
+    auto applied = false;
     {
       std::lock_guard lock(mutex_);
       if (settings_changed_) {
+        applied = true;
         filter_.hidden
           = { requested_.hidden.begin(), requested_.hidden.end() };
         filter_.locked
@@ -154,6 +156,7 @@ namespace oxygen::interop::module {
     if (cancel_requested_.exchange(false, std::memory_order_relaxed)) {
       CancelDrag();
     }
+    return applied;
   }
 
   auto CollectHelperNodes(scene::Scene& scene, const HelperNodeFilter& filter)

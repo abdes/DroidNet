@@ -102,7 +102,7 @@ namespace oxygen::interop::module {
 
     //! Replaces the settings; a running drag with other targets or another
     //! tool is cancelled at the next frame. Callable from any thread.
-    void SetSettings(TransformGizmoSettings settings);
+    OXGN_EI_API void SetSettings(TransformGizmoSettings settings);
     //! Cancels a running drag at the next frame. Callable from any thread.
     void RequestCancel() noexcept;
     //! Receives events on the engine thread. Callable from any thread; once it
@@ -110,8 +110,10 @@ namespace oxygen::interop::module {
     void SetListener(Listener listener);
 
     //! Applies requests made since the last frame; the engine thread calls it
-    //! before input. A new scene generation cancels the drag.
-    void BeginFrame(scene::Scene* scene, std::uint64_t scene_generation);
+    //! before input. A new scene generation cancels the drag. Returns whether
+    //! it applied new settings, which every view draws differently.
+    OXGN_EI_NDAPI auto BeginFrame(
+      scene::Scene* scene, std::uint64_t scene_generation) -> bool;
     //! Handles a view's input before navigation sees it, removing what the
     //! gizmo takes.
     void ProcessInput(EditorView& view, AccumulatedInput& input);

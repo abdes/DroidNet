@@ -60,14 +60,16 @@ namespace oxygen::interop::module {
     listener_ = std::move(listener);
   }
 
-  void TransformGizmoController::BeginFrame(
-    scene::Scene* scene, const std::uint64_t scene_generation)
+  auto TransformGizmoController::BeginFrame(
+    scene::Scene* scene, const std::uint64_t scene_generation) -> bool
   {
     {
       std::lock_guard lock(mutex_);
+    auto applied = false;
       if (settings_changed_) {
         if (drag_.has_value() && !SameTargets(settings_, requested_)) {
           cancel_requested_.store(true, std::memory_order_relaxed);
+        applied = true;
         }
         settings_ = requested_;
         settings_changed_ = false;
@@ -87,6 +89,7 @@ namespace oxygen::interop::module {
     }
   }
 
+    return applied;
   void TransformGizmoController::ProcessInput(
     EditorView& view, AccumulatedInput& input)
   {
