@@ -10,7 +10,7 @@ namespace Oxygen.Editor.SceneEditor.Unit.Tests;
 [TestClass]
 [ExcludeFromCodeCoverage]
 [TestCategory("Viewport Layout")]
-public class SceneLayoutHelpersTests
+internal sealed class SceneLayoutHelpersTests
 {
     [TestMethod]
     public void GetPlacements_ShouldReturnOnePlacement_ForOnePane()

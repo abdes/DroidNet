@@ -73,15 +73,16 @@ internal static class NativeSessionConversions
             gizmoEvent.Duplicate,
             gizmoEvent.Hovering,
             gizmoEvent.Representable,
-            [.. gizmoEvent.Targets.Select(target => new RuntimeGizmoTarget(NodeId.FromValue(target.NodeId), target.Position, target.Rotation, target.Scale))],
+            [.. gizmoEvent.Targets.Select(static target => new RuntimeGizmoTarget(FromNative(target.Node), target.Position, target.Rotation, target.Scale))],
             gizmoEvent.ReadoutAxes,
             gizmoEvent.ReadoutValues,
             gizmoEvent.PivotPixel,
             gizmoEvent.PointerPixel,
             gizmoEvent.Helper,
-            NodeId.FromValue(gizmoEvent.NodeId),
+            gizmoEvent.Node is null ? null : FromNative(gizmoEvent.Node),
             (RuntimeHelperHandle)(int)gizmoEvent.HelperHandle,
-            gizmoEvent.Value);
+            gizmoEvent.Value,
+            (RuntimeHelperLight)(int)gizmoEvent.HelperLight);
 
     /// <summary>Creates the native ground grid config.</summary>
     /// <param name="settings">The editor's grid settings.</param>

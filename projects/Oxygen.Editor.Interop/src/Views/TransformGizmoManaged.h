@@ -10,6 +10,7 @@
 #include <EditorModule/TransformGizmoController.h>
 #pragma managed(pop)
 
+#include <Views/NodeReferenceManaged.h>
 #include <Views/ViewIdManaged.h>
 
 #pragma managed(push, on)
@@ -66,11 +67,19 @@ namespace Oxygen::Interop {
     OuterCone = 3,
   };
 
+  /// <summary>The kind of light a scene helper's handle edits.</summary>
+  public enum class HelperLightManaged : System::Int32 {
+    None = 0,
+    Point = 1,
+    Spot = 2,
+  };
+
   /// <summary>A manipulated node's new local transform.</summary>
   public
   ref class TransformGizmoTargetManaged sealed {
   public:
-    property System::Guid NodeId;
+    /// <summary>The node, which an instance may have brought in.</summary>
+    property NodeReferenceManaged^ Node;
     property System::Numerics::Vector3 Position;
     property System::Numerics::Quaternion Rotation;
     property System::Numerics::Vector3 Scale;
@@ -117,8 +126,12 @@ namespace Oxygen::Interop {
     /// triad.</summary>
     property bool Helper;
 
-    /// <summary>For helper drags: the light being edited.</summary>
-    property System::Guid NodeId;
+    /// <summary>For helper drags: the light being edited, which an instance
+    /// may have brought in; null for other events.</summary>
+    property NodeReferenceManaged^ Node;
+    /// <summary>For helper drags: the kind of the light being
+    /// edited.</summary>
+    property HelperLightManaged HelperLight;
 
     /// <summary>For helper drags: the dragged handle.</summary>
     property HelperHandleManaged HelperHandle;
@@ -126,15 +139,6 @@ namespace Oxygen::Interop {
     /// <summary>For helper drags: metres for a range, radians for a cone
     /// angle.</summary>
     property float Value;
-
-    static System::Guid ToGuid(
-      const ::oxygen::interop::module::UuidKey& id) {
-      auto bytes = gcnew array<System::Byte>(16);
-      for (int b = 0; b < 16; ++b) {
-        bytes[b] = id[static_cast<std::size_t>(b)];
-      }
-      return System::Guid(bytes);
-    }
 
     static TransformGizmoEventManaged^ FromNative(
       const ::oxygen::interop::module::TransformGizmoEvent& event) {
@@ -151,7 +155,7 @@ namespace Oxygen::Interop {
       for (int i = 0; i < managed->Targets->Length; ++i) {
         const auto& target = event.targets[static_cast<std::size_t>(i)];
         auto item = gcnew TransformGizmoTargetManaged();
-        item->NodeId = ToGuid(target.id);
+        item->Node = NodeReferenceManaged::FromNative(target.id);
         item->Position = System::Numerics::Vector3(
           target.position.x, target.position.y, target.position.z);
         item->Rotation = System::Numerics::Quaternion(target.rotation.x,
@@ -170,11 +174,27 @@ namespace Oxygen::Interop {
       managed->PointerPixel = System::Numerics::Vector2(
         event.pointer_pixel.x, event.pointer_pixel.y);
       managed->Helper = event.helper;
-      managed->NodeId = ToGuid(event.node);
+      if (event.node.has_value()) {
+        managed->Node = NodeReferenceManaged::FromNative(*event.node);
+        managed->HelperLight = ToHelperLight(event.helper_kind);
+      }
       managed->HelperHandle
         = static_cast<HelperHandleManaged>(event.helper_handle);
       managed->Value = event.value;
       return managed;
+    }
+
+  private:
+    static HelperLightManaged ToHelperLight(
+      ::oxygen::interop::module::SceneHelperKind kind) {
+      switch (kind) {
+      case ::oxygen::interop::module::SceneHelperKind::kPointLight:
+        return HelperLightManaged::Point;
+      case ::oxygen::interop::module::SceneHelperKind::kSpotLight:
+        return HelperLightManaged::Spot;
+      default:
+        return HelperLightManaged::None;
+      }
     }
   };
 

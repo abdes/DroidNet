@@ -97,8 +97,9 @@ struct LampScene {
   LampScene() {
     NodeRegistry::ClearAll();
     auto lamp = scene->CreateNode("Lamp");
-    auto bulb_node = *scene->CreateChildNode(lamp, "Bulb");
-    (void)bulb_node.AttachLight(std::make_unique<oxygen::scene::PointLight>());
+    auto bulb_node = scene->CreateChildNode(lamp, "Bulb");
+    Assert::IsTrue(bulb_node.has_value());
+    (void)bulb_node->AttachLight(std::make_unique<oxygen::scene::PointLight>());
     auto desk = scene->CreateNode("Desk");
     (void)desk.AttachLight(std::make_unique<oxygen::scene::PointLight>());
     auto impl = lamp.GetImpl();
@@ -106,7 +107,7 @@ struct LampScene {
     impl->get().AddComponent<oxygen::scene::SceneInstanceComponent>(nullptr,
       nullptr, nullptr, std::vector<oxygen::data::SceneChange> {},
       std::unordered_map<NodeId, oxygen::scene::NodeHandle> {
-        { MakeNodeId(3), bulb_node.GetHandle() } });
+        { MakeNodeId(3), bulb_node->GetHandle() } });
     NodeRegistry::Register(Id(7), lamp.GetHandle());
     NodeRegistry::Register(Id(8), desk.GetHandle());
     scene->Update();
@@ -349,7 +350,19 @@ public:
     const auto* bulb = Find(nodes, lamp.bulb);
     Assert::IsTrue(bulb != nullptr);
     Assert::IsTrue(bulb->selected && bulb->active);
-    // Handles write the node's own light, which an instanced node is not.
+    // Its handles change it through its instance, as the editor applies them.
+    Assert::IsTrue(bulb->editable);
+  }
+
+  [TestMethod]
+  void SelectedInstancedLightsAreNotEditableWhenLocked() {
+    const LampScene lamp;
+
+    const auto nodes = CollectHelperNodes(*lamp.scene,
+      HelperNodeFilter { .locked = { lamp.bulb }, .selected = { lamp.bulb } });
+
+    const auto* bulb = Find(nodes, lamp.bulb);
+    Assert::IsTrue(bulb != nullptr);
     Assert::IsFalse(bulb->editable);
   }
 
@@ -526,9 +539,6 @@ public:
     Assert::IsTrue(overlay.top.triangles.empty());
     Assert::IsFalse(overlay.top.lines.empty());
   }
-};
-
-} // namespace InteropTests
 
   [TestMethod]
   void NewGizmoSettingsAreReportedOnceForEveryPaneToDraw() {
@@ -555,3 +565,6 @@ public:
     Assert::IsTrue(helpers.BeginFrame(nullptr, 0U, {}, std::nullopt));
     Assert::IsFalse(helpers.BeginFrame(nullptr, 0U, {}, std::nullopt));
   }
+};
+
+} // namespace InteropTests

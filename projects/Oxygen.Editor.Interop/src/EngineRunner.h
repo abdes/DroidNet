@@ -361,7 +361,7 @@ namespace Oxygen::Interop {
     auto TrySetTransformGizmo(EngineContext^ ctx, TransformToolManaged tool,
       TransformSpaceManaged space, bool snapEnabled, float translationStep,
       float rotationStepDegrees, float scaleStep,
-      array<System::Guid>^ targets, System::Nullable<System::Guid> activeNodeId,
+      array<NodeReferenceManaged^>^ targets, NodeReferenceManaged^ activeNode,
       float displayScale) -> bool;
 
     /// <summary>

@@ -29,7 +29,7 @@ internal sealed partial class SceneEditorConflictTests
         var saved = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         _ = store.Setup(value => value.SaveSettingAsync(PreviewSettingsService.Key, It.IsAny<PreviewSettingsService.Preferences>(), It.IsAny<SettingContext>(), It.IsAny<IProgress<SettingsProgress>>(), It.IsAny<CancellationToken>()))
             .Returns(saved.Task);
-        var preferences = new PreviewSettingsService(engine.Object, store.Object, session, Mock.Of<IOperationResultPublisher>(), new OperationStatusReducer());
+        using var preferences = new PreviewSettingsService(engine.Object, store.Object, session, Mock.Of<IOperationResultPublisher>(), new OperationStatusReducer());
         await preferences.EnsureRestoredAsync().ConfigureAwait(false);
         using var fixture = await Fixture.CreateAsync(this.TestContext, active: true, preferences, () => preferences.FrameRateCap = 45).ConfigureAwait(false);
 

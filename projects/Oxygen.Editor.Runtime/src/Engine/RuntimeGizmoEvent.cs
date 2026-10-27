@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Numerics;
-using Oxygen.Managed.Core;
+using Oxygen.Editor.World;
 
 namespace Oxygen.Editor.Runtime.Engine;
 
@@ -25,9 +25,10 @@ namespace Oxygen.Editor.Runtime.Engine;
 /// <param name="PivotPixel">The pivot in the view's physical pixels, when in front of the camera.</param>
 /// <param name="PointerPixel">The pointer in the view's physical pixels.</param>
 /// <param name="Helper">The event comes from a scene helper or the orientation triad.</param>
-/// <param name="NodeId">For helper drags: the light being edited.</param>
+/// <param name="Node">For helper drags: the light's node, which an instance may have brought in.</param>
 /// <param name="HelperHandle">For helper drags: the dragged handle.</param>
 /// <param name="Value">For helper drags: metres for a range, radians for a cone angle.</param>
+/// <param name="Light">For helper drags: the kind of the dragged light.</param>
 public sealed record RuntimeGizmoEvent(
     RuntimeGizmoEventKind Kind,
     RuntimeViewId ViewId,
@@ -42,6 +43,7 @@ public sealed record RuntimeGizmoEvent(
     Vector2? PivotPixel,
     Vector2 PointerPixel,
     bool Helper = false,
-    NodeId NodeId = default,
+    NodeReference? Node = null,
     RuntimeHelperHandle HelperHandle = RuntimeHelperHandle.None,
-    float Value = 0f);
+    float Value = 0f,
+    RuntimeHelperLight Light = RuntimeHelperLight.None);

@@ -100,8 +100,8 @@ internal sealed partial class NativeEngineSession
             gizmo.Snap.Translation,
             gizmo.Snap.RotationDegrees,
             gizmo.Snap.Scale,
-            [.. gizmo.Targets.Select(static id => id.Value)],
-            gizmo.ActiveNodeId?.Value,
+            [.. gizmo.Targets.Select(NativeSessionConversions.ToNative)],
+            gizmo.ActiveNode is null ? null : NativeSessionConversions.ToNative(gizmo.ActiveNode),
             gizmo.DisplayScale);
 
     /// <inheritdoc />

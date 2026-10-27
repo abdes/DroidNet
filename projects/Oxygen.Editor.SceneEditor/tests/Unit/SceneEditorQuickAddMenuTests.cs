@@ -7,6 +7,7 @@ using DroidNet.Controls.Menus;
 using Microsoft.UI;
 using Moq;
 using Oxygen.Editor.Projects.Testing;
+using Oxygen.Editor.SceneEditor.Settings;
 using Oxygen.Editor.SceneEditor.Unit.Tests.TestSupport;
 using Oxygen.Editor.Scenes.Testing;
 using Oxygen.Editor.Shell.Commands;
@@ -62,6 +63,7 @@ public sealed partial class SceneEditorQuickAddMenuTests
     private sealed partial class Fixture : IDisposable
     {
         private readonly TestSession session;
+        private readonly PreviewSettingsService previewSettings;
 
         public Fixture()
         {
@@ -70,7 +72,8 @@ public sealed partial class SceneEditorQuickAddMenuTests
             this.Tab = new DocumentTab(this.Metadata.Document, new DocumentEditorDescriptor(this.Metadata.Document.Kind, static _ => new object()) { IsClosable = false });
             var input = new Mock<IDocumentInputCommitter>();
             _ = input.Setup(value => value.CommitAsync(It.IsAny<DroidNet.Documents.DocumentId>())).Returns(Task.CompletedTask);
-            this.Editor = new(this.Tab, TestSceneEditorServices.Create(this.session, inputCommitter: input.Object));
+            this.previewSettings = TestSceneEditorServices.CreatePreviewSettings(this.session);
+            this.Editor = new(this.Tab, TestSceneEditorServices.Create(this.session, this.previewSettings, inputCommitter: input.Object));
             this.Editor.AttachWindow(new DocumentWindowServices(new WindowId(1), new TestDocumentArea(this.Metadata.Document), Mock.Of<ICommandService>(), Mock.Of<IPlacementService>(), Mock.Of<IAssetReveal>()));
         }
 
@@ -83,6 +86,7 @@ public sealed partial class SceneEditorQuickAddMenuTests
         public void Dispose()
         {
             this.Editor.Dispose();
+            this.previewSettings.Dispose();
             this.Tab.Dispose();
             this.Metadata.Dispose();
             this.session.Dispose();

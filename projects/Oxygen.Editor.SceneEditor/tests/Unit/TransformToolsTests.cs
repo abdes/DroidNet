@@ -11,7 +11,6 @@ using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.SceneEditor.Settings;
 using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.World;
-using Oxygen.Editor.World.Components;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.SceneEditor.Unit.Tests;
@@ -23,9 +22,9 @@ namespace Oxygen.Editor.SceneEditor.Unit.Tests;
 /// </summary>
 [TestClass]
 [TestCategory("Viewport Tools")]
-public sealed class TransformToolsTests
+internal sealed class TransformToolsTests
 {
-    private static readonly NodeId TargetNode = NodeId.New();
+    private static readonly NodeReference TargetNode = NodeReference.To(NodeId.New());
 
     [TestMethod]
     public void Tools_StartWithMoveAndEachCommandPicksItsTool()
@@ -141,22 +140,15 @@ public sealed class TransformToolsTests
     [TestMethod]
     public void HelperEdits_ChangeOnlyTheDraggedLightValue()
     {
-        var scene = new Scene { Name = "Scene" };
-        var spot = new SceneNode(scene, "Spot");
-        _ = spot.AddComponent(new SpotLightComponent { Name = "Spot" });
-        var point = new SceneNode(scene, "Point");
-        _ = point.AddComponent(new PointLightComponent { Name = "Point" });
-        var empty = new SceneNode(scene, "Empty");
-
-        var outer = SceneEditorViewModel.BuildHelperEdit(spot, RuntimeHelperHandle.OuterCone, 0.6F);
-        var range = SceneEditorViewModel.BuildHelperEdit(point, RuntimeHelperHandle.Range, 7.5F);
+        var outer = SceneEditorViewModel.BuildHelperEdit(RuntimeHelperLight.Spot, RuntimeHelperHandle.OuterCone, 0.6F);
+        var range = SceneEditorViewModel.BuildHelperEdit(RuntimeHelperLight.Point, RuntimeHelperHandle.Range, 7.5F);
 
         _ = outer!.Ids.Should().BeEquivalentTo([SceneProperties.SpotLight.OuterConeAngleRadiansDescriptor!.Id]);
         _ = outer.GetTyped(new PropertyId<float>(SceneProperties.SpotLight.OuterConeAngleRadiansDescriptor!.Id), out var radians).Should().BeTrue();
         _ = radians.Should().Be(0.6F);
         _ = range!.Ids.Should().BeEquivalentTo([SceneProperties.PointLight.RangeDescriptor.Id]);
-        _ = SceneEditorViewModel.BuildHelperEdit(point, RuntimeHelperHandle.InnerCone, 0.2F).Should().BeNull();
-        _ = SceneEditorViewModel.BuildHelperEdit(empty, RuntimeHelperHandle.Range, 1.0F).Should().BeNull();
+        _ = SceneEditorViewModel.BuildHelperEdit(RuntimeHelperLight.Point, RuntimeHelperHandle.InnerCone, 0.2F).Should().BeNull();
+        _ = SceneEditorViewModel.BuildHelperEdit(RuntimeHelperLight.None, RuntimeHelperHandle.Range, 1.0F).Should().BeNull();
     }
 
     [TestMethod]

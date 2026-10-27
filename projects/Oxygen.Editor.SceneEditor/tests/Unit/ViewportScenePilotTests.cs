@@ -19,7 +19,7 @@ namespace Oxygen.Editor.SceneEditor.Unit.Tests;
 /// </summary>
 [TestClass]
 [TestCategory("Viewport Camera")]
-public sealed class ViewportScenePilotTests
+internal sealed class ViewportScenePilotTests
 {
     private static readonly SceneCameraChoice MainCamera = new(NodeId.FromValue(Guid.Parse("4b1d7a9e-2f0c-4c7e-8d3a-6a9f0e5b1c01")), "Main");
     private static readonly RuntimeViewId ViewId = new(61);

@@ -39,10 +39,11 @@ namespace oxygen::interop::module {
     TransformSpace space { TransformSpace::kWorld };
     TransformSnap snap {};
     //! The nodes the gizmo moves: the selection without locked nodes and
-    //! without nodes whose ancestor is also selected.
-    std::vector<UuidKey> targets;
+    //! without nodes whose ancestor is also selected. A node an instance
+    //! brings in is named by its instance root and path.
+    std::vector<NodeReferenceKey> targets;
     //! The node whose origin is the pivot; the last target when absent.
-    std::optional<UuidKey> active;
+    std::optional<NodeReferenceKey> active;
     //! Physical pixels per device-independent pixel.
     float display_scale { 1.0F };
   };
@@ -82,9 +83,11 @@ namespace oxygen::interop::module {
     glm::vec2 pointer_pixel { 0.0F };
     //! The event comes from a scene helper or the orientation triad.
     bool helper { false };
-    //! For helper drags: the light edited, the handle and its value, in
-    //! metres or radians.
-    UuidKey node {};
+    //! For helper drags: the light edited, which an instance may have brought
+    //! in, its kind, the handle and its value, in metres or radians. Hover
+    //! and triad events name no light.
+    std::optional<NodeReferenceKey> node;
+    SceneHelperKind helper_kind { SceneHelperKind::kPointLight };
     HelperHandle helper_handle { HelperHandle::kNone };
     float value { 0.0F };
   };

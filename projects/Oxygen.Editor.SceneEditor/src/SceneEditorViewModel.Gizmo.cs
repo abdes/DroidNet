@@ -2,17 +2,15 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Globalization;
 using Oxygen.Editor.Runtime.Engine;
-using Oxygen.Editor.SceneEditor.Settings;
 using Oxygen.Editor.Scenes.Authoring;
-using Oxygen.Editor.Scenes.Edits.Properties;
 using Oxygen.Editor.Scenes.Nodes;
 using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.Shell.Commands;
 using Oxygen.Editor.World;
-using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Utils;
 using Oxygen.Managed.Core;
@@ -28,13 +26,13 @@ namespace Oxygen.Editor.SceneEditor;
 /// <remarks>
 /// The engine hit tests and drags the gizmo and the light helpers' handles, and reports each drag's
 /// new local transforms or light value; this view model is the only writer of the authored scene.
-/// An Alt-drag previews on the originals and, on release, restores them and duplicates them at the
+/// A node an instance brings in moves and has its light edited like a node of the scene, through
+/// its instance root's changes; Alt-drag refuses it, as Duplicate does. An Alt-drag previews on the originals and, on release, restores them and duplicates them at the
 /// dragged transforms, so a cancelled Alt-drag leaves no copy and no history. Icons, helpers and
 /// the orientation triad are engine overlays: they never reach the authored scene.
 /// </remarks>
 public partial class SceneEditorViewModel
 {
-
     private SynchronizationContext? gizmoContext;
     private GizmoTransaction? gizmoTransaction;
 
@@ -44,10 +42,10 @@ public partial class SceneEditorViewModel
     /// <summary>Builds the property edits that give each target its dragged transform.</summary>
     /// <param name="tool">The dragged gizmo's tool: it decides which properties the drag changes.</param>
     /// <param name="targets">The targets' new local transforms.</param>
-    /// <returns>One edit per target.</returns>
-    internal static Dictionary<NodeId, PropertyEdit> BuildGizmoEdits(RuntimeTransformTool tool, IReadOnlyList<RuntimeGizmoTarget> targets)
+    /// <returns>One edit per target, nodes an instance brings in included.</returns>
+    internal static Dictionary<NodeReference, PropertyEdit> BuildGizmoEdits(RuntimeTransformTool tool, IReadOnlyList<RuntimeGizmoTarget> targets)
     {
-        var edits = new Dictionary<NodeId, PropertyEdit>(targets.Count);
+        var edits = new Dictionary<NodeReference, PropertyEdit>(targets.Count);
         foreach (var target in targets)
         {
             // Every drag moves positions: rotation and scale act about the pivot.
@@ -65,28 +63,25 @@ public partial class SceneEditorViewModel
                 _ = edit.Set(SceneSchema.Transform.ScaleX, target.Scale.X).Set(SceneSchema.Transform.ScaleY, target.Scale.Y).Set(SceneSchema.Transform.ScaleZ, target.Scale.Z);
             }
 
-            edits[target.NodeId] = edit.Build();
+            edits[target.Node] = edit.Build();
         }
 
         return edits;
     }
 
     /// <summary>Builds the property edit a light helper's handle drag applies.</summary>
-    /// <param name="node">The light's node.</param>
+    /// <param name="light">The kind of the dragged light, as the engine reports it.</param>
     /// <param name="handle">The dragged handle.</param>
     /// <param name="value">Metres for a range, radians for a cone angle.</param>
-    /// <returns>The edit, or <see langword="null"/> when the node has no light with that value.</returns>
-    internal static PropertyEdit? BuildHelperEdit(SceneNode node, RuntimeHelperHandle handle, float value)
+    /// <returns>The edit, or <see langword="null"/> when the light has no such value.</returns>
+    internal static PropertyEdit? BuildHelperEdit(RuntimeHelperLight light, RuntimeHelperHandle handle, float value)
     {
-        ArgumentNullException.ThrowIfNull(node);
-        var descriptors = node.Components.OfType<SpotLightComponent>().Any() ? SceneProperties.SpotLight
-            : node.Components.OfType<PointLightComponent>().Any() ? SceneProperties.PointLight
-            : null;
-        var descriptor = handle switch
+        var descriptor = (light, handle) switch
         {
-            RuntimeHelperHandle.Range => descriptors?.RangeDescriptor,
-            RuntimeHelperHandle.InnerCone => descriptors?.InnerConeAngleRadiansDescriptor,
-            RuntimeHelperHandle.OuterCone => descriptors?.OuterConeAngleRadiansDescriptor,
+            (RuntimeHelperLight.Point, RuntimeHelperHandle.Range) => SceneProperties.PointLight.RangeDescriptor,
+            (RuntimeHelperLight.Spot, RuntimeHelperHandle.Range) => SceneProperties.SpotLight.RangeDescriptor,
+            (RuntimeHelperLight.Spot, RuntimeHelperHandle.InnerCone) => SceneProperties.SpotLight.InnerConeAngleRadiansDescriptor,
+            (RuntimeHelperLight.Spot, RuntimeHelperHandle.OuterCone) => SceneProperties.SpotLight.OuterConeAngleRadiansDescriptor,
             _ => null,
         };
         if (descriptor is null)
@@ -118,6 +113,10 @@ public partial class SceneEditorViewModel
             case RuntimeGizmoEventKind.Hover:
                 viewport?.SetGizmoHover(gizmoEvent.Hovering);
                 break;
+            case RuntimeGizmoEventKind.Begin when gizmoEvent.Duplicate && this.RefusesInstancedStructure(ViewportEditCommand.Duplicate):
+                // An Alt-drag duplicates its targets, which a node an instance brings in refuses.
+                _ = this.services.Engine.CancelTransformGizmoDragAsync();
+                break;
             case RuntimeGizmoEventKind.Begin when viewport is not null && this.Authoring is { } authoring:
                 this.gizmoTransaction = new GizmoTransaction(viewport, gizmoEvent.Tool, gizmoEvent.Duplicate, authoring);
                 viewport.BeginGizmoDrag();
@@ -144,22 +143,27 @@ public partial class SceneEditorViewModel
         }
     }
 
-    /// <summary>The nodes the gizmo moves: the selection without locked nodes, and without nodes whose ancestor is selected too.</summary>
-    /// <param name="activeNodeId">The node whose origin is the pivot.</param>
+    /// <summary>
+    /// The nodes the gizmo moves, nodes an instance brings in included: the selection without locked nodes, and without
+    /// nodes whose ancestor, in their instance or in the scene, is selected too.
+    /// </summary>
+    /// <param name="activeNode">The node whose origin is the pivot.</param>
     /// <returns>The targets, in selection order.</returns>
-    internal IReadOnlyList<NodeId> GetGizmoTargets(out NodeId? activeNodeId)
+    internal IReadOnlyList<NodeReference> GetGizmoTargets(out NodeReference? activeNode)
     {
-        activeNodeId = null;
-        if (this.scene is null)
+        activeNode = null;
+        if (this.scene is not { } scene)
         {
             return [];
         }
 
         var context = this.SelectionService.GetContext(this.Document.Id);
-        var nodes = this.FindSelectionRoots(context.OwnedNodeIds);
+        var selected = context.SelectedNodes.Where(scene.Holds).Distinct().ToList();
         var interaction = this.Interaction;
-        var targets = nodes.Where(node => interaction.GetLockOwner(node) is null).Select(static node => node.Id).ToList();
-        activeNodeId = context.OwnedPrimaryNodeId is { } primary && targets.Contains(primary) ? primary
+        var targets = selected
+            .Where(node => !(interaction.GetAncestors(scene, node) ?? []).Any(selected.Contains) && !interaction.GetLock(scene, node).Protects)
+            .ToList();
+        activeNode = context.PrimaryNode is { } primary && targets.Contains(primary) ? primary
             : targets.Count > 0 ? targets[^1] : null;
         return targets;
     }
@@ -182,7 +186,7 @@ public partial class SceneEditorViewModel
             RuntimeTransformTool.Scale => "Scale",
             _ => "Move",
         };
-        return count == 1 ? verb : $"{verb} {count} nodes";
+        return count == 1 ? verb : string.Create(CultureInfo.InvariantCulture, $"{verb} {count} nodes");
     }
 
     private void InitializeTransformTools()
@@ -251,9 +255,11 @@ public partial class SceneEditorViewModel
     }
 
     private GizmoEdits? HelperEdits(RuntimeGizmoEvent gizmoEvent)
-        => this.scene?.AllNodes.FirstOrDefault(node => node.Id == gizmoEvent.NodeId) is { } node
-            && BuildHelperEdit(node, gizmoEvent.HelperHandle, gizmoEvent.Value) is { } edit
-            ? new(new Dictionary<NodeId, PropertyEdit> { [node.Id] = edit }, HelperLabel(gizmoEvent.HelperHandle), [])
+        => this.scene is { } scene
+            && gizmoEvent.Node is { } node
+            && scene.Holds(node)
+            && BuildHelperEdit(gizmoEvent.Light, gizmoEvent.HelperHandle, gizmoEvent.Value) is { } edit
+            ? new(new Dictionary<NodeReference, PropertyEdit> { [node] = edit }, HelperLabel(gizmoEvent.HelperHandle), [])
             : null;
 
     private void OnTransformToolsChanged(object? sender, EventArgs e) => this.UpdateTransformGizmo();
@@ -281,7 +287,7 @@ public partial class SceneEditorViewModel
             return;
         }
 
-        var targets = this.GetGizmoTargets(out var activeNodeId);
+        var targets = this.GetGizmoTargets(out var activeNode);
         var settings = this.TransformTools.Settings;
         var displayScale = (float)(this.GetActiveViewport()?.DisplayScale ?? 1.0);
         var gizmo = new RuntimeTransformGizmo(
@@ -289,7 +295,7 @@ public partial class SceneEditorViewModel
             settings.Space,
             settings.Snap,
             targets,
-            activeNodeId,
+            activeNode,
             displayScale);
         _ = this.SetTransformGizmoAsync(gizmo);
         _ = this.SetSceneHelpersAsync(displayScale);
@@ -302,7 +308,7 @@ public partial class SceneEditorViewModel
         var selected = this.SelectionService.GetContext(this.Document.Id).SelectedNodes;
         IReadOnlyList<NodeReference> locked = this.scene is not { } scene
             ? []
-            : [.. selected.Where(node => scene.Holds(node) && interaction.GetLockOwner(scene, node) is not null)];
+            : [.. selected.Where(node => scene.Holds(node) && interaction.GetLock(scene, node).Protects)];
         var helpers = new RuntimeSceneHelpers([.. interaction.HiddenNodes()], locked, displayScale);
         try
         {
@@ -375,13 +381,13 @@ public partial class SceneEditorViewModel
             while (transaction.Pending is { } edits)
             {
                 transaction.Pending = null;
-                transaction.Gesture ??= transaction.Authoring.BeginGestureAsync(
+                transaction.Gesture ??= transaction.Authoring.BeginNodeGestureAsync(
                     [.. edits.Edits.Keys],
                     [.. edits.Edits.Values.SelectMany(static edit => edit.Ids).Distinct()],
                     edits.Label);
                 transaction.Applied = edits;
                 var gesture = await transaction.Gesture.ConfigureAwait(true);
-                _ = await gesture.PreviewAsync(new SetProperties(edits.Edits, edits.Label)).ConfigureAwait(true);
+                _ = await gesture.PreviewAsync(edits.Edits).ConfigureAwait(true);
             }
         }
         finally
@@ -421,10 +427,11 @@ public partial class SceneEditorViewModel
 
         if (commit && transaction.Duplicate)
         {
+            // An Alt-drag of a node an instance brings in was refused when it began: the targets are the scene's own.
             var transforms = applied.Targets.ToDictionary(
-                static target => target.NodeId,
+                static target => target.Node.Node,
                 static target => new TransformData { Name = "Transform", Position = target.Position, Rotation = target.Rotation, Scale = target.Scale });
-            await this.DuplicateInPlaceAsync(transaction.Authoring, [.. applied.Targets.Select(static target => target.NodeId)], transforms).ConfigureAwait(true);
+            await this.DuplicateInPlaceAsync(transaction.Authoring, [.. transforms.Keys], transforms).ConfigureAwait(true);
         }
     }
 
@@ -519,11 +526,11 @@ public partial class SceneEditorViewModel
     }
 
     /// <summary>The property edits one drag result applies, with its history label.</summary>
-    /// <param name="Edits">One edit per node.</param>
+    /// <param name="Edits">One edit per node, nodes an instance brings in included.</param>
     /// <param name="Label">The undo entry's label.</param>
     /// <param name="Targets">A transform drag's results, which an Alt-drag duplicates at; empty for helpers.</param>
     private sealed record GizmoEdits(
-        IReadOnlyDictionary<NodeId, PropertyEdit> Edits,
+        IReadOnlyDictionary<NodeReference, PropertyEdit> Edits,
         string Label,
         IReadOnlyList<RuntimeGizmoTarget> Targets);
 }

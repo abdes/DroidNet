@@ -14,8 +14,8 @@ using Oxygen.Editor.LivePreview.Scenes;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.SceneEditor.Settings;
-using Oxygen.Editor.Scenes.Interaction;
 using Oxygen.Editor.Scenes.Selection;
+using Oxygen.Editor.Scenes.Testing;
 using Oxygen.Editor.Shell.Documents;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -27,21 +27,33 @@ namespace Oxygen.Editor.SceneEditor.Unit.Tests.TestSupport;
 /// </summary>
 internal static class TestSceneEditorServices
 {
+    /// <summary>Creates preview preferences over a session that stores nothing.</summary>
+    /// <param name="session">The project session.</param>
+    /// <param name="results">Receives their operation results; by default, discards them.</param>
+    /// <returns>The preferences, which the caller owns and disposes.</returns>
+    public static PreviewSettingsService CreatePreviewSettings(IProjectSession session, IOperationResultPublisher? results = null)
+        => new(
+            Mock.Of<IEngineService>(),
+            Mock.Of<IEditorSettingsManager>(),
+            session,
+            results ?? Mock.Of<IOperationResultPublisher>(),
+            new OperationStatusReducer());
+
     /// <summary>Creates the services of a scene editor in a session.</summary>
     /// <param name="session">The project session.</param>
+    /// <param name="previewSettings">The preview preferences, which the caller owns and disposes.</param>
     /// <param name="preview">Reports when the engine shows a scene; by default, never.</param>
     /// <param name="inputCommitter">Completes the focused control's input; by default, does nothing.</param>
     /// <param name="results">Receives the editor's operation results; by default, discards them.</param>
-    /// <param name="previewSettings">The preview preferences; by default, a service over the session that stores nothing.</param>
     /// <param name="assets">The project's assets; by default, none.</param>
     /// <param name="references">The saved authored references; by default, none.</param>
     /// <returns>The services.</returns>
     public static SceneEditorServices Create(
         IProjectSession session,
+        PreviewSettingsService previewSettings,
         IScenePreview? preview = null,
         IDocumentInputCommitter? inputCommitter = null,
         IOperationResultPublisher? results = null,
-        PreviewSettingsService? previewSettings = null,
         IAssetFeed? assets = null,
         IAuthoredReferences? references = null)
     {
@@ -62,9 +74,9 @@ internal static class TestSceneEditorServices
             Mock.Of<IDocumentService>(),
             Mock.Of<IUnsavedCookInputs>(),
             new SceneSelectionService(),
-            new SceneNodeInteraction(session, settings, publisher, reducer, NullLoggerFactory.Instance),
+            new SceneInteractionKit().Create(session, publisher, reducer),
             new SceneEditorViews(),
-            previewSettings ?? new PreviewSettingsService(engine, settings, session, publisher, reducer),
+            previewSettings,
             new ViewportStateService(session, settings, publisher, reducer),
             new TransformToolSettingsService(settings: null),
             engineSettings.Object,

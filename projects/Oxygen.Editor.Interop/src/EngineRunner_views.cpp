@@ -6,8 +6,8 @@
 #include "pch_clr.h"
 
 #pragma managed(push, off)
-#include <cstdint>
 #include <cmath>
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -31,11 +31,11 @@
 #include <EngineRunner.h>
 #include <Views/CameraControlModeManaged.h>
 #include <Views/CameraViewPresetManaged.h>
-#include <Views/ViewModeManaged.h>
 #include <Views/EditorCameraStateManaged.h>
 #include <Views/GroundGridConfigManaged.h>
 #include <Views/ViewConfigManaged.h>
 #include <Views/ViewIdManaged.h>
+#include <Views/ViewModeManaged.h>
 
 using namespace System;
 using namespace System::Threading::Tasks;
@@ -938,7 +938,7 @@ namespace Oxygen::Interop {
   auto EngineRunner::TrySetTransformGizmo(EngineContext^ ctx,
     TransformToolManaged tool, TransformSpaceManaged space, bool snapEnabled,
     float translationStep, float rotationStepDegrees, float scaleStep,
-    array<System::Guid>^ targets, System::Nullable<System::Guid> activeNodeId,
+    array<NodeReferenceManaged^>^ targets, NodeReferenceManaged^ activeNode,
     float displayScale) -> bool
   {
     if (ctx == nullptr) {
@@ -970,14 +970,12 @@ namespace Oxygen::Interop {
     settings.display_scale = displayScale > 0.0F ? displayScale : 1.0F;
     if (targets != nullptr) {
       settings.targets.reserve(static_cast<std::size_t>(targets->Length));
-      for each (System::Guid id in targets) {
-        settings.targets.push_back(
-          detail::ToNativeKey<oxygen::interop::module::UuidKey>(id));
+      for each (NodeReferenceManaged^ reference in targets) {
+        settings.targets.push_back(NodeReferenceManaged::ToNative(reference));
       }
     }
-    if (activeNodeId.HasValue) {
-      settings.active = detail::ToNativeKey<oxygen::interop::module::UuidKey>(
-        activeNodeId.Value);
+    if (activeNode != nullptr) {
+      settings.active = NodeReferenceManaged::ToNative(activeNode);
     }
     try {
       editor_module_opt->get().GetTransformGizmo().SetSettings(
@@ -1093,7 +1091,7 @@ namespace Oxygen::Interop {
       throw gcnew ArgumentNullException("ctx");
     }
 
-    FrameStatisticsManaged statistics;
+    FrameStatisticsManaged statistics{};
     auto native_ctx = ctx->NativePtr();
     if (disposed_ || !native_ctx || !native_ctx->engine) {
       return statistics;

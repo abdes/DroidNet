@@ -19,7 +19,7 @@ namespace Oxygen.Editor.SceneEditor.Unit.Tests;
 /// </summary>
 [TestClass]
 [TestCategory("Viewport Selection")]
-public sealed class ViewportSelectionTests
+internal sealed class ViewportSelectionTests
 {
     private static readonly RuntimeViewId ViewId = new(83);
     private static readonly NodeReference A = NodeReference.To(NodeId.New());

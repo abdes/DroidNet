@@ -16,8 +16,8 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Constants.h>
-#include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Environment/LocalFogVolume.h>
+#include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Light/PointLight.h>
 #include <Oxygen/Scene/Light/SpotLight.h>
 #include <Oxygen/Scene/Scene.h>
@@ -117,7 +117,7 @@ namespace oxygen::interop::module {
   auto SceneHelperController::BeginFrame(scene::Scene* scene,
     const std::uint64_t scene_generation,
     const std::vector<NodeReferenceKey>& selected,
-    std::optional<NodeReferenceKey> active)
+    std::optional<NodeReferenceKey> active) -> bool
   {
     auto applied = false;
     {
@@ -168,7 +168,7 @@ namespace oxygen::interop::module {
       pending.emplace_back(root, false);
     }
     while (!pending.empty()) {
-      auto [node, parent_hidden] = pending.back();
+      auto [node, parent_hidden] = std::move(pending.back());
       pending.pop_back();
       if (!node.IsAlive()) {
         continue;
@@ -234,10 +234,9 @@ namespace oxygen::interop::module {
       }
       helper.selected = filter.selected.contains(helper.node);
       helper.active = helper.selected && filter.active == helper.node;
-      // Handles write the node's own light; a node an instance brought in
-      // changes through its instance instead.
-      helper.editable = helper.selected && helper.node.path.empty()
-        && !filter.locked.contains(helper.node);
+      // A node an instance brought in is edited through its instance's
+      // changes, so its handles drag like those of the scene's own nodes.
+      helper.editable = helper.selected && !filter.locked.contains(helper.node);
       nodes.push_back(std::move(helper));
     }
     return nodes;
@@ -319,7 +318,7 @@ namespace oxygen::interop::module {
 
     std::erase_if(input.button_events, [&](const EditorButtonEvent& event) {
       const auto position = ToPixel(event.position);
-      if (event.button == platform::MouseButton::kLeft) {
+      if (event.Is(platform::MouseButton::kLeft)) {
         if (event.pressed) {
           if (drag_.has_value() || gizmo_has_pointer || alt_down_
             || !camera_of_view().has_value()) {
@@ -375,7 +374,7 @@ namespace oxygen::interop::module {
         drag_view_ = kInvalidViewId;
         return true;
       }
-      if (event.button == platform::MouseButton::kRight) {
+      if (event.Is(platform::MouseButton::kRight)) {
         if (event.pressed && dragging_here()) {
           CancelDrag();
           swallow_right_release_ = true;
@@ -446,7 +445,7 @@ namespace oxygen::interop::module {
   }
 
   auto SceneHelperController::PickIcons(EditorView& view,
-    const vortex::ViewPickRect& rect) -> std::vector<HelperIconHit>
+    const vortex::ViewPickRect& rect) const -> std::vector<HelperIconHit>
   {
     if (view.IsInset() || !ShowsIcons(view)) {
       return {};
@@ -514,8 +513,8 @@ namespace oxygen::interop::module {
       .hovering = false,
       .pointer_pixel = drag_->Pointer(),
       .helper = true,
-      // Only editable helpers are dragged: nodes of the editor's own.
-      .node = drag_->Node().node.node,
+      .node = drag_->Node().node,
+      .helper_kind = drag_->Node().kind,
       .helper_handle = drag_->Handle(),
       .value = drag_->Value(),
     };

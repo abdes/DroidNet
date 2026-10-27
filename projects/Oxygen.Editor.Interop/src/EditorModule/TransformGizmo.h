@@ -18,8 +18,8 @@
 
 #include <Oxygen/Vortex/Types/ViewOverlay.h>
 
-#include <EditorModule/NodeRegistry.h>
 #include <api_export.h>
+#include <EditorModule/NodeRegistry.h>
 
 namespace oxygen::interop::module {
 
@@ -126,7 +126,7 @@ namespace oxygen::interop::module {
 
   //! A manipulated node as it was when the drag began.
   struct GizmoTargetStart {
-    UuidKey id {};
+    NodeReferenceKey id {};
     glm::mat4 world { 1.0F };
     glm::mat4 parent_world { 1.0F };
     glm::vec3 local_position { 0.0F };
@@ -136,7 +136,7 @@ namespace oxygen::interop::module {
 
   //! A manipulated node's new local transform.
   struct GizmoTargetResult {
-    UuidKey id {};
+    NodeReferenceKey id {};
     glm::vec3 position { 0.0F };
     glm::quat rotation { 1.0F, 0.0F, 0.0F, 0.0F };
     glm::vec3 scale { 1.0F };

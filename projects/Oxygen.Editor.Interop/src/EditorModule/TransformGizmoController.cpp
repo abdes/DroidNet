@@ -6,8 +6,10 @@
 
 #include "pch.h"
 
+#include <algorithm>
 #include <cmath>
 #include <utility>
+#include <vector>
 
 #include <glm/gtc/quaternion.hpp>
 
@@ -63,13 +65,13 @@ namespace oxygen::interop::module {
   auto TransformGizmoController::BeginFrame(
     scene::Scene* scene, const std::uint64_t scene_generation) -> bool
   {
+    auto applied = false;
     {
       std::lock_guard lock(mutex_);
-    auto applied = false;
       if (settings_changed_) {
+        applied = true;
         if (drag_.has_value() && !SameTargets(settings_, requested_)) {
           cancel_requested_.store(true, std::memory_order_relaxed);
-        applied = true;
         }
         settings_ = requested_;
         settings_changed_ = false;
@@ -87,9 +89,9 @@ namespace oxygen::interop::module {
     if (settings_.tool == TransformTool::kSelect || settings_.targets.empty()) {
       SetHover(kInvalidViewId, GizmoHandle::kNone);
     }
+    return applied;
   }
 
-    return applied;
   void TransformGizmoController::ProcessInput(
     EditorView& view, AccumulatedInput& input)
   {
@@ -137,7 +139,7 @@ namespace oxygen::interop::module {
 
     std::erase_if(input.button_events, [&](const EditorButtonEvent& event) {
       const auto position = ToPixel(event.position);
-      if (event.button == platform::MouseButton::kLeft) {
+      if (event.Is(platform::MouseButton::kLeft)) {
         if (event.pressed) {
           if (drag_.has_value() || settings_.tool == TransformTool::kSelect
             || !camera_of_view().has_value()) {
@@ -182,7 +184,7 @@ namespace oxygen::interop::module {
         }
         return true;
       }
-      if (event.button == platform::MouseButton::kRight) {
+      if (event.Is(platform::MouseButton::kRight)) {
         if (event.pressed && dragging_here()) {
           CancelDrag();
           swallow_right_release_ = true;
@@ -254,15 +256,34 @@ namespace oxygen::interop::module {
     if (scene_ == nullptr || settings_.targets.empty()) {
       return std::nullopt;
     }
+    // A target below another target moves with it. The editor drops a node
+    // whose selected ancestor it knows; only the live tree knows the parents
+    // of the nodes an instance brings in.
+    std::vector<scene::NodeHandle> handles;
+    for (const auto& id : settings_.targets) {
+      if (const auto handle = NodeRegistry::Lookup(*scene_, id)) {
+        handles.push_back(*handle);
+      }
+    }
+    const auto below_target = [&handles](scene::SceneNode node) {
+      for (auto ancestor = node.GetParent(); ancestor.has_value();
+        ancestor = ancestor->GetParent()) {
+        if (std::ranges::find(handles, ancestor->GetHandle()) != handles.end()) {
+          return true;
+        }
+      }
+      return false;
+    };
+
     auto resolution = Resolution {};
     std::optional<std::size_t> active;
     for (const auto& id : settings_.targets) {
-      const auto handle = NodeRegistry::Lookup(id);
+      const auto handle = NodeRegistry::Lookup(*scene_, id);
       if (!handle.has_value()) {
         continue;
       }
       auto node = scene_->GetNode(*handle);
-      if (!node.has_value() || !node->IsAlive()) {
+      if (!node.has_value() || !node->IsAlive() || below_target(*node)) {
         continue;
       }
       auto transform = node->GetTransform();

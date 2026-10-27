@@ -85,7 +85,7 @@ namespace oxygen::interop::module {
     OXGN_EI_NDAPI auto BeginFrame(scene::Scene* scene,
       std::uint64_t scene_generation,
       const std::vector<NodeReferenceKey>& selected,
-      std::optional<NodeReferenceKey> active);
+      std::optional<NodeReferenceKey> active) -> bool;
     [[nodiscard]] auto IsDragging() const noexcept -> bool
     {
       return drag_.has_value();
@@ -112,7 +112,7 @@ namespace oxygen::interop::module {
     void BuildOverlay(EditorView& view, vortex::ViewOverlay& overlay);
     //! The icons a pick rectangle of the view covers.
     [[nodiscard]] auto PickIcons(EditorView& view,
-      const vortex::ViewPickRect& rect) -> std::vector<HelperIconHit>;
+      const vortex::ViewPickRect& rect) const -> std::vector<HelperIconHit>;
 
   private:
     //! The nodes as a view sees them: without the camera it looks through,

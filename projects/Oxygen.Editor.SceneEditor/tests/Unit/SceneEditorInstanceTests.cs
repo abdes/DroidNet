@@ -10,6 +10,7 @@ using Moq;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline.Testing;
 using Oxygen.Editor.Projects.Testing;
+using Oxygen.Editor.SceneEditor.Settings;
 using Oxygen.Editor.SceneEditor.Unit.Tests.TestSupport;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Documents;
@@ -34,7 +35,7 @@ namespace Oxygen.Editor.SceneEditor.Unit.Tests;
 /// </summary>
 [TestClass]
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "MSTest discovers public test classes with the repository's discovery configuration.")]
-public sealed class SceneEditorInstanceTests
+public sealed partial class SceneEditorInstanceTests
 {
     private const string SceneName = "Harbor";
 
@@ -175,17 +176,18 @@ public sealed class SceneEditorInstanceTests
             ImportSource = imported ? identity : null,
         };
 
-    private sealed class Fixture : IDisposable
+    private sealed partial class Fixture : IDisposable
     {
         private readonly TestSession session;
+        private readonly PreviewSettingsService previewSettings;
+        private readonly BehaviorSubject<IReadOnlyList<AssetEntry>> assetItems;
 
         public Fixture()
         {
             this.session = new TestSession(TestProject.Create(new MockFileSystem()).Context);
             this.Metadata = TestScenes.Open(new Scene { Name = SceneName }, references: this.References);
             this.Tab = new DocumentTab(this.Metadata.Document, new DocumentEditorDescriptor(this.Metadata.Document.Kind, static _ => new object()) { IsClosable = false });
-            var assets = new Mock<IAssetFeed>();
-            _ = assets.SetupGet(feed => feed.Items).Returns(new BehaviorSubject<IReadOnlyList<AssetEntry>>(
+            this.assetItems = new BehaviorSubject<IReadOnlyList<AssetEntry>>(
             [
                 Entry(Car, AssetKind.Model, imported: true),
                 Entry(Ship, AssetKind.Model),
@@ -193,8 +195,11 @@ public sealed class SceneEditorInstanceTests
                 Entry(Harbor, AssetKind.Scene),
                 Entry(Watchtower, AssetKind.Scene),
                 Entry(Village, AssetKind.Scene),
-            ]));
-            this.Services = TestSceneEditorServices.Create(this.session, results: this.Results.Object, assets: assets.Object, references: this.References);
+            ]);
+            var assets = new Mock<IAssetFeed>();
+            _ = assets.SetupGet(feed => feed.Items).Returns(this.assetItems);
+            this.previewSettings = TestSceneEditorServices.CreatePreviewSettings(this.session);
+            this.Services = TestSceneEditorServices.Create(this.session, this.previewSettings, results: this.Results.Object, assets: assets.Object, references: this.References);
             this.Editor = new(this.Tab, this.Services);
             this.Editor.AttachWindow(new DocumentWindowServices(new WindowId(1), new TestDocumentArea(this.Metadata.Document), Mock.Of<ICommandService>(), Mock.Of<IPlacementService>(), Mock.Of<IAssetReveal>()));
         }
@@ -216,8 +221,10 @@ public sealed class SceneEditorInstanceTests
         public void Dispose()
         {
             this.Editor.Dispose();
+            this.previewSettings.Dispose();
             this.Tab.Dispose();
             this.Metadata.Dispose();
+            this.assetItems.Dispose();
             this.session.Dispose();
         }
     }

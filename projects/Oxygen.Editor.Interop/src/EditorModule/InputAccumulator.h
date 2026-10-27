@@ -41,6 +41,15 @@ namespace oxygen::interop::module {
     bool pressed{ false };
     oxygen::time::PhysicalTime timestamp{};
     SubPixelPosition position{};
+
+    //! Whether the event is of `mouse_button`; mouse buttons are flags.
+    [[nodiscard]] constexpr auto Is(
+      const platform::MouseButton mouse_button) const noexcept -> bool
+    {
+      using Bits = std::underlying_type_t<platform::MouseButton>;
+      return (static_cast<Bits>(button) & static_cast<Bits>(mouse_button))
+        != 0U;
+    }
   };
 
   struct EditorMouseMotionEvent {

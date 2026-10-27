@@ -79,6 +79,9 @@ internal sealed partial class SceneEditorConflictTests
     {
         private readonly List<TestSession> sessions = [];
 
+        // The preview preferences the fixture made because the test passed none.
+        private PreviewSettingsService? ownedPreviewSettings;
+
         private Fixture(TestSceneDocuments scenes, Document document)
         {
             this.Scenes = scenes;
@@ -122,6 +125,7 @@ internal sealed partial class SceneEditorConflictTests
         public void Dispose()
         {
             this.Editor.Dispose();
+            this.ownedPreviewSettings?.Dispose();
             foreach (var session in Enumerable.Reverse(this.sessions))
             {
                 session.Dispose();
@@ -159,9 +163,16 @@ internal sealed partial class SceneEditorConflictTests
 
             var input = new Mock<IDocumentInputCommitter>();
             _ = input.Setup(value => value.CommitAsync(It.IsAny<DroidNet.Documents.DocumentId>())).Callback(() => commitInput?.Invoke()).Returns(Task.CompletedTask);
+            var session = this.NewSession();
+            if (previewSettings is null)
+            {
+                this.ownedPreviewSettings = TestSceneEditorServices.CreatePreviewSettings(session, this.Results);
+                previewSettings = this.ownedPreviewSettings;
+            }
+
             this.Editor = new(
                 this.Tab,
-                TestSceneEditorServices.Create(this.NewSession(), this.Preview.Object, input.Object, this.Results, previewSettings));
+                TestSceneEditorServices.Create(session, previewSettings, this.Preview.Object, input.Object, this.Results));
             this.Editor.AttachWindow(new DocumentWindowServices(new WindowId(1), documents, Mock.Of<ICommandService>(), Mock.Of<IPlacementService>(), Mock.Of<IAssetReveal>()));
         }
 

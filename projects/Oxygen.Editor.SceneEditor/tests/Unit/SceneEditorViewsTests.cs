@@ -12,7 +12,7 @@ namespace Oxygen.Editor.SceneEditor.Unit.Tests;
 
 [TestClass]
 [TestCategory("Viewport Tools")]
-public sealed class SceneEditorViewsTests
+internal sealed class SceneEditorViewsTests
 {
     [TestMethod]
     public async Task Frame_ForADocumentWithoutAnEditor_ReturnsFalse()
