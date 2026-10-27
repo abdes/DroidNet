@@ -40,15 +40,8 @@ public sealed partial class ModelImportSettingsPanel : UserControl
     /// <returns>Visible when the group is set.</returns>
     internal static Visibility ShownWhen(object? group) => group is null ? Visibility.Collapsed : Visibility.Visible;
 
-    // Continue... lists the nodes of the last import as its flyout opens; its buttons close it.
-    private void OnContinueFlyoutOpening(object? sender, object args)
-    {
-        if (sender is Flyout { Target: FrameworkElement { DataContext: VanishedAnchorRow row } } flyout)
-        {
-            this.openFlyout = flyout;
-            row.Prepare();
-        }
-    }
+    // Continue... fills itself as its flyout opens (an x:Bind of the row); its buttons close the flyout that opened.
+    private void OnContinueFlyoutOpened(object? sender, object args) => this.openFlyout = sender as Flyout;
 
     private void OnContinueClicked(object sender, RoutedEventArgs e) => this.openFlyout?.Hide();
 

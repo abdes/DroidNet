@@ -7,6 +7,7 @@ using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
+using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.ModelEditor;
 
@@ -61,4 +62,18 @@ internal static class ModelImportStatus
     /// <param name="state">The model's import state.</param>
     /// <returns><see langword="true"/> when <em>Reimport</em> is enabled.</returns>
     public static bool CanReimport(ModelImportState state) => state is ModelImportState.SourceChanged or ModelImportState.ImportFailed;
+
+    /// <summary>Gets how serious an import state is, which colors the toolbar's status.</summary>
+    /// <param name="state">The model's import state.</param>
+    /// <returns>
+    /// <see cref="DiagnosticSeverity.Error"/> for an import that failed or a source that is missing,
+    /// <see cref="DiagnosticSeverity.Warning"/> for an import the source no longer matches or that never ran, and
+    /// <see cref="DiagnosticSeverity.Info"/> otherwise.
+    /// </returns>
+    public static DiagnosticSeverity SeverityOf(ModelImportState state) => state switch
+    {
+        ModelImportState.ImportFailed or ModelImportState.SourceMissing => DiagnosticSeverity.Error,
+        ModelImportState.SourceChanged or ModelImportState.NotImported => DiagnosticSeverity.Warning,
+        _ => DiagnosticSeverity.Info,
+    };
 }

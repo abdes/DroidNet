@@ -84,12 +84,13 @@
                     <TextBlock
                         x:Name="ImportStatus"
                         VerticalAlignment="Center"
-                        Text="{x:Bind ViewModel.ImportStatusText, Mode=OneWay}" />
+                        Text="{x:Bind ViewModel.ImportStatusText, Mode=OneWay}"
+                        Visibility="{x:Bind ViewModel.HasImportStatus, Mode=OneWay}" />
                     <TextBlock
                         VerticalAlignment="Center"
                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                         Text="·"
-                        Visibility="{x:Bind ViewModel.HasProblems, Mode=OneWay}" />
+                        Visibility="{x:Bind local:ModelEditorView.ShownWhenBoth(ViewModel.HasImportStatus, ViewModel.HasProblems), Mode=OneWay}" />
                     <HyperlinkButton
                         x:Name="ProblemsLink"
                         Padding="2,0"
@@ -123,6 +124,16 @@
                         <FontIconSource Glyph="&#xE777;" />
                     </dnc:ToolBarButton.Icon>
                 </dnc:ToolBarButton>
+                <dnc:ToolBarToggleButton
+                    x:Name="ImportSettingsToggle"
+                    IsChecked="{x:Bind local:ModelEditorView.IsShownWhen(ViewModel.Layout.IsPanelCollapsed), BindBack=ShowImportSettings, Mode=TwoWay}"
+                    Label="Import settings"
+                    ToolBarLabelPosition="Collapsed"
+                    ToolTipService.ToolTip="Show or hide the import settings beside the viewport">
+                    <dnc:ToolBarToggleButton.Icon>
+                        <FontIconSource Glyph="&#xE89F;" />
+                    </dnc:ToolBarToggleButton.Icon>
+                </dnc:ToolBarToggleButton>
             </dnc:ToolBar.SecondaryItems>
         </dnc:ToolBar>
 
@@ -136,21 +147,6 @@
             <!--  The viewport is added here once the engine shows the model  -->
             <Grid x:Name="ViewportHost" Grid.Column="0" />
 
-            <!--  ME-6: the view never approximates unsaved settings  -->
-            <InfoBar
-                x:Name="LastImportBanner"
-                Grid.Column="0"
-                Margin="8"
-                VerticalAlignment="Top"
-                IsClosable="False"
-                IsOpen="{x:Bind ViewModel.IsShowingLastImport, Mode=OneWay}"
-                Message="Showing the last import. Save to reimport with your settings."
-                Severity="Informational">
-                <InfoBar.ActionButton>
-                    <Button Command="{x:Bind ViewModel.SaveCommand}" Content="Save" />
-                </InfoBar.ActionButton>
-            </InfoBar>
-
             <sizers:GridSplitter
                 Grid.Column="1"
                 Width="4"
@@ -162,36 +158,19 @@
                 x:Name="SettingsPane"
                 Grid.Column="2"
                 Background="{ThemeResource LayerFillColorDefaultBrush}"
-                SizeChanged="OnSettingsPaneSizeChanged">
+                SizeChanged="OnSettingsPaneSizeChanged"
+                Visibility="{x:Bind local:ModelEditorView.CollapsedWhen(ViewModel.Layout.IsPanelCollapsed), Mode=OneWay}">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
 
-                <Grid Padding="8,4" ColumnSpacing="4">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    <TextBlock
-                        VerticalAlignment="Center"
-                        Style="{ThemeResource BodyStrongTextBlockStyle}"
-                        Text="Import settings"
-                        Visibility="{x:Bind local:ModelEditorView.CollapsedWhen(ViewModel.Layout.IsPanelCollapsed), Mode=OneWay}" />
-                    <ToggleButton
-                        x:Name="CollapsePanel"
-                        Grid.Column="1"
-                        AutomationProperties.Name="Collapse the import settings"
-                        IsChecked="{x:Bind ViewModel.Layout.IsPanelCollapsed, Mode=TwoWay}"
-                        ToolTipService.ToolTip="Collapse or expand the import settings">
-                        <FontIcon FontSize="12" Glyph="&#xE89F;" />
-                    </ToggleButton>
-                </Grid>
+                <TextBlock
+                    Padding="8,6"
+                    Style="{ThemeResource BodyStrongTextBlockStyle}"
+                    Text="Import settings" />
 
-                <ScrollViewer
-                    Grid.Row="1"
-                    Padding="8,0,8,8"
-                    Visibility="{x:Bind local:ModelEditorView.CollapsedWhen(ViewModel.Layout.IsPanelCollapsed), Mode=OneWay}">
+                <ScrollViewer Grid.Row="1" Padding="8,0,8,8">
                     <Grid>
                         <settings:ModelImportSettingsPanel ViewModel="{x:Bind ViewModel.Settings}" Visibility="{x:Bind ViewModel.HasImportSettings, Mode=OneWay}" />
                         <TextBlock
@@ -204,5 +183,21 @@
                 </ScrollViewer>
             </Grid>
         </Grid>
+        <VisualStateManager.VisualStateGroups>
+            <!--  The import status says how serious it is: information, a warning or an error.  -->
+            <VisualStateGroup x:Name="ImportStatusStates">
+                <VisualState x:Name="ImportStatusInfo" />
+                <VisualState x:Name="ImportStatusWarning">
+                    <VisualState.Setters>
+                        <Setter Target="ImportStatus.Foreground" Value="{ThemeResource SystemFillColorCautionBrush}" />
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="ImportStatusError">
+                    <VisualState.Setters>
+                        <Setter Target="ImportStatus.Foreground" Value="{ThemeResource SystemFillColorCriticalBrush}" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>
     </Grid>
 </UserControl>

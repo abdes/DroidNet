@@ -15,7 +15,7 @@ public interface IModelImportRecordWriter
 {
     /// <summary>Replaces a model's import record and reimports the model.</summary>
     /// <param name="model">The model's source.</param>
-    /// <param name="expected">The record as it was read.</param>
+    /// <param name="expected">The bytes the record's file held when it was read or last saved.</param>
     /// <param name="replacement">The record to save.</param>
     /// <param name="cancellationToken">Cancels the request.</param>
     /// <returns>
@@ -23,5 +23,5 @@ public interface IModelImportRecordWriter
     /// reimport then failed, which the model's import status reports; <see cref="DocumentSaveOutcome.Conflict"/> when the
     /// record changed since it was read; <see cref="DocumentSaveOutcome.Refused"/> when it could not be written.
     /// </returns>
-    public Task<DocumentSaveResult> ReplaceAsync(AssetPath model, ModelImportSettings expected, ModelImportSettings replacement, CancellationToken cancellationToken);
+    public Task<DocumentSaveResult> ReplaceAsync(AssetPath model, ReadOnlyMemory<byte> expected, ModelImportSettings replacement, CancellationToken cancellationToken);
 }

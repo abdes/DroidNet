@@ -39,6 +39,9 @@ public sealed partial class VanishedAnchorRow : ObservableObject
     /// <summary>Gets what the row says, such as "continued by Body/Door_Front_L" or "not continued".</summary>
     public string Status => this.ContinuedBy is { } node ? $"continued by {node}" : "not continued";
 
+    /// <summary>Gets what <em>Forget</em> does.</summary>
+    public string ForgetToolTip => $"Forget {this.Anchor}: the node was deleted on purpose. On Save, later imports no longer list it; changes scenes made on it stay their kept changes.";
+
     /// <summary>Gets the flyout's title.</summary>
     public string FlyoutTitle => $"Continue {this.Anchor} in";
 
@@ -80,6 +83,10 @@ public sealed partial class VanishedAnchorRow : ObservableObject
             this.Chosen = null;
         }
     }
+
+    /// <summary>Forgets the anchor, a node deleted on purpose: once saved, later imports no longer list it.</summary>
+    [RelayCommand]
+    private void Forget() => this.group.Forget(this.Anchor);
 
     private bool CanContinueWithChosen() => this.Chosen is { IsEnabled: true };
 

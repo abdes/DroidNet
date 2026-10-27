@@ -8,6 +8,7 @@ using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
+using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.ModelEditor.Tests;
 
@@ -68,4 +69,14 @@ public sealed class ModelImportStatusTests
             CookStatus = new AssetCookStatus(product, freshness, HasPublishedOutput: true, CookedOutputAvailability.Present, [], []),
         };
     }
+
+    [TestMethod]
+    [DataRow(ModelImportState.Imported, DiagnosticSeverity.Info)]
+    [DataRow(ModelImportState.Importing, DiagnosticSeverity.Info)]
+    [DataRow(ModelImportState.SourceChanged, DiagnosticSeverity.Warning)]
+    [DataRow(ModelImportState.NotImported, DiagnosticSeverity.Warning)]
+    [DataRow(ModelImportState.ImportFailed, DiagnosticSeverity.Error)]
+    [DataRow(ModelImportState.SourceMissing, DiagnosticSeverity.Error)]
+    public void SeverityOf_ColorsWhatAsksForAttention(ModelImportState state, DiagnosticSeverity severity)
+        => _ = ModelImportStatus.SeverityOf(state).Should().Be(severity);
 }

@@ -8,6 +8,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.Shell.Documents;
 using Oxygen.Editor.Viewports;
+using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.ModelEditor;
 
@@ -45,16 +46,36 @@ public sealed partial class ModelEditorView : UserControl, IDocumentEditorView
         await this.ReleaseViewportAsync().ConfigureAwait(true);
     }
 
-    /// <summary>Gets the import settings panel's column width: the user's width, or the header alone when collapsed.</summary>
+    /// <summary>Gets the import settings panel's column width: the user's width, or none when collapsed.</summary>
     /// <param name="width">The user's panel width.</param>
     /// <param name="isCollapsed">Whether the panel is collapsed.</param>
     /// <returns>The column width.</returns>
-    internal static GridLength PanelWidthOf(double width, bool isCollapsed) => isCollapsed ? GridLength.Auto : new GridLength(width);
+    internal static GridLength PanelWidthOf(double width, bool isCollapsed) => isCollapsed ? new GridLength(0) : new GridLength(width);
+
+    /// <summary>Gets the panel toggle's state: checked while the panel shows.</summary>
+    /// <param name="isCollapsed">Whether the panel is collapsed.</param>
+    /// <returns>Whether the toggle is checked.</returns>
+    internal static bool? IsShownWhen(bool isCollapsed) => !isCollapsed;
+
+    /// <summary>Gets the visibility of a separator between two parts, shown while both are.</summary>
+    /// <param name="first">Whether the first part shows.</param>
+    /// <param name="second">Whether the second part shows.</param>
+    /// <returns>Visible while both parts show.</returns>
+    internal static Visibility ShownWhenBoth(bool first, bool second) => first && second ? Visibility.Visible : Visibility.Collapsed;
 
     /// <summary>Gets the visibility of a part that hides while a condition holds.</summary>
     /// <param name="condition">The condition.</param>
     /// <returns>Collapsed while the condition holds.</returns>
     internal static Visibility CollapsedWhen(bool condition) => condition ? Visibility.Collapsed : Visibility.Visible;
+
+    // The Import settings toggle shows the panel while checked; an x:Bind function binding's way back sets the source.
+    private void ShowImportSettings(bool? isChecked)
+    {
+        if (this.ViewModel is { } model)
+        {
+            model.Layout.IsPanelCollapsed = isChecked != true;
+        }
+    }
 
     // The splitter sizes the panel's column; the width the user leaves is kept for every model document.
     private void OnSettingsPaneSizeChanged(object sender, SizeChangedEventArgs e)
@@ -95,6 +116,7 @@ public sealed partial class ModelEditorView : UserControl, IDocumentEditorView
         this.observed?.PropertyChanged -= this.OnViewModelPropertyChanged;
         this.observed = viewModel;
         this.observed?.PropertyChanged += this.OnViewModelPropertyChanged;
+        this.ShowImportStatusSeverity();
     }
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -103,6 +125,22 @@ public sealed partial class ModelEditorView : UserControl, IDocumentEditorView
         {
             this.ShowViewport();
         }
+        else if (string.Equals(e.PropertyName, nameof(ModelEditorViewModel.ImportStatusSeverity), StringComparison.Ordinal))
+        {
+            this.ShowImportStatusSeverity();
+        }
+    }
+
+    // A status that is not information shows in the warning or error color.
+    private void ShowImportStatusSeverity()
+    {
+        var state = this.ViewModel?.ImportStatusSeverity switch
+        {
+            DiagnosticSeverity.Error => "ImportStatusError",
+            DiagnosticSeverity.Warning => "ImportStatusWarning",
+            _ => "ImportStatusInfo",
+        };
+        _ = VisualStateManager.GoToState(this, state, useTransitions: false);
     }
 
     private async void ShowViewport()

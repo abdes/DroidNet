@@ -58,6 +58,9 @@ public sealed partial class SelectedMeshGroup : ObservableObject
     /// <summary>Gets each surface's defaults.</summary>
     public IReadOnlyList<SurfaceDefaultsRow> Surfaces { get; }
 
+    /// <summary>Gets the number of surfaces, shown beside the Surfaces title.</summary>
+    public string SurfaceCount => this.Surfaces.Count.ToString(CultureInfo.CurrentCulture);
+
     /// <summary>Shows the defaults the document's settings hold now.</summary>
     public void Refresh()
     {

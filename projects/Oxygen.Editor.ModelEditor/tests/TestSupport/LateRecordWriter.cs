@@ -40,6 +40,6 @@ internal sealed class LateRecordWriter : IModelImportRecordWriter
     }
 
     /// <inheritdoc/>
-    public Task<DocumentSaveResult> ReplaceAsync(AssetPath model, ModelImportSettings expected, ModelImportSettings replacement, CancellationToken cancellationToken)
+    public Task<DocumentSaveResult> ReplaceAsync(AssetPath model, ReadOnlyMemory<byte> expected, ModelImportSettings replacement, CancellationToken cancellationToken)
         => (this.Target ?? throw new InvalidOperationException("No writer took the saves yet.")).ReplaceAsync(model, expected, replacement, cancellationToken);
 }

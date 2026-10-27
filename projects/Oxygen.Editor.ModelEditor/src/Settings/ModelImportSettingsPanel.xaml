@@ -68,6 +68,7 @@
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <StackPanel>
                     <TextBlock
@@ -82,11 +83,22 @@
                 <Button
                     Grid.Column="1"
                     VerticalAlignment="Center"
+                    AutomationProperties.Name="{x:Bind ForgetToolTip}"
+                    Command="{x:Bind ForgetCommand}"
+                    Content="Forget"
+                    ToolTipService.ToolTip="{x:Bind ForgetToolTip}"
+                    Visibility="{x:Bind CanContinue}" />
+                <Button
+                    Grid.Column="2"
+                    VerticalAlignment="Center"
                     AutomationProperties.Name="{x:Bind FlyoutTitle}"
                     Content="Continue…"
                     Visibility="{x:Bind CanContinue}">
                     <Button.Flyout>
-                        <Flyout Opening="OnContinueFlyoutOpening" Placement="LeftEdgeAlignedTop">
+                        <Flyout
+                            Opened="OnContinueFlyoutOpened"
+                            Opening="{x:Bind Prepare}"
+                            Placement="LeftEdgeAlignedTop">
                             <StackPanel Width="320" Spacing="8">
                                 <TextBlock Style="{ThemeResource BodyStrongTextBlockStyle}" Text="{x:Bind FlyoutTitle}" />
                                 <TextBox
@@ -176,26 +188,37 @@
                 </Grid>
             </editorcontrols:PropertyCard>
         </DataTemplate>
-        <!--  A surface of the selected mesh: whether it renders and casts shadows by default.  -->
+        <!--
+            A surface of the selected mesh, as the Scene Inspector's surface cards show one: its name, then whether it
+            renders and casts shadows by default.
+        -->
         <DataTemplate x:Key="SurfaceDefaultsTemplate" x:DataType="settings:SurfaceDefaultsRow">
-            <StackPanel Spacing="2">
-                <TextBlock
-                    Margin="0,4,0,0"
-                    Style="{ThemeResource BodyStrongTextBlockStyle}"
-                    Text="{x:Bind Name}" />
-                <editorcontrols:ToggleField
-                    IsOn="{x:Bind Visible, Mode=TwoWay}"
-                    Label="Visible"
-                    OverrideState="{x:Bind VisibleOverride, Mode=OneWay}"
-                    ResetCommand="{x:Bind ResetVisibleCommand}"
-                    ResetToolTip="{x:Bind ResetToolTip}" />
-                <editorcontrols:ToggleField
-                    IsOn="{x:Bind CastsShadows, Mode=TwoWay}"
-                    Label="Casts shadows"
-                    OverrideState="{x:Bind CastsShadowsOverride, Mode=OneWay}"
-                    ResetCommand="{x:Bind ResetCastsShadowsCommand}"
-                    ResetToolTip="{x:Bind ResetToolTip}" />
-            </StackPanel>
+            <Border
+                Padding="10"
+                Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                BorderThickness="1"
+                CornerRadius="6">
+                <StackPanel Spacing="2">
+                    <TextBlock
+                        FontWeight="SemiBold"
+                        Text="{x:Bind Name}"
+                        TextTrimming="CharacterEllipsis"
+                        ToolTipService.ToolTip="{x:Bind NameToolTip}" />
+                    <editorcontrols:ToggleField
+                        IsOn="{x:Bind Visible, Mode=TwoWay}"
+                        Label="Visible"
+                        OverrideState="{x:Bind VisibleOverride, Mode=OneWay}"
+                        ResetCommand="{x:Bind ResetVisibleCommand}"
+                        ResetToolTip="{x:Bind ResetToolTip}" />
+                    <editorcontrols:ToggleField
+                        IsOn="{x:Bind CastsShadows, Mode=TwoWay}"
+                        Label="Cast shadows"
+                        OverrideState="{x:Bind CastsShadowsOverride, Mode=OneWay}"
+                        ResetCommand="{x:Bind ResetCastsShadowsCommand}"
+                        ResetToolTip="{x:Bind ResetToolTip}" />
+                </StackPanel>
+            </Border>
         </DataTemplate>
         <Style x:Key="RowHost" TargetType="ContentControl">
             <Setter Property="IsTabStop" Value="False" />
@@ -300,7 +323,7 @@
             Description="{x:Bind ViewModel.Continuity.Summary, Mode=OneWay}"
             Header="Node continuity"
             HeaderIcon="{ui:FontIcon Glyph='&#xE71B;'}"
-            IsExpanded="True"
+            IsExpanded="{x:Bind ViewModel.Continuity.HasEntries, Mode=OneWay}"
             Visibility="{x:Bind settings:ModelImportSettingsPanel.ShownWhen(ViewModel.Continuity), Mode=OneWay}">
             <editorcontrols:PropertiesExpander.Items>
                 <StackPanel Spacing="6">
@@ -340,7 +363,7 @@
                     <TextBlock
                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                         Style="{ThemeResource CaptionTextBlockStyle}"
-                        Text="Continued nodes apply on Save, which reimports."
+                        Text="Continued and forgotten nodes apply on Save, which reimports."
                         TextWrapping="Wrap"
                         Visibility="{x:Bind ViewModel.Continuity.HasUnsaved, Mode=OneWay}" />
                 </StackPanel>
@@ -434,6 +457,14 @@
             <editorcontrols:PropertiesExpander.Items>
                 <StackPanel Spacing="4">
                     <propertyeditors:LodPolicyEditor Label="LOD policy" Model="{x:Bind ViewModel.SelectedMesh.LevelOfDetail, Mode=OneWay}" />
+                    <!--  Surfaces: title and count, as in the Scene Inspector's Geometry section.  -->
+                    <StackPanel
+                        Margin="0,8,0,0"
+                        Orientation="Horizontal"
+                        Spacing="6">
+                        <TextBlock FontWeight="SemiBold" Text="Surfaces" />
+                        <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{x:Bind ViewModel.SelectedMesh.SurfaceCount, Mode=OneWay}" />
+                    </StackPanel>
                     <ItemsRepeater ItemTemplate="{StaticResource SurfaceDefaultsTemplate}" ItemsSource="{x:Bind ViewModel.SelectedMesh.Surfaces, Mode=OneWay}">
                         <ItemsRepeater.Layout>
                             <StackLayout Spacing="4" />

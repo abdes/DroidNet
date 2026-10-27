@@ -30,8 +30,11 @@ public sealed partial class SurfaceDefaultsRow : ObservableObject
     /// <summary>Gets the surface as the last import produced it.</summary>
     public GeometrySurface Surface { get; }
 
-    /// <summary>Gets the surface's name.</summary>
+    /// <summary>Gets the surface's name, as the geometry names it.</summary>
     public string Name => this.Surface.DisplayName;
+
+    /// <summary>Gets the tooltip of the surface's name, which says what the name is.</summary>
+    public string NameToolTip => $"The surface {this.Name} of the selected mesh";
 
     /// <summary>Gets or sets whether the surface renders by default.</summary>
     [ObservableProperty]

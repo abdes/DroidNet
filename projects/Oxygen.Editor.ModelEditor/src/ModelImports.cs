@@ -78,19 +78,19 @@ public sealed partial class ModelImports(
 
     /// <inheritdoc/>
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "A save reports why it failed to the document; the content pipeline owns the import and its recovery.")]
-    public async Task<DocumentSaveResult> ReplaceAsync(AssetPath model, ModelImportSettings expected, ModelImportSettings replacement, CancellationToken cancellationToken)
+    public async Task<DocumentSaveResult> ReplaceAsync(AssetPath model, ReadOnlyMemory<byte> expected, ModelImportSettings replacement, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(model);
-        ArgumentNullException.ThrowIfNull(expected);
         ArgumentNullException.ThrowIfNull(replacement);
         var project = session.Context;
         this.LogSaveRequested(model);
         this.Begin(model);
         try
         {
-            var result = await pipeline.ReplaceModelRecordAsync(model, expected.ToBytes(), replacement.ToBytes(), project, cancellationToken).ConfigureAwait(true);
+            var written = replacement.ToBytes();
+            var result = await pipeline.ReplaceModelRecordAsync(model, expected, written, project, cancellationToken).ConfigureAwait(true);
             ModelEditorResults.PublishReimport(results, reducer, ModelEditorResults.SaveTitle, result, model);
-            return OutcomeOf(project, model, expected, replacement, result);
+            return OutcomeOf(project, model, expected, written, result);
         }
         catch (OperationCanceledException)
         {
@@ -108,17 +108,18 @@ public sealed partial class ModelImports(
         }
     }
 
-    // The save is what the record holds after the operation: the replacement, even when the reimport then failed, which
-    // the model's import status reports; the record as it was read, when the write was refused; else another change.
-    private static DocumentSaveResult OutcomeOf(ProjectContext project, AssetPath model, ModelImportSettings expected, ModelImportSettings replacement, ContentCookResult result)
+    // The save is what the record's file holds after the operation: the replacement, even when the reimport then failed,
+    // which the model's import status reports; the bytes as they were read, when the write was refused; else another
+    // change.
+    private static DocumentSaveResult OutcomeOf(ProjectContext project, AssetPath model, ReadOnlyMemory<byte> expected, byte[] replacement, ContentCookResult result)
     {
-        var record = ModelRecordLookup.TryFind(project, model)?.Settings.ToBytes();
-        if (record is not null && record.AsSpan().SequenceEqual(replacement.ToBytes()))
+        var record = ModelRecordLookup.TryFind(project, model) is { } found ? project.FileSystem.File.ReadAllBytes(found.RecordPath) : null;
+        if (record is not null && record.AsSpan().SequenceEqual(replacement))
         {
             return new DocumentSaveResult(DocumentSaveOutcome.Saved);
         }
 
-        if (record is not null && !record.AsSpan().SequenceEqual(expected.ToBytes()))
+        if (record is not null && !record.AsSpan().SequenceEqual(expected.Span))
         {
             return new DocumentSaveResult(DocumentSaveOutcome.Conflict, $"The import settings of {model.Name} changed since the Model Editor read them; they were not saved.");
         }

@@ -39,7 +39,7 @@ public sealed class ModelDocumentKind(IProjectSession session, IModelImportRecor
         cancellationToken.ThrowIfCancellationRequested();
         var project = session.Context;
         var records = new ModelImportRecords(project.FileSystem, project.ProjectRoot.FullPath);
-        var record = records.TryFindBySource(file.Path.FullPath, out var found) ? found.Settings : null;
+        var record = records.TryFindBySource(file.Path.FullPath, out var found) ? ModelImportRecordSnapshot.Read(project.FileSystem, found.RecordPath) : null;
         return Task.FromResult(DocumentDecodeResult.Decoded(new ModelContent(file.Asset, record, context.History, writer)));
     }
 }

@@ -72,6 +72,24 @@ public sealed class ModelContentTests : IDisposable
     }
 
     [TestMethod]
+    public async Task SaveExpectsTheRecordsOwnBytesWhateverWroteIt()
+    {
+        // Another writer, such as the ImportTool, writes the same record in its own layout.
+        using (var written = JsonDocument.Parse(this.ReadRecord().ToBytes()))
+        {
+            this.project.Context.FileSystem.File.WriteAllBytes(this.recordPath, JsonSerializer.SerializeToUtf8Bytes(written.RootElement));
+        }
+
+        var (document, model) = await this.OpenAsync().ConfigureAwait(false);
+        model.EditSettings(ModelImportSettingCatalog.UnitPolicy.WriteTo(model.Record!.Settings, "custom"), "Edit Units");
+
+        var result = await document.SaveAsync(this.Token).ConfigureAwait(false);
+
+        _ = result.Outcome.Should().Be(DocumentSaveOutcome.Saved);
+        _ = ModelImportSettingCatalog.UnitPolicy.ReadFrom(this.ReadRecord().Settings).Should().Be("custom");
+    }
+
+    [TestMethod]
     public async Task SaveReplacesTheRecordAndNeverWritesTheSource()
     {
         var (document, model) = await this.OpenAsync().ConfigureAwait(false);
@@ -95,7 +113,7 @@ public sealed class ModelContentTests : IDisposable
         this.WriteRecord(this.ReadRecord() with { PublishedNodes = [node] });
 
         var conflict = await document.SaveAsync(this.Token).ConfigureAwait(false);
-        model.TakeRecord(this.ReadRecord(), keepEdits: true);
+        model.TakeRecord(this.ReadSnapshot(), keepEdits: true);
         var saved = await document.SaveAsync(this.Token).ConfigureAwait(false);
 
         _ = conflict.Outcome.Should().Be(DocumentSaveOutcome.Conflict);
@@ -111,12 +129,30 @@ public sealed class ModelContentTests : IDisposable
         var (document, model) = await this.OpenAsync().ConfigureAwait(false);
         model.AddContinuity("Body/Door_Front_L", "Body/Door_FL");
         var node = new ModelPublishedNode("Body/Door_Front_L", Guid.NewGuid());
-        model.TakeRecord(this.ReadRecord() with { PublishedNodes = [node] }, keepEdits: true);
+        model.TakeRecord(ModelImportRecordSnapshot.Of(this.ReadRecord() with { PublishedNodes = [node] }), keepEdits: true);
 
         await document.History.UndoAsync(this.Token).ConfigureAwait(false);
 
         _ = model.Record!.NodeContinuity.Should().BeEmpty();
         _ = model.Record.PublishedNodes.Should().Equal(node);
+    }
+
+    [TestMethod]
+    public async Task AForgottenAnchorStaysForgottenOverAnImportAndUndoRemembersIt()
+    {
+        var door = new ModelPublishedNode("Body/Door_FL", Guid.NewGuid());
+        this.WriteRecord(this.ReadRecord() with { VanishedNodes = [door] });
+        var (document, model) = await this.OpenAsync().ConfigureAwait(false);
+
+        model.ForgetVanished(door.Anchor);
+        var body = new ModelPublishedNode("Body", Guid.NewGuid());
+        model.TakeRecord(ModelImportRecordSnapshot.Of(this.ReadRecord() with { PublishedNodes = [body] }), keepEdits: true);
+
+        _ = model.Record!.VanishedNodes.Should().BeEmpty("the unsaved forget stays over an import that still lists the anchor");
+        _ = model.Record.PublishedNodes.Should().Equal(body);
+        _ = document.IsDirty.Should().BeTrue();
+        await document.History.UndoAsync(this.Token).ConfigureAwait(false);
+        _ = model.Record!.VanishedNodes.Should().Equal(door);
     }
 
     [TestMethod]
@@ -164,6 +200,9 @@ public sealed class ModelContentTests : IDisposable
         this.project.Context.FileSystem.File.WriteAllBytes(this.recordPath, record.ToBytes());
     }
 
+    private ModelImportRecordSnapshot ReadSnapshot()
+        => ModelImportRecordSnapshot.Read(this.project.Context.FileSystem, this.recordPath);
+
     private ModelImportSettings ReadRecord()
         => ModelImportSettings.Parse(this.recordPath, this.project.Context.FileSystem.File.ReadAllBytes(this.recordPath));
 
@@ -172,9 +211,9 @@ public sealed class ModelContentTests : IDisposable
     {
         public int Saves { get; private set; }
 
-        public Task<DocumentSaveResult> ReplaceAsync(AssetPath model, ModelImportSettings expected, ModelImportSettings replacement, CancellationToken cancellationToken)
+        public Task<DocumentSaveResult> ReplaceAsync(AssetPath model, ReadOnlyMemory<byte> expected, ModelImportSettings replacement, CancellationToken cancellationToken)
         {
-            if (!test.ReadRecord().ToBytes().AsSpan().SequenceEqual(expected.ToBytes()))
+            if (!test.ReadSnapshot().Content.AsSpan().SequenceEqual(expected.Span))
             {
                 return Task.FromResult(new DocumentSaveResult(DocumentSaveOutcome.Conflict, "The record changed."));
             }

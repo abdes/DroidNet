@@ -21,8 +21,8 @@ namespace Oxygen.Editor.ModelEditor;
 
 /// <summary>
 /// The import settings panel beside the viewport (model editor 5.3): the model's import settings, its node continuity
-/// and the selected mesh's and texture's groups, each edit one step of the document's history; the banner that says the
-/// view shows the last import until Save (ME-6); and the toolbar's count of the model's kept problems (M3).
+/// and the selected mesh's and texture's groups, each edit one step of the document's history until Save reimports
+/// (ME-6); and the toolbar's count of the model's kept problems (M3).
 /// </summary>
 public sealed partial class ModelEditorViewModel
 {
@@ -42,9 +42,6 @@ public sealed partial class ModelEditorViewModel
     /// <summary>Gets a value indicating whether the model has an import record whose settings the panel edits.</summary>
     [ObservableProperty]
     public partial bool HasImportSettings { get; private set; }
-
-    /// <summary>Gets a value indicating whether the banner shows: the settings changed, and the view shows the last import.</summary>
-    public bool IsShowingLastImport => this.Document.IsDirty && this.HasImportSettings;
 
     /// <summary>Gets the number of the model's kept import problems.</summary>
     [ObservableProperty]
@@ -85,7 +82,6 @@ public sealed partial class ModelEditorViewModel
     {
         var record = this.Model.Record;
         this.HasImportSettings = record is not null;
-        this.OnPropertyChanged(nameof(this.IsShowingLastImport));
         if (record is null)
         {
             this.settingsFile = null;
@@ -278,9 +274,9 @@ public sealed partial class ModelEditorViewModel
             return;
         }
 
-        var latest = ModelRecordLookup.TryFind(this.services.Session.Context, this.Source)?.Settings;
-        var saved = this.Model.SavedRecord;
-        if (latest is not null && saved is not null && latest.ToBytes().AsSpan().SequenceEqual(saved.ToBytes()))
+        var project = this.services.Session.Context;
+        var latest = ModelRecordLookup.TryFind(project, this.Source) is { } found ? ModelImportRecordSnapshot.Read(project.FileSystem, found.RecordPath) : null;
+        if (latest is not null && this.Model.Saved is { } saved && latest.HoldsSameBytes(saved))
         {
             return;
         }

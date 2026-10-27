@@ -34,7 +34,7 @@ namespace Oxygen.Editor.ModelEditor.Tests;
 
 /// <summary>
 /// The import settings panel beside the Model Editor's viewport (model editor 5.3, ME-5, ME-6, M3 to M5, M10): each edit
-/// is one undo step and shows the banner, Save replaces the record through the content pipeline, the toolbar counts the
+/// is one undo step that dirties the document, Save replaces the record through the content pipeline, the toolbar counts the
 /// model's kept problems, and the Selected mesh and Selected texture groups follow the selection.
 /// </summary>
 [TestClass]
@@ -59,7 +59,7 @@ public sealed class ModelEditorSettingsTests : IDisposable
     public TestContext TestContext { get; set; }
 
     [TestMethod]
-    public async Task AnEditInThePanelIsOneUndoStepAndShowsTheBanner()
+    public async Task AnEditInThePanelIsOneUndoStepThatDirtiesTheDocument()
     {
         _ = LateRecordWriter.WriteRecord(this.documents, Car, """{"name":"Car","unit_policy":"normalize"}""");
         var (car, editor) = await this.OpenAsync().ConfigureAwait(false);
@@ -67,12 +67,12 @@ public sealed class ModelEditorSettingsTests : IDisposable
         editor.Settings.UnitPolicy.SelectedOption = editor.Settings.UnitPolicy.Options.Single(static option => Equals(option.Value, "custom"));
 
         _ = editor.HasImportSettings.Should().BeTrue();
-        _ = editor.IsShowingLastImport.Should().BeTrue("the view shows the last import until Save");
+        _ = car.IsDirty.Should().BeTrue("Save writes the settings and reimports");
         _ = ModelImportSettingCatalog.UnitPolicy.ReadFrom(ModelOf(car).Record!.Settings).Should().Be("custom");
         _ = car.History.UndoStack.Should().ContainSingle();
         await car.History.UndoAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = editor.Settings.UnitPolicy.SelectedOption!.Value.Should().Be("normalize");
-        _ = editor.IsShowingLastImport.Should().BeFalse();
+        _ = car.IsDirty.Should().BeFalse();
     }
 
     [TestMethod]
@@ -97,6 +97,26 @@ public sealed class ModelEditorSettingsTests : IDisposable
         _ = car.IsDirty.Should().BeFalse();
         _ = ModelImportSettingCatalog.ImportCameras.ReadFrom(ModelImportSettings.Parse(written!).Settings).Should().Be(false);
         this.services.Results.Verify(value => value.Publish(It.Is<OperationResult>(published => published.Title == "Save import settings")), Times.Once);
+    }
+
+    [TestMethod]
+    public async Task ClosingWithUnsavedSettingsCanSaveThem()
+    {
+        var path = this.RecordPathOf(LateRecordWriter.WriteRecord(this.documents, Car));
+        _ = this.services.ContentPipeline
+            .Setup(value => value.ReplaceModelRecordAsync(Car, It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<ProjectContext>(), It.IsAny<CancellationToken>()))
+            .Callback((AssetPath _, ReadOnlyMemory<byte> _, ReadOnlyMemory<byte> replacement, ProjectContext _, CancellationToken _) =>
+                this.documents.Project.Context.FileSystem.File.WriteAllBytes(path, replacement.ToArray()))
+            .ReturnsAsync(Succeeded());
+        var (car, editor) = await this.OpenAsync().ConfigureAwait(false);
+        editor.Settings.ImportCameras.Value = false;
+        IDocumentCloseParticipant participant = editor;
+
+        await participant.PrepareForCloseAsync().ConfigureAwait(false);
+        var saved = await participant.SaveForCloseAsync().ConfigureAwait(false);
+
+        _ = saved.Should().BeTrue("a model with unsaved settings is closed as any document is: saved, discarded or kept open");
+        _ = car.IsDirty.Should().BeFalse();
     }
 
     [TestMethod]
@@ -197,6 +217,20 @@ public sealed class ModelEditorSettingsTests : IDisposable
         _ = group.Vanished.Single().Status.Should().Be("continued by Body/Door_Front_L");
         _ = group.Entries.Should().ContainSingle().Which.OverrideState.Should().Be(OverrideState.Full);
         _ = group.HasUnsaved.Should().BeTrue();
+        _ = car.IsDirty.Should().BeTrue();
+    }
+
+    [TestMethod]
+    public async Task ForgetDropsAVanishedAnchorUntilSave()
+    {
+        _ = LateRecordWriter.WriteRecord(this.documents, Car, change: record => record with { VanishedNodes = [new("world", Guid.NewGuid())] });
+        var (car, editor) = await this.OpenAsync().ConfigureAwait(false);
+
+        editor.Settings.Continuity!.Vanished.Single().ForgetCommand.Execute(parameter: null);
+
+        _ = editor.Settings.Continuity!.Vanished.Should().BeEmpty();
+        _ = editor.Settings.Continuity.HasUnsaved.Should().BeTrue("a forgotten anchor applies on Save");
+        _ = ModelOf(car).Record!.VanishedNodes.Should().BeEmpty();
         _ = car.IsDirty.Should().BeTrue();
     }
 

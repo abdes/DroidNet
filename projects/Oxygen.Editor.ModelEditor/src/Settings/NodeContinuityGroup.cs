@@ -15,7 +15,7 @@ namespace Oxygen.Editor.ModelEditor.Settings;
 /// </summary>
 /// <remarks>
 /// No match is guessed: a vanished anchor not yet continued offers <em>Continue…</em>, whose choice writes an entry, and
-/// every entry can be removed. Entries are import settings: an unsaved one carries the override bar until Save, which
+/// <em>Forget</em>, for a node deleted on purpose, which later imports no longer list; every entry can be removed. Entries are import settings: an unsaved one carries the override bar until Save, which
 /// reimports. Clicking an anchor of the last import selects its node.
 /// </remarks>
 public sealed partial class NodeContinuityGroup : ObservableObject
@@ -54,7 +54,8 @@ public sealed partial class NodeContinuityGroup : ObservableObject
     [NotifyPropertyChangedFor(nameof(HasEntries), nameof(EntriesHeader))]
     public partial IReadOnlyList<ContinuityEntryRow> Entries { get; private set; } = [];
 
-    /// <summary>Gets a value indicating whether an entry is not saved yet, which the Save note explains.</summary>
+    /// <summary>Gets a value indicating whether an entry or a forgotten anchor is not saved yet, which the Save note
+    /// explains.</summary>
     [ObservableProperty]
     public partial bool HasUnsaved { get; private set; }
 
@@ -83,12 +84,13 @@ public sealed partial class NodeContinuityGroup : ObservableObject
             return;
         }
 
-        var saved = this.model.SavedRecord?.NodeContinuity ?? [];
+        var saved = this.model.Saved?.Record.NodeContinuity ?? [];
         this.Summary = SummaryOf(record);
         this.Vanished = [.. record.VanishedNodes.Select(node => new VanishedAnchorRow(this, node.Anchor, ContinuerOf(record, node.Anchor)))];
         this.New = [.. record.NewNodes.Select(node => new NewAnchorRow(this, node.Anchor, ContinuedBy(record, node.Anchor)))];
         this.Entries = [.. record.NodeContinuity.Select(entry => new ContinuityEntryRow(this, entry, isSaved: saved.Contains(entry)))];
-        this.HasUnsaved = this.Entries.Any(static entry => !entry.IsSaved);
+        var forgotten = (this.model.Saved?.Record.VanishedNodes ?? []).Any(node => !record.VanishedNodes.Contains(node));
+        this.HasUnsaved = forgotten || this.Entries.Any(static entry => !entry.IsSaved);
     }
 
     /// <summary>Gets the nodes a vanished anchor can be continued by: the nodes new in the last import first, then every
@@ -114,6 +116,10 @@ public sealed partial class NodeContinuityGroup : ObservableObject
     /// <param name="target">The continuing node.</param>
     /// <param name="vanished">The vanished anchor.</param>
     internal void Continue(ContinueTarget target, string vanished) => this.model.AddContinuity(target.Anchor, vanished);
+
+    /// <summary>Forgets a vanished anchor that no node continues, as one step of the document's history.</summary>
+    /// <param name="anchor">The vanished anchor.</param>
+    internal void Forget(string anchor) => this.model.ForgetVanished(anchor);
 
     /// <summary>Removes a continuity entry, as one step of the document's history.</summary>
     /// <param name="entry">The entry.</param>

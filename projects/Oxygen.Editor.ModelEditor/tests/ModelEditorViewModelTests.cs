@@ -22,6 +22,7 @@ using Oxygen.Editor.Viewports;
 using Oxygen.Editor.World;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
+using Oxygen.Managed.Core.Diagnostics;
 using Testably.Abstractions.Testing;
 
 namespace Oxygen.Editor.ModelEditor.Tests;
@@ -98,7 +99,9 @@ public sealed class ModelEditorViewModelTests
         services.Assets.OnNext([ProductOf(Car, freshness)]);
 
         _ = editor.ReimportCommand.CanExecute(parameter: null).Should().Be(enabled);
-        _ = editor.ImportStatusText.Should().Be(ModelImportStatus.TextOf(editor.ImportState));
+        _ = editor.ImportStatusText.Should().Be(enabled ? ModelImportStatus.TextOf(editor.ImportState) : string.Empty, "a current import says nothing");
+        _ = editor.HasImportStatus.Should().Be(enabled);
+        _ = editor.ImportStatusSeverity.Should().Be(enabled ? ModelImportStatus.SeverityOf(editor.ImportState) : DiagnosticSeverity.Info);
     }
 
     [TestMethod]

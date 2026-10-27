@@ -21,6 +21,7 @@ using Oxygen.Editor.Viewports;
 using Oxygen.Editor.Viewports.Settings;
 using Oxygen.Editor.World;
 using Oxygen.Managed.Core;
+using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.ModelEditor;
 
@@ -104,12 +105,19 @@ public sealed partial class ModelEditorViewModel : ObservableObject, IDocumentWi
 
     /// <summary>Gets where the model's import stands.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ImportStatusText))]
+    [NotifyPropertyChangedFor(nameof(ImportStatusText), nameof(HasImportStatus), nameof(ImportStatusSeverity))]
     [NotifyCanExecuteChangedFor(nameof(ReimportCommand))]
     public partial ModelImportState ImportState { get; private set; }
 
-    /// <summary>Gets what the toolbar's status says of the import, such as "Imported" or "Source changed".</summary>
-    public string ImportStatusText => ModelImportStatus.TextOf(this.ImportState);
+    /// <summary>Gets what the toolbar's status says of the import, such as "Source changed" or "Import failed".</summary>
+    /// <remarks>An open model whose last import is current says nothing: only a state that asks for attention shows.</remarks>
+    public string ImportStatusText => this.ImportState == ModelImportState.Imported ? string.Empty : ModelImportStatus.TextOf(this.ImportState);
+
+    /// <summary>Gets a value indicating whether the toolbar shows the import status.</summary>
+    public bool HasImportStatus => this.ImportStatusText.Length != 0;
+
+    /// <summary>Gets how serious the import status is: a warning or an error is colored as one.</summary>
+    public DiagnosticSeverity ImportStatusSeverity => ModelImportStatus.SeverityOf(this.ImportState);
 
     /// <summary>Gets what <em>Add to scene</em> does, or why it is unavailable.</summary>
     public string AddToSceneToolTip => this.FindOpenScene() is { } scene
@@ -434,7 +442,6 @@ public sealed partial class ModelEditorViewModel : ObservableObject, IDocumentWi
         if (!this.disposed)
         {
             this.SaveCommand.NotifyCanExecuteChanged();
-            this.OnPropertyChanged(nameof(this.IsShowingLastImport));
         }
     }
 

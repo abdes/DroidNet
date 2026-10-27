@@ -58,7 +58,7 @@ the Import run flyout,
 | ME-3  | Opening or activating a model changes no layout: no pane opens, closes, moves or resizes. The docked Scene Explorer and Properties panes show the active document's nodes and selection                                                                                                                     | The user's workspace is theirs; panes that follow the active document are the panes they already arranged                                                                                                                                                            |
 | ME-4  | The model's structure and values are read-only; only import settings are edited                                                                                                                                                                                                                             | The model is an import output (scene instances SI-2): a change for one placement belongs to a scene, a change for every placement to the import settings                                                                                                             |
 | ME-5  | The import settings are a panel of the model document, right of the viewport: model-wide groups, then the selected mesh's geometry defaults and the selected texture's settings                                                                                                                             | They are what the document saves (Ctrl+S), as the Texture Editor's settings pane is; the Properties pane stays the inspector of nodes, read-only here as the model is                                                                                                |
-| ME-6  | Settings take effect on Save, which writes the import settings and reimports. Until then a banner says the view shows the last import                                                                                                                                                                       | The Texture Editor's rule: the view never approximates unsaved settings                                                                                                                                                                                              |
+| ME-6  | Settings take effect on Save, which writes the import settings and reimports; until then the view shows the last import, as the enabled Save and the tab's unsaved mark say                                                                                                                                 | The Texture Editor's rule: the view never approximates unsaved settings                                                                                                                                                                                              |
 | ME-7  | Opening a model opens its Model Editor; _Reimport_ is an explicit command (the toolbar, the Content Explorer's context menu)                                                                                                                                                                                | Double-click reimports today, which shows nothing and redoes work                                                                                                                                                                                                    |
 | ME-8  | The toolbar is the scene editor's `ToolBar` with the model's commands in the same places: Save, Reimport, Add to scene, Browse to asset, the status, Settings                                                                                                                                               | Same control, same positions, same shortcuts: Ctrl+S saves, Ctrl+B browses, and the status sits where the Play status does                                                                                                                                           |
 | ME-9  | The viewport is the scene editor's `Viewport` in its viewing profile: navigation, view mode, overlays, Frame and the status strips stay; editing tools, snapping, layouts and Maximize are hidden                                                                                                           | Nothing in the model can be moved, so tools that move things only add noise; one model needs one view. The profile is a property of the control, not a copy of it                                                                                                    |
@@ -126,7 +126,8 @@ unsaved settings.
 The document fills the document area as the scene editor does: the toolbar on
 top, then the viewport and, on its right, the import settings panel, separated
 by a splitter. The panel's width and whether it is collapsed are per-user view
-state, shared by every model document. Everything else is the workspace's own
+state, shared by every model document; collapsed, it takes no room, and the
+toolbar's _Import settings_ toggle shows it again. Everything else is the workspace's own
 panes.
 
 ### 5.1 Toolbar
@@ -134,12 +135,12 @@ panes.
 The scene editor's `ToolBar`, with the model's commands where the scene's
 equivalents sit:
 
-| Position             | Scene editor                      | Model Editor                                                                                                                                                     |
-| -------------------- | --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| First group          | Save (Ctrl+S), Cook scene         | Save (Ctrl+S): writes the import settings and reimports; Reimport, enabled when the source changed or the last import failed                                     |
-| Second group         | Add, Browse to asset, Environment | Add to scene, with its label; Browse to asset (Ctrl+B): the selected node's geometry or material, else the model file                                            |
-| Transport and status | Play, Stop, "Ready · Standalone"  | The import status: "Imported", "Source changed", "Importing…", "Import failed", followed by the problem count, a link to the Problems pane filtered to the model |
-| End                  | Settings                          | Settings: the same preview settings flyout (frame pacing, grid), shared with the scene editor; _Reset preview_ returns the sky, sun and exposure to the defaults |
+| Position             | Scene editor                      | Model Editor                                                                                                                                                                                                 |
+| -------------------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| First group          | Save (Ctrl+S), Cook scene         | Save (Ctrl+S): writes the import settings and reimports; Reimport, enabled when the source changed or the last import failed                                                                                 |
+| Second group         | Add, Browse to asset, Environment | Add to scene, with its label; Browse to asset (Ctrl+B): the selected node's geometry or material, else the model file                                                                                        |
+| Transport and status | Play, Stop, "Ready · Standalone"  | The import status when it asks for attention, "Source changed", "Importing…", "Import failed" (a current import says nothing), and the problem count, a link to the Problems pane filtered to the model      |
+| End                  | Settings                          | Settings: the same preview settings flyout (frame pacing, grid), shared with the scene editor; _Reset preview_ returns the sky, sun and exposure to the defaults; _Import settings_ shows or hides the panel |
 
 The scene's Add menu, Environment and the Play transport do not apply to a
 model and are absent, not disabled.
@@ -166,8 +167,7 @@ follows. In `Viewing`:
 | Transform gizmo and dragging                      | None                                                                                           |
 
 A click selects the node under the cursor (no instance-first rule: the model
-is the whole document); Show's selection outline marks it as in scenes. The
-banner of ME-6 sits at the viewport's top edge, as the Texture Editor's does.
+is the whole document); Show's selection outline marks it as in scenes.
 
 ### 5.3 Import settings panel
 
@@ -286,9 +286,14 @@ new. Each vanished anchor not yet continued offers _Continue…_, a flyout that
 lists the nodes new in the last import first, then every node, with Find. A
 node that already continues another is disabled; choosing a node that existed
 before the last import adds the caution that its changes under its own ID
-become kept changes. Below, every continuity entry, from this and earlier
-imports, has a remove button. Entries are import settings: they carry the
-override bar until Save, which reimports. Clicking an anchor selects its node
+become kept changes. A vanished anchor no node should continue, a node the
+artist deleted on purpose, offers _Forget_: the record no longer lists it, so
+later imports do not either (an import carries forward only the vanished
+anchors the record holds); changes scenes made on it stay their kept changes.
+Below, every continuity entry, from this and earlier imports, has a remove
+button. Entries and forgotten anchors are import settings:
+they apply on Save, which reimports, and an unsaved entry carries the override
+bar. Clicking an anchor selects its node
 in the Scene Explorer and the viewport. _Reassign_ in a scene's caution box
 opens the same flyout ([scene instances](scene-instances.md) 6.4). Mockup:
 [model-editor-node-continuity.svg](mockups/model-editor-node-continuity.svg).
