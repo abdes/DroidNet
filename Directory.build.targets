@@ -153,4 +153,37 @@
                                 Original="%(_RepositoryCopyLocal.FullPath)" />
         </ItemGroup>
     </Target>
+
+    <!--
+      Visual Studio intermittently reports "MSB4006: There is a circular
+      dependency in the target dependency graph involving target
+      GetMrtPackagingOutputs" on WinUI libraries; command-line builds never do.
+
+      Microsoft.Windows.SDK.BuildTools.MSIX (MrtCore.PriGen.targets) hooks
+      _MrtCoreUpToDateCheckInput before CollectUpToDateCheckInputDesignTime,
+      the fast up-to-date check that only design-time builds run. It depends
+      on GetMrtPackagingOutputs, a packaging target that calls itself on every
+      transitive project reference and runs its output groups through
+      CallTarget, as child builds of the same project. Visual Studio runs the
+      design-time builds of all projects concurrently in one build session, so
+      a library receives overlapping requests from its own build and from each
+      dependent's recursion. They can wait on each other, and the MSBuild
+      scheduler reports that wait cycle as MSB4006.
+
+      A library's PRI inputs are its own resources, manifest and PRI payload,
+      so collect only those. Content and embedded XAML stay tracked by the
+      managed fast up-to-date check. Applications keep the SDK default.
+
+      - https://github.com/microsoft/WindowsAppSDK/issues/3753
+        (_MrtCoreUpToDateCheckInput recursively calls GetMrtPackagingOutputs
+        during design-time builds; open)
+      - https://github.com/microsoft/WindowsAppSDK/issues/1898
+        (origin of the MRT Core fast up-to-date check integration)
+      - https://learn.microsoft.com/visualstudio/msbuild/errors/msb4006
+      - https://github.com/dotnet/msbuild/blob/main/src/Build/BackEnd/Components/Scheduler/SchedulableRequest.cs
+        (cross-request circular dependency detection)
+    -->
+    <PropertyGroup Condition="'$(UseWinUI)' == 'true' and '$(OutputType)' == 'Library'">
+        <_MrtCoreUpToDateCheckInputDependsOn>_GetPriFilesFromPayload</_MrtCoreUpToDateCheckInputDependsOn>
+    </PropertyGroup>
 </Project>
