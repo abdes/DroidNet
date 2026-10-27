@@ -262,6 +262,37 @@ public sealed record ModelImportSettings
         return updated;
     }
 
+    /// <summary>Gets the record without the node continuity entry of <paramref name="anchor"/>: the node gets its own ID
+    /// again on the next import. Nothing else changes.</summary>
+    /// <param name="anchor">The continuing node's anchor.</param>
+    /// <returns>The record without the entry.</returns>
+    public ModelImportSettings WithoutContinuity(string anchor)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(anchor);
+        return this with { NodeContinuity = this.NodeContinuity.RemoveAll(entry => string.Equals(entry.Anchor, anchor, StringComparison.Ordinal)) };
+    }
+
+    /// <summary>Gets the record with the model import settings replaced. Nothing else changes.</summary>
+    /// <param name="settings">The settings, in the import manifest's vocabulary.</param>
+    /// <returns>The record with the settings.</returns>
+    /// <exception cref="InvalidDataException">The settings do not match the schema.</exception>
+    public ModelImportSettings WithSettings(JsonElement settings)
+    {
+        var updated = this with { Settings = settings.Clone() };
+        _ = updated.ToBytes();
+        return updated;
+    }
+
+    /// <summary>Gets <paramref name="latest"/>, a newer version of this record read from its file, with this record's
+    /// settings and node continuity: what the user edits, kept over what an import or a relocation rewrote.</summary>
+    /// <param name="latest">The record as its file holds it now.</param>
+    /// <returns>The merged record.</returns>
+    public ModelImportSettings WithEditsOver(ModelImportSettings latest)
+    {
+        ArgumentNullException.ThrowIfNull(latest);
+        return latest with { Settings = this.Settings, NodeContinuity = this.NodeContinuity };
+    }
+
     /// <summary>Serializes the record, validated against the installed schema.</summary>
     /// <returns>The record's complete bytes.</returns>
     public byte[] ToBytes()

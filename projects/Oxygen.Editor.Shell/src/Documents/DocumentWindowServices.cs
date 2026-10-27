@@ -21,4 +21,8 @@ public sealed record DocumentWindowServices(
     IDocumentArea Area,
     ICommandService Commands,
     IPlacementService Placement,
-    IAssetReveal? Reveal);
+    IAssetReveal? Reveal)
+{
+    /// <summary>Gets what shows problems in the window's Problems panel, or <see langword="null"/> when the window has none.</summary>
+    public IProblemReveal? Problems { get; init; }
+}

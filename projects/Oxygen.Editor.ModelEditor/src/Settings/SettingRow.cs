@@ -16,6 +16,8 @@ namespace Oxygen.Editor.ModelEditor.Settings;
 /// A row shows when it applies to at least one selected file and edits only those; when that is not all of them, its
 /// qualifier says which. A value the files share shows as it is, values that differ are mixed, and the override bar is
 /// full when every file sets the value, half when only some do. An edit or a reset applies to every file the row edits.
+/// The row edits its <see cref="Scope"/> of each file's settings: the model's own, or one texture's overrides, whose
+/// unset value is the model's.
 /// </remarks>
 public abstract partial class SettingRow : ObservableObject
 {
@@ -44,6 +46,9 @@ public abstract partial class SettingRow : ObservableObject
 
     /// <summary>Gets the setting the row edits.</summary>
     public ModelImportSetting Setting { get; }
+
+    /// <summary>Gets or sets the part of each file's settings the row edits; the model's own settings by default.</summary>
+    public ModelImportSettingScope Scope { get; set; } = ModelImportSettingScope.Model;
 
     /// <summary>Gets or sets a value indicating whether the row applies to a selected file.</summary>
     [ObservableProperty]
@@ -75,10 +80,10 @@ public abstract partial class SettingRow : ObservableObject
         this.files = [.. selection.Where(this.appliesTo)];
         this.IsVisible = this.files.Count != 0;
         this.Qualifier = this.files.Count != 0 && this.files.Count < selection.Count ? this.qualifier : string.Empty;
-        var values = this.files.Select(file => this.Setting.ReadFrom(file.Settings)).ToArray();
+        var values = this.files.Select(file => this.Scope.Read(this.Setting, file.Settings)).ToArray();
         var set = values.Count(static value => value is not null);
         this.OverrideState = set == 0 ? OverrideState.None : set == values.Length ? OverrideState.Full : OverrideState.Partial;
-        var effective = values.Select(value => value ?? this.Setting.Default).Distinct().ToArray();
+        var effective = this.files.Select((file, index) => values[index] ?? this.Scope.Inherited(this.Setting, file.Settings)).Distinct().ToArray();
         this.IsMixed = effective.Length > 1;
         this.IsRefreshing = true;
         try
@@ -109,7 +114,7 @@ public abstract partial class SettingRow : ObservableObject
 
         foreach (var file in this.files)
         {
-            file.Settings = this.Setting.WriteTo(file.Settings, value);
+            file.Settings = this.Scope.Write(this.Setting, file.Settings, value);
         }
 
         this.Edited?.Invoke(this, EventArgs.Empty);

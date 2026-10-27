@@ -98,8 +98,11 @@ public sealed class ContentPipelineSessionModule : IScopeModule<ISessionLayer>
             resolver => (IGeometrySurfaceProvider)resolver.Resolve<IContentPipelineService>(), Reuse.Singleton);
         scope.RegisterDelegate(
             resolver => (IScriptLibrary)resolver.Resolve<IContentPipelineService>(), Reuse.Singleton);
+        scope.RegisterDelegate(
+            resolver => (IMaterialTextures)resolver.Resolve<IContentPipelineService>(), Reuse.Singleton);
         scope.Register<CookPublicationService>(Reuse.Singleton);
         scope.RegisterMapping<ICookPublicationReader, CookPublicationService>();
+        scope.RegisterMapping<IPublishedDiagnostics, CookPublicationService>();
         scope.Register<IMaterialCookService, MaterialCookService>(Reuse.Singleton);
         scope.Register<IUnsavedCookInputs, UnsavedCookInputs>(Reuse.Singleton);
         scope.Register<IAutomaticCookService, AutomaticCookService>(Reuse.Singleton);

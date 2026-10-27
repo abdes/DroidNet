@@ -179,7 +179,7 @@ internal sealed class LevelOfDetailTests : DroidNet.Tests.VisualUserInterfaceTes
         _ = policy.Should().Be(AssetPolicy, "a kind the asset uses starts from the asset's values");
     });
 
-    private static async Task<LodPolicyViewModel> OpenAsync(SceneInspectorViewModel host)
+    private static async Task<LodPolicyEditorModel> OpenAsync(SceneInspectorViewModel host)
     {
         var model = host.PropertyEditors.OfType<GeometryViewModel>().Single();
         await model.RefreshSurfacesAsync().ConfigureAwait(true);

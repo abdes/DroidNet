@@ -7,26 +7,12 @@
     xmlns:editorcontrols="using:Oxygen.Editor.Controls">
     <ResourceDictionary.MergedDictionaries>
         <ResourceDictionary Source="ms-appx:///Microsoft.UI.Xaml/DensityStyles/Compact.xaml" />
+        <ResourceDictionary Source="ms-appx:///Oxygen.Editor.Controls/Styles/QuietDisclosure.xaml" />
     </ResourceDictionary.MergedDictionaries>
-    <ctkcvt:BoolToObjectConverter
-        x:Key="SceneDisclosureGlyph"
-        FalseValue="&#xE76C;"
-        TrueValue="&#xE70D;" />
     <SolidColorBrush
         x:Key="SceneScopeSelectionBrush"
         Opacity="0.25"
         Color="{ThemeResource SystemAccentColor}" />
-    <Style
-        x:Key="QuietInspectorToggle"
-        BasedOn="{StaticResource DefaultToggleButtonStyle}"
-        TargetType="ToggleButton">
-        <Setter Property="MinWidth" Value="0" />
-        <Setter Property="MinHeight" Value="32" />
-        <Setter Property="Background" Value="Transparent" />
-        <Setter Property="BorderThickness" Value="0" />
-        <Setter Property="CornerRadius" Value="4" />
-        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-    </Style>
     <!--  A card for one item of a section's list, such as a script slot or a geometry surface.  -->
     <Style x:Key="InspectorItemCard" TargetType="Border">
         <Setter Property="Padding" Value="10" />
@@ -51,61 +37,4 @@
     <ctkcvt:BoolToVisibilityConverter x:Key="SceneExpandedVisibility" />
     <ctkcvt:BoolToVisibilityConverter x:Key="InspectorDiagnosticVisibility" />
     <ctkcvt:BoolToVisibilityConverter x:Key="BoolToVisibility" />
-    <Style x:Key="QuietDisclosure" TargetType="Expander">
-        <Setter Property="IsTabStop" Value="False" />
-        <Setter Property="MinHeight" Value="0" />
-        <Setter Property="Padding" Value="0" />
-        <Setter Property="Margin" Value="0" />
-        <Setter Property="VerticalAlignment" Value="Top" />
-        <Setter Property="HorizontalAlignment" Value="Stretch" />
-        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-        <Setter Property="Template">
-            <Setter.Value>
-                <ControlTemplate TargetType="Expander">
-                    <StackPanel Spacing="0">
-                        <ToggleButton
-                            x:Name="ExpanderHeader"
-                            MinHeight="32"
-                            Padding="1,6"
-                            HorizontalAlignment="Stretch"
-                            HorizontalContentAlignment="Stretch"
-                            Background="Transparent"
-                            BorderThickness="0"
-                            FontSize="14"
-                            IsChecked="{Binding IsExpanded, Mode=TwoWay, RelativeSource={RelativeSource Mode=TemplatedParent}}"
-                            Style="{StaticResource QuietInspectorToggle}"
-                            UseSystemFocusVisuals="True">
-                            <ToggleButton.Resources>
-                                <SolidColorBrush x:Key="ToggleButtonBackgroundChecked" Color="Transparent" />
-                                <SolidColorBrush x:Key="ToggleButtonBackgroundCheckedPointerOver" Color="{ThemeResource ControlFillColorSecondary}" />
-                                <SolidColorBrush x:Key="ToggleButtonBackgroundCheckedPressed" Color="{ThemeResource ControlFillColorTertiary}" />
-                                <SolidColorBrush x:Key="ToggleButtonBackgroundCheckedDisabled" Color="{ThemeResource ControlFillColorDisabled}" />
-                                <SolidColorBrush x:Key="ToggleButtonForegroundChecked" Color="{ThemeResource TextFillColorPrimary}" />
-                                <SolidColorBrush x:Key="ToggleButtonForegroundCheckedPointerOver" Color="{ThemeResource TextFillColorPrimary}" />
-                                <SolidColorBrush x:Key="ToggleButtonForegroundCheckedPressed" Color="{ThemeResource TextFillColorSecondary}" />
-                                <SolidColorBrush x:Key="ToggleButtonForegroundCheckedDisabled" Color="{ThemeResource TextFillColorDisabled}" />
-                            </ToggleButton.Resources>
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <ContentPresenter Content="{TemplateBinding Header}" />
-                                <FontIcon
-                                    x:Name="DisclosureChevron"
-                                    Grid.Column="1"
-                                    FontSize="14"
-                                    Glyph="{Binding IsChecked, ElementName=ExpanderHeader, Converter={StaticResource SceneDisclosureGlyph}}" />
-                            </Grid>
-                        </ToggleButton>
-                        <Border x:Name="ExpanderContentClip" Visibility="{Binding IsExpanded, RelativeSource={RelativeSource Mode=TemplatedParent}, Converter={StaticResource SceneExpandedVisibility}}">
-                            <Border x:Name="ExpanderContent" Visibility="{Binding IsExpanded, RelativeSource={RelativeSource Mode=TemplatedParent}, Converter={StaticResource SceneExpandedVisibility}}">
-                                <ContentPresenter HorizontalContentAlignment="Stretch" Content="{TemplateBinding Content}" />
-                            </Border>
-                        </Border>
-                    </StackPanel>
-                </ControlTemplate>
-            </Setter.Value>
-        </Setter>
-    </Style>
 </ResourceDictionary>

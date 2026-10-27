@@ -5,23 +5,23 @@
 using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 
-namespace Oxygen.Editor.SceneInspector.Components.Geometry;
+namespace Oxygen.Editor.Controls.PropertyEditors;
 
 /// <summary>
 /// One boundary of the LOD policy shown, between LOD <see cref="Index"/> and the next: a Distance threshold, or a
 /// Screen-space error pair.
 /// </summary>
-/// <remarks>Setting a value writes the whole policy through <see cref="LodPolicyViewModel"/>.</remarks>
-public sealed partial class LodTransitionViewModel : ObservableObject
+/// <remarks>Setting a value writes the whole policy through <see cref="LodPolicyEditorModel"/>.</remarks>
+public sealed partial class LodTransitionModel : ObservableObject
 {
-    private readonly LodPolicyViewModel policy;
+    private readonly LodPolicyEditorModel policy;
     private double first;
     private double second;
 
-    /// <summary>Initializes a new instance of the <see cref="LodTransitionViewModel"/> class.</summary>
+    /// <summary>Initializes a new instance of the <see cref="LodTransitionModel"/> class.</summary>
     /// <param name="policy">The rows' policy.</param>
     /// <param name="index">The boundary's index.</param>
-    internal LodTransitionViewModel(LodPolicyViewModel policy, int index)
+    internal LodTransitionModel(LodPolicyEditorModel policy, int index)
     {
         this.policy = policy;
         this.Index = index;
@@ -102,7 +102,7 @@ public sealed partial class LodTransitionViewModel : ObservableObject
         this.second = coarser;
         this.CanEdit = canEdit;
 
-        // The fields show the scene's values even when an edit was refused after they changed.
+        // The fields show the policy's values even when an edit was refused after they changed.
         this.OnPropertyChanged(nameof(this.Distance));
         this.OnPropertyChanged(nameof(this.Finer));
         this.OnPropertyChanged(nameof(this.Coarser));

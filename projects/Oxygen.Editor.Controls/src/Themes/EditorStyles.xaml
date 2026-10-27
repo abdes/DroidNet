@@ -9,6 +9,7 @@
     <ResourceDictionary.MergedDictionaries>
         <ResourceDictionary Source="ms-appx:///Oxygen.Editor.Controls/PropertyEditors/PropertyValueBoxes.xaml" />
         <ResourceDictionary Source="ms-appx:///Oxygen.Editor.Controls/Styles/RightAlignedToggleSwitch.xaml" />
+        <ResourceDictionary Source="ms-appx:///Oxygen.Editor.Controls/Styles/QuietDisclosure.xaml" />
     </ResourceDictionary.MergedDictionaries>
 
     <!--  A borderless icon button for row and section actions, such as add, remove or reset.  -->

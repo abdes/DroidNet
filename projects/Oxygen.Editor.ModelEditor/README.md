@@ -20,6 +20,34 @@ window (`CanTearOut` is false). `ModelFactsReader` reads the facts Properties
 shows on the model's root: the source analysis's counts, the last import and
 the LODs of the imported geometries.
 
+Beside the viewport, behind a splitter, `ModelImportSettingsPanel` edits the
+model's import record; its width and whether it is collapsed are per user
+(`ModelEditorLayout`). Each edit is one step of the document's history, and a
+banner says the view shows the last import until Save. Save goes through
+`IModelImportRecordWriter`, which `ModelImports` implements with the content
+pipeline's `ReplaceModelRecordAsync`: the record is replaced and the model
+reimported as one operation, whatever saved the document. After every cook the
+editor takes the record an import rewrote, keeping unsaved edits. The panel
+adds three Model Editor groups:
+
+- **Node continuity.** The anchors the last import lost and the new ones. A lost
+  anchor offers _Continue…_: the nodes of the last import, new ones first, with
+  Find and a caution. Every entry can be removed, and an unsaved entry carries
+  the override bar. Clicking an anchor selects its node.
+- **Selected mesh.** The selected node's geometry defaults, keyed by the
+  geometry's anchor from the record's surface provenance: the LOD policy, in the
+  shared `LodPolicyEditor`, and each surface's visibility and shadow casting.
+- **Selected texture.** The textures the selected mesh's materials use, read
+  from the cooked materials (`IMaterialTextures`). The chosen texture's maximum
+  size, compression quality and normal map convention override the Textures
+  group.
+
+`ModelImportProblems` lists each open model's kept import problems, the
+diagnostics its publication keeps (`IPublishedDiagnostics`), under the model's
+file in the Problems pane. A problem that names a node selects it. The
+toolbar's status counts them, and its link opens Problems filtered to the
+model.
+
 ## The Import model dialog
 
 - **Files.** A list of model files, every one selected when the dialog opens,
@@ -60,8 +88,8 @@ The dialog returns a `ModelImportPlan`; the Content Explorer imports it with
 
 `Oxygen.Editor.Models`, `Oxygen.Editor.Scenes`, `Oxygen.Editor.LivePreview`,
 `Oxygen.Editor.Viewports`, `Oxygen.Editor.ContentPipeline`,
-`Oxygen.Editor.Controls`, `Oxygen.Editor.Pickers`, `Oxygen.Editor.Assets` and
-Aura's dialog service. It never references `Oxygen.Editor.SceneInspector` or
+`Oxygen.Editor.Controls`, `Oxygen.Editor.Pickers`, `Oxygen.Editor.Assets`,
+`Oxygen.Editor.Data` (the per-user layout) and Aura's dialog service. It never references `Oxygen.Editor.SceneInspector` or
 the engine runtime: its viewport comes from `ViewportServices`.
 
 ## Tests

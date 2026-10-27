@@ -1,0 +1,158 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+    The Level of detail editor: the policy's kind in a property card, then its boundaries under a quiet disclosure whose
+    summary names the policy's source.
+-->
+<UserControl
+    x:Class="Oxygen.Editor.Controls.PropertyEditors.LodPolicyEditor"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:DroidNet.Controls"
+    xmlns:editorcontrols="using:Oxygen.Editor.Controls"
+    xmlns:local="using:Oxygen.Editor.Controls.PropertyEditors">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="ms-appx:///Oxygen.Editor.Controls/PropertyEditors/PropertyValueBoxes.xaml" />
+                <ResourceDictionary Source="ms-appx:///Oxygen.Editor.Controls/Styles/QuietDisclosure.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+
+            <!--  A Distance threshold; the first names the unit for all.  -->
+            <DataTemplate x:Key="DistanceTransitionTemplate" x:DataType="local:LodTransitionModel">
+                <editorcontrols:NumberField
+                    IsEnabled="{x:Bind CanEdit, Mode=OneWay}"
+                    Label="{x:Bind Label}"
+                    NumberValue="{x:Bind Distance, Mode=TwoWay}"
+                    Qualifier="{x:Bind DistanceUnit}"
+                    QualifierGroup="LodDistance"
+                    ToolTipService.ToolTip="From this view distance on, in radii of the geometry&apos;s bounding sphere, the coarser LOD shows. Thresholds must not decrease." />
+            </DataTemplate>
+
+            <!--  A Screen-space error pair: the error that brings the finer LOD back, and the one that moves to the coarser.  -->
+            <DataTemplate x:Key="ErrorTransitionTemplate" x:DataType="local:LodTransitionModel">
+                <editorcontrols:PropertyCard IsEnabled="{x:Bind CanEdit, Mode=OneWay}" PropertyName="{x:Bind Label}">
+                    <Grid ColumnSpacing="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <controls:NumberBox
+                            AutomationProperties.Name="{x:Bind FinerName}"
+                            LabelPosition="None"
+                            NumberValue="{x:Bind Finer, Mode=TwoWay}"
+                            Style="{StaticResource PropertyNumberBoxStyle}"
+                            ToolTipService.ToolTip="At or above this screen-space error, the bounding sphere&apos;s projected radius in pixels, the finer LOD shows. Errors must not increase toward coarser LODs." />
+                        <controls:NumberBox
+                            Grid.Column="1"
+                            AutomationProperties.Name="{x:Bind CoarserName}"
+                            LabelPosition="None"
+                            NumberValue="{x:Bind Coarser, Mode=TwoWay}"
+                            Style="{StaticResource PropertyNumberBoxStyle}"
+                            ToolTipService.ToolTip="At or below this screen-space error, the coarser LOD shows. Keep it below the finer error so the LOD does not flicker." />
+                    </Grid>
+                </editorcontrols:PropertyCard>
+            </DataTemplate>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <StackPanel Spacing="4" Visibility="{x:Bind Model.IsAvailable, Mode=OneWay}">
+        <editorcontrols:PropertyCard
+            IsEnabled="{x:Bind Model.CanEdit, Mode=OneWay}"
+            OverrideActions="{x:Bind Model.Actions, Mode=OneWay}"
+            OverrideState="{x:Bind Model.OverrideState, Mode=OneWay}"
+            PropertyName="{x:Bind Label, Mode=OneWay}"
+            ResetCommand="{x:Bind Model.ResetCommand, Mode=OneWay}"
+            ResetToolTip="{x:Bind Model.ResetToolTip, Mode=OneWay}">
+            <ComboBox
+                HorizontalAlignment="Stretch"
+                AutomationProperties.Name="{x:Bind Label, Mode=OneWay}"
+                ItemsSource="{x:Bind Model.Kinds, Mode=OneWay}"
+                PlaceholderText="Mixed"
+                SelectedIndex="{x:Bind Model.Kind, Mode=TwoWay}"
+                ToolTipService.ToolTip="How the geometry selects its LOD per view: always one LOD, by view distance, or by screen-space error." />
+        </editorcontrols:PropertyCard>
+        <Expander
+            HorizontalAlignment="Stretch"
+            HorizontalContentAlignment="Stretch"
+            AutomationProperties.Name="Thresholds"
+            IsExpanded="{x:Bind Model.IsExpanded, Mode=TwoWay}"
+            Style="{StaticResource QuietDisclosure}">
+            <Expander.Header>
+                <Grid ColumnSpacing="8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock VerticalAlignment="Center" Text="Thresholds" />
+                    <TextBlock
+                        Grid.Column="1"
+                        VerticalAlignment="Center"
+                        FontSize="12"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Text="{x:Bind Model.Summary, Mode=OneWay}"
+                        TextTrimming="CharacterEllipsis"
+                        ToolTipService.ToolTip="{x:Bind Model.Summary, Mode=OneWay}" />
+                </Grid>
+            </Expander.Header>
+            <StackPanel Padding="0,4,0,0" Spacing="4">
+                <editorcontrols:NumberField
+                    IsEnabled="{x:Bind Model.CanEdit, Mode=OneWay}"
+                    Label="LOD"
+                    Mask="#."
+                    NumberValue="{x:Bind Model.FixedLod, Mode=TwoWay}"
+                    Qualifier="{x:Bind Model.FixedRange, Mode=OneWay}"
+                    ToolTipService.ToolTip="The LOD that always shows; 0 is the finest. The engine clamps it if a reimport removes LODs."
+                    Visibility="{x:Bind Model.IsFixed, Mode=OneWay}" />
+                <StackPanel Spacing="4" Visibility="{x:Bind Model.IsDistance, Mode=OneWay}">
+                    <ItemsControl ItemTemplate="{StaticResource DistanceTransitionTemplate}" ItemsSource="{x:Bind Model.Transitions, Mode=OneWay}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Spacing="4" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                    </ItemsControl>
+                    <editorcontrols:NumberField
+                        Margin="0,8,0,0"
+                        IsEnabled="{x:Bind Model.CanEdit, Mode=OneWay}"
+                        Label="Hysteresis"
+                        NumberValue="{x:Bind Model.Hysteresis, Mode=TwoWay}"
+                        Qualifier="ratio"
+                        QualifierGroup="LodDistance"
+                        ToolTipService.ToolTip="The band around each threshold, as a ratio of it, within which the current LOD stays: from 0 to 0.99." />
+                </StackPanel>
+                <StackPanel Spacing="4" Visibility="{x:Bind Model.IsScreenSpaceError, Mode=OneWay}">
+                    <editorcontrols:PropertyCard PropertyName="">
+                        <Grid ColumnSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock
+                                FontSize="12"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Text="Finer above (px)" />
+                            <TextBlock
+                                Grid.Column="1"
+                                FontSize="12"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Text="Coarser below (px)" />
+                        </Grid>
+                    </editorcontrols:PropertyCard>
+                    <ItemsControl ItemTemplate="{StaticResource ErrorTransitionTemplate}" ItemsSource="{x:Bind Model.Transitions, Mode=OneWay}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Spacing="4" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                    </ItemsControl>
+                </StackPanel>
+                <TextBlock
+                    AutomationProperties.LiveSetting="Polite"
+                    Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                    Text="{x:Bind Model.ErrorText, Mode=OneWay}"
+                    TextWrapping="Wrap"
+                    Visibility="{x:Bind Model.HasError, Mode=OneWay}" />
+            </StackPanel>
+        </Expander>
+    </StackPanel>
+</UserControl>

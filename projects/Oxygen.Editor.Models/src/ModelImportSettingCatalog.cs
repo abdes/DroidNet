@@ -165,6 +165,12 @@ public static class ModelImportSettingCatalog
     /// <summary>Gets the key of the import's name, shown for its cook job.</summary>
     public static string NameKey => "name";
 
+    /// <summary>Gets the key of the asset defaults written into the model's geometries, by geometry anchor.</summary>
+    public static string GeometryDefaultsKey => "geometry_defaults";
+
+    /// <summary>Gets the key of the per-texture settings that override the model's texture settings, by texture name.</summary>
+    public static string TextureOverridesKey => "texture_overrides";
+
     /// <summary>Gets every setting of this catalog.</summary>
     public static ImmutableArray<ModelImportSetting> All { get; } =
     [

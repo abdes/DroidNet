@@ -51,6 +51,14 @@ public sealed partial class ProblemsPresenter : IProblemReveal, IDisposable
     }
 
     /// <inheritdoc />
+    public Task<bool> ShowFileAsync(string file)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(file);
+        this.model.ShowOnly(file);
+        return this.placement.ShowPanelAsync(ProblemsModule.PanelId);
+    }
+
+    /// <inheritdoc />
     public void Dispose()
     {
         if (this.disposed)

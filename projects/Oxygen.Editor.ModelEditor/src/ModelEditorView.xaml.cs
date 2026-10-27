@@ -11,7 +11,8 @@ using Oxygen.Editor.Viewports;
 
 namespace Oxygen.Editor.ModelEditor;
 
-/// <summary>The view of a model document: the toolbar, and the viewport that shows the model.</summary>
+/// <summary>The view of a model document: the toolbar, the viewport that shows the model, and the import settings
+/// panel beside it.</summary>
 /// <remarks>
 /// The viewport control holds an engine view, so the view makes it while it is in the window and disposes it once it
 /// leaves; the viewport's view model keeps the camera across.
@@ -42,6 +43,26 @@ public sealed partial class ModelEditorView : UserControl, IDocumentEditorView
     {
         this.isActive = false;
         await this.ReleaseViewportAsync().ConfigureAwait(true);
+    }
+
+    /// <summary>Gets the import settings panel's column width: the user's width, or the header alone when collapsed.</summary>
+    /// <param name="width">The user's panel width.</param>
+    /// <param name="isCollapsed">Whether the panel is collapsed.</param>
+    /// <returns>The column width.</returns>
+    internal static GridLength PanelWidthOf(double width, bool isCollapsed) => isCollapsed ? GridLength.Auto : new GridLength(width);
+
+    /// <summary>Gets the visibility of a part that hides while a condition holds.</summary>
+    /// <param name="condition">The condition.</param>
+    /// <returns>Collapsed while the condition holds.</returns>
+    internal static Visibility CollapsedWhen(bool condition) => condition ? Visibility.Collapsed : Visibility.Visible;
+
+    // The splitter sizes the panel's column; the width the user leaves is kept for every model document.
+    private void OnSettingsPaneSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (this.ViewModel is { Layout.IsPanelCollapsed: false } model && e.NewSize.Width > 0)
+        {
+            model.Layout.PanelWidth = e.NewSize.Width;
+        }
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)

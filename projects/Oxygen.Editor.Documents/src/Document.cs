@@ -128,6 +128,11 @@ public sealed partial class Document : IDisposable
                 return new DocumentSaveResult(DocumentSaveOutcome.Refused, refusal);
             }
 
+            if (capture.IsStored)
+            {
+                return await this.StoreAsync(capture, position, cancellationToken).ConfigureAwait(true);
+            }
+
             var bytes = await capture.EncodeAsync(cancellationToken).ConfigureAwait(true);
             var expected = this.IsMissingOnDisk ? FileVersion.Missing : this.Version;
             try
@@ -355,6 +360,28 @@ public sealed partial class Document : IDisposable
     }
 
     // Returns why the file did not decode, or null once the content is replaced.
+    // A content that keeps its state in a file of its own writes it; the document's file and version stay as they are.
+    private async Task<DocumentSaveResult> StoreAsync(DocumentCapture capture, HistoryPosition position, CancellationToken cancellationToken)
+    {
+        var result = await capture.StoreAsync(cancellationToken).ConfigureAwait(true);
+        switch (result.Outcome)
+        {
+            case DocumentSaveOutcome.Saved:
+                this.savedPosition = position;
+                this.LogSaved();
+                this.PublishState();
+                break;
+            case DocumentSaveOutcome.Conflict:
+                this.LogSaveConflict(result.Message ?? string.Empty);
+                break;
+            default:
+                this.LogSaveRefused(result.Message ?? string.Empty);
+                break;
+        }
+
+        return result;
+    }
+
     private async Task<string?> ReplaceContentAsync(FileSnapshot snapshot, CancellationToken cancellationToken)
     {
         var decoded = await this.Kind.DecodeAsync(this.File, snapshot.Content.AsMemory(), this.context, cancellationToken).ConfigureAwait(true);

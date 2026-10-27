@@ -332,7 +332,7 @@ public sealed partial class GeometryViewModel
 
         var overrides = nodes.ConvertAll(this.OverridesOf);
         var canEdit = this.IsInputEnabled && !this.IsSurfaceLoading;
-        this.LevelOfDetail.Update(read, overrides, canEdit);
+        this.ShowLevelOfDetail(read, overrides, canEdit);
         var labels = read.Surfaces.GroupBy(static surface => surface.DisplayName, StringComparer.Ordinal)
             .ToDictionary(static group => group.Key, static group => group.Count(), StringComparer.Ordinal);
         var cards = new List<SurfaceCardViewModel>(read.Surfaces.Length);
@@ -448,7 +448,7 @@ public sealed partial class GeometryViewModel
 
         this.inventory = read;
         this.inventoryProject = project;
-        this.LevelOfDetail.ShowError(error: null);
+        this.LevelOfDetail.ClearError();
         this.IsSurfaceInventoryFailed = false;
         this.SurfaceNotice = read.Surfaces.IsEmpty ? "This geometry has no surfaces." : string.Empty;
     }

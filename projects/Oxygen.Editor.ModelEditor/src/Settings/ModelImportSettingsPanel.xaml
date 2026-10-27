@@ -5,6 +5,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:editorcontrols="using:Oxygen.Editor.Controls"
     xmlns:pickers="using:Oxygen.Editor.Pickers"
+    xmlns:propertyeditors="using:Oxygen.Editor.Controls.PropertyEditors"
     xmlns:settings="using:Oxygen.Editor.ModelEditor.Settings"
     xmlns:ui="using:CommunityToolkit.WinUI">
     <UserControl.Resources>
@@ -60,6 +61,141 @@
                     Label="{x:Bind ButtonLabel, Mode=OneWay}"
                     Model="{x:Bind Choices}" />
             </editorcontrols:PropertyCard>
+        </DataTemplate>
+        <!--  Node continuity: a vanished anchor, whether a node continues it, and Continue... when none does.  -->
+        <DataTemplate x:Key="VanishedAnchorTemplate" x:DataType="settings:VanishedAnchorRow">
+            <Grid ColumnSpacing="8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel>
+                    <TextBlock
+                        Text="{x:Bind Anchor}"
+                        TextTrimming="CharacterEllipsis"
+                        ToolTipService.ToolTip="{x:Bind Anchor}" />
+                    <TextBlock
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Style="{ThemeResource CaptionTextBlockStyle}"
+                        Text="{x:Bind Status}" />
+                </StackPanel>
+                <Button
+                    Grid.Column="1"
+                    VerticalAlignment="Center"
+                    AutomationProperties.Name="{x:Bind FlyoutTitle}"
+                    Content="Continue…"
+                    Visibility="{x:Bind CanContinue}">
+                    <Button.Flyout>
+                        <Flyout Opening="OnContinueFlyoutOpening" Placement="LeftEdgeAlignedTop">
+                            <StackPanel Width="320" Spacing="8">
+                                <TextBlock Style="{ThemeResource BodyStrongTextBlockStyle}" Text="{x:Bind FlyoutTitle}" />
+                                <TextBox
+                                    AutomationProperties.Name="Find a node"
+                                    PlaceholderText="Find a node..."
+                                    Text="{x:Bind FindText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                <ListView
+                                    MaxHeight="280"
+                                    AutomationProperties.Name="Nodes of the last import"
+                                    ItemsSource="{x:Bind Targets, Mode=OneWay}"
+                                    SelectedItem="{x:Bind Chosen, Mode=TwoWay}"
+                                    SelectionMode="Single">
+                                    <ListView.ItemTemplate>
+                                        <DataTemplate x:DataType="settings:ContinueTarget">
+                                            <Grid ColumnSpacing="8" Opacity="{x:Bind Opacity}">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Text="{x:Bind Anchor}" TextTrimming="CharacterEllipsis" />
+                                                <TextBlock
+                                                    Grid.Column="1"
+                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                    Style="{ThemeResource CaptionTextBlockStyle}"
+                                                    Text="{x:Bind Note}" />
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ListView.ItemTemplate>
+                                </ListView>
+                                <TextBlock
+                                    Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                                    Style="{ThemeResource CaptionTextBlockStyle}"
+                                    Text="{x:Bind Caution, Mode=OneWay}"
+                                    TextWrapping="Wrap" />
+                                <StackPanel
+                                    HorizontalAlignment="Right"
+                                    Orientation="Horizontal"
+                                    Spacing="8">
+                                    <Button
+                                        Click="OnContinueClicked"
+                                        Command="{x:Bind ContinueCommand}"
+                                        Content="Continue"
+                                        Style="{ThemeResource AccentButtonStyle}" />
+                                    <Button Click="OnContinueCancelled" Content="Cancel" />
+                                </StackPanel>
+                            </StackPanel>
+                        </Flyout>
+                    </Button.Flyout>
+                </Button>
+            </Grid>
+        </DataTemplate>
+        <!--  An anchor new in the last import: clicking it selects its node.  -->
+        <DataTemplate x:Key="NewAnchorTemplate" x:DataType="settings:NewAnchorRow">
+            <StackPanel>
+                <HyperlinkButton
+                    Padding="0"
+                    Command="{x:Bind SelectCommand}"
+                    Content="{x:Bind Anchor}"
+                    ToolTipService.ToolTip="Select this node" />
+                <TextBlock
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Style="{ThemeResource CaptionTextBlockStyle}"
+                    Text="{x:Bind Note}" />
+            </StackPanel>
+        </DataTemplate>
+        <!--  A continuity entry: the override bar marks it until Save; the remove button gives the node its own ID again.  -->
+        <DataTemplate x:Key="ContinuityEntryTemplate" x:DataType="settings:ContinuityEntryRow">
+            <editorcontrols:PropertyCard OverrideState="{x:Bind OverrideState}" PropertyName="{x:Bind Anchor}">
+                <Grid ColumnSpacing="4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock
+                        VerticalAlignment="Center"
+                        Text="{x:Bind Continues}"
+                        TextTrimming="CharacterEllipsis"
+                        ToolTipService.ToolTip="{x:Bind Continues}" />
+                    <Button
+                        Grid.Column="1"
+                        AutomationProperties.Name="{x:Bind RemoveToolTip}"
+                        Command="{x:Bind RemoveCommand}"
+                        Style="{StaticResource QuietActionButtonStyle}"
+                        ToolTipService.ToolTip="{x:Bind RemoveToolTip}">
+                        <FontIcon FontSize="12" Glyph="&#xE711;" />
+                    </Button>
+                </Grid>
+            </editorcontrols:PropertyCard>
+        </DataTemplate>
+        <!--  A surface of the selected mesh: whether it renders and casts shadows by default.  -->
+        <DataTemplate x:Key="SurfaceDefaultsTemplate" x:DataType="settings:SurfaceDefaultsRow">
+            <StackPanel Spacing="2">
+                <TextBlock
+                    Margin="0,4,0,0"
+                    Style="{ThemeResource BodyStrongTextBlockStyle}"
+                    Text="{x:Bind Name}" />
+                <editorcontrols:ToggleField
+                    IsOn="{x:Bind Visible, Mode=TwoWay}"
+                    Label="Visible"
+                    OverrideState="{x:Bind VisibleOverride, Mode=OneWay}"
+                    ResetCommand="{x:Bind ResetVisibleCommand}"
+                    ResetToolTip="{x:Bind ResetToolTip}" />
+                <editorcontrols:ToggleField
+                    IsOn="{x:Bind CastsShadows, Mode=TwoWay}"
+                    Label="Casts shadows"
+                    OverrideState="{x:Bind CastsShadowsOverride, Mode=OneWay}"
+                    ResetCommand="{x:Bind ResetCastsShadowsCommand}"
+                    ResetToolTip="{x:Bind ResetToolTip}" />
+            </StackPanel>
         </DataTemplate>
         <Style x:Key="RowHost" TargetType="ContentControl">
             <Setter Property="IsTabStop" Value="False" />
@@ -159,6 +295,58 @@
             </editorcontrols:PropertiesExpander.Items>
         </editorcontrols:PropertiesExpander>
 
+        <!--  Model Editor only: what the last import reported, and the entries that keep node IDs across DCC changes.  -->
+        <editorcontrols:PropertiesExpander
+            Description="{x:Bind ViewModel.Continuity.Summary, Mode=OneWay}"
+            Header="Node continuity"
+            HeaderIcon="{ui:FontIcon Glyph='&#xE71B;'}"
+            IsExpanded="True"
+            Visibility="{x:Bind settings:ModelImportSettingsPanel.ShownWhen(ViewModel.Continuity), Mode=OneWay}">
+            <editorcontrols:PropertiesExpander.Items>
+                <StackPanel Spacing="6">
+                    <StackPanel Spacing="4" Visibility="{x:Bind ViewModel.Continuity.HasVanished, Mode=OneWay}">
+                        <TextBlock
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Style="{ThemeResource CaptionTextBlockStyle}"
+                            Text="Vanished in the last import" />
+                        <ItemsRepeater ItemTemplate="{StaticResource VanishedAnchorTemplate}" ItemsSource="{x:Bind ViewModel.Continuity.Vanished, Mode=OneWay}">
+                            <ItemsRepeater.Layout>
+                                <StackLayout Spacing="4" />
+                            </ItemsRepeater.Layout>
+                        </ItemsRepeater>
+                    </StackPanel>
+                    <StackPanel Spacing="4" Visibility="{x:Bind ViewModel.Continuity.HasNew, Mode=OneWay}">
+                        <TextBlock
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Style="{ThemeResource CaptionTextBlockStyle}"
+                            Text="New in the last import" />
+                        <ItemsRepeater ItemTemplate="{StaticResource NewAnchorTemplate}" ItemsSource="{x:Bind ViewModel.Continuity.New, Mode=OneWay}">
+                            <ItemsRepeater.Layout>
+                                <StackLayout Spacing="2" />
+                            </ItemsRepeater.Layout>
+                        </ItemsRepeater>
+                    </StackPanel>
+                    <StackPanel Spacing="4" Visibility="{x:Bind ViewModel.Continuity.HasEntries, Mode=OneWay}">
+                        <TextBlock
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Style="{ThemeResource CaptionTextBlockStyle}"
+                            Text="{x:Bind ViewModel.Continuity.EntriesHeader, Mode=OneWay}" />
+                        <ItemsRepeater ItemTemplate="{StaticResource ContinuityEntryTemplate}" ItemsSource="{x:Bind ViewModel.Continuity.Entries, Mode=OneWay}">
+                            <ItemsRepeater.Layout>
+                                <StackLayout Spacing="4" />
+                            </ItemsRepeater.Layout>
+                        </ItemsRepeater>
+                    </StackPanel>
+                    <TextBlock
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Style="{ThemeResource CaptionTextBlockStyle}"
+                        Text="Continued nodes apply on Save, which reimports."
+                        TextWrapping="Wrap"
+                        Visibility="{x:Bind ViewModel.Continuity.HasUnsaved, Mode=OneWay}" />
+                </StackPanel>
+            </editorcontrols:PropertiesExpander.Items>
+        </editorcontrols:PropertiesExpander>
+
         <editorcontrols:PropertiesExpander
             Description="Size, compression and normal map convention"
             Header="Textures"
@@ -233,6 +421,55 @@
                         <StackLayout Spacing="4" />
                     </ItemsRepeater.Layout>
                 </ItemsRepeater>
+            </editorcontrols:PropertiesExpander.Items>
+        </editorcontrols:PropertiesExpander>
+
+        <!--  Model Editor only: the asset defaults of the selected mesh, which every placement starts from.  -->
+        <editorcontrols:PropertiesExpander
+            Description="The defaults every placement of the model starts from"
+            Header="{x:Bind ViewModel.SelectedMesh.Title, Mode=OneWay}"
+            HeaderIcon="{ui:FontIcon Glyph='&#xF158;'}"
+            IsExpanded="True"
+            Visibility="{x:Bind settings:ModelImportSettingsPanel.ShownWhen(ViewModel.SelectedMesh), Mode=OneWay}">
+            <editorcontrols:PropertiesExpander.Items>
+                <StackPanel Spacing="4">
+                    <propertyeditors:LodPolicyEditor Label="LOD policy" Model="{x:Bind ViewModel.SelectedMesh.LevelOfDetail, Mode=OneWay}" />
+                    <ItemsRepeater ItemTemplate="{StaticResource SurfaceDefaultsTemplate}" ItemsSource="{x:Bind ViewModel.SelectedMesh.Surfaces, Mode=OneWay}">
+                        <ItemsRepeater.Layout>
+                            <StackLayout Spacing="4" />
+                        </ItemsRepeater.Layout>
+                    </ItemsRepeater>
+                </StackPanel>
+            </editorcontrols:PropertiesExpander.Items>
+        </editorcontrols:PropertiesExpander>
+
+        <!--  Model Editor only: a texture of the selected mesh's materials, overriding the Textures group.  -->
+        <editorcontrols:PropertiesExpander
+            Description="Overrides the Textures group for one texture"
+            Header="Selected texture"
+            HeaderIcon="{ui:FontIcon Glyph='&#xEB9F;'}"
+            IsExpanded="True"
+            Visibility="{x:Bind ViewModel.SelectedTexture.IsVisible, Mode=OneWay}">
+            <editorcontrols:PropertiesExpander.Items>
+                <editorcontrols:PropertyCard PropertyName="Texture">
+                    <ComboBox
+                        HorizontalAlignment="Stretch"
+                        AutomationProperties.Name="Texture"
+                        ItemsSource="{x:Bind ViewModel.SelectedTexture.Textures, Mode=OneWay}"
+                        SelectedItem="{x:Bind ViewModel.SelectedTexture.Texture, Mode=TwoWay}" />
+                </editorcontrols:PropertyCard>
+                <ContentControl
+                    Content="{x:Bind ViewModel.SelectedTexture.MaxTextureSize}"
+                    ContentTemplate="{StaticResource ChoiceRowTemplate}"
+                    Style="{StaticResource RowHost}" />
+                <ContentControl
+                    Content="{x:Bind ViewModel.SelectedTexture.CompressionQuality}"
+                    ContentTemplate="{StaticResource ChoiceRowTemplate}"
+                    Style="{StaticResource RowHost}" />
+                <ContentControl
+                    Content="{x:Bind ViewModel.SelectedTexture.FlipNormalGreen}"
+                    ContentTemplate="{StaticResource ToggleRowTemplate}"
+                    Style="{StaticResource RowHost}" />
             </editorcontrols:PropertiesExpander.Items>
         </editorcontrols:PropertiesExpander>
 

@@ -3,13 +3,13 @@
 // SPDX-License-Identifier: MIT
 
 using System.ComponentModel;
-using System.Diagnostics.CodeAnalysis;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.LivePreview.Scenes;
+using Oxygen.Editor.ModelEditor.Settings;
 using Oxygen.Editor.Models.Documents;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Changes;
@@ -25,8 +25,9 @@ using Oxygen.Managed.Core;
 namespace Oxygen.Editor.ModelEditor;
 
 /// <summary>
-/// The Model Editor of a model document: the model's preview scene in one viewport, read-only, with the toolbar that
-/// saves, reimports, places the model in the open scene and browses to its assets (model editor 4 to 6).
+/// The Model Editor of a model document: the model's preview scene in one viewport, read-only, beside its import
+/// settings, with the toolbar that saves, reimports, places the model in the open scene and browses to its assets
+/// (model editor 4 to 6).
 /// </summary>
 /// <remarks>
 /// The docked Scene Explorer and Properties pane show the model's nodes while its tab is active, and the engine shows its
@@ -45,7 +46,6 @@ public sealed partial class ModelEditorViewModel : ObservableObject, IDocumentWi
 
     // Set while the viewport's controls take the preview's environment, which they then must not write back.
     private bool showingEnvironment;
-    private bool isReimporting;
     private bool isCreatingViewport;
     private bool disposed;
 
@@ -62,6 +62,15 @@ public sealed partial class ModelEditorViewModel : ObservableObject, IDocumentWi
         this.Tab = tab;
         this.Document = tab.Document;
         this.PreviewSettingsPanel = services.Viewports.CreatePreviewSettings();
+        this.Settings = new ModelImportSettingsPanelViewModel();
+        this.Settings.SettingEdited += this.OnSettingEdited;
+        this.Model.Changed += this.OnModelChanged;
+        services.Problems.ProblemsChanged += this.OnProblemsChanged;
+        services.Imports.ImportingChanged += this.OnImportingChanged;
+        services.CookRuns.CookCompleted += this.OnCookCompletedAsync;
+        _ = services.Layout.EnsureLoadedAsync();
+        this.ShowRecord();
+        this.UpdateProblems();
 
         services.Views.Attach(this.Document.Id, this);
         services.ScenePreview.ReadyChanged += this.OnPreviewReadyChanged;
@@ -155,6 +164,11 @@ public sealed partial class ModelEditorViewModel : ObservableObject, IDocumentWi
         this.services.OpenDocuments.Opened -= this.OnOpenDocumentsChanged;
         this.services.OpenDocuments.Closed -= this.OnOpenDocumentsChanged;
         this.Document.StateChanged -= this.OnDocumentStateChanged;
+        this.Settings.SettingEdited -= this.OnSettingEdited;
+        this.Model.Changed -= this.OnModelChanged;
+        this.services.Problems.ProblemsChanged -= this.OnProblemsChanged;
+        this.services.Imports.ImportingChanged -= this.OnImportingChanged;
+        this.services.CookRuns.CookCompleted -= this.OnCookCompletedAsync;
         this.assetSubscription?.Dispose();
         this.assetSubscription = null;
         this.ObservePreview(authoring: null);
@@ -174,43 +188,11 @@ public sealed partial class ModelEditorViewModel : ObservableObject, IDocumentWi
     [RelayCommand(CanExecute = nameof(CanSave))]
     private async Task SaveAsync() => _ = await this.services.Documents.SaveAsync(this.Document).ConfigureAwait(true);
 
-    private bool CanReimport() => !this.disposed && !this.isReimporting && ModelImportStatus.CanReimport(this.ImportState);
+    private bool CanReimport() => !this.disposed && !this.services.Imports.IsImporting(this.Source) && ModelImportStatus.CanReimport(this.ImportState);
 
     /// <summary>Reimports the model with its import settings, when its source changed or its last import failed.</summary>
-    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "This user-command boundary reports the failure; the content pipeline owns the import and its recovery.")]
     [RelayCommand(CanExecute = nameof(CanReimport))]
-    private async Task ReimportAsync()
-    {
-        var source = this.Source;
-        var project = this.services.Session.Context;
-        this.LogReimportRequested(source);
-        this.isReimporting = true;
-        this.ReimportCommand.NotifyCanExecuteChanged();
-        try
-        {
-            var result = await this.services.ContentPipeline.ReimportSourceAsync(source, project, CancellationToken.None).ConfigureAwait(true);
-            if (ReferenceEquals(this.services.Session.Context, project))
-            {
-                await this.services.Assets.RefreshAsync().ConfigureAwait(true);
-            }
-
-            ModelEditorResults.PublishReimport(this.services, result, source);
-        }
-        catch (OperationCanceledException)
-        {
-            // The Cooking run keeps the cancellation.
-        }
-        catch (Exception ex)
-        {
-            this.LogReimportFailed(ex, source);
-            ModelEditorResults.PublishReimportFailure(this.services, source, ex);
-        }
-        finally
-        {
-            this.isReimporting = false;
-            this.ReimportCommand.NotifyCanExecuteChanged();
-        }
-    }
+    private Task ReimportAsync() => this.services.Imports.ReimportAsync(this.Source);
 
     /// <summary>Returns the model's preview to the default sky, sun and exposure, and forgets its file.</summary>
     [RelayCommand]
@@ -434,6 +416,7 @@ public sealed partial class ModelEditorViewModel : ObservableObject, IDocumentWi
         if (!this.disposed && args.DocumentId == this.Document.Id)
         {
             this.OutlineSelection();
+            _ = this.ShowSelectedMeshAsync();
         }
     }
 
@@ -451,6 +434,7 @@ public sealed partial class ModelEditorViewModel : ObservableObject, IDocumentWi
         if (!this.disposed)
         {
             this.SaveCommand.NotifyCanExecuteChanged();
+            this.OnPropertyChanged(nameof(this.IsShowingLastImport));
         }
     }
 
@@ -471,6 +455,7 @@ public sealed partial class ModelEditorViewModel : ObservableObject, IDocumentWi
         if (!this.disposed)
         {
             this.ImportState = ModelImportStatus.Of(this.Source, assets);
+            this.Settings.UpdateMaterials(assets);
         }
     }
 }

@@ -63,7 +63,7 @@
             <TextBlock
                 HorizontalAlignment="Center"
                 Style="{ThemeResource BodyStrongTextBlockStyle}"
-                Text="No problems in your scripts and input files" />
+                Text="{x:Bind ViewModel.EmptyText, Mode=OneWay}" />
             <TextBlock
                 HorizontalAlignment="Center"
                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
@@ -74,6 +74,12 @@
                 Command="{x:Bind ViewModel.CheckScriptsCommand}"
                 Content="Check scripts"
                 ToolTipService.ToolTip="Check every script of the project again" />
+            <HyperlinkButton
+                HorizontalAlignment="Center"
+                Command="{x:Bind ViewModel.ShowAllCommand}"
+                Content="Show all"
+                ToolTipService.ToolTip="List the problems of every file again"
+                Visibility="{x:Bind ViewModel.IsFiltered, Mode=OneWay}" />
         </StackPanel>
 
         <!--  Problems: the list fills the panel; the details open beside it for the selected problem.  -->
@@ -87,18 +93,39 @@
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
-            <Button
-                Margin="8,4"
-                Padding="8,2"
-                Background="Transparent"
-                BorderThickness="0"
-                Command="{x:Bind ViewModel.CheckScriptsCommand}"
-                ToolTipService.ToolTip="Check every script of the project again">
-                <StackPanel Orientation="Horizontal" Spacing="6">
-                    <FontIcon FontSize="12" Glyph="&#xE72C;" />
-                    <TextBlock Text="Check scripts" />
+            <StackPanel
+                Margin="8,0"
+                Orientation="Horizontal"
+                Spacing="8">
+                <Button
+                    Margin="0,4"
+                    Padding="8,2"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    Command="{x:Bind ViewModel.CheckScriptsCommand}"
+                    ToolTipService.ToolTip="Check every script of the project again">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <FontIcon FontSize="12" Glyph="&#xE72C;" />
+                        <TextBlock Text="Check scripts" />
+                    </StackPanel>
+                </Button>
+                <!--  The filter another part asked for, such as a model's problems from its editor.  -->
+                <StackPanel
+                    VerticalAlignment="Center"
+                    Orientation="Horizontal"
+                    Spacing="4"
+                    Visibility="{x:Bind ViewModel.IsFiltered, Mode=OneWay}">
+                    <TextBlock
+                        VerticalAlignment="Center"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Text="{x:Bind ViewModel.FilterText, Mode=OneWay}" />
+                    <HyperlinkButton
+                        Padding="4,2"
+                        Command="{x:Bind ViewModel.ShowAllCommand}"
+                        Content="Show all"
+                        ToolTipService.ToolTip="List the problems of every file again" />
                 </StackPanel>
-            </Button>
+            </StackPanel>
 
             <ListView
                 x:Name="ProblemList"

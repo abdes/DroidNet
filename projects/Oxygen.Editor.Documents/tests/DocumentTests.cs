@@ -125,6 +125,41 @@ public sealed class DocumentTests : DocumentTestBase
     }
 
     [TestMethod]
+    public async Task SaveAsync_WhenTheContentStoresItself_LeavesTheFileAndCleansTheDocument()
+    {
+        var (document, note) = await this.OpenNoteAsync("Wood").ConfigureAwait(false);
+        string? stored = null;
+        note.StoreElsewhere = (text, _) =>
+        {
+            stored = text;
+            return Task.FromResult(new DocumentSaveResult(DocumentSaveOutcome.Saved));
+        };
+        note.Edit("second");
+
+        var result = await document.SaveAsync(this.Token).ConfigureAwait(false);
+
+        _ = result.Outcome.Should().Be(DocumentSaveOutcome.Saved);
+        _ = stored.Should().Be("second");
+        _ = this.ReadText("Wood").Should().Be("first");
+        _ = document.IsDirty.Should().BeFalse();
+    }
+
+    [TestMethod]
+    public async Task SaveAsync_WhenTheContentsOwnFileChanged_ConflictsAndStaysDirty()
+    {
+        var (document, note) = await this.OpenNoteAsync("Wood").ConfigureAwait(false);
+        note.StoreElsewhere = (_, _) => Task.FromResult(new DocumentSaveResult(DocumentSaveOutcome.Conflict, "The record changed."));
+        note.Edit("second");
+
+        var result = await document.SaveAsync(this.Token).ConfigureAwait(false);
+
+        _ = result.Outcome.Should().Be(DocumentSaveOutcome.Conflict);
+        _ = result.Message.Should().Be("The record changed.");
+        _ = document.IsChangedOnDisk.Should().BeFalse();
+        _ = document.IsDirty.Should().BeTrue();
+    }
+
+    [TestMethod]
     public async Task SaveAsync_AfterAnOutsideChange_ConflictsAndKeepsTheOutsideFile()
     {
         var (document, note) = await this.OpenNoteAsync("Wood").ConfigureAwait(false);

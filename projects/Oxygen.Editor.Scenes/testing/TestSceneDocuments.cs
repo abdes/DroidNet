@@ -8,6 +8,7 @@ using DroidNet.Storage.Native;
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Documents;
+using Oxygen.Editor.Models;
 using Oxygen.Editor.Models.Documents;
 using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Scenes.Authoring;
@@ -38,13 +39,15 @@ public sealed partial class TestSceneDocuments : IDisposable
     /// <param name="otherKinds">The kinds of the other documents the test opens beside its scenes, if any.</param>
     /// <param name="references">The saved authored references every scene document's instance sources are checked against, if any.</param>
     /// <param name="structures">What the instances of every scene document contain, if the test publishes it.</param>
-    public TestSceneDocuments(TestProject project, ISceneNodeInteraction? interaction = null, IAssetRedirects? redirects = null, IEnumerable<IDocumentKind>? otherKinds = null, IAuthoredReferences? references = null, ISceneStructures? structures = null)
+    /// <param name="modelRecords">What saves the import record of every model document, if the test saves one.</param>
+    public TestSceneDocuments(TestProject project, ISceneNodeInteraction? interaction = null, IAssetRedirects? redirects = null, IEnumerable<IDocumentKind>? otherKinds = null, IAuthoredReferences? references = null, ISceneStructures? structures = null, IModelImportRecordWriter? modelRecords = null)
     {
         ArgumentNullException.ThrowIfNull(project);
         this.Project = project;
         this.Files = new GatedFileStore(new NativeAtomicFileStore(project.Context.FileSystem), this);
         this.Session = new TestSession(project.Context);
         this.Kind = new SceneDocumentKind(interaction, redirects, references, this.Session, structures);
+        this.ModelKind = new ModelDocumentKind(this.Session, modelRecords);
         this.Open = new OpenDocuments([this.Kind, this.ModelKind, .. otherKinds ?? []], this.Files);
     }
 
@@ -58,8 +61,7 @@ public sealed partial class TestSceneDocuments : IDisposable
     public SceneDocumentKind Kind { get; }
 
     /// <summary>Gets the kind model sources open with, beside the scenes.</summary>
-    public ModelDocumentKind ModelKind { get; } = new();
-
+    public ModelDocumentKind ModelKind { get; }
     /// <summary>Gets the open documents.</summary>
     public OpenDocuments Open { get; }
 

@@ -5,7 +5,10 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:dnc="using:DroidNet.Controls"
+    xmlns:local="using:Oxygen.Editor.ModelEditor"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:settings="using:Oxygen.Editor.ModelEditor.Settings"
+    xmlns:sizers="using:CommunityToolkit.WinUI.Controls"
     xmlns:vp="using:Oxygen.Editor.Viewports"
     mc:Ignorable="d">
 
@@ -13,7 +16,7 @@
         <Grid.RowDefinitions>
             <!--  The scene editor's toolbar, with the model's commands where the scene's sit  -->
             <RowDefinition Height="Auto" />
-            <!--  The viewport  -->
+            <!--  The viewport and, on its right, the import settings panel  -->
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
@@ -71,13 +74,34 @@
 
             <dnc:ToolBarSeparator />
 
-            <!--  The import status, where the scene editor shows the Play status  -->
+            <!--  The import status, where the scene editor shows the Play status, and the kept problems' link  -->
             <dnc:ToolBarElementHost>
-                <TextBlock
-                    x:Name="ImportStatus"
+                <StackPanel
                     Margin="6,0"
                     VerticalAlignment="Center"
-                    Text="{x:Bind ViewModel.ImportStatusText, Mode=OneWay}" />
+                    Orientation="Horizontal"
+                    Spacing="6">
+                    <TextBlock
+                        x:Name="ImportStatus"
+                        VerticalAlignment="Center"
+                        Text="{x:Bind ViewModel.ImportStatusText, Mode=OneWay}" />
+                    <TextBlock
+                        VerticalAlignment="Center"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Text="·"
+                        Visibility="{x:Bind ViewModel.HasProblems, Mode=OneWay}" />
+                    <HyperlinkButton
+                        x:Name="ProblemsLink"
+                        Padding="2,0"
+                        Command="{x:Bind ViewModel.ShowProblemsCommand}"
+                        ToolTipService.ToolTip="Show the problems of the last import in the Problems pane"
+                        Visibility="{x:Bind ViewModel.HasProblems, Mode=OneWay}">
+                        <StackPanel Orientation="Horizontal" Spacing="4">
+                            <FontIcon FontSize="12" Glyph="&#xE7BA;" />
+                            <TextBlock Text="{x:Bind ViewModel.ProblemCountText, Mode=OneWay}" />
+                        </StackPanel>
+                    </HyperlinkButton>
+                </StackPanel>
             </dnc:ToolBarElementHost>
 
             <dnc:ToolBar.SecondaryItems>
@@ -102,7 +126,83 @@
             </dnc:ToolBar.SecondaryItems>
         </dnc:ToolBar>
 
-        <!--  The viewport is added here once the engine shows the model  -->
-        <Grid x:Name="ViewportHost" Grid.Row="1" />
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" MinWidth="200" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition x:Name="PanelColumn" Width="{x:Bind local:ModelEditorView.PanelWidthOf(ViewModel.Layout.PanelWidth, ViewModel.Layout.IsPanelCollapsed), Mode=OneWay}" />
+            </Grid.ColumnDefinitions>
+
+            <!--  The viewport is added here once the engine shows the model  -->
+            <Grid x:Name="ViewportHost" Grid.Column="0" />
+
+            <!--  ME-6: the view never approximates unsaved settings  -->
+            <InfoBar
+                x:Name="LastImportBanner"
+                Grid.Column="0"
+                Margin="8"
+                VerticalAlignment="Top"
+                IsClosable="False"
+                IsOpen="{x:Bind ViewModel.IsShowingLastImport, Mode=OneWay}"
+                Message="Showing the last import. Save to reimport with your settings."
+                Severity="Informational">
+                <InfoBar.ActionButton>
+                    <Button Command="{x:Bind ViewModel.SaveCommand}" Content="Save" />
+                </InfoBar.ActionButton>
+            </InfoBar>
+
+            <sizers:GridSplitter
+                Grid.Column="1"
+                Width="4"
+                ResizeBehavior="PreviousAndNext"
+                ResizeDirection="Columns"
+                Visibility="{x:Bind local:ModelEditorView.CollapsedWhen(ViewModel.Layout.IsPanelCollapsed), Mode=OneWay}" />
+
+            <Grid
+                x:Name="SettingsPane"
+                Grid.Column="2"
+                Background="{ThemeResource LayerFillColorDefaultBrush}"
+                SizeChanged="OnSettingsPaneSizeChanged">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <Grid Padding="8,4" ColumnSpacing="4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock
+                        VerticalAlignment="Center"
+                        Style="{ThemeResource BodyStrongTextBlockStyle}"
+                        Text="Import settings"
+                        Visibility="{x:Bind local:ModelEditorView.CollapsedWhen(ViewModel.Layout.IsPanelCollapsed), Mode=OneWay}" />
+                    <ToggleButton
+                        x:Name="CollapsePanel"
+                        Grid.Column="1"
+                        AutomationProperties.Name="Collapse the import settings"
+                        IsChecked="{x:Bind ViewModel.Layout.IsPanelCollapsed, Mode=TwoWay}"
+                        ToolTipService.ToolTip="Collapse or expand the import settings">
+                        <FontIcon FontSize="12" Glyph="&#xE89F;" />
+                    </ToggleButton>
+                </Grid>
+
+                <ScrollViewer
+                    Grid.Row="1"
+                    Padding="8,0,8,8"
+                    Visibility="{x:Bind local:ModelEditorView.CollapsedWhen(ViewModel.Layout.IsPanelCollapsed), Mode=OneWay}">
+                    <Grid>
+                        <settings:ModelImportSettingsPanel ViewModel="{x:Bind ViewModel.Settings}" Visibility="{x:Bind ViewModel.HasImportSettings, Mode=OneWay}" />
+                        <TextBlock
+                            Margin="4,8"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Text="This model has no import record. Import it to choose its import settings."
+                            TextWrapping="Wrap"
+                            Visibility="{x:Bind local:ModelEditorView.CollapsedWhen(ViewModel.HasImportSettings), Mode=OneWay}" />
+                    </Grid>
+                </ScrollViewer>
+            </Grid>
+        </Grid>
     </Grid>
 </UserControl>

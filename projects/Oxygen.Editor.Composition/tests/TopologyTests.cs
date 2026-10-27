@@ -117,6 +117,7 @@ public sealed class TopologyTests
     [
         (nameof(IContentPipelineService), null),
         (nameof(IGeometrySurfaceProvider), null),
+        (nameof(IMaterialTextures), null),
         (nameof(IInstancedNodeReader), null),
         (nameof(IScriptLibrary), null),
         (nameof(SceneNodeInteraction), null),

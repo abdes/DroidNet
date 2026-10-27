@@ -19,6 +19,29 @@ public sealed class TexturedModelImportTests
 {
     public TestContext TestContext { get; set; } = null!;
 
+    /// <summary>The textures each imported material binds read back from the cooked materials, as the Model Editor's
+    /// Selected texture group lists them.</summary>
+    /// <returns>The import and read.</returns>
+    [TestMethod]
+    [TestCategory("NativeContent")]
+    public async Task AnImportedMaterialsTexturesAreReadFromItsCookedMaterial()
+    {
+        using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
+        var original = Path.Combine(workspace.Root, "incoming");
+        _ = Directory.CreateDirectory(original);
+        var primary = Path.Combine(original, "model.gltf");
+        File.Copy(Path.Combine(AppContext.BaseDirectory, "Fixtures", "static_textured_triangle.gltf"), primary);
+        File.Copy(Path.Combine(AppContext.BaseDirectory, "Fixtures", "static_textured_checker.png"), Path.Combine(original, "static_textured_checker.png"));
+        var cook = NativeCook.Create(workspace);
+        var request = new SceneImportRequest(workspace.ProjectContext, primary, "Textured", AssetPath.Parse("/Content/Models"));
+        var imported = await cook.Service.ImportSourceAsync(request, this.TestContext.CancellationToken).ConfigureAwait(false);
+        AssertCookSucceeded(imported);
+
+        var textures = await cook.Service.ReadTexturesAsync(workspace.ProjectContext, imported.RetainedSourceUri!, this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        _ = textures.Should().ContainSingle().Which.Value.Should().ContainSingle();
+    }
+
     /// <summary>External images remain portable after the original files disappear and the retained model is edited.</summary>
     /// <param name="extension">The native model format.</param>
     /// <returns>The import/reimport verification.</returns>

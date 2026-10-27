@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+    A quiet disclosure: an Expander whose header is a borderless row with a chevron at its end, for details under a
+    property row, such as a Level of detail policy's thresholds. Consumers set Style="{StaticResource QuietDisclosure}".
+-->
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:ctkcvt="using:CommunityToolkit.WinUI.Converters">
+    <ctkcvt:BoolToObjectConverter
+        x:Key="QuietDisclosureGlyph"
+        FalseValue="&#xE76C;"
+        TrueValue="&#xE70D;" />
+    <ctkcvt:BoolToVisibilityConverter x:Key="QuietDisclosureVisibility" />
+    <Style
+        x:Key="QuietDisclosureToggle"
+        BasedOn="{StaticResource DefaultToggleButtonStyle}"
+        TargetType="ToggleButton">
+        <Setter Property="MinWidth" Value="0" />
+        <Setter Property="MinHeight" Value="32" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="CornerRadius" Value="4" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    </Style>
+    <Style x:Key="QuietDisclosure" TargetType="Expander">
+        <Setter Property="IsTabStop" Value="False" />
+        <Setter Property="MinHeight" Value="0" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Margin" Value="0" />
+        <Setter Property="VerticalAlignment" Value="Top" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Expander">
+                    <StackPanel Spacing="0">
+                        <ToggleButton
+                            x:Name="ExpanderHeader"
+                            MinHeight="32"
+                            Padding="1,6"
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Stretch"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            FontSize="14"
+                            IsChecked="{Binding IsExpanded, Mode=TwoWay, RelativeSource={RelativeSource Mode=TemplatedParent}}"
+                            Style="{StaticResource QuietDisclosureToggle}"
+                            UseSystemFocusVisuals="True">
+                            <ToggleButton.Resources>
+                                <SolidColorBrush x:Key="ToggleButtonBackgroundChecked" Color="Transparent" />
+                                <SolidColorBrush x:Key="ToggleButtonBackgroundCheckedPointerOver" Color="{ThemeResource ControlFillColorSecondary}" />
+                                <SolidColorBrush x:Key="ToggleButtonBackgroundCheckedPressed" Color="{ThemeResource ControlFillColorTertiary}" />
+                                <SolidColorBrush x:Key="ToggleButtonBackgroundCheckedDisabled" Color="{ThemeResource ControlFillColorDisabled}" />
+                                <SolidColorBrush x:Key="ToggleButtonForegroundChecked" Color="{ThemeResource TextFillColorPrimary}" />
+                                <SolidColorBrush x:Key="ToggleButtonForegroundCheckedPointerOver" Color="{ThemeResource TextFillColorPrimary}" />
+                                <SolidColorBrush x:Key="ToggleButtonForegroundCheckedPressed" Color="{ThemeResource TextFillColorSecondary}" />
+                                <SolidColorBrush x:Key="ToggleButtonForegroundCheckedDisabled" Color="{ThemeResource TextFillColorDisabled}" />
+                            </ToggleButton.Resources>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <ContentPresenter Content="{TemplateBinding Header}" />
+                                <FontIcon
+                                    x:Name="DisclosureChevron"
+                                    Grid.Column="1"
+                                    FontSize="14"
+                                    Glyph="{Binding IsChecked, ElementName=ExpanderHeader, Converter={StaticResource QuietDisclosureGlyph}}" />
+                            </Grid>
+                        </ToggleButton>
+                        <Border x:Name="ExpanderContentClip" Visibility="{Binding IsExpanded, RelativeSource={RelativeSource Mode=TemplatedParent}, Converter={StaticResource QuietDisclosureVisibility}}">
+                            <Border x:Name="ExpanderContent" Visibility="{Binding IsExpanded, RelativeSource={RelativeSource Mode=TemplatedParent}, Converter={StaticResource QuietDisclosureVisibility}}">
+                                <ContentPresenter HorizontalContentAlignment="Stretch" Content="{TemplateBinding Content}" />
+                            </Border>
+                        </Border>
+                    </StackPanel>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+</ResourceDictionary>

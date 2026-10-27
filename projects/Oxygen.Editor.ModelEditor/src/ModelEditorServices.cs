@@ -5,6 +5,8 @@
 using Microsoft.Extensions.Logging;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline;
+using Oxygen.Editor.ContentPipeline.Cooking;
+using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.LivePreview.Scenes;
@@ -33,6 +35,13 @@ namespace Oxygen.Editor.ModelEditor;
 /// <param name="structures">What each model contains, as last read.</param>
 /// <param name="operationResults">Publishes what a reimport did.</param>
 /// <param name="statusReducer">Reduces the published diagnostics into a severity.</param>
+/// <param name="imports">Reimports a model and saves its import settings.</param>
+/// <param name="problems">The kept import problems of the open models.</param>
+/// <param name="layout">The import settings panel's width and collapse, per user.</param>
+/// <param name="analyzer">Reads what a model's source holds, which fills the import settings.</param>
+/// <param name="surfaces">Reads a geometry's surfaces and LOD policy, as the last import produced them.</param>
+/// <param name="materialTextures">Reads which textures a model's materials use.</param>
+/// <param name="cookRuns">The session's cook runs, after which a model's record and problems are read again.</param>
 /// <param name="loggerFactory">The logger factory.</param>
 public sealed class ModelEditorServices(
     ViewportServices viewports,
@@ -49,6 +58,13 @@ public sealed class ModelEditorServices(
     ISceneStructures structures,
     IOperationResultPublisher operationResults,
     IStatusReducer statusReducer,
+    ModelImports imports,
+    ModelImportProblems problems,
+    ModelEditorLayout layout,
+    IModelSourceAnalyzer analyzer,
+    IGeometrySurfaceProvider surfaces,
+    IMaterialTextures materialTextures,
+    ICookRunService cookRuns,
     ILoggerFactory loggerFactory)
 {
     /// <summary>Gets what creates the editor's viewport and outlines its selection.</summary>
@@ -92,6 +108,27 @@ public sealed class ModelEditorServices(
 
     /// <summary>Gets the status reducer.</summary>
     public IStatusReducer StatusReducer { get; } = statusReducer;
+
+    /// <summary>Gets what reimports a model and saves its import settings.</summary>
+    public ModelImports Imports { get; } = imports;
+
+    /// <summary>Gets the kept import problems of the open models.</summary>
+    public ModelImportProblems Problems { get; } = problems;
+
+    /// <summary>Gets the import settings panel's width and collapse, per user.</summary>
+    public ModelEditorLayout Layout { get; } = layout;
+
+    /// <summary>Gets what reads a model's source, which fills the import settings.</summary>
+    public IModelSourceAnalyzer Analyzer { get; } = analyzer;
+
+    /// <summary>Gets what reads a geometry's surfaces and LOD policy.</summary>
+    public IGeometrySurfaceProvider Surfaces { get; } = surfaces;
+
+    /// <summary>Gets what reads which textures a model's materials use.</summary>
+    public IMaterialTextures MaterialTextures { get; } = materialTextures;
+
+    /// <summary>Gets the session's cook runs.</summary>
+    public ICookRunService CookRuns { get; } = cookRuns;
 
     /// <summary>Gets the logger factory.</summary>
     public ILoggerFactory LoggerFactory { get; } = loggerFactory;

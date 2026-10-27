@@ -120,6 +120,19 @@ public sealed partial class DocumentScenes : IDisposable
         };
     }
 
+    /// <summary>Gets how a model document's preview names one of the model's nodes: that node below the preview's instance
+    /// of the model, as a click in the viewport or the Scene Explorer selects it.</summary>
+    /// <param name="document">The model document.</param>
+    /// <param name="node">The node's ID in the model, as its import publishes it.</param>
+    /// <returns>The reference, or <see langword="null"/> for a document that shows no model.</returns>
+    public NodeReference? ReferenceOf(Document document, NodeId node)
+    {
+        ArgumentNullException.ThrowIfNull(document);
+        return ShowsModel(document) && this.Of(document)?.Scene.RootNodes.FirstOrDefault() is { } instance
+            ? new NodeReference(instance.Id, NodePath.Of(node))
+            : null;
+    }
+
     /// <summary>Finds the open document that shows a scene.</summary>
     /// <param name="scene">The scene.</param>
     /// <returns>The document, or <see langword="null"/> when no open document shows the scene.</returns>

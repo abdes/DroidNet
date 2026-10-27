@@ -73,7 +73,7 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
         this.session = session;
         this.authoringProvider = authoringProvider;
         this.dispatcherQueue = hosting.Dispatcher;
-        this.LevelOfDetail = new(this);
+        this.LevelOfDetail = this.CreateLevelOfDetail();
 
         this.StartMaterialPickerSubscription();
         this.StartAssetCatalogSubscription();

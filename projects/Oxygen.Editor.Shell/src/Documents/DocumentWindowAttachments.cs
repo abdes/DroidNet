@@ -12,8 +12,8 @@ namespace Oxygen.Editor.Shell.Documents;
 ///     tabs leave it.
 /// </summary>
 /// <remarks>
-///     The editors belong to the project session; the window lends them its document area, commands, placement and asset
-///     reveal while it shows their tabs (<see cref="IDocumentWindowEditor"/>).
+///     The editors belong to the project session; the window lends them its document area, commands, placement, and its
+///     asset and problem reveals while it shows their tabs (<see cref="IDocumentWindowEditor"/>).
 /// </remarks>
 public sealed class DocumentWindowAttachments : IDisposable
 {
@@ -30,18 +30,20 @@ public sealed class DocumentWindowAttachments : IDisposable
     /// <param name="commands">The window's commands.</param>
     /// <param name="placement">Where the window shows documents and panels.</param>
     /// <param name="reveal">Reveals assets in the window, if the window has a part that does.</param>
+    /// <param name="problems">Shows problems in the window's Problems panel, if the window has one.</param>
     public DocumentWindowAttachments(
         DocumentArea area,
         DocumentService documents,
         ICommandService commands,
         IPlacementService placement,
-        IAssetReveal? reveal = null)
+        IAssetReveal? reveal = null,
+        IProblemReveal? problems = null)
     {
         ArgumentNullException.ThrowIfNull(area);
         ArgumentNullException.ThrowIfNull(documents);
         this.area = area;
         this.documents = documents;
-        this.services = new DocumentWindowServices(area.Window, area, commands, placement, reveal);
+        this.services = new DocumentWindowServices(area.Window, area, commands, placement, reveal) { Problems = problems };
 
         this.documents.EditorCreated += this.OnEditorCreated;
         this.area.TabAdded += this.OnTabAdded;

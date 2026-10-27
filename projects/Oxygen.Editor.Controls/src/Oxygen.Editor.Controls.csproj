@@ -13,10 +13,13 @@
 
     <ItemGroup>
         <ProjectReference Include="..\..\Controls\InPlaceEdit\src\Controls.InPlaceEdit.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.World\src\Oxygen.Editor.World.csproj" />
     </ItemGroup>
 
     <ItemGroup>
+        <PackageReference Include="CommunityToolkit.Mvvm" />
         <PackageReference Include="CommunityToolkit.WinUI.Controls.Segmented" />
+        <PackageReference Include="CommunityToolkit.WinUI.Converters" />
         <PackageReference Include="CommunityToolkit.WinUI.Triggers" />
         <PackageReference Include="Microsoft.WindowsAppSDK" />
         <PackageReference Include="Microsoft.Windows.SDK.BuildTools" />

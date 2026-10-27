@@ -18,7 +18,7 @@ namespace Oxygen.Editor.ModelEditor.Settings;
 /// <remarks>
 /// The rows bound to one file's content, the Scene and the Materials, show with one file selected; with several, the
 /// panel says to select one file to choose its scene and materials. Node continuity and the selection groups need a
-/// previous import and belong to the Model Editor.
+/// previous import and belong to the Model Editor, which sets them; the import dialog leaves them unset.
 /// </remarks>
 public sealed partial class ModelImportSettingsPanelViewModel : ObservableObject
 {
@@ -28,6 +28,7 @@ public sealed partial class ModelImportSettingsPanelViewModel : ObservableObject
 
     private IReadOnlyList<ModelImportFile> selection = [];
     private IReadOnlyList<AssetEntry> projectMaterials = [];
+    private bool matchingMaterials;
 
     /// <summary>Initializes a new instance of the <see cref="ModelImportSettingsPanelViewModel"/> class.</summary>
     public ModelImportSettingsPanelViewModel()
@@ -45,20 +46,29 @@ public sealed partial class ModelImportSettingsPanelViewModel : ObservableObject
             new("generate", "From the file, generate missing"), new("recalculate", "Always recalculate")]);
         this.KeepNodePivots = new("Keep node pivots", ModelImportSettingCatalog.BakeTransforms, static keep => !keep, static bake => bake is bool baked ? !baked : null);
         this.DropEmptyNodes = new("Drop empty nodes", ModelImportSettingCatalog.NodePruning, static drop => drop ? "drop-empty" : "keep", static pruning => pruning is string value ? string.Equals(value, "drop-empty", StringComparison.Ordinal) : null);
-        this.MaxTextureSize = new("Maximum size", ModelImportSettingCatalog.MaxTextureSize, [
-            new(null, "Source size"), new(4096, "4096"), new(2048, "2048"), new(1024, "1024"), new(512, "512")]);
-        this.CompressionQuality = new("Compression quality", ModelImportSettingCatalog.Bc7Quality, [
-            new("default", "Default"), new("fast", "Fast"), new("high", "High")]);
+        IReadOnlyList<ChoiceOption> sizes = [new(null, "Source size"), new(4096, "4096"), new(2048, "2048"), new(1024, "1024"), new(512, "512")];
+        IReadOnlyList<ChoiceOption> qualities = [new("default", "Default"), new("fast", "Fast"), new("high", "High")];
+        this.MaxTextureSize = new("Maximum size", ModelImportSettingCatalog.MaxTextureSize, sizes);
+        this.CompressionQuality = new("Compression quality", ModelImportSettingCatalog.Bc7Quality, qualities);
         this.FlipNormalGreen = new("Flip normal map green", ModelImportSettingCatalog.FlipNormalGreen);
         this.ImportLights = new("Import lights", ModelImportSettingCatalog.ImportLights);
         this.LightIntensityScale = new("Light intensity scale", ModelImportSettingCatalog.LightIntensityScale, prefix: "×");
         this.OmittedLightRange = new("Range of lights without one", ModelImportSettingCatalog.OmittedLightRange, unit: "m", qualifier: GltfFiles);
         this.ImportCameras = new("Import cameras", ModelImportSettingCatalog.ImportCameras);
+        this.SelectedTexture = new SelectedTextureGroup(sizes, qualities);
+        this.SelectedTexture.Edited += (_, args) => this.SettingEdited?.Invoke(this, args);
         foreach (var row in this.Rows)
         {
-            row.Edited += (_, _) => this.Refresh();
+            row.Edited += (_, _) =>
+            {
+                this.Refresh();
+                this.SettingEdited?.Invoke(this, new SettingEditedEventArgs($"Edit {row.Label}"));
+            };
         }
     }
+
+    /// <summary>Occurs when a row changed the settings of the selected files, once per change a user makes.</summary>
+    public event EventHandler<SettingEditedEventArgs>? SettingEdited;
 
     /// <summary>Gets the project's materials the Materials rows offer; its clearing choice imports the material.</summary>
     public AssetPickerModel MaterialChoices { get; } = new(
@@ -113,6 +123,17 @@ public sealed partial class ModelImportSettingsPanelViewModel : ObservableObject
 
     /// <summary>Gets whether cameras are imported.</summary>
     public ToggleRow ImportCameras { get; }
+
+    /// <summary>Gets the Selected texture group: the settings of a texture of the selected mesh, in the Model Editor.</summary>
+    public SelectedTextureGroup SelectedTexture { get; }
+
+    /// <summary>Gets or sets the Node continuity group, which the Model Editor shows; none in the import dialog.</summary>
+    [ObservableProperty]
+    public partial NodeContinuityGroup? Continuity { get; set; }
+
+    /// <summary>Gets or sets the Selected mesh group, which the Model Editor shows while a mesh is selected.</summary>
+    [ObservableProperty]
+    public partial SelectedMeshGroup? SelectedMesh { get; set; }
 
     /// <summary>Gets or sets the selected file's source materials; a selection replaces the whole list at once.</summary>
     [ObservableProperty]
@@ -192,6 +213,7 @@ public sealed partial class ModelImportSettingsPanelViewModel : ObservableObject
         // The scene row edits only the one selected file, and only when it has scenes to choose from.
         this.Scene.IsVisible = this.HasScenes;
         this.ImportResult = DescribeResult(this.selection);
+        this.SelectedTexture.Refresh(this.selection);
     }
 
     // What the import does to the analysed files; files whose results differ say so instead of one file's.
@@ -240,7 +262,14 @@ public sealed partial class ModelImportSettingsPanelViewModel : ObservableObject
             foreach (var material in facts.Materials)
             {
                 var row = new MaterialRow(this.selection[0], material, this.MaterialChoices);
-                row.Edited += (_, _) => this.UseProjectMaterialsCommand.NotifyCanExecuteChanged();
+                row.Edited += (_, _) =>
+                {
+                    this.UseProjectMaterialsCommand.NotifyCanExecuteChanged();
+                    if (!this.matchingMaterials)
+                    {
+                        this.SettingEdited?.Invoke(this, new SettingEditedEventArgs($"Edit material {row.Material}"));
+                    }
+                };
                 rows.Add(row);
             }
         }
@@ -262,12 +291,26 @@ public sealed partial class ModelImportSettingsPanelViewModel : ObservableObject
             .GroupBy(static asset => AssetFileTypes.RemoveSuffix(asset.Identity.Name), StringComparer.Ordinal)
             .Where(static named => named.Count() == 1)
             .ToDictionary(static named => named.Key, static named => named.Single().Identity, StringComparer.Ordinal);
-        foreach (var row in this.Materials.Where(static row => row.Target is null))
+        // One change for the user: every row filled at once.
+        var matched = this.Materials.Where(row => row.Target is null && byName.ContainsKey(row.Material)).ToList();
+        if (matched.Count == 0)
         {
-            if (byName.TryGetValue(row.Material, out var material))
+            return;
+        }
+
+        this.matchingMaterials = true;
+        try
+        {
+            foreach (var row in matched)
             {
-                row.Remap(material.VirtualPath);
+                row.Remap(byName[row.Material].VirtualPath);
             }
         }
+        finally
+        {
+            this.matchingMaterials = false;
+        }
+
+        this.SettingEdited?.Invoke(this, new SettingEditedEventArgs("Match materials by name"));
     }
 }

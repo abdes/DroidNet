@@ -4,11 +4,13 @@
 
 using AwesomeAssertions;
 using DroidNet.Documents;
-using DroidNet.TimeMachine;
 using DroidNet.Storage;
+using DroidNet.TimeMachine;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.Models.Documents;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Managed.Core;
+using Testably.Abstractions.Testing;
 
 namespace Oxygen.Editor.Models.Tests.Documents;
 
@@ -17,10 +19,13 @@ namespace Oxygen.Editor.Models.Tests.Documents;
 /// extension, and its content names the model, which the editor never writes.
 /// </summary>
 [TestClass]
-public sealed class ModelDocumentKindTests
+public sealed class ModelDocumentKindTests : IDisposable
 {
     private static readonly AssetPath Car = AssetPath.Parse("/Content/Vehicles/Car.glb");
     private static readonly AssetPath MovedCar = AssetPath.Parse("/Content/Cars/Car.glb");
+
+    // A project without records: these tests read no import record.
+    private readonly TestSession session = new(TestProject.Create(new MockFileSystem()).Context);
 
     public TestContext TestContext { get; set; }
 
@@ -29,16 +34,16 @@ public sealed class ModelDocumentKindTests
     [DataRow("Car.gltf")]
     [DataRow("Car.fbx")]
     public void TitleOf_ModelSource_KeepsTheExtension(string name)
-        => _ = DocumentKinds.TitleOf(new ModelDocumentKind(), PathOf(name)).Should().Be(name);
+        => _ = DocumentKinds.TitleOf(this.Kind(), PathOf(name)).Should().Be(name);
 
     [TestMethod]
     public void SuffixOf_SceneFile_IsNotAModel()
-        => _ = DocumentKinds.SuffixOf(new ModelDocumentKind(), PathOf("Harbor.oscene.json")).Should().BeNull();
+        => _ = DocumentKinds.SuffixOf(this.Kind(), PathOf("Harbor.oscene.json")).Should().BeNull();
 
     [TestMethod]
     public async Task Decode_ModelSource_NamesTheModelWithoutReadingIt()
     {
-        var result = await new ModelDocumentKind().DecodeAsync(
+        var result = await this.Kind().DecodeAsync(
             new DocumentFile(PathOf("Car.glb"), Car),
             ReadOnlyMemory<byte>.Empty,
             new DocumentDecodeContext(DocumentId.New(), new HistoryKeeper(new object())),
@@ -48,7 +53,7 @@ public sealed class ModelDocumentKindTests
     }
 
     [TestMethod]
-    public void Capture_IsRefused()
+    public void Capture_WithoutARecord_IsRefused()
     {
         var model = new ModelContent(Car);
 
@@ -70,6 +75,10 @@ public sealed class ModelDocumentKindTests
         _ = model.Source.Should().Be(MovedCar);
         _ = raised.Should().BeSameAs(relocation);
     }
+
+    public void Dispose() => this.session.Dispose();
+
+    private ModelDocumentKind Kind() => new(this.session);
 
     private static FileSystemPath PathOf(string name) => FileSystemPath.From(Path.Combine(Path.GetTempPath(), name));
 }

@@ -110,9 +110,37 @@ public sealed class CookRecovery(
             && Guid.TryParse(text, CultureInfo.InvariantCulture, out var node)
                 ? NodeId.FromValue(node) : null;
 
-    // Opens the scene an issue names and shows its target: a node with its slot or kept changes, or a scene property.
+    // A model's import problem names one of its nodes: the model's preview instance and the node's path in it.
+    private static (AssetPath Model, NodeReference Node)? FindModelNode(DiagnosticRecord issue)
+        => issue.AffectedEntity?.SceneId is null
+            && issue.SuggestedAction?.Payload is { } payload
+            && payload.TryGetValue("AssetUri", out var uri) && AssetPath.TryParseUri(uri, out var model)
+            && payload.TryGetValue("NodeReference", out var text) && NodeReference.TryParse(text, out var node)
+                ? (model, node)
+                : null;
+
+    // Opens the model an issue names in its editor and selects the node, as a click on it in the viewport would.
+    private async Task<bool> ShowModelNodeAsync(AssetPath model, NodeReference node)
+    {
+        var opened = await placement.OpenDocumentAsync(model, cancellationToken: session.Lifetime).ConfigureAwait(true);
+        if (opened.Document is not { } document || !DocumentScenes.ShowsModel(document))
+        {
+            return false;
+        }
+
+        selection.SetSelection(document.Id, [node], SelectionSource);
+        return true;
+    }
+
+    // Opens the scene an issue names and shows its target: a node with its slot or kept changes, or a scene property;
+    // or the model an import problem names, with its node.
     private async Task<bool> ShowTargetAsync(DiagnosticRecord issue)
     {
+        if (FindModelNode(issue) is { } modelNode)
+        {
+            return await this.ShowModelNodeAsync(modelNode.Model, modelNode.Node).ConfigureAwait(true);
+        }
+
         var project = session.Context;
         if (issue.AffectedEntity?.SceneId is not { } sceneId
             || issue.SuggestedAction?.Payload.TryGetValue("PropertyPath", out var property) != true

@@ -13,4 +13,9 @@ public interface IProblemReveal
     /// <param name="problem">The problem.</param>
     /// <returns><see langword="true"/> when the panel lists the problem and selected it.</returns>
     public Task<bool> RevealAsync(AssetProblem problem);
+
+    /// <summary>Brings the Problems panel forward listing only the problems of one file, until the user shows them all.</summary>
+    /// <param name="file">The file's full path, as its problems name it.</param>
+    /// <returns><see langword="true"/> when the panel came forward.</returns>
+    public Task<bool> ShowFileAsync(string file);
 }

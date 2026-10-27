@@ -69,6 +69,36 @@ internal sealed partial class ProblemsViewModelTests : IDisposable
     }
 
     [TestMethod]
+    public void ShowingOneFileListsOnlyItsProblemsUntilShowAll()
+    {
+        const string JumpPath = @"C:\Project\Content\jump.lua";
+        using var model = this.CreateModel();
+        _ = this.scripts.Add(Analyzed(MovePath, Problem(DiagnosticSeverity.Error, 12)));
+        _ = this.scripts.Add(Analyzed(JumpPath, Problem(DiagnosticSeverity.Warning, 2)) with { Identity = AssetPath.Parse("/Content/jump.oscript") });
+
+        model.ShowOnly(JumpPath);
+
+        _ = model.Groups.Should().ContainSingle().Which.SourcePath.Should().Be(JumpPath);
+        _ = model.FilterText.Should().Be("Only jump.lua");
+        _ = model.Title.Should().Be("Problems  ⛔ 1  ⚠ 1", "the tab counts every file's problems");
+        model.ShowAllCommand.Execute(parameter: null);
+        _ = model.Groups.Should().HaveCount(2);
+        _ = model.IsFiltered.Should().BeFalse();
+    }
+
+    [TestMethod]
+    public void AFileWithoutProblemsSaysSoWhileShownAlone()
+    {
+        using var model = this.CreateModel();
+        _ = this.scripts.Add(Analyzed(MovePath, Problem(DiagnosticSeverity.Error, 12)));
+
+        model.ShowOnly(@"C:\Project\Content\Car.glb");
+
+        _ = model.IsEmpty.Should().BeTrue();
+        _ = model.EmptyText.Should().Be("No problems in Car.glb");
+    }
+
+    [TestMethod]
     public void SelectionSurvivesAnUpdateOfAnotherFile()
     {
         using var model = this.CreateModel();

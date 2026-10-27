@@ -5,16 +5,16 @@
 using System.Collections.Immutable;
 using Oxygen.Editor.World.Serialization;
 
-namespace Oxygen.Editor.SceneInspector.Components.Geometry;
+namespace Oxygen.Editor.Controls.PropertyEditors;
 
 /// <summary>
-/// The LOD policies the inspector shows and writes: one boundary per transition between two of the geometry's LODs.
+/// The LOD policies the Level of detail editor shows and writes: one boundary per transition between two of the geometry's LODs.
 /// </summary>
 /// <remarks>
 /// The engine reads a policy's first <c>LOD count - 1</c> boundaries and ignores the others, so a policy is shown and
 /// written fitted to the geometry: a missing boundary repeats the last one, which keeps the order the engine requires.
 /// </remarks>
-internal static class LodPolicyShapes
+public static class LodPolicyShapes
 {
     /// <summary>The kind index of <see cref="LodPolicy.Fixed"/>.</summary>
     public const int FixedKind = 0;
@@ -49,12 +49,12 @@ internal static class LodPolicyShapes
         LodPolicy.Fixed => FixedKind,
         LodPolicy.Distance => DistanceKind,
         LodPolicy.ScreenSpaceError => ScreenSpaceErrorKind,
-        _ => throw new ArgumentOutOfRangeException(nameof(policy), policy, "The policy has no kind in the inspector."),
+        _ => throw new ArgumentOutOfRangeException(nameof(policy), policy, "The policy has no kind the editor lists."),
     };
 
     /// <summary>Gets the name of a policy's kind.</summary>
     /// <param name="policy">The policy.</param>
-    /// <returns>The name, as the inspector lists it.</returns>
+    /// <returns>The name, as the editor lists it.</returns>
     public static string NameOf(LodPolicy policy) => KindNames[KindOf(policy)];
 
     /// <summary>

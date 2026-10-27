@@ -18,6 +18,7 @@ using Oxygen.Editor.Projects.Testing;
 using Oxygen.Managed.Assets.Authoring.Materials;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Compatibility;
+using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Status;
 
@@ -25,6 +26,31 @@ namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Status;
 internal sealed partial class AssetCookStatusTests
 {
     public TestContext TestContext { get; set; } = null!;
+
+    /// <summary>The warnings a source's cook kept with its product read back from the publication, as a later session reads
+    /// a model's import problems.</summary>
+    /// <returns>The asynchronous publication read.</returns>
+    [TestMethod]
+    public async Task ThePublicationKeepsTheWarningsOfEachProduct()
+    {
+        using var project = new StatusProject();
+        var warning = new DiagnosticRecord
+        {
+            OperationId = Guid.NewGuid(),
+            Domain = FailureDomain.ContentPipeline,
+            Severity = DiagnosticSeverity.Warning,
+            Code = "import.texture_missing",
+            Message = "Paint_Normal.png is missing.",
+            AffectedVirtualPath = StatusProject.SourceUri.VirtualPath,
+        };
+        await project.PublishAsync(this.TestContext.CancellationToken, diagnostics: [warning]).ConfigureAwait(false);
+
+        var kept = await project.Publication.ReadDiagnosticsAsync(project.Project, StatusProject.SourceUri, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var unknown = await project.Publication.ReadDiagnosticsAsync(project.Project, AssetPath.Parse("/Content/Other.omat"), this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        _ = kept.Should().ContainSingle().Which.Message.Should().Be("Paint_Normal.png is missing.");
+        _ = unknown.Should().BeEmpty();
+    }
 
     /// <summary>Source changes affect freshness; cooked-byte integrity is checked explicitly.</summary>
     /// <param name="changeOutput">Whether to corrupt prior output instead of changing saved input.</param>
@@ -210,6 +236,8 @@ internal sealed partial class AssetCookStatusTests
 
         public ProjectContext Project { get; }
 
+        public IPublishedDiagnostics Publication => this.publication;
+
         public static string CreateMaterialJson(float roughness)
         {
             using var buffer = new MemoryStream();
@@ -228,7 +256,7 @@ internal sealed partial class AssetCookStatusTests
         public async Task<AssetCookStatus> ReadAsync(CancellationToken cancellationToken)
             => (await this.CreateReader().ReadAsync(this.Project, [SourceUri], cancellationToken).ConfigureAwait(false)).Single();
 
-        public async Task PublishAsync(CancellationToken cancellationToken, AssetPath? primary = null, IReadOnlyList<AssetPath>? dependencies = null)
+        public async Task PublishAsync(CancellationToken cancellationToken, AssetPath? primary = null, IReadOnlyList<AssetPath>? dependencies = null, IReadOnlyList<DiagnosticRecord>? diagnostics = null)
         {
             var operation = new ContentCookOperation(Guid.NewGuid(), this.Project, 1);
             var input = CookInputResolver.Resolve(this.Project, primary ?? SourceUri, ContentCookInputRole.Primary);
@@ -260,7 +288,7 @@ internal sealed partial class AssetCookStatusTests
 
             Oxygen.Testing.NativeInventoryFixture.WriteIndex(root, indexed, candidate.SourceKey);
             var inventory = Oxygen.Testing.NativeInventoryFixture.Read(root);
-            var provenance = this.CreateProvenance(outputs, plan, graph, inventory);
+            var provenance = this.CreateProvenance(outputs, plan, graph, inventory, diagnostics ?? []);
             var opening = await CookOutputReadLease.AcquireAsync(root, cancellationToken).ConfigureAwait(false);
             candidate.AcceptVerification(opening, inventory);
             var document = new CookPublicationDocument(
@@ -284,7 +312,7 @@ internal sealed partial class AssetCookStatusTests
             this.directory.Delete(recursive: true);
         }
 
-        private CookProvenance CreateProvenance(ContentCookedAsset[] outputs, CookIncrementalPlan plan, CookDependencyGraph graph, ContentPipeline.Inspection.CookedInventoryReport inventory)
+        private CookProvenance CreateProvenance(ContentCookedAsset[] outputs, CookIncrementalPlan plan, CookDependencyGraph graph, ContentPipeline.Inspection.CookedInventoryReport inventory, IReadOnlyList<DiagnosticRecord> diagnostics)
             => new(
                 this.Project.ProjectId,
                 [new CookProvenance.Root("Content", inventory.SourceKey, inventory.IndexSha256)],
@@ -300,6 +328,7 @@ internal sealed partial class AssetCookStatusTests
                             SourceFiles = [.. graph.Files.Where(file => graph.FileDependencies[output.SourceAssetUri].Contains(file.RelativePath, StringComparer.Ordinal))],
                             DeclaredOutputs = graph.SourceFacts[output.SourceAssetUri].Outputs,
                             NativeReferences = graph.SourceFacts[output.SourceAssetUri].References,
+                            Diagnostics = [.. diagnostics],
                         }),
                 ]);
 

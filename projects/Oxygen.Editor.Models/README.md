@@ -20,6 +20,10 @@ them. It holds no view, view model or dialog.
   `ModelImportSetting`: a job key with the importer's default and the manifest
   schema's values and ranges, read and written without touching other keys.
   `ModelMaterialRemap` reads and writes the material remap.
+  `ModelGeometryDefaults` reads and writes the defaults the import writes into
+  each geometry, by geometry anchor: its LOD policy and its surfaces'
+  visibility and shadow casting. `ModelImportSettingScope` reads and writes a
+  setting in the model's own settings or in one texture's overrides.
 - `ModelSourceFacts` are what the source analysis reports of a model file: its
   format and version, units, axes, counts, scenes and the names it produces.
 - `ImportRunSettings` are the ImportTool's execution settings of one import, with
@@ -29,10 +33,15 @@ them. It holds no view, view model or dialog.
 - `IModelImportPrompt` is the port of the Import model dialog: a UI surface asks
   it which models to import and gets a `ModelImportPlan`.
 - `ModelDocumentKind` opens a model source file as a document titled with its
-  extension; its `ModelContent` names the model and follows its source when it
-  moves, and refuses to be written.
+  extension. Its `ModelContent` names the model and follows its source when it
+  moves. It edits the model's import record (settings and node continuity), each
+  change one history step, and never writes the source. Save goes through the
+  `IModelImportRecordWriter` port, which replaces the record and reimports the
+  model as one operation. `TakeRecord` takes what an import rewrote and keeps
+  unsaved edits.
 - `IModelFacts` is the port that reads a model's `ModelFacts`: its source, last
   import and counts, which Properties shows on the model's root.
 
-The content pipeline, which cooks and imports models, depends on this module;
-this module depends only on the shared asset formats.
+The content pipeline, which cooks and imports models, depends on this module.
+This module depends on the shared asset formats, the project session (to find a
+model's record) and the scene model's LOD policy.

@@ -99,6 +99,21 @@ public sealed partial class ProblemsViewModel : ObservableObject, IDisposable
     /// <summary>Gets a value indicating whether there is nothing to show.</summary>
     public bool IsEmpty => this.Groups.Count == 0;
 
+    /// <summary>Gets the file whose problems alone are listed, or <see langword="null"/> when every file's are.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsFiltered), nameof(FilterText), nameof(EmptyText))]
+    [NotifyCanExecuteChangedFor(nameof(ShowAllCommand))]
+    public partial string? FileFilter { get; private set; }
+
+    /// <summary>Gets a value indicating whether only one file's problems are listed.</summary>
+    public bool IsFiltered => this.FileFilter is not null;
+
+    /// <summary>Gets what the panel says when it lists nothing.</summary>
+    public string EmptyText => this.FileFilter is { } file ? $"No problems in {Path.GetFileName(file)}" : "No problems in your scripts and input files";
+
+    /// <summary>Gets what the filter says, such as "Only Car.glb".</summary>
+    public string FilterText => this.FileFilter is { } file ? $"Only {Path.GetFileName(file)}" : string.Empty;
+
     /// <summary>Gets a value indicating whether a problem is selected.</summary>
     public bool HasSelection => this.Selected is not null;
 
@@ -153,6 +168,15 @@ public sealed partial class ProblemsViewModel : ObservableObject, IDisposable
         }
     }
 
+    /// <summary>Lists only the problems of one file, until <see cref="ShowAllCommand"/> lists them all again.</summary>
+    /// <param name="file">The file's full path, as its problems name it.</param>
+    public void ShowOnly(string file)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(file);
+        this.FileFilter = file;
+        this.Rebuild();
+    }
+
     /// <summary>Selects a problem, when Problems lists it.</summary>
     /// <param name="problem">The problem.</param>
     /// <returns>Whether the problem was found and selected.</returns>
@@ -202,13 +226,22 @@ public sealed partial class ProblemsViewModel : ObservableObject, IDisposable
     [RelayCommand(CanExecute = nameof(CanOpenSelected))]
     private Task OpenSelectedAsync() => this.OpenAsync(this.Selected);
 
+    private bool CanShowAll() => this.IsFiltered;
+
+    [RelayCommand(CanExecute = nameof(CanShowAll))]
+    private void ShowAll()
+    {
+        this.FileFilter = null;
+        this.Rebuild();
+    }
+
     private void OnProblemsChanged(object? sender, EventArgs args) => this.Rebuild();
 
     private void Rebuild()
     {
         var selected = this.Selected?.Problem;
         var root = this.session.Context.ProjectRoot;
-        var groups = this.sources
+        var all = this.sources
             .SelectMany(static source => source.Problems)
             .GroupBy(static problem => problem.File ?? string.Empty, StringComparer.OrdinalIgnoreCase)
             .Select(file =>
@@ -222,6 +255,10 @@ public sealed partial class ProblemsViewModel : ObservableObject, IDisposable
             .OrderBy(static group => group.DisplayPath, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
+        // The tab counts every problem; the list shows the filtered file's.
+        var groups = this.FileFilter is { } filter
+            ? all.FindAll(group => string.Equals(group.SourcePath, filter, StringComparison.OrdinalIgnoreCase))
+            : all;
         this.Groups.Clear();
         foreach (var group in groups)
         {
@@ -229,8 +266,8 @@ public sealed partial class ProblemsViewModel : ObservableObject, IDisposable
         }
 
         this.Selected = selected is null ? null : groups.SelectMany(static group => group.Entries).FirstOrDefault(entry => entry.Problem == selected);
-        this.ErrorCount = groups.Sum(static group => group.Entries.Count(static entry => entry.IsError));
-        this.WarningCount = groups.Sum(static group => group.Entries.Count(static entry => entry.IsWarning));
+        this.ErrorCount = all.Sum(static group => group.Entries.Count(static entry => entry.IsError));
+        this.WarningCount = all.Sum(static group => group.Entries.Count(static entry => entry.IsWarning));
         this.OnPropertyChanged(nameof(this.IsEmpty));
     }
 }

@@ -69,6 +69,21 @@ public sealed class DocumentScenesTests
     }
 
     [TestMethod]
+    public async Task ReferenceOf_AModelsNode_IsThatNodeBelowThePreviewsInstance()
+    {
+        using var documents = new TestSceneDocuments(TestProject.Create(new MockFileSystem()));
+        using var scenes = new DocumentScenes(documents.Open);
+        var model = await documents.OpenModelAsync(Car).ConfigureAwait(false);
+        var scene = await documents.OpenAsync(SampleScene.Build()).ConfigureAwait(false);
+        var node = NodeId.New();
+
+        var reference = scenes.ReferenceOf(model, node);
+
+        _ = reference.Should().Be(new NodeReference(scenes.Of(model)!.Scene.RootNodes[0].Id, NodePath.Of(node)));
+        _ = scenes.ReferenceOf(scene, node).Should().BeNull("a scene document shows no model");
+    }
+
+    [TestMethod]
     public async Task Of_ModelDocument_IsTheSamePreviewUntilItsContentChanges()
     {
         using var documents = new TestSceneDocuments(TestProject.Create(new MockFileSystem()));

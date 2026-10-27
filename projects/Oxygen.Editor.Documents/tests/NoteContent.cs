@@ -33,6 +33,9 @@ internal sealed class NoteContent(AssetPath identity, string text, List<AssetPat
     /// <summary>Gets or sets work an encode does before it returns, such as an edit made while the file is written.</summary>
     public Action? DuringEncode { get; set; }
 
+    /// <summary>Gets or sets where the note keeps its text instead of its file, or null to write its file.</summary>
+    public Func<string, CancellationToken, Task<DocumentSaveResult>>? StoreElsewhere { get; set; }
+
     public bool IsDisposed { get; private set; }
 
     public bool HasEditsInProgress => this.Pending is not null;
@@ -79,6 +82,12 @@ internal sealed class NoteContent(AssetPath identity, string text, List<AssetPat
         if (this.Refusal is { } refusal)
         {
             return DocumentCapture.Refused(refusal);
+        }
+
+        if (this.StoreElsewhere is { } store)
+        {
+            var text = this.Text;
+            return DocumentCapture.Stored(token => store(text, token));
         }
 
         var bytes = NoteKind.Encode(identity, this.Text, [.. references]);

@@ -15,6 +15,7 @@ owned here. Namespace `Oxygen.Editor.Controls`.
 | `ColorField`         | A row around a linear ColorBox; `ColorFieldKind` decides range, picker and qualifier.   |
 | `SourceModeField`    | A row of `Segmented` modes with a caption line and an optional source button.           |
 | `DiagnosticCard`     | A finding: message, a preview of the items it is about, expandable to all; no icon.     |
+| `LodPolicyEditor`    | A geometry's LOD policy: its kind, then its boundaries under a quiet disclosure.        |
 
 `OverrideState`, `OverrideStates` and `PropertyLayout` are the rows' shared
 types. The fields never edit a model: they expose values and forward their
@@ -22,9 +23,18 @@ editors' events with themselves as sender, so a field's `Tag` names it.
 `DiagnosticCard` takes its background from `DiagnosticCardSeverity`; its
 items show in place, never only in a tooltip.
 
+`LodPolicyEditor` composes the fields for one value, a `LodPolicy`, over its
+`LodPolicyEditorModel`. The model holds the rows (the kind, the fixed LOD, the
+distance or screen-space error boundaries fitted to the LOD count) and hands
+each whole policy, or `null` on reset, to its owner's write. The owner decides
+what the policy overrides and shows it with `LodPolicyEditorState`: the Scene
+Inspector a node's override of its asset, the Model Editor a model's import
+default. `LodPolicyShapes` creates and fits the policies.
+
 ## Styles
 
-All controls are templated. Their default styles live in `src/PropertyEditors/`,
+The fields are templated controls; `LodPolicyEditor` is a user control that
+composes them. Their default styles live in `src/PropertyEditors/`,
 one dictionary per control, and `src/Themes/Generic.xaml` merges them. Each
 control dictionary merges the shared resources it uses (the brushes and metrics
 of `src/Themes/ThemeResources.xaml`, the value box looks of
@@ -47,6 +57,7 @@ after `XamlControlsResources`, for the keyed styles of their own elements:
 | `QuietActionButtonStyle`        | A borderless icon button, such as add, remove or reset. |
 | `UnitSuffixTextStyle`           | A unit after a value.                                   |
 | `RightAlignedToggleSwitchStyle` | A switch at the end of a settings row.                  |
+| `QuietDisclosure`               | An `Expander` whose header is a borderless chevron row. |
 
 ## Tests
 

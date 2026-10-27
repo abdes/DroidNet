@@ -41,6 +41,9 @@ public sealed class CookRecoveryTests
 
     private TestSession? session;
 
+    /// <summary>Gets or sets the test's context.</summary>
+    public TestContext TestContext { get; set; } = null!;
+
     /// <summary>Closes the test session of the project the test activated.</summary>
     [TestCleanup]
     public void CloseSession() => this.session?.Dispose();
@@ -260,6 +263,51 @@ public sealed class CookRecoveryTests
         _ = this.selection.GetContext(document.Id).OwnedNodeIds.Should().ContainSingle().Which.Should().Be(node.Id);
         _ = focused.Should().ContainSingle().Which.PropertyPath.Should().Be(KeptChangeDiagnostics.PropertyPath);
         this.placement.Verify(service => service.ShowPanelsAsync(It.Is<IReadOnlyList<string>>(panels => panels.SequenceEqual(new[] { "props" })), It.IsAny<WindowPlacement>()), Times.Once);
+    }
+
+    /// <summary>A model's import problem opens the model in its editor and selects the node it names.</summary>
+    /// <returns>A task that completes when the test has run.</returns>
+    [TestMethod]
+    public async Task RevealOfAModelImportProblemSelectsItsNodeInTheModelAsync()
+    {
+        using var scenes = new TestSceneDocuments(TestProject.Create(new MockFileSystem(), ProjectFolder));
+        _ = this.ActivateProject(scenes);
+        var model = AssetPath.Parse("/Content/Models/Ship.glb");
+        var opened = await scenes.Open.OpenAsync(new DocumentFile(scenes.Project.WriteFile(model.VirtualPath, "glTF"), model), this.TestContext.CancellationToken).ConfigureAwait(false);
+        var document = opened.Document!;
+        _ = this.placement
+            .Setup(service => service.OpenDocumentAsync(model, It.IsAny<WindowPlacement>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new DocumentPlacement { Asset = model, Document = document });
+        _ = this.placement
+            .Setup(service => service.ShowPanelsAsync(It.IsAny<IReadOnlyList<string>>(), It.IsAny<WindowPlacement>()))
+            .ReturnsAsync(value: true);
+        var node = new NodeReference(NodeId.New(), NodePath.Of(NodeId.New()));
+        var issue = new DiagnosticRecord
+        {
+            OperationId = Guid.NewGuid(),
+            Domain = FailureDomain.ContentPipeline,
+            Severity = DiagnosticSeverity.Warning,
+            Code = "import.texture_missing",
+            Message = "Paint_Normal.png is missing.",
+            AffectedVirtualPath = model.VirtualPath,
+            SuggestedAction = new PrimaryAction
+            {
+                ActionId = "Model.SelectNode",
+                Label = "Select node",
+                Kind = PrimaryActionKind.Custom,
+                Payload = new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["AssetUri"] = model.ToUriString(),
+                    ["NodeId"] = node.Path.ToString(),
+                    ["NodeReference"] = node.ToString(),
+                },
+            },
+        };
+
+        var result = await this.CreateRecovery().RevealAsync(issue).ConfigureAwait(false);
+
+        _ = result.Should().BeTrue();
+        _ = this.selection.GetContext(document.Id).SelectedNodes.Should().Equal(node);
     }
 
     private static async Task<Document> OpenSceneAsync(TestSceneDocuments scenes, SceneId id)
