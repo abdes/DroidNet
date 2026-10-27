@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.Controls;
+namespace Oxygen.Editor.Controls.PropertyEditors;
 
 /// <summary>Specifies the placement of a property's label and editor.</summary>
 public enum PropertyLayout

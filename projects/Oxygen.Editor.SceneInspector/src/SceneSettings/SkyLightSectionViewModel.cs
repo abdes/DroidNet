@@ -141,7 +141,9 @@ public sealed partial class SkyLightSectionViewModel : ObservableObject, IDispos
     /// <inheritdoc />
     public void Dispose()
     {
-        this.StopRuntimeWatch();
+        this.runtimeWatch?.Cancel();
+        this.runtimeWatch?.Dispose();
+        this.runtimeWatch = null;
         this.Cubemaps.Dispose();
     }
 

@@ -120,8 +120,8 @@ public partial class PropertyCard
     }
 
     // The groups of one scope, by name, each with the trailing annotation width every loaded, visible member last measured.
-    private sealed partial class ScopeGroups
+    private sealed class ScopeGroups
     {
-        public Dictionary<string, Dictionary<PropertyCard, double>> ByName { get; } = [];
+        public Dictionary<string, Dictionary<PropertyCard, double>> ByName { get; } = new(StringComparer.Ordinal);
     }
 }

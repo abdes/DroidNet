@@ -75,11 +75,10 @@ public sealed partial class CubemapPickerModel : ObservableObject, IDisposable
     /// <returns>The shared feed.</returns>
     internal static IObservable<IReadOnlyList<CubeTextureAsset>> CubeTextures(IAssetFeed assetProvider, IProjectSession session)
         => assetProvider.Items
-            .Select(assets => (IReadOnlyList<CubeTextureAsset>)AssetRule.For(AssetKind.Texture).Apply(assets)
+            .Select(assets => (IReadOnlyList<CubeTextureAsset>)[.. AssetRule.For(AssetKind.Texture).Apply(assets)
                 .Select(asset => (Asset: asset, Cube: DescribeCube(session.Context.FileSystem, asset)))
                 .Where(static entry => entry.Cube is not null)
-                .Select(static entry => new CubeTextureAsset(entry.Asset, entry.Cube!.Value))
-                .ToArray())
+                .Select(static entry => new CubeTextureAsset(entry.Asset, entry.Cube!.Value))])
             .Replay(1)
             .RefCount();
 

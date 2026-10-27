@@ -14,7 +14,7 @@ using Oxygen.Managed.Core;
 namespace Oxygen.Editor.SceneInspector.SceneSettings;
 
 /// <summary>Owns the single scene-environment edit lifetime borrowed by all section models.</summary>
-public sealed class SceneEnvironmentEditOwner : ObservableObject, IInspectorEditSessionOwner, IDisposable
+public sealed partial class SceneEnvironmentEditOwner : ObservableObject, IInspectorEditSessionOwner, IDisposable
 {
     private readonly InspectorEditSessionCoordinator? coordinator;
     private bool isInputEnabled = true;

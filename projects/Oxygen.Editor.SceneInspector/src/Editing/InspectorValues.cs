@@ -25,7 +25,7 @@ internal static class InspectorValues
     /// </returns>
     public static bool TryToInt32(double value, out int integer)
     {
-        var rounded = Math.Round(value);
+        var rounded = Math.Round(value, MidpointRounding.ToEven);
         if (!double.IsFinite(rounded) || rounded < int.MinValue || rounded > int.MaxValue)
         {
             integer = 0;

@@ -4,7 +4,7 @@
 
 using Microsoft.UI.Xaml;
 
-namespace Oxygen.Editor.Controls;
+namespace Oxygen.Editor.Controls.PropertyEditors;
 
 /// <summary>Presents an <see cref="OverrideState"/>, for the override bar and reset button of rows and item cards.</summary>
 public static class OverrideStates

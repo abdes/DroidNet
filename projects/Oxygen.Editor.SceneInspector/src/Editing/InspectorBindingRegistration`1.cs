@@ -12,7 +12,7 @@ namespace Oxygen.Editor.SceneInspector.Editing;
 
 /// <summary>Owns typed binding subscriptions and routes requests through the existing captured-target coordinator.</summary>
 /// <typeparam name="T">The authored value type.</typeparam>
-internal sealed class InspectorBindingRegistration<T> : IInspectorBindingRefresh
+internal sealed partial class InspectorBindingRegistration<T> : IInspectorBindingRefresh
 {
     private readonly PropertyBinding<T> binding;
     private readonly InspectorEditSessionCoordinator? coordinator;

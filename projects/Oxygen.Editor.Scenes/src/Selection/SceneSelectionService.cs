@@ -63,24 +63,7 @@ public sealed class SceneSelectionService : ISceneSelectionService
 
         var folderIds = GetFolderIds(layout);
         var survivingFolderIds = context.SelectedFolderIds.Where(folderIds.Contains).ToArray();
-        var primaryNode = context.PrimaryNode is { } primary && survivingNodes.Contains(primary)
-            ? primary
-            : null;
-        FolderId? primaryFolder = context.PrimaryFolderId is { } folderId && survivingFolderIds.Contains(folderId)
-            ? folderId
-            : null;
-        // Without a surviving primary, the first surviving node leads, else the first surviving folder.
-        if (primaryNode is null && primaryFolder is null)
-        {
-            if (survivingNodes.Length > 0)
-            {
-                primaryNode = survivingNodes[0];
-            }
-            else if (survivingFolderIds.Length > 0)
-            {
-                primaryFolder = survivingFolderIds[0];
-            }
-        }
+        var (primaryNode, primaryFolder) = PrimariesOf(context, survivingNodes, survivingFolderIds);
 
         var kind = SceneSelectionContext.Classify(
             context.Kind == SceneSelectionKind.Scene,
@@ -174,5 +157,16 @@ public sealed class SceneSelectionService : ISceneSelectionService
         this.SelectionChanged?.Invoke(
             this,
             new SceneSelectionChangedEventArgs(documentId, context, source));
+    }
+
+    // The primary node and folder that survive; without either, the first surviving node leads, else the first
+    // surviving folder.
+    private static (NodeReference? Node, FolderId? Folder) PrimariesOf(SceneSelectionContext context, NodeReference[] nodes, FolderId[] folders)
+    {
+        NodeReference? node = context.PrimaryNode is { } primary && nodes.Contains(primary) ? primary : null;
+        FolderId? folder = context.PrimaryFolderId is { } folderId && folders.Contains(folderId) ? folderId : null;
+        return node is not null || folder is not null ? (node, folder)
+            : nodes.Length > 0 ? (nodes[0], null)
+            : (null, folders.Length > 0 ? folders[0] : null);
     }
 }

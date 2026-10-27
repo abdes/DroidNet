@@ -178,7 +178,7 @@ public sealed partial class AtmosphereLightsSectionViewModel
         foreach (var removed in this.observedLights.Except(currentLights).ToArray())
         {
             removed.PropertyChanged -= this.OnLightAssignmentChanged;
-            this.observedLights.Remove(removed);
+            _ = this.observedLights.Remove(removed);
         }
 
         foreach (var added in currentLights.Except(this.observedLights))
@@ -191,7 +191,7 @@ public sealed partial class AtmosphereLightsSectionViewModel
         foreach (var removed in this.observedTransforms.Except(currentTransforms).ToArray())
         {
             removed.PropertyChanged -= this.OnSourceTransformChanged;
-            this.observedTransforms.Remove(removed);
+            _ = this.observedTransforms.Remove(removed);
         }
 
         foreach (var added in currentTransforms.Except(this.observedTransforms))

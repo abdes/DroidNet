@@ -4,7 +4,7 @@
 
 using AwesomeAssertions;
 using Oxygen.Editor.ContentPipeline.Inspection;
-using Oxygen.Editor.Controls;
+using Oxygen.Editor.Controls.PropertyEditors;
 using Oxygen.Editor.SceneInspector.Components.Geometry;
 using Oxygen.Editor.SceneInspector.TestSupport;
 using Oxygen.Editor.Scenes.Authoring;

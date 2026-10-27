@@ -266,7 +266,7 @@ internal sealed partial class TransformEditController(
         }
 
         var hasSession = this.activeSessions.TryGetValue(property, out var session);
-        var nodes = hasSession ? session!.Nodes : this.selectedItems.ToList();
+        IReadOnlyList<SceneNode> nodes = hasSession ? session!.Nodes : [.. this.selectedItems];
         var edits = new Dictionary<NodeReference, PropertyEdit>();
         foreach (var node in nodes)
         {
@@ -542,7 +542,7 @@ internal sealed partial class TransformEditController(
         public static AxisField Of(PropertyDescriptor<float> descriptor)
             => new(
                 descriptor.Id,
-                transform => descriptor.Read(transform),
+                descriptor.Read,
                 (_, value) => PropertyEdit.SingleEdit(descriptor.TypedId, value),
                 value => PropertyChecks.Check(descriptor.TypedId, value));
 

@@ -30,6 +30,7 @@ public sealed partial class ExposureCompensationCurveEditorView
 
     private void OnRemoveKey(object sender, RoutedEventArgs args)
     {
+        _ = args;
         if (sender is FrameworkElement { DataContext: ExposureCompensationKeyViewModel key })
         {
             this.ViewModel?.RemoveKeyCommand.Execute(key);

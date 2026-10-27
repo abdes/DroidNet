@@ -5,7 +5,7 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
-using Oxygen.Editor.Controls;
+using Oxygen.Editor.Controls.Feedback;
 using Oxygen.Managed.Core.Diagnostics;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.Storage;

@@ -16,6 +16,6 @@ public sealed partial class InspectorFieldDiagnostic : ObservableObject
     [NotifyPropertyChangedFor(nameof(HasError))]
     public partial string Message { get; set; } = string.Empty;
 
-    /// <summary>Gets whether the field has an error to present.</summary>
+    /// <summary>Gets a value indicating whether the field has an error to present.</summary>
     public bool HasError => this.Message.Length != 0;
 }

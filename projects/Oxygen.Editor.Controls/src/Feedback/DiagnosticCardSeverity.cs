@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.Controls;
+namespace Oxygen.Editor.Controls.Feedback;
 
 /// <summary>How serious a <see cref="DiagnosticCard"/>'s finding is, which its background shows.</summary>
 public enum DiagnosticCardSeverity

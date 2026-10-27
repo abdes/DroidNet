@@ -15,7 +15,7 @@ namespace Oxygen.Editor.SceneInspector;
 /// It also observes each selected node's ancestors' flags and hierarchy, which decide the values its Inherit node flags
 /// resolve to, and follows a reparent to the new ancestors.
 /// </remarks>
-internal sealed class InspectorSelectionObserver(DispatcherQueue? dispatcher, Action<InspectorSelectionChange> changed) : IDisposable
+internal sealed partial class InspectorSelectionObserver(DispatcherQueue? dispatcher, Action<InspectorSelectionChange> changed) : IDisposable
 {
     private readonly HashSet<INotifyCollectionChanged> collections = [];
     private readonly HashSet<GameComponent> components = [];

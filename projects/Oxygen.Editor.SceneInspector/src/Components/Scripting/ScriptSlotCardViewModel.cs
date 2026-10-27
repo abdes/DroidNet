@@ -289,7 +289,7 @@ public sealed partial class ScriptSlotCardViewModel : ObservableObject
 
     private void CommitOrder()
     {
-        var order = (int)Math.Round(this.ExecutionOrder);
+        var order = (int)Math.Round(this.ExecutionOrder, MidpointRounding.ToEven);
         if (order != this.Slot.ExecutionOrder)
         {
             _ = this.Owner.EditAsync(node => new SetSlotExecutionOrder(node, new ScriptSlotId(this.SlotId), order));

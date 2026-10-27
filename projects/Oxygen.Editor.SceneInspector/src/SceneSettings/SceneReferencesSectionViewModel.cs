@@ -79,92 +79,32 @@ public sealed partial class SceneReferencesSectionViewModel : ObservableObject, 
     /// <summary>Gets the current catalog availability message.</summary>
     public string CatalogNotice { get; private set; } = string.Empty;
 
-    /// <summary>Gets whether a catalog availability message is present.</summary>
+    /// <summary>Gets a value indicating whether a catalog availability message is present.</summary>
     public bool HasCatalogNotice => this.CatalogNotice.Length > 0;
 
     /// <summary>Gets the latest edit validation or persistence message.</summary>
     public string ErrorMessage { get; private set; } = string.Empty;
 
-    /// <summary>Gets whether a typed reference or extra path can be authored.</summary>
+    /// <summary>Gets a value indicating whether a typed reference or extra path can be authored.</summary>
     public bool CanEdit => !this.disposed && !this.isBusy && this.inputEnabled
         && this.scene is { } current
         && this.authoringProvider?.Invoke() is { } authoring
         && ReferenceEquals(authoring.Scene, current);
 
-    /// <summary>Gets whether the extra-path input can be added.</summary>
+    /// <summary>Gets a value indicating whether the extra-path input can be added.</summary>
     public bool CanAddExtraAsset => this.CanEdit && !string.IsNullOrWhiteSpace(this.ExtraAssetText);
 
-    /// <summary>Gets whether catalog refresh can be requested.</summary>
+    /// <summary>Gets a value indicating whether catalog refresh can be requested.</summary>
     public bool CanRetryCatalog => !this.disposed && this.assetProvider is not null;
 
-    /// <summary>Gets whether an edit error should be displayed.</summary>
+    /// <summary>Gets a value indicating whether an edit error should be displayed.</summary>
     public bool HasError => this.ErrorMessage.Length > 0;
+
+    /// <summary>Gets a notification identity for searchable rows owned by the section.</summary>
+    internal static string SearchableContent => string.Empty;
 
     /// <summary>Gets completion of any in-flight reference edit.</summary>
     internal Task Pending => this.pending;
-
-    /// <summary>Gets a notification identity for searchable rows owned by the section.</summary>
-    internal string SearchableContent => string.Empty;
-
-    /// <summary>Binds the selected scene and starts the shared catalog feed.</summary>
-    /// <param name="value">The current scene, or null when scene authoring is unavailable.</param>
-    internal void Bind(Scene? value)
-    {
-        if (this.disposed || ReferenceEquals(this.scene, value))
-        {
-            return;
-        }
-
-        if (this.scene is { } previous)
-        {
-            previous.PropertyChanged -= this.OnSceneChanged;
-        }
-
-        this.scene = value;
-        if (value is { } current)
-        {
-            current.PropertyChanged += this.OnSceneChanged;
-        }
-
-        this.StartAssets();
-        this.RefreshFromScene();
-        this.NotifyCanEditChanged();
-    }
-
-    /// <summary>Enables or disables authoring with the parent inspector.</summary>
-    /// <param name="enabled">Whether edits are currently allowed.</param>
-    internal void SetInputEnabled(bool enabled)
-    {
-        this.inputEnabled = enabled;
-        this.NotifyCanEditChanged();
-    }
-
-    /// <summary>Gets whether the scene-reference section matches the active inspector search.</summary>
-    /// <param name="query">The raw search query.</param>
-    /// <returns><see langword="true"/> when all query tokens match section metadata or one asset row.</returns>
-    internal bool MatchesSearch(string query)
-    {
-        var terms = query.Trim().Split([' ', '\t', '/', '_', '-'], StringSplitOptions.RemoveEmptyEntries)
-            .Select(InspectorSearchModel.Normalize)
-            .ToArray();
-        if (terms.Length == 0)
-        {
-            return true;
-        }
-
-        var searchable = new List<string> { "Scene References Scripts Input Actions Physics Sidecars Extra Assets" };
-        searchable.AddRange(this.Scripts.Select(static row => row.SearchText));
-        searchable.AddRange(this.InputActions.Select(static row => row.SearchText));
-        searchable.AddRange(this.PhysicsSidecars.Select(static row => row.SearchText));
-        searchable.AddRange(this.ExtraAssets.Select(static row => row.Path));
-        searchable.AddRange(this.assets.Select(static asset => asset.DisplayName + " " + asset.DisplayPath));
-
-        return searchable.Any(text =>
-        {
-            var normalized = InspectorSearchModel.Normalize(text);
-            return terms.All(normalized.Contains);
-        });
-    }
 
     /// <summary>Adds a picked asset to its matching typed reference collection.</summary>
     /// <param name="kind">The typed collection to update.</param>
@@ -179,7 +119,7 @@ public sealed partial class SceneReferencesSectionViewModel : ObservableObject, 
             return Task.CompletedTask;
         }
 
-        return this.ApplyAsync(this.WithTypedReference(this.scene!.References, kind, asset, add: true));
+        return this.ApplyAsync(WithTypedReference(this.scene!.References, kind, asset, add: true));
     }
 
     /// <summary>Removes an existing typed reference without discarding unresolved references.</summary>
@@ -193,7 +133,7 @@ public sealed partial class SceneReferencesSectionViewModel : ObservableObject, 
             return Task.CompletedTask;
         }
 
-        return this.ApplyAsync(this.WithTypedReference(this.scene!.References, row.Kind, row.Asset, add: false));
+        return this.ApplyAsync(WithTypedReference(this.scene!.References, row.Kind, row.Asset, add: false));
     }
 
     /// <summary>Adds the entered canonical native virtual path.</summary>
@@ -254,6 +194,7 @@ public sealed partial class SceneReferencesSectionViewModel : ObservableObject, 
 
     /// <summary>Refreshes the shared catalog for typed asset pickers.</summary>
     /// <param name="cancellationToken">The refresh cancellation token.</param>
+    /// <returns>The completion of the catalog refresh.</returns>
     public async Task RefreshCatalogAsync(CancellationToken cancellationToken = default)
     {
         if (this.assetProvider is null)
@@ -298,13 +239,67 @@ public sealed partial class SceneReferencesSectionViewModel : ObservableObject, 
         this.NotifyCanEditChanged();
     }
 
-    partial void OnExtraAssetTextChanged(string value)
+    /// <summary>Binds the selected scene and starts the shared catalog feed.</summary>
+    /// <param name="value">The current scene, or null when scene authoring is unavailable.</param>
+    internal void Bind(Scene? value)
     {
-        _ = value;
-        this.OnPropertyChanged(nameof(this.CanAddExtraAsset));
+        if (this.disposed || ReferenceEquals(this.scene, value))
+        {
+            return;
+        }
+
+        if (this.scene is { } previous)
+        {
+            previous.PropertyChanged -= this.OnSceneChanged;
+        }
+
+        this.scene = value;
+        if (value is { } current)
+        {
+            current.PropertyChanged += this.OnSceneChanged;
+        }
+
+        this.StartAssets();
+        this.RefreshFromScene();
+        this.NotifyCanEditChanged();
     }
 
-    private SceneReferencesData WithTypedReference(SceneReferencesData current, AssetKind kind, AssetPath uri, bool add)
+    /// <summary>Enables or disables authoring with the parent inspector.</summary>
+    /// <param name="enabled">Whether edits are currently allowed.</param>
+    internal void SetInputEnabled(bool enabled)
+    {
+        this.inputEnabled = enabled;
+        this.NotifyCanEditChanged();
+    }
+
+    /// <summary>Gets a value indicating whether the scene-reference section matches the active inspector search.</summary>
+    /// <param name="query">The raw search query.</param>
+    /// <returns><see langword="true"/> when all query tokens match section metadata or one asset row.</returns>
+    internal bool MatchesSearch(string query)
+    {
+        var terms = query.Trim().Split([' ', '\t', '/', '_', '-'], StringSplitOptions.RemoveEmptyEntries)
+            .Select(InspectorSearchModel.Normalize)
+            .ToArray();
+        if (terms.Length == 0)
+        {
+            return true;
+        }
+
+        var searchable = new List<string> { "Scene References Scripts Input Actions Physics Sidecars Extra Assets" };
+        searchable.AddRange(this.Scripts.Select(static row => row.SearchText));
+        searchable.AddRange(this.InputActions.Select(static row => row.SearchText));
+        searchable.AddRange(this.PhysicsSidecars.Select(static row => row.SearchText));
+        searchable.AddRange(this.ExtraAssets.Select(static row => row.Path));
+        searchable.AddRange(this.assets.Select(static asset => asset.DisplayName + " " + asset.DisplayPath));
+
+        return searchable.Exists(text =>
+        {
+            var normalized = InspectorSearchModel.Normalize(text);
+            return terms.All(normalized.Contains);
+        });
+    }
+
+    private static SceneReferencesData WithTypedReference(SceneReferencesData current, AssetKind kind, AssetPath uri, bool add)
     {
         static IList<AssetPath> Update(IList<AssetPath> existing, AssetPath value, bool shouldAdd)
             => shouldAdd
@@ -326,6 +321,12 @@ public sealed partial class SceneReferencesSectionViewModel : ObservableObject, 
             AssetKind.PhysicsScene => result with { PhysicsSidecars = Update(current.PhysicsSidecars, uri, add) },
             _ => result,
         };
+    }
+
+    partial void OnExtraAssetTextChanged(string value)
+    {
+        _ = value;
+        this.OnPropertyChanged(nameof(this.CanAddExtraAsset));
     }
 
     private async Task ApplyAsync(SceneReferencesData references)
@@ -402,7 +403,7 @@ public sealed partial class SceneReferencesSectionViewModel : ObservableObject, 
             this.ExtraAssets.Add(new(asset, this.CanEdit));
         }
 
-        this.OnPropertyChanged(nameof(this.SearchableContent));
+        this.OnPropertyChanged(nameof(SearchableContent));
     }
 
     private void UpdateReferenceRows(AssetKind kind, IEnumerable<AssetPath> references, ObservableCollection<SceneReferenceRow> destination)
@@ -443,7 +444,7 @@ public sealed partial class SceneReferencesSectionViewModel : ObservableObject, 
         this.OnPropertyChanged(nameof(this.CatalogNotice));
         this.OnPropertyChanged(nameof(this.HasCatalogNotice));
         this.OnPropertyChanged(nameof(this.CanRetryCatalog));
-        this.OnPropertyChanged(nameof(this.SearchableContent));
+        this.OnPropertyChanged(nameof(SearchableContent));
     }
 
     private void SetErrorMessage(string value)
@@ -482,23 +483,4 @@ public sealed partial class SceneReferencesSectionViewModel : ObservableObject, 
             this.ExtraAssets[index] = this.ExtraAssets[index] with { CanEdit = this.CanEdit };
         }
     }
-}
-
-/// <summary>Displays a typed scene reference and whether it is currently resolvable.</summary>
-public sealed record SceneReferenceRow(AssetKind Kind, AssetPath Asset, string DisplayName, string DisplayPath, bool IsUnavailable, bool CanEdit)
-{
-    /// <summary>Gets searchable display text for this reference.</summary>
-    public string SearchText => this.DisplayName + " " + this.DisplayPath;
-
-    /// <summary>Gets the current resolution status.</summary>
-    public string StatusText => this.IsUnavailable ? "Unavailable or wrong asset type" : "Resolved";
-}
-
-/// <summary>Displays an additional asset with its current edit availability.</summary>
-/// <param name="Asset">The asset.</param>
-/// <param name="CanEdit">Whether the row can be removed.</param>
-public sealed record ExtraAssetRow(AssetPath Asset, bool CanEdit)
-{
-    /// <summary>Gets the asset's virtual path, as the row shows it.</summary>
-    public string Path => this.Asset.VirtualPath;
 }

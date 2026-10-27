@@ -40,6 +40,8 @@ public sealed class UnpackInstanceTests
     private static readonly NodeId Torch = NodeId.New();
     private static readonly NodeId Harbor = NodeId.New();
 
+    public TestContext TestContext { get; set; } = null!;
+
     [TestMethod]
     public async Task AModelInstance_BecomesOwnedNodesWithItsResolvedValues()
     {
@@ -64,7 +66,7 @@ public sealed class UnpackInstanceTests
     public async Task Unpacking_UndoesToTheInstanceWithItsChanges_AndRedoes()
     {
         using var fixture = await CreateAsync(Changes((Body, PositionX, 3f))).ConfigureAwait(false);
-        var build = await Conversion(fixture).UnpackAsync(fixture.Scene, SampleScene.Car, InstanceUnpack.One).ConfigureAwait(false);
+        var build = await Conversion(fixture).UnpackAsync(fixture.Scene, SampleScene.Car, InstanceUnpack.One, this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = await SceneAssert.RoundTripAsync(fixture, build.Value!).ConfigureAwait(false);
         _ = await fixture.Authoring.UndoAsync().ConfigureAwait(false);
@@ -123,7 +125,7 @@ public sealed class UnpackInstanceTests
     public async Task AnInstanceChangedSinceItsContentsWereRead_IsRefused()
     {
         using var fixture = await CreateAsync(InstanceChanges.None).ConfigureAwait(false);
-        var build = await Conversion(fixture).UnpackAsync(fixture.Scene, SampleScene.Car, InstanceUnpack.One).ConfigureAwait(false);
+        var build = await Conversion(fixture).UnpackAsync(fixture.Scene, SampleScene.Car, InstanceUnpack.One, this.TestContext.CancellationToken).ConfigureAwait(false);
         fixture.Node(SampleScene.Car).Components.OfType<SceneInstanceComponent>().Single().Changes = Changes((Body, PositionX, 8f));
 
         var result = await fixture.Authoring.ExecuteAsync(build.Value!).ConfigureAwait(false);
@@ -151,7 +153,7 @@ public sealed class UnpackInstanceTests
     public async Task AnAuthoredSceneUnpack_UndoesAndRedoesExactly()
     {
         using var fixture = await CreateHarborAsync().ConfigureAwait(false);
-        var build = await Conversion(fixture).UnpackAsync(fixture.Scene, Harbor, InstanceUnpack.Complete).ConfigureAwait(false);
+        var build = await Conversion(fixture).UnpackAsync(fixture.Scene, Harbor, InstanceUnpack.Complete, this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = await SceneAssert.RoundTripAsync(fixture, build.Value!).ConfigureAwait(false);
         _ = await fixture.Authoring.RedoAsync().ConfigureAwait(false);
@@ -177,15 +179,16 @@ public sealed class UnpackInstanceTests
     public async Task CopyingAnInstancedNode_GivesItsSubtreeWithTheResolvedValues_LinkedToNothing()
     {
         using var fixture = await CreateAsync(Changes((Mirror, PositionX, 6f))).ConfigureAwait(false);
-        var structureOf = (Func<AssetPath, SceneStructure?>)(source => fixture.Structures.Find(fixture.Project.Context, source));
 
-        var copied = await Conversion(fixture).CopyAsync(fixture.Scene, [new NodeReference(SampleScene.Car, Body), new NodeReference(SampleScene.Car, Mirror)], structureOf).ConfigureAwait(false);
+        var copied = await Conversion(fixture).CopyAsync(fixture.Scene, [new NodeReference(SampleScene.Car, Body), new NodeReference(SampleScene.Car, Mirror)], StructureOf, this.TestContext.CancellationToken).ConfigureAwait(false);
 
         var body = copied.Value.Should().ContainSingle("the mirror goes with its parent").Subject;
         _ = body.Name.Should().Be("Body");
         _ = body.Components.OfType<SceneInstanceComponentData>().Should().BeEmpty();
         var mirror = body.Children.Should().ContainSingle().Subject;
         _ = mirror.Required<TransformData>().Position.X.Should().Be(6f);
+
+        SceneStructure? StructureOf(AssetPath source) => fixture.Structures.Find(fixture.Project.Context, source);
     }
 
     // The sample scene's Car, instancing Car.glb (Body with Mirror), with the given changes.
@@ -211,7 +214,8 @@ public sealed class UnpackInstanceTests
                 Name = "Scene Instance",
                 Source = AssetPath.Parse(Watchtower),
                 Changes = InstanceChangesJson.Write(Changes((NodePath.Of(Tower), PositionX, 7f), (NodePath.Of(Torch, Body.Nodes[0]), PositionX, 9f))),
-            }])
+            }
+            ])
             .Build();
         var fixture = await AuthoringFixture.CreateAsync(harbor).ConfigureAwait(false);
         var watchtower = new SceneBuilder()
@@ -223,7 +227,8 @@ public sealed class UnpackInstanceTests
                 Name = "Scene Instance",
                 Source = SampleScene.CarModel,
                 Changes = InstanceChangesJson.Write(Changes((Body, PositionX, 5f))),
-            }])
+            }
+            ])
             .Build();
         _ = fixture.Project.WriteFile(WatchtowerFile, JsonSerializer.SerializeToUtf8Bytes(watchtower, SceneFileJsonContext.Default.SceneFileData));
         PublishCar(fixture);

@@ -29,12 +29,12 @@
             <DataTemplate x:Key="ToggleField" x:DataType="local:ScriptParameterFieldViewModel">
                 <editorcontrols:ToggleField
                     IsEnabled="{x:Bind CanEdit, Mode=OneWay}"
+                    IsOn="{x:Bind ToggleValue, Mode=TwoWay}"
                     Label="{x:Bind Label}"
                     OverrideState="{x:Bind OverrideState, Mode=OneWay}"
                     ResetCommand="{x:Bind ResetCommand}"
                     ResetToolTip="Reset to the script's default"
-                    ToolTipService.ToolTip="{x:Bind ToolTip}"
-                    Value="{x:Bind ToggleValue, Mode=TwoWay}" />
+                    ToolTipService.ToolTip="{x:Bind ToolTip}" />
             </DataTemplate>
 
             <DataTemplate x:Key="NumberField" x:DataType="local:ScriptParameterFieldViewModel">

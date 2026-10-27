@@ -41,11 +41,20 @@ public sealed partial class BackdropSectionView
 
     private void OnCubemapChoiceInvoked(object? sender, AssetChoice choice)
     {
+        _ = sender;
+        _ = choice;
+
         this.ViewModel?.SetCubemap(choice.Asset);
         this.CubemapFlyout.Hide();
     }
 
-    private void ClearCubemap_Click(object sender, RoutedEventArgs args) => this.ViewModel?.SetCubemap(cubemap: null);
+    private void ClearCubemap_Click(object sender, RoutedEventArgs args)
+    {
+        _ = sender;
+        _ = args;
+
+        this.ViewModel?.SetCubemap(cubemap: null);
+    }
 
     private void OnRgbColorPicked(object? sender, ColorBoxColorPickedEventArgs args)
     {

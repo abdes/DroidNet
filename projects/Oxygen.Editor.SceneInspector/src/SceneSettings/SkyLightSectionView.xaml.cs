@@ -49,6 +49,9 @@ public sealed partial class SkyLightSectionView
 
     private void OnCubemapChoiceInvoked(object? sender, AssetChoice choice)
     {
+        _ = sender;
+        _ = choice;
+
         this.ViewModel?.SetCubemap(choice.Asset);
         this.CubemapFlyout.Hide();
     }

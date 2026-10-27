@@ -9,7 +9,7 @@ using Oxygen.Editor.World.Serialization;
 namespace Oxygen.Editor.SceneInspector.SceneSettings;
 
 /// <summary>Projects authored exposure keys into the view's compact curve preview.</summary>
-internal static class InspectorCurvePresentation
+public static class InspectorCurvePresentation
 {
     /// <summary>Creates the view-owned polyline points without changing authored keys.</summary>
     /// <param name="keys">The authored exposure compensation curve.</param>

@@ -23,11 +23,11 @@ internal static class SurfaceLabels
     /// <returns>The row's label.</returns>
     public static string Of(PropertyId property)
     {
-        foreach (var row in Rows)
+        foreach (var (prop, label) in Rows)
         {
-            if (row.Property == property)
+            if (prop == property)
             {
-                return row.Label;
+                return label;
             }
         }
 

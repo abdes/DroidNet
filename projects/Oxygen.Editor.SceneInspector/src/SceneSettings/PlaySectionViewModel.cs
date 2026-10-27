@@ -13,6 +13,7 @@ using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.Input;
 using Oxygen.Editor.Pickers;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.SceneInspector.Editing;
 using Oxygen.Editor.SceneInspector.Presentation;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Edits.Settings;
@@ -42,9 +43,9 @@ public sealed partial class PlaySectionViewModel : ObservableObject, IDisposable
     private readonly Func<NodeId, Task>? inspectSceneNode;
     private readonly Func<AssetPath, Task>? revealAsset;
     private readonly List<AssetEntry> assets = [];
-    private IDisposable? assetSubscription;
-    private IDisposable? inputSubscription;
-    private IDisposable? structureSubscription;
+    private CancellationTokenSource? assetSubscription;
+    private CancellationTokenSource? inputSubscription;
+    private CancellationTokenSource? structureSubscription;
     private bool catalogLoaded;
     private Scene? scene;
     private NodeReference? automaticCamera;
@@ -88,11 +89,13 @@ public sealed partial class PlaySectionViewModel : ObservableObject, IDisposable
         this.structures = structures;
         if (structures is not null)
         {
-            this.structureSubscription = Observable.FromEventPattern(
-                    handler => structures.Changed += handler,
-                    handler => structures.Changed -= handler)
-                .ObserveOn(observerScheduler)
-                .Subscribe(_ => this.Refresh());
+            this.structureSubscription = LifetimeSubscription.Subscribe(
+                Observable.FromEventPattern(
+                        handler => structures.Changed += handler,
+                        handler => structures.Changed -= handler)
+                    .ObserveOn(observerScheduler),
+                _ => this.Refresh(),
+                session?.Lifetime ?? CancellationToken.None);
         }
     }
 
@@ -168,12 +171,9 @@ public sealed partial class PlaySectionViewModel : ObservableObject, IDisposable
         }
 
         this.disposed = true;
-        this.assetSubscription?.Dispose();
-        this.assetSubscription = null;
-        this.inputSubscription?.Dispose();
-        this.inputSubscription = null;
-        this.structureSubscription?.Dispose();
-        this.structureSubscription = null;
+        LifetimeSubscription.End(ref this.assetSubscription);
+        LifetimeSubscription.End(ref this.inputSubscription);
+        LifetimeSubscription.End(ref this.structureSubscription);
         this.Bind(value: null);
     }
 
@@ -348,8 +348,8 @@ public sealed partial class PlaySectionViewModel : ObservableObject, IDisposable
 
     private void RefreshCameras()
     {
-        var owned = this.scene?.AllNodes.Where(IsCamera).Select(static camera => (Id: (NodeReference)NodeReference.To(camera.Id), Name: camera.Metadata.Name)).ToArray() ?? [];
-        List<(NodeReference Id, string Name)> instanced = this.scene is { } current ? this.InstancedCameras(current) : [];
+        var owned = this.scene?.AllNodes.Where(IsCamera).Select(static camera => (Id: (NodeReference)NodeReference.To(camera.Id), camera.Metadata.Name)).ToArray() ?? [];
+        var instanced = this.scene is { } current ? this.InstancedCameras(current) : [];
         var cameras = owned.Concat(instanced).ToArray();
         var authored = this.scene?.StartingCamera;
         var gone = authored is { } id && cameras.All(camera => camera.Id != id);
@@ -377,10 +377,10 @@ public sealed partial class PlaySectionViewModel : ObservableObject, IDisposable
 
         // Without a starting camera, Play starts through the first camera the composed scene holds: the scene's own
         // cameras come before those its instances bring in.
-        var automatic = authored is null && cameras.Length > 0 ? cameras[0] : default;
+        var (automaticId, automaticName) = authored is null && cameras.Length > 0 ? cameras[0] : default;
         this.SelectedCamera = this.CameraChoices.First(choice => choice.Id == authored);
-        this.automaticCamera = authored is null && cameras.Length > 0 ? automatic.Id : null;
-        this.AutomaticCameraName = automatic.Name ?? string.Empty;
+        this.automaticCamera = authored is null && cameras.Length > 0 ? automaticId : null;
+        this.AutomaticCameraName = automaticName ?? string.Empty;
         this.ShowsAutomaticCamera = authored is null && cameras.Length > 0;
         this.ShowsNoCamera = authored is null && cameras.Length == 0;
         this.CameraError = !gone
@@ -487,9 +487,11 @@ public sealed partial class PlaySectionViewModel : ObservableObject, IDisposable
             return;
         }
 
-        this.assetSubscription = this.assetProvider.Items
-            .ObserveOn(this.observerScheduler)
-            .Subscribe(this.OnAssets, this.OnCatalogFeedError);
+        this.assetSubscription = LifetimeSubscription.Subscribe(
+            this.assetProvider.Items.ObserveOn(this.observerScheduler),
+            this.OnAssets,
+            this.OnCatalogFeedError,
+            this.session?.Lifetime ?? CancellationToken.None);
     }
 
     private void StartInputSources()
@@ -499,11 +501,13 @@ public sealed partial class PlaySectionViewModel : ObservableObject, IDisposable
             return;
         }
 
-        this.inputSubscription = Observable.FromEventPattern<InputSourceChangedEventArgs>(
-                handler => sources.Changed += handler,
-                handler => sources.Changed -= handler)
-            .ObserveOn(this.observerScheduler)
-            .Subscribe(_ => this.OnInputSourcesChanged());
+        this.inputSubscription = LifetimeSubscription.Subscribe(
+            Observable.FromEventPattern<InputSourceChangedEventArgs>(
+                    handler => sources.Changed += handler,
+                    handler => sources.Changed -= handler)
+                .ObserveOn(this.observerScheduler),
+            _ => this.OnInputSourcesChanged(),
+            this.session?.Lifetime ?? CancellationToken.None);
     }
 
     // A context's declaration and its priority come from its input source.

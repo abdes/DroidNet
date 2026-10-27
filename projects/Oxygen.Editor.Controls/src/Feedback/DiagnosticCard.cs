@@ -6,6 +6,7 @@ using System.Globalization;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
+using Oxygen.Editor.Controls.Feedback;
 
 namespace Oxygen.Editor.Controls;
 
@@ -88,19 +89,13 @@ public sealed partial class DiagnosticCard : Control
     /// <inheritdoc />
     protected override void OnApplyTemplate()
     {
-        if (this.expand is not null)
-        {
-            this.expand.Click -= this.OnExpandClick;
-        }
+        this.expand?.Click -= this.OnExpandClick;
 
         base.OnApplyTemplate();
         this.preview = this.GetTemplateChild(PreviewPartName) as TextBlock;
         this.expand = this.GetTemplateChild(ExpandPartName) as Button;
         this.details = this.GetTemplateChild(DetailsPartName) as ItemsControl;
-        if (this.expand is not null)
-        {
-            this.expand.Click += this.OnExpandClick;
-        }
+        this.expand?.Click += this.OnExpandClick;
 
         this.Update(useTransitions: false);
     }

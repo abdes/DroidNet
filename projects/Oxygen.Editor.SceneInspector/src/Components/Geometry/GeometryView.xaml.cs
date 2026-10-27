@@ -1,4 +1,4 @@
-﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
+// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
@@ -25,6 +25,7 @@ public partial class GeometryView
 
     private async void OnGeometryChoiceInvoked(object? sender, AssetChoice choice)
     {
+        _ = sender;
         Debug.Assert(this.ViewModel is not null, "ViewModel should not be null when handling a geometry choice.");
         await this.ViewModel.ApplyAssetAsync(choice).ConfigureAwait(true);
     }
@@ -40,7 +41,7 @@ public partial class GeometryView
 
     private async void OnMaterialChoiceInvoked(object? sender, AssetChoice choice)
     {
-        if (sender is FrameworkElement { DataContext: SurfaceCardViewModel card })
+        if (this.ViewModel is not null && sender is FrameworkElement { DataContext: SurfaceCardViewModel card })
         {
             await card.ApplyMaterialAsync(choice).ConfigureAwait(true);
         }

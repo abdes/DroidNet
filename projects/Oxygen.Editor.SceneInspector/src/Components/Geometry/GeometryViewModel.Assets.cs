@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using Oxygen.Editor.Assets;
+using Oxygen.Editor.SceneInspector.Editing;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.SceneInspector.Components.Geometry;
@@ -14,9 +15,11 @@ public sealed partial class GeometryViewModel
 
     private void StartAssetCatalogSubscription()
     {
-        this.assetChangesSubscription = this.assetProvider.Items.Subscribe(
+        this.assetChangesSubscription = LifetimeSubscription.Subscribe(
+            this.assetProvider.Items,
             items => this.DispatchOnUi(() => this.ApplySharedAssets(items)),
-            this.LogAssetFeedFailed);
+            this.LogAssetFeedFailed,
+            this.session.Lifetime);
         _ = this.RefreshSharedAssetsAsync();
     }
 
@@ -24,7 +27,7 @@ public sealed partial class GeometryViewModel
     {
         try
         {
-            await this.assetProvider.RefreshAsync().ConfigureAwait(false);
+            await this.assetProvider.RefreshAsync(this.session.Lifetime).ConfigureAwait(false);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException or ObjectDisposedException or OperationCanceledException)
         {

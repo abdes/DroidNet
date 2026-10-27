@@ -61,6 +61,7 @@ public static class InstancedNodes
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(values);
         ArgumentNullException.ThrowIfNull(changes);
+
         // The changes go over the values read, onto every component the node has, as for an authored scene's node.
         var node = new SceneNode(scene, values.Name);
         WriteValues(scene, node, values, InstancedNodeChanges.None);

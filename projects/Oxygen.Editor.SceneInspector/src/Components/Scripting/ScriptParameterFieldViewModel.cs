@@ -8,7 +8,7 @@ using System.Numerics;
 using System.Text;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using Oxygen.Editor.Controls;
+using Oxygen.Editor.Controls.PropertyEditors;
 using Oxygen.Editor.Pickers;
 using Oxygen.Editor.Scripting;
 using Oxygen.Editor.World.Components;
@@ -364,7 +364,7 @@ public sealed partial class ScriptParameterFieldViewModel : ObservableObject
         switch (this.Parameter.Kind)
         {
             case ScriptParameterKind.Int32Parameter:
-                this.Commit(ScriptValue.FromInt((int)Math.Round(this.Clamp(this.NumberValue))));
+                this.Commit(ScriptValue.FromInt((int)Math.Round(this.Clamp(this.NumberValue), MidpointRounding.ToEven)));
                 break;
             case ScriptParameterKind.FloatParameter:
                 this.Commit(ScriptValue.FromFloat((float)this.Clamp(this.NumberValue)));

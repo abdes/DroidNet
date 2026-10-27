@@ -4,7 +4,7 @@
 
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using Oxygen.Editor.Controls;
+using Oxygen.Editor.Controls.PropertyEditors;
 using Oxygen.Editor.ModelEditor.Importing;
 using Oxygen.Editor.Models;
 

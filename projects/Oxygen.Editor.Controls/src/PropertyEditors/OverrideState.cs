@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.Controls;
+namespace Oxygen.Editor.Controls.PropertyEditors;
 
 /// <summary>Specifies how many of the edited objects override a property's source value.</summary>
 public enum OverrideState

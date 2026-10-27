@@ -130,9 +130,10 @@ public sealed partial class SkyAtmosphereSectionViewModel : ObservableObject
         var result = SceneEnvironmentConstraints.ValidateAerialStart(value);
         var property = SceneProperties.SceneEnvironment.AerialPerspectiveStartDepthMeters.Id;
         var ticket = this.EditOwner.Diagnostics.Begin([property]);
-        this.EditOwner.Diagnostics.Complete(ticket, result.IsValid
+        var outcome = result.IsValid
             ? new SceneEditResult(SceneEditOutcome.Applied, [])
-            : new SceneEditResult(SceneEditOutcome.Invalid, [SceneDiagnostic.Error(SceneEditCodes.PropertyOutOfRange, result.Message ?? "The distance is out of range.", property: property)]));
+            : new SceneEditResult(SceneEditOutcome.Invalid, [SceneDiagnostic.Error(SceneEditCodes.PropertyOutOfRange, result.Message ?? "The distance is out of range.", property: property)]);
+        this.EditOwner.Diagnostics.Complete(ticket, outcome);
         return result.IsValid;
     }
 

@@ -11,6 +11,7 @@ using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Automation.Provider;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Shapes;
+using Oxygen.Editor.Controls.PropertyEditors;
 
 namespace Oxygen.Editor.Controls.Unit.UI.Tests.PropertyEditors;
 
@@ -24,7 +25,7 @@ internal sealed class ToggleFieldTests : VisualUserInterfaceTests
     [TestMethod]
     public Task AMixedValueShowsOffWithMixedAndTheFirstClickSetsOn() => EnqueueAsync(async () =>
     {
-        var field = new ToggleField { Label = "Visible", Value = null };
+        var field = new ToggleField { Label = "Visible", IsOn = null };
         await LoadTestContentAsync(new Grid { Width = 400, Children = { field } }).ConfigureAwait(true);
         var toggle = field.FindDescendant<ToggleSwitch>()!;
 
@@ -33,22 +34,22 @@ internal sealed class ToggleFieldTests : VisualUserInterfaceTests
 
         ((IToggleProvider)new ToggleSwitchAutomationPeer(toggle).GetPattern(PatternInterface.Toggle)).Toggle();
 
-        _ = field.Value.Should().BeTrue();
+        _ = field.IsOn.Should().BeTrue();
         _ = toggle.OffContent.Should().Be(string.Empty);
     });
 
     [TestMethod]
     public Task ASetValueMovesTheSwitchWithoutReportingAClick() => EnqueueAsync(async () =>
     {
-        var field = new ToggleField { Label = "Visible", Value = true };
+        var field = new ToggleField { Label = "Visible", IsOn = true };
         await LoadTestContentAsync(new Grid { Width = 400, Children = { field } }).ConfigureAwait(true);
         var toggle = field.FindDescendant<ToggleSwitch>()!;
         _ = toggle.IsOn.Should().BeTrue();
 
-        field.Value = false;
+        field.IsOn = false;
 
         _ = toggle.IsOn.Should().BeFalse();
-        _ = field.Value.Should().BeFalse();
+        _ = field.IsOn.Should().BeFalse();
     });
 
     [TestMethod]
@@ -61,7 +62,7 @@ internal sealed class ToggleFieldTests : VisualUserInterfaceTests
         var field = new ToggleField
         {
             Label = "Cast shadows",
-            Value = false,
+            IsOn = false,
             OverrideState = state,
             ResetCommand = reset,
             ResetToolTip = "Reset to the asset value (On)",
@@ -85,7 +86,7 @@ internal sealed class ToggleFieldTests : VisualUserInterfaceTests
     [TestMethod]
     public Task TheResetButtonTakesItsWidthFromTheRowNotFromBeyondIt() => EnqueueAsync(async () =>
     {
-        var field = new ToggleField { Label = "Visible", Value = true, OverrideState = OverrideState.Full, ResetCommand = new CountingCommand() };
+        var field = new ToggleField { Label = "Visible", IsOn = true, OverrideState = OverrideState.Full, ResetCommand = new CountingCommand() };
         var host = new Grid { Width = 300, Children = { field } };
         await LoadTestContentAsync(host).ConfigureAwait(true);
         await WaitForRenderAsync().ConfigureAwait(true);
@@ -98,8 +99,8 @@ internal sealed class ToggleFieldTests : VisualUserInterfaceTests
     [TestMethod]
     public Task RowsWithAndWithoutResetStartTheirEditorsAtTheSameEdge() => EnqueueAsync(async () =>
     {
-        var reset = new ToggleField { Label = "Visible", Value = true, OverrideState = OverrideState.Full, ResetCommand = new CountingCommand() };
-        var plain = new ToggleField { Label = "Cast shadows", Value = true };
+        var reset = new ToggleField { Label = "Visible", IsOn = true, OverrideState = OverrideState.Full, ResetCommand = new CountingCommand() };
+        var plain = new ToggleField { Label = "Cast shadows", IsOn = true };
         var host = new StackPanel { Width = 360, Children = { reset, plain } };
         await LoadTestContentAsync(host).ConfigureAwait(true);
         await WaitForRenderAsync().ConfigureAwait(true);

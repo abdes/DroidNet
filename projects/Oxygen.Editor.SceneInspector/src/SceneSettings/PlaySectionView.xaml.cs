@@ -56,6 +56,7 @@ public sealed partial class PlaySectionView
 
     private void OnContextChoiceInvoked(object? sender, AssetChoice choice)
     {
+        _ = sender;
         this.AddContextFlyout.Hide();
         this.ViewModel?.AddContextCommand.Execute(choice.Asset);
     }

@@ -41,11 +41,11 @@
         </DataTemplate>
         <DataTemplate x:Key="ToggleRowTemplate" x:DataType="settings:ToggleRow">
             <editorcontrols:ToggleField
+                IsOn="{x:Bind Value, Mode=TwoWay}"
                 Label="{x:Bind Label}"
                 OverrideState="{x:Bind OverrideState, Mode=OneWay}"
                 ResetCommand="{x:Bind ResetCommand}"
-                ResetToolTip="{x:Bind ResetToolTip}"
-                Value="{x:Bind Value, Mode=TwoWay}" />
+                ResetToolTip="{x:Bind ResetToolTip}" />
         </DataTemplate>
         <!--  The inspector's material picker: the chosen material's name, its chevron opening the asset picker.  -->
         <DataTemplate x:Key="MaterialRowTemplate" x:DataType="settings:MaterialRow">

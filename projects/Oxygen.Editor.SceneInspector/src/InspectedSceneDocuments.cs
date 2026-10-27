@@ -16,7 +16,7 @@ namespace Oxygen.Editor.SceneInspector;
 /// A scene document that becomes active, or reloads while active, is shown; the watched one that closes is reported, so
 /// the inspector stops showing its scene.
 /// </remarks>
-internal sealed class InspectedSceneDocuments : IDisposable
+internal sealed partial class InspectedSceneDocuments : IDisposable
 {
     private readonly IDocumentArea area;
     private readonly Action<Document> show;
@@ -42,6 +42,13 @@ internal sealed class InspectedSceneDocuments : IDisposable
     /// <summary>Gets the active document when it is a scene document.</summary>
     internal DocumentId? ActiveSceneId => this.area.ActiveDocument is { Content: SceneContent } active ? active.Id : null;
 
+    /// <inheritdoc />
+    public void Dispose()
+    {
+        this.area.ActiveDocumentChanged -= this.OnActiveDocumentChanged;
+        this.Watch(document: null);
+    }
+
     /// <summary>Gets the scene of an open scene document.</summary>
     /// <param name="document">The document.</param>
     /// <returns>Its scene, or <see langword="null"/> when no open scene document has that identity.</returns>
@@ -60,13 +67,6 @@ internal sealed class InspectedSceneDocuments : IDisposable
     /// <param name="scene">The scene.</param>
     /// <returns>The authoring of the scene's document, or <see langword="null"/> when no open document edits it.</returns>
     internal SceneAuthoring? AuthoringOf(Scene? scene) => (this.DocumentOf(scene)?.Content as SceneContent)?.Authoring;
-
-    /// <inheritdoc />
-    public void Dispose()
-    {
-        this.area.ActiveDocumentChanged -= this.OnActiveDocumentChanged;
-        this.Watch(document: null);
-    }
 
     private void OnActiveDocumentChanged(object? sender, EventArgs args)
     {

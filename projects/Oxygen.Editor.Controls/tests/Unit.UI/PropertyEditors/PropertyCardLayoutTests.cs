@@ -11,6 +11,7 @@ using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using NumberBox = DroidNet.Controls.NumberBox;
 using static Oxygen.Editor.Controls.Unit.UI.Tests.PropertyEditors.LayoutHosts;
+using Oxygen.Editor.Controls.PropertyEditors;
 
 namespace Oxygen.Editor.Controls.Unit.UI.Tests.PropertyEditors;
 

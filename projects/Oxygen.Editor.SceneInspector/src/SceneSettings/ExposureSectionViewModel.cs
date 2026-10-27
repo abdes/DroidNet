@@ -118,7 +118,6 @@ public sealed partial class ExposureSectionViewModel : ObservableObject, IDispos
     /// <summary>Gets the textures the metering-mask picker offers, grouped as Engine, Packages and Content.</summary>
     public AssetPickerModel MeteringMaskChoices { get; } = new(static asset => AssetChoice.For(asset, "Texture", "\uE7C3"));
 
-
     /// <summary>Gets the authored reference name, None, or URI fallback.</summary>
     public string MeteringMaskDisplayName => this.AutoExposureMeteringMask is null ? "None"
         : this.MeteringMaskChoices.Find(this.AutoExposureMeteringMask)?.Name
@@ -296,7 +295,6 @@ public sealed partial class ExposureSectionViewModel : ObservableObject, IDispos
         this.EditOwner.Apply(SceneProperties.SceneEnvironment.AutoExposureCompensationCurve, value);
         this.CurveEditor.Refresh(this.AutoExposureCompensationCurve);
     }
-
 
     private InspectorFieldDiagnostic Diagnostic(PropertyId property) => this.EditOwner.Diagnostics.Get(property);
 

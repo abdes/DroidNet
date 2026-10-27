@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.Controls;
+namespace Oxygen.Editor.Controls.PropertyEditors;
 
 /// <summary>What an authored RGB value means, which decides how an <see cref="ColorField"/> stores, shows and
 /// labels it. Every kind is stored linear, as the engine uses it.</summary>

@@ -18,13 +18,28 @@ public sealed partial class SceneReferencesSectionView
     public SceneReferencesSectionView() => this.InitializeComponent();
 
     private async void OnScriptChoiceInvoked(object? sender, AssetChoice choice)
-        => await this.AddReferenceAsync(AssetKind.Script, choice, this.AddScriptFlyout);
+    {
+        _ = sender;
+        _ = choice;
+
+        await this.AddReferenceAsync(AssetKind.Script, choice, this.AddScriptFlyout).ConfigureAwait(true);
+    }
 
     private async void OnInputActionChoiceInvoked(object? sender, AssetChoice choice)
-        => await this.AddReferenceAsync(AssetKind.InputAction, choice, this.AddInputActionFlyout);
+    {
+        _ = sender;
+        _ = choice;
+
+        await this.AddReferenceAsync(AssetKind.InputAction, choice, this.AddInputActionFlyout).ConfigureAwait(true);
+    }
 
     private async void OnPhysicsSidecarChoiceInvoked(object? sender, AssetChoice choice)
-        => await this.AddReferenceAsync(AssetKind.PhysicsScene, choice, this.AddPhysicsSidecarFlyout);
+    {
+        _ = sender;
+        _ = choice;
+
+        await this.AddReferenceAsync(AssetKind.PhysicsScene, choice, this.AddPhysicsSidecarFlyout).ConfigureAwait(true);
+    }
 
     private async Task AddReferenceAsync(AssetKind kind, AssetChoice choice, Flyout flyout)
     {
@@ -34,41 +49,53 @@ public sealed partial class SceneReferencesSectionView
         }
 
         flyout.Hide();
-        await model.AssignAsync(kind, asset);
+        await model.AssignAsync(kind, asset).ConfigureAwait(true);
     }
 
     private async void AddExtraAsset_Click(object sender, RoutedEventArgs args)
     {
+        _ = sender;
+        _ = args;
+
         if (this.ViewModel is { } model)
         {
-            await model.AddExtraAssetAsync();
+            await model.AddExtraAssetAsync().ConfigureAwait(true);
         }
     }
 
     private async void RemoveReference_Click(object sender, RoutedEventArgs args)
     {
+        _ = sender;
+        _ = args;
+
         if (sender is Button { Tag: SceneReferenceRow row })
         {
             if (this.ViewModel is { } model)
             {
-                await model.RemoveAsync(row);
+                await model.RemoveAsync(row).ConfigureAwait(true);
             }
         }
     }
 
     private async void RemoveExtraAsset_Click(object sender, RoutedEventArgs args)
     {
+        _ = sender;
+        _ = args;
+
         if (sender is Button { Tag: ExtraAssetRow row } && this.ViewModel is { } model)
         {
-            await model.RemoveExtraAssetAsync(row.Asset);
+            await model.RemoveExtraAssetAsync(row.Asset).ConfigureAwait(true);
         }
     }
 
     private async void RefreshCatalog_Click(object sender, RoutedEventArgs args)
     {
+        _ = sender;
+        _ = args;
+
         if (this.ViewModel is { } model)
         {
-            await model.RefreshCatalogAsync();
+            await model.RefreshCatalogAsync().ConfigureAwait(true);
         }
     }
 }

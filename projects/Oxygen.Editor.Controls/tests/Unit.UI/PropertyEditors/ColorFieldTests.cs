@@ -9,6 +9,7 @@ using DroidNet.Tests;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
+using Oxygen.Editor.Controls.PropertyEditors;
 using static Oxygen.Editor.Controls.Testing.PropertyEditorProbes;
 using NumberBox = DroidNet.Controls.NumberBox;
 

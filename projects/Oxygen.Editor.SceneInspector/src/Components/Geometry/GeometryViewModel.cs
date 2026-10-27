@@ -43,8 +43,8 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
     private readonly DispatcherQueue dispatcherQueue;
     private readonly ILogger logger;
 
-    private IDisposable? assetChangesSubscription;
-    private IDisposable? materialResultsSubscription;
+    private CancellationTokenSource? assetChangesSubscription;
+    private CancellationTokenSource? materialResultsSubscription;
     private IReadOnlyList<AssetEntry> latestMaterialAssets = [];
 
     private ICollection<SceneNode>? selectedItems;
@@ -93,14 +93,14 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
 
     /// <summary>
     /// Gets or sets a value indicating whether the currently selected scene nodes have
-    /// differing geometry assets. When <c>true</c>, the UI should indicate a mixed state.
+    /// differing geometry assets. When <see langword="true"/>, the UI should indicate a mixed state.
     /// </summary>
     [ObservableProperty]
     public partial bool IsMixed { get; set; }
 
     /// <summary>
     /// Gets or sets the currently selected geometry asset. When multiple nodes are selected and
-    /// they reference different assets this value will be <c>null</c>.
+    /// they reference different assets this value will be <see langword="null"/>.
     /// </summary>
     [ObservableProperty]
     public partial AssetPath? SelectedGeometry { get; set; }
@@ -125,7 +125,6 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
     /// otherwise returns the <see cref="SelectedAssetName"/>.
     /// </summary>
     public string AssetButtonLabel => this.IsMixed ? "--" : this.SelectedAssetName;
-
 
     /// <summary>
     /// Gets a glyph string to use as a thumbnail indicator for the currently selected asset.
@@ -232,8 +231,8 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
         this.disposed = true;
         this.surfaceRefresh?.Cancel();
         this.surfaceRefresh?.Dispose();
-        this.assetChangesSubscription?.Dispose();
-        this.materialResultsSubscription?.Dispose();
+        LifetimeSubscription.End(ref this.assetChangesSubscription);
+        LifetimeSubscription.End(ref this.materialResultsSubscription);
         GC.SuppressFinalize(this);
     }
 
@@ -247,15 +246,15 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
             && nodes.TrueForAll(node => this.selectedItems.Any(selected => ReferenceEquals(selected, node)));
 
     private void StartMaterialPickerSubscription()
-    {
-        this.materialResultsSubscription = this.assetProvider.Items.Subscribe(
+        => this.materialResultsSubscription = LifetimeSubscription.Subscribe(
+            this.assetProvider.Items,
             assets => this.DispatchOnUi(() =>
             {
                 this.latestMaterialAssets = assets;
                 this.ApplyContentMaterials();
             }),
-            this.LogAssetFeedFailed);
-    }
+            this.LogAssetFeedFailed,
+            this.session.Lifetime);
 
     // Lists the materials the surface accepts, keeping the one assigned now even when it is gone.
     private void ApplyContentMaterials()

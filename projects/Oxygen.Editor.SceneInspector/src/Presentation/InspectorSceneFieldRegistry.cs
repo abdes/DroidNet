@@ -15,19 +15,19 @@ namespace Oxygen.Editor.SceneInspector.Presentation;
 internal sealed class InspectorSceneFieldRegistry(InspectorSearchModel search, IValueConverter visibility)
 {
     /// <summary>Gets explicit field roots keyed by canonical presentation identity.</summary>
-    internal Dictionary<string, FrameworkElement> Fields { get; } = new(StringComparer.Ordinal);
+    internal Dictionary<string, FrameworkElement> Fields { get; } = [with(StringComparer.Ordinal)];
 
     /// <summary>Gets native section controls.</summary>
-    internal Dictionary<string, EditorPropertiesExpander> Sections { get; } = new(StringComparer.Ordinal);
+    internal Dictionary<string, EditorPropertiesExpander> Sections { get; } = [with(StringComparer.Ordinal)];
 
     /// <summary>Gets the views owning section namescopes.</summary>
-    internal Dictionary<string, UserControl> SectionViews { get; } = new(StringComparer.Ordinal);
+    internal Dictionary<string, UserControl> SectionViews { get; } = [with(StringComparer.Ordinal)];
 
     /// <summary>Gets nested field-group disclosures.</summary>
-    internal Dictionary<string, Expander> Disclosures { get; } = new(StringComparer.Ordinal);
+    internal Dictionary<string, Expander> Disclosures { get; } = [with(StringComparer.Ordinal)];
 
     /// <summary>Gets the two independently restored source disclosures.</summary>
-    internal Dictionary<string, Expander> Sources { get; } = new(StringComparer.Ordinal);
+    internal Dictionary<string, Expander> Sources { get; } = [with(StringComparer.Ordinal)];
 
     /// <summary>Registers a native section and its owning view.</summary>
     /// <param name="key">The stable section identity.</param>

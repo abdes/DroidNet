@@ -9,7 +9,7 @@ namespace Oxygen.Editor.SceneInspector;
 /// <summary>Keeps component feedback discoverable independently of the visible property section.</summary>
 public sealed partial class SceneInspectorViewModel
 {
-    private readonly List<(InspectorFieldDiagnostics source, EventHandler handler)> feedbackSubscriptions = [];
+    private readonly List<(InspectorFieldDiagnostics Source, EventHandler Handler)> feedbackSubscriptions = [];
 
     private void ObserveComponentFeedback(Type type, ComponentPropertyEditor editor)
     {

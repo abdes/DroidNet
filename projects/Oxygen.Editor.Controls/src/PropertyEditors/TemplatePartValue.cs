@@ -4,7 +4,7 @@
 
 using Microsoft.UI.Xaml;
 
-namespace Oxygen.Editor.Controls;
+namespace Oxygen.Editor.Controls.PropertyEditors;
 
 /// <summary>Keeps a value of a templated control and the same value of one of its template parts equal, both ways.</summary>
 /// <remarks>
@@ -13,39 +13,25 @@ namespace Oxygen.Editor.Controls;
 /// sync survives the part's own writes: the control's value is pushed to the part whenever it changes, and the part's
 /// value is taken back whenever the part changes it.
 /// </remarks>
-internal sealed class TemplatePartValue
+/// <param name="owner">The templated control.</param>
+/// <param name="ownerProperty">The control's property.</param>
+/// <param name="partProperty">The part's property it mirrors.</param>
+internal sealed class TemplatePartValue(DependencyObject owner, DependencyProperty ownerProperty, DependencyProperty partProperty)
 {
-    private readonly DependencyObject owner;
-    private readonly DependencyProperty ownerProperty;
-    private readonly DependencyProperty partProperty;
     private DependencyObject? part;
     private long callback;
     private bool syncing;
-
-    /// <summary>Initializes a new instance of the <see cref="TemplatePartValue"/> class.</summary>
-    /// <param name="owner">The templated control.</param>
-    /// <param name="ownerProperty">The control's property.</param>
-    /// <param name="partProperty">The part's property it mirrors.</param>
-    public TemplatePartValue(DependencyObject owner, DependencyProperty ownerProperty, DependencyProperty partProperty)
-    {
-        this.owner = owner;
-        this.ownerProperty = ownerProperty;
-        this.partProperty = partProperty;
-    }
 
     /// <summary>Attaches to a newly applied part, detaching from the previous one, and gives it the control's value.</summary>
     /// <param name="newPart">The part, or <see langword="null"/> when the template has none.</param>
     public void Attach(DependencyObject? newPart)
     {
-        if (this.part is not null)
-        {
-            this.part.UnregisterPropertyChangedCallback(this.partProperty, this.callback);
-        }
+        this.part?.UnregisterPropertyChangedCallback(partProperty, this.callback);
 
         this.part = newPart;
         if (newPart is not null)
         {
-            this.callback = newPart.RegisterPropertyChangedCallback(this.partProperty, this.OnPartChanged);
+            this.callback = newPart.RegisterPropertyChangedCallback(partProperty, this.OnPartChanged);
             this.Push();
         }
     }
@@ -61,7 +47,7 @@ internal sealed class TemplatePartValue
         this.syncing = true;
         try
         {
-            this.part.SetValue(this.partProperty, this.owner.GetValue(this.ownerProperty));
+            this.part.SetValue(partProperty, owner.GetValue(ownerProperty));
         }
         finally
         {
@@ -79,7 +65,7 @@ internal sealed class TemplatePartValue
         this.syncing = true;
         try
         {
-            this.owner.SetValue(this.ownerProperty, sender.GetValue(property));
+            owner.SetValue(ownerProperty, sender.GetValue(property));
         }
         finally
         {
@@ -87,7 +73,7 @@ internal sealed class TemplatePartValue
         }
 
         // A binding of the control may refuse the value at once and set its own; the part then shows that one.
-        if (!Equals(this.owner.GetValue(this.ownerProperty), sender.GetValue(property)))
+        if (!Equals(owner.GetValue(ownerProperty), sender.GetValue(property)))
         {
             this.Push();
         }

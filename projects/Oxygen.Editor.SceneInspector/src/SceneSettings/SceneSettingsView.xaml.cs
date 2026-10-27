@@ -112,7 +112,13 @@ public sealed partial class SceneSettingsView
         }
     }
 
-    private void ClearScenePropertySearch_Click(object sender, RoutedEventArgs args) => this.ScenePropertySearchBox.Text = string.Empty;
+    private void ClearScenePropertySearch_Click(object sender, RoutedEventArgs args)
+    {
+        _ = sender;
+        _ = args;
+
+        this.ScenePropertySearchBox.Text = string.Empty;
+    }
 
     private void ScenePropertyScope_Changed(object sender, SelectionChangedEventArgs args)
     {

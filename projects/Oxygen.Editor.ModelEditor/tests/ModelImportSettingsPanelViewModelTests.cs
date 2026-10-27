@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
-using Oxygen.Editor.Controls;
+using Oxygen.Editor.Controls.PropertyEditors;
 using Oxygen.Editor.Models;
 using static Oxygen.Editor.ModelEditor.TestSupport.ImportDialogs;
 

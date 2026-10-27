@@ -11,6 +11,7 @@ using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Automation.Provider;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
+using Oxygen.Editor.Controls.Feedback;
 
 namespace Oxygen.Editor.Controls.Unit.UI.Tests.Feedback;
 

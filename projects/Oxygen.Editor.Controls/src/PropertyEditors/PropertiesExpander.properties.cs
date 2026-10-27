@@ -204,12 +204,12 @@ public partial class PropertiesExpander
     }
 
     /// <summary>
-    /// Gets or sets the collection of items displayed in the expander.
+    /// Gets the collection of items displayed in the expander.
     /// </summary>
     public IList<object> Items
     {
         get => (IList<object>)this.GetValue(ItemsProperty);
-        set => this.SetValue(ItemsProperty, value);
+        private set => this.SetValue(ItemsProperty, value);
     }
 
     /// <summary>

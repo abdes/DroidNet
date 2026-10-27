@@ -21,6 +21,19 @@ internal static class EnvironmentFieldCatalog
     /// <returns>A new view-owned search model.</returns>
     internal static InspectorSearchModel Create()
         => new([
+            .. CreateSkyFields(),
+            .. CreateFogFields(),
+            CreateSourcesField(),
+            .. CreateExposureFields(),
+            .. CreatePostFields(),
+            .. CreateBackdropFields(),
+            .. CreateSkyLightFields(),
+        ]);
+
+    /// <summary>Creates the sky-atmosphere card presentation.</summary>
+    /// <returns>The presentation entries in catalog order.</returns>
+    private static InspectorFieldPresentation[] CreateSkyFields()
+        => [
             Sky("SunDiskEnabled", "/sky_atmosphere/sun_disk_enabled", "Sun Disk"),
             Sky("PlanetRadiusKm", "/sky_atmosphere/planet_radius_meters", "Planet Radius", "PlanetGround", "planet_radius_meters km"),
             Sky("AtmosphereHeightKm", "/sky_atmosphere/atmosphere_height_meters", "Atmosphere Height", "PlanetGround", "atmosphere_height_meters km"),
@@ -33,6 +46,12 @@ internal static class EnvironmentFieldCatalog
             Sky("AerialScatteringStrength", "/sky_atmosphere/aerial_scattering_strength", "Scattering strength", "AerialPerspective", "Aerial Strength"),
             Sky("AerialPerspectiveStartDepthMeters", "/sky_atmosphere/aerial_perspective_start_depth_meters", "Start distance", "AerialPerspective", "Aerial Start"),
             Sky("HeightFogContribution", "/sky_atmosphere/height_fog_contribution", "Height fog contribution", "AerialPerspective", "Height Fog"),
+        ];
+
+    /// <summary>Creates the fog card presentation.</summary>
+    /// <returns>The presentation entries in catalog order.</returns>
+    private static InspectorFieldPresentation[] CreateFogFields()
+        => [
             Fog("Enabled", "/fog/enabled", "Enabled", group: null, "enabled"),
             Fog("HeightFogEnabled", "/fog/height_fog_enabled", "Height Fog", group: null, "enable_height_fog"),
             Fog("Density", "/fog/density", "Density", group: null, "extinction_sigma_t_per_m 1/m"),
@@ -64,7 +83,17 @@ internal static class EnvironmentFieldCatalog
             Fog("Holdout", "/fog/holdout", "Holdout", "Rendering", "holdout"),
             Fog("VisibleInReflectionCaptures", "/fog/visible_in_reflection_captures", "Reflection Captures", "Rendering", "visible_in_reflection_captures"),
             Fog("VisibleInRealTimeSkyCaptures", "/fog/visible_in_real_time_sky_captures", "Sky Captures", "Rendering", "visible_in_real_time_sky_captures"),
-            new("Sources", SceneSchema.DirectionalLight.AtmosphereSlot.Id, InspectorPropertyScope.Environment, "AtmosphereLights", group: null, "Sources", "Atmosphere Lights Primary and secondary directional light sources.", $"Sun Binding Sun Reference atmosphere_light_slot azimuth elevation direction angular diameter disk luminance transmittance primary secondary SunAzimuth SunElevation AngularSizeRadians DiskScale {string.Join(' ', SourceFields.SelectMany(static entry => entry.Properties).Select(static property => property.JsonPointer))}"),
+        ];
+
+    /// <summary>Creates the atmosphere-lights source card presentation.</summary>
+    /// <returns>The source card presentation.</returns>
+    private static InspectorFieldPresentation CreateSourcesField()
+        => new("Sources", SceneSchema.DirectionalLight.AtmosphereSlot.Id, InspectorPropertyScope.Environment, "AtmosphereLights", group: null, "Sources", "Atmosphere Lights Primary and secondary directional light sources.", $"Sun Binding Sun Reference atmosphere_light_slot azimuth elevation direction angular diameter disk luminance transmittance primary secondary SunAzimuth SunElevation AngularSizeRadians DiskScale {string.Join(' ', SourceFields.SelectMany(static entry => entry.Properties).Select(static property => property.JsonPointer))}");
+
+    /// <summary>Creates the exposure card presentation.</summary>
+    /// <returns>The presentation entries in catalog order.</returns>
+    private static InspectorFieldPresentation[] CreateExposureFields()
+        => [
             Exposure("ExposureEnabled", "exposure_enabled", "Enabled"),
             Exposure("ExposureMode", "exposure_mode", "Mode", aliases: "Manual ManualCamera Auto"),
             Exposure("ManualExposureEv", "manual_exposure_ev", "Manual EV", applicability: InspectorFieldApplicability.ManualExposure, aliases: "ManualExposure EV100"),
@@ -85,6 +114,12 @@ internal static class EnvironmentFieldCatalog
             Exposure("AutoExposureTargetLuminance", "auto_exposure_target_luminance", "Target Luminance", "MeteringLimits", InspectorFieldApplicability.AutoExposure),
             Exposure("AutoExposureSpotMeterRadius", "auto_exposure_spot_meter_radius", "Spot Radius", "MeteringLimits", InspectorFieldApplicability.AutoExposureSpot),
             Exposure("AutoExposureCompensationCurve", "auto_exposure_compensation_curve", "Exposure-compensation curve", "ExposureShaping", InspectorFieldApplicability.AutoExposure, "Metered EV100 Compensation EV MeteredEv CompensationEv"),
+        ];
+
+    /// <summary>Creates the post-process card presentation.</summary>
+    /// <returns>The presentation entries in catalog order.</returns>
+    private static InspectorFieldPresentation[] CreatePostFields()
+        => [
             Post("ToneMapper", "tone_mapper", "Mapper", "ToneMapping", "Tone mapper selection and display transfer.", aliases: "AcesFitted Filmic Reinhard None"),
             Post("DisplayGamma", "display_gamma", "Display Gamma", "ToneMapping", "Tone mapper selection and display transfer."),
             Post("BloomIntensity", "bloom_intensity", "Intensity", "Bloom", "Bloom thresholding and contribution."),
@@ -92,6 +127,12 @@ internal static class EnvironmentFieldCatalog
             Post("Saturation", "saturation", "Saturation", "ColorGrading", "Color and lens-style post-process adjustments.", InspectorFieldApplicability.ToneMapping),
             Post("Contrast", "contrast", "Contrast", "ColorGrading", "Color and lens-style post-process adjustments.", InspectorFieldApplicability.ToneMapping),
             Post("VignetteIntensity", "vignette_intensity", "Vignette", "ColorGrading", "Color and lens-style post-process adjustments.", InspectorFieldApplicability.ToneMapping),
+        ];
+
+    /// <summary>Creates the backdrop card presentation.</summary>
+    /// <returns>The presentation entries in catalog order.</returns>
+    private static InspectorFieldPresentation[] CreateBackdropFields()
+        => [
             Backdrop("Backdrop", SceneSkyFields.Backdrop.Id, "Show", "Atmosphere Cubemap Solid color sky background skybox HDRI"),
             Backdrop("SkySphereCubemap", SceneSkyFields.SkySphereCubemap.Id, "Cubemap", "sky sphere cube texture skybox HDRI panorama", InspectorFieldApplicability.CubemapBackdrop),
             Backdrop("SkySphereRotation", SceneSkyFields.SkySphereRotationRadians.Id, "Rotation", "rotation_radians degrees", InspectorFieldApplicability.CubemapBackdrop),
@@ -100,6 +141,12 @@ internal static class EnvironmentFieldCatalog
             Backdrop("SkySphereIlluminance", SceneSkyFields.SkySphereIlluminanceLux.Id, "Illuminance", "sky illuminance lux calibration brightness physical sun HDRI exposure", InspectorFieldApplicability.SkySphereTone),
             Backdrop("SkySphereIntensity", SceneSkyFields.SkySphereIntensity.Id, "Intensity", "sky sphere intensity EV stops brightness", InspectorFieldApplicability.SkySphereTone),
             Backdrop("SkySphereTint", SceneSkyFields.SkySphereTintRgb.Id, "Tint", "sky sphere tint_rgb Linear RGB", InspectorFieldApplicability.SkySphereTone),
+        ];
+
+    /// <summary>Creates the sky-light card presentation.</summary>
+    /// <returns>The presentation entries in catalog order.</returns>
+    private static InspectorFieldPresentation[] CreateSkyLightFields()
+        => [
             SkyLight("SkyLightEnabled", SceneSkyFields.SkyLightEnabled.Id, "Enabled", group: null, "sky light IBL image-based lighting"),
             SkyLight("SkyLightSource", SceneSkyFields.SkyLightSource.Id, "Source", group: null, "Capture sky Cubemap captured scene specified cubemap"),
             SkyLight("SkyLightCubemap", SceneSkyFields.SkyLightCubemap.Id, "Cubemap", group: null, "cube texture HDRI", InspectorFieldApplicability.SkyLightCubemap),
@@ -114,7 +161,7 @@ internal static class EnvironmentFieldCatalog
             SkyLight("SkyLightLowerHemisphereBlend", SceneSkyFields.SkyLightLowerHemisphereBlendAlpha.Id, "Blend", "LowerHemisphere", "lower_hemisphere_blend_alpha"),
             SkyLight("SkyLightVolumetricScattering", SceneSkyFields.SkyLightVolumetricScatteringIntensity.Id, "Volumetric Scattering", "SkyLightAdvanced", "volumetric_scattering_intensity fog"),
             SkyLight("SkyLightAffectReflections", SceneSkyFields.SkyLightAffectReflections.Id, "Affect Reflections", "SkyLightAdvanced", "affect_reflections specular"),
-        ]);
+        ];
 
     private static ReadOnlyCollection<AtmosphereSourceFieldIdentity> CreateSourceFields()
     {

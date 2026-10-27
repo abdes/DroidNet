@@ -6,7 +6,7 @@ using System.Numerics;
 using AwesomeAssertions;
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.ContentPipeline.Inspection;
-using Oxygen.Editor.Controls;
+using Oxygen.Editor.Controls.PropertyEditors;
 using Oxygen.Editor.SceneInspector.Components.Geometry;
 using Oxygen.Editor.SceneInspector.Components.Lights;
 using Oxygen.Editor.SceneInspector.Components.Rendering;

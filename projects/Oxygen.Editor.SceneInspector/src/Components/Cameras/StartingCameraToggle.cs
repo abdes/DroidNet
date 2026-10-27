@@ -95,10 +95,10 @@ public sealed partial class StartingCameraToggle(Func<SceneAuthoring?>? authorin
             return;
         }
 
-        var camera = isStartingCamera ? reference : null;
-        if (camera != current.StartingCamera)
+        var target = isStartingCamera ? reference : null;
+        if (target != current.StartingCamera)
         {
-            _ = await authoring.ExecuteAsync(new SetStartingCamera(camera)).ConfigureAwait(true);
+            _ = await authoring.ExecuteAsync(new SetStartingCamera(target)).ConfigureAwait(true);
         }
 
         this.Refresh();

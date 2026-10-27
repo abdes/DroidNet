@@ -117,7 +117,7 @@ public sealed partial class StartingInputContextRowViewModel : ObservableObject
     private Task ResetPriorityAsync() => this.owner.SetContextPriorityAsync(this.Context, priority: null);
 
     private void CommitPriority()
-        => _ = this.owner.SetContextPriorityAsync(this.Context, (int)Math.Round(this.Priority));
+        => _ = this.owner.SetContextPriorityAsync(this.Context, (int)Math.Round(this.Priority, MidpointRounding.ToEven));
 
     /// <summary>What a row shows.</summary>
     /// <param name="DisplayName">The context name.</param>

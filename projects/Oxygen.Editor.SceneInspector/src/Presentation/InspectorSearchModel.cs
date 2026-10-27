@@ -9,8 +9,8 @@ namespace Oxygen.Editor.SceneInspector.Presentation;
 /// <summary>Scene-inspector search, applicability and temporary disclosure state.</summary>
 public sealed partial class InspectorSearchModel : ObservableObject
 {
-    private readonly Dictionary<string, bool> expansion = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, bool> savedExpansion = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, bool> expansion = [with(StringComparer.Ordinal)];
+    private readonly Dictionary<string, bool> savedExpansion = [with(StringComparer.Ordinal)];
     private string[] terms = [];
 
     /// <summary>Initializes a new instance of the <see cref="InspectorSearchModel"/> class.</summary>
@@ -37,8 +37,7 @@ public sealed partial class InspectorSearchModel : ObservableObject
     public void Update(string query, InspectorPropertyScope scope, InspectorApplicabilityContext modes)
     {
         var wasSearching = this.IsSearching;
-        this.terms = query.Trim().Split([' ', '\t', '/', '_', '-'], StringSplitOptions.RemoveEmptyEntries)
-            .Select(Normalize).ToArray();
+        this.terms = [.. query.Trim().Split([' ', '\t', '/', '_', '-'], StringSplitOptions.RemoveEmptyEntries).Select(Normalize)];
         if (this.IsSearching && !wasSearching)
         {
             this.savedExpansion.Clear();
@@ -106,5 +105,5 @@ public sealed partial class InspectorSearchModel : ObservableObject
     /// <param name="text">One query token or metadata string.</param>
     /// <returns>Lower-case letters and digits only.</returns>
     internal static string Normalize(string text)
-        => new(text.Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant).ToArray());
+        => new([.. text.Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant)]);
 }

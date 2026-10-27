@@ -153,9 +153,6 @@ public sealed partial class SceneSettingsViewModel : InspectorSection, IDisposab
         this.RefreshFromScene();
     }
 
-    /// <summary>Shows the bound scene's current values again.</summary>
-    internal void Refresh() => this.RefreshFromScene();
-
     /// <inheritdoc />
     public void BeginEditSession(string field, NumberBoxEditInteractionKind interaction) => this.EditOwner.BeginEditSession(field, interaction);
 
@@ -188,6 +185,9 @@ public sealed partial class SceneSettingsViewModel : InspectorSection, IDisposab
         this.EditOwner.Dispose();
         this.scene = null;
     }
+
+    /// <summary>Shows the bound scene's current values again.</summary>
+    internal void Refresh() => this.RefreshFromScene();
 
     /// <summary>Requests realization of a canonical field identity.</summary>
     /// <param name="property">The stable field path.</param>

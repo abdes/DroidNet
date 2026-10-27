@@ -96,7 +96,7 @@ public sealed partial class NodeFlagSourceField : ObservableObject
             _ => "Mixed: " + Count(modes, this.ModeNames),
         };
 
-        this.Caption = string.Join(" ", new[] { caption, notice ?? string.Empty }.Where(static part => part.Length > 0));
+        this.Caption = string.Join(' ', new[] { caption, notice ?? string.Empty }.Where(static part => part.Length > 0));
         this.SourceToolTip = this.source is { } node && this.selectNode is not null ? $"Select {node.Metadata.Name}" : string.Empty;
         this.OnPropertyChanged(nameof(this.SelectedIndex));
         this.OnPropertyChanged(nameof(this.Caption));

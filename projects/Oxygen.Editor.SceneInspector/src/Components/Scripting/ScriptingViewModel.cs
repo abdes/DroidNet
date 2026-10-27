@@ -328,8 +328,8 @@ public sealed partial class ScriptingViewModel : ComponentPropertyEditor, IDispo
 
         this.assets.Clear();
         this.assets.AddRange(value);
-        var scripts = this.FindAssets(ScriptAssetType);
-        var identities = scripts.Select(static script => script.Identity).ToArray();
+        var found = this.FindAssets(ScriptAssetType);
+        var identities = found.Select(static script => script.Identity).ToArray();
         if (!identities.SequenceEqual(this.scriptAssets))
         {
             // Mounted libraries changed, so library scripts are read again.
@@ -337,7 +337,7 @@ public sealed partial class ScriptingViewModel : ComponentPropertyEditor, IDispo
             this.scriptAssets = identities;
         }
 
-        this.ScriptChoices.Update(scripts);
+        this.ScriptChoices.Update(found);
 
         this.Rebuild();
     }
@@ -372,7 +372,7 @@ public sealed partial class ScriptingViewModel : ComponentPropertyEditor, IDispo
         ScriptRead read;
         try
         {
-            read = await library.ReadLibraryAsync(script).ConfigureAwait(true);
+            read = await library.ReadLibraryAsync(script, this.session?.Lifetime ?? CancellationToken.None).ConfigureAwait(true);
         }
         catch (OperationCanceledException)
         {

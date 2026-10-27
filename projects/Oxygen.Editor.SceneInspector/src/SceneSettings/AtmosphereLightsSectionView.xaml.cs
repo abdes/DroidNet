@@ -27,6 +27,9 @@ public sealed partial class AtmosphereLightsSectionView
 
     private async void ResetAtmosphereSources_Click(object sender, RoutedEventArgs args)
     {
+        _ = sender;
+        _ = args;
+
         if (this.ViewModel is { } model)
         {
             await model.ResetAtmosphereSourcesAsync().ConfigureAwait(true);
@@ -35,6 +38,9 @@ public sealed partial class AtmosphereLightsSectionView
 
     private async void InspectPrimarySource_Click(object sender, RoutedEventArgs args)
     {
+        _ = sender;
+        _ = args;
+
         if (this.ViewModel is { } model)
         {
             await model.InspectAtmosphereSourceAsync(model.SelectedSun).ConfigureAwait(true);
@@ -43,6 +49,9 @@ public sealed partial class AtmosphereLightsSectionView
 
     private async void InspectSecondarySource_Click(object sender, RoutedEventArgs args)
     {
+        _ = sender;
+        _ = args;
+
         if (this.ViewModel is { } model)
         {
             await model.InspectAtmosphereSourceAsync(model.SelectedSecondarySun).ConfigureAwait(true);
