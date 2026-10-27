@@ -259,10 +259,11 @@ namespace {
 
   //! Generates the normals of `vertices`, one vertex per triangle corner.
   /*!
-   A corner's normal is the area-weighted sum of the face normals of the
-   triangles at its position whose face normal is within
-   `smoothing_angle_deg` of its own triangle's, so a sharper edge stays hard.
-   A corner of a degenerate triangle sums every triangle at its position.
+   A corner's normal is the area-weighted sum of its own triangle's face
+   normal and those of the triangles at its position whose face normal is
+   within `smoothing_angle_deg` of it, so a sharper edge stays hard and an
+   angle of 0 gives flat normals. A corner of a degenerate triangle sums every
+   triangle at its position.
   */
   auto ComputeNormalsFromTriangles(std::vector<data::Vertex>& vertices,
     const std::span<const SubmeshBucket> buckets,
@@ -322,8 +323,11 @@ namespace {
         const bool degenerate = own == glm::vec3(0.0F);
         auto n = glm::vec3(0.0F);
         for (const auto& other_entry : shared) {
+          // A unit normal's dot with itself can round below cos(0) = 1, so the
+          // corner's own face is taken without the angle test.
           const auto other = other_entry.second;
-          if (degenerate || glm::dot(own, units.at(other)) >= min_cos) {
+          if (other == corner || degenerate
+            || glm::dot(own, units.at(other)) >= min_cos) {
             n += faces.at(other);
           }
         }

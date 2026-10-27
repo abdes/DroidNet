@@ -939,6 +939,52 @@ NOLINT_TEST_F(ModelValuesTest, GeneratedNormalsFollowTheSmoothingAngle)
   }
 }
 
+//! A glTF primitive without normals gets flat ones: each corner takes its own
+//! triangle's face normal, on tilted faces too, where a unit normal's dot with
+//! itself rounds below 1.
+NOLINT_TEST_F(ModelValuesTest, GltfWithoutNormalsGetsItsFaceNormals)
+{
+  // A 3 x 3 grid of quads with uneven heights, two triangles each, unindexed.
+  const auto document = nlohmann::json::parse(R"({
+    "asset": {"version": "2.0"},
+    "buffers": [{"uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAAAAAM3MTD4AAIA/AACAP5qZmT4AAAAAAACAP5qZmT4AAAAAAAAAAM3MTD4AAIA/AACAPzMzMz8AAIA/AACAP5qZmT4AAAAAAACAPzMzMz8AAIA/AAAAQM3MzD0AAAAAAAAAQM3MzD0AAAAAAACAPzMzMz8AAIA/AAAAQAAAAD8AAIA/AAAAQM3MzD0AAAAAAAAAQAAAAD8AAIA/AABAQM3MzD4AAAAAAABAQM3MzD4AAAAAAAAAQAAAAD8AAIA/AABAQM3MzD0AAIA/AAAAAM3MTD4AAIA/AAAAAJqZGT8AAABAAACAPzMzMz8AAIA/AACAPzMzMz8AAIA/AAAAAJqZGT8AAABAAACAP83MTD4AAABAAACAPzMzMz8AAIA/AACAP83MTD4AAABAAAAAQAAAAD8AAIA/AAAAQAAAAD8AAIA/AACAP83MTD4AAABAAAAAQGZmZj8AAABAAAAAQAAAAD8AAIA/AAAAQGZmZj8AAABAAABAQM3MzD0AAIA/AABAQM3MzD0AAIA/AAAAQGZmZj8AAABAAABAQJqZmT4AAABAAAAAAJqZGT8AAABAAAAAAM3MzD0AAEBAAACAP83MTD4AAABAAACAP83MTD4AAABAAAAAAM3MzD0AAEBAAACAPwAAAD8AAEBAAACAP83MTD4AAABAAACAPwAAAD8AAEBAAAAAQGZmZj8AAABAAAAAQGZmZj8AAABAAACAPwAAAD8AAEBAAAAAQM3MTD4AAEBAAAAAQGZmZj8AAABAAAAAQM3MTD4AAEBAAABAQJqZmT4AAABAAABAQJqZmT4AAABAAAAAQM3MTD4AAEBAAABAQM3MTD8AAEBA", "byteLength": 648}],
+    "bufferViews": [{"buffer": 0, "byteLength": 648}],
+    "accessors": [{"bufferView": 0, "componentType": 5126, "count": 54,
+      "type": "VEC3", "min": [0, 0, 0], "max": [3, 0.9, 3]}],
+    "materials": [{"name": "Grid"}],
+    "meshes": [{"name": "Grid", "primitives": [
+      {"attributes": {"POSITION": 0}, "material": 0}]}],
+    "nodes": [{"name": "Grid", "mesh": 0}],
+    "scenes": [{"nodes": [0]}], "scene": 0
+  })");
+  const auto root = MakeTempDir("gltf_flat_normals");
+  const auto source = root / "grid.gltf";
+  {
+    std::ofstream output(source);
+    output << document.dump();
+  }
+  auto request = oxygen::content::import::ImportRequest {};
+  request.source_path = source;
+  request.asset_virtual_path = oxygen::cooker::test::ModelVirtualPath(source);
+  request.cooked_root = root / "cooked";
+  const auto imported = RunImport(std::move(request));
+  ASSERT_TRUE(imported.report.success);
+  LoadAndVerify(imported.report, [](const CookedModel& model) -> void {
+    ASSERT_EQ(model.indices.size(), 54U);
+    for (size_t tri = 0; tri < model.indices.size() / 3; ++tri) {
+      SCOPED_TRACE(tri);
+      const auto& v0 = model.vertices.at(model.indices.at(tri * 3));
+      const auto& v1 = model.vertices.at(model.indices.at((tri * 3) + 1));
+      const auto& v2 = model.vertices.at(model.indices.at((tri * 3) + 2));
+      const auto face = glm::normalize(
+        glm::cross(v1.position - v0.position, v2.position - v0.position));
+      for (const auto* corner : { &v0, &v1, &v2 }) {
+        ExpectVec3Near(corner->normal, face, 0.001F);
+      }
+    }
+  });
+}
+
 //! The scalar FBX scene, with a material, and with its axes or a film back
 //! as asked.
 auto ScalarFbxText(const std::filesystem::path& models, const bool axes,
