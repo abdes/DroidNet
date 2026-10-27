@@ -87,7 +87,9 @@ public sealed partial class CookingPanelView
     private void RestoreOutputSelection()
     {
         this.restoreSelectionQueued = false;
-        if (this.IsLoaded && this.readingRun is { } run)
+
+        // A selection made since the restore was queued is newer than the one the run kept.
+        if (this.IsLoaded && this.readingRun is { } run && this.CookOutput.CaptureSelection().Count == 0)
         {
             this.CookOutput.RestoreSelection(run.SelectedOutputEntries);
         }

@@ -16,7 +16,7 @@ namespace Oxygen.Editor.Cooking.Unit.UI.Tests;
 
 /// <summary>The Cooking panel comes forward when a cook run asks to be revealed, and only while its presenter lives.</summary>
 [TestClass]
-public sealed class CookingPresenterTests : DroidNet.Tests.VisualUserInterfaceTests
+internal sealed class CookingPresenterTests : DroidNet.Tests.VisualUserInterfaceTests
 {
     /// <summary>A revealed run brings the panel forward once.</summary>
     /// <returns>The asynchronous test.</returns>
@@ -58,11 +58,15 @@ public sealed class CookingPresenterTests : DroidNet.Tests.VisualUserInterfaceTe
     // The model applies a run change on the dispatcher at low priority; a later item of the same priority runs after it.
     private static async Task RaiseRevealAsync(Mock<ICookRunService> runs, CookRunSnapshot snapshot)
     {
-        runs.Raise(service => service.RunChanged += null, runs.Object, new CookRunChangedEventArgs(snapshot, reveal: true));
+        RaiseReveal(runs, snapshot);
         var applied = new TaskCompletionSource();
-        _ = DispatcherQueue.GetForCurrentThread().TryEnqueue(DispatcherQueuePriority.Low, () => applied.SetResult());
+        _ = DispatcherQueue.GetForCurrentThread().TryEnqueue(DispatcherQueuePriority.Low, applied.SetResult);
         await applied.Task.ConfigureAwait(true);
     }
+
+    // Run changes are a synchronous event.
+    private static void RaiseReveal(Mock<ICookRunService> runs, CookRunSnapshot snapshot)
+        => runs.Raise(service => service.RunChanged += null, runs.Object, new CookRunChangedEventArgs(snapshot, reveal: true));
 
     private static TestSession CreateSession()
         => new(TestProject.Create(new MockFileSystem(), Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"))).Context with { Name = "Presenter" });

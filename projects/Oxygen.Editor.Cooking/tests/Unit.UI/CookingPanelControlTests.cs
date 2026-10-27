@@ -19,7 +19,6 @@ using Moq;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.Projects.Testing;
-using Oxygen.Editor.Cooking;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 using Testably.Abstractions.Testing;
@@ -116,8 +115,13 @@ public sealed partial class CookingPanelControlTests : VisualUserInterfaceTests
         AssertShownViews(view);
         model.SelectedRun!.ViewIndex = CookingRunViewModel.IssuesView;
         await WaitForRenderAsync().ConfigureAwait(true);
-        var issue = view.FindDescendant<TextBlock>(element => string.Equals(element.Text, "Aerial Start must be 0 m or greater.", StringComparison.Ordinal))!;
-        var row = issue.FindAscendant<ListViewItem>()!;
+
+        // A narrow list shows less than one issue; the list realizes rows beyond its viewport only as they scroll in.
+        const string message = "Aerial Start must be 0 m or greater.";
+        view.FindDescendant<ListView>(element => string.Equals(element.Name, "CookIssues", StringComparison.Ordinal))!
+            .ScrollIntoView(model.SelectedRun.Issues.Single(item => string.Equals(item.Message, message, StringComparison.Ordinal)));
+        await this.WaitForReadingAsync(() => FindText(view, message) is not null).ConfigureAwait(true);
+        var row = FindText(view, message)!.FindAscendant<ListViewItem>()!;
         var action = row.FindDescendant<HyperlinkButton>(element => Equals(element.Content, "Go to property"))!;
         _ = action.Visibility.Should().Be(Visibility.Visible);
         _ = model.SelectedRun.Issues.Select(static item => item.Scope).Should().Equal("OtherScene", "Main");
@@ -351,7 +355,7 @@ public sealed partial class CookingPanelControlTests : VisualUserInterfaceTests
     /// <summary>Long Output and Assets views stay inside the pane and scroll by themselves, realizing only visible rows.</summary>
     /// <returns>The asynchronous UI test.</returns>
     [TestMethod]
-    public Task LongViewsAreBoundedAndVirtualized() => EnqueueAsync(async () =>
+    public Task LongViewsAreBoundedAndVirtualized() => EnqueueAsync(static async () =>
     {
         using var session = CreateSession();
         using var model = CreateModel(session);
@@ -378,7 +382,7 @@ public sealed partial class CookingPanelControlTests : VisualUserInterfaceTests
         var outputList = output.FindDescendant<ListView>()!;
         _ = output.ActualHeight.Should().BeLessThan(340);
         _ = outputList.FindDescendant<ScrollViewer>()!.ScrollableHeight.Should().BePositive();
-        _ = outputList.FindDescendants().OfType<ListViewItem>().Count().Should().BeLessThan(100);
+        _ = outputList.FindDescendants().OfType<ListViewItem>().Should().HaveCountLessThan(100);
 
         run.IsAssetsView = true;
         await WaitForRenderAsync().ConfigureAwait(true);
@@ -386,12 +390,13 @@ public sealed partial class CookingPanelControlTests : VisualUserInterfaceTests
         var list = view.FindDescendant<ListView>(element => string.Equals(element.Name, "CookAssets", StringComparison.Ordinal))!;
         _ = list.ActualHeight.Should().BeLessThan(340);
         _ = list.FindDescendant<ScrollViewer>()!.ScrollableHeight.Should().BePositive();
-        _ = list.FindDescendants().OfType<ListViewItem>().Count().Should().BeLessThan(100);
+        _ = list.FindDescendants().OfType<ListViewItem>().Should().HaveCountLessThan(100);
     });
 
     /// <summary>Reused assets are a count until asked for; changed and failed assets are listed.</summary>
+    /// <returns>The asset-listing regression on the UI thread.</returns>
     [TestMethod]
-    public void AssetsViewListsReusedAssetsOnlyOnRequest()
+    public Task AssetsViewListsReusedAssetsOnlyOnRequest() => EnqueueAsync(() =>
     {
         using var session = CreateSession();
         using var model = CreateModel(session);
@@ -414,8 +419,8 @@ public sealed partial class CookingPanelControlTests : VisualUserInterfaceTests
         _ = run.Assets.Should().HaveCount(6);
         _ = run.Assets.Select(static row => row.Asset.AssetUri).Should().BeInAscendingOrder();
         run.ShowReused = false;
-        _ = run.Assets.Should().HaveCount(1);
-    }
+        _ = run.Assets.Should().ContainSingle();
+    });
 
     /// <summary>A burst paints only its latest snapshot while retaining every asset and output message.</summary>
     /// <returns>The asynchronous progress-coalescing regression.</returns>
@@ -536,6 +541,9 @@ public sealed partial class CookingPanelControlTests : VisualUserInterfaceTests
         }
     }
 
+    private static TextBlock? FindText(CookingPanelView view, string text)
+        => view.FindDescendant<TextBlock>(element => string.Equals(element.Text, text, StringComparison.Ordinal));
+
     private static TestSession CreateSession()
         => new(TestProject.Create(new MockFileSystem(), Path.GetTempPath()).Context with { ProjectId = Guid.NewGuid(), Name = "Vortex", AuthoringMounts = [] });
 
@@ -574,7 +582,7 @@ public sealed partial class CookingPanelControlTests : VisualUserInterfaceTests
         };
         run = configure?.Invoke(run) ?? run;
         var runs = runService ?? new Mock<ICookRunService>();
-        _ = runs.SetupGet(service => service.Runs).Returns(new[] { run });
+        _ = runs.SetupGet(service => service.Runs).Returns([run]);
         var dispatcher = DispatcherQueue.GetForCurrentThread();
         var hosting = new HostingContext { Application = Application.Current, Dispatcher = dispatcher, DispatcherScheduler = new System.Reactive.Concurrency.DispatcherQueueScheduler(dispatcher) };
         return new(runs.Object, Mock.Of<IContentPipelineService>(), session, actions ?? Mock.Of<ICookRecovery>(), hosting);

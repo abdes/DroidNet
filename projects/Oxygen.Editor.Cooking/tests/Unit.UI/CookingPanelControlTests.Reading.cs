@@ -65,8 +65,9 @@ public sealed partial class CookingPanelControlTests
         var view = new CookingPanelView { ViewModel = model, Width = 700, Height = 340 };
         await LoadTestContentAsync(view).ConfigureAwait(true);
         var output = (OutputConsoleView)view.FindName("CookOutput");
-        await this.WaitForReadingAsync(() => output.FindDescendant<ListView>()!.Items.Count > 0).ConfigureAwait(true);
+        await this.WaitForReadingAsync(() => output.FindDescendant<ListView>()!.Items.Count == first.Output.Count).ConfigureAwait(true);
         output.RestoreSelection([first.Output[2], first.Output[3]]);
+        _ = output.CaptureSelection().Should().Equal([first.Output[2], first.Output[3]], "the console selects shown messages");
         AppendReadingMessages(first, 20);
         await WaitForRenderAsync().ConfigureAwait(true);
         _ = output.CaptureSelection().Should().Equal(first.Output[2], first.Output[3]);

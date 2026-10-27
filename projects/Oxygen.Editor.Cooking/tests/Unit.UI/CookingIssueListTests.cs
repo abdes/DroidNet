@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Globalization;
 using AwesomeAssertions;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -15,7 +16,7 @@ internal sealed class CookingIssueListTests
     public void RepeatedDiagnosticsShareOneIssueWithTheirPlaces()
     {
         var issues = new CookingIssueList();
-        var repeated = Enumerable.Range(0, 3).Select(static index => Diagnostic("Textures repeat.", "Cook.Texture", DiagnosticSeverity.Warning, $"/materials/{index}")).ToArray();
+        var repeated = Enumerable.Range(0, 3).Select(static index => Diagnostic("Textures repeat.", "Cook.Texture", DiagnosticSeverity.Warning, string.Create(CultureInfo.InvariantCulture, $"/materials/{index}"))).ToArray();
 
         foreach (var diagnostic in repeated)
         {
