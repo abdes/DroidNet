@@ -569,4 +569,13 @@ internal sealed partial class ScenePreview
 
     private void LogAssetLoadFailed(Guid operationId, ulong generation, NodeId nodeId, string message)
         => LogAssetLoadFailed(this.logger, operationId, generation, nodeId, message);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Warning,
+        Message = "Reading the structure of instanced source '{Source}' failed; its last structure is kept")]
+    private static partial void LogStructureReadFailed(ILogger logger, Exception exception, AssetPath source);
+
+    private void LogStructureReadFailed(Exception exception, AssetPath source)
+        => LogStructureReadFailed(this.logger, exception, source);
 }

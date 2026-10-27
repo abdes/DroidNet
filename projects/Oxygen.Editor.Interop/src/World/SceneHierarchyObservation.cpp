@@ -7,8 +7,8 @@
 #include "pch_clr.h"
 
 #pragma managed(push, off)
-#include <functional>
 #include <array>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -56,14 +56,14 @@ auto ToGuid(const std::string& canonical) -> System::Guid
 
 auto ToManaged(const Hierarchy& hierarchy) -> SceneHierarchyManaged
 {
-  SceneHierarchyManaged result;
+  SceneHierarchyManaged result{};
   result.Exists = true;
   result.SceneKey = ToGuid(oxygen::data::to_string(hierarchy.scene_key));
   result.Nodes = gcnew array<SceneHierarchyNodeManaged>(
     static_cast<int>(hierarchy.nodes.size()));
   for (int index = 0; index < result.Nodes->Length; ++index) {
     const auto& node = hierarchy.nodes.at(static_cast<std::size_t>(index));
-    SceneHierarchyNodeManaged entry;
+    SceneHierarchyNodeManaged entry{};
     entry.Path = gcnew array<System::Guid>(static_cast<int>(node.path.size()));
     for (int level = 0; level < entry.Path->Length; ++level) {
       entry.Path[level] = ToGuid(oxygen::data::to_string(
@@ -76,13 +76,16 @@ auto ToManaged(const Hierarchy& hierarchy) -> SceneHierarchyManaged
     entry.InstanceKey = node.instance.has_value()
       ? ToGuid(oxygen::data::to_string(*node.instance))
       : System::Guid::Empty;
+    entry.GeometryPath = node.geometry.has_value()
+      ? FromUtf8(node.geometry->virtual_path)
+      : nullptr;
     result.Nodes[index] = entry;
   }
   result.Issues = gcnew array<SceneHierarchyIssueManaged>(
     static_cast<int>(hierarchy.issues.size()));
   for (int index = 0; index < result.Issues->Length; ++index) {
     const auto& issue = hierarchy.issues.at(static_cast<std::size_t>(index));
-    SceneHierarchyIssueManaged entry;
+    SceneHierarchyIssueManaged entry{};
     entry.Code = static_cast<SceneHierarchyIssueCodeManaged>(issue.code);
     entry.Node = issue.node.has_value() ? static_cast<int>(*issue.node) : -1;
     entry.SceneKey = ToGuid(oxygen::data::to_string(issue.scene_key));
@@ -93,7 +96,7 @@ auto ToManaged(const Hierarchy& hierarchy) -> SceneHierarchyManaged
 
 auto MissingHierarchy() -> SceneHierarchyManaged
 {
-  SceneHierarchyManaged missing;
+  SceneHierarchyManaged missing{};
   missing.Exists = false;
   missing.Nodes = gcnew array<SceneHierarchyNodeManaged>(0);
   missing.Issues = gcnew array<SceneHierarchyIssueManaged>(0);
@@ -118,7 +121,7 @@ auto ToManaged(const LodPolicyRecord& record) -> LodPolicyManaged
   using oxygen::data::pak::geometry::LodPolicyType;
   const auto distance = record.type == LodPolicyType::kDistance;
   const auto error = record.type == LodPolicyType::kScreenSpaceError;
-  LodPolicyManaged policy;
+  LodPolicyManaged policy{};
   policy.Type = static_cast<System::Byte>(record.type);
   policy.LodIndex = record.lod_index;
   policy.HysteresisRatio = record.hysteresis_ratio;
@@ -158,7 +161,7 @@ auto ToManaged(const NodeValue& value, SceneNodePropertyManaged% property)
 
 auto ToManaged(const NodeValues& values) -> SceneNodeValuesManaged
 {
-  SceneNodeValuesManaged result;
+  SceneNodeValuesManaged result{};
   result.Exists = true;
   result.Name = FromUtf8(values.name);
   result.GeometryPath = values.geometry.has_value()
@@ -169,7 +172,7 @@ auto ToManaged(const NodeValues& values) -> SceneNodeValuesManaged
   for (int index = 0; index < result.Properties->Length; ++index) {
     const auto& property
       = values.properties.at(static_cast<std::size_t>(index));
-    SceneNodePropertyManaged entry;
+    SceneNodePropertyManaged entry{};
     entry.OverrideId = static_cast<System::UInt16>(property.override_id);
     entry.PartId = property.part_id.IsNil()
       ? System::Guid::Empty
@@ -185,7 +188,7 @@ auto ToManaged(const NodeValues& values) -> SceneNodeValuesManaged
 
 auto MissingNode() -> SceneNodeValuesManaged
 {
-  SceneNodeValuesManaged missing;
+  SceneNodeValuesManaged missing{};
   missing.Exists = false;
   missing.Properties = gcnew array<SceneNodePropertyManaged>(0);
   return missing;

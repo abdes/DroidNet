@@ -6,6 +6,7 @@ using System.Collections.Immutable;
 using System.Globalization;
 using System.Numerics;
 using Oxygen.Editor.ContentPipeline;
+using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
@@ -134,6 +135,11 @@ internal sealed partial class ScenePreview
         if (previous is null || !Equals(previous.Source, current.Source))
         {
             this.Report(await this.InstantiateAsync(scene, node, current, cancellationToken).ConfigureAwait(true));
+            if (this.structureStore.Find(this.session.Context, current.Source) is null)
+            {
+                await this.ReadStructuresAsync([current.Source]).ConfigureAwait(true);
+            }
+
             return;
         }
 
@@ -162,9 +168,9 @@ internal sealed partial class ScenePreview
             apply,
             cancellationToken);
 
-    /// <summary>The source and changes of an instance as the projector last sent them.</summary>
-    private sealed record ProjectedInstance(AssetPath Source, InstanceChanges Changes);
-
     /// <summary>The address of one instance change: the node, the property and the part.</summary>
     private readonly record struct InstanceChangeKey(NodePath Path, PropertyId Property, Guid Part);
+
+    /// <summary>The source and changes of an instance as the projector last sent them.</summary>
+    private sealed record ProjectedInstance(AssetPath Source, InstanceChanges Changes);
 }

@@ -5,6 +5,10 @@
 using System.Collections.Immutable;
 using Oxygen.Editor.World;
 
+// The hierarchy read's result types are one contract: they stay together.
+#pragma warning disable SA1402 // File may only contain a single type
+#pragma warning disable MA0048 // File name must match type name
+
 namespace Oxygen.Editor.Runtime.Engine;
 
 /// <summary>The hierarchy of a scene of the mounted content, with every scene it instances, read from the scene descriptors alone.</summary>
@@ -20,7 +24,11 @@ public sealed record RuntimeSceneHierarchy(bool Exists, Guid SceneKey, Immutable
 /// <param name="Parent">The parent's index in the hierarchy's nodes, or <see langword="null"/> for a root of the scene read.</param>
 /// <param name="SceneKey">The asset key of the scene that defines the node.</param>
 /// <param name="InstanceKey">The asset key of the scene the node instances, when it is an instance root.</param>
-public sealed record RuntimeSceneHierarchyNode(NodePath Path, string Name, int? Parent, Guid SceneKey, Guid? InstanceKey);
+/// <param name="GeometryPath">
+/// The virtual path of the geometry the node renders: <see langword="null"/> when it renders nothing, empty when no
+/// mounted source provides it.
+/// </param>
+public sealed record RuntimeSceneHierarchyNode(NodePath Path, string Name, int? Parent, Guid SceneKey, Guid? InstanceKey, string? GeometryPath);
 
 /// <summary>A part of a scene's hierarchy that could not be read.</summary>
 /// <param name="Code">Why it could not be read.</param>
@@ -36,9 +44,6 @@ public enum RuntimeSceneHierarchyIssueCode
 
     /// <summary>An instanced scene instances, directly or not, the scene it is in.</summary>
     Cycle,
-
-    /// <summary>An instance record names a node its scene does not have.</summary>
-    InvalidInstance,
 }
 
 /// <summary>The correlated outcome and hierarchy of one scene hierarchy read.</summary>

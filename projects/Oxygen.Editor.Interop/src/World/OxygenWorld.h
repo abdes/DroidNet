@@ -147,13 +147,15 @@ value struct PropertyValueEntry {
     //! The asset key of the scene the node instances; empty when the node is
     //! no instance root.
     System::Guid InstanceKey;
+    //! The virtual path of the geometry the node renders: null when it
+    //! renders nothing, empty when no mounted source provides it.
+    System::String^ GeometryPath;
   };
 
   //! Why part of a scene's hierarchy could not be read.
   public enum class SceneHierarchyIssueCodeManaged : System::Byte {
     SceneUnavailable = 0,
     Cycle = 1,
-    InvalidInstance = 2,
   };
 
   //! A part of a scene's hierarchy that could not be read.

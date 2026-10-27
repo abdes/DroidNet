@@ -8,6 +8,7 @@ using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.LivePreview.Tests.Scenes;
 
@@ -37,7 +38,7 @@ public sealed class SceneWireTests
     {
         var properties = ProjectedKinds.SelectMany(static kind => SceneProperties.RulesOf(kind)!.Descriptors.Keys);
 
-        _ = properties.Where(static property => !SceneWire.TryGet(property, out _)).Should().BeEmpty();
+        _ = properties.Should().NotContain(property => !IsWired(property));
     }
 
     [TestMethod]
@@ -80,4 +81,6 @@ public sealed class SceneWireTests
         _ = SceneWire.HasComponent(node, RuntimeComponentId.PointLight).Should().BeFalse();
         _ = SceneWire.HasComponent(node, RuntimeComponentId.LocalFogVolume).Should().BeFalse();
     }
+
+    private static bool IsWired(PropertyId property) => SceneWire.TryGet(property, out _);
 }

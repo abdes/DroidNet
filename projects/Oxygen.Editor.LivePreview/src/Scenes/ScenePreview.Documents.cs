@@ -345,10 +345,10 @@ internal sealed partial class ScenePreview
             lifetime.Owner.Queue(() => this.ReadyChanged?.Invoke(this, new ScenePreviewEventArgs(lifetime.DocumentId)));
         }
 
-        // A ready document's content is mounted, possibly again after a cook: structures read before may differ.
+        // A ready document's content is mounted, possibly again after a cook: its sources' structures are read again.
         if (changed && isReady)
         {
-            lifetime.Owner.Queue(() => this.StructuresChanged?.Invoke(this, EventArgs.Empty));
+            lifetime.Owner.Queue(() => _ = this.ReadStructuresAsync(InstancedSources(lifetime.Scene)));
         }
     }
 

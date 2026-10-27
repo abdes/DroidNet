@@ -39,7 +39,8 @@ internal sealed partial class NativeRuntimeCommandTransport
                 node.Name,
                 node.Parent < 0 ? null : node.Parent,
                 node.SceneKey,
-                node.InstanceKey == Guid.Empty ? null : node.InstanceKey))],
+                node.InstanceKey == Guid.Empty ? null : node.InstanceKey,
+                node.GeometryPath))],
             [.. hierarchy.Issues.Select(static issue => new RuntimeSceneHierarchyIssue(
                 (RuntimeSceneHierarchyIssueCode)issue.Code,
                 issue.Node < 0 ? null : issue.Node,

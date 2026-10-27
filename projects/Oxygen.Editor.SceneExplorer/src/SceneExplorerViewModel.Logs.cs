@@ -36,15 +36,6 @@ public partial class SceneExplorerViewModel
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Warning,
-        Message = "Scene Explorer could not read what the instances of {Source} contain in document {DocumentId}.")]
-    private static partial void LogInstanceStructureReadFailed(ILogger logger, Exception exception, AssetPath source, DocumentId documentId);
-
-    private void LogInstanceStructureReadFailed(Exception exception, AssetPath source)
-        => LogInstanceStructureReadFailed(this.logger, exception, source, this.SceneDocumentId);
-
-    [LoggerMessage(
-        SkipEnabledCheck = true,
-        Level = LogLevel.Warning,
         Message = "A drop was refused in document {DocumentId}: it moves a node of instance {InstanceRoot} or gives one a child")]
     private static partial void LogInstancedDropRefused(ILogger logger, DocumentId documentId, NodeId? instanceRoot);
 

@@ -61,12 +61,13 @@ public sealed class LivePreviewSessionModule : IScopeModule<ISessionLayer>
                 resolver.Resolve<IEngineService>(),
                 resolver.Resolve<OpenDocuments>(),
                 resolver.Resolve<IProjectSession>(),
+                resolver.Resolve<SceneStructureStore>(),
                 resolver.Resolve<ILoggerFactory>(),
                 resolver.Resolve<IOperationResultPublisher>(),
                 resolver.Resolve<IAssetFeed>()),
             Reuse.Singleton);
         scope.RegisterDelegate(
-            resolver => (ISceneStructureProvider)resolver.Resolve<IScenePreview>(), Reuse.Singleton);
+            resolver => (IInstancedNodeReader)resolver.Resolve<IScenePreview>(), Reuse.Singleton);
         scope.Register<PreviewSession>(Reuse.Singleton);
         scope.RegisterMapping<IContentMountChanges, PreviewSession>();
     }

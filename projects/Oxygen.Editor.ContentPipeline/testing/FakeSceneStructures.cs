@@ -11,11 +11,12 @@ using Oxygen.Managed.Core;
 namespace Oxygen.Editor.ContentPipeline.Testing;
 
 /// <summary>
-/// An <see cref="ISceneStructureProvider"/> for tests: the structures of the sources a test publishes. A source with no
-/// structure reads as <see langword="null"/> (not cooked), as the real reader answers.
+/// The <see cref="ISceneStructures"/> and <see cref="IInstancedNodeReader"/> of tests: the structures and node values
+/// of the sources a test publishes, as read. A source with no structure is found as <see langword="null"/> (not read),
+/// as the real store answers.
 /// </summary>
-/// <remarks>Structures do not depend on the project a read names.</remarks>
-public sealed class FakeSceneStructures : ISceneStructureProvider
+/// <remarks>Structures do not depend on the project a lookup names.</remarks>
+public sealed class FakeSceneStructures : ISceneStructures, IInstancedNodeReader
 {
     private readonly Lock gate = new();
     private readonly Dictionary<AssetPath, SceneStructure> structures = [];
@@ -39,14 +40,25 @@ public sealed class FakeSceneStructures : ISceneStructureProvider
         var structure = new SceneStructure(
             source,
             scene,
-            [.. nodes.Select(node => new StructureNode(node.Path, node.Name, node.Parent, scene, Instance: null))],
-            ImmutableArray<StructureIssue>.Empty);
+            [.. nodes.Select(node => new StructureNode(node.Path, node.Name, node.Parent, scene, Instance: null, Geometry: null))],
+            []);
         lock (this.gate)
         {
             this.structures[source] = structure;
         }
 
         return structure;
+    }
+
+    /// <summary>Publishes a structure as read, replacing any earlier one of its source.</summary>
+    /// <param name="structure">The structure, with whatever geometry and issues the test needs.</param>
+    public void Publish(SceneStructure structure)
+    {
+        ArgumentNullException.ThrowIfNull(structure);
+        lock (this.gate)
+        {
+            this.structures[structure.Source] = structure;
+        }
     }
 
     /// <summary>Publishes the effective values of a node an instance of a source brings in, replacing earlier ones.</summary>
@@ -78,18 +90,17 @@ public sealed class FakeSceneStructures : ISceneStructureProvider
         }
     }
 
-    /// <summary>Announces that structures read before may differ now, as when content is mounted again.</summary>
+    /// <summary>Announces that structures were read again, as when content is mounted again.</summary>
     public void RaiseChanged() => this.Changed?.Invoke(this, EventArgs.Empty);
 
     /// <inheritdoc />
-    public Task<SceneStructure?> ReadAsync(ProjectContext project, AssetPath source, CancellationToken cancellationToken = default)
+    public SceneStructure? Find(ProjectContext project, AssetPath source)
     {
         ArgumentNullException.ThrowIfNull(project);
         ArgumentNullException.ThrowIfNull(source);
-        cancellationToken.ThrowIfCancellationRequested();
         lock (this.gate)
         {
-            return Task.FromResult(this.structures.GetValueOrDefault(source));
+            return this.structures.GetValueOrDefault(source);
         }
     }
 

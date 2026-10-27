@@ -50,6 +50,11 @@ public sealed class ContentPipelineSessionModule : IScopeModule<ISessionLayer>
         // The project's files and relocations, as documents see them, in the session's current content mounts.
         scope.Register<IDocumentFiles, ProjectDocumentFiles>(Reuse.Singleton);
         scope.Register<IDocumentRelocations, DocumentRelocationFeed>(Reuse.Singleton);
+
+        // What the instances of the session's scenes contain: the engine that shows the scene keeps what it reads, and
+        // the edit checks, the lock rule and the views look it up.
+        scope.Register<SceneStructureStore>(Reuse.Singleton);
+        scope.RegisterMapping<ISceneStructures, SceneStructureStore>();
     }
 
     // The cook status of the project's assets, their relocation and creation, and the session's relocation record,

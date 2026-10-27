@@ -5,6 +5,7 @@
 using System.Collections.Immutable;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Diagnostics;
@@ -32,6 +33,7 @@ internal sealed partial class ScenePreview : IScenePreview, IDisposable
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Usage", "CA2213:Disposable fields should be disposed", Justification = "The application owns the injected engine service; disposing the preview must not shut down the shared runtime.")]
     private readonly IEngineService engineService;
     private readonly IProjectSession session;
+    private readonly SceneStructureStore structureStore;
     private readonly ILogger<ScenePreview> logger;
     private readonly IOperationResultPublisher? operationResults;
     private readonly Oxygen.Editor.Assets.IAssetFeed? assetFeed;
@@ -45,6 +47,7 @@ internal sealed partial class ScenePreview : IScenePreview, IDisposable
     /// <param name="engineService">The embedded engine.</param>
     /// <param name="documents">The workspace's open documents.</param>
     /// <param name="session">The project session whose scene documents the preview shows.</param>
+    /// <param name="structureStore">Keeps the structures the preview reads of the instanced sources.</param>
     /// <param name="loggerFactory">The optional diagnostic logger factory.</param>
     /// <param name="operationResults">Publishes the engine's rejections and failures.</param>
     /// <param name="assetFeed">Reports which assets are mounted, so geometry waits for its asset.</param>
@@ -52,6 +55,7 @@ internal sealed partial class ScenePreview : IScenePreview, IDisposable
         IEngineService engineService,
         OpenDocuments documents,
         IProjectSession session,
+        SceneStructureStore structureStore,
         ILoggerFactory? loggerFactory = null,
         IOperationResultPublisher? operationResults = null,
         Oxygen.Editor.Assets.IAssetFeed? assetFeed = null)
@@ -59,6 +63,7 @@ internal sealed partial class ScenePreview : IScenePreview, IDisposable
         this.engineService = engineService ?? throw new ArgumentNullException(nameof(engineService));
         this.documents = documents ?? throw new ArgumentNullException(nameof(documents));
         this.session = session ?? throw new ArgumentNullException(nameof(session));
+        this.structureStore = structureStore ?? throw new ArgumentNullException(nameof(structureStore));
         this.logger = loggerFactory?.CreateLogger<ScenePreview>() ?? NullLogger<ScenePreview>.Instance;
         this.operationResults = operationResults;
         this.assetFeed = assetFeed;

@@ -5,6 +5,7 @@
 using System.Numerics;
 using AwesomeAssertions;
 using Oxygen.Editor.ContentPipeline;
+using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.LivePreview.Scenes;
 using Oxygen.Editor.LivePreview.Session;
 using Oxygen.Editor.LivePreview.Tests.TestSupport.Native;
@@ -39,7 +40,7 @@ public sealed partial class PublicationPreviewEngineTests : DroidNet.Tests.Visua
         await using var sessionLifetime = session.ConfigureAwait(true);
         _ = (await session.StartAsync(token).ConfigureAwait(true)).Should().BeTrue();
         using var documents = new TestSceneDocuments(TestProject.Create(new MockFileSystem(), @"C:\LivePreviewTests"));
-        using var preview = new ScenePreview(engine, documents.Open, documents.Session);
+        using var preview = new ScenePreview(engine, documents.Open, documents.Session, new SceneStructureStore());
         var built = new Scene { Name = "Test Scene" };
         built.RootNodes.Add(new SceneNode(built, "Cube"));
         var document = await documents.OpenAsync(built.Dehydrate()).ConfigureAwait(true);

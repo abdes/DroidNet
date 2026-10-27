@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
+using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.LivePreview.Scenes;
 using Oxygen.Editor.LivePreview.Tests.TestSupport.Native;
 using Oxygen.Editor.Projects.Testing;
@@ -33,7 +34,7 @@ public sealed class ScenePreviewEngineTests : DroidNet.Tests.VisualUserInterface
         try
         {
             using var documents = new TestSceneDocuments(TestProject.Create(new MockFileSystem(), @"C:\LivePreviewTests"));
-            using var preview = new ScenePreview(engine, documents.Open, documents.Session);
+            using var preview = new ScenePreview(engine, documents.Open, documents.Session, new SceneStructureStore());
             var built = new Scene { Name = "Test Scene" };
             built.RootNodes.Add(new SceneNode(built, "Cube"));
             var document = await documents.OpenAsync(built.Dehydrate()).ConfigureAwait(true);

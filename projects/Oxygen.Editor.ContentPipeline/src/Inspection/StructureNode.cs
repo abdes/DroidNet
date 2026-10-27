@@ -4,6 +4,8 @@
 
 using Oxygen.Editor.World;
 
+using Oxygen.Managed.Core;
+
 namespace Oxygen.Editor.ContentPipeline.Inspection;
 
 #pragma warning disable SA1402 // File may only contain a single type
@@ -14,12 +16,17 @@ namespace Oxygen.Editor.ContentPipeline.Inspection;
 /// <param name="Parent">The parent's path, or null for a root node of the source.</param>
 /// <param name="DefiningScene">The scene that defines the node.</param>
 /// <param name="Instance">The scene the node instances, or null when it is not an instance root.</param>
+/// <param name="Geometry">
+/// The geometry the node renders, which no change of an instance replaces, or null when it renders nothing or no
+/// mounted source provides it.
+/// </param>
 public sealed record StructureNode(
     NodePath Path,
     string Name,
     NodePath? Parent,
     StructureScene DefiningScene,
-    StructureScene? Instance);
+    StructureScene? Instance,
+    AssetPath? Geometry);
 
 /// <summary>A scene of the structure: the source itself, or one it instances at any depth.</summary>
 /// <param name="Key">The scene's asset key.</param>

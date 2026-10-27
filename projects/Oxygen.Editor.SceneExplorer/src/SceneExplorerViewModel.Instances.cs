@@ -17,44 +17,11 @@ namespace Oxygen.Editor.SceneExplorer;
 /// </summary>
 public partial class SceneExplorerViewModel
 {
-    // Each source's structure as last read: rows are built from it at once, and a read that finds it changed
-    // rebuilds them.
-    private readonly Dictionary<AssetPath, SceneStructure> instanceStructures = [];
-
-    // The sources read or being read, so each is read once until content is mounted again.
-    private readonly HashSet<AssetPath> readingStructures = [];
-
-    // Counts the mounts the provider reported: a read that started before the latest one is out of date.
-    private int structuresGeneration;
-
     /// <summary>Gets the rows of the given references that the tree realizes, in order.</summary>
     /// <param name="nodes">The nodes.</param>
     /// <returns>The realized rows.</returns>
     internal IEnumerable<NodeRowAdapter> RowsOf(IEnumerable<NodeReference> nodes)
         => nodes.Select(this.projection.GetRow).OfType<NodeRowAdapter>();
-
-    /// <summary>Gets the references of the nodes a row and its scene and instanced ancestors are, deepest first, without the row's own.</summary>
-    /// <param name="scene">The scene.</param>
-    /// <param name="node">The node.</param>
-    /// <returns>The ancestors' references: the shorter paths below the instance root, then the instance root's ancestry.</returns>
-    private static IEnumerable<NodeReference> AncestorsOf(Scene scene, NodeReference node)
-    {
-        for (var length = node.Path.Count - 1; length > 0; length--)
-        {
-            yield return new NodeReference(node.Node, NodePath.Of(node.Path.Nodes.Take(length)));
-        }
-
-        var owned = scene.AllNodes.FirstOrDefault(candidate => candidate.Id == node.Node);
-        if (!node.IsOwned && owned is not null)
-        {
-            yield return NodeReference.To(owned.Id);
-        }
-
-        for (var parent = owned?.Hierarchy.Parent; parent is not null; parent = parent.Hierarchy.Parent)
-        {
-            yield return NodeReference.To(parent.Id);
-        }
-    }
 
     private static void AddInstancedRows(LayoutItemAdapter row, NodeId instanceRoot, ILookup<NodePath?, StructureNode> children, NodePath? parent)
     {
@@ -95,7 +62,7 @@ public partial class SceneExplorerViewModel
     {
         foreach (var root in RealizedNodeRows(sceneAdapter).Where(static row => row.IsInstanceRoot).ToList())
         {
-            if (this.instanceStructures.TryGetValue(root.InstanceSource!, out var structure))
+            if (this.StructureOf(root.InstanceSource!) is { } structure)
             {
                 AddInstancedRows(root, root.AttachedObject.Id, structure.Nodes.ToLookup(static node => node.Parent), parent: null);
             }
@@ -144,86 +111,52 @@ public partial class SceneExplorerViewModel
         }
     }
 
-    // Content was mounted again or a scene became readable: every source is read again.
+    // The structure the provider last read of a source, or null when none was read.
+    private SceneStructure? StructureOf(AssetPath source)
+        => this.session?.Context is { } project ? this.structures?.Find(project, source) : null;
+
+    // Structures were read or read again: the hidden and locked entries of nodes they no longer hold are dropped, and the
+    // instances' rows are rebuilt from them.
     private void OnStructuresChanged(object? sender, EventArgs args)
     {
         _ = sender;
         _ = args;
-        this.structuresGeneration++;
-        this.readingStructures.Clear();
-        _ = this.ReadInstanceStructuresAsync();
+        _ = this.ApplyStructuresAsync();
     }
 
-    /// <summary>
-    /// Reads, in the background, the structure of each source the scene instances that is not read yet, drops the hidden
-    /// and locked entries of nodes a complete structure does not hold, and rebuilds the rows once a structure arrives. A
-    /// source is read once, and again when the provider reports that content was mounted again; a read that a newer
-    /// mount overtakes is discarded, since the newer pass reads the source again.
-    /// </summary>
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "A background read reports its failure in the log; the tree stays usable without the instance's rows.")]
-    private async Task ReadInstanceStructuresAsync()
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "A failed rebuild is logged; the tree stays usable without the instance's rows.")]
+    private async Task ApplyStructuresAsync()
     {
-        if (this.isDisposed || this.structures is not { } provider || this.session?.Context is not { } project || this.Scene is not { } sceneAdapter)
+        if (this.isDisposed || this.Scene is not { } sceneAdapter)
         {
             return;
         }
 
-        var generation = this.structuresGeneration;
-        var roots = sceneAdapter.AttachedObject.AllNodes
-            .Select(static node => (Node: node.Id, Source: node.Components.OfType<SceneInstanceComponent>().FirstOrDefault()?.Source))
-            .Where(static root => root.Source is not null)
-            .ToList();
-        var pending = roots.Select(static root => root.Source!).Distinct().Where(source => this.readingStructures.Add(source)).ToList();
-        var changed = false;
-        foreach (var source in pending)
+        this.DropUnresolvedInstancedNodes(sceneAdapter.AttachedObject);
+        try
         {
-            SceneStructure? structure;
-            try
-            {
-                structure = await provider.ReadAsync(project, source).ConfigureAwait(true);
-            }
-            catch (Exception exception)
-            {
-                // Includes a read the engine dropped; the next mount reads the source again.
-                this.LogInstanceStructureReadFailed(exception, source);
-                continue;
-            }
-
-            if (this.isDisposed || generation != this.structuresGeneration)
-            {
-                return;
-            }
-
-            if (structure is null)
-            {
-                // Not mounted yet: the next mount or edit that reaches the tree tries again.
-                _ = this.readingStructures.Remove(source);
-                continue;
-            }
-
-            this.instanceStructures[source] = structure;
-            changed = true;
-
-            // A structure with issues lacks the nodes of the scenes it could not read, which may only be unmounted for
-            // now: their entries are kept.
-            if (structure.Issues.IsEmpty)
-            {
-                foreach (var root in roots.Where(root => root.Source == source))
-                {
-                    this.interaction?.DropUnresolvedNodes(root.Node, path => structure.Find(path) is not null);
-                }
-            }
+            await this.ReconcileProjectionAsync().ConfigureAwait(true);
         }
-
-        if (changed && ReferenceEquals(this.Scene, sceneAdapter))
+        catch (Exception exception)
         {
-            try
+            this.LogProjectionUpdateFailed(exception, this.SceneDocumentId);
+        }
+    }
+
+    /// <summary>
+    /// Drops the hidden and locked entries of the nodes an instance's source no longer holds, by the structure read of
+    /// the source. A structure with issues lacks the nodes of the scenes it could not read, which may only be unmounted
+    /// for now: their entries are kept.
+    /// </summary>
+    /// <param name="scene">The scene.</param>
+    private void DropUnresolvedInstancedNodes(Scene scene)
+    {
+        foreach (var node in scene.AllNodes)
+        {
+            if (node.Components.OfType<SceneInstanceComponent>().FirstOrDefault() is { } instance
+                && this.StructureOf(instance.Source) is { Issues.IsEmpty: true } structure)
             {
-                await this.ReconcileProjectionAsync().ConfigureAwait(true);
-            }
-            catch (Exception exception)
-            {
-                this.LogProjectionUpdateFailed(exception, this.SceneDocumentId);
+                this.interaction?.DropUnresolvedNodes(node.Id, path => structure.Find(path) is not null);
             }
         }
     }

@@ -8,6 +8,7 @@ using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World;
+using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
@@ -19,39 +20,15 @@ namespace Oxygen.Editor.LivePreview.Scenes;
 /// read by the engine that shows the active scene from the cooked scene descriptors of the content it mounts: the
 /// source's nodes and those of the scenes it instances, without loading geometry or anything else they reference.
 /// </summary>
-internal sealed partial class ScenePreview : ISceneStructureProvider
+/// <remarks>
+/// The structure of every source the shown scene instances is read when the scene becomes ready, when an instance of
+/// a source not read yet is placed, and whenever content is mounted again; each read is kept in the session's
+/// <see cref="SceneStructureStore"/>, which everything else looks structures up in.
+/// </remarks>
+internal sealed partial class ScenePreview : IInstancedNodeReader
 {
     /// <inheritdoc/>
-    event EventHandler? ISceneStructureProvider.Changed
-    {
-        add => this.StructuresChanged += value;
-        remove => this.StructuresChanged -= value;
-    }
-
-    // Raised on a document's owner thread when it becomes ready, and whenever the engine mounts the project's content
-    // again, as after a cook: structures read before may differ.
-    private event EventHandler? StructuresChanged;
-
-    /// <inheritdoc/>
-    async Task<SceneStructure?> ISceneStructureProvider.ReadAsync(ProjectContext project, AssetPath source, CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(project);
-        ArgumentNullException.ThrowIfNull(source);
-        if (!ReferenceEquals(this.session.Context, project)
-            || AssetFileTypes.SceneProductOf(source) is not { } scene
-            || this.activeWorld is not { } world)
-        {
-            return null;
-        }
-
-        var observation = await world.Commands.ReadSceneHierarchyAsync(Guid.NewGuid(), world.Target, ContentPipelinePaths.ToCookedScenePath(scene), cancellationToken).ConfigureAwait(false);
-        return observation.Outcome.Succeeded && observation.Hierarchy is { Exists: true } hierarchy
-            ? ToStructure(source, ContentPipelinePaths.ToCookedScenePath(scene), hierarchy)
-            : null;
-    }
-
-    /// <inheritdoc/>
-    async Task<InstancedNodeValues?> ISceneStructureProvider.ReadNodeAsync(ProjectContext project, AssetPath source, NodePath path, CancellationToken cancellationToken)
+    async Task<InstancedNodeValues?> IInstancedNodeReader.ReadNodeAsync(ProjectContext project, AssetPath source, NodePath path, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(project);
         ArgumentNullException.ThrowIfNull(source);
@@ -97,7 +74,8 @@ internal sealed partial class ScenePreview : ISceneStructureProvider
                     node.Name,
                     node.Parent is { } parent ? nodes[parent].Path : null,
                     SceneOf(node.SceneKey),
-                    node.InstanceKey is { } instance ? SceneOf(instance) : null)),
+                    node.InstanceKey is { } instance ? SceneOf(instance) : null,
+                    string.IsNullOrEmpty(node.GeometryPath) ? null : AssetPath.Parse(node.GeometryPath))),
             ],
             [
                 .. hierarchy.Issues.Select(issue => new StructureIssue(
@@ -149,18 +127,58 @@ internal sealed partial class ScenePreview : ISceneStructureProvider
     {
         RuntimeSceneHierarchyIssueCode.SceneUnavailable => "scene.instance.unavailable",
         RuntimeSceneHierarchyIssueCode.Cycle => "scene.instance.cycle",
-        RuntimeSceneHierarchyIssueCode.InvalidInstance => "scene.instance.invalid",
         _ => throw new ArgumentOutOfRangeException(nameof(code), code, "The engine reported an unknown hierarchy issue."),
     };
 
-    // A scene shown before its content was mounted stays ready while the content arrives, so the mount itself announces
-    // that structures may have changed.
+    // The sources a scene instances, each once.
+    private static IReadOnlyList<AssetPath> InstancedSources(Scene? scene)
+        => scene is null ? [] : [.. scene.AllNodes.Select(InstanceOf).OfType<SceneInstanceComponent>().Select(static instance => instance.Source).Distinct()];
+
+    // Reads the structure of each source through the engine that shows the scene, keeps each one read, and announces
+    // them; a source that is not instanceable or not mounted yet keeps its last structure, if any.
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "A failed read keeps the last structure and is logged; the next mount reads again.")]
+    private async Task ReadStructuresAsync(IReadOnlyList<AssetPath> sources)
+    {
+        if (sources.Count == 0 || this.activeWorld is not { } world)
+        {
+            return;
+        }
+
+        var project = this.session.Context;
+        var read = new Dictionary<AssetPath, SceneStructure>();
+        foreach (var source in sources)
+        {
+            if (AssetFileTypes.SceneProductOf(source) is not { } scene)
+            {
+                continue;
+            }
+
+            var path = ContentPipelinePaths.ToCookedScenePath(scene);
+            try
+            {
+                var observation = await world.Commands.ReadSceneHierarchyAsync(Guid.NewGuid(), world.Target, path, CancellationToken.None).ConfigureAwait(true);
+                if (observation.Outcome.Succeeded && observation.Hierarchy is { Exists: true } hierarchy)
+                {
+                    read[source] = ToStructure(source, path, hierarchy);
+                }
+            }
+            catch (Exception exception)
+            {
+                this.LogStructureReadFailed(exception, source);
+            }
+        }
+
+        this.structureStore.Keep(project, read.Values);
+    }
+
+    // A scene shown before its content was mounted stays ready while the content arrives, so the mount itself reads
+    // the structures again.
     private void OnContentStatusChanged(object? sender, RuntimeContentChangedEventArgs args)
     {
         _ = sender;
         if (args.Snapshot.State == RuntimeContentState.Mounted)
         {
-            this.owner.Queue(() => this.StructuresChanged?.Invoke(this, EventArgs.Empty));
+            this.owner.Queue(() => _ = this.ReadStructuresAsync(InstancedSources(this.activeScene)));
         }
     }
 }

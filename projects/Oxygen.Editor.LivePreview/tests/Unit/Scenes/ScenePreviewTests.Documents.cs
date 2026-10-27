@@ -4,6 +4,7 @@
 
 using System.Numerics;
 using AwesomeAssertions;
+using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.LivePreview.Scenes;
 using Oxygen.Editor.LivePreview.Tests.TestSupport;
 using Oxygen.Editor.Projects.Testing;
@@ -121,7 +122,7 @@ public sealed partial class ScenePreviewTests
         using var documents = new TestSceneDocuments(TestProject.Create(new MockFileSystem(), @"C:\LivePreviewTests"));
         var document = await documents.OpenAsync(new Scene { Name = "Test Scene" }.Dehydrate()).ConfigureAwait(false);
 
-        using var preview = new ScenePreview(engine, documents.Open, documents.Session);
+        using var preview = new ScenePreview(engine, documents.Open, documents.Session, new SceneStructureStore());
 
         _ = preview.IsReady(document.Id).Should().BeTrue();
     }

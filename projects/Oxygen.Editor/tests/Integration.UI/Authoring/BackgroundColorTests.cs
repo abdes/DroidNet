@@ -7,6 +7,7 @@ using System.Numerics;
 using AwesomeAssertions;
 using DroidNet.Storage.Native;
 using Moq;
+using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.LivePreview.Scenes;
 using Oxygen.Editor.Projects.Testing;
@@ -67,7 +68,7 @@ internal sealed class BackgroundColorTests : DroidNet.Tests.VisualUserInterfaceT
         using var session = new TestSession(project);
         using var scenes = new OpenDocuments([new SceneDocumentKind()], new NativeAtomicFileStore(new RealFileSystem()));
         var (previewEngine, probe) = EngineProbe.Of(engine);
-        var preview = ScenePreviews.Create(previewEngine, scenes, session, operationResults: results);
+        var preview = ScenePreviews.Create(previewEngine, scenes, session, new SceneStructureStore(), operationResults: results);
         using var previewLifetime = (IDisposable)preview;
         var document = await OpenAndShowAsync(scenes, file, preview, probe, cancellationToken).ConfigureAwait(true);
         await EditSaveBackgroundAsync(engine, document, document.Target, cancellationToken).ConfigureAwait(true);
