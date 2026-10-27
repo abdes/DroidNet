@@ -14,7 +14,7 @@ namespace Oxygen.Editor.Scenes.Edits.Properties;
 
 /// <summary>
 /// Sets or resets overrides: the values nodes' components store over their sources, such as the material of a geometry
-/// surface over the geometry asset's.
+/// surface over the geometry asset's, and the changes a scene makes of the nodes an instance brings in.
 /// </summary>
 /// <remarks>
 /// Each write addresses a property <see cref="SceneSchema.Overridable"/> lists, on the node's component of that
@@ -23,6 +23,11 @@ namespace Oxygen.Editor.Scenes.Edits.Properties;
 /// checked when the edit is built (see <see cref="Assets.SurfaceEdits"/>), which also names the asset the part was chosen
 /// from, so the edit refuses a node that has since changed it. An override of a part the asset no longer has is kept,
 /// unresolved. The edit's inverse writes back each override as it was, whatever the asset.
+/// <para>
+/// A write with a <see cref="OverrideWrite.Path"/> changes the node below the instance root that the path names: it sets
+/// or removes the change in the root's <see cref="SceneInstanceComponent.Changes"/> (see
+/// <see cref="InstanceChangeWrites"/>). Such a node and its ancestors, instanced or not, must be unlocked.
+/// </para>
 /// </remarks>
 public sealed record SetOverrides : ISceneEdit
 {
@@ -58,7 +63,14 @@ public sealed record SetOverrides : ISceneEdit
     public string Label { get; }
 
     /// <inheritdoc/>
-    public IReadOnlyCollection<NodeId> Targets => [.. this.Writes.Keys];
+    public IReadOnlyCollection<NodeId> Targets
+        => [.. this.Writes.Where(static pair => pair.Value.Any(static write => write.Path is null)).Select(static pair => pair.Key)];
+
+    /// <inheritdoc/>
+    public IReadOnlyCollection<NodeReference> InstancedTargets
+        => [.. this.Writes
+            .SelectMany(static pair => pair.Value.Where(static write => write.Path is not null).Select(write => new NodeReference(pair.Key, write.Path!)))
+            .Distinct()];
 
     /// <inheritdoc/>
     SceneEditValidation ISceneEdit.Validate(SceneEditScope scope)
@@ -74,13 +86,16 @@ public sealed record SetOverrides : ISceneEdit
             var node = scope.FindNode(id);
             foreach (var write in writes)
             {
-                if ((Check(write) ?? CheckComponent(scope, node, write)) is { } invalid)
+                var invalid = write.Path is { } path
+                    ? InstanceChangeWrites.Check(scope, node, path, write)
+                    : Check(write) ?? CheckComponent(scope, node, write);
+                if (invalid is not null)
                 {
                     return SceneEditValidation.Invalid(invalid with { Node = id });
                 }
             }
 
-            if (writes.GroupBy(static write => (write.Property, write.Part)).FirstOrDefault(static group => group.Count() > 1) is { } repeated)
+            if (writes.GroupBy(static write => (write.Path?.ToString(), write.Property, write.Part)).FirstOrDefault(static group => group.Count() > 1) is { } repeated)
             {
                 return SceneEditValidation.Invalid(SceneDiagnostic.Error(SceneEditCodes.OverrideInvalid, $"{repeated.Key.Property} is written twice on one part.", id, repeated.Key.Property));
             }
@@ -102,19 +117,13 @@ public sealed record SetOverrides : ISceneEdit
             var changed = new List<PropertyId>();
             foreach (var write in writes)
             {
-                var component = ComponentOf(node, write.Property)!;
-                var previous = component.Overrides.Find(write.Property, write.Part);
-                var value = write.Value is AssetPath asset ? scope.Resolve(asset) : write.Value;
-                var updated = value is null
-                    ? component.Overrides.Without(write.Property, write.Part)
-                    : component.Overrides.With(new SourceOverride(write.Property, write.Part, write.LayoutRevision, value));
-                if (updated.Equals(component.Overrides))
+                var resolved = write.Value is AssetPath asset ? write with { Value = scope.Resolve(asset) } : write;
+                if (!Write(node, resolved, out var previous))
                 {
                     continue;
                 }
 
-                component.Overrides = updated;
-                inverse.Insert(0, OverrideWrite.Restoring(write.Property, write.Part, previous));
+                inverse.Insert(0, OverrideWrite.Restoring(write.Property, write.Part, previous) with { Path = write.Path });
                 if (!changed.Contains(write.Property))
                 {
                     changed.Add(write.Property);
@@ -132,6 +141,28 @@ public sealed record SetOverrides : ISceneEdit
         return new SceneEditApplication.Applied(reverts.Count == 0 ? this : new SetOverrides(reverts, this.Label), changes);
     }
 
+    // Writes an override of the node's own component, or a change of a node its instance brings in.
+    private static bool Write(SceneNode node, OverrideWrite write, out SourceOverride? previous)
+    {
+        if (write.Path is { } path)
+        {
+            return InstanceChangeWrites.Write(InstanceChangeWrites.InstanceOf(node)!, path, write, out previous);
+        }
+
+        var component = ComponentOf(node, write.Property)!;
+        previous = component.Overrides.Find(write.Property, write.Part);
+        var updated = write.Value is null
+            ? component.Overrides.Without(write.Property, write.Part)
+            : component.Overrides.With(new SourceOverride(write.Property, write.Part, write.LayoutRevision, write.Value));
+        if (updated.Equals(component.Overrides))
+        {
+            return false;
+        }
+
+        component.Overrides = updated;
+        return true;
+    }
+
     private static IOverridableComponent? ComponentOf(SceneNode? node, PropertyId property)
         => node?.Components.OfType<IOverridableComponent>()
             .SingleOrDefault(component => string.Equals(component.Overrides.ComponentKind, property.ComponentKind, StringComparison.Ordinal));
@@ -143,7 +174,7 @@ public sealed record SetOverrides : ISceneEdit
             return SceneDiagnostic.Error(SceneEditCodes.ComponentMissing, $"The node has no {write.Property.ComponentKind} component.", property: write.Property);
         }
 
-        return write is { PartOwner: { } owner, Part: { } part } && component.PartOwner(part.Kind) != scope.Resolve(owner)
+        return write is { PartOwner: { } owner, Part: { } part } && PartOwners.Resolve(scope, node!, path: null, part.Kind) != scope.Resolve(owner)
             ? SceneDiagnostic.Error(SceneEditCodes.PartStale, "The node no longer uses the asset the part was chosen from.", property: write.Property)
             : null;
     }

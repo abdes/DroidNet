@@ -82,10 +82,18 @@ public sealed class SurfaceEditsTests
         provider.Publish(SampleScene.CubeGeometry, SampleScene.CubeLayoutRevision, SampleScene.CubeSurface);
         using var gate = provider.HoldReads();
         var reading = this.SetAsync(provider, CubeTarget);
-        await gate.ReadPending.ConfigureAwait(false);
-        _ = await fixture.Authoring.ExecuteAsync(new SetGeometry([SampleScene.Mesh], SampleScene.SphereGeometry)).ConfigureAwait(false);
-        gate.Release();
-        var built = await reading.ConfigureAwait(false);
+        SurfaceEdit built;
+        try
+        {
+            await gate.ReadPending.ConfigureAwait(false);
+            _ = await fixture.Authoring.ExecuteAsync(new SetGeometry([SampleScene.Mesh], SampleScene.SphereGeometry)).ConfigureAwait(false);
+        }
+        finally
+        {
+            // The read uses the provider and the gate: it completes before they are disposed.
+            gate.Release();
+            built = await reading.ConfigureAwait(false);
+        }
         var before = fixture.Snapshot();
 
         var result = await fixture.Authoring.ExecuteAsync(built.Edit!).ConfigureAwait(false);

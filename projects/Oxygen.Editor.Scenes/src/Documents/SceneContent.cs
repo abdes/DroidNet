@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Text.Json;
+using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.Scenes.Authoring;
@@ -32,10 +33,11 @@ public sealed partial class SceneContent : IDocumentContent, IDisposable
     /// <param name="redirects">The session's asset renames and moves, if the editor tracks them.</param>
     /// <param name="references">The saved authored references instance sources are checked against, if the editor reads them.</param>
     /// <param name="asset">The scene's asset.</param>
-    internal SceneContent(Scene scene, IList<ExplorerEntryData> layout, DocumentDecodeContext document, ISceneNodeInteraction? interaction, IAssetRedirects? redirects, IAuthoredReferences? references = null, AssetPath? asset = null)
+    /// <param name="structureOf">What an instance of a source contains, as last read, if the editor reads it.</param>
+    internal SceneContent(Scene scene, IList<ExplorerEntryData> layout, DocumentDecodeContext document, ISceneNodeInteraction? interaction, IAssetRedirects? redirects, IAuthoredReferences? references = null, AssetPath? asset = null, Func<AssetPath, SceneStructure?>? structureOf = null)
     {
         this.Scene = scene;
-        this.Authoring = new SceneAuthoring(document, scene, layout, interaction, redirects, references) { Asset = asset };
+        this.Authoring = new SceneAuthoring(document, scene, layout, interaction, redirects, references, structureOf) { Asset = asset };
     }
 
     /// <summary>Gets the scene.</summary>

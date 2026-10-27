@@ -3,8 +3,11 @@
 // SPDX-License-Identifier: MIT
 
 using Oxygen.Editor.Scenes.Changes;
+using Oxygen.Editor.Scenes.Edits.Properties;
 using Oxygen.Editor.Scenes.Properties;
+using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World;
+using Oxygen.Editor.World.Components;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Scenes.Authoring;
@@ -34,7 +37,34 @@ public sealed partial class SceneAuthoring
         ArgumentNullException.ThrowIfNull(targets);
         ArgumentNullException.ThrowIfNull(properties);
         ArgumentException.ThrowIfNullOrWhiteSpace(label);
-        return this.RunAsync(() => this.BeginGesture(targets, properties, label));
+        return this.RunAsync(() => this.BeginGesture(targets, [], properties, label));
+    }
+
+    /// <summary>
+    /// Begins a gesture on nodes of the scene and nodes an instance brings in: checks them and their locks, and captures
+    /// their state; it writes nothing.
+    /// </summary>
+    /// <param name="nodes">The edited nodes; at least one.</param>
+    /// <param name="properties">The edited properties, all of one component kind; changeable on an instanced node.</param>
+    /// <param name="label">The gesture's name in the history.</param>
+    /// <returns>The gesture, previewed with <see cref="SceneGesture.PreviewAsync(IReadOnlyDictionary{NodeReference, PropertyEdit})"/>.</returns>
+    /// <exception cref="SceneEditRefusedException">
+    /// The authoring is retired, a node is missing or locked, a node an instance brings in is not below an instance root,
+    /// or the properties do not fit.
+    /// </exception>
+    public Task<SceneGesture> BeginNodeGestureAsync(IReadOnlyCollection<NodeReference> nodes, IReadOnlyCollection<PropertyId> properties, string label)
+    {
+        ArgumentNullException.ThrowIfNull(nodes);
+        ArgumentNullException.ThrowIfNull(properties);
+        ArgumentException.ThrowIfNullOrWhiteSpace(label);
+        if (nodes.Count == 0)
+        {
+            throw new ArgumentException("A node gesture edits at least one node.", nameof(nodes));
+        }
+
+        NodeId[] owned = [.. nodes.Where(static node => node.IsOwned).Select(static node => node.Node)];
+        NodeReference[] instanced = [.. nodes.Where(static node => !node.IsOwned).Distinct()];
+        return this.RunAsync(() => this.BeginGesture(owned, instanced, properties, label));
     }
 
     /// <summary>Commits every open gesture, each as one history entry.</summary>
@@ -72,7 +102,7 @@ public sealed partial class SceneAuthoring
     /// <param name="gesture">The gesture.</param>
     internal void Forget(SceneGesture gesture) => _ = this.gestures.Remove(gesture);
 
-    private SceneGesture BeginGesture(IReadOnlyCollection<NodeId> targets, IReadOnlyCollection<PropertyId> properties, string label)
+    private SceneGesture BeginGesture(IReadOnlyCollection<NodeId> targets, NodeReference[] instanced, IReadOnlyCollection<PropertyId> properties, string label)
     {
         if (this.IsRetired)
         {
@@ -80,13 +110,16 @@ public sealed partial class SceneAuthoring
         }
 
         var rules = SceneProperties.RulesOf(properties);
-        if (rules is null || rules.IsSceneKind != (targets.Count == 0) || properties.Any(id => !rules.Descriptors.ContainsKey(id)))
+        if (rules is null
+            || rules.IsSceneKind != (targets.Count == 0 && instanced.Length == 0)
+            || properties.Any(id => !rules.Descriptors.ContainsKey(id))
+            || (instanced.Length != 0 && properties.Any(id => !SceneSchema.Changeable.ContainsKey(id))))
         {
             throw new SceneEditRefusedException(SceneEditResult.Of(SceneEditValidation.Invalid(
                 SceneDiagnostic.Error(SceneEditCodes.PropertyUnknown, "A gesture edits properties of one supported kind, on nodes or on the scene."))));
         }
 
-        var check = this.scope.CheckTargets(new GestureTargets(targets, label));
+        var check = this.scope.CheckTargets(new GestureTargets(targets, instanced, label));
         if (!check.IsValid)
         {
             throw new SceneEditRefusedException(SceneEditResult.Of(check));
@@ -100,7 +133,15 @@ public sealed partial class SceneAuthoring
                     SceneDiagnostic.Error(SceneEditCodes.ComponentMissing, "The node has no component for the edited properties.", node))));
         }
 
-        var gesture = new SceneGesture(this, rules, properties.ToHashSet(), models, label);
+        var instances = new Dictionary<NodeReference, SceneInstanceComponent>();
+        foreach (var node in instanced)
+        {
+            instances[node] = InstanceChangeWrites.InstanceOf(this.scope.FindNode(node.Node))
+                ?? throw new SceneEditRefusedException(SceneEditResult.Of(SceneEditValidation.Invalid(
+                    SceneDiagnostic.Error(SceneEditCodes.ComponentMissing, "The node is not an instance root, so it brings in no node to change.", node.Node))));
+        }
+
+        var gesture = new SceneGesture(this, rules, properties.ToHashSet(), models, instances, label);
         this.gestures.Add(gesture);
         return gesture;
     }
@@ -114,7 +155,7 @@ public sealed partial class SceneAuthoring
     }
 
     // The targets of a gesture, checked once when it begins, the way an edit's targets are.
-    private sealed record GestureTargets(IReadOnlyCollection<NodeId> Targets, string Label) : ISceneEdit
+    private sealed record GestureTargets(IReadOnlyCollection<NodeId> Targets, IReadOnlyCollection<NodeReference> InstancedTargets, string Label) : ISceneEdit
     {
         public SceneEditValidation Validate(SceneEditScope scope) => SceneEditValidation.Valid;
 

@@ -5,6 +5,7 @@
 using System.Diagnostics.CodeAnalysis;
 using DroidNet.Documents;
 using DroidNet.TimeMachine;
+using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.Scenes.Changes;
@@ -42,14 +43,15 @@ public sealed partial class SceneAuthoring : IDisposable
     /// <param name="interaction">The nodes hidden and locked in the editor, if the editor keeps them.</param>
     /// <param name="redirects">The session's asset renames and moves, if the editor tracks them.</param>
     /// <param name="references">The saved authored references instance sources are checked against, if the editor reads them.</param>
-    internal SceneAuthoring(DocumentDecodeContext document, Scene scene, IList<ExplorerEntryData> layout, ISceneNodeInteraction? interaction, IAssetRedirects? redirects, IAuthoredReferences? references = null)
+    /// <param name="structureOf">What an instance of a source contains, as last read, if the editor reads it.</param>
+    internal SceneAuthoring(DocumentDecodeContext document, Scene scene, IList<ExplorerEntryData> layout, ISceneNodeInteraction? interaction, IAssetRedirects? redirects, IAuthoredReferences? references = null, Func<AssetPath, SceneStructure?>? structureOf = null)
     {
         this.Document = document.Document;
         this.history = document.History;
         this.Scene = scene;
         this.Layout = layout;
         this.context = SynchronizationContext.Current;
-        this.scope = new SceneEditScope(scene, layout, interaction, redirects, references);
+        this.scope = new SceneEditScope(scene, layout, interaction, redirects, references) { StructureOf = structureOf };
     }
 
     /// <summary>Occurs on the scene thread after each edit, replay, preview and relocation, naming what changed.</summary>

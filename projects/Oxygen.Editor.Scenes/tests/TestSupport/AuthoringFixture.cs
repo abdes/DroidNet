@@ -34,10 +34,13 @@ namespace Oxygen.Editor.Scenes.Tests.TestSupport;
 public sealed partial class AuthoringFixture : IDisposable
 {
     private readonly object historyRoot;
+    private readonly Ports ports;
 
-    private AuthoringFixture(TestProject project, DocumentId document, SceneContent content, object historyRoot, HistoryKeeper history, FakeNodeInteraction? interaction, FakeAssetRedirects redirects, FakeAuthoredReferences references, SingleThreadContext? thread)
+    private AuthoringFixture(TestProject project, DocumentId document, SceneContent content, object historyRoot, HistoryKeeper history, FakeNodeInteraction? interaction, FakeAssetRedirects redirects, FakeAuthoredReferences references, Ports ports, SingleThreadContext? thread)
     {
         this.Project = project;
+        this.ports = ports;
+        this.Structures = ports.Structures;
         this.Document = document;
         this.Content = content;
         this.historyRoot = historyRoot;
@@ -48,6 +51,12 @@ public sealed partial class AuthoringFixture : IDisposable
         this.Thread = thread;
         this.Changes = new ChangeRecorder(content.Authoring);
     }
+
+    /// <summary>
+    /// Gets what the scene's instances contain, as the editor last read it: a source published here is read, for the
+    /// edits' part owners and the interaction's locks alike.
+    /// </summary>
+    public FakeSceneStructures Structures { get; }
 
     /// <summary>Gets the project the scene belongs to.</summary>
     public TestProject Project { get; }
@@ -101,8 +110,17 @@ public sealed partial class AuthoringFixture : IDisposable
         var history = new HistoryKeeper(root);
         var project = TestProject.Create(new MockFileSystem());
         var document = DocumentId.New();
-        var content = await DecodeAsync(project, data, document, interaction, redirects, references, history).ConfigureAwait(true);
-        return new AuthoringFixture(project, document, content, root, history, interaction, redirects, references, thread: null);
+        var ports = Ports.For(project, interaction);
+        try
+        {
+            var content = await DecodeAsync(project, data, document, interaction, redirects, references, ports, history).ConfigureAwait(true);
+            return new AuthoringFixture(project, document, content, root, history, interaction, redirects, references, ports, thread: null);
+        }
+        catch
+        {
+            ports.Dispose();
+            throw;
+        }
     }
 
     /// <summary>
@@ -114,6 +132,7 @@ public sealed partial class AuthoringFixture : IDisposable
     {
         ArgumentNullException.ThrowIfNull(data);
         var thread = new SingleThreadContext();
+        Ports? ports = null;
         try
         {
             var interaction = new FakeNodeInteraction();
@@ -123,11 +142,14 @@ public sealed partial class AuthoringFixture : IDisposable
             var history = new HistoryKeeper(root);
             var project = TestProject.Create(new MockFileSystem());
             var document = DocumentId.New();
-            var content = await thread.RunAsync(() => DecodeAsync(project, data, document, interaction, redirects, references, history)).ConfigureAwait(false);
-            return new AuthoringFixture(project, document, content, root, history, interaction, redirects, references, thread);
+            var created = Ports.For(project, interaction);
+            ports = created;
+            var content = await thread.RunAsync(() => DecodeAsync(project, data, document, interaction, redirects, references, created, history)).ConfigureAwait(false);
+            return new AuthoringFixture(project, document, content, root, history, interaction, redirects, references, created, thread);
         }
         catch
         {
+            ports?.Dispose();
             thread.Dispose();
             throw;
         }
@@ -189,17 +211,40 @@ public sealed partial class AuthoringFixture : IDisposable
             this.Content.Dispose();
         }
 
+        this.ports.Dispose();
         GC.KeepAlive(this.historyRoot);
     }
 
-    private static async Task<SceneContent> DecodeAsync(TestProject project, SceneData data, DocumentId document, FakeNodeInteraction? interaction, FakeAssetRedirects redirects, FakeAuthoredReferences references, HistoryKeeper history)
+    private static async Task<SceneContent> DecodeAsync(TestProject project, SceneData data, DocumentId document, FakeNodeInteraction? interaction, FakeAssetRedirects redirects, FakeAuthoredReferences references, Ports ports, HistoryKeeper history)
     {
-        var kind = new SceneDocumentKind(interaction, redirects, references);
+        var kind = new SceneDocumentKind(interaction, redirects, references, ports.Session, ports.Structures);
         var file = new DocumentFile(
             project.PathOf($"/Content/{data.Name}{AssetFileTypes.SceneDescriptor}"),
             AssetPath.Parse($"/Content/{data.Name}{AssetFileTypes.Scene}"));
         var bytes = JsonSerializer.SerializeToUtf8Bytes(data as SceneFileData ?? new SceneFileData(data, explorerLayout: null), SceneFileJsonContext.Default.SceneFileData);
         var result = await kind.DecodeAsync(file, bytes, new DocumentDecodeContext(document, history), CancellationToken.None).ConfigureAwait(true);
         return result.Content as SceneContent ?? throw new InvalidOperationException($"The test scene did not decode: {result.Problem}");
+    }
+
+    // The session and the structures the scene's edits and the interaction's locks read alike; it owns the session.
+    private sealed class Ports : IDisposable
+    {
+        private Ports(TestProject project)
+        {
+            this.Session = new TestSession(project.Context);
+        }
+
+        public TestSession Session { get; }
+
+        public FakeSceneStructures Structures { get; } = new();
+
+        public static Ports For(TestProject project, FakeNodeInteraction? interaction)
+        {
+            var ports = new Ports(project);
+            interaction?.StructureOf = source => ports.Structures.Find(project.Context, source);
+            return ports;
+        }
+
+        public void Dispose() => this.Session.Dispose();
     }
 }

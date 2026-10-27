@@ -8,6 +8,7 @@ using System.Text.Json.Serialization.Metadata;
 using Oxygen.Editor.Scenes.Edits.Properties;
 using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.Schemas;
+using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Utils;
@@ -130,6 +131,12 @@ public static class SceneEditJson
             var property = new PropertyId(root.GetProperty("component").GetString()!, partKind, root.GetProperty("pointer").GetString()!);
             var value = root.GetProperty("value");
             var owner = root.TryGetProperty("owner", out var ownerJson) ? ownerJson.Deserialize(SceneJsonContext.Default.AssetPath) : null;
+            NodePath? path = null;
+            if (root.TryGetProperty("path", out var pathJson) && !NodePath.TryParse(pathJson.GetString(), out path))
+            {
+                throw new JsonException("An override write's node path is not a node path.");
+            }
+
             return new OverrideWrite(
                 property,
                 partKind is null ? null : new PartId(partKind, root.GetProperty("partId").GetGuid()),
@@ -137,6 +144,7 @@ public static class SceneEditJson
                 value.ValueKind == JsonValueKind.Null ? null : SourceOverridesJson.ReadValue(property, value))
             {
                 PartOwner = owner,
+                Path = path,
             };
         }
 
@@ -152,6 +160,11 @@ public static class SceneEditJson
             }
 
             writer.WriteString("revision", value.LayoutRevision);
+            if (value.Path is { } path)
+            {
+                writer.WriteString("path", path.ToString());
+            }
+
             if (value.PartOwner is { } owner)
             {
                 writer.WritePropertyName("owner");
