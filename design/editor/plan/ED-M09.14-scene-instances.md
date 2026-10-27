@@ -194,7 +194,7 @@ ED-M09 item 14 points here and is `done` when every slice below is.
 | D9    | done  | 467290908                                                                   |
 | D10   | done  | 46a4ea6ad                                                                   |
 | D11   | done  | 2da9619bf                                                                   |
-| D12   | open  | -                                                                           |
+| D12   | done  | 6a5ea246d                                                                   |
 | D13   | open  | -                                                                           |
 | D14   | open  | -                                                                           |
 | D15   | open  | -                                                                           |
