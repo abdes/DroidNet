@@ -159,6 +159,7 @@ public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNo
             loggerFactory,
             this.AuthoringOf,
             this.SelectNode,
+            this.ReferenceOf,
             new InspectorScriptServices(scripts, codeEditor, scriptCreation, problems));
         this.sceneSettings = new SceneSettingsViewModel(
             this.AuthoringOf,
@@ -236,10 +237,10 @@ public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNo
         || (this.selectionContext.Kind == SceneSelectionKind.Node && !this.HasItems && !this.isReadingInstancedNodes);
 
     /// <summary>
-    /// Gets a value indicating whether the current node selection can be authored: no node is locked, and none is one an
-    /// instance brings in, which the pane shows read-only.
+    /// Gets a value indicating whether the current node selection can be authored: no node is locked. A node an instance
+    /// brings in is authored through its instance root's changes.
     /// </summary>
-    public bool CanEditSelectedNodes => !this.HasInstancedSelection && this.items.All(node => this.LockOf(node) is null);
+    public bool CanEditSelectedNodes => this.items.All(node => this.LockOf(node) is null);
 
     /// <summary>Gets a value indicating whether a lock protects any node in the current selection.</summary>
     public bool HasLockedSelection => this.items.Any(node => this.LockOf(node) is not null);

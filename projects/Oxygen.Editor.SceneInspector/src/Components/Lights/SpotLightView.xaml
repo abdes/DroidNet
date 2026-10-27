@@ -32,6 +32,8 @@
                 Label="Inner angle"
                 Mask="~.#"
                 NumberValue="{x:Bind ViewModel.InnerConeAngleDegrees, Mode=TwoWay}"
+                OverrideState="{x:Bind ViewModel.InnerConeAngleOverride.State, Mode=OneWay}"
+                ResetCommand="{x:Bind ViewModel.InnerConeAngleOverride.ResetCommand}"
                 Tag="InnerConeAngleRadians"
                 Unit="°" />
             <editorcontrols:NumberField
@@ -43,6 +45,8 @@
                 Label="Outer angle"
                 Mask="~.#"
                 NumberValue="{x:Bind ViewModel.OuterConeAngleDegrees, Mode=TwoWay}"
+                OverrideState="{x:Bind ViewModel.OuterConeAngleOverride.State, Mode=OneWay}"
+                ResetCommand="{x:Bind ViewModel.OuterConeAngleOverride.ResetCommand}"
                 Tag="OuterConeAngleRadians"
                 Unit="°" />
         </editorcontrols:PropertiesExpander.Items>

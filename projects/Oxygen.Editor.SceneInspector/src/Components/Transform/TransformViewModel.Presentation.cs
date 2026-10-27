@@ -4,6 +4,7 @@
 
 using Oxygen.Editor.SceneInspector.Editing;
 using Oxygen.Editor.Schemas;
+using Oxygen.Editor.World;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.SceneInspector.Components.Transform;
@@ -11,7 +12,7 @@ namespace Oxygen.Editor.SceneInspector.Components.Transform;
 /// <summary>Ends hidden transform gestures without discarding field feedback.</summary>
 public sealed partial class TransformViewModel
 {
-    private readonly Dictionary<PropertyId, Dictionary<NodeId, object?>> displayedSources = [];
+    private readonly Dictionary<PropertyId, Dictionary<NodeReference, object?>> displayedSources = [];
 
     /// <inheritdoc />
     internal override InspectorFieldDiagnostics? ValidationFeedback => this.diagnostics;
@@ -23,7 +24,7 @@ public sealed partial class TransformViewModel
         this.flagEdits?.SetInputEnabled(enabled);
     }
 
-    private void RefreshSourceFeedback(PropertyDescriptor descriptor, Dictionary<NodeId, object?> targets)
+    private void RefreshSourceFeedback(PropertyDescriptor descriptor, Dictionary<NodeReference, object?> targets)
     {
         var current = targets.Where(static item => item.Value is not null)
             .ToDictionary(static item => item.Key, item => descriptor.ReadBoxed(item.Value!));

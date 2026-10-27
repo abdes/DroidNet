@@ -27,7 +27,7 @@ public sealed partial class AtmosphereLightsSectionViewModel : ObservableObject,
     private readonly InspectorEditSessionCoordinator? lightAssignments;
     private readonly Func<SceneAuthoring?>? authoringProvider;
     private readonly Func<NodeId, Task>? inspectSceneNode;
-    private readonly ConditionalWeakTable<Scene, Dictionary<NodeId, PropertyEdit>> initialAtmosphereSources = new();
+    private readonly ConditionalWeakTable<Scene, Dictionary<NodeId, PropertyEdit>> initialAtmosphereSources = [];
     private Scene? scene;
     private bool isApplyingEditorValues;
     private bool disposed;
@@ -266,20 +266,20 @@ public sealed partial class AtmosphereLightsSectionViewModel : ObservableObject,
             return;
         }
 
-        var edits = new Dictionary<NodeId, PropertyEdit>();
+        var edits = new Dictionary<NodeReference, PropertyEdit>();
         if (current is not null)
         {
-            edits[current.Id] = PropertyEdit.SingleEdit(SceneSchema.DirectionalLight.AtmosphereSlot, AtmosphereLightSlot.None);
+            edits[NodeReference.To(current.Id)] = PropertyEdit.SingleEdit(SceneSchema.DirectionalLight.AtmosphereSlot, AtmosphereLightSlot.None);
         }
 
         if (selected is { } selectedId)
         {
-            edits[selectedId] = PropertyEdit.SingleEdit(SceneSchema.DirectionalLight.AtmosphereSlot, slot);
+            edits[NodeReference.To(selectedId)] = PropertyEdit.SingleEdit(SceneSchema.DirectionalLight.AtmosphereSlot, slot);
         }
 
         if (edits.Count > 0)
         {
-            this.lightAssignments?.Bind(edits.Keys.ToArray());
+            this.lightAssignments?.Bind([.. edits.Keys]);
             this.lightAssignments?.Submit(edits);
         }
     }

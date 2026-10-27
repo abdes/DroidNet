@@ -16,6 +16,7 @@ namespace Oxygen.Editor.SceneInspector.Components.Cameras;
 public sealed partial class PerspectiveCameraViewModel : ComponentPropertyEditor, IDisposable, IInspectorEditSessionOwner
 {
     private readonly InspectorFieldDiagnostic unboundDiagnostic = new();
+    private readonly InspectorFieldOverride unboundOverride = new(static () => { });
     private readonly InspectorEditSessionCoordinator? edits;
     private readonly List<IInspectorBindingRefresh> registrations = [];
     private readonly PropertyBinding<CameraAspectMode> aspectModeBinding = new(SceneProperties.PerspectiveCamera.AspectModeDescriptor);
@@ -99,6 +100,30 @@ public sealed partial class PerspectiveCameraViewModel : ComponentPropertyEditor
     /// <summary>Gets ISO feedback.</summary>
     public InspectorFieldDiagnostic IsoDiagnostic => this.edits?.Diagnostics.Get(this.Iso.Id.Id) ?? this.unboundDiagnostic;
 
+    /// <summary>Gets the field of view override bar.</summary>
+    public InspectorFieldOverride FieldOfViewOverride => this.Override(this.FieldOfView.Id.Id);
+
+    /// <summary>Gets the aspect mode override bar.</summary>
+    public InspectorFieldOverride AspectModeOverride => this.Override(this.aspectModeBinding.Id.Id);
+
+    /// <summary>Gets the aspect ratio override bar.</summary>
+    public InspectorFieldOverride AspectRatioOverride => this.Override(this.AspectRatio.Id.Id);
+
+    /// <summary>Gets the near plane override bar.</summary>
+    public InspectorFieldOverride NearPlaneOverride => this.Override(this.NearPlane.Id.Id);
+
+    /// <summary>Gets the far plane override bar.</summary>
+    public InspectorFieldOverride FarPlaneOverride => this.Override(this.FarPlane.Id.Id);
+
+    /// <summary>Gets the aperture override bar.</summary>
+    public InspectorFieldOverride ApertureFOverride => this.Override(this.ApertureF.Id.Id);
+
+    /// <summary>Gets the shutter rate override bar.</summary>
+    public InspectorFieldOverride ShutterRateOverride => this.Override(this.ShutterRate.Id.Id);
+
+    /// <summary>Gets the ISO override bar.</summary>
+    public InspectorFieldOverride IsoOverride => this.Override(this.Iso.Id.Id);
+
     /// <inheritdoc />
     public Guid EditScopeId => this.edits?.ScopeId ?? Guid.Empty;
 
@@ -141,17 +166,23 @@ public sealed partial class PerspectiveCameraViewModel : ComponentPropertyEditor
     /// <inheritdoc />
     public override void UpdateValues(ICollection<SceneNode> items)
     {
-        this.edits?.Bind(items.Where(node => node.Components.OfType<PerspectiveCamera>().Any()).Select(node => node.Id).ToArray());
+        this.edits?.Bind(items.Where(node => node.Components.OfType<PerspectiveCamera>().Any()).Select(this.ReferenceOf).ToArray());
         this.selectedItems = items;
         var targets = items.Where(node => node.Components.OfType<PerspectiveCamera>().Any())
-            .ToDictionary(static node => node.Id, static node => (object?)node.Components.OfType<PerspectiveCamera>().First());
+            .ToDictionary(this.ReferenceOf, static node => (object?)node.Components.OfType<PerspectiveCamera>().First());
         var nodes = targets.Keys.ToArray();
-        this.StartingCamera.Bind([.. items.Where(node => targets.ContainsKey(node.Id))]);
+        this.StartingCamera.Bind([.. items.Where(node => targets.ContainsKey(this.ReferenceOf(node)) && this.ReferenceOf(node).IsOwned)]);
         foreach (var registration in this.registrations)
         {
             registration.Refresh(nodes, id => targets.GetValueOrDefault(id));
         }
     }
+
+    /// <summary>Gets the override bar of a field.</summary>
+    /// <param name="ids">The properties the field shows.</param>
+    /// <returns>The field's bar.</returns>
+    private InspectorFieldOverride Override(params PropertyId[] ids)
+        => this.edits?.Overrides.Get(ids) ?? this.unboundOverride;
 
     private void Register<T>(PropertyBinding<T> binding, string? property = null)
         => this.registrations.Add(new InspectorBindingRegistration<T>(

@@ -29,7 +29,7 @@ public sealed partial class GeometryViewModel
         }
 
         var write = new OverrideWrite(SceneSchema.Geometry.LodPolicy.Id, Part: null, LayoutRevision: null, policy);
-        var result = await authoring.ExecuteAsync(new SetOverrides(nodes.ConvertAll(static node => node.Id), [write], label)).ConfigureAwait(true);
+        var result = await authoring.ExecuteAsync(NodeOverrides.Write(nodes.ToDictionary(this.ReferenceOf, _ => (IReadOnlyList<OverrideWrite>)[write]), label)).ConfigureAwait(true);
         if (!this.IsCurrentSelection(nodes))
         {
             return;

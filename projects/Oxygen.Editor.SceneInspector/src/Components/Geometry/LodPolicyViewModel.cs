@@ -153,13 +153,13 @@ public sealed partial class LodPolicyViewModel : ObservableObject
 
     /// <summary>Shows the selected nodes' policy.</summary>
     /// <param name="inventory">The geometry's inventory, with the asset's policy and the LOD count.</param>
-    /// <param name="nodes">The overrides of each selected node's geometry.</param>
+    /// <param name="nodes">The values and changes of each selected node's geometry.</param>
     /// <param name="canEdit">Whether the policy can be edited now.</param>
-    internal void Update(GeometrySurfaceMetadata inventory, IReadOnlyList<SourceOverrides> nodes, bool canEdit)
+    internal void Update(GeometrySurfaceMetadata inventory, IReadOnlyList<GeometryOverrides> nodes, bool canEdit)
     {
         this.asset = inventory.LodPolicy;
         this.lodCount = inventory.LodCount;
-        var policies = nodes.Select(overrides => overrides.TryGet(SceneSchema.Geometry.LodPolicy, out var policy) ? policy : this.asset).ToList();
+        var policies = nodes.Select(overrides => overrides.Values.TryGet(SceneSchema.Geometry.LodPolicy, out var policy) ? policy : this.asset).ToList();
         var agreed = policies.TrueForAll(policy => policy.Equals(policies[0])) ? policies[0] : null;
         this.shown = agreed is null ? null : LodPolicyShapes.Fit(agreed, this.lodCount);
         this.kind = this.shown is null ? -1 : LodPolicyShapes.KindOf(this.shown);
@@ -170,7 +170,7 @@ public sealed partial class LodPolicyViewModel : ObservableObject
         this.IsScreenSpaceError = this.shown is LodPolicy.ScreenSpaceError;
         this.FixedRange = string.Create(CultureInfo.CurrentCulture, $"of 0 to {this.lodCount - 1}");
 
-        var overriding = nodes.Count(overrides => overrides.TryGet(SceneSchema.Geometry.LodPolicy, out _));
+        var overriding = nodes.Count(overrides => overrides.Changes.TryGet(SceneSchema.Geometry.LodPolicy, out _));
 
         // A single LOD always shows, so its policy changes nothing; an override, such as one kept from a geometry with
         // more LODs, still shows so it can be reset.

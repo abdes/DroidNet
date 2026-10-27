@@ -6,6 +6,10 @@ using System.Numerics;
 using AwesomeAssertions;
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.ContentPipeline.Inspection;
+using Oxygen.Editor.Controls;
+using Oxygen.Editor.SceneInspector.Components.Geometry;
+using Oxygen.Editor.SceneInspector.Components.Lights;
+using Oxygen.Editor.SceneInspector.Components.Rendering;
 using Oxygen.Editor.SceneInspector.TestSupport;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
@@ -16,7 +20,8 @@ namespace Oxygen.Editor.SceneInspector.Unit.UI.Tests;
 
 /// <summary>
 /// A node an instance brings in shows in the Properties pane (scene instances 6.2, 8.5): a transient node holding the
-/// effective values the engine reads, read-only, its header naming its source and refusing structural commands.
+/// effective values the engine reads, its header naming its source and refusing structural commands; its sections edit
+/// it through its instance root's changes, each change marked by the override bar and undone by its reset.
 /// </summary>
 [TestClass]
 internal sealed class InstancedNodeInspectionTests : DroidNet.Tests.VisualUserInterfaceTests
@@ -27,17 +32,17 @@ internal sealed class InstancedNodeInspectionTests : DroidNet.Tests.VisualUserIn
     private static readonly AssetPath DoorGeometry = AssetPath.Parse("/Content/Models/Car.glb/Door.ogeo");
     private static readonly AssetPath Paint = AssetPath.Parse("/Content/Models/Car.glb/Paint.omat");
     private static readonly NodeId Door = NodeId.New();
-    private static readonly Guid Rim = Guid.NewGuid();
+    private static readonly Guid Rim = SceneAuthoringFixture.TargetFor(DoorGeometry).SurfaceId;
 
     public TestContext TestContext { get; set; } = null!;
 
     /// <summary>
-    /// The selected instanced node shows its source's name and its values in its components; nothing is editable, and no
-    /// lock is reported.
+    /// The selected instanced node shows its source's name and its values in its components; its sections take input, and
+    /// no lock is reported.
     /// </summary>
     /// <returns>The test task.</returns>
     [TestMethod]
-    public Task InstancedNodeShowsItsValuesReadOnly() => EnqueueAsync(() =>
+    public Task InstancedNodeShowsItsValues() => EnqueueAsync(() =>
     {
         using var fixture = new SceneAuthoringFixture(instanceSource: Car);
         fixture.Structures.PublishValues(Car, NodePath.Of(Door), DoorValues(positionX: 2f));
@@ -53,17 +58,17 @@ internal sealed class InstancedNodeInspectionTests : DroidNet.Tests.VisualUserIn
         var geometry = node.Components.OfType<GeometryComponent>().Should().ContainSingle().Subject;
         _ = geometry.Geometry.Should().Be(DoorGeometry);
         _ = geometry.Overrides.Find(SceneSchema.Geometry.Surface.Material.Id, new PartId(SceneSchema.Geometry.Surface.Material.Id.PartKind!, Rim))!.Value.Value.Should().Be(Paint);
-        _ = host.CanEditSelectedNodes.Should().BeFalse();
-        _ = host.HasLockedSelection.Should().BeFalse("an instanced node is read-only without being locked");
-        _ = host.PropertyEditors.Should().NotBeEmpty().And.OnlyContain(static section => !section.IsInputEnabled);
+        _ = host.CanEditSelectedNodes.Should().BeTrue();
+        _ = host.HasLockedSelection.Should().BeFalse();
+        _ = host.PropertyEditors.Should().NotBeEmpty().And.OnlyContain(static section => section.IsInputEnabled);
         _ = host.CanUseNodeHeader.Should().BeTrue("the header still selects the instance");
         return Task.CompletedTask;
     });
 
-    /// <summary>The sections of an instanced node show their fields disabled; those of a node of the scene take input.</summary>
+    /// <summary>The sections of an instanced node take input, as those of a node of the scene do.</summary>
     /// <returns>The test task.</returns>
     [TestMethod]
-    public Task InstancedNodeSectionsAreDisabled() => EnqueueAsync(async () =>
+    public Task InstancedNodeSectionsTakeInput() => EnqueueAsync(async () =>
     {
         using var fixture = new SceneAuthoringFixture(instanceSource: Car);
         fixture.Structures.PublishValues(Car, NodePath.Of(Door), DoorValues(positionX: 2f));
@@ -75,7 +80,7 @@ internal sealed class InstancedNodeInspectionTests : DroidNet.Tests.VisualUserIn
         SelectDoor(fixture);
         await WaitForRenderAsync().ConfigureAwait(true);
 
-        _ = sections.Children.OfType<Control>().Should().NotBeEmpty().And.OnlyContain(static section => !section.IsEnabled);
+        _ = sections.Children.OfType<Control>().Should().NotBeEmpty().And.OnlyContain(static section => section.IsEnabled);
 
         host.SelectInstanceCommand.Execute(parameter: null);
         await WaitForRenderAsync().ConfigureAwait(true);
@@ -162,9 +167,97 @@ internal sealed class InstancedNodeInspectionTests : DroidNet.Tests.VisualUserIn
         fixture.Structures.RaiseChanged();
 
         _ = host.SelectedNode!.Transform.LocalPosition.X.Should().Be(5f);
-        _ = host.CanEditSelectedNodes.Should().BeFalse();
         return Task.CompletedTask;
     });
+
+    /// <summary>
+    /// A value edited in a section becomes a change of the instance root, never of the source: the section shows it with
+    /// a full override bar, and undo and redo take it out and back.
+    /// </summary>
+    /// <returns>The test task.</returns>
+    [TestMethod]
+    public Task EditingAnInstancedValueChangesTheInstanceRoot() => EnqueueAsync(async () =>
+    {
+        using var fixture = new SceneAuthoringFixture(instanceSource: Car);
+        fixture.Structures.PublishValues(Car, NodePath.Of(Door), DoorValues(positionX: 2f));
+        using var host = fixture.CreateInspectorHost("Transform");
+        SelectDoor(fixture);
+        var light = host.PropertyEditors.OfType<PointLightViewModel>().Single();
+        _ = light.RangeOverride.State.Should().Be(OverrideState.None);
+
+        light.Range.Value = 9f;
+        await light.PendingEdits.ConfigureAwait(true);
+
+        _ = ChangeOf(fixture, SceneSchema.PointLight.Range.Id).Should().Be(9f);
+        _ = host.SelectedNode!.Components.OfType<PointLightComponent>().Single().Range.Should().Be(9f);
+        _ = light.RangeOverride.State.Should().Be(OverrideState.Full);
+        _ = light.RangeOverride.ResetCommand.CanExecute(parameter: null).Should().BeTrue();
+
+        _ = await fixture.Authoring.UndoAsync().ConfigureAwait(true);
+        _ = ChangeOf(fixture, SceneSchema.PointLight.Range.Id).Should().BeNull();
+        _ = host.SelectedNode!.Components.OfType<PointLightComponent>().Single().Range.Should().Be(7f);
+        _ = light.RangeOverride.State.Should().Be(OverrideState.None);
+
+        _ = await fixture.Authoring.RedoAsync().ConfigureAwait(true);
+        _ = ChangeOf(fixture, SceneSchema.PointLight.Range.Id).Should().Be(9f);
+        _ = light.RangeOverride.State.Should().Be(OverrideState.Full);
+    });
+
+    /// <summary>A child flag, which a model node cooks as Inherit, is changed and reset like any value.</summary>
+    /// <returns>The test task.</returns>
+    [TestMethod]
+    public Task ResetTakesTheSourcesFlagBack() => EnqueueAsync(async () =>
+    {
+        using var fixture = new SceneAuthoringFixture(instanceSource: Car);
+        fixture.Structures.PublishValues(Car, NodePath.Of(Door), DoorValues(positionX: 2f));
+        using var host = fixture.CreateInspectorHost("Transform");
+        SelectDoor(fixture);
+        var rendering = host.PropertyEditors.OfType<NodeRenderingViewModel>().Single();
+        var undoDepth = fixture.Document.History.UndoStack.Count;
+
+        rendering.IsStatic = true;
+        await rendering.PendingEdits.ConfigureAwait(true);
+        _ = ChangeOf(fixture, SceneSchema.Node.IsStatic.Id).Should().Be(true);
+        _ = rendering.IsStaticOverride.State.Should().Be(OverrideState.Full);
+
+        rendering.IsStaticOverride.ResetCommand.Execute(parameter: null);
+        await rendering.PendingEdits.ConfigureAwait(true);
+
+        _ = ChangeOf(fixture, SceneSchema.Node.IsStatic.Id).Should().BeNull();
+        _ = host.SelectedNode!.Flags.IsStatic.Should().BeFalse();
+        _ = rendering.IsStaticOverride.State.Should().Be(OverrideState.None);
+        _ = fixture.Document.History.UndoStack.Count.Should().Be(undoDepth + 2, "the edit and its reset are one entry each");
+    });
+
+    /// <summary>
+    /// Geometry rows mark only the scene's changes: a surface value the source sets shows without a bar, a policy the
+    /// scene sets shows with one, and the geometry asset, which the source decides, cannot be replaced.
+    /// </summary>
+    /// <returns>The test task.</returns>
+    [TestMethod]
+    public Task GeometryMarksOnlyTheScenesChanges() => EnqueueAsync(async () =>
+    {
+        using var fixture = new SceneAuthoringFixture(instanceSource: Car);
+        fixture.PublishSurface(DoorGeometry);
+        fixture.Structures.PublishValues(Car, NodePath.Of(Door), DoorValues(positionX: 2f));
+        using var host = fixture.CreateInspectorHost("Transform");
+        SelectDoor(fixture);
+        var geometry = host.PropertyEditors.OfType<GeometryViewModel>().Single();
+        await geometry.RefreshSurfacesAsync().ConfigureAwait(true);
+
+        _ = geometry.CanChangeGeometry.Should().BeFalse();
+        var card = geometry.Surfaces.Should().ContainSingle().Subject;
+        _ = card.MaterialOverrideState.Should().Be(OverrideState.None, "the source's material is no change of this scene");
+
+        await geometry.SetLodPolicyAsync(new LodPolicy.Fixed(0), "Edit Level of Detail").ConfigureAwait(true);
+
+        _ = ChangeOf(fixture, SceneSchema.Geometry.LodPolicy.Id).Should().Be(new LodPolicy.Fixed(0));
+        _ = geometry.LevelOfDetail.OverrideState.Should().Be(OverrideState.Full);
+    });
+
+    private static object? ChangeOf(SceneAuthoringFixture fixture, PropertyId property)
+        => fixture.InstanceRoot!.Components.OfType<SceneInstanceComponent>().Single().Changes
+            .Of(NodePath.Of(Door)).Of(property.ComponentKind).Find(property, part: null)?.Value;
 
     private static void SelectDoor(SceneAuthoringFixture fixture)
         => fixture.Selection.SetSelection(fixture.TestScene.DocumentId, [new NodeReference(fixture.InstanceRoot!.Id, NodePath.Of(Door))], "Test");

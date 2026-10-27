@@ -44,9 +44,14 @@
                 IsMixed="{x:Bind ViewModel.FieldOfView.IsMixed, Mode=OneWay}"
                 Label="Field of view"
                 NumberValue="{x:Bind ViewModel.FieldOfView.Number, Mode=TwoWay}"
+                OverrideState="{x:Bind ViewModel.FieldOfViewOverride.State, Mode=OneWay}"
+                ResetCommand="{x:Bind ViewModel.FieldOfViewOverride.ResetCommand}"
                 Tag="FieldOfView"
                 Unit="°" />
-            <editorcontrols:PropertyCard PropertyName="Aspect mode">
+            <editorcontrols:PropertyCard
+                OverrideState="{x:Bind ViewModel.AspectModeOverride.State, Mode=OneWay}"
+                PropertyName="Aspect mode"
+                ResetCommand="{x:Bind ViewModel.AspectModeOverride.ResetCommand}">
                 <ComboBox
                     HorizontalAlignment="Stretch"
                     AutomationProperties.Name="Aspect mode"
@@ -61,6 +66,8 @@
                 IsMixed="{x:Bind ViewModel.AspectRatio.IsMixed, Mode=OneWay}"
                 Label="Aspect ratio"
                 NumberValue="{x:Bind ViewModel.AspectRatio.Number, Mode=TwoWay}"
+                OverrideState="{x:Bind ViewModel.AspectRatioOverride.State, Mode=OneWay}"
+                ResetCommand="{x:Bind ViewModel.AspectRatioOverride.ResetCommand}"
                 Tag="AspectRatio" />
             <editorcontrols:NumberField
                 EditSessionCompleted="NumberEditCompleted"
@@ -70,6 +77,8 @@
                 IsMixed="{x:Bind ViewModel.NearPlane.IsMixed, Mode=OneWay}"
                 Label="Near plane"
                 NumberValue="{x:Bind ViewModel.NearPlane.Number, Mode=TwoWay}"
+                OverrideState="{x:Bind ViewModel.NearPlaneOverride.State, Mode=OneWay}"
+                ResetCommand="{x:Bind ViewModel.NearPlaneOverride.ResetCommand}"
                 Tag="NearPlane"
                 Unit="m" />
             <editorcontrols:NumberField
@@ -80,6 +89,8 @@
                 IsMixed="{x:Bind ViewModel.FarPlane.IsMixed, Mode=OneWay}"
                 Label="Far plane"
                 NumberValue="{x:Bind ViewModel.FarPlane.Number, Mode=TwoWay}"
+                OverrideState="{x:Bind ViewModel.FarPlaneOverride.State, Mode=OneWay}"
+                ResetCommand="{x:Bind ViewModel.FarPlaneOverride.ResetCommand}"
                 Tag="FarPlane"
                 Unit="m" />
             <editorcontrols:NumberField
@@ -90,6 +101,8 @@
                 IsMixed="{x:Bind ViewModel.ApertureF.IsMixed, Mode=OneWay}"
                 Label="Aperture"
                 NumberValue="{x:Bind ViewModel.ApertureF.Number, Mode=TwoWay}"
+                OverrideState="{x:Bind ViewModel.ApertureFOverride.State, Mode=OneWay}"
+                ResetCommand="{x:Bind ViewModel.ApertureFOverride.ResetCommand}"
                 Tag="ApertureF"
                 Unit="f" />
             <editorcontrols:NumberField
@@ -100,7 +113,9 @@
                 IsMixed="{x:Bind ViewModel.ShutterRate.IsMixed, Mode=OneWay}"
                 Label="Shutter speed"
                 NumberValue="{x:Bind ViewModel.ShutterRate.Number, Mode=TwoWay}"
+                OverrideState="{x:Bind ViewModel.ShutterRateOverride.State, Mode=OneWay}"
                 Prefix="1/"
+                ResetCommand="{x:Bind ViewModel.ShutterRateOverride.ResetCommand}"
                 Tag="ShutterRate"
                 Unit="s" />
             <editorcontrols:NumberField
@@ -111,6 +126,8 @@
                 IsMixed="{x:Bind ViewModel.Iso.IsMixed, Mode=OneWay}"
                 Label="ISO"
                 NumberValue="{x:Bind ViewModel.Iso.Number, Mode=TwoWay}"
+                OverrideState="{x:Bind ViewModel.IsoOverride.State, Mode=OneWay}"
+                ResetCommand="{x:Bind ViewModel.IsoOverride.ResetCommand}"
                 Tag="Iso" />
         </editorcontrols:PropertiesExpander.Items>
     </editorcontrols:PropertiesExpander>

@@ -1652,10 +1652,20 @@ nodes would double every section and let them drift.
   effective values, written through the component descriptors, with this
   scene's changes as their overrides. The existing sections bind to them
   unchanged. Content mounted again reads the selected nodes again.
-- Sections write through a `ComponentWriteTarget`: `Owned(NodeId)` keeps
-  today's edits; `Instanced(root, path)` turns every property write into an
-  `OverrideWrite` with the node path (ED3), so a section never knows which it
-  edits.
+- Sections name each edited node by its `NodeReference`: a node of the scene
+  by its `NodeId`, an instanced node by its instance root and path. A
+  transient node keeps its source's `NodeId`, which two instances of one
+  source share, so no section keys an edit by `NodeId`. `NodeOverrides`
+  (`Oxygen.Editor.Scenes`) turns the writes of an instanced node into
+  `OverrideWrite`s with its path (ED3), and gestures begin with
+  `BeginNodeGestureAsync`, so a section never knows which it edits.
+- A field's override bar and reset (`InspectorFieldOverride`) count the
+  edited nodes that change it: for an instanced node, this scene's change in
+  its instance root's `Changes`, never the values its source sets. Geometry
+  rows show the effective values and mark only those changes. Reset removes
+  the change, so the source's value applies. The geometry asset, which the
+  source decides, cannot be replaced, and changes kept for lost surfaces stay
+  those of the scene's own nodes (kept changes of instanced nodes: ED10).
 - `SceneNodeDetailsView`'s header shows the name read-only and the second line
   "in Car3 · Car.glb (model)" with a link to the Model Editor on that node and
   a button that selects the instance root; _Add component_ and _Remove

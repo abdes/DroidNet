@@ -27,6 +27,7 @@ public sealed partial class DirectionalLightViewModel : ComponentPropertyEditor,
     private const float DegToRad = MathF.PI / 180f;
 
     private readonly InspectorFieldDiagnostic unboundDiagnostic = new();
+    private readonly InspectorFieldOverride unboundOverride = new(static () => { });
 
     private readonly InspectorEditSessionCoordinator? edits;
     private readonly PropertyBinding<Vector3> colorBinding = new(SceneProperties.DirectionalLight.ColorDescriptor);
@@ -309,6 +310,78 @@ public sealed partial class DirectionalLightViewModel : ComponentPropertyEditor,
     /// <summary>Gets current diagnostics for DistanceFadeoutFraction.</summary>
     public InspectorFieldDiagnostic DistanceFadeoutFractionDiagnostic => this.edits?.Diagnostics.Get(this.distanceFadeoutFractionBinding.Id.Id) ?? this.unboundDiagnostic;
 
+    /// <summary>Gets the color override bar.</summary>
+    public InspectorFieldOverride ColorOverride => this.Override(this.colorBinding.Id.Id);
+
+    /// <summary>Gets the illuminance override bar.</summary>
+    public InspectorFieldOverride IntensityLuxOverride => this.Override(this.intensityLuxBinding.Id.Id);
+
+    /// <summary>Gets the angular diameter override bar.</summary>
+    public InspectorFieldOverride AngularSizeRadiansOverride => this.Override(this.angularSizeRadiansBinding.Id.Id);
+
+    /// <summary>Gets the sun direction override bar.</summary>
+    public InspectorFieldOverride SunDirectionOverride => this.Override(SceneSchema.Transform.Rotation.Id);
+
+    /// <summary>Gets the atmosphere slot override bar.</summary>
+    public InspectorFieldOverride AtmosphereSlotOverride => this.Override(this.atmosphereSlotBinding.Id.Id);
+
+    /// <summary>Gets the per-pixel transmittance override bar.</summary>
+    public InspectorFieldOverride UsePerPixelAtmosphereTransmittanceOverride => this.Override(this.usePerPixelAtmosphereTransmittanceBinding.Id.Id);
+
+    /// <summary>Gets the disk luminance scale override bar.</summary>
+    public InspectorFieldOverride AtmosphereDiskLuminanceScaleRgbOverride => this.Override(this.atmosphereDiskLuminanceScaleRgbBinding.Id.Id);
+
+    /// <summary>Gets the affects world override bar.</summary>
+    public InspectorFieldOverride AffectsWorldOverride => this.Override(this.affectsWorldBinding.Id.Id);
+
+    /// <summary>Gets the exposure compensation override bar.</summary>
+    public InspectorFieldOverride ExposureCompensationOverride => this.Override(this.exposureCompensationBinding.Id.Id);
+
+    /// <summary>Gets the cast shadows override bar.</summary>
+    public InspectorFieldOverride CastsShadowsOverride => this.Override(this.castsShadowsBinding.Id.Id);
+
+    /// <summary>Gets the contact shadows override bar.</summary>
+    public InspectorFieldOverride ContactShadowsOverride => this.Override(this.contactShadowsBinding.Id.Id);
+
+    /// <summary>Gets the shadow resolution override bar.</summary>
+    public InspectorFieldOverride ShadowResolutionHintOverride => this.Override(this.shadowResolutionHintBinding.Id.Id);
+
+    /// <summary>Gets the shadow depth bias override bar.</summary>
+    public InspectorFieldOverride ShadowBiasOverride => this.Override(this.shadowBiasBinding.Id.Id);
+
+    /// <summary>Gets the shadow normal bias override bar.</summary>
+    public InspectorFieldOverride ShadowNormalBiasOverride => this.Override(this.shadowNormalBiasBinding.Id.Id);
+
+    /// <summary>Gets the split mode override bar.</summary>
+    public InspectorFieldOverride SplitModeOverride => this.Override(this.splitModeBinding.Id.Id);
+
+    /// <summary>Gets the cascade count override bar.</summary>
+    public InspectorFieldOverride CascadeCountOverride => this.Override(this.cascadeCountBinding.Id.Id);
+
+    /// <summary>Gets the maximum shadow distance override bar.</summary>
+    public InspectorFieldOverride MaxShadowDistanceOverride => this.Override(this.maxShadowDistanceBinding.Id.Id);
+
+    /// <summary>Gets the distribution exponent override bar.</summary>
+    public InspectorFieldOverride DistributionExponentOverride => this.Override(this.distributionExponentBinding.Id.Id);
+
+    /// <summary>Gets the cascade 1 distance override bar.</summary>
+    public InspectorFieldOverride CascadeDistance1Override => this.Override(this.cascadeDistance0Binding.Id.Id);
+
+    /// <summary>Gets the cascade 2 distance override bar.</summary>
+    public InspectorFieldOverride CascadeDistance2Override => this.Override(this.cascadeDistance1Binding.Id.Id);
+
+    /// <summary>Gets the cascade 3 distance override bar.</summary>
+    public InspectorFieldOverride CascadeDistance3Override => this.Override(this.cascadeDistance2Binding.Id.Id);
+
+    /// <summary>Gets the cascade 4 distance override bar.</summary>
+    public InspectorFieldOverride CascadeDistance4Override => this.Override(this.cascadeDistance3Binding.Id.Id);
+
+    /// <summary>Gets the transition fraction override bar.</summary>
+    public InspectorFieldOverride TransitionFractionOverride => this.Override(this.transitionFractionBinding.Id.Id);
+
+    /// <summary>Gets the fade-out fraction override bar.</summary>
+    public InspectorFieldOverride DistanceFadeoutFractionOverride => this.Override(this.distanceFadeoutFractionBinding.Id.Id);
+
     /// <inheritdoc/>
     public Guid EditScopeId => this.edits?.ScopeId ?? Guid.Empty;
 
@@ -356,14 +429,14 @@ public sealed partial class DirectionalLightViewModel : ComponentPropertyEditor,
     /// <inheritdoc />
     public override void UpdateValues(ICollection<SceneNode> items)
     {
-        this.edits?.Bind(items.Where(node => node.Components.Any(component => component is DirectionalLightComponent)).Select(node => node.Id).ToArray());
+        this.edits?.Bind(items.Where(node => node.Components.Any(component => component is DirectionalLightComponent)).Select(this.ReferenceOf).ToArray());
         this.selectedItems = items;
         var targets = items
             .Select(static node => new { Node = node, Light = node.Components.OfType<DirectionalLightComponent>().FirstOrDefault() })
             .Where(static target => target.Light is not null)
             .ToList();
-        var nodeIds = targets.ConvertAll(static target => target.Node.Id);
-        var targetsByNode = targets.ToDictionary(static target => target.Node.Id, static target => (object?)target.Light);
+        var nodeIds = targets.ConvertAll(target => this.ReferenceOf(target.Node));
+        var targetsByNode = targets.ToDictionary(target => this.ReferenceOf(target.Node), static target => (object?)target.Light);
 
         this.isApplyingEditorValues = true;
         try
@@ -449,10 +522,16 @@ public sealed partial class DirectionalLightViewModel : ComponentPropertyEditor,
         }
     }
 
+    /// <summary>Gets the override bar of a field.</summary>
+    /// <param name="ids">The properties the field shows.</param>
+    /// <returns>The field's bar.</returns>
+    private InspectorFieldOverride Override(params PropertyId[] ids)
+        => this.edits?.Overrides.Get(ids) ?? this.unboundOverride;
+
     private void UpdateBinding<T>(
         PropertyBinding<T> binding,
-        IReadOnlyList<NodeId> nodeIds,
-        Dictionary<NodeId, object?> targetsByNode,
+        IReadOnlyList<NodeReference> nodeIds,
+        Dictionary<NodeReference, object?> targetsByNode,
         Action<T> setValue)
     {
         var previous = binding.HasValue ? (object?)binding.Value : null;
@@ -486,7 +565,7 @@ public sealed partial class DirectionalLightViewModel : ComponentPropertyEditor,
             return;
         }
 
-        var perTarget = new Dictionary<NodeId, PropertyEdit>();
+        var perTarget = new Dictionary<NodeReference, PropertyEdit>();
         foreach (var node in this.selectedItems)
         {
             if (node.Components.OfType<DirectionalLightComponent>().FirstOrDefault() is not { } light)
@@ -496,7 +575,7 @@ public sealed partial class DirectionalLightViewModel : ComponentPropertyEditor,
 
             var color = light.Color;
             color[axis] = (float)value;
-            perTarget[node.Id] = PropertyEdit.SingleEdit(SceneSchema.DirectionalLight.Color, color);
+            perTarget[this.ReferenceOf(node)] = PropertyEdit.SingleEdit(SceneSchema.DirectionalLight.Color, color);
         }
 
         this.edits?.Submit(perTarget);
@@ -547,7 +626,7 @@ public sealed partial class DirectionalLightViewModel : ComponentPropertyEditor,
             return;
         }
 
-        var perTarget = new Dictionary<NodeId, PropertyEdit>();
+        var perTarget = new Dictionary<NodeReference, PropertyEdit>();
         foreach (var node in this.selectedItems)
         {
             if (node.Components.OfType<DirectionalLightComponent>().FirstOrDefault() is not { } light)
@@ -557,7 +636,7 @@ public sealed partial class DirectionalLightViewModel : ComponentPropertyEditor,
 
             var scale = light.AtmosphereDiskLuminanceScaleRgb;
             scale[axis] = (float)value;
-            perTarget[node.Id] = PropertyEdit.SingleEdit(SceneSchema.DirectionalLight.AtmosphereDiskLuminanceScaleRgb, scale);
+            perTarget[this.ReferenceOf(node)] = PropertyEdit.SingleEdit(SceneSchema.DirectionalLight.AtmosphereDiskLuminanceScaleRgb, scale);
         }
 
         this.edits?.Submit(perTarget);
@@ -602,11 +681,11 @@ public sealed partial class DirectionalLightViewModel : ComponentPropertyEditor,
             return;
         }
 
-        var perTarget = new Dictionary<NodeId, PropertyEdit>();
+        var perTarget = new Dictionary<NodeReference, PropertyEdit>();
         foreach (var node in this.selectedItems.Where(node => node.Components.Any(component => component is DirectionalLightComponent)))
         {
             var angles = TransformConverter.QuaternionToEulerDegrees(DirectionalLightOrientation.LocalRotation(node, (float)azimuth, (float)elevation));
-            perTarget[node.Id] = new PropertyEdit.Builder()
+            perTarget[this.ReferenceOf(node)] = new PropertyEdit.Builder()
                 .Set(SceneSchema.Transform.Rotation, angles)
                 .Build();
         }

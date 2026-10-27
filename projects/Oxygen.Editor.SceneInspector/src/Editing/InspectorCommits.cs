@@ -29,7 +29,7 @@ internal static class InspectorCommits
     /// <summary>Gets the values a per-target edit commits.</summary>
     /// <param name="edits">The entered values, by target.</param>
     /// <returns>The values to submit, by target.</returns>
-    public static IReadOnlyDictionary<NodeId, PropertyEdit> Commit(IReadOnlyDictionary<NodeId, PropertyEdit> edits)
+    public static IReadOnlyDictionary<NodeReference, PropertyEdit> Commit(IReadOnlyDictionary<NodeReference, PropertyEdit> edits)
     {
         ArgumentNullException.ThrowIfNull(edits);
         return edits.ToDictionary(static pair => pair.Key, static pair => Commit(pair.Value));

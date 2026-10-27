@@ -15,7 +15,10 @@
                         <local:PropertyCard
                             HorizontalContentAlignment="Stretch"
                             FontSize="{TemplateBinding FontSize}"
-                            PropertyName="{TemplateBinding Label}">
+                            OverrideState="{TemplateBinding OverrideState}"
+                            PropertyName="{TemplateBinding Label}"
+                            ResetCommand="{TemplateBinding ResetCommand}"
+                            ResetToolTip="{TemplateBinding ResetToolTip}">
                             <seg:Segmented
                                 x:Name="PART_Modes"
                                 HorizontalAlignment="Stretch"

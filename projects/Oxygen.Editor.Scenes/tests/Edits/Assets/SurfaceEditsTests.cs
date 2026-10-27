@@ -151,7 +151,7 @@ public sealed class SurfaceEditsTests
         geometry.Overrides = geometry.Overrides.With(SceneSchema.Geometry.Surface.Visibility, CubeTarget.Part, SampleScene.CubeLayoutRevision, value: false);
         var before = fixture.Snapshot();
 
-        var result = await fixture.Authoring.ExecuteAsync(SurfaceEdits.Reset([SampleScene.Mesh], CubeTarget.Part, "Reset Surface")).ConfigureAwait(false);
+        var result = await fixture.Authoring.ExecuteAsync(SurfaceEdits.Reset([NodeReference.To(SampleScene.Mesh)], CubeTarget.Part, "Reset Surface")).ConfigureAwait(false);
 
         SceneAssert.Applied(result);
         _ = geometry.Overrides.IsEmpty.Should().BeTrue();
@@ -197,5 +197,5 @@ public sealed class SurfaceEditsTests
     }
 
     private Task<SurfaceEdit> SetAsync(FakeSurfaceProvider provider, SurfaceTarget target)
-        => SurfaceEdits.SetAsync(provider, this.project.Context, [SampleScene.Mesh], target, Material, BlueMaterial, "Edit Surface Material", this.TestContext.CancellationToken);
+        => SurfaceEdits.SetAsync(provider, this.project.Context, [NodeReference.To(SampleScene.Mesh)], target, Material, BlueMaterial, "Edit Surface Material", this.TestContext.CancellationToken);
 }

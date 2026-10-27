@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using Oxygen.Editor.Schemas.Bindings;
-using Oxygen.Managed.Core;
+using Oxygen.Editor.World;
 
 namespace Oxygen.Editor.SceneInspector.Editing;
 
@@ -15,7 +15,7 @@ internal static class PropertyBindingNodeExtensions
     /// <param name="binding">The binding to refresh.</param>
     /// <param name="nodes">The selected nodes.</param>
     /// <param name="targets">Resolves the edited component of each node.</param>
-    public static void UpdateFromModel<T>(this PropertyBinding<T> binding, IReadOnlyList<NodeId> nodes, Func<NodeId, object?> targets)
+    public static void UpdateFromModel<T>(this PropertyBinding<T> binding, IReadOnlyList<NodeReference> nodes, Func<NodeReference, object?> targets)
     {
         ArgumentNullException.ThrowIfNull(binding);
         ArgumentNullException.ThrowIfNull(nodes);

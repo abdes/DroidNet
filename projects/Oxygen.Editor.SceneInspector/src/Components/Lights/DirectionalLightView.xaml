@@ -31,8 +31,10 @@
                 Green="{x:Bind ViewModel.ColorG, Mode=TwoWay}"
                 HasError="{x:Bind ViewModel.ColorRDiagnostic.HasError, Mode=OneWay}"
                 Label="Color"
+                OverrideState="{x:Bind ViewModel.ColorOverride.State, Mode=OneWay}"
                 PickerAutomationName="Pick light color"
                 Red="{x:Bind ViewModel.ColorR, Mode=TwoWay}"
+                ResetCommand="{x:Bind ViewModel.ColorOverride.ResetCommand}"
                 Tag="Color" />
             <editorcontrols:NumberField
                 EditSessionCompleted="NumberEditCompleted"
@@ -41,6 +43,8 @@
                 HasError="{x:Bind ViewModel.IntensityLuxDiagnostic.HasError, Mode=OneWay}"
                 Label="Illuminance"
                 NumberValue="{x:Bind ViewModel.IntensityLux, Mode=TwoWay}"
+                OverrideState="{x:Bind ViewModel.IntensityLuxOverride.State, Mode=OneWay}"
+                ResetCommand="{x:Bind ViewModel.IntensityLuxOverride.ResetCommand}"
                 Tag="IntensityLux"
                 Unit="lux" />
             <editorcontrols:NumberField
@@ -51,6 +55,8 @@
                 Label="Angular diameter"
                 Mask="~.####"
                 NumberValue="{x:Bind ViewModel.AngularDiameterDegrees, Mode=TwoWay}"
+                OverrideState="{x:Bind ViewModel.AngularSizeRadiansOverride.State, Mode=OneWay}"
+                ResetCommand="{x:Bind ViewModel.AngularSizeRadiansOverride.ResetCommand}"
                 Tag="AngularSizeRadians"
                 Unit="rad" />
             <editorcontrols:NumberField
@@ -61,6 +67,8 @@
                 Label="Azimuth"
                 Mask="~.#"
                 NumberValue="{x:Bind ViewModel.SunAzimuth, Mode=TwoWay}"
+                OverrideState="{x:Bind ViewModel.SunDirectionOverride.State, Mode=OneWay}"
+                ResetCommand="{x:Bind ViewModel.SunDirectionOverride.ResetCommand}"
                 Tag="SunAzimuth"
                 Unit="°" />
             <editorcontrols:NumberField
@@ -71,9 +79,14 @@
                 Label="Elevation"
                 Mask="~.#"
                 NumberValue="{x:Bind ViewModel.SunElevation, Mode=TwoWay}"
+                OverrideState="{x:Bind ViewModel.SunDirectionOverride.State, Mode=OneWay}"
+                ResetCommand="{x:Bind ViewModel.SunDirectionOverride.ResetCommand}"
                 Tag="SunElevation"
                 Unit="°" />
-            <editorcontrols:PropertyCard PropertyName="Source assignment">
+            <editorcontrols:PropertyCard
+                OverrideState="{x:Bind ViewModel.AtmosphereSlotOverride.State, Mode=OneWay}"
+                PropertyName="Source assignment"
+                ResetCommand="{x:Bind ViewModel.AtmosphereSlotOverride.ResetCommand}">
                 <StackPanel Spacing="4">
                     <ComboBox
                         HorizontalAlignment="Stretch"
@@ -86,7 +99,10 @@
                         Visibility="{x:Bind ViewModel.AtmosphereSlotDiagnostic.HasError, Mode=OneWay, Converter={StaticResource InspectorDiagnosticVisibility}}" />
                 </StackPanel>
             </editorcontrols:PropertyCard>
-            <editorcontrols:PropertyCard PropertyName="Per-pixel transmittance">
+            <editorcontrols:PropertyCard
+                OverrideState="{x:Bind ViewModel.UsePerPixelAtmosphereTransmittanceOverride.State, Mode=OneWay}"
+                PropertyName="Per-pixel transmittance"
+                ResetCommand="{x:Bind ViewModel.UsePerPixelAtmosphereTransmittanceOverride.ResetCommand}">
                 <ToggleSwitch AutomationProperties.Name="Per-pixel transmittance" IsOn="{x:Bind ViewModel.UsePerPixelAtmosphereTransmittance, Mode=TwoWay}" />
             </editorcontrols:PropertyCard>
             <editorcontrols:ColorField
@@ -99,9 +115,14 @@
                 HasError="{x:Bind ViewModel.AtmosphereDiskLuminanceScaleRgbDiagnostic.HasError, Mode=OneWay}"
                 Kind="Multiplier"
                 Label="Disk luminance scale"
+                OverrideState="{x:Bind ViewModel.AtmosphereDiskLuminanceScaleRgbOverride.State, Mode=OneWay}"
                 Red="{x:Bind ViewModel.DiskScaleR, Mode=TwoWay}"
+                ResetCommand="{x:Bind ViewModel.AtmosphereDiskLuminanceScaleRgbOverride.ResetCommand}"
                 Tag="DiskScale" />
-            <editorcontrols:PropertyCard PropertyName="Affects world">
+            <editorcontrols:PropertyCard
+                OverrideState="{x:Bind ViewModel.AffectsWorldOverride.State, Mode=OneWay}"
+                PropertyName="Affects world"
+                ResetCommand="{x:Bind ViewModel.AffectsWorldOverride.ResetCommand}">
                 <ToggleSwitch AutomationProperties.Name="Affects world" IsOn="{x:Bind ViewModel.AffectsWorld, Mode=TwoWay}" />
             </editorcontrols:PropertyCard>
             <editorcontrols:NumberField
@@ -111,6 +132,8 @@
                 HasError="{x:Bind ViewModel.ExposureCompensationDiagnostic.HasError, Mode=OneWay}"
                 Label="Exposure"
                 NumberValue="{x:Bind ViewModel.ExposureCompensation, Mode=TwoWay}"
+                OverrideState="{x:Bind ViewModel.ExposureCompensationOverride.State, Mode=OneWay}"
+                ResetCommand="{x:Bind ViewModel.ExposureCompensationOverride.ResetCommand}"
                 Tag="ExposureCompensation"
                 Unit="EV" />
             <lights:DirectionalLightShadowsView ViewModel="{x:Bind ViewModel, Mode=OneWay}" />

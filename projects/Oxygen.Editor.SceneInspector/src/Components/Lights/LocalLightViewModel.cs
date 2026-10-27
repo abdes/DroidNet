@@ -20,6 +20,7 @@ namespace Oxygen.Editor.SceneInspector.Components.Lights;
 public abstract partial class LocalLightViewModel : ComponentPropertyEditor, IDisposable, IInspectorEditSessionOwner
 {
     private readonly InspectorFieldDiagnostic unboundDiagnostic = new();
+    private readonly InspectorFieldOverride unboundOverride = new(static () => { });
     private readonly InspectorEditSessionCoordinator? edits;
     private readonly PropertyBinding<Vector3> colorBinding;
     private readonly PropertyBinding<bool> affectsWorldBinding;
@@ -140,6 +141,39 @@ public abstract partial class LocalLightViewModel : ComponentPropertyEditor, IDi
     /// <summary>Gets shadow normal bias feedback.</summary>
     public InspectorFieldDiagnostic ShadowNormalBiasDiagnostic => this.Diagnostic(this.ShadowNormalBias.Id.Id);
 
+    /// <summary>Gets the color override bar.</summary>
+    public InspectorFieldOverride ColorOverride => this.Override(this.colorBinding.Id.Id);
+
+    /// <summary>Gets the luminous flux override bar.</summary>
+    public InspectorFieldOverride LuminousFluxLumensOverride => this.Override(this.LuminousFluxLumens.Id.Id);
+
+    /// <summary>Gets the range override bar.</summary>
+    public InspectorFieldOverride RangeOverride => this.Override(this.Range.Id.Id);
+
+    /// <summary>Gets the source radius override bar.</summary>
+    public InspectorFieldOverride SourceRadiusOverride => this.Override(this.SourceRadius.Id.Id);
+
+    /// <summary>Gets the affects world override bar.</summary>
+    public InspectorFieldOverride AffectsWorldOverride => this.Override(this.affectsWorldBinding.Id.Id);
+
+    /// <summary>Gets the exposure compensation override bar.</summary>
+    public InspectorFieldOverride ExposureCompensationOverride => this.Override(this.ExposureCompensation.Id.Id);
+
+    /// <summary>Gets the cast shadows override bar.</summary>
+    public InspectorFieldOverride CastsShadowsOverride => this.Override(this.castsShadowsBinding.Id.Id);
+
+    /// <summary>Gets the contact shadows override bar.</summary>
+    public InspectorFieldOverride ContactShadowsOverride => this.Override(this.contactShadowsBinding.Id.Id);
+
+    /// <summary>Gets the shadow resolution override bar.</summary>
+    public InspectorFieldOverride ShadowResolutionHintOverride => this.Override(this.shadowResolutionHintBinding.Id.Id);
+
+    /// <summary>Gets the shadow depth bias override bar.</summary>
+    public InspectorFieldOverride ShadowBiasOverride => this.Override(this.ShadowBias.Id.Id);
+
+    /// <summary>Gets the shadow normal bias override bar.</summary>
+    public InspectorFieldOverride ShadowNormalBiasOverride => this.Override(this.ShadowNormalBias.Id.Id);
+
     /// <inheritdoc />
     public Guid EditScopeId => this.edits?.ScopeId ?? Guid.Empty;
 
@@ -188,7 +222,7 @@ public abstract partial class LocalLightViewModel : ComponentPropertyEditor, IDi
         var targets = items
             .Select(node => (node, light: this.FindLight(node)))
             .Where(static target => target.light is not null)
-            .ToDictionary(static target => target.node.Id, static target => (object?)target.light);
+            .ToDictionary(target => this.ReferenceOf(target.node), static target => (object?)target.light);
         var nodes = targets.Keys.ToArray();
         this.edits?.Bind(nodes);
         this.selectedItems = items;
@@ -274,6 +308,12 @@ public abstract partial class LocalLightViewModel : ComponentPropertyEditor, IDi
     private protected InspectorFieldDiagnostic Diagnostic(PropertyId id)
         => this.edits?.Diagnostics.Get(id) ?? this.unboundDiagnostic;
 
+    /// <summary>Gets the override bar of a field.</summary>
+    /// <param name="ids">The properties the field shows.</param>
+    /// <returns>The field's bar.</returns>
+    private protected InspectorFieldOverride Override(params PropertyId[] ids)
+        => this.edits?.Overrides.Get(ids) ?? this.unboundOverride;
+
     partial void OnColorRChanged(double value) => this.ApplyColorAxisEdit(0, value);
 
     partial void OnColorGChanged(double value) => this.ApplyColorAxisEdit(1, value);
@@ -308,12 +348,12 @@ public abstract partial class LocalLightViewModel : ComponentPropertyEditor, IDi
             return;
         }
 
-        var perTarget = new Dictionary<NodeId, PropertyEdit>();
+        var perTarget = new Dictionary<NodeReference, PropertyEdit>();
         foreach (var node in this.selectedItems)
         {
             if (this.FindLight(node) is { } light)
             {
-                perTarget[node.Id] = PropertyEdit.SingleEdit(this.colorBinding.Id, color(light));
+                perTarget[this.ReferenceOf(node)] = PropertyEdit.SingleEdit(this.colorBinding.Id, color(light));
             }
         }
 

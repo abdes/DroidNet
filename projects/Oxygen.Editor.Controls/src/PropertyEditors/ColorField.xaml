@@ -21,8 +21,11 @@
                             HorizontalContentAlignment="Stretch"
                             FontSize="{TemplateBinding FontSize}"
                             IsCompound="True"
+                            OverrideState="{TemplateBinding OverrideState}"
                             PropertyName="{TemplateBinding Label}"
-                            QualifierGroup="{TemplateBinding QualifierGroup}">
+                            QualifierGroup="{TemplateBinding QualifierGroup}"
+                            ResetCommand="{TemplateBinding ResetCommand}"
+                            ResetToolTip="{TemplateBinding ResetToolTip}">
                             <local:PropertyCard.Resources>
                                 <!--  The ColorBox's channels are a VectorBox of the row's look, whatever the consumer styles.  -->
                                 <Style BasedOn="{StaticResource PropertyVectorBoxStyle}" TargetType="controls:VectorBox" />

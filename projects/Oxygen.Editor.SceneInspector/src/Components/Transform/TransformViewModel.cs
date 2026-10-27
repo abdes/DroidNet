@@ -13,6 +13,7 @@ using Oxygen.Editor.Schemas.Bindings;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Utils;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.SceneInspector.Components.Transform;
 
@@ -24,6 +25,7 @@ namespace Oxygen.Editor.SceneInspector.Components.Transform;
 public sealed partial class TransformViewModel : ComponentPropertyEditor, IDisposable
 {
     private readonly InspectorFieldDiagnostics diagnostics = new();
+    private readonly InspectorFieldOverride unboundOverride = new(static () => { });
     private readonly TransformEditController controller;
     private readonly NumberBinding<float> positionXBinding = new(SceneProperties.Transform.PositionXDescriptor);
     private readonly NumberBinding<float> positionYBinding = new(SceneProperties.Transform.PositionYDescriptor);
@@ -46,7 +48,7 @@ public sealed partial class TransformViewModel : ComponentPropertyEditor, IDispo
         Func<SceneAuthoring?>? authoringProvider = null)
     {
         this.LoggerFactory = loggerFactory;
-        this.controller = new(loggerFactory, authoringProvider ?? (static () => null), () => this.IsInputEnabled && !this.disposed, this.UpdateValues, this.diagnostics);
+        this.controller = new(loggerFactory, authoringProvider ?? (static () => null), this.ReferenceOf, () => this.IsInputEnabled && !this.disposed, this.UpdateValues, this.diagnostics);
         if (authoringProvider is not null)
         {
             this.flagEdits = new(authoringProvider, "Edit Transform", this.RefreshFlagValues);
@@ -145,6 +147,18 @@ public sealed partial class TransformViewModel : ComponentPropertyEditor, IDispo
     /// <summary>Gets per-axis scale feedback.</summary>
     public InspectorFieldDiagnostic ScaleZDiagnostic => this.diagnostics.Get(this.scaleZBinding.Id.Id);
 
+    /// <summary>Gets the position override bar.</summary>
+    public InspectorFieldOverride PositionOverride => this.Override(this.positionXBinding.Id.Id, this.positionYBinding.Id.Id, this.positionZBinding.Id.Id);
+
+    /// <summary>Gets the rotation override bar.</summary>
+    public InspectorFieldOverride RotationOverride => this.Override(SceneProperties.Transform.RotationDescriptor.Id);
+
+    /// <summary>Gets the scale override bar.</summary>
+    public InspectorFieldOverride ScaleOverride => this.Override(this.scaleXBinding.Id.Id, this.scaleYBinding.Id.Id, this.scaleZBinding.Id.Id);
+
+    /// <summary>Gets the ignore parent transform override bar.</summary>
+    public InspectorFieldOverride IgnoreParentTransformOverride => this.Override(this.ignoreParentTransformBinding.Id.Id);
+
     /// <inheritdoc />
     public override string Header => "Transform";
 
@@ -234,6 +248,12 @@ public sealed partial class TransformViewModel : ComponentPropertyEditor, IDispo
 
     partial void OnScaleZChanged(double value) => this.Apply("ScaleZ", value);
 
+    /// <summary>Gets the override bar of a field.</summary>
+    /// <param name="ids">The properties the field shows.</param>
+    /// <returns>The field's bar.</returns>
+    private InspectorFieldOverride Override(params PropertyId[] ids)
+        => this.flagEdits?.Overrides.Get(ids) ?? this.unboundOverride;
+
     private void Apply(string property, double value)
     {
         if (!this.isApplyingEditorChanges)
@@ -244,7 +264,7 @@ public sealed partial class TransformViewModel : ComponentPropertyEditor, IDispo
 
     private void UpdateFlagValues(ICollection<SceneNode> items)
     {
-        var targets = items.ToDictionary(static node => node.Id, static node => (object?)node.Flags);
+        var targets = items.ToDictionary(node => this.ReferenceOf(node), static node => (object?)node.Flags);
         var nodes = targets.Keys.ToArray();
         this.flagEdits?.Bind(nodes);
         this.selectedItems = items;
@@ -263,7 +283,7 @@ public sealed partial class TransformViewModel : ComponentPropertyEditor, IDispo
     private void UpdateRotationValues(ICollection<SceneNode> items)
     {
         var descriptor = SceneProperties.Transform.RotationDescriptor;
-        var targets = items.ToDictionary(static node => node.Id, static node => (object?)node.Transform);
+        var targets = items.ToDictionary(node => this.ReferenceOf(node), static node => (object?)node.Transform);
         this.RefreshSourceFeedback(descriptor, targets);
         var angles = items.Select(node => descriptor.Read(node.Transform)).ToList();
         var first = angles.Count > 0 ? angles[0] : Vector3.Zero;
@@ -279,8 +299,8 @@ public sealed partial class TransformViewModel : ComponentPropertyEditor, IDispo
 
     private void UpdateBindingValue(NumberBinding<float> binding, ICollection<SceneNode> items, Action<float> setValue, Action<bool> setMixed)
     {
-        var nodes = items.Select(static node => node.Id).ToArray();
-        var targets = items.ToDictionary(static node => node.Id, static node => (object?)node.Transform);
+        var nodes = items.Select(this.ReferenceOf).ToArray();
+        var targets = items.ToDictionary(node => this.ReferenceOf(node), static node => (object?)node.Transform);
         this.RefreshSourceFeedback(binding.Descriptor, targets);
         binding.UpdateFromModel(nodes, id => targets.GetValueOrDefault(id));
         var value = binding.HasValue ? binding.Value : 0;

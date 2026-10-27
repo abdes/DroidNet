@@ -30,12 +30,14 @@ namespace Oxygen.Editor.SceneInspector.Components.Transform;
 ///     process. If <see langword="null" />, logging is disabled.
 /// </param>
 /// <param name="authoringProvider">The authoring of the scene being inspected.</param>
+/// <param name="referenceOf">Names a selected node by its reference: a node of the scene or one an instance brings in.</param>
 /// <param name="inputEnabled">The owning model's input/lifetime gate.</param>
 /// <param name="refresh">The owning model's value refresh operation.</param>
 /// <param name="diagnostics">The borrowed canonical Transform feedback.</param>
 internal sealed partial class TransformEditController(
     ILoggerFactory? loggerFactory,
     Func<SceneAuthoring?> authoringProvider,
+    Func<SceneNode, NodeReference> referenceOf,
     Func<bool> inputEnabled,
     Action<ICollection<SceneNode>> refresh,
     InspectorFieldDiagnostics diagnostics) : IDisposable
@@ -151,10 +153,10 @@ internal sealed partial class TransformEditController(
         var nodes = this.selectedItems.ToList();
         var axis = Axis(property);
         var originalValues = nodes.ToDictionary(
-            static node => node.Id,
+            node => referenceOf(node),
             node => axis.Read(node.Transform));
         this.activeSessions[property] = new TransformEditSession(
-            authoring.BeginGestureAsync([.. nodes.Select(static node => node.Id)], [axis.Id], Label),
+            authoring.BeginNodeGestureAsync([.. nodes.Select(referenceOf)], [axis.Id], Label),
             nodes,
             originalValues,
             args.InteractionKind);
@@ -179,7 +181,7 @@ internal sealed partial class TransformEditController(
             var hasRelativeEdit = this.pendingRelativeEdits.Remove(property, out var relativeEdit);
             if (!hasRelativeEdit && args.InputText is { } inputText)
             {
-                var firstValue = activeSession.OriginalValues[activeSession.Nodes[0].Id];
+                var firstValue = activeSession.OriginalValues[referenceOf(activeSession.Nodes[0])];
                 hasRelativeEdit = NumericInputParser.TryParse(inputText, firstValue, out relativeEdit) && relativeEdit.IsRelative;
             }
 
@@ -265,7 +267,7 @@ internal sealed partial class TransformEditController(
 
         var hasSession = this.activeSessions.TryGetValue(property, out var session);
         var nodes = hasSession ? session!.Nodes : this.selectedItems.ToList();
-        var edits = new Dictionary<NodeId, PropertyEdit>();
+        var edits = new Dictionary<NodeReference, PropertyEdit>();
         foreach (var node in nodes)
         {
             if (!this.TryAxisEdit(property, node, value, out var edit))
@@ -273,18 +275,18 @@ internal sealed partial class TransformEditController(
                 return;
             }
 
-            edits[node.Id] = edit;
+            edits[referenceOf(node)] = edit;
         }
 
         this.LogApplyingChange(property, (float)value, this.selectedItems.Count);
         if (hasSession)
         {
             _ = this.RequestAsync(property, nodes, validates: true, async () =>
-                await (await session!.Gesture.ConfigureAwait(true)).PreviewAsync(new SetProperties(edits, Label)).ConfigureAwait(true));
+                await (await session!.Gesture.ConfigureAwait(true)).PreviewAsync(edits).ConfigureAwait(true));
             return;
         }
 
-        _ = this.RequestAsync(property, nodes, validates: true, () => authoring.ExecuteAsync(new SetProperties(edits, Label)));
+        _ = this.RequestAsync(property, nodes, validates: true, () => authoring.ExecuteAsync(NodeOverrides.SetValues(edits, Label)));
     }
 
     /// <summary>Settles hidden drafts, cancelling pointer/wheel work and committing text by existing policy.</summary>
@@ -475,8 +477,8 @@ internal sealed partial class TransformEditController(
             return false;
         }
 
-        var expectedIds = nodes.Select(static node => node.Id).ToHashSet();
-        return this.selectedItems.All(node => expectedIds.Contains(node.Id));
+        var expected = nodes.Select(referenceOf).ToHashSet();
+        return this.selectedItems.All(node => expected.Contains(referenceOf(node)));
     }
 
     // A relative entry ("+=5") applies to each target's own starting value, then ends the gesture.
@@ -488,20 +490,20 @@ internal sealed partial class TransformEditController(
             return;
         }
 
-        var edits = new Dictionary<NodeId, PropertyEdit>();
+        var edits = new Dictionary<NodeReference, PropertyEdit>();
         foreach (var node in session.Nodes)
         {
-            if (!this.TryAxisEdit(property, node, expression.Apply(session.OriginalValues[node.Id]), out var edit))
+            if (!this.TryAxisEdit(property, node, expression.Apply(session.OriginalValues[referenceOf(node)]), out var edit))
             {
                 await this.EndAsync(property, session, NumberBoxEditCompletionKind.Cancel).ConfigureAwait(true);
                 return;
             }
 
-            edits[node.Id] = edit;
+            edits[referenceOf(node)] = edit;
         }
 
         await this.RequestAsync(property, session.Nodes, validates: true, async () =>
-            await (await session.Gesture.ConfigureAwait(true)).PreviewAsync(new SetProperties(edits, Label)).ConfigureAwait(true)).ConfigureAwait(true);
+            await (await session.Gesture.ConfigureAwait(true)).PreviewAsync(edits).ConfigureAwait(true)).ConfigureAwait(true);
         await this.EndAsync(property, session, NumberBoxEditCompletionKind.Commit).ConfigureAwait(true);
     }
 
@@ -566,6 +568,6 @@ internal sealed partial class TransformEditController(
     private sealed record TransformEditSession(
         Task<SceneGesture> Gesture,
         IReadOnlyList<SceneNode> Nodes,
-        IReadOnlyDictionary<NodeId, float> OriginalValues,
+        IReadOnlyDictionary<NodeReference, float> OriginalValues,
         NumberBoxEditInteractionKind Interaction);
 }

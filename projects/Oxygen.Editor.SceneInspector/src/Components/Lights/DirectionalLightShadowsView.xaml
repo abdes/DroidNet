@@ -14,13 +14,22 @@
     <StackPanel Spacing="4">
         <StackPanel Spacing="4">
             <TextBlock FontWeight="SemiBold" Text="Shadows" />
-            <editorcontrols:PropertyCard PropertyName="Cast shadows">
+            <editorcontrols:PropertyCard
+                OverrideState="{x:Bind ViewModel.CastsShadowsOverride.State, Mode=OneWay}"
+                PropertyName="Cast shadows"
+                ResetCommand="{x:Bind ViewModel.CastsShadowsOverride.ResetCommand}">
                 <ToggleSwitch IsOn="{x:Bind ViewModel.CastsShadows, Mode=TwoWay}" />
             </editorcontrols:PropertyCard>
-            <editorcontrols:PropertyCard PropertyName="Contact shadows">
+            <editorcontrols:PropertyCard
+                OverrideState="{x:Bind ViewModel.ContactShadowsOverride.State, Mode=OneWay}"
+                PropertyName="Contact shadows"
+                ResetCommand="{x:Bind ViewModel.ContactShadowsOverride.ResetCommand}">
                 <ToggleSwitch IsOn="{x:Bind ViewModel.ContactShadows, Mode=TwoWay}" />
             </editorcontrols:PropertyCard>
-            <editorcontrols:PropertyCard PropertyName="Resolution">
+            <editorcontrols:PropertyCard
+                OverrideState="{x:Bind ViewModel.ShadowResolutionHintOverride.State, Mode=OneWay}"
+                PropertyName="Resolution"
+                ResetCommand="{x:Bind ViewModel.ShadowResolutionHintOverride.ResetCommand}">
                 <ComboBox
                     HorizontalAlignment="Stretch"
                     ItemsSource="{x:Bind ViewModel.ShadowResolutionOptions}"
@@ -34,6 +43,8 @@
                 Label="Depth bias"
                 Mask="~.####"
                 NumberValue="{x:Bind ViewModel.ShadowBias, Mode=TwoWay}"
+                OverrideState="{x:Bind ViewModel.ShadowBiasOverride.State, Mode=OneWay}"
+                ResetCommand="{x:Bind ViewModel.ShadowBiasOverride.ResetCommand}"
                 Tag="ShadowBias" />
             <editorcontrols:NumberField
                 EditSessionCompleted="NumberEditCompleted"
@@ -43,11 +54,16 @@
                 Label="Normal bias"
                 Mask="~.####"
                 NumberValue="{x:Bind ViewModel.ShadowNormalBias, Mode=TwoWay}"
+                OverrideState="{x:Bind ViewModel.ShadowNormalBiasOverride.State, Mode=OneWay}"
+                ResetCommand="{x:Bind ViewModel.ShadowNormalBiasOverride.ResetCommand}"
                 Tag="ShadowNormalBias" />
         </StackPanel>
         <Expander Header="Cascaded shadows" Style="{StaticResource QuietDisclosure}">
             <StackPanel Spacing="4">
-                <editorcontrols:PropertyCard PropertyName="Split mode">
+                <editorcontrols:PropertyCard
+                    OverrideState="{x:Bind ViewModel.SplitModeOverride.State, Mode=OneWay}"
+                    PropertyName="Split mode"
+                    ResetCommand="{x:Bind ViewModel.SplitModeOverride.ResetCommand}">
                     <ComboBox
                         HorizontalAlignment="Stretch"
                         ItemsSource="{x:Bind ViewModel.SplitModeOptions}"
@@ -61,6 +77,8 @@
                     Label="Cascade count"
                     Mask="#."
                     NumberValue="{x:Bind ViewModel.CascadeCount, Mode=TwoWay}"
+                    OverrideState="{x:Bind ViewModel.CascadeCountOverride.State, Mode=OneWay}"
+                    ResetCommand="{x:Bind ViewModel.CascadeCountOverride.ResetCommand}"
                     Tag="CascadeCount" />
                 <editorcontrols:NumberField
                     EditSessionCompleted="NumberEditCompleted"
@@ -69,6 +87,8 @@
                     HasError="{x:Bind ViewModel.MaxShadowDistanceDiagnostic.HasError, Mode=OneWay}"
                     Label="Maximum distance"
                     NumberValue="{x:Bind ViewModel.MaxShadowDistance, Mode=TwoWay}"
+                    OverrideState="{x:Bind ViewModel.MaxShadowDistanceOverride.State, Mode=OneWay}"
+                    ResetCommand="{x:Bind ViewModel.MaxShadowDistanceOverride.ResetCommand}"
                     Tag="MaxShadowDistance"
                     Unit="m" />
                 <editorcontrols:NumberField
@@ -79,6 +99,8 @@
                     IsEnabled="{x:Bind ViewModel.IsDistributionExponentApplicable, Mode=OneWay}"
                     Label="Distribution exponent"
                     NumberValue="{x:Bind ViewModel.DistributionExponent, Mode=TwoWay}"
+                    OverrideState="{x:Bind ViewModel.DistributionExponentOverride.State, Mode=OneWay}"
+                    ResetCommand="{x:Bind ViewModel.DistributionExponentOverride.ResetCommand}"
                     Tag="DistributionExponent" />
                 <editorcontrols:NumberField
                     EditSessionCompleted="NumberEditCompleted"
@@ -88,6 +110,8 @@
                     IsEnabled="{x:Bind ViewModel.IsCascadeDistance1Applicable, Mode=OneWay}"
                     Label="Cascade 1 distance"
                     NumberValue="{x:Bind ViewModel.CascadeDistance1, Mode=TwoWay}"
+                    OverrideState="{x:Bind ViewModel.CascadeDistance1Override.State, Mode=OneWay}"
+                    ResetCommand="{x:Bind ViewModel.CascadeDistance1Override.ResetCommand}"
                     Tag="CascadeDistance1"
                     Unit="m" />
                 <editorcontrols:NumberField
@@ -98,6 +122,8 @@
                     IsEnabled="{x:Bind ViewModel.IsCascadeDistance2Applicable, Mode=OneWay}"
                     Label="Cascade 2 distance"
                     NumberValue="{x:Bind ViewModel.CascadeDistance2, Mode=TwoWay}"
+                    OverrideState="{x:Bind ViewModel.CascadeDistance2Override.State, Mode=OneWay}"
+                    ResetCommand="{x:Bind ViewModel.CascadeDistance2Override.ResetCommand}"
                     Tag="CascadeDistance2"
                     Unit="m" />
                 <editorcontrols:NumberField
@@ -108,6 +134,8 @@
                     IsEnabled="{x:Bind ViewModel.IsCascadeDistance3Applicable, Mode=OneWay}"
                     Label="Cascade 3 distance"
                     NumberValue="{x:Bind ViewModel.CascadeDistance3, Mode=TwoWay}"
+                    OverrideState="{x:Bind ViewModel.CascadeDistance3Override.State, Mode=OneWay}"
+                    ResetCommand="{x:Bind ViewModel.CascadeDistance3Override.ResetCommand}"
                     Tag="CascadeDistance3"
                     Unit="m" />
                 <editorcontrols:NumberField
@@ -118,6 +146,8 @@
                     IsEnabled="{x:Bind ViewModel.IsCascadeDistance4Applicable, Mode=OneWay}"
                     Label="Cascade 4 distance"
                     NumberValue="{x:Bind ViewModel.CascadeDistance4, Mode=TwoWay}"
+                    OverrideState="{x:Bind ViewModel.CascadeDistance4Override.State, Mode=OneWay}"
+                    ResetCommand="{x:Bind ViewModel.CascadeDistance4Override.ResetCommand}"
                     Tag="CascadeDistance4"
                     Unit="m" />
             </StackPanel>
@@ -131,6 +161,8 @@
                     HasError="{x:Bind ViewModel.TransitionFractionDiagnostic.HasError, Mode=OneWay}"
                     Label="Transition fraction"
                     NumberValue="{x:Bind ViewModel.TransitionFraction, Mode=TwoWay}"
+                    OverrideState="{x:Bind ViewModel.TransitionFractionOverride.State, Mode=OneWay}"
+                    ResetCommand="{x:Bind ViewModel.TransitionFractionOverride.ResetCommand}"
                     Tag="TransitionFraction" />
                 <editorcontrols:NumberField
                     EditSessionCompleted="NumberEditCompleted"
@@ -139,6 +171,8 @@
                     HasError="{x:Bind ViewModel.DistanceFadeoutFractionDiagnostic.HasError, Mode=OneWay}"
                     Label="Fade-out fraction"
                     NumberValue="{x:Bind ViewModel.DistanceFadeoutFraction, Mode=TwoWay}"
+                    OverrideState="{x:Bind ViewModel.DistanceFadeoutFractionOverride.State, Mode=OneWay}"
+                    ResetCommand="{x:Bind ViewModel.DistanceFadeoutFractionOverride.ResetCommand}"
                     Tag="DistanceFadeoutFraction" />
             </StackPanel>
         </Expander>

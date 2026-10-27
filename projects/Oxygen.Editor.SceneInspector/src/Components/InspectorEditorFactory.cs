@@ -15,6 +15,7 @@ using Oxygen.Editor.SceneInspector.Components.Rendering;
 using Oxygen.Editor.SceneInspector.Components.Scripting;
 using Oxygen.Editor.SceneInspector.Components.Transform;
 using Oxygen.Editor.Scenes.Authoring;
+using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Managed.Core;
 
@@ -31,6 +32,7 @@ internal static class InspectorEditorFactory
     /// <param name="logger">The scoped logging factory.</param>
     /// <param name="authoring">The authoring of the scene being inspected.</param>
     /// <param name="selectNode">Selects a node of the inspected scene.</param>
+    /// <param name="references">Names a selected node for its edits, a node an instance brings in by its instance root and path.</param>
     /// <param name="scripts">The scripting services, when the host provides them.</param>
     /// <returns>The component construction operations.</returns>
     internal static Dictionary<Type, Func<ComponentPropertyEditor>> Create(
@@ -41,18 +43,19 @@ internal static class InspectorEditorFactory
         ILoggerFactory? logger,
         Func<SceneAuthoring?> authoring,
         Action<NodeId> selectNode,
+        Func<SceneNode, NodeReference> references,
         InspectorScriptServices? scripts = null)
         => new()
         {
-            [typeof(TransformComponent)] = () => new TransformViewModel(logger, authoring),
-            [typeof(NodeFlagsComponent)] = () => new NodeRenderingViewModel(authoring, selectNode),
-            [typeof(GeometryComponent)] = () => new GeometryViewModel(hosting, assets, surfaces, session, authoring, logger),
-            [typeof(PerspectiveCamera)] = () => new PerspectiveCameraViewModel(authoring),
-            [typeof(OrthographicCamera)] = () => new OrthographicCameraViewModel(authoring),
-            [typeof(DirectionalLightComponent)] = () => new DirectionalLightViewModel(authoring),
-            [typeof(PointLightComponent)] = () => new PointLightViewModel(authoring),
-            [typeof(SpotLightComponent)] = () => new SpotLightViewModel(authoring),
-            [typeof(LocalFogVolumeComponent)] = () => new LocalFogVolumeViewModel(authoring),
+            [typeof(TransformComponent)] = () => new TransformViewModel(logger, authoring) { References = references },
+            [typeof(NodeFlagsComponent)] = () => new NodeRenderingViewModel(authoring, selectNode) { References = references },
+            [typeof(GeometryComponent)] = () => new GeometryViewModel(hosting, assets, surfaces, session, authoring, logger) { References = references },
+            [typeof(PerspectiveCamera)] = () => new PerspectiveCameraViewModel(authoring) { References = references },
+            [typeof(OrthographicCamera)] = () => new OrthographicCameraViewModel(authoring) { References = references },
+            [typeof(DirectionalLightComponent)] = () => new DirectionalLightViewModel(authoring) { References = references },
+            [typeof(PointLightComponent)] = () => new PointLightViewModel(authoring) { References = references },
+            [typeof(SpotLightComponent)] = () => new SpotLightViewModel(authoring) { References = references },
+            [typeof(LocalFogVolumeComponent)] = () => new LocalFogVolumeViewModel(authoring) { References = references },
             [typeof(ScriptingComponent)] = () => new ScriptingViewModel(authoring, assets, scripts?.Scripts, scripts?.CodeEditor, scripts?.Creation, scripts?.Problems, session, hosting.DispatcherScheduler),
         };
 }

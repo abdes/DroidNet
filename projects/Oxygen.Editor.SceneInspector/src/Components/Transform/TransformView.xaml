@@ -44,9 +44,11 @@
                 <editorcontrols:PropertyCard
                     IsCompound="True"
                     IsEnabled="{x:Bind ViewModel.PositionProperty.IsEnabled, Mode=OneWay}"
+                    OverrideState="{x:Bind ViewModel.PositionOverride.State, Mode=OneWay}"
                     PropertyName="Position"
                     Qualifier="m"
                     QualifierGroup="Transform"
+                    ResetCommand="{x:Bind ViewModel.PositionOverride.ResetCommand}"
                     Visibility="{x:Bind ViewModel.PositionProperty.IsVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
                     <controls:VectorBox
                         x:Name="PositionBox"
@@ -91,9 +93,11 @@
                 <editorcontrols:PropertyCard
                     IsCompound="True"
                     IsEnabled="{x:Bind ViewModel.RotationProperty.IsEnabled, Mode=OneWay}"
+                    OverrideState="{x:Bind ViewModel.RotationOverride.State, Mode=OneWay}"
                     PropertyName="Rotation"
                     Qualifier="°"
                     QualifierGroup="Transform"
+                    ResetCommand="{x:Bind ViewModel.RotationOverride.ResetCommand}"
                     Visibility="{x:Bind ViewModel.RotationProperty.IsVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
                     <controls:VectorBox
                         x:Name="RotationBox"
@@ -123,9 +127,11 @@
                 <editorcontrols:PropertyCard
                     IsCompound="True"
                     IsEnabled="{x:Bind ViewModel.ScaleProperty.IsEnabled, Mode=OneWay}"
+                    OverrideState="{x:Bind ViewModel.ScaleOverride.State, Mode=OneWay}"
                     PropertyName="Scale"
                     Qualifier="x"
                     QualifierGroup="Transform"
+                    ResetCommand="{x:Bind ViewModel.ScaleOverride.ResetCommand}"
                     Visibility="{x:Bind ViewModel.ScaleProperty.IsVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
                     <controls:VectorBox
                         x:Name="ScaleBox"
@@ -165,7 +171,10 @@
                     <Run Text="Z: " /><Run Text="{x:Bind ViewModel.ScaleZDiagnostic.Message, Mode=OneWay}" />
                 </TextBlock>
             </StackPanel>
-            <editorcontrols:PropertyCard PropertyName="Ignore parent transform">
+            <editorcontrols:PropertyCard
+                OverrideState="{x:Bind ViewModel.IgnoreParentTransformOverride.State, Mode=OneWay}"
+                PropertyName="Ignore parent transform"
+                ResetCommand="{x:Bind ViewModel.IgnoreParentTransformOverride.ResetCommand}">
                 <ToggleSwitch AutomationProperties.Name="Ignore parent transform" IsOn="{x:Bind ViewModel.IgnoreParentTransform, Mode=TwoWay}" />
             </editorcontrols:PropertyCard>
         </editorcontrols:PropertiesExpander.Items>

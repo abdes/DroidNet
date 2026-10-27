@@ -226,6 +226,7 @@
                             x:Name="GeometryAssetButton"
                             Grid.Column="1"
                             ChoiceInvoked="OnGeometryChoiceInvoked"
+                            IsEnabled="{x:Bind ViewModel.CanChangeGeometry, Mode=OneWay}"
                             Label="{x:Bind ViewModel.AssetButtonLabel, Mode=OneWay}"
                             Model="{x:Bind ViewModel.GeometryChoices}" />
                     </Grid>

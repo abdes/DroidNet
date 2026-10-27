@@ -22,6 +22,8 @@
                 Caption="{x:Bind ViewModel.Visibility.Caption, Mode=OneWay}"
                 Label="Scene visibility"
                 ModeNames="{x:Bind ViewModel.Visibility.ModeNames}"
+                OverrideState="{x:Bind ViewModel.VisibilityOverride.State, Mode=OneWay}"
+                ResetCommand="{x:Bind ViewModel.VisibilityOverride.ResetCommand}"
                 SelectedIndex="{x:Bind ViewModel.Visibility.SelectedIndex, Mode=TwoWay}"
                 SourceRequested="{x:Bind ViewModel.Visibility.SelectSource}"
                 SourceToolTip="{x:Bind ViewModel.Visibility.SourceToolTip, Mode=OneWay}" />
@@ -29,6 +31,8 @@
                 Caption="{x:Bind ViewModel.CastsShadows.Caption, Mode=OneWay}"
                 Label="Cast shadows"
                 ModeNames="{x:Bind ViewModel.CastsShadows.ModeNames}"
+                OverrideState="{x:Bind ViewModel.CastsShadowsOverride.State, Mode=OneWay}"
+                ResetCommand="{x:Bind ViewModel.CastsShadowsOverride.ResetCommand}"
                 SelectedIndex="{x:Bind ViewModel.CastsShadows.SelectedIndex, Mode=TwoWay}"
                 SourceRequested="{x:Bind ViewModel.CastsShadows.SelectSource}"
                 SourceToolTip="{x:Bind ViewModel.CastsShadows.SourceToolTip, Mode=OneWay}" />
@@ -44,11 +48,21 @@
                         Caption="{x:Bind ViewModel.ReceivesShadows.Caption, Mode=OneWay}"
                         Label="Receive shadows"
                         ModeNames="{x:Bind ViewModel.ReceivesShadows.ModeNames}"
+                        OverrideState="{x:Bind ViewModel.ReceivesShadowsOverride.State, Mode=OneWay}"
+                        ResetCommand="{x:Bind ViewModel.ReceivesShadowsOverride.ResetCommand}"
                         SelectedIndex="{x:Bind ViewModel.ReceivesShadows.SelectedIndex, Mode=TwoWay}"
                         SourceRequested="{x:Bind ViewModel.ReceivesShadows.SelectSource}"
                         SourceToolTip="{x:Bind ViewModel.ReceivesShadows.SourceToolTip, Mode=OneWay}" />
-                    <editorcontrols:ToggleField Label="Static" Value="{x:Bind ViewModel.IsStatic, Mode=TwoWay}" />
-                    <editorcontrols:ToggleField Label="Ray-cast selectable" Value="{x:Bind ViewModel.IsRayCastingSelectable, Mode=TwoWay}" />
+                    <editorcontrols:ToggleField
+                        Label="Static"
+                        OverrideState="{x:Bind ViewModel.IsStaticOverride.State, Mode=OneWay}"
+                        ResetCommand="{x:Bind ViewModel.IsStaticOverride.ResetCommand}"
+                        Value="{x:Bind ViewModel.IsStatic, Mode=TwoWay}" />
+                    <editorcontrols:ToggleField
+                        Label="Ray-cast selectable"
+                        OverrideState="{x:Bind ViewModel.IsRayCastingSelectableOverride.State, Mode=OneWay}"
+                        ResetCommand="{x:Bind ViewModel.IsRayCastingSelectableOverride.ResetCommand}"
+                        Value="{x:Bind ViewModel.IsRayCastingSelectable, Mode=TwoWay}" />
                 </StackPanel>
             </Expander>
         </editorcontrols:PropertiesExpander.Items>

@@ -6,11 +6,16 @@ using DroidNet.Controls;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Edits.Properties;
 using Oxygen.Editor.Schemas;
+using Oxygen.Editor.World;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.SceneInspector.Editing;
 
 /// <summary>Captures control targets and runs each control gesture as one scene gesture: previews, then one commit.</summary>
+/// <remarks>
+/// A target is a node of the scene or a node an instance brings in, named by its reference: the edits of the latter land in
+/// its instance root's changes (scene instances 8.5), so a section never knows which it edits.
+/// </remarks>
 internal sealed partial class InspectorEditSessionCoordinator(
     Func<SceneAuthoring?> authoringProvider,
     string label,
@@ -19,11 +24,13 @@ internal sealed partial class InspectorEditSessionCoordinator(
     InspectorFieldDiagnostics? diagnostics = null) : IDisposable
 {
     private static readonly TimeSpan WheelIdleDelay = TimeSpan.FromMilliseconds(250);
+    private const string ResetLabel = "Reset to Source";
     private static readonly SceneEditResult Nothing = new(SceneEditOutcome.Applied, []);
     private readonly List<Task> pending = [];
 
     // Node targets; in environment mode the target is the bound scene and this stays empty.
-    private NodeId[] targets = [];
+    private NodeReference[] targets = [];
+    private InspectorFieldOverrides? overrides;
     private SceneAuthoring? boundAuthoring;
     private Gesture? active;
     private HashSet<PropertyId>? supersededProperties;
@@ -33,6 +40,9 @@ internal sealed partial class InspectorEditSessionCoordinator(
 
     /// <summary>Gets the current diagnostics for the bound fields.</summary>
     public InspectorFieldDiagnostics Diagnostics { get; } = diagnostics ?? new();
+
+    /// <summary>Gets the override bars of the bound fields, from what the targets override of their sources.</summary>
+    public InspectorFieldOverrides Overrides => this.overrides ??= new(this.Reset);
 
     /// <summary>Gets the identity of the current binding lifetime.</summary>
     public Guid ScopeId { get; private set; } = Guid.NewGuid();
@@ -67,11 +77,12 @@ internal sealed partial class InspectorEditSessionCoordinator(
     }
 
     /// <summary>Updates the binding scope, ending the old gesture first.</summary>
-    /// <param name="nodeIds">The bound target identities.</param>
-    public void Bind(IReadOnlyList<NodeId> nodeIds)
+    /// <param name="nodes">The bound targets.</param>
+    public void Bind(IReadOnlyList<NodeReference> nodes)
     {
         var authoring = authoringProvider();
-        if (this.IsBoundTo(authoring) && this.targets.ToHashSet().SetEquals(nodeIds))
+        this.Overrides.Update(authoring?.Scene, nodes);
+        if (this.IsBoundTo(authoring) && this.targets.ToHashSet().SetEquals(nodes))
         {
             return;
         }
@@ -82,7 +93,7 @@ internal sealed partial class InspectorEditSessionCoordinator(
         // Cancellation changes the old model and can synchronously reenter Bind
         // through the inspector host. Publish the new scope before that callback.
         this.boundAuthoring = authoring;
-        this.targets = [.. nodeIds];
+        this.targets = [.. nodes];
         this.ScopeId = Guid.NewGuid();
         this.Diagnostics.Reset();
         this.End(completion);
@@ -134,8 +145,31 @@ internal sealed partial class InspectorEditSessionCoordinator(
 
     /// <summary>Submits per-target values for color axes and world-space sun orientation.</summary>
     /// <param name="edits">The requested values for each target, committed as <see cref="InspectorCommits"/> says.</param>
-    public void Submit(IReadOnlyDictionary<NodeId, PropertyEdit> edits)
+    public void Submit(IReadOnlyDictionary<NodeReference, PropertyEdit> edits)
         => this.Submit(InspectorCommits.Commit(edits), uniform: null);
+
+    /// <summary>Resets properties to the source's value on every target that overrides them, as one edit.</summary>
+    /// <param name="properties">The properties.</param>
+    public void Reset(IReadOnlyList<PropertyId> properties)
+    {
+        ArgumentNullException.ThrowIfNull(properties);
+        if (this.disposed || !this.inputEnabled || authoringProvider() is not { } authoring || !this.IsBoundTo(authoring))
+        {
+            return;
+        }
+
+        var writes = this.Overrides.Overriding(properties).ToDictionary(
+            static pair => pair.Key,
+            static pair => (IReadOnlyList<OverrideWrite>)[.. pair.Value.Select(static property => new OverrideWrite(property, Part: null, LayoutRevision: null, Value: null))]);
+        if (writes.Count == 0)
+        {
+            return;
+        }
+
+        this.End(NumberBoxEditCompletionKind.Commit);
+        var ticket = this.Diagnostics.Begin(properties);
+        this.Track(this.ObserveAsync(authoring.ExecuteAsync(NodeOverrides.Write(writes, ResetLabel)), authoring, this.targets, ticket));
+    }
 
     /// <summary>Ends the current gesture exactly once.</summary>
     /// <param name="completion">Whether to commit or restore the original values.</param>
@@ -188,7 +222,7 @@ internal sealed partial class InspectorEditSessionCoordinator(
         return await gesture.CommitAsync().ConfigureAwait(true);
     }
 
-    private void Submit(IReadOnlyDictionary<NodeId, PropertyEdit> edits, PropertyEdit? uniform)
+    private void Submit(IReadOnlyDictionary<NodeReference, PropertyEdit> edits, PropertyEdit? uniform)
     {
         if (this.disposed || !this.inputEnabled || authoringProvider() is not { } authoring || !this.IsBoundTo(authoring))
         {
@@ -213,7 +247,9 @@ internal sealed partial class InspectorEditSessionCoordinator(
         {
             // The scene gesture starts with the first value, when its properties are known.
             gesture.Properties ??= properties;
-            gesture.Scene ??= authoring.BeginGestureAsync(environment ? [] : gesture.Targets, properties, label);
+            gesture.Scene ??= environment
+                ? authoring.BeginGestureAsync([], properties, label)
+                : authoring.BeginNodeGestureAsync(gesture.Targets, properties, label);
             gesture.Steps = this.PreviewAsync(gesture.Steps, gesture.Scene, edits, uniform);
             this.Track(this.ObserveAsync(gesture.Steps, gesture.Authoring, gesture.Targets, ticket));
         }
@@ -224,16 +260,16 @@ internal sealed partial class InspectorEditSessionCoordinator(
     }
 
     // The scene environment is edited as scene properties; nodes uniformly or per target.
-    private ISceneEdit EditOf(IReadOnlyDictionary<NodeId, PropertyEdit> edits, PropertyEdit? uniform)
-        => environment ? new SetSceneProperties(uniform ?? PropertyEdit.Empty, label) : new SetProperties(edits, label);
+    private ISceneEdit EditOf(IReadOnlyDictionary<NodeReference, PropertyEdit> edits, PropertyEdit? uniform)
+        => environment ? new SetSceneProperties(uniform ?? PropertyEdit.Empty, label) : NodeOverrides.SetValues(edits, label);
 
-    private async Task<SceneEditResult> PreviewAsync(Task<SceneEditResult> previous, Task<SceneGesture> scene, IReadOnlyDictionary<NodeId, PropertyEdit> edits, PropertyEdit? uniform)
+    private async Task<SceneEditResult> PreviewAsync(Task<SceneEditResult> previous, Task<SceneGesture> scene, IReadOnlyDictionary<NodeReference, PropertyEdit> edits, PropertyEdit? uniform)
     {
         _ = await previous.ConfigureAwait(true);
         var gesture = await scene.ConfigureAwait(true);
         return environment
             ? await gesture.PreviewAsync(new SetSceneProperties(uniform ?? PropertyEdit.Empty, label)).ConfigureAwait(true)
-            : await gesture.PreviewAsync(new SetProperties(edits, label)).ConfigureAwait(true);
+            : await gesture.PreviewAsync(edits).ConfigureAwait(true);
     }
 
     private async Task CommitAfterIdleAsync(Gesture gesture, CancellationTokenSource idle)
@@ -259,7 +295,7 @@ internal sealed partial class InspectorEditSessionCoordinator(
         }
     }
 
-    private async Task ObserveAsync(Task<SceneEditResult> operation, SceneAuthoring authoring, IReadOnlyList<NodeId> editedTargets, InspectorFieldDiagnostics.Ticket? ticket)
+    private async Task ObserveAsync(Task<SceneEditResult> operation, SceneAuthoring authoring, IReadOnlyList<NodeReference> editedTargets, InspectorFieldDiagnostics.Ticket? ticket)
     {
         var result = Nothing;
         try
@@ -309,11 +345,11 @@ internal sealed partial class InspectorEditSessionCoordinator(
         }
     }
 
-    private sealed class Gesture(SceneAuthoring authoring, IReadOnlyList<NodeId> targets, string field, NumberBoxEditInteractionKind interaction)
+    private sealed class Gesture(SceneAuthoring authoring, IReadOnlyList<NodeReference> targets, string field, NumberBoxEditInteractionKind interaction)
     {
         public SceneAuthoring Authoring { get; } = authoring;
 
-        public IReadOnlyList<NodeId> Targets { get; } = [.. targets];
+        public IReadOnlyList<NodeReference> Targets { get; } = [.. targets];
 
         public string Field { get; } = field;
 

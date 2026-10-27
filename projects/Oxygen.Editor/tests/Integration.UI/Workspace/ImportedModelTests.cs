@@ -113,7 +113,7 @@ public sealed partial class ImportedModelTests : DroidNet.Tests.VisualUserInterf
         _ = selected.GeometryKey.Should().Be(ImportedNativeKey(geometry));
         _ = fixture.Document.History.UndoStack.Should().ContainSingle();
         var surface = await ReadSingleSurfaceAsync(inventories, fixture.Session.Context, geometry.Identity, cancellationToken).ConfigureAwait(true);
-        var built = await SurfaceEdits.SetAsync(inventories, fixture.Session.Context, [node.Id], surface, SceneSchema.Geometry.Surface.Material.Id, material.Identity, "Edit Surface Material", cancellationToken).ConfigureAwait(true);
+        var built = await SurfaceEdits.SetAsync(inventories, fixture.Session.Context, [NodeReference.To(node.Id)], surface, SceneSchema.Geometry.Surface.Material.Id, material.Identity, "Edit Surface Material", cancellationToken).ConfigureAwait(true);
         _ = built.Error.Should().BeNull("the current native surface must be editable");
         _ = (await fixture.Authoring.ExecuteAsync(built.Edit!).ConfigureAwait(true)).Succeeded.Should().BeTrue();
         _ = fixture.Document.History.UndoStack.Should().HaveCount(2);

@@ -25,7 +25,9 @@ namespace Oxygen.Editor.SceneInspector.Components.Geometry;
 /// <remarks>
 /// The list shows only when every selected node uses one geometry, since surface IDs belong to it. Cards and kept changes
 /// are updated in place from the scene after every edit, undo and redo; the inventory is read again only when the
-/// selection, its geometry or the geometry's cook changes, or when the author refreshes it.
+/// selection, its geometry or the geometry's cook changes, or when the author refreshes it. A node an instance brings in
+/// takes its edits as changes of its instance root; the changes the scene keeps for lost surfaces are those of the
+/// scene's own nodes.
 /// </remarks>
 public sealed partial class GeometryViewModel
 {
@@ -74,7 +76,7 @@ public sealed partial class GeometryViewModel
             return;
         }
 
-        var built = await SurfaceEdits.ClearUnresolvedAsync(this.surfaces, this.session.Context, authoring.Scene, nodes.ConvertAll(static node => node.Id)).ConfigureAwait(true);
+        var built = await SurfaceEdits.ClearUnresolvedAsync(this.surfaces, this.session.Context, authoring.Scene, this.OwnedIds(nodes)).ConfigureAwait(true);
         await this.ExecuteSurfaceEditAsync(nodes, authoring, built).ConfigureAwait(true);
     }
 
@@ -179,7 +181,7 @@ public sealed partial class GeometryViewModel
             return;
         }
 
-        var built = await SurfaceEdits.SetAsync(this.surfaces, this.session.Context, nodes.ConvertAll(static node => node.Id), card.Target, property, value, label).ConfigureAwait(true);
+        var built = await SurfaceEdits.SetAsync(this.surfaces, this.session.Context, nodes.ConvertAll(this.ReferenceOf), card.Target, property, value, label).ConfigureAwait(true);
         await this.ExecuteSurfaceEditAsync(nodes, authoring, built).ConfigureAwait(true);
     }
 
@@ -192,7 +194,8 @@ public sealed partial class GeometryViewModel
     {
         if (this.TryGetSurfaceEditing(out var nodes, out var authoring))
         {
-            var reset = new SetOverrides(nodes.ConvertAll(static node => node.Id), [new OverrideWrite(property, card.Target.Part, LayoutRevision: null, Value: null)], label);
+            OverrideWrite[] writes = [new OverrideWrite(property, card.Target.Part, LayoutRevision: null, Value: null)];
+            var reset = NodeOverrides.Write(nodes.ToDictionary(this.ReferenceOf, _ => (IReadOnlyList<OverrideWrite>)writes), label);
             await this.ExecuteSurfaceEditAsync(nodes, authoring, new SurfaceEdit(reset, Error: null)).ConfigureAwait(true);
         }
     }
@@ -204,7 +207,7 @@ public sealed partial class GeometryViewModel
     {
         if (this.TryGetSurfaceEditing(out var nodes, out var authoring))
         {
-            var reset = SurfaceEdits.Reset(nodes.ConvertAll(static node => node.Id), card.Target.Part, "Reset Surface");
+            var reset = SurfaceEdits.Reset(nodes.ConvertAll(this.ReferenceOf), card.Target.Part, "Reset Surface");
             await this.ExecuteSurfaceEditAsync(nodes, authoring, new SurfaceEdit(reset, Error: null)).ConfigureAwait(true);
         }
     }
@@ -221,7 +224,7 @@ public sealed partial class GeometryViewModel
             return;
         }
 
-        var built = await SurfaceEdits.RetargetAsync(this.surfaces, this.session.Context, authoring.Scene, nodes.ConvertAll(static node => node.Id), kept.Part, target.Target).ConfigureAwait(true);
+        var built = await SurfaceEdits.RetargetAsync(this.surfaces, this.session.Context, authoring.Scene, this.OwnedIds(nodes), kept.Part, target.Target).ConfigureAwait(true);
         await this.ExecuteSurfaceEditAsync(nodes, authoring, built).ConfigureAwait(true);
     }
 
@@ -232,7 +235,7 @@ public sealed partial class GeometryViewModel
     {
         if (this.TryGetSurfaceEditing(out var nodes, out var authoring))
         {
-            var reset = SurfaceEdits.Reset(nodes.ConvertAll(static node => node.Id), kept.Part, "Remove Kept Surface Changes");
+            var reset = SurfaceEdits.Reset([.. nodes.ConvertAll(this.ReferenceOf).Where(static reference => reference.IsOwned)], kept.Part, "Remove Kept Surface Changes");
             await this.ExecuteSurfaceEditAsync(nodes, authoring, new SurfaceEdit(reset, Error: null)).ConfigureAwait(true);
         }
     }
@@ -267,7 +270,7 @@ public sealed partial class GeometryViewModel
             return;
         }
 
-        var built = await SurfaceEdits.SetAsync(this.surfaces, this.session.Context, picker.Nodes.ConvertAll(static node => node.Id), picker.Target, SceneSchema.Geometry.Surface.Material.Id, material, "Edit Surface Material").ConfigureAwait(true);
+        var built = await SurfaceEdits.SetAsync(this.surfaces, this.session.Context, picker.Nodes.ConvertAll(this.ReferenceOf), picker.Target, SceneSchema.Geometry.Surface.Material.Id, material, "Edit Surface Material").ConfigureAwait(true);
         await this.ExecuteSurfaceEditAsync(picker.Nodes, picker.Authoring, built).ConfigureAwait(true);
     }
 
@@ -275,6 +278,18 @@ public sealed partial class GeometryViewModel
     protected override void OnInputEnabledChanged(bool enabled) => this.ProjectSurfaces();
 
     private static GeometryComponent? GeometryOf(SceneNode? node) => node?.Components.OfType<GeometryComponent>().FirstOrDefault();
+
+    // The IDs of the selected nodes of the scene, leaving out nodes an instance brings in.
+    private List<NodeId> OwnedIds(List<SceneNode> nodes)
+        => [.. nodes.ConvertAll(this.ReferenceOf).Where(static reference => reference.IsOwned).Select(static reference => reference.Node)];
+
+    // A node's geometry values and what the scene changes of them.
+    private GeometryOverrides OverridesOf(SceneNode node)
+    {
+        var values = GeometryOf(node)!.Overrides;
+        var reference = this.ReferenceOf(node);
+        return new(values, reference.IsOwned ? values : NodeOverrides.Of(node.Scene, reference, SceneSchema.Geometry.Kind));
+    }
 
     // Whether the inventory shown is the one of the nodes' shared geometry in the current project; a cook or reimport
     // refreshes it on its own.
@@ -328,7 +343,7 @@ public sealed partial class GeometryViewModel
             return;
         }
 
-        var overrides = nodes.ConvertAll(node => GeometryOf(node)!.Overrides);
+        var overrides = nodes.ConvertAll(this.OverridesOf);
         var canEdit = this.IsInputEnabled && !this.IsSurfaceLoading;
         this.LevelOfDetail.Update(read, overrides, canEdit);
         var labels = read.Surfaces.GroupBy(static surface => surface.DisplayName, StringComparer.Ordinal)
@@ -350,13 +365,14 @@ public sealed partial class GeometryViewModel
         }
 
         var current = read.Surfaces.Select(static surface => surface.SurfaceId).ToHashSet();
-        var lost = overrides.SelectMany(static values => values.Parts.Keys)
+        var owned = nodes.Where(node => this.ReferenceOf(node).IsOwned).Select(node => GeometryOf(node)!.Overrides).ToList();
+        var lost = owned.SelectMany(static values => values.Parts.Keys)
             .Where(part => string.Equals(part.Kind, SceneSchema.Geometry.Surface.Kind, StringComparison.Ordinal) && !current.Contains(part.Id))
             .Distinct().ToList();
         var kept = lost.ConvertAll(part => this.KeptChanges.FirstOrDefault(existing => existing.Part == part) ?? new KeptSurfaceChangesViewModel(this, part));
         foreach (var entry in kept)
         {
-            entry.Update(overrides, cards, this.ResolveMaterialDisplayName, canEdit);
+            entry.Update(owned, cards, this.ResolveMaterialDisplayName, canEdit);
         }
 
         if (!kept.SequenceEqual(this.KeptChanges))

@@ -195,14 +195,6 @@ public sealed class SceneGesture
     private static PropertyEdit Differences(PropertyEdit before, PropertyEdit current)
         => PropertyEdit.Of(before.Where(entry => !current.TryGetRaw(entry.Key, out var value) || !Equals(entry.Value, value)));
 
-    // The writes that set the values of the nodes an instance brings in, by instance root.
-    private static Dictionary<NodeId, IReadOnlyList<OverrideWrite>> ChangeWrites(Dictionary<NodeReference, PropertyEdit> changes)
-        => changes
-            .GroupBy(static pair => pair.Key.Node)
-            .ToDictionary(
-                static group => group.Key,
-                static group => (IReadOnlyList<OverrideWrite>)[.. group.SelectMany(static pair => pair.Value.Select(entry => new OverrideWrite(entry.Key, Part: null, LayoutRevision: null, entry.Value) { Path = pair.Key.Path }))]);
-
     private SceneEditResult Preview(SetProperties values)
     {
         if (this.rules.IsSceneKind || !values.Edits.Keys.ToHashSet().SetEquals(this.nodes.Keys) || !this.EditsOnlyItsProperties(values.Edits.Values))
@@ -233,7 +225,7 @@ public sealed class SceneGesture
             return SceneEditResult.Of(SceneEditValidation.Refused(SceneDiagnostic.Error(SceneEditCodes.GestureMismatch, "A preview must edit the gesture's own nodes and properties.")));
         }
 
-        var writes = ChangeWrites(changes);
+        var writes = NodeOverrides.ChangeWrites(changes);
         List<ISceneEdit> checks = [];
         if (owned.Count > 0)
         {

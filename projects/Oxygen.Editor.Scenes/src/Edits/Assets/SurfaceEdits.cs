@@ -22,7 +22,7 @@ public static class SurfaceEdits
     /// <summary>Builds the edit that sets or resets one property of a surface on nodes using the surface's geometry.</summary>
     /// <param name="inventories">Reads surface inventories.</param>
     /// <param name="project">The scene's project.</param>
-    /// <param name="nodes">The nodes.</param>
+    /// <param name="nodes">The nodes; a node an instance brings in takes the value as a change of its instance root.</param>
     /// <param name="target">The surface, with the inventory revision it was chosen from.</param>
     /// <param name="property">A property of the surface part, such as <see cref="SceneSchema.Geometry.Surface.Material"/>.</param>
     /// <param name="value">The value, or <see langword="null"/> to reset to the geometry's.</param>
@@ -32,7 +32,7 @@ public static class SurfaceEdits
     public static async Task<SurfaceEdit> SetAsync(
         IGeometrySurfaceProvider inventories,
         ProjectContext project,
-        IReadOnlyCollection<NodeId> nodes,
+        IReadOnlyCollection<NodeReference> nodes,
         SurfaceTarget target,
         PropertyId property,
         object? value,
@@ -48,7 +48,8 @@ public static class SurfaceEdits
             return new SurfaceEdit(Edit: null, error);
         }
 
-        return new SurfaceEdit(new SetOverrides(nodes, [new OverrideWrite(property, target.Part, target.LayoutRevision, value) { PartOwner = target.Geometry }], label), Error: null);
+        OverrideWrite[] writes = [new OverrideWrite(property, target.Part, target.LayoutRevision, value) { PartOwner = target.Geometry }];
+        return new SurfaceEdit(NodeOverrides.Write(nodes.Distinct().ToDictionary(static node => node, _ => (IReadOnlyList<OverrideWrite>)writes), label), Error: null);
     }
 
     /// <summary>Builds the edit that resets every override of one surface on nodes, so the geometry's values apply.</summary>
@@ -56,19 +57,17 @@ public static class SurfaceEdits
     /// A reset needs no inventory: it removes overrides whatever surfaces the geometry has, such as the overrides kept for a
     /// surface lost on reimport. Nodes without an override of the surface are left as they are.
     /// </remarks>
-    /// <param name="nodes">The nodes.</param>
+    /// <param name="nodes">The nodes; a node an instance brings in loses its instance root's changes of the surface.</param>
     /// <param name="part">The surface.</param>
     /// <param name="label">The history label.</param>
     /// <returns>A <see cref="SetOverrides"/> that resets each property of the surface part.</returns>
-    public static SetOverrides Reset(IReadOnlyCollection<NodeId> nodes, PartId part, string label)
+    public static SetOverrides Reset(IReadOnlyCollection<NodeReference> nodes, PartId part, string label)
     {
         ArgumentNullException.ThrowIfNull(nodes);
-        return new SetOverrides(
-            nodes,
-            [.. SceneSchema.Overridable.Keys
-                .Where(property => string.Equals(property.PartKind, part.Kind, StringComparison.Ordinal))
-                .Select(property => new OverrideWrite(property, part, LayoutRevision: null, Value: null))],
-            label);
+        OverrideWrite[] writes = [.. SceneSchema.Overridable.Keys
+            .Where(property => string.Equals(property.PartKind, part.Kind, StringComparison.Ordinal))
+            .Select(property => new OverrideWrite(property, part, LayoutRevision: null, Value: null))];
+        return NodeOverrides.Write(nodes.Distinct().ToDictionary(static node => node, _ => (IReadOnlyList<OverrideWrite>)writes), label);
     }
 
     /// <summary>

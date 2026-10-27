@@ -141,25 +141,25 @@ public sealed partial class SurfaceCardViewModel : ObservableObject
     /// <param name="target">The surface, from the current inventory.</param>
     /// <param name="surface">The surface's inventory entry, with its asset defaults.</param>
     /// <param name="name">The surface's name in the list.</param>
-    /// <param name="nodes">The overrides of each selected node's geometry.</param>
+    /// <param name="nodes">The values and changes of each selected node's geometry.</param>
     /// <param name="materialName">Names a material.</param>
     /// <param name="canEdit">Whether the surface can be edited now.</param>
-    internal void Update(SurfaceTarget target, GeometrySurface surface, string name, IReadOnlyList<SourceOverrides> nodes, Func<AssetPath, string> materialName, bool canEdit)
+    internal void Update(SurfaceTarget target, GeometrySurface surface, string name, IReadOnlyList<GeometryOverrides> nodes, Func<AssetPath, string> materialName, bool canEdit)
     {
         this.Target = target;
         this.Name = name;
         this.CanEdit = canEdit;
         var part = target.Part;
 
-        var materials = nodes.Select(overrides => overrides.TryGet(SceneSchema.Geometry.Surface.Material, part, out var material) ? material : null).Distinct().ToList();
+        var materials = nodes.Select(overrides => overrides.Values.TryGet(SceneSchema.Geometry.Surface.Material, part, out var material) ? material : null).Distinct().ToList();
         var material = materials.Count == 1 ? materials[0] : null;
         this.MaterialLabel = materials.Count > 1 ? "--" : material is null ? GeometryMaterialText : materialName(material);
         this.MaterialGlyph = materials.Count > 1 ? "" : "";
         (this.MaterialOverrideState, var materialOverrides) = StateOf(nodes, SceneSchema.Geometry.Surface.Material.Id, part);
         this.MaterialResetToolTip = ResetText("Reset to the geometry's material", materialOverrides, nodes.Count);
 
-        var shown = nodes.Select(overrides => overrides.TryGet(SceneSchema.Geometry.Surface.Visibility, part, out var value) ? value : surface.Visible).ToList();
-        var casting = nodes.Select(overrides => overrides.TryGet(SceneSchema.Geometry.Surface.CastsShadows, part, out var value) ? value : surface.CastsShadows).ToList();
+        var shown = nodes.Select(overrides => overrides.Values.TryGet(SceneSchema.Geometry.Surface.Visibility, part, out var value) ? value : surface.Visible).ToList();
+        var casting = nodes.Select(overrides => overrides.Values.TryGet(SceneSchema.Geometry.Surface.CastsShadows, part, out var value) ? value : surface.CastsShadows).ToList();
         this.visible = Agreed(shown);
         this.castsShadows = Agreed(casting);
         (this.VisibleOverrideState, var visibleOverrides) = StateOf(nodes, SceneSchema.Geometry.Surface.Visibility.Id, part);
@@ -173,8 +173,8 @@ public sealed partial class SurfaceCardViewModel : ObservableObject
 
         this.Summary = string.Join(" · ", new[] { this.MaterialLabel, OffText("Hidden", shown), OffText("No shadows", casting) }.Where(static text => text.Length > 0));
 
-        var overridden = SurfaceLabels.Rows.Where(row => nodes.Any(overrides => overrides.Find(row.Property, part) is not null)).Select(static row => row.Label).ToList();
-        var anyOverride = nodes.Count(overrides => overrides.Parts.ContainsKey(part));
+        var overridden = SurfaceLabels.Rows.Where(row => nodes.Any(overrides => overrides.Changes.Find(row.Property, part) is not null)).Select(static row => row.Label).ToList();
+        var anyOverride = nodes.Count(overrides => overrides.Changes.Parts.ContainsKey(part));
         this.OverrideState = anyOverride == 0 ? OverrideState.None : anyOverride == nodes.Count ? OverrideState.Full : OverrideState.Partial;
         this.ResetToolTip = overridden.Count == 0 ? string.Empty : ResetText($"Reset {Join(overridden)} to the asset's values", anyOverride, nodes.Count);
     }
@@ -191,9 +191,9 @@ public sealed partial class SurfaceCardViewModel : ObservableObject
     [RelayCommand]
     private Task ResetCastsShadowsAsync() => this.owner.ResetSurfaceValueAsync(this, SceneSchema.Geometry.Surface.CastsShadows.Id, "Reset Surface Cast Shadows");
 
-    private static (OverrideState State, int Count) StateOf(IReadOnlyList<SourceOverrides> nodes, PropertyId property, PartId part)
+    private static (OverrideState State, int Count) StateOf(IReadOnlyList<GeometryOverrides> nodes, PropertyId property, PartId part)
     {
-        var count = nodes.Count(overrides => overrides.Find(property, part) is not null);
+        var count = nodes.Count(overrides => overrides.Changes.Find(property, part) is not null);
         return (count == 0 ? OverrideState.None : count == nodes.Count ? OverrideState.Full : OverrideState.Partial, count);
     }
 

@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Windows.Input;
 using DroidNet.Controls;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
@@ -74,6 +75,15 @@ public sealed partial class ColorField : Control
     /// <summary>Identifies the side of each channel field its label shows on.</summary>
     public static readonly DependencyProperty ChannelLabelPositionProperty = Register<LabelPosition>(nameof(ChannelLabelPosition), LabelPosition.Left);
 
+    /// <summary>Identifies how many edited objects override the value.</summary>
+    public static readonly DependencyProperty OverrideStateProperty = Register<OverrideState>(nameof(OverrideState), OverrideState.None);
+
+    /// <summary>Identifies the command that resets the value to its source.</summary>
+    public static readonly DependencyProperty ResetCommandProperty = Register<ICommand>(nameof(ResetCommand), defaultValue: null);
+
+    /// <summary>Identifies the reset button's tooltip and automation name.</summary>
+    public static readonly DependencyProperty ResetToolTipProperty = Register<string>(nameof(ResetToolTip), "Reset to the source value");
+
     private const string CardPartName = "PART_Card";
     private const string ColorBoxPartName = "PART_ColorBox";
     private const string ErrorTextPartName = "PART_ErrorText";
@@ -143,6 +153,15 @@ public sealed partial class ColorField : Control
 
     /// <summary>Gets or sets the swatch's automation name and tooltip.</summary>
     public string PickerAutomationName { get => (string)this.GetValue(PickerAutomationNameProperty); set => this.SetValue(PickerAutomationNameProperty, value); }
+
+    /// <summary>Gets or sets how many edited objects override the value.</summary>
+    public OverrideState OverrideState { get => (OverrideState)this.GetValue(OverrideStateProperty); set => this.SetValue(OverrideStateProperty, value); }
+
+    /// <summary>Gets or sets the command that resets the value to its source.</summary>
+    public ICommand? ResetCommand { get => (ICommand?)this.GetValue(ResetCommandProperty); set => this.SetValue(ResetCommandProperty, value); }
+
+    /// <summary>Gets or sets the reset button's tooltip, which names the source.</summary>
+    public string ResetToolTip { get => (string)this.GetValue(ResetToolTipProperty); set => this.SetValue(ResetToolTipProperty, value); }
 
     /// <summary>Gets or sets the current validation text.</summary>
     public string ErrorText { get => (string)this.GetValue(ErrorTextProperty); set => this.SetValue(ErrorTextProperty, value); }

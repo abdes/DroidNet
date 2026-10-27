@@ -114,6 +114,13 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
     public partial string SelectedAssetName { get; set; } = "None";
 
     /// <summary>
+    /// Gets a value indicating whether the selection's geometry asset can be replaced: no selected node is one an instance
+    /// brings in, whose geometry its source decides.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool CanChangeGeometry { get; private set; } = true;
+
+    /// <summary>
     /// Gets the label to show on the asset button. Returns "--" when <see cref="IsMixed"/>,
     /// otherwise returns the <see cref="SelectedAssetName"/>.
     /// </summary>
@@ -150,7 +157,7 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
     /// <returns>A <see cref="Task"/> that completes when the operation has finished.</returns>
     public async Task ApplyAssetAsync(AssetChoice choice)
     {
-        if (!this.IsInputEnabled || choice is not { IsEnabled: true, Asset: { } geometry })
+        if (!this.IsInputEnabled || !this.CanChangeGeometry || choice is not { IsEnabled: true, Asset: { } geometry })
         {
             return;
         }
@@ -191,10 +198,11 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
             .Select(static node => new { Node = node, Geometry = node.Components.OfType<GeometryComponent>().FirstOrDefault() })
             .Where(static target => target.Geometry is not null)
             .ToList();
-        var nodeIds = targets.ConvertAll(static target => target.Node.Id);
-        var targetsByNode = targets.ToDictionary(static target => target.Node.Id, static target => (object?)target.Geometry);
+        var references = targets.ConvertAll(target => this.ReferenceOf(target.Node));
+        var targetsByNode = targets.ToDictionary(target => this.ReferenceOf(target.Node), static target => (object?)target.Geometry);
 
-        this.geometryUriBinding.UpdateFromModel(nodeIds, nodeId => targetsByNode.TryGetValue(nodeId, out var target) ? target : null);
+        this.geometryUriBinding.UpdateFromModel(references, reference => targetsByNode.TryGetValue(reference, out var target) ? target : null);
+        this.CanChangeGeometry = references.TrueForAll(static reference => reference.IsOwned);
         this.IsMixed = this.geometryUriBinding.IsMixed;
 
         if (this.geometryUriBinding.IsMixed)

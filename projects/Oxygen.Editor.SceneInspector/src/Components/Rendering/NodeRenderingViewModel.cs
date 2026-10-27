@@ -27,6 +27,7 @@ public sealed partial class NodeRenderingViewModel : ComponentPropertyEditor, ID
 {
     private static readonly IReadOnlyList<string> ShadowModeNames = ["Inherit", "On", "Off"];
 
+    private readonly InspectorFieldOverride unboundOverride = new(static () => { });
     private readonly InspectorEditSessionCoordinator? edits;
     private readonly List<IInspectorBindingRefresh> registrations = [];
     private readonly PropertyBinding<VisibilitySource> visibilityBinding = new(SceneProperties.NodeFlags.VisibilityDescriptor);
@@ -101,6 +102,21 @@ public sealed partial class NodeRenderingViewModel : ComponentPropertyEditor, ID
         set => Request(this.isRayCastingSelectableBinding, value);
     }
 
+    /// <summary>Gets the scene visibility override bar.</summary>
+    public InspectorFieldOverride VisibilityOverride => this.Override(this.visibilityBinding.Id.Id);
+
+    /// <summary>Gets the cast shadows override bar.</summary>
+    public InspectorFieldOverride CastsShadowsOverride => this.Override(this.castsShadowsBinding.Id.Id);
+
+    /// <summary>Gets the receive shadows override bar.</summary>
+    public InspectorFieldOverride ReceivesShadowsOverride => this.Override(this.receivesShadowsBinding.Id.Id);
+
+    /// <summary>Gets the static override bar.</summary>
+    public InspectorFieldOverride IsStaticOverride => this.Override(this.isStaticBinding.Id.Id);
+
+    /// <summary>Gets the ray-cast selectable override bar.</summary>
+    public InspectorFieldOverride IsRayCastingSelectableOverride => this.Override(this.isRayCastingSelectableBinding.Id.Id);
+
     /// <inheritdoc />
     public override string Header => "Rendering";
 
@@ -133,7 +149,7 @@ public sealed partial class NodeRenderingViewModel : ComponentPropertyEditor, ID
     /// <inheritdoc />
     public override void UpdateValues(ICollection<SceneNode> items)
     {
-        var targets = items.ToDictionary(static node => node.Id, static node => (object?)node.Flags);
+        var targets = items.ToDictionary(node => this.ReferenceOf(node), static node => (object?)node.Flags);
         var nodes = targets.Keys.ToArray();
         this.edits?.Bind(nodes);
         this.selectedItems = items;
@@ -176,6 +192,12 @@ public sealed partial class NodeRenderingViewModel : ComponentPropertyEditor, ID
     // A node without geometry casts and receives nothing itself; its modes reach its children that inherit.
     private static string? ShadowNotice(IReadOnlyCollection<SceneNode> nodes)
         => nodes.Count > 0 && !nodes.Any(HasGeometry) ? "Applies to children that inherit." : null;
+
+    /// <summary>Gets the override bar of a field.</summary>
+    /// <param name="ids">The properties the field shows.</param>
+    /// <returns>The field's bar.</returns>
+    private InspectorFieldOverride Override(params PropertyId[] ids)
+        => this.edits?.Overrides.Get(ids) ?? this.unboundOverride;
 
     private void Register<T>(PropertyBinding<T> binding, Action changed)
         => this.registrations.Add(new InspectorBindingRegistration<T>(

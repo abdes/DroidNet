@@ -19,6 +19,7 @@ namespace Oxygen.Editor.SceneInspector.Components.Fog;
 public sealed partial class LocalFogVolumeViewModel : ComponentPropertyEditor, IDisposable, IInspectorEditSessionOwner
 {
     private readonly InspectorFieldDiagnostic unboundDiagnostic = new();
+    private readonly InspectorFieldOverride unboundOverride = new(static () => { });
     private readonly InspectorEditSessionCoordinator? edits;
     private readonly List<IInspectorBindingRefresh> registrations = [];
     private readonly PropertyBinding<bool> enabledBinding = new(SceneProperties.LocalFogVolume.EnabledDescriptor);
@@ -138,6 +139,33 @@ public sealed partial class LocalFogVolumeViewModel : ComponentPropertyEditor, I
     /// <summary>Gets sort priority feedback.</summary>
     public InspectorFieldDiagnostic SortPriorityDiagnostic => this.Diagnostic(this.sortPriorityBinding.Id.Id);
 
+    /// <summary>Gets the enabled override bar.</summary>
+    public InspectorFieldOverride EnabledOverride => this.Override(this.enabledBinding.Id.Id);
+
+    /// <summary>Gets the radial extinction override bar.</summary>
+    public InspectorFieldOverride RadialFogExtinctionOverride => this.Override(this.RadialFogExtinction.Id.Id);
+
+    /// <summary>Gets the height extinction override bar.</summary>
+    public InspectorFieldOverride HeightFogExtinctionOverride => this.Override(this.HeightFogExtinction.Id.Id);
+
+    /// <summary>Gets the height falloff override bar.</summary>
+    public InspectorFieldOverride HeightFogFalloffOverride => this.Override(this.HeightFogFalloff.Id.Id);
+
+    /// <summary>Gets the height offset override bar.</summary>
+    public InspectorFieldOverride HeightFogOffsetOverride => this.Override(this.HeightFogOffset.Id.Id);
+
+    /// <summary>Gets the phase anisotropy override bar.</summary>
+    public InspectorFieldOverride FogPhaseGOverride => this.Override(this.FogPhaseG.Id.Id);
+
+    /// <summary>Gets the albedo override bar.</summary>
+    public InspectorFieldOverride AlbedoOverride => this.Override(this.albedoBinding.Id.Id);
+
+    /// <summary>Gets the emissive override bar.</summary>
+    public InspectorFieldOverride EmissiveOverride => this.Override(this.emissiveBinding.Id.Id);
+
+    /// <summary>Gets the sort priority override bar.</summary>
+    public InspectorFieldOverride SortPriorityOverride => this.Override(this.sortPriorityBinding.Id.Id);
+
     /// <inheritdoc />
     public Guid EditScopeId => this.edits?.ScopeId ?? Guid.Empty;
 
@@ -199,7 +227,7 @@ public sealed partial class LocalFogVolumeViewModel : ComponentPropertyEditor, I
     public override void UpdateValues(ICollection<SceneNode> items)
     {
         var targets = items.Where(static node => node.Components.OfType<LocalFogVolumeComponent>().Any())
-            .ToDictionary(static node => node.Id, static node => (object?)node.Components.OfType<LocalFogVolumeComponent>().First());
+            .ToDictionary(this.ReferenceOf, static node => (object?)node.Components.OfType<LocalFogVolumeComponent>().First());
         var nodes = targets.Keys.ToArray();
         this.edits?.Bind(nodes);
         this.selectedItems = items;
@@ -257,12 +285,12 @@ public sealed partial class LocalFogVolumeViewModel : ComponentPropertyEditor, I
             return;
         }
 
-        var perTarget = new Dictionary<NodeId, PropertyEdit>();
+        var perTarget = new Dictionary<NodeReference, PropertyEdit>();
         foreach (var node in this.selectedItems)
         {
             if (node.Components.OfType<LocalFogVolumeComponent>().FirstOrDefault() is { } volume)
             {
-                perTarget[node.Id] = PropertyEdit.SingleEdit(id, color(volume));
+                perTarget[this.ReferenceOf(node)] = PropertyEdit.SingleEdit(id, color(volume));
             }
         }
 
@@ -289,6 +317,12 @@ public sealed partial class LocalFogVolumeViewModel : ComponentPropertyEditor, I
 
     private InspectorFieldDiagnostic Diagnostic(PropertyId id)
         => this.edits?.Diagnostics.Get(id) ?? this.unboundDiagnostic;
+
+    /// <summary>Gets the override bar of a field.</summary>
+    /// <param name="ids">The properties the field shows.</param>
+    /// <returns>The field's bar.</returns>
+    private InspectorFieldOverride Override(params PropertyId[] ids)
+        => this.edits?.Overrides.Get(ids) ?? this.unboundOverride;
 
     private void Register<T>(PropertyBinding<T> binding, string? property = null)
         => this.registrations.Add(new InspectorBindingRegistration<T>(

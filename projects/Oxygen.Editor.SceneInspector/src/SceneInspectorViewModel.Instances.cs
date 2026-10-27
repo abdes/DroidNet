@@ -15,9 +15,9 @@ namespace Oxygen.Editor.SceneInspector;
 
 /// <content>
 /// Nodes an instance brings in (scene instances 6.2, 8.5): each selected one shows as a transient node whose components
-/// hold its effective values, read from the mounted cooked scenes with this scene's changes over them. The pane shows it
-/// read-only, its header naming its source and refusing structural commands, and shows each change the scene makes of
-/// it, as from the viewport, when the change is made.
+/// hold its effective values, read from the mounted cooked scenes with this scene's changes over them. Its sections edit
+/// it through its <see cref="NodeReference"/>, as changes of its instance root; its header names its source and refuses
+/// structural commands, and the pane shows each change the scene makes of it, as from the viewport, when it is made.
 /// </content>
 public sealed partial class SceneInspectorViewModel
 {
@@ -63,6 +63,11 @@ public sealed partial class SceneInspectorViewModel
 
     private static SceneInstanceComponent? InstanceOf(Scene scene, NodeReference reference)
         => scene.AllNodes.FirstOrDefault(node => node.Id == reference.Node)?.Components.OfType<SceneInstanceComponent>().FirstOrDefault();
+
+    // The reference a section's edits name a selected node by: its instance root and path for a node an instance brings
+    // in, the node itself otherwise.
+    private NodeReference ReferenceOf(SceneNode node)
+        => this.instancedNodes.TryGetValue(node, out var reference) ? reference : NodeReference.To(node.Id);
 
     // The node an instance brings in when it is the single selected node.
     private NodeReference? SelectedInstancedNode()
@@ -240,6 +245,9 @@ public sealed partial class SceneInspectorViewModel
                 InstancedNodes.Write(scene, node, values, changed.Changes.Of(reference.Path));
             }
         }
+
+        // A change that leaves a value as it was, as a reset to the source's own value, still changes the override bars.
+        this.RefreshPropertyEditorValues();
     }
 
     // Content mounted again, as after a cook: the selected instanced nodes may hold other values now.

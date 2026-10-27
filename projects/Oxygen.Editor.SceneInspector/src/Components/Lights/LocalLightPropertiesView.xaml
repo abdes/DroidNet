@@ -24,8 +24,10 @@
             Green="{x:Bind ViewModel.ColorG, Mode=TwoWay}"
             HasError="{x:Bind ViewModel.ColorDiagnostic.HasError, Mode=OneWay}"
             Label="Color"
+            OverrideState="{x:Bind ViewModel.ColorOverride.State, Mode=OneWay}"
             PickerAutomationName="Pick light color"
             Red="{x:Bind ViewModel.ColorR, Mode=TwoWay}"
+            ResetCommand="{x:Bind ViewModel.ColorOverride.ResetCommand}"
             Tag="Color" />
         <editorcontrols:NumberField
             EditSessionCompleted="NumberEditCompleted"
@@ -35,6 +37,8 @@
             IsMixed="{x:Bind ViewModel.LuminousFluxLumens.IsMixed, Mode=OneWay}"
             Label="Luminous flux"
             NumberValue="{x:Bind ViewModel.LuminousFluxLumens.Number, Mode=TwoWay}"
+            OverrideState="{x:Bind ViewModel.LuminousFluxLumensOverride.State, Mode=OneWay}"
+            ResetCommand="{x:Bind ViewModel.LuminousFluxLumensOverride.ResetCommand}"
             Tag="LuminousFluxLumens"
             Unit="lm" />
         <editorcontrols:NumberField
@@ -45,6 +49,8 @@
             IsMixed="{x:Bind ViewModel.Range.IsMixed, Mode=OneWay}"
             Label="Range"
             NumberValue="{x:Bind ViewModel.Range.Number, Mode=TwoWay}"
+            OverrideState="{x:Bind ViewModel.RangeOverride.State, Mode=OneWay}"
+            ResetCommand="{x:Bind ViewModel.RangeOverride.ResetCommand}"
             Tag="Range"
             Unit="m" />
         <editorcontrols:NumberField
@@ -56,9 +62,14 @@
             Label="Source radius"
             Mask="~.###"
             NumberValue="{x:Bind ViewModel.SourceRadius.Number, Mode=TwoWay}"
+            OverrideState="{x:Bind ViewModel.SourceRadiusOverride.State, Mode=OneWay}"
+            ResetCommand="{x:Bind ViewModel.SourceRadiusOverride.ResetCommand}"
             Tag="SourceRadius"
             Unit="m" />
-        <editorcontrols:PropertyCard PropertyName="Affects world">
+        <editorcontrols:PropertyCard
+            OverrideState="{x:Bind ViewModel.AffectsWorldOverride.State, Mode=OneWay}"
+            PropertyName="Affects world"
+            ResetCommand="{x:Bind ViewModel.AffectsWorldOverride.ResetCommand}">
             <ToggleSwitch AutomationProperties.Name="Affects world" IsOn="{x:Bind ViewModel.AffectsWorld, Mode=TwoWay}" />
         </editorcontrols:PropertyCard>
         <editorcontrols:NumberField
@@ -69,16 +80,27 @@
             IsMixed="{x:Bind ViewModel.ExposureCompensation.IsMixed, Mode=OneWay}"
             Label="Exposure"
             NumberValue="{x:Bind ViewModel.ExposureCompensation.Number, Mode=TwoWay}"
+            OverrideState="{x:Bind ViewModel.ExposureCompensationOverride.State, Mode=OneWay}"
+            ResetCommand="{x:Bind ViewModel.ExposureCompensationOverride.ResetCommand}"
             Tag="ExposureCompensation"
             Unit="EV" />
         <TextBlock FontWeight="SemiBold" Text="Shadows" />
-        <editorcontrols:PropertyCard PropertyName="Cast shadows">
+        <editorcontrols:PropertyCard
+            OverrideState="{x:Bind ViewModel.CastsShadowsOverride.State, Mode=OneWay}"
+            PropertyName="Cast shadows"
+            ResetCommand="{x:Bind ViewModel.CastsShadowsOverride.ResetCommand}">
             <ToggleSwitch AutomationProperties.Name="Cast shadows" IsOn="{x:Bind ViewModel.CastsShadows, Mode=TwoWay}" />
         </editorcontrols:PropertyCard>
-        <editorcontrols:PropertyCard PropertyName="Contact shadows">
+        <editorcontrols:PropertyCard
+            OverrideState="{x:Bind ViewModel.ContactShadowsOverride.State, Mode=OneWay}"
+            PropertyName="Contact shadows"
+            ResetCommand="{x:Bind ViewModel.ContactShadowsOverride.ResetCommand}">
             <ToggleSwitch AutomationProperties.Name="Contact shadows" IsOn="{x:Bind ViewModel.ContactShadows, Mode=TwoWay}" />
         </editorcontrols:PropertyCard>
-        <editorcontrols:PropertyCard PropertyName="Resolution">
+        <editorcontrols:PropertyCard
+            OverrideState="{x:Bind ViewModel.ShadowResolutionHintOverride.State, Mode=OneWay}"
+            PropertyName="Resolution"
+            ResetCommand="{x:Bind ViewModel.ShadowResolutionHintOverride.ResetCommand}">
             <ComboBox
                 HorizontalAlignment="Stretch"
                 AutomationProperties.Name="Shadow resolution"
@@ -94,6 +116,8 @@
             Label="Depth bias"
             Mask="~.####"
             NumberValue="{x:Bind ViewModel.ShadowBias.Number, Mode=TwoWay}"
+            OverrideState="{x:Bind ViewModel.ShadowBiasOverride.State, Mode=OneWay}"
+            ResetCommand="{x:Bind ViewModel.ShadowBiasOverride.ResetCommand}"
             Tag="ShadowBias" />
         <editorcontrols:NumberField
             EditSessionCompleted="NumberEditCompleted"
@@ -104,6 +128,8 @@
             Label="Normal bias"
             Mask="~.####"
             NumberValue="{x:Bind ViewModel.ShadowNormalBias.Number, Mode=TwoWay}"
+            OverrideState="{x:Bind ViewModel.ShadowNormalBiasOverride.State, Mode=OneWay}"
+            ResetCommand="{x:Bind ViewModel.ShadowNormalBiasOverride.ResetCommand}"
             Tag="ShadowNormalBias" />
     </StackPanel>
 </UserControl>

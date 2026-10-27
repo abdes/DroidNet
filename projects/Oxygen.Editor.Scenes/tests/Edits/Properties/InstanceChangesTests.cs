@@ -6,6 +6,7 @@ using AwesomeAssertions;
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Changes;
+using Oxygen.Editor.Scenes.Edits.Assets;
 using Oxygen.Editor.Scenes.Edits.Hierarchy;
 using Oxygen.Editor.Scenes.Edits.Properties;
 using Oxygen.Editor.Scenes.Nodes;
@@ -13,6 +14,7 @@ using Oxygen.Editor.Scenes.Tests.TestSupport;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
+using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Scenes.Tests.Edits.Properties;
@@ -175,6 +177,81 @@ public sealed class InstanceChangesTests
 
         _ = (await begin.Should().ThrowAsync<SceneEditRefusedException>().ConfigureAwait(false))
             .Which.Result!.Diagnostics.Should().ContainSingle().Which.Code.Should().Be(SceneEditCodes.TargetLocked);
+    }
+
+    [TestMethod]
+    public async Task SetValues_OnAnInstancedNode_ChangesItsInstanceRootOnly()
+    {
+        using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
+        var root = await PlaceCarAsync(fixture).ConfigureAwait(false);
+        var wheel = new NodeReference(root, WheelPath);
+        var rootVisibility = fixture.Node(root).Flags.Visibility;
+
+        var edit = NodeOverrides.SetValues(new Dictionary<NodeReference, PropertyEdit> { [wheel] = PropertyEdit.SingleEdit(SceneSchema.Node.Visibility, VisibilitySource.Hidden) }, "Edit Rendering");
+        _ = await SceneAssert.RoundTripAsync(fixture, edit).ConfigureAwait(false);
+        _ = await fixture.Authoring.RedoAsync().ConfigureAwait(false);
+
+        _ = edit.Should().BeOfType<SetOverrides>();
+        _ = ChangeOf(fixture, root, SceneSchema.Node.Visibility.Id).Should().Be(VisibilitySource.Hidden);
+        _ = NodeOverrides.Find(fixture.Scene, wheel, SceneSchema.Node.Visibility.Id, part: null)!.Value.Value.Should().Be(VisibilitySource.Hidden);
+        _ = fixture.Node(root).Flags.Visibility.Should().Be(rootVisibility, "the instance root's own flags are not the instanced node's");
+    }
+
+    [TestMethod]
+    public async Task SetValues_OnASceneNodeAndAnInstancedNode_IsOneEntry()
+    {
+        using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
+        var root = await PlaceCarAsync(fixture).ConfigureAwait(false);
+        var undoDepth = fixture.History.UndoStack.Count;
+        var before = fixture.Node(SampleScene.A).Transform.LocalPosition.X;
+
+        SceneAssert.Applied(await fixture.Authoring.ExecuteAsync(NodeOverrides.SetValues(
+            new Dictionary<NodeReference, PropertyEdit>
+            {
+                [NodeReference.To(SampleScene.A)] = PropertyEdit.SingleEdit(SceneSchema.Transform.PositionX, 4f),
+                [new NodeReference(root, WheelPath)] = PropertyEdit.SingleEdit(SceneSchema.Transform.PositionX, 2f),
+            },
+            "Edit Transform")).ConfigureAwait(false));
+
+        _ = fixture.Node(SampleScene.A).Transform.LocalPosition.X.Should().Be(4f);
+        _ = ChangeOf(fixture, root, PositionX).Should().Be(2f);
+        _ = fixture.History.UndoStack.Count.Should().Be(undoDepth + 1);
+        _ = await fixture.Authoring.UndoAsync().ConfigureAwait(false);
+        _ = fixture.Node(SampleScene.A).Transform.LocalPosition.X.Should().Be(before);
+        _ = InstanceOf(fixture, root).Changes.IsEmpty.Should().BeTrue();
+    }
+
+    [TestMethod]
+    public async Task AResetOfAnInstancedNode_RemovesTheChangeAndUndoes()
+    {
+        using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
+        var root = await PlaceCarAsync(fixture).ConfigureAwait(false);
+        SceneAssert.Applied(await fixture.Authoring.ExecuteAsync(Change(root, PositionX, 2f)).ConfigureAwait(false));
+        var wheel = new NodeReference(root, WheelPath);
+
+        var reset = NodeOverrides.Write(
+            new Dictionary<NodeReference, IReadOnlyList<OverrideWrite>> { [wheel] = [new OverrideWrite(PositionX, Part: null, LayoutRevision: null, Value: null)] },
+            "Reset to Source");
+        SceneAssert.Applied(await fixture.Authoring.ExecuteAsync(reset).ConfigureAwait(false));
+
+        _ = NodeOverrides.Of(fixture.Scene, wheel, SceneSchema.Transform.Kind).IsEmpty.Should().BeTrue();
+        _ = await fixture.Authoring.UndoAsync().ConfigureAwait(false);
+        _ = ChangeOf(fixture, root, PositionX).Should().Be(2f);
+    }
+
+    [TestMethod]
+    public async Task ASurfaceEditOnAnInstancedNode_IsAChangeOfItsInstanceRoot()
+    {
+        using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
+        var root = await PlaceCarAsync(fixture).ConfigureAwait(false);
+        var wheel = new NodeReference(root, WheelPath);
+        var part = new PartId(SceneSchema.Geometry.Surface.Kind, SampleScene.CubeSurface);
+
+        SceneAssert.Applied(await fixture.Authoring.ExecuteAsync(SurfaceChange(root, SampleScene.CubeGeometry)).ConfigureAwait(false));
+        _ = NodeOverrides.Find(fixture.Scene, wheel, Material, part)!.Value.Value.Should().Be(SampleScene.RedMaterial);
+        SceneAssert.Applied(await fixture.Authoring.ExecuteAsync(SurfaceEdits.Reset([wheel], part, "Reset Surface")).ConfigureAwait(false));
+
+        _ = InstanceOf(fixture, root).Changes.IsEmpty.Should().BeTrue();
     }
 
     private static SetOverrides Change(NodeId root, PropertyId property, object value)

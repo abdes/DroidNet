@@ -53,6 +53,12 @@ public sealed partial class SpotLightViewModel : LocalLightViewModel
     /// <summary>Gets outer cone feedback.</summary>
     public InspectorFieldDiagnostic OuterConeAngleDiagnostic => this.Diagnostic(this.OuterConeAngleRadians.Id.Id);
 
+    /// <summary>Gets the inner cone override bar.</summary>
+    public InspectorFieldOverride InnerConeAngleOverride => this.Override(this.InnerConeAngleRadians.Id.Id);
+
+    /// <summary>Gets the outer cone override bar.</summary>
+    public InspectorFieldOverride OuterConeAngleOverride => this.Override(this.OuterConeAngleRadians.Id.Id);
+
     /// <inheritdoc />
     public override string Header => "Spot Light";
 

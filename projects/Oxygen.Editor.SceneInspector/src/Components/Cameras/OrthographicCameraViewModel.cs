@@ -16,6 +16,7 @@ namespace Oxygen.Editor.SceneInspector.Components.Cameras;
 public sealed partial class OrthographicCameraViewModel : ComponentPropertyEditor, IDisposable, IInspectorEditSessionOwner
 {
     private readonly InspectorFieldDiagnostic unboundDiagnostic = new();
+    private readonly InspectorFieldOverride unboundOverride = new(static () => { });
     private readonly InspectorEditSessionCoordinator? edits;
     private readonly List<IInspectorBindingRefresh> registrations = [];
     private readonly PropertyBinding<CameraAspectMode> aspectModeBinding = new(SceneProperties.OrthographicCamera.AspectModeDescriptor);
@@ -99,6 +100,30 @@ public sealed partial class OrthographicCameraViewModel : ComponentPropertyEdito
     /// <summary>Gets ISO feedback.</summary>
     public InspectorFieldDiagnostic IsoDiagnostic => this.Diagnostic(this.Iso.Id.Id);
 
+    /// <summary>Gets the orthographic size override bar.</summary>
+    public InspectorFieldOverride OrthographicSizeOverride => this.Override(this.OrthographicSize.Id.Id);
+
+    /// <summary>Gets the aspect mode override bar.</summary>
+    public InspectorFieldOverride AspectModeOverride => this.Override(this.aspectModeBinding.Id.Id);
+
+    /// <summary>Gets the aspect ratio override bar.</summary>
+    public InspectorFieldOverride AspectRatioOverride => this.Override(this.AspectRatio.Id.Id);
+
+    /// <summary>Gets the near plane override bar.</summary>
+    public InspectorFieldOverride NearPlaneOverride => this.Override(this.NearPlane.Id.Id);
+
+    /// <summary>Gets the far plane override bar.</summary>
+    public InspectorFieldOverride FarPlaneOverride => this.Override(this.FarPlane.Id.Id);
+
+    /// <summary>Gets the aperture override bar.</summary>
+    public InspectorFieldOverride ApertureFOverride => this.Override(this.ApertureF.Id.Id);
+
+    /// <summary>Gets the shutter rate override bar.</summary>
+    public InspectorFieldOverride ShutterRateOverride => this.Override(this.ShutterRate.Id.Id);
+
+    /// <summary>Gets the ISO override bar.</summary>
+    public InspectorFieldOverride IsoOverride => this.Override(this.Iso.Id.Id);
+
     /// <inheritdoc />
     public Guid EditScopeId => this.edits?.ScopeId ?? Guid.Empty;
 
@@ -145,11 +170,11 @@ public sealed partial class OrthographicCameraViewModel : ComponentPropertyEdito
     public override void UpdateValues(ICollection<SceneNode> items)
     {
         var targets = items.Where(static node => node.Components.OfType<OrthographicCamera>().Any())
-            .ToDictionary(static node => node.Id, static node => (object?)node.Components.OfType<OrthographicCamera>().First());
+            .ToDictionary(this.ReferenceOf, static node => (object?)node.Components.OfType<OrthographicCamera>().First());
         var nodes = targets.Keys.ToArray();
         this.edits?.Bind(nodes);
         this.selectedItems = items;
-        this.StartingCamera.Bind([.. items.Where(node => targets.ContainsKey(node.Id))]);
+        this.StartingCamera.Bind([.. items.Where(node => targets.ContainsKey(this.ReferenceOf(node)) && this.ReferenceOf(node).IsOwned)]);
         foreach (var registration in this.registrations)
         {
             registration.Refresh(nodes, id => targets.GetValueOrDefault(id));
@@ -161,6 +186,12 @@ public sealed partial class OrthographicCameraViewModel : ComponentPropertyEdito
 
     private InspectorFieldDiagnostic Diagnostic(PropertyId id)
         => this.edits?.Diagnostics.Get(id) ?? this.unboundDiagnostic;
+
+    /// <summary>Gets the override bar of a field.</summary>
+    /// <param name="ids">The properties the field shows.</param>
+    /// <returns>The field's bar.</returns>
+    private InspectorFieldOverride Override(params PropertyId[] ids)
+        => this.edits?.Overrides.Get(ids) ?? this.unboundOverride;
 
     private void Register<T>(PropertyBinding<T> binding, string? property = null)
         => this.registrations.Add(new InspectorBindingRegistration<T>(
