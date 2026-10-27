@@ -48,6 +48,10 @@ struct ModelImportRecordContent final {
   std::shared_ptr<const SurfaceProvenance> surface_provenance;
   std::vector<ModelNodeContinuity> node_continuity;
   std::vector<ModelPublishedNode> published_nodes;
+  //! The published nodes the publication before the last did not emit.
+  std::vector<ModelPublishedNode> new_nodes;
+  //! The nodes earlier publications emitted whose ID the last did not.
+  std::vector<ModelPublishedNode> vanished_nodes;
   //! Absent until the record's first publication.
   std::optional<ModelSourceFingerprint> source_fingerprint;
 };

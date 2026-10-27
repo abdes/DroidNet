@@ -231,8 +231,7 @@ public:
   //! Sets the nodes the model scene emitted. Returned, like the surface
   //! provenance, only with a successful final report of a model import from
   //! its record.
-  OXGN_COOK_API auto SetPublishedNodes(std::vector<ModelPublishedNode> nodes)
-    -> void;
+  OXGN_COOK_API auto SetPublishedNodes(ModelNodePublication nodes) -> void;
 
   //! The complete source geometry set was processed successfully, even if
   //! empty.
@@ -295,7 +294,7 @@ private:
   mutable std::mutex diagnostics_mutex_;
   std::mutex surface_provenance_mutex_;
   std::vector<SurfaceGeometryProvenance> surface_provenance_;
-  std::vector<ModelPublishedNode> published_nodes_;
+  ModelNodePublication published_nodes_;
   bool surface_source_processed_ = false;
   std::optional<ImportSessionToken> table_participation_;
   std::optional<ImportSessionToken> index_participation_;

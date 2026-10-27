@@ -22,12 +22,14 @@ namespace Oxygen.Editor.Scenes.Documents;
 /// <param name="references">The saved authored references instance sources are checked against, if the editor reads them.</param>
 /// <param name="session">The project session the scenes belong to, whose instances' structures are read and whose scene files <i>Apply to source</i> writes.</param>
 /// <param name="structures">What the instances of the shown scene contain, if the editor reads it.</param>
+/// <param name="modelRecords">The model import records of the project's models, which <i>Reassign</i> writes, if a project is open.</param>
 public sealed class SceneDocumentKind(
     ISceneNodeInteraction? interaction = null,
     IAssetRedirects? redirects = null,
     IAuthoredReferences? references = null,
     IProjectSession? session = null,
-    ISceneStructures? structures = null) : IDocumentKind
+    ISceneStructures? structures = null,
+    IModelImportRecordFiles? modelRecords = null) : IDocumentKind
 {
     /// <inheritdoc/>
     public string Name => "Scene";
@@ -83,7 +85,7 @@ public sealed class SceneDocumentKind(
         Func<AssetPath, SceneStructure?>? structureOf = session is not null && structures is not null
             ? source => structures.Find(session.Context, source)
             : null;
-        return DocumentDecodeResult.Decoded(new SceneContent(scene, layout, context, interaction, redirects, references, file.Asset, structureOf, session is null ? null : new ProjectSceneFiles(session)));
+        return DocumentDecodeResult.Decoded(new SceneContent(scene, layout, context, interaction, redirects, references, file.Asset, structureOf, session is null ? null : new ProjectSceneFiles(session), modelRecords));
     }
 
     private static bool IsLayoutValid(IEnumerable<ExplorerEntryData>? entries, HashSet<NodeId> nodeIds, HashSet<FolderId> folderIds, HashSet<NodeId> layoutNodeIds)

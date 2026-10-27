@@ -4,6 +4,7 @@
 
 using System.Numerics;
 using System.Text.Json;
+using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Changes;
 using Oxygen.Editor.Scenes.Edits.Assets;
@@ -72,6 +73,8 @@ public static class EditSamples
 
     private static NodePath CarBody { get; } = NodePath.Of(NodeId.FromValue(SampleScene.Tagged(1, "1D")));
 
+    private static NodePath TowerGate { get; } = NodePath.Of(NodeId.FromValue(SampleScene.Tagged(1, "1E")));
+
     private static FolderId NewFolder { get; } = FolderId.FromValue(SampleScene.Tagged(3, "2A"));
 
     private static FolderId RestoredFolder { get; } = FolderId.FromValue(SampleScene.Tagged(3, "2B"));
@@ -118,6 +121,10 @@ public static class EditSamples
         RestoreInstanceSample,
         ApplyToSourceSample,
         RestoreSourceSample,
+        RemoveKeptChangesSample,
+        RestoreInstanceChangesSample,
+        ReassignKeptChangeSample,
+        RestoreModelRecordSample,
         SetStartingInputContextsSample,
         SetSceneReferencesSample,
         SetScriptSlotsSample,
@@ -487,6 +494,59 @@ public static class EditSamples
             HasTargets = false,
         };
 
+    // Tower.oscene read again without Post: Tower's move of Post is a kept change.
+    private static EditSample RemoveKeptChangesSample =>
+        new(
+            nameof(RemoveKeptChanges),
+            static _ => new RemoveKeptChanges(SampleScene.Tower, [SampleScene.Post]),
+            [new SceneChange.OverridesChanged(SampleScene.Tower, [SceneSchema.Transform.PositionX.Id])],
+            [new SceneChange.OverridesChanged(SampleScene.Tower, [SceneSchema.Transform.PositionX.Id])])
+        {
+            HasTargets = true,
+            Arrange = LosePost,
+        };
+
+    // A removal of Tower's changes undone: Tower holds none, and gets them back.
+    private static EditSample RestoreInstanceChangesSample =>
+        new(
+            nameof(RestoreInstanceChanges),
+            static _ => new RestoreInstanceChanges(SampleScene.Tower, RemoveKeptChanges.HistoryLabel) { Changes = SampleScene.TowerChanges, Restored = InstanceChanges.None },
+            [new SceneChange.OverridesChanged(SampleScene.Tower, [SceneSchema.Transform.PositionX.Id])],
+            [new SceneChange.OverridesChanged(SampleScene.Tower, [SceneSchema.Transform.PositionX.Id])])
+        {
+            HasTargets = true,
+        };
+
+    // Tower.oscene read again with Gate in place of Post: Tower's kept move of Post goes to Gate, in the instance.
+    private static EditSample ReassignKeptChangeSample =>
+        new(
+            nameof(ReassignKeptChange),
+            static _ => new ReassignKeptChange(SampleScene.Tower, SampleScene.Post, TowerGate),
+            [new SceneChange.OverridesChanged(SampleScene.Tower, [SceneSchema.Transform.PositionX.Id])],
+            [new SceneChange.OverridesChanged(SampleScene.Tower, [SceneSchema.Transform.PositionX.Id])])
+        {
+            HasTargets = true,
+            Arrange = LosePost,
+        };
+
+    // A repair in Car.glb undone: the record holds what the repair wrote, and gets other bytes back with Car's change.
+    private static EditSample RestoreModelRecordSample =>
+        new(
+            nameof(RestoreModelRecord),
+            static _ => new RestoreModelRecord(SampleScene.Car, SampleScene.CarModel, ReassignKeptChange.HistoryLabel)
+            {
+                Changes = InstanceChanges.None,
+                Restored = InstanceChanges.None.With(CarBody, InstancedNodeChanges.None.With(SourceOverrides.ChangesOf(SceneSchema.Transform.Kind).With(new SourceOverride(SceneSchema.Transform.PositionX.Id, Part: null, LayoutRevision: null, 1f)))),
+                Applied = "{\"repaired\":true}"u8.ToArray(),
+                Previous = "{\"repaired\":false}"u8.ToArray(),
+            },
+            [new SceneChange.OverridesChanged(SampleScene.Car, [SceneSchema.Transform.PositionX.Id])],
+            [new SceneChange.OverridesChanged(SampleScene.Car, [SceneSchema.Transform.PositionX.Id])])
+        {
+            HasTargets = true,
+            Arrange = static fixture => fixture.ModelRecords.Set(SampleScene.CarModel, "{\"repaired\":true}"u8.ToArray()),
+        };
+
     private static EditSample SetStartingCameraSample =>
         new(
             nameof(SetStartingCamera),
@@ -715,4 +775,11 @@ public static class EditSamples
         => new(
             new Dictionary<NodeId, PropertyEdit> { [SampleScene.A1] = PropertyEdit.SingleEdit(SceneSchema.Transform.PositionX, 5f) },
             "Move");
+
+    // Publishes Tower.oscene as it reads after Post was renamed Gate.
+    private static void LosePost(AuthoringFixture fixture)
+    {
+        var tower = new StructureScene(Guid.NewGuid(), SampleScene.TowerScene.VirtualPath);
+        fixture.Structures.Publish(new SceneStructure(SampleScene.TowerScene, tower, [new StructureNode(TowerGate, "Gate", Parent: null, tower, Instance: null, Geometry: null, HasCamera: false)], []));
+    }
 }

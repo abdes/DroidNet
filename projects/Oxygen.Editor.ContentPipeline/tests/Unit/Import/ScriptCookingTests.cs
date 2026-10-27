@@ -318,6 +318,42 @@ internal sealed partial class ScriptCookingTests : IDisposable
         _ = mapped.SuggestedAction.Payload["PropertyPath"].Should().Be(new ScriptFieldAddress(site.SlotId, "speed").ToString());
     }
 
+    [TestMethod]
+    public void AnUnresolvedInstanceParameterChange_IsAKeptChangeOfItsInstanceRoot()
+    {
+        var path = NodePath.Of(NodeId.New());
+        var site = new ScriptBindingSite(NodeId.New(), "Tower", Guid.NewGuid(), SlotNumber: 0, ["speed"]) { Path = path, InstancedNames = "Guard" };
+        var descriptor = new SceneDescriptorGenerationResult(
+            AssetPath.Parse("/Content/Scenes/Main.oscene"),
+            Path.Combine(this.root, ".pipeline", "Scenes", "Main.oscene.json"),
+            "/Content/Scenes/Main.oscene",
+            Dependencies: [],
+            Diagnostics: [])
+        {
+            SceneId = SceneId.New(),
+            SceneName = "Main",
+            ScriptInstanceBindings = [new ScriptSidecarInstanceBinding(0, [path.ToString()], site.SlotId.ToString("D"), [])],
+            ScriptInstanceBindingSites = [site],
+            Nodes = [new DescriptorNodeSite(site.NodeId, "Tower")],
+        };
+        var issue = new DiagnosticRecord
+        {
+            OperationId = Guid.NewGuid(),
+            Domain = FailureDomain.AssetImport,
+            Severity = DiagnosticSeverity.Warning,
+            Code = KeptChangeDiagnostics.ScriptInstanceOverrideUnresolved,
+            Message = "The change names no node of the instanced scene",
+            TechnicalMessage = "instance_bindings[0]",
+            AffectedPath = descriptor.DescriptorPath,
+        };
+
+        var mapped = ContentPipelineService.MapKeptChangeDiagnostic(this.CreateScope(), [descriptor], issue);
+
+        _ = mapped.Message.Should().StartWith("Kept change of 'Guard' in the instance under 'Tower': ");
+        _ = mapped.AffectedEntity!.NodeId.Should().Be(site.NodeId);
+        _ = mapped.SuggestedAction!.Payload["PropertyPath"].Should().Be(KeptChangeDiagnostics.PropertyPath);
+    }
+
     private static Scene CreateScene(out SceneNode target, out SceneNode player)
     {
         var scene = new Scene { Name = "Main", Id = SceneId.New() };

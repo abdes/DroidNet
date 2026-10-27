@@ -59,40 +59,19 @@ public sealed class CookRecovery(
     {
         ArgumentNullException.ThrowIfNull(run);
         ArgumentNullException.ThrowIfNull(issue);
-        var project = session.Context;
-        if (run.ProjectId != project.ProjectId
-            || issue.AffectedEntity?.SceneId is not { } sceneId
-            || issue.SuggestedAction?.Payload.TryGetValue("PropertyPath", out var property) != true
-            || property is null
-            || (FindScriptSlotNode(issue, property) is null && !IsSceneProperty(property))
-            || await SceneFiles.FindByIdAsync(catalog, project, sceneId).ConfigureAwait(true) is not { } scene
-            || issue.AffectedPath is not { } sourcePath || !project.FileSystem.File.Exists(sourcePath))
-        {
-            return false;
-        }
-
-        var opened = await placement.OpenDocumentAsync(scene.Identity).ConfigureAwait(true);
-        if (opened.Document is not { Content: SceneContent content } document)
-        {
-            return false;
-        }
-
-        // A script slot problem selects its node, whose inspector shows the slot; any other names a scene property.
-        if (FindScriptSlotNode(issue, property) is { } nodeId)
-        {
-            if (content.Scene.AllNodes.FirstOrDefault(candidate => candidate.Id == nodeId) is { } node)
-            {
-                selection.SetSelection(document.Id, [NodeReference.To(node.Id)], SelectionSource);
-            }
-        }
-        else
-        {
-            selection.Publish(document.Id, new SceneSelectionContext(SceneSelectionKind.Scene, [], [], PrimaryNode: null, PrimaryFolderId: null), SelectionSource);
-            selection.RequestPropertyFocus(document.Id, property, SelectionSource);
-        }
 
         // Properties shares a dock with Cooking by default; both stay visible.
-        return await placement.ShowPanelsAsync([InspectorPanelId, CookingPanelId]).ConfigureAwait(true);
+        return run.ProjectId == session.Context.ProjectId
+            && await this.ShowTargetAsync(issue).ConfigureAwait(true)
+            && await placement.ShowPanelsAsync([InspectorPanelId, CookingPanelId]).ConfigureAwait(true);
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> GoToPropertyAsync(DiagnosticRecord issue)
+    {
+        ArgumentNullException.ThrowIfNull(issue);
+        return await this.ShowTargetAsync(issue).ConfigureAwait(true)
+            && await placement.ShowPanelsAsync([InspectorPanelId]).ConfigureAwait(true);
     }
 
     /// <inheritdoc />
@@ -124,11 +103,56 @@ public sealed class CookRecovery(
         => string.Equals(property, SceneEnvironmentConstraints.AerialStartPropertyPath, StringComparison.Ordinal)
             || SceneStartingPropertyPaths.IsStartingProperty(property);
 
-    private static NodeId? FindScriptSlotNode(DiagnosticRecord issue, string property)
-        => ScriptFieldAddress.TryParse(property, out _)
+    // The node a script slot problem or a kept change names: its inspector shows the slot, or the kept changes.
+    private static NodeId? FindNode(DiagnosticRecord issue, string property)
+        => (ScriptFieldAddress.TryParse(property, out _) || property.Length == 0 || string.Equals(property, KeptChangeDiagnostics.PropertyPath, StringComparison.Ordinal))
             && issue.SuggestedAction?.Payload.TryGetValue("NodeId", out var text) == true
             && Guid.TryParse(text, CultureInfo.InvariantCulture, out var node)
                 ? NodeId.FromValue(node) : null;
+
+    // Opens the scene an issue names and shows its target: a node with its slot or kept changes, or a scene property.
+    private async Task<bool> ShowTargetAsync(DiagnosticRecord issue)
+    {
+        var project = session.Context;
+        if (issue.AffectedEntity?.SceneId is not { } sceneId
+            || issue.SuggestedAction?.Payload.TryGetValue("PropertyPath", out var property) != true
+            || property is null
+            || (FindNode(issue, property) is null && !IsSceneProperty(property))
+            || await SceneFiles.FindByIdAsync(catalog, project, sceneId).ConfigureAwait(true) is not { } scene
+            || issue.AffectedPath is not { } sourcePath || !project.FileSystem.File.Exists(sourcePath))
+        {
+            return false;
+        }
+
+        var opened = await placement.OpenDocumentAsync(scene.Identity).ConfigureAwait(true);
+        if (opened.Document is not { Content: SceneContent content } document)
+        {
+            return false;
+        }
+
+        if (FindNode(issue, property) is not { } nodeId)
+        {
+            selection.Publish(document.Id, new SceneSelectionContext(SceneSelectionKind.Scene, [], [], PrimaryNode: null, PrimaryFolderId: null), SelectionSource);
+            selection.RequestPropertyFocus(document.Id, property, SelectionSource);
+            return true;
+        }
+
+        if (content.Scene.AllNodes.Any(candidate => candidate.Id == nodeId))
+        {
+            // The node an instance brings in when the issue names one, else the node of the scene.
+            var target = issue.SuggestedAction?.Payload.TryGetValue("NodeReference", out var text) == true
+                && NodeReference.TryParse(text, out var reference) && reference.Node == nodeId
+                    ? reference
+                    : NodeReference.To(nodeId);
+            selection.SetSelection(document.Id, [target], SelectionSource);
+            if (string.Equals(property, KeptChangeDiagnostics.PropertyPath, StringComparison.Ordinal))
+            {
+                selection.RequestPropertyFocus(document.Id, property, SelectionSource);
+            }
+        }
+
+        return true;
+    }
 
     private bool IsActiveProject(CookRunSnapshot run)
     {

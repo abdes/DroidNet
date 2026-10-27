@@ -39,6 +39,12 @@ public sealed record SceneDescriptorGenerationResult(
     /// <summary>Gets the instanced node and slot each instance binding comes from, in instance binding order.</summary>
     public IReadOnlyList<ScriptBindingSite> ScriptInstanceBindingSites { get; init; } = [];
 
+    /// <summary>Gets each node of the descriptor, by its index there, for diagnostics that point at one.</summary>
+    public IReadOnlyList<DescriptorNodeSite> Nodes { get; init; } = [];
+
+    /// <summary>Gets the descriptor index of each renderable's node, by the renderable's index.</summary>
+    public IReadOnlyList<int> RenderableNodes { get; init; } = [];
+
     /// <summary>Gets the scripts and assets the slots use, which the scene depends on.</summary>
     public IReadOnlyList<AssetPath> ScriptReferences { get; init; } = [];
 }

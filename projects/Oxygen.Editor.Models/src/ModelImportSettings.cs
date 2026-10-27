@@ -60,6 +60,12 @@ public sealed record ModelImportSettings
     /// <summary>Gets the anchor and ID of each node the last import emitted.</summary>
     public ImmutableArray<ModelPublishedNode> PublishedNodes { get; init; } = [];
 
+    /// <summary>Gets the published nodes whose anchor the publication before the last did not emit.</summary>
+    public ImmutableArray<ModelPublishedNode> NewNodes { get; init; } = [];
+
+    /// <summary>Gets the nodes earlier imports emitted whose ID the last import did not, the nodes kept changes lost.</summary>
+    public ImmutableArray<ModelPublishedNode> VanishedNodes { get; init; } = [];
+
     /// <summary>Gets the files the last import read; absent until the first import.</summary>
     public ModelSourceFingerprint? SourceFingerprint { get; init; }
 
@@ -134,7 +140,7 @@ public sealed record ModelImportSettings
             ? [.. entries.EnumerateArray().Select(static entry => new ModelNodeContinuity(
                 entry.GetProperty("anchor").GetString()!, entry.GetProperty("continues").GetString()!))]
             : ImmutableArray<ModelNodeContinuity>.Empty;
-        if (continuity.Select(static entry => entry.Anchor).Distinct(StringComparer.Ordinal).Count() != continuity.Length)
+        if (continuity.Select(static entry => entry.Anchor).Distinct(StringComparer.Ordinal).Take(continuity.Length + 1).Count() != continuity.Length)
         {
             throw new InvalidDataException("Two node continuity entries of the model import record have one anchor.");
         }
@@ -147,10 +153,9 @@ public sealed record ModelImportSettings
             SourceIdentity = root.GetProperty("source_identity").GetGuid(),
             SurfaceProvenance = root.TryGetProperty("surface_provenance", out var provenance) ? provenance.Clone() : EmptyProvenance(),
             NodeContinuity = continuity,
-            PublishedNodes = root.TryGetProperty("published_nodes", out var nodes)
-                ? [.. nodes.EnumerateArray().Select(static node => new ModelPublishedNode(
-                    node.GetProperty("anchor").GetString()!, node.GetProperty("node_id").GetGuid()))]
-                : [],
+            PublishedNodes = ReadNodes(root, "published_nodes"),
+            NewNodes = ReadNodes(root, "new_nodes"),
+            VanishedNodes = ReadNodes(root, "vanished_nodes"),
             SourceFingerprint = root.TryGetProperty("source_fingerprint", out var fingerprint)
                 ? ModelSourceFingerprint.Read(fingerprint) : null,
         };
@@ -196,7 +201,7 @@ public sealed record ModelImportSettings
     }
 
     /// <summary>Gets the record with what an import established: the <c>model_import</c> of the engine's report, its
-    /// surface provenance, published nodes and source fingerprint. Nothing else changes.</summary>
+    /// surface provenance, published, new and vanished nodes and source fingerprint. Nothing else changes.</summary>
     /// <param name="update">The report's <c>model_import</c> object.</param>
     /// <returns>The updated record.</returns>
     public ModelImportSettings WithImportUpdate(JsonElement update)
@@ -204,8 +209,9 @@ public sealed record ModelImportSettings
         var updated = this with
         {
             SurfaceProvenance = update.GetProperty("surface_provenance").Clone(),
-            PublishedNodes = [.. update.GetProperty("published_nodes").EnumerateArray().Select(static node => new ModelPublishedNode(
-                node.GetProperty("anchor").GetString()!, node.GetProperty("node_id").GetGuid()))],
+            PublishedNodes = ReadNodes(update, "published_nodes"),
+            NewNodes = ReadNodes(update, "new_nodes"),
+            VanishedNodes = ReadNodes(update, "vanished_nodes"),
             SourceFingerprint = update.TryGetProperty("source_fingerprint", out var fingerprint)
                 ? ModelSourceFingerprint.Read(fingerprint) : this.SourceFingerprint,
         };
@@ -215,7 +221,8 @@ public sealed record ModelImportSettings
 
     /// <summary>Gets whether <paramref name="other"/> differs from this record only in what an import establishes.</summary>
     /// <param name="other">Another version of this record.</param>
-    /// <returns><see langword="true"/> when only the surface provenance, published nodes or fingerprint differ.</returns>
+    /// <returns><see langword="true"/> when only the surface provenance, the published, new or vanished nodes or the
+    /// fingerprint differ.</returns>
     public bool DiffersOnlyByImport(ModelImportSettings other)
     {
         ArgumentNullException.ThrowIfNull(other);
@@ -223,9 +230,36 @@ public sealed record ModelImportSettings
         {
             SurfaceProvenance = this.SurfaceProvenance,
             PublishedNodes = this.PublishedNodes,
+            NewNodes = this.NewNodes,
+            VanishedNodes = this.VanishedNodes,
             SourceFingerprint = this.SourceFingerprint,
         };
         return aligned.ToBytes().AsSpan().SequenceEqual(this.ToBytes());
+    }
+
+    /// <summary>Gets the record with a node continuity entry: the node with <paramref name="anchor"/> continues the node
+    /// with <paramref name="continues"/>, and takes its ID on the next import. Nothing else changes.</summary>
+    /// <param name="anchor">The continuing node's anchor.</param>
+    /// <param name="continues">The anchor of the node it continues.</param>
+    /// <returns>The record with the entry.</returns>
+    /// <exception cref="ArgumentException">The anchors are equal, or <paramref name="anchor"/> already continues a node.</exception>
+    public ModelImportSettings WithContinuity(string anchor, string continues)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(anchor);
+        ArgumentException.ThrowIfNullOrEmpty(continues);
+        if (string.Equals(anchor, continues, StringComparison.Ordinal))
+        {
+            throw new ArgumentException("A node cannot continue itself.", nameof(continues));
+        }
+
+        if (this.NodeContinuity.Any(entry => string.Equals(entry.Anchor, anchor, StringComparison.Ordinal)))
+        {
+            throw new ArgumentException($"'{anchor}' already continues a node.", nameof(anchor));
+        }
+
+        var updated = this with { NodeContinuity = this.NodeContinuity.Add(new ModelNodeContinuity(anchor, continues)) };
+        _ = updated.ToBytes();
+        return updated;
     }
 
     /// <summary>Serializes the record, validated against the installed schema.</summary>
@@ -254,16 +288,9 @@ public sealed record ModelImportSettings
             }
 
             writer.WriteEndArray();
-            writer.WriteStartArray("published_nodes");
-            foreach (var node in this.PublishedNodes)
-            {
-                writer.WriteStartObject();
-                writer.WriteString("anchor", node.Anchor);
-                writer.WriteString("node_id", node.NodeId.ToString("D"));
-                writer.WriteEndObject();
-            }
-
-            writer.WriteEndArray();
+            WriteNodes(writer, "published_nodes", this.PublishedNodes);
+            WriteNodes(writer, "new_nodes", this.NewNodes);
+            WriteNodes(writer, "vanished_nodes", this.VanishedNodes);
             this.SourceFingerprint?.Write(writer);
             writer.WriteEndObject();
         }
@@ -274,6 +301,26 @@ public sealed record ModelImportSettings
         return Schema.Value.Evaluate(document.RootElement).IsValid
             ? bytes
             : throw new InvalidDataException("The model import record does not match its schema.");
+    }
+
+    private static ImmutableArray<ModelPublishedNode> ReadNodes(JsonElement owner, string name)
+        => owner.TryGetProperty(name, out var nodes)
+            ? [.. nodes.EnumerateArray().Select(static node => new ModelPublishedNode(
+                node.GetProperty("anchor").GetString()!, node.GetProperty("node_id").GetGuid()))]
+            : [];
+
+    private static void WriteNodes(Utf8JsonWriter writer, string name, ImmutableArray<ModelPublishedNode> nodes)
+    {
+        writer.WriteStartArray(name);
+        foreach (var node in nodes)
+        {
+            writer.WriteStartObject();
+            writer.WriteString("anchor", node.Anchor);
+            writer.WriteString("node_id", node.NodeId.ToString("D"));
+            writer.WriteEndObject();
+        }
+
+        writer.WriteEndArray();
     }
 
     private static JsonElement EmptyProvenance()

@@ -699,7 +699,7 @@ auto ScenePipeline::Worker() -> co::Co<>
     const auto cook_start = std::chrono::steady_clock::now();
     std::vector<ImportDiagnostic> diagnostics;
     BuildOutcome outcome;
-    std::vector<ModelPublishedNode> model_nodes;
+    ModelNodePublication model_nodes;
 
     if (item.adapter_owner == nullptr || item.build_stage == nullptr) {
       diagnostics.push_back(MakeErrorDiagnostic("scene.adapter_missing",

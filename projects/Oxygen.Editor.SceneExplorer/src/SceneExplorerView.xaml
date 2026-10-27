@@ -31,9 +31,16 @@
             </DataTemplate>
 
             <!--  An instance root: the entity glyph with the link badge (scene instances 6.2).  -->
-            <DataTemplate x:Key="InstanceRootThumbnailTemplate" x:DataType="dnc:TreeItemAdapter">
+            <DataTemplate x:Key="InstanceRootThumbnailTemplate" x:DataType="scene:SceneNodeAdapter">
                 <Grid Width="24" Height="24">
-                    <SymbolIcon Symbol="{x:Bind scene:ThumbnailGenerator.GetThumbnailForEntity((dnc:TreeItemAdapter))}" />
+                    <SymbolIcon Symbol="{x:Bind scene:ThumbnailGenerator.GetThumbnailForNode(AttachedObject)}" Visibility="{x:Bind ShowsNodeGlyph, Mode=OneWay}" />
+                    <!--  Kept changes, changes whose node the source no longer has, take the glyph's place: the Scene Instance section lists them.  -->
+                    <FontIcon
+                        FontSize="22"
+                        Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                        Glyph="&#xE7BA;"
+                        ToolTipService.ToolTip="This instance has kept changes: changes whose node its source no longer has. Select it to see them."
+                        Visibility="{x:Bind HasKeptChanges, Mode=OneWay}" />
                     <FontIcon
                         HorizontalAlignment="Right"
                         VerticalAlignment="Bottom"

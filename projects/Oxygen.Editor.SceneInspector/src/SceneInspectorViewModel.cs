@@ -15,6 +15,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Dispatching;
 using Oxygen.Editor.Assets;
+using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Documents;
@@ -73,6 +74,9 @@ public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNo
     // The nodes whose property changes refresh the panel's own properties.
     private readonly List<SceneNode> observedNodes = [];
     private (DocumentId Document, string Property)? pendingEnvironmentFocus;
+
+    // The scene whose selected instance root shows its kept changes once its Scene Instance section is built.
+    private DocumentId? pendingKeptChangesFocus;
 
     // The atmosphere source the inspector selected, whose directional light it shows once the selection arrives.
     private NodeId? pendingAtmosphereSource;
@@ -438,6 +442,7 @@ public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNo
         this.ObserveNodes(this.items);
         this.RefreshOwnProperties();
         this.RefreshPropertyEditors();
+        this.ApplyPendingKeptChangesFocus();
     }
 
     private void ObserveNodes(IEnumerable<SceneNode> nodes)
@@ -789,9 +794,29 @@ public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNo
         this.sceneSettings.RequestFieldFocus(target.Property);
     }
 
-    // The scene's properties show once the scene is the shown one; until then the request waits.
+    private void ApplyPendingKeptChangesFocus()
+    {
+        if (this.pendingKeptChangesFocus is not { } document || this.activeDocumentId != document
+            || this.PropertyEditors.OfType<SceneInstanceViewModel>().FirstOrDefault() is not { } section)
+        {
+            return;
+        }
+
+        this.pendingKeptChangesFocus = null;
+        section.FocusKeptChanges();
+    }
+
+    // The scene's properties show once the scene is the shown one, and an instance's kept changes once its section is;
+    // until then the request waits.
     private void OnPropertyFocusRequested(object? sender, ScenePropertyFocusEventArgs args)
     {
+        if (string.Equals(args.PropertyPath, KeptChangeDiagnostics.PropertyPath, StringComparison.Ordinal))
+        {
+            this.pendingKeptChangesFocus = args.DocumentId;
+            this.ApplyPendingKeptChangesFocus();
+            return;
+        }
+
         this.pendingEnvironmentFocus = (args.DocumentId, args.PropertyPath);
         this.ApplyPendingEnvironmentFocus();
     }

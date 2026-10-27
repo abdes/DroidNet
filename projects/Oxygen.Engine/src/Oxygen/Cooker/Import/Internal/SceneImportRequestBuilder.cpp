@@ -148,6 +148,7 @@ auto SceneImportSettings::Prepare(const ImportFormat expected_format,
     request.model_import = ModelImportInputs {
       .node_continuity = settings.model_record->node_continuity,
       .published_nodes = settings.model_record->published_nodes,
+      .vanished_nodes = settings.model_record->vanished_nodes,
     };
   } else {
     request.surface_provenance

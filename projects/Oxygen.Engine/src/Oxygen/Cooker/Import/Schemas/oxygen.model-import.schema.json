@@ -51,16 +51,15 @@
     },
     "published_nodes": {
       "description": "The anchor and ID of each node the last import emitted.",
-      "type": "array",
-      "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["anchor", "node_id"],
-        "properties": {
-          "anchor": { "type": "string", "minLength": 1 },
-          "node_id": { "$ref": "#/definitions/key" }
-        }
-      }
+      "$ref": "#/definitions/nodes"
+    },
+    "new_nodes": {
+      "description": "The published nodes whose anchor the publication before the last did not emit.",
+      "$ref": "#/definitions/nodes"
+    },
+    "vanished_nodes": {
+      "description": "The nodes earlier publications emitted whose ID the last import did not emit, kept until an import emits their ID again.",
+      "$ref": "#/definitions/nodes"
     },
     "source_fingerprint": {
       "description": "The files the last import read: the primary source, and every other file relative to the primary's folder.",
@@ -87,6 +86,18 @@
     }
   },
   "definitions": {
+    "nodes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["anchor", "node_id"],
+        "properties": {
+          "anchor": { "type": "string", "minLength": 1 },
+          "node_id": { "$ref": "#/definitions/key" }
+        }
+      }
+    },
     "key": {
       "type": "string",
       "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",

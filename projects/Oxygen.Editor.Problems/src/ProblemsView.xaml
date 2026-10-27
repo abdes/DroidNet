@@ -159,7 +159,7 @@
                     <Button
                         Command="{x:Bind ViewModel.SelectNodeCommand}"
                         Content="Select node"
-                        ToolTipService.ToolTip="Select the node whose script reported this, in the scene that played"
+                        ToolTipService.ToolTip="Select the node this problem names: in the scene that played, or in the scene the cook reported it for"
                         Visibility="{x:Bind ViewModel.CanSelectNode, Mode=OneWay}" />
                 </StackPanel>
             </Grid>

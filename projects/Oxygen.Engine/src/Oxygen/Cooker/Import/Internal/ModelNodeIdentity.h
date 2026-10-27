@@ -97,12 +97,13 @@ public:
   //! The ID of the node with `anchor`, which the import emits.
   OXGN_COOK_NDAPI auto Emit(std::string_view anchor) -> data::NodeId;
 
-  //! The nodes emitted, in emission order. Reports, against the previous
+  //! The nodes emitted, in emission order, with those whose anchor the
+  //! previous publication did not emit and those earlier publications emitted
+  //! whose ID this import did not. Reports, against the previous
   //! publication's nodes, the anchors that vanished and those that are new
   //! (`import.nodes_changed`, info).
-  OXGN_COOK_NDAPI auto TakePublishedNodes(
-    std::string_view source_id, std::vector<ImportDiagnostic>& diagnostics)
-    -> std::vector<ModelPublishedNode>;
+  OXGN_COOK_NDAPI auto TakePublishedNodes(std::string_view source_id,
+    std::vector<ImportDiagnostic>& diagnostics) -> ModelNodePublication;
 
 private:
   //! The anchor whose ID the node with `anchor` has.

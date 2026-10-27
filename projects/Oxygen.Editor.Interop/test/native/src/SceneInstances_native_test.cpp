@@ -258,6 +258,31 @@ void ReferencesNameNestedInstancedNodes()
   NodeRegistry::ClearAll();
 }
 
+void AKeptChangeIsNoFailure()
+{
+  using oxygen::instantiation::SceneInstantiationIssue;
+  using oxygen::instantiation::issue_codes::kChangeUnresolved;
+  const auto kept = SceneInstantiationIssue {
+    .code = std::string(kChangeUnresolved),
+    .scene = {},
+    .node_index = 0U,
+    .node_path = { MakeId(7) },
+    .message = "the change names no node of the source",
+  };
+  Require(Instances::FailureOf({}, std::vector { kept }).empty(),
+    "a change whose node the source no longer has is inert, no failure");
+
+  auto other = kept;
+  other.code = "scene.instance.root_invalid";
+  other.message = "bad root";
+  Require(Instances::FailureOf({}, std::vector { kept, other })
+      == "scene.instance.root_invalid: bad root",
+    "other issues are the failure");
+  Require(Instances::FailureOf({ "material missing" }, std::vector { other })
+      == "material missing (and 1 more)",
+    "conversion errors come first, then the count of the rest");
+}
+
 char last_error[512] {};
 
 auto RunScenario(const int scenario) -> const char*
@@ -287,6 +312,9 @@ auto RunScenario(const int scenario) -> const char*
       break;
     case 7:
       ReferencesNameNestedInstancedNodes();
+      break;
+    case 8:
+      AKeptChangeIsNoFailure();
       break;
     default:
       throw std::runtime_error("unknown scenario");
@@ -333,6 +361,8 @@ public:
   [TestMethod] void ForgetDropsADeadRoot() { Check(6); }
 
   [TestMethod] void ReferencesNameNestedInstancedNodes() { Check(7); }
+
+  [TestMethod] void AKeptChangeIsNoFailure() { Check(8); }
 };
 
 } // namespace InteropTests

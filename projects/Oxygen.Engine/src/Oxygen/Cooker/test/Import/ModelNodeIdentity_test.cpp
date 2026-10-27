@@ -211,13 +211,19 @@ NOLINT_TEST(ModelNodeIdentityTest, PublishedNodesReportWhatChanged)
   static_cast<void>(first.Emit("Body/Headlight_R"));
   auto diagnostics = std::vector<ImportDiagnostic> {};
   const auto published = first.TakePublishedNodes("car.glb", diagnostics);
-  ASSERT_EQ(published.size(), 2U);
-  EXPECT_EQ(published[1].anchor, "Body/Headlight_R");
-  EXPECT_EQ(published[1].node_id, first.IdOf("Body/Headlight_R"));
+  ASSERT_EQ(published.published.size(), 2U);
+  EXPECT_EQ(published.published[1].anchor, "Body/Headlight_R");
+  EXPECT_EQ(published.published[1].node_id, first.IdOf("Body/Headlight_R"));
   EXPECT_TRUE(diagnostics.empty()) << "a first import has nothing to compare";
+  EXPECT_TRUE(published.added.empty());
+  EXPECT_TRUE(published.vanished.empty());
 
   auto second = ModelNodeIdentity(Identity(),
-    ModelImportInputs { .node_continuity = {}, .published_nodes = published });
+    ModelImportInputs {
+      .node_continuity = {},
+      .published_nodes = published.published,
+      .vanished_nodes = published.vanished,
+    });
   static_cast<void>(second.Emit("Body"));
   static_cast<void>(second.Emit("Body/Spoiler"));
   const auto next = second.TakePublishedNodes("car.glb", diagnostics);
@@ -229,12 +235,39 @@ NOLINT_TEST(ModelNodeIdentityTest, PublishedNodesReportWhatChanged)
   EXPECT_THAT(diagnostics.front().message,
     testing::AllOf(testing::HasSubstr("Vanished: 'Body/Headlight_R'"),
       testing::HasSubstr("New: 'Body/Spoiler'")));
-  EXPECT_EQ(next.front().node_id, published.front().node_id);
+  EXPECT_EQ(
+    next.published.front().node_id, published.published.front().node_id);
+  ASSERT_EQ(next.added.size(), 1U);
+  EXPECT_EQ(next.added.front().anchor, "Body/Spoiler");
+  ASSERT_EQ(next.vanished.size(), 1U);
+  EXPECT_EQ(next.vanished.front(), published.published[1]);
 
   auto third = ModelNodeIdentity(Identity(),
-    ModelImportInputs { .node_continuity = {}, .published_nodes = next });
-  EXPECT_EQ(third.Emit("Body/Headlight_R"), published[1].node_id)
+    ModelImportInputs {
+      .node_continuity = {},
+      .published_nodes = next.published,
+      .vanished_nodes = next.vanished,
+    });
+  static_cast<void>(third.Emit("Body"));
+  static_cast<void>(third.Emit("Body/Spoiler"));
+  const auto unchanged = third.TakePublishedNodes("car.glb", diagnostics);
+  EXPECT_TRUE(unchanged.added.empty()) << "new only against the previous";
+  ASSERT_EQ(unchanged.vanished.size(), 1U)
+    << "a vanished node stays listed until it comes back";
+  EXPECT_EQ(unchanged.vanished.front(), published.published[1]);
+
+  auto fourth = ModelNodeIdentity(Identity(),
+    ModelImportInputs {
+      .node_continuity = {},
+      .published_nodes = unchanged.published,
+      .vanished_nodes = unchanged.vanished,
+    });
+  static_cast<void>(fourth.Emit("Body"));
+  static_cast<void>(fourth.Emit("Body/Spoiler"));
+  EXPECT_EQ(fourth.Emit("Body/Headlight_R"), published.published[1].node_id)
     << "a node that comes back has its old ID";
+  const auto returned = fourth.TakePublishedNodes("car.glb", diagnostics);
+  EXPECT_TRUE(returned.vanished.empty());
 }
 
 //! Identical paths share one record; records follow the order paths are

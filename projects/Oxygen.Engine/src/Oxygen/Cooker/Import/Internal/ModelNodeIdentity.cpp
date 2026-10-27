@@ -241,13 +241,34 @@ auto ModelNodeIdentity::Emit(const std::string_view anchor) -> data::NodeId
 }
 
 auto ModelNodeIdentity::TakePublishedNodes(const std::string_view source_id,
-  std::vector<ImportDiagnostic>& diagnostics) -> std::vector<ModelPublishedNode>
+  std::vector<ImportDiagnostic>& diagnostics) -> ModelNodePublication
 {
   const auto& previous = history_.published_nodes;
+  auto publication = ModelNodePublication {};
+  auto emitted_ids = std::set<data::NodeId> {};
+  for (const auto& node : published_) {
+    emitted_ids.insert(node.node_id);
+  }
+  auto vanished_ids = std::set<data::NodeId> {};
+  const auto keep_vanished = [&](const std::vector<ModelPublishedNode>& nodes) {
+    for (const auto& node : nodes) {
+      if (!emitted_ids.contains(node.node_id)
+        && vanished_ids.insert(node.node_id).second) {
+        publication.vanished.push_back(node);
+      }
+    }
+  };
+  keep_vanished(previous);
+  keep_vanished(history_.vanished_nodes);
   if (!previous.empty()) {
     auto before = std::set<std::string_view> {};
     for (const auto& node : previous) {
       before.insert(node.anchor);
+    }
+    for (const auto& node : published_) {
+      if (!before.contains(node.anchor)) {
+        publication.added.push_back(node);
+      }
     }
     auto after = std::set<std::string_view> {};
     for (const auto& node : published_) {
@@ -275,7 +296,8 @@ auto ModelNodeIdentity::TakePublishedNodes(const std::string_view source_id,
       });
     }
   }
-  return std::exchange(published_, {});
+  publication.published = std::exchange(published_, {});
+  return publication;
 }
 
 } // namespace oxygen::content::import::internal

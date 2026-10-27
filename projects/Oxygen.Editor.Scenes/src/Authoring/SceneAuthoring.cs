@@ -46,14 +46,15 @@ public sealed partial class SceneAuthoring : IDisposable
     /// <param name="references">The saved authored references instance sources are checked against, if the editor reads them.</param>
     /// <param name="structureOf">What an instance of a source contains, as last read, if the editor reads it.</param>
     /// <param name="sceneFiles">The files of the project's authored scenes, if a project is open.</param>
-    internal SceneAuthoring(DocumentDecodeContext document, Scene scene, IList<ExplorerEntryData> layout, ISceneNodeInteraction? interaction, IAssetRedirects? redirects, IAuthoredReferences? references = null, Func<AssetPath, SceneStructure?>? structureOf = null, IAuthoredSceneFiles? sceneFiles = null)
+    /// <param name="modelRecords">The model import records of the project's models, if a project is open.</param>
+    internal SceneAuthoring(DocumentDecodeContext document, Scene scene, IList<ExplorerEntryData> layout, ISceneNodeInteraction? interaction, IAssetRedirects? redirects, IAuthoredReferences? references = null, Func<AssetPath, SceneStructure?>? structureOf = null, IAuthoredSceneFiles? sceneFiles = null, IModelImportRecordFiles? modelRecords = null)
     {
         this.Document = document.Document;
         this.history = document.History;
         this.Scene = scene;
         this.Layout = layout;
         this.context = SynchronizationContext.Current;
-        this.scope = new SceneEditScope(scene, layout, interaction, redirects, references) { StructureOf = structureOf, SceneFiles = sceneFiles };
+        this.scope = new SceneEditScope(scene, layout, interaction, redirects, references) { StructureOf = structureOf, SceneFiles = sceneFiles, ModelRecords = modelRecords };
     }
 
     /// <summary>Occurs on the scene thread after each edit, replay, preview and relocation, naming what changed.</summary>

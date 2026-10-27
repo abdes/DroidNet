@@ -16,6 +16,14 @@ public interface ICookRecovery
     /// <returns>Whether the target was accepted for navigation.</returns>
     public Task<bool> GoToPropertyAsync(CookRunSnapshot run, DiagnosticRecord issue);
 
+    /// <summary>
+    /// Opens and focuses what a cook issue names in the open project, as the Problems pane asks for a problem a cook
+    /// reported: a scene property, a script slot's node, or an instance's kept changes.
+    /// </summary>
+    /// <param name="issue">The structured property target.</param>
+    /// <returns>Whether the target was accepted for navigation.</returns>
+    public Task<bool> GoToPropertyAsync(DiagnosticRecord issue);
+
     /// <summary>Saves the unsaved documents a cook reads, after asking.</summary>
     /// <param name="request">The cook.</param>
     /// <returns>Whether the cook can run: nothing it reads is unsaved, or every document was saved.</returns>

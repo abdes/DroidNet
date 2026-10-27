@@ -184,7 +184,7 @@ public sealed class SceneGesture
 
                 foreach (var property in this.captured)
                 {
-                    _ = InstanceChangeWrites.Write(instance, reference.Path, OverrideWrite.Restoring(property, part: null, before.Find(property, part: null)), out _);
+                    _ = InstanceChangeWrites.Write(instance, reference.Path, OverrideWrite.Restoring(property, part: null, before.Find(property, part: null)), names: null, out _);
                 }
             }
         }
@@ -250,7 +250,7 @@ public sealed class SceneGesture
                 foreach (var write in rootWrites)
                 {
                     var resolved = write.Value is AssetPath asset ? write with { Value = this.authoring.Scope.Resolve(asset) } : write;
-                    _ = InstanceChangeWrites.Write(this.instanced[new NodeReference(root, write.Path!)].Instance, write.Path!, resolved, out _);
+                    _ = InstanceChangeWrites.Write(this.instanced[new NodeReference(root, write.Path!)].Instance, write.Path!, resolved, names: null, out _);
                 }
             }
 

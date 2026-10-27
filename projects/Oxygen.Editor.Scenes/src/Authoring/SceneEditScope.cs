@@ -65,6 +65,12 @@ public sealed class SceneEditScope
     /// </summary>
     public IAuthoredSceneFiles? SceneFiles { get; init; }
 
+    /// <summary>
+    /// Gets the model import records of the project's models, which repairing a kept change in its model reads and
+    /// writes, or <see langword="null"/> when no project is open.
+    /// </summary>
+    public IModelImportRecordFiles? ModelRecords { get; init; }
+
     /// <summary>Gets the scene's own asset, which no instance in it may reach, or <see langword="null"/> when unknown.</summary>
     public AssetPath? Asset { get; internal set; }
 

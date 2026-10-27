@@ -589,8 +589,11 @@ function.
    each node it emitted in the model import record, beside the surface
    provenance (NGN14). The import reports, against
    the previous publication's anchors, those that vanished and those that are
-   new (`import.nodes_changed`, info). These are facts for the user's choice
-   (section 6.4); the importer proposes no match.
+   new (`import.nodes_changed`, info), and records them: `new_nodes`, the
+   nodes new against the previous publication, and `vanished_nodes`, every
+   node an earlier publication emitted whose ID this one does not, kept from
+   import to import until its ID is emitted again. These are facts for the
+   user's choice (section 6.4); the importer proposes no match.
 
 `Car.glb` reimported after the artist edited it in Blender:
 
@@ -1221,17 +1224,19 @@ settings) would otherwise be written twice.
   model rewrites the record's `source`.
 - **Schema.** `oxygen.model-import.schema.json` replaces both schemas:
 
-  | Field                | Holds                                                                                                         |
-  | -------------------- | ------------------------------------------------------------------------------------------------------------- |
-  | `schema_version`     | 1                                                                                                             |
-  | `source`             | The primary source file, relative to the record; inside or outside the content root                           |
-  | `virtual_path`       | The model's identity, under which its products are named                                                      |
-  | `settings`           | The model import settings ([model editor](model-editor.md) section 5.3), in the import manifest's vocabulary  |
-  | `source_identity`    | A UUID, from which node IDs (NGN2) and surface IDs are derived                                                |
-  | `surface_provenance` | As today, without a second copy of the identity                                                               |
-  | `node_continuity`    | The continuity entries (NGN2)                                                                                 |
-  | `published_nodes`    | The anchor and node ID of each node the last import emitted (NGN2)                                            |
-  | `source_fingerprint` | Size and SHA-256 of every file the last import read: NGN13's relocation proof and the editor's reimport check |
+  | Field                | Holds                                                                                                                |
+  | -------------------- | -------------------------------------------------------------------------------------------------------------------- |
+  | `schema_version`     | 1                                                                                                                    |
+  | `source`             | The primary source file, relative to the record; inside or outside the content root                                  |
+  | `virtual_path`       | The model's identity, under which its products are named                                                             |
+  | `settings`           | The model import settings ([model editor](model-editor.md) section 5.3), in the import manifest's vocabulary         |
+  | `source_identity`    | A UUID, from which node IDs (NGN2) and surface IDs are derived                                                       |
+  | `surface_provenance` | As today, without a second copy of the identity                                                                      |
+  | `node_continuity`    | The continuity entries (NGN2)                                                                                        |
+  | `published_nodes`    | The anchor and node ID of each node the last import emitted (NGN2)                                                   |
+  | `new_nodes`          | The published nodes whose anchor the publication before the last did not emit: _Reassign_ lists them first           |
+  | `vanished_nodes`     | The nodes earlier imports emitted whose ID the last did not, kept until emitted again: the anchors kept changes lost |
+  | `source_fingerprint` | Size and SHA-256 of every file the last import read: NGN13's relocation proof and the editor's reimport check        |
 
 - **Left out, each owned elsewhere.** The content root: the record's
   grandparent folder. The published generation: publication state, kept by
@@ -1600,8 +1605,8 @@ message.
 | `SetInstanceSource`  | Sets `Source`; refuses a source that instances this scene (`SceneEditCodes.InstanceCycle`), by `InstanceRules.WouldCycle` over the cook dependency graph, the rule the pickers use; with changes, keeps them by name path (`InstanceSwap.KeepByName`, through `InstanceNamePaths`, which records each change's `Names`) or discards them (section 6.5), marking unmatched ones `CarriedFrom` the old source. Keeping them while the new source's structure is not read is refused with `InstanceUnavailable`. Its revert (`InstanceSwap.Replace`) restores the source and the exact changes; it raises `InstanceSourceChanged`, which Live Preview and the Scene Explorer rebuild the instance from                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | `UnpackInstance`     | `One` or `Complete` (section 6.8): owned `SceneNode`s with new `NodeId`s replace the component, first among the root's children; nested instance roots stay one with their changes re-rooted, this scene's winning. `InstanceConversion` builds the edit before it runs: an authored scene source gives its file's stored nodes with the changes written over them, a model the values the mounted content holds (`IInstancedNodeReader`), each with the edit's `UnpackedNode` (path, copy); a source not readable now refuses with `InstanceUnavailable`, and the edit refuses when the instance changed since. References to an unpacked node are retargeted: the starting camera, locks and hidden nodes, node values of scripts and of changes. Changes of nodes the source lacks are dropped with a `NodePathUnresolved` warning. A rotation is written as the change's angles where a change set it, else decomposed from the composed quaternion (YXZ): the same rotation, possibly as other angles. Its revert, `RestoreInstance`, removes the copies and restores the component and the references. _Copy_ of instanced nodes uses the same conversion, unpacking completely the subtree of each copied node |
 | `ApplyToSource`      | Moves changes into an authored scene on the node path (section 6.7). `SourceApplication` builds it before it runs: the authored scenes the path passes through, read from their files, and the chosen file's bytes before and after, a change of a node the scene owns written as its stored value and a deeper one merged into the changes of its instance root, the moved values winning; a selection (`ChangeSelection`) takes the whole instance, one node, one component or one row's values. The edit writes the file through `IAuthoredSceneFiles` and keeps its previous bytes; its revert, `RestoreSource`, writes them back and restores the changes. Either is refused with `SceneEditCodes.SourceChanged` when the file no longer holds the bytes it expects, with `InstanceUnavailable` when the instance's changes changed since it was built, and with `AssetReferenceInvalid` for a model; changes whose node the scene lacks stay, listed in a `NodePathUnresolved` warning                                                                                                                                                                                                                          |
-| `ReassignKeptChange` | Repairs a kept change where it was lost (section 6.4): in the model's import settings, with their previous bytes recorded and a reimport, or by rewriting the change's node path                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| Kept change removal  | A `SetOverrides` that resets the listed changes, labelled _Remove kept changes_                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `ReassignKeptChange` | Repairs a kept change where it was lost (section 6.4), as `KeptChanges.RepairOf` decides. In the model: the record gains the entry that the chosen node's anchor continues the lost one (from `vanished_nodes`), its previous bytes recorded; the content pipeline, the one writer of model import records, writes it when the record still holds the bytes read and reimports the model, as one operation of its writer; the scene's changes of the chosen node under its own ID become kept changes, listed in a `NodePathUnresolved` warning; the revert, `RestoreModelRecord`, writes the previous bytes back and reimports, refused with `SourceChanged` when the record changed since. In the instance: the change moves to the chosen node, its values winning over the node's own; the revert is `RestoreInstanceChanges`. A node the source lacks is refused with `NodePathUnresolved`, a node that already continues another with `OverrideInvalid`                                                                                                                                                                                                                                                         |
+| Kept change removal  | `RemoveKeptChanges` removes the listed kept changes, component values and script parameters alike, labelled _Remove kept changes_; its revert, `RestoreInstanceChanges`, gives the instance its exact changes back. Kept changes are told against the source's complete structure: while it is not read, both kept-change edits are refused with `InstanceUnavailable`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 
 - `SceneEditCodes` (`Oxygen.Editor.Scenes/src/Authoring/SceneEditCodes.cs:11`)
   gains `InstancedStructure`, `InstanceCycle`, `NodePathUnresolved` and
@@ -1867,16 +1872,37 @@ presentation and repair, not removal of a gate.
 
 **How.**
 
-- The caution box of the Scene Instance section (ED5) lists each kept change
-  with its last known name path and property, with _Reassign…_ (section 6.4,
-  `ReassignKeptChange`), _Remove_ and _Remove all_.
-- _Reassign…_ opens the Model Editor's continuity flyout
-  ([model editor](model-editor.md) section 5.3), listing the nodes new in the
-  last import first, from the import settings' published anchors.
+- `KeptChanges` (`Oxygen.Editor.Scenes`) tells an instance's kept changes
+  against its source's complete structure: none while the structure is not
+  read or misses an unreadable scene's nodes. A change records its node's
+  names whenever it is written on a node the structure holds, and a swap that
+  keeps changes by name lists those it keeps in a `NodePathUnresolved`
+  warning.
+- The caution box of the Scene Instance section (ED5), a warning `InfoBar`,
+  lists each kept change with its last known name path and properties, and
+  the source it was carried from, with _Reassign…_ (section 6.4,
+  `ReassignKeptChange`), _Remove_ and _Remove all_ (`RemoveKeptChanges`). It
+  follows the structures as they are read again. The Scene Explorer marks the
+  instance root's glyph with the caution glyph while it has kept changes.
+- A change kept for a surface the geometry no longer declares, on an instanced
+  node that still exists, is listed with that node's surfaces in its Geometry
+  section, as for an owned node: _Remove_, _Remove all_ and _Apply to_ a
+  current surface (`SurfaceEdits.Reset`, `SurfaceEdits.RetargetAsync`, by node
+  reference).
+- _Reassign…_ opens the node picker the Model Editor's continuity flyout
+  ([model editor](model-editor.md) section 5.3) shares: the nodes new in the
+  last import first (`new_nodes`), then every node, with Find; a node that
+  already continues another is disabled with the reason, and choosing a node
+  whose own changes become kept says how many. It says where the repair
+  happens: in the model, for every scene, or in this instance only.
 - The cook's warnings (`scene.descriptor.instance_override_unresolved`,
   `scene.descriptor.surface_invalid`, `script.sidecar.instance_override_unresolved`)
-  reach the Problems pane; selecting one selects the instance root and focuses
-  its caution box through `PropertyFocusRequested`.
+  name their node: `KeptChangeDiagnostics` maps a descriptor location to the
+  instance root and the change's names, or, for a lost surface, the node whose
+  Geometry section lists it, with Go To Property. `KeptChangeProblems` puts them in the Problems pane,
+  each cook of a scene replacing that scene's; _Select node_ there runs the
+  same Go To Property, which selects the instance root and focuses its caution
+  box through `PropertyFocusRequested` (`KeptChangeDiagnostics.PropertyPath`).
 
 **Done when.** A renamed node's change shows in the caution box and as a cook
 warning; _Reassign…_ restores it in every scene.

@@ -102,6 +102,8 @@ public sealed partial class SceneDescriptorGenerator : ISceneDescriptorGenerator
 
         var nodes = new List<NativeSceneNode>();
         var renderables = new List<NativeRenderable>();
+        var nodeSites = new List<DescriptorNodeSite>();
+        var renderableNodes = new List<int>();
         var cameras = new List<NativePerspectiveCamera>();
         var orthographicCameras = new List<NativeOrthographicCamera>();
         var directionalLights = new List<NativeDirectionalLight>();
@@ -224,6 +226,8 @@ public sealed partial class SceneDescriptorGenerator : ISceneDescriptorGenerator
             ScriptInstanceBindingSites = scripts.InstanceSites,
             ScriptBindingSites = scripts.Sites,
             ScriptReferences = scripts.References,
+            Nodes = nodeSites,
+            RenderableNodes = renderableNodes,
         };
 
         void AddNode(SceneNode node, int? parentIndex)
@@ -250,6 +254,14 @@ public sealed partial class SceneDescriptorGenerator : ISceneDescriptorGenerator
                     ToArray(transform.LocalRotation),
                     ToArray(transform.LocalScale)),
                 node.Components.OfType<SceneInstanceComponent>().FirstOrDefault() is { } instance ? CreateInstance(node, instance) : null));
+
+            // In the order CreateInstance writes the changes, which the cooker's diagnostics index.
+            nodeSites.Add(new DescriptorNodeSite(node.Id, node.Metadata.Name)
+            {
+                InstanceChanges = node.Components.OfType<SceneInstanceComponent>().FirstOrDefault() is { } changed
+                    ? [.. changed.Changes.Ordered.Where(static entry => !entry.Value.Components.IsEmpty).Select(static entry => new DescriptorInstanceChange(entry.Key, entry.Value.Names))]
+                    : [],
+            });
 
             foreach (var geometry in node.Components.OfType<GeometryComponent>())
             {
@@ -372,6 +384,7 @@ public sealed partial class SceneDescriptorGenerator : ISceneDescriptorGenerator
             }
 
             renderables.Add(new NativeRenderable(nodeIndex, geometryRef, overrides));
+            renderableNodes.Add(nodeIndex);
         }
 
         // An instance root writes the scene its source instances as, and every change by node path and component kind.

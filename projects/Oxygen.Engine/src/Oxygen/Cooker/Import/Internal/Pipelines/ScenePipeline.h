@@ -88,7 +88,7 @@ public:
     std::vector<std::byte> descriptor_bytes;
     data::AssetReferences references;
     //! For a model scene: the nodes emitted, published with the import.
-    std::vector<ModelPublishedNode> model_nodes;
+    ModelNodePublication model_nodes;
   };
 
   //! Work submission item.

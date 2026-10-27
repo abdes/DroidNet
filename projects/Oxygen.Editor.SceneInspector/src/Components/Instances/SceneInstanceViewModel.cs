@@ -32,8 +32,8 @@ namespace Oxygen.Editor.SceneInspector.Components.Instances;
 /// <summary>
 /// The Scene Instance section of an instance root (scene instances 8.5): its source, which the source picker swaps
 /// for another model or authored scene (6.5), the number of changes the scene makes to the instance, <i>Apply to</i> its
-/// source when it is an authored scene (6.7), <i>Unpack</i> and <i>Unpack completely</i> (6.8), and, for an instanced scene, that its environment and start state apply only when it
-/// runs as a level.
+/// source when it is an authored scene (6.7), <i>Unpack</i> and <i>Unpack completely</i> (6.8), the caution box of its kept
+/// changes (6.4), and, for an instanced scene, that its environment and start state apply only when it runs as a level.
 /// </summary>
 /// <remarks>
 /// A swap of an instance with changes first asks whether to keep them by name or discard them. Keeping them needs the
@@ -86,6 +86,7 @@ public sealed partial class SceneInstanceViewModel : ComponentPropertyEditor, ID
         this.operationResults = services.OperationResults;
         this.statusReducer = services.StatusReducer;
         this.logger = loggerFactory?.CreateLogger<SceneInstanceViewModel>() ?? NullLogger<SceneInstanceViewModel>.Instance;
+        this.structures?.Changed += this.OnStructuresChanged;
     }
 
     /// <summary>Gets the sources the picker offers: the imported models, and the scenes that may be instanced here.</summary>
@@ -143,7 +144,7 @@ public sealed partial class SceneInstanceViewModel : ComponentPropertyEditor, ID
     public override string Header => "Scene Instance";
 
     /// <inheritdoc />
-    public override string Description => "The model or scene this node instances, how many of its values this scene changes, applying them to the scene it instances, and unpacking it into the scene's own nodes.";
+    public override string Description => "The model or scene this node instances, how many of its values this scene changes, applying them to the scene it instances, unpacking it into the scene's own nodes, and the changes whose node the source no longer has.";
 
     /// <summary>Gets completion of the swap or unpack in flight.</summary>
     internal Task Pending => this.pending;
@@ -157,6 +158,7 @@ public sealed partial class SceneInstanceViewModel : ComponentPropertyEditor, ID
         }
 
         this.disposed = true;
+        this.structures?.Changed -= this.OnStructuresChanged;
         LifetimeSubscription.End(ref this.assetSubscription);
         this.Observe(component: null);
     }
@@ -343,6 +345,7 @@ public sealed partial class SceneInstanceViewModel : ComponentPropertyEditor, ID
         this.OnPropertyChanged(nameof(this.CanSwap));
         this.OnPropertyChanged(nameof(this.CanUnpack));
         this.OnPropertyChanged(nameof(this.CanApply));
+        this.OnPropertyChanged(nameof(this.CanEditKeptChanges));
     }
 
     // Asks what to do with the changes; null when the user cancels, or when no one can be asked.
@@ -426,6 +429,7 @@ public sealed partial class SceneInstanceViewModel : ComponentPropertyEditor, ID
             : SourceApplication.RefusalOf(shown!.Source) is { } refusal ? refusal
             : shown!.Changes.IsEmpty ? $"This instance changes nothing of {target}."
             : $"Move this instance's changes into {target}: every instance of it gets them, and they leave this one.";
+        this.RefreshKeptChanges(shown);
         this.NotifyCommandsChanged();
         this.UpdateChoices();
     }

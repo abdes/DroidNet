@@ -12,6 +12,7 @@ using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Edits.Hierarchy;
 using Oxygen.Editor.Scenes.Edits.Instances;
+using Oxygen.Editor.Scenes.Edits.Properties;
 using Oxygen.Editor.Scenes.Interaction;
 using Oxygen.Editor.Scenes.Nodes;
 using Oxygen.Editor.Scenes.Selection;
@@ -30,7 +31,7 @@ namespace Oxygen.Editor.SceneExplorer.Unit.Tests;
 /// rule; reading a structure drops the entries of nodes it no longer holds.
 /// </summary>
 [TestClass]
-public sealed class SceneExplorerInstanceTests
+public sealed partial class SceneExplorerInstanceTests
 {
     private static readonly AssetPath Car = AssetPath.Parse("/Content/Vehicles/Car.glb");
     private static readonly AssetPath Van = AssetPath.Parse("/Content/Vehicles/Van.glb");
@@ -213,8 +214,32 @@ public sealed class SceneExplorerInstanceTests
             .Which.Reference.Should().Be(new NodeReference(harness.Root, chassis));
     }
 
+    [TestMethod]
+    public async Task AnInstanceRootWithKeptChanges_CarriesTheCautionMark_UntilTheyAreRemoved()
+    {
+        using var harness = await InstanceHarness.CreateAsync().ConfigureAwait(false);
+        using var explorer = await harness.OpenAsync().ConfigureAwait(false);
+        var root = (SceneNodeAdapter)(await explorer.FindAdapterByNodeIdAsync(harness.Root).ConfigureAwait(false))!;
+        _ = (await ChangeAsync(harness, harness.Body.Path).ConfigureAwait(false)).Succeeded.Should().BeTrue();
+        _ = root.HasKeptChanges.Should().BeFalse("Car.glb holds Body");
+
+        // Car.glb reimported without Body: the next change of the instance shows Body's change kept.
+        _ = harness.Structures.Publish(Car, (harness.Door.Path, "Door_FL", null));
+        _ = (await ChangeAsync(harness, harness.Door.Path).ConfigureAwait(false)).Succeeded.Should().BeTrue();
+
+        _ = root.HasKeptChanges.Should().BeTrue("Car.glb holds no node with the path of Body's change");
+        _ = root.ShowsNodeGlyph.Should().BeFalse("the caution glyph takes the node glyph's place");
+        _ = (await harness.Authoring.ExecuteAsync(new RemoveKeptChanges(harness.Root, [harness.Body.Path])).ConfigureAwait(false)).Succeeded.Should().BeTrue();
+        _ = root.HasKeptChanges.Should().BeFalse();
+    }
+
+    private static Task<SceneEditResult> ChangeAsync(InstanceHarness harness, NodePath path)
+        => harness.Authoring.ExecuteAsync(new SetOverrides(
+            new Dictionary<NodeId, IReadOnlyList<OverrideWrite>> { [harness.Root] = [new OverrideWrite(SceneSchema.Transform.PositionX.Id, Part: null, LayoutRevision: null, 1f) { Path = path }] },
+            "Change"));
+
     /// <summary>A scene with an instance of <c>Car.glb</c>, whose structure holds <c>Body</c> and its child <c>Door_FL</c>.</summary>
-    private sealed class InstanceHarness : IDisposable
+    private sealed partial class InstanceHarness : IDisposable
     {
         private readonly TestSession session;
         private readonly TestScene testScene;
@@ -227,6 +252,7 @@ public sealed class SceneExplorerInstanceTests
             this.Structures = structures;
             this.Root = root;
             this.Body = new NodeReference(root, NodePath.Of(NodeId.New()));
+
             // As a cooked source holds them: the door's parent is the body in the contents, not in its path.
             this.Door = new NodeReference(root, NodePath.Of(NodeId.New()));
             _ = this.Structures.Publish(Car, (this.Body.Path, "Body", null), (this.Door.Path, "Door_FL", this.Body.Path));
@@ -256,14 +282,14 @@ public sealed class SceneExplorerInstanceTests
         public static async Task<InstanceHarness> CreateAsync()
         {
             var project = TestProject.Create(new MockFileSystem(), @"C:\InstanceHarness");
-            var session = new TestSession(project.Context);
+            var projectSession = new TestSession(project.Context);
             var structures = new FakeSceneStructures();
-            var interaction = new SceneInteractionKit(structures).Create(session);
-            var testScene = TestScenes.Open(new Scene { Name = "Harbor" }, interaction, project: project);
-            var node = SceneNodeTemplates.Instance(testScene.Scene, Car);
-            var result = await testScene.Authoring.ExecuteAsync(new InsertNodes([SceneNodeTemplates.Append(testScene.Scene, testScene.Layout, node)])).ConfigureAwait(false);
+            var interaction = new SceneInteractionKit(structures).Create(projectSession);
+            var opened = TestScenes.Open(new Scene { Name = "Harbor" }, interaction, project: project, structures: structures);
+            var node = SceneNodeTemplates.Instance(opened.Scene, Car);
+            var result = await opened.Authoring.ExecuteAsync(new InsertNodes([SceneNodeTemplates.Append(opened.Scene, opened.Layout, node)])).ConfigureAwait(false);
             _ = result.Succeeded.Should().BeTrue();
-            return new InstanceHarness(session, testScene, interaction, structures, node.Id);
+            return new InstanceHarness(projectSession, opened, interaction, structures, node.Id);
         }
 
         public async Task<SceneExplorerViewModel> OpenAsync()

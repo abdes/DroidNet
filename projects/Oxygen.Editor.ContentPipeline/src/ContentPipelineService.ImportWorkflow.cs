@@ -93,6 +93,40 @@ public sealed partial class ContentPipelineService
             cancellationToken);
     }
 
+    /// <inheritdoc />
+    public Task<ContentCookResult> ReplaceModelRecordAsync(
+        AssetPath sourceUri,
+        ReadOnlyMemory<byte> expected,
+        ReadOnlyMemory<byte> replacement,
+        ProjectContext expectedProject,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(sourceUri);
+        ArgumentNullException.ThrowIfNull(expectedProject);
+        var before = expected.ToArray();
+        var after = replacement.ToArray();
+        return this.cookCoordinator.RunCookAsync(
+            new(CookTargetKind.Asset, sourceUri) { IsReimport = true, OriginContext = expectedProject },
+            async (operation, token) =>
+            {
+                if (!ReferenceEquals(operation.Project, expectedProject))
+                {
+                    return CreateFailedCook(operation, CookTargetKind.Asset, new InvalidOperationException("The project changed before the import settings were written."));
+                }
+
+                try
+                {
+                    await this.ReplaceRecordAsync(operation, sourceUri, before, after, token).ConfigureAwait(false);
+                    return await this.CookAssetCoreAsync(operation, sourceUri, token).ConfigureAwait(false);
+                }
+                catch (Exception failure) when (failure is IOException or InvalidDataException or InvalidOperationException or ArgumentException or UnauthorizedAccessException)
+                {
+                    return CreateFailedCook(operation, CookTargetKind.Asset, failure);
+                }
+            },
+            cancellationToken);
+    }
+
     // The identity a new model takes: its own path when it is already under an authoring mount, else its file in a
     // folder named for it in the chosen destination.
     private static AssetPath PlannedIdentity(ProjectContext project, SceneImportRequest request)
@@ -306,6 +340,23 @@ public sealed partial class ContentPipelineService
     // Model Editor's Save does before its reimport; the cook captures the record as it then is.
     private Task SaveReplacementSettingsAsync(ContentCookOperation operation, SceneImportReplacement replacement, JsonElement? settings, CancellationToken cancellationToken)
         => this.SaveRecordSettingsAsync(operation, replacement.Record.RecordPath, settings, cancellationToken);
+
+    // Replaces a model's record when it holds the expected bytes; the replacement must be a valid record of the model.
+    private async Task ReplaceRecordAsync(ContentCookOperation operation, AssetPath sourceUri, byte[] expected, byte[] replacement, CancellationToken cancellationToken)
+    {
+        var record = ModelRecordLookup.TryFind(operation.Project, sourceUri)
+            ?? throw new InvalidDataException($"{sourceUri.Name} has no import record. Import it first.");
+        _ = ModelImportSettings.Parse(record.RecordPath, replacement);
+        this.cookCoordinator.VerifyWriter(operation);
+        var snapshot = await this.importRecordFiles.ReadAsync(record.RecordPath, cancellationToken).ConfigureAwait(false);
+        if (!snapshot.Content.AsSpan().SequenceEqual(expected))
+        {
+            throw new InvalidDataException($"The import settings of {sourceUri.Name} changed since they were read, so they were left as they are.");
+        }
+
+        this.cookCoordinator.VerifyWriter(operation);
+        _ = await this.importRecordFiles.WriteAsync(record.RecordPath, replacement, snapshot.Version, cancellationToken).ConfigureAwait(false);
+    }
 
     // Writes the chosen settings into a model's record, leaving it untouched when they are the same.
     private async Task SaveRecordSettingsAsync(ContentCookOperation operation, string path, JsonElement? settings, CancellationToken cancellationToken)

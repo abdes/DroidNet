@@ -42,6 +42,25 @@ public sealed partial class SceneNodeAdapter : NodeRowAdapter, ITreeItem<SceneNo
     /// <summary>Gets a value indicating whether the node is an instance root.</summary>
     public bool IsInstanceRoot => this.InstanceSource is not null;
 
+    /// <summary>
+    /// Gets a value indicating whether the instance root has kept changes, changes whose node its source no longer has,
+    /// which its row shows with the caution glyph in place of its own (scene instances 6.2).
+    /// </summary>
+    public bool HasKeptChanges
+    {
+        get;
+        internal set
+        {
+            if (this.SetProperty(ref field, value))
+            {
+                this.OnPropertyChanged(nameof(this.ShowsNodeGlyph));
+            }
+        }
+    }
+
+    /// <summary>Gets a value indicating whether the row shows the node's own glyph: it has no kept changes to show.</summary>
+    public bool ShowsNodeGlyph => !this.HasKeptChanges;
+
     public override string Label
     {
         get => this.AttachedObject.Metadata.Name;

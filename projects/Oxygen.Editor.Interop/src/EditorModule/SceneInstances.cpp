@@ -151,6 +151,24 @@ void SceneInstances::Report(scene::NodeHandle root,
   }
 }
 
+auto SceneInstances::FailureOf(std::vector<std::string> errors,
+  const std::span<const instantiation::SceneInstantiationIssue> issues)
+  -> std::string
+{
+  for (const auto& issue : issues) {
+    if (issue.code == instantiation::issue_codes::kChangeUnresolved) {
+      continue;
+    }
+    errors.push_back(issue.code + ": " + issue.message);
+  }
+  if (errors.empty()) {
+    return {};
+  }
+  return errors.size() == 1U ? errors.front()
+                             : errors.front() + " (and "
+      + std::to_string(errors.size() - 1U) + " more)";
+}
+
 auto SceneInstances::Contains(scene::NodeHandle root) const -> bool
 {
   return requests_.contains(root);

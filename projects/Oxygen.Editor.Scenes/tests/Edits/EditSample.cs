@@ -4,6 +4,7 @@
 
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Changes;
+using Oxygen.Editor.Scenes.Tests.TestSupport;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Core;
 
@@ -46,6 +47,12 @@ public sealed record EditSample(
     /// is not built from serialization records or property edits.
     /// </summary>
     public Func<SceneData, TamperedEdit>? Tamper { get; init; }
+
+    /// <summary>
+    /// Gets what the edit needs of the fixture beyond the sample scene, such as a source's structure that makes one of its
+    /// changes a kept change, or <see langword="null"/> when it needs nothing.
+    /// </summary>
+    public Action<AuthoringFixture>? Arrange { get; init; }
 
     /// <inheritdoc/>
     public override string ToString() => this.Name;

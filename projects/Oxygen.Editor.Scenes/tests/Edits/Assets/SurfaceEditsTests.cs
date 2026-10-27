@@ -4,6 +4,7 @@
 
 using System.Diagnostics.CodeAnalysis;
 using AwesomeAssertions;
+using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.ContentPipeline.Testing;
 using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Scenes.Authoring;
@@ -106,47 +107,6 @@ public sealed class SurfaceEditsTests
     }
 
     [TestMethod]
-    public async Task UnresolvedSurfaces_AreResetAndUndoRestoresThem()
-    {
-        using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
-        using var provider = new FakeSurfaceProvider();
-        provider.Publish(SampleScene.CubeGeometry, SampleScene.CubeLayoutRevision, Guid.NewGuid());
-        var built = await SurfaceEdits.ClearUnresolvedAsync(provider, fixture.Project.Context, fixture.Scene, [SampleScene.Mesh], this.TestContext.CancellationToken).ConfigureAwait(false);
-        var before = fixture.Snapshot();
-
-        var result = await fixture.Authoring.ExecuteAsync(built.Edit!).ConfigureAwait(false);
-
-        SceneAssert.Applied(result);
-        _ = fixture.Node(SampleScene.Mesh).Components.OfType<GeometryComponent>().Single().Overrides.IsEmpty.Should().BeTrue();
-        SceneAssert.Changes(fixture.Changes.Only(), new SceneChange.OverridesChanged(SampleScene.Mesh, [Material]));
-        _ = (await fixture.Authoring.UndoAsync().ConfigureAwait(false)).Outcome.Should().Be(SceneEditOutcome.Applied);
-        _ = fixture.Snapshot().Document.Should().Be(before.Document);
-    }
-
-    [TestMethod]
-    public async Task EveryOverrideResolves_BuildsNoEdit()
-    {
-        using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
-        using var provider = new FakeSurfaceProvider();
-        provider.Publish(SampleScene.CubeGeometry, SampleScene.CubeLayoutRevision, SampleScene.CubeSurface);
-
-        var built = await SurfaceEdits.ClearUnresolvedAsync(provider, fixture.Project.Context, fixture.Scene, [SampleScene.Mesh], this.TestContext.CancellationToken).ConfigureAwait(false);
-
-        _ = built.Should().Be(new SurfaceEdit(Edit: null, Error: null));
-    }
-
-    [TestMethod]
-    public async Task InventoryUnreadable_KeepsTheOverrides()
-    {
-        using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
-        using var provider = new FakeSurfaceProvider();
-
-        var built = await SurfaceEdits.ClearUnresolvedAsync(provider, fixture.Project.Context, fixture.Scene, [SampleScene.Mesh], this.TestContext.CancellationToken).ConfigureAwait(false);
-
-        _ = built.Edit.Should().BeNull("an override stays until an inventory proves it unresolved");
-    }
-
-    [TestMethod]
     public async Task Reset_RemovesEveryOverrideOfTheSurfaceAndUndoRestoresThem()
     {
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
@@ -174,13 +134,41 @@ public sealed class SurfaceEditsTests
         _ = kept.Should().Be(SampleScene.RedMaterial);
         var before = fixture.Snapshot();
 
-        var built = await SurfaceEdits.RetargetAsync(provider, fixture.Project.Context, fixture.Scene, [SampleScene.Mesh], CubeTarget.Part, current, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var built = await SurfaceEdits.RetargetAsync(provider, fixture.Project.Context, fixture.Scene, [NodeReference.To(SampleScene.Mesh)], CubeTarget.Part, current, this.TestContext.CancellationToken).ConfigureAwait(false);
         var result = await fixture.Authoring.ExecuteAsync(built.Edit!).ConfigureAwait(false);
 
         SceneAssert.Applied(result);
         _ = geometry.Overrides.Parts.Keys.Should().Equal(current.Part);
         _ = geometry.Overrides.TryGet(SceneSchema.Geometry.Surface.Material, current.Part, out var moved).Should().BeTrue();
         _ = moved.Should().Be(SampleScene.RedMaterial);
+        _ = (await fixture.Authoring.UndoAsync().ConfigureAwait(false)).Outcome.Should().Be(SceneEditOutcome.Applied);
+        _ = fixture.Snapshot().Document.Should().Be(before.Document);
+    }
+
+    [TestMethod]
+    public async Task Retarget_MovesAnInstancedNodesKeptChangesInItsInstanceRoot()
+    {
+        using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
+        using var provider = new FakeSurfaceProvider();
+        var tower = new StructureScene(Guid.NewGuid(), SampleScene.TowerScene.VirtualPath);
+        fixture.Structures.Publish(new SceneStructure(SampleScene.TowerScene, tower, [new StructureNode(SampleScene.Post, "Post", Parent: null, tower, Instance: null, SampleScene.CubeGeometry, HasCamera: false)], []));
+        var lost = new PartId(SceneSchema.Geometry.Surface.Kind, Guid.NewGuid());
+        var post = new NodeReference(SampleScene.Tower, SampleScene.Post);
+        SceneAssert.Applied(await fixture.Authoring.ExecuteAsync(NodeOverrides.Write(
+            new Dictionary<NodeReference, IReadOnlyList<OverrideWrite>> { [post] = [new OverrideWrite(Material, lost, SampleScene.CubeLayoutRevision, BlueMaterial) { PartOwner = SampleScene.CubeGeometry }] },
+            "Change")).ConfigureAwait(false));
+        var current = new SurfaceTarget(SampleScene.CubeGeometry, Guid.NewGuid(), SampleScene.CubeLayoutRevision);
+        provider.Publish(SampleScene.CubeGeometry, SampleScene.CubeLayoutRevision, current.SurfaceId);
+        var before = fixture.Snapshot();
+
+        var built = await SurfaceEdits.RetargetAsync(provider, fixture.Project.Context, fixture.Scene, [post], lost, current, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var result = await fixture.Authoring.ExecuteAsync(built.Edit!).ConfigureAwait(false);
+
+        SceneAssert.Applied(result);
+        var changes = NodeOverrides.Of(fixture.Scene, post, SceneSchema.Geometry.Kind);
+        _ = changes.Parts.Keys.Should().Equal(current.Part);
+        _ = changes.TryGet(SceneSchema.Geometry.Surface.Material, current.Part, out var moved).Should().BeTrue();
+        _ = moved.Should().Be(BlueMaterial);
         _ = (await fixture.Authoring.UndoAsync().ConfigureAwait(false)).Outcome.Should().Be(SceneEditOutcome.Applied);
         _ = fixture.Snapshot().Document.Should().Be(before.Document);
     }
@@ -193,7 +181,7 @@ public sealed class SurfaceEditsTests
         provider.Publish(SampleScene.CubeGeometry, SampleScene.CubeLayoutRevision, Guid.NewGuid());
         var missing = new SurfaceTarget(SampleScene.CubeGeometry, Guid.NewGuid(), SampleScene.CubeLayoutRevision);
 
-        var built = await SurfaceEdits.RetargetAsync(provider, fixture.Project.Context, fixture.Scene, [SampleScene.Mesh], CubeTarget.Part, missing, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var built = await SurfaceEdits.RetargetAsync(provider, fixture.Project.Context, fixture.Scene, [NodeReference.To(SampleScene.Mesh)], CubeTarget.Part, missing, this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = built.Edit.Should().BeNull();
         _ = built.Error!.Code.Should().Be(SceneEditCodes.SurfaceStale);

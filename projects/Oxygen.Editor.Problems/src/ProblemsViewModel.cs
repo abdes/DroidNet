@@ -7,6 +7,8 @@ using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Routing;
+using Oxygen.Editor.ContentPipeline.Cooking;
+using Oxygen.Editor.Cooking;
 using Oxygen.Editor.LivePreview.Play;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scripting;
@@ -40,17 +42,20 @@ public sealed partial class ProblemsViewModel : ObservableObject, IDisposable
     private readonly IScripts? scripts;
     private readonly IRuntimeProblemSource? runtime;
     private readonly IRuntimeProblemNodes nodes;
+    private readonly ICookRecovery cookIssues;
 
     /// <summary>Initializes a new instance of the <see cref="ProblemsViewModel"/> class.</summary>
     /// <param name="sources">The session's problem sources: the family facts, and the running scene's problems.</param>
     /// <param name="codeEditor">The code editor that opens a problem's location.</param>
     /// <param name="session">The project session the panel lives in, for project-relative file names.</param>
     /// <param name="nodes">What shows the node a runtime problem names.</param>
-    public ProblemsViewModel(IAssetProblemSources sources, ICodeEditorService codeEditor, IProjectSession session, IRuntimeProblemNodes nodes)
+    /// <param name="cookIssues">What shows the node or property a cook's problem names.</param>
+    public ProblemsViewModel(IAssetProblemSources sources, ICodeEditorService codeEditor, IProjectSession session, IRuntimeProblemNodes nodes, ICookRecovery cookIssues)
     {
         ArgumentNullException.ThrowIfNull(sources);
         ArgumentNullException.ThrowIfNull(nodes);
         this.nodes = nodes;
+        this.cookIssues = cookIssues;
         this.sources = sources.Sources;
         this.codeEditor = codeEditor;
         this.session = session;
@@ -97,9 +102,15 @@ public sealed partial class ProblemsViewModel : ObservableObject, IDisposable
     /// <summary>Gets a value indicating whether a problem is selected.</summary>
     public bool HasSelection => this.Selected is not null;
 
-    /// <summary>Gets a value indicating whether the selected problem names a node of the scene that played.</summary>
-    public bool CanSelectNode => this.Selected?.Problem is RuntimeScriptProblem { SlotNode: not null } problem
-        && this.runtime?.NodeOf(problem) is not null;
+    /// <summary>
+    /// Gets a value indicating whether the selected problem names a node: of the scene that played, or of a cooked scene.
+    /// </summary>
+    public bool CanSelectNode => this.Selected?.Problem switch
+    {
+        RuntimeScriptProblem { SlotNode: not null } problem => this.runtime?.NodeOf(problem) is not null,
+        CookProblem problem => problem.Issue.SuggestedAction?.Payload.ContainsKey("NodeId") == true,
+        _ => false,
+    };
 
     /// <summary>Formats the tab title.</summary>
     /// <param name="errors">The number of errors.</param>
@@ -153,7 +164,8 @@ public sealed partial class ProblemsViewModel : ObservableObject, IDisposable
     }
 
     // A runtime problem whose spans name no project file has nothing to open.
-    private static bool HasSourceFile(ProblemEntry entry) => entry.Problem.File is { } file && Path.IsPathFullyQualified(file);
+    // A cook's problem names a scene file, which is not code: Select node leads to it instead.
+    private static bool HasSourceFile(ProblemEntry entry) => entry.Problem is not CookProblem && entry.Problem.File is { } file && Path.IsPathFullyQualified(file);
 
     private bool CanCheckScripts() => !this.IsChecking && this.scripts is not null;
 
@@ -163,7 +175,7 @@ public sealed partial class ProblemsViewModel : ObservableObject, IDisposable
         this.IsChecking = true;
         try
         {
-            await this.scripts!.RefreshAsync(force: true).ConfigureAwait(true);
+            await this.scripts!.RefreshAsync(force: true, this.session.Lifetime).ConfigureAwait(true);
         }
         finally
         {
@@ -176,9 +188,14 @@ public sealed partial class ProblemsViewModel : ObservableObject, IDisposable
     [RelayCommand(CanExecute = nameof(CanSelectNode))]
     private async Task SelectNodeAsync()
     {
-        if (this.Selected?.Problem is RuntimeScriptProblem problem)
+        switch (this.Selected?.Problem)
         {
-            _ = await this.nodes.SelectAsync(problem).ConfigureAwait(true);
+            case RuntimeScriptProblem problem:
+                _ = await this.nodes.SelectAsync(problem).ConfigureAwait(true);
+                break;
+            case CookProblem problem:
+                _ = await this.cookIssues.GoToPropertyAsync(problem.Issue).ConfigureAwait(true);
+                break;
         }
     }
 

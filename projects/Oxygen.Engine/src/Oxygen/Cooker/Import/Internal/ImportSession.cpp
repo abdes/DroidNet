@@ -548,8 +548,7 @@ auto ImportSession::AddSurfaceProvenance(SurfaceGeometryProvenance geometry)
   surface_provenance_.push_back(std::move(geometry));
 }
 
-auto ImportSession::SetPublishedNodes(std::vector<ModelPublishedNode> nodes)
-  -> void
+auto ImportSession::SetPublishedNodes(ModelNodePublication nodes) -> void
 {
   const std::scoped_lock lock(surface_provenance_mutex_);
   published_nodes_ = std::move(nodes);
@@ -973,7 +972,9 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
       }
       if (request_.model_import) {
         const std::scoped_lock lock(surface_provenance_mutex_);
-        report.published_nodes = std::move(published_nodes_);
+        report.published_nodes = std::move(published_nodes_.published);
+        report.new_nodes = std::move(published_nodes_.added);
+        report.vanished_nodes = std::move(published_nodes_.vanished);
       }
     }
     report.packaging = BuildPackagingSummary(report, write_result);

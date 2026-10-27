@@ -34,6 +34,23 @@ public interface IContentPipelineService : Status.IAssetCookStatusReader
     /// <returns>The shared incremental publication result.</returns>
     public Task<ContentCookResult> ReimportSourceAsync(AssetPath sourceUri, ProjectContext expectedProject, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Replaces a model's import record, when it still holds the expected bytes, and reimports the model, as one operation
+    /// of the project's writer. A record that changed since is left as it is, and the operation fails.
+    /// </summary>
+    /// <param name="sourceUri">The model's source.</param>
+    /// <param name="expected">The bytes the record holds now.</param>
+    /// <param name="replacement">The record's new bytes.</param>
+    /// <param name="expectedProject">The project that originated the action.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>The reimport's result.</returns>
+    public Task<ContentCookResult> ReplaceModelRecordAsync(
+        AssetPath sourceUri,
+        ReadOnlyMemory<byte> expected,
+        ReadOnlyMemory<byte> replacement,
+        ProjectContext expectedProject,
+        CancellationToken cancellationToken);
+
     /// <summary>Cooks saved content needed by an active preview, ahead of queued background saves.</summary>
     /// <param name="assetUri">The required authored geometry or material identity.</param>
     /// <param name="expectedProject">The project that owns the preview request.</param>

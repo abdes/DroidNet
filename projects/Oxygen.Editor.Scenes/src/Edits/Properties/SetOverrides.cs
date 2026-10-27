@@ -5,6 +5,7 @@
 using System.Text.Json.Serialization;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Changes;
+using Oxygen.Editor.Scenes.Nodes;
 using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
@@ -118,7 +119,7 @@ public sealed record SetOverrides : ISceneEdit
             foreach (var write in writes)
             {
                 var resolved = write.Value is AssetPath asset ? write with { Value = scope.Resolve(asset) } : write;
-                if (!Write(node, resolved, out var previous))
+                if (!Write(scope, node, resolved, out var previous))
                 {
                     continue;
                 }
@@ -142,11 +143,12 @@ public sealed record SetOverrides : ISceneEdit
     }
 
     // Writes an override of the node's own component, or a change of a node its instance brings in.
-    private static bool Write(SceneNode node, OverrideWrite write, out SourceOverride? previous)
+    private static bool Write(SceneEditScope scope, SceneNode node, OverrideWrite write, out SourceOverride? previous)
     {
         if (write.Path is { } path)
         {
-            return InstanceChangeWrites.Write(InstanceChangeWrites.InstanceOf(node)!, path, write, out previous);
+            var instance = InstanceChangeWrites.InstanceOf(node)!;
+            return InstanceChangeWrites.Write(instance, path, write, KeptChanges.NamesOf(scope.StructureOf?.Invoke(instance.Source), path), out previous);
         }
 
         var component = ComponentOf(node, write.Property)!;

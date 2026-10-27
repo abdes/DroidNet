@@ -102,4 +102,32 @@ public sealed partial class SceneInstanceViewModel
     private static partial void LogCatalogFeedFailed(ILogger logger, Exception exception);
 
     private void LogCatalogFeedFailed(Exception exception) => LogCatalogFeedFailed(this.logger, exception);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Information,
+        Message = "{Edit} of the instance's kept changes of {Paths}.")]
+    private static partial void LogKeptChangeEditRequested(ILogger logger, string edit, IReadOnlyList<string> paths);
+
+    private void LogKeptChangeEditRequested(string edit, IReadOnlyList<string> paths)
+    {
+        if (this.logger.IsEnabled(LogLevel.Information))
+        {
+            LogKeptChangeEditRequested(this.logger, edit, paths);
+        }
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Warning,
+        Message = "{Edit} of the instance's kept changes did not apply: {Code}.")]
+    private static partial void LogKeptChangeEditRefused(ILogger logger, string edit, string code);
+
+    private void LogKeptChangeEditRefused(string edit, string? code)
+    {
+        if (this.logger.IsEnabled(LogLevel.Warning))
+        {
+            LogKeptChangeEditRefused(this.logger, edit, code ?? "no diagnostic");
+        }
+    }
 }

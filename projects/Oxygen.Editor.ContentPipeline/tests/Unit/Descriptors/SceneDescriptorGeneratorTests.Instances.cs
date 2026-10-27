@@ -2,10 +2,10 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Globalization;
 using System.Numerics;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
-using Oxygen.Editor.ContentPipeline.TestSupport;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Managed.Core;
@@ -108,6 +108,48 @@ internal sealed partial class SceneDescriptorGeneratorTests
         var issue = result.Diagnostics.Should().ContainSingle().Which;
         _ = issue.Severity.Should().Be(DiagnosticSeverity.Error);
         _ = issue.Code.Should().Be(ContentPipelineDiagnosticCodes.SceneDescriptorGenerationFailed);
+    }
+
+    /// <summary>The cook's warning about a kept change names the change by its last known names and leads to its instance
+    /// root's kept changes (scene instances 8.10): the descriptor's projection keeps each node and change in order.</summary>
+    /// <returns>The asynchronous test operation.</returns>
+    [TestMethod]
+    public async Task KeptChangeWarningsOfTheCook_NameTheChangeAndItsInstanceRoot()
+    {
+        using var workspace = new DescriptorWorkspace();
+        var scene = CreateScene();
+        var door = NodePath.Of(NodeId.New());
+        var changes = InstancedNodeChanges.None
+            .With(SourceOverrides.ChangesOf(SceneSchema.Transform.Kind).With(SceneSchema.Transform.PositionX, 2.5f))
+            .WithNames("Body/Door_FL");
+        var root = AddInstance(scene, "Car", AssetPath.Parse("/Content/Vehicles/Car.glb"), InstanceChanges.None.With(door, changes));
+        var scope = CreateScope(workspace);
+        var result = await new SceneDescriptorGenerator().GenerateAsync(scene, scope, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var index = result.Nodes.Select(static (node, position) => (node, position)).Single(entry => entry.node.NodeId == root.Id).position;
+        _ = result.Nodes[index].InstanceChanges.Should().Equal([new DescriptorInstanceChange(door, "Body/Door_FL")]);
+        var issue = new DiagnosticRecord
+        {
+            OperationId = Guid.NewGuid(),
+            Domain = FailureDomain.AssetImport,
+            Severity = DiagnosticSeverity.Warning,
+            Code = KeptChangeDiagnostics.InstanceOverrideUnresolved,
+            Message = "The change names no node of the instanced scene",
+            TechnicalMessage = string.Create(CultureInfo.InvariantCulture, $"nodes[{index}].instance.overrides[0].components.transform"),
+            AffectedPath = result.DescriptorPath,
+        };
+
+        var mapped = ContentPipelineService.MapKeptChangeDiagnostic(scope, [result], issue);
+
+        _ = mapped.Code.Should().Be(issue.Code);
+        _ = mapped.Message.Should().StartWith("Kept change of 'Body/Door_FL' in the instance under 'Car': ");
+        _ = mapped.AffectedEntity!.NodeId.Should().Be(root.Id);
+        _ = mapped.SuggestedAction!.Payload["NodeId"].Should().Be(root.Id.ToString());
+        _ = mapped.SuggestedAction.Payload["PropertyPath"].Should().Be(KeptChangeDiagnostics.PropertyPath);
+
+        // A lost surface is listed with the instanced node's surfaces: the warning selects that node.
+        var surface = ContentPipelineService.MapKeptChangeDiagnostic(scope, [result], issue with { Code = KeptChangeDiagnostics.SurfaceInvalid });
+        _ = surface.SuggestedAction!.Payload["NodeReference"].Should().Be(new NodeReference(root.Id, door).ToString());
+        _ = surface.SuggestedAction.Payload["PropertyPath"].Should().BeEmpty();
     }
 
     private static SceneNode AddInstance(Scene scene, string name, AssetPath source, InstanceChanges changes)

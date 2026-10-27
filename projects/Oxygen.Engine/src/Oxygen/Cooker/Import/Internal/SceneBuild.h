@@ -53,8 +53,9 @@ struct SceneBuild final {
   //! In activation order.
   std::vector<data::pak::world::StartingInputContextRecord>
     starting_input_contexts;
-  //! For a model scene: the anchor and ID of each node emitted.
-  std::vector<ModelPublishedNode> model_nodes;
+  //! For a model scene: the anchor and ID of each node emitted, and what
+  //! changed since the previous publication.
+  ModelNodePublication model_nodes;
 };
 
 } // namespace oxygen::content::import

@@ -4,6 +4,9 @@
 
 using AwesomeAssertions;
 using Moq;
+using Oxygen.Editor.ContentPipeline;
+using Oxygen.Editor.ContentPipeline.Cooking;
+using Oxygen.Editor.Cooking;
 using Oxygen.Editor.Input;
 using Oxygen.Editor.Input.Testing;
 using Oxygen.Editor.LivePreview.Play;
@@ -24,7 +27,7 @@ namespace Oxygen.Editor.Problems.Unit.Tests;
 /// file, counted in its title, cleared when fixed.
 /// </summary>
 [TestClass]
-internal sealed class ProblemsViewModelTests : IDisposable
+internal sealed partial class ProblemsViewModelTests : IDisposable
 {
     private const string MovePath = @"C:\Project\Content\Player\move.lua";
     private static readonly AssetPath Move = AssetPath.Parse("/Content/Player/move.oscript");
@@ -130,6 +133,39 @@ internal sealed class ProblemsViewModelTests : IDisposable
         _ = model.OpenSelectedCommand.CanExecute(parameter: null).Should().BeFalse("the problem names no project file");
         await model.SelectNodeCommand.ExecuteAsync(parameter: null).ConfigureAwait(false);
         _ = this.runtime.Selected.Should().ContainSingle().Which.Should().Be(runtimeProblem);
+    }
+
+    [TestMethod]
+    public async Task ACooksKeptChangeWarning_SelectsItsNodeThroughTheCooksGoToProperty_AndOpensNoCode()
+    {
+        var issue = new DiagnosticRecord
+        {
+            OperationId = Guid.NewGuid(),
+            Domain = FailureDomain.AssetImport,
+            Severity = DiagnosticSeverity.Warning,
+            Code = KeptChangeDiagnostics.InstanceOverrideUnresolved,
+            Message = "Kept change of 'Body/Door_FL' in the instance under 'Car': it has no effect until it resolves",
+            AffectedPath = @"C:\Project\Content\Harbor.oscene.json",
+            SuggestedAction = new PrimaryAction
+            {
+                ActionId = "Cook.GoToProperty",
+                Label = "Go to kept changes",
+                Kind = PrimaryActionKind.Custom,
+                Payload = new Dictionary<string, string>(StringComparer.Ordinal) { ["NodeId"] = NodeId.New().ToString(), ["PropertyPath"] = KeptChangeDiagnostics.PropertyPath },
+            },
+        };
+        var cook = new Mock<IAssetProblemSource>();
+        _ = cook.SetupGet(static source => source.Problems).Returns([new CookProblem(issue)]);
+        var recovery = new Mock<ICookRecovery>();
+        _ = recovery.Setup(static target => target.GoToPropertyAsync(It.IsAny<DiagnosticRecord>())).ReturnsAsync(value: true);
+        using var model = TestProblems.CreateModel(this.session, [cook.Object], this.codeEditor.Object, this.runtime, recovery.Object);
+
+        model.Selected = model.Groups[0].Entries[0];
+
+        _ = model.CanSelectNode.Should().BeTrue();
+        _ = model.OpenSelectedCommand.CanExecute(parameter: null).Should().BeFalse("a scene file is no code to open");
+        await model.SelectNodeCommand.ExecuteAsync(parameter: null).ConfigureAwait(false);
+        recovery.Verify(target => target.GoToPropertyAsync(issue), Times.Once);
     }
 
     [TestMethod]

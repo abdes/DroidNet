@@ -20,6 +20,7 @@ using Oxygen.Editor.SceneInspector.SceneSettings;
 using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.Scenes.Edits.Instances;
 using Oxygen.Editor.Scenes.Layout;
+using Oxygen.Editor.Scenes.Nodes;
 using Oxygen.Editor.Scenes.Testing;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
@@ -44,6 +45,7 @@ internal sealed partial class SceneInstanceSectionTests
     private static readonly NodePath CarRig = NodePath.Of(NodeId.New());
     private static readonly NodePath CarLens = NodePath.Of(NodeId.New());
     private static readonly NodePath VanBody = NodePath.Of(NodeId.New());
+    private static readonly NodePath LostDoor = NodePath.Of(NodeId.New());
 
     public TestContext TestContext { get; set; } = null!;
 
@@ -227,6 +229,86 @@ internal sealed partial class SceneInstanceSectionTests
         _ = harness.Scene.Scene.StartingCamera.Should().Be(lens);
     }
 
+    [TestMethod]
+    public void AChangeWhoseNodeTheSourceLacks_IsListedInTheCautionBox()
+    {
+        using var harness = Harness.Open(changed: true);
+        harness.KeepDoorChange();
+        using var section = harness.Section();
+
+        _ = section.HasKeptChanges.Should().BeTrue();
+        _ = section.KeptChangesTitle.Should().Be("1 kept change");
+        var row = section.KeptChangeRows.Should().ContainSingle().Subject;
+        _ = row.Names.Should().Be("Body/Door_FL");
+        _ = row.Detail.Should().Contain(SceneSchema.Transform.PositionX.Id.Qualified());
+    }
+
+    [TestMethod]
+    public void AStructureReadAgain_ShowsTheChangesItLeavesKept()
+    {
+        using var harness = Harness.Open(changed: true);
+        using var section = harness.Section();
+        _ = section.HasKeptChanges.Should().BeFalse();
+
+        harness.Structures.Publish(Structure(Car, (CarRig, "Rig", null, false)));
+        harness.Structures.NotifyChanged();
+
+        _ = section.KeptChangeRows.Select(static row => row.Change.Path).Should().Equal([CarBody], "Body is gone from the reimported Car.glb");
+    }
+
+    [TestMethod]
+    public async Task RemoveAndRemoveAll_RemoveKeptChanges_InOneUndoableEditEach()
+    {
+        using var harness = Harness.Open(changed: true);
+        harness.KeepDoorChange();
+        using var section = harness.Section();
+
+        await section.RemoveKeptChangesAsync([.. section.KeptChangeRows]).ConfigureAwait(false);
+
+        _ = section.HasError.Should().BeFalse(section.ErrorMessage);
+        _ = harness.Instance.Changes.Nodes.Keys.Should().Equal([CarBody], "only the kept change is removed");
+        _ = section.HasKeptChanges.Should().BeFalse();
+        _ = (await harness.Scene.Authoring.UndoAsync().ConfigureAwait(false)).Succeeded.Should().BeTrue();
+        _ = section.KeptChangeRows.Should().ContainSingle();
+    }
+
+    [TestMethod]
+    public async Task Reassign_OfAChangeTheProjectHasNoRecordFor_MovesItInTheInstance()
+    {
+        using var harness = Harness.Open(changed: false);
+        harness.KeepDoorChange();
+        using var section = harness.Section();
+        var row = section.KeptChangeRows.Single();
+
+        var choices = section.ChoicesOf(row);
+
+        _ = choices.Should().NotBeNull();
+        _ = choices!.Repair.Should().Be(KeptChangeRepair.Instance);
+        _ = choices.Targets.Select(static target => target.Path).Should().Equal([CarBody, CarRig, CarLens]);
+
+        await section.ReassignAsync(row, CarBody).ConfigureAwait(false);
+
+        _ = section.HasError.Should().BeFalse(section.ErrorMessage);
+        _ = harness.Instance.Changes.Nodes.Keys.Should().Equal([CarBody]);
+        _ = section.HasKeptChanges.Should().BeFalse();
+    }
+
+    [TestMethod]
+    public void FocusingTheKeptChanges_ExpandsTheSectionAndAsksItsViewToShowThem()
+    {
+        using var harness = Harness.Open(changed: true);
+        harness.KeepDoorChange();
+        using var section = harness.Section();
+        section.IsExpanded = false;
+        var asked = 0;
+        section.KeptChangesFocusRequested += (_, _) => asked++;
+
+        section.FocusKeptChanges();
+
+        _ = section.IsExpanded.Should().BeTrue();
+        _ = asked.Should().Be(1);
+    }
+
     private static AssetEntry Model(AssetPath asset)
         => Entry(asset, AssetKind.Model, AssetState.Source) with { ImportSource = asset };
 
@@ -334,6 +416,12 @@ internal sealed partial class SceneInstanceSectionTests
             section.UpdateValues([this.Root]);
             return section;
         }
+
+        // A change of Body/Door_FL, a node a reimport of Car.glb lost: a kept change.
+        public void KeepDoorChange()
+            => this.Instance.Changes = this.Instance.Changes.With(
+                LostDoor,
+                InstancedNodeChanges.None.With(SourceOverrides.ChangesOf(SceneSchema.Transform.Kind).With(SceneSchema.Transform.PositionX, 4f)).WithNames("Body/Door_FL"));
 
         // Watchtower.oscene, which owns one node, Body, at the origin; the structure the swap to it reads.
         public NodeId WriteWatchtower()

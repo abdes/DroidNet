@@ -581,7 +581,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         var hasNode = items.Any(static item => item is NodeRowAdapter);
         var kind = SceneSelectionContext.Classify(hasScene, hasFolder, hasNode);
 
-        var nodes = items.OfType<NodeRowAdapter>().Select(static row => row.Reference).ToList();
+        var selectedNodes = items.OfType<NodeRowAdapter>().Select(static row => row.Reference).ToList();
         var folderIds = items.OfType<FolderAdapter>().Select(folder => folder.Id).ToList();
 
         // The explicit active row is the primary identity; selection order is only the fallback
@@ -590,7 +590,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
 
         return new SceneSelectionContext(
             kind,
-            nodes,
+            selectedNodes,
             folderIds,
             primary is NodeRowAdapter primaryNode ? primaryNode.Reference : null,
             primary is FolderAdapter primaryFolder ? primaryFolder.Id : null);
@@ -1653,15 +1653,15 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             return;
         }
 
-        IReadOnlyList<NodeReference>? nodes = args.TreeItem switch
+        IReadOnlyList<NodeReference>? framedNodes = args.TreeItem switch
         {
             NodeRowAdapter node => [node.Reference],
             SceneAdapter => [],
             _ => null,
         };
-        if (nodes is not null)
+        if (framedNodes is not null)
         {
-            _ = this.views?.FrameAsync(this.SceneDocumentId, nodes);
+            _ = this.views?.FrameAsync(this.SceneDocumentId, framedNodes);
         }
     }
 
@@ -1954,6 +1954,10 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             or SceneChange.NodeRenamed or SceneChange.LayoutChanged) || this.ChangesInstanceRoots(args.Changes))
         {
             _ = this.RefreshProjectionAsync();
+        }
+        else if (args.Changes.Any(static change => change is SceneChange.OverridesChanged) && this.Scene is { } sceneAdapter)
+        {
+            this.MarkKeptChanges(sceneAdapter);
         }
     }
 
@@ -2375,16 +2379,16 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             return;
         }
 
-        var nodes = this.ResolveWorkspaceTargets(anchor);
-        if (nodes.Count == 0 || this.CurrentAuthoring() is not { } authoring)
+        var targetNodes = this.ResolveWorkspaceTargets(anchor);
+        if (targetNodes.Count == 0 || this.CurrentAuthoring() is not { } authoring)
         {
             return;
         }
 
         // One intent, one undo step: the batch target is decided from the first row so a mixed
         // selection hides or shows uniformly, the way Delete and Reparent batches already do.
-        var hide = !service.IsHidden(nodes[0]);
-        _ = await authoring.ExecuteAsync(new SetEditorHidden(nodes, hide)).ConfigureAwait(true);
+        var hide = !service.IsHidden(targetNodes[0]);
+        _ = await authoring.ExecuteAsync(new SetEditorHidden(targetNodes, hide)).ConfigureAwait(true);
     }
 
     /// <summary>Locks or unlocks the anchor row, or the whole selection, against editing.</summary>

@@ -10,6 +10,7 @@ using Oxygen.Editor.Scenes.Changes;
 using Oxygen.Editor.Scenes.Tests.TestSupport;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
+using Oxygen.Editor.World.Serialization;
 
 namespace Oxygen.Editor.Scenes.Tests.Edits;
 
@@ -31,7 +32,7 @@ public sealed class EditContractTests
     public async Task RoundTrip_RestoresTheSceneExactly(EditSample sample)
     {
         ArgumentNullException.ThrowIfNull(sample);
-        using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
+        using var fixture = await OpenAsync(sample, SampleScene.Build()).ConfigureAwait(false);
 
         var result = await SceneAssert.RoundTripAsync(fixture, sample.Build(SampleScene.Build())).ConfigureAwait(false);
 
@@ -43,7 +44,7 @@ public sealed class EditContractTests
     public async Task Apply_RaisesTheDeclaredChanges(EditSample sample)
     {
         ArgumentNullException.ThrowIfNull(sample);
-        using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
+        using var fixture = await OpenAsync(sample, SampleScene.Build()).ConfigureAwait(false);
         var edit = sample.Build(SampleScene.Build());
 
         var result = await fixture.Authoring.ExecuteAsync(edit).ConfigureAwait(false);
@@ -57,7 +58,7 @@ public sealed class EditContractTests
     public async Task Undo_RaisesTheChangesOfTheRevert(EditSample sample)
     {
         ArgumentNullException.ThrowIfNull(sample);
-        using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
+        using var fixture = await OpenAsync(sample, SampleScene.Build()).ConfigureAwait(false);
         _ = await fixture.Authoring.ExecuteAsync(sample.Build(SampleScene.Build())).ConfigureAwait(false);
         fixture.Changes.Clear();
 
@@ -74,7 +75,7 @@ public sealed class EditContractTests
         ArgumentNullException.ThrowIfNull(sample);
         var edit = sample.Build(SampleScene.Build());
         var missing = edit.Targets.First();
-        using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Builder().Without(missing).Build()).ConfigureAwait(false);
+        using var fixture = await OpenAsync(sample, SampleScene.Builder().Without(missing).Build()).ConfigureAwait(false);
         var before = fixture.Snapshot();
 
         var result = await fixture.Authoring.ExecuteAsync(edit).ConfigureAwait(false);
@@ -88,7 +89,7 @@ public sealed class EditContractTests
     public async Task LockedTarget_IsRefused(EditSample sample)
     {
         ArgumentNullException.ThrowIfNull(sample);
-        using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
+        using var fixture = await OpenAsync(sample, SampleScene.Build()).ConfigureAwait(false);
         var edit = sample.Build(SampleScene.Build());
         var locked = edit.Targets.First();
         fixture.Interaction!.Lock(locked);
@@ -105,7 +106,7 @@ public sealed class EditContractTests
     public async Task TargetUnderLockedAncestor_IsRefused(EditSample sample)
     {
         ArgumentNullException.ThrowIfNull(sample);
-        using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
+        using var fixture = await OpenAsync(sample, SampleScene.Build()).ConfigureAwait(false);
         var edit = sample.Build(SampleScene.Build());
         var target = edit.Targets.First();
         fixture.Interaction!.Lock(EditSamples.ParentOf(target)!.Value);
@@ -122,7 +123,7 @@ public sealed class EditContractTests
     public async Task AfterDispose_IsRetired(EditSample sample)
     {
         ArgumentNullException.ThrowIfNull(sample);
-        using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
+        using var fixture = await OpenAsync(sample, SampleScene.Build()).ConfigureAwait(false);
         var edit = sample.Build(SampleScene.Build());
         fixture.Authoring.Dispose();
         var before = fixture.Snapshot();
@@ -138,7 +139,7 @@ public sealed class EditContractTests
     public async Task Validate_ChangesNothing(EditSample sample)
     {
         ArgumentNullException.ThrowIfNull(sample);
-        using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
+        using var fixture = await OpenAsync(sample, SampleScene.Build()).ConfigureAwait(false);
         var edit = sample.Build(SampleScene.Build());
         var before = fixture.Snapshot();
 
@@ -153,8 +154,8 @@ public sealed class EditContractTests
     public async Task Json_RoundTripsTheEdit(EditSample sample)
     {
         ArgumentNullException.ThrowIfNull(sample);
-        using var expected = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
-        using var actual = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
+        using var expected = await OpenAsync(sample, SampleScene.Build()).ConfigureAwait(false);
+        using var actual = await OpenAsync(sample, SampleScene.Build()).ConfigureAwait(false);
         var edit = sample.Build(SampleScene.Build());
         var json = JsonSerializer.Serialize(edit, SceneEditJson.Options);
         var copy = JsonSerializer.Deserialize<ISceneEdit>(json, SceneEditJson.Options)!;
@@ -173,7 +174,7 @@ public sealed class EditContractTests
     public async Task Json_RoundTripsTheRevert(EditSample sample)
     {
         ArgumentNullException.ThrowIfNull(sample);
-        using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
+        using var fixture = await OpenAsync(sample, SampleScene.Build()).ConfigureAwait(false);
         var before = fixture.Snapshot();
         var applied = await ApplyInProbeAsync(fixture, sample.Build(SampleScene.Build())).ConfigureAwait(false);
         var json = JsonSerializer.Serialize(applied.Revert, SceneEditJson.Options);
@@ -189,8 +190,8 @@ public sealed class EditContractTests
     public async Task ConstructorInput_ChangedAfterwards_DoesNotChangeTheEdit(EditSample sample)
     {
         ArgumentNullException.ThrowIfNull(sample);
-        using var expected = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
-        using var actual = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
+        using var expected = await OpenAsync(sample, SampleScene.Build()).ConfigureAwait(false);
+        using var actual = await OpenAsync(sample, SampleScene.Build()).ConfigureAwait(false);
         _ = await expected.Authoring.ExecuteAsync(sample.Tamper!(SampleScene.Build()).Edit).ConfigureAwait(false);
         var tampered = sample.Tamper!(SampleScene.Build());
         tampered.Mutate();
@@ -206,7 +207,7 @@ public sealed class EditContractTests
     public async Task Undo_AssetRenamedAfterTheEdit_RestoresTheNewUri(EditSample sample)
     {
         ArgumentNullException.ThrowIfNull(sample);
-        using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
+        using var fixture = await OpenAsync(sample, SampleScene.Build()).ConfigureAwait(false);
         var asset = sample.Asset!;
         var moved = EditSamples.MovedTo(asset);
         _ = await fixture.Authoring.ExecuteAsync(sample.Build(SampleScene.Build())).ConfigureAwait(false);
@@ -226,7 +227,7 @@ public sealed class EditContractTests
     public async Task Redo_AssetDeletedAfterTheEdit_RestoresWithAWarning(EditSample sample)
     {
         ArgumentNullException.ThrowIfNull(sample);
-        using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
+        using var fixture = await OpenAsync(sample, SampleScene.Build()).ConfigureAwait(false);
         var asset = sample.Asset!;
         _ = await fixture.Authoring.ExecuteAsync(sample.Build(SampleScene.Build())).ConfigureAwait(false);
         _ = await fixture.Authoring.UndoAsync().ConfigureAwait(false);
@@ -267,6 +268,14 @@ public sealed class EditContractTests
         => typeof(ISceneEdit).Assembly.GetExportedTypes()
             .Where(static type => type.IsClass && !type.IsAbstract && typeof(ISceneEdit).IsAssignableFrom(type))
             .OrderBy(static type => type.Name, StringComparer.Ordinal);
+
+    // Opens the sample scene, or a variant of it, with what the sample's edit needs of it.
+    private static async Task<AuthoringFixture> OpenAsync(EditSample sample, SceneData data)
+    {
+        var fixture = await AuthoringFixture.CreateAsync(data).ConfigureAwait(false);
+        sample.Arrange?.Invoke(fixture);
+        return fixture;
+    }
 
     private static bool IsForbidden(Type type)
     {

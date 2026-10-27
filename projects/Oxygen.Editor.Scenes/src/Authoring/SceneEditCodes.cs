@@ -87,7 +87,8 @@ public static class SceneEditCodes
 
     /// <summary>
     /// A change of an instance names a node path its source does not hold, a kept change: Unpack drops it and lists it in
-    /// a warning naming the instance root.
+    /// a warning naming the instance root, as a swap that keeps changes by name lists those it keeps and <i>Reassign</i>
+    /// in the model lists the changes it makes kept; <i>Reassign</i> refuses a node the source does not hold.
     /// </summary>
     public const string NodePathUnresolved = DiagnosticCodes.ScenePrefix + "Instance.NodePathUnresolved";
 

@@ -135,6 +135,10 @@ struct ImportReport final {
   //! it read once they were verified unchanged. Committed with the
   //! provenance.
   std::vector<ModelPublishedNode> published_nodes;
+  //! The published nodes the previous publication did not emit, and the nodes
+  //! earlier publications emitted whose ID this import did not.
+  std::vector<ModelPublishedNode> new_nodes;
+  std::vector<ModelPublishedNode> vanished_nodes;
   std::optional<ModelSourceFingerprint> source_fingerprint;
   //! Set only after model import record publication; staging reports leave
   //! it unset.

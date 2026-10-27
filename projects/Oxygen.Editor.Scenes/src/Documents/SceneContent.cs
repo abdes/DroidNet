@@ -35,10 +35,11 @@ public sealed partial class SceneContent : IDocumentContent, IDisposable
     /// <param name="asset">The scene's asset.</param>
     /// <param name="structureOf">What an instance of a source contains, as last read, if the editor reads it.</param>
     /// <param name="sceneFiles">The files of the project's authored scenes, if a project is open.</param>
-    internal SceneContent(Scene scene, IList<ExplorerEntryData> layout, DocumentDecodeContext document, ISceneNodeInteraction? interaction, IAssetRedirects? redirects, IAuthoredReferences? references = null, AssetPath? asset = null, Func<AssetPath, SceneStructure?>? structureOf = null, IAuthoredSceneFiles? sceneFiles = null)
+    /// <param name="modelRecords">The model import records of the project's models, if a project is open.</param>
+    internal SceneContent(Scene scene, IList<ExplorerEntryData> layout, DocumentDecodeContext document, ISceneNodeInteraction? interaction, IAssetRedirects? redirects, IAuthoredReferences? references = null, AssetPath? asset = null, Func<AssetPath, SceneStructure?>? structureOf = null, IAuthoredSceneFiles? sceneFiles = null, IModelImportRecordFiles? modelRecords = null)
     {
         this.Scene = scene;
-        this.Authoring = new SceneAuthoring(document, scene, layout, interaction, redirects, references, structureOf, sceneFiles) { Asset = asset };
+        this.Authoring = new SceneAuthoring(document, scene, layout, interaction, redirects, references, structureOf, sceneFiles, modelRecords) { Asset = asset };
     }
 
     /// <summary>Gets the scene.</summary>

@@ -241,6 +241,27 @@ public sealed class CookRecoveryTests
         this.placement.Verify(service => service.ShowPanelsAsync(It.Is<IReadOnlyList<string>>(panels => panels.SequenceEqual(new[] { "props", "cook" })), It.IsAny<WindowPlacement>()), Times.Once);
     }
 
+    [TestMethod]
+    public async Task GoToKeptChangesSelectsTheInstanceRootAndFocusesItsKeptChangesAsync()
+    {
+        using var scenes = new TestSceneDocuments(TestProject.Create(new MockFileSystem(), ProjectFolder));
+        _ = this.ActivateProject(scenes);
+        var id = SceneId.New();
+        var document = await OpenSceneAsync(scenes, id).ConfigureAwait(false);
+        var node = SceneContent.Of(document).Scene.RootNodes.Single();
+        var focused = new List<ScenePropertyFocusEventArgs>();
+        this.selection.PropertyFocusRequested += (_, args) => focused.Add(args);
+        this.ArrangeScene(scenes, document);
+        var issue = Issue(id, scenes.FileOf(SceneName).Path.FullPath, KeptChangeDiagnostics.PropertyPath, node.Id);
+
+        var result = await this.CreateRecovery().GoToPropertyAsync(issue).ConfigureAwait(false);
+
+        _ = result.Should().BeTrue();
+        _ = this.selection.GetContext(document.Id).OwnedNodeIds.Should().ContainSingle().Which.Should().Be(node.Id);
+        _ = focused.Should().ContainSingle().Which.PropertyPath.Should().Be(KeptChangeDiagnostics.PropertyPath);
+        this.placement.Verify(service => service.ShowPanelsAsync(It.Is<IReadOnlyList<string>>(panels => panels.SequenceEqual(new[] { "props" })), It.IsAny<WindowPlacement>()), Times.Once);
+    }
+
     private static async Task<Document> OpenSceneAsync(TestSceneDocuments scenes, SceneId id)
     {
         var built = new Scene { Name = SceneName };

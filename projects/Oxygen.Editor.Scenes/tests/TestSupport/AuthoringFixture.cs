@@ -42,6 +42,7 @@ public sealed partial class AuthoringFixture : IDisposable
         this.Project = project;
         this.ports = ports;
         this.Structures = ports.Structures;
+        this.ModelRecords = ports.ModelRecords;
         this.Document = document;
         this.Content = content;
         this.historyRoot = historyRoot;
@@ -58,6 +59,9 @@ public sealed partial class AuthoringFixture : IDisposable
     /// edits' part owners and the interaction's locks alike.
     /// </summary>
     public FakeSceneStructures Structures { get; }
+
+    /// <summary>Gets the import records of the project's models, which repairing a kept change in its model writes.</summary>
+    public FakeModelRecords ModelRecords { get; }
 
     /// <summary>Gets the project the scene belongs to.</summary>
     public TestProject Project { get; }
@@ -218,7 +222,7 @@ public sealed partial class AuthoringFixture : IDisposable
 
     private static async Task<SceneContent> DecodeAsync(TestProject project, SceneData data, DocumentId document, FakeNodeInteraction? interaction, FakeAssetRedirects redirects, FakeAuthoredReferences references, Ports ports, HistoryKeeper history)
     {
-        var kind = new SceneDocumentKind(interaction, redirects, references, ports.Session, ports.Structures);
+        var kind = new SceneDocumentKind(interaction, redirects, references, ports.Session, ports.Structures, ports.ModelRecords);
         var file = new DocumentFile(
             project.PathOf($"/Content/{data.Name}{AssetFileTypes.SceneDescriptor}"),
             AssetPath.Parse($"/Content/{data.Name}{AssetFileTypes.Scene}"));
@@ -238,6 +242,8 @@ public sealed partial class AuthoringFixture : IDisposable
         public TestSession Session { get; }
 
         public FakeSceneStructures Structures { get; } = new();
+
+        public FakeModelRecords ModelRecords { get; } = new();
 
         public static Ports For(TestProject project, FakeNodeInteraction? interaction)
         {

@@ -302,6 +302,13 @@ NOLINT_TEST_F(ModelImportRecordTest, PublishCommitsWhatTheImportEstablished)
       .node_id = NodeId::FromStableIdentity("Root"),
     },
   };
+  report.new_nodes = report.published_nodes;
+  report.vanished_nodes = {
+    ModelPublishedNode {
+      .anchor = "Body/Door_FL",
+      .node_id = NodeId::FromStableIdentity("Body/Door_FL"),
+    },
+  };
   report.source_fingerprint = Fingerprint(source_);
   const auto settings_before = ModelImportRecord::Read(record_).settings_json;
 
@@ -310,6 +317,8 @@ NOLINT_TEST_F(ModelImportRecordTest, PublishCommitsWhatTheImportEstablished)
 
   const auto content = ModelImportRecord::Read(record_);
   EXPECT_EQ(content.published_nodes, report.published_nodes);
+  EXPECT_EQ(content.new_nodes, report.new_nodes);
+  EXPECT_EQ(content.vanished_nodes, report.vanished_nodes);
   EXPECT_EQ(content.source_fingerprint, report.source_fingerprint);
   EXPECT_EQ(content.settings_json, settings_before);
   EXPECT_EQ(content.source_identity, identity_);

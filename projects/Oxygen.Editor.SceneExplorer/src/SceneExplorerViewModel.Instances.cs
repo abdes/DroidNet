@@ -5,6 +5,7 @@
 using DroidNet.Controls;
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.Scenes.Changes;
+using Oxygen.Editor.Scenes.Nodes;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Managed.Core;
@@ -66,6 +67,19 @@ public partial class SceneExplorerViewModel
             {
                 AddInstancedRows(root, root.AttachedObject.Id, structure.Nodes.ToLookup(static node => node.Parent), parent: null);
             }
+        }
+
+        this.MarkKeptChanges(sceneAdapter);
+    }
+
+    /// <summary>Marks each instance root's row that has kept changes, by the structures already read.</summary>
+    /// <param name="sceneAdapter">The scene's rows.</param>
+    private void MarkKeptChanges(SceneAdapter sceneAdapter)
+    {
+        foreach (var root in RealizedNodeRows(sceneAdapter).Where(static row => row.IsInstanceRoot))
+        {
+            root.HasKeptChanges = root.AttachedObject.Components.OfType<SceneInstanceComponent>().FirstOrDefault() is { } instance
+                && !KeptChanges.Of(instance, this.StructureOf(instance.Source)).IsEmpty;
         }
     }
 

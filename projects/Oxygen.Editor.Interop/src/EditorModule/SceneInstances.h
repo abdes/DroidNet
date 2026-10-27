@@ -9,6 +9,7 @@
 
 #include <array>
 #include <cstdint>
+#include <span>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -21,6 +22,7 @@
 #include <Oxygen/Data/Schema/Generated.SceneComponents.h>
 #include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Scene/Types/NodeHandle.h>
+#include <Oxygen/SceneInstantiation/SceneInstantiation.h>
 
 #include <EditorModule/SceneAssetRequests.h>
 #include <api_export.h>
@@ -133,6 +135,14 @@ public:
 
   //! True when the request of `root` is kept.
   OXGN_EI_NDAPI auto Contains(scene::NodeHandle root) const -> bool;
+
+  //! The failure an instance operation reports: the errors converting its
+  //! changes, then the issues of instantiation; empty when there are none. A
+  //! change whose node the source no longer has is a kept change, inert by
+  //! design and no failure (scene instances SI-7).
+  OXGN_EI_NDAPI static auto FailureOf(std::vector<std::string> errors,
+    std::span<const instantiation::SceneInstantiationIssue> issues)
+    -> std::string;
 
 private:
   struct Request {

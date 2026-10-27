@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="Oxygen.Editor.SceneInspector.Components.Instances.KeptChangeTargetPicker"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:Oxygen.Editor.SceneInspector.Components.Instances"
+    Width="340">
+    <StackPanel Spacing="8">
+        <TextBlock
+            Style="{StaticResource BodyStrongTextBlockStyle}"
+            Text="{x:Bind Title}"
+            TextWrapping="Wrap" />
+        <TextBlock
+            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+            Style="{StaticResource CaptionTextBlockStyle}"
+            Text="{x:Bind Scope}"
+            TextWrapping="Wrap" />
+        <TextBox
+            x:Name="FindBox"
+            AutomationProperties.Name="Find a node"
+            PlaceholderText="Find a node"
+            TextChanged="OnFindChanged" />
+        <ListView
+            x:Name="TargetList"
+            MaxHeight="280"
+            AutomationProperties.Name="Nodes"
+            ItemsSource="{x:Bind Shown}"
+            SelectionChanged="OnSelectionChanged"
+            SelectionMode="Single">
+            <ListView.ItemTemplate>
+                <DataTemplate x:DataType="local:KeptChangeTargetItem">
+                    <Grid
+                        Padding="0,4"
+                        ColumnSpacing="8"
+                        Opacity="{x:Bind Opacity}"
+                        ToolTipService.ToolTip="{x:Bind ToolTip}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock
+                            VerticalAlignment="Center"
+                            Text="{x:Bind Names}"
+                            TextTrimming="CharacterEllipsis" />
+                        <TextBlock
+                            Grid.Column="1"
+                            VerticalAlignment="Center"
+                            Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                            Style="{StaticResource CaptionTextBlockStyle}"
+                            Text="{x:Bind Badge}" />
+                    </Grid>
+                </DataTemplate>
+            </ListView.ItemTemplate>
+        </ListView>
+        <TextBlock
+            x:Name="CautionText"
+            Foreground="{ThemeResource SystemFillColorCautionBrush}"
+            Style="{StaticResource CaptionTextBlockStyle}"
+            TextWrapping="Wrap"
+            Visibility="Collapsed" />
+        <Button
+            x:Name="ReassignButton"
+            HorizontalAlignment="Right"
+            AutomationProperties.Name="Reassign"
+            Click="OnReassignClick"
+            Content="Reassign"
+            IsEnabled="False"
+            Style="{StaticResource AccentButtonStyle}" />
+    </StackPanel>
+</UserControl>

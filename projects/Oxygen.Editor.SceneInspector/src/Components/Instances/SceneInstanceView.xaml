@@ -4,6 +4,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:editorcontrols="using:Oxygen.Editor.Controls"
+    xmlns:local="using:Oxygen.Editor.SceneInspector.Components.Instances"
     xmlns:pickers="using:Oxygen.Editor.Pickers"
     xmlns:ui="using:CommunityToolkit.WinUI">
     <UserControl.Resources>
@@ -56,6 +57,60 @@
                     </Grid>
                 </StackPanel>
             </editorcontrols:PropertyCard>
+
+            <!--  Kept changes: changes whose node the source no longer has, each reassigned or removed (scene instances 6.4).  -->
+            <InfoBar
+                x:Name="KeptChangesBox"
+                Title="{x:Bind ViewModel.KeptChangesTitle, Mode=OneWay}"
+                IsClosable="False"
+                IsOpen="{x:Bind ViewModel.HasKeptChanges, Mode=OneWay}"
+                Message="{x:Bind ViewModel.KeptChangesMessage, Mode=OneWay}"
+                Severity="Warning">
+                <StackPanel Margin="0,0,0,8" Spacing="4">
+                    <ItemsControl ItemsSource="{x:Bind ViewModel.KeptChangeRows, Mode=OneWay}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="local:KeptChangeRow">
+                                <Grid Padding="0,2" ColumnSpacing="4">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel VerticalAlignment="Center">
+                                        <TextBlock Text="{x:Bind Names}" TextTrimming="CharacterEllipsis" />
+                                        <TextBlock
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                            Style="{StaticResource CaptionTextBlockStyle}"
+                                            Text="{x:Bind Detail}"
+                                            TextWrapping="Wrap" />
+                                    </StackPanel>
+                                    <Button
+                                        Grid.Column="1"
+                                        VerticalAlignment="Center"
+                                        AutomationProperties.Name="Reassign"
+                                        Click="OnReassignClick"
+                                        Content="Reassign…"
+                                        ToolTipService.ToolTip="Point this change at a node the source has" />
+                                    <Button
+                                        Grid.Column="2"
+                                        VerticalAlignment="Center"
+                                        AutomationProperties.Name="Remove"
+                                        Click="OnRemoveKeptClick"
+                                        Content="Remove"
+                                        ToolTipService.ToolTip="Remove this change" />
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <Button
+                        HorizontalAlignment="Right"
+                        AutomationProperties.Name="Remove all"
+                        Click="OnRemoveAllKeptClick"
+                        Content="Remove all"
+                        IsEnabled="{x:Bind ViewModel.CanEditKeptChanges, Mode=OneWay}"
+                        ToolTipService.ToolTip="Remove every kept change of this instance" />
+                </StackPanel>
+            </InfoBar>
 
             <!--  Unpack: the instance's nodes become the scene's own.  -->
             <editorcontrols:PropertyCard PropertyName="Unpack">

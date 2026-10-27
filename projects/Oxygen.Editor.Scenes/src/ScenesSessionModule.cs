@@ -49,7 +49,9 @@ public sealed class ScenesSessionModule : IScopeModule<ISessionLayer>
         // Scene commands obey the same hide / lock state through the Scenes interface.
         scope.RegisterMapping<ISceneNodeInteraction, SceneNodeInteraction>();
 
-        // Scene files open as documents of the session, with its hide / lock state and its asset moves.
+        // Scene files open as documents of the session, with its hide / lock state, its asset moves and the import records
+        // of its models, which repairing a kept change in its model writes and reimports.
+        scope.Register<IModelImportRecordFiles, ProjectModelRecords>(Reuse.Singleton);
         scope.Register<SceneDocumentKind>(Reuse.Singleton);
         scope.Register<ISceneSelectionService, SceneSelectionService>(Reuse.Singleton);
         scope.Register<ISceneNodeClipboard, SceneNodeClipboard>(Reuse.Singleton);

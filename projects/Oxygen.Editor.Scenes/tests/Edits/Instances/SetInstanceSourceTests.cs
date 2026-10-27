@@ -62,7 +62,7 @@ public sealed class SetInstanceSourceTests
         using var fixture = await CreateAsync().ConfigureAwait(false);
         await ChangeAsync(fixture, CarWheel, 4f).ConfigureAwait(false);
 
-        SceneAssert.Applied(await fixture.Authoring.ExecuteAsync(new SetInstanceSource(SampleScene.Car, Van, InstanceSwap.KeepByName)).ConfigureAwait(false));
+        SceneAssert.Warned(await fixture.Authoring.ExecuteAsync(new SetInstanceSource(SampleScene.Car, Van, InstanceSwap.KeepByName)).ConfigureAwait(false), SceneEditCodes.NodePathUnresolved, SampleScene.Car);
 
         var kept = InstanceOf(fixture).Changes.Of(CarWheel);
         _ = ValueOf(InstanceOf(fixture), CarWheel).Should().Be(4f, "the change stays on its path");
@@ -75,7 +75,7 @@ public sealed class SetInstanceSourceTests
     {
         using var fixture = await CreateAsync().ConfigureAwait(false);
         await ChangeAsync(fixture, CarWheel, 4f).ConfigureAwait(false);
-        SceneAssert.Applied(await fixture.Authoring.ExecuteAsync(new SetInstanceSource(SampleScene.Car, Van, InstanceSwap.KeepByName)).ConfigureAwait(false));
+        SceneAssert.Warned(await fixture.Authoring.ExecuteAsync(new SetInstanceSource(SampleScene.Car, Van, InstanceSwap.KeepByName)).ConfigureAwait(false), SceneEditCodes.NodePathUnresolved, SampleScene.Car);
         var instance = InstanceOf(fixture);
 
         var json = JsonSerializer.Serialize((SceneInstanceComponentData)instance.Dehydrate(), SceneJsonContext.Default.SceneInstanceComponentData);

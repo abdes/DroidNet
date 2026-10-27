@@ -62,11 +62,21 @@ public static class SurfaceEdits
     /// <param name="label">The history label.</param>
     /// <returns>A <see cref="SetOverrides"/> that resets each property of the surface part.</returns>
     public static SetOverrides Reset(IReadOnlyCollection<NodeReference> nodes, PartId part, string label)
+        => Reset(nodes, [part], label);
+
+    /// <summary>Builds the edit that resets every override of several surfaces on nodes, so the geometry's values apply.</summary>
+    /// <remarks>As <see cref="Reset(IReadOnlyCollection{NodeReference}, PartId, string)"/>, for each surface.</remarks>
+    /// <param name="nodes">The nodes; a node an instance brings in loses its instance root's changes of the surfaces.</param>
+    /// <param name="parts">The surfaces.</param>
+    /// <param name="label">The history label.</param>
+    /// <returns>A <see cref="SetOverrides"/> that resets each property of each surface part.</returns>
+    public static SetOverrides Reset(IReadOnlyCollection<NodeReference> nodes, IReadOnlyCollection<PartId> parts, string label)
     {
         ArgumentNullException.ThrowIfNull(nodes);
-        OverrideWrite[] writes = [.. SceneSchema.Overridable.Keys
+        ArgumentNullException.ThrowIfNull(parts);
+        OverrideWrite[] writes = [.. parts.Distinct().SelectMany(static part => SceneSchema.Overridable.Keys
             .Where(property => string.Equals(property.PartKind, part.Kind, StringComparison.Ordinal))
-            .Select(property => new OverrideWrite(property, part, LayoutRevision: null, Value: null))];
+            .Select(property => new OverrideWrite(property, part, LayoutRevision: null, Value: null)))];
         return NodeOverrides.Write(nodes.Distinct().ToDictionary(static node => node, _ => (IReadOnlyList<OverrideWrite>)writes), label);
     }
 
@@ -80,7 +90,10 @@ public static class SurfaceEdits
     /// <param name="inventories">Reads surface inventories.</param>
     /// <param name="project">The scene's project.</param>
     /// <param name="scene">The scene.</param>
-    /// <param name="nodes">The nodes; missing ids and nodes without overrides of <paramref name="kept"/> are skipped.</param>
+    /// <param name="nodes">
+    /// The nodes; a node an instance brings in moves its instance root's changes. Nodes without overrides of
+    /// <paramref name="kept"/> are skipped.
+    /// </param>
     /// <param name="kept">The surface the overrides were made for.</param>
     /// <param name="target">The surface of the current inventory that takes them.</param>
     /// <param name="cancellationToken">Cancels the inventory read.</param>
@@ -89,7 +102,7 @@ public static class SurfaceEdits
         IGeometrySurfaceProvider inventories,
         ProjectContext project,
         Scene scene,
-        IReadOnlyCollection<NodeId> nodes,
+        IReadOnlyCollection<NodeReference> nodes,
         PartId kept,
         SurfaceTarget target,
         CancellationToken cancellationToken = default)
@@ -103,84 +116,20 @@ public static class SurfaceEdits
             return new SurfaceEdit(Edit: null, error);
         }
 
-        var writes = new Dictionary<NodeId, IReadOnlyList<OverrideWrite>>();
-        foreach (var id in nodes.Distinct())
+        var writes = new Dictionary<NodeReference, IReadOnlyList<OverrideWrite>>();
+        foreach (var node in nodes.Distinct())
         {
-            var values = scene.AllNodes.FirstOrDefault(node => node.Id == id)?.Components.OfType<GeometryComponent>().FirstOrDefault()?.Overrides.All
-                .Where(entry => entry.Part == kept)
-                .ToList() ?? [];
+            var values = NodeOverrides.Of(scene, node, SceneSchema.Geometry.Kind).All.Where(entry => entry.Part == kept).ToList();
             if (values.Count > 0 && kept != target.Part)
             {
-                writes[id] = [
+                writes[node] = [
                     .. values.Select(static entry => new OverrideWrite(entry.Property, entry.Part, LayoutRevision: null, Value: null)),
                     .. values.Select(entry => new OverrideWrite(entry.Property, target.Part, target.LayoutRevision, entry.Value) { PartOwner = target.Geometry }),
                 ];
             }
         }
 
-        return new SurfaceEdit(writes.Count == 0 ? null : new SetOverrides(writes, "Apply Kept Surface Changes"), Error: null);
-    }
-
-    /// <summary>Builds the edit that resets the overrides of surfaces the nodes' current geometries do not have.</summary>
-    /// <remarks>
-    /// An override of a surface the current inventory lacks is unresolved, such as one kept from a geometry the node used
-    /// before. When an inventory cannot be read, the overrides of its nodes stay.
-    /// </remarks>
-    /// <param name="inventories">Reads surface inventories.</param>
-    /// <param name="project">The scene's project.</param>
-    /// <param name="scene">The scene.</param>
-    /// <param name="nodes">The nodes; missing ids and nodes without geometry are skipped.</param>
-    /// <param name="cancellationToken">Cancels the inventory reads.</param>
-    /// <returns>A <see cref="SetOverrides"/>, or no edit when every override resolves.</returns>
-    public static async Task<SurfaceEdit> ClearUnresolvedAsync(
-        IGeometrySurfaceProvider inventories,
-        ProjectContext project,
-        Scene scene,
-        IReadOnlyCollection<NodeId> nodes,
-        CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(inventories);
-        ArgumentNullException.ThrowIfNull(scene);
-        ArgumentNullException.ThrowIfNull(nodes);
-        var geometries = nodes.Distinct()
-            .Select(id => (Id: id, Geometry: scene.AllNodes.FirstOrDefault(node => node.Id == id)?.Components.OfType<GeometryComponent>().FirstOrDefault()))
-            .Where(static pair => pair.Geometry is not null)
-            .Select(static pair => (pair.Id, Component: pair.Geometry!))
-            .ToList();
-        var read = new Dictionary<AssetPath, GeometrySurfaceMetadata>();
-        foreach (var uri in geometries.Select(static pair => pair.Component.Geometry).Distinct())
-        {
-            try
-            {
-                if (await inventories.ReadAsync(project, uri, cancellationToken).ConfigureAwait(true) is { } inventory)
-                {
-                    read[uri] = inventory;
-                }
-            }
-            catch (Exception error) when (IsReadFailure(error))
-            {
-                // Overrides stay until an inventory proves them unresolved.
-            }
-        }
-
-        var resets = new Dictionary<NodeId, IReadOnlyList<OverrideWrite>>();
-        foreach (var (id, component) in geometries)
-        {
-            if (read.GetValueOrDefault(component.Geometry) is not { } inventory)
-            {
-                continue;
-            }
-
-            OverrideWrite[] writes = [.. component.Overrides.All
-                .Where(entry => entry.Part is { Kind: SceneSchema.Geometry.Surface.Kind } part && inventory.Surfaces.All(surface => surface.SurfaceId != part.Id))
-                .Select(static entry => new OverrideWrite(entry.Property, entry.Part, LayoutRevision: null, Value: null))];
-            if (writes.Length > 0)
-            {
-                resets[id] = writes;
-            }
-        }
-
-        return new SurfaceEdit(resets.Count == 0 ? null : new SetOverrides(resets, "Clear Unresolved Surface Overrides"), Error: null);
+        return new SurfaceEdit(writes.Count == 0 ? null : NodeOverrides.Write(writes, "Apply Kept Surface Changes"), Error: null);
     }
 
     // Why the surface cannot be edited now: its inventory is unreadable, or no longer lists the surface as it was chosen.

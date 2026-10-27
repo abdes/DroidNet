@@ -14,6 +14,7 @@ using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scripting;
+using Oxygen.Managed.Assets.Diagnostics;
 using Oxygen.Managed.Core.Compatibility;
 
 namespace Oxygen.Editor.ContentPipeline;
@@ -29,8 +30,9 @@ namespace Oxygen.Editor.ContentPipeline;
 /// </remarks>
 public sealed class ContentPipelineSessionModule : IScopeModule<ISessionLayer>
 {
-    // The cook listens to the catalog's changes from the moment the session opens.
-    private static readonly Type[] Activated = [typeof(IAutomaticCookService)];
+    // The cook listens to the catalog's changes from the moment the session opens, and the kept-change problems follow
+    // every cook of the session, whether or not the Problems pane is shown yet.
+    private static readonly Type[] Activated = [typeof(IAutomaticCookService), typeof(KeptChangeProblems)];
 
     /// <inheritdoc />
     public IReadOnlyCollection<Type> Shadows => [];
@@ -76,6 +78,8 @@ public sealed class ContentPipelineSessionModule : IScopeModule<ISessionLayer>
         scope.Register<ContentCookCoordinator>(Reuse.Singleton);
         scope.RegisterMapping<IContentCookCoordinator, ContentCookCoordinator>();
         scope.RegisterMapping<ICookRunService, ContentCookCoordinator>();
+        scope.Register<KeptChangeProblems>(Reuse.Singleton);
+        scope.RegisterMapping<IAssetProblemSource, KeptChangeProblems>();
         scope.RegisterDelegate<IContentPipelineService>(
             resolver => new ContentPipelineService(
             resolver.Resolve<IProjectSession>(),

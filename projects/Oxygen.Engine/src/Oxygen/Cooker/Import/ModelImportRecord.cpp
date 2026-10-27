@@ -297,6 +297,25 @@ namespace {
     return nodes;
   }
 
+  auto ReadNodes(const json& document, const char* key)
+    -> std::vector<ModelPublishedNode>
+  {
+    auto nodes = std::vector<ModelPublishedNode> {};
+    for (const auto& node : document.value(key, json::array())) {
+      const auto id
+        = data::NodeId::FromString(node.at("node_id").get<std::string>());
+      if (!id) {
+        throw std::invalid_argument(
+          std::string("Invalid node ID in '") + key + "'");
+      }
+      nodes.push_back({
+        .anchor = node.at("anchor").get<std::string>(),
+        .node_id = id.value(),
+      });
+    }
+    return nodes;
+  }
+
   auto IdentityOfName(const std::filesystem::path& record_path)
     -> std::optional<Uuid>
   {
@@ -563,17 +582,9 @@ auto ModelImportRecord::Read(const std::filesystem::path& record_path)
         "Two node continuity entries have the anchor '" + added.anchor + "'");
     }
   }
-  for (const auto& node : document.value("published_nodes", json::array())) {
-    const auto id
-      = data::NodeId::FromString(node.at("node_id").get<std::string>());
-    if (!id) {
-      throw std::invalid_argument("Invalid published node ID");
-    }
-    content.published_nodes.push_back({
-      .anchor = node.at("anchor").get<std::string>(),
-      .node_id = id.value(),
-    });
-  }
+  content.published_nodes = ReadNodes(document, "published_nodes");
+  content.new_nodes = ReadNodes(document, "new_nodes");
+  content.vanished_nodes = ReadNodes(document, "vanished_nodes");
   if (document.contains("source_fingerprint")) {
     content.source_fingerprint
       = ReadFingerprint(document.at("source_fingerprint"));
@@ -610,6 +621,8 @@ auto ModelImportRecord::Serialize(const ModelImportRecordContent& content,
     { "surface_provenance", std::move(provenance) },
     { "node_continuity", std::move(continuity) },
     { "published_nodes", WriteNodes(content.published_nodes) },
+    { "new_nodes", WriteNodes(content.new_nodes) },
+    { "vanished_nodes", WriteNodes(content.vanished_nodes) },
   };
   if (content.source_fingerprint) {
     record.update({
@@ -635,6 +648,8 @@ auto ModelImportRecord::SerializeImportUpdate(
       ordered_json::parse(report.surface_provenance_json),
     },
     { "published_nodes", WriteNodes(report.published_nodes) },
+    { "new_nodes", WriteNodes(report.new_nodes) },
+    { "vanished_nodes", WriteNodes(report.vanished_nodes) },
   };
   if (report.source_fingerprint) {
     update.update({
@@ -1226,6 +1241,8 @@ auto ModelImportRecord::Publish(
   content.surface_provenance = SurfaceProvenance::Parse(
     report.surface_provenance_json, content.source_identity);
   content.published_nodes = report.published_nodes;
+  content.new_nodes = report.new_nodes;
+  content.vanished_nodes = report.vanished_nodes;
   if (report.source_fingerprint) {
     content.source_fingerprint = report.source_fingerprint;
   }

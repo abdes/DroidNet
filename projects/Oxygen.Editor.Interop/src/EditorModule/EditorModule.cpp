@@ -1795,23 +1795,6 @@ namespace oxygen::interop::module {
         },
       };
     }
-
-    //! The error an operation reports: none when nothing went wrong.
-    auto InstanceError(std::vector<std::string> errors,
-      const std::vector<instantiation::SceneInstantiationIssue>& issues)
-      -> std::string
-    {
-      // Instantiation has already logged each issue.
-      for (const auto& issue : issues) {
-        errors.push_back(fmt::format("{}: {}", issue.code, issue.message));
-      }
-      if (errors.empty()) {
-        return {};
-      }
-      return errors.size() == 1U
-        ? errors.front()
-        : fmt::format("{} (and {} more)", errors.front(), errors.size() - 1U);
-    }
   } // namespace
 
   auto EditorModule::ApplyInstancesAsync() -> co::Co<bool> {
@@ -1872,7 +1855,7 @@ namespace oxygen::interop::module {
           loader);
         changed = true;
         instances_->Report(root_handle, build->generation,
-          InstanceError(std::move(errors), result.issues));
+          SceneInstances::FailureOf(std::move(errors), result.issues));
       } else if (const auto* set
         = std::get_if<SceneInstances::SetOperation>(&operation)) {
         auto issues = std::vector<instantiation::SceneInstantiationIssue> {};
@@ -1883,14 +1866,14 @@ namespace oxygen::interop::module {
           changed = true;
         }
         instances_->Report(root_handle, set->generation,
-          InstanceError(std::move(errors), issues));
+          SceneInstances::FailureOf(std::move(errors), issues));
       } else if (const auto* clear
         = std::get_if<SceneInstances::ClearOperation>(&operation)) {
         const auto result
           = instantiation::ClearChange(*root, clear->address, loader);
         changed = true;
         instances_->Report(root_handle, clear->generation,
-          InstanceError(std::move(errors), result.issues));
+          SceneInstances::FailureOf(std::move(errors), result.issues));
       }
     }
     co_return changed;

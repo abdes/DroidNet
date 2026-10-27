@@ -71,9 +71,13 @@ internal static class InstanceChangeWrites
     /// <param name="instance">The instance root's component.</param>
     /// <param name="path">The node below the root.</param>
     /// <param name="write">The write, checked by <see cref="Check"/>; its value has its assets resolved.</param>
+    /// <param name="names">
+    /// The node's names in the source, which the change records as its last known names, or <see langword="null"/> when
+    /// the source's structure does not hold the node now.
+    /// </param>
     /// <param name="previous">The change before the write, or <see langword="null"/> when there was none.</param>
     /// <returns>Whether the changes are different now.</returns>
-    public static bool Write(SceneInstanceComponent instance, NodePath path, OverrideWrite write, out SourceOverride? previous)
+    public static bool Write(SceneInstanceComponent instance, NodePath path, OverrideWrite write, string? names, out SourceOverride? previous)
     {
         ArgumentNullException.ThrowIfNull(instance);
         ArgumentNullException.ThrowIfNull(path);
@@ -89,7 +93,7 @@ internal static class InstanceChangeWrites
             return false;
         }
 
-        instance.Changes = instance.Changes.With(path, node.With(updated));
+        instance.Changes = instance.Changes.With(path, names is null ? node.With(updated) : node.With(updated).WithNames(names));
         return true;
     }
 

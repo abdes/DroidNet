@@ -5,7 +5,6 @@
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Changes;
 using Oxygen.Editor.Scenes.Nodes;
-using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
@@ -91,6 +90,14 @@ public sealed record SetInstanceSource(NodeId Instance, AssetPath Source, Instan
         instance.Source = source;
         instance.Changes = changes;
         scope.WarnIfDeleted([source, .. changes.Assets], this.Instance);
+        if (this.Swap == InstanceSwap.KeepByName && source != beforeSource && KeptChanges.Of(instance, scope.StructureOf?.Invoke(source)) is { IsEmpty: false } kept)
+        {
+            scope.Warn([SceneDiagnostic.Warning(
+                SceneEditCodes.NodePathUnresolved,
+                $"{source.Name} has no node named as the node of {kept.Length} change(s), which are kept: {string.Join(", ", kept.Select(static change => change.Names))}. Reassign or remove them in the Scene Instance section.",
+                this.Instance)]);
+        }
+
         var changed = new List<SceneChange>();
         if (source != beforeSource)
         {

@@ -32,6 +32,20 @@ struct ModelPublishedNode final {
   auto operator==(const ModelPublishedNode&) const -> bool = default;
 };
 
+//! The nodes one import of a model emitted, and how they differ from what
+//! earlier imports emitted.
+struct ModelNodePublication final {
+  //! The nodes emitted, in emission order.
+  std::vector<ModelPublishedNode> published;
+  //! The emitted nodes whose anchor the previous publication did not emit.
+  std::vector<ModelPublishedNode> added;
+  //! The nodes an earlier publication emitted whose ID this one does not,
+  //! kept from import to import until their ID is emitted again.
+  std::vector<ModelPublishedNode> vanished;
+
+  auto operator==(const ModelNodePublication&) const -> bool = default;
+};
+
 //! The size and SHA-256 of a file an import read.
 struct ModelSourceFile final {
   //! Relative to the folder of the model's primary source file; empty for the
@@ -60,6 +74,8 @@ struct ModelImportInputs final {
   std::vector<ModelNodeContinuity> node_continuity;
   //! The nodes the previous publication emitted.
   std::vector<ModelPublishedNode> published_nodes;
+  //! The nodes earlier publications emitted that the previous one did not.
+  std::vector<ModelPublishedNode> vanished_nodes;
 };
 
 } // namespace oxygen::content::import
