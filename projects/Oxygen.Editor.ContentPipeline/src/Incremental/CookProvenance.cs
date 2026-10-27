@@ -108,7 +108,7 @@ internal sealed partial record CookProvenance(Guid ProjectId, ImmutableArray<Coo
         {
             if (!this.Matches(inventory))
             {
-                return (false, []);
+                return (false, ImmutableHashSet<string>.Empty.WithComparer(StringComparer.Ordinal));
             }
 
             var descriptors = inventory.Assets.Select(static asset => asset.DescriptorPath).ToHashSet(StringComparer.Ordinal);
@@ -117,7 +117,7 @@ internal sealed partial record CookProvenance(Guid ProjectId, ImmutableArray<Coo
             if (inventory.Issues.Any(issue => !descriptors.Contains(issue.RelativePath)
                 || issue.Reason is not ("missing" or "size_mismatch" or "digest_mismatch" or "format_version")))
             {
-                return (false, []);
+                return (false, ImmutableHashSet<string>.Empty.WithComparer(StringComparer.Ordinal));
             }
 
             var damaged = inventory.Issues.Select(static issue => issue.RelativePath).ToHashSet(StringComparer.Ordinal);

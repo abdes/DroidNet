@@ -25,12 +25,12 @@ internal static class IncrementalCookScenario
 
     internal static void AssertCookSucceeded(ContentCookResult result) => _ = result.Status.Should().BeOneOf([OperationStatus.Succeeded, OperationStatus.SucceededWithWarnings], string.Join(Environment.NewLine, result.Diagnostics.Select(static diagnostic => diagnostic.TechnicalMessage ?? diagnostic.Message)));
 
-    internal static Dictionary<string, (string hash, DateTime write)> ReadOutputIdentities(string projectRoot)
+    internal static Dictionary<string, (string Hash, DateTime Write)> ReadOutputIdentities(string projectRoot)
     {
         var headPath = global::Oxygen.Editor.ContentPipeline.Publication.CookPublicationPaths.Head(projectRoot);
         if (!File.Exists(headPath))
         {
-            return [];
+            return new(StringComparer.Ordinal);
         }
 
         var head = System.Text.Json.JsonSerializer.Deserialize<global::Oxygen.Editor.ContentPipeline.Publication.CookPublicationHead>(File.ReadAllBytes(headPath), global::Oxygen.Editor.ContentPipeline.Publication.CookPublicationDocument.JsonOptions)!;

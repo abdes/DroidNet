@@ -17,8 +17,18 @@ namespace Oxygen.Editor.ContentPipeline.Incremental;
 internal static class CookIncrementalPlanner
 {
     /// <summary>Verifies published roots before input capture or reuse planning.</summary>
+    /// <param name="publication">The read lease over the published roots.</param>
+    /// <param name="mounts">The mounts whose roots are verified.</param>
+    /// <param name="native">The existing native content API.</param>
+    /// <param name="cancellationToken">Cancels native work.</param>
+    /// <param name="artifacts">Optional artifacts already retained by the operation.</param>
+    /// <returns>The verified inventories keyed by mount; unreadable or unindexed roots are omitted.</returns>
     public static async Task<ImmutableDictionary<string, CookedInventoryReport>> ReadInventoriesAsync(
-        CookPublicationReadLease publication, IEnumerable<string> mounts, IEngineContentPipelineApi native, CancellationToken cancellationToken, NativeArtifactLease? artifacts = null)
+        CookPublicationReadLease publication,
+        IEnumerable<string> mounts,
+        IEngineContentPipelineApi native,
+        CancellationToken cancellationToken,
+        NativeArtifactLease? artifacts = null)
     {
         var inventories = ImmutableDictionary.CreateBuilder<string, CookedInventoryReport>(StringComparer.Ordinal);
         foreach (var mount in mounts.Distinct(StringComparer.Ordinal))
@@ -29,7 +39,7 @@ internal static class CookIncrementalPlanner
                 continue;
             }
 
-            var inventory = await ReadRootAsync(path, native, cancellationToken, artifacts).ConfigureAwait(false);
+            var inventory = await ReadRootAsync(path, native, artifacts, cancellationToken).ConfigureAwait(false);
             if (inventory is not null)
             {
                 inventories.Add(mount, inventory);
@@ -40,14 +50,27 @@ internal static class CookIncrementalPlanner
     }
 
     /// <summary>Compares captured inputs with verified output facts without performing more I/O.</summary>
-    public static CookIncrementalPlan CreatePlan(IReadOnlyList<CookSnapshotInput> inputs,
-        CookDependencyGraph graph, CookProvenance previous, ImmutableDictionary<string, CookedInventoryReport> inventories,
-        IReadOnlySet<string>? rebuiltRoots = null, IReadOnlySet<AssetPath>? removedSources = null, IReadOnlySet<AssetPath>? rebuiltSources = null)
+    /// <param name="inputs">The captured source and generated-product inputs.</param>
+    /// <param name="graph">The dependency graph of the requested assets.</param>
+    /// <param name="previous">The provenance saved by the previous cook.</param>
+    /// <param name="inventories">The verified inventories of the published roots, by mount.</param>
+    /// <param name="rebuiltRoots">Mounts whose roots are rebuilt, so none of their outputs are reused.</param>
+    /// <param name="removedSources">Sources whose prior products leave the cooked content.</param>
+    /// <param name="rebuiltSources">Sources the repair cooks again even though their inputs did not change.</param>
+    /// <returns>The fingerprints to build and the verified products to reuse.</returns>
+    public static CookIncrementalPlan CreatePlan(
+        IReadOnlyList<CookSnapshotInput> inputs,
+        CookDependencyGraph graph,
+        CookProvenance previous,
+        ImmutableDictionary<string, CookedInventoryReport> inventories,
+        IReadOnlySet<string>? rebuiltRoots = null,
+        IReadOnlySet<AssetPath>? removedSources = null,
+        IReadOnlySet<AssetPath>? rebuiltSources = null)
     {
         var fingerprints = graph.Assets.ToImmutableDictionary(static input => input.AssetUri, input => Fingerprint(input, inputs, graph));
 
         var sharedRoots = ImmutableHashSet.CreateBuilder<string>(StringComparer.Ordinal);
-        var validOutputs = new HashSet<(string root, string path)>();
+        var validOutputs = new HashSet<(string Root, string Path)>();
         foreach (var root in previous.Roots)
         {
             if (rebuiltRoots?.Contains(root.Mount) == true
@@ -106,14 +129,20 @@ internal static class CookIncrementalPlanner
     internal static string Fingerprint(ContentCookInput input, IReadOnlyList<CookSnapshotInput> inputs, CookDependencyGraph graph)
     {
         var files = inputs.ToDictionary(static file => file.RelativePath, StringComparer.Ordinal);
-        return Fingerprint(input, graph.FileDependencies[input.AssetUri].Select(path => files[path]),
-            graph.Dependencies[input.AssetUri], graph.CookedDependencies.GetValueOrDefault(input.AssetUri, []));
+        return Fingerprint(
+            input,
+            graph.FileDependencies[input.AssetUri].Select(path => files[path]),
+            graph.Dependencies[input.AssetUri],
+            graph.CookedDependencies.GetValueOrDefault(input.AssetUri, []));
     }
 
     // A product depends on its inputs alone: the engine's verification of the cooked root refuses outputs in a format
     // it no longer reads, so the tools that cooked them are no part of the fingerprint.
-    internal static string Fingerprint(ContentCookInput input, IEnumerable<CookSnapshotInput> files,
-        IEnumerable<AssetPath> dependencies, IEnumerable<CookedDependencySnapshot> cookedDependencies)
+    internal static string Fingerprint(
+        ContentCookInput input,
+        IEnumerable<CookSnapshotInput> files,
+        IEnumerable<AssetPath> dependencies,
+        IEnumerable<CookedDependencySnapshot> cookedDependencies)
     {
         var authored = Hash(new
         {
@@ -138,7 +167,7 @@ internal static class CookIncrementalPlanner
 
     private static string Hash<T>(T value) => Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(value)));
 
-    private static async Task<CookedInventoryReport?> ReadRootAsync(string path, IEngineContentPipelineApi native, CancellationToken cancellationToken, NativeArtifactLease? artifacts)
+    private static async Task<CookedInventoryReport?> ReadRootAsync(string path, IEngineContentPipelineApi native, NativeArtifactLease? artifacts, CancellationToken cancellationToken)
     {
         try
         {

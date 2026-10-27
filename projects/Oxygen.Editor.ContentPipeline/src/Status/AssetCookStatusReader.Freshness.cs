@@ -13,10 +13,13 @@ namespace Oxygen.Editor.ContentPipeline.Status;
 /// <summary>Compares publication metadata without verifying cooked payload bytes.</summary>
 public sealed partial class AssetCookStatusReader
 {
-    private static async Task<FreshnessSnapshot> ReadFreshnessAsync(CookPublicationReadLease publication,
-        CookDependencyGraph graph, CookProvenance previous, CancellationToken cancellationToken)
+    private static async Task<FreshnessSnapshot> ReadFreshnessAsync(
+        CookPublicationReadLease publication,
+        CookDependencyGraph graph,
+        CookProvenance previous,
+        CancellationToken cancellationToken)
     {
-        var available = ImmutableHashSet.CreateBuilder<(string rootMount, string virtualPath)>();
+        var available = ImmutableHashSet.CreateBuilder<(string RootMount, string VirtualPath)>();
         var unknown = ImmutableHashSet.CreateBuilder<string>(StringComparer.Ordinal);
         foreach (var root in previous.Roots)
         {
@@ -67,7 +70,8 @@ public sealed partial class AssetCookStatusReader
             }
         }
 
-        var fingerprints = graph.Assets.ToDictionary(static input => input.AssetUri,
+        var fingerprints = graph.Assets.ToDictionary(
+            static input => input.AssetUri,
             input => CookIncrementalPlanner.Fingerprint(input, graph.Files, graph));
 
         var currentProducts = previous.Products.Where(product => fingerprints.TryGetValue(product.SourceUri, out var fingerprint)
@@ -76,8 +80,11 @@ public sealed partial class AssetCookStatusReader
         return new(currentProducts, available.ToImmutable(), unknown.ToImmutable());
     }
 
-    private static CookedOutputAvailability ReadOutputAvailability(AssetPath source,
-        Dictionary<AssetPath, CookProvenance.Product> products, FreshnessSnapshot snapshot, HashSet<AssetPath> visited)
+    private static CookedOutputAvailability ReadOutputAvailability(
+        AssetPath source,
+        Dictionary<AssetPath, CookProvenance.Product> products,
+        FreshnessSnapshot snapshot,
+        HashSet<AssetPath> visited)
     {
         if (!visited.Add(source))
         {
@@ -119,6 +126,6 @@ public sealed partial class AssetCookStatusReader
 
     private sealed record FreshnessSnapshot(
         ImmutableHashSet<AssetPath> CurrentProducts,
-        ImmutableHashSet<(string rootMount, string virtualPath)> AvailableOutputs,
+        ImmutableHashSet<(string RootMount, string VirtualPath)> AvailableOutputs,
         ImmutableHashSet<string> UnknownRoots);
 }

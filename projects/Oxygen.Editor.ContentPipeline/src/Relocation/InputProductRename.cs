@@ -16,16 +16,17 @@ namespace Oxygen.Editor.ContentPipeline.Relocation;
 /// <param name="Name">The new name, such as <c>Leap</c>.</param>
 public sealed record InputProductRename(AssetPath Product, string Name)
 {
-    /// <summary>Gets the product's cooked extension: <c>.oiact</c> or <c>.oimap</c>.</summary>
-    /// <exception cref="AssetRelocationException">The product is not a cooked asset.</exception>
-    public string Extension => AssetFileTypes.Find(this.Product.Name)?.CookedExtension
-        ?? throw new AssetRelocationException($"'{this.Product}' is not an action or a mapping context.");
-
     /// <summary>Gets the product's current name.</summary>
-    public string CurrentName => this.Product.Name[..^this.Extension.Length];
+    public string CurrentName => this.Product.Name[..^this.GetExtension().Length];
 
     /// <summary>Gets the product's identity after the rename.</summary>
-    public AssetPath Target => this.Product.WithName(this.Name + this.Extension);
+    public AssetPath Target => this.Product.WithName(this.Name + this.GetExtension());
+
+    /// <summary>Gets the product's cooked extension: <c>.oiact</c> or <c>.oimap</c>.</summary>
+    /// <returns>The cooked extension, with its leading dot.</returns>
+    /// <exception cref="AssetRelocationException">The product is not a cooked asset.</exception>
+    public string GetExtension() => AssetFileTypes.Find(this.Product.Name)?.CookedExtension
+        ?? throw new AssetRelocationException($"'{this.Product}' is not an action or a mapping context.");
 
     /// <summary>Gets the rename that undoes this one.</summary>
     /// <returns>The reverse rename.</returns>

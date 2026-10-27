@@ -72,7 +72,7 @@ public sealed partial class ContentPipelineService
             {
                 if (plan.Fingerprints.TryGetValue(source.Key, out var fingerprint))
                 {
-                    products[source.Key] = CreateProduct(source, fingerprint, root, result, graph, snapshot, expectedInputs, expectedFiles, sourceInputs);
+                    products[source.Key] = CreateProduct(source, fingerprint, root, result, graph, expectedInputs, expectedFiles, sourceInputs);
                 }
             }
         }
@@ -125,7 +125,6 @@ public sealed partial class ContentPipelineService
         CookProvenance.Root root,
         ContentCookResult result,
         CookDependencyGraph graph,
-        CookInputSnapshot snapshot,
         ImmutableArray<CookSnapshotInput> expectedInputs,
         Dictionary<string, CookSnapshotInput> expectedFiles,
         Dictionary<AssetPath, ContentCookInput> sourceInputs)
@@ -348,7 +347,7 @@ public sealed partial class ContentPipelineService
             ReusedAssets = plan.ReusedAssets,
             ReusedDiagnosticIds = plan.DiagnosticIds,
             InputSnapshot = snapshot,
-            InputsAreCurrent = await this.InputsAreCurrentAsync(snapshot, graph, resolveScopes, cancellationToken).ConfigureAwait(false),
+            InputsAreCurrent = await InputsAreCurrentAsync(snapshot, graph, resolveScopes, cancellationToken).ConfigureAwait(false),
         };
         return await this.publication.PublishObservedBindingsAsync(operation, baseline, libraries, unchanged, plan.DroppedRoots, cancellationToken).ConfigureAwait(false);
     }
@@ -466,6 +465,6 @@ public sealed partial class ContentPipelineService
             throw new InvalidDataException("Native validation did not establish output identities for publication.");
         }
 
-        return result with { InputsAreCurrent = await this.InputsAreCurrentAsync(snapshot, graph, resolveScopes, result.IsPublished ? CancellationToken.None : cancellationToken, result.IsPublished ? result.ProducedSourceFiles : []).ConfigureAwait(false) };
+        return result with { InputsAreCurrent = await InputsAreCurrentAsync(snapshot, graph, resolveScopes, result.IsPublished ? CancellationToken.None : cancellationToken, result.IsPublished ? result.ProducedSourceFiles : []).ConfigureAwait(false) };
     }
 }

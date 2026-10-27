@@ -8,7 +8,6 @@ using DryIoc;
 using Oxygen.Editor.ContentPipeline.Authoring;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Inspection;
-using Oxygen.Editor.ContentPipeline.Mounting;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.ContentPipeline.Status;
@@ -97,7 +96,6 @@ public sealed class ContentPipelineSessionModule : IScopeModule<ISessionLayer>
             resolver => (IScriptLibrary)resolver.Resolve<IContentPipelineService>(), Reuse.Singleton);
         scope.Register<CookPublicationService>(Reuse.Singleton);
         scope.RegisterMapping<ICookPublicationReader, CookPublicationService>();
-        scope.Register<CookedContentMountService>(Reuse.Singleton);
         scope.Register<IMaterialCookService, MaterialCookService>(Reuse.Singleton);
         scope.Register<IUnsavedCookInputs, UnsavedCookInputs>(Reuse.Singleton);
         scope.Register<IAutomaticCookService, AutomaticCookService>(Reuse.Singleton);

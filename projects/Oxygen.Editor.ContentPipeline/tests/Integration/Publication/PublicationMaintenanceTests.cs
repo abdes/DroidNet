@@ -79,7 +79,7 @@ public sealed class PublicationMaintenanceTests
 
         _ = (await service.MaintainAsync(context, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().BeEmpty();
         _ = File.Exists(Path.Combine(oldPath, "container.index.bin")).Should().BeTrue();
-        nativeReader.Dispose();
+        await nativeReader.DisposeAsync().ConfigureAwait(false);
         _ = (await service.MaintainAsync(context, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().BeEmpty();
         _ = Directory.Exists(oldPath).Should().Be(removeMarker, "nonempty markerless published roots cannot be claimed safely");
     }
@@ -95,18 +95,23 @@ public sealed class PublicationMaintenanceTests
         var operation = new ContentCookOperation(Guid.NewGuid(), context, 1);
         using var owner = CookOutputLease.AcquireOperation(FileSystemPath.From(project.Root), operation.OperationId);
         using var baseline = await service.AcquireReadAsync(context, this.TestContext.CancellationToken).ConfigureAwait(false);
-        var transaction = await CookPublicationTransaction.ReserveAsync(operation, baseline, [], files,
-            new ProjectManagerService(new NativeStorageProvider(new RealFileSystem())), this.TestContext.CancellationToken).ConfigureAwait(false);
+        var transaction = await CookPublicationTransaction.ReserveAsync(
+            operation,
+            baseline,
+            [],
+            files,
+            new ProjectManagerService(new NativeStorageProvider(new RealFileSystem())),
+            this.TestContext.CancellationToken).ConfigureAwait(false);
         await transaction.AbandonBuildAsync().ConfigureAwait(false);
         var directory = Path.Combine(project.Root, ".build", "cook", operation.OperationId.ToString("N"));
         var input = Path.Combine(directory, "replacement-input.gltf");
-        File.WriteAllText(input, "retry bytes");
+        await File.WriteAllTextAsync(input, "retry bytes", this.TestContext.CancellationToken).ConfigureAwait(false);
         using var retry = CookOutputLease.TryAcquireRetryInput(FileSystemPath.From(project.Root), operation.OperationId);
         _ = retry.Should().NotBeNull();
-        owner.Dispose();
+        await owner.DisposeAsync().ConfigureAwait(false);
         _ = (await service.MaintainAsync(context, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().BeEmpty();
-        _ = File.ReadAllText(input).Should().Be("retry bytes");
-        retry!.Dispose();
+        _ = (await File.ReadAllTextAsync(input, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Be("retry bytes");
+        await retry!.DisposeAsync().ConfigureAwait(false);
         _ = (await service.MaintainAsync(context, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().BeEmpty();
         _ = Directory.Exists(directory).Should().BeFalse();
     }
@@ -124,15 +129,19 @@ public sealed class PublicationMaintenanceTests
         var directory = Path.Combine(project.Root, ".build", "cook", id.ToString("N"));
         var inputs = Directory.CreateDirectory(Path.Combine(directory, "inputs"));
         var captured = Path.Combine(inputs.FullName, "source.gltf");
-        File.WriteAllText(captured, "captured input");
+        await File.WriteAllTextAsync(captured, "captured input", this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = (await service.MaintainAsync(context, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().BeEmpty();
         _ = File.Exists(captured).Should().BeTrue();
-        operation.Dispose();
+        await operation.DisposeAsync().ConfigureAwait(false);
         _ = (await service.MaintainAsync(context, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().BeEmpty();
         _ = Directory.Exists(directory).Should().BeFalse();
     }
 
     private static CookPublicationService MaintenanceService(IAtomicFileStore files, TestSession session)
-        => new(Mock.Of<IContentCookCoordinator>(), session, files,
-            new ProjectManagerService(new NativeStorageProvider(new RealFileSystem()), atomicFiles: files), new EngineContentPakFixture());
+        => new(
+            Mock.Of<IContentCookCoordinator>(),
+            session,
+            files,
+            new ProjectManagerService(new NativeStorageProvider(new RealFileSystem()), atomicFiles: files),
+            new EngineContentPakFixture());
 }

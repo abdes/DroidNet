@@ -13,7 +13,7 @@ internal static partial class NativeInventoryFixture
     public static IEngineContentPipelineApi CreateApi()
     {
         var api = new Mock<IEngineContentPipelineApi>(MockBehavior.Strict);
-        api.Setup(value => value.ReadInventoryAsync(It.IsAny<string>(), It.IsAny<NativeArtifactLease?>(), It.IsAny<CancellationToken>()))
+        _ = api.Setup(value => value.ReadInventoryAsync(It.IsAny<string>(), It.IsAny<NativeArtifactLease?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((string root, NativeArtifactLease? _, CancellationToken _) => Read(root));
         return api.Object;
     }

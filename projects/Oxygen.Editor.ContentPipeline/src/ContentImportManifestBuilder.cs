@@ -73,15 +73,7 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
             input => scope.NativeJobs.TryGetValue(input.AssetUri, out var job) ? job.Id : BuildJobId(input));
 
         // A scene that instances another scene of this cook reads its cooked output, so it waits for that scene's job.
-        var scenes = sceneDescriptors.OrderBy(static item => item.DescriptorPath, StringComparer.Ordinal)
-            .Select(descriptor => (Descriptor: descriptor, Input: new ContentCookInput(
-                descriptor.SceneAssetUri,
-                ContentCookAssetKind.Scene,
-                mountName,
-                ToProjectRelativePath(scope.InputRoot, descriptor.DescriptorPath),
-                FileSystemPath.From(descriptor.DescriptorPath),
-                ContentCookInputRole.GeneratedDescriptor)))
-            .ToList();
+        var scenes = CreateSceneInputs(scope, mountName, sceneDescriptors);
         foreach (var (descriptor, input) in scenes)
         {
             jobIdsBySource[descriptor.SceneAssetUri] = scope.NativeJobs.TryGetValue(descriptor.SceneAssetUri, out var job) ? job.Id : BuildJobId(input);
@@ -200,6 +192,21 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
             InstanceBindings = descriptor.ScriptInstanceBindings.Count == 0 ? null : descriptor.ScriptInstanceBindings,
             OwnerSource = sceneJob.Source,
         };
+
+    // Pairs each generated scene descriptor, in path order, with the cook input that stands for it.
+    private static List<(SceneDescriptorGenerationResult Descriptor, ContentCookInput Input)> CreateSceneInputs(
+        ContentCookScope scope,
+        string mountName,
+        IReadOnlyList<SceneDescriptorGenerationResult> sceneDescriptors)
+        => sceneDescriptors.OrderBy(static item => item.DescriptorPath, StringComparer.Ordinal)
+            .Select(descriptor => (Descriptor: descriptor, Input: new ContentCookInput(
+                descriptor.SceneAssetUri,
+                ContentCookAssetKind.Scene,
+                mountName,
+                ToProjectRelativePath(scope.InputRoot, descriptor.DescriptorPath),
+                FileSystemPath.From(descriptor.DescriptorPath),
+                ContentCookInputRole.GeneratedDescriptor)))
+            .ToList();
 
     private static string GetSingleMountName(ContentCookScope scope)
     {

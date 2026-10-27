@@ -8,7 +8,6 @@ namespace Oxygen.Editor.ContentPipeline.TestSupport;
 
 internal sealed partial class FailingPublicationPreview : ICookPublicationPreview
 {
-
     public bool IsRuntimeAvailable => true;
 
     public int Mounts { get; private set; }

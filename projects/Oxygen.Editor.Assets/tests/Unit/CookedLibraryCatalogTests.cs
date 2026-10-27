@@ -104,17 +104,17 @@ public sealed class CookedLibraryCatalogTests
 
         public FileSystemPath Second { get; }
 
-        public FakeCookPublicationReader.PublishedRoot ProjectRoot { get; }
+        public PublishedRoot ProjectRoot { get; }
 
-        public FakeCookPublicationReader.PublishedRoot FirstRoot { get; }
+        public PublishedRoot FirstRoot { get; }
 
-        public FakeCookPublicationReader.PublishedRoot SecondRoot { get; }
+        public PublishedRoot SecondRoot { get; }
 
         public TestSession Session { get; }
 
         public FakeCookPublicationReader Publication { get; }
 
-        public void Publish(params FakeCookPublicationReader.PublishedRoot[] roots)
+        public void Publish(params PublishedRoot[] roots)
             => this.Publication.Publish(roots, new Dictionary<string, FileSystemPath> { ["Content"] = this.ProjectOutput });
 
         public AssetCatalog CreateCatalog()

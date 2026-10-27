@@ -93,6 +93,22 @@ public sealed partial class ContentPipelineService
             cancellationToken);
     }
 
+    // The identity a new model takes: its own path when it is already under an authoring mount, else its file in a
+    // folder named for it in the chosen destination.
+    private static AssetPath PlannedIdentity(ProjectContext project, SceneImportRequest request)
+    {
+        var source = Path.GetFullPath(request.SourcePath);
+        return CookInputResolver.FindAuthoringSourceUri(project, FileSystemPath.From(source))
+            ?? request.DestinationFolder.Combine(request.Name + "/" + Path.GetFileName(source));
+    }
+
+    // The record of a model imported in place, which a request for its source imports again; null for any other.
+    private static ModelImportRecord? InPlaceRecord(ProjectContext project, SceneImportRequest request)
+    {
+        var source = FileSystemPath.From(Path.GetFullPath(request.SourcePath));
+        return CookInputResolver.FindAuthoringSourceUri(project, source) is null ? null : ModelRecordLookup.TryFind(project, source);
+    }
+
     private async Task<ContentCookResult> ImportSourceCoreAsync(ContentCookOperation operation, SceneImportRequest request, Action<SceneImportRequest> retainRecovery, CancellationToken cancellationToken)
     {
         AssetPath? retainedUri = null;
@@ -188,16 +204,7 @@ public sealed partial class ContentPipelineService
         _ = await this.importRecordFiles.WriteAsync(path, record.ToBytes(), DroidNet.Storage.FileVersion.Missing, cancellationToken).ConfigureAwait(false);
     }
 
-    // The identity a new model takes: its own path when it is already under an authoring mount, else its file in a
-    // folder named for it in the chosen destination.
-    private static AssetPath PlannedIdentity(ProjectContext project, SceneImportRequest request)
-    {
-        var source = Path.GetFullPath(request.SourcePath);
-        return CookInputResolver.FindAuthoringSourceUri(project, FileSystemPath.From(source))
-            ?? request.DestinationFolder.Combine(request.Name + "/" + Path.GetFileName(source));
-    }
-
-    private Task<ContentCookResult> CookImportedSourcesAsync(ContentCookOperation operation, IReadOnlyList<AssetPath> sources, ImportRunSettings run, CancellationToken cancellationToken)
+    private Task<ContentCookResult> CookImportedSourcesAsync(ContentCookOperation operation, List<AssetPath> sources, ImportRunSettings run, CancellationToken cancellationToken)
         => this.CookCapturedScopesAsync(
             operation,
             () => [.. sources.Select(uri => this.CreateAssetScope(operation.Project, uri, allowImportedSourceChanges: true, isAutomatic: false) with { Run = run })],
@@ -261,13 +268,6 @@ public sealed partial class ContentPipelineService
         {
             return (null, CreateFailedCook(operation, CookTargetKind.Changes, failure));
         }
-    }
-
-    // The record of a model imported in place, which a request for its source imports again; null for any other.
-    private static ModelImportRecord? InPlaceRecord(ProjectContext project, SceneImportRequest request)
-    {
-        var source = FileSystemPath.From(Path.GetFullPath(request.SourcePath));
-        return CookInputResolver.FindAuthoringSourceUri(project, source) is null ? null : ModelRecordLookup.TryFind(project, source);
     }
 
     // Imports a model already imported in place again: its record takes the chosen settings, then it cooks as a reimport.

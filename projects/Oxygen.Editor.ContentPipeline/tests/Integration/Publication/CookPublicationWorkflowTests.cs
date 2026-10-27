@@ -47,8 +47,8 @@ public sealed class CookPublicationWorkflowTests
         _ = failed.Validation!.Succeeded.Should().BeTrue();
         _ = failed.Diagnostics.Should().Contain(item => item.Code == "Cook.PublicationFailed");
         var restored = ReadOutputIdentities(workspace.Root);
-        _ = restored.ToDictionary(static pair => pair.Key, static pair => pair.Value.hash, StringComparer.Ordinal)
-            .Should().BeEquivalentTo(previous.ToDictionary(static pair => pair.Key, static pair => pair.Value.hash, StringComparer.Ordinal));
+        _ = restored.ToDictionary(static pair => pair.Key, static pair => pair.Value.Hash, StringComparer.Ordinal)
+            .Should().BeEquivalentTo(previous.ToDictionary(static pair => pair.Key, static pair => pair.Value.Hash, StringComparer.Ordinal));
         var receiptPath = CookPublicationPaths.Head(workspace.Root);
         _ = restored.Where(pair => !string.Equals(pair.Key, receiptPath, StringComparison.Ordinal)).Should()
             .BeEquivalentTo(previous.Where(pair => !string.Equals(pair.Key, receiptPath, StringComparison.Ordinal)));

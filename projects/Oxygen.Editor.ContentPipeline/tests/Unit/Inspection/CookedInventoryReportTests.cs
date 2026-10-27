@@ -64,7 +64,13 @@ public sealed class CookedInventoryReportTests
     }
 
     private static string Inventory(string path, FileKind kind)
-        => $$"""
-            {"schema_version":1,"source_key":"{{Guid.Empty}}","index_size":256,"index_sha256":"{{new string('a', 64)}}","files":[{"relative_path":"{{path}}","size":1,"sha256":"{{new string('b', 64)}}","file_kind":{{(int)kind}}}],"assets":[],"resources":[],"issues":[]}
+    {
+        var sourceKey = Guid.Empty.ToString();
+        var fileKind = ((int)kind).ToString(System.Globalization.CultureInfo.InvariantCulture);
+        var indexSha = new string('a', 64);
+        var fileSha = new string('b', 64);
+        return $$"""
+            {"schema_version":1,"source_key":"{{sourceKey}}","index_size":256,"index_sha256":"{{indexSha}}","files":[{"relative_path":"{{path}}","size":1,"sha256":"{{fileSha}}","file_kind":{{fileKind}}}],"assets":[],"resources":[],"issues":[]}
             """;
+    }
 }

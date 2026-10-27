@@ -69,9 +69,9 @@ internal sealed partial class SceneDescriptorGeneratorTests
         var revision = new string('b', 64);
         var geometry = new GeometryComponent { Name = "Geometry", Geometry = EngineAssets.BasicShape("Cube") };
         geometry.Overrides = geometry.Overrides
-            .With(SceneSchema.Geometry.LodPolicy, (LodPolicy)new LodPolicy.Fixed(1))
-            .With(SceneSchema.Geometry.Surface.Visibility, surface, revision, false)
-            .With(SceneSchema.Geometry.Surface.CastsShadows, surface, revision, true);
+            .With(SceneSchema.Geometry.LodPolicy, new LodPolicy.Fixed(1))
+            .With(SceneSchema.Geometry.Surface.Visibility, surface, revision, value: false)
+            .With(SceneSchema.Geometry.Surface.CastsShadows, surface, revision, value: true);
         _ = node.AddComponent(geometry);
         scene.RootNodes.Add(node);
 

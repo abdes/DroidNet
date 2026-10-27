@@ -179,11 +179,12 @@ public sealed class CookRepairTests
     {
         using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         workspace.WriteMaterial("Content/Materials/Red.omat.json", "Red");
-        workspace.WriteText("Content/Scripts/Orbit.lua", """
+        const string orbitScript = """
             local Script = oxygen.script {}
 
             return Script
-            """);
+            """;
+        workspace.WriteText("Content/Scripts/Orbit.lua", orbitScript);
         var script = AssetPath.Parse("/Content/Scripts/Orbit.lua");
         var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = CreateRecordingApi(compatibility);

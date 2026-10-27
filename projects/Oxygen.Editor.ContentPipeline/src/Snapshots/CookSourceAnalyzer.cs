@@ -122,7 +122,7 @@ internal sealed partial class CookSourceAnalyzer(
         foreach (var job in report.Jobs)
         {
             var owner = prepared.FirstOrDefault(source => string.Equals(source.Job.Id, job.Id, StringComparison.Ordinal))?.Input;
-            var ownerPath = owner is null ? null : owner.AssetUri.VirtualPath;
+            var ownerPath = owner?.AssetUri.VirtualPath;
             diagnostics.AddRange(job.Diagnostics.Select(issue => issue with { AffectedVirtualPath = ownerPath }));
 
             if (!job.Complete && !job.Diagnostics.Any(static issue => issue.Severity >= DiagnosticSeverity.Error))

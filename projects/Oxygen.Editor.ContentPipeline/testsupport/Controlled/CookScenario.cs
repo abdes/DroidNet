@@ -30,16 +30,18 @@ internal static class CookScenario
 
     internal static CookInspectionResult SucceededInspection(CookWorkspace workspace) => new(workspace.Root, Succeeded: true, SourceIdentity: null, Assets: [], Files: [], Diagnostics: []);
 
-    internal async static Task AssertReaderRetainedUntilDrainAsync(TestContext testContext, Task work, CookWorkspace consumer, Action openForWrite, TaskCompletionSource drain)
+    internal static async Task AssertReaderRetainedUntilDrainAsync(TestContext testContext, Task work, CookWorkspace consumer, Action openForWrite, TaskCompletionSource drain)
     {
         Func<Task> observe = () => work.WaitAsync(TimeSpan.FromSeconds(5), testContext.CancellationToken);
         var failure = await observe.Should().ThrowAsync<ContentPipelineTerminationException>().ConfigureAwait(false);
         _ = openForWrite.Should().Throw<IOException>();
-        var next = consumer.CookCoordinator.RunAsync((_, _) =>
-        {
-            openForWrite();
-            return Task.FromResult(true);
-        }, testContext.CancellationToken);
+        var next = consumer.CookCoordinator.RunAsync(
+            (_, _) =>
+            {
+                openForWrite();
+                return Task.FromResult(true);
+            },
+            testContext.CancellationToken);
         _ = next.IsCompleted.Should().BeFalse();
         drain.SetResult();
         await failure.Which.DrainCompletion.WaitAsync(TimeSpan.FromSeconds(5), testContext.CancellationToken).ConfigureAwait(false);

@@ -12,8 +12,13 @@ namespace Oxygen.Editor.ContentPipeline.Publication;
 /// <summary>Restores source and head state while retaining immutable generations for readers.</summary>
 internal sealed partial class CookPublicationTransaction
 {
-    internal static async Task<CookPublicationTransaction> LoadAsync(ProjectContext project, Guid operationId,
-        IAtomicFileStore files, IProjectManagerService manager, CookOutputWriteLease gate, CancellationToken cancellationToken)
+    internal static async Task<CookPublicationTransaction> LoadAsync(
+        ProjectContext project,
+        Guid operationId,
+        IAtomicFileStore files,
+        IProjectManagerService manager,
+        CookOutputWriteLease gate,
+        CancellationToken cancellationToken)
     {
         gate.VerifyOwner(project.ProjectRoot);
         var directory = Path.Combine(project.ProjectRoot.FullPath, ".build", "cook", operationId.ToString("N"));
@@ -26,23 +31,23 @@ internal sealed partial class CookPublicationTransaction
             throw new InvalidDataException("The publication recovery journal is missing.");
         }
 
-        var journal = JsonSerializer.Deserialize<CookPublicationJournal>(snapshot.Content.AsSpan(), JsonOptions)
+        var loaded = JsonSerializer.Deserialize<CookPublicationJournal>(snapshot.Content.AsSpan(), JsonOptions)
             ?? throw new InvalidDataException("The publication recovery journal is empty.");
-        ValidateJournal(journal, project.ProjectId, operationId);
-        var transaction = new CookPublicationTransaction(project, files, manager, journal, snapshot.Version, checkpoint: null);
-        foreach (var file in journal.SourceFiles)
+        ValidateJournal(loaded, project.ProjectId, operationId);
+        var transaction = new CookPublicationTransaction(project, files, manager, loaded, snapshot.Version, checkpoint: null);
+        foreach (var file in loaded.SourceFiles)
         {
-            if (MayHaveMutated(journal.Phase))
+            if (MayHaveMutated(loaded.Phase))
             {
                 _ = ProducedSourcePath(project, file);
-                if (journal.SourceReplacement is { } replacement && IsWithinSourceBundle(project, replacement.BundleRoot, file.RelativePath))
+                if (loaded.SourceReplacement is { } replacement && IsWithinSourceBundle(project, replacement.BundleRoot, file.RelativePath))
                 {
                     throw new InvalidDataException("A source update overlaps a source-directory replacement.");
                 }
             }
         }
 
-        if (journal.SourceReplacement is { } source)
+        if (loaded.SourceReplacement is { } source)
         {
             try
             {
@@ -61,7 +66,7 @@ internal sealed partial class CookPublicationTransaction
             }
         }
 
-        if (journal.ProjectChange is { } configuration)
+        if (loaded.ProjectChange is { } configuration)
         {
             _ = transaction.ParseProjectConfiguration(configuration.BeforeJson);
             _ = transaction.ParseProjectConfiguration(configuration.AfterJson);
@@ -70,26 +75,15 @@ internal sealed partial class CookPublicationTransaction
         return transaction;
     }
 
-    internal async Task RecoverAsync(CookOutputWriteLease gate)
-    {
-        gate.VerifyOwner(this.project.ProjectRoot);
-        if (this.Phase is CookPublicationPhase.Committed or CookPublicationPhase.RolledBack)
-        {
-            return;
-        }
-
-        if (MayHaveMutated(this.Phase))
-        {
-            await this.RestoreFilesAsync().ConfigureAwait(false);
-        }
-
-        await this.WriteJournalAsync(CookPublicationPhase.RolledBack, CancellationToken.None).ConfigureAwait(false);
-    }
-
     // The caller already owns the selection gate. Never acquire it recursively
     // and never wait for an operation lock while holding it.
-    internal static async Task RecoverInterruptedMutationsAsync(ProjectContext project, IAtomicFileStore files,
-        IProjectManagerService manager, CookOutputWriteLease gate, Guid? currentOperation, CancellationToken cancellationToken)
+    internal static async Task RecoverInterruptedMutationsAsync(
+        ProjectContext project,
+        IAtomicFileStore files,
+        IProjectManagerService manager,
+        CookOutputWriteLease gate,
+        Guid? currentOperation,
+        CancellationToken cancellationToken)
     {
         gate.VerifyOwner(project.ProjectRoot);
         foreach (var id in await PendingMutationsAsync(project, files, currentOperation, cancellationToken).ConfigureAwait(false))
@@ -108,8 +102,11 @@ internal sealed partial class CookPublicationTransaction
         }
     }
 
-    internal static async Task RequireSettledSelectionAsync(ProjectContext project, IAtomicFileStore files,
-        CookOutputWriteLease gate, CancellationToken cancellationToken)
+    internal static async Task RequireSettledSelectionAsync(
+        ProjectContext project,
+        IAtomicFileStore files,
+        CookOutputWriteLease gate,
+        CancellationToken cancellationToken)
     {
         gate.VerifyOwner(project.ProjectRoot);
         if ((await PendingMutationsAsync(project, files, currentOperation: null, cancellationToken).ConfigureAwait(false)).Count != 0)
@@ -118,8 +115,27 @@ internal sealed partial class CookPublicationTransaction
         }
     }
 
-    private static async Task<List<Guid>> PendingMutationsAsync(ProjectContext project, IAtomicFileStore files,
-        Guid? currentOperation, CancellationToken cancellationToken)
+    internal async Task RecoverAsync(CookOutputWriteLease gate)
+    {
+        gate.VerifyOwner(this.project.ProjectRoot);
+        if (this.Phase is CookPublicationPhase.Committed or CookPublicationPhase.RolledBack)
+        {
+            return;
+        }
+
+        if (MayHaveMutated(this.Phase))
+        {
+            await this.RestoreFilesAsync().ConfigureAwait(false);
+        }
+
+        await this.WriteJournalAsync(CookPublicationPhase.RolledBack, CancellationToken.None).ConfigureAwait(false);
+    }
+
+    private static async Task<List<Guid>> PendingMutationsAsync(
+        ProjectContext project,
+        IAtomicFileStore files,
+        Guid? currentOperation,
+        CancellationToken cancellationToken)
     {
         var pending = new List<Guid>();
         var operations = Path.Combine(project.ProjectRoot.FullPath, ".build", "cook");
@@ -140,10 +156,10 @@ internal sealed partial class CookPublicationTransaction
                 continue;
             }
 
-            var journal = JsonSerializer.Deserialize<CookPublicationJournal>(bytes.Content.AsSpan(), JsonOptions)
+            var recorded = JsonSerializer.Deserialize<CookPublicationJournal>(bytes.Content.AsSpan(), JsonOptions)
                 ?? throw new InvalidDataException("A publication recovery journal is empty.");
-            ValidateJournal(journal, project.ProjectId, id);
-            if (!MayHaveMutated(journal.Phase))
+            ValidateJournal(recorded, project.ProjectId, id);
+            if (!MayHaveMutated(recorded.Phase))
             {
                 continue;
             }
@@ -232,34 +248,8 @@ internal sealed partial class CookPublicationTransaction
             }
         }
 
-        var restoreProject = false;
-        if (this.journal.ProjectChange is { } change)
-        {
-            var actual = await this.projectManager.LoadProjectInfoAsync(this.project.ProjectRoot.FullPath).ConfigureAwait(false)
-                ?? throw new InvalidDataException("The project's configuration cannot be read for recovery.");
-            var json = ProjectInfo.ToJson(actual);
-            var before = ProjectInfo.ToJson(this.ParseProjectConfiguration(change.BeforeJson));
-            var after = ProjectInfo.ToJson(this.ParseProjectConfiguration(change.AfterJson));
-            if (!string.Equals(json, before, StringComparison.Ordinal) && !string.Equals(json, after, StringComparison.Ordinal))
-            {
-                throw new StorageWriteConflictException("The project configuration changed outside this transaction.");
-            }
-
-            restoreProject = !string.Equals(json, before, StringComparison.Ordinal);
-        }
-
-        foreach (var directory in this.Directories())
-        {
-            var previous = await CookRootImage.CaptureAsync(directory.Previous, copyTo: null, CancellationToken.None).ConfigureAwait(false);
-            var published = await CookRootImage.CaptureAsync(directory.Published, copyTo: null, CancellationToken.None).ConfigureAwait(false);
-            if ((previous.Exists && !previous.Matches(directory.Before))
-                || (!previous.Exists && !published.Matches(directory.Before))
-                || (published.Exists && !published.Matches(directory.Before) && !published.Matches(directory.After)))
-            {
-                throw new InvalidDataException($"Source recovery material for '{directory.Name}' is missing or changed.");
-            }
-        }
-
+        var restoreProject = await this.RequiresProjectRestoreAsync().ConfigureAwait(false);
+        await this.VerifyRecoveryMaterialAsync().ConfigureAwait(false);
         await this.RestoreSourceFilesAsync().ConfigureAwait(false);
         foreach (var directory in this.Directories().Reverse())
         {
@@ -279,8 +269,9 @@ internal sealed partial class CookPublicationTransaction
 
         if (restoreProject && this.journal.ProjectChange is { } configuration)
         {
-            await this.projectManager.SaveProjectInfoAsync(this.ParseProjectConfiguration(configuration.BeforeJson),
-                this.ParseProjectConfiguration(configuration.AfterJson), CancellationToken.None).ConfigureAwait(false);
+            var restored = this.ParseProjectConfiguration(configuration.BeforeJson);
+            var superseded = this.ParseProjectConfiguration(configuration.AfterJson);
+            await this.projectManager.SaveProjectInfoAsync(restored, superseded, CancellationToken.None).ConfigureAwait(false);
         }
 
         if (head.Version != this.PreviousHead.Version)
@@ -292,6 +283,44 @@ internal sealed partial class CookPublicationTransaction
             else
             {
                 File.Delete(headPath);
+            }
+        }
+    }
+
+    // Reports whether the saved project configuration is still the post-change one and must be rolled back; throws
+    // when it is neither the before nor the after configuration.
+    private async Task<bool> RequiresProjectRestoreAsync()
+    {
+        if (this.journal.ProjectChange is not { } change)
+        {
+            return false;
+        }
+
+        var actual = await this.projectManager.LoadProjectInfoAsync(this.project.ProjectRoot.FullPath).ConfigureAwait(false)
+            ?? throw new InvalidDataException("The project's configuration cannot be read for recovery.");
+        var json = ProjectInfo.ToJson(actual);
+        var before = ProjectInfo.ToJson(this.ParseProjectConfiguration(change.BeforeJson));
+        var after = ProjectInfo.ToJson(this.ParseProjectConfiguration(change.AfterJson));
+        if (!string.Equals(json, before, StringComparison.Ordinal) && !string.Equals(json, after, StringComparison.Ordinal))
+        {
+            throw new StorageWriteConflictException("The project configuration changed outside this transaction.");
+        }
+
+        return !string.Equals(json, before, StringComparison.Ordinal);
+    }
+
+    // Confirms every retained and published source directory is in a state recovery can restore from.
+    private async Task VerifyRecoveryMaterialAsync()
+    {
+        foreach (var directory in this.Directories())
+        {
+            var previous = await CookRootImage.CaptureAsync(directory.Previous, copyTo: null, CancellationToken.None).ConfigureAwait(false);
+            var published = await CookRootImage.CaptureAsync(directory.Published, copyTo: null, CancellationToken.None).ConfigureAwait(false);
+            if ((previous.Exists && !previous.Matches(directory.Before))
+                || (!previous.Exists && !published.Matches(directory.Before))
+                || (published.Exists && !published.Matches(directory.Before) && !published.Matches(directory.After)))
+            {
+                throw new InvalidDataException($"Source recovery material for '{directory.Name}' is missing or changed.");
             }
         }
     }

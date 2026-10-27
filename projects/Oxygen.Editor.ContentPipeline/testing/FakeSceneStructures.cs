@@ -91,7 +91,7 @@ public sealed class FakeSceneStructures : ISceneStructures, IInstancedNodeReader
     }
 
     /// <summary>Announces that structures were read again, as when content is mounted again.</summary>
-    public void RaiseChanged() => this.Changed?.Invoke(this, EventArgs.Empty);
+    public void NotifyChanged() => this.Changed?.Invoke(this, EventArgs.Empty);
 
     /// <inheritdoc />
     public SceneStructure? Find(ProjectContext project, AssetPath source)

@@ -14,6 +14,22 @@ namespace Oxygen.Editor.ContentPipeline.Import;
 /// <param name="coordinator">The project writer and activation lifetime.</param>
 public sealed class ImportSourceRetention(IContentCookCoordinator coordinator)
 {
+    /// <summary>Resolves the bundle folder a model is imported into: <paramref name="bundleName"/> in the chosen folder.</summary>
+    /// <param name="project">The project owning the source bundle.</param>
+    /// <param name="folder">The authoring folder the user chose.</param>
+    /// <param name="bundleName">The bundle folder's name.</param>
+    /// <returns>The contained absolute bundle directory.</returns>
+    public static string ResolveDestination(ProjectContext project, AssetPath folder, string bundleName)
+    {
+        ArgumentNullException.ThrowIfNull(project);
+        ArgumentNullException.ThrowIfNull(folder);
+        ValidateBundleName(bundleName);
+        var mount = project.AuthoringMounts.FirstOrDefault(mount => string.Equals(mount.Name, folder.Mount, StringComparison.Ordinal))
+            ?? throw new ArgumentException("Choose an authoring folder, not built-in or cooked content.", nameof(folder));
+        var segments = folder.RelativePath.Length == 0 ? [] : folder.RelativePath.Split('/');
+        return Path.Combine(ResolveInsideMount(project, mount, segments), bundleName);
+    }
+
     /// <summary>Captures all discovered dependencies, then installs the new bundle without overwriting an existing source.</summary>
     /// <param name="operation">The operation owning the project writer.</param>
     /// <param name="folder">The authoring folder the user chose for the model.</param>
@@ -57,22 +73,6 @@ public sealed class ImportSourceRetention(IContentCookCoordinator coordinator)
             snapshot.Inputs.Single(file => string.Equals(file.RelativePath, primary, FileSystemPath.NameComparison)).RelativePath,
             snapshot.Inputs.Where(static file => file.Kind == CookSnapshotInputKind.File)
                 .Select(static file => new RetainedImportSourceFile(file.RelativePath, file.DiscoveryHash)).ToImmutableArray());
-    }
-
-    /// <summary>Resolves the bundle folder a model is imported into: <paramref name="bundleName"/> in the chosen folder.</summary>
-    /// <param name="project">The project owning the source bundle.</param>
-    /// <param name="folder">The authoring folder the user chose.</param>
-    /// <param name="bundleName">The bundle folder's name.</param>
-    /// <returns>The contained absolute bundle directory.</returns>
-    public static string ResolveDestination(ProjectContext project, AssetPath folder, string bundleName)
-    {
-        ArgumentNullException.ThrowIfNull(project);
-        ArgumentNullException.ThrowIfNull(folder);
-        ValidateBundleName(bundleName);
-        var mount = project.AuthoringMounts.FirstOrDefault(mount => string.Equals(mount.Name, folder.Mount, StringComparison.Ordinal))
-            ?? throw new ArgumentException("Choose an authoring folder, not built-in or cooked content.", nameof(folder));
-        var segments = folder.RelativePath.Length == 0 ? [] : folder.RelativePath.Split('/');
-        return Path.Combine(ResolveInsideMount(project, mount, segments), bundleName);
     }
 
     /// <summary>Resolves the folder of an existing retained bundle from its project-relative path.</summary>
@@ -124,7 +124,7 @@ public sealed class ImportSourceRetention(IContentCookCoordinator coordinator)
         {
             if (VirtualPath.IsDerivedContent(segment))
             {
-                throw new ArgumentException("Choose a content destination outside source-media and generated folders.");
+                throw new ArgumentException("Choose a content destination outside source-media and generated folders.", nameof(segments));
             }
 
             path = Path.Combine(path, segment);

@@ -32,6 +32,7 @@ internal sealed partial class CookPublicationTransaction
     {
         var published = ImportSourceRetention.ResolveBundleRoot(operation.Project, source.BundleRoot);
         ValidateImage(source.Before);
+
         // The reviewed folder may hold no file: a replacement can stand in for a model whose source is missing. Its
         // record, outside the folder, names it.
         if (!source.Before.Exists)

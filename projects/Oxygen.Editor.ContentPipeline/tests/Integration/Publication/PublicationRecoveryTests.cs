@@ -36,7 +36,8 @@ public sealed class PublicationRecoveryTests
         var replica = Directory.CreateTempSubdirectory("oxygen-publication-recovery-");
         try
         {
-            await using var staging = await project.StageAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+            var staging = await project.StageAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+            await using var stagingLifetime = staging.ConfigureAwait(false);
             var captured = false;
             var transaction = await project.PrepareAsync(staging, this.TestContext.CancellationToken, async name =>
             {
@@ -65,15 +66,17 @@ public sealed class PublicationRecoveryTests
     }
 
     /// <summary>Recovery cannot replace a head written outside the interrupted transaction.</summary>
+    /// <returns>The asynchronous changed-head regression.</returns>
     [TestMethod]
     public async Task ChangedHeadBlocksRecoveryAndRetainsJournal()
     {
         using var project = new PublicationProject(hadPrevious: true);
-        await using var staging = await project.StageAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        var staging = await project.StageAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        await using var stagingLifetime = staging.ConfigureAwait(false);
         var head = CookPublicationPaths.Head(project.Root);
         var transaction = await project.PrepareAsync(staging, this.TestContext.CancellationToken, async name =>
         {
-            if (name == "HeadSelected")
+            if (string.Equals(name, "HeadSelected", StringComparison.Ordinal))
             {
                 await File.WriteAllTextAsync(head, "external selection", this.TestContext.CancellationToken).ConfigureAwait(false);
                 throw new IOException("Injected external head change");
@@ -84,9 +87,9 @@ public sealed class PublicationRecoveryTests
         _ = transaction.Phase.Should().Be(CookPublicationPhase.HeadSelected);
         using var gate = await CookOutputLease.AcquireWriteAsync(FileSystemPath.From(project.Root), this.TestContext.CancellationToken).ConfigureAwait(false);
         var recovery = await CookPublicationTransaction.LoadAsync(project.Context, project.Operation.OperationId, project.Files, project.Manager, gate, this.TestContext.CancellationToken).ConfigureAwait(false);
-        Func<Task> recover = () => recovery.RecoverAsync(gate);
+        Func<Task> recover = async () => await recovery.RecoverAsync(gate).ConfigureAwait(false);
         _ = await recover.Should().ThrowAsync<DroidNet.Storage.StorageWriteConflictException>().ConfigureAwait(false);
-        _ = File.ReadAllText(head).Should().Be("external selection");
+        _ = (await File.ReadAllTextAsync(head, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Be("external selection");
         _ = File.Exists(Path.Combine(project.Root, ".build", "cook", project.Operation.OperationId.ToString("N"), "publication.json")).Should().BeTrue();
     }
 
@@ -96,7 +99,8 @@ public sealed class PublicationRecoveryTests
     public async Task InvalidGenerationIdentityIsRejectedBeforeRecovery()
     {
         using var project = new PublicationProject(hadPrevious: true);
-        await using var staging = await project.StageAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        var staging = await project.StageAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        await using var stagingLifetime = staging.ConfigureAwait(false);
         _ = await project.PrepareAsync(staging, this.TestContext.CancellationToken).ConfigureAwait(false);
         var path = Path.Combine(project.Root, ".build", "cook", project.Operation.OperationId.ToString("N"), "publication.json");
         var journal = JsonNode.Parse(await File.ReadAllTextAsync(path, this.TestContext.CancellationToken).ConfigureAwait(false))!;
@@ -114,7 +118,8 @@ public sealed class PublicationRecoveryTests
     public async Task CommittedOutputMustStillMatchItsProof()
     {
         using var project = new PublicationProject(hadPrevious: true);
-        await using var staging = await project.StageAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        var staging = await project.StageAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        await using var stagingLifetime = staging.ConfigureAwait(false);
         var transaction = await project.PrepareAsync(staging, this.TestContext.CancellationToken).ConfigureAwait(false);
         using var accepted = await transaction.PublishAsync(preview: null, project.Baseline, static () => { }, this.TestContext.CancellationToken).ConfigureAwait(false);
         await staging.DisposeAsync().ConfigureAwait(false);
@@ -128,7 +133,7 @@ public sealed class PublicationRecoveryTests
         var loaded = await CookPublicationTransaction.LoadAsync(project.Context, project.Operation.OperationId, project.Files, project.Manager, writer, this.TestContext.CancellationToken).ConfigureAwait(false);
         Func<Task> verify = async () =>
         {
-            var catalog = await accepted.CreateCatalogAsync(accepted.Roots.Single(static root => root.Name == "Content"), this.TestContext.CancellationToken).ConfigureAwait(false);
+            var catalog = await accepted.CreateCatalogAsync(accepted.Roots.Single(static root => string.Equals(root.Name, "Content", StringComparison.Ordinal)), this.TestContext.CancellationToken).ConfigureAwait(false);
         };
         _ = await verify.Should().ThrowAsync<InvalidDataException>().ConfigureAwait(false);
     }

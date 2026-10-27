@@ -153,7 +153,7 @@ internal sealed partial class SceneInstanceSectionTests
     public async Task ASourceThatInstancesTheScene_IsRefusedWithItsMessage()
     {
         using var harness = Harness.Open(changed: false);
-        _ = harness.References.Setup(references => references.Of(Watchtower)).Returns([harness.SceneAsset]);
+        _ = harness.References.Setup(references => references.ReferencesOf(Watchtower)).Returns([harness.SceneAsset]);
         using var section = harness.Section();
 
         await section.SwapAsync(Watchtower).ConfigureAwait(false);
@@ -167,7 +167,7 @@ internal sealed partial class SceneInstanceSectionTests
     {
         var harbor = AssetPath.Parse("/Content/Harbor.oscene");
         using var harness = Harness.Open(changed: false, [Model(Van), Scene(Watchtower), Scene(harbor)]);
-        _ = harness.References.Setup(references => references.Of(harbor)).Returns([harness.SceneAsset]);
+        _ = harness.References.Setup(references => references.ReferencesOf(harbor)).Returns([harness.SceneAsset]);
         using var section = harness.Section();
 
         await section.PrepareChoicesAsync().ConfigureAwait(false);
@@ -310,7 +310,7 @@ internal sealed partial class SceneInstanceSectionTests
             });
             var references = new Mock<IAuthoredReferences>();
             _ = references.Setup(saved => saved.RefreshAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
-            _ = references.Setup(saved => saved.Of(It.IsAny<AssetPath>())).Returns([]);
+            _ = references.Setup(saved => saved.ReferencesOf(It.IsAny<AssetPath>())).Returns([]);
             var scene = TestScenes.Open(built, project: project, references: references.Object, structures: structures);
             var opened = new Harness(scene, new TestSession(scene.Project), structures, references, assets ?? []) { Project = project };
             _ = opened.Nodes.Setup(nodes => nodes.ReadStructureAsync(It.IsAny<ProjectContext>(), Van, It.IsAny<CancellationToken>()))

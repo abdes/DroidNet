@@ -12,6 +12,33 @@ namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Inspection;
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "MSTest discovers public test classes with the repository discovery configuration.")]
 public sealed class CookedDependencyReportTests
 {
+    private const string ReportJson = """
+        {
+          "schema": "oxygen.cooked-dependencies.v3",
+          "source_key": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          "assets": [
+            {
+              "asset_key": "11111111-1111-4111-8111-111111111111",
+              "asset_type": 2,
+              "virtual_path": "/Content/Materials/Test.omat",
+              "dependencies": ["22222222-2222-4222-8222-222222222222"],
+              "key_references": [
+                { "asset_key": "22222222-2222-4222-8222-222222222222", "target_kind": 1, "expected_asset_type": 2 },
+                { "asset_key": "33333333-3333-4333-8333-333333333333", "target_kind": 2, "expected_asset_type": 0 },
+                { "asset_key": "44444444-4444-4444-8444-444444444444", "target_kind": 3, "expected_asset_type": 0 },
+                { "asset_key": "55555555-5555-4555-8555-555555555555", "target_kind": 4, "expected_asset_type": 0 }
+              ],
+              "resource_bindings": [
+                { "kind": 2, "index": 0, "state": "fallback" },
+                { "kind": 2, "index": 4294967295, "state": "error" },
+                { "kind": 5, "index": 3, "state": "external" }
+              ],
+              "complete": true
+            }
+          ]
+        }
+        """;
+
     [TestMethod]
     public void Parse_UsesOnlyAssetTargetReferencesAsDependencies()
     {
@@ -62,31 +89,4 @@ public sealed class CookedDependencyReportTests
 
         _ = global::Oxygen.Editor.ContentPipeline.Publication.CookedLibraryReadSet.MatchesExpectedAssetType(reference, target).Should().Be(expectedMatch);
     }
-
-    private const string ReportJson = """
-        {
-          "schema": "oxygen.cooked-dependencies.v3",
-          "source_key": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-          "assets": [
-            {
-              "asset_key": "11111111-1111-4111-8111-111111111111",
-              "asset_type": 2,
-              "virtual_path": "/Content/Materials/Test.omat",
-              "dependencies": ["22222222-2222-4222-8222-222222222222"],
-              "key_references": [
-                { "asset_key": "22222222-2222-4222-8222-222222222222", "target_kind": 1, "expected_asset_type": 2 },
-                { "asset_key": "33333333-3333-4333-8333-333333333333", "target_kind": 2, "expected_asset_type": 0 },
-                { "asset_key": "44444444-4444-4444-8444-444444444444", "target_kind": 3, "expected_asset_type": 0 },
-                { "asset_key": "55555555-5555-4555-8555-555555555555", "target_kind": 4, "expected_asset_type": 0 }
-              ],
-              "resource_bindings": [
-                { "kind": 2, "index": 0, "state": "fallback" },
-                { "kind": 2, "index": 4294967295, "state": "error" },
-                { "kind": 5, "index": 3, "state": "external" }
-              ],
-              "complete": true
-            }
-          ]
-        }
-        """;
 }

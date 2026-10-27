@@ -194,7 +194,7 @@ public sealed class SceneEditScope
     public SceneDiagnostic? CheckInstanceSource(AssetPath source, NodeId? node = null)
     {
         ArgumentNullException.ThrowIfNull(source);
-        return this.Asset is { } scene && InstanceRules.WouldCycle(scene, source, asset => this.References?.Of(asset) ?? [])
+        return this.Asset is { } scene && InstanceRules.WouldCycle(scene, source, asset => this.References?.ReferencesOf(asset) ?? [])
             ? SceneDiagnostic.Error(SceneEditCodes.InstanceCycle, $"'{source.Name}' is or instances this scene, which cannot instance itself.", node)
             : null;
     }

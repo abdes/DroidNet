@@ -126,6 +126,15 @@ public sealed partial class ContentPipelineService
         return [.. inputs.OrderBy(static file => file.RelativePath, StringComparer.Ordinal)];
     }
 
+    private static async Task VerifyReplacementTargetAsync(ContentCookOperation operation, SceneImportReplacement replacement, CancellationToken cancellationToken)
+    {
+        var root = operation.Project.ProjectRoot.Combine(replacement.BundleRoot).FullPath;
+        if (!replacement.Before.Matches(await CookRootImage.CaptureAsync(root, copyTo: null, cancellationToken).ConfigureAwait(false)))
+        {
+            throw new IOException("The model to replace changed since its replacement was chosen. Choose Replace again.");
+        }
+    }
+
     private async Task<ContentCookResult> CookReplacementAsync(ContentCookOperation operation, SceneImportRequest request, Action<SceneImportRequest> retainRecovery, CancellationToken cancellationToken)
     {
         var replacement = request.Replacement!;
@@ -155,7 +164,7 @@ public sealed partial class ContentPipelineService
     {
         var request = scope.ImportReplacement!;
         var replacement = request.Replacement!;
-        await this.VerifyReplacementTargetAsync(operation, replacement, cancellationToken).ConfigureAwait(false);
+        await VerifyReplacementTargetAsync(operation, replacement, cancellationToken).ConfigureAwait(false);
         var source = scope.Inputs.Single();
         var incoming = request.ReplacementCandidatePath ?? request.SourcePath;
         if (!string.Equals(Path.GetExtension(incoming), Path.GetExtension(source.SourceAbsolutePath.Name), StringComparison.OrdinalIgnoreCase))
@@ -193,15 +202,6 @@ public sealed partial class ContentPipelineService
             ImportedSources = graph.ImportedSources.SetItem(source.AssetUri, replacementGraph.ImportedSources[source.AssetUri]),
         };
         return (snapshot, await this.AnalyzeReplacementAsync(operation, source, recordRelative, snapshot, graph, artifacts, cancellationToken).ConfigureAwait(false));
-    }
-
-    private async Task VerifyReplacementTargetAsync(ContentCookOperation operation, SceneImportReplacement replacement, CancellationToken cancellationToken)
-    {
-        var root = operation.Project.ProjectRoot.Combine(replacement.BundleRoot).FullPath;
-        if (!replacement.Before.Matches(await CookRootImage.CaptureAsync(root, copyTo: null, cancellationToken).ConfigureAwait(false)))
-        {
-            throw new IOException("The model to replace changed since its replacement was chosen. Choose Replace again.");
-        }
     }
 
     // Captures the incoming files and discovers what the replacement depends on.

@@ -21,7 +21,19 @@ internal sealed class CookedGeneration : IDisposable
         this.abandoned = abandoned;
     }
 
+    /// <inheritdoc />
+    public void Dispose()
+    {
+        if (!this.disposed)
+        {
+            this.disposed = true;
+            this.ownership?.Dispose();
+        }
+    }
+
     /// <summary>Claims a journaled candidate after its operation has drained and recovery has settled.</summary>
+    /// <param name="root">A contained generation directory whose operation has drained.</param>
+    /// <returns>Ownership retained through deletion, or null when the directory is absent or a live reader holds it.</returns>
     internal static CookedGeneration? TryClaimAbandoned(string root)
     {
         CookOutputLease.RejectReparsePoint(root);
@@ -48,17 +60,22 @@ internal sealed class CookedGeneration : IDisposable
 
         var marker = Path.Combine(root, MarkerFileName);
         CookOutputLease.RejectReparsePoint(marker);
-        var ownership = WindowsCookFile.TryClaimGeneration(marker);
+        var claimed = WindowsCookFile.TryClaimGeneration(marker);
         try
         {
             // Nonempty unsealed roots belong to operation recovery, not GC.
-            return ownership is null && Directory.EnumerateFileSystemEntries(root).Any()
-                ? null : new(root, ownership);
+            if (claimed is null && Directory.EnumerateFileSystemEntries(root).Any())
+            {
+                return null;
+            }
+
+            var generation = new CookedGeneration(root, claimed);
+            claimed = null;
+            return generation;
         }
-        catch
+        finally
         {
-            ownership?.Dispose();
-            throw;
+            claimed?.Dispose();
         }
     }
 
@@ -105,16 +122,6 @@ internal sealed class CookedGeneration : IDisposable
         // cleanup remains claimable on the next maintenance pass.
         File.Delete(marker);
         Directory.Delete(this.root);
-    }
-
-    /// <inheritdoc />
-    public void Dispose()
-    {
-        if (!this.disposed)
-        {
-            this.disposed = true;
-            this.ownership?.Dispose();
-        }
     }
 
     private static void DeletePayloadDirectory(string directory)

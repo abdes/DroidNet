@@ -33,7 +33,11 @@ internal static class ControlledSourceAnalysis
 
         // A single-asset job's output is the identity it names.
         var output = job.VirtualPath ?? throw new InvalidOperationException($"Job '{job.Id}' names no virtual path.");
-        return new(job.Id, job.Type, source, Complete: true,
+        return new(
+            job.Id,
+            job.Type,
+            source,
+            Complete: true,
             [new(output, kind, "/", Required: true)],
             References: [],
             [new(source, Required: true)],

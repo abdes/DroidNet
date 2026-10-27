@@ -30,9 +30,9 @@ public sealed class AuthoredReferencesTests
 
         await references.RefreshAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
 
-        _ = references.Of(Harbor).Should().Equal(Watchtower);
-        _ = references.Of(Watchtower).Should().Equal(Car);
-        _ = references.Of(Car).Should().BeEmpty();
+        _ = references.ReferencesOf(Harbor).Should().Equal(Watchtower);
+        _ = references.ReferencesOf(Watchtower).Should().Equal(Car);
+        _ = references.ReferencesOf(Car).Should().BeEmpty();
     }
 
     [TestMethod]
@@ -40,7 +40,7 @@ public sealed class AuthoredReferencesTests
     {
         using var workspace = CreateProject();
 
-        _ = new AuthoredReferences(workspace.Session).Of(Harbor).Should().BeEmpty();
+        _ = new AuthoredReferences(workspace.Session).ReferencesOf(Harbor).Should().BeEmpty();
     }
 
     [TestMethod]
@@ -53,7 +53,7 @@ public sealed class AuthoredReferencesTests
         _ = workspace.Write("Content/Scenes/Watchtower.oscene.json", SceneInstancing("Watchtower", Harbor));
         await references.RefreshAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
 
-        _ = references.Of(Watchtower).Should().Equal(Harbor);
+        _ = references.ReferencesOf(Watchtower).Should().Equal(Harbor);
     }
 
     private static string SceneInstancing(string name, AssetPath source)

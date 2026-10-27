@@ -19,7 +19,7 @@ using Testably.Abstractions.Testing;
 namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Relocation;
 
 /// <summary>An in-memory project with one Content mount and a relocation service.</summary>
-internal sealed class RelocationWorkspace : IDisposable
+internal sealed partial class RelocationWorkspace : IDisposable
 {
     private readonly Subject<AssetChange> catalogChanges = new();
 

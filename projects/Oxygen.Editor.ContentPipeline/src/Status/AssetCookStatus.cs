@@ -1,4 +1,4 @@
-﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
+// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
@@ -24,7 +24,7 @@ public sealed record AssetCookStatus(
     ImmutableArray<ContentCookedAsset> Outputs,
     ImmutableArray<DiagnosticRecord> Diagnostics)
 {
-    /// <summary>Gets whether the published output is present, without claiming payload integrity.</summary>
+    /// <summary>Gets a value indicating whether the published output is present, without claiming payload integrity.</summary>
     public bool HasAvailableOutput => this.OutputAvailability == CookedOutputAvailability.Present;
 
     /// <summary>
@@ -37,7 +37,7 @@ public sealed record AssetCookStatus(
     public ImmutableArray<FileSystemPath> SourcePaths { get; init; } = [];
 
     /// <summary>Gets the selected generation paths used by this status read, shared across its result batch.</summary>
-    public ImmutableDictionary<string, FileSystemPath> OutputRoots { get; init; } = ImmutableDictionary<string, FileSystemPath>.Empty;
+    public ImmutableDictionary<string, FileSystemPath> OutputRoots { get; init; } = [];
 
     /// <summary>Gets the hash of source bytes used by this status check, for cached source previews.</summary>
     public string? SavedSourceHash { get; init; }

@@ -36,7 +36,7 @@ public sealed class CookedContentMountTests
     {
         using var fixture = new MountFixture();
         using var reader = await fixture.CaptureAsync(fixture.Project, this.TestContext.CancellationToken).ConfigureAwait(false);
-        var mounts = await fixture.Service.PrepareAsync(fixture.Project, reader, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var mounts = await CookedContentMountService.PrepareAsync(fixture.Project, reader, this.TestContext.CancellationToken).ConfigureAwait(false);
         using (mounts)
         {
             _ = mounts.Roots.Should().Equal(fixture.First, fixture.Second, fixture.ProjectOutput);
@@ -62,7 +62,7 @@ public sealed class CookedContentMountTests
 
         using var libraries = await CookedLibraryReadSet.AcquireAsync(fixture.Project, new EngineContentPakFixture(), this.TestContext.CancellationToken).ConfigureAwait(false);
         using var reader = await fixture.CaptureAsync(fixture.Project, this.TestContext.CancellationToken).ConfigureAwait(false);
-        using var mounts = await fixture.Service.PrepareAsync(fixture.Project, reader, this.TestContext.CancellationToken).ConfigureAwait(false);
+        using var mounts = await CookedContentMountService.PrepareAsync(fixture.Project, reader, this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = libraries.Unreadable.Should().ContainSingle().Which.Name.Should().Be("First");
         _ = mounts.Roots.Should().Equal(fixture.Second, fixture.ProjectOutput);
@@ -80,7 +80,7 @@ public sealed class CookedContentMountTests
             CookedContentOrder = [new(CookedContentSourceKind.LocalFolder, "First"), new(CookedContentSourceKind.LocalFolder, "Second"), new(CookedContentSourceKind.ProjectOutput), new(CookedContentSourceKind.LocalFolder, "Alias")],
         };
         using var reader = await fixture.CaptureAsync(project, this.TestContext.CancellationToken).ConfigureAwait(false);
-        using var mounts = await fixture.Service.PrepareAsync(project, reader, this.TestContext.CancellationToken).ConfigureAwait(false);
+        using var mounts = await CookedContentMountService.PrepareAsync(project, reader, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = mounts.Roots.Should().Equal(fixture.Second, fixture.ProjectOutput, fixture.First);
     }
 
@@ -94,7 +94,7 @@ public sealed class CookedContentMountTests
         using var reader = await fixture.CaptureAsync(fixture.Project, this.TestContext.CancellationToken).ConfigureAwait(false);
         var path = Path.Combine(fixture.First, "Materials", "Shared.omat");
         File.WriteAllBytes(path, [8, 8, 8, 8]);
-        Func<Task> prepare = () => fixture.Service.PrepareAsync(fixture.Project, reader, this.TestContext.CancellationToken);
+        Func<Task> prepare = () => CookedContentMountService.PrepareAsync(fixture.Project, reader, this.TestContext.CancellationToken);
         _ = await prepare.Should().ThrowAsync<InvalidDataException>().WithMessage("*metadata does not match*").ConfigureAwait(false);
         using var borrowed = reader.Retain();
         File.WriteAllBytes(path, [9]);
@@ -110,7 +110,7 @@ public sealed class CookedContentMountTests
         using var reader = await fixture.CaptureAsync(fixture.Project, this.TestContext.CancellationToken).ConfigureAwait(false);
         var recorded = reader.Roots.Single(static root => string.Equals(root.Name, "First", StringComparison.Ordinal));
         fixture.RecookFirst();
-        Func<Task> prepare = () => fixture.Service.PrepareAsync(fixture.Project, reader, this.TestContext.CancellationToken);
+        Func<Task> prepare = () => CookedContentMountService.PrepareAsync(fixture.Project, reader, this.TestContext.CancellationToken);
         var changed = (await prepare.Should().ThrowAsync<CookedLibraryChangedException>().ConfigureAwait(false)).Which;
         _ = changed.Root.Should().Be(recorded);
         _ = changed.RootPath.Should().Be(fixture.First);
@@ -145,7 +145,7 @@ public sealed class CookedContentMountTests
         using var reader = await fixture.CaptureAsync(fixture.Project, this.TestContext.CancellationToken).ConfigureAwait(false);
         using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(this.TestContext.CancellationToken);
         await cancellation.CancelAsync().ConfigureAwait(false);
-        var preparation = fixture.Service.PrepareAsync(fixture.Project, reader, cancellation.Token);
+        var preparation = CookedContentMountService.PrepareAsync(fixture.Project, reader, cancellation.Token);
         Func<Task> finish = () => preparation;
         _ = await finish.Should().ThrowAsync<OperationCanceledException>().ConfigureAwait(false);
         using var borrowed = reader.Retain();
@@ -162,11 +162,11 @@ public sealed class CookedContentMountTests
         var project = fixture.Project with { PakFileMounts = [new("Props", FileSystemPath.From(pak.Path))] };
         using var reader = await fixture.CaptureAsync(project, this.TestContext.CancellationToken).ConfigureAwait(false);
 
-        var root = reader.Roots.Single(static root => root.Name == "Props");
+        var root = reader.Roots.Single(static root => string.Equals(root.Name, "Props", StringComparison.Ordinal));
         _ = root.Container.Should().Be(CookPublicationRootContainer.PakFile);
         _ = root.SourceKey.Should().Be(pak.Document.SourceIdentity);
         _ = root.IndexSha256.Should().Be(pak.Document.CatalogDigest);
-        using (var mounts = await fixture.Service.PrepareAsync(project, reader, this.TestContext.CancellationToken).ConfigureAwait(false))
+        using (var mounts = await CookedContentMountService.PrepareAsync(project, reader, this.TestContext.CancellationToken).ConfigureAwait(false))
         {
             _ = mounts.Roots.Should().Contain(pak.Path);
             Action replace = () => File.WriteAllBytes(pak.Path, [0]);
@@ -174,7 +174,10 @@ public sealed class CookedContentMountTests
         }
 
         _ = fixture.WritePak("Props.pak", pak.Document.SourceIdentity, digestByte: 0xB2);
-        Func<Task> stale = () => fixture.Service.PrepareAsync(project, reader, this.TestContext.CancellationToken);
+        Func<Task> stale = async () =>
+        {
+            using var replaced = await CookedContentMountService.PrepareAsync(project, reader, this.TestContext.CancellationToken).ConfigureAwait(false);
+        };
         _ = await stale.Should().ThrowAsync<CookedLibraryChangedException>().ConfigureAwait(false);
     }
 
@@ -191,7 +194,7 @@ public sealed class CookedContentMountTests
         {
         }
 
-        var head = await fixture.DowngradeAsync(fixture.Project, version: 6, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var head = await MountFixture.DowngradeAsync(fixture.Project, version: 6, this.TestContext.CancellationToken).ConfigureAwait(false);
 
         Func<Task> read = () => fixture.OpenAsync(fixture.Project, upgradeOutdated: false, this.TestContext.CancellationToken);
         var refused = await read.Should().ThrowAsync<CookPublicationFormatException>().ConfigureAwait(false);
@@ -222,7 +225,6 @@ public sealed class CookedContentMountTests
                 Name = "Mounts",
                 LocalFolderMounts = [new("First", FileSystemPath.From(this.First)), new("Second", FileSystemPath.From(this.Second))],
             };
-            this.Service = new();
         }
 
         public string ProjectOutput { get; }
@@ -233,7 +235,22 @@ public sealed class CookedContentMountTests
 
         public ProjectContext Project { get; }
 
-        public CookedContentMountService Service { get; }
+        // Rewrites the selected document as one of another format, as an older editor wrote it, and selects it.
+        public static async Task<string> DowngradeAsync(ProjectContext project, int version, CancellationToken token)
+        {
+            var headPath = CookPublicationPaths.Head(project.ProjectRoot.FullPath);
+            var selected = JsonSerializer.Deserialize<CookPublicationHead>(await File.ReadAllBytesAsync(headPath, token).ConfigureAwait(false), CookPublicationDocument.JsonOptions)!;
+            var path = CookPublicationPaths.Document(project.ProjectRoot.FullPath, selected.PublicationId);
+            var document = System.Text.Json.Nodes.JsonNode.Parse(await File.ReadAllBytesAsync(path, token).ConfigureAwait(false))!;
+            document["version"] = version;
+            document["cookInputs"] = new System.Text.Json.Nodes.JsonObject { ["buildFingerprint"] = "older" };
+            var bytes = System.Text.Encoding.UTF8.GetBytes(document.ToJsonString());
+            await File.WriteAllBytesAsync(path, bytes, token).ConfigureAwait(false);
+            var head = new CookPublicationHead(CookPublicationHead.CurrentVersion, selected.PublicationId, Convert.ToHexString(SHA256.HashData(bytes)));
+            var headBytes = JsonSerializer.SerializeToUtf8Bytes(head, CookPublicationDocument.JsonOptions);
+            await File.WriteAllBytesAsync(headPath, headBytes, token).ConfigureAwait(false);
+            return Convert.ToHexString(SHA256.HashData(headBytes));
+        }
 
         public async Task<CookPublicationReadLease> CaptureAsync(ProjectContext project, CancellationToken token)
         {
@@ -256,23 +273,6 @@ public sealed class CookedContentMountTests
             var head = new CookPublicationHead(CookPublicationHead.CurrentVersion, document.OperationId, version.Sha256);
             _ = await this.files.WriteAsync(CookPublicationPaths.Head(project.ProjectRoot.FullPath), JsonSerializer.SerializeToUtf8Bytes(head, CookPublicationDocument.JsonOptions), FileVersion.Missing, token).ConfigureAwait(false);
             return await CookPublicationReadLease.OpenUnderGateAsync(project, this.files, gate, token).ConfigureAwait(false);
-        }
-
-        // Rewrites the selected document as one of another format, as an older editor wrote it, and selects it.
-        public async Task<string> DowngradeAsync(ProjectContext project, int version, CancellationToken token)
-        {
-            var headPath = CookPublicationPaths.Head(project.ProjectRoot.FullPath);
-            var selected = JsonSerializer.Deserialize<CookPublicationHead>(await File.ReadAllBytesAsync(headPath, token).ConfigureAwait(false), CookPublicationDocument.JsonOptions)!;
-            var path = CookPublicationPaths.Document(project.ProjectRoot.FullPath, selected.PublicationId);
-            var document = System.Text.Json.Nodes.JsonNode.Parse(await File.ReadAllBytesAsync(path, token).ConfigureAwait(false))!;
-            document["version"] = version;
-            document["cookInputs"] = new System.Text.Json.Nodes.JsonObject { ["buildFingerprint"] = "older" };
-            var bytes = System.Text.Encoding.UTF8.GetBytes(document.ToJsonString());
-            await File.WriteAllBytesAsync(path, bytes, token).ConfigureAwait(false);
-            var head = new CookPublicationHead(CookPublicationHead.CurrentVersion, selected.PublicationId, Convert.ToHexString(SHA256.HashData(bytes)));
-            var headBytes = JsonSerializer.SerializeToUtf8Bytes(head, CookPublicationDocument.JsonOptions);
-            await File.WriteAllBytesAsync(headPath, headBytes, token).ConfigureAwait(false);
-            return Convert.ToHexString(SHA256.HashData(headBytes));
         }
 
         public async Task<CookPublicationReadLease> OpenAsync(ProjectContext project, bool upgradeOutdated, CancellationToken token)

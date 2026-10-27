@@ -35,7 +35,6 @@ public sealed partial class PlaySession : ObservableObject, IRuntimeProblemSourc
     private readonly IProjectSession session;
     private readonly IContentPipelineService pipeline;
     private readonly CookPublicationService publication;
-    private readonly CookedContentMountService mountService;
     private readonly OpenDocuments documents;
     private readonly IOperationResultPublisher operationResults;
     private readonly OwnerThread owner = OwnerThread.Capture();
@@ -53,7 +52,6 @@ public sealed partial class PlaySession : ObservableObject, IRuntimeProblemSourc
     /// <param name="session">The project session, whose scenes Play runs.</param>
     /// <param name="pipeline">The content pipeline that cooks the scene.</param>
     /// <param name="publication">The cooked content publication the player mounts.</param>
-    /// <param name="mountService">Validates and holds the cooked roots while the player reads them.</param>
     /// <param name="settings">The play session preferences.</param>
     /// <param name="documents">The open documents, whose edits make a running session stale.</param>
     /// <param name="operationResults">Publishes Play failures.</param>
@@ -63,7 +61,6 @@ public sealed partial class PlaySession : ObservableObject, IRuntimeProblemSourc
         IProjectSession session,
         IContentPipelineService pipeline,
         CookPublicationService publication,
-        CookedContentMountService mountService,
         PlaySettings settings,
         OpenDocuments documents,
         IOperationResultPublisher operationResults,
@@ -73,7 +70,6 @@ public sealed partial class PlaySession : ObservableObject, IRuntimeProblemSourc
         this.session = session;
         this.pipeline = pipeline;
         this.publication = publication;
-        this.mountService = mountService;
         this.Settings = settings;
         this.documents = documents;
         this.operationResults = operationResults;
@@ -259,7 +255,7 @@ public sealed partial class PlaySession : ObservableObject, IRuntimeProblemSourc
     private async Task<CookedContentMountSet> WriteLaunchFileAsync(ProjectContext project, PlayRequest request, string scenePath, CancellationToken cancellationToken)
     {
         using var publishedReader = await this.publication.AcquireForMountAsync(project, cancellationToken).ConfigureAwait(true);
-        var mounts = await this.mountService.PrepareAsync(project, publishedReader, cancellationToken).ConfigureAwait(true);
+        var mounts = await CookedContentMountService.PrepareAsync(project, publishedReader, cancellationToken).ConfigureAwait(true);
         try
         {
             var window = new PlayerLaunchWindow(

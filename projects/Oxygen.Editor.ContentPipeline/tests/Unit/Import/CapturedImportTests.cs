@@ -35,7 +35,7 @@ public sealed class CapturedImportTests
         _ = capture["inputs"]![1]!["exists"]!.GetValue<bool>().Should().BeFalse();
         _ = capture["inputs"]![1]!["metadata"].Should().BeNull();
         _ = capture["inputs"]![1]!["file"].Should().BeNull();
-        _ = Directory.EnumerateFiles(Path.GetDirectoryName(runner.CapturePath!)!).Should().BeEmpty();
+        _ = Directory.EnumerateFiles(Path.GetDirectoryName(runner.CapturePath)!).Should().BeEmpty();
     }
 
     /// <summary>The capture map remains available while a failed-to-terminate worker is alive.</summary>
@@ -53,7 +53,7 @@ public sealed class CapturedImportTests
         drain.SetResult();
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         await failure.Which.DrainCompletion.WaitAsync(timeout.Token).ConfigureAwait(false);
-        _ = Directory.EnumerateFiles(Path.GetDirectoryName(runner.CapturePath!)!).Should().BeEmpty();
+        _ = Directory.EnumerateFiles(Path.GetDirectoryName(runner.CapturePath)!).Should().BeEmpty();
     }
 
     private static ContentImportExecution CapturedExecution(ImportAdapterWorkspace workspace)
@@ -65,7 +65,7 @@ public sealed class CapturedImportTests
             [
                 new(
                     Path.Combine(workspace.Root, execution.Manifest.Jobs[0].AttributedSource),
-Exists: true,
+                    Exists: true,
                     new(2, IsDirectory: false, IsSymlink: false, 0, 0),
                     new(Path.Combine(execution.OperationRoot, "captured.json"), 2, new string('a', 64))),
                 new(Path.Combine(workspace.Root, "absent.png"), Exists: false, Metadata: null, File: null),

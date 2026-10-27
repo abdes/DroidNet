@@ -72,8 +72,6 @@ public sealed partial class AssetRedirects : IAssetRedirects
         return !this.Exists(identity) && snapshot.Any(identity.IsSameOrInside);
     }
 
-    /// <inheritdoc/>
-
     /// <summary>Records a committed relocation.</summary>
     /// <param name="map">The relocation's identity mapping.</param>
     internal void Record(RelocationMap map)

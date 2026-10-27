@@ -15,6 +15,9 @@ namespace Oxygen.Editor.ContentPipeline;
 /// </remarks>
 public sealed partial class ContentCookCoordinator
 {
+    // The work that takes the writer without a cook request.
+    private const string OtherWriterWork = "a move, rename, copy or delete of project files, a mount change or a cooked library inspection";
+
     private readonly List<WriterRequest> waitingWriters = [];
     private readonly List<TaskCompletionSource> idleWaiters = [];
 
@@ -118,9 +121,6 @@ public sealed partial class ContentCookCoordinator
 
         this.idleWaiters.Clear();
     }
-
-    // The work that takes the writer without a cook request.
-    private const string OtherWriterWork = "a move, rename, copy or delete of project files, a mount change or a cooked library inspection";
 
     // Called under stateLock.
     private void PreemptAutomaticWriter()

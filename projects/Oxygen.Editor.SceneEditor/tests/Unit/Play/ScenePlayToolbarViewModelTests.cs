@@ -7,7 +7,6 @@ using DroidNet.Storage;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Oxygen.Editor.ContentPipeline;
-using Oxygen.Editor.ContentPipeline.Mounting;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.LivePreview.Play;
 using Oxygen.Editor.Projects;
@@ -83,7 +82,7 @@ internal sealed partial class ScenePlayToolbarViewModelTests
             File.WriteAllBytes(player, []);
             _ = this.Pipeline.Setup(value => value.CookCurrentSceneAsync(It.IsAny<AssetPath>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(new ContentCookResult(Guid.NewGuid(), CookTargetKind.CurrentScene, OperationStatus.Failed, [], [], Inspection: null, Validation: null));
-            this.Session = new PlaySession(this.session, this.Pipeline.Object, publication, new CookedContentMountService(), new PlaySettings(settings: null), this.Documents.Open, Mock.Of<IOperationResultPublisher>(), playerExecutable: player);
+            this.Session = new PlaySession(this.session, this.Pipeline.Object, publication, new PlaySettings(settings: null), this.Documents.Open, Mock.Of<IOperationResultPublisher>(), playerExecutable: player);
         }
 
         public TestSceneDocuments Documents { get; } = new(TestProject.Create(new MockFileSystem(), @"C:\PlayToolbarTests"));

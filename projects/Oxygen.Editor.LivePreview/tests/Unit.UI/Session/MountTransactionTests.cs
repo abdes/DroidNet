@@ -10,7 +10,6 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline;
-using Oxygen.Editor.ContentPipeline.Mounting;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.Testing;
 using Oxygen.Editor.LivePreview.Session;
@@ -134,7 +133,7 @@ internal sealed partial class MountTransactionTests : DroidNet.Tests.VisualUserI
             _ = catalog.Setup(value => value.UsePublicationAsync(It.IsAny<ICookPublicationReadLease>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
             this.Roots = [this.BaseLibrary];
             this.ConfigureEngine();
-            this.Session = new(this.engine.Object, this.publication, new CookedContentMountService(), catalog.Object, this.coordinator, session, this.Sessions, Mock.Of<IOperationResultPublisher>(), new OperationStatusReducer());
+            this.Session = new(this.engine.Object, this.publication, catalog.Object, this.coordinator, session, this.Sessions, Mock.Of<IOperationResultPublisher>(), new OperationStatusReducer());
         }
 
         public MountAtomicStore Store { get; } = new();

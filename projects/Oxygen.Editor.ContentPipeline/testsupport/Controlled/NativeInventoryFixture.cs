@@ -17,19 +17,24 @@ internal static partial class NativeInventoryFixture
 {
     public static void WriteIndex(string root, IEnumerable<CookedAssetEntry> assets, Guid? sourceKey = null)
     {
-        var entries = assets.Where(static asset => asset.Kind != ContentCookAssetKind.Texture).Select(asset =>
+        CookedAssetEntry[] allAssets = [.. assets];
+        var entries = allAssets.Where(static asset => asset.Kind != ContentCookAssetKind.Texture).Select(asset =>
         {
             var path = asset.DescriptorRelativePath ?? asset.VirtualPath.TrimStart('/');
             var bytes = File.ReadAllBytes(Path.Combine(root, path));
             var key = asset.AssetKey is null ? Guid.CreateVersion7() : Guid.Parse(asset.AssetKey);
-            return new AssetEntry(AssetKey.FromBytes(key.ToByteArray(bigEndian: true)), path, asset.VirtualPath,
-                asset.Kind switch { ContentCookAssetKind.Material => (byte)1, ContentCookAssetKind.Geometry => (byte)2, ContentCookAssetKind.Scene => (byte)3, _ => (byte)0 },
-                checked((ulong)bytes.Length), SHA256.HashData(bytes));
+            return new AssetEntry(
+                AssetKey.FromBytes(key.ToByteArray(bigEndian: true)),
+                path,
+                asset.VirtualPath,
+                asset.Kind switch { ContentCookAssetKind.Material => 1, ContentCookAssetKind.Geometry => 2, ContentCookAssetKind.Scene => 3, _ => 0 },
+                checked((ulong)bytes.Length),
+                SHA256.HashData(bytes));
         }).ToArray();
         var descriptors = entries.Select(static entry => entry.DescriptorRelativePath).ToHashSet(StringComparer.Ordinal);
 
         // A texture is a resource: its descriptor is a file record that carries the texture's virtual path.
-        var textures = assets.Where(static asset => asset.Kind == ContentCookAssetKind.Texture)
+        var textures = allAssets.Where(static asset => asset.Kind == ContentCookAssetKind.Texture)
             .ToDictionary(static asset => asset.DescriptorRelativePath ?? asset.VirtualPath.TrimStart('/'), static asset => asset.VirtualPath, StringComparer.Ordinal);
         var files = Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)
             .Select(path => (Path: path, Relative: Path.GetRelativePath(root, path).Replace('\\', '/')))
@@ -54,14 +59,17 @@ internal static partial class NativeInventoryFixture
         using var stream = new MemoryStream(indexBytes, writable: false);
         var index = LooseCookedIndex.Read(stream);
         var members = index.Assets.Select(static asset => (Path: asset.DescriptorRelativePath, Size: asset.DescriptorSize, Digest: asset.DescriptorSha256, Kind: (FileKind?)null))
-            .Concat(index.Files.Select(static file => (Path: file.RelativePath, Size: file.Size, Digest: file.Sha256, Kind: (FileKind?)file.Kind))).ToArray();
+            .Concat(index.Files.Select(static file => (Path: file.RelativePath, file.Size, Digest: file.Sha256, Kind: (FileKind?)file.Kind))).ToArray();
         var issues = new List<object>();
         foreach (var member in members)
         {
             var path = Path.Combine(root, member.Path);
             var reason = !File.Exists(path) ? "missing" : (ulong)new FileInfo(path).Length != member.Size ? "size_mismatch"
                 : !SHA256.HashData(File.ReadAllBytes(path)).AsSpan().SequenceEqual(member.Digest.Span) ? "digest_mismatch" : null;
-            if (reason is not null) { issues.Add(new { relative_path = member.Path, reason }); }
+            if (reason is not null)
+            {
+                issues.Add(new { relative_path = member.Path, reason });
+            }
         }
 
         var expected = members.Select(static member => member.Path).ToHashSet(StringComparer.Ordinal);
@@ -69,10 +77,16 @@ internal static partial class NativeInventoryFixture
         {
             var relative = Path.GetRelativePath(root, path).Replace('\\', '/');
             if (relative is not ("container.index.bin" or ".generation.lock") && !expected.Contains(relative))
-            { issues.Add(new { relative_path = relative, reason = "unexpected" }); }
+            {
+                issues.Add(new { relative_path = relative, reason = "unexpected" });
+            }
         }
 
-        if (forceFailure) { issues.Add(new { relative_path = "controlled-missing.bin", reason = "missing" }); }
+        if (forceFailure)
+        {
+            issues.Add(new { relative_path = "controlled-missing.bin", reason = "missing" });
+        }
+
         return JsonSerializer.Serialize(new
         {
             schema_version = 1,

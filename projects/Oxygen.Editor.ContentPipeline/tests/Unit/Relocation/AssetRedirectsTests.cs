@@ -22,7 +22,7 @@ public sealed class AssetRedirectsTests
     {
         using var workspace = new RelocationWorkspace();
         var redirects = new AssetRedirects(workspace.Session);
-        var service = workspace.CreateService(redirects);
+        using var service = workspace.CreateService(redirects);
         _ = workspace.Write("Content/Materials/A.omat.json", "{}");
 
         _ = await service.RelocateAsync(Move("/Content/Materials/A.omat.json", "/Content/Materials/B.omat.json"), "Move", new HistoryKeeper(this), this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -42,7 +42,7 @@ public sealed class AssetRedirectsTests
     {
         using var workspace = new RelocationWorkspace();
         var redirects = new AssetRedirects(workspace.Session);
-        var service = workspace.CreateService(redirects);
+        using var service = workspace.CreateService(redirects);
         _ = workspace.Write("Content/Materials/A.omat.json", "{}");
         _ = await service.RelocateAsync(Move("/Content/Materials/A.omat.json", "/Content/Materials/B.omat.json"), "Move", new HistoryKeeper(this), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = workspace.Write("Content/Materials/A.omat.json", "{}");
@@ -57,7 +57,7 @@ public sealed class AssetRedirectsTests
     {
         using var workspace = new RelocationWorkspace();
         var redirects = new AssetRedirects(workspace.Session);
-        var service = workspace.CreateService(redirects);
+        using var service = workspace.CreateService(redirects);
         var path = workspace.Write("Content/Materials/A.omat.json", "{}");
 
         await service.DeleteAsync(
@@ -81,7 +81,7 @@ public sealed class AssetRedirectsTests
     public async Task ParticipantsFollowBeforeRelocationReturns()
     {
         using var workspace = new RelocationWorkspace();
-        var service = workspace.CreateService(redirects: null);
+        using var service = workspace.CreateService(redirects: null);
         _ = workspace.Write("Content/Materials/A.omat.json", "{}");
         var scene = workspace.FileOf("Content/Scenes/Main.oscene.json");
         _ = workspace.Write("Content/Scenes/Main.oscene.json", """{ "RootNodes": [ { "Components": [ { "$type": "GeometryComponent", "Overrides": { "Parts": [ { "Kind": "surface", "Id": "6e1d1f0a-0000-4000-8000-000000000001", "LayoutRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "Values": { "/material": "asset:///Content/Materials/A.omat" } } ] } } ] } ] }""");

@@ -164,7 +164,7 @@ internal sealed class InstancedNodeInspectionTests : DroidNet.Tests.VisualUserIn
         SelectDoor(fixture);
 
         fixture.Structures.PublishValues(Car, NodePath.Of(Door), DoorValues(positionX: 5f));
-        fixture.Structures.RaiseChanged();
+        fixture.Structures.NotifyChanged();
 
         _ = host.SelectedNode!.Transform.LocalPosition.X.Should().Be(5f);
         return Task.CompletedTask;

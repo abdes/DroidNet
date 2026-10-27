@@ -34,8 +34,13 @@ internal sealed class NativeSourceFactsFixture(ProjectContext project) : ICookSo
         await using var lifetime = artifacts.ConfigureAwait(false);
         var native = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
         var scopes = new ProjectCookScopeProvider(new DroidNet.Storage.Native.NativeStorageProvider(new Testably.Abstractions.RealFileSystem()));
-        var analyzer = new CookSourceAnalyzer(operation, artifacts, native, new ContentImportManifestBuilder(),
-            new SceneDescriptorGenerator(), scopes);
+        var analyzer = new CookSourceAnalyzer(
+            operation,
+            artifacts,
+            native,
+            new ContentImportManifestBuilder(),
+            new SceneDescriptorGenerator(),
+            scopes);
         return await analyzer.ReadAsync(inputs, cancellationToken).ConfigureAwait(false);
     }
 }

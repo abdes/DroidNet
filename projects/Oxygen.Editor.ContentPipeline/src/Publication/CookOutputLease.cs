@@ -37,6 +37,15 @@ internal static class CookOutputLease
     internal static FileStream? TryAcquireRetryInput(FileSystemPath projectRoot, Guid operationId)
         => TryAcquireOperationFile(projectRoot, operationId, "retry-input.lock");
 
+    internal static void RejectReparsePoint(string path)
+    {
+        var attributes = new FileInfo(path).Attributes;
+        if (attributes != (FileAttributes)(-1) && attributes.HasFlag(FileAttributes.ReparsePoint))
+        {
+            throw new IOException($"Cook ownership paths must not redirect outside the project: '{path}'.");
+        }
+    }
+
     private static FileStream? TryAcquireOperationFile(FileSystemPath projectRoot, Guid operationId, string name)
     {
         if (operationId == Guid.Empty)
@@ -51,15 +60,6 @@ internal static class CookOutputLease
         var path = Path.Combine(directory, name);
         RejectReparsePoint(path);
         return WindowsCookFile.TryOpenOperation(path, out _);
-    }
-
-    internal static void RejectReparsePoint(string path)
-    {
-        var attributes = new FileInfo(path).Attributes;
-        if (attributes != (FileAttributes)(-1) && attributes.HasFlag(FileAttributes.ReparsePoint))
-        {
-            throw new IOException($"Cook ownership paths must not redirect outside the project: '{path}'.");
-        }
     }
 
     private static string PrepareCookFolder(FileSystemPath projectRoot)

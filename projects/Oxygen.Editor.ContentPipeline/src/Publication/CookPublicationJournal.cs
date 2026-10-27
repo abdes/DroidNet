@@ -10,13 +10,28 @@ namespace Oxygen.Editor.ContentPipeline.Publication;
 /// <summary>Durable boundaries of one source and publication-head transaction.</summary>
 internal enum CookPublicationPhase
 {
+    /// <summary>Candidate generations are reserved and being built; nothing is selected yet.</summary>
     Building,
+
+    /// <summary>The candidate head and source changes are captured and validated.</summary>
     Prepared,
+
+    /// <summary>Applying has begun; source directories and files may be partly replaced.</summary>
     Applying,
+
+    /// <summary>Every source directory and file change is installed.</summary>
     SourcesApplied,
+
+    /// <summary>The candidate publication head is written as the selected head.</summary>
     HeadSelected,
+
+    /// <summary>The candidate generations are mounted and ready for readers.</summary>
     RuntimeReady,
+
+    /// <summary>The transaction completed; the candidate is the published state.</summary>
     Committed,
+
+    /// <summary>The transaction was abandoned or undone; the previous state is current.</summary>
     RolledBack,
 }
 

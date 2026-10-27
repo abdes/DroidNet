@@ -66,6 +66,12 @@ internal static class AssetRelocationPlanner
         return new(request, map, edits, referrers);
     }
 
+    /// <summary>Finds the imported model a product is named under.</summary>
+    /// <param name="product">The identity.</param>
+    /// <returns>The model, or null when the identity is not a model's product.</returns>
+    internal static AssetPath? ModelOf(AssetPath product)
+        => AssetFileTypes.ContainerOf(product) is { } container && AssetFileTypes.Is(container.Name, AssetFileCategory.Model) ? container : null;
+
     private static void AddMove(ProjectContext project, AuthoredReferenceIndex index, RelocationMap map, AssetRelocationMove move)
     {
         var (source, target, isDirectory) = Resolve(project, move);
@@ -281,12 +287,6 @@ internal static class AssetRelocationPlanner
         map.AddIdentity(rename.Product, rename.Target, isFolder: false);
     }
 
-    /// <summary>Finds the imported model a product is named under.</summary>
-    /// <param name="product">The identity.</param>
-    /// <returns>The model, or null when the identity is not a model's product.</returns>
-    internal static AssetPath? ModelOf(AssetPath product)
-        => AssetFileTypes.ContainerOf(product) is { } container && AssetFileTypes.Is(container.Name, AssetFileCategory.Model) ? container : null;
-
     private static async Task<IReadOnlyList<RelocationEdit>> PlanEditsAsync(
         ProjectContext project,
         AuthoredReferenceIndex index,
@@ -319,8 +319,9 @@ internal static class AssetRelocationPlanner
             // the model, so its products are named under the model's new path.
             var target = map.MapPath(import.PrimaryPath);
             var folder = target.Parent!;
+
             // The primary may be renamed in its folder; the files it reads must keep their place beside it.
-            if (import.Files.Where(file => file != import.PrimaryPath).Any(file => !string.Equals(
+            if (import.Files.Any(file => file != import.PrimaryPath && !string.Equals(
                 Path.GetRelativePath(import.Folder.FullPath, file.FullPath),
                 Path.GetRelativePath(folder.FullPath, map.MapPath(file).FullPath),
                 StringComparison.OrdinalIgnoreCase)))
@@ -339,7 +340,8 @@ internal static class AssetRelocationPlanner
             var virtualPath = RelocationPaths.ToVirtual(project, target)
                 ?? throw new AssetRelocationException($"'{import.PrimaryVirtualPath.Name}' would leave the project's authoring mounts.");
             var rewritten = (ModelImportSettings.Parse(import.RecordPath.FullPath, content)
-                .WithSource(import.RecordPath.FullPath, target.FullPath) with { VirtualPath = virtualPath.VirtualPath }).ToBytes();
+                .WithSource(import.RecordPath.FullPath, target.FullPath) with
+            { VirtualPath = virtualPath.VirtualPath }).ToBytes();
             edits.Add(new(import.RecordPath, import.RecordPath, snapshot.Version, content, rewritten));
         }
 

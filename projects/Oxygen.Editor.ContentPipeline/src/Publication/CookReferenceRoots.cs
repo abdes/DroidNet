@@ -18,6 +18,7 @@ internal sealed partial class CookReferenceRoots : IDisposable
     /// <param name="staging">Private roots that remain writable by this operation.</param>
     /// <param name="previous">Verified prior publication metadata.</param>
     /// <param name="plan">The reused products needed by the closure.</param>
+    /// <param name="native">The native pipeline that reads each retained root's inventory.</param>
     /// <param name="cancellationToken">Cancels reader acquisition.</param>
     /// <returns>The lookup paths and retained readers.</returns>
     public static async Task<CookReferenceRoots> AcquireAsync(CookStagingArea staging, CookProvenance previous, CookIncrementalPlan plan, IEngineContentPipelineApi native, CancellationToken cancellationToken)

@@ -12,6 +12,10 @@ namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Import;
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "MSTest discovers public test classes with the repository discovery configuration.")]
 public sealed class AssetKeyRequestTests
 {
+    private const string AssetKeyReport = """
+        {"schema":"oxygen.asset-key-map.v1","assets":[{"virtual_path":"/Game/Physics/Materials/Rubber.opmat","asset_key":"5793612a-1c25-ca81-a7a2-8e696378559e"}]}
+        """;
+
     public TestContext TestContext { get; set; } = null!;
 
     /// <summary>Failed termination retains both private JSON files and the native tool until drain completes.</summary>
@@ -58,10 +62,6 @@ public sealed class AssetKeyRequestTests
         _ = await work.Should().ThrowAsync<InvalidDataException>().ConfigureAwait(false);
         _ = Directory.EnumerateFiles(Path.Combine(workspace.Root, "dependency-inspection")).Should().BeEmpty();
     }
-
-    private const string AssetKeyReport = """
-        {"schema":"oxygen.asset-key-map.v1","assets":[{"virtual_path":"/Game/Physics/Materials/Rubber.opmat","asset_key":"5793612a-1c25-ca81-a7a2-8e696378559e"}]}
-        """;
 
     private sealed class AssetKeyRunner(string json, Exception? failure = null) : IContentPipelineProcessRunner
     {

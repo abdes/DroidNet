@@ -79,7 +79,8 @@ public sealed class CookedLibraryChangedException : IOException
     private static string Describe(CookPublicationRoot root, string path, Guid actualSourceKey, string actualIndexSha256)
     {
         ArgumentNullException.ThrowIfNull(root);
-        return $"Cooked {root.Owner.ToString().ToLowerInvariant()} root '{root.Name}' at '{path}' changed after publication: "
+        var owner = root.Owner == CookPublicationRootOwner.Library ? "library" : "project";
+        return $"Cooked {owner} root '{root.Name}' at '{path}' changed after publication: "
             + $"recorded source {root.SourceKey:D} index {root.IndexSha256}, found source {actualSourceKey:D} index {actualIndexSha256}. "
             + "Republish the project from its current libraries before using it.";
     }

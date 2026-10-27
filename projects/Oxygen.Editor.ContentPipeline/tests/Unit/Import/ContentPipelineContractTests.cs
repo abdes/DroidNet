@@ -10,7 +10,7 @@ using Oxygen.Managed.Core.Diagnostics;
 namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Import;
 
 [TestClass]
-public sealed class ContentPipelineContractTests
+internal sealed class ContentPipelineContractTests
 {
     public TestContext TestContext { get; set; } = null!;
 

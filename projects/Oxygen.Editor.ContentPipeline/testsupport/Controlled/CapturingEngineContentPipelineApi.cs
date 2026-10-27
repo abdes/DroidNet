@@ -8,7 +8,7 @@ internal sealed class CapturingEngineContentPipelineApi(CookValidationResult val
 {
     private readonly CookInspectionResult inspected = inspection with
     {
-        Assets = inspection.Assets.Select(static asset => asset with { DescriptorRelativePath = asset.DescriptorRelativePath ?? asset.VirtualPath.TrimStart('/') }).ToArray(),
+        Assets = [.. inspection.Assets.Select(static asset => asset with { DescriptorRelativePath = asset.DescriptorRelativePath ?? asset.VirtualPath.TrimStart('/') })],
     };
 
     public Func<ContentImportExecution, CancellationToken, Task>? BeforeImport { get; init; }

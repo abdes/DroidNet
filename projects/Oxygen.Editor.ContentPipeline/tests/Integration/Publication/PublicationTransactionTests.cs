@@ -19,17 +19,19 @@ public sealed class PublicationTransactionTests
     public async Task CommitSelectsAllRootsWhileOldReadersRemainUsable()
     {
         using var project = new PublicationProject(hadPrevious: true);
-        await using var staging = await project.StageAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        var staging = await project.StageAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        await using var stagingLifetime = staging.ConfigureAwait(false);
         using var old = project.Baseline.Retain();
         var oldContent = old.FindProjectRoot("Content")!.FullPath;
         var transaction = await project.PrepareAsync(staging, this.TestContext.CancellationToken).ConfigureAwait(false);
-        await using var preview = new Preview(project.Root);
+        var preview = new Preview(project.Root);
+        await using var previewLifetime = preview.ConfigureAwait(false);
         using var accepted = await transaction.PublishAsync(preview, project.Baseline, static () => { }, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = transaction.Phase.Should().Be(CookPublicationPhase.Committed);
         project.AssertNew();
         _ = preview.Resumed.Should().BeTrue();
         _ = preview.MountedRoots.Should().HaveCount(3);
-        _ = File.ReadAllText(Path.Combine(oldContent, "value.txt")).Should().Be("old:Content");
+        _ = (await File.ReadAllTextAsync(Path.Combine(oldContent, "value.txt"), this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Be("old:Content");
         using var gate = await CookOutputLease.AcquireWriteAsync(FileSystemPath.From(project.Root), this.TestContext.CancellationToken).ConfigureAwait(false);
         using var selected = await CookPublicationReadLease.OpenUnderGateAsync(project.Context, project.Files, gate, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = selected.PublicationId.Should().Be(accepted.PublicationId);
@@ -47,10 +49,12 @@ public sealed class PublicationTransactionTests
     public async Task FailureRestoresTheWholePublication(bool hadPrevious, string boundary)
     {
         using var project = new PublicationProject(hadPrevious);
-        await using var staging = await project.StageAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
-        var transaction = await project.PrepareAsync(staging, this.TestContext.CancellationToken,
-            name => name == boundary ? Task.FromException(new IOException("Injected publication failure")) : Task.CompletedTask).ConfigureAwait(false);
-        await using var preview = new Preview(project.Root);
+        var staging = await project.StageAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        await using var stagingLifetime = staging.ConfigureAwait(false);
+        Task Inject(string name) => string.Equals(name, boundary, StringComparison.Ordinal) ? Task.FromException(new IOException("Injected publication failure")) : Task.CompletedTask;
+        var transaction = await project.PrepareAsync(staging, this.TestContext.CancellationToken, Inject).ConfigureAwait(false);
+        var preview = new Preview(project.Root);
+        await using var previewLifetime = preview.ConfigureAwait(false);
         Func<Task> publish = () => transaction.PublishAsync(preview, project.Baseline, static () => { }, this.TestContext.CancellationToken);
         _ = await publish.Should().ThrowAsync<IOException>().ConfigureAwait(false);
         _ = transaction.Phase.Should().Be(CookPublicationPhase.RolledBack);
@@ -62,9 +66,11 @@ public sealed class PublicationTransactionTests
     public async Task FailedMountRestoresPreviousPublication()
     {
         using var project = new PublicationProject(hadPrevious: true);
-        await using var staging = await project.StageAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        var staging = await project.StageAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        await using var stagingLifetime = staging.ConfigureAwait(false);
         var transaction = await project.PrepareAsync(staging, this.TestContext.CancellationToken).ConfigureAwait(false);
-        await using var preview = new Preview(project.Root) { FailFirstMount = true };
+        var preview = new Preview(project.Root) { FailFirstMount = true };
+        await using var previewLifetime = preview.ConfigureAwait(false);
         Func<Task> publish = () => transaction.PublishAsync(preview, project.Baseline, static () => { }, this.TestContext.CancellationToken);
         _ = await publish.Should().ThrowAsync<IOException>().ConfigureAwait(false);
         project.AssertOld();
@@ -76,9 +82,11 @@ public sealed class PublicationTransactionTests
     public async Task FailedRollbackMountRetainsRecoverableState()
     {
         using var project = new PublicationProject(hadPrevious: true);
-        await using var staging = await project.StageAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        var staging = await project.StageAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        await using var stagingLifetime = staging.ConfigureAwait(false);
         var transaction = await project.PrepareAsync(staging, this.TestContext.CancellationToken).ConfigureAwait(false);
-        await using var preview = new Preview(project.Root) { FailAllMounts = true };
+        var preview = new Preview(project.Root) { FailAllMounts = true };
+        await using var previewLifetime = preview.ConfigureAwait(false);
         Func<Task> publish = () => transaction.PublishAsync(preview, project.Baseline, static () => { }, this.TestContext.CancellationToken);
         _ = await publish.Should().ThrowAsync<AggregateException>().ConfigureAwait(false);
         project.AssertOld();
@@ -94,9 +102,10 @@ public sealed class PublicationTransactionTests
     {
         using var project = new PublicationProject(hadPrevious: true);
         using var cancellation = new CancellationTokenSource();
-        await using var staging = await project.StageAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
-        var transaction = await project.PrepareAsync(staging, this.TestContext.CancellationToken,
-            name => name == "Applying" ? cancellation.CancelAsync() : Task.CompletedTask).ConfigureAwait(false);
+        var staging = await project.StageAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        await using var stagingLifetime = staging.ConfigureAwait(false);
+        Task Inject(string name) => string.Equals(name, "Applying", StringComparison.Ordinal) ? cancellation.CancelAsync() : Task.CompletedTask;
+        var transaction = await project.PrepareAsync(staging, this.TestContext.CancellationToken, Inject).ConfigureAwait(false);
         using var accepted = await transaction.PublishAsync(preview: null, project.Baseline, static () => { }, cancellation.Token).ConfigureAwait(false);
         _ = transaction.Phase.Should().Be(CookPublicationPhase.Committed);
         project.AssertNew();
@@ -108,11 +117,12 @@ public sealed class PublicationTransactionTests
     public async Task LostProjectOwnershipRestoresThePreviousHead(string boundary)
     {
         using var project = new PublicationProject(hadPrevious: true);
-        await using var staging = await project.StageAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        var staging = await project.StageAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        await using var stagingLifetime = staging.ConfigureAwait(false);
         var current = true;
         var transaction = await project.PrepareAsync(staging, this.TestContext.CancellationToken, name =>
         {
-            if (name == boundary)
+            if (string.Equals(name, boundary, StringComparison.Ordinal))
             {
                 current = false;
             }
@@ -136,9 +146,11 @@ public sealed class PublicationTransactionTests
     public async Task CancelledPreparedCookNeverPausesPreview()
     {
         using var project = new PublicationProject(hadPrevious: true);
-        await using var staging = await project.StageAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        var staging = await project.StageAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        await using var stagingLifetime = staging.ConfigureAwait(false);
         var transaction = await project.PrepareAsync(staging, this.TestContext.CancellationToken).ConfigureAwait(false);
-        await using var preview = new Preview(project.Root);
+        var preview = new Preview(project.Root);
+        await using var previewLifetime = preview.ConfigureAwait(false);
         Func<Task> publish = () => transaction.PublishAsync(preview, project.Baseline, static () => { }, new CancellationToken(canceled: true));
         _ = await publish.Should().ThrowAsync<OperationCanceledException>().ConfigureAwait(false);
         project.AssertOld();

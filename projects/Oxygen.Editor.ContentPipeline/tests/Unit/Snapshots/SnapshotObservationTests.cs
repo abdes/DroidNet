@@ -43,7 +43,7 @@ public sealed class SnapshotObservationTests
         _ = result.Should().NotBeNull();
         Directory.Delete(directory);
         _ = CookSavedSourceReader.MatchesProbe(accepted).Should().BeFalse();
-        await File.WriteAllTextAsync(directory, string.Empty).ConfigureAwait(false);
+        await File.WriteAllTextAsync(directory, string.Empty, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = CookSavedSourceReader.MatchesProbe(accepted).Should().BeFalse();
     }
 
@@ -129,8 +129,8 @@ public sealed class SnapshotObservationTests
         {
             NativeObservations = [new(
                 input.SourcePath.FullPath,
-Exists: true,
-Metadata: null,
+                Exists: true,
+                Metadata: null,
                 [new(0, 0, Hash(content)), new(3, 150_000, Hash(new string('x', 150_000))),
                  new(199_999, ulong.MaxValue, Hash("x")), new(ulong.MaxValue, 0, Hash(string.Empty))])],
         };

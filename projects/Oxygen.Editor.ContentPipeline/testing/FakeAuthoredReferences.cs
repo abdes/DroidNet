@@ -31,7 +31,7 @@ public sealed class FakeAuthoredReferences : IAuthoredReferences
     }
 
     /// <inheritdoc/>
-    public IReadOnlyList<AssetPath> Of(AssetPath asset)
+    public IReadOnlyList<AssetPath> ReferencesOf(AssetPath asset)
     {
         ArgumentNullException.ThrowIfNull(asset);
         lock (this.gate)

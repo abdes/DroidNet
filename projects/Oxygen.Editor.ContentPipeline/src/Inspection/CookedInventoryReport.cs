@@ -16,8 +16,14 @@ public sealed class CookedInventoryReport
 {
     private static readonly Lazy<JsonSchema> Schema = new(LoadSchema);
 
-    private CookedInventoryReport(Guid sourceKey, long indexSize, string indexSha256,
-        ImmutableDictionary<string, Member> files, ImmutableArray<Asset> assets, ImmutableArray<Resource> resources, ImmutableArray<Issue> issues)
+    private CookedInventoryReport(
+        Guid sourceKey,
+        long indexSize,
+        string indexSha256,
+        ImmutableDictionary<string, CookedInventoryMember> files,
+        ImmutableArray<CookedInventoryAsset> assets,
+        ImmutableArray<CookedInventoryResource> resources,
+        ImmutableArray<CookedInventoryIssue> issues)
     {
         this.SourceKey = sourceKey;
         this.IndexSize = indexSize;
@@ -38,18 +44,18 @@ public sealed class CookedInventoryReport
     public string IndexSha256 { get; }
 
     /// <summary>Gets all expected content members, excluding the index and generation lock.</summary>
-    public ImmutableDictionary<string, Member> Files { get; }
+    public ImmutableDictionary<string, CookedInventoryMember> Files { get; }
 
     /// <summary>Gets the index's asset identities and descriptor locations.</summary>
-    public ImmutableArray<Asset> Assets { get; }
+    public ImmutableArray<CookedInventoryAsset> Assets { get; }
 
     /// <summary>Gets native resource descriptors, distinct from keyed runtime assets.</summary>
-    public ImmutableArray<Resource> Resources { get; }
+    public ImmutableArray<CookedInventoryResource> Resources { get; }
 
     /// <summary>Gets observed file failures; process success alone does not establish integrity.</summary>
-    public ImmutableArray<Issue> Issues { get; }
+    public ImmutableArray<CookedInventoryIssue> Issues { get; }
 
-    /// <summary>Gets whether every indexed member and the complete membership matched.</summary>
+    /// <summary>Gets a value indicating whether every indexed member and the complete membership matched.</summary>
     public bool IsValid => this.Issues.IsEmpty;
 
     /// <summary>Reads the native schema and checks cross-record identities.</summary>
@@ -64,23 +70,88 @@ public sealed class CookedInventoryReport
             throw new InvalidDataException("The native integrity inventory does not match its schema.");
         }
 
-        var files = ImmutableDictionary.CreateBuilder<string, Member>(StringComparer.Ordinal);
+        var files = ReadFiles(root);
+        var paths = new HashSet<string>(StringComparer.Ordinal);
+        var descriptors = new HashSet<string>(StringComparer.Ordinal);
+        var assets = ReadAssets(root, files, paths, descriptors);
+        var resources = ReadResources(root, files, paths, descriptors);
+        var issues = ReadIssues(root);
+
+        if (issues.IsEmpty && resources.Any(static resource => resource.ResourceIndex is null))
+        {
+            throw new InvalidDataException("The native inventory omitted a verified resource identity.");
+        }
+
+        return new(
+            root.GetProperty("source_key").GetGuid(),
+            root.GetProperty("index_size").GetInt64(),
+            root.GetProperty("index_sha256").GetString()!,
+            files,
+            assets,
+            resources,
+            issues);
+    }
+
+    /// <summary>Creates the existing inspection view from the same native verification.</summary>
+    /// <param name="root">The physical root for diagnostics.</param>
+    /// <returns>Asset/file metadata and integrity diagnostics.</returns>
+    public CookInspectionResult ToInspection(string root)
+    {
+        CookedAssetEntry[] assets = this.IsValid ? [.. this.Assets.Select(static asset => ToEntry(asset))] : [];
+        var files = this.Files.Select(static file => new CookedFileEntry(file.Key, checked((ulong)file.Value.Size))).ToArray();
+        return new(root, this.IsValid, this.SourceKey, assets, files, this.Diagnostics(root));
+    }
+
+    /// <summary>Creates the validation view without another native launch or hash pass.</summary>
+    /// <param name="root">The physical root for diagnostics.</param>
+    /// <returns>The integrity result.</returns>
+    public CookValidationResult ToValidation(string root) => new(root, this.IsValid, this.Diagnostics(root));
+
+    private static CookedAssetEntry ToEntry(CookedInventoryAsset asset)
+    {
+        var kind = asset.Type switch
+        {
+            1 => ContentCookAssetKind.Material,
+            2 => ContentCookAssetKind.Geometry,
+            3 => ContentCookAssetKind.Scene,
+            _ => ContentCookAssetKind.Unknown,
+        };
+        return new CookedAssetEntry(asset.VirtualPath, kind)
+        {
+            DescriptorRelativePath = asset.DescriptorPath,
+            AssetKey = asset.Key.ToString(),
+        };
+    }
+
+    private static ImmutableDictionary<string, CookedInventoryMember> ReadFiles(JsonElement root)
+    {
+        var files = ImmutableDictionary.CreateBuilder<string, CookedInventoryMember>(StringComparer.Ordinal);
         foreach (var row in root.GetProperty("files").EnumerateArray())
         {
             var path = row.GetProperty("relative_path").GetString()!;
             ValidatePath(path);
             var kind = row.GetProperty("file_kind");
-            if (!files.TryAdd(path, new(row.GetProperty("size").GetInt64(), row.GetProperty("sha256").GetString()!,
-                kind.ValueKind == JsonValueKind.Null ? null : (FileKind)kind.GetUInt16())))
+            var member = new CookedInventoryMember(
+                row.GetProperty("size").GetInt64(),
+                row.GetProperty("sha256").GetString()!,
+                kind.ValueKind == JsonValueKind.Null ? null : (FileKind)kind.GetUInt16());
+            if (!files.TryAdd(path, member))
             {
                 throw new InvalidDataException("The native inventory contains duplicate member paths.");
             }
         }
 
+        return files.ToImmutable();
+    }
+
+    private static ImmutableArray<CookedInventoryAsset> ReadAssets(
+        JsonElement root,
+        ImmutableDictionary<string, CookedInventoryMember> files,
+        HashSet<string> paths,
+        HashSet<string> descriptors)
+    {
         var keys = new HashSet<Guid>();
-        var paths = new HashSet<string>(StringComparer.Ordinal);
-        var descriptors = new HashSet<string>(StringComparer.Ordinal);
-        var assets = ImmutableArray.CreateBuilder<Asset>();
+        var assets = ImmutableArray.CreateBuilder<CookedInventoryAsset>();
         foreach (var row in root.GetProperty("assets").EnumerateArray())
         {
             var key = row.GetProperty("asset_key").GetGuid();
@@ -94,7 +165,16 @@ public sealed class CookedInventoryReport
             assets.Add(new(key, row.GetProperty("asset_type").GetByte(), path, descriptor));
         }
 
-        var resources = ImmutableArray.CreateBuilder<Resource>();
+        return assets.ToImmutable();
+    }
+
+    private static ImmutableArray<CookedInventoryResource> ReadResources(
+        JsonElement root,
+        ImmutableDictionary<string, CookedInventoryMember> files,
+        HashSet<string> paths,
+        HashSet<string> descriptors)
+    {
+        var resources = ImmutableArray.CreateBuilder<CookedInventoryResource>();
         foreach (var row in root.GetProperty("resources").EnumerateArray())
         {
             var descriptor = row.GetProperty("descriptor_relative_path").GetString()!;
@@ -113,48 +193,26 @@ public sealed class CookedInventoryReport
             resources.Add(new(row.GetProperty("kind").GetString()!, path, descriptor, index.ValueKind == JsonValueKind.Null ? null : index.GetUInt32()));
         }
 
-        var issues = root.GetProperty("issues").EnumerateArray().Select(static row => new Issue(
-            row.GetProperty("relative_path").GetString()!, row.GetProperty("reason").GetString()!)).ToImmutableArray();
+        return resources.ToImmutable();
+    }
+
+    private static ImmutableArray<CookedInventoryIssue> ReadIssues(JsonElement root)
+    {
+        var issues = root.GetProperty("issues").EnumerateArray()
+            .Select(static row => new CookedInventoryIssue(row.GetProperty("relative_path").GetString()!, row.GetProperty("reason").GetString()!))
+            .ToImmutableArray();
         foreach (var issue in issues)
         {
             ValidatePath(issue.RelativePath);
         }
 
-        if (issues.IsEmpty && resources.Any(static resource => resource.ResourceIndex is null))
-        {
-            throw new InvalidDataException("The native inventory omitted a verified resource identity.");
-        }
-
-        return new(root.GetProperty("source_key").GetGuid(), root.GetProperty("index_size").GetInt64(),
-            root.GetProperty("index_sha256").GetString()!, files.ToImmutable(), assets.ToImmutable(), resources.ToImmutable(), issues);
+        return issues;
     }
-
-    /// <summary>Creates the existing inspection view from the same native verification.</summary>
-    /// <param name="root">The physical root for diagnostics.</param>
-    /// <returns>Asset/file metadata and integrity diagnostics.</returns>
-    public CookInspectionResult ToInspection(string root) => new(root, this.IsValid, this.SourceKey,
-        this.IsValid ? this.Assets.Select(static asset => new CookedAssetEntry(asset.VirtualPath,
-            asset.Type switch { 1 => ContentCookAssetKind.Material, 2 => ContentCookAssetKind.Geometry, 3 => ContentCookAssetKind.Scene, _ => ContentCookAssetKind.Unknown })
-        { DescriptorRelativePath = asset.DescriptorPath, AssetKey = asset.Key.ToString() }).ToArray() : [],
-        this.Files.Select(static file => new CookedFileEntry(file.Key, checked((ulong)file.Value.Size))).ToArray(), this.Diagnostics(root));
-
-    /// <summary>Creates the validation view without another native launch or hash pass.</summary>
-    /// <param name="root">The physical root for diagnostics.</param>
-    /// <returns>The integrity result.</returns>
-    public CookValidationResult ToValidation(string root) => new(root, this.IsValid, this.Diagnostics(root));
-
-    private DiagnosticRecord[] Diagnostics(string root) => [.. this.Issues.Select(issue => new DiagnosticRecord
-    {
-        OperationId = Guid.NewGuid(),
-        Domain = FailureDomain.ContentPipeline, Severity = DiagnosticSeverity.Error,
-        Code = ContentPipelineDiagnosticCodes.ValidateFailed,
-        Message = $"Cooked content integrity failed: {issue.RelativePath} ({issue.Reason}).",
-        AffectedPath = Path.Combine(root, issue.RelativePath),
-    })];
 
     private static void ValidatePath(string path)
     {
-        if (path.Contains('\\') || path.Contains(':') || path.Split('/').Any(static segment => segment is "" or "." or "..")
+        if (path.Contains('\\', StringComparison.Ordinal) || path.Contains(':', StringComparison.Ordinal)
+            || path.Split('/').Any(static segment => segment is "" or "." or "..")
             || path is "container.index.bin" or ".generation.lock")
         {
             throw new InvalidDataException($"The native inventory contains a non-content path: {path}.");
@@ -169,25 +227,12 @@ public sealed class CookedInventoryReport
         return JsonSchema.FromText(reader.ReadToEnd());
     }
 
-    /// <summary>Expected bytes recorded by the native producer.</summary>
-    /// <param name="Size">The byte length.</param>
-    /// <param name="Sha256">The SHA-256 digest.</param>
-    /// <param name="Kind">The native file role, or null for keyed asset descriptors.</param>
-    public sealed record Member(long Size, string Sha256, FileKind? Kind);
-    /// <summary>A native asset's identity and physical descriptor.</summary>
-    /// <param name="Key">The native asset key.</param>
-    /// <param name="Type">The native asset type.</param>
-    /// <param name="VirtualPath">The logical name.</param>
-    /// <param name="DescriptorPath">The indexed physical member.</param>
-    public sealed record Asset(Guid Key, byte Type, string VirtualPath, string DescriptorPath);
-    /// <summary>A native texture sidecar and its observed table slot; the slot is not a durable identity.</summary>
-    /// <param name="Kind">The native resource kind.</param>
-    /// <param name="VirtualPath">The logical name the texture is addressed by.</param>
-    /// <param name="DescriptorPath">The indexed physical member.</param>
-    /// <param name="ResourceIndex">The validated table slot, or null when integrity failed.</param>
-    public sealed record Resource(string Kind, string VirtualPath, string DescriptorPath, uint? ResourceIndex);
-    /// <summary>One observed mismatch in the protected root.</summary>
-    /// <param name="RelativePath">The affected relative path.</param>
-    /// <param name="Reason">The native schema's failure classification.</param>
-    public sealed record Issue(string RelativePath, string Reason);
+    private DiagnosticRecord[] Diagnostics(string root) => [.. this.Issues.Select(issue => new DiagnosticRecord
+    {
+        OperationId = Guid.NewGuid(),
+        Domain = FailureDomain.ContentPipeline, Severity = DiagnosticSeverity.Error,
+        Code = ContentPipelineDiagnosticCodes.ValidateFailed,
+        Message = $"Cooked content integrity failed: {issue.RelativePath} ({issue.Reason}).",
+        AffectedPath = Path.Combine(root, issue.RelativePath),
+    })];
 }

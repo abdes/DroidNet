@@ -70,56 +70,75 @@ internal static class NativeImportReportReader
                 productsBySource.Add(source, ReadProducts(job));
             }
 
-            if (requested.Record is not null
-                && string.Equals(job.GetProperty("status").GetString(), "succeeded", StringComparison.Ordinal))
-            {
-                if (!job.TryGetProperty("model_import", out var update))
-                {
-                    throw new InvalidDataException("A successful model import omitted what it established.");
-                }
-
-                if (requested.Source is null || modelImports.ContainsKey(requested.Source))
-                {
-                    throw new InvalidDataException("A model import does not identify the requested source uniquely.");
-                }
-
-                modelImports.Add(requested.Source, update.Clone());
-            }
-
-            foreach (var issue in job.GetProperty("diagnostics").EnumerateArray())
-            {
-                diagnostics.Add(new()
-                {
-                    OperationId = execution.OperationId,
-                    Domain = FailureDomain.AssetImport,
-                    Severity = issue.GetProperty("severity").GetString() switch { "info" => DiagnosticSeverity.Info, "warning" => DiagnosticSeverity.Warning, _ => DiagnosticSeverity.Error },
-                    Code = issue.GetProperty("code").GetString()!,
-                    Message = issue.GetProperty("message").GetString()!,
-                    AffectedPath = Path.GetFullPath(Path.Combine(execution.InputRoot, execution.Manifest.Jobs[index].AttributedSource)),
-                    TechnicalMessage = issue.TryGetProperty("object_path", out var location) ? location.GetString() : null,
-                    AffectedEntity = NativeSourceObject.Read(issue),
-                });
-            }
+            ReadModelImport(job, requested, modelImports);
+            AddJobDiagnostics(job, execution, requested, diagnostics);
         }
 
-        if (!succeeded && !diagnostics.Exists(static issue => issue.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Fatal))
+        AddIncompleteDiagnostic(execution, succeeded, diagnostics);
+        return new(succeeded, diagnostics)
+        {
+            OutputsBySource = outputsBySource.ToImmutable(),
+            ProductsBySource = productsBySource.ToImmutable(),
+            ModelImports = succeeded ? modelImports.ToImmutable() : [],
+        };
+    }
+
+    // A successful job that imports a model establishes what its record keeps, one entry per requested source.
+    private static void ReadModelImport(JsonElement job, ContentImportJob requested, ImmutableDictionary<string, JsonElement>.Builder modelImports)
+    {
+        if (requested.Record is null
+            || !string.Equals(job.GetProperty("status").GetString(), "succeeded", StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        if (!job.TryGetProperty("model_import", out var update))
+        {
+            throw new InvalidDataException("A successful model import omitted what it established.");
+        }
+
+        if (requested.Source is null || modelImports.ContainsKey(requested.Source))
+        {
+            throw new InvalidDataException("A model import does not identify the requested source uniquely.");
+        }
+
+        modelImports.Add(requested.Source, update.Clone());
+    }
+
+    private static void AddJobDiagnostics(JsonElement job, ContentImportExecution execution, ContentImportJob requested, List<DiagnosticRecord> diagnostics)
+    {
+        foreach (var issue in job.GetProperty("diagnostics").EnumerateArray())
         {
             diagnostics.Add(new()
             {
                 OperationId = execution.OperationId,
                 Domain = FailureDomain.AssetImport,
-                Severity = DiagnosticSeverity.Error,
-                Code = AssetImportDiagnosticCodes.ImportFailed,
-                Message = "The native import did not complete every requested job.",
+                Severity = issue.GetProperty("severity").GetString() switch { "info" => DiagnosticSeverity.Info, "warning" => DiagnosticSeverity.Warning, _ => DiagnosticSeverity.Error },
+                Code = issue.GetProperty("code").GetString()!,
+                Message = issue.GetProperty("message").GetString()!,
+                AffectedPath = Path.GetFullPath(Path.Combine(execution.InputRoot, requested.AttributedSource)),
+                TechnicalMessage = issue.TryGetProperty("object_path", out var location) ? location.GetString() : null,
+                AffectedEntity = NativeSourceObject.Read(issue),
             });
         }
+    }
 
-        return new(succeeded, diagnostics)
+    // A run that failed without reporting any error still reports that it did not complete.
+    private static void AddIncompleteDiagnostic(ContentImportExecution execution, bool succeeded, List<DiagnosticRecord> diagnostics)
+    {
+        if (succeeded || diagnostics.Exists(static issue => issue.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Fatal))
         {
-            OutputsBySource = outputsBySource.ToImmutable(),
-            ProductsBySource = productsBySource.ToImmutable(),
-            ModelImports = succeeded ? modelImports.ToImmutable() : ImmutableDictionary<string, JsonElement>.Empty,
-        };
+            return;
+        }
+
+        diagnostics.Add(new()
+        {
+            OperationId = execution.OperationId,
+            Domain = FailureDomain.AssetImport,
+            Severity = DiagnosticSeverity.Error,
+            Code = AssetImportDiagnosticCodes.ImportFailed,
+            Message = "The native import did not complete every requested job.",
+        });
     }
 
     private static void AddOutputs(JsonElement job, HashSet<string> outputs)

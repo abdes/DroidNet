@@ -39,34 +39,16 @@ public sealed class SceneImportSourceDiscovery(IContentCookCoordinator coordinat
         try
         {
             CookRunContext.Report(new(Message: "Reading source content and dependencies."));
-            var report = await native.AnalyzeSourcesAsync(
-                new(operation.OperationId, directory, scratch, [recipe with { Source = primary }])
-                {
-                    Artifacts = artifacts,
-                }, cancellationToken).ConfigureAwait(false);
+            var execution = new ContentSourceAnalysisExecution(operation.OperationId, directory, scratch, [recipe with { Source = primary }])
+            {
+                Artifacts = artifacts,
+            };
+            var report = await native.AnalyzeSourcesAsync(execution, cancellationToken).ConfigureAwait(false);
             coordinator.VerifyWriter(operation);
             var facts = report.Jobs.Single();
             if (!report.Complete || !facts.Complete)
             {
-                var issues = facts.Diagnostics.Select(issue => issue with
-                {
-                    OperationId = operation.OperationId,
-                    AffectedPath = issue.AffectedPath ?? primary,
-                }).ToImmutableArray();
-                if (!issues.Any(static issue => issue.Severity >= DiagnosticSeverity.Error))
-                {
-                    issues = issues.Add(new()
-                    {
-                        OperationId = operation.OperationId,
-                        Domain = FailureDomain.AssetImport,
-                        Severity = DiagnosticSeverity.Error,
-                        Code = AssetImportDiagnosticCodes.ImportFailed,
-                        Message = "Native source analysis did not complete.",
-                        AffectedPath = primary,
-                    });
-                }
-
-                throw new CookInputDiscoveryException(issues);
+                throw CreateIncompleteAnalysisFailure(operation, facts, primary);
             }
 
             var root = CookSavedSourceReader.FindNativeInputsRoot(facts, FileSystemPath.From(directory));
@@ -100,6 +82,30 @@ public sealed class SceneImportSourceDiscovery(IContentCookCoordinator coordinat
                 DeleteScratch(scratch);
             }
         }
+    }
+
+    // The analysis diagnostics attributed to the operation, with an error added when it failed without reporting one.
+    private static CookInputDiscoveryException CreateIncompleteAnalysisFailure(ContentCookOperation operation, NativeSourceAnalysisJob facts, string primary)
+    {
+        var issues = facts.Diagnostics.Select(issue => issue with
+        {
+            OperationId = operation.OperationId,
+            AffectedPath = issue.AffectedPath ?? primary,
+        }).ToImmutableArray();
+        if (!issues.Any(static issue => issue.Severity >= DiagnosticSeverity.Error))
+        {
+            issues = issues.Add(new()
+            {
+                OperationId = operation.OperationId,
+                Domain = FailureDomain.AssetImport,
+                Severity = DiagnosticSeverity.Error,
+                Code = AssetImportDiagnosticCodes.ImportFailed,
+                Message = "Native source analysis did not complete.",
+                AffectedPath = primary,
+            });
+        }
+
+        return new CookInputDiscoveryException(issues);
     }
 
     private static async Task CleanupAfterDrainAsync(Task drain, string scratch)

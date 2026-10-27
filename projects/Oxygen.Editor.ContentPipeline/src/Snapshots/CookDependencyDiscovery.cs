@@ -25,6 +25,10 @@ internal sealed class CookDependencyDiscovery(
     public Task<CookDependencyGraph> DiscoverAsync(ProjectContext project, IReadOnlyList<ContentCookInput> roots, CancellationToken cancellationToken)
         => this.DiscoverAsync(project, roots, preparedImport: null, cancellationToken);
 
+    internal static string FingerprintImportedContent(IEnumerable<CookSnapshotInput> inputs)
+        => Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(inputs.OrderBy(static file => file.RelativePath, StringComparer.Ordinal)
+            .Select(static file => new { file.RelativePath, file.DiscoveryHash, file.Kind, Metadata = file.ProbeShape }))));
+
     internal async Task<CookDependencyGraph> DiscoverAsync(ProjectContext project, IReadOnlyList<ContentCookInput> roots, CookDependencyGraph? preparedImport, CancellationToken cancellationToken)
     {
         var discovery = new Discovery(project, analyzer, resolveImported, resolveProducer, preferCookedReference, expandCookedReferences);
@@ -40,10 +44,6 @@ internal sealed class CookDependencyDiscovery(
 
         return await discovery.RunAsync(cancellationToken).ConfigureAwait(false);
     }
-
-    internal static string FingerprintImportedContent(IEnumerable<CookSnapshotInput> inputs)
-        => Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(inputs.OrderBy(static file => file.RelativePath, StringComparer.Ordinal)
-            .Select(static file => new { file.RelativePath, file.DiscoveryHash, file.Kind, Metadata = file.ProbeShape }))));
 
     private sealed class Discovery(ProjectContext project, ICookSourceFactsProvider analyzer,
         Func<AssetPath, ContentCookInput?>? resolveImported,
@@ -67,6 +67,7 @@ internal sealed class CookDependencyDiscovery(
         private readonly Dictionary<AssetPath, CookSourceFacts> sourceFacts = [];
         private readonly HashSet<AssetPath> requiresAnalysis = [];
         private readonly Dictionary<string, NativeCapturedInput> generatedInputs = [with(StringComparer.OrdinalIgnoreCase)];
+
         // Each identity has one producing source; identities differing only in case are one file in a cooked root.
         private readonly Dictionary<string, ContentCookInput> producers = [with(StringComparer.OrdinalIgnoreCase)];
         private readonly Dictionary<AssetPath, ImmutableArray<AssetPath>> resourceDependencies = [];
@@ -162,6 +163,46 @@ internal sealed class CookDependencyDiscovery(
                 _ = this.requiresAnalysis.Add(input.AssetUri);
             }
 
+            this.AddSourceFiles(source, input);
+            if (source.Scene is { } scene)
+            {
+                this.scenes[input.AssetUri] = scene;
+            }
+
+            if (input.Kind == ContentCookAssetKind.ForeignSource && !source.RequiresAnalysis)
+            {
+                this.RecordImportedSource(source, input);
+            }
+
+            var localOutputs = source.Outputs.Select(static output => output.VirtualPath).ToHashSet(StringComparer.Ordinal);
+            var external = source.References.Where(reference => !localOutputs.Contains(reference.VirtualPath)).ToArray();
+            var references = external.Where(static reference => !string.Equals(reference.Kind, "buffer", StringComparison.Ordinal))
+                .Select(static reference => AssetPath.Parse(reference.VirtualPath))
+                .Where(reference => AssetFileTypes.ContainerOf(reference) != input.AssetUri)
+                .Distinct().ToArray();
+            this.nativeReferences[input.AssetUri] = [.. references];
+            var resolved = references.Select(this.ResolveReference).ToHashSet();
+            var bufferDependencies = this.AddBufferOwners(input, external, resolved);
+            this.resourceDependencies[input.AssetUri] = [.. bufferDependencies];
+            if (expandCookedReferences is not null)
+            {
+                var expansion = await expandCookedReferences(input, references, cancellationToken).ConfigureAwait(false);
+                this.cookedDependencies[input.AssetUri] = expansion.Libraries;
+                this.diagnostics.AddRange(expansion.Diagnostics);
+                this.importedReferences.UnionWith(expansion.ImportedOutputs);
+                foreach (var dependency in expansion.ProjectInputs)
+                {
+                    this.AddAsset(dependency);
+                    _ = resolved.Add(dependency.AssetUri);
+                }
+            }
+
+            this.dependencies[input.AssetUri] = [.. resolved.Order()];
+        }
+
+        // A source's file facts join those of the other sources; a file two sources name keeps the stronger kind.
+        private void AddSourceFiles(CookSourceFacts source, ContentCookInput input)
+        {
             this.fileDependencies[input.AssetUri] = [with(StringComparer.Ordinal)];
             foreach (var file in source.Files)
             {
@@ -182,32 +223,24 @@ internal sealed class CookDependencyDiscovery(
                     this.files.Add(path, file);
                 }
             }
+        }
 
-            if (source.Scene is { } scene)
+        // A model source records its content fingerprint and the files it was imported from.
+        private void RecordImportedSource(CookSourceFacts source, ContentCookInput input)
+        {
+            var primary = source.Files.Single(file => file.AssetUri == input.AssetUri);
+            this.imported[input.AssetUri] = new(
+                primary.DiscoveryHash,
+                [.. source.Files.Where(static file => !file.RelativePath.StartsWith(Models.ModelImportSettings.RecordsFolder + "/", StringComparison.OrdinalIgnoreCase))
+                    .Select(static file => file.RelativePath).Order(StringComparer.Ordinal)])
             {
-                this.scenes[input.AssetUri] = scene;
-            }
+                ContentFingerprint = FingerprintImportedContent(source.Files),
+            };
+        }
 
-            if (input.Kind == ContentCookAssetKind.ForeignSource && !source.RequiresAnalysis)
-            {
-                var primary = source.Files.Single(file => file.AssetUri == input.AssetUri);
-                this.imported[input.AssetUri] = new(
-                    primary.DiscoveryHash,
-                    [.. source.Files.Where(static file => !file.RelativePath.StartsWith(Models.ModelImportSettings.RecordsFolder + "/", StringComparison.OrdinalIgnoreCase))
-                        .Select(static file => file.RelativePath).Order(StringComparer.Ordinal)])
-                {
-                    ContentFingerprint = FingerprintImportedContent(source.Files),
-                };
-            }
-
-            var localOutputs = source.Outputs.Select(static output => output.VirtualPath).ToHashSet(StringComparer.Ordinal);
-            var external = source.References.Where(reference => !localOutputs.Contains(reference.VirtualPath)).ToArray();
-            var references = external.Where(static reference => !string.Equals(reference.Kind, "buffer", StringComparison.Ordinal))
-                .Select(static reference => AssetPath.Parse(reference.VirtualPath))
-                .Where(reference => AssetFileTypes.ContainerOf(reference) != input.AssetUri)
-                .Distinct().ToArray();
-            this.nativeReferences[input.AssetUri] = [.. references];
-            var resolved = references.Select(this.ResolveReference).ToHashSet();
+        // A raw buffer is cooked by the source that owns it: that source joins the cook and the asset depends on it.
+        private HashSet<AssetPath> AddBufferOwners(ContentCookInput input, NativeLogicalDependency[] external, HashSet<AssetPath> resolved)
+        {
             var bufferDependencies = new HashSet<AssetPath>();
             foreach (var reference in external.Where(static reference => string.Equals(reference.Kind, "buffer", StringComparison.Ordinal)))
             {
@@ -228,21 +261,7 @@ internal sealed class CookDependencyDiscovery(
                 _ = bufferDependencies.Add(owner.AssetUri);
             }
 
-            this.resourceDependencies[input.AssetUri] = [.. bufferDependencies];
-            if (expandCookedReferences is not null)
-            {
-                var expansion = await expandCookedReferences(input, references, cancellationToken).ConfigureAwait(false);
-                this.cookedDependencies[input.AssetUri] = expansion.Libraries;
-                this.diagnostics.AddRange(expansion.Diagnostics);
-                this.importedReferences.UnionWith(expansion.ImportedOutputs);
-                foreach (var dependency in expansion.ProjectInputs)
-                {
-                    this.AddAsset(dependency);
-                    _ = resolved.Add(dependency.AssetUri);
-                }
-            }
-
-            this.dependencies[input.AssetUri] = [.. resolved.Order()];
+            return bufferDependencies;
         }
 
         // A reference is an asset's identity. It resolves to a cooked asset the cook publishes as it is (a library asset,

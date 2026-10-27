@@ -19,17 +19,3 @@ public sealed record GeometrySurfaceMetadata(AssetPath GeometryUri, Guid NativeG
     /// <summary>Gets the geometry's number of LODs: every LOD binds a submesh to a surface, and a geometry has at least one.</summary>
     public int LodCount => this.Surfaces.SelectMany(static surface => surface.Bindings).Select(static binding => (int)binding.LodIndex + 1).DefaultIfEmpty(1).Max();
 }
-
-/// <summary>One opaque semantic surface and its exact surface bindings.</summary>
-/// <param name="SurfaceId">The native identity; labels and ordering do not establish identity.</param>
-/// <param name="DisplayName">The native presentation label.</param>
-/// <param name="Visible">The asset's default Visibility of the surface, which applies where a scene does not override it.</param>
-/// <param name="CastsShadows">The asset's default Cast Shadows of the surface, which applies where a scene does not override it.</param>
-/// <param name="Bindings">All LOD/submesh bindings owned by this surface.</param>
-public sealed record GeometrySurface(Guid SurfaceId, string DisplayName, bool Visible, bool CastsShadows, ImmutableArray<GeometrySurfaceBinding> Bindings);
-
-/// <summary>One surface's native default assignment.</summary>
-/// <param name="LodIndex">The zero-based LOD index.</param>
-/// <param name="SubmeshIndex">The zero-based submesh index.</param>
-/// <param name="DefaultMaterialKey">The native material key; empty retains the omitted-reference sentinel.</param>
-public sealed record GeometrySurfaceBinding(uint LodIndex, uint SubmeshIndex, Guid DefaultMaterialKey);

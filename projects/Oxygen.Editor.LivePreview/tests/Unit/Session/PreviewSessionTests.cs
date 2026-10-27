@@ -8,7 +8,6 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline;
-using Oxygen.Editor.ContentPipeline.Mounting;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.Testing;
 using Oxygen.Editor.LivePreview.Session;
@@ -133,7 +132,7 @@ internal sealed partial class PreviewSessionTests
                 });
             var publisher = new Mock<IOperationResultPublisher>();
             _ = publisher.Setup(value => value.Publish(It.IsAny<OperationResult>())).Callback<OperationResult>(this.Results.Add);
-            this.Session = new PreviewSession(this.Engine, publication, new CookedContentMountService(), this.Catalog.Object, this.coordinator, session, this.sessions, publisher.Object, new OperationStatusReducer());
+            this.Session = new PreviewSession(this.Engine, publication, this.Catalog.Object, this.coordinator, session, this.sessions, publisher.Object, new OperationStatusReducer());
         }
 
         public FakeEngine Engine { get; }

@@ -24,10 +24,10 @@ public sealed record CookDependencyGraph(
     ImmutableArray<DiagnosticRecord> Diagnostics)
 {
     /// <summary>Gets the exact runtime references authored by each source before source-owner resolution.</summary>
-    public ImmutableDictionary<AssetPath, ImmutableArray<AssetPath>> NativeReferences { get; init; } = ImmutableDictionary<AssetPath, ImmutableArray<AssetPath>>.Empty;
+    public ImmutableDictionary<AssetPath, ImmutableArray<AssetPath>> NativeReferences { get; init; } = [];
 
     /// <summary>Gets verified native library identities required by each consuming source.</summary>
-    public ImmutableDictionary<AssetPath, ImmutableArray<CookedDependencySnapshot>> CookedDependencies { get; init; } = ImmutableDictionary<AssetPath, ImmutableArray<CookedDependencySnapshot>>.Empty;
+    public ImmutableDictionary<AssetPath, ImmutableArray<CookedDependencySnapshot>> CookedDependencies { get; init; } = [];
 
     /// <summary>Gets exact imported output references whose retained owners participate in this closure.</summary>
     public ImmutableArray<AssetPath> ImportedReferences { get; init; } = [];
@@ -36,22 +36,22 @@ public sealed record CookDependencyGraph(
     public ImmutableHashSet<AssetPath> SourcesNeedingAnalysis { get; init; } = [];
 
     /// <summary>Gets source-revision dependency facts retained with successful imported products.</summary>
-    public ImmutableDictionary<AssetPath, Import.ImportedSourceDependencyState> ImportedSources { get; init; } = ImmutableDictionary<AssetPath, Import.ImportedSourceDependencyState>.Empty;
+    public ImmutableDictionary<AssetPath, Import.ImportedSourceDependencyState> ImportedSources { get; init; } = [];
 
     /// <summary>Gets scene projections retained for cooking without regeneration.</summary>
     internal ImmutableDictionary<AssetPath, SceneDescriptorGenerationResult> SceneDescriptors { get; init; }
-        = ImmutableDictionary<AssetPath, SceneDescriptorGenerationResult>.Empty;
+        = [];
 
     /// <summary>Gets the exact native recipes used during discovery.</summary>
     internal ImmutableDictionary<AssetPath, ContentImportJob> NativeJobs { get; init; }
-        = ImmutableDictionary<AssetPath, ContentImportJob>.Empty;
+        = [];
 
     /// <summary>Gets verified generated inputs for native execution.</summary>
     internal ImmutableArray<Import.NativeCapturedInput> GeneratedInputs { get; init; } = [];
 
     /// <summary>Gets source facts to retain with successfully published products.</summary>
-    internal ImmutableDictionary<AssetPath, CookSourceFacts> SourceFacts { get; init; } = ImmutableDictionary<AssetPath, CookSourceFacts>.Empty;
+    internal ImmutableDictionary<AssetPath, CookSourceFacts> SourceFacts { get; init; } = [];
 
     /// <summary>Gets source dependencies whose buffer indices are embedded by value during cooking.</summary>
-    internal ImmutableDictionary<AssetPath, ImmutableArray<AssetPath>> ResourceDependencies { get; init; } = ImmutableDictionary<AssetPath, ImmutableArray<AssetPath>>.Empty;
+    internal ImmutableDictionary<AssetPath, ImmutableArray<AssetPath>> ResourceDependencies { get; init; } = [];
 }

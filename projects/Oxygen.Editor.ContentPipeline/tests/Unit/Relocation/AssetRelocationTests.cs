@@ -1,4 +1,4 @@
-﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
+// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
@@ -66,17 +66,19 @@ public sealed class AssetRelocationTests
     public async Task RelocationRewritesReferenceFieldsAndLeavesText()
     {
         using var workspace = CreateContent();
-        _ = workspace.Write("Content/Scenes/Named.oscene.json", """
+        var named = """
             { "Id": "0b0e6b8c-3c5a-4a0e-9a8f-1b1f2a3c4d5e", "Name": "Named",
               "RootNodes": [ { "Id": "3d9a2b1c-0000-4000-8000-000000000003", "Components": [ { "$type": "Metadata", "Name": "asset:///Content/Materials/Red.omat" }, { "$type": "Transform", "Name": "Transform" }, { "$type": "NodeFlags", "Name": "Rendering" }, { "$type": "Scripting", "Name": "Scripting", "Slots": [ {
                 "Id": "0f8fad5b-d9cb-469f-a165-70867728950e", "Script": "asset:///Content/Scripts/paint.oscript",
                 "Overrides": {
                   "label": { "Type": "string", "Value": "asset:///Content/Materials/Red.omat" },
                   "paint": { "Type": "asset", "Value": "asset:///Content/Materials/Red.omat" } } } ] } ] } ] }
-            """);
-        _ = workspace.Write("Content/Shapes/Box.ocshape.json", """
+            """;
+        var box = """
             { "name": "/Content/Materials/Red.omat", "virtual_path": "/Content/Shapes/Box.ocshape", "shape_type": "box", "material_ref": "/Content/Materials/Red.opmat" }
-            """);
+            """;
+        _ = workspace.Write("Content/Scenes/Named.oscene.json", named);
+        _ = workspace.Write("Content/Shapes/Box.ocshape.json", box);
 
         var plan = await workspace.Service.RelocateAsync(Move("/Content/Materials/Red.omat.json", "/Content/Materials/Blue.omat.json"), "Move", new HistoryKeeper(this), this.TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -181,10 +183,11 @@ public sealed class AssetRelocationTests
     public async Task MovingMultiSourceTextureRewritesEveryImage()
     {
         using var workspace = CreateContent();
-        _ = workspace.Write("Content/Shared/layers.otex.json", """
+        var layers = """
             { "virtual_path": "/Content/Shared/layers.otex", "source": "../Textures/Wood.png",
               "sources": [ { "file": "../Textures/Wood.png", "layer": 1 } ], "mips": { "policy": "none" } }
-            """);
+            """;
+        _ = workspace.Write("Content/Shared/layers.otex.json", layers);
         _ = await workspace.Service.RelocateAsync(Move("/Content/Shared", "/Content/Textures/Shared"), "Move", new HistoryKeeper(this), this.TestContext.CancellationToken).ConfigureAwait(false);
 
         var moved = workspace.ReadJson("Content/Textures/Shared/layers.otex.json");
@@ -271,11 +274,11 @@ public sealed class AssetRelocationTests
         var product = AssetPath.Parse("/Content/Models/Robot/robot.gltf/Body.ogeo");
         var before = workspace.Snapshot();
 
-        Func<Task> move = () => workspace.Service.RelocateAsync(Move(product.VirtualPath, "/Content/Models/Body.ogeo"), "Move", new HistoryKeeper(this), this.TestContext.CancellationToken);
-        Func<Task> rename = () => workspace.Service.RelocateAsync(new AssetRelocationRequest { ProductRenames = [new(product, "Hull")] }, "Rename", new HistoryKeeper(this), this.TestContext.CancellationToken);
-        Func<Task> delete = () => workspace.Service.DeleteAsync([product], static _ => Task.CompletedTask, this.TestContext.CancellationToken);
+        Task MoveProduct() => workspace.Service.RelocateAsync(Move(product.VirtualPath, "/Content/Models/Body.ogeo"), "Move", new HistoryKeeper(this), this.TestContext.CancellationToken);
+        Task RenameProduct() => workspace.Service.RelocateAsync(new AssetRelocationRequest { ProductRenames = [new(product, "Hull")] }, "Rename", new HistoryKeeper(this), this.TestContext.CancellationToken);
+        Task DeleteProduct() => workspace.Service.DeleteAsync([product], static _ => Task.CompletedTask, this.TestContext.CancellationToken);
 
-        foreach (var operation in new[] { move, rename, delete })
+        foreach (var operation in new Func<Task>[] { MoveProduct, RenameProduct, DeleteProduct })
         {
             _ = (await operation.Should().ThrowAsync<AssetRelocationException>().ConfigureAwait(false))
                 .Which.Code.Should().Be(AssetRelocationException.ModelProductCode);
@@ -518,7 +521,7 @@ public sealed class AssetRelocationTests
         var main = UnsavedMain(workspace);
         IEnumerable<FileSystemPath>? asked = null;
         _ = workspace.UnsavedDocuments.Setup(documents => documents.Find(It.IsAny<IEnumerable<FileSystemPath>>()))
-            .Callback<IEnumerable<FileSystemPath>>(paths => asked = paths.ToArray())
+            .Callback<IEnumerable<FileSystemPath>>(paths => asked = [.. paths])
             .Returns([main]);
 
         var unsaved = workspace.Service.FindUnsavedDocuments();
@@ -709,8 +712,8 @@ public sealed class AssetRelocationTests
 
         _ = await workspace.Service.RelocateAsync(Move("/Content/Sky/Pisa.otex.json", "/Content/Textures/Pisa.otex.json"), "Move", new HistoryKeeper(this), this.TestContext.CancellationToken).ConfigureAwait(false);
 
-        _ = faces.Where(face => !workspace.Exists($"Content/Textures/{face}")).Should().BeEmpty();
-        _ = faces.Where(face => workspace.Exists($"Content/Sky/{face}")).Should().BeEmpty();
+        _ = faces.Should().NotContain(face => !workspace.Exists($"Content/Textures/{face}"));
+        _ = faces.Should().NotContain(face => workspace.Exists($"Content/Sky/{face}"));
     }
 
     /// <summary>A request that changes nothing touches no file and starts no transaction.</summary>
@@ -851,19 +854,22 @@ public sealed class AssetRelocationTests
     private static RelocationWorkspace CreateInput()
     {
         var workspace = new RelocationWorkspace();
-        _ = workspace.Write("Content/Input/Player.input.json", """
+        var player = """
             {
               "actions": [ { "name": "Jump", "type": "bool" }, { "name": "Dash", "type": "bool" } ],
               "contexts": [ { "name": "OnFoot", "mappings": [ { "action": "Jump", "slot": "Space" } ] } ]
             }
-            """);
-        _ = workspace.Write("Content/Input/Vehicle.input.json", """
+            """;
+        var vehicle = """
             { "contexts": [ { "name": "Driving", "mappings": [ { "action": "/Content/Input/Player.input/Jump.oiact", "slot": "Space" } ] } ] }
-            """);
-        _ = workspace.Write("Content/Scenes/Main.oscene.json", """
+            """;
+        var main = """
             { "Id": "6a1f2c0e-6c1e-4a59-9a77-1f6a3e4b2d10", "Name": "Main", "RootNodes": [],
               "StartingInputContexts": [ { "Context": "asset:///Content/Input/Player.input/OnFoot.oimap" } ] }
-            """);
+            """;
+        _ = workspace.Write("Content/Input/Player.input.json", player);
+        _ = workspace.Write("Content/Input/Vehicle.input.json", vehicle);
+        _ = workspace.Write("Content/Scenes/Main.oscene.json", main);
         return workspace;
     }
 

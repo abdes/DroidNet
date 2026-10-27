@@ -60,7 +60,7 @@ internal sealed partial class SceneExplorerInstanceRowsTests : DroidNet.Tests.Vi
         await WaitForRenderAsync().ConfigureAwait(true);
 
         // As when the preview mounts the content again after a cook.
-        harness.Structures.RaiseChanged();
+        harness.Structures.NotifyChanged();
         await WaitUntilAsync(
             () => harness.RootRow(explorer).IsExpanded && InstancedRows(explorer).Count == NodeCount,
             () => Describe(harness, explorer)).ConfigureAwait(true);
@@ -110,7 +110,7 @@ internal sealed partial class SceneExplorerInstanceRowsTests : DroidNet.Tests.Vi
         await ScrollAsync(scroller, scroller.ScrollableHeight).ConfigureAwait(true);
 
         // The rows are replaced while the tree is scrolled far down, as when content is mounted again after a cook.
-        harness.Structures.RaiseChanged();
+        harness.Structures.NotifyChanged();
         await WaitUntilAsync(
             () => harness.RootRow(explorer).IsExpanded && InstancedRows(explorer).Count == NodeCount,
             () => Describe(harness, explorer)).ConfigureAwait(true);

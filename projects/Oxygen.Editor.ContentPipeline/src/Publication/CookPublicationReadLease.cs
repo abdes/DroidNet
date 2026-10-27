@@ -82,20 +82,6 @@ public sealed class CookPublicationReadLease : ICookPublicationReadLease
         return new(index.Index, FileSystemPath.From(path));
     }
 
-    /// <summary>
-    /// Requires sealed owned roots before native mounting or publication, including disk-only publication. A root cooked in
-    /// another index format is not a broken generation: it is left unmounted until it is recooked.
-    /// </summary>
-    internal void RequireAvailableGenerations()
-    {
-        ObjectDisposedException.ThrowIf(this.disposed, this);
-        if (!this.state.UnsealedRoots.IsEmpty)
-        {
-            throw new InvalidDataException("Cooked generations need rebuilding: "
-                + string.Join(", ", this.state.UnsealedRoots.Select(static root => root.Name)) + ".");
-        }
-    }
-
     /// <summary>Retains this exact snapshot without reopening the head or reacquiring filesystem handles.</summary>
     /// <returns>Independent disposal ownership of the same immutable selection.</returns>
     public CookPublicationReadLease Retain()
@@ -104,7 +90,11 @@ public sealed class CookPublicationReadLease : ICookPublicationReadLease
         {
             ObjectDisposedException.ThrowIf(this.disposed, this);
             var retained = new CookPublicationReadLease(this.state);
-            checked { this.state.Readers++; }
+            checked
+            {
+                this.state.Readers++;
+            }
+
             return retained;
         }
     }
@@ -187,8 +177,12 @@ public sealed class CookPublicationReadLease : ICookPublicationReadLease
     /// </param>
     /// <returns>A lease on the selected publication.</returns>
     /// <exception cref="CookPublicationFormatException">The document is outdated and <paramref name="upgradeOutdated"/> is false.</exception>
-    internal static async Task<CookPublicationReadLease> OpenUnderGateAsync(ProjectContext project, IAtomicFileStore files,
-        CookOutputWriteLease gate, CancellationToken cancellationToken, bool upgradeOutdated = false)
+    internal static async Task<CookPublicationReadLease> OpenUnderGateAsync(
+        ProjectContext project,
+        IAtomicFileStore files,
+        CookOutputWriteLease gate,
+        CancellationToken cancellationToken,
+        bool upgradeOutdated = false)
     {
         gate.VerifyOwner(project.ProjectRoot);
         var head = await files.ReadAsync(CookPublicationPaths.Head(project.ProjectRoot.FullPath), cancellationToken).ConfigureAwait(false);
@@ -204,8 +198,19 @@ public sealed class CookPublicationReadLease : ICookPublicationReadLease
     }
 
     /// <summary>Retains a known candidate or previous selection without rereading the mutable head.</summary>
-    internal static async Task<CookPublicationReadLease> OpenDocumentUnderGateAsync(ProjectContext project, IAtomicFileStore files,
-        CookOutputWriteLease gate, FileSnapshot selection, CancellationToken cancellationToken)
+    /// <param name="project">The project whose publication is read.</param>
+    /// <param name="files">Reads the document.</param>
+    /// <param name="gate">The selection gate the caller owns.</param>
+    /// <param name="selection">The head snapshot selecting the publication to retain.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>A lease on the selected publication.</returns>
+    /// <exception cref="InvalidDataException">The head or the document it selects is invalid.</exception>
+    internal static async Task<CookPublicationReadLease> OpenDocumentUnderGateAsync(
+        ProjectContext project,
+        IAtomicFileStore files,
+        CookOutputWriteLease gate,
+        FileSnapshot selection,
+        CancellationToken cancellationToken)
     {
         gate.VerifyOwner(project.ProjectRoot);
         if (!selection.Version.Exists)
@@ -213,13 +218,7 @@ public sealed class CookPublicationReadLease : ICookPublicationReadLease
             return new(new(project, selection, document: null, [], [], []));
         }
 
-        var head = JsonSerializer.Deserialize<CookPublicationHead>(selection.Content.AsSpan(), CookPublicationDocument.JsonOptions);
-        if (head is null || head.Version != CookPublicationHead.CurrentVersion || head.PublicationId == Guid.Empty
-            || !CookPublicationDocument.IsDigest(head.DocumentSha256))
-        {
-            throw new InvalidDataException("The cooked publication head is invalid.");
-        }
-
+        var head = ParseHead(selection);
         var handles = new List<FileStream>(capacity: 1);
         try
         {
@@ -242,50 +241,110 @@ public sealed class CookPublicationReadLease : ICookPublicationReadLease
             }
 
             handles.EnsureCapacity(checked(document.Roots.Length + 1));
-            var unavailable = ImmutableArray.CreateBuilder<CookPublicationRoot>(document.Roots.Length);
-            var unsealed = ImmutableArray.CreateBuilder<CookPublicationRoot>();
-            foreach (var root in document.Roots)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                var marker = Path.Combine(root.ResolvePath(project.ProjectRoot.FullPath), CookedGeneration.MarkerFileName);
-                CookOutputLease.RejectReparsePoint(marker);
-                var reader = WindowsCookFile.TryOpenGenerationReader(marker, out var busy);
-                if (reader is not null)
-                {
-                    handles.Add(reader);
-                }
-                else if (busy)
-                {
-                    throw new CookOutputBusyException($"Cooked generation '{root.Name}' is being reclaimed. Refresh the publication.");
-                }
-                else if (root.Owner == CookPublicationRootOwner.Project)
-                {
-                    unavailable.Add(root);
-                    unsealed.Add(root);
-                    continue;
-                }
-
-                if (await IsStaleAsync(root, project, cancellationToken).ConfigureAwait(false))
-                {
-                    unavailable.Add(root);
-                }
-            }
-
-            return new(new(project, selection, document, handles, unavailable.ToImmutable(), unsealed.ToImmutable()));
+            var (unavailable, unsealed) = await OpenRootsAsync(project, document, handles, cancellationToken).ConfigureAwait(false);
+            return new(new(project, selection, document, handles, unavailable, unsealed));
         }
         catch
         {
             foreach (var handle in handles.AsEnumerable().Reverse())
             {
-                handle.Dispose();
+                await handle.DisposeAsync().ConfigureAwait(false);
             }
 
             throw;
         }
     }
 
+    /// <summary>
+    /// Requires sealed owned roots before native mounting or publication, including disk-only publication. A root cooked in
+    /// another index format is not a broken generation: it is left unmounted until it is recooked.
+    /// </summary>
+    internal void RequireAvailableGenerations()
+    {
+        ObjectDisposedException.ThrowIf(this.disposed, this);
+        if (!this.state.UnsealedRoots.IsEmpty)
+        {
+            throw new InvalidDataException("Cooked generations need rebuilding: "
+                + string.Join(", ", this.state.UnsealedRoots.Select(static root => root.Name)) + ".");
+        }
+    }
+
+    // Reads the mutable head and rejects one that is malformed or of another format.
+    private static CookPublicationHead ParseHead(FileSnapshot selection)
+    {
+        var head = JsonSerializer.Deserialize<CookPublicationHead>(selection.Content.AsSpan(), CookPublicationDocument.JsonOptions);
+        if (head is null || head.Version != CookPublicationHead.CurrentVersion || head.PublicationId == Guid.Empty
+            || !CookPublicationDocument.IsDigest(head.DocumentSha256))
+        {
+            throw new InvalidDataException("The cooked publication head is invalid.");
+        }
+
+        return head;
+    }
+
+    // Holds each root's generation marker open (adding the readers to the handles) and reports the roots that cannot be
+    // mounted: owned roots without a marker (also unsealed) and loose roots cooked in another index format.
+    private static async Task<(ImmutableArray<CookPublicationRoot> Unavailable, ImmutableArray<CookPublicationRoot> Unsealed)> OpenRootsAsync(
+        ProjectContext project,
+        CookPublicationDocument document,
+        List<FileStream> handles,
+        CancellationToken cancellationToken)
+    {
+        var unavailable = ImmutableArray.CreateBuilder<CookPublicationRoot>(document.Roots.Length);
+        var unsealed = ImmutableArray.CreateBuilder<CookPublicationRoot>();
+        foreach (var root in document.Roots)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var marker = Path.Combine(root.ResolvePath(project.ProjectRoot.FullPath), CookedGeneration.MarkerFileName);
+            CookOutputLease.RejectReparsePoint(marker);
+            if (!RetainGenerationReader(marker, handles, out var busy))
+            {
+                if (busy)
+                {
+                    throw new CookOutputBusyException($"Cooked generation '{root.Name}' is being reclaimed. Refresh the publication.");
+                }
+
+                // An unsealed project root is unavailable; a library root without a marker is checked as it is.
+                if (root.Owner == CookPublicationRootOwner.Project)
+                {
+                    unavailable.Add(root);
+                    unsealed.Add(root);
+                    continue;
+                }
+            }
+
+            if (await IsStaleAsync(root, project, cancellationToken).ConfigureAwait(false))
+            {
+                unavailable.Add(root);
+            }
+        }
+
+        return (unavailable.ToImmutable(), unsealed.ToImmutable());
+    }
+
     // A loose root cooked in another index format has nothing readable until it is recooked. The read is shared with
     // every later consumer of the same index; a missing or damaged index is reported by the consumer that needs it.
+    // Opens a generation's marker for reading and adds it to the handles that keep the generation alive.
+    private static bool RetainGenerationReader(string marker, List<FileStream> handles, out bool busy)
+    {
+        var reader = WindowsCookFile.TryOpenGenerationReader(marker, out busy);
+        try
+        {
+            if (reader is null)
+            {
+                return false;
+            }
+
+            handles.Add(reader);
+            reader = null;
+            return true;
+        }
+        finally
+        {
+            reader?.Dispose();
+        }
+    }
+
     private static async Task<bool> IsStaleAsync(CookPublicationRoot root, ProjectContext project, CancellationToken cancellationToken)
     {
         if (root.Container != CookPublicationRootContainer.LooseFolder)
@@ -318,8 +377,13 @@ public sealed class CookPublicationReadLease : ICookPublicationReadLease
 
     private sealed class SharedState
     {
-        internal SharedState(ProjectContext project, FileSnapshot head, CookPublicationDocument? document, List<FileStream> handles,
-            ImmutableArray<CookPublicationRoot> unavailableRoots, ImmutableArray<CookPublicationRoot> unsealedRoots)
+        internal SharedState(
+            ProjectContext project,
+            FileSnapshot head,
+            CookPublicationDocument? document,
+            List<FileStream> handles,
+            ImmutableArray<CookPublicationRoot> unavailableRoots,
+            ImmutableArray<CookPublicationRoot> unsealedRoots)
         {
             this.Head = head;
             this.ProjectRoot = project.ProjectRoot;

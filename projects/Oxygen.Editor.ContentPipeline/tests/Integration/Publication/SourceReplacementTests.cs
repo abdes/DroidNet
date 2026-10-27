@@ -22,7 +22,8 @@ public sealed class SourceReplacementTests
     public async Task SourceBundleCommitsWithCookedOutput()
     {
         using var project = new PublicationProject(hadPrevious: true);
-        await using var staging = await project.StageAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        var staging = await project.StageAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        await using var stagingLifetime = staging.ConfigureAwait(false);
         var source = await this.StageSourceAsync(project).ConfigureAwait(false);
         var transaction = await project.PrepareAsync(staging, this.TestContext.CancellationToken, sourceReplacement: source).ConfigureAwait(false);
         AssertSource(project.Root, "old");
@@ -46,16 +47,15 @@ public sealed class SourceReplacementTests
     [DataRow("SourcesApplied", false)]
     [DataRow("Installed:Source:Model", false)]
     [DataRow("RuntimeReady", false)]
-    [DataRow("RuntimeReady", false)]
     [DataRow("Retained:Source:Model", true)]
     [DataRow("SourcesApplied", true)]
     [DataRow("Installed:Source:Model", true)]
     [DataRow("RuntimeReady", true)]
-    [DataRow("RuntimeReady", true)]
     public async Task SourceBundleRestoresWithCookedOutput(string boundary, bool persisted)
     {
         using var project = new PublicationProject(hadPrevious: true);
-        await using var staging = await project.StageAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        var staging = await project.StageAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        await using var stagingLifetime = staging.ConfigureAwait(false);
         var source = await this.StageSourceAsync(project).ConfigureAwait(false);
         var replica = Directory.CreateTempSubdirectory("oxygen-source-recovery-");
         try
@@ -105,7 +105,8 @@ public sealed class SourceReplacementTests
     public async Task SourceReplacementRejectsChangedBaseline(bool beforePreparation)
     {
         using var project = new PublicationProject(hadPrevious: true);
-        await using var staging = await project.StageAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        var staging = await project.StageAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        await using var stagingLifetime = staging.ConfigureAwait(false);
         var source = await this.StageSourceAsync(project).ConfigureAwait(false);
         var transaction = beforePreparation ? null : await project.PrepareAsync(staging, this.TestContext.CancellationToken, sourceReplacement: source).ConfigureAwait(false);
         var primary = Path.Combine(project.Root, SourceBundle, "model.glb");
@@ -129,7 +130,8 @@ public sealed class SourceReplacementTests
     public async Task SourceReplacementCancellationHasOneOutcome(bool afterMutation)
     {
         using var project = new PublicationProject(hadPrevious: true);
-        await using var staging = await project.StageAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        var staging = await project.StageAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        await using var stagingLifetime = staging.ConfigureAwait(false);
         var source = await this.StageSourceAsync(project).ConfigureAwait(false);
         using var cancellation = new CancellationTokenSource();
         var transaction = await project.PrepareAsync(
@@ -165,7 +167,8 @@ public sealed class SourceReplacementTests
     public async Task SourceReplacementJournalRejectsTraversal()
     {
         using var project = new PublicationProject(hadPrevious: true);
-        await using var staging = await project.StageAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        var staging = await project.StageAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        await using var stagingLifetime = staging.ConfigureAwait(false);
         var source = await this.StageSourceAsync(project).ConfigureAwait(false);
         _ = await project.PrepareAsync(staging, this.TestContext.CancellationToken, sourceReplacement: source).ConfigureAwait(false);
         var path = Path.Combine(project.Root, ".build/cook", project.Operation.OperationId.ToString("N"), "publication.json");

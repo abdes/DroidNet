@@ -31,8 +31,8 @@ public sealed class UnsavedCookInputs(IProjectSession session, IUnsavedDocuments
             return unsaved;
         }
 
-        IReadOnlyList<AssetPath> scope = request.TargetKind == CookTargetKind.Changes ? request.Assets
-            : request.ScopeUri is { } uri ? [uri] : [];
+        var scope = request.TargetKind == CookTargetKind.Changes ? request.Assets
+            : request.ScopeUri is { } uri ? (IReadOnlyList<AssetPath>)[uri] : [];
         var targets = scope.Select(AssetFileTypes.ToIdentity).ToArray();
         var index = await AuthoredReferenceIndex.BuildAsync(project, cancellationToken).ConfigureAwait(false);
         var read = ReadFiles(index, targets);

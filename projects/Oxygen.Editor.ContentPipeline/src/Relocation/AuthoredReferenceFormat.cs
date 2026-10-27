@@ -68,7 +68,7 @@ internal static class AuthoredReferenceFormat
     public static byte[] RenameInputProduct(ReadOnlyMemory<byte> content, InputProductRename rename)
     {
         ArgumentNullException.ThrowIfNull(rename);
-        var renamed = InputSourceWriter.RenameProduct(content.Span, rename.Extension, rename.CurrentName, rename.Name);
+        var renamed = InputSourceWriter.RenameProduct(content.Span, rename.GetExtension(), rename.CurrentName, rename.Name);
         return Serialize(renamed, content.Span);
     }
 

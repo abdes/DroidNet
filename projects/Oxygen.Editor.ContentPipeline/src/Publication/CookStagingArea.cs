@@ -12,9 +12,9 @@ namespace Oxygen.Editor.ContentPipeline.Publication;
 /// <summary>Owns fresh candidate roots at their final paths under the coordinator's operation lifetime.</summary>
 internal sealed class CookStagingArea : IAsyncDisposable
 {
+    private readonly List<CookStagingRoot> roots;
     private bool retained;
     private bool disposed;
-    private readonly List<CookStagingRoot> roots;
 
     private CookStagingArea(CookPublicationReadLease baseline, CookPublicationTransaction transaction, int rootCount)
     {
@@ -28,56 +28,6 @@ internal sealed class CookStagingArea : IAsyncDisposable
     internal CookPublicationTransaction Transaction { get; }
 
     internal IReadOnlyList<CookStagingRoot> Roots => this.roots;
-
-    internal static async Task<CookStagingArea> CreateAsync(ContentCookOperation operation, CookPublicationReadLease baseline,
-        IEnumerable<string> mounts, IAtomicFileStore files, IProjectManagerService manager,
-        CancellationToken cancellationToken, IReadOnlySet<string>? emptyRoots = null, Func<string, Task>? checkpoint = null)
-    {
-        var names = ValidateMounts(mounts);
-        var generations = names.Select(static _ => Guid.CreateVersion7()).ToImmutableArray();
-        var transaction = await CookPublicationTransaction.ReserveAsync(operation, baseline, generations, files, manager, cancellationToken, checkpoint).ConfigureAwait(false);
-        CookStagingArea? area = null;
-        var retainedBaseline = baseline.Retain();
-        try
-        {
-            area = new(retainedBaseline, transaction, names.Length);
-            retainedBaseline = null;
-            for (var index = 0; index < names.Length; index++)
-            {
-                var name = names[index];
-                var path = CookPublicationPaths.Generation(operation.Project.ProjectRoot.FullPath, generations[index]);
-                if (Directory.Exists(path) || File.Exists(path))
-                {
-                    throw new IOException("A fresh generation identity already has an output path.");
-                }
-
-                // Publish ownership to the area before a fallible seed copy.
-                var root = new CookStagingRoot(name, generations[index], path);
-                area.roots.Add(root);
-                _ = Directory.CreateDirectory(path);
-                if (emptyRoots?.Contains(name) != true && baseline.FindProjectRoot(name)?.FullPath is { } previous)
-                {
-                    await root.SeedAsync(previous, cancellationToken).ConfigureAwait(false);
-                }
-            }
-
-            return area;
-        }
-        catch
-        {
-            if (area is not null)
-            {
-                await area.DisposeAsync().ConfigureAwait(false);
-            }
-
-            retainedBaseline?.Dispose();
-            throw;
-        }
-    }
-
-    internal void RetainForPublication() => this.retained = true;
-
-    internal ImmutableArray<CookPublicationRoot> SealRoots() => [.. this.Roots.Select(static root => root.Seal())];
 
     public void VerifyAcceptedInventories(IReadOnlyDictionary<string, CookedInventoryReport> inventories, IReadOnlySet<string> emptyRoots)
     {
@@ -144,23 +94,8 @@ internal sealed class CookStagingArea : IAsyncDisposable
         this.disposed = true;
         try
         {
-            Exception? releaseFailure = null;
-            foreach (var root in this.Roots)
-            {
-                try
-                {
-                    await root.DisposeAsync().ConfigureAwait(false);
-                }
-                catch (Exception failure)
-                {
-                    releaseFailure ??= failure;
-                }
-            }
-
-            if (releaseFailure is not null)
-            {
-                System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(releaseFailure).Throw();
-            }
+            // Every root is released even when an earlier one fails; a failure propagates once all were tried.
+            await DisposeRootsAsync(this.Roots, 0).ConfigureAwait(false);
 
             if (!this.retained)
             {
@@ -193,5 +128,79 @@ internal sealed class CookStagingArea : IAsyncDisposable
                 || name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 || name.Contains('/', StringComparison.Ordinal) || name.Contains('\\', StringComparison.Ordinal))
             ? throw new ArgumentException("Cooking requires distinct mount names that are single directory names.", nameof(mounts))
             : names.Order(StringComparer.Ordinal).ToArray();
+    }
+
+    internal static async Task<CookStagingArea> CreateAsync(
+        ContentCookOperation operation,
+        CookPublicationReadLease baseline,
+        IEnumerable<string> mounts,
+        IAtomicFileStore files,
+        IProjectManagerService manager,
+        CancellationToken cancellationToken,
+        IReadOnlySet<string>? emptyRoots = null,
+        Func<string, Task>? checkpoint = null)
+    {
+        var names = ValidateMounts(mounts);
+        var generations = names.Select(static _ => Guid.CreateVersion7()).ToImmutableArray();
+        var transaction = await CookPublicationTransaction.ReserveAsync(operation, baseline, generations, files, manager, cancellationToken, checkpoint).ConfigureAwait(false);
+        CookStagingArea? area = null;
+        var retainedBaseline = baseline.Retain();
+        try
+        {
+            area = new(retainedBaseline, transaction, names.Length);
+            retainedBaseline = null;
+            for (var index = 0; index < names.Length; index++)
+            {
+                var name = names[index];
+                var path = CookPublicationPaths.Generation(operation.Project.ProjectRoot.FullPath, generations[index]);
+                if (Directory.Exists(path) || File.Exists(path))
+                {
+                    throw new IOException("A fresh generation identity already has an output path.");
+                }
+
+                // Publish ownership to the area before a fallible seed copy.
+                var root = new CookStagingRoot(name, generations[index], path);
+                area.roots.Add(root);
+                _ = Directory.CreateDirectory(path);
+                if (emptyRoots?.Contains(name) != true && baseline.FindProjectRoot(name)?.FullPath is { } previous)
+                {
+                    await root.SeedAsync(previous, cancellationToken).ConfigureAwait(false);
+                }
+            }
+
+            return area;
+        }
+        catch
+        {
+            if (area is not null)
+            {
+                await area.DisposeAsync().ConfigureAwait(false);
+            }
+
+            retainedBaseline?.Dispose();
+            throw;
+        }
+    }
+
+    internal void RetainForPublication() => this.retained = true;
+
+    internal ImmutableArray<CookPublicationRoot> SealRoots() => [.. this.Roots.Select(static root => root.Seal())];
+
+    // Releases the roots from the index on, each one after the one before it, whether or not that one failed.
+    private static async ValueTask DisposeRootsAsync(IReadOnlyList<CookStagingRoot> roots, int index)
+    {
+        if (index >= roots.Count)
+        {
+            return;
+        }
+
+        try
+        {
+            await roots[index].DisposeAsync().ConfigureAwait(false);
+        }
+        finally
+        {
+            await DisposeRootsAsync(roots, index + 1).ConfigureAwait(false);
+        }
     }
 }

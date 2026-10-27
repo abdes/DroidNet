@@ -11,6 +11,7 @@ public sealed partial class CookedContentMountSet : IDisposable
     private int disposed;
 
     /// <summary>Initializes a new instance of the <see cref="CookedContentMountSet"/> class.</summary>
+    /// <param name="publication">The retained publication snapshot the roots were admitted from.</param>
     /// <param name="roots">The accepted native mount order.</param>
     /// <param name="readers">Readers transferred from successful preparation.</param>
     internal CookedContentMountSet(Publication.CookPublicationReadLease publication, IReadOnlyList<string> roots, IReadOnlyList<IDisposable> readers)

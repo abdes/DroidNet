@@ -34,7 +34,6 @@ namespace Oxygen.Editor.LivePreview.Session;
 /// </remarks>
 /// <param name="engine">The embedded engine, shared by every window.</param>
 /// <param name="publication">The project's cook publication.</param>
-/// <param name="mounts">Prepares a publication for mounting.</param>
 /// <param name="catalog">The asset catalog that shows the mounted publication.</param>
 /// <param name="coordinator">Serializes project changes with cooking.</param>
 /// <param name="session">The project session: the project the preview shows, as its content mounts are now.</param>
@@ -45,7 +44,6 @@ namespace Oxygen.Editor.LivePreview.Session;
 public sealed partial class PreviewSession(
     IEngineService engine,
     CookPublicationService publication,
-    CookedContentMountService mounts,
     IAssetPublicationTarget catalog,
     IContentCookCoordinator coordinator,
     IProjectSession session,

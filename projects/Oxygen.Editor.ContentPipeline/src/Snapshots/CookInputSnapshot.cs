@@ -34,8 +34,12 @@ public sealed record CookInputSnapshot(
                 ? new(
                     Path.Combine(this.InputRoot, input.RelativePath),
                     input.Metadata?.Size ?? throw new InvalidOperationException("A captured file is missing its original metadata."),
-                    input.DiscoveryHash.ToLowerInvariant())
+                    ToLowerHash(input.DiscoveryHash))
                 : null;
             return new NativeCapturedInput(logicalPath, !input.IsAbsent, input.Metadata, file);
         })]);
+
+    // The native admission map names a file's hash in lower-case hexadecimal, as the native cook reports it.
+    private static string ToLowerHash(string hash)
+        => string.Create(hash.Length, hash, static (span, value) => value.AsSpan().ToLowerInvariant(span));
 }

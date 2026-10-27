@@ -63,16 +63,6 @@ internal sealed partial class CookOutputReadLease : IAsyncDisposable, IDisposabl
         }
     }
 
-    /// <summary>Retains the sealed generation without reopening its verified index or payloads.</summary>
-    internal void RetainGeneration()
-    {
-        lock (this.verificationGate)
-        {
-            ObjectDisposedException.ThrowIf(this.disposed, this);
-            this.generation ??= WindowsCookFile.OpenGenerationReader(Path.Combine(this.root, CookedGeneration.MarkerFileName));
-        }
-    }
-
     /// <summary>Verifies this protected opening once through the native inventory authority.</summary>
     /// <param name="native">The existing native content API.</param>
     /// <param name="cancellationToken">Cancels native work.</param>
@@ -85,6 +75,31 @@ internal sealed partial class CookOutputReadLease : IAsyncDisposable, IDisposabl
             ObjectDisposedException.ThrowIf(this.disposed, this);
             this.CheckMembership();
             return this.inventory ??= this.VerifyInventoryAsync(native, artifacts, cancellationToken);
+        }
+    }
+
+    /// <summary>Returns the actual protected file set, including files not represented by index file records.</summary>
+    /// <returns>Root-relative paths and sizes without reading file contents.</returns>
+    public IReadOnlyList<CookedFileEntry> GetFiles()
+    {
+        this.CheckMembership();
+        return this.files.OrderBy(static pair => pair.Key, StringComparer.Ordinal)
+            .Select(static pair => new CookedFileEntry(pair.Key, checked((ulong)pair.Value.Length))).ToArray();
+    }
+
+    /// <inheritdoc />
+    public void Dispose() => _ = this.BeginDisposal();
+
+    /// <inheritdoc />
+    public ValueTask DisposeAsync() => new(this.BeginDisposal());
+
+    /// <summary>Retains the sealed generation without reopening its verified index or payloads.</summary>
+    internal void RetainGeneration()
+    {
+        lock (this.verificationGate)
+        {
+            ObjectDisposedException.ThrowIf(this.disposed, this);
+            this.generation ??= WindowsCookFile.OpenGenerationReader(Path.Combine(this.root, CookedGeneration.MarkerFileName));
         }
     }
 
@@ -126,21 +141,6 @@ internal sealed partial class CookOutputReadLease : IAsyncDisposable, IDisposabl
         return report;
     }
 
-    /// <summary>Returns the actual protected file set, including files not represented by index file records.</summary>
-    /// <returns>Root-relative paths and sizes without reading file contents.</returns>
-    public IReadOnlyList<CookedFileEntry> GetFiles()
-    {
-        this.CheckMembership();
-        return this.files.OrderBy(static pair => pair.Key, StringComparer.Ordinal)
-            .Select(static pair => new CookedFileEntry(pair.Key, checked((ulong)pair.Value.Length))).ToArray();
-    }
-
-    /// <inheritdoc />
-    public void Dispose() => _ = this.BeginDisposal();
-
-    /// <inheritdoc />
-    public ValueTask DisposeAsync() => new(this.BeginDisposal());
-
     private Task BeginDisposal()
     {
         lock (this.verificationGate)
@@ -160,8 +160,11 @@ internal sealed partial class CookOutputReadLease : IAsyncDisposable, IDisposabl
         if (verification is not null)
         {
             // Observe completion without replacing the operation's original failure.
-            await verification.ContinueWith(static completed => { _ = completed.Exception; }, CancellationToken.None,
-                TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default).ConfigureAwait(false);
+            await verification.ContinueWith(
+                static completed => { _ = completed.Exception; },
+                CancellationToken.None,
+                TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default).ConfigureAwait(false);
         }
 
         try
@@ -182,7 +185,10 @@ internal sealed partial class CookOutputReadLease : IAsyncDisposable, IDisposabl
             }
             finally
             {
-                this.generation?.Dispose();
+                if (this.generation is not null)
+                {
+                    await this.generation.DisposeAsync().ConfigureAwait(false);
+                }
             }
         }
     }

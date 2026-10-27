@@ -28,7 +28,7 @@ public sealed partial class SceneDescriptorGenerator
         Scene scene,
         ContentCookScope scope,
         ContentCookInput sceneInput,
-        IReadOnlyDictionary<NodeId, int> nodeIndices,
+        Dictionary<NodeId, int> nodeIndices,
         Guid operationId,
         List<DiagnosticRecord> diagnostics)
     {

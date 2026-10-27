@@ -9,6 +9,7 @@ using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Authoring;
 using Oxygen.Editor.ContentPipeline.Inspection;
+using Oxygen.Editor.ContentPipeline.Mounting;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.ContentPipeline.Status;
@@ -66,7 +67,7 @@ public sealed partial class ImportedModelTests : DroidNet.Tests.VisualUserInterf
                 root.Container == Oxygen.Editor.ContentPipeline.Publication.CookPublicationRootContainer.PakFile
                     ? Oxygen.Editor.Runtime.Engine.RuntimeCookedRootKind.PakFile
                     : Oxygen.Editor.Runtime.Engine.RuntimeCookedRootKind.LooseFolder)).ToArray();
-            var mounts = await services.Mounts.PrepareAsync(services.Session.Context, publication, timeout.Token).ConfigureAwait(true);
+            var mounts = await CookedContentMountService.PrepareAsync(services.Session.Context, publication, timeout.Token).ConfigureAwait(true);
             await fixture.Runtime.RefreshProjectCookedRootsAsync(bindings, mounts).ConfigureAwait(true);
         }
 

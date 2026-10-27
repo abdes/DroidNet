@@ -31,7 +31,7 @@ public sealed class CookedScriptReport
             throw new InvalidDataException("The native script report does not match its schema.");
         }
 
-        var scripts = ImmutableDictionary.CreateBuilder<Guid, ImmutableArray<ScriptParameter>>();
+        var declarations = ImmutableDictionary.CreateBuilder<Guid, ImmutableArray<ScriptParameter>>();
         foreach (var row in document.RootElement.GetProperty("scripts").EnumerateArray())
         {
             var parameters = row.GetProperty("parameters").EnumerateArray().Select(ParseParameter).ToImmutableArray();
@@ -40,13 +40,13 @@ public sealed class CookedScriptReport
                 throw new InvalidDataException("The native script report declares a parameter twice.");
             }
 
-            if (!scripts.TryAdd(row.GetProperty("asset_key").GetGuid(), parameters))
+            if (!declarations.TryAdd(row.GetProperty("asset_key").GetGuid(), parameters))
             {
                 throw new InvalidDataException("The native script report contains duplicate asset keys.");
             }
         }
 
-        return new(scripts.ToImmutable());
+        return new(declarations.ToImmutable());
     }
 
     /// <summary>Reads a native command result scoped to one virtual path.</summary>

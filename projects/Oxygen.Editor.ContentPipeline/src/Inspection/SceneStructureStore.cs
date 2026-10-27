@@ -19,7 +19,7 @@ namespace Oxygen.Editor.ContentPipeline.Inspection;
 /// </remarks>
 public sealed class SceneStructureStore : ISceneStructures
 {
-    private Snapshot structures = new(Project: null, ImmutableDictionary<AssetPath, SceneStructure>.Empty);
+    private Snapshot structures = new(Project: null, []);
 
     /// <inheritdoc/>
     public event EventHandler? Changed;
@@ -49,7 +49,7 @@ public sealed class SceneStructureStore : ISceneStructures
         }
 
         var current = Volatile.Read(ref this.structures);
-        var kept = ReferenceEquals(current.Project, project) ? current.Structures : ImmutableDictionary<AssetPath, SceneStructure>.Empty;
+        var kept = ReferenceEquals(current.Project, project) ? current.Structures : [];
         Volatile.Write(ref this.structures, new Snapshot(project, kept.SetItems(read.Select(static structure => KeyValuePair.Create(structure.Source, structure)))));
         this.Changed?.Invoke(this, EventArgs.Empty);
     }

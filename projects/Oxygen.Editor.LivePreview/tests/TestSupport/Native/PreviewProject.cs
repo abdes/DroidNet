@@ -8,7 +8,6 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline;
-using Oxygen.Editor.ContentPipeline.Mounting;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.LivePreview.Session;
 using Oxygen.Editor.Projects;
@@ -101,7 +100,7 @@ internal sealed partial class PreviewProject : IDisposable
     {
         var results = new Mock<IOperationResultPublisher>();
         _ = results.Setup(value => value.Publish(It.IsAny<OperationResult>())).Callback<OperationResult>(this.Results.Add);
-        return new PreviewSession(engine, this.Publication, new CookedContentMountService(), this.Catalog.Object, this.coordinator, this.Sessions.Session!, this.Sessions, results.Object, new OperationStatusReducer());
+        return new PreviewSession(engine, this.Publication, this.Catalog.Object, this.coordinator, this.Sessions.Session!, this.Sessions, results.Object, new OperationStatusReducer());
     }
 
     /// <inheritdoc/>

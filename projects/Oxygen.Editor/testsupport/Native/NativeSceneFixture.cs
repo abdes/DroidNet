@@ -22,7 +22,6 @@ using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Inspection;
-using Oxygen.Editor.ContentPipeline.Mounting;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Cooking;
@@ -623,7 +622,7 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
     {
         var publisher = new Mock<IOperationResultPublisher>();
         _ = publisher.Setup(value => value.Publish(It.IsAny<OperationResult>())).Callback<OperationResult>(this.Results.Enqueue);
-        return new PreviewSession(this.previewEngine, publication, new CookedContentMountService(), catalog, coordinator, session, this.Sessions, publisher.Object, new OperationStatusReducer());
+        return new PreviewSession(this.previewEngine, publication, catalog, coordinator, session, this.Sessions, publisher.Object, new OperationStatusReducer());
     }
 
     /// <summary>Follows relocations on the fixture's UI thread; the relocation calls participants from a worker.</summary>

@@ -38,8 +38,15 @@ internal static class GenerationScenario
         await File.WriteAllBytesAsync(Path.Combine(root, CookedGeneration.MarkerFileName), [], token).ConfigureAwait(false);
         NativeInventoryFixture.WriteIndex(root, [], sourceKey);
         var digest = NativeInventoryFixture.Read(root).IndexSha256;
-        var document = new CookPublicationDocument(CookPublicationDocument.CurrentVersion, project.ProjectId, Guid.CreateVersion7(), DateTimeOffset.UtcNow,
-            CookPublicationDocument.ConfigurationIdentity(project), [new(CookPublicationRootOwner.Project, "Content", sourceKey, digest, LibraryPath: null)], [], CookInputs: null);
+        var document = new CookPublicationDocument(
+            CookPublicationDocument.CurrentVersion,
+            project.ProjectId,
+            Guid.CreateVersion7(),
+            DateTimeOffset.UtcNow,
+            CookPublicationDocument.ConfigurationIdentity(project),
+            [new(CookPublicationRootOwner.Project, "Content", sourceKey, digest, LibraryPath: null)],
+            [],
+            CookInputs: null);
         var documentPath = CookPublicationPaths.Document(project.ProjectRoot.FullPath, document.OperationId);
         _ = Directory.CreateDirectory(Path.GetDirectoryName(documentPath)!);
         var version = await files.WriteAsync(documentPath, JsonSerializer.SerializeToUtf8Bytes(document, CookPublicationDocument.JsonOptions), FileVersion.Missing, token).ConfigureAwait(false);

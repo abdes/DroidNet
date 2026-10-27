@@ -429,9 +429,9 @@ public sealed partial class AutomaticCookService : IAutomaticCookService, IDispo
                 this.LogSourcesGone(gone.Count);
             }
 
-            var statuses = read.DistinctBy(static status => status.AssetUri).ToDictionary(static status => status.AssetUri);
+            var statusBySource = read.DistinctBy(static status => status.AssetUri).ToDictionary(static status => status.AssetUri);
             return [.. sources.Where(asset => !cooked.Contains(asset) && !gone.Contains(asset))
-                .Select(asset => (asset, statuses.TryGetValue(asset, out var status) ? UsedSources(current, asset, status) : []))];
+                .Select(asset => (asset, statusBySource.TryGetValue(asset, out var status) ? UsedSources(current, asset, status) : []))];
         }
         catch (OperationCanceledException) when (lifetime.IsCancellationRequested)
         {

@@ -42,18 +42,7 @@ public sealed class CookedLibraryResolutionTests
         await consumer.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
         var service = CreateService(consumer, api, compatibility: compatibility);
         var scene = AssetPath.Parse("/Content/Scenes/Main.oscene");
-        var indexed = imported.Inspection!.Assets.Single(asset => asset.VirtualPath == geometry.VirtualPath);
-        var descriptorPath = Path.Combine(root, indexed.DescriptorRelativePath!);
-        var original = await File.ReadAllBytesAsync(descriptorPath, this.TestContext.CancellationToken).ConfigureAwait(false);
-        var damaged = original.ToArray();
-        damaged[^1] ^= 1;
-        await File.WriteAllBytesAsync(descriptorPath, damaged, this.TestContext.CancellationToken).ConfigureAwait(false);
-        var rejected = await service.CookCurrentSceneAsync(scene, this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = rejected.IsPublished.Should().BeFalse();
-        var dependencyCache = Path.Combine(consumer.Root, ".build/cache/cooked-dependencies-v3");
-        _ = (Directory.Exists(dependencyCache) && Directory.EnumerateFiles(dependencyCache, "*", SearchOption.AllDirectories).Any()).Should().BeFalse(
-            "damaged descriptor bytes must not seed a dependency cache under the unchanged index identity");
-        await File.WriteAllBytesAsync(descriptorPath, original, this.TestContext.CancellationToken).ConfigureAwait(false);
+        await this.AssertDamagedDescriptorIsRejectedAsync(consumer, service, imported, geometry, root, scene).ConfigureAwait(false);
         var result = await service.CookCurrentSceneAsync(scene, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = result.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, result.Diagnostics.Select(static issue => issue.TechnicalMessage ?? issue.Message)));
         _ = result.CookedAssets.Should().ContainSingle().Which.SourceAssetUri.Should().Be(scene);
@@ -90,10 +79,11 @@ public sealed class CookedLibraryResolutionTests
         using var consumer = new CookWorkspace(engineContent: EngineContentPak.Installed());
         _ = Directory.CreateDirectory(Path.Combine(library.Root, "Art/Textures"));
         await File.WriteAllBytesAsync(Path.Combine(library.Root, "Art/Textures/Surface.tga"), [0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 32, 8, 255, 0, 0, 255], this.TestContext.CancellationToken).ConfigureAwait(false);
-        library.WriteText("Art/Textures/Surface.otex.json", """
+        const string textureDescriptor = """
             { "source": "Surface.tga", "intent": "albedo", "virtual_path": "/Art/Textures/Surface.otex",
               "decode": { "color_space": "srgb" }, "output": { "format": "rgba8_srgb" } }
-            """);
+            """;
+        library.WriteText("Art/Textures/Surface.otex.json", textureDescriptor);
         var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
         var texture = await CreateService(library, api, compatibility: compatibility).CookAssetAsync(AssetPath.Parse("/Art/Textures/Surface.otex"), this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -113,6 +103,7 @@ public sealed class CookedLibraryResolutionTests
                 alphaCutoff: 0.5f,
                 doubleSided: false).WithTextureReference("base_color", AssetPath.Parse("/Art/Textures/Surface.otex")));
         }
+
         var service = CreateService(consumer, api, compatibility: compatibility);
 
         // Act
@@ -162,6 +153,22 @@ public sealed class CookedLibraryResolutionTests
         var second = await service.CookCurrentSceneAsync(scene, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = second.IsPublished.Should().BeTrue();
         _ = second.InputSnapshot!.CookedDependencies.Select(static dependency => dependency.SourceName).Distinct(StringComparer.Ordinal).Should().ContainSingle().Which.Should().Be("Older");
+    }
+
+    private async Task AssertDamagedDescriptorIsRejectedAsync(CookWorkspace consumer, ContentPipelineService service, ContentCookResult imported, AssetPath geometry, string root, AssetPath scene)
+    {
+        var indexed = imported.Inspection!.Assets.Single(asset => string.Equals(asset.VirtualPath, geometry.VirtualPath, StringComparison.Ordinal));
+        var descriptorPath = Path.Combine(root, indexed.DescriptorRelativePath!);
+        var original = await File.ReadAllBytesAsync(descriptorPath, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var damaged = original.ToArray();
+        damaged[^1] ^= 1;
+        await File.WriteAllBytesAsync(descriptorPath, damaged, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var rejected = await service.CookCurrentSceneAsync(scene, this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = rejected.IsPublished.Should().BeFalse();
+        var dependencyCache = Path.Combine(consumer.Root, ".build/cache/cooked-dependencies-v3");
+        _ = (Directory.Exists(dependencyCache) && Directory.EnumerateFiles(dependencyCache, "*", SearchOption.AllDirectories).Any()).Should().BeFalse(
+            "damaged descriptor bytes must not seed a dependency cache under the unchanged index identity");
+        await File.WriteAllBytesAsync(descriptorPath, original, this.TestContext.CancellationToken).ConfigureAwait(false);
     }
 
     private async Task AssertLibraryFailuresPreserveOutputAsync(CookWorkspace consumer, Oxygen.Editor.Projects.ProjectContext context, string libraryProject, string root, ContentPipelineService service, AssetPath scene)

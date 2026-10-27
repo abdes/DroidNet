@@ -169,7 +169,7 @@ public sealed class PublicationReadTests
         // Act
         using var publication = await CookPublicationReadLease.OpenUnderGateAsync(context, files, gate, this.TestContext.CancellationToken).ConfigureAwait(false);
         var catalogs = await publication.CreateCatalogsAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
-        using var mounts = await new CookedContentMountService().PrepareAsync(context, publication, this.TestContext.CancellationToken).ConfigureAwait(false);
+        using var mounts = await CookedContentMountService.PrepareAsync(context, publication, this.TestContext.CancellationToken).ConfigureAwait(false);
         var first = await CookedIndexSnapshot.ReadAsync(root, this.TestContext.CancellationToken).ConfigureAwait(false);
         var again = await CookedIndexSnapshot.ReadAsync(root, this.TestContext.CancellationToken).ConfigureAwait(false);
         await LooseCookedIndexFixture.RewriteFormatVersionAsync(indexPath, 3).ConfigureAwait(false);

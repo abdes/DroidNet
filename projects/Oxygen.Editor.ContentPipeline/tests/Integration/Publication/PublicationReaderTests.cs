@@ -22,14 +22,15 @@ public sealed class PublicationReaderTests
         using var project = new PublicationProject(hadPrevious: true);
         using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(this.TestContext.CancellationToken);
         cancellation.CancelAfter(TimeSpan.FromSeconds(5));
-        await using var staging = await project.StageAsync(cancellation.Token).ConfigureAwait(false);
+        var staging = await project.StageAsync(cancellation.Token).ConfigureAwait(false);
+        await using var stagingLifetime = staging.ConfigureAwait(false);
         var transaction = await project.PrepareAsync(staging, cancellation.Token).ConfigureAwait(false);
         using var reader = project.Baseline.Retain();
         using var accepted = await transaction.PublishAsync(preview: null, project.Baseline, static () => { }, cancellation.Token).WaitAsync(cancellation.Token).ConfigureAwait(false);
         var oldRoot = reader.FindProjectRoot("Content")!.FullPath;
         _ = (reader.PublicationId == accepted.PublicationId).Should().BeFalse();
-        var catalog = await reader.CreateCatalogAsync(reader.Roots.Single(static root => root.Name == "Content"), cancellation.Token).ConfigureAwait(false);
-        _ = File.ReadAllText(Path.Combine(oldRoot, "value.txt")).Should().Be("old:Content");
+        var catalog = await reader.CreateCatalogAsync(reader.Roots.Single(static root => string.Equals(root.Name, "Content", StringComparison.Ordinal)), cancellation.Token).ConfigureAwait(false);
+        _ = (await File.ReadAllTextAsync(Path.Combine(oldRoot, "value.txt"), cancellation.Token).ConfigureAwait(false)).Should().Be("old:Content");
         using var claimed = CookedGeneration.TryClaim(oldRoot);
         _ = claimed.Should().BeNull();
         project.AssertNew();

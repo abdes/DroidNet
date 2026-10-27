@@ -1,4 +1,4 @@
-﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
+// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
@@ -19,7 +19,7 @@ internal sealed record CookIncrementalPlan(
     ImmutableHashSet<string> ValidSharedRoots)
 {
     /// <summary>Gets committed inventory metadata for comparison with candidate outputs; this is not a live read lease.</summary>
-    public ImmutableDictionary<string, CookedInventoryReport> PriorInventories { get; init; } = ImmutableDictionary<string, CookedInventoryReport>.Empty;
+    public ImmutableDictionary<string, CookedInventoryReport> PriorInventories { get; init; } = [];
 
     /// <summary>
     /// Gets the mounts whose every product was retired and that nothing in this cook goes into. They leave the
@@ -34,7 +34,7 @@ internal sealed record CookIncrementalPlan(
     public ImmutableDictionary<string, CookedOutputRemoval> Removals { get; init; } = ImmutableDictionary<string, CookedOutputRemoval>.Empty.WithComparers(StringComparer.Ordinal);
 
     /// <summary>Gets output descriptors whose shared resources and own bytes remain verified.</summary>
-    public ImmutableHashSet<(string rootMount, string virtualPath)> VerifiedOutputs { get; init; } = [];
+    public ImmutableHashSet<(string RootMount, string VirtualPath)> VerifiedOutputs { get; init; } = [];
 
     /// <summary>Gets verified native paths for filtering jobs reintroduced by scene preparation.</summary>
     public ImmutableHashSet<string> ReusedVirtualPaths => this.Reusable.Values.SelectMany(static product => product.Outputs).Select(static output => output.Asset.VirtualPath).ToImmutableHashSet(StringComparer.Ordinal);

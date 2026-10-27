@@ -10,14 +10,14 @@ using Oxygen.Managed.Core;
 namespace Oxygen.Editor.ContentPipeline.Mounting;
 
 /// <summary>Admits one captured publication without recomputing root paths or precedence.</summary>
-public sealed class CookedContentMountService
+public static class CookedContentMountService
 {
     /// <summary>Validates native metadata and retains the exact selection through runtime ownership.</summary>
     /// <param name="project">The owning project.</param>
     /// <param name="publication">The borrowed accepted or candidate snapshot.</param>
     /// <param name="cancellationToken">Cancels before native ownership transfer.</param>
     /// <returns>The complete ordered roots and their protected readers.</returns>
-    public async Task<CookedContentMountSet> PrepareAsync(ProjectContext project, CookPublicationReadLease publication, CancellationToken cancellationToken)
+    public static async Task<CookedContentMountSet> PrepareAsync(ProjectContext project, CookPublicationReadLease publication, CancellationToken cancellationToken)
     {
         if (project.ProjectId != publication.ProjectId
             || project.ProjectRoot != publication.ProjectRoot)

@@ -98,7 +98,7 @@ public sealed class NativeImportReportReaderTests
         _ = read.Should().Throw<InvalidDataException>();
     }
 
-    private static (ContentImportExecution execution, JsonNode report) CreateReport()
+    private static (ContentImportExecution Execution, JsonNode Report) CreateReport()
     {
         var root = Path.Combine(Path.GetTempPath(), "NativeReport", Guid.NewGuid().ToString("N"));
         var output = Path.Combine(root, "output");
@@ -119,7 +119,7 @@ public sealed class NativeImportReportReaderTests
         return (execution, report);
     }
 
-    private static (ContentImportExecution execution, JsonNode report) CreateModelReport(bool includeUpdate)
+    private static (ContentImportExecution Execution, JsonNode Report) CreateModelReport(bool includeUpdate)
     {
         var root = Path.Combine(Path.GetTempPath(), "NativeReport", Guid.NewGuid().ToString("N"));
         var output = Path.Combine(root, "output");
@@ -135,6 +135,7 @@ public sealed class NativeImportReportReaderTests
                 "source_fingerprint":{"size":2,"sha256":"%HASH%","files":[]}}
               """.Replace("%HASH%", new string('a', 64), StringComparison.Ordinal)
             : string.Empty;
+
         // The engine reports a model job as the gltf or fbx job its record runs.
         var report = JsonNode.Parse("""
             {"report_version":"3","session":{"cooked_root":""},"jobs":[

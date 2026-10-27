@@ -15,7 +15,7 @@ public sealed class AuthoredReferences(IProjectSession session) : IAuthoredRefer
     private ImmutableDictionary<AssetPath, IReadOnlyList<AssetPath>> references = [];
 
     /// <inheritdoc/>
-    public IReadOnlyList<AssetPath> Of(AssetPath asset)
+    public IReadOnlyList<AssetPath> ReferencesOf(AssetPath asset)
     {
         ArgumentNullException.ThrowIfNull(asset);
         return Volatile.Read(ref this.references).GetValueOrDefault(asset, []);

@@ -157,14 +157,14 @@ public sealed partial class PreviewSession
         {
             try
             {
-                return (reader, await mounts.PrepareAsync(active, reader, CancellationToken.None).ConfigureAwait(true));
+                return (reader, await CookedContentMountService.PrepareAsync(active, reader, CancellationToken.None).ConfigureAwait(true));
             }
             catch (CookedLibraryChangedException changed)
             {
                 this.LogCookedLibraryChanged(changed, active.ProjectRoot.FullPath);
                 reader.Dispose();
                 reader = await publication.AcquireForMountAsync(active, CancellationToken.None).ConfigureAwait(true);
-                return (reader, await mounts.PrepareAsync(active, reader, CancellationToken.None).ConfigureAwait(true));
+                return (reader, await CookedContentMountService.PrepareAsync(active, reader, CancellationToken.None).ConfigureAwait(true));
             }
         }
         catch

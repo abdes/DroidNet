@@ -43,7 +43,7 @@ public sealed record CookRunSnapshot
     public ImmutableList<CookRunMessage> Messages { get; init; } = [];
 
     /// <summary>Gets identified assets and their individual outcomes.</summary>
-    public ImmutableDictionary<AssetPath, CookRunAsset> Assets { get; init; } = ImmutableDictionary<AssetPath, CookRunAsset>.Empty;
+    public ImmutableDictionary<AssetPath, CookRunAsset> Assets { get; init; } = [];
 
     /// <summary>Gets actionable structured issues from the cook.</summary>
     public ImmutableArray<DiagnosticRecord> Diagnostics { get; init; } = [];

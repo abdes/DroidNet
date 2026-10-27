@@ -43,28 +43,13 @@ public sealed class ImportReplacementTests
         {
             var source = await WriteRetainedModelAsync(workspace, "Model", "gltf", this.TestContext.CancellationToken).ConfigureAwait(false);
             var repair = failure.StartsWith("repair", StringComparison.Ordinal);
+            var dependencyConflict = string.Equals(failure, "repair dependency conflict", StringComparison.Ordinal);
             if (repair)
             {
                 workspace.WriteMaterial("Content/Materials/Unrelated.omat.json", "Unrelated");
             }
 
-            if (failure == "repair dependency conflict")
-            {
-                workspace.WriteMaterial("Content/Materials/Red.omat.json", "Red");
-                WriteAuthoredGeometry(workspace, withBuffer: true);
-                const string retainedPath = "Content/Models/Model/model.gltf";
-                var retained = System.Text.Json.Nodes.JsonNode.Parse(workspace.ReadText(retainedPath))!;
-                var uri = retained["buffers"]![0]!["uri"]!.GetValue<string>();
-                var buffer = Convert.FromBase64String(uri[(uri.IndexOf(',', StringComparison.Ordinal) + 1)..]);
-                await File.WriteAllBytesAsync(Path.Combine(workspace.Root, "Content/Models/Model/retired.bin"), buffer, this.TestContext.CancellationToken).ConfigureAwait(false);
-                retained["buffers"]![0]!["uri"] = "retired.bin";
-                workspace.WriteText(retainedPath, retained.ToJsonString());
-
-                // The first cook reads retired.bin, so the record's fingerprint makes the model its owner.
-                var geometry = System.Text.Json.Nodes.JsonNode.Parse(workspace.ReadText("Content/Geometry/AuthoredCube.ogeo.json"))!;
-                geometry["buffers"]![0]!["uri"] = "../Models/Model/retired.bin";
-                workspace.WriteText("Content/Geometry/AuthoredCube.ogeo.json", geometry.ToJsonString());
-            }
+            await this.RetireModelBufferAsync(workspace, dependencyConflict).ConfigureAwait(false);
 
             var runner = new FailImportBatchRunner { Fail = false };
             var publication = workspace.Publication;
@@ -74,24 +59,12 @@ public sealed class ImportReplacementTests
                 ? await service.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false)
                 : await service.CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false);
             _ = first.IsPublished.Should().BeTrue();
-            if (repair)
-            {
-                var payload = Directory.EnumerateFiles(Path.Combine(workspace.Root, ".cooked"), "buffers.data", SearchOption.AllDirectories).Single();
-                var damaged = await File.ReadAllBytesAsync(payload, this.TestContext.CancellationToken).ConfigureAwait(false);
-                damaged[^1] ^= 0xFF;
-                await File.WriteAllBytesAsync(payload, damaged, this.TestContext.CancellationToken).ConfigureAwait(false);
-            }
+            await this.DamageRepairedPayloadAsync(workspace, repair).ConfigureAwait(false);
 
             var primary = Path.Combine(workspace.Root, "Content/Models/Model/model.gltf");
             var originalBytes = await File.ReadAllBytesAsync(primary, this.TestContext.CancellationToken).ConfigureAwait(false);
             var incoming = Path.Combine(external.FullName, "replacement.gltf");
-            var json = System.Text.Json.Nodes.JsonNode.Parse(originalBytes)!;
-            json["materials"]![0]!["pbrMetallicRoughness"]!["roughnessFactor"] = 0.1;
-            if (failure == "repair dependency conflict")
-            {
-                var bytes = await File.ReadAllBytesAsync(Path.Combine(Path.GetDirectoryName(primary)!, "retired.bin"), this.TestContext.CancellationToken).ConfigureAwait(false);
-                json["buffers"]![0]!["uri"] = "data:application/octet-stream;base64," + Convert.ToBase64String(bytes);
-            }
+            var json = await this.CreateReplacementJsonAsync(originalBytes, primary, dependencyConflict).ConfigureAwait(false);
 
             await this.WriteReplacementCandidateAsync(json, incoming, failure is "external" or "external retry" or "repair dependency conflict").ConfigureAwait(false);
             if (string.Equals(failure, "missing", StringComparison.Ordinal))
@@ -106,31 +79,13 @@ public sealed class ImportReplacementTests
             using var registration = string.Equals(failure, "publication", StringComparison.Ordinal) ? publication.RegisterPreview(workspace.ProjectContext, () => Task.FromResult<ICookPublicationPreview?>(preview)) : null;
             runner.Fail = failure is "native" or "external retry";
             var result = await service.ImportSourceAsync(request, this.TestContext.CancellationToken).ConfigureAwait(false);
-            if (failure == "repair dependency conflict")
+            if (dependencyConflict)
             {
-                _ = result.IsPublished.Should().BeFalse();
-                _ = result.Diagnostics.Should().Contain(static diagnostic => diagnostic.Code == "asset_cook.replacement_dependency_missing"
-                    && diagnostic.AffectedPath != null && diagnostic.AffectedPath.EndsWith("retired.bin", StringComparison.Ordinal));
-                _ = (await File.ReadAllBytesAsync(primary, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Equal(originalBytes);
+                await this.AssertDependencyConflictRejectedAsync(result, primary, originalBytes).ConfigureAwait(false);
                 return;
             }
 
-            if (failure is "native" or "publication" or "external retry")
-            {
-                _ = result.Status.Should().Be(OperationStatus.Failed);
-                _ = (await File.ReadAllBytesAsync(primary, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Equal(originalBytes);
-                var retry = workspace.CookCoordinator.Runs.Single(run => run.Request.Import?.Replacement is not null).Request.Import!;
-                _ = retry.ReplacementCandidatePath.Should().NotBeNull();
-                foreach (var path in Directory.EnumerateFiles(external.FullName, "*", SearchOption.AllDirectories))
-                {
-                    File.Delete(path);
-                }
-
-                runner.Fail = false;
-                registration?.Dispose();
-                result = await service.ImportSourceAsync(retry, this.TestContext.CancellationToken).ConfigureAwait(false);
-            }
-
+            result = await this.RetryFailedImportAsync(failure, workspace, service, runner, registration, external, result, primary, originalBytes).ConfigureAwait(false);
             await this.AssertReplacementReadyAsync(workspace, service, source, first, result, primary, json.ToJsonString()).ConfigureAwait(false);
         }
         finally
@@ -157,7 +112,7 @@ public sealed class ImportReplacementTests
             var cook = NativeCook.Create(workspace, runner: runner);
             var service = cook.Service;
             _ = (await service.CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false)).IsPublished.Should().BeTrue();
-            var before = ReadOutputIdentities(workspace.Root).ToDictionary(static item => item.Key, static item => item.Value.hash, StringComparer.Ordinal);
+            var before = ReadOutputIdentities(workspace.Root).ToDictionary(static item => item.Key, static item => item.Value.Hash, StringComparer.Ordinal);
             var primary = Path.Combine(workspace.Root, "Content/Models/Model/model.gltf");
 
             var review = await SceneImportReplacement.ReviewAsync(workspace.ProjectContext, AssetPath.Parse("/Content/Models"), "Model", this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -180,7 +135,7 @@ public sealed class ImportReplacementTests
 
             _ = result.Status.Should().Be(OperationStatus.Failed);
             _ = (await File.ReadAllBytesAsync(primary, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Equal(original);
-            _ = ReadOutputIdentities(workspace.Root).ToDictionary(static item => item.Key, static item => item.Value.hash, StringComparer.Ordinal).Should().BeEquivalentTo(before);
+            _ = ReadOutputIdentities(workspace.Root).ToDictionary(static item => item.Key, static item => item.Value.Hash, StringComparer.Ordinal).Should().BeEquivalentTo(before);
         }
         finally
         {
@@ -242,6 +197,84 @@ public sealed class ImportReplacementTests
         _ = (await File.ReadAllTextAsync(primary, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Be(expected);
         _ = (await service.ReadAsync(workspace.ProjectContext, [source], this.TestContext.CancellationToken).ConfigureAwait(false)).Single().Freshness.Should().Be(AssetCookFreshness.Current);
         _ = (await service.CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false)).IsUpToDate.Should().BeTrue();
+    }
+
+    private async Task RetireModelBufferAsync(CookWorkspace workspace, bool dependencyConflict)
+    {
+        if (!dependencyConflict)
+        {
+            return;
+        }
+
+        workspace.WriteMaterial("Content/Materials/Red.omat.json", "Red");
+        WriteAuthoredGeometry(workspace, withBuffer: true);
+        const string retainedPath = "Content/Models/Model/model.gltf";
+        var retained = System.Text.Json.Nodes.JsonNode.Parse(workspace.ReadText(retainedPath))!;
+        var uri = retained["buffers"]![0]!["uri"]!.GetValue<string>();
+        var buffer = Convert.FromBase64String(uri[(uri.IndexOf(',', StringComparison.Ordinal) + 1)..]);
+        await File.WriteAllBytesAsync(Path.Combine(workspace.Root, "Content/Models/Model/retired.bin"), buffer, this.TestContext.CancellationToken).ConfigureAwait(false);
+        retained["buffers"]![0]!["uri"] = "retired.bin";
+        workspace.WriteText(retainedPath, retained.ToJsonString());
+
+        // The first cook reads retired.bin, so the record's fingerprint makes the model its owner.
+        var geometry = System.Text.Json.Nodes.JsonNode.Parse(workspace.ReadText("Content/Geometry/AuthoredCube.ogeo.json"))!;
+        geometry["buffers"]![0]!["uri"] = "../Models/Model/retired.bin";
+        workspace.WriteText("Content/Geometry/AuthoredCube.ogeo.json", geometry.ToJsonString());
+    }
+
+    private async Task DamageRepairedPayloadAsync(CookWorkspace workspace, bool repair)
+    {
+        if (!repair)
+        {
+            return;
+        }
+
+        var payload = Directory.EnumerateFiles(Path.Combine(workspace.Root, ".cooked"), "buffers.data", SearchOption.AllDirectories).Single();
+        var damaged = await File.ReadAllBytesAsync(payload, this.TestContext.CancellationToken).ConfigureAwait(false);
+        damaged[^1] ^= 0xFF;
+        await File.WriteAllBytesAsync(payload, damaged, this.TestContext.CancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<System.Text.Json.Nodes.JsonNode> CreateReplacementJsonAsync(byte[] originalBytes, string primary, bool dependencyConflict)
+    {
+        var json = System.Text.Json.Nodes.JsonNode.Parse(originalBytes)!;
+        json["materials"]![0]!["pbrMetallicRoughness"]!["roughnessFactor"] = 0.1;
+        if (dependencyConflict)
+        {
+            var bytes = await File.ReadAllBytesAsync(Path.Combine(Path.GetDirectoryName(primary)!, "retired.bin"), this.TestContext.CancellationToken).ConfigureAwait(false);
+            json["buffers"]![0]!["uri"] = "data:application/octet-stream;base64," + Convert.ToBase64String(bytes);
+        }
+
+        return json;
+    }
+
+    private async Task AssertDependencyConflictRejectedAsync(ContentCookResult result, string primary, byte[] originalBytes)
+    {
+        _ = result.IsPublished.Should().BeFalse();
+        _ = result.Diagnostics.Should().Contain(static diagnostic => diagnostic.Code == "asset_cook.replacement_dependency_missing"
+            && diagnostic.AffectedPath != null && diagnostic.AffectedPath.EndsWith("retired.bin", StringComparison.Ordinal));
+        _ = (await File.ReadAllBytesAsync(primary, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Equal(originalBytes);
+    }
+
+    private async Task<ContentCookResult> RetryFailedImportAsync(string failure, CookWorkspace workspace, ContentPipelineService service, FailImportBatchRunner runner, IDisposable? registration, DirectoryInfo external, ContentCookResult result, string primary, byte[] originalBytes)
+    {
+        if (failure is not ("native" or "publication" or "external retry"))
+        {
+            return result;
+        }
+
+        _ = result.Status.Should().Be(OperationStatus.Failed);
+        _ = (await File.ReadAllBytesAsync(primary, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Equal(originalBytes);
+        var retry = workspace.CookCoordinator.Runs.Single(run => run.Request.Import?.Replacement is not null).Request.Import!;
+        _ = retry.ReplacementCandidatePath.Should().NotBeNull();
+        foreach (var path in Directory.EnumerateFiles(external.FullName, "*", SearchOption.AllDirectories))
+        {
+            File.Delete(path);
+        }
+
+        runner.Fail = false;
+        registration?.Dispose();
+        return await service.ImportSourceAsync(retry, this.TestContext.CancellationToken).ConfigureAwait(false);
     }
 
     private async Task WriteReplacementCandidateAsync(System.Text.Json.Nodes.JsonNode json, string incoming, bool externalBuffer)

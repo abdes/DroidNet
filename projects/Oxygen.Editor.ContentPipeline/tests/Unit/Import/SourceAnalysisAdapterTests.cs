@@ -299,7 +299,7 @@ public sealed class SourceAnalysisAdapterTests
                         },
                         ["reads"] = new JsonArray(new JsonObject { ["offset"] = 2, ["max_bytes"] = 4, ["sha256"] = new string('a', 64) }),
                     }),
-                    ["diagnostics"] = this.ExitCode == 0 ? new JsonArray() : new JsonArray(new JsonObject
+                    ["diagnostics"] = this.ExitCode == 0 ? [] : new JsonArray(new JsonObject
                     {
                         ["severity"] = "Error",
                         ["code"] = "analysis.source_missing",

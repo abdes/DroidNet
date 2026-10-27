@@ -389,6 +389,14 @@ public sealed partial class ContentPipelineService(
         };
     }
 
+    private static void ReportPreparing(IEnumerable<ContentCookInput> inputs)
+    {
+        foreach (var input in inputs)
+        {
+            CookRunContext.Report(new(Asset: new(input.AssetUri, input.Kind, CookAssetState.Preparing)));
+        }
+    }
+
     private Task<ContentCookResult> CookCurrentSceneCoreAsync(ContentCookOperation operation, AssetPath sceneAssetUri, CancellationToken cancellationToken)
         => this.CookCapturedScopesAsync(operation, () => [this.CreateSceneScope(operation.Project, sceneAssetUri) with { ScopeUri = sceneAssetUri }], CookTargetKind.CurrentScene, cancellationToken);
 
@@ -396,11 +404,11 @@ public sealed partial class ContentPipelineService(
         => this.CookCapturedScopesAsync(operation, () => [this.CreateAssetScope(operation.Project, assetUri, allowImportedSourceChanges, isAutomatic)], CookTargetKind.Asset, cancellationToken);
 
     // Each asset keeps the scope it has when cooked alone, so a requested product still resolves to its container.
-    private Task<ContentCookResult> CookAssetsCoreAsync(ContentCookOperation operation, IReadOnlyList<AssetPath> assetUris, bool isAutomatic, CancellationToken cancellationToken)
+    private Task<ContentCookResult> CookAssetsCoreAsync(ContentCookOperation operation, AssetPath[] assetUris, bool isAutomatic, CancellationToken cancellationToken)
         => this.CookCapturedScopesAsync(
             operation,
             () => [.. assetUris.Select(assetUri => this.CreateAssetScope(operation.Project, assetUri, allowImportedSourceChanges: !isAutomatic, isAutomatic))],
-            assetUris.Count == 1 ? CookTargetKind.Asset : CookTargetKind.Changes,
+            assetUris.Length == 1 ? CookTargetKind.Asset : CookTargetKind.Changes,
             cancellationToken);
 
     private Task<ContentCookResult> CookFolderCoreAsync(ContentCookOperation operation, AssetPath folderUri, CancellationToken cancellationToken)
@@ -413,14 +421,6 @@ public sealed partial class ContentPipelineService(
                 .Select(mount => this.CreateScope(operation.Project, ResolveMountInputs(operation.Project, mount), CookTargetKind.Project)).ToArray(),
             CookTargetKind.Project,
             cancellationToken);
-
-    private static void ReportPreparing(IEnumerable<ContentCookInput> inputs)
-    {
-        foreach (var input in inputs)
-        {
-            CookRunContext.Report(new(Asset: new(input.AssetUri, input.Kind, CookAssetState.Preparing)));
-        }
-    }
 
     private Task<ContentCookResult> CookMixedInputsAsync(Guid operationId, ContentCookScope scope, CancellationToken cancellationToken)
         => scope.Inputs.Any(static input => input.Kind == ContentCookAssetKind.ForeignSource)

@@ -15,7 +15,7 @@ public interface IAuthoredReferences
     /// <summary>Gets the assets a saved authored asset references directly, as last read.</summary>
     /// <param name="asset">The asset's identity, such as <c>/Content/Watchtower.oscene</c>.</param>
     /// <returns>The referenced identities; none for an asset that has no saved descriptor or was never read.</returns>
-    public IReadOnlyList<AssetPath> Of(AssetPath asset);
+    public IReadOnlyList<AssetPath> ReferencesOf(AssetPath asset);
 
     /// <summary>Reads the saved descriptors of the project again.</summary>
     /// <param name="cancellationToken">Cancels the read; the references read before stay.</param>

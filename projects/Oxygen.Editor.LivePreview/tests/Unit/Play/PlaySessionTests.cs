@@ -7,7 +7,6 @@ using DroidNet.Storage.Native;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Oxygen.Editor.ContentPipeline;
-using Oxygen.Editor.ContentPipeline.Mounting;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.Testing;
 using Oxygen.Editor.LivePreview.Play;
@@ -88,7 +87,7 @@ public sealed partial class PlaySessionTests
                 File.WriteAllBytes(player, []);
             }
 
-            this.Session = new PlaySession(this.session, this.Pipeline.Object, publication, new CookedContentMountService(), new PlaySettings(settings: null), this.Documents.Open, publisher.Object, playerExecutable: player);
+            this.Session = new PlaySession(this.session, this.Pipeline.Object, publication, new PlaySettings(settings: null), this.Documents.Open, publisher.Object, playerExecutable: player);
         }
 
         public TestSceneDocuments Documents { get; } = new(TestProject.Create(new MockFileSystem(), @"C:\LivePreviewTests"));

@@ -124,7 +124,7 @@ public sealed class SourceDependencyDiscoveryTests
 
         using var missingOutputs = await CookedLibraryReadSet.AcquireAsync(workspace.ProjectContext, workspace.EngineContent, this.TestContext.CancellationToken).ConfigureAwait(false);
         var missingDiagnostics = missingOutputs.Apply(graph).Diagnostics
-            .Where(static issue => issue.Code == "asset_cook.library_reference_missing")
+            .Where(static issue => string.Equals(issue.Code, "asset_cook.library_reference_missing", StringComparison.Ordinal))
             .ToArray();
         _ = missingDiagnostics.Should().HaveCount(typedReferences.Length);
         _ = missingDiagnostics.Should().Contain(issue => issue.Message.Contains(physicsOutputUri.VirtualPath, StringComparison.Ordinal));
@@ -256,7 +256,7 @@ public sealed class SourceDependencyDiscoveryTests
     {
         using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         const string source = "Content/Materials/Channels.omat.json";
-        workspace.WriteText(source, """
+        const string channels = """
             { "name":"Channels", "textures": {
                 "base_color":{"virtual_path":"/Content/Textures/Shared.otex"},
                 "normal":{"virtual_path":"/Content/Textures/Shared.otex","uv_set":1},
@@ -264,7 +264,8 @@ public sealed class SourceDependencyDiscoveryTests
                 "roughness":{"virtual_path":"/Content/Textures/Rough.otex"},
                 "emissive":{"virtual_path":"/Library/Textures/Emit.otex"}
             } }
-            """);
+            """;
+        workspace.WriteText(source, channels);
         foreach (var name in new[] { "Shared", "Metal", "Rough" })
         {
             workspace.WriteText($"Content/Textures/{name}.otex.json", $$"""{"source":"{{name}}.png"}""");

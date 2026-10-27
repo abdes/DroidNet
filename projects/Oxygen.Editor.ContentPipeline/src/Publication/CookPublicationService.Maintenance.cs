@@ -24,83 +24,6 @@ public sealed partial class CookPublicationService
         return this.MaintainCoreAsync(operation.Project, operation.OperationId, CancellationToken.None);
     }
 
-    private async Task<IReadOnlyList<string>> MaintainCoreAsync(ProjectContext project, Guid? completedOperation, CancellationToken token)
-    {
-        using var batch = new MaintenanceBatch();
-        using (var gate = await CookOutputLease.AcquireWriteAsync(project.ProjectRoot, token).ConfigureAwait(false))
-        {
-            var path = Path.Combine(project.ProjectRoot.FullPath, ".build", "cook", "maintenance.lock");
-            CookOutputLease.RejectReparsePoint(path);
-            batch.Maintenance = WindowsCookFile.TryOpenExclusive(path, FileMode.OpenOrCreate, out _);
-            if (batch.Maintenance is null)
-            {
-                return batch.Failures;
-            }
-
-            await CookPublicationTransaction.RequireSettledSelectionAsync(project, files, gate, token).ConfigureAwait(false);
-            using var selected = await CookPublicationReadLease.OpenUnderGateAsync(project, files, gate, token).ConfigureAwait(false);
-            if (selected.PublicationId is { } id)
-            {
-                batch.RetainedDocuments.Add(id);
-            }
-
-            batch.RetainedGenerations.UnionWith(selected.Roots.Where(static root => root.Owner == CookPublicationRootOwner.Project).Select(static root => root.SourceKey));
-            await this.ClaimOperationsAsync(project, gate, completedOperation, batch, token).ConfigureAwait(false);
-            await ClaimDocumentsAsync(project, batch, token).ConfigureAwait(false);
-            ClaimGenerations(project, batch);
-        }
-
-        await Task.Run(() =>
-        {
-            DeleteClaimed(project, batch, token);
-            batch.ReleaseClaims();
-            RemoveEmptyOperationDirectories(batch);
-        }, token).ConfigureAwait(false);
-        return batch.Failures;
-    }
-
-    private async Task ClaimOperationsAsync(ProjectContext project, CookOutputWriteLease gate, Guid? completedOperation, MaintenanceBatch batch, CancellationToken token)
-    {
-        foreach (var (id, directory) in OwnedDirectories(Path.Combine(project.ProjectRoot.FullPath, ".build", "cook")))
-        {
-            token.ThrowIfCancellationRequested();
-            var handle = CookOutputLease.TryAcquireOperation(project.ProjectRoot, id);
-            var owned = handle is null ? null : new OperationClaim(directory, handle);
-            if (owned is not null)
-            {
-                batch.Operations.Add(owned);
-            }
-
-            var journal = Path.Combine(directory, "publication.json");
-            CookOutputLease.RejectReparsePoint(journal);
-            if (File.Exists(journal))
-            {
-                var transaction = await CookPublicationTransaction.LoadAsync(project, id, files, projectManager, gate, token).ConfigureAwait(false);
-                if (owned is null)
-                {
-                    if (id != completedOperation || transaction.Phase != CookPublicationPhase.Committed)
-                    {
-                        batch.RetainedDocuments.Add(id);
-                        RetainHead(transaction.PreviousHead, batch.RetainedDocuments);
-                        batch.RetainedGenerations.UnionWith(transaction.CandidateGenerations);
-                    }
-                }
-                else
-                {
-                    owned.Transaction = transaction;
-                    await transaction.RecoverAsync(gate).ConfigureAwait(false);
-                    if (!transaction.HasPreparedHead)
-                    {
-                        batch.UnpreparedGenerations.UnionWith(transaction.CandidateGenerations);
-                    }
-                }
-            }
-
-            // Up-to-date and preflight-only operations may have scratch without a journal.
-            owned?.Retry = CookOutputLease.TryAcquireRetryInput(project.ProjectRoot, id);
-        }
-    }
-
     private static async Task ClaimDocumentsAsync(ProjectContext project, MaintenanceBatch batch, CancellationToken token)
     {
         var parent = Path.Combine(project.ProjectRoot.FullPath, ".cooked", "publications");
@@ -118,10 +41,8 @@ public sealed partial class CookPublicationService
             }
 
             CookOutputLease.RejectReparsePoint(path);
-            var claim = batch.RetainedDocuments.Contains(id) ? null : WindowsCookFile.TryClaimPublication(path);
-            if (claim is not null)
+            if (TryClaimDocument(path, id, batch))
             {
-                batch.Documents.Add(new(path, claim));
                 continue;
             }
 
@@ -137,6 +58,36 @@ public sealed partial class CookPublicationService
         }
     }
 
+    // Claims an unretained publication document for deletion; false when it is retained or still owned by a reader.
+    private static bool TryClaimDocument(string path, Guid id, MaintenanceBatch batch)
+    {
+        if (batch.RetainedDocuments.Contains(id))
+        {
+            return false;
+        }
+
+        var claim = WindowsCookFile.TryClaimPublication(path);
+        DocumentClaim? document = null;
+        try
+        {
+            if (claim is null)
+            {
+                return false;
+            }
+
+            document = new DocumentClaim(path, claim);
+            claim = null;
+            batch.Documents.Add(document);
+            document = null;
+            return true;
+        }
+        finally
+        {
+            claim?.Dispose();
+            document?.Dispose();
+        }
+    }
+
     private static void ClaimGenerations(ProjectContext project, MaintenanceBatch batch)
     {
         foreach (var (id, path) in OwnedDirectories(Path.Combine(project.ProjectRoot.FullPath, ".cooked", "generations")))
@@ -146,10 +97,19 @@ public sealed partial class CookPublicationService
                 continue;
             }
 
-            var generation = batch.UnpreparedGenerations.Contains(id) ? CookedGeneration.TryClaimAbandoned(path) : CookedGeneration.TryClaim(path);
-            if (generation is not null)
+            CookedGeneration? generation = null;
+            try
             {
-                batch.Generations.Add(generation);
+                generation = batch.UnpreparedGenerations.Contains(id) ? CookedGeneration.TryClaimAbandoned(path) : CookedGeneration.TryClaim(path);
+                if (generation is not null)
+                {
+                    batch.Generations.Add(generation);
+                    generation = null;
+                }
+            }
+            finally
+            {
+                generation?.Dispose();
             }
         }
     }
@@ -226,7 +186,7 @@ public sealed partial class CookPublicationService
         }
     }
 
-    private static IEnumerable<(Guid id, string path)> OwnedDirectories(string parent)
+    private static IEnumerable<(Guid Id, string Path)> OwnedDirectories(string parent)
     {
         CookOutputLease.RejectReparsePoint(parent);
         if (!Directory.Exists(parent))
@@ -254,6 +214,109 @@ public sealed partial class CookPublicationService
         }
     }
 
+    // Deletes what the batch claimed, then releases the claims and removes the operation directories left empty.
+    private static void ReclaimClaimed(ProjectContext project, MaintenanceBatch batch, CancellationToken token)
+    {
+        DeleteClaimed(project, batch, token);
+        batch.ReleaseClaims();
+        RemoveEmptyOperationDirectories(batch);
+    }
+
+    private async Task<IReadOnlyList<string>> MaintainCoreAsync(ProjectContext project, Guid? completedOperation, CancellationToken token)
+    {
+        using var batch = new MaintenanceBatch();
+        using (var gate = await CookOutputLease.AcquireWriteAsync(project.ProjectRoot, token).ConfigureAwait(false))
+        {
+            var path = Path.Combine(project.ProjectRoot.FullPath, ".build", "cook", "maintenance.lock");
+            CookOutputLease.RejectReparsePoint(path);
+            batch.Maintenance = WindowsCookFile.TryOpenExclusive(path, FileMode.OpenOrCreate, out _);
+            if (batch.Maintenance is null)
+            {
+                return batch.Failures;
+            }
+
+            await CookPublicationTransaction.RequireSettledSelectionAsync(project, files, gate, token).ConfigureAwait(false);
+            using var selected = await CookPublicationReadLease.OpenUnderGateAsync(project, files, gate, token).ConfigureAwait(false);
+            if (selected.PublicationId is { } id)
+            {
+                batch.RetainedDocuments.Add(id);
+            }
+
+            batch.RetainedGenerations.UnionWith(selected.Roots.Where(static root => root.Owner == CookPublicationRootOwner.Project).Select(static root => root.SourceKey));
+            await this.ClaimOperationsAsync(project, gate, completedOperation, batch, token).ConfigureAwait(false);
+            await ClaimDocumentsAsync(project, batch, token).ConfigureAwait(false);
+            ClaimGenerations(project, batch);
+        }
+
+        await Task.Run(() => ReclaimClaimed(project, batch, token), token).ConfigureAwait(false);
+        return batch.Failures;
+    }
+
+    private async Task ClaimOperationsAsync(ProjectContext project, CookOutputWriteLease gate, Guid? completedOperation, MaintenanceBatch batch, CancellationToken token)
+    {
+        foreach (var (id, directory) in OwnedDirectories(Path.Combine(project.ProjectRoot.FullPath, ".build", "cook")))
+        {
+            token.ThrowIfCancellationRequested();
+            await this.ClaimOperationAsync(project, gate, completedOperation, batch, (id, directory), token).ConfigureAwait(false);
+        }
+    }
+
+    // Claims one operation directory when its owner has drained; an operation still owned by a live process is only retained.
+    private async Task ClaimOperationAsync(
+        ProjectContext project,
+        CookOutputWriteLease gate,
+        Guid? completedOperation,
+        MaintenanceBatch batch,
+        (Guid Id, string Directory) operationDirectory,
+        CancellationToken token)
+    {
+        var (id, directory) = operationDirectory;
+        var handle = CookOutputLease.TryAcquireOperation(project.ProjectRoot, id);
+        var owned = handle is null ? null : new OperationClaim(directory, handle);
+        try
+        {
+            if (owned is not null)
+            {
+                batch.Operations.Add(owned);
+            }
+
+            var journal = Path.Combine(directory, "publication.json");
+            CookOutputLease.RejectReparsePoint(journal);
+            if (File.Exists(journal))
+            {
+                var transaction = await CookPublicationTransaction.LoadAsync(project, id, files, projectManager, gate, token).ConfigureAwait(false);
+                if (owned is null)
+                {
+                    if (id != completedOperation || transaction.Phase != CookPublicationPhase.Committed)
+                    {
+                        batch.RetainedDocuments.Add(id);
+                        RetainHead(transaction.PreviousHead, batch.RetainedDocuments);
+                        batch.RetainedGenerations.UnionWith(transaction.CandidateGenerations);
+                    }
+                }
+                else
+                {
+                    owned.Transaction = transaction;
+                    await transaction.RecoverAsync(gate).ConfigureAwait(false);
+                    if (!transaction.HasPreparedHead)
+                    {
+                        batch.UnpreparedGenerations.UnionWith(transaction.CandidateGenerations);
+                    }
+                }
+            }
+
+            // Up-to-date and preflight-only operations may have scratch without a journal.
+            owned?.Retry = CookOutputLease.TryAcquireRetryInput(project.ProjectRoot, id);
+
+            // The batch now owns the claim and releases it with the rest of its claims.
+            owned = null;
+        }
+        finally
+        {
+            owned?.Dispose();
+        }
+    }
+
     private sealed class MaintenanceBatch : IDisposable
     {
         internal FileStream? Maintenance { get; set; }
@@ -272,6 +335,12 @@ public sealed partial class CookPublicationService
 
         internal List<string> Failures { get; } = [];
 
+        public void Dispose()
+        {
+            this.ReleaseClaims();
+            this.Maintenance?.Dispose();
+        }
+
         internal void Attempt(Action deletion)
         {
             try
@@ -286,15 +355,20 @@ public sealed partial class CookPublicationService
 
         internal void ReleaseClaims()
         {
-            foreach (var generation in this.Generations) { generation.Dispose(); }
-            foreach (var document in this.Documents) { document.Dispose(); }
-            foreach (var operation in this.Operations) { operation.Dispose(); }
-        }
+            foreach (var generation in this.Generations)
+            {
+                generation.Dispose();
+            }
 
-        public void Dispose()
-        {
-            this.ReleaseClaims();
-            this.Maintenance?.Dispose();
+            foreach (var document in this.Documents)
+            {
+                document.Dispose();
+            }
+
+            foreach (var operation in this.Operations)
+            {
+                operation.Dispose();
+            }
         }
     }
 

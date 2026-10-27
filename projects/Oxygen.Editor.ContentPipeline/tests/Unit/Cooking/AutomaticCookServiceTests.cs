@@ -26,7 +26,7 @@ namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Cooking;
 
 [TestClass]
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "MSTest discovers public test classes with the repository discovery configuration.")]
-public sealed class AutomaticCookServiceTests
+public sealed partial class AutomaticCookServiceTests
 {
     private static readonly AssetPath Main = AssetPath.Parse("/Content/Scenes/Main.oscene.json");
     private static readonly AssetPath Wood = AssetPath.Parse("/Content/Materials/Wood.omat.json");
@@ -523,7 +523,7 @@ public sealed class AutomaticCookServiceTests
     private static InputProblem InputError(AssetPath? container = null)
         => new(new AssetProblem(DiagnosticSeverity.Error, "input.action_path", "The action is not declared."), container ?? AssetPath.Parse("/Content/Input/Player.input"));
 
-    private sealed class Fixture : IDisposable
+    private sealed partial class Fixture : IDisposable
     {
         private readonly Subject<AssetChange> changes = new();
         private readonly Mock<IContentPipelineService> pipeline = new();
@@ -624,7 +624,7 @@ public sealed class AutomaticCookServiceTests
             => this.Session.Context.ProjectRoot.Combine(asset.VirtualPath.TrimStart('/'));
 
         public async Task<CookCall> NextCallAsync(TestContext context)
-            => await this.Calls.Reader.ReadAsync(context.CancellationToken).AsTask().WaitAsync(TimeSpan.FromSeconds(5), context.CancellationToken).ConfigureAwait(false);
+            => await this.Calls.Reader.ReadAsync(context.CancellationToken).AsTask().WaitAsync(TimeSpan.FromSeconds(5), System.TimeProvider.System, context.CancellationToken).ConfigureAwait(false);
 
         /// <summary>Changes the script, whose facts report errors, and checks that the run of a later change leaves it out.</summary>
         /// <param name="context">The test context.</param>
@@ -633,7 +633,7 @@ public sealed class AutomaticCookServiceTests
         {
             this.Change(AssetChangeKind.Updated, Orbit);
             this.Time.Advance(AutomaticCookService.QuietWindow);
-            _ = (await this.StatusReads.Reader.ReadAsync(context.CancellationToken).AsTask().WaitAsync(TimeSpan.FromSeconds(5), context.CancellationToken).ConfigureAwait(false))
+            _ = (await this.StatusReads.Reader.ReadAsync(context.CancellationToken).AsTask().WaitAsync(TimeSpan.FromSeconds(5), System.TimeProvider.System, context.CancellationToken).ConfigureAwait(false))
                 .Should().Equal(Orbit);
 
             // Runs are taken one after another, so the next one starts after the script was left out.
@@ -658,21 +658,25 @@ public sealed class AutomaticCookServiceTests
         }
 
         private AssetCookStatus StatusOf(AssetPath asset)
-            => new(
+        {
+            var freshness = this.Unresolved.Contains(asset) ? AssetCookFreshness.InvalidSource
+                : this.Fresh.Contains(asset) ? AssetCookFreshness.Current
+                : this.Gone.Contains(asset) ? AssetCookFreshness.MissingSource
+                : AssetCookFreshness.OutOfDate;
+            ImmutableArray<DiagnosticRecord> diagnostics = this.Unresolved.Contains(asset)
+                ? [new DiagnosticRecord { OperationId = Guid.Empty, Domain = FailureDomain.AssetCook, Severity = DiagnosticSeverity.Error, Code = AssetCookStatusReader.InputUnresolvedCode, Message = "Unsupported cook dependency." }]
+                : [];
+            return new(
                 asset,
-                this.Unresolved.Contains(asset) ? AssetCookFreshness.InvalidSource
-                    : this.Fresh.Contains(asset) ? AssetCookFreshness.Current
-                    : this.Gone.Contains(asset) ? AssetCookFreshness.MissingSource
-                    : AssetCookFreshness.OutOfDate,
+                freshness,
                 HasPublishedOutput: !this.NeverCooked.Contains(asset) && !this.Unresolved.Contains(asset),
                 CookedOutputAvailability.Present,
                 [],
-                this.Unresolved.Contains(asset)
-                    ? [new DiagnosticRecord { OperationId = Guid.Empty, Domain = FailureDomain.AssetCook, Severity = DiagnosticSeverity.Error, Code = AssetCookStatusReader.InputUnresolvedCode, Message = "Unsupported cook dependency." }]
-                    : ImmutableArray<DiagnosticRecord>.Empty)
+                diagnostics)
             {
                 SourcePaths = [.. this.Uses.GetValueOrDefault(asset, []).Prepend(asset).Select(this.SourcePath)],
             };
+        }
     }
 
     /// <summary>One run the service asked the pipeline for.</summary>
@@ -684,7 +688,7 @@ public sealed class AutomaticCookServiceTests
     }
 
     /// <summary>A clock the test advances; timers fire on the advancing thread.</summary>
-    private sealed class ManualTime : System.TimeProvider
+    private sealed partial class ManualTime : System.TimeProvider
     {
         private readonly List<ManualTimer> timers = [];
         private long now;
@@ -710,7 +714,7 @@ public sealed class AutomaticCookServiceTests
             }
         }
 
-        private sealed class ManualTimer(ManualTime owner, TimerCallback callback, object? state) : ITimer
+        private sealed partial class ManualTimer(ManualTime owner, TimerCallback callback, object? state) : ITimer
         {
             private long? due;
 
@@ -733,7 +737,7 @@ public sealed class AutomaticCookServiceTests
 
             public ValueTask DisposeAsync()
             {
-                this.Dispose();
+                this.due = null;
                 return ValueTask.CompletedTask;
             }
         }

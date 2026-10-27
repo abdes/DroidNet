@@ -87,7 +87,7 @@ public sealed record CookedDependencyReport(Guid SourceIdentity, ImmutableDictio
         where T : struct, Enum
     {
         var parsed = (T)Enum.ToObject(typeof(T), value);
-        return Enum.IsDefined(parsed) ? parsed : throw new InvalidDataException($"Unknown native {label} value {value}.");
+        return value != 0 && Enum.IsDefined(parsed) ? parsed : throw new InvalidDataException($"Unknown native {label} value {value}.");
     }
 
     private static CookedResourceBindingState ReadBindingState(string? state)

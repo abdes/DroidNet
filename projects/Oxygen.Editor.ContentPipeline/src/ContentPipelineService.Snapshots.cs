@@ -109,6 +109,101 @@ public sealed partial class ContentPipelineService
         }
     }
 
+    private static async Task<ContentCookResult?> ValidatePrimaryInputsAsync(ContentCookOperation operation, CookTargetKind targetKind, ContentCookInput[] primaryInputs, bool replacingSource, bool isAutomatic)
+    {
+        if (primaryInputs.Length == 0)
+        {
+            return new(operation.OperationId, targetKind, OperationStatus.Succeeded, [], [], Inspection: null, Validation: null);
+        }
+
+        // A save or preview may have queued this cook before its source, never cooked, was moved or deleted. There is
+        // nothing to cook and no output to remove.
+        if (isAutomatic && primaryInputs.All(input => IsGone(operation.Project, input)))
+        {
+            var retired = CreateSourceMissingDiagnostics(operation.Project, operation.OperationId, primaryInputs).Select(diagnostic => diagnostic with
+            {
+                Severity = DiagnosticSeverity.Info,
+                Message = $"'{Path.GetFileName(diagnostic.AffectedPath)}' was moved or deleted after this cook was requested; there is nothing to cook.",
+            }).ToArray();
+            foreach (var diagnostic in retired)
+            {
+                CookRunContext.Report(new(Message: diagnostic.Message));
+            }
+
+            return new(operation.OperationId, targetKind, OperationStatus.Cancelled, NormalizeDiagnostics(operation.OperationId, retired), [], Inspection: null, Validation: null);
+        }
+
+        ReportPreparing(primaryInputs);
+        if (replacingSource)
+        {
+            return null;
+        }
+
+        var missing = CreateSourceMissingDiagnostics(operation.Project, operation.OperationId, primaryInputs);
+        return missing.Count == 0 ? null : new(operation.OperationId, targetKind, OperationStatus.Failed, NormalizeDiagnostics(operation.OperationId, missing), [], Inspection: null, Validation: null);
+    }
+
+    private static async Task<bool> InputsAreCurrentAsync(
+        CookInputSnapshot snapshot,
+        CookDependencyGraph graph,
+        Func<IReadOnlyList<ContentCookScope>> resolveScopes,
+        CancellationToken cancellationToken,
+        ImmutableArray<CookProducedSourceFile> producedSourceFiles = default)
+    {
+        var expectedInputs = producedSourceFiles.IsDefaultOrEmpty ? snapshot.Inputs
+            : CookProducedSourceFile.ExpectedInputs(snapshot.Inputs, producedSourceFiles);
+        var streams = new Dictionary<FileSystemPath, FileStream>();
+        try
+        {
+            var primary = graph.Assets.Where(static input => input.Role == ContentCookInputRole.Primary).Select(static input => input.SourceAbsolutePath).ToHashSet();
+            if (!primary.SetEquals(resolveScopes().SelectMany(static scope => scope.Inputs).Select(static input => input.SourceAbsolutePath)))
+            {
+                return false;
+            }
+
+            foreach (var input in expectedInputs.Where(static input => input.Kind == CookSnapshotInputKind.File))
+            {
+                if (!streams.ContainsKey(input.SourcePath))
+                {
+                    streams.Add(input.SourcePath, new(input.SourcePath.FullPath, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete, 65536, FileOptions.Asynchronous));
+                }
+            }
+
+            foreach (var input in expectedInputs)
+            {
+                if (input.Kind != CookSnapshotInputKind.File)
+                {
+                    if (!CookSavedSourceReader.MatchesProbe(input))
+                    {
+                        return false;
+                    }
+                }
+                else
+                {
+                    var stream = streams[input.SourcePath];
+                    stream.Position = 0;
+                    if (!string.Equals(Convert.ToHexString(await SHA256.HashDataAsync(stream, cancellationToken).ConfigureAwait(false)), input.DiscoveryHash, StringComparison.Ordinal))
+                    {
+                        return false;
+                    }
+                }
+            }
+
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+        finally
+        {
+            foreach (var stream in streams.Values)
+            {
+                await stream.DisposeAsync().ConfigureAwait(false);
+            }
+        }
+    }
+
     private async Task<ContentCookResult> CookCapturedScopesAsync(
         ContentCookOperation operation,
         Func<IReadOnlyList<ContentCookScope>> resolveScopes,
@@ -154,7 +249,7 @@ public sealed partial class ContentPipelineService
             ReportRetiredSources(operation.OperationId, primaryInputs);
             resolveScopes = static () => [];
         }
-        else if (await this.ValidatePrimaryInputsAsync(operation, targetKind, primaryInputs, scopes.Any(static scope => scope.ImportReplacement is not null), isAutomatic, cancellationToken).ConfigureAwait(false) is { } preflight)
+        else if (await ValidatePrimaryInputsAsync(operation, targetKind, primaryInputs, scopes.Any(static scope => scope.ImportReplacement is not null), isAutomatic).ConfigureAwait(false) is { } preflight)
         {
             return preflight;
         }
@@ -222,41 +317,7 @@ public sealed partial class ContentPipelineService
         }
     }
 
-    private async Task<ContentCookResult?> ValidatePrimaryInputsAsync(ContentCookOperation operation, CookTargetKind targetKind, ContentCookInput[] primaryInputs, bool replacingSource, bool isAutomatic, CancellationToken cancellationToken)
-    {
-        if (primaryInputs.Length == 0)
-        {
-            return new(operation.OperationId, targetKind, OperationStatus.Succeeded, [], [], Inspection: null, Validation: null);
-        }
-
-        // A save or preview may have queued this cook before its source, never cooked, was moved or deleted. There is
-        // nothing to cook and no output to remove.
-        if (isAutomatic && primaryInputs.All(input => IsGone(operation.Project, input)))
-        {
-            var retired = CreateSourceMissingDiagnostics(operation.Project, operation.OperationId, primaryInputs).Select(diagnostic => diagnostic with
-            {
-                Severity = DiagnosticSeverity.Info,
-                Message = $"'{Path.GetFileName(diagnostic.AffectedPath)}' was moved or deleted after this cook was requested; there is nothing to cook.",
-            }).ToArray();
-            foreach (var diagnostic in retired)
-            {
-                CookRunContext.Report(new(Message: diagnostic.Message));
-            }
-
-            return new(operation.OperationId, targetKind, OperationStatus.Cancelled, NormalizeDiagnostics(operation.OperationId, retired), [], Inspection: null, Validation: null);
-        }
-
-        ReportPreparing(primaryInputs);
-        if (replacingSource)
-        {
-            return null;
-        }
-
-        var missing = CreateSourceMissingDiagnostics(operation.Project, operation.OperationId, primaryInputs);
-        return missing.Count == 0 ? null : new(operation.OperationId, targetKind, OperationStatus.Failed, NormalizeDiagnostics(operation.OperationId, missing), [], Inspection: null, Validation: null);
-    }
-
-    private async Task<(CookInputSnapshot snapshot, CookDependencyGraph graph)> CaptureScopesAsync(
+    private async Task<(CookInputSnapshot Snapshot, CookDependencyGraph Graph)> CaptureScopesAsync(
         ContentCookOperation operation,
         Func<IReadOnlyList<ContentCookScope>> resolveScopes,
         Oxygen.Managed.Core.Compatibility.NativeArtifactLease artifacts,
@@ -310,65 +371,4 @@ public sealed partial class ContentPipelineService
                 Path.Combine(operation.Project.ProjectRoot.FullPath, ".build", "cook", operation.OperationId.ToString("N")),
                 artifacts,
                 token));
-
-    private async Task<bool> InputsAreCurrentAsync(
-        CookInputSnapshot snapshot,
-        CookDependencyGraph graph,
-        Func<IReadOnlyList<ContentCookScope>> resolveScopes,
-        CancellationToken cancellationToken,
-        ImmutableArray<CookProducedSourceFile> producedSourceFiles = default)
-    {
-        var expectedInputs = producedSourceFiles.IsDefaultOrEmpty ? snapshot.Inputs
-            : CookProducedSourceFile.ExpectedInputs(snapshot.Inputs, producedSourceFiles);
-        var streams = new Dictionary<FileSystemPath, FileStream>();
-        try
-        {
-            var primary = graph.Assets.Where(static input => input.Role == ContentCookInputRole.Primary).Select(static input => input.SourceAbsolutePath).ToHashSet();
-            if (!primary.SetEquals(resolveScopes().SelectMany(static scope => scope.Inputs).Select(static input => input.SourceAbsolutePath)))
-            {
-                return false;
-            }
-
-            foreach (var input in expectedInputs.Where(static input => input.Kind == CookSnapshotInputKind.File))
-            {
-                if (!streams.ContainsKey(input.SourcePath))
-                {
-                    streams.Add(input.SourcePath, new(input.SourcePath.FullPath, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete, 65536, FileOptions.Asynchronous));
-                }
-            }
-
-            foreach (var input in expectedInputs)
-            {
-                if (input.Kind != CookSnapshotInputKind.File)
-                {
-                    if (!CookSavedSourceReader.MatchesProbe(input))
-                    {
-                        return false;
-                    }
-                }
-                else
-                {
-                    var stream = streams[input.SourcePath];
-                    stream.Position = 0;
-                    if (!string.Equals(Convert.ToHexString(await SHA256.HashDataAsync(stream, cancellationToken).ConfigureAwait(false)), input.DiscoveryHash, StringComparison.Ordinal))
-                    {
-                        return false;
-                    }
-                }
-            }
-
-            return true;
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            return false;
-        }
-        finally
-        {
-            foreach (var stream in streams.Values)
-            {
-                await stream.DisposeAsync().ConfigureAwait(false);
-            }
-        }
-    }
 }

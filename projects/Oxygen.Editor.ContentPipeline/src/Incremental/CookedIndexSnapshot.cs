@@ -71,6 +71,8 @@ internal sealed class CookedIndexSnapshot
         => this.records.Value.WaitAsync(cancellationToken);
 
     /// <summary>Checks the protected member list and sizes, without hashing their contents.</summary>
+    /// <param name="actual">The files actually held by the read lease, with their sizes.</param>
+    /// <exception cref="InvalidDataException">A file's size differs from the index, or an indexed file is missing.</exception>
     public void ValidateMetadata(IReadOnlyList<CookedFileEntry> actual)
     {
         var expected = this.Index.Assets.Select(static asset => (Path: asset.DescriptorRelativePath, Size: asset.DescriptorSize))

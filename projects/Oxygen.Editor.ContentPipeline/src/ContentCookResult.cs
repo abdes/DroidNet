@@ -80,11 +80,11 @@ public sealed record ContentCookResult(
 
     /// <summary>Gets native source-allocation candidates awaiting journaled publication.</summary>
     internal ImmutableDictionary<string, System.Text.Json.JsonElement> ModelImports { get; init; }
-        = ImmutableDictionary<string, System.Text.Json.JsonElement>.Empty;
+        = [];
 
     /// <summary>Gets native-reported auxiliary file ownership for imported source products.</summary>
     internal ImmutableDictionary<AssetPath, ImmutableArray<string>> AuxiliaryFilesBySource { get; init; }
-        = ImmutableDictionary<AssetPath, ImmutableArray<string>>.Empty;
+        = [];
 
     /// <summary>Gets model import records emitted by the native producer and committed with its outputs.</summary>
     internal ImmutableArray<Publication.CookProducedSourceFile> ProducedSourceFiles { get; init; } = [];

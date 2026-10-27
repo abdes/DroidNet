@@ -83,11 +83,12 @@ public sealed class IncrementalCookTests
         var api = CreateRecordingApi(compatibility);
         await PrepareIncrementalSceneAsync(workspace, api).ConfigureAwait(false);
         using var library = new CookWorkspace(engineContent: EngineContentPak.Installed());
-        library.WriteText("Content/Scripts/Orbit.lua", """
+        const string orbitScript = """
             local Script = oxygen.script {}
 
             return Script
-            """);
+            """;
+        library.WriteText("Content/Scripts/Orbit.lua", orbitScript);
 
         // A script cooks with the scene that references it.
         library.Scene.SetReferences(new SceneReferencesData { Scripts = [AssetPath.Parse("/Content/Scripts/Orbit.oscript")] });

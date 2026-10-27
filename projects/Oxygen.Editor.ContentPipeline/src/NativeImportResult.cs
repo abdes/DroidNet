@@ -18,14 +18,14 @@ public sealed record NativeImportResult(bool Succeeded, IReadOnlyList<Diagnostic
 {
     /// <summary>Gets the files each native job wrote, shared tables included, keyed by captured source-relative path.</summary>
     public ImmutableDictionary<string, ImmutableArray<string>> OutputsBySource { get; init; }
-        = ImmutableDictionary<string, ImmutableArray<string>>.Empty;
+        = [];
 
     /// <summary>Gets the virtual paths of the assets and textures each source produced, keyed by captured source-relative path.</summary>
     public ImmutableDictionary<string, ImmutableHashSet<string>> ProductsBySource { get; init; }
-        = ImmutableDictionary<string, ImmutableHashSet<string>>.Empty;
+        = [];
 
     /// <summary>Gets what each model import established, the report's <c>model_import</c>, keyed by the model's captured
     /// source-relative path; the publication commits it to the model's import record.</summary>
     public ImmutableDictionary<string, JsonElement> ModelImports { get; init; }
-        = ImmutableDictionary<string, JsonElement>.Empty;
+        = [];
 }

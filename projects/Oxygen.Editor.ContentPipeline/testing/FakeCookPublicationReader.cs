@@ -54,7 +54,7 @@ public sealed class FakeCookPublicationReader(Guid projectId, FileSystemPath pro
         this.current = new(
             Guid.NewGuid(),
             roots,
-            (projectRoots ?? new Dictionary<string, FileSystemPath>()).ToImmutableDictionary(StringComparer.OrdinalIgnoreCase),
+            (projectRoots ?? new Dictionary<string, FileSystemPath>(StringComparer.OrdinalIgnoreCase)).ToImmutableDictionary(StringComparer.OrdinalIgnoreCase),
             [.. projectOutputs ?? []]);
     }
 
@@ -73,14 +73,17 @@ public sealed class FakeCookPublicationReader(Guid projectId, FileSystemPath pro
     public async Task<CookPublicationCatalogs> AcquireCatalogsAsync(ProjectContext project, CancellationToken cancellationToken)
     {
         var lease = this.Lease();
-        return new(lease, await lease.CreateCatalogsAsync(cancellationToken).ConfigureAwait(false));
+        try
+        {
+            var catalogs = new CookPublicationCatalogs(lease, await lease.CreateCatalogsAsync(cancellationToken).ConfigureAwait(false));
+            lease = null;
+            return catalogs;
+        }
+        finally
+        {
+            lease?.Dispose();
+        }
     }
-
-    /// <summary>A root binding and the index it serves.</summary>
-    /// <param name="Binding">The published root.</param>
-    /// <param name="Document">The root's index.</param>
-    /// <param name="Folder">The root's physical folder.</param>
-    public sealed record PublishedRoot(CookPublicationRoot Binding, Document Document, FileSystemPath Folder);
 
     private sealed record Selection(
         Guid? PublicationId,

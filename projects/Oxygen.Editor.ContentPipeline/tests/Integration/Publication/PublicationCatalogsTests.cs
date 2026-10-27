@@ -32,7 +32,7 @@ public sealed class PublicationCatalogsTests
             consumer.Activate(consumer.ProjectContext with { LocalFolderMounts = [new("Library", FileSystemPath.From(library.FullName))] });
             var project = consumer.Session.Context;
             using var published = await consumer.Publication.AcquireForMountAsync(project, this.TestContext.CancellationToken).ConfigureAwait(false);
-            var recorded = published.Roots.Single(static root => root.Name == "Library");
+            var recorded = published.Roots.Single(static root => string.Equals(root.Name, "Library", StringComparison.Ordinal));
 
             WriteLibrary(library.FullName, 2);
             Func<Task> exact = () => published.CreateCatalogsAsync(this.TestContext.CancellationToken);
@@ -43,7 +43,7 @@ public sealed class PublicationCatalogsTests
             try
             {
                 _ = (publication.PublicationId == published.PublicationId).Should().BeFalse("the project was published again");
-                _ = publication.Roots.Single(static root => root.Name == "Library").IndexSha256.Should().NotBe(recorded.IndexSha256);
+                _ = publication.Roots.Single(static root => string.Equals(root.Name, "Library", StringComparison.Ordinal)).IndexSha256.Should().NotBe(recorded.IndexSha256);
                 _ = opened.Catalogs.Should().HaveCount(publication.Roots.Length - publication.UnavailableRoots.Length);
             }
             finally

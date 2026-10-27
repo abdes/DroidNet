@@ -36,6 +36,9 @@ internal static partial class WindowsCookFile
         => TryOpen(path, FileMode.Open, FileAccess.ReadWrite, FileShare.Delete, deleteOnClose: false, out _);
 
     /// <summary>Distinguishes an absent generation marker from live reclamation.</summary>
+    /// <param name="path">The generation marker path.</param>
+    /// <param name="busy">Whether a reclaiming handle prevented the open, as opposed to the marker being absent.</param>
+    /// <returns>The generation lifetime handle, or null when the marker is absent or being reclaimed.</returns>
     internal static FileStream? TryOpenGenerationReader(string path, out bool busy)
         => TryOpenGeneration(path, reclaim: false, out busy);
 
@@ -54,8 +57,13 @@ internal static partial class WindowsCookFile
         => new($"Could not access cook ownership file '{path}': {new Win32Exception(error).Message}", unchecked((int)0x80070000) | error);
 
     private static FileStream? TryOpenGeneration(string path, bool reclaim, out bool busy)
-        => TryOpen(path, FileMode.Open, reclaim ? FileAccess.ReadWrite : FileAccess.Read,
-            reclaim ? FileShare.Delete : FileShare.Read | FileShare.Delete, deleteOnClose: false, out busy);
+        => TryOpen(
+            path,
+            FileMode.Open,
+            reclaim ? FileAccess.ReadWrite : FileAccess.Read,
+            reclaim ? FileShare.Delete : FileShare.Read | FileShare.Delete,
+            deleteOnClose: false,
+            out busy);
 
     private static FileStream? TryOpen(string path, FileMode mode, FileAccess access, FileShare sharing, bool deleteOnClose, out bool busy)
     {

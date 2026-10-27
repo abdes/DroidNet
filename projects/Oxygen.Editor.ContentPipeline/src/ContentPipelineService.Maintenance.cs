@@ -29,15 +29,19 @@ public sealed partial class ContentPipelineService
         return result with
         {
             Status = result.Status == OperationStatus.Succeeded ? OperationStatus.SucceededWithWarnings : result.Status,
-            Diagnostics = [.. result.Diagnostics, new DiagnosticRecord
-            {
-                OperationId = operation.OperationId,
-                Domain = FailureDomain.ContentPipeline,
-                Severity = DiagnosticSeverity.Warning,
-                Code = "Cook.CleanupDeferred",
-                Message = "Some unused output will be reclaimed during a later maintenance pass.",
-                TechnicalMessage = string.Join(Environment.NewLine, failures),
-            }],
+            Diagnostics =
+            [
+                .. result.Diagnostics,
+                new DiagnosticRecord
+                {
+                    OperationId = operation.OperationId,
+                    Domain = FailureDomain.ContentPipeline,
+                    Severity = DiagnosticSeverity.Warning,
+                    Code = "Cook.CleanupDeferred",
+                    Message = "Some unused output will be reclaimed during a later maintenance pass.",
+                    TechnicalMessage = string.Join(Environment.NewLine, failures),
+                },
+            ],
         };
     }
 }

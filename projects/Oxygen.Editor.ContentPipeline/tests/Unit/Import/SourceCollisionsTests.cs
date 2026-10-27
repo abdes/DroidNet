@@ -11,7 +11,7 @@ namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Import;
 
 /// <summary>Two sources beside each other that cook to one asset collide; each reports the other.</summary>
 [TestClass]
-public sealed class SourceCollisionsTests
+internal sealed class SourceCollisionsTests
 {
     private readonly TestProject project = TestProject.Create(new MockFileSystem());
 

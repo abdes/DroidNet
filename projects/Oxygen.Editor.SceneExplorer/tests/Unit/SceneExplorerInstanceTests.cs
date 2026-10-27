@@ -177,7 +177,7 @@ public sealed class SceneExplorerInstanceTests
         harness.Interaction.SetLocked(harness.Door, isLocked: true);
 
         // Structures read again, as after a cook, drop the entries of nodes their sources no longer hold.
-        harness.Structures.RaiseChanged();
+        harness.Structures.NotifyChanged();
 
         _ = harness.Interaction.IsLocked(gone).Should().BeFalse("the source no longer holds the node");
         _ = harness.Interaction.IsHidden(gone).Should().BeFalse();

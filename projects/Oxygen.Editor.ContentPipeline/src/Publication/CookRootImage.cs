@@ -16,6 +16,7 @@ internal sealed record CookRootImage(bool Exists, ImmutableDictionary<string, Co
     /// <param name="root">The published or staged root.</param>
     /// <param name="copyTo">Optional new staging destination.</param>
     /// <param name="cancellationToken">Cancels before publication.</param>
+    /// <param name="excludeGenerationMarker">Whether the generation marker file is left out of the image and the copy.</param>
     /// <returns>The protected source content identities.</returns>
     public static async Task<CookRootImage> CaptureAsync(string root, string? copyTo, CancellationToken cancellationToken, bool excludeGenerationMarker = false)
     {

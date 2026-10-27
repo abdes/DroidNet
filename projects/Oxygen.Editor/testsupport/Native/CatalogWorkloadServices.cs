@@ -5,7 +5,6 @@
 using DroidNet.Storage.Native;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ContentPipeline;
-using Oxygen.Editor.ContentPipeline.Mounting;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.Projects;
@@ -29,7 +28,6 @@ internal sealed partial class CatalogWorkloadServices : IDisposable
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), processRunner ?? new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, this.compatibility);
         this.Scopes = new ProjectCookScopeProvider(this.Storage);
         this.Publication = new(this.Runs, session, files, new ProjectManagerService(this.Storage, atomicFiles: files), this.EngineContent);
-        this.Mounts = new();
         this.Pipeline = new ContentPipelineService(session, this.Runs, this.Scopes, new SceneDescriptorGenerator(), new ContentImportManifestBuilder(), new ContentImportManifestValidator(), api, this.compatibility, files, this.Publication, this.EngineContent);
     }
 
@@ -50,8 +48,6 @@ internal sealed partial class CatalogWorkloadServices : IDisposable
     public ContentPipelineService Pipeline { get; }
 
     public CookPublicationService Publication { get; }
-
-    public CookedContentMountService Mounts { get; }
 
     public EngineContentPak EngineContent { get; } = EngineContentPak.Installed();
 

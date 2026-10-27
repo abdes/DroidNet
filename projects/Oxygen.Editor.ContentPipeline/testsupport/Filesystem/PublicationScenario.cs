@@ -10,6 +10,8 @@ namespace Oxygen.Editor.ContentPipeline.TestSupport;
 
 internal static class PublicationScenario
 {
+    internal const string SourceBundle = "Content/Models/Model";
+
     internal static async Task CopyPersistedStateAsync(string source, string target, CancellationToken cancellationToken)
     {
         foreach (var path in Directory.EnumerateDirectories(source, "*", SearchOption.AllDirectories))
@@ -19,7 +21,7 @@ internal static class PublicationScenario
 
         foreach (var path in Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories))
         {
-            if (Path.GetFileName(path) != CookedGeneration.MarkerFileName && Path.GetExtension(path) is ".lock" or ".lease")
+            if (!string.Equals(Path.GetFileName(path), CookedGeneration.MarkerFileName, StringComparison.Ordinal) && Path.GetExtension(path) is ".lock" or ".lease")
             {
                 continue;
             }
@@ -40,10 +42,8 @@ internal static class PublicationScenario
 
         var head = JsonSerializer.Deserialize<CookPublicationHead>(File.ReadAllBytes(headPath), CookPublicationDocument.JsonOptions)!;
         var document = JsonSerializer.Deserialize<CookPublicationDocument>(File.ReadAllBytes(CookPublicationPaths.Document(projectRoot, head.PublicationId)), CookPublicationDocument.JsonOptions)!;
-        var root = document.Roots.Single(root => root.Name == mount).ResolvePath(projectRoot);
+        var root = document.Roots.Single(root => string.Equals(root.Name, mount, StringComparison.Ordinal)).ResolvePath(projectRoot);
         _ = File.ReadAllText(Path.Combine(root, "value.txt")).Should().Be("old:" + mount);
         _ = File.ReadAllText(Path.Combine(root, "keep.bin")).Should().Be("keep:" + mount);
     }
-
-    internal const string SourceBundle = "Content/Models/Model";
 }

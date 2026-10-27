@@ -21,6 +21,9 @@ namespace Oxygen.Editor.ContentPipeline.Integration.Tests.Import;
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "MSTest discovers public test classes with the repository discovery configuration.")]
 public sealed class ImportWorkflowTests
 {
+    private static readonly string[] FlatImportOutputPaths =
+        ["/Content/Models/Model/Model.gltf/Scalar.omat", "/Content/Models/Model/Model.gltf/Triangle.ogeo", "/Content/Models/Model/Model.gltf/Model.oscene"];
+
     public TestContext TestContext { get; set; } = null!;
 
     /// <summary>One explicit import retains source, creates its import record and publishes through one coordinator run.</summary>
@@ -225,9 +228,6 @@ public sealed class ImportWorkflowTests
             external.Delete(recursive: true);
         }
     }
-
-    private static readonly string[] FlatImportOutputPaths =
-        ["/Content/Models/Model/Model.gltf/Scalar.omat", "/Content/Models/Model/Model.gltf/Triangle.ogeo", "/Content/Models/Model/Model.gltf/Model.oscene"];
 
     private sealed class FailSettingsStore : IAtomicFileStore
     {

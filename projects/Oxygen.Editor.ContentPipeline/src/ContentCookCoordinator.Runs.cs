@@ -253,7 +253,7 @@ public sealed partial class ContentCookCoordinator
         var state = exception is OperationCanceledException ? CookRunState.Cancelled : CookRunState.Failed;
         var diagnostics = exception is NativeCompatibilityException compatibility
             ? compatibility.Diagnostics.Select(diagnostic => diagnostic with { OperationId = operationId }).ToArray()
-            : state == CookRunState.Cancelled ? Array.Empty<DiagnosticRecord>() :
+            : state == CookRunState.Cancelled ? [] :
         [
             new DiagnosticRecord
             {

@@ -33,15 +33,15 @@ internal sealed class PakReadLease : IDisposable
     public static async Task<PakReadLease> AcquireAsync(FileSystemPath path, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(path);
-        var stream = new FileStream(path.FullPath, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, FileOptions.Asynchronous);
+        var opened = new FileStream(path.FullPath, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, FileOptions.Asynchronous);
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
-            return new(stream, PakIndex.Read(stream));
+            return new(opened, PakIndex.Read(opened));
         }
         catch
         {
-            await stream.DisposeAsync().ConfigureAwait(false);
+            await opened.DisposeAsync().ConfigureAwait(false);
             throw;
         }
     }

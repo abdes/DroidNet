@@ -241,7 +241,7 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
         }
     }
 
-    private static async Task<(RelocationMap map, List<AssetPath> copies)> PlanCopiesAsync(
+    private static async Task<(RelocationMap Map, List<AssetPath> Copies)> PlanCopiesAsync(
         ProjectContext project,
         AuthoredReferenceIndex index,
         IReadOnlyList<AssetPath> sources,
@@ -256,7 +256,7 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
         {
             var path = ResolveExisting(project, source);
             var isDirectory = project.FileSystem.Directory.Exists(path.FullPath);
-            RejectImportContent(project, index, path, isDirectory, "Import the model again instead of copying it.");
+            RejectImportContent(index, path, isDirectory, "Import the model again instead of copying it.");
             if (isDirectory && targetFolder.IsSameOrInside(source))
             {
                 throw new AssetRelocationException("A folder cannot be copied into itself.");
@@ -306,7 +306,7 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
         }
     }
 
-    private static void RejectImportContent(ProjectContext project, AuthoredReferenceIndex index, FileSystemPath path, bool isDirectory, string advice)
+    private static void RejectImportContent(AuthoredReferenceIndex index, FileSystemPath path, bool isDirectory, string advice)
     {
         foreach (var import in index.Imports)
         {
@@ -321,7 +321,7 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
         }
     }
 
-    private static IEnumerable<FileSystemPath> GetDeletedFiles(ProjectContext project, AuthoredReferenceIndex index, FileSystemPath path, bool isDirectory)
+    private static List<FileSystemPath> GetDeletedFiles(ProjectContext project, AuthoredReferenceIndex index, FileSystemPath path, bool isDirectory)
     {
         var fileSystem = project.FileSystem;
         var root = project.ProjectRoot;
@@ -363,14 +363,25 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
             }
         }
 
-        if (isDirectory || !path.Name.EndsWith(AssetFileTypes.TextureDescriptor, StringComparison.Ordinal))
-        {
-            var descriptors = isDirectory ? [] : index.Descriptors.Where(descriptor => descriptor.Location.Name.EndsWith(AssetFileTypes.TextureDescriptor, StringComparison.Ordinal)
-                && descriptor.Location.Parent == path.Parent
-                && AuthoredReferenceFormat.ReadTextureSources(project, descriptor.Location, fileSystem.File.ReadAllBytes(descriptor.Location.FullPath)).Contains(path))
-                .Select(static descriptor => descriptor.Location);
-            return [path, .. descriptors, .. records];
-        }
+        return isDirectory || !path.Name.EndsWith(AssetFileTypes.TextureDescriptor, StringComparison.Ordinal)
+            ? GetDeletedFilesWithDescriptors(project, index, path, isDirectory, records)
+            : GetDeletedTextureFiles(project, index, path);
+    }
+
+    // A file or folder goes with the texture descriptors that name it as their image, and with the records of the models it holds.
+    private static List<FileSystemPath> GetDeletedFilesWithDescriptors(ProjectContext project, AuthoredReferenceIndex index, FileSystemPath path, bool isDirectory, List<FileSystemPath> records)
+    {
+        var fileSystem = project.FileSystem;
+        var descriptors = isDirectory ? [] : index.Descriptors.Where(descriptor => descriptor.Location.Name.EndsWith(AssetFileTypes.TextureDescriptor, StringComparison.Ordinal)
+            && descriptor.Location.Parent == path.Parent
+            && AuthoredReferenceFormat.ReadTextureSources(project, descriptor.Location, fileSystem.File.ReadAllBytes(descriptor.Location.FullPath)).Contains(path))
+            .Select(static descriptor => descriptor.Location);
+        return [path, .. descriptors, .. records];
+    }
+
+    private static List<FileSystemPath> GetDeletedTextureFiles(ProjectContext project, AuthoredReferenceIndex index, FileSystemPath path)
+    {
+        var fileSystem = project.FileSystem;
 
         // An image another texture still uses stays; only this texture's own images go with it.
         var folder = path.Parent;
@@ -415,6 +426,18 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
         return project.FileSystem.File.Exists(path.FullPath) || project.FileSystem.Directory.Exists(path.FullPath)
             ? path
             : throw new AssetRelocationException($"'{source}' does not exist as an authored file. Imported outputs belong to their model.");
+    }
+
+    // An open document follows a relocation only from its saved file, and an unsaved edit may reference what moves.
+    // The caller asks to save them first; an undo or redo, or an edit made since, is refused.
+    private static void RejectUnsavedDocuments(ProjectContext project, IUnsavedDocuments documents)
+    {
+        var unsaved = documents.Find([project.ProjectRoot]).Select(static document => document.Title)
+            .Distinct(StringComparer.CurrentCultureIgnoreCase).ToArray();
+        if (unsaved.Length != 0)
+        {
+            throw new AssetRelocationException(AssetRelocationException.UnsavedDocumentsCode, $"Save {string.Join(", ", unsaved)} first: moving or renaming content rewrites the files that use it.");
+        }
     }
 
     private async Task WriteCopiesAsync(ProjectContext project, RelocationMap map)
@@ -623,18 +646,6 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
         }
 
         return index;
-    }
-
-    // An open document follows a relocation only from its saved file, and an unsaved edit may reference what moves.
-    // The caller asks to save them first; an undo or redo, or an edit made since, is refused.
-    private static void RejectUnsavedDocuments(ProjectContext project, IUnsavedDocuments documents)
-    {
-        var unsaved = documents.Find([project.ProjectRoot]).Select(static document => document.Title)
-            .Distinct(StringComparer.CurrentCultureIgnoreCase).ToArray();
-        if (unsaved.Length != 0)
-        {
-            throw new AssetRelocationException(AssetRelocationException.UnsavedDocumentsCode, $"Save {string.Join(", ", unsaved)} first: moving or renaming content rewrites the files that use it.");
-        }
     }
 
     private sealed partial class Registration(AssetRelocationService owner, IAssetRelocationParticipant participant) : IDisposable

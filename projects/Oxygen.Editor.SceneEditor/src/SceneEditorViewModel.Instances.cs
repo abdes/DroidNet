@@ -103,7 +103,7 @@ public partial class SceneEditorViewModel
     }
 
     private bool WouldCycle(AssetPath scene, AssetPath source)
-        => InstanceRules.WouldCycle(scene, source, asset => this.services.References?.Of(asset) ?? []);
+        => InstanceRules.WouldCycle(scene, source, asset => this.services.References?.ReferencesOf(asset) ?? []);
 
     private void RequestInstanceSourcePicker(AssetPickerModel choices, string emptyText)
     {

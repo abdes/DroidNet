@@ -22,16 +22,27 @@ internal sealed class CookStagingRoot(string mount, Guid sourceKey, string path)
 
     internal string Path { get; } = path;
 
-    internal CookRootImage Before { get; private set; } = new(Exists: false, ImmutableDictionary<string, CookRootImage.FileImage>.Empty);
+    internal CookRootImage Before { get; private set; } = new(Exists: false, []);
+
+    internal CookedInventoryReport Inventory => this.inventory
+        ?? throw new InvalidOperationException("The candidate root has not passed native validation.");
+
+    public async ValueTask DisposeAsync()
+    {
+        this.disposed = true;
+        var opening = this.verification;
+        this.verification = null;
+        if (opening is not null)
+        {
+            await opening.DisposeAsync().ConfigureAwait(false);
+        }
+    }
 
     internal async Task SeedAsync(string previousRoot, CancellationToken cancellationToken)
     {
         ObjectDisposedException.ThrowIf(this.disposed, this);
         this.Before = await CookRootImage.CaptureAsync(previousRoot, this.Path, cancellationToken, excludeGenerationMarker: true).ConfigureAwait(false);
     }
-
-    internal CookedInventoryReport Inventory => this.inventory
-        ?? throw new InvalidOperationException("The candidate root has not passed native validation.");
 
     internal async Task PrepareWriteAsync()
     {
@@ -81,16 +92,5 @@ internal sealed class CookStagingRoot(string mount, Guid sourceKey, string path)
         opening.RetainGeneration();
 
         return new(CookPublicationRootOwner.Project, this.Mount, this.SourceKey, this.Inventory.IndexSha256, LibraryPath: null);
-    }
-
-    public async ValueTask DisposeAsync()
-    {
-        this.disposed = true;
-        var opening = this.verification;
-        this.verification = null;
-        if (opening is not null)
-        {
-            await opening.DisposeAsync().ConfigureAwait(false);
-        }
     }
 }

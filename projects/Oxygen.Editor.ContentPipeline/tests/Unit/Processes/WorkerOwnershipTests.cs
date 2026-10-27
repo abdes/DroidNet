@@ -10,7 +10,7 @@ namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Processes;
 
 [TestClass]
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "MSTest discovers public test classes with the repository discovery configuration.")]
-public sealed class WorkerOwnershipTests
+public sealed partial class WorkerOwnershipTests
 {
     public TestContext TestContext { get; set; } = null!;
 

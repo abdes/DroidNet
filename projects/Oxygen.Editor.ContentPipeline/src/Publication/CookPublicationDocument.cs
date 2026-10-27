@@ -7,7 +7,6 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Oxygen.Editor.ContentPipeline.Incremental;
-using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Core;
 
@@ -34,20 +33,27 @@ internal sealed record CookPublicationDocument(
         RespectRequiredConstructorParameters = true,
     };
 
-    internal CookProvenance ProductState => new(
-        this.ProjectId,
-        [.. this.Roots.Where(static root => root.Owner == CookPublicationRootOwner.Project)
-            .Select(static root => new CookProvenance.Root(root.Name, root.SourceKey, root.IndexSha256))], this.Products);
+    internal CookProvenance ProductState
+    {
+        get
+        {
+            var projectRoots = this.Roots.Where(static root => root.Owner == CookPublicationRootOwner.Project)
+                .Select(static root => new CookProvenance.Root(root.Name, root.SourceKey, root.IndexSha256));
+            return new(this.ProjectId, [.. projectRoots], this.Products);
+        }
+    }
 
     internal static string ConfigurationIdentity(ProjectContext project)
-        => Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(
-            new
-            {
-                project.AuthoringMounts,
-                project.LocalFolderMounts,
-                project.PakFileMounts,
-                Order = CookedContentOrdering.Resolve(project),
-            }, JsonOptions)));
+    {
+        var configuration = new
+        {
+            project.AuthoringMounts,
+            project.LocalFolderMounts,
+            project.PakFileMounts,
+            Order = CookedContentOrdering.Resolve(project),
+        };
+        return Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(configuration, JsonOptions)));
+    }
 
     /// <summary>Reads a publication document, refusing one written in another format before reading its fields.</summary>
     /// <param name="content">The document's bytes.</param>
@@ -127,20 +133,4 @@ internal sealed record CookPublicationDocument(
 
         return null;
     }
-}
-
-/// <summary>The last cook's consumed inputs; mount-only publications preserve these facts unchanged.</summary>
-internal sealed record CookPublicationInputs(
-    string InputIdentity,
-    ImmutableArray<CookSnapshotInput> Inputs,
-    ImmutableArray<CookedDependencySnapshot> CookedDependencies,
-    ImmutableArray<CookPublicationSourceTransition> ProducedSourceFiles);
-
-/// <summary>A producer-owned source transition committed with cooked output.</summary>
-internal sealed record CookPublicationSourceTransition(string RelativePath, string BeforeHash, string AfterHash);
-
-/// <summary>The sole mutable selection of an immutable publication document.</summary>
-internal sealed record CookPublicationHead(int Version, Guid PublicationId, string DocumentSha256)
-{
-    internal const int CurrentVersion = 1;
 }

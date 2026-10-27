@@ -455,7 +455,7 @@ public sealed partial class SceneInstanceViewModel : ComponentPropertyEditor, ID
         var scene = this.authoringProvider()?.Asset;
         this.SourceChoices.Update([
             .. InstanceSources.Models(this.latestAssets),
-            .. InstanceSources.Scenes(this.latestAssets, source => scene is not null && InstanceRules.WouldCycle(scene, source, asset => this.references?.Of(asset) ?? [])),
+            .. InstanceSources.Scenes(this.latestAssets, source => scene is not null && InstanceRules.WouldCycle(scene, source, asset => this.references?.ReferencesOf(asset) ?? [])),
         ]);
     }
 }

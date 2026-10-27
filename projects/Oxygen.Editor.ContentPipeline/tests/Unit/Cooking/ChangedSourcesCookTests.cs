@@ -92,7 +92,7 @@ public sealed class ChangedSourcesCookTests
             workspace.ProjectContext,
             this.TestContext.CancellationToken).ConfigureAwait(false);
 
-        var skipped = workspace.CookCoordinator.Runs.Single().Diagnostics.Where(static issue => issue.Code == ContentPipelineService.SkippedForProblemsCode).ToList();
+        var skipped = workspace.CookCoordinator.Runs.Single().Diagnostics.Where(static issue => string.Equals(issue.Code, ContentPipelineService.SkippedForProblemsCode, StringComparison.Ordinal)).ToList();
         _ = skipped.Should().OnlyContain(static issue => issue.Severity == DiagnosticSeverity.Info);
         _ = skipped.Select(static issue => issue.AffectedVirtualPath).Should().Equal("/Content/Scripts/Orbit.oscript", "/Content/Scenes/Main.oscene");
     }

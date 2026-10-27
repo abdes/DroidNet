@@ -88,7 +88,7 @@ public sealed class InputFileCookTests
         var result = await service.CookFolderAsync(AssetPath.Parse("/Content/Gameplay"), this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = result.IsPublished.Should().BeTrue(Describe(result));
-        _ = result.CookedAssets.ToDictionary(static asset => asset.CookedAssetUri.VirtualPath, static asset => asset.SourceAssetUri.VirtualPath).Should().BeEquivalentTo(new Dictionary<string, string>
+        _ = result.CookedAssets.ToDictionary(static asset => asset.CookedAssetUri.VirtualPath, static asset => asset.SourceAssetUri.VirtualPath, StringComparer.Ordinal).Should().BeEquivalentTo(new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["/Content/Gameplay/Player.input/Jump.oiact"] = "/Content/Gameplay/Player.input",
             ["/Content/Gameplay/Player.input/Gameplay.oimap"] = "/Content/Gameplay/Player.input",

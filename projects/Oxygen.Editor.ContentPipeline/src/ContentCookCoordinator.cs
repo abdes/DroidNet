@@ -149,7 +149,7 @@ public sealed partial class ContentCookCoordinator : IContentCookCoordinator, IC
     {
         ArgumentNullException.ThrowIfNull(work);
         cancellationToken.ThrowIfCancellationRequested();
-        var (operation, requestCancellation) = this.CreateRequest(cancellationToken, shared?.Request ?? request, shared);
+        var (operation, requestCancellation) = this.CreateRequest(shared?.Request ?? request, shared, cancellationToken);
         IProgress<CookRunProgress>? progress = null;
         var acquired = false;
         var retained = false;
@@ -261,7 +261,7 @@ public sealed partial class ContentCookCoordinator : IContentCookCoordinator, IC
             TaskScheduler.Default);
     }
 
-    private (ContentCookOperation operation, CancellationTokenSource cancellation) CreateRequest(CancellationToken cancellationToken, CookRunRequest? request, SharedCook? shared = null)
+    private (ContentCookOperation Operation, CancellationTokenSource Cancellation) CreateRequest(CookRunRequest? request, SharedCook? shared, CancellationToken cancellationToken)
     {
         lock (this.stateLock)
         {
