@@ -2,7 +2,7 @@
 
 Status: **design for owner review** (ED-M09 item 14, #77 slice 77.8).
 
-Last Updated: 2026-10-27
+Last Updated: 2026-10-28
 
 Summary: a node of a scene can **instance** an imported model (`Car.glb`) or
 another authored scene (`Watchtower.oscene`). The instanced hierarchy appears
@@ -1326,7 +1326,7 @@ with scenes.
 | Source analysis report schema | A model job reports the file's scenes, its detected unit, axes and handedness, its counts, and the names of its materials and textures (`oxygen.source-analysis.schema.json`)                                                                                                                                                                                                                                                                                       | NGN12, M-NGN2                           |
 | Model import record schema    | `oxygen.model-import.schema.json` replaces `oxygen.retained-model-import.schema.json` and the editor's `native-scene-import.schema.json`: source, virtual path, settings, source identity, surface provenance, node continuity, published nodes, source fingerprint                                                                                                                                                                                                 | NGN2, NGN13, NGN14                      |
 | Cooker diagnostics            | Node and slot ID errors; unresolved changes, surfaces and starting cameras as warnings; `surface_invalid` a warning                                                                                                                                                                                                                                                                                                                                                 | NGN1, NGN3, NGN9, NGN10                 |
-| Model import                  | Node IDs by anchor; per-geometry LOD policy and surface defaults from the import settings, in the geometry fields that already hold them; the chosen glTF scene, the others reported; `cgltf_validate` and nodes reached twice refused; vanished and new anchors reported; generated LODs; remapped materials not produced; per-texture overrides applied; Draco, meshopt, WebP and KTX2 glTF data decoded                                                          | NGN2, NGN12, M-NGN1, M-NGN4 to M-NGN9   |
+| Model import                  | Node IDs by anchor; per-geometry LOD policy and surface defaults from the import settings, in the geometry fields that already hold them; the chosen glTF scene, the others reported; `cgltf_validate` and nodes reached twice refused; vanished and new anchors reported; generated LODs; remapped materials not produced; per-texture overrides applied; meshopt, WebP and KTX2 glTF data decoded                                                                 | NGN2, NGN12, M-NGN1, M-NGN4 to M-NGN9   |
 
 Unchanged, and needing no format work: the loose cooked index
 (`kLooseCookedIndexVersion` 6), the PAK header and directory (`kPakVersion` 10,

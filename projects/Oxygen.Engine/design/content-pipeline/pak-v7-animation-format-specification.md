@@ -45,21 +45,21 @@ Strict parity mode:
 
 ### 1.3 Source Fidelity Mapping Requirements
 
-**glTF**
+**glTF**:
 
 1. skins -> skeleton+skin
 2. targets -> morph sets
 3. animations -> clips/samplers/channels
 4. `weights` channels -> morph-weight channels
 
-**FBX**
+**FBX**:
 
 1. takes/stacks/layers -> clip metadata
 2. blendshape in-betweens -> morph metadata
 3. pre/post rotation policies persisted
 4. camera/light animation persisted
 
-**Practical Import Coverage Required Support Targets**
+**Practical Import Coverage Required Support Targets**:
 
 1. `KHR_materials_emissive_strength`
 2. `KHR_materials_specular` full
@@ -69,7 +69,6 @@ Strict parity mode:
 6. `KHR_materials_anisotropy`
 7. `KHR_materials_variants`
 8. `EXT_meshopt_compression` decode
-9. `KHR_draco_mesh_compression` decode
 
 ### 1.4 Persisted Flag/Id Catalog Requirements
 
