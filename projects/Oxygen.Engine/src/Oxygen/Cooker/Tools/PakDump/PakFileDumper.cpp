@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -12,9 +13,10 @@
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
-#include <iostream>
+#include <ios>
 #include <memory>
 #include <optional>
+#include <ostream>
 #include <span>
 #include <sstream>
 #include <stdexcept>
@@ -31,6 +33,8 @@
 #include <fmt/base.h>
 #include <fmt/format.h>
 
+#include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Content/PakFile.h>
 #include <Oxygen/Core/Types/AssetKey.h>
@@ -43,12 +47,10 @@
 #include <Oxygen/Data/PhysicsResource.h>
 #include <Oxygen/Data/ScriptResource.h>
 #include <Oxygen/Data/SourceKey.h>
-#include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/OxCo/Co.h>
 
 using PrintUtils::Field;
-using PrintUtils::HexDump;
 using PrintUtils::Separator;
 using PrintUtils::SubSeparator;
 
@@ -74,36 +76,37 @@ using oxygen::data::pak::render::TexturePayloadHeader;
  This is separate from asset descriptors - it reads the raw binary data
  that buffers and textures point to.
  */
-auto PrintResourceData(std::span<const uint8_t> data,
+auto PrintResourceData(std::ostream& out, std::span<const uint8_t> data,
   const std::string& resource_type, size_t max_bytes = 256) -> void
 {
   try {
     size_t bytes_to_read
       = (std::min)(static_cast<size_t>(data.size()), max_bytes);
-    std::cout << "        " << resource_type << " Data Preview ("
-              << bytes_to_read << " of " << data.size() << " bytes):\n";
-    PrintUtils::HexDump(data.data(), bytes_to_read, max_bytes);
+    out << "        " << resource_type << " Data Preview (" << bytes_to_read
+        << " of " << data.size() << " bytes):\n";
+    PrintUtils::HexDump(out, data.data(), bytes_to_read, max_bytes);
 
   } catch (const std::exception& ex) {
-    std::cout << "        Failed to read " << resource_type
-              << " data: " << ex.what() << "\n";
+    out << "        Failed to read " << resource_type << " data: " << ex.what()
+        << "\n";
   }
 }
 
 //=== PAK Structure Dumping Functions ========================================//
 
-auto PrintResourceRegion(
-  const std::string& name, uint64_t offset, uint64_t size) -> void
+auto PrintResourceRegion(std::ostream& out, const std::string& name,
+  uint64_t offset, uint64_t size) -> void
 {
-  fmt::print("    {:<16}offset=0x{:08x}, size={} bytes{}\n", name + ":", offset,
-    size, size == 0 ? " (empty)" : "");
+  out << fmt::format("    {:<16}offset=0x{:08x}, size={} bytes{}\n", name + ":",
+    offset, size, size == 0 ? " (empty)" : "");
 }
 
-auto PrintResourceTable(const std::string& name, uint64_t offset,
-  uint32_t count, uint32_t entry_size) -> void
+auto PrintResourceTable(std::ostream& out, const std::string& name,
+  uint64_t offset, uint32_t count, uint32_t entry_size) -> void
 {
-  fmt::print("    {:<16}offset=0x{:08x}, count={}, entry_size={} bytes{}\n",
-    name + ":", offset, count, entry_size, count == 0 ? " (empty)" : "");
+  out << fmt::format(
+    "    {:<16}offset=0x{:08x}, count={}, entry_size={} bytes{}\n", name + ":",
+    offset, count, entry_size, count == 0 ? " (empty)" : "");
 }
 
 template <typename T> auto ToHexString(T value) -> std::string
@@ -136,17 +139,19 @@ auto ReadPakFooter(const std::filesystem::path& pak_path)
   }
 
   file.seekg(0, std::ios::end);
-  const auto file_size = file.tellg();
-  if (file_size < static_cast<std::streamoff>(sizeof(PakFooter))) {
+  const std::streamoff file_size = file.tellg();
+  if (std::cmp_less(file_size, sizeof(PakFooter))) {
     return std::nullopt;
   }
 
   file.seekg(file_size - static_cast<std::streamoff>(sizeof(PakFooter)));
-  PakFooter footer {};
-  file.read(reinterpret_cast<char*>(&footer), sizeof(footer));
+  std::array<char, sizeof(PakFooter)> raw {};
+  file.read(raw.data(), static_cast<std::streamsize>(raw.size()));
   if (!file) {
     return std::nullopt;
   }
+  PakFooter footer {};
+  std::memcpy(&footer, raw.data(), sizeof(footer));
   return footer;
 }
 
@@ -167,36 +172,37 @@ auto TexturePackingPolicyName(uint8_t policy) -> std::string_view
   }
 }
 
-auto PrintV4TexturePayloadSummary(std::span<const uint8_t> payload, int indent)
-  -> void
+auto PrintV4TexturePayloadSummary(
+  std::ostream& out, std::span<const uint8_t> payload, int indent) -> void
 {
   if (payload.size() < sizeof(TexturePayloadHeader)) {
-    Field("Texture Payload", "Too small to contain v4 header", indent);
+    Field(out, "Texture Payload", "Too small to contain v4 header", indent);
     return;
   }
 
   TexturePayloadHeader header {};
   std::memcpy(&header, payload.data(), sizeof(header));
   if (header.magic != kTexturePayloadMagic) {
-    Field("Texture Payload", "Missing v4 magic (expected 'OTX1')", indent);
+    Field(out, "Texture Payload", "Missing v4 magic (expected 'OTX1')", indent);
     return;
   }
 
-  Field("Payload Magic", "OTX1", indent);
-  Field("Packing Policy",
+  Field(out, "Payload Magic", "OTX1", indent);
+  Field(out, "Packing Policy",
     fmt::format("{} ({})", static_cast<int>(header.packing_policy),
       TexturePackingPolicyName(header.packing_policy)),
     indent);
-  Field("Flags", fmt::format("0x{:02x}", header.flags), indent);
-  Field("Subresources", std::to_string(header.subresource_count), indent);
+  Field(out, "Flags", fmt::format("0x{:02x}", header.flags), indent);
+  Field(out, "Subresources", std::to_string(header.subresource_count), indent);
+  Field(out, "Total Payload Size", std::to_string(header.total_payload_size),
+    indent);
   Field(
-    "Total Payload Size", std::to_string(header.total_payload_size), indent);
-  Field("Layouts Offset", ToHexString(header.layouts_offset_bytes), indent);
-  Field("Data Offset", ToHexString(header.data_offset_bytes), indent);
-  Field("Payload Content Hash", ToHexString(header.content_hash), indent);
+    out, "Layouts Offset", ToHexString(header.layouts_offset_bytes), indent);
+  Field(out, "Data Offset", ToHexString(header.data_offset_bytes), indent);
+  Field(out, "Payload Content Hash", ToHexString(header.content_hash), indent);
 
   if (header.total_payload_size != payload.size()) {
-    Field("Payload Size Check",
+    Field(out, "Payload Size Check",
       fmt::format("mismatch (header={} actual={})", header.total_payload_size,
         payload.size()),
       indent);
@@ -207,12 +213,12 @@ auto PrintV4TexturePayloadSummary(std::span<const uint8_t> payload, int indent)
   const auto layout_count = static_cast<size_t>(header.subresource_count);
   const auto layouts_bytes = layout_count * sizeof(SubresourceLayout);
 
-  if (layouts_offset + layouts_bytes > payload.size()) {
-    Field("Layouts", "Out of bounds", indent);
+  if ((layouts_offset + layouts_bytes) > payload.size()) {
+    Field(out, "Layouts", "Out of bounds", indent);
     return;
   }
   if (data_offset > payload.size()) {
-    Field("Data Section", "Out of bounds", indent);
+    Field(out, "Data Section", "Out of bounds", indent);
     return;
   }
 
@@ -222,27 +228,28 @@ auto PrintV4TexturePayloadSummary(std::span<const uint8_t> payload, int indent)
     return;
   }
 
-  std::cout << std::string(static_cast<size_t>(indent), ' ')
-            << "Subresource Layouts (" << count
-            << (layout_count > count ? " shown" : "") << "):\n";
+  out << std::string(static_cast<size_t>(indent), ' ')
+      << "Subresource Layouts (" << count
+      << (layout_count > count ? " shown" : "") << "):\n";
   for (size_t i = 0; i < count; ++i) {
     SubresourceLayout layout {};
-    const auto offset = layouts_offset + i * sizeof(SubresourceLayout);
-    std::memcpy(&layout, payload.data() + offset, sizeof(layout));
+    const auto offset = layouts_offset + (i * sizeof(SubresourceLayout));
+    std::memcpy(
+      &layout, payload.subspan(offset, sizeof(layout)).data(), sizeof(layout));
     const auto abs_data_offset
       = data_offset + static_cast<size_t>(layout.offset_bytes);
     const auto end = abs_data_offset + static_cast<size_t>(layout.size_bytes);
     const auto within_bounds = end <= payload.size();
 
-    std::cout << std::string(static_cast<size_t>(indent), ' ') << "  [" << i
-              << "] offset=" << ToHexString(layout.offset_bytes)
-              << " row_pitch=" << layout.row_pitch_bytes
-              << " size=" << layout.size_bytes
-              << (within_bounds ? "" : " (oob)") << "\n";
+    out << std::string(static_cast<size_t>(indent), ' ') << "  [" << i
+        << "] offset=" << ToHexString(layout.offset_bytes)
+        << " row_pitch=" << layout.row_pitch_bytes
+        << " size=" << layout.size_bytes << (within_bounds ? "" : " (oob)")
+        << "\n";
   }
   if (layout_count > kMaxLayoutsToPrint) {
-    std::cout << std::string(static_cast<size_t>(indent), ' ') << "  ... ("
-              << (layout_count - kMaxLayoutsToPrint) << " more)\n";
+    out << std::string(static_cast<size_t>(indent), ' ') << "  ... ("
+        << (layout_count - kMaxLayoutsToPrint) << " more)\n";
   }
 }
 
@@ -252,7 +259,12 @@ auto PrintV4TexturePayloadSummary(std::span<const uint8_t> payload, int indent)
 
 class ResourceTableDumper {
 public:
+  ResourceTableDumper() = default;
   virtual ~ResourceTableDumper() = default;
+
+  OXYGEN_MAKE_NON_COPYABLE(ResourceTableDumper)
+  OXYGEN_MAKE_NON_MOVABLE(ResourceTableDumper)
+
   virtual auto DumpAsync(const PakFile& pak, DumpContext& ctx,
     AssetLoader& asset_loader) const -> oxygen::co::Co<> = 0;
 };
@@ -266,20 +278,20 @@ public:
       co_return;
     }
     if (!pak.HasTableOf<BufferResource>()) {
-      std::cout << "    No buffer resource table present\n\n";
+      ctx.Out() << "    No buffer resource table present\n\n";
       co_return;
     }
-    SubSeparator("BUFFER RESOURCES");
+    SubSeparator(ctx.Out(), "BUFFER RESOURCES");
     auto& buffers_table = pak.BuffersTable();
     size_t buffer_count = buffers_table.Size();
     if (buffer_count > 0) {
-      Field("Buffer Count", buffer_count - 1);
-      Field("Total Table Entries (inc. sentinel)", buffer_count);
+      Field(ctx.Out(), "Buffer Count", buffer_count - 1);
+      Field(ctx.Out(), "Total Table Entries (inc. sentinel)", buffer_count);
     } else {
-      Field("Buffer Count", 0);
+      Field(ctx.Out(), "Buffer Count", 0);
     }
     if ((ctx.verbose || ctx.show_resource_data) && buffer_count > 0) {
-      std::cout << "    Buffer entries:\n";
+      ctx.Out() << "    Buffer entries:\n";
       for (size_t i = 0; i < (std::min)(buffer_count, static_cast<size_t>(20));
         ++i) {
         try {
@@ -288,23 +300,23 @@ public:
           auto buffer_resource
             = co_await asset_loader.LoadResourceAsync<BufferResource>(key);
           if (buffer_resource) {
-            std::cout << "      [" << i << "] Buffer Resource"
+            ctx.Out() << "      [" << i << "] Buffer Resource"
                       << (i == 0 ? " (sentinel/reserved)" : "") << ":\n";
-            Field(
-              "Data Offset", ToHexString(buffer_resource->GetDataOffset()), 8);
-            Field("Data Size",
+            Field(ctx.Out(), "Data Offset",
+              ToHexString(buffer_resource->GetDataOffset()), 8);
+            Field(ctx.Out(), "Data Size",
               std::to_string(buffer_resource->GetDataSize()) + " bytes", 8);
-            Field("Element Stride",
+            Field(ctx.Out(), "Element Stride",
               std::to_string(buffer_resource->GetElementStride()), 8);
-            Field("Element Format",
+            Field(ctx.Out(), "Element Format",
               std::to_string(
                 static_cast<uint32_t>(buffer_resource->GetElementFormat())),
               8);
-            Field("Usage Flags",
+            Field(ctx.Out(), "Usage Flags",
               std::to_string(
                 static_cast<uint32_t>(buffer_resource->GetUsageFlags())),
               8);
-            Field("Content Hash",
+            Field(ctx.Out(), "Content Hash",
               ToHexString(buffer_resource->GetContentHash()), 8);
             std::string buffer_type;
             if (buffer_resource->IsRaw()) {
@@ -316,24 +328,24 @@ public:
             } else {
               buffer_type = "Unknown";
             }
-            Field("Buffer Type", buffer_type, 8);
+            Field(ctx.Out(), "Buffer Type", buffer_type, 8);
             if (ctx.show_resource_data) {
-              PrintResourceData(
-                buffer_resource->GetData(), "Buffer", ctx.max_data_bytes);
+              PrintResourceData(ctx.Out(), buffer_resource->GetData(), "Buffer",
+                ctx.max_data_bytes);
             }
           } else {
-            std::cout << "      [" << i << "] Failed to load buffer resource\n";
+            ctx.Out() << "      [" << i << "] Failed to load buffer resource\n";
           }
         } catch (const std::exception& ex) {
-          std::cout << "      [" << i << "] Error loading buffer: " << ex.what()
+          ctx.Out() << "      [" << i << "] Error loading buffer: " << ex.what()
                     << "\n";
         }
       }
       if (buffer_count > 20) {
-        std::cout << "      ... (" << (buffer_count - 20) << " more buffers)\n";
+        ctx.Out() << "      ... (" << (buffer_count - 20) << " more buffers)\n";
       }
     }
-    std::cout << "\n";
+    ctx.Out() << "\n";
     co_return;
   }
 };
@@ -347,15 +359,15 @@ public:
       co_return;
     }
     if (!pak.HasTableOf<TextureResource>()) {
-      std::cout << "    No texture resource table present\n\n";
+      ctx.Out() << "    No texture resource table present\n\n";
       co_return;
     }
-    SubSeparator("TEXTURE RESOURCES");
+    SubSeparator(ctx.Out(), "TEXTURE RESOURCES");
     auto& textures_table = pak.TexturesTable();
     size_t texture_count = textures_table.Size();
-    Field("Texture Count", texture_count);
+    Field(ctx.Out(), "Texture Count", texture_count);
     if ((ctx.verbose || ctx.show_resource_data) && texture_count > 0) {
-      std::cout << "    Texture entries:\n";
+      ctx.Out() << "    Texture entries:\n";
       for (size_t i = 0; i < (std::min)(texture_count, static_cast<size_t>(20));
         ++i) {
         try {
@@ -364,50 +376,54 @@ public:
           auto texture_resource
             = co_await asset_loader.LoadResourceAsync<TextureResource>(key);
           if (texture_resource) {
-            std::cout << "      [" << i << "] Texture Resource:\n";
-            Field(
-              "Data Offset", ToHexString(texture_resource->GetDataOffset()), 8);
-            Field("Data Size",
+            ctx.Out() << "      [" << i << "] Texture Resource:\n";
+            Field(ctx.Out(), "Data Offset",
+              ToHexString(texture_resource->GetDataOffset()), 8);
+            Field(ctx.Out(), "Data Size",
               std::to_string(texture_resource->GetData().size()) + " bytes", 8);
-            Field("Width", std::to_string(texture_resource->GetWidth()), 8);
-            Field("Height", std::to_string(texture_resource->GetHeight()), 8);
-            Field("Depth", std::to_string(texture_resource->GetDepth()), 8);
-            Field("Array Layers",
+            Field(ctx.Out(), "Width",
+              std::to_string(texture_resource->GetWidth()), 8);
+            Field(ctx.Out(), "Height",
+              std::to_string(texture_resource->GetHeight()), 8);
+            Field(ctx.Out(), "Depth",
+              std::to_string(texture_resource->GetDepth()), 8);
+            Field(ctx.Out(), "Array Layers",
               std::to_string(texture_resource->GetArrayLayers()), 8);
-            Field(
-              "Mip Levels", std::to_string(texture_resource->GetMipCount()), 8);
-            Field("Format",
+            Field(ctx.Out(), "Mip Levels",
+              std::to_string(texture_resource->GetMipCount()), 8);
+            Field(ctx.Out(), "Format",
               std::to_string(
                 static_cast<uint32_t>(texture_resource->GetFormat())),
               8);
-            Field("Texture Type",
+            Field(ctx.Out(), "Texture Type",
               std::to_string(
                 static_cast<uint32_t>(texture_resource->GetTextureType())),
               8);
-            Field("Content Hash",
+            Field(ctx.Out(), "Content Hash",
               ToHexString(texture_resource->GetContentHash()), 8);
             if (ctx.verbose) {
-              PrintV4TexturePayloadSummary(texture_resource->GetPayload(), 8);
+              PrintV4TexturePayloadSummary(
+                ctx.Out(), texture_resource->GetPayload(), 8);
             }
             if (ctx.show_resource_data) {
-              PrintResourceData(
-                texture_resource->GetData(), "Texture", ctx.max_data_bytes);
+              PrintResourceData(ctx.Out(), texture_resource->GetData(),
+                "Texture", ctx.max_data_bytes);
             }
           } else {
-            std::cout << "      [" << i
+            ctx.Out() << "      [" << i
                       << "] Failed to load texture resource\n";
           }
         } catch (const std::exception& ex) {
-          std::cout << "      [" << i
+          ctx.Out() << "      [" << i
                     << "] Error loading texture: " << ex.what() << "\n";
         }
       }
       if (texture_count > 20) {
-        std::cout << "      ... (" << (texture_count - 20)
+        ctx.Out() << "      ... (" << (texture_count - 20)
                   << " more textures)\n";
       }
     }
-    std::cout << "\n";
+    ctx.Out() << "\n";
     co_return;
   }
 };
@@ -421,22 +437,22 @@ public:
       co_return;
     }
     if (!pak.HasTableOf<ScriptResource>()) {
-      std::cout << "    No script resource table present\n\n";
+      ctx.Out() << "    No script resource table present\n\n";
       co_return;
     }
 
-    SubSeparator("SCRIPT RESOURCES");
+    SubSeparator(ctx.Out(), "SCRIPT RESOURCES");
     auto& scripts_table = pak.ScriptsTable();
     const size_t script_count = scripts_table.Size();
     if (script_count > 0) {
-      Field("Script Resource Count", script_count - 1);
-      Field("Total Table Entries (inc. sentinel)", script_count);
+      Field(ctx.Out(), "Script Resource Count", script_count - 1);
+      Field(ctx.Out(), "Total Table Entries (inc. sentinel)", script_count);
     } else {
-      Field("Script Resource Count", 0);
+      Field(ctx.Out(), "Script Resource Count", 0);
     }
 
     if ((ctx.verbose || ctx.show_resource_data) && script_count > 0) {
-      std::cout << "    Script resource entries:\n";
+      ctx.Out() << "    Script resource entries:\n";
       for (size_t i = 0; i < (std::min)(script_count, static_cast<size_t>(20));
         ++i) {
         try {
@@ -445,41 +461,41 @@ public:
           auto script_resource
             = co_await asset_loader.LoadResourceAsync<ScriptResource>(key);
           if (script_resource) {
-            std::cout << "      [" << i << "] Script Resource"
+            ctx.Out() << "      [" << i << "] Script Resource"
                       << (i == 0 ? " (sentinel/reserved)" : "") << ":\n";
-            Field(
-              "Data Offset", ToHexString(script_resource->GetDataOffset()), 8);
-            Field("Data Size",
+            Field(ctx.Out(), "Data Offset",
+              ToHexString(script_resource->GetDataOffset()), 8);
+            Field(ctx.Out(), "Data Size",
               std::to_string(script_resource->GetDataSize()) + " bytes", 8);
-            Field("Language",
+            Field(ctx.Out(), "Language",
               std::to_string(
                 static_cast<uint32_t>(script_resource->GetLanguage())),
               8);
-            Field("Encoding",
+            Field(ctx.Out(), "Encoding",
               std::to_string(
                 static_cast<uint32_t>(script_resource->GetEncoding())),
               8);
-            Field("Compression",
+            Field(ctx.Out(), "Compression",
               std::to_string(
                 static_cast<uint32_t>(script_resource->GetCompression())),
               8);
             if (ctx.show_resource_data) {
-              PrintResourceData(
-                script_resource->GetData(), "Script", ctx.max_data_bytes);
+              PrintResourceData(ctx.Out(), script_resource->GetData(), "Script",
+                ctx.max_data_bytes);
             }
           } else {
-            std::cout << "      [" << i << "] Failed to load script resource\n";
+            ctx.Out() << "      [" << i << "] Failed to load script resource\n";
           }
         } catch (const std::exception& ex) {
-          std::cout << "      [" << i << "] Error loading script: " << ex.what()
+          ctx.Out() << "      [" << i << "] Error loading script: " << ex.what()
                     << "\n";
         }
       }
       if (script_count > 20) {
-        std::cout << "      ... (" << (script_count - 20) << " more scripts)\n";
+        ctx.Out() << "      ... (" << (script_count - 20) << " more scripts)\n";
       }
     }
-    std::cout << "\n";
+    ctx.Out() << "\n";
     co_return;
   }
 };
@@ -493,22 +509,22 @@ public:
       co_return;
     }
     if (!pak.HasTableOf<PhysicsResource>()) {
-      std::cout << "    No physics resource table present\n\n";
+      ctx.Out() << "    No physics resource table present\n\n";
       co_return;
     }
 
-    SubSeparator("PHYSICS RESOURCES");
+    SubSeparator(ctx.Out(), "PHYSICS RESOURCES");
     auto& physics_table = pak.PhysicsTable();
     const size_t physics_count = physics_table.Size();
     if (physics_count > 0) {
-      Field("Physics Resource Count", physics_count - 1);
-      Field("Total Table Entries (inc. sentinel)", physics_count);
+      Field(ctx.Out(), "Physics Resource Count", physics_count - 1);
+      Field(ctx.Out(), "Total Table Entries (inc. sentinel)", physics_count);
     } else {
-      Field("Physics Resource Count", 0);
+      Field(ctx.Out(), "Physics Resource Count", 0);
     }
 
     if ((ctx.verbose || ctx.show_resource_data) && physics_count > 0) {
-      std::cout << "    Physics resource entries:\n";
+      ctx.Out() << "    Physics resource entries:\n";
       for (size_t i = 0; i < (std::min)(physics_count, static_cast<size_t>(20));
         ++i) {
         try {
@@ -517,32 +533,32 @@ public:
           auto physics_resource
             = co_await asset_loader.LoadResourceAsync<PhysicsResource>(key);
           if (physics_resource) {
-            std::cout << "      [" << i << "] Physics Resource"
+            ctx.Out() << "      [" << i << "] Physics Resource"
                       << (i == 0 ? " (sentinel/reserved)" : "") << ":\n";
-            Field(
-              "Data Offset", ToHexString(physics_resource->GetDataOffset()), 8);
-            Field("Data Size",
+            Field(ctx.Out(), "Data Offset",
+              ToHexString(physics_resource->GetDataOffset()), 8);
+            Field(ctx.Out(), "Data Size",
               std::to_string(physics_resource->GetDataSize()) + " bytes", 8);
             if (ctx.show_resource_data) {
-              PrintResourceData(
-                physics_resource->GetData(), "Physics", ctx.max_data_bytes);
+              PrintResourceData(ctx.Out(), physics_resource->GetData(),
+                "Physics", ctx.max_data_bytes);
             }
           } else {
-            std::cout << "      [" << i
+            ctx.Out() << "      [" << i
                       << "] Failed to load physics resource\n";
           }
         } catch (const std::exception& ex) {
-          std::cout << "      [" << i
+          ctx.Out() << "      [" << i
                     << "] Error loading physics resource: " << ex.what()
                     << "\n";
         }
       }
       if (physics_count > 20) {
-        std::cout << "      ... (" << (physics_count - 20)
+        ctx.Out() << "      ... (" << (physics_count - 20)
                   << " more physics resources)\n";
       }
     }
-    std::cout << "\n";
+    ctx.Out() << "\n";
     co_return;
   }
 };
@@ -557,7 +573,8 @@ public:
     Register("physics", std::make_unique<PhysicsResourceTableDumper>());
   }
 
-  auto Get(const std::string& type) const -> const ResourceTableDumper&
+  [[nodiscard]] auto Get(const std::string& type) const
+    -> const ResourceTableDumper&
   {
     auto it = dumpers_.find(type);
     if (it != dumpers_.end()) {
@@ -577,8 +594,8 @@ private:
     dumpers_;
   class DefaultResourceTableDumper : public ResourceTableDumper {
   public:
-    auto DumpAsync(const PakFile&, DumpContext&, AssetLoader&) const
-      -> oxygen::co::Co<> override
+    auto DumpAsync(const PakFile& /*pak*/, DumpContext& /*ctx*/,
+      AssetLoader& /*loader*/) const -> oxygen::co::Co<> override
     {
       co_return;
     }
@@ -587,8 +604,8 @@ private:
 
 class ResourceTablesDumper {
 public:
-  ResourceTablesDumper(const ResourceTableDumperRegistry& registry)
-    : registry_(registry)
+  explicit ResourceTablesDumper(const ResourceTableDumperRegistry& registry)
+    : registry_(&registry)
   {
   }
 
@@ -598,16 +615,16 @@ public:
     if (!ctx.show_resources) {
       co_return;
     }
-    Separator("RESOURCE TABLES");
-    co_await registry_.Get("buffer").DumpAsync(pak, ctx, asset_loader);
-    co_await registry_.Get("texture").DumpAsync(pak, ctx, asset_loader);
-    co_await registry_.Get("script").DumpAsync(pak, ctx, asset_loader);
-    co_await registry_.Get("physics").DumpAsync(pak, ctx, asset_loader);
+    Separator(ctx.Out(), "RESOURCE TABLES");
+    co_await registry_->Get("buffer").DumpAsync(pak, ctx, asset_loader);
+    co_await registry_->Get("texture").DumpAsync(pak, ctx, asset_loader);
+    co_await registry_->Get("script").DumpAsync(pak, ctx, asset_loader);
+    co_await registry_->Get("physics").DumpAsync(pak, ctx, asset_loader);
     co_return;
   }
 
 private:
-  const ResourceTableDumperRegistry& registry_;
+  oxygen::observer_ptr<const ResourceTableDumperRegistry> registry_;
 };
 
 //=== PakFileDumper Class ===================================================//
@@ -635,11 +652,12 @@ auto PakFileDumper::DumpAsync(const PakFile& pak, AssetLoader& asset_loader)
           to_string(entry.asset_key), to_string(entry.asset_type), *expected));
       }
     }
-    Separator("PAK FILE ANALYSIS: " + ctx_.pak_path.filename().string());
-    Field("File Path", ctx_.pak_path.string());
-    Field("File Size",
+    Separator(
+      ctx_.Out(), "PAK FILE ANALYSIS: " + ctx_.pak_path.filename().string());
+    Field(ctx_.Out(), "File Path", ctx_.pak_path.string());
+    Field(ctx_.Out(), "File Size",
       std::to_string(std::filesystem::file_size(ctx_.pak_path)) + " bytes");
-    std::cout << "\n";
+    ctx_.Out() << "\n";
     PrintPakHeader(pak);
     PrintPakFooter(pak);
     ResourceTableDumperRegistry resource_registry;
@@ -648,13 +666,13 @@ auto PakFileDumper::DumpAsync(const PakFile& pak, AssetLoader& asset_loader)
     oxygen::content::pakdump::AssetDumperRegistry registry;
     oxygen::content::pakdump::AssetDirectoryDumper dir_dumper(registry);
     co_await dir_dumper.DumpAsync(pak, ctx_, asset_loader);
-    Separator("ANALYSIS COMPLETE");
+    Separator(ctx_.Out(), "ANALYSIS COMPLETE");
     co_return true;
   } catch (const std::exception& ex) {
-    std::cerr << "ERROR: PakDump failed: " << ex.what() << "\n";
+    ctx_.Err() << "ERROR: PakDump failed: " << ex.what() << "\n";
     co_return false;
   } catch (...) {
-    std::cerr << "ERROR: PakDump failed: unknown exception\n";
+    ctx_.Err() << "ERROR: PakDump failed: unknown exception\n";
     co_return false;
   }
 }
@@ -664,13 +682,14 @@ void PakFileDumper::PrintPakHeader(const PakFile& pak)
   if (!ctx_.show_header) {
     return;
   }
-  Separator("PAK HEADER");
-  Field("Magic", "OXPAK (verified by successful load)");
-  Field("Format Version", pak.FormatVersion());
-  Field("Content Version", pak.ContentVersion());
-  Field("GUID", to_string(pak.Guid()));
-  Field("Header Size", std::to_string(sizeof(PakHeader)) + " bytes");
-  std::cout << "\n";
+  Separator(ctx_.Out(), "PAK HEADER");
+  Field(ctx_.Out(), "Magic", "OXPAK (verified by successful load)");
+  Field(ctx_.Out(), "Format Version", pak.FormatVersion());
+  Field(ctx_.Out(), "Content Version", pak.ContentVersion());
+  Field(ctx_.Out(), "GUID", to_string(pak.Guid()));
+  Field(
+    ctx_.Out(), "Header Size", std::to_string(sizeof(PakHeader)) + " bytes");
+  ctx_.Out() << "\n";
 }
 
 void PakFileDumper::PrintPakFooter(const PakFile& pak)
@@ -678,108 +697,119 @@ void PakFileDumper::PrintPakFooter(const PakFile& pak)
   if (!ctx_.show_footer) {
     return;
   }
-  Separator("PAK FOOTER");
+  Separator(ctx_.Out(), "PAK FOOTER");
 
   const auto footer = ReadPakFooter(ctx_.pak_path);
   if (!footer) {
-    Field("Footer", "Failed to read from file");
-    std::cout << "\n";
+    Field(ctx_.Out(), "Footer", "Failed to read from file");
+    ctx_.Out() << "\n";
     return;
   }
 
   const auto& f = *footer;
-  Field("Footer Size", std::to_string(sizeof(PakFooter)) + " bytes");
-  Field("Footer Magic", FooterMagicOk(f) ? "OK" : "MISMATCH");
+  Field(
+    ctx_.Out(), "Footer Size", std::to_string(sizeof(PakFooter)) + " bytes");
+  Field(ctx_.Out(), "Footer Magic", FooterMagicOk(f) ? "OK" : "MISMATCH");
 
-  Field("Directory Offset", ToHexString(f.directory_offset));
-  Field("Directory Size", std::to_string(f.directory_size));
-  Field("Asset Count (footer)", std::to_string(f.asset_count));
-  std::cout << "\n";
-  SubSeparator("RESOURCE REGIONS");
+  Field(ctx_.Out(), "Directory Offset", ToHexString(f.directory_offset));
+  Field(ctx_.Out(), "Directory Size", std::to_string(f.directory_size));
+  Field(ctx_.Out(), "Asset Count (footer)", std::to_string(f.asset_count));
+  ctx_.Out() << "\n";
+  SubSeparator(ctx_.Out(), "RESOURCE REGIONS");
+  PrintResourceRegion(ctx_.Out(), "Texture Region", f.texture_region.offset,
+    f.texture_region.size);
   PrintResourceRegion(
-    "Texture Region", f.texture_region.offset, f.texture_region.size);
+    ctx_.Out(), "Buffer Region", f.buffer_region.offset, f.buffer_region.size);
   PrintResourceRegion(
-    "Buffer Region", f.buffer_region.offset, f.buffer_region.size);
+    ctx_.Out(), "Audio Region", f.audio_region.offset, f.audio_region.size);
   PrintResourceRegion(
-    "Audio Region", f.audio_region.offset, f.audio_region.size);
-  PrintResourceRegion(
-    "Script Region", f.script_region.offset, f.script_region.size);
-  PrintResourceRegion(
-    "Physics Region", f.physics_region.offset, f.physics_region.size);
-  std::cout << "\n";
-  SubSeparator("RESOURCE TABLES");
-  PrintResourceTable("Texture Table", f.texture_table.offset,
+    ctx_.Out(), "Script Region", f.script_region.offset, f.script_region.size);
+  PrintResourceRegion(ctx_.Out(), "Physics Region", f.physics_region.offset,
+    f.physics_region.size);
+  ctx_.Out() << "\n";
+  SubSeparator(ctx_.Out(), "RESOURCE TABLES");
+  PrintResourceTable(ctx_.Out(), "Texture Table", f.texture_table.offset,
     f.texture_table.count, f.texture_table.entry_size);
-  PrintResourceTable("Buffer Table", f.buffer_table.offset,
+  PrintResourceTable(ctx_.Out(), "Buffer Table", f.buffer_table.offset,
     f.buffer_table.count, f.buffer_table.entry_size);
-  PrintResourceTable("Audio Table", f.audio_table.offset, f.audio_table.count,
-    f.audio_table.entry_size);
-  PrintResourceTable("Script Resource Table", f.script_resource_table.offset,
-    f.script_resource_table.count, f.script_resource_table.entry_size);
-  PrintResourceTable("Physics Resource Table", f.physics_resource_table.offset,
-    f.physics_resource_table.count, f.physics_resource_table.entry_size);
-  Field("Index-0 Sentinel",
+  PrintResourceTable(ctx_.Out(), "Audio Table", f.audio_table.offset,
+    f.audio_table.count, f.audio_table.entry_size);
+  PrintResourceTable(ctx_.Out(), "Script Resource Table",
+    f.script_resource_table.offset, f.script_resource_table.count,
+    f.script_resource_table.entry_size);
+  PrintResourceTable(ctx_.Out(), "Physics Resource Table",
+    f.physics_resource_table.offset, f.physics_resource_table.count,
+    f.physics_resource_table.entry_size);
+  Field(ctx_.Out(), "Index-0 Sentinel",
     "buffer/scripts tables reserve index 0 as sentinel when present");
 
-  Field("Browse Index Offset", ToHexString(f.browse_index_offset));
-  Field("Browse Index Size", std::to_string(f.browse_index_size));
-  Field("Browse Index Present", pak.HasBrowseIndex() ? "yes" : "no");
+  Field(ctx_.Out(), "Browse Index Offset", ToHexString(f.browse_index_offset));
+  Field(ctx_.Out(), "Browse Index Size", std::to_string(f.browse_index_size));
+  Field(
+    ctx_.Out(), "Browse Index Present", pak.HasBrowseIndex() ? "yes" : "no");
   if (pak.HasBrowseIndex()) {
-    Field("Browse Index Entries", std::to_string(pak.BrowseIndex().size()));
-    Field("Browse Index Textures", std::to_string(pak.BrowseTextures().size()));
+    Field(ctx_.Out(), "Browse Index Entries",
+      std::to_string(pak.BrowseIndex().size()));
+    Field(ctx_.Out(), "Browse Index Textures",
+      std::to_string(pak.BrowseTextures().size()));
   }
 
-  Field("Catalog Offset", ToHexString(f.catalog_offset));
-  Field("Catalog Size", std::to_string(f.catalog_size));
+  Field(ctx_.Out(), "Catalog Offset", ToHexString(f.catalog_offset));
+  Field(ctx_.Out(), "Catalog Size", std::to_string(f.catalog_size));
   const auto& catalog = pak.Catalog();
-  Field("Catalog Assets", std::to_string(catalog.entries.size()));
-  Field("Deleted Assets", std::to_string(catalog.deleted.size()));
-  Field("Required Base Layers", std::to_string(catalog.bases.size()));
+  Field(ctx_.Out(), "Catalog Assets", std::to_string(catalog.entries.size()));
+  Field(ctx_.Out(), "Deleted Assets", std::to_string(catalog.deleted.size()));
+  Field(
+    ctx_.Out(), "Required Base Layers", std::to_string(catalog.bases.size()));
   for (const auto& base : catalog.bases) {
-    Field("Base Source", oxygen::data::to_string(base.source_key), 4);
-    Field("Base Content Version", std::to_string(base.content_version), 4);
-  }
-  Field("Dependencies", std::to_string(catalog.dependencies.size()));
-  for (const auto& dependency : catalog.dependencies) {
     Field(
-      "Dependency Source", oxygen::data::to_string(dependency.source_key), 4);
-    Field("Dependency Content Version",
+      ctx_.Out(), "Base Source", oxygen::data::to_string(base.source_key), 4);
+    Field(ctx_.Out(), "Base Content Version",
+      std::to_string(base.content_version), 4);
+  }
+  Field(
+    ctx_.Out(), "Dependencies", std::to_string(catalog.dependencies.size()));
+  for (const auto& dependency : catalog.dependencies) {
+    Field(ctx_.Out(), "Dependency Source",
+      oxygen::data::to_string(dependency.source_key), 4);
+    Field(ctx_.Out(), "Dependency Content Version",
       std::to_string(dependency.content_version), 4);
   }
 
-  Field("PAK CRC32", fmt::format("0x{:08x}", f.pak_crc32));
+  Field(ctx_.Out(), "PAK CRC32", fmt::format("0x{:08x}", f.pak_crc32));
 
   if (ctx_.verbose && pak.HasBrowseIndex()) {
-    std::cout << "\n";
-    Separator("BROWSE INDEX");
+    ctx_.Out() << "\n";
+    Separator(ctx_.Out(), "BROWSE INDEX");
     const auto entries = pak.BrowseIndex();
     constexpr size_t kMaxEntriesToPrint = 32;
     const auto count = (std::min)(entries.size(), kMaxEntriesToPrint);
     for (size_t i = 0; i < count; ++i) {
       const auto& e = entries[i];
-      std::cout << "  [" << i << "]\n";
-      Field("Virtual Path", e.virtual_path, 4);
-      Field("Asset Key", to_string(e.asset_key), 4);
-      std::cout << "\n";
+      ctx_.Out() << "  [" << i << "]\n";
+      Field(ctx_.Out(), "Virtual Path", e.virtual_path, 4);
+      Field(ctx_.Out(), "Asset Key", to_string(e.asset_key), 4);
+      ctx_.Out() << "\n";
     }
     if (entries.size() > kMaxEntriesToPrint) {
-      std::cout << "  ... (" << (entries.size() - kMaxEntriesToPrint)
-                << " more entries)\n\n";
+      ctx_.Out() << "  ... (" << (entries.size() - kMaxEntriesToPrint)
+                 << " more entries)\n\n";
     }
     const auto textures = pak.BrowseTextures();
     const auto texture_count = (std::min)(textures.size(), kMaxEntriesToPrint);
     for (size_t i = 0; i < texture_count; ++i) {
       const auto& e = textures[i];
-      std::cout << "  [texture " << i << "]\n";
-      Field("Virtual Path", e.virtual_path, 4);
-      Field("Texture Index", std::to_string(e.texture_index.get()), 4);
-      std::cout << "\n";
+      ctx_.Out() << "  [texture " << i << "]\n";
+      Field(ctx_.Out(), "Virtual Path", e.virtual_path, 4);
+      Field(
+        ctx_.Out(), "Texture Index", std::to_string(e.texture_index.get()), 4);
+      ctx_.Out() << "\n";
     }
     if (textures.size() > kMaxEntriesToPrint) {
-      std::cout << "  ... (" << (textures.size() - kMaxEntriesToPrint)
-                << " more textures)\n\n";
+      ctx_.Out() << "  ... (" << (textures.size() - kMaxEntriesToPrint)
+                 << " more textures)\n\n";
     }
   }
 
-  std::cout << "\n";
+  ctx_.Out() << "\n";
 }

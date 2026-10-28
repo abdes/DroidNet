@@ -294,7 +294,7 @@ auto GltfCommand::BuildCommand() -> std::shared_ptr<clap::Command>
     .WithOption(std::move(with_content_hashing));
 }
 
-auto GltfCommand::Run() -> std::expected<void, std::error_code>
+auto GltfCommand::Execute() -> std::expected<void, std::error_code>
 {
   auto settings = options_;
   if (global_options_ != nullptr && settings.cooked_root.empty()) {

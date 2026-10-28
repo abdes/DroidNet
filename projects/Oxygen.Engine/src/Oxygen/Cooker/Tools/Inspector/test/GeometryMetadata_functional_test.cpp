@@ -12,6 +12,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <iostream>
 #include <optional>
 #include <span>
 #include <stdexcept>
@@ -29,6 +30,7 @@
 #include <Oxygen/Cooker/Loose/Validation.h>
 #include <Oxygen/Cooker/Pak/PakBuildReport.h>
 #include <Oxygen/Cooker/Pak/PakBuilder.h>
+#include <Oxygen/Cooker/Tools/Common/ToolApp.h>
 #include <Oxygen/Cooker/Tools/Inspector/GeometryMetadata.h>
 #include <Oxygen/Cooker/test/Pak/PakTestSupport.h>
 #include <Oxygen/Cooker/test/Support/DescriptorFixtures.h>
@@ -57,7 +59,17 @@ namespace {
 
 namespace geometry = oxygen::data::pak::geometry;
 namespace lc = oxygen::data::loose_cooked;
-using oxygen::content::inspection::RunGeometryMetadataReport;
+using oxygen::content::inspection::GeometryMetadataOptions;
+
+//! `RunGeometryMetadataReport` as the tool runs it: the error, if any, goes to
+//! stderr, and the result is the process exit code.
+auto RunGeometryMetadataReport(const GeometryMetadataOptions& options) -> int
+{
+  return oxygen::content::toolkit::ExitCodeOf(std::cerr, [&] {
+    return oxygen::content::inspection::RunGeometryMetadataReport(options);
+  });
+}
+
 using oxygen::content::lc::ValidateRoot;
 using oxygen::content::pak::test::AssetSpec;
 using oxygen::content::pak::test::FileSpec;
@@ -430,6 +442,8 @@ NOLINT_TEST_F(InspectorGeometryMetadataTest, ReportsSeparateSurfacesAcrossLods)
         : AssetKey::FromVirtualPath("/Content/Materials/Shared.omat");
       EXPECT_EQ(
         binding.at("default_material_key"), oxygen::data::to_string(material));
+      // Each submesh draws one view of one triangle.
+      EXPECT_EQ(binding.at("triangle_count"), kTriangleSize / 3U);
     }
   }
   ASSERT_EQ(Report(), 0);

@@ -94,7 +94,7 @@ auto InputCommand::BuildCommand() -> std::shared_ptr<clap::Command>
     .WithOption(std::move(with_content_hashing));
 }
 
-auto InputCommand::Run() -> std::expected<void, std::error_code>
+auto InputCommand::Execute() -> std::expected<void, std::error_code>
 {
   DCHECK_F(global_options_ != nullptr && global_options_->writer,
     "Global message writer must be set by main");

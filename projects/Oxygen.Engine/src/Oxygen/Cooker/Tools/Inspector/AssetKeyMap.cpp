@@ -4,9 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <exception>
 #include <fstream>
-#include <iostream>
+#include <ios>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -22,6 +21,7 @@
 #include <Oxygen/Clap/Fluent/DSL.h>
 #include <Oxygen/Clap/Option.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
+#include <Oxygen/Cooker/Tools/Common/ToolCommand.h>
 #include <Oxygen/Cooker/Tools/Inspector/AssetKeyMap_schema.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 
@@ -51,41 +51,36 @@ auto BuildAssetKeyMapCommand(AssetKeyMapOptions& options)
     .WithOption(std::move(output));
 }
 
-auto RunAssetKeyMap(const AssetKeyMapOptions& options) -> int
+auto RunAssetKeyMap(const AssetKeyMapOptions& options) -> toolkit::ToolResult
 {
-  try {
-    std::ifstream input(options.input, std::ios::binary);
-    const auto request = nlohmann::json::parse(input);
-    nlohmann::json_schema::json_validator validator;
-    validator.set_root_schema(nlohmann::json::parse(kAssetKeyRequestSchema));
-    import::internal::ValidateJsonSchema(
-      validator, request, "Asset key request " + options.input);
-    auto assets = nlohmann::json::array();
-    for (const auto& entry : request.at("virtual_paths")) {
-      const auto path = entry.get<std::string>();
-      assets.push_back({
-        { "virtual_path", path },
-        {
-          "asset_key",
-          nostd::to_string(data::AssetKey::FromVirtualPath(path)),
-        },
-      });
-    }
-    const nlohmann::json report = {
-      { "schema", "oxygen.asset-key-map.v1" },
-      { "assets", std::move(assets) },
-    };
-    std::ofstream output(options.output, std::ios::binary | std::ios::trunc);
-    output << report.dump(2);
-    output.close();
-    if (!output) {
-      throw std::runtime_error("Could not write asset key map.");
-    }
-    return 0;
-  } catch (const std::exception& error) {
-    std::cerr << "ERROR: " << error.what() << '\n';
-    return 2;
+  std::ifstream input(options.input, std::ios::binary);
+  const auto request = nlohmann::json::parse(input);
+  nlohmann::json_schema::json_validator validator;
+  validator.set_root_schema(nlohmann::json::parse(kAssetKeyRequestSchema));
+  import::internal::ValidateJsonSchema(
+    validator, request, "Asset key request " + options.input);
+  auto assets = nlohmann::json::array();
+  for (const auto& entry : request.at("virtual_paths")) {
+    const auto path = entry.get<std::string>();
+    assets.push_back({
+      { "virtual_path", path },
+      {
+        "asset_key",
+        nostd::to_string(data::AssetKey::FromVirtualPath(path)),
+      },
+    });
   }
+  const nlohmann::json report = {
+    { "schema", "oxygen.asset-key-map.v1" },
+    { "assets", std::move(assets) },
+  };
+  std::ofstream output(options.output, std::ios::binary);
+  output << report.dump(2);
+  output.close();
+  if (!output) {
+    throw std::runtime_error("Could not write asset key map.");
+  }
+  return {};
 }
 
 } // namespace oxygen::content::inspection

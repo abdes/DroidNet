@@ -7,9 +7,10 @@
 #include <cstddef>
 #include <cstdint>
 #include <exception>
+#include <expected>
 #include <filesystem>
 #include <fstream>
-#include <iostream>
+#include <ios>
 #include <map>
 #include <memory>
 #include <optional>
@@ -23,6 +24,7 @@
 #include <vector>
 
 #include "SceneMetadata.h"
+#include <fmt/format.h>
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
@@ -35,6 +37,7 @@
 #include <Oxygen/Content/Loaders/SceneLoader.h>
 #include <Oxygen/Cooker/Import/Internal/GeometryDefaults.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
+#include <Oxygen/Cooker/Tools/Common/ToolCommand.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
@@ -596,81 +599,83 @@ auto BuildSceneMetadataCommand(SceneMetadataOptions& options)
     .WithOption(std::move(virtual_path));
 }
 
-auto RunSceneMetadataReport(const SceneMetadataOptions& options) -> int
+auto RunSceneMetadataReport(const SceneMetadataOptions& options)
+  -> toolkit::ToolResult
 {
-  try {
-    const auto root
-      = std::filesystem::absolute(options.cooked_root).lexically_normal();
-    const auto output_path
-      = std::filesystem::absolute(options.output).lexically_normal();
-    if (output_path == root / "container.index.bin") {
-      throw std::runtime_error(
-        "Scene metadata output must not replace its source index.");
-    }
-    lc::Inspection inspection;
-    inspection.LoadFromRoot(root);
-    auto root_scenes = RootScenes(root, inspection);
-    auto scenes = json::array();
-    bool complete = true;
-    for (const auto& entry : inspection.Assets()) {
-      const auto relative
-        = std::filesystem::path(entry.descriptor_relpath).lexically_normal();
-      if (output_path == root / relative) {
-        throw std::runtime_error(
-          "Scene metadata output must not replace a source descriptor.");
-      }
-      if (entry.asset_type != static_cast<uint8_t>(data::AssetType::kScene)
-        || (!options.virtual_path.empty()
-          && entry.virtual_path != options.virtual_path)) {
-        continue;
-      }
-      auto row = json {
-        { "asset_key", nostd::to_string(entry.key) },
-        { "virtual_path", entry.virtual_path },
-        { "descriptor_version", nullptr },
-        { "occurrences", json::array() },
-        { "nodes", json::array() },
-        { "unresolved", json::array() },
-        { "issues", json::array() },
-        { "complete", false },
-      };
-      try {
-        auto scene = root_scenes.Load(entry.key);
-        if (!scene) {
-          throw std::runtime_error("The scene is not in its root.");
-        }
-        row.at("descriptor_version") = scene->GetHeader().version;
-        const auto composed
-          = data::ComposeScene(std::move(scene), root_scenes.Resolver());
-        SceneReport(composed, root_scenes).Write(row);
-        row.at("complete") = true;
-      } catch (const std::exception& error) {
-        complete = false;
-        row.emplace("diagnostic", error.what());
-        std::cerr << "ERROR: scene '" << entry.virtual_path << "' ("
-                  << nostd::to_string(entry.key) << "): " << error.what()
-                  << '\n';
-      }
-      scenes.push_back(std::move(row));
-    }
-    const auto report = json {
-      { "schema", "oxygen.cooked-scenes.v2" },
-      { "source_key", nostd::to_string(inspection.Guid()) },
-      { "complete", complete },
-      { "scenes", std::move(scenes) },
-    };
-    // An output stream truncates the file it opens.
-    std::ofstream output(output_path, std::ios::binary);
-    output << report.dump(2) << '\n';
-    output.close();
-    if (!output) {
-      throw std::runtime_error("Could not write scene metadata report.");
-    }
-    return complete ? 0 : 2;
-  } catch (const std::exception& error) {
-    std::cerr << "ERROR: " << error.what() << '\n';
-    return 2;
+  const auto root
+    = std::filesystem::absolute(options.cooked_root).lexically_normal();
+  const auto output_path
+    = std::filesystem::absolute(options.output).lexically_normal();
+  if (output_path == root / "container.index.bin") {
+    throw std::runtime_error(
+      "Scene metadata output must not replace its source index.");
   }
+  lc::Inspection inspection;
+  inspection.LoadFromRoot(root);
+  auto root_scenes = RootScenes(root, inspection);
+  auto scenes = json::array();
+  // Each scene that could not be read, as `scene '<path>' (<key>): <why>`.
+  auto failures = std::vector<std::string> {};
+  for (const auto& entry : inspection.Assets()) {
+    const auto relative
+      = std::filesystem::path(entry.descriptor_relpath).lexically_normal();
+    if (output_path == root / relative) {
+      throw std::runtime_error(
+        "Scene metadata output must not replace a source descriptor.");
+    }
+    if (entry.asset_type != static_cast<uint8_t>(data::AssetType::kScene)
+      || (!options.virtual_path.empty()
+        && entry.virtual_path != options.virtual_path)) {
+      continue;
+    }
+    auto row = json {
+      { "asset_key", nostd::to_string(entry.key) },
+      { "virtual_path", entry.virtual_path },
+      { "descriptor_version", nullptr },
+      { "occurrences", json::array() },
+      { "nodes", json::array() },
+      { "unresolved", json::array() },
+      { "issues", json::array() },
+      { "complete", false },
+    };
+    try {
+      auto scene = root_scenes.Load(entry.key);
+      if (!scene) {
+        throw std::runtime_error("The scene is not in its root.");
+      }
+      row.at("descriptor_version") = scene->GetHeader().version;
+      const auto composed
+        = data::ComposeScene(std::move(scene), root_scenes.Resolver());
+      SceneReport(composed, root_scenes).Write(row);
+      row.at("complete") = true;
+    } catch (const std::exception& error) {
+      row.emplace("diagnostic", error.what());
+      failures.push_back(fmt::format("scene '{}' ({}): {}", entry.virtual_path,
+        nostd::to_string(entry.key), error.what()));
+    }
+    scenes.push_back(std::move(row));
+  }
+  const auto report = json {
+    { "schema", "oxygen.cooked-scenes.v2" },
+    { "source_key", nostd::to_string(inspection.Guid()) },
+    { "complete", failures.empty() },
+    { "scenes", std::move(scenes) },
+  };
+  // An output stream truncates the file it opens.
+  std::ofstream output(output_path, std::ios::binary);
+  output << report.dump(2) << '\n';
+  output.close();
+  if (!output) {
+    throw std::runtime_error("Could not write scene metadata report.");
+  }
+  if (!failures.empty()) {
+    auto message = std::string {};
+    for (const auto& failure : failures) {
+      message += message.empty() ? failure : "; " + failure;
+    }
+    return std::unexpected(toolkit::ToolError::Failed(std::move(message)));
+  }
+  return {};
 }
 
 } // namespace oxygen::content::inspection

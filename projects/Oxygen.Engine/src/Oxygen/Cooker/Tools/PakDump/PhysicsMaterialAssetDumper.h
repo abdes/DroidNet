@@ -7,7 +7,6 @@
 #pragma once
 
 #include <cstring>
-#include <iostream>
 
 #include "AssetDumpHelpers.h"
 #include "AssetDumper.h"
@@ -29,39 +28,39 @@ public:
 
     using oxygen::data::pak::physics::PhysicsMaterialAssetDesc;
 
-    std::cout << "Asset #" << idx << " (PhysicsMaterial):\n";
+    ctx.Out() << "Asset #" << idx << " (PhysicsMaterial):\n";
     asset_dump_helpers::PrintAssetKey(entry.asset_key, ctx);
-    asset_dump_helpers::PrintAssetMetadata(entry);
+    asset_dump_helpers::PrintAssetMetadata(ctx.Out(), entry);
 
     const auto data = asset_dump_helpers::ReadDescriptorBytes(pak, entry);
     if (!data) {
-      std::cout << "    Failed to read asset descriptor data\n\n";
+      ctx.Out() << "    Failed to read asset descriptor data\n\n";
       co_return;
     }
 
     if (data->size() < sizeof(PhysicsMaterialAssetDesc)) {
-      std::cout << "    PhysicsMaterialAssetDesc: (insufficient data)\n\n";
+      ctx.Out() << "    PhysicsMaterialAssetDesc: (insufficient data)\n\n";
       co_return;
     }
 
     PhysicsMaterialAssetDesc mat {};
     std::memcpy(&mat, data->data(), sizeof(mat));
 
-    asset_dump_helpers::PrintAssetHeaderFields(mat.header,
+    asset_dump_helpers::PrintAssetHeaderFields(ctx.Out(), mat.header,
       asset_dump_helpers::DescriptorString(
         *data, mat.header, mat.header.name_offset),
       4);
 
-    std::cout << "    --- Physics Material Fields ---\n";
-    PrintUtils::Field("Static Friction", mat.static_friction, 8);
-    PrintUtils::Field("Dynamic Friction", mat.dynamic_friction, 8);
-    PrintUtils::Field("Restitution", mat.restitution, 8);
-    PrintUtils::Field("Density", mat.density, 8);
-    PrintUtils::Field(
-      "Friction Combine", static_cast<int>(mat.combine_mode_friction), 8);
-    PrintUtils::Field(
-      "Restitution Combine", static_cast<int>(mat.combine_mode_restitution), 8);
-    std::cout << "\n";
+    ctx.Out() << "    --- Physics Material Fields ---\n";
+    PrintUtils::Field(ctx.Out(), "Static Friction", mat.static_friction, 8);
+    PrintUtils::Field(ctx.Out(), "Dynamic Friction", mat.dynamic_friction, 8);
+    PrintUtils::Field(ctx.Out(), "Restitution", mat.restitution, 8);
+    PrintUtils::Field(ctx.Out(), "Density", mat.density, 8);
+    PrintUtils::Field(ctx.Out(), "Friction Combine",
+      static_cast<int>(mat.combine_mode_friction), 8);
+    PrintUtils::Field(ctx.Out(), "Restitution Combine",
+      static_cast<int>(mat.combine_mode_restitution), 8);
+    ctx.Out() << "\n";
 
     co_return;
   }

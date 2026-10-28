@@ -9,6 +9,8 @@
 #include <memory>
 #include <string>
 
+#include <Oxygen/Cooker/Tools/Common/ToolCommand.h>
+
 namespace oxygen::clap {
 class Command;
 }
@@ -23,6 +25,7 @@ struct GeometryMetadataOptions {
 
 auto BuildGeometryMetadataCommand(GeometryMetadataOptions& options)
   -> std::shared_ptr<clap::Command>;
-auto RunGeometryMetadataReport(const GeometryMetadataOptions& options) -> int;
+[[nodiscard]] auto RunGeometryMetadataReport(
+  const GeometryMetadataOptions& options) -> toolkit::ToolResult;
 
 } // namespace oxygen::content::inspection

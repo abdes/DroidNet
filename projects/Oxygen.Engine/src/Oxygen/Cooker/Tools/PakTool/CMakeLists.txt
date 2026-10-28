@@ -33,8 +33,6 @@ include(JsonSchemaHelpers)
 add_library(
   oxygen-cooker-paktool-core
   STATIC
-  "App.cpp"
-  "App.h"
   "ArtifactPublication.cpp"
   "ArtifactPublication.h"
   "BuildReportJson.cpp"
@@ -43,6 +41,8 @@ add_library(
   "CliBuilder.h"
   "CommandExecution.cpp"
   "CommandExecution.h"
+  "PakToolCommands.cpp"
+  "PakToolCommands.h"
   "PakToolOptions.h"
   "RequestPreparation.cpp"
   "RequestPreparation.h"
@@ -68,6 +68,7 @@ target_link_libraries(
     oxygen::cooker
     oxygen::content
     oxygen::clap
+    oxygen-cooker-toolkit
     nlohmann_json::nlohmann_json
 )
 target_compile_definitions(

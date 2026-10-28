@@ -9,6 +9,8 @@
 #include <memory>
 #include <string>
 
+#include <Oxygen/Cooker/Tools/Common/ToolCommand.h>
+
 namespace oxygen::clap {
 class Command;
 }
@@ -22,6 +24,7 @@ struct AssetKeyMapOptions {
 
 auto BuildAssetKeyMapCommand(AssetKeyMapOptions& options)
   -> std::shared_ptr<clap::Command>;
-auto RunAssetKeyMap(const AssetKeyMapOptions& options) -> int;
+[[nodiscard]] auto RunAssetKeyMap(const AssetKeyMapOptions& options)
+  -> toolkit::ToolResult;
 
 } // namespace oxygen::content::inspection

@@ -18,6 +18,7 @@
 #include <limits>
 #include <optional>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -490,8 +491,9 @@ namespace {
       return std::nullopt;
     }
     auto records = std::vector<ScriptParamRecord>(table.count);
-    std::memcpy(
-      records.data(), bytes.data() + sizeof(ScriptAssetDesc), records_size);
+    std::memcpy(records.data(),
+      std::span(bytes).subspan(sizeof(ScriptAssetDesc), records_size).data(),
+      records_size);
 
     auto strings = data::DescriptorStringsBuilder {};
     const auto copy = [&](const data::pak::core::StringTableOffsetT offset)
@@ -720,7 +722,9 @@ namespace {
         static_cast<AssetType>(asset.asset_type), asset.virtual_path,
         asset.descriptor_relpath, 0, references,
         import::LooseCookedProducer {
-          .source = asset.source_path, .completes = {} },
+          .source = asset.source_path,
+          .completes = {},
+        },
         *digest);
     }
 
@@ -733,7 +737,9 @@ namespace {
         writer.RegisterExternalTextureDescriptor(file.relpath,
           file.virtual_path,
           import::LooseCookedProducer {
-            .source = file.source_path, .completes = {} });
+            .source = file.source_path,
+            .completes = {},
+          });
       } else {
         writer.RegisterExternalFile(file.kind, file.relpath);
       }

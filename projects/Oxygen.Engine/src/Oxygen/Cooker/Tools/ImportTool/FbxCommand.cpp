@@ -283,7 +283,7 @@ auto FbxCommand::BuildCommand() -> std::shared_ptr<clap::Command>
     .WithOption(std::move(with_content_hashing));
 }
 
-auto FbxCommand::Run() -> std::expected<void, std::error_code>
+auto FbxCommand::Execute() -> std::expected<void, std::error_code>
 {
   auto settings = options_;
   if (global_options_ != nullptr && settings.cooked_root.empty()) {

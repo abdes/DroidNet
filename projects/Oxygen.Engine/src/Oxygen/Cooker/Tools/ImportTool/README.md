@@ -605,6 +605,15 @@ Optional:
   (`share/oxygen/engine.pak` in an SDK) to reference `/Engine` assets.
 - `--max-in-flight-jobs <n>`
 
+### `versions`
+
+Prints the versions of what the tool cooks: every cooked format and asset, and
+the revision of every importer, all from `PakFormatVersions.inc`. `--json`
+prints one object with `program`, `version`, `formats`, `assets` and
+`importers`, each from a name to its version. An importer's revision goes up
+when its output for the same inputs changes while every format stays the same,
+so a caller that reuses cooked content cooks it again.
+
 ## Manifest Format
 
 Top-level fields:
@@ -781,8 +790,11 @@ Notes:
 ## Reports and Exit Codes
 
 Per-command `--report` and batch `--report` write JSON report output, version
-`3`. Each job lists:
+`4`. Each job lists:
 
+- `importer`: the importer that cooks the job and its revision, as
+  `{name, revision}`, the same as `versions` reports. A job no importer handles
+  has none.
 - `outputs`: every file the job wrote, as `{path, size_bytes}`, including shared
   tables and the index.
 - `products`: what the job's source produced, as

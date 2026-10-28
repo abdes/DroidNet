@@ -9,6 +9,7 @@
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Cooker/Pak/PakBuildPhase.h>
 #include <Oxygen/Cooker/Pak/PakBuildReport.h>
 #include <Oxygen/Cooker/Pak/PakBuildRequest.h>
@@ -254,10 +255,11 @@ namespace {
 
 } // namespace
 
-auto ExecutePakToolCommand(const pak::BuildMode mode, std::string command,
-  std::string command_line, std::string tool_version,
-  const PakToolCliOptions& options, IRequestPreparationFileSystem& prep_fs,
-  IArtifactFileSystem& artifact_fs) -> PakToolCommandResult
+auto ExecutePakToolCommand(const pak::BuildMode mode,
+  const std::string& command, const std::string& command_line,
+  const std::string& tool_version, const PakToolCliOptions& options,
+  IRequestPreparationFileSystem& prep_fs, IArtifactFileSystem& artifact_fs)
+  -> PakToolCommandResult
 {
   auto command_result = PakToolCommandResult {};
   LogInfoMessage("PakTool command starting: command='" + command + "' mode='"
@@ -302,11 +304,12 @@ auto ExecutePakToolCommand(const pak::BuildMode mode, std::string command,
     return command_result;
   }
 
-  struct StagedSourceCleanup final {
-    std::vector<std::filesystem::path> paths;
-
-    ~StagedSourceCleanup() { CleanupStagedLooseRoots(paths); }
-  } staged_source_cleanup { .paths = sealed_request->staged_loose_roots };
+  // The sealed sources are staged for this build only; they go however it ends.
+  const auto staged_roots = sealed_request->staged_loose_roots;
+  const auto staged_source_cleanup
+    = ScopeGuard([&staged_roots] noexcept -> void {
+        CleanupStagedLooseRoots(staged_roots);
+      });
 
   if (sealed_request->sealed_script_assets > 0U) {
     LogInfoMessage("PakTool sealed loose-cooked script assets: count="

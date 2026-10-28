@@ -49,7 +49,7 @@ auto SourceInspectionCommand::BuildCommand() -> std::shared_ptr<clap::Command>
     .WithOption(std::move(output));
 }
 
-auto SourceInspectionCommand::Run() -> std::expected<void, std::error_code>
+auto SourceInspectionCommand::Execute() -> std::expected<void, std::error_code>
 {
   const auto source = std::filesystem::path(source_path_);
   const auto report = InspectSceneSource(source);
@@ -71,7 +71,7 @@ auto SourceInspectionCommand::Run() -> std::expected<void, std::error_code>
   if (const auto parent = output.parent_path(); !parent.empty()) {
     std::filesystem::create_directories(parent);
   }
-  auto stream = std::ofstream(output, std::ios::binary | std::ios::trunc);
+  auto stream = std::ofstream(output, std::ios::binary);
   stream << ExportSceneSourceInspection(report) << '\n';
   stream.close();
   if (!stream) {

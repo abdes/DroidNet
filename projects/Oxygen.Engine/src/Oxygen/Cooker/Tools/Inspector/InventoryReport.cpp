@@ -6,9 +6,8 @@
 
 #include <cstdint>
 #include <cstring>
-#include <exception>
 #include <filesystem>
-#include <iostream>
+#include <ios>
 #include <memory>
 #include <span>
 #include <stdexcept>
@@ -31,6 +30,7 @@
 #include <Oxygen/Cooker/Loose/Inspection.h>
 #include <Oxygen/Cooker/Loose/Types.h>
 #include <Oxygen/Cooker/Loose/Validation.h>
+#include <Oxygen/Cooker/Tools/Common/ToolCommand.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakFormatVersions.h>
 #include <Oxygen/Data/PakFormat_core.h>
@@ -100,103 +100,102 @@ auto BuildInventoryReportCommand(InventoryReportOptions& options)
     .WithOption(std::move(output));
 }
 
-auto RunInventoryReport(const InventoryReportOptions& options) -> int
+auto RunInventoryReport(const InventoryReportOptions& options)
+  -> toolkit::ToolResult
 {
   using nlohmann::json;
-  try {
-    const auto root
-      = std::filesystem::canonical(base::ToNativePath(options.cooked_root));
-    const auto output
-      = std::filesystem::weakly_canonical(base::ToNativePath(options.output));
-    const auto relative = output.lexically_relative(root);
-    if (!relative.empty() && *relative.begin() != "..") {
-      throw std::runtime_error(
-        "Inventory report output must be outside the cooked root");
-    }
-    const auto index_path = root / "container.index.bin";
-    const auto index_digest = base::ComputeFileSha256(index_path);
-    const auto index = lc::LooseCookedIndex::LoadFromRoot(root);
-    const auto failures = index.CheckContent(root, lc::IntegrityCheck::kFull);
-    const auto stale = failures.empty() ? FindStaleDescriptors(root, index)
-                                        : std::vector<std::string> {};
-    if (failures.empty() && stale.empty()) {
-      lc::ValidateRoot(root, lc::IntegrityCheck::kMetadata);
-    }
-    auto issues = json::array();
-    for (const auto& relpath : stale) {
-      issues.push_back(
-        { { "relative_path", relpath }, { "reason", "format_version" } });
-    }
-    for (const auto& failure : failures) {
-      const auto* const reason = [&] -> const char* {
-        switch (failure.reason) {
-        case lc::IntegrityFailure::kMissing:
-          return "missing";
-        case lc::IntegrityFailure::kUnexpected:
-          return "unexpected";
-        case lc::IntegrityFailure::kSizeMismatch:
-          return "size_mismatch";
-        case lc::IntegrityFailure::kDigestMismatch:
-          return "digest_mismatch";
-        case lc::IntegrityFailure::kLinkedPath:
-          return "linked_path";
-        case lc::IntegrityFailure::kNotRegular:
-          return "not_regular";
-        }
-        throw std::logic_error("Unknown inventory failure");
-      }();
-      issues.push_back(
-        { { "relative_path", failure.relative_path }, { "reason", reason } });
-    }
-    const auto hex = [](const base::Sha256Digest& digest) -> std::string {
-      return base::ToHexString(digest);
-    };
-    auto files = json::array();
-    for (const auto& file : index.GetFileInventory()) {
-      files.push_back({
-        { "relative_path", file.relative_path },
-        { "size", file.size },
-        { "sha256", hex(file.sha256) },
-        {
-          "file_kind",
-          file.kind.has_value() ? json(static_cast<uint16_t>(file.kind.value()))
-                                : json(nullptr),
-        },
-      });
-    }
-    lc::Inspection inspection;
-    inspection.LoadFromRoot(root);
-    auto assets = json::array();
-    for (const auto& asset : inspection.Assets()) {
-      assets.push_back({
-        { "asset_key", nostd::to_string(asset.key) },
-        { "asset_type", asset.asset_type },
-        { "virtual_path", asset.virtual_path },
-        { "descriptor_relative_path", asset.descriptor_relpath },
-      });
-    }
-    auto resources = json::array();
-    for (const auto& file : inspection.Files()) {
-      if (file.kind != lc::FileKind::kTextureDescriptor) {
-        continue;
+  const auto root
+    = std::filesystem::canonical(base::ToNativePath(options.cooked_root));
+  const auto output
+    = std::filesystem::weakly_canonical(base::ToNativePath(options.output));
+  const auto relative = output.lexically_relative(root);
+  if (!relative.empty() && *relative.begin() != "..") {
+    throw std::runtime_error(
+      "Inventory report output must be outside the cooked root");
+  }
+  const auto index_path = root / "container.index.bin";
+  const auto index_digest = base::ComputeFileSha256(index_path);
+  const auto index = lc::LooseCookedIndex::LoadFromRoot(root);
+  const auto failures = index.CheckContent(root, lc::IntegrityCheck::kFull);
+  const auto stale = failures.empty() ? FindStaleDescriptors(root, index)
+                                      : std::vector<std::string> {};
+  if (failures.empty() && stale.empty()) {
+    lc::ValidateRoot(root, lc::IntegrityCheck::kMetadata);
+  }
+  auto issues = json::array();
+  for (const auto& relpath : stale) {
+    issues.push_back(
+      { { "relative_path", relpath }, { "reason", "format_version" } });
+  }
+  for (const auto& failure : failures) {
+    const auto* const reason = [&] -> const char* {
+      switch (failure.reason) {
+      case lc::IntegrityFailure::kMissing:
+        return "missing";
+      case lc::IntegrityFailure::kUnexpected:
+        return "unexpected";
+      case lc::IntegrityFailure::kSizeMismatch:
+        return "size_mismatch";
+      case lc::IntegrityFailure::kDigestMismatch:
+        return "digest_mismatch";
+      case lc::IntegrityFailure::kLinkedPath:
+        return "linked_path";
+      case lc::IntegrityFailure::kNotRegular:
+        return "not_regular";
       }
-      auto resource_index = json(nullptr);
-      if (failures.empty()) {
-        resource_index = static_cast<uint32_t>(
-          inspection.ReadTextureDescriptor(file.relpath).index);
-      }
-      resources.push_back({
-        { "kind", "texture" },
-        { "virtual_path", file.virtual_path },
-        { "descriptor_relative_path", file.relpath },
-        { "resource_index", std::move(resource_index) },
-      });
+      throw std::logic_error("Unknown inventory failure");
+    }();
+    issues.push_back(
+      { { "relative_path", failure.relative_path }, { "reason", reason } });
+  }
+  const auto hex = [](const base::Sha256Digest& digest) -> std::string {
+    return base::ToHexString(digest);
+  };
+  auto files = json::array();
+  for (const auto& file : index.GetFileInventory()) {
+    files.push_back({
+      { "relative_path", file.relative_path },
+      { "size", file.size },
+      { "sha256", hex(file.sha256) },
+      {
+        "file_kind",
+        file.kind.has_value() ? json(static_cast<uint16_t>(file.kind.value()))
+                              : json(nullptr),
+      },
+    });
+  }
+  lc::Inspection inspection;
+  inspection.LoadFromRoot(root);
+  auto assets = json::array();
+  for (const auto& asset : inspection.Assets()) {
+    assets.push_back({
+      { "asset_key", nostd::to_string(asset.key) },
+      { "asset_type", asset.asset_type },
+      { "virtual_path", asset.virtual_path },
+      { "descriptor_relative_path", asset.descriptor_relpath },
+    });
+  }
+  auto resources = json::array();
+  for (const auto& file : inspection.Files()) {
+    if (file.kind != lc::FileKind::kTextureDescriptor) {
+      continue;
     }
-    if (base::ComputeFileSha256(index_path) != index_digest) {
-      throw std::runtime_error(
-        "Loose cooked index changed during verification");
+    auto resource_index = json(nullptr);
+    if (failures.empty()) {
+      resource_index = static_cast<uint32_t>(
+        inspection.ReadTextureDescriptor(file.relpath).index);
     }
-    const auto report = json {
+    resources.push_back({
+      { "kind", "texture" },
+      { "virtual_path", file.virtual_path },
+      { "descriptor_relative_path", file.relpath },
+      { "resource_index", std::move(resource_index) },
+    });
+  }
+  if (base::ComputeFileSha256(index_path) != index_digest) {
+    throw std::runtime_error("Loose cooked index changed during verification");
+  }
+  const auto report = json {
       { "schema_version", 1 }, { "source_key", nostd::to_string(index.Guid()) },
       { "index_size", std::filesystem::file_size(index_path) },
       { "index_sha256", hex(index_digest) },
@@ -204,21 +203,16 @@ auto RunInventoryReport(const InventoryReportOptions& options) -> int
       { "resources", std::move(resources) },
       { "issues", std::move(issues) },
     }.dump();
-    const auto result
-      = serio::WriteFileAtomically(output, std::as_bytes(std::span(report)));
-    if (!result) {
-      throw std::system_error(
-        result.error(), "Write integrity inventory report");
-    }
-    if (result->durability_error) {
-      throw std::system_error(
-        result->durability_error, "Synchronize integrity inventory report");
-    }
-    return 0;
-  } catch (const std::exception& error) {
-    std::cerr << "ERROR: " << error.what() << '\n';
-    return 2;
+  const auto result
+    = serio::WriteFileAtomically(output, std::as_bytes(std::span(report)));
+  if (!result) {
+    throw std::system_error(result.error(), "Write integrity inventory report");
   }
+  if (result->durability_error) {
+    throw std::system_error(
+      result->durability_error, "Synchronize integrity inventory report");
+  }
+  return {};
 }
 
 } // namespace oxygen::content::inspection

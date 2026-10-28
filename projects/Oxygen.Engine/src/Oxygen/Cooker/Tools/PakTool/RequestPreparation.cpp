@@ -24,6 +24,7 @@
 #include <Oxygen/Cooker/Tools/PakTool/PakToolOptions.h>
 #include <Oxygen/Cooker/Tools/PakTool/RequestPreparation.h>
 #include <Oxygen/Cooker/Tools/PakTool/RequestSnapshot.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/CookedSource.h>
 #include <Oxygen/Data/PakCatalog.h>
@@ -189,8 +190,8 @@ namespace {
   {
     auto key = path.lexically_normal().generic_string();
 #ifdef _WIN32
-    std::transform(
-      key.begin(), key.end(), key.begin(), [](const unsigned char ch) -> char {
+    std::ranges::transform(
+      key, key.begin(), [](const unsigned char ch) -> char {
         return static_cast<char>(std::tolower(ch));
       });
 #endif

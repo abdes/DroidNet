@@ -15,10 +15,10 @@
 #include <expected>
 #include <filesystem>
 #include <fstream>
-#include <iostream>
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <ostream>
 #include <ratio>
 #include <sstream>
 #include <stop_token>
@@ -887,7 +887,7 @@ auto BatchCommand::PrepareImportServiceConfig()
   return service_config;
 }
 
-auto BatchCommand::Run() -> std::expected<void, std::error_code>
+auto BatchCommand::Execute() -> std::expected<void, std::error_code>
 {
   const auto session_started = std::chrono::system_clock::now();
   // 1. Process Options
@@ -1726,8 +1726,12 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
   if (!options_.report_path.empty()) {
     const auto cooked_root
       = ResolveCookedRootForReport(jobs, common_context->reports);
-    const auto resolved_path
-      = ResolveReportPath(options_.report_path, cooked_root, std::cerr);
+    auto report_path_errors = std::ostringstream {};
+    const auto resolved_path = ResolveReportPath(
+      options_.report_path, cooked_root, report_path_errors);
+    if (!report_path_errors.view().empty()) {
+      writer->Error(report_path_errors.str());
+    }
 
     if (resolved_path.has_value()) {
       const auto session_ended = std::chrono::system_clock::now();
@@ -1831,7 +1835,13 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
         { "jobs", std::move(jobs_json) },
       });
 
-      if (!WriteJsonReport(payload, *resolved_path, std::cerr)) {
+      auto write_errors = std::ostringstream {};
+      const auto written
+        = WriteJsonReport(payload, *resolved_path, write_errors);
+      if (!write_errors.view().empty()) {
+        writer->Error(write_errors.str());
+      }
+      if (!written) {
         deferred_error = std::make_error_code(std::errc::io_error);
       }
       final_report_path = *resolved_path;

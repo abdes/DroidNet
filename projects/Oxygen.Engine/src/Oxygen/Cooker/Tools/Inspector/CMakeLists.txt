@@ -41,6 +41,16 @@ add_library(
   "ScriptMetadata.h"
   "InventoryReport.cpp"
   "InventoryReport.h"
+  "ContainerCommands.cpp"
+  "ContainerCommands.h"
+  "CookedRootCommand.cpp"
+  "CookedRootCommand.h"
+  "DescriptorCommands.cpp"
+  "DescriptorCommands.h"
+  "DumpFormat.h"
+  "ReportCommand.h"
+  "ResourceTableCommands.cpp"
+  "ResourceTableCommands.h"
 )
 set_target_properties(
   oxygen-cooker-inspector-core
@@ -56,6 +66,7 @@ target_link_libraries(
     oxygen::cooker
     oxygen::content
     oxygen::clap
+    oxygen-cooker-toolkit
     nlohmann_json::nlohmann_json
     nlohmann_json_schema_validator
 )

@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-// Covers: Tools/PakTool/App.cpp, Tools/PakTool/CommandExecution.cpp
+// Covers: Tools/PakTool/PakToolCommands.cpp, Tools/PakTool/CommandExecution.cpp
 
 #include <filesystem>
 #include <sstream>
@@ -17,8 +17,8 @@
 #include "RequestPreparation.h"
 
 #include <Oxygen/Cooker/Pak/PakBuildRequest.h>
-#include <Oxygen/Cooker/Tools/PakTool/App.h>
 #include <Oxygen/Cooker/Tools/PakTool/CommandExecution.h>
+#include <Oxygen/Cooker/Tools/PakTool/PakToolCommands.h>
 #include <Oxygen/Cooker/test/Support/TempDir.h>
 #include <Oxygen/Testing/GTest.h>
 
@@ -27,7 +27,6 @@ namespace {
 using oxygen::content::pak::BuildMode;
 using oxygen::content::pak::tool::ExecutePakToolCommand;
 using oxygen::content::pak::tool::IArtifactFileSystem;
-using oxygen::content::pak::tool::MakeArtifactPublicationPlan;
 using oxygen::content::pak::tool::PakToolCliOptions;
 using oxygen::content::pak::tool::PakToolExitCode;
 using oxygen::content::pak::tool::RealArtifactFileSystem;

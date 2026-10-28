@@ -13,6 +13,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <iostream>
 #include <iterator>
 #include <span>
 #include <stdexcept>
@@ -26,6 +27,7 @@
 
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Cooker/Loose/Validation.h>
+#include <Oxygen/Cooker/Tools/Common/ToolApp.h>
 #include <Oxygen/Cooker/Tools/Inspector/SceneMetadata.h>
 #include <Oxygen/Cooker/test/Pak/PakTestSupport.h>
 #include <Oxygen/Cooker/test/Support/JsonSchema.h>
@@ -48,7 +50,17 @@
 namespace {
 
 namespace world = oxygen::data::pak::world;
-using oxygen::content::inspection::RunSceneMetadataReport;
+using oxygen::content::inspection::SceneMetadataOptions;
+
+//! `RunSceneMetadataReport` as the tool runs it: the error, if any, goes to
+//! stderr, and the result is the process exit code.
+auto RunSceneMetadataReport(const SceneMetadataOptions& options) -> int
+{
+  return oxygen::content::toolkit::ExitCodeOf(std::cerr, [&] {
+    return oxygen::content::inspection::RunSceneMetadataReport(options);
+  });
+}
+
 using oxygen::content::lc::ValidateRoot;
 using oxygen::data::ComponentType;
 using oxygen::data::schema::OverrideId;

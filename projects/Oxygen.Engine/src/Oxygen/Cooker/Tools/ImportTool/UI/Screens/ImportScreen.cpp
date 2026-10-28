@@ -18,14 +18,11 @@
 #include <ftxui/component/component_base.hpp>
 #include <ftxui/component/screen_interactive.hpp>
 #include <ftxui/dom/elements.hpp>
-#include <ftxui/screen/color.hpp>
 
 #include <Oxygen/Cooker/Tools/ImportTool/UI/Screens/ImportScreen.h>
 
 namespace oxygen::content::import::tool {
 namespace {
-  using ftxui::color;
-  using ftxui::Color;
   using ftxui::Element;
   using ftxui::Event;
   using ftxui::hbox;
@@ -88,7 +85,7 @@ void ImportScreen::Run()
   ftxui::ScreenInteractive screen = ftxui::ScreenInteractive::Fullscreen();
   std::atomic<bool> running { true };
 
-  auto renderer = ftxui::Renderer([&]() -> Element {
+  auto renderer = ftxui::Renderer([&] -> Element {
     const auto state = GetStateSnapshot();
     return vbox({
       window(text("Oxygen Import Tool - Job"), BuildHeader(state)),
@@ -111,7 +108,7 @@ void ImportScreen::Run()
     return false;
   });
 
-  std::thread updater([&]() -> void {
+  std::thread updater([&] -> void {
     while (running.load()) {
       if (provider_) {
         UpdateState(provider_());

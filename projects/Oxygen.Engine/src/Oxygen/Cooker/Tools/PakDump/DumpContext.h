@@ -8,6 +8,9 @@
 #include <cstddef>
 #include <filesystem>
 #include <fstream>
+#include <ostream>
+
+#include <Oxygen/Cooker/Tools/Common/ToolCommand.h>
 
 struct DumpContext {
   // Options
@@ -22,4 +25,10 @@ struct DumpContext {
 
   // Shared state
   std::filesystem::path pak_path;
+
+  //! The tool's injected output streams; the dumpers write nothing else.
+  oxygen::content::toolkit::ToolStreams streams;
+
+  [[nodiscard]] auto Out() const -> std::ostream& { return *streams.out; }
+  [[nodiscard]] auto Err() const -> std::ostream& { return *streams.err; }
 };

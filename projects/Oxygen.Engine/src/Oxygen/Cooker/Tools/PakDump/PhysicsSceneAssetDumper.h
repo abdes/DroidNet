@@ -8,7 +8,7 @@
 
 #include <cstdint>
 #include <cstring>
-#include <iostream>
+#include <ostream>
 
 #include "AssetDumpHelpers.h"
 #include "AssetDumper.h"
@@ -51,8 +51,8 @@ class PhysicsSceneAssetDumper final : public AssetDumper {
     return offset <= total && size <= (total - offset);
   }
 
-  static auto PrintSampleRecord(const std::vector<std::byte>& blob,
-    const size_t table_offset,
+  static auto PrintSampleRecord(std::ostream& out,
+    const std::vector<std::byte>& blob, const size_t table_offset,
     const oxygen::data::pak::physics::PhysicsBindingType type) -> void
   {
     using oxygen::data::pak::physics::AggregateBindingRecord;
@@ -66,71 +66,78 @@ class PhysicsSceneAssetDumper final : public AssetDumper {
 
     switch (type) {
     case PhysicsBindingType::kRigidBody: {
-      RigidBodyBindingRecord record {};
-      std::memcpy(&record, blob.data() + table_offset, sizeof(record));
-      PrintUtils::Field("Sample Node Index", record.node_index, 10);
-      PrintUtils::Field("Sample Shape Key",
+      const auto record
+        = asset_dump_helpers::ReadRecordAt<RigidBodyBindingRecord>(
+          blob, table_offset);
+      PrintUtils::Field(out, "Sample Node Index", record.node_index, 10);
+      PrintUtils::Field(out, "Sample Shape Key",
         oxygen::data::to_string(record.shape_asset_key), 10);
-      PrintUtils::Field("Sample Material Key",
+      PrintUtils::Field(out, "Sample Material Key",
         oxygen::data::to_string(record.material_asset_key), 10);
       break;
     }
     case PhysicsBindingType::kCollider: {
-      ColliderBindingRecord record {};
-      std::memcpy(&record, blob.data() + table_offset, sizeof(record));
-      PrintUtils::Field("Sample Node Index", record.node_index, 10);
-      PrintUtils::Field("Sample Shape Key",
+      const auto record
+        = asset_dump_helpers::ReadRecordAt<ColliderBindingRecord>(
+          blob, table_offset);
+      PrintUtils::Field(out, "Sample Node Index", record.node_index, 10);
+      PrintUtils::Field(out, "Sample Shape Key",
         oxygen::data::to_string(record.shape_asset_key), 10);
-      PrintUtils::Field("Sample Is Sensor", record.is_sensor, 10);
+      PrintUtils::Field(out, "Sample Is Sensor", record.is_sensor, 10);
       break;
     }
     case PhysicsBindingType::kCharacter: {
-      CharacterBindingRecord record {};
-      std::memcpy(&record, blob.data() + table_offset, sizeof(record));
-      PrintUtils::Field("Sample Node Index", record.node_index, 10);
-      PrintUtils::Field("Sample Shape Key",
+      const auto record
+        = asset_dump_helpers::ReadRecordAt<CharacterBindingRecord>(
+          blob, table_offset);
+      PrintUtils::Field(out, "Sample Node Index", record.node_index, 10);
+      PrintUtils::Field(out, "Sample Shape Key",
         oxygen::data::to_string(record.shape_asset_key), 10);
       break;
     }
     case PhysicsBindingType::kSoftBody: {
-      SoftBodyBindingRecord record {};
-      std::memcpy(&record, blob.data() + table_offset, sizeof(record));
-      PrintUtils::Field("Sample Node Index", record.node_index, 10);
-      PrintUtils::Field("Sample Topology Asset Key",
+      const auto record
+        = asset_dump_helpers::ReadRecordAt<SoftBodyBindingRecord>(
+          blob, table_offset);
+      PrintUtils::Field(out, "Sample Node Index", record.node_index, 10);
+      PrintUtils::Field(out, "Sample Topology Asset Key",
         oxygen::data::to_string(record.topology_asset_key), 10);
-      PrintUtils::Field("Sample Topology Format",
+      PrintUtils::Field(out, "Sample Topology Format",
         static_cast<uint32_t>(record.topology_format), 10);
       PrintUtils::Field(
-        "Sample Solver Iterations", record.solver_iteration_count, 10);
-      PrintUtils::Field("Sample Global Damping", record.global_damping, 10);
-      PrintUtils::Field("Sample Restitution", record.restitution, 10);
-      PrintUtils::Field("Sample Friction", record.friction, 10);
+        out, "Sample Solver Iterations", record.solver_iteration_count, 10);
+      PrintUtils::Field(
+        out, "Sample Global Damping", record.global_damping, 10);
+      PrintUtils::Field(out, "Sample Restitution", record.restitution, 10);
+      PrintUtils::Field(out, "Sample Friction", record.friction, 10);
       break;
     }
     case PhysicsBindingType::kJoint: {
-      JointBindingRecord record {};
-      std::memcpy(&record, blob.data() + table_offset, sizeof(record));
-      PrintUtils::Field("Sample Node A", record.node_index_a, 10);
-      PrintUtils::Field("Sample Node B", record.node_index_b, 10);
+      const auto record = asset_dump_helpers::ReadRecordAt<JointBindingRecord>(
+        blob, table_offset);
+      PrintUtils::Field(out, "Sample Node A", record.node_index_a, 10);
+      PrintUtils::Field(out, "Sample Node B", record.node_index_b, 10);
       break;
     }
     case PhysicsBindingType::kVehicle: {
-      VehicleBindingRecord record {};
-      std::memcpy(&record, blob.data() + table_offset, sizeof(record));
-      PrintUtils::Field("Sample Node Index", record.node_index, 10);
-      PrintUtils::Field("Sample Controller Type",
+      const auto record
+        = asset_dump_helpers::ReadRecordAt<VehicleBindingRecord>(
+          blob, table_offset);
+      PrintUtils::Field(out, "Sample Node Index", record.node_index, 10);
+      PrintUtils::Field(out, "Sample Controller Type",
         static_cast<uint32_t>(record.controller_type), 10);
       PrintUtils::Field(
-        "Sample Wheel Slice Offset", record.wheel_slice_offset, 10);
+        out, "Sample Wheel Slice Offset", record.wheel_slice_offset, 10);
       PrintUtils::Field(
-        "Sample Wheel Slice Count", record.wheel_slice_count, 10);
+        out, "Sample Wheel Slice Count", record.wheel_slice_count, 10);
       break;
     }
     case PhysicsBindingType::kAggregate: {
-      AggregateBindingRecord record {};
-      std::memcpy(&record, blob.data() + table_offset, sizeof(record));
-      PrintUtils::Field("Sample Node Index", record.node_index, 10);
-      PrintUtils::Field("Sample Max Bodies", record.max_bodies, 10);
+      const auto record
+        = asset_dump_helpers::ReadRecordAt<AggregateBindingRecord>(
+          blob, table_offset);
+      PrintUtils::Field(out, "Sample Node Index", record.node_index, 10);
+      PrintUtils::Field(out, "Sample Max Bodies", record.max_bodies, 10);
       break;
     }
     default:
@@ -148,69 +155,73 @@ public:
 
     using oxygen::data::pak::physics::PhysicsSceneAssetDesc;
 
-    std::cout << "Asset #" << idx << " (PhysicsScene):\n";
+    ctx.Out() << "Asset #" << idx << " (PhysicsScene):\n";
     asset_dump_helpers::PrintAssetKey(entry.asset_key, ctx);
-    asset_dump_helpers::PrintAssetMetadata(entry);
+    asset_dump_helpers::PrintAssetMetadata(ctx.Out(), entry);
 
     const auto data = asset_dump_helpers::ReadDescriptorBytes(pak, entry);
     if (!data) {
-      std::cout << "    Failed to read asset descriptor data\n\n";
+      ctx.Out() << "    Failed to read asset descriptor data\n\n";
       co_return;
     }
 
     if (data->size() < sizeof(PhysicsSceneAssetDesc)) {
-      std::cout << "    PhysicsSceneAssetDesc: (insufficient data)\n\n";
+      ctx.Out() << "    PhysicsSceneAssetDesc: (insufficient data)\n\n";
       co_return;
     }
 
     PhysicsSceneAssetDesc scene {};
     std::memcpy(&scene, data->data(), sizeof(scene));
 
-    asset_dump_helpers::PrintAssetHeaderFields(scene.header,
+    asset_dump_helpers::PrintAssetHeaderFields(ctx.Out(), scene.header,
       asset_dump_helpers::DescriptorString(
         *data, scene.header, scene.header.name_offset),
       4);
 
-    std::cout << "    --- Physics Scene Sidecar Fields ---\n";
+    ctx.Out() << "    --- Physics Scene Sidecar Fields ---\n";
+    PrintUtils::Field(ctx.Out(), "Target Scene Key",
+      oxygen::data::to_string(scene.target_scene_key), 8);
     PrintUtils::Field(
-      "Target Scene Key", oxygen::data::to_string(scene.target_scene_key), 8);
-    PrintUtils::Field("Target Node Count", scene.target_node_count, 8);
-    PrintUtils::Field("Component Table Count", scene.component_table_count, 8);
-    PrintUtils::Field("Component Directory Offset",
+      ctx.Out(), "Target Node Count", scene.target_node_count, 8);
+    PrintUtils::Field(
+      ctx.Out(), "Component Table Count", scene.component_table_count, 8);
+    PrintUtils::Field(ctx.Out(), "Component Directory Offset",
       asset_dump_helpers::ToHexString(scene.component_table_directory_offset),
       8);
 
     if (scene.component_table_count == 0) {
-      PrintUtils::Field("Binding Tables", "none", 8);
-      std::cout << "\n";
+      PrintUtils::Field(ctx.Out(), "Binding Tables", "none", 8);
+      ctx.Out() << "\n";
       co_return;
     }
 
-    const size_t dir_offset
+    const auto dir_offset
       = static_cast<size_t>(scene.component_table_directory_offset);
     const size_t dir_size = static_cast<size_t>(scene.component_table_count)
       * sizeof(oxygen::data::pak::physics::PhysicsComponentTableDesc);
     if (!InRange(dir_offset, dir_size, data->size())) {
-      PrintUtils::Field("Binding Tables", "directory out of bounds", 8);
-      std::cout << "\n";
+      PrintUtils::Field(
+        ctx.Out(), "Binding Tables", "directory out of bounds", 8);
+      ctx.Out() << "\n";
       co_return;
     }
 
-    std::cout << "        Binding Tables:\n";
+    ctx.Out() << "        Binding Tables:\n";
     uint64_t total_bindings = 0;
     for (uint32_t i = 0; i < scene.component_table_count; ++i) {
       const size_t entry_offset = dir_offset
-        + static_cast<size_t>(i)
-          * sizeof(oxygen::data::pak::physics::PhysicsComponentTableDesc);
-      oxygen::data::pak::physics::PhysicsComponentTableDesc table_desc {};
-      std::memcpy(&table_desc, data->data() + entry_offset, sizeof(table_desc));
+        + (static_cast<size_t>(i)
+          * sizeof(oxygen::data::pak::physics::PhysicsComponentTableDesc));
+      const auto table_desc = asset_dump_helpers::ReadRecordAt<
+        oxygen::data::pak::physics::PhysicsComponentTableDesc>(
+        *data, entry_offset);
 
       const auto table_offset = static_cast<size_t>(table_desc.table.offset);
       const auto count = static_cast<size_t>(table_desc.table.count);
       const auto entry_size = static_cast<size_t>(table_desc.table.entry_size);
       const auto table_size = count * entry_size;
 
-      std::cout << fmt::format(
+      ctx.Out() << fmt::format(
         "          [{}] {} ({:#010X}) count={} entry_size={} "
         "offset={}\n",
         i, BindingTypeName(table_desc.binding_type),
@@ -220,16 +231,17 @@ public:
       total_bindings += table_desc.table.count;
 
       if (!InRange(table_offset, table_size, data->size())) {
-        PrintUtils::Field("Table Status", "out of bounds", 10);
+        PrintUtils::Field(ctx.Out(), "Table Status", "out of bounds", 10);
         continue;
       }
 
       if (ctx.verbose && count > 0) {
-        PrintSampleRecord(*data, table_offset, table_desc.binding_type);
+        PrintSampleRecord(
+          ctx.Out(), *data, table_offset, table_desc.binding_type);
       }
     }
-    PrintUtils::Field("Total Bindings", total_bindings, 8);
-    std::cout << "\n";
+    PrintUtils::Field(ctx.Out(), "Total Bindings", total_bindings, 8);
+    ctx.Out() << "\n";
 
     co_return;
   }

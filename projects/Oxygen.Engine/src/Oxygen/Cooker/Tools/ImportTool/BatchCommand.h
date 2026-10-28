@@ -29,7 +29,7 @@ public:
 
   [[nodiscard]] auto Name() const -> std::string_view override;
   [[nodiscard]] auto BuildCommand() -> std::shared_ptr<clap::Command> override;
-  [[nodiscard]] auto Run() -> std::expected<void, std::error_code> override;
+  [[nodiscard]] auto Execute() -> std::expected<void, std::error_code> override;
   //! Prepare import service configuration from the batch manifest.
   [[nodiscard]] auto PrepareImportServiceConfig()
     -> std::expected<AsyncImportService::Config, std::error_code> override;

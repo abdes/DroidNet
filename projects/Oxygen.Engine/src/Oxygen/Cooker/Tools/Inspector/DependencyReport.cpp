@@ -4,10 +4,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <exception>
 #include <filesystem>
 #include <fstream>
-#include <iostream>
+#include <ios>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -22,6 +21,7 @@
 #include <Oxygen/Clap/Fluent/DSL.h>
 #include <Oxygen/Clap/Option.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
+#include <Oxygen/Cooker/Tools/Common/ToolCommand.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/PakFormat_core.h>
 
@@ -50,72 +50,68 @@ auto BuildDependencyCommand(DependencyReportOptions& options)
     .WithOption(std::move(output));
 }
 
-auto RunDependencyReport(const DependencyReportOptions& options) -> int
+auto RunDependencyReport(const DependencyReportOptions& options)
+  -> toolkit::ToolResult
 {
-  try {
-    const auto root
-      = std::filesystem::absolute(options.cooked_root).lexically_normal();
-    lc::Inspection inspection;
-    inspection.Load(root);
-    nlohmann::json assets = nlohmann::json::array();
-    for (const auto& entry : inspection.Assets()) {
-      nlohmann::json row = {
-        { "asset_key", nostd::to_string(entry.key) },
-        { "asset_type", entry.asset_type },
-        { "virtual_path", entry.virtual_path },
-        { "dependencies", nlohmann::json::array() },
-        { "complete", true },
-      };
-      row["key_references"] = nlohmann::json::array();
-      row["resource_bindings"] = nlohmann::json::array();
-      for (const auto& reference : entry.references.Keys()) {
-        row["key_references"].push_back({
-          { "asset_key", nostd::to_string(reference.key) },
-          { "target_kind", nostd::to_underlying(reference.kind) },
-          {
-            "expected_asset_type",
-            nostd::to_underlying(reference.expected_type),
-          },
-        });
-        if (reference.kind == data::KeyReferenceKind::kAsset) {
-          row["dependencies"].push_back(nostd::to_string(reference.key));
-        }
-      }
-      for (const auto& binding : entry.references.Resources()) {
-        const char* state = "resource";
-        if (binding.kind == data::ResourceKind::kExternalTexture) {
-          state = "external";
-        } else if (binding.kind == data::ResourceKind::kTexture) {
-          if (binding.index == data::pak::core::kErrorTextureResourceIndex) {
-            state = "error";
-          } else if (binding.index == data::pak::core::kFallbackResourceIndex) {
-            state = "fallback";
-          }
-        }
-        row["resource_bindings"].push_back({
-          { "kind", nostd::to_underlying(binding.kind) },
-          { "index", binding.index.get() },
-          { "state", state },
-        });
-      }
-      assets.push_back(std::move(row));
-    }
-    const nlohmann::json report = {
-      { "schema", "oxygen.cooked-dependencies.v3" },
-      { "source_key", nostd::to_string(inspection.Guid()) },
-      { "assets", std::move(assets) },
+  const auto root
+    = std::filesystem::absolute(options.cooked_root).lexically_normal();
+  lc::Inspection inspection;
+  inspection.Load(root);
+  nlohmann::json assets = nlohmann::json::array();
+  for (const auto& entry : inspection.Assets()) {
+    nlohmann::json row = {
+      { "asset_key", nostd::to_string(entry.key) },
+      { "asset_type", entry.asset_type },
+      { "virtual_path", entry.virtual_path },
+      { "dependencies", nlohmann::json::array() },
+      { "complete", true },
     };
-    std::ofstream output(options.output, std::ios::binary | std::ios::trunc);
-    output << report.dump(2);
-    output.close();
-    if (!output) {
-      throw std::runtime_error("Could not write dependency report.");
+    row["key_references"] = nlohmann::json::array();
+    row["resource_bindings"] = nlohmann::json::array();
+    for (const auto& reference : entry.references.Keys()) {
+      row["key_references"].push_back({
+        { "asset_key", nostd::to_string(reference.key) },
+        { "target_kind", nostd::to_underlying(reference.kind) },
+        {
+          "expected_asset_type",
+          nostd::to_underlying(reference.expected_type),
+        },
+      });
+      if (reference.kind == data::KeyReferenceKind::kAsset) {
+        row["dependencies"].push_back(nostd::to_string(reference.key));
+      }
     }
-    return 0;
-  } catch (const std::exception& error) {
-    std::cerr << "ERROR: " << error.what() << '\n';
-    return 2;
+    for (const auto& binding : entry.references.Resources()) {
+      const char* state = "resource";
+      if (binding.kind == data::ResourceKind::kExternalTexture) {
+        state = "external";
+      } else if (binding.kind == data::ResourceKind::kTexture) {
+        if (binding.index == data::pak::core::kErrorTextureResourceIndex) {
+          state = "error";
+        } else if (binding.index == data::pak::core::kFallbackResourceIndex) {
+          state = "fallback";
+        }
+      }
+      row["resource_bindings"].push_back({
+        { "kind", nostd::to_underlying(binding.kind) },
+        { "index", binding.index.get() },
+        { "state", state },
+      });
+    }
+    assets.push_back(std::move(row));
   }
+  const nlohmann::json report = {
+    { "schema", "oxygen.cooked-dependencies.v3" },
+    { "source_key", nostd::to_string(inspection.Guid()) },
+    { "assets", std::move(assets) },
+  };
+  std::ofstream output(options.output, std::ios::binary);
+  output << report.dump(2);
+  output.close();
+  if (!output) {
+    throw std::runtime_error("Could not write dependency report.");
+  }
+  return {};
 }
 
 } // namespace oxygen::content::inspection

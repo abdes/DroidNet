@@ -127,7 +127,7 @@ auto ScriptCommand::BuildCommand() -> std::shared_ptr<clap::Command>
     .WithOption(std::move(with_content_hashing));
 }
 
-auto ScriptCommand::Run() -> std::expected<void, std::error_code>
+auto ScriptCommand::Execute() -> std::expected<void, std::error_code>
 {
   auto settings = options_;
 

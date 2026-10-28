@@ -42,7 +42,12 @@ add_library(
   "GlobalOptions.h"
   "GltfCommand.cpp"
   "GltfCommand.h"
+  "ConsoleMessageWriter.cpp"
+  "ConsoleMessageWriter.h"
+  "ImportCommand.cpp"
   "ImportCommand.h"
+  "ImportSession.cpp"
+  "ImportSession.h"
   "InputCommand.cpp"
   "InputCommand.h"
   "ImportRunner.cpp"
@@ -56,6 +61,8 @@ add_library(
   "RemoveCookedCommand.h"
   "ReportJson.cpp"
   "ReportJson.h"
+  "ServiceConfig.cpp"
+  "ServiceConfig.h"
   "SourceAnalysisCommand.cpp"
   "SourceAnalysisCommand.h"
   "SourceInspectionCommand.cpp"
@@ -64,6 +71,8 @@ add_library(
   "ScriptCommand.h"
   "ScriptingSidecarCommand.cpp"
   "ScriptingSidecarCommand.h"
+  "StopSignal.cpp"
+  "StopSignal.h"
   "TextureCommand.cpp"
   "TextureCommand.h"
   "UI/BatchViewModel.h"
@@ -91,6 +100,7 @@ target_link_libraries(
     oxygen::core
     oxygen::cooker
     oxygen::clap
+    oxygen-cooker-toolkit
     fmt::fmt-header-only
     ftxui::screen
     ftxui::dom

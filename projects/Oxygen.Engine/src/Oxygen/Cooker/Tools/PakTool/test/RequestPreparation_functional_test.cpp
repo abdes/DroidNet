@@ -289,12 +289,14 @@ NOLINT_TEST_F(
   auto options = MakeOptions();
   const auto library = TempDir() / "engine_loose";
   oxygen::cooker::test::WriteTextureLibrary(library, kGrid,
-    { .size_bytes = 4U,
+    {
+      .size_bytes = 4U,
       .width = 1U,
       .height = 1U,
       .depth = 1U,
       .array_layers = 1U,
-      .mip_levels = 1U });
+      .mip_levels = 1U,
+    });
   options.request.dependency_paks
     = { oxygen::cooker::test::PackLibrary(library, TempDir() / "engine.pak") };
   auto fs = RealRequestPreparationFileSystem {};

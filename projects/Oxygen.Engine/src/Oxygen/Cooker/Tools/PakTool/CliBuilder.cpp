@@ -4,18 +4,12 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#ifndef OXYGEN_PAKTOOL_VERSION
-#  error OXYGEN_PAKTOOL_VERSION must be defined for PakTool CLI version.
-#endif
-
 #include <cstdint>
 #include <filesystem>
 #include <memory>
 #include <string>
-#include <string_view>
 
 #include <Oxygen/Clap/Command.h>
-#include <Oxygen/Clap/Fluent/CliBuilder.h>
 #include <Oxygen/Clap/Fluent/CommandBuilder.h>
 #include <Oxygen/Clap/Fluent/DSL.h>
 #include <Oxygen/Clap/Option.h>
@@ -27,14 +21,10 @@ namespace oxygen::content::pak::tool {
 
 namespace {
 
-  using oxygen::clap::CliBuilder;
   using oxygen::clap::Command;
   using oxygen::clap::CommandBuilder;
   using oxygen::clap::Option;
   using oxygen::clap::Options;
-
-  constexpr auto kProgramName = std::string_view { "Oxygen.Cooker.PakTool" };
-  constexpr auto kVersion = std::string_view { OXYGEN_PAKTOOL_VERSION };
 
   auto BuildToolOptions(PakToolOutputOptions& options)
     -> std::shared_ptr<Options>
@@ -248,38 +238,25 @@ namespace {
     return group;
   }
 
-  auto BuildBuildCommand(PakToolCliOptions& options) -> std::shared_ptr<Command>
-  {
-    return CommandBuilder("build")
-      .About("Build a full pak archive from cooked sources.")
-      .WithOptions(BuildToolOptions(options.output))
-      .WithOptions(BuildRequestOptions(options.request))
-      .WithOptions(BuildFullBuildOptions(options.build))
-      .Build();
-  }
-
-  auto BuildPatchCommand(PakToolCliOptions& options) -> std::shared_ptr<Command>
-  {
-    return CommandBuilder("patch")
-      .About("Build a patch pak archive against base catalogs.")
-      .WithOptions(BuildToolOptions(options.output))
-      .WithOptions(BuildRequestOptions(options.request))
-      .WithOptions(BuildPatchOptions(options.patch))
-      .Build();
-  }
-
 } // namespace
 
-auto BuildCli(PakToolCliOptions& options) -> std::unique_ptr<oxygen::clap::Cli>
+auto BuildBuildCommand(PakToolCliOptions& options) -> std::shared_ptr<Command>
 {
-  return CliBuilder()
-    .ProgramName(std::string(kProgramName))
-    .Version(std::string(kVersion))
-    .About("Build and publish Oxygen pak archives and their sidecar artifacts.")
-    .WithHelpCommand()
-    .WithVersionCommand()
-    .WithCommand(BuildBuildCommand(options))
-    .WithCommand(BuildPatchCommand(options))
+  return CommandBuilder("build")
+    .About("Build a full pak archive from cooked sources.")
+    .WithOptions(BuildToolOptions(options.output))
+    .WithOptions(BuildRequestOptions(options.request))
+    .WithOptions(BuildFullBuildOptions(options.build))
+    .Build();
+}
+
+auto BuildPatchCommand(PakToolCliOptions& options) -> std::shared_ptr<Command>
+{
+  return CommandBuilder("patch")
+    .About("Build a patch pak archive against base catalogs.")
+    .WithOptions(BuildToolOptions(options.output))
+    .WithOptions(BuildRequestOptions(options.request))
+    .WithOptions(BuildPatchOptions(options.patch))
     .Build();
 }
 

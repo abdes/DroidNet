@@ -192,6 +192,11 @@ out/build-vs/bin/Debug/Oxygen.Cooker.PakTool.exe build `
 - build report schema:
   `src/Oxygen/Cooker/Tools/PakTool/Schemas/oxygen.pak-build-report.schema.json`
 
+## Versions
+
+`versions` prints the version of every cooked format and asset the tool reads
+and writes, from `PakFormatVersions.inc`; `--json` prints them as one object.
+
 ## Exit Codes
 
 | Code | Meaning                                          |

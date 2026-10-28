@@ -7,17 +7,19 @@
 #pragma once
 
 #include <memory>
-#include <span>
-#include <string>
+#include <vector>
 
-#include <Oxygen/Clap/Cli.h>
+#include <Oxygen/Clap/Option.h>
 #include <Oxygen/Cooker/Tools/ImportTool/GlobalOptions.h>
 
 namespace oxygen::content::import::tool {
 
-class ImportCommand;
-
-[[nodiscard]] auto BuildCli(std::span<ImportCommand* const> commands,
-  GlobalOptions& global_options) -> std::unique_ptr<clap::Cli>;
+//! The option groups every import tool command accepts, before its name.
+/*!
+ The global options parse into `global_options`; the service options are read
+ from the parsed values when a command's import service is configured.
+*/
+[[nodiscard]] auto BuildGlobalOptionGroups(GlobalOptions& global_options)
+  -> std::vector<std::shared_ptr<clap::Options>>;
 
 } // namespace oxygen::content::import::tool

@@ -104,7 +104,7 @@ auto ScriptingSidecarCommand::BuildCommand() -> std::shared_ptr<clap::Command>
     .WithOption(std::move(with_content_hashing));
 }
 
-auto ScriptingSidecarCommand::Run() -> std::expected<void, std::error_code>
+auto ScriptingSidecarCommand::Execute() -> std::expected<void, std::error_code>
 {
   auto settings = options_;
 

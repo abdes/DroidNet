@@ -18,7 +18,7 @@ class SourceInspectionCommand final : public ImportCommand {
 public:
   [[nodiscard]] auto Name() const -> std::string_view override;
   [[nodiscard]] auto BuildCommand() -> std::shared_ptr<clap::Command> override;
-  [[nodiscard]] auto Run() -> std::expected<void, std::error_code> override;
+  [[nodiscard]] auto Execute() -> std::expected<void, std::error_code> override;
   [[nodiscard]] auto RequiresImportService() const noexcept -> bool override
   {
     return false;

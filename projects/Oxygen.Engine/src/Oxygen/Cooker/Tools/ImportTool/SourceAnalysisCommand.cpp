@@ -8,7 +8,7 @@
 #include <expected>
 #include <filesystem>
 #include <fstream>
-#include <iostream>
+#include <ios>
 #include <memory>
 #include <optional>
 #include <sstream>
@@ -16,6 +16,8 @@
 #include <string_view>
 #include <system_error>
 #include <utility>
+
+#include <fmt/format.h>
 
 #include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Clap/Command.h>
@@ -26,6 +28,7 @@
 #include <Oxygen/Cooker/Import/ImportManifest.h>
 #include <Oxygen/Cooker/Import/ImportSourceAnalysis.h>
 #include <Oxygen/Cooker/Import/ImportSourceDocument.h>
+#include <Oxygen/Cooker/Tools/ImportTool/MessageWriter.h>
 #include <Oxygen/Cooker/Tools/ImportTool/SourceAnalysisCommand.h>
 
 namespace oxygen::content::import::tool {
@@ -72,14 +75,22 @@ auto SourceAnalysisCommand::BuildCommand() -> std::shared_ptr<clap::Command>
     .WithOption(std::move(captures));
 }
 
-auto SourceAnalysisCommand::Run() -> std::expected<void, std::error_code>
+auto SourceAnalysisCommand::Execute() -> std::expected<void, std::error_code>
 {
   const auto manifest_path = std::filesystem::path(manifest_path_);
   const auto root = root_path_.empty()
     ? std::optional<std::filesystem::path> {}
     : std::optional { std::filesystem::path(root_path_) };
-  const auto manifest = ImportManifest::Load(manifest_path, root, std::cerr);
+  const auto report_error = [this](const std::string_view message) -> void {
+    if (!message.empty() && global_options_->writer != nullptr) {
+      global_options_->writer->Error(message);
+    }
+  };
+  auto manifest_errors = std::ostringstream {};
+  const auto manifest
+    = ImportManifest::Load(manifest_path, root, manifest_errors);
   if (!manifest.has_value()) {
+    report_error(manifest_errors.view());
     return std::unexpected(std::make_error_code(std::errc::invalid_argument));
   }
   auto captured_inputs = std::shared_ptr<const CapturedInputSet> {};
@@ -89,13 +100,13 @@ auto SourceAnalysisCommand::Run() -> std::expected<void, std::error_code>
       const auto document = ImportSourceDocument::Load(
         captured_inputs_path_, "capture map", errors);
       if (!document.has_value()) {
-        std::cerr << errors.str();
+        report_error(errors.view());
         return std::unexpected(
           std::make_error_code(std::errc::invalid_argument));
       }
       captured_inputs = CapturedInputSet::Parse(document->text);
     } catch (const std::exception& error) {
-      std::cerr << "Invalid captured inputs: " << error.what() << '\n';
+      report_error(fmt::format("Invalid captured inputs: {}", error.what()));
       return std::unexpected(std::make_error_code(std::errc::invalid_argument));
     }
   }
@@ -148,8 +159,8 @@ auto SourceAnalysisCommand::Run() -> std::expected<void, std::error_code>
   if (!destination.parent_path().empty()) {
     std::filesystem::create_directories(destination.parent_path());
   }
-  auto output = std::ofstream(
-    base::ToNativePath(destination), std::ios::binary | std::ios::trunc);
+  auto output
+    = std::ofstream(base::ToNativePath(destination), std::ios::binary);
   output << report.ToJson() << '\n';
   output.close();
   if (!output) {

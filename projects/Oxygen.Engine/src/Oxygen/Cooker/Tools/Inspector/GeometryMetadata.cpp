@@ -8,7 +8,7 @@
 #include <exception>
 #include <filesystem>
 #include <fstream>
-#include <iostream>
+#include <ios>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -27,6 +27,7 @@
 #include <Oxygen/Content/Loaders/GeometryLoader.h>
 #include <Oxygen/Cooker/Import/Internal/GeometryDefaults.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
+#include <Oxygen/Cooker/Tools/Common/ToolCommand.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/StableId.h>
@@ -45,6 +46,18 @@ namespace {
       throw std::runtime_error("surface declares no defaults");
     }
     return *surface.defaults;
+  }
+
+  //! The triangles the submesh `binding` names draws.
+  auto TriangleCountOf(const data::GeometryAsset& geometry,
+    const data::SurfaceBinding& binding) -> uint64_t
+  {
+    const auto& mesh = geometry.MeshAt(binding.lod_index);
+    if (mesh == nullptr
+      || binding.submesh_index.get() >= mesh->SubMeshes().size()) {
+      throw std::runtime_error("surface binding names no submesh");
+    }
+    return mesh->SubMeshes()[binding.submesh_index.get()].TriangleCount();
   }
 } // namespace
 
@@ -77,123 +90,119 @@ auto BuildGeometryMetadataCommand(GeometryMetadataOptions& options)
     .WithOption(std::move(virtual_path));
 }
 
-auto RunGeometryMetadataReport(const GeometryMetadataOptions& options) -> int
+auto RunGeometryMetadataReport(const GeometryMetadataOptions& options)
+  -> toolkit::ToolResult
 {
   using nlohmann::json;
-  try {
-    const auto root
-      = std::filesystem::absolute(options.cooked_root).lexically_normal();
-    const auto output_path
-      = std::filesystem::absolute(options.output).lexically_normal();
-    if (output_path == root / "container.index.bin") {
+  const auto root
+    = std::filesystem::absolute(options.cooked_root).lexically_normal();
+  const auto output_path
+    = std::filesystem::absolute(options.output).lexically_normal();
+  if (output_path == root / "container.index.bin") {
+    throw std::runtime_error(
+      "Geometry metadata output must not replace its source index.");
+  }
+  if (output_path == root) {
+    throw std::runtime_error(
+      "Geometry metadata output must not replace its source pak.");
+  }
+  lc::Inspection inspection;
+  inspection.Load(root);
+  auto geometries = json::array();
+  for (const auto& entry : inspection.Assets()) {
+    const auto relative
+      = std::filesystem::path(entry.descriptor_relpath).lexically_normal();
+    if (!inspection.IsPak() && output_path == root / relative) {
       throw std::runtime_error(
-        "Geometry metadata output must not replace its source index.");
+        "Geometry metadata output must not replace a source descriptor.");
     }
-    if (output_path == root) {
-      throw std::runtime_error(
-        "Geometry metadata output must not replace its source pak.");
+    if (entry.asset_type != static_cast<uint8_t>(data::AssetType::kGeometry)) {
+      continue;
     }
-    lc::Inspection inspection;
-    inspection.Load(root);
-    auto geometries = json::array();
-    for (const auto& entry : inspection.Assets()) {
-      const auto relative
-        = std::filesystem::path(entry.descriptor_relpath).lexically_normal();
-      if (!inspection.IsPak() && output_path == root / relative) {
+    if (!options.virtual_path.empty()
+      && entry.virtual_path != options.virtual_path) {
+      continue;
+    }
+    try {
+      if (!inspection.IsPak()
+        && (relative.empty() || relative.has_root_path()
+          || *relative.begin() == "..")) {
         throw std::runtime_error(
-          "Geometry metadata output must not replace a source descriptor.");
+          "Descriptor path must stay within its cooked root.");
       }
-      if (entry.asset_type
-        != static_cast<uint8_t>(data::AssetType::kGeometry)) {
-        continue;
+      const auto bytes = inspection.ReadAssetDescriptor(entry.key);
+      if (bytes.size() != entry.descriptor_size) {
+        throw std::runtime_error(
+          "Geometry descriptor size does not match its index entry.");
       }
-      if (!options.virtual_path.empty()
-        && entry.virtual_path != options.virtual_path) {
-        continue;
-      }
-      try {
-        if (!inspection.IsPak()
-          && (relative.empty() || relative.has_root_path()
-            || *relative.begin() == "..")) {
-          throw std::runtime_error(
-            "Descriptor path must stay within its cooked root.");
-        }
-        const auto bytes = inspection.ReadAssetDescriptor(entry.key);
-        if (bytes.size() != entry.descriptor_size) {
-          throw std::runtime_error(
-            "Geometry descriptor size does not match its index entry.");
-        }
-        serio::ReadOnlyMemoryStream stream(bytes);
-        serio::Reader reader(stream);
-        const LoaderContext context {
-          .current_asset_key = entry.key,
-          .desc_reader = &reader,
-          .work_offline = true,
-          .parse_only = true,
-        };
-        const auto geometry = loaders::LoadGeometryAsset(context);
-        const auto& inventory = geometry->Surfaces();
-        auto surfaces = json::array();
-        for (const auto& surface : inventory.surfaces) {
-          auto bindings = json::array();
-          for (const auto& binding : surface.bindings) {
-            bindings.push_back({
-              { "lod_index", binding.lod_index.get() },
-              { "submesh_index", binding.submesh_index.get() },
-              {
-                "default_material_key",
-                nostd::to_string(binding.default_material_key),
-              },
-            });
-          }
-          const auto& defaults = DefaultsOf(surface);
-          surfaces.push_back({
-            { "surface_id", data::to_string(surface.surface_id) },
-            { "display_name", surface.display_name },
-            { "visible", defaults.visible },
-            { "casts_shadows", defaults.casts_shadows },
-            { "bindings", std::move(bindings) },
+      serio::ReadOnlyMemoryStream stream(bytes);
+      serio::Reader reader(stream);
+      const LoaderContext context {
+        .current_asset_key = entry.key,
+        .desc_reader = &reader,
+        .work_offline = true,
+        .parse_only = true,
+      };
+      const auto geometry = loaders::LoadGeometryAsset(context);
+      const auto& inventory = geometry->Surfaces();
+      auto surfaces = json::array();
+      for (const auto& surface : inventory.surfaces) {
+        auto bindings = json::array();
+        for (const auto& binding : surface.bindings) {
+          bindings.push_back({
+            { "lod_index", binding.lod_index.get() },
+            { "submesh_index", binding.submesh_index.get() },
+            {
+              "default_material_key",
+              nostd::to_string(binding.default_material_key),
+            },
+            { "triangle_count", TriangleCountOf(*geometry, binding) },
           });
         }
-        const auto lod_policy = geometry->DefaultLodPolicy();
-        if (!lod_policy.has_value()) {
-          throw std::runtime_error("geometry declares no LOD policy");
-        }
-        geometries.push_back({
-          {
-            "geometry_asset_key",
-            nostd::to_string(inventory.geometry_asset_key),
-          },
-          {
-            "layout_revision",
-            base::ToHexString(inventory.layout_revision),
-          },
-          {
-            "lod_policy",
-            import::internal::WriteLodPolicy(*lod_policy),
-          },
-          { "surfaces", std::move(surfaces) },
+        const auto& defaults = DefaultsOf(surface);
+        surfaces.push_back({
+          { "surface_id", data::to_string(surface.surface_id) },
+          { "display_name", surface.display_name },
+          { "visible", defaults.visible },
+          { "casts_shadows", defaults.casts_shadows },
+          { "bindings", std::move(bindings) },
         });
-      } catch (const std::exception& error) {
-        throw std::runtime_error("invalid geometry '" + entry.virtual_path
-          + "' (" + nostd::to_string(entry.key) + "): " + error.what());
       }
+      const auto lod_policy = geometry->DefaultLodPolicy();
+      if (!lod_policy.has_value()) {
+        throw std::runtime_error("geometry declares no LOD policy");
+      }
+      geometries.push_back({
+        {
+          "geometry_asset_key",
+          nostd::to_string(inventory.geometry_asset_key),
+        },
+        {
+          "layout_revision",
+          base::ToHexString(inventory.layout_revision),
+        },
+        {
+          "lod_policy",
+          import::internal::WriteLodPolicy(*lod_policy),
+        },
+        { "surfaces", std::move(surfaces) },
+      });
+    } catch (const std::exception& error) {
+      throw std::runtime_error("invalid geometry '" + entry.virtual_path + "' ("
+        + nostd::to_string(entry.key) + "): " + error.what());
     }
-    const auto report = json {
-      { "schema_version", data::kSurfaceInventorySchemaVersion },
-      { "geometries", std::move(geometries) },
-    };
-    std::ofstream output(output_path, std::ios::binary);
-    output << report.dump(2) << '\n';
-    output.close();
-    if (!output) {
-      throw std::runtime_error("Could not write geometry metadata report.");
-    }
-    return 0;
-  } catch (const std::exception& error) {
-    std::cerr << "ERROR: " << error.what() << '\n';
-    return 2;
   }
+  const auto report = json {
+    { "schema_version", data::kSurfaceInventorySchemaVersion },
+    { "geometries", std::move(geometries) },
+  };
+  std::ofstream output(output_path, std::ios::binary);
+  output << report.dump(2) << '\n';
+  output.close();
+  if (!output) {
+    throw std::runtime_error("Could not write geometry metadata report.");
+  }
+  return {};
 }
 
 } // namespace oxygen::content::inspection

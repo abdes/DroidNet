@@ -174,9 +174,9 @@ protected:
       argv.push_back(report_arg.c_str());
       options_.command_line += " --report " + report_arg;
     }
-    static_cast<void>(cli->Parse(static_cast<int>(argv.size()), argv.data()));
+    static_cast<void>(cli->Parse(argv));
 
-    return command.Run();
+    return command.Execute();
   }
 
   [[nodiscard]] auto Messages() const -> std::string

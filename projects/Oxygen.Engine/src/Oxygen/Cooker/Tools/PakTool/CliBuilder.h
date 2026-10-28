@@ -8,12 +8,17 @@
 
 #include <memory>
 
-#include <Oxygen/Clap/Cli.h>
+#include <Oxygen/Clap/Command.h>
 #include <Oxygen/Cooker/Tools/PakTool/PakToolOptions.h>
 
 namespace oxygen::content::pak::tool {
 
-[[nodiscard]] auto BuildCli(PakToolCliOptions& options)
-  -> std::unique_ptr<oxygen::clap::Cli>;
+//! The `build` command, parsing into `options`.
+[[nodiscard]] auto BuildBuildCommand(PakToolCliOptions& options)
+  -> std::shared_ptr<oxygen::clap::Command>;
+
+//! The `patch` command, parsing into `options`.
+[[nodiscard]] auto BuildPatchCommand(PakToolCliOptions& options)
+  -> std::shared_ptr<oxygen::clap::Command>;
 
 } // namespace oxygen::content::pak::tool

@@ -104,7 +104,7 @@ auto PhysicsSidecarCommand::BuildCommand() -> std::shared_ptr<clap::Command>
     .WithOption(std::move(with_content_hashing));
 }
 
-auto PhysicsSidecarCommand::Run() -> std::expected<void, std::error_code>
+auto PhysicsSidecarCommand::Execute() -> std::expected<void, std::error_code>
 {
   auto settings = options_;
 

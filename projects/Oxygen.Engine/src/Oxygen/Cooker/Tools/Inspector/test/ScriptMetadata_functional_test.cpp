@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <iostream>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -21,6 +22,7 @@
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
+#include <Oxygen/Cooker/Tools/Common/ToolApp.h>
 #include <Oxygen/Cooker/Tools/Inspector/ScriptMetadata.h>
 #include <Oxygen/Cooker/test/Pak/PakTestSupport.h>
 #include <Oxygen/Cooker/test/Support/JsonSchema.h>
@@ -35,7 +37,17 @@
 namespace {
 
 namespace scripting = oxygen::data::pak::scripting;
-using oxygen::content::inspection::RunScriptMetadataReport;
+using oxygen::content::inspection::ScriptMetadataOptions;
+
+//! `RunScriptMetadataReport` as the tool runs it: the error, if any, goes to
+//! stderr, and the result is the process exit code.
+auto RunScriptMetadataReport(const ScriptMetadataOptions& options) -> int
+{
+  return oxygen::content::toolkit::ExitCodeOf(std::cerr, [&] {
+    return oxygen::content::inspection::RunScriptMetadataReport(options);
+  });
+}
+
 using oxygen::content::pak::test::AssetSpec;
 using oxygen::data::AssetKey;
 using oxygen::data::AssetType;

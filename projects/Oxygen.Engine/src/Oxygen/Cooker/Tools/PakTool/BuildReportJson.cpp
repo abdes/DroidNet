@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cstddef>
@@ -41,12 +42,8 @@ namespace {
   template <size_t N>
   [[nodiscard]] auto IsAllZero(const std::array<uint8_t, N>& bytes) -> bool
   {
-    for (const auto byte : bytes) {
-      if (byte != 0U) {
-        return false;
-      }
-    }
-    return true;
+    return std::ranges::all_of(
+      bytes, [](const auto byte) { return byte == 0U; });
   }
 
   [[nodiscard]] auto ToHex(const std::span<const uint8_t> bytes) -> std::string
@@ -55,7 +52,9 @@ namespace {
     auto out = std::string {};
     out.reserve(bytes.size() * 2U);
 
-    for (const auto value : bytes) {
+    for (const auto byte : bytes) {
+      // Integer promotion would make the shifted value a signed int.
+      const auto value = static_cast<unsigned>(byte);
       out.push_back(kHex.at((value >> 4U) & 0x0FU));
       out.push_back(kHex.at(value & 0x0FU));
     }
@@ -409,7 +408,7 @@ auto WriteReportFile(const std::filesystem::path& output_path,
     }
   }
 
-  auto output = std::ofstream(output_path, std::ios::binary | std::ios::trunc);
+  auto output = std::ofstream(output_path, std::ios::binary);
   if (!output.is_open()) {
     return ReportWriteResult {
       .success = false,

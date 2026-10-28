@@ -8,6 +8,7 @@
 #include <array>
 #include <atomic>
 #include <chrono>
+#include <cmath>
 #include <cstddef>
 #include <filesystem>
 #include <format>
@@ -72,8 +73,9 @@ namespace {
     if (width <= 0) {
       return "";
     }
-    const int filled
-      = std::clamp(static_cast<int>(progress * width + 0.5F), 0, width);
+    const int filled = std::clamp(
+      static_cast<int>(std::lround(progress * static_cast<float>(width))), 0,
+      width);
     std::string bar;
     bar.reserve(static_cast<size_t>(width) * kFullBlock.size());
     for (int i = 0; i < width; ++i) {
@@ -99,7 +101,7 @@ namespace {
     };
     const float clamped = std::clamp(queue_load, 0.0F, 1.0F);
     const int bucket
-      = std::clamp(static_cast<int>(clamped * 10.0F + 1e-4F), 0, 10);
+      = std::clamp(static_cast<int>((clamped * 10.0F) + 1e-4F), 0, 10);
     return kGlyphs[static_cast<size_t>(bucket)];
   }
 
@@ -121,7 +123,7 @@ namespace {
       return std::string(value);
     }
     std::string padded(value);
-    if (static_cast<int>(padded.size()) < width) {
+    if (std::cmp_less(padded.size(), width)) {
       padded.append(static_cast<size_t>(width) - padded.size(), ' ');
     }
     return padded;
@@ -159,13 +161,12 @@ namespace {
       order.emplace_back(index, fractions[index]);
     }
 
-    std::sort(
-      order.begin(), order.end(), [](const auto& lhs, const auto& rhs) -> auto {
-        if (lhs.second == rhs.second) {
-          return lhs.first < rhs.first;
-        }
-        return lhs.second > rhs.second;
-      });
+    std::ranges::sort(order, [](const auto& lhs, const auto& rhs) -> auto {
+      if (lhs.second == rhs.second) {
+        return lhs.first < rhs.first;
+      }
+      return lhs.second > rhs.second;
+    });
 
     for (int i = 0; i < remaining; ++i) {
       const size_t index = order[static_cast<size_t>(i) % order.size()].first;
@@ -193,7 +194,7 @@ namespace {
   {
     const float clamped = std::clamp(queue_load, 0.0F, 1.0F);
     const int percent
-      = std::clamp(static_cast<int>(clamped * 100.0F + 0.5F), 0, 100);
+      = std::clamp(static_cast<int>(std::lround(clamped * 100.0F)), 0, 100);
     if (percent >= 100) {
       return Color::Red;
     }
@@ -275,7 +276,7 @@ namespace {
 
     for (size_t index = 0; index < state.active_jobs.size(); ++index) {
       const auto& job = state.active_jobs[index];
-      const int percent = static_cast<int>(job.progress * 100.0F + 0.5F);
+      const int percent = static_cast<int>(std::lround(job.progress * 100.0F));
       const std::string bar = BuildMiniBar(job.progress, 18);
       const std::string source = ShortName(job.source);
       const size_t row_index = index + 1U;
@@ -324,14 +325,14 @@ namespace {
   {
     if (display_kind.empty()) {
       return {
-        "",
-        0.0F,
-        "",
-        "",
-        "",
-        Color::GrayLight,
-        Color::GrayLight,
-        false,
+        .label = "",
+        .ratio = 0.0F,
+        .input_glyph = "",
+        .output_glyph = "",
+        .counts = "",
+        .input_color = Color::GrayLight,
+        .output_color = Color::GrayLight,
+        .visible = false,
       };
     }
     const auto lookup_kind
@@ -352,14 +353,14 @@ namespace {
     const auto active = static_cast<int>(std::min(entry.active, 99U));
     const auto total = static_cast<int>(std::min(entry.total, 99U));
     return {
-      std::string(entry.kind),
-      ratio,
-      std::string(input_glyph),
-      std::string(output_glyph),
-      std::format(" {:>2}/{:<2}", active, total),
-      LoadColor(entry.input_queue_load),
-      LoadColor(entry.output_queue_load),
-      true,
+      .label = std::string(entry.kind),
+      .ratio = ratio,
+      .input_glyph = std::string(input_glyph),
+      .output_glyph = std::string(output_glyph),
+      .counts = std::format(" {:>2}/{:<2}", active, total),
+      .input_color = LoadColor(entry.input_queue_load),
+      .output_color = LoadColor(entry.output_queue_load),
+      .visible = true,
     };
   }
 
@@ -491,7 +492,7 @@ void BatchImportScreen::Run()
   ftxui::ScreenInteractive screen = ftxui::ScreenInteractive::Fullscreen();
   std::atomic<bool> running { true };
 
-  auto renderer = ftxui::Renderer([&]() -> Element {
+  auto renderer = ftxui::Renderer([&] -> Element {
     const auto state = GetStateSnapshot();
     return vbox({
       window(text("Oxygen Import Tool"), BuildHeader(state)),
@@ -522,7 +523,7 @@ void BatchImportScreen::Run()
     return false;
   });
 
-  std::thread updater([&]() -> void {
+  std::thread updater([&] -> void {
     while (running.load()) {
       if (provider_) {
         UpdateState(provider_());

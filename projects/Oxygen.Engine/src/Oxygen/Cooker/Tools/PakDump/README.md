@@ -136,6 +136,11 @@ Code registers specialized dumpers for known asset/resource types. To extend:
 2. Register it in the respective registry constructor.
 3. Add option flags if new dump modes warrant user control.
 
+## Versions
+
+`versions` prints the version of every cooked format and asset the tool reads,
+from `PakFormatVersions.inc`; `--json` prints them as one object.
+
 ## Exit Codes
 
 | Code | Meaning                                                   |

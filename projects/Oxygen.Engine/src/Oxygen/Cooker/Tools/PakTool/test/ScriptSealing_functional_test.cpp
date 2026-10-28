@@ -7,7 +7,10 @@
 // Covers: Tools/PakTool/ScriptSealing.cpp
 
 #include <algorithm>
+#include <array>
+#include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <ios>
@@ -94,8 +97,8 @@ protected:
   {
     std::filesystem::create_directories(
       oxygen::base::ToNativePath(path.parent_path()));
-    auto out = std::ofstream(
-      oxygen::base::ToNativePath(path), std::ios::binary | std::ios::trunc);
+    auto out
+      = std::ofstream(oxygen::base::ToNativePath(path), std::ios::binary);
     ASSERT_TRUE(out.is_open()) << path.string();
     out << content;
   }
@@ -108,12 +111,14 @@ protected:
       throw std::runtime_error("cannot open " + path.string());
     }
 
-    auto descriptor = ScriptAssetDesc {};
-    in.read(reinterpret_cast<char*>(&descriptor), sizeof(descriptor));
+    auto bytes = std::array<char, sizeof(ScriptAssetDesc)> {};
+    in.read(bytes.data(), static_cast<std::streamsize>(bytes.size()));
     if (!in.good() && !in.eof()) {
       throw std::runtime_error(
         "cannot read script descriptor " + path.string());
     }
+    auto descriptor = ScriptAssetDesc {};
+    std::memcpy(&descriptor, bytes.data(), sizeof(descriptor));
     return descriptor;
   }
 
@@ -137,7 +142,9 @@ protected:
       AssetType::kScript, virtual_path, "rooted.oscript",
       oxygen::data::MakeDescriptorBytes(descriptor, strings), {},
       oxygen::content::import::LooseCookedProducer {
-        .source = "/Content/rooted.lua", .completes = {} });
+        .source = "/Content/rooted.lua",
+        .completes = {},
+      });
     static_cast<void>(writer.Finish());
     PakBuildRequest request {};
     request.mode = BuildMode::kFull;
@@ -192,7 +199,9 @@ NOLINT_TEST_P(PakToolScriptSealingTest,
     script_virtual_path, script_relpath,
     oxygen::data::MakeDescriptorBytes(descriptor, strings), {},
     oxygen::content::import::LooseCookedProducer {
-      .source = "/Content/script.lua", .completes = {} });
+      .source = "/Content/script.lua",
+      .completes = {},
+    });
   static_cast<void>(writer.Finish());
 
   auto request = PakBuildRequest {};
@@ -246,9 +255,10 @@ NOLINT_TEST_P(PakToolScriptSealingTest,
     const auto table_size = static_cast<size_t>(table_in.tellg());
     table_in.seekg(0, std::ios::beg);
     ASSERT_EQ(table_size, sizeof(ScriptResourceDesc) * 2U);
+    auto table_bytes = std::vector<char>(table_size);
+    table_in.read(table_bytes.data(), static_cast<std::streamsize>(table_size));
     auto table_entries = std::vector<ScriptResourceDesc>(2U);
-    table_in.read(reinterpret_cast<char*>(table_entries.data()),
-      static_cast<std::streamsize>(table_size));
+    std::memcpy(table_entries.data(), table_bytes.data(), table_size);
 
     const auto index
       = oxygen::content::lc::LooseCookedIndex::LoadFromRoot(staged_root);

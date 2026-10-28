@@ -8,7 +8,6 @@
 
 #include <cstddef>
 #include <cstring>
-#include <iostream>
 
 #include "AssetDumpHelpers.h"
 #include "AssetDumper.h"
@@ -29,34 +28,35 @@ public:
     (void)asset_loader;
     using oxygen::data::pak::input::InputActionAssetDesc;
 
-    std::cout << "Asset #" << idx << ":\n";
+    ctx.Out() << "Asset #" << idx << ":\n";
     asset_dump_helpers::PrintAssetKey(entry.asset_key, ctx);
-    asset_dump_helpers::PrintAssetMetadata(entry);
+    asset_dump_helpers::PrintAssetMetadata(ctx.Out(), entry);
 
     const auto data = asset_dump_helpers::ReadDescriptorBytes(pak, entry);
     if (!data) {
-      std::cout << "    Failed to read asset descriptor data\n\n";
+      ctx.Out() << "    Failed to read asset descriptor data\n\n";
       co_return;
     }
 
     asset_dump_helpers::PrintAssetDescriptorHexPreview(*data, ctx);
     if (data->size() < sizeof(InputActionAssetDesc)) {
-      std::cout << "    InputActionAssetDesc: (insufficient data)\n\n";
+      ctx.Out() << "    InputActionAssetDesc: (insufficient data)\n\n";
       co_return;
     }
 
     InputActionAssetDesc desc {};
     std::memcpy(&desc, data->data(), sizeof(desc));
 
-    asset_dump_helpers::PrintAssetHeaderFields(desc.header,
+    asset_dump_helpers::PrintAssetHeaderFields(ctx.Out(), desc.header,
       asset_dump_helpers::DescriptorString(
         *data, desc.header, desc.header.name_offset),
       4);
-    std::cout << "    --- Input Action Descriptor Fields ---\n";
-    PrintUtils::Field("Value Type", static_cast<uint32_t>(desc.value_type), 8);
-    PrintUtils::Field("Flags", nostd::to_string(desc.flags), 8);
+    ctx.Out() << "    --- Input Action Descriptor Fields ---\n";
+    PrintUtils::Field(
+      ctx.Out(), "Value Type", static_cast<uint32_t>(desc.value_type), 8);
+    PrintUtils::Field(ctx.Out(), "Flags", nostd::to_string(desc.flags), 8);
 
-    std::cout << "\n";
+    ctx.Out() << "\n";
     co_return;
   }
 };

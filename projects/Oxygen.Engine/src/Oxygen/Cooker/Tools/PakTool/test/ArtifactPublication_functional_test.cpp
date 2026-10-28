@@ -91,6 +91,8 @@ NOLINT_TEST_F(PakToolArtifactPublicationTest,
       TempDir() / "release" / "game.catalog.json",
       TempDir() / "release" / "game.manifest.json",
       TempDir() / "release" / "game.report.json");
+  ASSERT_HAS_VALUE(plan.manifest);
+  ASSERT_HAS_VALUE(plan.report);
 
   WriteText(plan.pak.staged_path, "pak-new");
   WriteText(plan.catalog.staged_path, "catalog-new");
@@ -134,6 +136,8 @@ NOLINT_TEST_F(PakToolArtifactPublicationTest,
       TempDir() / "release" / "game.catalog.json",
       TempDir() / "release" / "game.manifest.json",
       TempDir() / "release" / "game.report.json");
+  ASSERT_HAS_VALUE(plan.manifest);
+  ASSERT_HAS_VALUE(plan.report);
 
   WriteText(plan.pak.final_path, "pak-old");
   WriteText(plan.catalog.final_path, "catalog-old");
@@ -179,6 +183,8 @@ NOLINT_TEST_F(PakToolArtifactPublicationTest,
       TempDir() / "release" / "game.catalog.json",
       TempDir() / "release" / "game.manifest.json",
       TempDir() / "release" / "game.report.json");
+  ASSERT_HAS_VALUE(plan.manifest);
+  ASSERT_HAS_VALUE(plan.report);
 
   WriteText(plan.pak.final_path, "pak-old");
   WriteText(plan.catalog.final_path, "catalog-old");

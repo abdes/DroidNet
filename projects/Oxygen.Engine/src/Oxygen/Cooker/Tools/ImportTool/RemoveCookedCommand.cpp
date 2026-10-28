@@ -93,7 +93,7 @@ auto RemoveCookedCommand::BuildCommand() -> std::shared_ptr<clap::Command>
     .WithOption(std::move(input));
 }
 
-auto RemoveCookedCommand::Run() -> std::expected<void, std::error_code>
+auto RemoveCookedCommand::Execute() -> std::expected<void, std::error_code>
 {
   auto stream = std::ifstream(base::ToNativePath(request_path_));
   if (!stream) {

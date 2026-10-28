@@ -657,8 +657,8 @@ Required work:
 Implementation notes:
 
 - Added the tool-local app/console seam in:
-  - `src/Oxygen/Cooker/Tools/PakTool/App.h`
-  - `src/Oxygen/Cooker/Tools/PakTool/App.cpp`
+  - `src/Oxygen/Cooker/Tools/PakTool/PakToolCommands.h`
+  - `src/Oxygen/Cooker/Tools/PakTool/PakToolCommands.cpp`
 - `main.cpp` now delegates to `RunPakToolApp(...)`, which owns:
   - CLI parse error mapping to exit code `1`
   - preparation failure mapping to exit code `2`

@@ -8,8 +8,10 @@
 #include <cstdint>
 #include <filesystem>
 #include <optional>
+#include <string>
 #include <string_view>
 #include <system_error>
+#include <utility>
 #include <vector>
 
 #include <Oxygen/Cooker/Tools/PakTool/ArtifactPublication.h>
@@ -54,12 +56,18 @@ namespace {
     return "artifact";
   }
 
-  auto SetError(ArtifactPublicationResult& result, const std::string_view code,
-    const std::string_view message) -> void
+  //! Why a publication failed: a stable diagnostic code, and a message.
+  struct PublicationError {
+    std::string_view code;
+    std::string message;
+  };
+
+  auto SetError(ArtifactPublicationResult& result, PublicationError error)
+    -> void
   {
     result.success = false;
-    result.error_code = std::string(code);
-    result.error_message = std::string(message);
+    result.error_code = std::string(error.code);
+    result.error_message = std::move(error.message);
   }
 
   [[nodiscard]] auto MakeSiblingPath(const std::filesystem::path& path,
@@ -116,9 +124,10 @@ namespace {
 
     const auto ec = fs.RemoveFile(artifact.paths->final_path);
     if (ec) {
-      SetError(result, "paktool.publish.remove_stale_final_failed",
-        std::string("Failed to remove stale final ") + ToString(artifact.kind)
-          + " artifact.");
+      SetError(result,
+        { .code = "paktool.publish.remove_stale_final_failed",
+          .message = std::string("Failed to remove stale final ")
+            + ToString(artifact.kind) + " artifact." });
       return false;
     }
 
@@ -141,9 +150,10 @@ namespace {
 
     const auto ec = fs.CreateDirectories(parent);
     if (ec) {
-      SetError(result, "paktool.publish.create_directories_failed",
-        std::string("Failed to create output directory for ")
-          + ToString(artifact.kind) + " artifact.");
+      SetError(result,
+        { .code = "paktool.publish.create_directories_failed",
+          .message = std::string("Failed to create output directory for ")
+            + ToString(artifact.kind) + " artifact." });
       return false;
     }
     return true;
@@ -174,9 +184,10 @@ namespace {
     std::vector<PublishedArtifact>& published) -> bool
   {
     if (!fs.Exists(artifact.paths->staged_path)) {
-      SetError(result, "paktool.publish.staged_missing",
-        std::string("Missing staged ") + ToString(artifact.kind)
-          + " artifact.");
+      SetError(result,
+        { .code = "paktool.publish.staged_missing",
+          .message = std::string("Missing staged ") + ToString(artifact.kind)
+            + " artifact." });
       return false;
     }
 
@@ -187,9 +198,10 @@ namespace {
       const auto backup_ec
         = fs.Rename(artifact.paths->final_path, artifact.paths->backup_path);
       if (backup_ec) {
-        SetError(result, "paktool.publish.backup_rename_failed",
-          std::string("Failed to move existing final ")
-            + ToString(artifact.kind) + " artifact out of the way.");
+        SetError(result,
+          { .code = "paktool.publish.backup_rename_failed",
+            .message = std::string("Failed to move existing final ")
+              + ToString(artifact.kind) + " artifact out of the way." });
         return false;
       }
       had_backup = true;
@@ -202,9 +214,10 @@ namespace {
         [[maybe_unused]] const auto restore_ec
           = fs.Rename(artifact.paths->backup_path, artifact.paths->final_path);
       }
-      SetError(result, "paktool.publish.rename_failed",
-        std::string("Failed to publish staged ") + ToString(artifact.kind)
-          + " artifact.");
+      SetError(result,
+        { .code = "paktool.publish.rename_failed",
+          .message = std::string("Failed to publish staged ")
+            + ToString(artifact.kind) + " artifact." });
       return false;
     }
 

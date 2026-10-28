@@ -9,12 +9,13 @@
 #include <cstddef>
 #include <cstring>
 #include <iomanip>
-#include <iostream>
 #include <optional>
+#include <ostream>
 #include <span>
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <vector>
 
 #include "DumpContext.h"
@@ -40,12 +41,13 @@ inline auto PrintAssetKey(const oxygen::data::AssetKey& key, DumpContext& ctx)
   -> void
 {
   if (ctx.verbose) {
-    PrintUtils::Field("GUID", oxygen::data::to_string(key));
-    PrintUtils::Bytes("Raw bytes", key.data(), oxygen::data::AssetKey::size());
+    PrintUtils::Field(ctx.Out(), "GUID", oxygen::data::to_string(key));
+    PrintUtils::Bytes(ctx.Out(), "Raw bytes",
+      std::span<const uint8_t> { key.data(), oxygen::data::AssetKey::size() });
     return;
   }
 
-  PrintUtils::Field("GUID", oxygen::data::to_string(key));
+  PrintUtils::Field(ctx.Out(), "GUID", oxygen::data::to_string(key));
 }
 
 template <typename T>
@@ -75,9 +77,9 @@ inline auto PrintAssetDescriptorHexPreview(
     return;
   }
 
-  std::cout << "    Asset Descriptor Preview (" << data.size()
+  ctx.Out() << "    Asset Descriptor Preview (" << data.size()
             << " bytes read):\n";
-  PrintUtils::HexDump(data, ctx.max_data_bytes);
+  PrintUtils::HexDump(ctx.Out(), data, ctx.max_data_bytes);
 }
 
 //! Resolves a string of a descriptor's string table, for display.
@@ -97,18 +99,18 @@ inline auto PrintAssetDescriptorHexPreview(
   return fmt::format("<invalid string offset {}>", offset);
 }
 
-inline auto PrintAssetHeaderFields(
+inline auto PrintAssetHeaderFields(std::ostream& out,
   const oxygen::data::pak::core::AssetHeader& h, const std::string_view name,
   const int indent = 8) -> void
 {
-  PrintUtils::Field("Name", std::string { name }, indent);
-  PrintUtils::Field("String Table",
+  PrintUtils::Field(out, "Name", std::string { name }, indent);
+  PrintUtils::Field(out, "String Table",
     fmt::format("{} bytes at {}", h.strings.size, h.strings.offset), indent);
-  PrintUtils::Field("Format Version", static_cast<int>(h.version), indent);
+  PrintUtils::Field(out, "Format Version", static_cast<int>(h.version), indent);
   PrintUtils::Field(
-    "Streaming Priority", static_cast<int>(h.streaming_priority), indent);
-  PrintUtils::Field("Content Hash", ToHexString(h.content_hash), indent);
-  PrintUtils::Field("Variant Flags", ToHexString(h.variant_flags), indent);
+    out, "Streaming Priority", static_cast<int>(h.streaming_priority), indent);
+  PrintUtils::Field(out, "Content Hash", ToHexString(h.content_hash), indent);
+  PrintUtils::Field(out, "Variant Flags", ToHexString(h.variant_flags), indent);
 }
 
 [[nodiscard]] inline auto TryReadAssetHeader(const std::vector<std::byte>& data)
@@ -148,16 +150,29 @@ inline auto PrintAssetHeaderFields(
   return true;
 }
 
-inline auto PrintAssetMetadata(
+inline auto PrintAssetMetadata(std::ostream& out,
   const oxygen::data::pak::core::AssetDirectoryEntry& e) -> void
 {
-  std::cout << "    --- asset metadata ---\n";
-  PrintUtils::Field("Asset Type",
+  out << "    --- asset metadata ---\n";
+  PrintUtils::Field(out, "Asset Type",
     std::string(GetAssetTypeName(e.asset_type)) + " ("
       + nostd::to_string(e.asset_type) + ")");
-  PrintUtils::Field("Entry Offset", ToHexString(e.entry_offset));
-  PrintUtils::Field("Desc Offset", ToHexString(e.desc_offset));
-  PrintUtils::Field("Desc Size", std::to_string(e.desc_size) + " bytes");
+  PrintUtils::Field(out, "Entry Offset", ToHexString(e.entry_offset));
+  PrintUtils::Field(out, "Desc Offset", ToHexString(e.desc_offset));
+  PrintUtils::Field(out, "Desc Size", std::to_string(e.desc_size) + " bytes");
+}
+
+//! Copies the trivially copyable record of type `T` stored at `offset`.
+//! The caller guarantees `offset + sizeof(T) <= bytes.size()`.
+template <typename T>
+  requires(
+    std::is_trivially_copyable_v<T> && std::is_default_constructible_v<T>)
+[[nodiscard]] inline auto ReadRecordAt(
+  const std::span<const std::byte> bytes, const size_t offset) -> T
+{
+  T record {};
+  std::memcpy(&record, bytes.subspan(offset, sizeof(T)).data(), sizeof(T));
+  return record;
 }
 
 [[nodiscard]] inline auto ReadDescriptorBytes(

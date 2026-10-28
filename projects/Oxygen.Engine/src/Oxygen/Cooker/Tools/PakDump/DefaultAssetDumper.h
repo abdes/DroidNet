@@ -7,7 +7,6 @@
 #pragma once
 
 #include <cstddef>
-#include <iostream>
 
 #include "AssetDumpHelpers.h"
 #include "AssetDumper.h"
@@ -24,25 +23,25 @@ public:
   {
     (void)asset_loader;
 
-    std::cout << "Asset #" << idx << ":\n";
+    ctx.Out() << "Asset #" << idx << ":\n";
     asset_dump_helpers::PrintAssetKey(entry.asset_key, ctx);
-    asset_dump_helpers::PrintAssetMetadata(entry);
+    asset_dump_helpers::PrintAssetMetadata(ctx.Out(), entry);
 
     const auto data = asset_dump_helpers::ReadDescriptorBytes(pak, entry);
     if (!data) {
-      std::cout << "    Failed to read asset descriptor data\n\n";
+      ctx.Out() << "    Failed to read asset descriptor data\n\n";
       co_return;
     }
 
     if (const auto header = asset_dump_helpers::TryReadAssetHeader(*data)) {
-      asset_dump_helpers::PrintAssetHeaderFields(*header,
+      asset_dump_helpers::PrintAssetHeaderFields(ctx.Out(), *header,
         asset_dump_helpers::DescriptorString(
           *data, *header, header->name_offset),
         4);
     }
 
     asset_dump_helpers::PrintAssetDescriptorHexPreview(*data, ctx);
-    std::cout << "\n";
+    ctx.Out() << "\n";
 
     co_return;
   }

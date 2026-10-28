@@ -9,6 +9,8 @@
 #include <memory>
 #include <string>
 
+#include <Oxygen/Cooker/Tools/Common/ToolCommand.h>
+
 namespace oxygen::clap {
 class Command;
 }
@@ -22,6 +24,7 @@ struct DependencyReportOptions {
 
 auto BuildDependencyCommand(DependencyReportOptions& options)
   -> std::shared_ptr<clap::Command>;
-auto RunDependencyReport(const DependencyReportOptions& options) -> int;
+[[nodiscard]] auto RunDependencyReport(const DependencyReportOptions& options)
+  -> toolkit::ToolResult;
 
 } // namespace oxygen::content::inspection

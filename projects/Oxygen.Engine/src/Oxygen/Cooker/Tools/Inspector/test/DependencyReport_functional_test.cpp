@@ -10,13 +10,16 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <iostream>
 
 #include <nlohmann/json.hpp>
 
 #include <Oxygen/Content/test/Fixtures/LooseCookedTestWriter.h>
 #include <Oxygen/Cooker/Pak/PakBuilder.h>
+#include <Oxygen/Cooker/Tools/Common/ToolApp.h>
 #include <Oxygen/Cooker/Tools/Inspector/DependencyReport.h>
 #include <Oxygen/Cooker/test/Pak/PakTestSupport.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/CookedSource.h>
@@ -28,7 +31,15 @@ namespace {
 
 namespace data = oxygen::data;
 namespace pak = oxygen::content::pak;
-using oxygen::content::inspection::RunDependencyReport;
+using oxygen::content::inspection::DependencyReportOptions;
+
+//! `RunDependencyReport` as the tool runs it: the error, if any, goes to
+//! stderr, and the result is the process exit code.
+auto RunDependencyReport(const DependencyReportOptions& options) -> int
+{
+  return oxygen::content::toolkit::ExitCodeOf(std::cerr,
+    [&] { return oxygen::content::inspection::RunDependencyReport(options); });
+}
 
 class InspectorDependencyReportTest : public pak::test::TempDirFixture {
 protected:
@@ -87,7 +98,7 @@ NOLINT_TEST_F(InspectorDependencyReportTest, ReportsDependenciesFromAPak)
         .sources = { data::CookedSource {
           .kind = data::CookedSourceKind::kLooseCooked,
           .path = loose,
-        } },
+        }, },
         .embed_browse_index = true,
       }));
   ASSERT_TRUE(built.has_value() && built->summary.diagnostics_error == 0U);

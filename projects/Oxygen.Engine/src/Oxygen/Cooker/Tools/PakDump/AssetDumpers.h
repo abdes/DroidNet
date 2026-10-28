@@ -9,7 +9,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <exception>
-#include <iostream>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -29,6 +28,7 @@
 #include "ScriptAssetDumper.h"
 
 #include <Oxygen/Base/NoStd.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/OxCo/Co.h>
 
@@ -89,7 +89,7 @@ private:
 class AssetDirectoryDumper {
 public:
   explicit AssetDirectoryDumper(const AssetDumperRegistry& registry)
-    : registry_(registry)
+    : registry_(&registry)
   {
   }
 
@@ -100,22 +100,22 @@ public:
       co_return;
     }
 
-    PrintUtils::Separator("ASSET DIRECTORY");
+    PrintUtils::Separator(ctx.Out(), "ASSET DIRECTORY");
     const auto dir = pak.Directory();
-    PrintUtils::Field("Asset Count", dir.size());
-    std::cout << "\n";
+    PrintUtils::Field(ctx.Out(), "Asset Count", dir.size());
+    ctx.Out() << "\n";
 
     for (size_t i = 0; i < dir.size(); ++i) {
       const auto& entry = dir[i];
       try {
-        co_await registry_.Get(entry.asset_type)
+        co_await registry_->Get(entry.asset_type)
           .DumpAsync(pak, entry, ctx, i, asset_loader);
       } catch (const std::exception& ex) {
-        std::cerr << "ERROR: failed to dump asset #" << i
+        ctx.Err() << "ERROR: failed to dump asset #" << i
                   << " (type=" << nostd::to_string(entry.asset_type)
                   << "): " << ex.what() << "\n\n";
       } catch (...) {
-        std::cerr << "ERROR: failed to dump asset #" << i
+        ctx.Err() << "ERROR: failed to dump asset #" << i
                   << " (type=" << nostd::to_string(entry.asset_type)
                   << "): unknown exception\n\n";
       }
@@ -125,7 +125,7 @@ public:
   }
 
 private:
-  const AssetDumperRegistry& registry_;
+  oxygen::observer_ptr<const AssetDumperRegistry> registry_;
 };
 
 } // namespace oxygen::content::pakdump

@@ -10,6 +10,9 @@
 #include <filesystem>
 #include <optional>
 #include <string>
+#include <system_error>
+
+#include <Oxygen/Base/Macros.h>
 
 namespace oxygen::content::pak::tool {
 
@@ -60,7 +63,10 @@ struct ArtifactPublicationResult {
 
 class IArtifactFileSystem {
 public:
+  IArtifactFileSystem() = default;
   virtual ~IArtifactFileSystem() = default;
+  OXYGEN_MAKE_NON_COPYABLE(IArtifactFileSystem)
+  OXYGEN_MAKE_NON_MOVABLE(IArtifactFileSystem)
 
   [[nodiscard]] virtual auto Exists(const std::filesystem::path& path) const
     -> bool = 0;

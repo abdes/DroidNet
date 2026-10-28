@@ -9,7 +9,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstring>
-#include <iostream>
+#include <ostream>
 #include <span>
 #include <string_view>
 
@@ -164,14 +164,14 @@ public:
       if (mesh_desc.IsProcedural()) {
         const size_t params_size = mesh_desc.info.procedural.params_size;
         if (offset > data->size() || params_size > (data->size() - offset)) {
-          std::cout << "      Procedural params: (insufficient data)\n\n";
+          ctx.Out() << "      Procedural params: (insufficient data)\n\n";
           break;
         }
 
         if (ctx.verbose && ctx.show_asset_descriptors && params_size > 0) {
-          std::cout << "      Procedural Params Preview (" << params_size
+          ctx.Out() << "      Procedural Params Preview (" << params_size
                     << " bytes):\n";
-          PrintUtils::HexDump(
+          PrintUtils::HexDump(ctx.Out(),
             std::span(*data).subspan(offset, params_size), ctx.max_data_bytes);
         }
         offset += params_size;
@@ -182,14 +182,14 @@ public:
         = ctx.verbose ? submesh_count : (std::min)(submesh_count, 8U);
 
       if (submesh_count > 0) {
-        std::cout << "      SubMeshes (" << submesh_count << "):\n";
+        ctx.Out() << "      SubMeshes (" << submesh_count << "):\n";
       }
 
       for (uint32_t sm = 0; sm < submesh_limit; ++sm) {
         SubMeshDesc submesh_desc {};
         if (!asset_dump_helpers::ReadStructAt(
               *data, offset, sizeof(submesh_desc), &submesh_desc)) {
-          std::cout << "        [" << sm
+          ctx.Out() << "        [" << sm
                     << "] SubMeshDesc: (insufficient data)\n";
           break;
         }
@@ -197,13 +197,14 @@ public:
         const auto submesh_name = asset_dump_helpers::DescriptorString(
           *data, geo.header, submesh_desc.name_offset);
 
-        std::cout << "        [" << sm << "] " << submesh_name << "\n";
-        PrintUtils::Field("Material Key",
+        ctx.Out() << "        [" << sm << "] " << submesh_name << "\n";
+        PrintUtils::Field(ctx.Out(), "Material Key",
           oxygen::data::to_string(submesh_desc.material_asset_key), 12);
-        PrintUtils::Field("MeshView Count", submesh_desc.mesh_view_count, 12);
-        PrintUtils::Field("AABB Min",
+        PrintUtils::Field(
+          ctx.Out(), "MeshView Count", submesh_desc.mesh_view_count, 12);
+        PrintUtils::Field(ctx.Out(), "AABB Min",
           asset_dump_helpers::FormatVec3(submesh_desc.bounding_box_min), 12);
-        PrintUtils::Field("AABB Max",
+        PrintUtils::Field(ctx.Out(), "AABB Max",
           asset_dump_helpers::FormatVec3(submesh_desc.bounding_box_max), 12);
 
         offset += sizeof(SubMeshDesc);
@@ -216,17 +217,17 @@ public:
           MeshViewDesc view_desc {};
           if (!asset_dump_helpers::ReadStructAt(
                 *data, offset, sizeof(view_desc), &view_desc)) {
-            std::cout << "          [" << v
+            ctx.Out() << "          [" << v
                       << "] MeshViewDesc: (insufficient data)\n";
             break;
           }
 
-          std::cout << "          [" << v << "]";
-          std::cout << " first_index=" << view_desc.first_index;
-          std::cout << ", index_count=" << view_desc.index_count;
-          std::cout << ", first_vertex=" << view_desc.first_vertex;
-          std::cout << ", vertex_count=" << view_desc.vertex_count;
-          std::cout << ", bounds=(" << view_desc.bounding_box_min[0] << ", "
+          ctx.Out() << "          [" << v << "]";
+          ctx.Out() << " first_index=" << view_desc.first_index;
+          ctx.Out() << ", index_count=" << view_desc.index_count;
+          ctx.Out() << ", first_vertex=" << view_desc.first_vertex;
+          ctx.Out() << ", vertex_count=" << view_desc.vertex_count;
+          ctx.Out() << ", bounds=(" << view_desc.bounding_box_min[0] << ", "
                     << view_desc.bounding_box_min[1] << ", "
                     << view_desc.bounding_box_min[2] << ")-("
                     << view_desc.bounding_box_max[0] << ", "
@@ -237,7 +238,7 @@ public:
         }
 
         if (view_count > view_limit) {
-          std::cout << "          ... (" << (view_count - view_limit)
+          ctx.Out() << "          ... (" << (view_count - view_limit)
                     << " more views)\n";
           offset += static_cast<size_t>(view_count - view_limit)
             * sizeof(MeshViewDesc);
@@ -245,7 +246,7 @@ public:
       }
 
       if (submesh_count > submesh_limit) {
-        std::cout << "        ... (" << (submesh_count - submesh_limit)
+        ctx.Out() << "        ... (" << (submesh_count - submesh_limit)
                   << " more submeshes)\n";
 
         for (uint32_t sm = submesh_limit; sm < submesh_count; ++sm) {
@@ -260,19 +261,19 @@ public:
         }
       }
 
-      std::cout << "\n";
+      ctx.Out() << "\n";
     }
 
-    std::cout << "    Surfaces (" << geo.surface_count << "):\n";
+    ctx.Out() << "    Surfaces (" << geo.surface_count << "):\n";
     for (uint32_t surface = 0; surface < geo.surface_count; ++surface) {
       data::pak::geometry::SurfaceDesc surface_desc {};
       if (!asset_dump_helpers::ReadStructAt(
             *data, offset, sizeof(surface_desc), &surface_desc)) {
-        std::cout << "        (surface table not present in descriptor)\n";
+        ctx.Out() << "        (surface table not present in descriptor)\n";
         break;
       }
       offset += sizeof(surface_desc);
-      std::cout << "        " << data::to_string(surface_desc.surface_id)
+      ctx.Out() << "        " << data::to_string(surface_desc.surface_id)
                 << std::boolalpha << ": visible="
                 << ((surface_desc.flags
                       & data::pak::geometry::kSurfaceFlag_Visible)

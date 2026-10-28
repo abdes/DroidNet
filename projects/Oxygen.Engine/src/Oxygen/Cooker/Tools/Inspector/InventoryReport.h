@@ -9,6 +9,8 @@
 #include <memory>
 #include <string>
 
+#include <Oxygen/Cooker/Tools/Common/ToolCommand.h>
+
 namespace oxygen::clap {
 class Command;
 }
@@ -22,6 +24,7 @@ struct InventoryReportOptions final {
 
 auto BuildInventoryReportCommand(InventoryReportOptions& options)
   -> std::shared_ptr<clap::Command>;
-auto RunInventoryReport(const InventoryReportOptions& options) -> int;
+[[nodiscard]] auto RunInventoryReport(const InventoryReportOptions& options)
+  -> toolkit::ToolResult;
 
 } // namespace oxygen::content::inspection

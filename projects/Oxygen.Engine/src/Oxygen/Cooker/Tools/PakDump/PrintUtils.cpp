@@ -8,7 +8,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <iomanip>
-#include <iostream>
+#include <ostream>
 #include <span>
 #include <string>
 
@@ -18,40 +18,43 @@
 
 namespace PrintUtils {
 
-void Separator(const std::string& title)
+void Separator(std::ostream& out, const std::string& title)
 {
-  fmt::print("{}\n", std::string(78, '='));
+  out << fmt::format("{}\n", std::string(78, '='));
   if (!title.empty()) {
-    fmt::print("== {}\n", title);
-    fmt::print("{}\n", std::string(78, '='));
+    out << fmt::format("== {}\n", title);
+    out << fmt::format("{}\n", std::string(78, '='));
   }
 }
 
-void SubSeparator(const std::string& title)
+void SubSeparator(std::ostream& out, const std::string& title)
 {
-  fmt::print("--- {} {}\n", title, std::string(70 - title.length(), '-'));
+  out << fmt::format(
+    "--- {} {}\n", title, std::string(70 - title.length(), '-'));
 }
 
-void Bytes(
-  const std::string& name, const uint8_t* data, size_t size, int indent)
+void Bytes(std::ostream& out, const std::string& name,
+  const std::span<const uint8_t> data, const int indent)
 {
   std::string line = fmt::format("{:>{}}{}: ", "", indent, name);
-  for (size_t i = 0; i < size; ++i) {
+  for (size_t i = 0; i < data.size(); ++i) {
     if (i > 0 && i % 16 == 0) {
-      fmt::print("{}\n", line);
+      out << fmt::format("{}\n", line);
       line = fmt::format("{:>{}}{}: ", "", indent, name);
     }
     line += fmt::format("{:02x} ", data[i]);
   }
-  fmt::print("{}\n", line);
+  out << fmt::format("{}\n", line);
 }
 
-void HexDump(const uint8_t* data, size_t size, size_t max_bytes)
+void HexDump(
+  std::ostream& out, const uint8_t* data, size_t size, size_t max_bytes)
 {
-  HexDump(std::as_bytes(std::span(data, size)), max_bytes);
+  HexDump(out, std::as_bytes(std::span(data, size)), max_bytes);
 }
 
-void HexDump(const std::span<const std::byte> data, const size_t max_bytes)
+void HexDump(std::ostream& out, const std::span<const std::byte> data,
+  const size_t max_bytes)
 {
   const auto shown = data.first((std::min)(data.size(), max_bytes));
   for (size_t i = 0; i < shown.size(); i += 16) {
@@ -63,17 +66,17 @@ void HexDump(const std::span<const std::byte> data, const size_t max_bytes)
         line += "   ";
       }
     }
-    line += " ";
+    line += ' ';
     for (size_t j = 0; j < 16 && i + j < shown.size(); ++j) {
       const auto c = std::to_integer<uint8_t>(shown[i + j]);
       line += (c >= 32 && c <= 126) ? static_cast<char>(c) : '.';
     }
-    fmt::print("{}\n", line);
+    out << fmt::format("{}\n", line);
   }
   if (data.size() > max_bytes) {
-    std::cout << "    ... (" << (data.size() - max_bytes) << " more bytes)\n";
+    out << "    ... (" << (data.size() - max_bytes) << " more bytes)\n";
   }
-  std::cout << std::setfill(' ');
+  out << std::setfill(' ');
 }
 
 } // namespace PrintUtils

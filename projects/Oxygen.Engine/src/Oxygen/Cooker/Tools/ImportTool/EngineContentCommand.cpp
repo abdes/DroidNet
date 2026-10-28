@@ -7,6 +7,7 @@
 #include <expected>
 #include <filesystem>
 #include <memory>
+#include <string>
 #include <string_view>
 #include <system_error>
 
@@ -44,7 +45,7 @@ auto EngineContentCommand::BuildCommand() -> std::shared_ptr<clap::Command>
     .WithPositionalArguments(sources, cooked_root);
 }
 
-auto EngineContentCommand::Run() -> std::expected<void, std::error_code>
+auto EngineContentCommand::Execute() -> std::expected<void, std::error_code>
 {
   [[maybe_unused]] const auto manifests
     = WriteEngineContentSources(std::filesystem::absolute(sources_path_),

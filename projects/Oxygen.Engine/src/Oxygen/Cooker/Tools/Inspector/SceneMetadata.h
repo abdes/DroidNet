@@ -9,6 +9,8 @@
 #include <memory>
 #include <string>
 
+#include <Oxygen/Cooker/Tools/Common/ToolCommand.h>
+
 namespace oxygen::clap {
 class Command;
 }
@@ -24,6 +26,7 @@ struct SceneMetadataOptions {
 
 auto BuildSceneMetadataCommand(SceneMetadataOptions& options)
   -> std::shared_ptr<clap::Command>;
-auto RunSceneMetadataReport(const SceneMetadataOptions& options) -> int;
+[[nodiscard]] auto RunSceneMetadataReport(const SceneMetadataOptions& options)
+  -> toolkit::ToolResult;
 
 } // namespace oxygen::content::inspection

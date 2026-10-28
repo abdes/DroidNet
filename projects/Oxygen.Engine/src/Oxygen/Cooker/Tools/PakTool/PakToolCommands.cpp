@@ -4,13 +4,16 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <array>
 #include <chrono>
 #include <cstddef>
 #include <exception>
+#include <expected>
 #include <iomanip>
 #include <ios>
-#include <iostream>
+#include <memory>
 #include <optional>
+#include <ostream>
 #include <ratio>
 #include <span>
 #include <sstream>
@@ -22,94 +25,114 @@
 #include "RequestPreparation.h"
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Clap/Cli.h>
 #include <Oxygen/Clap/Command.h>
-#include <Oxygen/Clap/CommandLineContext.h>
 #include <Oxygen/Cooker/Pak/PakBuildPhase.h>
 #include <Oxygen/Cooker/Pak/PakBuildReport.h>
 #include <Oxygen/Cooker/Pak/PakBuildRequest.h>
-#include <Oxygen/Cooker/Tools/PakTool/App.h>
+#include <Oxygen/Cooker/Tools/Common/ToolApp.h>
+#include <Oxygen/Cooker/Tools/Common/ToolCommand.h>
 #include <Oxygen/Cooker/Tools/PakTool/CliBuilder.h>
 #include <Oxygen/Cooker/Tools/PakTool/CommandExecution.h>
+#include <Oxygen/Cooker/Tools/PakTool/PakToolCommands.h>
 #include <Oxygen/Data/CookedSource.h>
+
+#ifndef OXYGEN_PAKTOOL_VERSION
+#  error OXYGEN_PAKTOOL_VERSION must be defined for PakTool CLI version.
+#endif
 
 namespace oxygen::content::pak::tool {
 
+namespace toolkit = oxygen::content::toolkit;
+
 namespace {
+
+  //! How the console writer presents its lines.
+  struct ConsoleStyle {
+    //! Only warnings and errors are written.
+    bool quiet = false;
+    //! Levels are written without ANSI colors.
+    bool no_color = false;
+  };
+
+  //! A line's severity, as written, and its ANSI color.
+  struct LineLevel {
+    std::string_view name;
+    std::string_view color;
+  };
+
+  constexpr auto kInfoLevel = LineLevel { .name = "INFO", .color = "36" };
+  constexpr auto kReportLevel = LineLevel { .name = "REPORT", .color = "32" };
+  constexpr auto kWarningLevel = LineLevel { .name = "WARNING", .color = "33" };
+  constexpr auto kErrorLevel = LineLevel { .name = "ERROR", .color = "31" };
 
   class ConsoleWriter {
   public:
-    ConsoleWriter(std::ostream& out, std::ostream& err, const bool quiet,
-      const bool no_color)
-      : out_(out)
-      , err_(err)
-      , quiet_(quiet)
-      , no_color_(no_color)
+    ConsoleWriter(const toolkit::ToolStreams streams, const ConsoleStyle style)
+      : streams_(streams)
+      , style_(style)
     {
     }
 
     auto Info(const std::string_view code, const std::string& message) -> void
     {
-      if (quiet_) {
-        return;
+      if (!style_.quiet) {
+        WriteLine(*streams_.out, kInfoLevel, code, message);
       }
-      WriteLine(out_, "INFO", code, message, "36");
     }
 
     auto Report(const std::string_view code, const std::string& message) -> void
     {
-      if (quiet_) {
-        return;
+      if (!style_.quiet) {
+        WriteLine(*streams_.out, kReportLevel, code, message);
       }
-      WriteLine(out_, "REPORT", code, message, "32");
     }
 
     auto Warning(const std::string_view code, const std::string& message)
       -> void
     {
-      if (quiet_) {
-        return;
+      if (!style_.quiet) {
+        WriteLine(*streams_.err, kWarningLevel, code, message);
       }
-      WriteLine(err_, "WARNING", code, message, "33");
     }
 
     auto Error(const std::string_view code, const std::string& message) -> void
     {
-      WriteLine(err_, "ERROR", code, message, "31");
+      WriteLine(*streams_.err, kErrorLevel, code, message);
     }
 
   private:
-    auto WriteLine(std::ostream& stream, const std::string_view level,
-      const std::string_view code, const std::string& message,
-      const std::string_view color_code) const -> void
+    auto WriteLine(std::ostream& stream, const LineLevel& level,
+      const std::string_view code, const std::string& message) const -> void
     {
-      if (!no_color_) {
-        stream << "\x1b[" << color_code << "m";
-      }
-      stream << level;
-      if (!no_color_) {
-        stream << "\x1b[0m";
+      if (style_.no_color) {
+        stream << level.name;
+      } else {
+        stream << "\x1b[" << level.color << "m" << level.name << "\x1b[0m";
       }
       stream << " [" << code << "]: " << message << '\n';
     }
 
-    std::ostream& out_;
-    std::ostream& err_;
-    bool quiet_ = false;
-    bool no_color_ = false;
+    toolkit::ToolStreams streams_;
+    ConsoleStyle style_;
   };
 
-  [[nodiscard]] auto CommandLineToString(const std::span<char*> argv)
-    -> std::string
+  //! How a build ended, as the result summary names it.
+  [[nodiscard]] auto BuildOutcomeName(const PakToolExitCode exit_code)
+    -> std::string_view
   {
-    auto out = std::ostringstream {};
-    for (size_t i = 0; i < argv.size(); ++i) {
-      if (i > 0U) {
-        out << ' ';
-      }
-      out << argv[i];
+    switch (exit_code) {
+    case PakToolExitCode::kSuccess:
+      return "success";
+    case PakToolExitCode::kBuildFailure:
+      return "failed";
+    case PakToolExitCode::kUsageError:
+    case PakToolExitCode::kPreparationFailure:
+    case PakToolExitCode::kRuntimeFailure:
+      break;
     }
-    return out.str();
+    return "runtime_failure";
   }
 
   [[nodiscard]] auto CountSources(const PakToolCliOptions& options,
@@ -273,11 +296,7 @@ namespace {
       FormatPublicationSummary(result.publication_result));
 
     auto result_summary = std::ostringstream {};
-    result_summary << "build="
-                   << (result.exit_code == PakToolExitCode::kSuccess ? "success"
-                          : result.exit_code == PakToolExitCode::kBuildFailure
-                          ? "failed"
-                          : "runtime_failure")
+    result_summary << "build=" << BuildOutcomeName(result.exit_code)
                    << " exit_code=" << static_cast<int>(result.exit_code);
     if (options.output.diagnostics_file.empty()) {
       result_summary << " report=not_requested";
@@ -289,36 +308,78 @@ namespace {
     writer.Report("paktool.result", result_summary.str());
   }
 
+  auto ReportUnhandledException(ConsoleWriter& writer, const std::exception& ex)
+    -> int
+  {
+    LOG_F(ERROR,
+      "PakTool unhandled exception [paktool.runtime.unhandled_exception]: {}",
+      ex.what());
+    writer.Error("paktool.runtime.unhandled_exception",
+      std::string("[Finalize] ") + ex.what());
+    return static_cast<int>(PakToolExitCode::kRuntimeFailure);
+  }
+
+  auto ReportCommandLineFailure(const oxygen::clap::CmdLineArgumentsError& ex,
+    const toolkit::ToolStreams streams) -> int
+  {
+    auto writer = ConsoleWriter(streams, { .no_color = true });
+    LOG_F(ERROR, "PakTool CLI parse failed [paktool.cli.parse_failed]: {}",
+      ex.what());
+    writer.Error("paktool.cli.parse_failed",
+      std::string("[RequestValidation] ") + ex.what());
+    return static_cast<int>(PakToolExitCode::kUsageError);
+  }
+
 } // namespace
 
-auto RunPakToolApp(std::span<char*> argv, std::ostream& out, std::ostream& err,
-  IRequestPreparationFileSystem& prep_fs, IArtifactFileSystem& artifact_fs)
-  -> int
+auto PakToolInfo() -> toolkit::ToolInfo
 {
+  return toolkit::ToolInfo {
+    .program = "Oxygen.Cooker.PakTool",
+    .version = OXYGEN_PAKTOOL_VERSION,
+    .about = "Build and publish Oxygen pak archives and their sidecar "
+             "artifacts.",
+    .on_parse_error = ReportCommandLineFailure,
+  };
+}
+
+PakToolCommand::PakToolCommand(const pak::BuildMode mode,
+  PakToolCliOptions& options, IRequestPreparationFileSystem& prep_fs,
+  IArtifactFileSystem& artifact_fs)
+  : mode_(mode)
+  , options_(&options)
+  , prep_fs_(&prep_fs)
+  , artifact_fs_(&artifact_fs)
+{
+}
+
+auto PakToolCommand::Name() const -> std::string_view
+{
+  return mode_ == BuildMode::kPatch ? "patch" : "build";
+}
+
+auto PakToolCommand::BuildCommand() -> std::shared_ptr<clap::Command>
+{
+  return mode_ == BuildMode::kPatch ? BuildPatchCommand(*options_)
+                                    : BuildBuildCommand(*options_);
+}
+
+auto PakToolCommand::Run(toolkit::ToolContext& context) -> toolkit::ToolResult
+{
+  const auto& options = *options_;
   try {
-    auto options = PakToolCliOptions {};
-    const auto cli = BuildCli(options);
-    const auto context = cli->Parse(
-      static_cast<int>(argv.size()), const_cast<const char**>(argv.data()));
+    auto writer = ConsoleWriter(context.Streams(),
+      {
+        .quiet = options.output.quiet,
+        .no_color = options.output.no_color,
+      });
 
-    const auto command_path = context.active_command->PathAsString();
-    if (command_path == oxygen::clap::Command::VERSION
-      || command_path == oxygen::clap::Command::HELP
-      || context.ovm.HasOption(oxygen::clap::Command::HELP)) {
-      return 0;
-    }
-
-    auto writer
-      = ConsoleWriter(out, err, options.output.quiet, options.output.no_color);
-    const auto mode
-      = command_path == "patch" ? BuildMode::kPatch : BuildMode::kFull;
-
-    writer.Info("paktool.command", FormatCommandSummary(mode, options));
-    writer.Info("paktool.outputs", FormatOutputSummary(mode, options));
+    writer.Info("paktool.command", FormatCommandSummary(mode_, options));
+    writer.Info("paktool.outputs", FormatOutputSummary(mode_, options));
 
     auto result
-      = ExecutePakToolCommand(mode, command_path, CommandLineToString(argv),
-        OXYGEN_PAKTOOL_VERSION, options, prep_fs, artifact_fs);
+      = ExecutePakToolCommand(mode_, std::string(Name()), context.CommandLine(),
+        OXYGEN_PAKTOOL_VERSION, options, *prep_fs_, *artifact_fs_);
 
     if (!result.error_code.empty()) {
       const auto phase_code
@@ -334,31 +395,42 @@ auto RunPakToolApp(std::span<char*> argv, std::ostream& out, std::ostream& err,
     }
 
     EmitFinalConsoleSummary(options, result, writer);
-    return static_cast<int>(result.exit_code);
-  } catch (const oxygen::clap::CmdLineArgumentsError& ex) {
-    auto writer = ConsoleWriter(out, err, false, true);
-    LOG_F(ERROR, "PakTool CLI parse failed [paktool.cli.parse_failed]: {}",
-      ex.what());
-    writer.Error("paktool.cli.parse_failed",
-      std::string("[RequestValidation] ") + ex.what());
-    return static_cast<int>(PakToolExitCode::kUsageError);
+    if (result.exit_code == PakToolExitCode::kSuccess) {
+      return {};
+    }
+    return std::unexpected(
+      toolkit::ToolError::WithCode(static_cast<int>(result.exit_code)));
   } catch (const std::exception& ex) {
-    auto writer = ConsoleWriter(out, err, false, true);
-    LOG_F(ERROR,
-      "PakTool unhandled exception [paktool.runtime.unhandled_exception]: {}",
-      ex.what());
-    writer.Error("paktool.runtime.unhandled_exception",
-      std::string("[Finalize] ") + ex.what());
-    return static_cast<int>(PakToolExitCode::kRuntimeFailure);
+    auto writer = ConsoleWriter(context.Streams(), { .no_color = true });
+    return std::unexpected(
+      toolkit::ToolError::WithCode(ReportUnhandledException(writer, ex)));
   } catch (...) {
-    auto writer = ConsoleWriter(out, err, false, true);
+    auto writer = ConsoleWriter(context.Streams(), { .no_color = true });
     LOG_F(ERROR,
       "PakTool unhandled exception [paktool.runtime.unknown_exception]: "
       "unknown exception");
     writer.Error(
       "paktool.runtime.unknown_exception", "[Finalize] unknown exception");
-    return static_cast<int>(PakToolExitCode::kRuntimeFailure);
+    return std::unexpected(toolkit::ToolError::WithCode(
+      static_cast<int>(PakToolExitCode::kRuntimeFailure)));
   }
+}
+
+auto RunPakToolApp(std::span<char*> argv, std::ostream& out, std::ostream& err,
+  IRequestPreparationFileSystem& prep_fs, IArtifactFileSystem& artifact_fs)
+  -> int
+{
+  auto options = PakToolCliOptions {};
+  auto build = PakToolCommand(BuildMode::kFull, options, prep_fs, artifact_fs);
+  auto patch = PakToolCommand(BuildMode::kPatch, options, prep_fs, artifact_fs);
+  auto commands = std::array<toolkit::ToolCommand*, 2> { &build, &patch };
+
+  return toolkit::RunTool(PakToolInfo(), commands,
+    std::span<const char* const>(argv),
+    toolkit::ToolStreams {
+      .out = observer_ptr<std::ostream> { &out },
+      .err = observer_ptr<std::ostream> { &err },
+    });
 }
 
 } // namespace oxygen::content::pak::tool

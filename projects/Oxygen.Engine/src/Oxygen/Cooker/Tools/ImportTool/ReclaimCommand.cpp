@@ -41,7 +41,7 @@ auto ReclaimCommand::BuildCommand() -> std::shared_ptr<clap::Command>
     .WithOption(std::move(record));
 }
 
-auto ReclaimCommand::Run() -> std::expected<void, std::error_code>
+auto ReclaimCommand::Execute() -> std::expected<void, std::error_code>
 {
   const auto removed = ModelImportRecord::ReclaimUnusedGenerations(
     base::ToNativePath(record_path_));

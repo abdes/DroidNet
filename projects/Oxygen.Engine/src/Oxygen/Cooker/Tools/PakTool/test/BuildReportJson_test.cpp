@@ -48,7 +48,6 @@ using oxygen::content::pak::tool::PakToolRequestSnapshot;
 using oxygen::content::pak::tool::PublishArtifacts;
 using oxygen::content::pak::tool::RealArtifactFileSystem;
 using oxygen::content::pak::tool::ToCanonicalJsonString;
-using oxygen::content::pak::tool::WriteReportFile;
 using oxygen::cooker::test::WriteText;
 
 class PakToolBuildReportJsonTest : public oxygen::cooker::test::TempDirTest {
@@ -104,6 +103,9 @@ protected:
     const auto plan = MakeArtifactPublicationPlan(request.output_pak_path,
       TempDir() / "release" / "game.catalog.json", request.output_manifest_path,
       TempDir() / "release" / "game.report.json");
+    if (!plan.manifest.has_value() || !plan.report.has_value()) {
+      throw std::runtime_error("publication plan is missing sidecars");
+    }
 
     WriteText(plan.pak.staged_path, "pak-data");
     WriteText(plan.catalog.staged_path, "catalog-data");

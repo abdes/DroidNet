@@ -6,29 +6,18 @@
 
 #include <cstdint>
 #include <memory>
-#include <span>
 #include <string>
-#include <string_view>
+#include <vector>
 
-#include <Oxygen/Clap/Cli.h>
 #include <Oxygen/Clap/CliTheme.h>
-#include <Oxygen/Clap/Fluent/CliBuilder.h>
 #include <Oxygen/Clap/Fluent/DSL.h>
 #include <Oxygen/Clap/Option.h>
 #include <Oxygen/Cooker/Tools/ImportTool/CliBuilder.h>
 #include <Oxygen/Cooker/Tools/ImportTool/GlobalOptions.h>
-#include <Oxygen/Cooker/Tools/ImportTool/ImportCommand.h>
-
-#ifndef OXYGEN_IMPORT_TOOL_VERSION
-#  error OXYGEN_IMPORT_TOOL_VERSION must be defined for ImportTool CLI version.
-#endif
 
 namespace oxygen::content::import::tool {
 
 namespace {
-
-  constexpr std::string_view kProgramName = "Oxygen.Cooker.ImportTool";
-  constexpr std::string_view kVersion = OXYGEN_IMPORT_TOOL_VERSION;
 
   using oxygen::clap::Option;
   using oxygen::clap::Options;
@@ -117,24 +106,10 @@ namespace {
 
 } // namespace
 
-auto BuildCli(std::span<ImportCommand* const> commands,
-  GlobalOptions& global_options) -> std::unique_ptr<clap::Cli>
+auto BuildGlobalOptionGroups(GlobalOptions& global_options)
+  -> std::vector<std::shared_ptr<clap::Options>>
 {
-  clap::CliBuilder builder;
-  builder.ProgramName(std::string(kProgramName))
-    .Version(std::string(kVersion))
-    .About("Invoke async import jobs for standalone assets")
-    .WithHelpCommand()
-    .WithVersionCommand();
-
-  builder.WithGlobalOptions(BuildGlobalOptions(global_options));
-  builder.WithGlobalOptions(BuildServiceOptions());
-
-  for (auto* command : commands) {
-    builder.WithCommand(command->BuildCommand());
-  }
-
-  return builder.Build();
+  return { BuildGlobalOptions(global_options), BuildServiceOptions() };
 }
 
 } // namespace oxygen::content::import::tool

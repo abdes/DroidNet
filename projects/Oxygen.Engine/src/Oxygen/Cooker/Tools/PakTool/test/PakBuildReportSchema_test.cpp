@@ -21,7 +21,6 @@ using oxygen::cooker::test::SchemaCase;
 using oxygen::cooker::test::ValidateJson;
 using ::testing::Contains;
 using ::testing::HasSubstr;
-using ::testing::IsEmpty;
 
 auto Schema() -> const json&
 {

@@ -9,12 +9,14 @@
 #include <cstddef>
 #include <filesystem>
 #include <fstream>
+#include <iostream>
 #include <string>
 
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Base/NoStd.h>
+#include <Oxygen/Cooker/Tools/Common/ToolApp.h>
 #include <Oxygen/Cooker/Tools/Inspector/AssetKeyMap.h>
 #include <Oxygen/Cooker/test/Pak/PakTestSupport.h>
 #include <Oxygen/Cooker/test/Support/JsonSchema.h>
@@ -24,7 +26,15 @@
 namespace {
 
 using nlohmann::json;
-using oxygen::content::inspection::RunAssetKeyMap;
+using oxygen::content::inspection::AssetKeyMapOptions;
+
+//! `RunAssetKeyMap` as the tool runs it: the error, if any, goes to stderr, and
+//! the result is the process exit code.
+auto RunAssetKeyMap(const AssetKeyMapOptions& options) -> int
+{
+  return oxygen::content::toolkit::ExitCodeOf(std::cerr,
+    [&] { return oxygen::content::inspection::RunAssetKeyMap(options); });
+}
 
 class InspectorAssetKeyMapTest
   : public oxygen::content::pak::test::TempDirFixture {

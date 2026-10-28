@@ -31,6 +31,8 @@ asap_push_module("${META_MODULE_NAME}")
 add_executable(
   ${META_MODULE_TARGET}
   "main.cpp"
+  "PakDumpCommand.cpp"
+  "PakDumpCommand.h"
   "AssetDumpers.h"
   "AssetDumper.h"
   "AssetDumpHelpers.h"
@@ -75,7 +77,9 @@ target_link_libraries(
     oxygen::core
     oxygen::data
     oxygen::content
+    oxygen::cooker
     oxygen::clap
+    oxygen-cooker-toolkit
 )
 
 # ==============================================================================

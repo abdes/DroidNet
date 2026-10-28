@@ -8,22 +8,12 @@
 #include <iostream>
 #include <span>
 
-#include <Oxygen/Base/Logging.h>
-#include <Oxygen/Cooker/Tools/PakTool/App.h>
+#include <Oxygen/Cooker/Tools/Common/ToolApp.h>
+#include <Oxygen/Cooker/Tools/PakTool/PakToolCommands.h>
 
 auto main(int argc, char** argv) -> int
 {
-  loguru::g_preamble_date = false;
-  loguru::g_preamble_file = true;
-  loguru::g_preamble_verbose = false;
-  loguru::g_preamble_time = true;
-  loguru::g_preamble_uptime = false;
-  loguru::g_preamble_thread = true;
-  loguru::g_preamble_header = false;
-  loguru::g_global_verbosity = loguru::Verbosity_OFF;
-
-  loguru::init(argc, const_cast<const char**>(argv));
-  loguru::set_thread_name("main");
+  const oxygen::content::toolkit::ToolLogging logging(argc, argv);
 
   auto prep_fs
     = oxygen::content::pak::tool::RealRequestPreparationFileSystem {};

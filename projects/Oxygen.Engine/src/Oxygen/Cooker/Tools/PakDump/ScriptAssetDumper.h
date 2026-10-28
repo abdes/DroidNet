@@ -10,7 +10,6 @@
 #include <cstddef>
 #include <cstring>
 #include <exception>
-#include <iostream>
 #include <string>
 
 #include "AssetDumpHelpers.h"
@@ -32,45 +31,46 @@ public:
     using oxygen::data::ScriptResource;
     using oxygen::data::pak::scripting::ScriptAssetDesc;
 
-    std::cout << "Asset #" << idx << ":\n";
+    ctx.Out() << "Asset #" << idx << ":\n";
     asset_dump_helpers::PrintAssetKey(entry.asset_key, ctx);
-    asset_dump_helpers::PrintAssetMetadata(entry);
+    asset_dump_helpers::PrintAssetMetadata(ctx.Out(), entry);
 
     const auto data = asset_dump_helpers::ReadDescriptorBytes(pak, entry);
     if (!data) {
-      std::cout << "    Failed to read asset descriptor data\n\n";
+      ctx.Out() << "    Failed to read asset descriptor data\n\n";
       co_return;
     }
 
     asset_dump_helpers::PrintAssetDescriptorHexPreview(*data, ctx);
     if (data->size() < sizeof(ScriptAssetDesc)) {
-      std::cout << "    ScriptAssetDesc: (insufficient data)\n\n";
+      ctx.Out() << "    ScriptAssetDesc: (insufficient data)\n\n";
       co_return;
     }
 
     ScriptAssetDesc desc {};
     std::memcpy(&desc, data->data(), sizeof(desc));
 
-    asset_dump_helpers::PrintAssetHeaderFields(desc.header,
+    asset_dump_helpers::PrintAssetHeaderFields(ctx.Out(), desc.header,
       asset_dump_helpers::DescriptorString(
         *data, desc.header, desc.header.name_offset),
       4);
-    std::cout << "    --- Script Descriptor Fields ---\n";
+    ctx.Out() << "    --- Script Descriptor Fields ---\n";
     PrintUtils::Field(
-      "Bytecode Reference", desc.bytecode_resource_index.get(), 8);
-    PrintUtils::Field("Source Reference", desc.source_resource_index.get(), 8);
-    PrintUtils::Field("Flags",
+      ctx.Out(), "Bytecode Reference", desc.bytecode_resource_index.get(), 8);
+    PrintUtils::Field(
+      ctx.Out(), "Source Reference", desc.source_resource_index.get(), 8);
+    PrintUtils::Field(ctx.Out(), "Flags",
       asset_dump_helpers::ToHexString(static_cast<uint32_t>(desc.flags)), 8);
     {
       const auto path = asset_dump_helpers::DescriptorString(
         *data, desc.header, desc.external_source_path_offset);
       PrintUtils::Field(
-        "External Source Path", path.empty() ? "<none>" : path, 8);
+        ctx.Out(), "External Source Path", path.empty() ? "<none>" : path, 8);
     }
-    PrintUtils::Field("Declared Parameters", desc.params.count, 8);
+    PrintUtils::Field(ctx.Out(), "Declared Parameters", desc.params.count, 8);
 
     if (!ctx.verbose && !ctx.show_resource_data) {
-      std::cout << "\n";
+      ctx.Out() << "\n";
       co_return;
     }
 
@@ -80,14 +80,15 @@ public:
       : desc.source_resource_index;
     if (selected_index == data::kNoResourceReference) {
       PrintUtils::Field(
-        "Resource Entry", "none (embedded payload not assigned)", 8);
-      std::cout << "\n";
+        ctx.Out(), "Resource Entry", "none (embedded payload not assigned)", 8);
+      ctx.Out() << "\n";
       co_return;
     }
 
     if (!pak.HasTableOf<ScriptResource>()) {
-      PrintUtils::Field("Resource Entry", "Script table is not present", 8);
-      std::cout << "\n";
+      PrintUtils::Field(
+        ctx.Out(), "Resource Entry", "Script table is not present", 8);
+      ctx.Out() << "\n";
       co_return;
     }
 
@@ -96,14 +97,15 @@ public:
     const auto resolved
       = references.ResolveResource(selected_index, data::ResourceKind::kScript);
     if (!resolved || !resolved->has_value()) {
-      PrintUtils::Field("Resource Entry", "Invalid script reference", 8);
+      PrintUtils::Field(
+        ctx.Out(), "Resource Entry", "Invalid script reference", 8);
       co_return;
     }
     const auto selected_resource_index = **resolved;
     if (!scripts_table.IsValidKey(selected_resource_index)) {
       PrintUtils::Field(
-        "Resource Entry", "Index out of script table bounds", 8);
-      std::cout << "\n";
+        ctx.Out(), "Resource Entry", "Index out of script table bounds", 8);
+      ctx.Out() << "\n";
       co_return;
     }
 
@@ -114,44 +116,45 @@ public:
         = co_await asset_loader.LoadResourceAsync<ScriptResource>(key);
       if (!script_resource) {
         PrintUtils::Field(
-          "Resource Entry", "Failed to load script resource", 8);
-        std::cout << "\n";
+          ctx.Out(), "Resource Entry", "Failed to load script resource", 8);
+        ctx.Out() << "\n";
         co_return;
       }
 
-      PrintUtils::Field("Resource Entry", selected_resource_index.get(), 8);
-      PrintUtils::Field("Data Offset",
+      PrintUtils::Field(
+        ctx.Out(), "Resource Entry", selected_resource_index.get(), 8);
+      PrintUtils::Field(ctx.Out(), "Data Offset",
         asset_dump_helpers::ToHexString(script_resource->GetDataOffset()), 8);
-      PrintUtils::Field("Data Size",
+      PrintUtils::Field(ctx.Out(), "Data Size",
         std::to_string(script_resource->GetDataSize()) + " bytes", 8);
-      PrintUtils::Field("Language",
+      PrintUtils::Field(ctx.Out(), "Language",
         std::to_string(static_cast<uint32_t>(script_resource->GetLanguage())),
         8);
-      PrintUtils::Field("Encoding",
+      PrintUtils::Field(ctx.Out(), "Encoding",
         std::to_string(static_cast<uint32_t>(script_resource->GetEncoding())),
         8);
-      PrintUtils::Field("Compression",
+      PrintUtils::Field(ctx.Out(), "Compression",
         std::to_string(
           static_cast<uint32_t>(script_resource->GetCompression())),
         8);
-      PrintUtils::Field("Content Hash",
+      PrintUtils::Field(ctx.Out(), "Content Hash",
         asset_dump_helpers::ToHexString(script_resource->GetContentHash()), 8);
 
       if (ctx.show_resource_data) {
         const auto script_data = script_resource->GetData();
         const auto bytes_to_read
           = (std::min)(script_data.size(), ctx.max_data_bytes);
-        std::cout << "        Script Data Preview (" << bytes_to_read << " of "
+        ctx.Out() << "        Script Data Preview (" << bytes_to_read << " of "
                   << script_data.size() << " bytes):\n";
         PrintUtils::HexDump(
-          script_data.data(), bytes_to_read, ctx.max_data_bytes);
+          ctx.Out(), script_data.data(), bytes_to_read, ctx.max_data_bytes);
       }
     } catch (const std::exception& ex) {
       PrintUtils::Field(
-        "Resource Entry", std::string("Error: ") + ex.what(), 8);
+        ctx.Out(), "Resource Entry", std::string("Error: ") + ex.what(), 8);
     }
 
-    std::cout << "\n";
+    ctx.Out() << "\n";
     co_return;
   }
 };

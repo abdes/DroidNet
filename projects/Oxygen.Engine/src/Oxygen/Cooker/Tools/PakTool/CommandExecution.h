@@ -36,9 +36,10 @@ struct PakToolCommandResult {
   ReportWriteResult report_write_result {};
 };
 
-[[nodiscard]] auto ExecutePakToolCommand(const pak::BuildMode mode,
-  std::string command, std::string command_line, std::string tool_version,
-  const PakToolCliOptions& options, IRequestPreparationFileSystem& prep_fs,
-  IArtifactFileSystem& artifact_fs) -> PakToolCommandResult;
+[[nodiscard]] auto ExecutePakToolCommand(pak::BuildMode mode,
+  const std::string& command, const std::string& command_line,
+  const std::string& tool_version, const PakToolCliOptions& options,
+  IRequestPreparationFileSystem& prep_fs, IArtifactFileSystem& artifact_fs)
+  -> PakToolCommandResult;
 
 } // namespace oxygen::content::pak::tool

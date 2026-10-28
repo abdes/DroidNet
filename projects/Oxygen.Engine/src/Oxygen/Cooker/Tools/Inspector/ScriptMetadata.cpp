@@ -8,7 +8,7 @@
 #include <exception>
 #include <filesystem>
 #include <fstream>
-#include <iostream>
+#include <ios>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -27,6 +27,7 @@
 #include <Oxygen/Content/LoaderContext.h>
 #include <Oxygen/Content/Loaders/ScriptLoader.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
+#include <Oxygen/Cooker/Tools/Common/ToolCommand.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/ScriptAsset.h>
@@ -115,85 +116,81 @@ auto BuildScriptMetadataCommand(ScriptMetadataOptions& options)
     .WithOption(std::move(virtual_path));
 }
 
-auto RunScriptMetadataReport(const ScriptMetadataOptions& options) -> int
+auto RunScriptMetadataReport(const ScriptMetadataOptions& options)
+  -> toolkit::ToolResult
 {
   using nlohmann::json;
-  try {
-    const auto root
-      = std::filesystem::absolute(options.cooked_root).lexically_normal();
-    const auto output_path
-      = std::filesystem::absolute(options.output).lexically_normal();
-    if (output_path == root / "container.index.bin") {
-      throw std::runtime_error(
-        "Script metadata output must not replace its source index.");
-    }
-    lc::Inspection inspection;
-    inspection.LoadFromRoot(root);
-    auto scripts = json::array();
-    for (const auto& entry : inspection.Assets()) {
-      const auto relative
-        = std::filesystem::path(entry.descriptor_relpath).lexically_normal();
-      if (output_path == root / relative) {
-        throw std::runtime_error(
-          "Script metadata output must not replace a source descriptor.");
-      }
-      if (entry.asset_type != static_cast<uint8_t>(data::AssetType::kScript)) {
-        continue;
-      }
-      if (!options.virtual_path.empty()
-        && entry.virtual_path != options.virtual_path) {
-        continue;
-      }
-      try {
-        if (relative.empty() || relative.has_root_path()
-          || *relative.begin() == "..") {
-          throw std::runtime_error(
-            "Descriptor path must stay within its cooked root.");
-        }
-        serio::FileStream<> stream(root / relative, std::ios::in);
-        const auto size = stream.Size();
-        if (!size || *size != entry.descriptor_size) {
-          throw std::runtime_error(
-            "Script descriptor size does not match its index entry.");
-        }
-        serio::Reader reader(stream);
-        const LoaderContext context {
-          .current_asset_key = entry.key,
-          .desc_reader = &reader,
-          .work_offline = true,
-          .parse_only = true,
-        };
-        const auto script = loaders::LoadScriptAsset(context);
-        auto parameters = json::array();
-        for (const auto& parameter : script->Parameters()) {
-          parameters.push_back(ToJson(parameter));
-        }
-        scripts.push_back({
-          { "virtual_path", entry.virtual_path },
-          { "asset_key", nostd::to_string(entry.key) },
-          { "parameters", std::move(parameters) },
-        });
-      } catch (const std::exception& error) {
-        throw std::runtime_error("invalid script '" + entry.virtual_path + "' ("
-          + nostd::to_string(entry.key) + "): " + error.what());
-      }
-    }
-    const auto report = json {
-      { "schema_version", kScriptMetadataSchemaVersion },
-      { "scripts", std::move(scripts) },
-    };
-    // An output stream truncates the file it opens.
-    std::ofstream output(output_path, std::ios::binary);
-    output << report.dump(2) << '\n';
-    output.close();
-    if (!output) {
-      throw std::runtime_error("Could not write script metadata report.");
-    }
-    return 0;
-  } catch (const std::exception& error) {
-    std::cerr << "ERROR: " << error.what() << '\n';
-    return 2;
+  const auto root
+    = std::filesystem::absolute(options.cooked_root).lexically_normal();
+  const auto output_path
+    = std::filesystem::absolute(options.output).lexically_normal();
+  if (output_path == root / "container.index.bin") {
+    throw std::runtime_error(
+      "Script metadata output must not replace its source index.");
   }
+  lc::Inspection inspection;
+  inspection.LoadFromRoot(root);
+  auto scripts = json::array();
+  for (const auto& entry : inspection.Assets()) {
+    const auto relative
+      = std::filesystem::path(entry.descriptor_relpath).lexically_normal();
+    if (output_path == root / relative) {
+      throw std::runtime_error(
+        "Script metadata output must not replace a source descriptor.");
+    }
+    if (entry.asset_type != static_cast<uint8_t>(data::AssetType::kScript)) {
+      continue;
+    }
+    if (!options.virtual_path.empty()
+      && entry.virtual_path != options.virtual_path) {
+      continue;
+    }
+    try {
+      if (relative.empty() || relative.has_root_path()
+        || *relative.begin() == "..") {
+        throw std::runtime_error(
+          "Descriptor path must stay within its cooked root.");
+      }
+      serio::FileStream<> stream(root / relative, std::ios::in);
+      const auto size = stream.Size();
+      if (!size || *size != entry.descriptor_size) {
+        throw std::runtime_error(
+          "Script descriptor size does not match its index entry.");
+      }
+      serio::Reader reader(stream);
+      const LoaderContext context {
+        .current_asset_key = entry.key,
+        .desc_reader = &reader,
+        .work_offline = true,
+        .parse_only = true,
+      };
+      const auto script = loaders::LoadScriptAsset(context);
+      auto parameters = json::array();
+      for (const auto& parameter : script->Parameters()) {
+        parameters.push_back(ToJson(parameter));
+      }
+      scripts.push_back({
+        { "virtual_path", entry.virtual_path },
+        { "asset_key", nostd::to_string(entry.key) },
+        { "parameters", std::move(parameters) },
+      });
+    } catch (const std::exception& error) {
+      throw std::runtime_error("invalid script '" + entry.virtual_path + "' ("
+        + nostd::to_string(entry.key) + "): " + error.what());
+    }
+  }
+  const auto report = json {
+    { "schema_version", kScriptMetadataSchemaVersion },
+    { "scripts", std::move(scripts) },
+  };
+  // An output stream truncates the file it opens.
+  std::ofstream output(output_path, std::ios::binary);
+  output << report.dump(2) << '\n';
+  output.close();
+  if (!output) {
+    throw std::runtime_error("Could not write script metadata report.");
+  }
+  return {};
 }
 
 } // namespace oxygen::content::inspection

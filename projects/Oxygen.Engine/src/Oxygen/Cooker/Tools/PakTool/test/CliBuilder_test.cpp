@@ -4,33 +4,64 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-// Covers: Tools/PakTool/CliBuilder.cpp
+// Covers: Tools/PakTool/CliBuilder.cpp, Tools/PakTool/PakToolCommands.cpp
 
 #include <array>
 #include <filesystem>
 
+#include "ArtifactPublication.h"
 #include "PakToolOptions.h"
+#include "RequestPreparation.h"
 
 #include <Oxygen/Clap/Cli.h>
 #include <Oxygen/Clap/CommandLineContext.h>
-#include <Oxygen/Cooker/Tools/PakTool/CliBuilder.h>
+#include <Oxygen/Cooker/Pak/PakBuildRequest.h>
+#include <Oxygen/Cooker/Tools/Common/ToolApp.h>
+#include <Oxygen/Cooker/Tools/Common/ToolCommand.h>
+#include <Oxygen/Cooker/Tools/PakTool/PakToolCommands.h>
 #include <Oxygen/Data/CookedSource.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {
 
 using oxygen::clap::CmdLineArgumentsError;
-using oxygen::content::pak::tool::BuildCli;
+using oxygen::content::pak::BuildMode;
 using oxygen::content::pak::tool::PakToolCliOptions;
+using oxygen::content::pak::tool::PakToolCommand;
+using oxygen::content::pak::tool::PakToolInfo;
+using oxygen::content::pak::tool::RealArtifactFileSystem;
+using oxygen::content::pak::tool::RealRequestPreparationFileSystem;
+using oxygen::content::toolkit::ToolApp;
+using oxygen::content::toolkit::ToolCommand;
 
 constexpr auto kSourceKey = "01234567-89ab-7def-8123-456789abcdef";
+
+//! The PakTool parser over `options`. Parse-only: no command is ever run, so
+//! the real file systems are never touched.
+class ParseOnlyTool {
+public:
+  explicit ParseOnlyTool(PakToolCliOptions& options)
+    : build_(BuildMode::kFull, options, prep_fs_, artifact_fs_)
+    , patch_(BuildMode::kPatch, options, prep_fs_, artifact_fs_)
+    , app_(PakToolInfo(), std::array<ToolCommand*, 2> { &build_, &patch_ })
+  {
+  }
+
+  [[nodiscard]] auto Cli() -> oxygen::clap::Cli& { return app_.Cli(); }
+
+private:
+  RealRequestPreparationFileSystem prep_fs_;
+  RealArtifactFileSystem artifact_fs_;
+  PakToolCommand build_;
+  PakToolCommand patch_;
+  ToolApp app_;
+};
 
 NOLINT_TEST(PakToolCliTest, BuildCommandParsesCommonAndFullBuildOptions)
 {
   auto options = PakToolCliOptions {};
-  const auto cli = BuildCli(options);
+  auto tool = ParseOnlyTool(options);
 
-  constexpr auto argc = 24;
   const auto argv = std::array {
     "Oxygen.Cooker.PakTool",
     "build",
@@ -58,7 +89,7 @@ NOLINT_TEST(PakToolCliTest, BuildCommandParsesCommonAndFullBuildOptions)
     "C:/Build/game.report.json",
   };
 
-  const auto context = cli->Parse(argc, const_cast<const char**>(argv.data()));
+  const auto context = tool.Cli().Parse(argv);
 
   EXPECT_EQ(context.active_command->PathAsString(), "build");
   ASSERT_EQ(options.request.sources.size(), 3U);
@@ -93,9 +124,8 @@ NOLINT_TEST(PakToolCliTest, BuildCommandParsesCommonAndFullBuildOptions)
 NOLINT_TEST(PakToolCliTest, PatchCommandPreservesBaseCatalogOrder)
 {
   auto options = PakToolCliOptions {};
-  const auto cli = BuildCli(options);
+  auto tool = ParseOnlyTool(options);
 
-  constexpr auto argc = 22;
   const auto argv = std::array {
     "Oxygen.Cooker.PakTool",
     "patch",
@@ -121,7 +151,7 @@ NOLINT_TEST(PakToolCliTest, PatchCommandPreservesBaseCatalogOrder)
     "C:/Cooked/base_patch_input.pak",
   };
 
-  const auto context = cli->Parse(argc, const_cast<const char**>(argv.data()));
+  const auto context = tool.Cli().Parse(argv);
 
   EXPECT_EQ(context.active_command->PathAsString(), "patch");
   ASSERT_EQ(options.patch.base_paks.size(), 2U);
@@ -147,9 +177,8 @@ NOLINT_TEST(PakToolCliTest, PatchCommandPreservesBaseCatalogOrder)
 NOLINT_TEST(PakToolCliTest, BuildCommandRejectsMissingRequiredCommonOptions)
 {
   auto options = PakToolCliOptions {};
-  const auto cli = BuildCli(options);
+  auto tool = ParseOnlyTool(options);
 
-  constexpr auto argc = 8;
   const auto argv = std::array {
     "Oxygen.Cooker.PakTool",
     "build",
@@ -161,16 +190,14 @@ NOLINT_TEST(PakToolCliTest, BuildCommandRejectsMissingRequiredCommonOptions)
     kSourceKey,
   };
 
-  NOLINT_EXPECT_THROW(cli->Parse(argc, const_cast<const char**>(argv.data())),
-    CmdLineArgumentsError);
+  NOLINT_EXPECT_THROW(tool.Cli().Parse(argv), CmdLineArgumentsError);
 }
 
 NOLINT_TEST(PakToolCliTest, PatchCommandRejectsMissingPatchOnlyRequirements)
 {
   auto options = PakToolCliOptions {};
-  const auto cli = BuildCli(options);
+  auto tool = ParseOnlyTool(options);
 
-  constexpr auto argc = 10;
   const auto argv = std::array {
     "Oxygen.Cooker.PakTool",
     "patch",
@@ -184,16 +211,14 @@ NOLINT_TEST(PakToolCliTest, PatchCommandRejectsMissingPatchOnlyRequirements)
     kSourceKey,
   };
 
-  NOLINT_EXPECT_THROW(cli->Parse(argc, const_cast<const char**>(argv.data())),
-    CmdLineArgumentsError);
+  NOLINT_EXPECT_THROW(tool.Cli().Parse(argv), CmdLineArgumentsError);
 }
 
 NOLINT_TEST(PakToolCliTest, BuildCommandRejectsPatchOnlyOptionSurface)
 {
   auto options = PakToolCliOptions {};
-  const auto cli = BuildCli(options);
+  auto tool = ParseOnlyTool(options);
 
-  constexpr auto argc = 19;
   const auto argv = std::array {
     "Oxygen.Cooker.PakTool",
     "build",
@@ -216,17 +241,15 @@ NOLINT_TEST(PakToolCliTest, BuildCommandRejectsPatchOnlyOptionSurface)
     "--quiet",
   };
 
-  NOLINT_EXPECT_THROW(cli->Parse(argc, const_cast<const char**>(argv.data())),
-    CmdLineArgumentsError);
+  NOLINT_EXPECT_THROW(tool.Cli().Parse(argv), CmdLineArgumentsError);
 }
 
 //! Both commands take dependency paks, whose assets the pak references.
 NOLINT_TEST(PakToolCliTest, BuildCommandAcceptsDependencyPaks)
 {
   auto options = PakToolCliOptions {};
-  const auto cli = BuildCli(options);
+  auto tool = ParseOnlyTool(options);
 
-  constexpr auto argc = 15;
   const auto argv = std::array {
     "Oxygen.Cooker.PakTool",
     "build",
@@ -245,7 +268,7 @@ NOLINT_TEST(PakToolCliTest, BuildCommandAcceptsDependencyPaks)
     "--quiet",
   };
 
-  const auto context = cli->Parse(argc, const_cast<const char**>(argv.data()));
+  const auto context = tool.Cli().Parse(argv);
 
   EXPECT_EQ(context.active_command->PathAsString(), "build");
   ASSERT_EQ(options.request.dependency_paks.size(), 1U);

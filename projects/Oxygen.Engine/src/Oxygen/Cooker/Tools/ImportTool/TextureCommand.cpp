@@ -320,7 +320,7 @@ auto TextureCommand::BuildCommand() -> std::shared_ptr<clap::Command>
     .WithOption(std::move(with_content_hashing));
 }
 
-auto TextureCommand::Run() -> std::expected<void, std::error_code>
+auto TextureCommand::Execute() -> std::expected<void, std::error_code>
 {
   auto settings = options_;
 

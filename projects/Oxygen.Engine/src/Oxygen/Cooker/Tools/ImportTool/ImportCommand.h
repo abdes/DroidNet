@@ -7,23 +7,31 @@
 #pragma once
 
 #include <expected>
-#include <memory>
-#include <string_view>
 #include <system_error>
 
-#include <Oxygen/Clap/Command.h>
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
+#include <Oxygen/Cooker/Tools/Common/ToolCommand.h>
 
 namespace oxygen::content::import::tool {
 
-class ImportCommand {
-public:
-  virtual ~ImportCommand() = default;
+//! The process exit status of a failed import command.
+/*!
+ An invalid argument, input or configuration is `ExitCode::kUsage`; anything
+ else is `ExitCode::kFailed`.
+*/
+[[nodiscard]] auto ExitStatusFromError(const std::error_code& error) -> int;
 
-  [[nodiscard]] virtual auto Name() const -> std::string_view = 0;
-  [[nodiscard]] virtual auto BuildCommand()
-    -> std::shared_ptr<clap::Command> = 0;
-  [[nodiscard]] virtual auto Run() -> std::expected<void, std::error_code> = 0;
+//! A command of the import tool.
+/*!
+ Commands report their progress and failures through the run's message writer,
+ so a failed `Execute` carries only the error whose category picks the exit
+ status.
+*/
+class ImportCommand : public toolkit::ToolCommand {
+public:
+  //! Runs the command.
+  [[nodiscard]] virtual auto Execute()
+    -> std::expected<void, std::error_code> = 0;
 
   //! Whether this command schedules work through the asynchronous importer.
   [[nodiscard]] virtual auto RequiresImportService() const noexcept -> bool
@@ -39,6 +47,9 @@ public:
     config.max_in_flight_jobs = 1U;
     return config;
   }
+
+  [[nodiscard]] auto Run(toolkit::ToolContext& context)
+    -> toolkit::ToolResult final;
 };
 
 } // namespace oxygen::content::import::tool

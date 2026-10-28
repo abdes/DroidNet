@@ -4,6 +4,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # ===-----------------------------------------------------------------------===#
 
+add_subdirectory("Common")
 add_subdirectory("ImportTool")
 add_subdirectory("Inspector")
 add_subdirectory("PakTool")

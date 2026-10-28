@@ -9,6 +9,7 @@
 #include <filesystem>
 #include <string>
 
+#include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Cooker/Pak/PakBuildRequest.h>
 #include <Oxygen/Cooker/Tools/PakTool/ArtifactPublication.h>
@@ -31,7 +32,10 @@ struct PreparedPakToolRequest {
 
 class IRequestPreparationFileSystem {
 public:
+  IRequestPreparationFileSystem() = default;
   virtual ~IRequestPreparationFileSystem() = default;
+  OXYGEN_MAKE_NON_COPYABLE(IRequestPreparationFileSystem)
+  OXYGEN_MAKE_NON_MOVABLE(IRequestPreparationFileSystem)
 
   [[nodiscard]] virtual auto Exists(const std::filesystem::path& path) const
     -> bool = 0;
@@ -56,7 +60,7 @@ public:
     -> std::error_code override;
 };
 
-[[nodiscard]] auto PreparePakToolRequest(const pak::BuildMode mode,
+[[nodiscard]] auto PreparePakToolRequest(pak::BuildMode mode,
   const PakToolCliOptions& options, IRequestPreparationFileSystem& fs)
   -> Result<PreparedPakToolRequest, RequestPreparationError>;
 
