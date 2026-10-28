@@ -399,6 +399,11 @@ void ScreenHzbModule::OnFrameStart()
 void ScreenHzbModule::RemoveViewState(const ViewId view_id)
 {
   impl_->published_log.Forget(view_id);
+  ReleaseViewState(view_id);
+}
+
+void ScreenHzbModule::ReleaseViewState(const ViewId view_id)
+{
   const auto found = impl_->view_states.find(view_id);
   if (found != impl_->view_states.end()) {
     if (auto gfx = impl_->renderer.GetGraphics()) {
@@ -500,7 +505,7 @@ void ScreenHzbModule::Execute(RenderContext& ctx,
   }
   if (ctx.current_view.view_state_handle
     == CompositionView::kInvalidViewStateHandle) {
-    RemoveViewState(view_id);
+    ReleaseViewState(view_id);
     output_view_id_ = view_id;
   }
   auto retire_stateless = ScopeGuard([&] noexcept -> void {
@@ -605,9 +610,10 @@ void ScreenHzbModule::Execute(RenderContext& ctx,
 
   if (current_output_.available) {
     if (auto line
-      = fmt::format("screen_hzb_published=true width={} height={} mips={}",
-        current_output_.bindings.width, current_output_.bindings.height,
-        current_output_.bindings.mip_count);
+      = fmt::format("screen_hzb_published=true view={} width={} height={} "
+                    "mips={}",
+        view_id, current_output_.bindings.width,
+        current_output_.bindings.height, current_output_.bindings.mip_count);
       impl_->published_log.Update(view_id, line)) {
       LOG_F(INFO, "{}", line);
     }

@@ -13,6 +13,7 @@
 
 #include "DemoShell/DemoShell.h"
 #include "DemoShell/Runtime/DemoModuleBase.h"
+#include "DemoShell/Runtime/MainViewState.h"
 #include "Physics/PhysicsDemoPanel.h"
 #include <glm/glm.hpp>
 
@@ -136,6 +137,7 @@ private:
   scene::SceneNode sun_light_node_ {};
 
   ViewId main_view_id_ { kInvalidViewId };
+  MainViewState main_view_state_;
 
   std::shared_ptr<input::Action> launch_action_;
   std::shared_ptr<input::Action> reset_action_;

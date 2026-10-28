@@ -12,6 +12,7 @@
 
 #include "DemoShell/DemoShell.h"
 #include "DemoShell/Runtime/DemoModuleBase.h"
+#include "DemoShell/Runtime/MainViewState.h"
 #include "DemoShell/Services/SkyboxService.h"
 #include "TexturedCube/SceneSetup.h"
 #include "TexturedCube/TextureLoadingService.h"
@@ -119,6 +120,7 @@ private:
 
   // Hosted view
   ViewId main_view_id_ { kInvalidViewId };
+  MainViewState main_view_state_;
   scene::SceneNode main_camera_ {};
 
   // Custom UI

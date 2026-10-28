@@ -11,6 +11,7 @@
 
 #include "DemoShell/DemoShell.h"
 #include "DemoShell/Runtime/DemoModuleBase.h"
+#include "DemoShell/Runtime/MainViewState.h"
 #include "InputSystem/InputDebugPanel.h"
 #include <glm/glm.hpp>
 
@@ -107,6 +108,7 @@ private:
 
   // Hosted view
   ViewId main_view_id_ { kInvalidViewId };
+  MainViewState main_view_state_;
 
   // Input actions
   std::shared_ptr<input::Action> shift_action_;

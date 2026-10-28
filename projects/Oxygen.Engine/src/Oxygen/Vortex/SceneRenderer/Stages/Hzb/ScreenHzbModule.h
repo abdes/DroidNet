@@ -80,6 +80,10 @@ public:
   [[nodiscard]] OXGN_VRTX_API auto GetPreviousOutput() const -> const Output&;
 
 private:
+  //! Releases the view's pyramids and outputs. A stateless view does it every
+  //! frame; its published-output log line survives, so it logs only changes.
+  void ReleaseViewState(ViewId view_id);
+
   struct Impl;
   std::unique_ptr<Impl> impl_;
   Output current_output_ {};

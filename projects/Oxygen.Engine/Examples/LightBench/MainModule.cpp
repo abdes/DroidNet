@@ -4,7 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <atomic>
 #include <cstdint>
 #include <exception>
 #include <filesystem>
@@ -46,17 +45,6 @@ namespace oxygen::examples::light_bench {
 namespace {
   constexpr std::uint32_t kWindowWidth = 2560;
   constexpr std::uint32_t kWindowHeight = 1440;
-
-  auto AllocateMainViewStateHandle() -> vortex::CompositionView::ViewStateHandle
-  {
-    static std::atomic_uint64_t next_handle { 1U };
-    const auto handle = vortex::CompositionView::ViewStateHandle {
-      next_handle.fetch_add(1U, std::memory_order_relaxed)
-    };
-    CHECK_F(handle != vortex::CompositionView::kInvalidViewStateHandle,
-      "LightBench temporal view state identity exhausted");
-    return handle;
-  }
 } // namespace
 
 MainModule::MainModule(
@@ -268,27 +256,19 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
 auto MainModule::BuildViews(
   engine::FrameContext& context, host::HostViews& views) -> void
 {
-  if (!main_camera_.IsAlive()) {
+  if (!active_scene_.IsValid() || !main_camera_.IsAlive()) {
     ResetMainViewState(observer_ptr { &context });
     return;
   }
 
-  if (!main_view_state_camera_.IsAlive()
-    || main_view_state_camera_.GetHandle() != main_camera_.GetHandle()) {
-    ResetMainViewState(observer_ptr { &context });
-    main_view_state_handle_ = AllocateMainViewStateHandle();
-    main_view_state_camera_ = main_camera_;
-    if (pending_auto_seed_) {
-      if (auto renderer = ResolveRenderer()) {
-        const auto queued
-          = renderer->QueueExposureTransition(main_view_state_handle_,
-            vortex::ExposureTransitionPolicy::kSeedFromEv100,
-            *pending_auto_seed_);
-        CHECK_F(
-          queued.has_value(), "LightBench Auto startup seed was rejected");
-        pending_auto_seed_.reset();
-      }
-    }
+  const auto renderer = ResolveRenderer();
+  const auto view_state = main_view_state_.For(
+    context, renderer, main_view_id_, active_scene_, main_camera_);
+  if (view_state.started && pending_auto_seed_ && renderer) {
+    const auto queued = renderer->QueueExposureTransition(view_state.handle,
+      vortex::ExposureTransitionPolicy::kSeedFromEv100, *pending_auto_seed_);
+    CHECK_F(queued.has_value(), "LightBench Auto startup seed was rejected");
+    pending_auto_seed_.reset();
   }
 
   View view {};
@@ -322,7 +302,7 @@ auto MainModule::BuildViews(
 
   auto main_comp
     = vortex::CompositionView::ForScene(main_view_id_, view, main_camera_);
-  main_comp.view_state_handle = main_view_state_handle_;
+  main_comp.view_state_handle = view_state.handle;
   main_comp.with_atmosphere = false;
   views.views.push_back(std::move(main_comp));
   views.main = main_view_id_;
@@ -331,18 +311,7 @@ auto MainModule::BuildViews(
 auto MainModule::ResetMainViewState(
   const observer_ptr<engine::FrameContext> context) -> void
 {
-  if (main_view_state_handle_
-    != vortex::CompositionView::kInvalidViewStateHandle) {
-    if (auto renderer = ResolveRenderer()) {
-      if (context) {
-        renderer->RemovePublishedRuntimeView(*context, main_view_id_);
-      } else {
-        renderer->RemovePublishedRuntimeView(main_view_id_);
-      }
-    }
-  }
-  main_view_state_handle_ = vortex::CompositionView::kInvalidViewStateHandle;
-  main_view_state_camera_ = {};
+  main_view_state_.Reset(context, ResolveRenderer(), main_view_id_);
 }
 
 auto MainModule::OnGuiUpdate(observer_ptr<engine::FrameContext> context)

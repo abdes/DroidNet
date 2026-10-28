@@ -201,6 +201,7 @@ auto MainModule::OnAttachedImpl(observer_ptr<IAsyncEngine> engine) noexcept
 
 void MainModule::OnShutdown() noexcept
 {
+  main_view_state_.Reset({}, ResolveRenderer(), main_view_id_);
   Stage().Clear();
   Base::OnShutdown();
   input_debug_panel_.reset();
@@ -442,14 +443,20 @@ auto MainModule::SetSwimmingMode(const bool swimming) -> void
 }
 
 auto MainModule::BuildViews(
-  engine::FrameContext& /*context*/, host::HostViews& views) -> void
+  engine::FrameContext& context, host::HostViews& views) -> void
 {
-  if (!main_camera_.IsAlive()) {
+  if (!active_scene_.IsValid() || !main_camera_.IsAlive()) {
+    main_view_state_.Reset(
+      observer_ptr { &context }, ResolveRenderer(), main_view_id_);
     return;
   }
   // An unset viewport covers the window.
   auto main_view
     = vortex::CompositionView::ForScene(main_view_id_, View {}, main_camera_);
+  main_view.view_state_handle = main_view_state_
+                                  .For(context, ResolveRenderer(),
+                                    main_view_id_, active_scene_, main_camera_)
+                                  .handle;
   main_view.with_atmosphere = true;
   views.views.push_back(std::move(main_view));
   views.main = main_view_id_;

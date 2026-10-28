@@ -11,6 +11,7 @@
 
 #include "DemoShell/DemoShell.h"
 #include "DemoShell/Runtime/DemoModuleBase.h"
+#include "DemoShell/Runtime/MainViewState.h"
 #include "LightBench/LightBenchPanel.h"
 #include "LightBench/LightBenchSettings.h"
 #include "LightBench/LightScene.h"
@@ -113,7 +114,6 @@ private:
   std::uint32_t reference_width_ { 0 };
   std::uint32_t reference_height_ { 0 };
   host::ActiveScene active_scene_;
-  scene::SceneNode main_view_state_camera_ {};
   scene::SceneNode main_camera_ {};
 
   LightScene light_scene_;
@@ -123,9 +123,7 @@ private:
 
   // Hosted view
   ViewId main_view_id_ { kInvalidViewId };
-  vortex::CompositionView::ViewStateHandle main_view_state_handle_ {
-    vortex::CompositionView::kInvalidViewStateHandle
-  };
+  MainViewState main_view_state_;
 };
 
 } // namespace oxygen::examples::light_bench
