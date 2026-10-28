@@ -14,6 +14,7 @@
 
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/ProceduralMeshDefaults.h>
+#include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Data/api_export.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
@@ -111,6 +112,9 @@ OXGN_DATA_NDAPI auto MakeQuadMeshAsset(
 //! Its z extent is [-0.1, 0.78], so its bounding box is not centred at zero.
 OXGN_DATA_NDAPI auto MakeArrowGizmoMeshAsset()
   -> std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>>;
+
+//! The surface every generated mesh declares, whatever its generator.
+OXGN_DATA_NDAPI auto ProceduralSurfaceId() -> SurfaceId;
 
 OXGN_DATA_NDAPI auto GenerateMeshBuffers(
   std::string_view name, std::span<const std::byte> param_blob)

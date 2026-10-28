@@ -1,17 +1,9 @@
 {
   "name": "softbody_cube",
-  "bounds": {
-    "min": [-0.5, -0.5, -0.5],
-    "max": [0.5, 0.5, 0.5]
-  },
   "lods": [
     {
       "name": "softbody_cube_lod0",
       "mesh_type": "procedural",
-      "bounds": {
-        "min": [-0.5, -0.5, -0.5],
-        "max": [0.5, 0.5, 0.5]
-      },
       "procedural": {
         "generator": "SubdividedCube",
         "mesh_name": "SoftBodyCube",

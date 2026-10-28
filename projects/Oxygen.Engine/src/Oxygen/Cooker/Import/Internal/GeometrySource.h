@@ -27,10 +27,19 @@ namespace oxygen::content::import::internal {
 
 //! Owned geometry recipe before cooked references are linked or meshes
 //! generated.
+/*!
+  Bounds are the authored ones. A procedural LOD has none: its generator
+  bounds it when the geometry is cooked.
+*/
 struct GeometrySource final {
   struct Bounds final {
     std::array<float, 3> min {};
     std::array<float, 3> max {};
+
+    //! True when `inner` is ordered and lies inside these bounds.
+    OXGN_COOK_NDAPI auto Contains(const Bounds& inner) const -> bool;
+    //! The smallest bounds containing these and `other`.
+    OXGN_COOK_NDAPI auto Union(const Bounds& other) const -> Bounds;
   };
 
   struct Buffers final {
@@ -59,26 +68,29 @@ struct GeometrySource final {
   struct View final {
     std::string view_ref;
     //! The authored bounds, else the submesh bounds.
-    Bounds bounds;
+    std::optional<Bounds> bounds;
   };
 
   struct Submesh final {
     std::string name;
     data::SurfaceId surface_id {};
     std::string material;
-    Bounds bounds;
+    //! The authored bounds, else the LOD bounds.
+    std::optional<Bounds> bounds;
     std::vector<View> views;
   };
 
   struct Lod final {
     std::string name;
-    Bounds bounds;
+    //! The authored bounds of a buffer mesh; none for a procedural mesh.
+    std::optional<Bounds> bounds;
     std::variant<Buffers, Skinned, Procedural> mesh { Buffers {} };
     std::vector<Submesh> submeshes;
   };
 
   std::string name;
-  Bounds bounds;
+  //! The authored bounds; absent takes the union of the LOD bounds.
+  std::optional<Bounds> bounds;
   std::vector<BufferSource> buffers;
   std::vector<Lod> lods;
   //! Authored surface defaults, each of a declared surface, at most once.

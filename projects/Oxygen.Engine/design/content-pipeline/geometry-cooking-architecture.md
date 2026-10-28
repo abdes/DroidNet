@@ -123,12 +123,15 @@ Out of scope:
 12. Buffer sidecar resolution MUST check for multiple matches across mounted
     cooked roots and emit `geometry.buffer.sidecar_ambiguous` if more than one
     candidate path is found.
-13. Pre-built bounds are authoritative. All-zero bounds are valid and MUST NOT
-    be treated as absent or missing.
+13. Authored bounds of buffer meshes are authoritative. All-zero bounds are
+    valid and MUST NOT be treated as absent or missing. Each authored bound MUST
+    contain the next level's: geometry, LOD, submesh, view.
 14. Procedural mesh parameter blobs MUST be serialized with `ScopedAlignment(1)`
-    using `serio::Writer`. `GenerateMeshBuffers` is called only to derive
-    vertex/index counts at cook time; it is executed again at runtime for actual
-    buffer population.
+    using `serio::Writer`. `GenerateMeshBuffers` runs once per procedural LOD at
+    cook time, to count its vertices and indices and to bound it; it runs again
+    at runtime for actual buffer population. Source preparation never generates
+    meshes. A descriptor never authors a procedural LOD's bounds: its LOD,
+    submesh and view bounds are the generated mesh's.
 15. `kImplicitBufferViewName` (`"__all__"`) is the only valid `view_ref` for
     procedural submesh views. Any other value MUST be rejected at cook time.
 
@@ -519,7 +522,7 @@ JSON Schema draft-07, `additionalProperties: false` at all levels.
 | Field             | Required | Type                | Description                                          |
 | ----------------- | -------- | ------------------- | ---------------------------------------------------- |
 | `name`            | Yes      | `string` (name)     | Asset name used for output file naming               |
-| `bounds`          | Yes      | `bounds3`           | AABB for the entire geometry                         |
+| `bounds`          | No       | `bounds3`           | AABB containing every LOD (default: their union)     |
 | `lods`            | Yes      | `array` (1–8 items) | `lod_descriptor` entries (Section 7.2.4)             |
 | `$schema`         | No       | `string`            | Points to shipped JSON Schema for editor integration |
 | `content_hashing` | No       | `bool`              | Override global content hashing toggle               |
@@ -596,9 +599,10 @@ Top-level validation rules:
 { "min": [x, y, z], "max": [x, y, z] }
 ```
 
-Both `min` and `max` are required. All-zero vectors are valid. Bounds are
-pre-computed by tooling and stored in `GeometryAssetDesc`, `MeshDesc` (per-LOD),
-and `SubMeshDesc` (per-submesh) fields.
+Both `min` and `max` are required. All-zero vectors are valid. Buffer meshes
+carry bounds pre-computed by tooling; procedural meshes are bounded by their
+generator at cook time. Bounds are stored in `GeometryAssetDesc`, `MeshDesc`
+(per-LOD), `SubMeshDesc` (per-submesh) and `MeshViewDesc` (per-view) fields.
 
 #### 7.2.3 `buffer_descriptor` (in `buffers` array)
 
@@ -637,7 +641,7 @@ Exactly one pair must be provided: either `byte_offset`+`byte_length` or
 | ------------ | ----------- | --------------------------------------------- | ----------------------------------------------------------------------- |
 | `name`       | Yes         | `name`                                        | LOD name embedded in `MeshDesc`                                         |
 | `mesh_type`  | Yes         | `"standard"` \| `"skinned"` \| `"procedural"` | Determines variant                                                      |
-| `bounds`     | Yes         | `bounds3`                                     | LOD-level AABB                                                          |
+| `bounds`     | Conditional | `bounds3`                                     | Required for `"standard"` and `"skinned"`; forbidden for `"procedural"` |
 | `submeshes`  | Yes         | `array` (≥1 items)                            | `submesh_descriptor` entries (Section 7.2.5)                            |
 | `buffers`    | Conditional | `mesh_buffer_refs`                            | Required for `"standard"` and `"skinned"`; forbidden for `"procedural"` |
 | `skinning`   | Conditional | `skinning_buffer_refs`                        | Required for `"skinned"`; forbidden for `"standard"` and `"procedural"` |
@@ -670,7 +674,7 @@ Exactly one pair must be provided: either `byte_offset`+`byte_length` or
 | `material_ref` | Yes      | `canonical_omat_path` | Canonical virtual path to `.omat` material descriptor             |
 | `views`        | Yes      | `array` (≥1 items)    | `submesh_view` entries (Section 7.2.5.1)                          |
 | `name`         | No       | `name`                | Submesh name embedded in `SubMeshDesc` (auto-generated if absent) |
-| `bounds`       | No       | `bounds3`             | Submesh-level AABB (defaults to LOD bounds if absent)             |
+| `bounds`       | No       | `bounds3`             | Inside the LOD bounds (default); forbidden for procedural LODs    |
 
 ##### 7.2.5.1 `submesh_view`
 
@@ -678,7 +682,7 @@ Exactly one pair must be provided: either `byte_offset`+`byte_length` or
 | ---------- | -------- | --------------- | ---------------------------------------------------------------------- |
 | `view_ref` | Yes      | `view_selector` | Named buffer view identifier, or `"__all__"` (required for procedural) |
 | `name`     | No       | `name`          | View debug name                                                        |
-| `bounds`   | No       | `bounds3`       | View-level local AABB (defaults to the submesh bounds if absent)       |
+| `bounds`   | No       | `bounds3`       | Inside the submesh bounds (default); forbidden for procedural LODs     |
 
 `view_ref` resolves against the named `buffer_view_descriptor` entries in the VB
 and IB sidecars. `"__all__"` is the only valid selector for procedural LODs
@@ -787,11 +791,11 @@ Produces `PreparedGeometryDescriptor` (raw descriptor bytes +
 | Step | Action                                                                                                                                                                                                                                                                                                  |
 | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1    | **Header** — `GeometryAssetDesc.header.asset_type = kGeometry`, `version = kGeometryAssetVersion`, `lod_count`, `bounding_box_min/max`, `surface_count`, `default_lod_policy` (`MakeDefaultLodPolicy`). `WritePod(writer, asset_desc)`.                                                                 |
-| 2    | **For each LOD** — read `lod_doc` from `lods[i]`. Resolve `lod_bounds`.                                                                                                                                                                                                                                 |
+| 2    | **For each LOD** — read `lod_doc` from `lods[i]`. Take `lod_bounds` from the authored bounds or the generated procedural mesh.                                                                                                                                                                          |
 | 3    | **`mesh_type`** — set `MeshDesc.mesh_type` from `"standard"` / `"skinned"` / `"procedural"`.                                                                                                                                                                                                            |
 | 4    | **Standard LOD** — `co_await ResolveBufferSidecarByVirtualPath` for `vb_ref` and `ib_ref`. Validate `kVertexBuffer` / `kIndexBuffer` usage flags. Store `ResourceIndexT` into `mesh_bindings`. Set VB/IB fields to `kNoResourceIndex` (patched later).                                                  |
 | 5    | **Skinned LOD** — additionally resolves `joint_index_ref`, `joint_weight_ref`, `inverse_bind_ref`, `joint_remap_ref` sidecars. Optional `skeleton_ref` resolved via `ResolveAssetKeyByVirtualPath`. Fills extended `MeshBufferBindings` fields.                                                         |
-| 6    | **Procedural LOD** — `BuildProceduralParamBlob` encodes typed generator params. `GenerateMeshBuffers` called to count `vertex_count` / `index_count`.                                                                                                                                                   |
+| 6    | **Procedural LOD** — `BuildProceduralParamBlob` encodes typed generator params. Before the header, `GenerateMeshBuffers` runs once per LOD to count `vertex_count` / `index_count` and bound the mesh.                                                                                                  |
 | 7    | **Submesh count + view count** — accumulate total `mesh_view_count` from all `submeshes[*].views`.                                                                                                                                                                                                      |
 | 8    | **`WritePod(writer, mesh_desc)`** — writes completed `MeshDesc`.                                                                                                                                                                                                                                        |
 | 9    | **Procedural param blob** — if non-empty, writes raw blob bytes immediately after `MeshDesc`.                                                                                                                                                                                                           |
@@ -949,7 +953,8 @@ so it carries its own bounds. The view bounds are:
   splits large submeshes into spatially coherent views.
 - **Geometry descriptors.** The authored `submesh_view.bounds`, else the submesh
   bounds. That is conservative: authored views are never split.
-- **Procedural LODs.** The submesh bounds.
+- **Procedural LODs.** The generated mesh's bounds, as are its LOD and submesh
+  bounds.
 
 The view bounds must lie inside the submesh bounds. Adding them increments
 `kGeometryAssetVersion` from 3 to 4 (constraint 9); geometry cooked at version 3
@@ -1023,43 +1028,45 @@ Geometry import errors are surfaced as diagnostics in `ImportReport` and as log
 messages written to `error_stream`. Error codes follow the pattern
 `geometry.<category>.<key>`:
 
-| Category   | Code Pattern                                   | Key Causes                                                  |
-| ---------- | ---------------------------------------------- | ----------------------------------------------------------- |
-| Schema     | `geometry.descriptor.schema_validation_failed` | JSON fields violate schema constraints                      |
-| Schema     | `geometry.descriptor.schema_validator_failure` | JSON Schema validator internal failure                      |
-| Schema     | `geometry.descriptor.request_invalid`          | `geometry_descriptor` payload absent from request           |
-| Schema     | `geometry.descriptor.request_invalid_json`     | Normalized payload is invalid JSON or non-object            |
-| Schema     | `geometry.descriptor.bounds_invalid`           | `bounds` object missing or has non-numeric `min`/`max` vec3 |
-| Schema     | `geometry.descriptor.lod_count_invalid`        | `lods` array is empty or exceeds 8 entries                  |
-| Schema     | `geometry.descriptor.serialize_failed`         | `serio::Writer` write error during descriptor build         |
-| Schema     | `geometry.descriptor.view_count_overflow`      | Total mesh view count exceeds `uint32_t` range              |
-| Schema     | `geometry.descriptor.surface_unknown`          | `surfaces` names a surface no submesh declares              |
-| Schema     | `geometry.descriptor.surface_duplicate`        | `surfaces` names a surface more than once                   |
-| Schema     | `geometry.descriptor.lod_policy_invalid`       | Lists out of order or unequal screen-space error lists      |
-| I/O        | `geometry.descriptor.index_load_failed`        | `container.index.bin` could not be loaded                   |
-| Buffer     | `geometry.buffer.virtual_path_invalid`         | Non-canonical virtual path in `vb_ref`/`ib_ref`             |
-| Buffer     | `geometry.buffer.virtual_path_unmounted`       | Virtual path outside all mounted cooked roots               |
-| Buffer     | `geometry.buffer.sidecar_ambiguous`            | Multiple `.obuf` files matched across mounts                |
-| Buffer     | `geometry.buffer.sidecar_missing`              | `.obuf` file not found in any mount                         |
-| Buffer     | `geometry.buffer.sidecar_read_failed`          | Binary sidecar file read error                              |
-| Buffer     | `geometry.buffer.sidecar_invalid`              | Binary sidecar parse error                                  |
-| Buffer     | `geometry.buffer.reader_unavailable`           | Async file reader not available                             |
-| Buffer     | `geometry.buffer.view_missing`                 | Named `view_ref` not found in VB or IB sidecar              |
-| Buffer     | `geometry.buffer.view_overflow`                | View element offset/count exceeds `uint32_t`                |
-| Buffer     | `geometry.buffer.usage_mismatch`               | Buffer sidecar does not advertise required usage flag       |
-| Buffer     | `geometry.buffer.no_submissions`               | No buffer work items were submitted from `buffers` array    |
-| Material   | `geometry.material.virtual_path_invalid`       | Non-canonical virtual path in `material_ref`                |
-| Material   | `geometry.material.virtual_path_unmounted`     | Material path outside all mounted cooked roots              |
-| Material   | `geometry.material.type_mismatch`              | Index entry exists but asset type is not `kMaterial`        |
-| Material   | `geometry.material.missing`                    | No `.omat` file found for virtual path                      |
-| Procedural | `geometry.procedural.params_invalid`           | `BuildProceduralParamBlob` failed to encode params          |
-| Procedural | `geometry.procedural.generation_failed`        | `GenerateMeshBuffers` rejected descriptor params            |
-| Procedural | `geometry.procedural.mesh_too_large`           | Generated vertex/index count exceeds `uint32_t`             |
-| Procedural | `geometry.procedural.view_ref_invalid`         | Procedural `view_ref` is not `"__all__"`                    |
-| Skinning   | `geometry.skinning.skeleton_missing`           | `skeleton_ref` could not be resolved to an `AssetKey`       |
-| Asset      | `geometry.asset.virtual_path_invalid`          | Non-canonical virtual path in `skeleton_ref`                |
-| Asset      | `geometry.asset.virtual_path_unmounted`        | Asset path outside all mounted cooked roots                 |
-| Asset      | `geometry.asset.missing`                       | Asset file not found in any mount                           |
+| Category   | Code Pattern                                   | Key Causes                                               |
+| ---------- | ---------------------------------------------- | -------------------------------------------------------- |
+| Schema     | `geometry.descriptor.schema_validation_failed` | JSON fields violate schema constraints                   |
+| Schema     | `geometry.descriptor.schema_validator_failure` | JSON Schema validator internal failure                   |
+| Schema     | `geometry.descriptor.request_invalid`          | `geometry_descriptor` payload absent from request        |
+| Schema     | `geometry.descriptor.request_invalid_json`     | Normalized payload is invalid JSON or non-object         |
+| Schema     | `geometry.descriptor.bounds_invalid`           | Geometry `bounds` unordered or not containing every LOD  |
+| Schema     | `geometry.descriptor.submesh_bounds_invalid`   | Submesh `bounds` unordered or outside the LOD bounds     |
+| Schema     | `geometry.descriptor.view_bounds_invalid`      | View `bounds` unordered or outside the submesh bounds    |
+| Schema     | `geometry.descriptor.lod_count_invalid`        | `lods` array is empty or exceeds 8 entries               |
+| Schema     | `geometry.descriptor.serialize_failed`         | `serio::Writer` write error during descriptor build      |
+| Schema     | `geometry.descriptor.view_count_overflow`      | Total mesh view count exceeds `uint32_t` range           |
+| Schema     | `geometry.descriptor.surface_unknown`          | `surfaces` names a surface no submesh declares           |
+| Schema     | `geometry.descriptor.surface_duplicate`        | `surfaces` names a surface more than once                |
+| Schema     | `geometry.descriptor.lod_policy_invalid`       | Lists out of order or unequal screen-space error lists   |
+| I/O        | `geometry.descriptor.index_load_failed`        | `container.index.bin` could not be loaded                |
+| Buffer     | `geometry.buffer.virtual_path_invalid`         | Non-canonical virtual path in `vb_ref`/`ib_ref`          |
+| Buffer     | `geometry.buffer.virtual_path_unmounted`       | Virtual path outside all mounted cooked roots            |
+| Buffer     | `geometry.buffer.sidecar_ambiguous`            | Multiple `.obuf` files matched across mounts             |
+| Buffer     | `geometry.buffer.sidecar_missing`              | `.obuf` file not found in any mount                      |
+| Buffer     | `geometry.buffer.sidecar_read_failed`          | Binary sidecar file read error                           |
+| Buffer     | `geometry.buffer.sidecar_invalid`              | Binary sidecar parse error                               |
+| Buffer     | `geometry.buffer.reader_unavailable`           | Async file reader not available                          |
+| Buffer     | `geometry.buffer.view_missing`                 | Named `view_ref` not found in VB or IB sidecar           |
+| Buffer     | `geometry.buffer.view_overflow`                | View element offset/count exceeds `uint32_t`             |
+| Buffer     | `geometry.buffer.usage_mismatch`               | Buffer sidecar does not advertise required usage flag    |
+| Buffer     | `geometry.buffer.no_submissions`               | No buffer work items were submitted from `buffers` array |
+| Material   | `geometry.material.virtual_path_invalid`       | Non-canonical virtual path in `material_ref`             |
+| Material   | `geometry.material.virtual_path_unmounted`     | Material path outside all mounted cooked roots           |
+| Material   | `geometry.material.type_mismatch`              | Index entry exists but asset type is not `kMaterial`     |
+| Material   | `geometry.material.missing`                    | No `.omat` file found for virtual path                   |
+| Procedural | `geometry.procedural.params_invalid`           | `BuildProceduralParamBlob` failed to encode params       |
+| Procedural | `geometry.procedural.generation_failed`        | `GenerateMeshBuffers` rejected descriptor params         |
+| Procedural | `geometry.procedural.mesh_too_large`           | Generated vertex/index count exceeds `uint32_t`          |
+| Procedural | `geometry.procedural.view_ref_invalid`         | Procedural `view_ref` is not `"__all__"`                 |
+| Skinning   | `geometry.skinning.skeleton_missing`           | `skeleton_ref` could not be resolved to an `AssetKey`    |
+| Asset      | `geometry.asset.virtual_path_invalid`          | Non-canonical virtual path in `skeleton_ref`             |
+| Asset      | `geometry.asset.virtual_path_unmounted`        | Asset path outside all mounted cooked roots              |
+| Asset      | `geometry.asset.missing`                       | Asset file not found in any mount                        |
 
 ---
 

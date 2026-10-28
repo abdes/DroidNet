@@ -1,17 +1,9 @@
 {
   "name": "GeoCitySphere",
-  "bounds": {
-    "min": [-0.5, -0.5, -0.5],
-    "max": [0.5, 0.5, 0.5]
-  },
   "lods": [
     {
       "name": "GeoCitySphere_lod0",
       "mesh_type": "procedural",
-      "bounds": {
-        "min": [-0.5, -0.5, -0.5],
-        "max": [0.5, 0.5, 0.5]
-      },
       "procedural": {
         "generator": "IcoSphere",
         "mesh_name": "GeoCitySphere",

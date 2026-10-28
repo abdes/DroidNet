@@ -108,7 +108,7 @@ namespace {
     },
     {
       .importer = Importer::kGeometryDescriptor,
-      .revision = 3,
+      .revision = 4,
       .digest
       = "8835adccf95dfbe6e97dbf95c4f32d0fdd321b9f51e11069b29d062f060cfd04",
     },
@@ -531,20 +531,14 @@ namespace {
     const auto& [source, cooked] = scenario;
     ASSERT_NO_FATAL_FAILURE(
       CookPrerequisite(MaterialRequest(scenario, "default")));
-    const auto bounds = json {
-      { "min", json::array({ -0.5F, -0.5F, -0.5F }) },
-      { "max", json::array({ 0.5F, 0.5F, 0.5F }) },
-    };
     const auto descriptor = json {
       { "name", "ProceduralCube" },
-      { "bounds", bounds },
       {
         "lods",
         json::array({
           json {
             { "name", "LOD0" },
             { "mesh_type", "procedural" },
-            { "bounds", bounds },
             {
               "procedural",
               {

@@ -40,12 +40,10 @@ NOLINT_TEST(ImportManifestGeometryDescriptorTest,
     R"({
       "name": "ProcCube",
       "content_hashing": false,
-      "bounds": { "min": [-0.5, -0.5, -0.5], "max": [0.5, 0.5, 0.5] },
       "lods": [
         {
           "name": "LOD0",
           "mesh_type": "procedural",
-          "bounds": { "min": [-0.5, -0.5, -0.5], "max": [0.5, 0.5, 0.5] },
           "procedural": { "generator": "Cube", "mesh_name": "CubeMesh" },
           "submeshes": [
             {
@@ -122,12 +120,10 @@ NOLINT_TEST(ImportManifestGeometryDescriptorTest,
   WriteText(descriptor_path,
     R"({
       "name": "ProcCube",
-      "bounds": { "min": [-0.5, -0.5, -0.5], "max": [0.5, 0.5, 0.5] },
       "lods": [
         {
           "name": "LOD0",
           "mesh_type": "procedural",
-          "bounds": { "min": [-0.5, -0.5, -0.5], "max": [0.5, 0.5, 0.5] },
           "procedural": { "generator": "Cube", "mesh_name": "CubeMesh" },
           "submeshes": [
             {

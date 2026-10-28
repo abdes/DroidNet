@@ -179,7 +179,7 @@ internal sealed partial class AssetCookStatusTests
     {
         using var project = new StatusProject();
         const string geometry = """
-            {"$schema":"oxygen.geometry-descriptor.v1","name":"Geometry","bounds":{"min":[-0.5,-0.5,-0.5],"max":[0.5,0.5,0.5]},"lods":[{"name":"LOD0","mesh_type":"procedural","bounds":{"min":[-0.5,-0.5,-0.5],"max":[0.5,0.5,0.5]},"procedural":{"generator":"Cube","mesh_name":"Cube","params":{}},"submeshes":[{"name":"Main","material_ref":"/Content/Material.omat","surface_id":"146b1397-c3e0-bc20-fce3-c55e470b4086","views":[{"view_ref":"__all__"}]}]}]}
+            {"$schema":"oxygen.geometry-descriptor.v1","name":"Geometry","lods":[{"name":"LOD0","mesh_type":"procedural","procedural":{"generator":"Cube","mesh_name":"Cube","params":{}},"submeshes":[{"name":"Main","material_ref":"/Content/Material.omat","surface_id":"146b1397-c3e0-bc20-fce3-c55e470b4086","views":[{"view_ref":"__all__"}]}]}]}
             """;
         var uri = AssetPath.Parse("/Content/Geometry.ogeo");
         await File.WriteAllTextAsync(Path.Combine(project.Root, "Content", "Geometry.ogeo.json"), geometry, this.TestContext.CancellationToken).ConfigureAwait(false);

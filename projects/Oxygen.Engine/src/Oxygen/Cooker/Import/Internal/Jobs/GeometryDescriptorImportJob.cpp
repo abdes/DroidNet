@@ -21,6 +21,8 @@
 #include <variant>
 #include <vector>
 
+#include <glm/common.hpp>
+
 #include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
@@ -52,6 +54,7 @@
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
 #include <Oxygen/Data/SurfaceId.h>
+#include <Oxygen/Data/Vertex.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Writer.h>
@@ -468,6 +471,113 @@ namespace {
     return false;
   }
 
+  using Bounds = internal::GeometrySource::Bounds;
+
+  //! One LOD's mesh as its descriptor records it: a procedural mesh is
+  //! generated once, its counts sizing its views and its vertices bounding it.
+  struct LodGeometry final {
+    Bounds bounds;
+    uint32_t vertex_count = 0;
+    uint32_t index_count = 0;
+  };
+
+  //! The bounds of `vertices`, which are not empty.
+  auto BoundsOf(std::span<const data::Vertex> vertices) -> Bounds
+  {
+    auto low = vertices.front().position;
+    auto high = low;
+    for (const auto& vertex : vertices) {
+      low = glm::min(low, vertex.position);
+      high = glm::max(high, vertex.position);
+    }
+    return {
+      .min = { low.x, low.y, low.z },
+      .max = { high.x, high.y, high.z },
+    };
+  }
+
+  auto GenerateLod(GeometryExecutionContext& context,
+    const internal::GeometrySource::Procedural& procedural,
+    const std::string& lod_path) -> std::optional<LodGeometry>
+  {
+    const auto generated = data::GenerateMeshBuffers(
+      procedural.name, std::span<const std::byte>(procedural.parameters));
+    if (!generated.has_value() || generated->first.empty()) {
+      AddDiagnostic(context.session, context.request, ImportSeverity::kError,
+        "geometry.procedural.generation_failed",
+        "Procedural mesh generator rejected descriptor parameters",
+        lod_path + ".procedural");
+      return std::nullopt;
+    }
+    const auto& [vertices, indices] = *generated;
+    const auto vertex_count = CheckedU32(vertices.size(), context.session,
+      context.request, "geometry.procedural.mesh_too_large",
+      "Generated procedural vertex count exceeds supported range",
+      lod_path + ".procedural");
+    const auto index_count = CheckedU32(indices.size(), context.session,
+      context.request, "geometry.procedural.mesh_too_large",
+      "Generated procedural index count exceeds supported range",
+      lod_path + ".procedural");
+    if (!vertex_count.has_value() || !index_count.has_value()) {
+      return std::nullopt;
+    }
+    return LodGeometry {
+      .bounds = BoundsOf(vertices),
+      .vertex_count = *vertex_count,
+      .index_count = *index_count,
+    };
+  }
+
+  //! Each LOD's geometry: a buffer mesh's authored bounds, or the generated
+  //! procedural mesh.
+  auto PrepareLods(
+    GeometryExecutionContext& context, const internal::GeometrySource& source)
+    -> std::optional<std::vector<LodGeometry>>
+  {
+    auto lods = std::vector<LodGeometry> {};
+    lods.reserve(source.lods.size());
+    for (size_t lod_i = 0; lod_i < source.lods.size(); ++lod_i) {
+      const auto& lod = source.lods.at(lod_i);
+      const auto* procedural
+        = std::get_if<internal::GeometrySource::Procedural>(&lod.mesh);
+      if (procedural == nullptr) {
+        // The schema requires a buffer mesh's bounds.
+        lods.push_back({ .bounds = lod.bounds.value_or(Bounds {}) });
+        continue;
+      }
+      auto generated = GenerateLod(
+        context, *procedural, "lods[" + std::to_string(lod_i) + "]");
+      if (!generated.has_value()) {
+        return std::nullopt;
+      }
+      lods.push_back(*generated);
+    }
+    return lods;
+  }
+
+  //! The geometry's bounds: the authored ones, which must contain every LOD,
+  //! else the union of the LOD bounds.
+  auto GeometryBounds(GeometryExecutionContext& context,
+    const internal::GeometrySource& source, std::span<const LodGeometry> lods)
+    -> std::optional<Bounds>
+  {
+    auto lods_bounds = lods.front().bounds;
+    for (const auto& lod : lods) {
+      lods_bounds = lods_bounds.Union(lod.bounds);
+    }
+    if (!source.bounds.has_value()) {
+      return lods_bounds;
+    }
+    if (!source.bounds->Contains(lods_bounds)) {
+      AddDiagnostic(context.session, context.request, ImportSeverity::kError,
+        "geometry.descriptor.bounds_invalid",
+        "Geometry bounds must be ordered and contain every LOD's bounds",
+        "bounds");
+      return std::nullopt;
+    }
+    return source.bounds;
+  }
+
   struct LinkedGeometryDescriptor final {
     std::string geometry_name;
     std::vector<std::byte> descriptor_bytes;
@@ -481,7 +591,14 @@ namespace {
   {
     auto prepared = LinkedGeometryDescriptor {};
     prepared.geometry_name = source.name;
-    const auto& root_bounds = source.bounds;
+    const auto lod_geometry = PrepareLods(context, source);
+    if (!lod_geometry.has_value()) {
+      co_return std::nullopt;
+    }
+    const auto root_bounds = GeometryBounds(context, source, *lod_geometry);
+    if (!root_bounds.has_value()) {
+      co_return std::nullopt;
+    }
     const auto lod_count = source.lods.size();
 
     auto output_stream = serio::MemoryStream {};
@@ -494,8 +611,10 @@ namespace {
     asset_desc.header.version = data::pak::geometry::kGeometryAssetVersion;
     asset_desc.header.variant_flags = 0;
     asset_desc.lod_count = static_cast<uint32_t>(lod_count);
-    std::ranges::copy(root_bounds.min, std::begin(asset_desc.bounding_box_min));
-    std::ranges::copy(root_bounds.max, std::begin(asset_desc.bounding_box_max));
+    std::ranges::copy(
+      root_bounds->min, std::begin(asset_desc.bounding_box_min));
+    std::ranges::copy(
+      root_bounds->max, std::begin(asset_desc.bounding_box_max));
     const auto surface_table
       = internal::MakeSurfaceTable(source.DeclaredSurfaces(), source.surfaces);
     asset_desc.surface_count = static_cast<uint32_t>(surface_table.size());
@@ -516,7 +635,8 @@ namespace {
     for (size_t lod_i = 0; lod_i < lod_count; ++lod_i) {
       const auto& lod = source.lods.at(lod_i);
       const auto lod_path = "lods[" + std::to_string(lod_i) + "]";
-      const auto& lod_bounds = lod.bounds;
+      const auto& geometry = lod_geometry->at(lod_i);
+      const auto& lod_bounds = geometry.bounds;
       auto mesh_desc = data::pak::geometry::MeshDesc {};
       mesh_desc.name_offset = strings.Add(lod.name);
 
@@ -524,8 +644,6 @@ namespace {
       std::span<const std::byte> procedural_blob;
       std::optional<ResolvedBufferSidecar> resolved_vb {};
       std::optional<ResolvedBufferSidecar> resolved_ib {};
-      uint32_t procedural_vertex_count = 0;
-      uint32_t procedural_index_count = 0;
 
       const auto* skinned
         = std::get_if<internal::GeometrySource::Skinned>(&lod.mesh);
@@ -640,31 +758,6 @@ namespace {
 
         mesh_desc.info.procedural.params_size
           = static_cast<uint32_t>(procedural_blob.size());
-
-        const auto generated = data::GenerateMeshBuffers(
-          procedural_name, std::span<const std::byte>(procedural_blob));
-        if (!generated.has_value()) {
-          AddDiagnostic(context.session, context.request,
-            ImportSeverity::kError, "geometry.procedural.generation_failed",
-            "Procedural mesh generator rejected descriptor parameters",
-            lod_path + ".procedural");
-          co_return std::nullopt;
-        }
-        const auto vtx_count
-          = CheckedU32(generated->first.size(), context.session,
-            context.request, "geometry.procedural.mesh_too_large",
-            "Generated procedural vertex count exceeds supported range",
-            lod_path + ".procedural");
-        const auto idx_count
-          = CheckedU32(generated->second.size(), context.session,
-            context.request, "geometry.procedural.mesh_too_large",
-            "Generated procedural index count exceeds supported range",
-            lod_path + ".procedural");
-        if (!vtx_count.has_value() || !idx_count.has_value()) {
-          co_return std::nullopt;
-        }
-        procedural_vertex_count = *vtx_count;
-        procedural_index_count = *idx_count;
       }
 
       const auto& submeshes = lod.submeshes;
@@ -718,7 +811,7 @@ namespace {
         submesh_desc.mesh_view_count
           = static_cast<uint32_t>(submesh.views.size());
 
-        const auto& submesh_bounds = submesh.bounds;
+        const auto submesh_bounds = submesh.bounds.value_or(lod_bounds);
 
         std::ranges::copy(
           submesh_bounds.min, std::begin(submesh_desc.bounding_box_min));
@@ -740,9 +833,9 @@ namespace {
 
           if (mesh_desc.IsProcedural()) {
             view_desc.first_index = 0;
-            view_desc.index_count = procedural_index_count;
+            view_desc.index_count = geometry.index_count;
             view_desc.first_vertex = 0;
-            view_desc.vertex_count = procedural_vertex_count;
+            view_desc.vertex_count = geometry.vertex_count;
           } else {
             if (!resolved_vb.has_value() || !resolved_ib.has_value()) {
               co_return std::nullopt;
@@ -753,10 +846,11 @@ namespace {
               co_return std::nullopt;
             }
           }
+          const auto view_bounds = view.bounds.value_or(submesh_bounds);
           std::ranges::copy(
-            view.bounds.min, std::begin(view_desc.bounding_box_min));
+            view_bounds.min, std::begin(view_desc.bounding_box_min));
           std::ranges::copy(
-            view.bounds.max, std::begin(view_desc.bounding_box_max));
+            view_bounds.max, std::begin(view_desc.bounding_box_max));
 
           if (!WritePod(writer, view_desc)) {
             AddDiagnostic(context.session, context.request,

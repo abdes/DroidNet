@@ -14,7 +14,8 @@
       "type": "boolean"
     },
     "bounds": {
-      "$ref": "#/definitions/bounds3"
+      "$ref": "#/definitions/bounds3",
+      "description": "Local bounds of the whole geometry, containing every LOD's bounds. Defaults to the union of the LOD bounds."
     },
     "buffers": {
       "type": "array",
@@ -43,7 +44,7 @@
       "$ref": "oxygen.lod-policy.schema.json#/definitions/lod_policy"
     }
   },
-  "required": ["name", "bounds", "lods"],
+  "required": ["name", "lods"],
   "definitions": {
     "canonical_virtual_path": {
       "type": "string",
@@ -765,7 +766,8 @@
           "$ref": "#/definitions/canonical_omat_path"
         },
         "bounds": {
-          "$ref": "#/definitions/bounds3"
+          "$ref": "#/definitions/bounds3",
+          "description": "Local bounds of the submesh's triangles, inside the LOD bounds. Defaults to the LOD bounds."
         },
         "views": {
           "type": "array",
@@ -789,7 +791,8 @@
           "enum": ["standard", "skinned", "procedural"]
         },
         "bounds": {
-          "$ref": "#/definitions/bounds3"
+          "$ref": "#/definitions/bounds3",
+          "description": "Local bounds of the LOD's mesh. Required for buffer meshes; a procedural mesh's bounds come from its generator."
         },
         "buffers": {
           "$ref": "#/definitions/mesh_buffer_refs"
@@ -808,7 +811,7 @@
           }
         }
       },
-      "required": ["name", "mesh_type", "bounds", "submeshes"],
+      "required": ["name", "mesh_type", "submeshes"],
       "allOf": [
         {
           "if": {
@@ -820,7 +823,7 @@
             "required": ["mesh_type"]
           },
           "then": {
-            "required": ["buffers"],
+            "required": ["buffers", "bounds"],
             "not": {
               "anyOf": [
                 {
@@ -843,7 +846,7 @@
             "required": ["mesh_type"]
           },
           "then": {
-            "required": ["buffers", "skinning"],
+            "required": ["buffers", "skinning", "bounds"],
             "not": {
               "required": ["procedural"]
             }
@@ -860,10 +863,31 @@
           },
           "then": {
             "required": ["procedural"],
+            "properties": {
+              "submeshes": {
+                "items": {
+                  "not": {
+                    "required": ["bounds"]
+                  },
+                  "properties": {
+                    "views": {
+                      "items": {
+                        "not": {
+                          "required": ["bounds"]
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
             "not": {
               "anyOf": [
                 {
                   "required": ["buffers"]
+                },
+                {
+                  "required": ["bounds"]
                 },
                 {
                   "required": ["skinning"]

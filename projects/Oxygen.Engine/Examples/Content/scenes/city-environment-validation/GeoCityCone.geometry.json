@@ -1,17 +1,9 @@
 {
   "name": "GeoCityCone",
-  "bounds": {
-    "min": [-0.5, -0.5, -0.5],
-    "max": [0.5, 0.5, 0.5]
-  },
   "lods": [
     {
       "name": "GeoCityCone_lod0",
       "mesh_type": "procedural",
-      "bounds": {
-        "min": [-0.5, -0.5, -0.5],
-        "max": [0.5, 0.5, 0.5]
-      },
       "procedural": {
         "generator": "Cone",
         "mesh_name": "GeoCityCone",

@@ -73,22 +73,10 @@ MATERIALS = {
 # --- Unit procedural geometries (centred, unit extents) --------------------
 
 GEOMETRIES = {
-    "GeoCityCube": ("Cube", None, ([-0.5, -0.5, -0.5], [0.5, 0.5, 0.5])),
-    "GeoCityCylinder": (
-        "Cylinder",
-        {"segments": 32, "height": 1.0, "radius": 0.5},
-        ([-0.5, -0.5, -0.5], [0.5, 0.5, 0.5]),
-    ),
-    "GeoCityCone": (
-        "Cone",
-        {"segments": 24, "height": 1.0, "radius": 0.5},
-        ([-0.5, -0.5, -0.5], [0.5, 0.5, 0.5]),
-    ),
-    "GeoCitySphere": (
-        "IcoSphere",
-        {"subdivision_level": 2},
-        ([-0.5, -0.5, -0.5], [0.5, 0.5, 0.5]),
-    ),
+    "GeoCityCube": ("Cube", None),
+    "GeoCityCylinder": ("Cylinder", {"segments": 32, "height": 1.0, "radius": 0.5}),
+    "GeoCityCone": ("Cone", {"segments": 24, "height": 1.0, "radius": 0.5}),
+    "GeoCitySphere": ("IcoSphere", {"subdivision_level": 2}),
 }
 
 FLAGS_STATIC = {
@@ -856,19 +844,16 @@ def material_document(name: str, params: dict) -> dict:
     }
 
 
-def geometry_document(name: str, generator: str, params: dict | None, bounds) -> dict:
+def geometry_document(name: str, generator: str, params: dict | None) -> dict:
     procedural: dict[str, object] = {"generator": generator, "mesh_name": name}
     if params:
         procedural["params"] = params
-    lo, hi = bounds
     return {
         "name": name,
-        "bounds": {"min": lo, "max": hi},
         "lods": [
             {
                 "name": f"{name}_lod0",
                 "mesh_type": "procedural",
-                "bounds": {"min": lo, "max": hi},
                 "procedural": procedural,
                 "submeshes": [
                     {
@@ -941,10 +926,9 @@ def main() -> None:
             stale.unlink()
     for name, params in MATERIALS.items():
         write_json(HERE / f"{name}.material.json", material_document(name, params))
-    for name, (generator, params, bounds) in GEOMETRIES.items():
+    for name, (generator, params) in GEOMETRIES.items():
         write_json(
-            HERE / f"{name}.geometry.json",
-            geometry_document(name, generator, params, bounds),
+            HERE / f"{name}.geometry.json", geometry_document(name, generator, params)
         )
     scene = scene_document()
     write_json(HERE / f"{SCENE_NAME}.scene.json", scene)

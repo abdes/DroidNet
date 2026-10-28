@@ -48,11 +48,9 @@ auto CapsuleDescriptor(const json& params) -> json
 {
   auto doc = json::parse(R"({
     "name": "Capsule",
-    "bounds": { "min": [-0.5, -0.5, -1], "max": [0.5, 0.5, 1] },
     "lods": [{
       "name": "LOD0",
       "mesh_type": "procedural",
-      "bounds": { "min": [-0.5, -0.5, -1], "max": [0.5, 0.5, 1] },
       "procedural": { "generator": "Capsule", "mesh_name": "Capsule" },
       "submeshes": [{
         "surface_id": "018f8f8f-1111-7111-8111-111111111111",
@@ -83,12 +81,10 @@ INSTANTIATE_TEST_SUITE_P(Cases, GeometryDescriptorSchemaCaseTest,
     "$schema": "./src/Oxygen/Cooker/Import/Schemas/oxygen.geometry-descriptor.schema.json",
     "name": "ProcCube",
     "content_hashing": true,
-    "bounds": { "min": [-0.5, -0.5, -0.5], "max": [0.5, 0.5, 0.5] },
     "lods": [
       {
         "name": "LOD0",
         "mesh_type": "procedural",
-        "bounds": { "min": [-0.5, -0.5, -0.5], "max": [0.5, 0.5, 0.5] },
         "procedural": {
           "generator": "Cube",
           "mesh_name": "CubeMesh"
@@ -110,12 +106,10 @@ INSTANTIATE_TEST_SUITE_P(Cases, GeometryDescriptorSchemaCaseTest,
       "AcceptsSubdividedCubeProcedural",
       R"({
     "name": "ProcJellyCube",
-    "bounds": { "min": [-0.5, -0.5, -0.5], "max": [0.5, 0.5, 0.5] },
     "lods": [
       {
         "name": "LOD0",
         "mesh_type": "procedural",
-        "bounds": { "min": [-0.5, -0.5, -0.5], "max": [0.5, 0.5, 0.5] },
         "procedural": {
           "generator": "SubdividedCube",
           "mesh_name": "JellyCube",
@@ -140,12 +134,10 @@ INSTANTIATE_TEST_SUITE_P(Cases, GeometryDescriptorSchemaCaseTest,
       "RejectsUnknownNestedFields",
       R"({
     "name": "ProcCube",
-    "bounds": { "min": [-0.5, -0.5, -0.5], "max": [0.5, 0.5, 0.5] },
     "lods": [
       {
         "name": "LOD0",
         "mesh_type": "procedural",
-        "bounds": { "min": [-0.5, -0.5, -0.5], "max": [0.5, 0.5, 0.5] },
         "procedural": {
           "generator": "Cube",
           "mesh_name": "CubeMesh",
@@ -170,12 +162,10 @@ NOLINT_TEST(GeometryDescriptorSchemaTest, ValidatesIcoSphereParameters)
 {
   const auto doc = json::parse(R"({
     "name": "ProcIcoSphere",
-    "bounds": { "min": [-0.5, -0.5, -0.5], "max": [0.5, 0.5, 0.5] },
     "lods": [
       {
         "name": "LOD0",
         "mesh_type": "procedural",
-        "bounds": { "min": [-0.5, -0.5, -0.5], "max": [0.5, 0.5, 0.5] },
         "procedural": {
           "generator": "IcoSphere",
           "mesh_name": "BallGeo",
@@ -215,6 +205,51 @@ NOLINT_TEST(GeometryDescriptorSchemaTest, ValidatesIcoSphereParameters)
       Contains(HasSubstr(ParamError("subdivision_level"))))
       << subdivisions.dump();
   }
+}
+
+//! A procedural mesh's bounds come from its generator, never the descriptor.
+NOLINT_TEST(GeometryDescriptorSchemaTest, RejectsBoundsOnProceduralMeshes)
+{
+  const auto bounds
+    = json::parse(R"({ "min": [-1, -1, -1], "max": [1, 1, 1] })");
+  const auto base = CapsuleDescriptor(nullptr);
+  ASSERT_THAT(ValidateJson(Schema(), base), IsEmpty());
+
+  auto on_lod = base;
+  on_lod.at("lods").at(0)["bounds"] = bounds;
+  EXPECT_THAT(ValidateJson(Schema(), on_lod), Not(IsEmpty()));
+
+  auto on_submesh = base;
+  on_submesh.at("lods").at(0).at("submeshes").at(0)["bounds"] = bounds;
+  EXPECT_THAT(ValidateJson(Schema(), on_submesh), Not(IsEmpty()));
+
+  auto on_view = base;
+  on_view.at("lods").at(0).at("submeshes").at(0).at("views").at(0)["bounds"]
+    = bounds;
+  EXPECT_THAT(ValidateJson(Schema(), on_view), Not(IsEmpty()));
+
+  // The geometry's own bounds stay optional authoring for every mesh type.
+  auto on_geometry = base;
+  on_geometry["bounds"] = bounds;
+  EXPECT_THAT(ValidateJson(Schema(), on_geometry), IsEmpty());
+}
+
+//! A buffer mesh has no generator, so its descriptor bounds it.
+NOLINT_TEST(GeometryDescriptorSchemaTest, RequiresBoundsOnBufferMeshes)
+{
+  auto doc = CapsuleDescriptor(nullptr);
+  auto& lod = doc.at("lods").at(0);
+  lod.erase("procedural");
+  lod.at("mesh_type") = "standard";
+  lod["buffers"] = json {
+    { "vb_ref", "/.cooked/Buffers/vertices.obuf" },
+    { "ib_ref", "/.cooked/Buffers/indices.obuf" },
+  };
+  lod.at("submeshes").at(0).at("views").at(0).at("view_ref") = "surface";
+  EXPECT_THAT(ValidateJson(Schema(), doc), Not(IsEmpty()));
+
+  lod["bounds"] = json::parse(R"({ "min": [-1, -1, -1], "max": [1, 1, 1] })");
+  EXPECT_THAT(ValidateJson(Schema(), doc), IsEmpty());
 }
 
 NOLINT_TEST(GeometryDescriptorSchemaTest, AcceptsCapsuleParameterBounds)
@@ -402,23 +437,42 @@ NOLINT_TEST(GeometryDescriptorSchemaTest, RejectsInvalidAssetDefaults)
     std::string_view value;
   };
   const auto cases = std::vector<Case> {
-    { "surfaces", R"([{ "visible": false }])" },
-    { "surfaces", R"([{ "surface_id": "x", "visible": false }])" },
-    { "surfaces",
-      R"([{ "surface_id": "018f8f8f-1111-7111-8111-111111111111",
-        "material": "/Content/Red.omat" }])" },
-    { "lod_policy", R"({ "type": "fixed", "lod_index": 8 })" },
-    { "lod_policy", R"({ "type": "fixed" })" },
-    { "lod_policy",
-      R"({ "type": "distance", "thresholds": [1], "hysteresis_ratio": 1 })" },
-    { "lod_policy",
-      R"({ "type": "distance", "thresholds": [1, 2, 3, 4, 5, 6, 7, 8],
-        "hysteresis_ratio": 0.1 })" },
-    { "lod_policy", R"({ "type": "distance", "thresholds": [-1],
-        "hysteresis_ratio": 0.1 })" },
-    { "lod_policy", R"({ "type": "screen_space_error",
-        "enter_finer_sse": [1] })" },
-    { "lod_policy", R"({ "type": "nearest" })" },
+    { .member = "surfaces", .value = R"([{ "visible": false }])" },
+    {
+      .member = "surfaces",
+      .value = R"([{ "surface_id": "x", "visible": false }])",
+    },
+    {
+      .member = "surfaces",
+      .value = R"([{ "surface_id": "018f8f8f-1111-7111-8111-111111111111",
+        "material": "/Content/Red.omat" }])",
+    },
+    {
+      .member = "lod_policy",
+      .value = R"({ "type": "fixed", "lod_index": 8 })",
+    },
+    { .member = "lod_policy", .value = R"({ "type": "fixed" })" },
+    {
+      .member = "lod_policy",
+      .value
+      = R"({ "type": "distance", "thresholds": [1], "hysteresis_ratio": 1 })",
+    },
+    {
+      .member = "lod_policy",
+      .value = R"({ "type": "distance", "thresholds": [1, 2, 3, 4, 5, 6, 7, 8],
+        "hysteresis_ratio": 0.1 })",
+    },
+    {
+      .member = "lod_policy",
+      .value = R"({ "type": "distance", "thresholds": [-1],
+        "hysteresis_ratio": 0.1 })",
+    },
+    {
+      .member = "lod_policy",
+      .value = R"({ "type": "screen_space_error",
+        "enter_finer_sse": [1] })",
+    },
+    { .member = "lod_policy", .value = R"({ "type": "nearest" })" },
   };
   for (const auto& test_case : cases) {
     SCOPED_TRACE(test_case.value);

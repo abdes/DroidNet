@@ -52,12 +52,10 @@ NOLINT_TEST(GeometryDescriptorImportRequestBuilderTest,
       "$schema": "./src/Oxygen/Cooker/Import/Schemas/oxygen.geometry-descriptor.schema.json",
       "name": "ProcCube",
       "content_hashing": false,
-      "bounds": { "min": [-0.5, -0.5, -0.5], "max": [0.5, 0.5, 0.5] },
       "lods": [
         {
           "name": "LOD0",
           "mesh_type": "procedural",
-          "bounds": { "min": [-0.5, -0.5, -0.5], "max": [0.5, 0.5, 0.5] },
           "procedural": { "generator": "Cube", "mesh_name": "CubeMesh" },
           "submeshes": [
             {
@@ -103,12 +101,10 @@ NOLINT_TEST(GeometryDescriptorImportRequestBuilderTest,
   WriteText(descriptor_path,
     R"({
       "name": "Bad",
-      "bounds": { "min": [-1, -1, -1], "max": [1, 1, 1] },
       "lods": [
         {
           "name": "LOD0",
           "mesh_type": "procedural",
-          "bounds": { "min": [-1, -1, -1], "max": [1, 1, 1] },
           "procedural": { "generator": "Cube", "mesh_name": "Cube" },
           "submeshes": [
             {
@@ -155,12 +151,10 @@ NOLINT_TEST(
   WriteText(descriptor_path,
     R"({
       "name": "ProcCube",
-      "bounds": { "min": [-0.5, -0.5, -0.5], "max": [0.5, 0.5, 0.5] },
       "lods": [
         {
           "name": "LOD0",
           "mesh_type": "procedural",
-          "bounds": { "min": [-0.5, -0.5, -0.5], "max": [0.5, 0.5, 0.5] },
           "procedural": { "generator": "Cube", "mesh_name": "CubeMesh" },
           "submeshes": [
             {

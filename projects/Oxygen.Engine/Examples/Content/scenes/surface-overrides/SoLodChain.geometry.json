@@ -1,18 +1,10 @@
 {
   "$schema": "../../../../src/Oxygen/Cooker/Import/Schemas/oxygen.geometry-descriptor.schema.json",
   "name": "SoLodChain",
-  "bounds": {
-    "min": [-0.5, -0.5, -0.5],
-    "max": [0.5, 0.5, 0.5]
-  },
   "lods": [
     {
       "name": "SoLodChain_lod0",
       "mesh_type": "procedural",
-      "bounds": {
-        "min": [-0.5, -0.5, -0.5],
-        "max": [0.5, 0.5, 0.5]
-      },
       "procedural": {
         "generator": "Sphere",
         "mesh_name": "SoLodChain_lod0",
@@ -37,10 +29,6 @@
     {
       "name": "SoLodChain_lod1",
       "mesh_type": "procedural",
-      "bounds": {
-        "min": [-0.5, -0.5, -0.5],
-        "max": [0.5, 0.5, 0.5]
-      },
       "procedural": {
         "generator": "IcoSphere",
         "mesh_name": "SoLodChain_lod1",
@@ -64,10 +52,6 @@
     {
       "name": "SoLodChain_lod2",
       "mesh_type": "procedural",
-      "bounds": {
-        "min": [-0.5, -0.5, -0.5],
-        "max": [0.5, 0.5, 0.5]
-      },
       "procedural": {
         "generator": "Cube",
         "mesh_name": "SoLodChain_lod2"

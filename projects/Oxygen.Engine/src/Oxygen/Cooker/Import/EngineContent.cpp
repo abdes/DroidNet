@@ -4,7 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <algorithm>
 #include <array>
 #include <filesystem>
 #include <fstream>
@@ -19,10 +18,9 @@
 
 #include <Oxygen/Cooker/Import/EngineContent.h>
 #include <Oxygen/Core/Types/DescriptorExtensions.h>
-#include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
-#include <Oxygen/Data/SurfaceId.h>
+#include <Oxygen/Data/StableId.h>
 
 namespace {
 
@@ -89,37 +87,15 @@ auto DefaultMaterialDescriptor() -> json
 
 auto GeometryDescriptor(const EngineShape& shape) -> json
 {
-  auto mesh_name = std::string(shape.name);
-  std::ranges::transform(
-    mesh_name, mesh_name.begin(), [](const char value) -> char {
-      return value >= 'A' && value <= 'Z'
-        ? static_cast<char>(value + ('a' - 'A'))
-        : value;
-    });
-  const auto mesh
-    = oxygen::data::GenerateMesh(std::string(shape.name) + "/" + mesh_name, {});
-  if (!mesh || mesh->SubMeshes().empty()) {
-    throw std::runtime_error(
-      "Engine shape generation failed for " + std::string(shape.name));
-  }
-
-  const auto minimum = mesh->BoundingBoxMin();
-  const auto maximum = mesh->BoundingBoxMax();
-  const auto bounds = json {
-    { "min", json::array({ minimum.x, minimum.y, minimum.z }) },
-    { "max", json::array({ maximum.x, maximum.y, maximum.z }) },
-  };
   return {
     { "$schema", "oxygen.geometry-descriptor.v1" },
     { "name", shape.name },
-    { "bounds", bounds },
     {
       "lods",
       json::array({
         {
           { "name", "LOD0" },
           { "mesh_type", "procedural" },
-          { "bounds", bounds },
           {
             "procedural",
             {
@@ -135,7 +111,7 @@ auto GeometryDescriptor(const EngineShape& shape) -> json
                 { "name", "Main" },
                 {
                   "surface_id",
-                  to_string(mesh->SubMeshes().front().SurfaceIdentity()),
+                  to_string(oxygen::data::ProceduralSurfaceId()),
                 },
                 {
                   "material_ref",

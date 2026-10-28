@@ -44,8 +44,7 @@ auto BuildMesh(std::string_view name,
                 .WithVertices(std::move(vertices))
                 .WithIndices(std::move(indices))
                 .BeginSubMesh("default", MaterialAsset::CreateDefault())
-                .WithSurfaceId(oxygen::data::SurfaceId::FromStableIdentity(
-                  "oxygen.procedural.surface/v1"))
+                .WithSurfaceId(oxygen::data::ProceduralSurfaceId())
                 .WithMeshView(MeshViewDesc {
                   .first_index = 0,
                   .index_count = index_count,
@@ -435,6 +434,11 @@ auto ParseGeneratorAndMeshName(std::string_view full_name)
 
  @see MeshType, MeshDesc, MakeCubeMeshAsset, MakeSphereMeshAsset, BuildMesh
 */
+auto oxygen::data::ProceduralSurfaceId() -> SurfaceId
+{
+  return SurfaceId::FromStableIdentity("oxygen.procedural.surface/v1");
+}
+
 auto oxygen::data::GenerateMeshBuffers(std::string_view full_name,
   std::span<const std::byte> param_blob) -> std::optional<MeshDataPair>
 {

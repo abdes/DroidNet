@@ -81,12 +81,18 @@ namespace {
     const auto& submesh = lod.submeshes.front();
     EXPECT_EQ(submesh.name, "submesh_0");
     EXPECT_EQ(submesh.material, "/Content/Materials/stone.omat");
-    EXPECT_EQ(submesh.bounds.min, lod.bounds.min);
+    ASSERT_HAS_VALUE(lod.bounds);
+    ASSERT_HAS_VALUE(submesh.bounds);
+    // A submesh without authored bounds takes its LOD bounds.
+    EXPECT_EQ(submesh.bounds->min, lod.bounds->min);
+    EXPECT_EQ(submesh.bounds->max, lod.bounds->max);
     ASSERT_EQ(submesh.views.size(), 1U);
-    EXPECT_EQ(submesh.views.front().view_ref, "surface");
+    const auto& view = submesh.views.front();
+    EXPECT_EQ(view.view_ref, "surface");
     // A view without authored bounds takes its submesh bounds.
-    EXPECT_EQ(submesh.views.front().bounds.min, submesh.bounds.min);
-    EXPECT_EQ(submesh.views.front().bounds.max, submesh.bounds.max);
+    ASSERT_HAS_VALUE(view.bounds);
+    EXPECT_EQ(view.bounds->min, submesh.bounds->min);
+    EXPECT_EQ(view.bounds->max, submesh.bounds->max);
   }
 
   NOLINT_TEST(GeometrySourceTest, RetainsAuthoredViewBounds)
@@ -107,8 +113,39 @@ namespace {
       FAIL() << "Expected source to contain a value";
     }
     const auto& view = source->lods.front().submeshes.front().views.front();
-    EXPECT_EQ(view.bounds.min, (std::array { 0.0F, 0.0F, 0.0F }));
-    EXPECT_EQ(view.bounds.max, (std::array { 1.0F, 0.5F, 1.0F }));
+    ASSERT_HAS_VALUE(view.bounds);
+    EXPECT_EQ(view.bounds->min, (std::array { 0.0F, 0.0F, 0.0F }));
+    EXPECT_EQ(view.bounds->max, (std::array { 1.0F, 0.5F, 1.0F }));
+  }
+
+  NOLINT_TEST(GeometrySourceTest, RejectsSubmeshBoundsOutsideTheLod)
+  {
+    auto document = MakeDescriptor();
+    document.at("lods")
+      .at(0)
+      .at("submeshes")
+      .at(0)
+      .emplace(
+        "bounds", nlohmann::json::parse(R"({"min":[0,0,0],"max":[2,1,1]})"));
+    auto diagnostics = std::vector<ImportDiagnostic> {};
+    EXPECT_FALSE(GeometrySource::FromDescriptor(
+      document.dump(), "geometry.json", diagnostics));
+    EXPECT_TRUE(
+      std::ranges::any_of(diagnostics, [](const auto& diagnostic) -> auto {
+        return diagnostic.code == "geometry.descriptor.submesh_bounds_invalid";
+      }));
+  }
+
+  //! Absent geometry bounds are left to the cook, which unions the LODs'.
+  NOLINT_TEST(GeometrySourceTest, GeometryBoundsAreOptional)
+  {
+    auto document = MakeDescriptor();
+    document.erase("bounds");
+    auto diagnostics = std::vector<ImportDiagnostic> {};
+    const auto source = GeometrySource::FromDescriptor(
+      document.dump(), "geometry.json", diagnostics);
+    ASSERT_HAS_VALUE(source) << "Expected source to contain a value";
+    EXPECT_FALSE(source->bounds.has_value());
   }
 
   NOLINT_TEST(GeometrySourceTest, RejectsViewBoundsOutsideTheSubmesh)
@@ -172,6 +209,7 @@ namespace {
     document.erase("buffers");
     auto& lod = document.at("lods").at(0);
     lod.erase("buffers");
+    lod.erase("bounds");
     lod.at("mesh_type") = "procedural";
     lod.emplace("procedural",
       nlohmann::json {
@@ -196,6 +234,11 @@ namespace {
     ASSERT_NE(procedural, nullptr);
     EXPECT_EQ(procedural->name, "Sphere/LargeSphere");
     EXPECT_EQ(procedural->parameters.size(), 8U);
+    // Only the generator can bound the mesh, when the geometry is cooked.
+    const auto& prepared = source->lods.front();
+    EXPECT_FALSE(prepared.bounds.has_value());
+    EXPECT_FALSE(prepared.submeshes.front().bounds.has_value());
+    EXPECT_FALSE(prepared.submeshes.front().views.front().bounds.has_value());
   }
 
   NOLINT_TEST(GeometrySourceTest, RejectsNilSurfaceBeforeResolvingAssets)

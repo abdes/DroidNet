@@ -6,6 +6,7 @@
 
 // Covers: Import/Internal/Jobs/GeometryDescriptorImportJob.cpp
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -51,13 +52,8 @@ namespace {
     return data::to_string(mesh->SubMeshes().front().SurfaceIdentity());
   }
 
-  auto MakeCapsuleDescriptor(
-    const json& params, const float height, const float radius) -> json
+  auto MakeCapsuleDescriptor(const json& params) -> json
   {
-    const auto bounds = json {
-      { "min", json::array({ -radius, -radius, -height * 0.5F }) },
-      { "max", json::array({ radius, radius, height * 0.5F }) },
-    };
     auto procedural
       = json { { "generator", "Capsule" }, { "mesh_name", "Capsule" } };
     if (!params.is_null()) {
@@ -65,14 +61,12 @@ namespace {
     }
     return json {
       { "name", "Capsule" },
-      { "bounds", bounds },
       {
         "lods",
         json::array({
           {
             { "name", "LOD0" },
             { "mesh_type", "procedural" },
-            { "bounds", bounds },
             { "procedural", std::move(procedural) },
             {
               "submeshes",
@@ -107,14 +101,12 @@ NOLINT_TEST(GeometryDescriptorImportJobProceduralTest,
 
   const auto descriptor_doc = json {
     { "name", "ProceduralCube" },
-    { "bounds", MakeBounds() },
     {
       "lods",
       json::array({
         json {
           { "name", "LOD0" },
           { "mesh_type", "procedural" },
-          { "bounds", MakeBounds() },
           {
             "procedural",
             {
@@ -164,8 +156,72 @@ NOLINT_TEST(GeometryDescriptorImportJobProceduralTest,
   EXPECT_TRUE(CanParseGeometryDescriptor(descriptor_bytes));
 }
 
+//! Authored geometry bounds that cut into a generated mesh fail the import.
 NOLINT_TEST(GeometryDescriptorImportJobProceduralTest,
-  ProceduralPlanePreservesDescriptorBoundsInCookedMetadata)
+  AuthoredBoundsMustContainTheGeneratedMesh)
+{
+  const ScopedTempDir temp;
+  const auto root = temp.Path() / "procedural_bounds_too_small";
+  const auto cooked_root = root / ".cooked";
+  const auto descriptor_path = root / "Sources" / "cube.geometry.json";
+  WriteText(cooked_root / "Materials" / "default.omat", "placeholder");
+
+  const auto descriptor_doc = json {
+    { "name", "ProceduralCube" },
+    {
+      "bounds",
+      {
+        { "min", json::array({ -0.25F, -0.25F, -0.25F }) },
+        { "max", json::array({ 0.25F, 0.25F, 0.25F }) },
+      },
+    },
+    {
+      "lods",
+      json::array({
+        json {
+          { "name", "LOD0" },
+          { "mesh_type", "procedural" },
+          { "procedural",
+            { { "generator", "Cube" }, { "mesh_name", "Cube" } } },
+          {
+            "submeshes",
+            json::array({
+              json {
+                { "surface_id", GeneratedSurfaceId("Cube") },
+                { "material_ref", "/.cooked/Materials/default.omat" },
+                {
+                  "views",
+                  json::array({ json { { "view_ref", "__all__" } } }),
+                },
+              },
+            }),
+          },
+        },
+      }),
+    },
+  };
+  WriteText(descriptor_path, descriptor_doc.dump(2));
+
+  auto service = AsyncImportService(AsyncImportService::Config {
+    .thread_pool_size = 2U,
+  });
+  [[maybe_unused]] auto stop_service
+    = oxygen::Finally([&service] -> void { service.Stop(); });
+
+  const auto report = SubmitAndWait(
+    service, MakeGeometryRequest(descriptor_path, cooked_root, descriptor_doc));
+  ASSERT_HAS_VALUE(report);
+  EXPECT_FALSE(report->success);
+  EXPECT_TRUE(std::ranges::any_of(report->diagnostics,
+    [](const auto& diagnostic) -> bool {
+      return diagnostic.code == "geometry.descriptor.bounds_invalid";
+    }))
+    << DiagnosticSummary(report->diagnostics);
+}
+
+//! The cooked bounds are the generated mesh's; the descriptor authors none.
+NOLINT_TEST(GeometryDescriptorImportJobProceduralTest,
+  ProceduralPlaneBoundsComeFromItsGenerator)
 {
   const ScopedTempDir temp;
   const auto root = temp.Path() / "procedural_plane_bounds_xy_z0";
@@ -177,20 +233,14 @@ NOLINT_TEST(GeometryDescriptorImportJobProceduralTest,
   std::filesystem::create_directories(cooked_root / "Materials");
   WriteText(cooked_root / "Materials" / "default.omat", "placeholder");
 
-  const auto floor_bounds = json {
-    { "min", json::array({ -5.0F, -5.0F, 0.0F }) },
-    { "max", json::array({ 5.0F, 5.0F, 0.0F }) },
-  };
   const auto descriptor_doc = json {
     { "name", "FloorPlane" },
-    { "bounds", floor_bounds },
     {
       "lods",
       json::array({
         json {
           { "name", "LOD0" },
           { "mesh_type", "procedural" },
-          { "bounds", floor_bounds },
           {
             "procedural",
             {
@@ -302,8 +352,7 @@ NOLINT_TEST(GeometryDescriptorImportJobProceduralTest,
     const auto cooked_root = root / ".cooked";
     const auto source_path = root / "Sources" / "capsule.geometry.json";
     WriteText(cooked_root / "Materials" / "default.omat", "placeholder");
-    const auto doc = MakeCapsuleDescriptor(
-      test_case.params, test_case.height, test_case.radius);
+    const auto doc = MakeCapsuleDescriptor(test_case.params);
     WriteText(source_path, doc.dump(2));
     const auto report = SubmitAndWait(
       service, MakeGeometryRequest(source_path, cooked_root, doc));
@@ -423,7 +472,7 @@ NOLINT_TEST(GeometryDescriptorImportJobProceduralTest,
     const auto cooked_root = root / ".cooked";
     const auto source_path = root / "Sources" / "capsule.geometry.json";
     WriteText(cooked_root / "Materials" / "default.omat", "placeholder");
-    auto doc = MakeCapsuleDescriptor(nullptr, 2.0F, 0.5F);
+    auto doc = MakeCapsuleDescriptor(nullptr);
     if (!test_case.surfaces.is_null()) {
       doc["surfaces"] = test_case.surfaces;
     }
@@ -487,7 +536,7 @@ NOLINT_TEST(GeometryDescriptorImportJobProceduralTest,
     const auto cooked_root = root / ".cooked";
     const auto source_path = root / "Sources" / "capsule.geometry.json";
     WriteText(cooked_root / "Materials" / "default.omat", "placeholder");
-    const auto doc = MakeCapsuleDescriptor(cases.at(index), 2.0F, 0.5F);
+    const auto doc = MakeCapsuleDescriptor(cases.at(index));
     WriteText(source_path, doc.dump(2));
     const auto report = SubmitAndWait(
       service, MakeGeometryRequest(source_path, cooked_root, doc));
@@ -517,14 +566,12 @@ NOLINT_TEST(GeometryDescriptorImportJobProceduralTest,
 
   const auto descriptor_doc = json {
     { "name", "ProceduralIcoSphere" },
-    { "bounds", MakeBounds() },
     {
       "lods",
       json::array({
         json {
           { "name", "LOD0" },
           { "mesh_type", "procedural" },
-          { "bounds", MakeBounds() },
           {
             "procedural",
             {
@@ -628,14 +675,12 @@ NOLINT_TEST(GeometryDescriptorImportJobProceduralTest,
 
   const auto descriptor_doc = json {
     { "name", "ProceduralSubdividedCube" },
-    { "bounds", MakeBounds() },
     {
       "lods",
       json::array({
         json {
           { "name", "LOD0" },
           { "mesh_type", "procedural" },
-          { "bounds", MakeBounds() },
           {
             "procedural",
             {

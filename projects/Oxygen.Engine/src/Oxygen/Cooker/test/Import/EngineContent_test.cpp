@@ -18,6 +18,8 @@
 #include <Oxygen/Cooker/test/Support/JsonSchema.h>
 #include <Oxygen/Cooker/test/Support/TempDir.h>
 #include <Oxygen/Data/MaterialAsset.h>
+#include <Oxygen/Data/ProceduralMeshes.h>
+#include <Oxygen/Data/StableId.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {
@@ -32,12 +34,20 @@ using oxygen::cooker::test::ValidateJson;
 
 class EngineContentTest : public TempDirTest { };
 
+//! The geometry descriptor schema, loaded once.
+auto GeometrySchema() -> const json&
+{
+  static const auto schema
+    = LoadSchema("Import/Schemas/oxygen.geometry-descriptor.schema.json");
+  return schema;
+}
+
 //! Checks one geometry job: its descriptor is schema-valid, procedural from the
 //! shape's generator, and uses the engine default material.
-auto CheckShapeJob(const json& job, const json& schema) -> void
+auto CheckShapeJob(const json& job) -> void
 {
   const auto descriptor = LoadJson(job.at("source").get<std::string>());
-  EXPECT_THAT(ValidateJson(schema, descriptor), testing::IsEmpty());
+  EXPECT_THAT(ValidateJson(GeometrySchema(), descriptor), testing::IsEmpty());
   const auto& lod = descriptor.at("lods").at(0);
   EXPECT_EQ(lod.at("procedural").at("generator"), job.at("name"));
   EXPECT_EQ(lod.at("submeshes").at(0).at("material_ref").get<std::string>(),
@@ -46,12 +56,11 @@ auto CheckShapeJob(const json& job, const json& schema) -> void
   EXPECT_THAT(job.at("virtual_path").get<std::string>(),
     testing::AllOf(testing::StartsWith("/Engine/"),
       testing::EndsWith("/" + job.at("name").get<std::string>() + ".ogeo")));
-  if (job.at("name") == "Capsule") {
-    EXPECT_EQ(
-      descriptor.at("bounds").at("min"), json::array({ -0.5F, -0.5F, -1.0F }));
-    EXPECT_EQ(
-      descriptor.at("bounds").at("max"), json::array({ 0.5F, 0.5F, 1.0F }));
-  }
+  // The generator bounds the mesh when it is cooked.
+  EXPECT_FALSE(descriptor.contains("bounds"));
+  EXPECT_FALSE(lod.contains("bounds"));
+  EXPECT_EQ(lod.at("submeshes").at(0).at("surface_id").get<std::string>(),
+    to_string(oxygen::data::ProceduralSurfaceId()));
 }
 
 //! The default material descriptor is schema-valid and carries the live
@@ -92,10 +101,6 @@ NOLINT_TEST_F(EngineContentTest, DefaultMaterialMatchesTheLiveMaterial)
 //! referencing the default material by its engine path.
 NOLINT_TEST_F(EngineContentTest, EveryShapeCooksUnderItsEnginePath)
 {
-  // Arrange
-  const auto geometry_schema
-    = LoadSchema("Import/Schemas/oxygen.geometry-descriptor.schema.json");
-
   // Act
   const auto manifests
     = WriteEngineContentSources(TempDir(), TempPath("cooked"));
@@ -105,7 +110,7 @@ NOLINT_TEST_F(EngineContentTest, EveryShapeCooksUnderItsEnginePath)
   ASSERT_EQ(jobs.size(), GetEngineShapes().size());
   auto folders = std::vector<std::string> {};
   for (const auto& job : jobs) {
-    TRACE_GCHECK_F(CheckShapeJob(job, geometry_schema), "shape job");
+    TRACE_GCHECK_F(CheckShapeJob(job), "shape job");
     folders.push_back(
       std::filesystem::path(job.at("virtual_path").get<std::string>())
         .parent_path()

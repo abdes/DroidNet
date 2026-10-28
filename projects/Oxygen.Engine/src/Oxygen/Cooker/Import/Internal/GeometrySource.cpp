@@ -199,20 +199,6 @@ namespace {
     return bounds;
   }
 
-  //! True when `inner` is ordered and lies inside `outer`.
-  auto BoundsContain(const GeometrySource::Bounds& outer,
-    const GeometrySource::Bounds& inner) -> bool
-  {
-    for (size_t axis = 0; axis < inner.min.size(); ++axis) {
-      if (!(inner.min.at(axis) <= inner.max.at(axis))
-        || !(inner.min.at(axis) >= outer.min.at(axis))
-        || !(inner.max.at(axis) <= outer.max.at(axis))) {
-        return false;
-      }
-    }
-    return true;
-  }
-
   //! Reads `surfaces` and `lod_policy` into `source`, whose LODs are read.
   auto ReadAssetDefaults(const json& document,
     const std::filesystem::path& source_path,
@@ -273,7 +259,9 @@ namespace {
   {
     auto source = GeometrySource {};
     source.name = document.at("name").get<std::string>();
-    source.bounds = ReadBounds(document.at("bounds"));
+    if (document.contains("bounds")) {
+      source.bounds = ReadBounds(document.at("bounds"));
+    }
     if (document.contains("content_hashing")) {
       source.content_hashing = document.at("content_hashing").get<bool>();
     }
@@ -292,9 +280,9 @@ namespace {
       const auto lod_path = "lods[" + std::to_string(lod_index) + "]";
       auto lod = GeometrySource::Lod {};
       lod.name = lod_doc.at("name").get<std::string>();
-      lod.bounds = ReadBounds(lod_doc.at("bounds"));
       const auto type = lod_doc.at("mesh_type").get<std::string>();
       if (type == "standard" || type == "skinned") {
+        lod.bounds = ReadBounds(lod_doc.at("bounds"));
         auto buffers = GeometrySource::Buffers {
           .vertex = lod_doc.at("buffers").at("vb_ref").get<std::string>(),
           .index = lod_doc.at("buffers").at("ib_ref").get<std::string>(),
@@ -358,6 +346,14 @@ namespace {
             : lod.bounds,
           .views = {},
         };
+        if (lod.bounds.has_value() && submesh.bounds.has_value()
+          && !lod.bounds->Contains(*submesh.bounds)) {
+          AddDiagnostic(diagnostics, source_path, ImportSeverity::kError,
+            "geometry.descriptor.submesh_bounds_invalid",
+            "Submesh bounds must be ordered and lie inside the LOD bounds",
+            submesh_path + ".bounds");
+          return std::nullopt;
+        }
         const auto& views = submesh_doc.at("views");
         submesh.views.reserve(views.size());
         for (size_t view_index = 0; view_index < views.size(); ++view_index) {
@@ -378,7 +374,8 @@ namespace {
               view_path + ".view_ref");
             return std::nullopt;
           }
-          if (!BoundsContain(submesh.bounds, view.bounds)) {
+          if (submesh.bounds.has_value() && view.bounds.has_value()
+            && !submesh.bounds->Contains(*view.bounds)) {
             AddDiagnostic(diagnostics, source_path, ImportSeverity::kError,
               "geometry.descriptor.view_bounds_invalid",
               "Mesh view bounds must be ordered and lie inside the submesh "
@@ -398,6 +395,28 @@ namespace {
     return source;
   }
 } // namespace
+
+auto GeometrySource::Bounds::Contains(const Bounds& inner) const -> bool
+{
+  for (size_t axis = 0; axis < inner.min.size(); ++axis) {
+    if (!(inner.min.at(axis) <= inner.max.at(axis))
+      || !(inner.min.at(axis) >= min.at(axis))
+      || !(inner.max.at(axis) <= max.at(axis))) {
+      return false;
+    }
+  }
+  return true;
+}
+
+auto GeometrySource::Bounds::Union(const Bounds& other) const -> Bounds
+{
+  auto both = *this;
+  for (size_t axis = 0; axis < both.min.size(); ++axis) {
+    both.min.at(axis) = std::min(both.min.at(axis), other.min.at(axis));
+    both.max.at(axis) = std::max(both.max.at(axis), other.max.at(axis));
+  }
+  return both;
+}
 
 auto GeometrySource::DeclaredSurfaces() const -> std::vector<data::SurfaceId>
 {

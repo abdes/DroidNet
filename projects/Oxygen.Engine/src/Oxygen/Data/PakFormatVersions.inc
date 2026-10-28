@@ -39,7 +39,7 @@ OXDAT_IMPORTER_REVISION(
   kPhysicsMaterialDescriptor, physics_material_descriptor, 1)
 OXDAT_IMPORTER_REVISION(
   kCollisionShapeDescriptor, collision_shape_descriptor, 1)
-OXDAT_IMPORTER_REVISION(kGeometryDescriptor, geometry_descriptor, 3)
+OXDAT_IMPORTER_REVISION(kGeometryDescriptor, geometry_descriptor, 4)
 OXDAT_IMPORTER_REVISION(kSceneDescriptor, scene_descriptor, 1)
 OXDAT_IMPORTER_REVISION(kScriptAsset, script, 1)
 OXDAT_IMPORTER_REVISION(kScriptingSidecar, script_sidecar, 1)
