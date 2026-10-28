@@ -235,6 +235,22 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
         return root.Replace('\\', '/');
     }
 
+    /// <summary>Gets the importers whose output makes up a source's products, by the names the ImportTool reports.</summary>
+    /// <param name="input">The cook input.</param>
+    /// <returns>The importers its jobs run: a scene's script sidecar patches its cooked scene.</returns>
+    internal static IReadOnlyList<string> GetImporters(ContentCookInput input)
+        => input.Kind switch
+        {
+            ContentCookAssetKind.Material => ["material_descriptor"],
+            ContentCookAssetKind.Geometry => ["geometry_descriptor"],
+            ContentCookAssetKind.Scene => ["scene_descriptor", "script_sidecar"],
+            ContentCookAssetKind.Texture => ["texture"],
+            ContentCookAssetKind.ForeignSource => [Path.GetExtension(input.SourceRelativePath).Equals(".fbx", StringComparison.OrdinalIgnoreCase) ? "fbx" : "gltf"],
+            ContentCookAssetKind.Input => ["input"],
+            ContentCookAssetKind.Script => ["script"],
+            _ => throw new ArgumentOutOfRangeException(nameof(input), input.Kind, "Unsupported manifest job asset kind."),
+        };
+
     private static string GetJobType(ContentCookAssetKind kind)
         => kind switch
         {

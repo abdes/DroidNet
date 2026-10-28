@@ -57,6 +57,11 @@ internal static class NativeImportReportReader
                 throw new InvalidDataException("The native report identifies an unexpected job.");
             }
 
+            if (execution.Importers is { } importers)
+            {
+                EnsureImporterRevision(job, importers);
+            }
+
             succeeded &= string.Equals(job.GetProperty("status").GetString(), "succeeded", StringComparison.Ordinal);
             var emitted = new HashSet<string>(StringComparer.Ordinal);
             AddOutputs(job, emitted);
@@ -81,6 +86,23 @@ internal static class NativeImportReportReader
             ProductsBySource = productsBySource.ToImmutable(),
             ModelImports = succeeded ? modelImports.ToImmutable() : [],
         };
+    }
+
+    // A product's fingerprint holds the revision of the importer that cooks it, so a job cooked at another revision
+    // would record a product the next cook wrongly reuses.
+    private static void EnsureImporterRevision(JsonElement job, Incremental.ImporterRevisions importers)
+    {
+        if (!job.TryGetProperty("importer", out var importer))
+        {
+            return;
+        }
+
+        var name = importer.GetProperty("name").GetString()!;
+        var revision = importer.GetProperty("revision").GetUInt32();
+        if (importers.Of(name) != revision)
+        {
+            throw new InvalidDataException($"The ImportTool cooked with the '{name}' importer at revision {revision}, not the {importers.Of(name)} the cook's fingerprints hold.");
+        }
     }
 
     // A successful job that imports a model establishes what its record keeps, one entry per requested source.

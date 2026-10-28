@@ -26,7 +26,8 @@ public sealed class ImportWorkflowTests
 
     public TestContext TestContext { get; set; } = null!;
 
-    /// <summary>One explicit import retains source, creates its import record and publishes through one coordinator run.</summary>
+    /// <summary>One explicit import retains source, creates its import record and publishes through one coordinator run;
+    /// an explicit reimport then imports again although nothing changed, and an ordinary cook reuses the result.</summary>
     /// <returns>The asynchronous complete import test.</returns>
     [TestMethod]
     [TestCategory("NativeContent")]
@@ -58,7 +59,12 @@ public sealed class ImportWorkflowTests
             _ = run.Messages.Should().NotContain(static message => message.Text.Contains('\u001b'), "native output is captured without terminal escapes");
             _ = run.Messages.Should().Contain(static message => message.Text.Contains("geom-buffer:", StringComparison.Ordinal) && !message.Text.EndsWith("...", StringComparison.Ordinal), "native progress lines reach the run whole");
             File.Delete(source);
-            _ = (await service.ReimportSourceAsync(result.RetainedSourceUri!, workspace.ProjectContext, this.TestContext.CancellationToken).ConfigureAwait(false)).IsUpToDate.Should().BeTrue();
+
+            // An explicit reimport imports again, unchanged inputs included, from the retained copy alone.
+            var reimported = await service.ReimportSourceAsync(result.RetainedSourceUri!, workspace.ProjectContext, this.TestContext.CancellationToken).ConfigureAwait(false);
+            _ = reimported.IsUpToDate.Should().BeFalse("the user asked for the import, not for a check that it is current");
+            _ = reimported.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, reimported.Diagnostics.Select(static issue => issue.Message)));
+            _ = (await service.CookFolderAsync(AssetPath.Parse("/Content/Models/Model"), this.TestContext.CancellationToken).ConfigureAwait(false)).IsUpToDate.Should().BeTrue("an ordinary cook still reuses current products");
         }
         finally
         {

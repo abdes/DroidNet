@@ -402,6 +402,19 @@ public sealed partial class ContentPipelineService(
     private Task<ContentCookResult> CookAssetCoreAsync(ContentCookOperation operation, AssetPath assetUri, CancellationToken cancellationToken, bool allowImportedSourceChanges = true, bool isAutomatic = false)
         => this.CookCapturedScopesAsync(operation, () => [this.CreateAssetScope(operation.Project, assetUri, allowImportedSourceChanges, isAutomatic)], CookTargetKind.Asset, cancellationToken);
 
+    // An explicit reimport imports its source again even when nothing it reads changed: the user asks for the import,
+    // not for a check that it is current.
+    private Task<ContentCookResult> ReimportAssetCoreAsync(ContentCookOperation operation, AssetPath sourceUri, CancellationToken cancellationToken)
+        => this.CookCapturedScopesAsync(
+            operation,
+            () =>
+            {
+                var scope = this.CreateAssetScope(operation.Project, sourceUri, allowImportedSourceChanges: true, isAutomatic: false);
+                return [scope with { ReimportedSources = [.. scope.Inputs.Where(static input => input.Role == ContentCookInputRole.Primary).Select(static input => input.AssetUri)] }];
+            },
+            CookTargetKind.Asset,
+            cancellationToken);
+
     // Each asset keeps the scope it has when cooked alone, so a requested product still resolves to its container.
     private Task<ContentCookResult> CookAssetsCoreAsync(ContentCookOperation operation, AssetPath[] assetUris, bool isAutomatic, CancellationToken cancellationToken)
         => this.CookCapturedScopesAsync(
@@ -579,7 +592,7 @@ public sealed partial class ContentPipelineService(
             scope.InputRoot,
             Path.Combine(scope.Project.ProjectRoot.FullPath, ".build", "cook", operationId.ToString("N")),
             manifest)
-        { Artifacts = scope.Artifacts, CapturedInputs = scope.CapturedInputs };
+        { Artifacts = scope.Artifacts, CapturedInputs = scope.CapturedInputs, Importers = scope.Importers };
         return this.engineContentPipelineApi.ImportAsync(execution, cancellationToken);
     }
 

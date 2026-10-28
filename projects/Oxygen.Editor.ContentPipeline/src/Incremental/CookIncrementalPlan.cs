@@ -18,6 +18,9 @@ internal sealed record CookIncrementalPlan(
     ImmutableDictionary<AssetPath, CookProvenance.Product> Reusable,
     ImmutableHashSet<string> ValidSharedRoots)
 {
+    /// <summary>Gets the revisions of the importers the plan's fingerprints hold.</summary>
+    public required ImporterRevisions Importers { get; init; }
+
     /// <summary>Gets committed inventory metadata for comparison with candidate outputs; this is not a live read lease.</summary>
     public ImmutableDictionary<string, CookedInventoryReport> PriorInventories { get; init; } = [];
 

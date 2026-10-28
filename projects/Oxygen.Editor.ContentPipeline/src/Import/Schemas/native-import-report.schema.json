@@ -4,7 +4,7 @@
   "required": ["report_version", "session", "jobs"],
   "properties": {
     "report_version": {
-      "const": "3"
+      "const": "4"
     },
     "session": {
       "type": "object",
@@ -37,6 +37,20 @@
           "type": {
             "type": "string",
             "minLength": 1
+          },
+          "importer": {
+            "type": "object",
+            "required": ["name", "revision"],
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "revision": {
+                "type": "integer",
+                "minimum": 1
+              }
+            }
           },
           "status": {
             "enum": [

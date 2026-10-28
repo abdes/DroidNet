@@ -88,7 +88,7 @@ public sealed partial class ContentPipelineService
         return this.cookCoordinator.RunCookAsync(
             new(CookTargetKind.Asset, sourceUri) { IsReimport = true, OriginContext = expectedProject, CoalescePending = true },
             (operation, token) => ReferenceEquals(operation.Project, expectedProject)
-                ? this.CookAssetCoreAsync(operation, sourceUri, token)
+                ? this.ReimportAssetCoreAsync(operation, sourceUri, token)
                 : Task.FromResult(CreateFailedCook(operation, CookTargetKind.Asset, new InvalidOperationException("The project changed before reimport started."))),
             cancellationToken);
     }

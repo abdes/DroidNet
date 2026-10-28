@@ -23,4 +23,10 @@ public sealed record ContentImportExecution(
 
     /// <summary>Gets frozen inputs; null selects ordinary native source reads.</summary>
     public NativeCapturedInputSet? CapturedInputs { get; init; }
+
+    /// <summary>
+    /// Gets the importer revisions the cook's fingerprints hold, which every job must cook with; null when no
+    /// fingerprint records the import.
+    /// </summary>
+    public Incremental.ImporterRevisions? Importers { get; init; }
 }

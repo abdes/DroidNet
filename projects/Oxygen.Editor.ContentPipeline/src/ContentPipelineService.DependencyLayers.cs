@@ -134,6 +134,7 @@ public sealed partial class ContentPipelineService
                 {
                     Snapshot = snapshot,
                     Artifacts = artifacts,
+                    Importers = plan.Importers,
                     ReusableSources = [.. completed],
                     PreviousProvenance = previous,
                     PreviousInventories = plan.PriorInventories,

@@ -32,6 +32,9 @@ public sealed record ContentCookScope(
     /// <summary>Gets the compatible artifacts borrowed from the owning cook operation.</summary>
     public NativeArtifactLease? Artifacts { get; init; }
 
+    /// <summary>Gets the importer revisions the owning cook's fingerprints hold; null outside an incremental cook.</summary>
+    public Incremental.ImporterRevisions? Importers { get; init; }
+
     /// <summary>Gets the logical authoring root used by native recipes.</summary>
     public string InputRoot => this.Project.ProjectRoot.FullPath;
 
@@ -57,6 +60,12 @@ public sealed record ContentCookScope(
 
     /// <summary>Gets a value indicating whether explicit user intent permits changed retained model inputs.</summary>
     internal bool AllowImportedSourceChanges { get; init; } = true;
+
+    /// <summary>
+    /// Gets the sources this cook imports again although nothing they read changed: the sources the user asked to
+    /// reimport, which no reused product may answer.
+    /// </summary>
+    internal System.Collections.Immutable.ImmutableHashSet<AssetPath> ReimportedSources { get; init; } = [];
 
     /// <summary>
     /// Gets a value indicating whether a save or preview queued this cook. Its source may have been moved or deleted

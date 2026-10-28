@@ -18,6 +18,7 @@ using Oxygen.Editor.ContentPipeline.Testing;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Projects.Testing;
 using Oxygen.Managed.Assets.Authoring.Materials;
+using Oxygen.Managed.Core;
 using Testably.Abstractions;
 
 namespace Oxygen.Editor.Assets.Benchmarks.Tests;
@@ -43,14 +44,16 @@ public sealed class AssetFeedWorkloadBenchmarks
         }
 
         var session = workspace.OpenSession();
-        var documents = Mock.Of<Oxygen.Editor.Documents.IUnsavedDocuments>();
+        var documents = Mock.Of<Oxygen.Editor.Documents.IUnsavedDocuments>(port => port.Find(It.IsAny<IEnumerable<FileSystemPath>>()) == Array.Empty<Oxygen.Editor.Documents.UnsavedDocument>());
         using var runs = new ContentCookCoordinator(session, NullLogger<ContentCookCoordinator>.Instance);
         var files = new NativeAtomicFileStore(new RealFileSystem());
         var content = new Mock<IEngineContentPipelineApi>(MockBehavior.Strict);
+        _ = content.Setup(value => value.ReadImporterRevisionsAsync(It.IsAny<Oxygen.Managed.Core.Compatibility.NativeArtifactLease?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(ImporterRevisionsFixture.Current);
         var storage = new NativeStorageProvider(new RealFileSystem());
         var engineContent = new EngineContentPakFixture();
         var publication = new CookPublicationService(runs, session, files, new ProjectManagerService(storage, atomicFiles: files), engineContent);
-        var statuses = new AssetCookStatusReader(publication, engineContent);
+        var statuses = new AssetCookStatusReader(publication, engineContent, content.Object);
         await using var catalog = new AssetCatalog(session, storage, engineContent, publication);
         var runtime = AssetStatusFixture.CreateUnavailableRuntimeStatus();
         using var provider = new AssetFeed(catalog, session, new WorkspaceCookScopeProvider(workspace), statuses, documents, runs, runtime, Mock.Of<IAssetRelocationService>(), Mock.Of<IAssetAuthoring>());
@@ -64,6 +67,8 @@ public sealed class AssetFeedWorkloadBenchmarks
         this.TestContext.WriteLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"Asset feed: cold={cold.TotalMilliseconds:F2}ms; entries={rows.Count}; configuration={typeof(AssetFeed).Assembly.GetCustomAttributes(typeof(System.Reflection.AssemblyConfigurationAttribute), inherit: false).Cast<System.Reflection.AssemblyConfigurationAttribute>().Single().Configuration}"));
         _ = cold.Should().BeLessThan(TimeSpan.FromSeconds(5));
         _ = runs.Runs.Should().BeEmpty();
+        // A status read asks the ImportTool for its importer revisions alone; it runs no import.
+        content.Verify(value => value.ReadImporterRevisionsAsync(It.IsAny<Oxygen.Managed.Core.Compatibility.NativeArtifactLease?>(), It.IsAny<CancellationToken>()), Times.AtLeastOnce());
         content.VerifyNoOtherCalls();
     }
 

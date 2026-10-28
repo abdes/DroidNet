@@ -56,18 +56,21 @@ internal static class CookIncrementalPlanner
     /// <param name="inventories">The verified inventories of the published roots, by mount.</param>
     /// <param name="rebuiltRoots">Mounts whose roots are rebuilt, so none of their outputs are reused.</param>
     /// <param name="removedSources">Sources whose prior products leave the cooked content.</param>
-    /// <param name="rebuiltSources">Sources the repair cooks again even though their inputs did not change.</param>
+    /// <param name="rebuiltSources">Sources cooked again even though their inputs did not change: those a repair cooks
+    /// again, and those the user asked to reimport.</param>
+    /// <param name="importers">The revisions of the importers that cook.</param>
     /// <returns>The fingerprints to build and the verified products to reuse.</returns>
     public static CookIncrementalPlan CreatePlan(
         IReadOnlyList<CookSnapshotInput> inputs,
         CookDependencyGraph graph,
         CookProvenance previous,
         ImmutableDictionary<string, CookedInventoryReport> inventories,
+        ImporterRevisions importers,
         IReadOnlySet<string>? rebuiltRoots = null,
         IReadOnlySet<AssetPath>? removedSources = null,
         IReadOnlySet<AssetPath>? rebuiltSources = null)
     {
-        var fingerprints = graph.Assets.ToImmutableDictionary(static input => input.AssetUri, input => Fingerprint(input, inputs, graph));
+        var fingerprints = graph.Assets.ToImmutableDictionary(static input => input.AssetUri, input => Fingerprint(input, inputs, graph, importers));
 
         var sharedRoots = ImmutableHashSet.CreateBuilder<string>(StringComparer.Ordinal);
         var validOutputs = new HashSet<(string Root, string Path)>();
@@ -120,35 +123,39 @@ internal static class CookIncrementalPlanner
 
         return new(fingerprints, reused.ToImmutable(), sharedRoots.ToImmutable())
         {
+            Importers = importers,
             VerifiedOutputs = [.. validOutputs],
             PriorInventories = inventories,
             RemovedSources = removedSources?.ToImmutableHashSet() ?? [],
         };
     }
 
-    internal static string Fingerprint(ContentCookInput input, IReadOnlyList<CookSnapshotInput> inputs, CookDependencyGraph graph)
+    internal static string Fingerprint(ContentCookInput input, IReadOnlyList<CookSnapshotInput> inputs, CookDependencyGraph graph, ImporterRevisions importers)
     {
         var files = inputs.ToDictionary(static file => file.RelativePath, StringComparer.Ordinal);
         return Fingerprint(
             input,
             graph.FileDependencies[input.AssetUri].Select(path => files[path]),
             graph.Dependencies[input.AssetUri],
-            graph.CookedDependencies.GetValueOrDefault(input.AssetUri, []));
+            graph.CookedDependencies.GetValueOrDefault(input.AssetUri, []),
+            importers);
     }
 
-    // A product depends on its inputs alone: the engine's verification of the cooked root refuses outputs in a format
-    // it no longer reads, so the tools that cooked them are no part of the fingerprint.
+    // A product depends on its inputs and on the revisions of the importers that cook it. A format the engine no
+    // longer reads needs nothing here: its verification of the cooked root refuses those outputs.
     internal static string Fingerprint(
         ContentCookInput input,
         IEnumerable<CookSnapshotInput> files,
         IEnumerable<AssetPath> dependencies,
-        IEnumerable<CookedDependencySnapshot> cookedDependencies)
+        IEnumerable<CookedDependencySnapshot> cookedDependencies,
+        ImporterRevisions importers)
     {
         var authored = Hash(new
         {
-            Version = 2,
+            Version = 3,
             Source = input.AssetUri.ToUriString(),
             input.Kind,
+            Importers = ContentImportManifestBuilder.GetImporters(input).Select(importer => new { Name = importer, Revision = importers.Of(importer) }),
             Files = files.Select(file => new
             {
                 Path = file.RelativePath,

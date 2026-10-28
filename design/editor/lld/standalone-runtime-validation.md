@@ -3,7 +3,7 @@
 Status:
 `post-V0.1 design; retired from ED-M08 on 2026-10-08 (PRD REQ-042 deferred)`
 
-Last Updated: 2026-10-20 01:32
+Last Updated: 2026-10-28 18:00
 
 The entire validation workflow is **development-only**. Normal Debug and Release
 editor/RenderScene builds and their SDK/install/package graphs contain no
@@ -474,7 +474,8 @@ Verify and retain actual artifact files before use; child startup checks its
 loaded identities against the request.
 
 Cooked products carry no producer fingerprint; the engine's cooked format
-versions decide whether they are readable. Exact runtime,
+versions decide whether they are readable, and the importer revisions whether
+the editor reuses them. Exact runtime,
 development tool, and profile hashes identify the parity run. Do not require
 unrelated managed assemblies, tests, documentation or git dirtiness to match. A
 source commit may be recorded diagnostically without becoming a startup gate. A

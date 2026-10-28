@@ -56,6 +56,7 @@ internal sealed partial class CookSourceAnalyzer
         }
 
         var products = previous.Products.ToDictionary(static product => product.SourceUri);
+        var importers = await native.ReadImporterRevisionsAsync(artifacts, cancellationToken).ConfigureAwait(false);
         var accepted = await new AcceptedCookSourceFacts(
                 operation.Project,
                 previous,
@@ -72,7 +73,7 @@ internal sealed partial class CookSourceAnalyzer
                 continue;
             }
 
-            var fingerprint = CookIncrementalPlanner.Fingerprint(facts.Input, facts.Files, product.Dependencies, product.CookedDependencies);
+            var fingerprint = CookIncrementalPlanner.Fingerprint(facts.Input, facts.Files, product.Dependencies, product.CookedDependencies, importers);
             if (string.Equals(fingerprint, product.ReuseFingerprint, StringComparison.Ordinal))
             {
                 reused.Add(facts.Input.AssetUri, facts);

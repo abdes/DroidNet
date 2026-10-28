@@ -23,6 +23,9 @@ test projects reference it.
   is pending.
 - `EngineContentPakFixture` is an `IEngineContentPak` that declares its assets
   instead of reading a pak, for tests that run no native tool.
+- `ImporterRevisionsFixture` holds every importer at revision 1, as
+  `ImporterRevisions` and as the ImportTool's `versions --json` output, for
+  tests that run no native tool.
 - `NativeContentPipelineFixture` composes the production `ContentPipelineService`
   and `CookPublicationService` over a project and its cook coordinator, with the
   installed import tool and cooking compatibility checks, for integration tests

@@ -15,6 +15,8 @@ internal static partial class NativeInventoryFixture
         var api = new Mock<IEngineContentPipelineApi>(MockBehavior.Strict);
         _ = api.Setup(value => value.ReadInventoryAsync(It.IsAny<string>(), It.IsAny<NativeArtifactLease?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((string root, NativeArtifactLease? _, CancellationToken _) => Read(root));
+        _ = api.Setup(value => value.ReadImporterRevisionsAsync(It.IsAny<NativeArtifactLease?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Oxygen.Editor.ContentPipeline.Testing.ImporterRevisionsFixture.Current);
         return api.Object;
     }
 }

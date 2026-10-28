@@ -24,10 +24,12 @@ namespace Oxygen.Editor.ContentPipeline.Status;
 /// </remarks>
 /// <param name="publication">The committed metadata verifier.</param>
 /// <param name="engineContent">The engine content pak, the lowest library engine references resolve through.</param>
+/// <param name="native">The ImportTool, which reports the importer revisions every product's fingerprint holds.</param>
 /// <param name="loggerFactory">Creates the logger of the read times.</param>
 public sealed partial class AssetCookStatusReader(
     CookPublicationService publication,
     IEngineContentPak engineContent,
+    IEngineContentPipelineApi native,
     ILoggerFactory? loggerFactory = null) : IAssetCookStatusReader
 {
     /// <summary>The code of the status of an asset that cannot be a cook input, such as a deleted script.</summary>
@@ -90,7 +92,8 @@ public sealed partial class AssetCookStatusReader(
         graph = libraries.Apply(graph);
         var validGraph = WithCompleteAssets(graph);
         var discovered = Stopwatch.GetTimestamp();
-        var plan = await ReadFreshnessAsync(snapshot, validGraph, prior, cancellationToken).ConfigureAwait(false);
+        var importers = await native.ReadImporterRevisionsAsync(artifacts: null, cancellationToken).ConfigureAwait(false);
+        var plan = await ReadFreshnessAsync(snapshot, validGraph, prior, importers, cancellationToken).ConfigureAwait(false);
         var freshnessRead = Stopwatch.GetTimestamp();
         var changed = await FindChangedInputsAsync(graph.Files, cancellationToken).ConfigureAwait(false);
         this.LogReadTimes(new(started, inputsResolved, librariesRead, discovered, freshnessRead, Stopwatch.GetTimestamp()), requested.Length, graph.Files.Length);

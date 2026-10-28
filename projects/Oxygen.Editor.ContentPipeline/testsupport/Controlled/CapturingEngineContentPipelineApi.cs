@@ -66,6 +66,9 @@ internal sealed class CapturingEngineContentPipelineApi(CookValidationResult val
         return importResult ?? new NativeImportResult(Succeeded: true, Diagnostics: []);
     }
 
+    public Task<Incremental.ImporterRevisions> ReadImporterRevisionsAsync(Managed.Core.Compatibility.NativeArtifactLease? artifacts, CancellationToken cancellationToken)
+        => Task.FromResult(Testing.ImporterRevisionsFixture.Current);
+
     public Task<Inspection.CookedInventoryReport> ReadInventoryAsync(string root, Managed.Core.Compatibility.NativeArtifactLease? artifacts, CancellationToken cancellationToken)
     {
         this.InspectedRoot = root;

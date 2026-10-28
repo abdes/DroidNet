@@ -43,6 +43,8 @@ internal sealed class RecordingNativeApi(ImportToolContentPipelineApi native) : 
 
     public Task<global::Oxygen.Editor.ContentPipeline.Inspection.CookedInventoryReport> ReadInventoryAsync(string root, NativeArtifactLease? artifacts, CancellationToken cancellationToken) => native.ReadInventoryAsync(root, artifacts, cancellationToken);
 
+    public Task<global::Oxygen.Editor.ContentPipeline.Incremental.ImporterRevisions> ReadImporterRevisionsAsync(NativeArtifactLease? artifacts, CancellationToken cancellationToken) => native.ReadImporterRevisionsAsync(artifacts, cancellationToken);
+
     public Task RemoveCookedOutputsAsync(string operationRoot, string cookedRoot, Guid sourceKey, global::Oxygen.Editor.ContentPipeline.Inspection.CookedOutputRemoval removal, NativeArtifactLease artifacts, CancellationToken cancellationToken)
     {
         this.Removed.Add(removal);

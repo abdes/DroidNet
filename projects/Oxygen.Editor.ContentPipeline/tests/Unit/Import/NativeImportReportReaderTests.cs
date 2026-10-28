@@ -5,6 +5,7 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Oxygen.Editor.ContentPipeline.Import;
+using Oxygen.Editor.ContentPipeline.Testing;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Import;
@@ -68,6 +69,32 @@ public sealed class NativeImportReportReaderTests
         _ = result.ModelImports.Should().BeEmpty();
     }
 
+    /// <summary>A job cooked with the importer revision the cook's fingerprints hold is accepted.</summary>
+    [TestMethod]
+    public void AcceptsAJobCookedAtTheFingerprintedRevision()
+    {
+        var (execution, report) = CreateReport();
+
+        var result = NativeImportReportReader.Read(report.ToJsonString(), execution with { Importers = ImporterRevisionsFixture.Current }, 0);
+
+        _ = result.Succeeded.Should().BeTrue();
+    }
+
+    /// <summary>
+    /// A job cooked at another importer revision than the cook's fingerprints hold would record a product the next
+    /// cook wrongly reuses, so the report is refused.
+    /// </summary>
+    [TestMethod]
+    public void RejectsAJobCookedAtAnotherRevision()
+    {
+        var (execution, report) = CreateReport();
+        report["jobs"]![0]!["importer"]!["revision"] = 2;
+
+        Action read = () => _ = NativeImportReportReader.Read(report.ToJsonString(), execution with { Importers = ImporterRevisionsFixture.Current }, 0);
+
+        _ = read.Should().Throw<InvalidDataException>().WithMessage("*'gltf' importer at revision 2*");
+    }
+
     /// <summary>Malformed versions, job identity, escaped paths and products that are not identities cannot become authoritative output ownership.</summary>
     /// <param name="invalid">The invalid report field.</param>
     [TestMethod]
@@ -108,8 +135,8 @@ public sealed class NativeImportReportReaderTests
             root,
             new(1, output, new("/Content"), [new("model", "gltf", "model.gltf", [], Output: null, Name: "Model")]));
         var report = JsonNode.Parse("""
-            {"report_version":"3","session":{"cooked_root":""},"jobs":[
-              {"index":1,"type":"gltf","status":"succeeded","outputs":[{"path":"Models/Model/Geometry/Triangle.ogeo","size_bytes":128}],
+            {"report_version":"4","session":{"cooked_root":""},"jobs":[
+              {"index":1,"type":"gltf","importer":{"name":"gltf","revision":1},"status":"succeeded","outputs":[{"path":"Models/Model/Geometry/Triangle.ogeo","size_bytes":128}],
                "products":[
                  {"kind":"asset","virtual_path":"/Content/Models/Model/Geometry/Triangle.ogeo","descriptor_relative_path":"Models/Model/Geometry/Triangle.ogeo","asset_key":"00000000-0000-0000-0000-000000000001","asset_type":2},
                  {"kind":"texture","virtual_path":"/Content/Models/Model/Textures/Albedo.otex","descriptor_relative_path":"Models/Model/Textures/Albedo.otex"}],
@@ -138,7 +165,7 @@ public sealed class NativeImportReportReaderTests
 
         // The engine reports a model job as the gltf or fbx job its record runs.
         var report = JsonNode.Parse("""
-            {"report_version":"3","session":{"cooked_root":""},"jobs":[
+            {"report_version":"4","session":{"cooked_root":""},"jobs":[
               {"index":1,"type":"gltf","status":"succeeded","outputs":[],"products":[],"diagnostics":[]
             """ + update + "}]}")!;
         report["session"]!["cooked_root"] = output;

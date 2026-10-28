@@ -37,6 +37,12 @@ public interface IEngineContentPipelineApi
     /// <returns>Expected inventory metadata and observed per-file failures.</returns>
     public Task<CookedInventoryReport> ReadInventoryAsync(string cookedRoot, NativeArtifactLease? artifacts, CancellationToken cancellationToken);
 
+    /// <summary>Reads the revision of each importer of the ImportTool that cooks, through its <c>versions</c>.</summary>
+    /// <param name="artifacts">Optional native artifact lease already owned by this operation.</param>
+    /// <param name="cancellationToken">Cancels the native worker and waits for its ownership drain.</param>
+    /// <returns>The importers' revisions, which every product's fingerprint holds.</returns>
+    public Task<Incremental.ImporterRevisions> ReadImporterRevisionsAsync(NativeArtifactLease? artifacts, CancellationToken cancellationToken);
+
     /// <summary>Removes cooked assets and auxiliary files from a loose cooked root the caller owns, without cooking.</summary>
     /// <remarks>
     /// The index is updated first and the files are deleted after it, so the index never lists a deleted file.

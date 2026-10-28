@@ -3,7 +3,7 @@
 Status:
 `Canonical V0.1 contract; implementation and qualification tracked by ED-M08`
 
-Last Updated: 2026-10-26 19:40
+Last Updated: 2026-10-28 18:00
 
 **Navigation:** [purpose](#1-purpose),
 [surface identity and reimport](#20-canonical-surface-identity-and-reimport),
@@ -1319,6 +1319,16 @@ committed source updates against their after hashes and all other inputs against
 their consumed hashes. Later authoring edits make products stale; they do not
 invalidate immutable generation receipts. No provenance field is omitted from
 dependency fingerprints, and no consumed hash is rewritten after cooking.
+
+A product's fingerprint also holds the revision of each importer that cooks it,
+as the installed ImportTool's `versions --json` reports them. The revisions live
+only in the engine's `PakFormatVersions.inc`. An importer's revision goes up
+when what it cooks from the same inputs changes while every cooked format stays
+the same, so a product an earlier revision cooked is cooked again. A format
+change needs no revision: verification of the cooked root refuses a format the
+engine no longer reads. Each job of an import report names its importer and
+revision; a report whose revision differs from the one the cook's fingerprints
+hold is refused. The editor reads the revisions once per installed tool.
 
 For each source geometry, the native provenance schema records:
 

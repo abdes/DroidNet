@@ -221,6 +221,8 @@ internal sealed partial class AssetCookStatusTests
             File.WriteAllText(this.SourcePath, MaterialJson);
             _ = this.api.Setup(value => value.ReadInventoryAsync(It.IsAny<string>(), It.IsAny<NativeArtifactLease?>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync((string root, NativeArtifactLease? _, CancellationToken _) => Oxygen.Testing.NativeInventoryFixture.Read(root));
+            _ = this.api.Setup(value => value.ReadImporterRevisionsAsync(It.IsAny<NativeArtifactLease?>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(ImporterRevisionsFixture.Current);
             _ = TestProject.SaveProjectFile(this.Project);
             this.session = new TestSession(this.Project);
             this.publication = new(Mock.Of<IContentCookCoordinator>(), this.session, this.files, this.manager, this.engineContent);
@@ -251,7 +253,7 @@ internal sealed partial class AssetCookStatusTests
         }
 
         public AssetCookStatusReader CreateReader()
-            => new(this.publication, this.engineContent);
+            => new(this.publication, this.engineContent, this.api.Object);
 
         public async Task<AssetCookStatus> ReadAsync(CancellationToken cancellationToken)
             => (await this.CreateReader().ReadAsync(this.Project, [SourceUri], cancellationToken).ConfigureAwait(false)).Single();
@@ -263,7 +265,7 @@ internal sealed partial class AssetCookStatusTests
             var facts = new StatusSourceFacts(this.Project, input, dependencies ?? []);
             var graph = await new CookDependencyDiscovery(facts).DiscoverAsync(this.Project, [input], cancellationToken).ConfigureAwait(false);
             _ = graph.Diagnostics.Should().BeEmpty();
-            var plan = CookIncrementalPlanner.CreatePlan(graph.Files, graph, new(this.Project.ProjectId, [], []), []);
+            var plan = CookIncrementalPlanner.CreatePlan(graph.Files, graph, new(this.Project.ProjectId, [], []), [], ImporterRevisionsFixture.Current);
             using var baseline = await this.publication.AcquireReadAsync(this.Project, cancellationToken).ConfigureAwait(false);
             await using var ownership = CookOutputLease.AcquireOperation(this.Project.ProjectRoot, operation.OperationId).ConfigureAwait(false);
             var staging = await CookStagingArea.CreateAsync(operation, baseline, ["Content"], this.files, this.manager, cancellationToken).ConfigureAwait(false);

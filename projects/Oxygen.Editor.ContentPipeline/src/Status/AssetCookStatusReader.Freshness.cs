@@ -17,6 +17,7 @@ public sealed partial class AssetCookStatusReader
         CookPublicationReadLease publication,
         CookDependencyGraph graph,
         CookProvenance previous,
+        ImporterRevisions importers,
         CancellationToken cancellationToken)
     {
         var available = ImmutableHashSet.CreateBuilder<(string RootMount, string VirtualPath)>();
@@ -72,7 +73,7 @@ public sealed partial class AssetCookStatusReader
 
         var fingerprints = graph.Assets.ToDictionary(
             static input => input.AssetUri,
-            input => CookIncrementalPlanner.Fingerprint(input, graph.Files, graph));
+            input => CookIncrementalPlanner.Fingerprint(input, graph.Files, graph, importers));
 
         var currentProducts = previous.Products.Where(product => fingerprints.TryGetValue(product.SourceUri, out var fingerprint)
             && string.Equals(fingerprint, product.ReuseFingerprint, StringComparison.Ordinal))

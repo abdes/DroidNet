@@ -72,7 +72,7 @@ public sealed partial class ContentPipelineService
             {
                 if (plan.Fingerprints.TryGetValue(source.Key, out var fingerprint))
                 {
-                    products[source.Key] = CreateProduct(source, fingerprint, root, result, graph, expectedInputs, expectedFiles, sourceInputs);
+                    products[source.Key] = CreateProduct(source, fingerprint, root, result, graph, expectedInputs, expectedFiles, sourceInputs, plan.Importers);
                 }
             }
         }
@@ -127,7 +127,8 @@ public sealed partial class ContentPipelineService
         CookDependencyGraph graph,
         ImmutableArray<CookSnapshotInput> expectedInputs,
         Dictionary<string, CookSnapshotInput> expectedFiles,
-        Dictionary<AssetPath, ContentCookInput> sourceInputs)
+        Dictionary<AssetPath, ContentCookInput> sourceInputs,
+        ImporterRevisions importers)
     {
         var dependencies = graph.Dependencies.GetValueOrDefault(source.Key, []);
         return new(source.Key, fingerprint, dependencies, [.. source.Select(asset => new CookProvenance.Output(asset, root.Mount))])
@@ -139,7 +140,7 @@ public sealed partial class ContentPipelineService
             NativeReferences = graph.SourceFacts.GetValueOrDefault(source.Key)?.References ?? [],
             AuxiliaryFiles = result.AuxiliaryFilesBySource.GetValueOrDefault(source.Key, []),
             ReuseFingerprint = sourceInputs.TryGetValue(source.Key, out var sourceInput)
-                ? CookIncrementalPlanner.Fingerprint(sourceInput, expectedInputs, graph) : fingerprint,
+                ? CookIncrementalPlanner.Fingerprint(sourceInput, expectedInputs, graph, importers) : fingerprint,
             CookedDependencies = graph.CookedDependencies.GetValueOrDefault(source.Key, []),
             ImportedSource = graph.ImportedSources.TryGetValue(source.Key, out var imported) ? imported with
             {
@@ -219,7 +220,9 @@ public sealed partial class ContentPipelineService
         // A root reconstructed or vacated, that nothing in this cook goes into, leaves the publication.
         var dropped = repair.EmptyRoots.Union(repair.VacatedRoots)
             .Where(mount => !graph.Assets.Any(input => string.Equals(input.MountName, mount, StringComparison.Ordinal))).ToArray();
-        var plan = CookIncrementalPlanner.CreatePlan(snapshot.Inputs, graph, previous, inventories, repair.EmptyRoots, repair.RemovedSources, repair.Sources) with
+        var rebuilt = repair.Sources.Union(resolveScopes().SelectMany(static scope => scope.ReimportedSources));
+        var importers = await this.engineContentPipelineApi.ReadImporterRevisionsAsync(artifacts, cancellationToken).ConfigureAwait(false);
+        var plan = CookIncrementalPlanner.CreatePlan(snapshot.Inputs, graph, previous, inventories, importers, repair.EmptyRoots, repair.RemovedSources, rebuilt) with
         {
             DroppedRoots = dropped.ToImmutableHashSet(StringComparer.Ordinal),
             Removals = repair.Removals.RemoveRange(dropped),

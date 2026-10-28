@@ -9,6 +9,7 @@ using AwesomeAssertions;
 using Oxygen.Editor.ContentPipeline.Incremental;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.Snapshots;
+using Oxygen.Editor.ContentPipeline.Testing;
 using Oxygen.Editor.ContentPipeline.TestSupport;
 using Oxygen.Editor.Models;
 using Oxygen.Managed.Core;
@@ -176,8 +177,8 @@ public sealed class ProducedSourceMetadataTests
             [],
             []);
         var accepted = CookProducedSourceFile.ExpectedInputs(consumed, [update]);
-        var beforeFingerprint = CookIncrementalPlanner.Fingerprint(input, consumed, graph);
-        var reuseFingerprint = CookIncrementalPlanner.Fingerprint(input, accepted, graph);
+        var beforeFingerprint = CookIncrementalPlanner.Fingerprint(input, consumed, graph, ImporterRevisionsFixture.Current);
+        var reuseFingerprint = CookIncrementalPlanner.Fingerprint(input, accepted, graph, ImporterRevisionsFixture.Current);
         var output = new ContentCookedAsset(uri, AssetPath.Parse("/Content/Geometry/Model.ogeo"), ContentCookAssetKind.Geometry, "Content", "/Content/Geometry/Model.ogeo")
         {
             DescriptorRelativePath = "Geometry/Model.ogeo",
@@ -192,13 +193,48 @@ public sealed class ProducedSourceMetadataTests
         var root = new CookProvenance.Root("Content", inventory.SourceKey, inventory.IndexSha256);
         var previous = new CookProvenance(project.Context.ProjectId, [root], [product]);
         var verified = ImmutableDictionary<string, global::Oxygen.Editor.ContentPipeline.Inspection.CookedInventoryReport>.Empty.Add("Content", inventory);
-        var plan = CookIncrementalPlanner.CreatePlan(accepted, graph, previous, verified);
+        var plan = CookIncrementalPlanner.CreatePlan(accepted, graph, previous, verified, ImporterRevisionsFixture.Current);
         _ = plan.Reusable.Keys.Should().Contain(uri);
         _ = product.Fingerprint.Should().Be(beforeFingerprint).And.NotBe(reuseFingerprint);
         _ = consumed.Single().DiscoveryHash.Should().Be(update.BeforeHash);
         var changed = accepted.SetItem(0, accepted[0] with { DiscoveryHash = new string('F', 64) });
-        var edited = CookIncrementalPlanner.CreatePlan(changed, graph, previous, verified);
+        var edited = CookIncrementalPlanner.CreatePlan(changed, graph, previous, verified, ImporterRevisionsFixture.Current);
         _ = edited.Reusable.Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// A product cooked by another revision of its importer is cooked again, though none of its inputs changed: the
+    /// importer's output changed while every cooked format stayed the same.
+    /// </summary>
+    /// <returns>The asynchronous planner regression.</returns>
+    [TestMethod]
+    public async Task ImporterRevisionChangeCooksTheProductAgain()
+    {
+        using var project = new PublicationProject(hadPrevious: true);
+        var update = await this.CreateSourceUpdateAsync(project, "Model").ConfigureAwait(false);
+        var uri = AssetPath.Parse("/Content/Models/Model/model.gltf");
+        var input = new ContentCookInput(
+            uri,
+            ContentCookAssetKind.ForeignSource,
+            "Content",
+            "Content/Models/Model/model.gltf",
+            FileSystemPath.From(Path.Combine(project.Root, "Content/Models/Model/model.gltf")),
+            ContentCookInputRole.Primary);
+        ImmutableArray<CookSnapshotInput> files = [new(AssetUri: null, FileSystemPath.From(Path.Combine(project.Root, update.RelativePath)), update.RelativePath, update.BeforeHash)];
+        var graph = new CookDependencyGraph(
+            [input],
+            files,
+            ImmutableDictionary<AssetPath, ImmutableArray<AssetPath>>.Empty.Add(uri, []),
+            ImmutableDictionary<AssetPath, ImmutableArray<string>>.Empty.Add(uri, [update.RelativePath]),
+            [],
+            []);
+        var revised = new ImporterRevisions(ImporterRevisionsFixture.Current.Revisions.SetItem("gltf", 2));
+        var otherImporter = new ImporterRevisions(ImporterRevisionsFixture.Current.Revisions.SetItem("fbx", 2));
+
+        var cooked = CookIncrementalPlanner.Fingerprint(input, files, graph, ImporterRevisionsFixture.Current);
+
+        _ = CookIncrementalPlanner.Fingerprint(input, files, graph, revised).Should().NotBe(cooked);
+        _ = CookIncrementalPlanner.Fingerprint(input, files, graph, otherImporter).Should().Be(cooked, "a glTF model does not depend on the FBX importer");
     }
 
     private async Task<CookProducedSourceFile> CreateSourceUpdateAsync(PublicationProject project, string bundle, bool projectOwned = false)
@@ -224,7 +260,7 @@ public sealed class ProducedSourceMetadataTests
                             {
                                 surface_id = "20000000-0000-0000-0000-000000000001",
                                 display_name = "Surface",
-                                bindings = new[] { new { lod_index = 0, submesh_index = 0, default_material_key = "30000000-0000-0000-0000-000000000001" } },
+                                bindings = new[] { new { lod_index = 0, submesh_index = 0, default_material_key = "30000000-0000-0000-0000-000000000001", triangle_count = 12 } },
                             },
                         },
                         allocations = new[] { new { declaration_key = 0, surface_id = "20000000-0000-0000-0000-000000000001" } },
