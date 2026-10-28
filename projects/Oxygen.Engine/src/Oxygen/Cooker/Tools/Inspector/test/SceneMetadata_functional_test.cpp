@@ -289,7 +289,7 @@ auto Model() -> SceneAssetBuilder
   auto model = SceneAssetBuilder {};
   model.AddNode("Body");
   model.AddNode("Wheel", 0U);
-  const auto rotation = world::EulerYxzDegreesToQuaternion(kBodyAngles);
+  const auto rotation = world::EulerXyzDegreesToQuaternion(kBodyAngles);
   std::ranges::copy(rotation, std::begin(model.Node(0U).rotation));
   model.Node(kWheel).translation[0] = kModelX;
   auto light = world::MakeDefaultRecord<world::PointLightRecord>();

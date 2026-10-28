@@ -92,17 +92,17 @@ using Quaternion = std::array<float, 4>;
 OXGN_DATA_API auto WriteRotation(
   NodeRecord& record, const Quaternion& rotation) noexcept -> void;
 
-//! The rotation of the editor's Y-X-Z Euler angles, in degrees: yaw about Y,
-//! then pitch about X, then roll about Z (the schema's
-//! `euler-yxz-degrees-to-quat` encoding).
-OXGN_DATA_NDAPI auto EulerYxzDegreesToQuaternion(
+//! The rotation of X-Y-Z Euler angles `{x, y, z}`, in degrees: about X, then
+//! about Y, then about Z, each about a parent axis, so R = Rz * Ry * Rx (the
+//! schema's `euler-xyz-degrees-to-quat` encoding, `space` in
+//! Oxygen/Core/Constants.h).
+OXGN_DATA_NDAPI auto EulerXyzDegreesToQuaternion(
   const std::array<float, 3>& degrees) noexcept -> Quaternion;
 
-//! The editor's Y-X-Z Euler angles of `rotation`, in degrees, ordered as
-//! `EulerYxzDegreesToQuaternion` takes them: pitch about X, yaw about Y, roll
-//! about Z. At ±90° pitch, where yaw and roll turn about one axis, the roll is
-//! zero.
-OXGN_DATA_NDAPI auto QuaternionToEulerYxzDegrees(
+//! The X-Y-Z Euler angles of `rotation`, in degrees, ordered as
+//! `EulerXyzDegreesToQuaternion` takes them. The Y angle lies in [-90°, 90°].
+//! At ±90° about Y, where X and Z turn about one axis, the X angle is zero.
+OXGN_DATA_NDAPI auto QuaternionToEulerXyzDegrees(
   const Quaternion& rotation) noexcept -> std::array<float, 3>;
 
 } // namespace oxygen::data::pak::world

@@ -526,7 +526,7 @@ auto ReadField(const NodeRecord& record, const schema::TransformField field)
   case TransformField::kRotationXDegrees:
   case TransformField::kRotationYDegrees:
   case TransformField::kRotationZDegrees:
-    // The record holds a quaternion: QuaternionToEulerYxzDegrees reads it
+    // The record holds a quaternion: QuaternionToEulerXyzDegrees reads it
     // whole.
     return std::nullopt;
   case TransformField::kScaleX:
@@ -783,38 +783,38 @@ auto WriteRotation(NodeRecord& record, const Quaternion& rotation) noexcept
   std::ranges::copy(rotation, std::begin(record.rotation));
 }
 
-auto EulerYxzDegreesToQuaternion(const std::array<float, 3>& degrees) noexcept
+auto EulerXyzDegreesToQuaternion(const std::array<float, 3>& degrees) noexcept
   -> Quaternion
 {
   const auto radians
     = glm::radians(glm::vec3 { degrees[0], degrees[1], degrees[2] });
   const auto rotation
-    = glm::angleAxis(radians.y, glm::vec3 { 0.0F, 1.0F, 0.0F })
-    * glm::angleAxis(radians.x, glm::vec3 { 1.0F, 0.0F, 0.0F })
-    * glm::angleAxis(radians.z, glm::vec3 { 0.0F, 0.0F, 1.0F });
+    = glm::angleAxis(radians.z, glm::vec3 { 0.0F, 0.0F, 1.0F })
+    * glm::angleAxis(radians.y, glm::vec3 { 0.0F, 1.0F, 0.0F })
+    * glm::angleAxis(radians.x, glm::vec3 { 1.0F, 0.0F, 0.0F });
   return { rotation.x, rotation.y, rotation.z, rotation.w };
 }
 
-auto QuaternionToEulerYxzDegrees(const Quaternion& rotation) noexcept
+auto QuaternionToEulerXyzDegrees(const Quaternion& rotation) noexcept
   -> std::array<float, 3>
 {
-  // R = Ry(yaw) * Rx(pitch) * Rz(roll); glm matrices index [column][row].
+  // R = Rz(z) * Ry(y) * Rx(x); glm matrices index [column][row].
   const auto matrix = glm::mat3_cast(
     glm::quat { rotation[3], rotation[0], rotation[1], rotation[2] });
-  // The pitch from its sine and cosine: asin loses precision near ±90°.
-  const auto cos_pitch = std::hypot(matrix[0][1], matrix[1][1]);
-  const auto pitch = std::atan2(-matrix[2][1], cos_pitch);
-  auto yaw = 0.0F;
-  auto roll = 0.0F;
-  // Within 0.1° of ±90° pitch, float noise outweighs the yaw and roll split.
+  // Y from its sine and cosine: asin loses precision near ±90°.
+  const auto cos_y = std::hypot(matrix[0][0], matrix[0][1]);
+  const auto y = std::atan2(-matrix[0][2], cos_y);
+  auto x = 0.0F;
+  auto z = 0.0F;
+  // Within 0.1° of ±90° about Y, float noise outweighs the X and Z split.
   constexpr auto kGimbalLock = 0.0015F;
-  if (cos_pitch > kGimbalLock) {
-    yaw = std::atan2(matrix[2][0], matrix[2][2]);
-    roll = std::atan2(matrix[0][1], matrix[1][1]);
+  if (cos_y > kGimbalLock) {
+    x = std::atan2(matrix[1][2], matrix[2][2]);
+    z = std::atan2(matrix[0][1], matrix[0][0]);
   } else {
-    yaw = std::atan2(-matrix[0][2], matrix[0][0]);
+    z = std::atan2(-matrix[1][0], matrix[1][1]);
   }
-  const auto degrees = glm::degrees(glm::vec3 { pitch, yaw, roll });
+  const auto degrees = glm::degrees(glm::vec3 { x, y, z });
   return { degrees.x, degrees.y, degrees.z };
 }
 

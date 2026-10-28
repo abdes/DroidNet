@@ -327,7 +327,7 @@ static_assert(sizeof(OverrideRecordIndex) == sizeof(uint32_t));
  - `as_int32`: an int, or the wire value of an enum member.
  - `as_float`: a float; `as_vec3`: the three floats of a vec3.
  - `as_quat`: a rotation quaternion (x, y, z, w), the change of a rotation
-   property (`schema::Encoding::kEulerYxzDegreesToQuat`).
+   property (`schema::Encoding::kEulerXyzDegreesToQuat`).
  - `as_asset`: the key of an asset of the property's asset type.
  - `as_string_offset`: an offset into the descriptor string table.
  - `as_record_index`: the index of an entry of the record table of the value

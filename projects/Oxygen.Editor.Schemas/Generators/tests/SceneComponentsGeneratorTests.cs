@@ -215,7 +215,7 @@ public sealed class SceneComponentsGeneratorTests : VerifyBase
 
     [TestMethod]
     public Task Generate_RotationEncoding()
-        => this.Check("WireTable", Minimal.Replace("fields: [ColorR, ColorG, ColorB]", "fields: [ColorR, ColorG, ColorB]\n        encoding: euler-yxz-degrees-to-quat", StringComparison.Ordinal));
+        => this.Check("WireTable", Minimal.Replace("fields: [ColorR, ColorG, ColorB]", "fields: [ColorR, ColorG, ColorB]\n        encoding: euler-xyz-degrees-to-quat", StringComparison.Ordinal));
 
     [TestMethod]
     public Task Generate_DuplicateOverrideId()

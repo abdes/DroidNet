@@ -793,7 +793,7 @@ def test_rotation_is_one_property_of_three_angles() -> None:
     assert (rotation.key, rotation.type, rotation.encoding) == (
         "/local_rotation_euler_degrees",
         "vec3",
-        "euler-yxz-degrees-to-quat",
+        "euler-xyz-degrees-to-quat",
     )
     assert rotation.fields == (
         "RotationXDegrees",
@@ -817,10 +817,10 @@ def test_override_id_without_fields_or_sources_is_refused() -> None:
 def test_rotation_encoding_needs_three_angles() -> None:
     document = _minimal()
     document["components"][0]["properties"][1].update(
-        encoding="euler-yxz-degrees-to-quat", unit="degree"
+        encoding="euler-xyz-degrees-to-quat", unit="degree"
     )
     assert (
-        "PointLight.Range: euler-yxz-degrees-to-quat encodes vec3 values only"
+        "PointLight.Range: euler-xyz-degrees-to-quat encodes vec3 values only"
         in _error_of(document)
     )
 
@@ -830,7 +830,7 @@ def _with_rotation(document: dict[str, Any]) -> dict[str, Any]:
     entry.update(
         name="Rotation",
         key="/rotation",
-        encoding="euler-yxz-degrees-to-quat",
+        encoding="euler-xyz-degrees-to-quat",
         unit="degree",
         default=[0, 0, 0],
     )
@@ -843,7 +843,7 @@ def test_rotation_keeps_its_angles_in_its_fields_and_changes_whole() -> None:
     document = _with_rotation(_minimal())
     text = _text(document)
     assert "inline constexpr float kColorRDefault = 0.0F;" in text
-    assert "    .encoding = Encoding::kEulerYxzDegreesToQuat,\n" in text
+    assert "    .encoding = Encoding::kEulerXyzDegreesToQuat,\n" in text
     assert "    .member = ValueMember::kQuat,\n" in text
     rendered = changes.render(model.parse(document, _rules()), "test.yaml")
     assert (

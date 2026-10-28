@@ -87,7 +87,7 @@ capability.
 
 Transform stores local position in metres, a finite nonzero normalized XYZW
 quaternion and finite nonzero scale axes. Negative scale is valid. Rotation UI
-uses degrees and the existing YXZ convention; no competing Euler source or raw
+uses degrees and the engine X-Y-Z convention; no competing Euler source or raw
 quaternion editor is added. World pose derives from hierarchy/native rules.
 
 PerspectiveCamera stores vertical FOV in degrees, positive near/far distances

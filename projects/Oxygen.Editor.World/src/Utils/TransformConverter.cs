@@ -69,25 +69,20 @@ public static class TransformConverter
     }
 
     /// <summary>
-    ///     Converts a quaternion to Euler angles (degrees) using the YXZ (Yaw-Pitch-Roll) rotation
-    ///     order.
-    ///     <para>
-    ///     <b>Rotation Order:</b> Yaw (Y) -> Pitch (X) -> Roll (Z).</para>
+    ///     Converts a quaternion to X-Y-Z Euler angles in degrees: about X, then about Y, then about Z, each about a
+    ///     parent axis, so R = Rz * Ry * Rx (the engine convention, see <c>Oxygen/Core/Constants.h</c>).
     /// </summary>
     /// <remarks>
-    ///     <b>Compatibility:</b> This method is the inverse of <see
-    ///     cref="Quaternion.CreateFromYawPitchRoll"/> and is compatible with GLM's YXZ Euler angle
-    ///     conventions (often used in FPS cameras and game engines).
+    ///     <b>Compatibility:</b> This method is the inverse of <see cref="EulerDegreesToQuaternion"/> and matches the
+    ///     engine's <c>QuaternionToEulerXyzDegrees</c> on the canonical range.
     ///     <para>
-    ///     <b>Human-Friendly Optimization:</b> While the standard mathematical extraction restricts
-    ///     Pitch (X) to [-90, 90], this method applies a heuristic to "unwrap" the angles if it
-    ///     results in a cleaner representation. For example, a pitch of 100 degrees is returned as
-    ///     (100, 0, 0) rather than the mathematically equivalent but confusing (80, 180,
-    ///     180).</para>
+    ///     <b>Human-Friendly Optimization:</b> While the standard mathematical extraction restricts the Y angle to
+    ///     [-90, 90], this method applies a heuristic to "unwrap" the angles if it results in a cleaner
+    ///     representation. For example, a Y angle of 100 degrees is returned as (0, 100, 0) rather than the
+    ///     mathematically equivalent but confusing (180, 80, 180).</para>
     /// </remarks>
     /// <param name="q">The quaternion to convert.</param>
-    /// <returns>A <see cref="Vector3"/> containing Euler angles in degrees (X = pitch, Y = yaw, Z =
-    /// roll).</returns>
+    /// <returns>A <see cref="Vector3"/> containing the X, Y and Z Euler angles in degrees.</returns>
     public static Vector3 QuaternionToEulerDegrees(Quaternion q)
     {
         // Normalize first to ensure valid range for asin
@@ -98,126 +93,112 @@ public static class TransformConverter
 
         q = Quaternion.Normalize(q);
 
-        var test = 2f * ((q.W * q.X) - (q.Y * q.Z));
+        // sin(Y) = -R20 of R = Rz * Ry * Rx.
+        var test = 2f * ((q.W * q.Y) - (q.X * q.Z));
         test = Math.Clamp(test, -1f, 1f); // Handle float precision errors
 
-        // Compute the canonical Euler angles (pitch restricted to [-90, 90])
-        var (pitchDeg, yawDeg, rollDeg) = MathF.Abs(test) >= 0.99999f
+        // Compute the canonical Euler angles (Y restricted to [-90, 90])
+        var (xDeg, yDeg, zDeg) = MathF.Abs(test) >= 0.99999f
             ? HandleGimbalLock(q, test)
             : ComputeNormalAngles(q, test);
 
-        // Compute alternative representation (pitch beyond [-90, 90])
-        var (pitchAlt, yawAlt, rollAlt) = ComputeAlternativeRepresentation(pitchDeg, yawDeg, rollDeg);
+        // Compute alternative representation (Y beyond [-90, 90])
+        var (xAlt, yAlt, zAlt) = ComputeAlternativeRepresentation(xDeg, yDeg, zDeg);
 
-        // Select the representation with cleaner yaw/roll values
-        return SelectBestRepresentation(pitchDeg, yawDeg, rollDeg, pitchAlt, yawAlt, rollAlt);
+        // Select the representation with cleaner X and Z values
+        return SelectBestRepresentation(new Vector3(xDeg, yDeg, zDeg), new Vector3(xAlt, yAlt, zAlt));
 
-        // Local helper: Handle gimbal lock case (pitch = +/- 90 degrees)
-        static (float PitchDeg, float YawDeg, float RollDeg) HandleGimbalLock(Quaternion q, float test)
+        // Local helper: Handle gimbal lock case (Y = +/- 90 degrees)
+        static (float XDeg, float YDeg, float ZDeg) HandleGimbalLock(Quaternion q, float test)
         {
             const float RadToDeg = 180f / MathF.PI;
-            var pitch = MathF.CopySign(MathF.PI / 2f, test);
+            var y = MathF.CopySign(MathF.PI / 2f, test);
 
-            // In YXZ order at gimbal lock:
-            // If Pitch = 90, R00 = cos(y-z), R01 = sin(y-z) => Yaw - Roll = Atan2(R01, R00)
-            // If Pitch = -90, R00 = cos(y+z), R01 = -sin(y+z) => Yaw + Roll = Atan2(-R01, R00)
+            // At Y = +/-90 the X and Z turns share one axis; X = 0 resolves the ambiguity, and then
+            // R01 = -sin(Z), R11 = cos(Z).
             var r01 = 2f * ((q.X * q.Y) - (q.W * q.Z));
-            var r00 = 1f - (2f * ((q.Y * q.Y) + (q.Z * q.Z)));
+            var r11 = 1f - (2f * ((q.X * q.X) + (q.Z * q.Z)));
+            const float x = 0f;
+            var z = MathF.Atan2(-r01, r11);
 
-            // Set Roll = 0 to resolve the ambiguity
-            var yaw = test > 0 ? MathF.Atan2(r01, r00) : MathF.Atan2(-r01, r00);
-            const float roll = 0f;
-
-            return (pitch * RadToDeg, yaw * RadToDeg, roll * RadToDeg);
+            return (x * RadToDeg, y * RadToDeg, z * RadToDeg);
         }
 
         // Local helper: Compute angles for normal case (no gimbal lock)
-        static (float PitchDeg, float YawDeg, float RollDeg) ComputeNormalAngles(Quaternion q, float test)
+        static (float XDeg, float YDeg, float ZDeg) ComputeNormalAngles(Quaternion q, float test)
         {
             const float RadToDeg = 180f / MathF.PI;
 
-            var pitch = MathF.Asin(test);
-            var yaw = MathF.Atan2(2f * ((q.W * q.Y) + (q.X * q.Z)), 1f - (2f * ((q.X * q.X) + (q.Y * q.Y))));
-            var roll = MathF.Atan2(2f * ((q.W * q.Z) + (q.X * q.Y)), 1f - (2f * ((q.X * q.X) + (q.Z * q.Z))));
+            var y = MathF.Asin(test);
+            var x = MathF.Atan2(2f * ((q.Y * q.Z) + (q.W * q.X)), 1f - (2f * ((q.X * q.X) + (q.Y * q.Y))));
+            var z = MathF.Atan2(2f * ((q.X * q.Y) + (q.W * q.Z)), 1f - (2f * ((q.Y * q.Y) + (q.Z * q.Z))));
 
-            return (pitch * RadToDeg, yaw * RadToDeg, roll * RadToDeg);
+            return (x * RadToDeg, y * RadToDeg, z * RadToDeg);
         }
 
-        // Local helper: Compute alternative representation with pitch beyond [-90, 90]
-        static (float PitchAlt, float YawAlt, float RollAlt) ComputeAlternativeRepresentation(
-            float pitchDeg,
-            float yawDeg,
-            float rollDeg)
+        // Local helper: Compute alternative representation with Y beyond [-90, 90]
+        static (float XAlt, float YAlt, float ZAlt) ComputeAlternativeRepresentation(
+            float xDeg,
+            float yDeg,
+            float zDeg)
         {
             /*
              ## Optimization for human readability:
 
-             The standard YXZ extraction restricts Pitch (X) to [-90, 90]. However, humans often prefer to see Pitch go
-             beyond 90 (e.g. 100) instead of seeing Yaw/Roll flip 180 degrees. We check if the "alternative" representation
-             (Pitch > 90 or < -90) results in simpler Yaw/Roll values.
+             The standard X-Y-Z extraction restricts Y to [-90, 90]. However, humans often prefer to see Y go beyond 90
+             (e.g. 100) instead of seeing X and Z flip 180 degrees. We check if the "alternative" representation
+             (Y > 90 or < -90) results in simpler X and Z values.
             */
 
-            var pitchAlt = pitchDeg >= 0 ? 180f - pitchDeg : -180f - pitchDeg;
-            var yawAlt = NormalizeAngle(yawDeg + 180f);
-            var rollAlt = NormalizeAngle(rollDeg + 180f);
+            var yAlt = yDeg >= 0 ? 180f - yDeg : -180f - yDeg;
+            var xAlt = NormalizeAngle(xDeg + 180f);
+            var zAlt = NormalizeAngle(zDeg + 180f);
 
-            return (pitchAlt, yawAlt, rollAlt);
+            return (xAlt, yAlt, zAlt);
         }
 
-        // Local helper: Select the representation with the lowest cost (cleaner yaw/roll)
-        static Vector3 SelectBestRepresentation(
-            float pitchDeg,
-            float yawDeg,
-            float rollDeg,
-            float pitchAlt,
-            float yawAlt,
-            float rollAlt)
+        // Local helper: Select the representation with the lowest cost (cleaner X and Z)
+        static Vector3 SelectBestRepresentation(Vector3 canonical, Vector3 alternative)
         {
-            // Cost function: sum of absolute Yaw and Roll. Smaller is "cleaner".
-            var costCanonical = MathF.Abs(yawDeg) + MathF.Abs(rollDeg);
-            var costAlt = MathF.Abs(yawAlt) + MathF.Abs(rollAlt);
+            // Cost function: sum of absolute X and Z. Smaller is "cleaner".
+            var costCanonical = MathF.Abs(canonical.X) + MathF.Abs(canonical.Z);
+            var costAlt = MathF.Abs(alternative.X) + MathF.Abs(alternative.Z);
 
             // To avoid jitter when rotating near the ±90° boundary, we need stronger preference.
-            // If the alternative representation has significantly cleaner yaw/roll (threshold: 10°),
-            // prefer it. Additionally, if the alternative pitch is smaller in absolute value,
+            // If the alternative representation has significantly cleaner X and Z (threshold: 10°),
+            // prefer it. Additionally, if the alternative Y is smaller in absolute value,
             // that's a strong indicator we should use it.
-            const float costThreshold = 10f; // Increased from 0.1f to provide stronger hysteresis
+            const float costThreshold = 10f;
 
-            // If alternative pitch magnitude is smaller AND cost is better (or within threshold),
-            // prefer alternative (this handles cases like (100,0,0) vs (80,180,180))
-            if (MathF.Abs(pitchAlt) < MathF.Abs(pitchDeg) && costAlt <= costCanonical + costThreshold)
+            // If alternative Y magnitude is smaller AND cost is better (or within threshold),
+            // prefer alternative (this handles cases like (0,100,0) vs (180,80,180))
+            if (MathF.Abs(alternative.Y) < MathF.Abs(canonical.Y) && costAlt <= costCanonical + costThreshold)
             {
-                return new Vector3(pitchAlt, yawAlt, rollAlt);
+                return alternative;
             }
 
             // Otherwise, use cost-based selection with hysteresis threshold
-            return costAlt < costCanonical - costThreshold
-                ? new Vector3(pitchAlt, yawAlt, rollAlt)
-                : new Vector3(pitchDeg, yawDeg, rollDeg);
+            return costAlt < costCanonical - costThreshold ? alternative : canonical;
         }
     }
 
     /// <summary>
-    ///     Converts Euler angles (degrees) to a quaternion using the YXZ (Yaw-Pitch-Roll) rotation order.
-    ///     <para>
-    ///     <b>Rotation Order:</b> Yaw (Y) -> Pitch (X) -> Roll (Z).</para>
+    ///     Converts X-Y-Z Euler angles in degrees to a quaternion: about X, then about Y, then about Z, each about a
+    ///     parent axis, so R = Rz * Ry * Rx (the engine convention, see <c>Oxygen/Core/Constants.h</c>).
     /// </summary>
     /// <remarks>
-    ///     <b>Compatibility:</b> This wraps <see cref="Quaternion.CreateFromYawPitchRoll"/> and ensures that the
-    ///     resulting quaternion matches the rotation produced by GLM when using the same YXZ convention.
+    ///     <b>Compatibility:</b> Matches the engine's <c>EulerXyzDegreesToQuaternion</c>.
     /// </remarks>
-    /// <param name="eulerDegrees">Euler angles in degrees (X = pitch, Y = yaw, Z = roll).</param>
+    /// <param name="eulerDegrees">The X, Y and Z Euler angles in degrees.</param>
     /// <returns>A <see cref="Quaternion"/> representing the rotation.</returns>
     public static Quaternion EulerDegreesToQuaternion(Vector3 eulerDegrees)
     {
         const float DegToRad = MathF.PI / 180f;
 
-        // Editor convention: X=pitch, Y=yaw, Z=roll
-        // Quaternion.CreateFromYawPitchRoll expects (yaw, pitch, roll)
-        return Quaternion.CreateFromYawPitchRoll(
-            eulerDegrees.Y * DegToRad, // yaw
-            eulerDegrees.X * DegToRad, // pitch
-            eulerDegrees.Z * DegToRad); // roll
+        var x = Quaternion.CreateFromAxisAngle(Vector3.UnitX, eulerDegrees.X * DegToRad);
+        var y = Quaternion.CreateFromAxisAngle(Vector3.UnitY, eulerDegrees.Y * DegToRad);
+        var z = Quaternion.CreateFromAxisAngle(Vector3.UnitZ, eulerDegrees.Z * DegToRad);
+        return z * y * x;
     }
 
     /// <summary>

@@ -77,10 +77,10 @@ public sealed class TransformConverterTests
     [DataRow(10f, 20f, 30f)]
     [DataRow(-10f, -20f, -30f)]
     [DataRow(45f, 45f, 45f)]
-    [DataRow(90f, 0f, 0f)] // Pitch +90
-    [DataRow(-90f, 0f, 0f)] // Pitch -90
-    [DataRow(0f, 90f, 0f)] // Yaw +90
-    [DataRow(0f, 0f, 90f)] // Roll +90
+    [DataRow(90f, 0f, 0f)] // X +90
+    [DataRow(0f, 90f, 0f)] // Y +90
+    [DataRow(0f, -90f, 0f)] // Y -90
+    [DataRow(0f, 0f, 90f)] // Z +90
     public void QuaternionToEulerDegrees_RoundTrip_PreservesAngles(float x, float y, float z)
     {
         var original = new Vector3(x, y, z);
@@ -100,99 +100,104 @@ public sealed class TransformConverterTests
     }
 
     [TestMethod]
-    public void QuaternionToEulerDegrees_HumanEyeOptimization_PreservesPitchBeyond90()
+    public void EulerDegreesToQuaternion_AppliesXThenYThenZ()
     {
-        // Case: Pitch = 100 degrees.
-        // Canonical YXZ would represent this as Pitch=80, Yaw=180, Roll=180.
-        // We want the converter to prefer (100, 0, 0) because it's "cleaner" (smaller Yaw/Roll).
-        var original = new Vector3(100f, 0f, 0f);
+        // R = Rz * Ry * Rx: Z(90) * X(90) = (0.5, 0.5, 0.5, 0.5); X(90) * Z(90) would negate y.
+        var q = World.Utils.TransformConverter.EulerDegreesToQuaternion(new Vector3(90f, 0f, 90f));
+
+        _ = q.X.Should().BeApproximately(0.5f, Tolerance);
+        _ = q.Y.Should().BeApproximately(0.5f, Tolerance);
+        _ = q.Z.Should().BeApproximately(0.5f, Tolerance);
+        _ = q.W.Should().BeApproximately(0.5f, Tolerance);
+    }
+
+    [TestMethod]
+    public void QuaternionToEulerDegrees_HumanEyeOptimization_PreservesYBeyond90()
+    {
+        // Case: Y = 100 degrees.
+        // Canonical X-Y-Z would represent this as X=180, Y=80, Z=180.
+        // We want the converter to prefer (0, 100, 0) because it's "cleaner" (smaller X and Z).
+        var original = new Vector3(0f, 100f, 0f);
         var q = World.Utils.TransformConverter.EulerDegreesToQuaternion(original);
         var result = World.Utils.TransformConverter.QuaternionToEulerDegrees(q);
 
-        _ = result.X.Should().BeApproximately(100f, Tolerance);
-        _ = result.Y.Should().BeApproximately(0f, Tolerance);
+        _ = result.X.Should().BeApproximately(0f, Tolerance);
+        _ = result.Y.Should().BeApproximately(100f, Tolerance);
         _ = result.Z.Should().BeApproximately(0f, Tolerance);
     }
 
     [TestMethod]
-    public void QuaternionToEulerDegrees_HumanEyeOptimization_PreservesPitchBelowMinus90()
+    public void QuaternionToEulerDegrees_HumanEyeOptimization_PreservesYBelowMinus90()
     {
-        // Case: Pitch = -100 degrees.
-        // Canonical YXZ would represent this as Pitch=-80, Yaw=180, Roll=180.
-        // We want the converter to prefer (-100, 0, 0).
-        var original = new Vector3(-100f, 0f, 0f);
+        // Case: Y = -100 degrees.
+        // Canonical X-Y-Z would represent this as X=180, Y=-80, Z=180.
+        // We want the converter to prefer (0, -100, 0).
+        var original = new Vector3(0f, -100f, 0f);
         var q = World.Utils.TransformConverter.EulerDegreesToQuaternion(original);
         var result = World.Utils.TransformConverter.QuaternionToEulerDegrees(q);
 
-        _ = result.X.Should().BeApproximately(-100f, Tolerance);
-        _ = result.Y.Should().BeApproximately(0f, Tolerance);
+        _ = result.X.Should().BeApproximately(0f, Tolerance);
+        _ = result.Y.Should().BeApproximately(-100f, Tolerance);
         _ = result.Z.Should().BeApproximately(0f, Tolerance);
     }
 
     [TestMethod]
-    public void QuaternionToEulerDegrees_GimbalLock_PositivePitch_HandlesCorrectly()
+    public void QuaternionToEulerDegrees_GimbalLock_PositiveY_HandlesCorrectly()
     {
-        // Pitch = 90 degrees causes Gimbal lock in YXZ.
-        // Yaw and Roll become linked.
-        // Input: Pitch=90, Yaw=10, Roll=0.
-        // Quaternion logic should handle this.
-        var original = new Vector3(90f, 10f, 0f);
+        // Y = 90 degrees causes gimbal lock in X-Y-Z: X and Z turn about one axis.
+        // Our implementation sets X=0 and puts everything in Z.
+        // So (0, 90, 10) -> (0, 90, 10).
+        var original = new Vector3(0f, 90f, 10f);
         var q = World.Utils.TransformConverter.EulerDegreesToQuaternion(original);
         var result = World.Utils.TransformConverter.QuaternionToEulerDegrees(q);
 
-        // At exactly 90, the result should be stable.
-        _ = result.X.Should().BeApproximately(90f, Tolerance);
-
-        // Yaw should be recovered.
-        // Note: In Gimbal lock, Yaw+Roll (or Yaw-Roll) is constant.
-        // Our implementation sets Roll=0 and puts everything in Yaw.
-        // So (90, 10, 0) -> (90, 10, 0).
-        _ = result.Y.Should().BeApproximately(10f, Tolerance);
-        _ = result.Z.Should().BeApproximately(0f, Tolerance);
+        _ = result.X.Should().BeApproximately(0f, Tolerance);
+        _ = result.Y.Should().BeApproximately(90f, Tolerance);
+        _ = result.Z.Should().BeApproximately(10f, Tolerance);
     }
 
     [TestMethod]
-    public void QuaternionToEulerDegrees_GimbalLock_NegativePitch_HandlesCorrectly()
+    public void QuaternionToEulerDegrees_GimbalLock_NegativeY_HandlesCorrectly()
     {
-        // Pitch = -90 degrees.
-        var original = new Vector3(-90f, 25f, 0f);
+        // Y = -90 degrees.
+        var original = new Vector3(0f, -90f, 25f);
         var q = World.Utils.TransformConverter.EulerDegreesToQuaternion(original);
         var result = World.Utils.TransformConverter.QuaternionToEulerDegrees(q);
 
-        _ = result.X.Should().BeApproximately(-90f, Tolerance);
-        _ = result.Y.Should().BeApproximately(25f, Tolerance);
-        _ = result.Z.Should().BeApproximately(0f, Tolerance);
+        _ = result.X.Should().BeApproximately(0f, Tolerance);
+        _ = result.Y.Should().BeApproximately(-90f, Tolerance);
+        _ = result.Z.Should().BeApproximately(25f, Tolerance);
     }
 
     [TestMethod]
-    public void QuaternionToEulerDegrees_PitchStability_NearBoundaries_RemainsConsistent()
+    public void QuaternionToEulerDegrees_YStability_NearBoundaries_RemainsConsistent()
     {
         // Test that values near 90-degree boundaries don't cause flipping between representations
-        // This tests for the jitter issue when pitch crosses ±90 degrees
+        // This tests for the jitter issue when Y crosses ±90 degrees
 
         // Test positive boundary (85-95 degrees)
-        for (var pitch = 85f; pitch <= 95f; ++pitch)
+        for (var y = 85f; y <= 95f; ++y)
         {
-            var original = new Vector3(pitch, 0f, 0f);
+            var original = new Vector3(0f, y, 0f);
             var q = World.Utils.TransformConverter.EulerDegreesToQuaternion(original);
             var result = World.Utils.TransformConverter.QuaternionToEulerDegrees(q);
 
             // The result should prefer the representation that's closest to the input
-            // For pitch > 90, it should return pitch > 90 (not flip to negative with 180° yaw/roll)
-            _ = result.X.Should().BeApproximately(pitch, Tolerance, "Pitch should remain close to input, not flip to alternative");
-            _ = result.Y.Should().BeApproximately(0f, Tolerance);
+            // For Y > 90, it should return Y > 90 (not flip with 180° X and Z)
+            _ = result.X.Should().BeApproximately(0f, Tolerance);
+            _ = result.Y.Should().BeApproximately(y, Tolerance, "Y should remain close to input, not flip to alternative");
             _ = result.Z.Should().BeApproximately(0f, Tolerance);
         }
 
         // Test negative boundary (-95 to -85 degrees)
-        for (var pitch = -95f; pitch <= -85f; ++pitch)
+        for (var y = -95f; y <= -85f; ++y)
         {
-            var original = new Vector3(pitch, 0f, 0f);
+            var original = new Vector3(0f, y, 0f);
             var q = World.Utils.TransformConverter.EulerDegreesToQuaternion(original);
             var result = World.Utils.TransformConverter.QuaternionToEulerDegrees(q);
 
-            _ = result.X.Should().BeApproximately(pitch, Tolerance, "Pitch should remain close to input, not flip to alternative");
-            _ = result.Y.Should().BeApproximately(0f, Tolerance);
+            _ = result.X.Should().BeApproximately(0f, Tolerance);
+            _ = result.Y.Should().BeApproximately(y, Tolerance, "Y should remain close to input, not flip to alternative");
             _ = result.Z.Should().BeApproximately(0f, Tolerance);
         }
     }

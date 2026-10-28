@@ -136,7 +136,7 @@ NOLINT_TEST(SceneChangesTest, EveryWiredPropertyIsAppliedAndReadByItsRecord)
 }
 
 //! A rotation changes whole: its change holds the quaternion of the three
-//! Y-X-Z angles, and the node record receives it.
+//! X-Y-Z angles, and the node record receives it.
 NOLINT_TEST(SceneChangesTest, RotationChangeHoldsTheQuaternionOfItsAngles)
 {
   const auto encoded = schema::EncodeChange(
@@ -156,48 +156,48 @@ NOLINT_TEST(SceneChangesTest, RotationChangeHoldsTheQuaternionOfItsAngles)
   EXPECT_NEAR(record.rotation[3], half, 1e-6F);
 }
 
-//! Yaw applies before pitch and roll, as the editor composes them.
-NOLINT_TEST(SceneChangesTest, EulerAnglesComposeYawPitchRoll)
+//! X applies first and Z last, each about a parent axis: R = Rz * Ry * Rx.
+NOLINT_TEST(SceneChangesTest, EulerAnglesComposeXThenYThenZ)
 {
-  const auto pitch = world::EulerYxzDegreesToQuaternion({ 90.0F, 0.0F, 0.0F });
-  const auto yaw_pitch
-    = world::EulerYxzDegreesToQuaternion({ 90.0F, 90.0F, 0.0F });
+  const auto x = world::EulerXyzDegreesToQuaternion({ 90.0F, 0.0F, 0.0F });
+  const auto x_then_z
+    = world::EulerXyzDegreesToQuaternion({ 90.0F, 0.0F, 90.0F });
 
   const auto half = std::numbers::sqrt2_v<float> / 2.0F;
-  EXPECT_NEAR(pitch[0], half, 1e-6F);
-  EXPECT_NEAR(pitch[3], half, 1e-6F);
-  // Y(90) * X(90) = (0.5, 0.5, -0.5, 0.5).
-  EXPECT_NEAR(yaw_pitch[0], 0.5F, 1e-6F);
-  EXPECT_NEAR(yaw_pitch[1], 0.5F, 1e-6F);
-  EXPECT_NEAR(yaw_pitch[2], -0.5F, 1e-6F);
-  EXPECT_NEAR(yaw_pitch[3], 0.5F, 1e-6F);
+  EXPECT_NEAR(x[0], half, 1e-6F);
+  EXPECT_NEAR(x[3], half, 1e-6F);
+  // Z(90) * X(90) = (0.5, 0.5, 0.5, 0.5); X(90) * Z(90) would negate y.
+  EXPECT_NEAR(x_then_z[0], 0.5F, 1e-6F);
+  EXPECT_NEAR(x_then_z[1], 0.5F, 1e-6F);
+  EXPECT_NEAR(x_then_z[2], 0.5F, 1e-6F);
+  EXPECT_NEAR(x_then_z[3], 0.5F, 1e-6F);
 }
 
-//! A quaternion reads back as the Y-X-Z angles that made it.
+//! A quaternion reads back as the X-Y-Z angles that made it.
 NOLINT_TEST(SceneChangesTest, QuaternionReadsBackItsEulerAngles)
 {
-  constexpr auto angles = std::array { 20.0F, -130.0F, 45.0F };
+  constexpr auto angles = std::array { 20.0F, -70.0F, 135.0F };
 
-  const auto read = world::QuaternionToEulerYxzDegrees(
-    world::EulerYxzDegreesToQuaternion(angles));
+  const auto read = world::QuaternionToEulerXyzDegrees(
+    world::EulerXyzDegreesToQuaternion(angles));
 
   for (auto i = 0U; i < angles.size(); ++i) {
     EXPECT_NEAR(read.at(i), angles.at(i), 1e-3F);
   }
 }
 
-//! At 90° pitch yaw and roll turn about one axis: the angles read back have
-//! no roll and give the same rotation.
-NOLINT_TEST(SceneChangesTest, GimbalLockedQuaternionReadsWithoutRoll)
+//! At 90° about Y, X and Z turn about one axis: the angles read back have no
+//! X angle and give the same rotation.
+NOLINT_TEST(SceneChangesTest, GimbalLockedQuaternionReadsWithoutX)
 {
   const auto rotation
-    = world::EulerYxzDegreesToQuaternion({ 90.0F, 30.0F, 20.0F });
+    = world::EulerXyzDegreesToQuaternion({ 30.0F, 90.0F, 20.0F });
 
-  const auto read = world::QuaternionToEulerYxzDegrees(rotation);
-  const auto again = world::EulerYxzDegreesToQuaternion(read);
+  const auto read = world::QuaternionToEulerXyzDegrees(rotation);
+  const auto again = world::EulerXyzDegreesToQuaternion(read);
 
-  EXPECT_NEAR(read[0], 90.0F, 1e-2F);
-  EXPECT_FLOAT_EQ(read[2], 0.0F);
+  EXPECT_NEAR(read[1], 90.0F, 1e-2F);
+  EXPECT_FLOAT_EQ(read[0], 0.0F);
   // q and -q are one rotation.
   const auto dot = (rotation[0] * again[0]) + (rotation[1] * again[1])
     + (rotation[2] * again[2]) + (rotation[3] * again[3]);

@@ -16,11 +16,11 @@
 
 namespace oxygen::interop::rotation {
 
-//! The editor's Y-X-Z authoring convention (X pitch, Y yaw, Z roll), which the
-//! scene schema's rotation encoding owns.
+//! The X-Y-Z authoring convention (R = Rz * Ry * Rx), which the scene
+//! schema's rotation encoding owns.
 inline auto ToQuaternion(const glm::vec3& degrees) -> glm::quat
 {
-  const auto rotation = oxygen::data::pak::world::EulerYxzDegreesToQuaternion(
+  const auto rotation = oxygen::data::pak::world::EulerXyzDegreesToQuaternion(
     { degrees.x, degrees.y, degrees.z });
   return { rotation[3], rotation[0], rotation[1], rotation[2] };
 }
@@ -45,27 +45,29 @@ inline auto ToEulerDegrees(glm::quat rotation) -> glm::vec3
     return glm::vec3(0.0F);
   }
   const auto q = glm::normalize(rotation);
-  const auto test = std::clamp(2.0F * (q.w * q.x - q.y * q.z), -1.0F, 1.0F);
+  // sin(Y) = -R20 of R = Rz * Ry * Rx.
+  const auto test = std::clamp(2.0F * (q.w * q.y - q.x * q.z), -1.0F, 1.0F);
   glm::vec3 angles;
   if (std::abs(test) >= 0.99999F) {
+    // X and Z turn about one axis: X = 0, then R01 = -sin(Z), R11 = cos(Z).
     const auto r01 = 2.0F * (q.x * q.y - q.w * q.z);
-    const auto r00 = 1.0F - 2.0F * (q.y * q.y + q.z * q.z);
-    angles = { std::copysign(glm::half_pi<float>(), test),
-      test > 0.0F ? std::atan2(r01, r00) : std::atan2(-r01, r00), 0.0F };
+    const auto r11 = 1.0F - 2.0F * (q.x * q.x + q.z * q.z);
+    angles = { 0.0F, std::copysign(glm::half_pi<float>(), test),
+      std::atan2(-r01, r11) };
   } else {
-    angles = { std::asin(test),
-      std::atan2(2.0F * (q.w * q.y + q.x * q.z),
-        1.0F - 2.0F * (q.x * q.x + q.y * q.y)),
-      std::atan2(2.0F * (q.w * q.z + q.x * q.y),
-        1.0F - 2.0F * (q.x * q.x + q.z * q.z)) };
+    angles = { std::atan2(2.0F * (q.y * q.z + q.w * q.x),
+                 1.0F - 2.0F * (q.x * q.x + q.y * q.y)),
+      std::asin(test),
+      std::atan2(2.0F * (q.x * q.y + q.w * q.z),
+        1.0F - 2.0F * (q.y * q.y + q.z * q.z)) };
   }
   angles = glm::degrees(angles);
-  const glm::vec3 alternative {
-    angles.x >= 0.0F ? 180.0F - angles.x : -180.0F - angles.x,
-    NormalizeAngle(angles.y + 180.0F), NormalizeAngle(angles.z + 180.0F) };
-  const auto cost = std::abs(angles.y) + std::abs(angles.z);
-  const auto alternative_cost = std::abs(alternative.y) + std::abs(alternative.z);
-  if ((std::abs(alternative.x) < std::abs(angles.x)
+  const glm::vec3 alternative { NormalizeAngle(angles.x + 180.0F),
+    angles.y >= 0.0F ? 180.0F - angles.y : -180.0F - angles.y,
+    NormalizeAngle(angles.z + 180.0F) };
+  const auto cost = std::abs(angles.x) + std::abs(angles.z);
+  const auto alternative_cost = std::abs(alternative.x) + std::abs(alternative.z);
+  if ((std::abs(alternative.y) < std::abs(angles.y)
         && alternative_cost <= cost + 10.0F)
     || alternative_cost < cost - 10.0F) {
     return alternative;

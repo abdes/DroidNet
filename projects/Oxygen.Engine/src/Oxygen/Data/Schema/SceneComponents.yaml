@@ -19,7 +19,7 @@
 # int or an enum member's wire value as an int32, a float or each axis of a
 # vec3 as a float. `encoding` names a unit conversion applied before the value
 # goes to its fields: `degrees-to-radians` converts one angle;
-# `euler-yxz-degrees-to-quat` turns three Y-X-Z Euler angles into one rotation,
+# `euler-xyz-degrees-to-quat` turns three X-Y-Z Euler angles into one rotation,
 # which a change holds as a quaternion while the fields receive the angles.
 #
 # The schema is the only place that decides a property's creation `default`
@@ -256,7 +256,7 @@ components:
         type: vec3
         fields: [RotationXDegrees, RotationYDegrees, RotationZDegrees]
         override_id: 8
-        encoding: euler-yxz-degrees-to-quat
+        encoding: euler-xyz-degrees-to-quat
         default: [0, 0, 0]
         unit: degree
       - name: ScaleX

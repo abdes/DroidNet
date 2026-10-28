@@ -264,7 +264,7 @@
         },
         "encoding": {
           "description": "A unit conversion applied before the value goes to its fields; a rotation's change holds its quaternion while its fields receive the angles.",
-          "enum": ["degrees-to-radians", "euler-yxz-degrees-to-quat"]
+          "enum": ["degrees-to-radians", "euler-xyz-degrees-to-quat"]
         },
         "sources": {
           "description": "What may supply the value; a scene then stores only its overrides of it.",

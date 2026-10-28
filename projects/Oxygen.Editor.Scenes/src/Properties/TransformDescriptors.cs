@@ -54,7 +54,7 @@ public sealed class TransformDescriptors
     public PropertyDescriptor<float> PositionZDescriptor { get; }
 
     /// <summary>
-    /// Gets the rotation descriptor: the three Y-X-Z Euler angles in degrees, one property, since the stored rotation is
+    /// Gets the rotation descriptor: the three X-Y-Z Euler angles in degrees, one property, since the stored rotation is
     /// one quaternion and an angle alone exists only through its decomposition.
     /// </summary>
     public PropertyDescriptor<Vector3> RotationDescriptor { get; }

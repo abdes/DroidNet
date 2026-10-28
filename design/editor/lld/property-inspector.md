@@ -122,11 +122,11 @@ activation field.
 All axes use common-component multi-selection and per-axis mixed values.
 Transform is required and locked against removal.
 
-| Field                | Source/unit                                   | Default  | Bounds and commit                                                           | Active effect                                                     |
-| -------------------- | --------------------------------------------- | -------- | --------------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| Local Position X/Y/Z | float32 metres                                | 0/0/0    | Finite                                                                      | Local translation; parented world pose follows hierarchy          |
-| Local Rotation X/Y/Z | UI degrees; normalized XYZW quaternion source | Identity | Finite; wrap displayed angles to [-180,180]; reject zero/invalid quaternion | Existing YXZ yaw/pitch/roll convention; no competing Euler source |
-| Local Scale X/Y/Z    | float32 multiplier                            | 1/1/1    | Finite, nonzero; negative allowed                                           | Scale including mirrored winding/normal handling                  |
+| Field                | Source/unit                                   | Default  | Bounds and commit                                                           | Active effect                                                                                    |
+| -------------------- | --------------------------------------------- | -------- | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| Local Position X/Y/Z | float32 metres                                | 0/0/0    | Finite                                                                      | Local translation; parented world pose follows hierarchy                                         |
+| Local Rotation X/Y/Z | UI degrees; normalized XYZW quaternion source | Identity | Finite; wrap displayed angles to [-180,180]; reject zero/invalid quaternion | The engine X-Y-Z convention (R = Rz·Ry·Rx, `Oxygen/Core/Constants.h`); no competing Euler source |
+| Local Scale X/Y/Z    | float32 multiplier                            | 1/1/1    | Finite, nonzero; negative allowed                                           | Scale including mirrored winding/normal handling                                                 |
 
 Preserve the manipulated Euler axis during a gesture; commit its canonical
 quaternion. Inspecting a transform does not normalize/rewrite source. Raw

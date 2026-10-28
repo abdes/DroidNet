@@ -19,7 +19,7 @@ namespace Oxygen.Editor.Scenes.Nodes;
 /// A value resolves as scene instances 6.3 orders it: this scene's change of the node first, then the value read from
 /// the mounted content, which holds the source's value and the changes of deeper nesting levels. A change of a component
 /// the node does not have changes nothing. A rotation is written as the change's angles where a change sets it, else as
-/// the angles the read decomposed (Y-X-Z); either way the node stores the same quaternion.
+/// the angles the read decomposed (X-Y-Z); either way the node stores the same quaternion.
 /// </remarks>
 public static class InstancedNodes
 {

@@ -179,7 +179,7 @@ value struct PropertyValueEntry {
 
   //! A property of a mounted scene's node with its effective value, in the
   //! schema's units: an enum is its member's wire value, a rotation the
-  //! editor's Y-X-Z Euler angles in degrees, an asset the virtual path of its
+  //! X-Y-Z Euler angles in degrees, an asset the virtual path of its
   //! cooked asset (empty when no mounted source provides it), a LOD policy its
   //! record's values. `Kind` names the member that holds the value; the
   //! others stay at their defaults.

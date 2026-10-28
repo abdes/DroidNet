@@ -191,7 +191,7 @@ public:
 
   //! A property value in the schema's units: a bool, an int32 (an int, or the
   //! wire value of an enum member), a float, the three floats of a vec3 (a
-  //! rotation as the editor's Y-X-Z Euler angles, in degrees), an asset, or
+  //! rotation as X-Y-Z Euler angles, in degrees), an asset, or
   //! a LOD policy.
   using SceneNodeValue = std::variant<bool, std::int32_t, float,
     std::array<float, 3>, SceneNodeAsset, data::pak::geometry::LodPolicyRecord>;

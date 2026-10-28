@@ -45,7 +45,7 @@ _DISPLAY_UNITS = {"radian": frozenset({"degree"})}
 # The value type and unit of the authored value an encoding converts.
 _ENCODINGS = {
     "degrees-to-radians": ("float", "degree"),
-    "euler-yxz-degrees-to-quat": ("vec3", "degree"),
+    "euler-xyz-degrees-to-quat": ("vec3", "degree"),
 }
 
 

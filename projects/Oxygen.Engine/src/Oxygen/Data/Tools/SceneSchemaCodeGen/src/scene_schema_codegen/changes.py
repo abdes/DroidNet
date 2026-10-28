@@ -111,7 +111,7 @@ def _encode(entry: Override) -> str:
         return f"detail::EncodeFloat(value, {component}, {ids[0]}{radians})"
     encoder = (
         "EncodeRotation"
-        if prop.encoding == "euler-yxz-degrees-to-quat"
+        if prop.encoding == "euler-xyz-degrees-to-quat"
         else "EncodeVec3"
     )
     return f"detail::{encoder}(value, {component}, {{ {', '.join(ids)} }})"
@@ -143,7 +143,7 @@ def _apply(entry: Override) -> str:
     wire = entry.component.wire
     assert wire is not None
     fields = [f"{wire.field_set}Field::k{field}" for field in prop.fields]
-    if prop.encoding == "euler-yxz-degrees-to-quat":
+    if prop.encoding == "euler-xyz-degrees-to-quat":
         quaternion = ", ".join(f"value.as_quat[{axis}]" for axis in range(4))
         return f"pak::world::WriteRotation(record, {{ {quaternion} }}); return true;"
     if prop.type == "vec3":
@@ -187,7 +187,7 @@ def _read(entry: Override) -> str:
     wire = entry.component.wire
     assert wire is not None
     fields = [f"{wire.field_set}Field::k{field}" for field in prop.fields]
-    if prop.encoding == "euler-yxz-degrees-to-quat":
+    if prop.encoding == "euler-xyz-degrees-to-quat":
         return "detail::ReadRotation(record)"
     if prop.type == "vec3":
         return f"detail::ReadVec3(record, std::array {{ {', '.join(fields)} }})"

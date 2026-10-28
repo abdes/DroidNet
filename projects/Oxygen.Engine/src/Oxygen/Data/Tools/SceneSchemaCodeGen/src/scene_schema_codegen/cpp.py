@@ -47,7 +47,7 @@ _VALUE_TYPES = (
 
 _ENCODINGS = (
     ("degrees-to-radians", "DegreesToRadians"),
-    ("euler-yxz-degrees-to-quat", "EulerYxzDegreesToQuat"),
+    ("euler-xyz-degrees-to-quat", "EulerXyzDegreesToQuat"),
 )
 
 # The `OverrideValue` member that holds a change, by value type.
@@ -356,7 +356,7 @@ def _encoding_name(entry: Property) -> str:
 
 
 def _member_name(entry: Property) -> str:
-    if entry.encoding == "euler-yxz-degrees-to-quat":
+    if entry.encoding == "euler-xyz-degrees-to-quat":
         return "Quat"
     return dict(_MEMBERS)[entry.type]
 

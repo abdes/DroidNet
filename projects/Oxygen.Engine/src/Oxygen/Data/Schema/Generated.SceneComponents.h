@@ -374,7 +374,7 @@ enum class PartKind : std::uint8_t {
 enum class Encoding : std::uint8_t {
   kNone = 0,
   kDegreesToRadians = 1,
-  kEulerYxzDegreesToQuat = 2,
+  kEulerXyzDegreesToQuat = 2,
 };
 
 //! The member of `OverrideValue` that holds a property's change.
@@ -599,7 +599,7 @@ inline constexpr std::array<OverrideProperty, 89> kOverrideProperties {
     .key = "/local_rotation_euler_degrees",
     .type = ValueType::kVec3,
     .asset_type = AssetType::kUnknown,
-    .encoding = Encoding::kEulerYxzDegreesToQuat,
+    .encoding = Encoding::kEulerXyzDegreesToQuat,
     .member = ValueMember::kQuat,
     .asset_sourced = false,
   },

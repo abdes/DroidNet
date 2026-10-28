@@ -105,7 +105,7 @@ namespace detail {
     return encoded;
   }
 
-  //! Three Y-X-Z Euler angles in degrees, one valid for each of `fields`, as
+  //! Three X-Y-Z Euler angles in degrees, one valid for each of `fields`, as
   //! the quaternion they describe.
   [[nodiscard]] inline auto EncodeRotation(const SchemaValue& value,
     const ComponentId component, const std::array<std::uint16_t, 3>& fields)
@@ -115,7 +115,7 @@ namespace detail {
     if (angles == nullptr || !EncodeVec3(value, component, fields)) {
       return std::nullopt;
     }
-    const auto rotation = pak::world::EulerYxzDegreesToQuaternion(*angles);
+    const auto rotation = pak::world::EulerXyzDegreesToQuaternion(*angles);
     auto encoded = pak::world::OverrideValue {};
     encoded.as_quat[0] = rotation[0];
     encoded.as_quat[1] = rotation[1];
@@ -187,11 +187,11 @@ namespace detail {
     return vector;
   }
 
-  //! The node's local rotation as Y-X-Z Euler angles in degrees.
+  //! The node's local rotation as X-Y-Z Euler angles in degrees.
   [[nodiscard]] inline auto ReadRotation(const pak::world::NodeRecord& record)
     -> SchemaValue
   {
-    return pak::world::QuaternionToEulerYxzDegrees({
+    return pak::world::QuaternionToEulerXyzDegrees({
       record.rotation[0],
       record.rotation[1],
       record.rotation[2],
