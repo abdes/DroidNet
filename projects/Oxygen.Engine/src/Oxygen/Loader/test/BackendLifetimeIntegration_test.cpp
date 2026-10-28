@@ -590,8 +590,11 @@ NOLINT_TEST_P(BackendLifetimeIntegration,
   ASSERT_TRUE(readback->IsReady().has_value());
   EXPECT_FALSE(*readback->IsReady());
   EXPECT_EQ(readback->MapNow().error(), ReadbackError::kWouldDeadlock);
-  EXPECT_FALSE(recording.Submit()); // its earlier legacy value is stale
-  EXPECT_EQ(readback->MapNow().error(), ReadbackError::kCancelled);
+  // The queue assigns the readback's signal when the recording submits, so a
+  // marker emitted in between does not make the recording stale.
+  ASSERT_TRUE(recording.Submit());
+  graphics->Flush();
+  EXPECT_TRUE(readback->MapNow().has_value());
 }
 
 NOLINT_TEST_P(BackendLifetimeIntegration,

@@ -114,6 +114,8 @@ namespace {
     desc.is_shader_resource = false;
     desc.is_render_target = false;
     desc.is_uav = false;
+    // Without the render target flag, D3D12 rejects an optimized clear value.
+    desc.use_clear_value = false;
     desc.initial_state = ResourceStates::kResolveDest;
     desc.debug_name = source_desc.debug_name + "-resolve";
     return desc;
@@ -187,6 +189,7 @@ namespace {
     desc.is_shader_resource = false;
     desc.is_render_target = false;
     desc.is_uav = false;
+    desc.use_clear_value = false;
     desc.initial_state = ResourceStates::kCopyDest;
     return desc;
   }
