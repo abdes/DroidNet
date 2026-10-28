@@ -3,11 +3,12 @@
 Status: proposal. Nothing here is implemented, scheduled or accepted. It is
 written against the engine as it is today and changes no accepted document.
 
-Last updated: 2026-10-24
+Last updated: 2026-10-28
 
 Read: [at a glance](#at-a-glance), [scenario](#scenario),
 [engine today](#the-engine-today), [architecture](#architecture),
-[decisions](#decisions), [shared rules](#shared-rules),
+[decisions](#decisions), [evolution](#rasterization-evolution),
+[shared rules](#shared-rules),
 [accepted designs this touches](#accepted-designs-this-touches).
 
 ## At a glance
@@ -145,7 +146,9 @@ Each decision is binding for this proposal and states its rationale.
    indirect draws through existing `ExecuteIndirect`. Mesh shaders need
    Graphics support that does not exist today and are a separate decision;
    software micropolygon rasterization and a visibility buffer are separate
-   renderer decisions.
+   renderer decisions. The format and the selection output do not depend on
+   the raster path, so those later profiles read the same pages and cuts
+   ([evolution](#rasterization-evolution)).
 6. **Content stays GPU-independent.** Content returns validated immutable
    bytes by manifest-local page identity. Vortex owns GPU installation.
 7. **One non-preemptive completion permit per geometry pool.** The geometry
@@ -171,11 +174,45 @@ Each decision is binding for this proposal and states its rationale.
     prefix-scan and age-bucket machinery; neither exists as code today.
 12. **Cluster and page sizes are profile parameters.** They are chosen by
     measurement when the format is frozen, are independent of hardware wave
-    size and of each other, and are never encoded as architecture.
-13. **A clustering library is adopted by audit.** meshoptimizer's clusterlod
-    is the candidate; no clustering dependency exists today, so adoption adds
-    a pinned Conan requirement after boundary and error fixtures pass. Oxygen
-    owns the coverage proof, error semantics and format regardless.
+    size and of each other, and are never encoded as architecture. One bound
+    is architectural: a cluster has at most 256 vertices and 256 triangles,
+    the range of its 8-bit local indices
+    ([encoding](geometry-format.md#page-and-cluster-encoding)) and the D3D12
+    mesh-shader output maximum, so a later mesh-shader profile reads the same
+    clusters.
+13. **meshoptimizer is the Cooker's mesh library; clusterlod is adopted by
+    audit.** The classic model import adopts meshoptimizer, as a pinned Conan
+    requirement, for LOD simplification, vertex cache and fetch ordering and
+    `EXT_meshopt_compression` decoding; this proposal reuses that dependency
+    and adds none. clusterlod (`clodBuild`, `clodGroup`) is not part of the
+    library or its package: it ships in the repository's `demo/` directory, so
+    a reviewed revision is vendored into the Cooker only after the boundary
+    and error fixtures pass. Oxygen owns the coverage proof, error semantics
+    and format regardless.
+
+## Rasterization evolution
+
+The direction beyond this proposal, stated so that nothing here blocks it.
+Only the first profile is part of the design; each later one is its own
+renderer decision with its own Graphics and Vortex changes.
+
+| Profile                      | Draws                                                               | Needs                                                                                        |
+| ---------------------------- | ------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| Vertex pulling (this design) | Every visible cluster through counted `ExecuteIndirect` draws       | Nothing beyond the [Graphics gaps](paged-resource-backing.md#d3d12-realization)              |
+| Mesh shaders                 | Every visible cluster through amplification and mesh shaders        | Graphics mesh pipeline state, `DispatchMesh` and tier detection; vertex pulling as fallback  |
+| Hybrid                       | Large clusters through mesh shaders, small ones in a compute raster | A visibility buffer and a material resolve pass, since a compute raster cannot write GBuffer |
+
+What keeps the later profiles a backend change rather than a format change:
+
+- clusters stay within the mesh-shader output limits (decision 12);
+- a triangle is one aligned 32-bit word, and positions are a section of their
+  own, so every raster path loads them the same way;
+- the visible-work record names clusters, never a raster path; routing by
+  projected size is a later selection output, not a field reserved now;
+- no visibility-buffer payload is reserved: the layout is chosen with the
+  hybrid profile. Whatever it is, depth occupies the most significant bits of
+  the 64-bit word, because the atomic minimum that resolves visibility
+  compares the whole word.
 
 ## Shared rules
 

@@ -4,7 +4,7 @@ Status: proposal. Part of [virtual geometry](README.md). Owner module: Data.
 This is the review baseline for the cooked profile; production assets are not
 emitted until its layout and version are frozen in the Data version catalog.
 
-Last updated: 2026-10-24
+Last updated: 2026-10-28
 
 Read: [identity and units](#identity-and-units), [manifest](#manifest),
 [pages and clusters](#page-and-cluster-encoding), [validation](#validation),
@@ -147,12 +147,26 @@ cluster lies wholly inside one resident page in v1; groups may span pages.
 Packing splits an oversized cluster or group construction before encoding and
 never emits a continuation chain hidden from validation.
 
-Resident payload holds a checked header, a cluster-record directory, compact
-triangle indices, quantized positions and the required attributes. The header
-gives record counts, section offsets and bytes, and the resident-format
-version. GPU loads stay aligned to their declared view or typed-load
-requirement; byte-sized triangle indices need a documented aligned extraction
-path. Layout and codec are independent of mesh-shader group dimensions.
+Resident payload holds a checked header, a cluster-record directory, and
+three separate sections: triangles, quantized positions, and the remaining
+attributes. The header gives record counts, section offsets and bytes, and the
+resident-format version. GPU loads stay aligned to their declared view or
+typed-load requirement.
+
+- **Triangles.** Each triangle is one aligned 32-bit word: three 8-bit
+  cluster-local vertex indices in bits 0-7, 8-15 and 16-23, and bits 24-31
+  reserved as zero. A triangle is one aligned load in every raster path, and
+  the 8-bit indices bound a cluster to 256 vertices. Validation rejects a
+  nonzero reserved byte; a later profile that assigns it is a new format
+  version.
+- **Positions apart from attributes.** Positions are contiguous per cluster
+  in their own section, so depth-only and shadow passes read only positions.
+  Normals, tangents and UVs follow in the attribute section, in the
+  quantization the profile declares.
+
+A cluster has at most 256 vertices and 256 triangles
+([decision 12](README.md#decisions)). Within that bound, layout and codec are
+independent of mesh-shader group dimensions.
 
 The first transfer codec may be the identity over the compact quantized
 resident format. Advanced entropy or inter-page compression is optional; a

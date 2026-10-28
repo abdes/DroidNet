@@ -2,7 +2,7 @@
 
 Status: proposal. Part of [virtual geometry](README.md). Owner module: Vortex.
 
-Last updated: 2026-10-24
+Last updated: 2026-10-28
 
 Read: [stages](#stage-placement), [draw and shading](#draw-and-shading-contract),
 [shadow and temporal identity](#shadow-and-temporal-identity),
@@ -88,7 +88,11 @@ Depth and GBuffer use the same decoded positions, winding, transforms,
 clipping, masked-material inputs and supported deformation, and keep the
 existing GBuffer, HDR, normal and velocity conventions. Geometry
 virtualization does not authorize a visibility-buffer rewrite, a software
-micropolygon rasterizer or a second opaque material evaluation path. Baseline
+micropolygon rasterizer or a second opaque material evaluation path. That is
+this proposal's scope, not a ceiling: a compute rasterizer cannot write the
+GBuffer, so it comes with a visibility buffer and a material resolve pass as
+one later renderer decision
+([evolution](README.md#rasterization-evolution)). Baseline
 support is static opaque and masked geometry; masked materials still write the
 GBuffer with real alpha clip. Unsupported deformation or material modes are
 explicit admission errors or asset-policy fallbacks to a classic
@@ -104,8 +108,10 @@ Mesh shaders are a later execution profile over the same page, group and
 resource contracts. They need, first, a Graphics mesh pipeline state, a
 `DispatchMesh` command and tier detection (all absent today, though the shader
 compiler can build mesh stages), then the vertex-pulling path stays as the
-fallback. Cluster limits come from measurement; no vendor's wave or output
-recommendation is baked into page identity.
+fallback. Cluster limits come from measurement within the mesh-shader
+output maximum of 256 vertices and 256 triangles, so that profile reads the
+same pages; no vendor's wave or output recommendation is baked into page
+identity.
 
 ## Shadow and temporal identity
 

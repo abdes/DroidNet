@@ -4,7 +4,7 @@ Status: proposal. Part of [virtual geometry](README.md). Owner module: Cooker.
 The [geometry format](geometry-format.md) owns the emitted schema and
 encoding.
 
-Last updated: 2026-10-24
+Last updated: 2026-10-28
 
 Read: [pipeline](#pipeline-and-boundaries), [hierarchy](#hierarchy-construction),
 [packing and errors](#packing-and-errors), [verification](#verification).
@@ -79,8 +79,10 @@ validate `C_g`/`F_g`, ranks, root closure and independently compatible group
 boundaries before packing.
 
 Partition finest triangles into clusters of bounded vertices and triangles
-with coherent spatial extent. Limits come from measurement at format freeze;
-a cluster's limits are independent of page capacity and hardware wave size.
+with coherent spatial extent. Limits come from measurement at format freeze,
+within at most 256 vertices and 256 triangles
+([decision 12](README.md#decisions)); a cluster's limits are independent of
+page capacity and hardware wave size.
 Material, hole, seam and required authored-boundary constraints are preserved
 explicitly, and the cluster's material is its submesh's.
 
@@ -105,15 +107,19 @@ matching is not a proof of compatible cuts.
 
 ### Library
 
-meshoptimizer (clusterlod) is the candidate cluster builder and simplifier.
-Nothing in the engine depends on it today: neither Conan, CMake nor the
-Cooker's linked set contains it, so adoption means a new pinned Conan
-requirement and `find_package` in the Cooker build. Pin a reviewed revision
-and configuration only after the boundary and error fixtures pass. Oxygen owns
-the asset contract, coverage proof, error semantics and qualification; library
-defaults, optional sloppy simplifiers, border dilation and terminal behavior
-are audited against that contract. See
-[geometry research](references.md#geometry-research).
+meshoptimizer is the Cooker's mesh library: the classic model import adopts
+it as a pinned Conan requirement for LOD simplification, vertex cache and
+fetch ordering and meshopt decoding. Virtual geometry reuses that requirement
+and its version; it adds no second mesh library.
+
+clusterlod (`clodBuild`, `clodGroup`) is the candidate cluster builder and
+group simplifier. It is not part of the meshoptimizer library or its Conan
+package; it ships in the repository's `demo/` directory. A reviewed revision
+is vendored into the Cooker, matching the pinned library version, only after
+the boundary and error fixtures pass. Oxygen owns the asset contract,
+coverage proof, error semantics and qualification; library defaults, optional
+sloppy simplifiers, border dilation and terminal behavior are audited against
+that contract. See [geometry research](references.md#geometry-research).
 
 ## Packing and errors
 

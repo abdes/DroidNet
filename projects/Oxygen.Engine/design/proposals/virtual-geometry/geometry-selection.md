@@ -2,7 +2,7 @@
 
 Status: proposal. Part of [virtual geometry](README.md). Owner module: Vortex.
 
-Last updated: 2026-10-24
+Last updated: 2026-10-28
 
 Read: [inputs](#inputs-and-outputs), [valid cut](#valid-cut-selection),
 [bounded progress](#bounded-progress), [visibility](#visibility-and-history),
@@ -112,6 +112,14 @@ unsupported transform bound prevents any aggressive rejection or refinement
 shortcut. Orthographic views use world error times projected scale, and a
 conservative transform norm covers nonuniform scale and shear. The exact bound
 is owned here and independently tested before error-based pruning is enabled.
+
+The projected-pixel-error threshold is a profile parameter. Error is not
+triangle size, but a smaller threshold refines to smaller triangles, and the
+hardware rasterizer shades 2×2 pixel quads, so the vertex-pulling profile does
+not set its threshold where triangles shrink to a few pixels and quad overdraw
+dominates shading. Its value is chosen by measurement at format freeze, with
+the scenario's cliff and terrain as the workload. A lower threshold belongs to
+a later rasterization profile ([evolution](README.md#rasterization-evolution)).
 
 Upper and lower refinement thresholds with documented hysteresis prevent
 thrashing. Error rank and request priority are separate from actual

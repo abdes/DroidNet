@@ -4,7 +4,7 @@ Status: proposal. Reading map for [virtual geometry](README.md). The module
 documents own Oxygen's contracts; references explain mechanisms and tradeoffs.
 A reference implementation is not permission to import its full architecture.
 
-Last updated: 2026-10-24
+Last updated: 2026-10-28
 
 Read: [Oxygen sources](#oxygen-sources), [UE 5.7](#ue-57), [D3D12](#d3d12),
 [geometry research](#geometry-research), [decision evidence](#decision-evidence).
@@ -82,12 +82,13 @@ Microsoft references, reviewed 2026-09-27:
 
 ## Geometry research
 
-| Topic         | Reference                                                                                                                                                                                                               | Use and limits                                                                                                            |
-| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| meshoptimizer | [meshoptimizer](https://github.com/zeux/meshoptimizer), [clusterlod.h](https://github.com/zeux/meshoptimizer/blob/master/demo/clusterlod.h)                                                                             | Candidate clustering and simplification; group DAG versus traversal hierarchy; pin a reviewed revision before adoption    |
-| Nanite talk   | [Karis, Stubbe, Wihlidal: A Deep Dive into Nanite](https://advances.realtimerendering.com/s2021/Karis_Nanite_SIGGRAPH_Advances_2021_final.pdf), [course index](https://advances.realtimerendering.com/s2021/index.html) | Research reading on clustering, streaming and rendering; not a substitute for UE 5.7 source or Oxygen's bounded cut proof |
-| Quantization  | [AMD meshlet compression](https://gpuopen.com/learn/mesh_shaders/mesh_shaders-meshlet_compression/)                                                                                                                     | Compatible global and local integer grids; numerical cracks are separate from topology compatibility                      |
-| Mesh shaders  | [AMD optimization and best practices](https://gpuopen.com/learn/mesh_shaders/mesh_shaders-optimization_and_best_practices/)                                                                                             | Output allocation, occupancy and cluster limits for the later execution profile                                           |
+| Topic              | Reference                                                                                                                                                                                                               | Use and limits                                                                                                                                                 |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| meshoptimizer      | [meshoptimizer](https://github.com/zeux/meshoptimizer), [clusterlod.h](https://github.com/zeux/meshoptimizer/blob/master/demo/clusterlod.h)                                                                             | The Cooker's mesh library (classic LODs, vertex order, meshopt decoding); clusterlod is a demo header, vendored by audit; group DAG versus traversal hierarchy |
+| Nanite talk        | [Karis, Stubbe, Wihlidal: A Deep Dive into Nanite](https://advances.realtimerendering.com/s2021/Karis_Nanite_SIGGRAPH_Advances_2021_final.pdf), [course index](https://advances.realtimerendering.com/s2021/index.html) | Research reading on clustering, streaming and rendering; not a substitute for UE 5.7 source or Oxygen's bounded cut proof                                      |
+| Quantization       | [AMD meshlet compression](https://gpuopen.com/learn/mesh_shaders/mesh_shaders-meshlet_compression/)                                                                                                                     | Compatible global and local integer grids; numerical cracks are separate from topology compatibility                                                           |
+| Mesh shaders       | [AMD optimization and best practices](https://gpuopen.com/learn/mesh_shaders/mesh_shaders-optimization_and_best_practices/)                                                                                             | Output allocation, occupancy and cluster limits for the later execution profile                                                                                |
+| Mesh shader limits | [D3D12 mesh shader specification](https://microsoft.github.io/DirectX-Specs/d3d/MeshShader.html)                                                                                                                        | At most 256 output vertices and 256 output primitives per group: the cluster bound of decision 12                                                              |
 
 ## Decision evidence
 
