@@ -122,7 +122,7 @@ auto ImportRequest::GetFormat() const -> ImportFormat
   if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga"
     || ext == ".bmp" || ext == ".psd" || ext == ".gif" || ext == ".hdr"
     || ext == ".pic" || ext == ".ppm" || ext == ".pgm" || ext == ".pnm"
-    || ext == ".exr") {
+    || ext == ".exr" || ext == ".webp" || ext == ".ktx2") {
     return ImportFormat::kTextureImage;
   }
   if (ext == ".gltf" || ext == ".glb") {

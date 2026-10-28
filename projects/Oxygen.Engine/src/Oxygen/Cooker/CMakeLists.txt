@@ -24,6 +24,8 @@ find_package(nlohmann_json REQUIRED)
 find_package(nlohmann_json_schema_validator REQUIRED)
 find_package(SPNG REQUIRED)
 find_package(meshoptimizer CONFIG REQUIRED)
+find_package(WebP CONFIG REQUIRED)
+find_package(Ktx CONFIG REQUIRED)
 
 # ==============================================================================
 # Build instructions
@@ -446,9 +448,11 @@ if(OXYGEN_BUILD_TESTS AND BUILD_SHARED_LIBS)
       oxygen::content
     PRIVATE
       glm::glm
+      KTX::ktx
       meshoptimizer::meshoptimizer
       spng::spng_static
       tinyexr::tinyexr
+      WebP::webp
       nlohmann_json::nlohmann_json
       nlohmann_json_schema_validator
   )
@@ -503,9 +507,11 @@ target_link_libraries(
     oxygen::scene
     oxygen::physics
     glm::glm
+    KTX::ktx
     meshoptimizer::meshoptimizer
     spng::spng_static
     tinyexr::tinyexr
+    WebP::webp
     nlohmann_json::nlohmann_json
     nlohmann_json_schema_validator
 )

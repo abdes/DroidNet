@@ -37,7 +37,6 @@
 #include <Oxygen/Cooker/test/Support/TestImages.h>
 #include <Oxygen/Cooker/test/Support/TestPaths.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
-#include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace oxygen::content::import::test {
@@ -67,15 +66,15 @@ namespace {
   constexpr auto kGolden = std::to_array<GoldenOutput>({
     {
       .importer = Importer::kGltf,
-      .revision = 2,
+      .revision = 3,
       .digest
       = "e14ee29097e2c2bdf66734216ee2426ba721f186f0ec69f354225af638a35b9d",
     },
     {
       .importer = Importer::kFbx,
-      .revision = 2,
+      .revision = 3,
       .digest
-      = "2e5f08164652a963bc8af32d988fd26b1e056e7bf46f820af6139b25b83a8b8c",
+      = "5678785ffcca919f74d48658d8ff84ccabb2ac47299fbb65ac5abe03cdc138bb",
     },
     {
       .importer = Importer::kTexture,

@@ -665,7 +665,10 @@ struct ImportOptions final {
     //! Bake HDR content to LDR via tonemap + exposure.
     bool bake_hdr_to_ldr = false;
 
-    //! Flip the green (Y) channel for normal maps.
+    //! Flip the green (Y) channel of normal maps. A standalone image is
+    //! taken green-down, the engine's convention (`space::texture`); a model's
+    //! map is taken as its source declares it. Set this for a map authored the
+    //! other way.
     bool flip_normal_green = false;
 
     //! Renormalize normals in each mip level after downsampling.

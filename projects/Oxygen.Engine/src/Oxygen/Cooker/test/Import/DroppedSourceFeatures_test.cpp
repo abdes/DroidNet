@@ -359,6 +359,23 @@ NOLINT_TEST(DroppedSourceFeaturesTest, UsedUnreadExtensionIsReported)
   EXPECT_EQ(diagnostics.front().object_path, "/extensions/EXT_physics");
 }
 
+NOLINT_TEST(DroppedSourceFeaturesTest, CompressedTextureExtensionsAreRead)
+{
+  std::string webp = "EXT_texture_webp";
+  std::string basisu = "KHR_texture_basisu";
+  std::array extensions { webp.data(), basisu.data() };
+  cgltf_data source {};
+  source.extensions_used = extensions.data();
+  source.extensions_used_count = extensions.size();
+  source.extensions_required = extensions.data();
+  source.extensions_required_count = extensions.size();
+  std::vector<ImportDiagnostic> diagnostics;
+
+  ReportDroppedSourceFeatures(source, "compressed.gltf", diagnostics);
+
+  EXPECT_TRUE(diagnostics.empty());
+}
+
 NOLINT_TEST(DroppedSourceFeaturesTest, MaterialTextureChannelsAreNotReported)
 {
   auto texture = cgltf_texture {};
@@ -402,9 +419,10 @@ NOLINT_TEST(DroppedSourceFeaturesTest, ConflictingTextureUvMappingsAreReported)
 
 NOLINT_TEST(DroppedSourceFeaturesTest, CustomSamplingIsReported)
 {
-  auto sampler = cgltf_sampler {};
-  sampler.wrap_s = cgltf_wrap_mode_clamp_to_edge;
-  sampler.wrap_t = cgltf_wrap_mode_repeat;
+  auto sampler = cgltf_sampler {
+    .wrap_s = cgltf_wrap_mode_clamp_to_edge,
+    .wrap_t = cgltf_wrap_mode_repeat,
+  };
   auto texture = cgltf_texture {};
   texture.sampler = &sampler;
   auto name = std::string("Bun");
@@ -426,12 +444,30 @@ NOLINT_TEST(DroppedSourceFeaturesTest, CustomSamplingIsReported)
   EXPECT_EQ(diagnostics.front().object_path, "/materials/0");
 }
 
+NOLINT_TEST(DroppedSourceFeaturesTest, EmissiveStrengthIsRead)
+{
+  std::string extension = "KHR_materials_emissive_strength";
+  std::array extensions { extension.data() };
+  auto material = cgltf_material {};
+  material.has_emissive_strength = 1;
+  auto source = cgltf_data {};
+  source.extensions_used = extensions.data();
+  source.extensions_used_count = extensions.size();
+  source.materials = &material;
+  source.materials_count = 1U;
+  auto diagnostics = std::vector<ImportDiagnostic> {};
+
+  ReportDroppedSourceFeatures(source, "glow.gltf", diagnostics);
+
+  EXPECT_TRUE(diagnostics.empty());
+}
+
 NOLINT_TEST(
   DroppedSourceFeaturesTest, UnsupportedMaterialExtensionsAreNamedInOneReport)
 {
   auto material = cgltf_material {};
   material.has_iridescence = 1;
-  material.has_emissive_strength = 1;
+  material.has_anisotropy = 1;
   auto source = cgltf_data {};
   source.materials = &material;
   source.materials_count = 1U;
@@ -442,9 +478,32 @@ NOLINT_TEST(
   ASSERT_EQ(diagnostics.size(), 1U);
   EXPECT_TRUE(AllDropWarnings(diagnostics));
   EXPECT_THAT(diagnostics.front().message,
-    ::testing::HasSubstr("iridescence and emissive strength"));
+    ::testing::HasSubstr("iridescence and anisotropy"));
   EXPECT_TRUE(diagnostics.front().object_name.empty())
     << "an unnamed material has no name to report";
+}
+
+//! A material extension the format cannot hold is one loss, reported once
+//! for the material that uses it, not again as an unread extension.
+NOLINT_TEST(DroppedSourceFeaturesTest, MaterialExtensionLossIsReportedOnce)
+{
+  std::string anisotropy = "KHR_materials_anisotropy";
+  std::array extensions { anisotropy.data() };
+  auto material = cgltf_material {};
+  material.has_anisotropy = 1;
+  auto source = cgltf_data {};
+  source.extensions_used = extensions.data();
+  source.extensions_used_count = extensions.size();
+  source.materials = &material;
+  source.materials_count = 1U;
+  auto diagnostics = std::vector<ImportDiagnostic> {};
+
+  ReportDroppedSourceFeatures(source, "lamp.gltf", diagnostics);
+
+  ASSERT_EQ(diagnostics.size(), 1U);
+  EXPECT_EQ(diagnostics.front().object_path, "/materials/0");
+  EXPECT_THAT(diagnostics.front().message,
+    ::testing::HasSubstr("anisotropy is not imported"));
 }
 
 NOLINT_TEST(DroppedSourceFeaturesTest, UnmappedScalarFieldsAreReported)

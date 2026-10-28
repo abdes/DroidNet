@@ -450,18 +450,28 @@ NOLINT_TEST_F(ModelValuesTest, FbxGeneratesMissingNormalMapTangents)
       const auto world
         = glm::mat3(WorldTransform(scene, renderables.front().node_index));
       const auto normal_matrix = glm::transpose(glm::inverse(world));
+      // `space::texture`: the bitangent runs the way V grows over the surface
+      // in the cooked UVs, whose V grows down the image; the source's V grew
+      // up and was flipped on import.
+      const auto e1 = vertices[1].position - vertices[0].position;
+      const auto e2 = vertices[2].position - vertices[0].position;
+      const auto d1 = vertices[1].texcoord - vertices[0].texcoord;
+      const auto d2 = vertices[2].texcoord - vertices[0].texcoord;
+      const auto v_direction = glm::normalize((e2 * d1.x) - (e1 * d2.x))
+        * glm::sign((d1.x * d2.y) - (d1.y * d2.x));
+      ExpectVec3Near(v_direction, { -1, 0, 0 });
       for (const auto& vertex : vertices) {
         // The geometry is in Oxygen axes: the Y-up source's +Z normal is -Y.
         ExpectVec3Near(vertex.normal, { 0, -1, 0 });
         ExpectVec3Near(vertex.tangent, { 0, 0, 1 });
-        ExpectVec3Near(vertex.bitangent, { 1, 0, 0 });
+        ExpectVec3Near(vertex.bitangent, v_direction);
         ExpectVec3Near(
           glm::normalize(normal_matrix * vertex.normal), { 0, -1, 0 });
         ExpectVec3Near(glm::normalize(world * vertex.tangent), { 0, 0, 1 });
-        ExpectVec3Near(glm::normalize(world * vertex.bitangent), { 1, 0, 0 });
+        ExpectVec3Near(glm::normalize(world * vertex.bitangent), { -1, 0, 0 });
         EXPECT_NEAR(
           glm::dot(glm::cross(vertex.normal, vertex.tangent), vertex.bitangent),
-          -1.0F, 0.0001F);
+          1.0F, 0.0001F);
       }
     });
 }

@@ -308,6 +308,11 @@ These stages follow the current synchronous implementation in
      - `flip_y_on_decode`
      - `force_rgba_on_decode`
      - `extension_hint` from `source_id` or per-face `TextureSource.source_id`
+   - Formats, detected from the leading bytes: OpenEXR (tinyexr), Radiance
+     HDR, PNG (libspng), WebP still images (libwebp), KTX2 compressed with
+     Basis Universal (libktx, base level transcoded to RGBA8), and the other
+     stb_image formats. Other KTX2 encodings, KTX2 arrays, cube maps and
+     volumes, and animated WebP are refused.
    - Output: `ScratchImage` (RGBA8 or RGBA32Float)
 
 5. **(Single-source only) Cubemap transforms**
@@ -341,7 +346,10 @@ These stages follow the current synchronous implementation in
      - `kError`: only bake if `bake_hdr_to_ldr` is true, otherwise error later
      - `kKeepFloat`: force float output for HDR input (override to RGBA32F,
        disable BC7, and skip baking).
-   - Normal maps: `intent == kNormalTS` → optional `flip_normal_green`
+   - Normal maps: `intent == kNormalTS` → `flip_normal_green` turns a
+     green-up map green-down, the engine's convention (`space::texture` in
+     `Oxygen/Core/Constants.h`). Model imports set it from the source: every
+     glTF map, and FBX maps from green-up authoring applications.
 
 10. **Generate mips**
     - `MipPolicy::kNone`, `kFullChain`, or `kMaxCount`

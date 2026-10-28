@@ -753,29 +753,6 @@ namespace {
     return nullptr;
   }
 
-  [[nodiscard]] auto HasMaterialTextures(const cgltf_material* material) -> bool
-  {
-    if (material == nullptr) {
-      return false;
-    }
-
-    if (material->has_pbr_metallic_roughness != 0) {
-      const auto& pbr = material->pbr_metallic_roughness;
-      if (pbr.base_color_texture.texture != nullptr
-        || pbr.metallic_roughness_texture.texture != nullptr) {
-        return true;
-      }
-    }
-
-    if (material->normal_texture.texture != nullptr
-      || material->occlusion_texture.texture != nullptr
-      || material->emissive_texture.texture != nullptr) {
-      return true;
-    }
-
-    return false;
-  }
-
   [[nodiscard]] auto BuildSourceId(std::string_view prefix,
     std::string_view name, uint32_t ordinal) -> std::string
   {
@@ -808,6 +785,64 @@ namespace {
     kTransmission,
     kThickness,
   };
+
+  //! Visits every texture a material binds, with its usage: the core slots and
+  //! those of the KHR_materials extensions the material declares, as the
+  //! material binds them.
+  template <typename Visit>
+  auto VisitMaterialTextures(const cgltf_material& material, const Visit& visit)
+    -> void
+  {
+    if (material.has_pbr_metallic_roughness != 0) {
+      const auto& pbr = material.pbr_metallic_roughness;
+      visit(pbr.base_color_texture, TextureUsage::kBaseColor);
+      visit(pbr.metallic_roughness_texture, TextureUsage::kMetallicRoughness);
+    }
+    visit(material.normal_texture, TextureUsage::kNormal);
+    visit(material.occlusion_texture, TextureUsage::kOcclusion);
+    visit(material.emissive_texture, TextureUsage::kEmissive);
+    if (material.has_specular != 0) {
+      visit(material.specular.specular_texture, TextureUsage::kSpecular);
+    }
+    if (material.has_sheen != 0) {
+      visit(material.sheen.sheen_color_texture, TextureUsage::kSheenColor);
+    }
+    if (material.has_clearcoat != 0) {
+      visit(material.clearcoat.clearcoat_texture, TextureUsage::kClearcoat);
+      visit(material.clearcoat.clearcoat_normal_texture,
+        TextureUsage::kClearcoatNormal);
+    }
+    if (material.has_transmission != 0) {
+      visit(material.transmission.transmission_texture,
+        TextureUsage::kTransmission);
+    }
+    if (material.has_volume != 0) {
+      visit(material.volume.thickness_texture, TextureUsage::kThickness);
+    }
+  }
+
+  //! What a material's textures need from the meshes it shades.
+  struct MaterialTextureNeeds final {
+    bool uvs = false;
+    bool tangents = false;
+  };
+
+  [[nodiscard]] auto NeedsOf(const cgltf_material& material)
+    -> MaterialTextureNeeds
+  {
+    auto needs = MaterialTextureNeeds {};
+    VisitMaterialTextures(material,
+      [&needs](
+        const cgltf_texture_view& view, const TextureUsage usage) -> void {
+        if (view.texture == nullptr) {
+          return;
+        }
+        needs.uvs = true;
+        needs.tangents = needs.tangents || usage == TextureUsage::kNormal
+          || usage == TextureUsage::kClearcoatNormal;
+      });
+    return needs;
+  }
 
   [[nodiscard]] auto UsageLabel(const TextureUsage usage) -> std::string_view
   {
@@ -866,13 +901,28 @@ namespace {
     return TexturePreset::kData;
   }
 
+  //! The image a texture cooks from. As glTF specifies for a reader of the
+  //! extension, the `EXT_texture_webp` image is preferred, then the
+  //! `KHR_texture_basisu` (KTX2) image; the core image is their fallback.
+  [[nodiscard]] auto SourceImage(const cgltf_texture& texture)
+    -> const cgltf_image*
+  {
+    if (texture.has_webp != 0 && texture.webp_image != nullptr) {
+      return texture.webp_image;
+    }
+    if (texture.has_basisu != 0 && texture.basisu_image != nullptr) {
+      return texture.basisu_image;
+    }
+    return texture.image;
+  }
+
   //! The source a texture cooks from: its image, or the texture itself when it
-  //! has no core image. Two textures of one image share their source.
+  //! has none. Two textures of one image share their source.
   [[nodiscard]] auto BuildTextureSourceKey(
     const cgltf_data& data, const cgltf_texture& texture) -> std::string
   {
-    if (texture.image != nullptr) {
-      return "image_" + std::to_string(cgltf_image_index(&data, texture.image));
+    if (const auto* image = SourceImage(texture); image != nullptr) {
+      return "image_" + std::to_string(cgltf_image_index(&data, image));
     }
     return "texture_" + std::to_string(cgltf_texture_index(&data, &texture));
   }
@@ -1289,11 +1339,16 @@ namespace {
       = BuildGltfBakePlan(data, input.request.options.coordinate);
     for (size_t index = 0; index < bake_plan.retained_reasons.size(); ++index) {
       if (!bake_plan.retained_reasons.at(index).empty()) {
-        result.diagnostics.push_back(
-          MakeWarningDiagnostic("mesh.transform_bake_retained",
-            "Retained authored node transform: "
-              + bake_plan.retained_reasons.at(index),
-            input.source_id_prefix, "/nodes/" + std::to_string(index)));
+        // The node keeps its transform and the world geometry is unchanged:
+        // nothing is lost, so the import only notes it.
+        result.diagnostics.push_back(ImportDiagnostic {
+          .severity = ImportSeverity::kInfo,
+          .code = "mesh.transform_bake_retained",
+          .message = "Retained authored node transform: "
+            + bake_plan.retained_reasons.at(index),
+          .source_path = std::string(input.source_id_prefix),
+          .object_path = "/nodes/" + std::to_string(index),
+        });
       }
     }
     result.sources.reserve(bake_plan.variants.size());
@@ -1400,6 +1455,7 @@ namespace {
       bool any_colors = false;
       bool any_skin = false;
       bool has_material_textures = false;
+      bool has_tangent_space_textures = false;
 
       size_t total_vertices = 0;
       size_t total_indices = 0;
@@ -1469,78 +1525,32 @@ namespace {
         }
 
         if (!texcoords_by_index.empty()) {
+          // The UV set of each texture the material samples, in slot order.
           std::vector<cgltf_size> preferred_uv_sets;
-
           if (prim.material != nullptr) {
-            const auto& material = *prim.material;
-            if (material.has_pbr_metallic_roughness != 0) {
-              const auto& pbr = material.pbr_metallic_roughness;
-              if (pbr.base_color_texture.texture != nullptr) {
-                preferred_uv_sets.push_back(
-                  ResolveUvSet(pbr.base_color_texture));
-              }
-              if (pbr.metallic_roughness_texture.texture != nullptr) {
-                preferred_uv_sets.push_back(
-                  ResolveUvSet(pbr.metallic_roughness_texture));
-              }
-            }
-            if (material.normal_texture.texture != nullptr) {
-              preferred_uv_sets.push_back(
-                ResolveUvSet(material.normal_texture));
-            }
-            if (material.occlusion_texture.texture != nullptr) {
-              preferred_uv_sets.push_back(
-                ResolveUvSet(material.occlusion_texture));
-            }
-            if (material.emissive_texture.texture != nullptr) {
-              preferred_uv_sets.push_back(
-                ResolveUvSet(material.emissive_texture));
-            }
+            VisitMaterialTextures(*prim.material,
+              [&preferred_uv_sets](const cgltf_texture_view& view,
+                const TextureUsage /*usage*/) -> void {
+                if (view.texture != nullptr) {
+                  preferred_uv_sets.push_back(ResolveUvSet(view));
+                }
+              });
           }
 
-          cgltf_size fallback_uv_set = std::numeric_limits<cgltf_size>::max();
-          for (const auto& [uv_set, accessor] : texcoords_by_index) {
-            (void)accessor;
-            fallback_uv_set = (std::min)(fallback_uv_set, uv_set);
-          }
-          auto selected_uv_set = fallback_uv_set;
-          if (texcoords_by_index.size() > 1U) {
-            std::ostringstream message;
-            message << "glTF primitive exposes multiple UV sets; ";
-            message << "available={";
-            bool first = true;
-            for (const auto& [uv_set, accessor] : texcoords_by_index) {
-              (void)accessor;
-              if (!first) {
-                message << ",";
-              }
-              first = false;
-              message << uv_set;
-            }
-            message << "}";
-            result.diagnostics.push_back(MakeWarningDiagnostic("mesh.uv_sets",
-              message.str(), input.source_id_prefix, mesh_name));
-          }
+          auto selected_uv_set = texcoords_by_index.begin()->first;
           if (!preferred_uv_sets.empty()) {
             const auto first_uv = preferred_uv_sets.front();
-            bool mixed = false;
-            for (const auto uv_set : preferred_uv_sets) {
-              if (uv_set != first_uv) {
-                mixed = true;
-                break;
-              }
-            }
-            if (mixed) {
+            if (std::ranges::any_of(preferred_uv_sets,
+                  [first_uv](const cgltf_size uv_set) -> bool {
+                    return uv_set != first_uv;
+                  })) {
               result.diagnostics.push_back(
                 MakeWarningDiagnostic("mesh.uv_set_conflict",
                   "Material uses multiple UV sets; using the first available",
                   input.source_id_prefix, mesh_name));
             }
-
-            const auto preferred_uv = preferred_uv_sets.front();
-            if (const auto it = texcoords_by_index.find(preferred_uv);
-              it != texcoords_by_index.end()) {
-              selected_uv_set = preferred_uv;
+            if (texcoords_by_index.contains(first_uv)) {
+              selected_uv_set = first_uv;
             } else {
               result.diagnostics.push_back(
                 MakeWarningDiagnostic("mesh.uv_set_missing",
@@ -1550,11 +1560,20 @@ namespace {
             }
           }
 
+          // A mesh keeps one UV set: what the others carry is left out.
           if (texcoords_by_index.size() > 1U) {
             std::ostringstream message;
-            message << "Selected UV set " << selected_uv_set;
+            message << "glTF primitive has UV sets {";
+            bool first = true;
+            for (const auto& [uv_set, accessor] : texcoords_by_index) {
+              (void)accessor;
+              message << (first ? "" : ",") << uv_set;
+              first = false;
+            }
+            message << "}; only set " << selected_uv_set
+                    << " is imported, and textures of the other sets use it";
             result.diagnostics.push_back(
-              MakeWarningDiagnostic("mesh.uv_set_selected", message.str(),
+              MakeWarningDiagnostic("mesh.uv_sets_dropped", message.str(),
                 input.source_id_prefix, mesh_name));
           }
 
@@ -1634,8 +1653,11 @@ namespace {
             input.source_id_prefix, mesh_name));
         }
 
-        if (prim.material != nullptr && HasMaterialTextures(prim.material)) {
-          has_material_textures = true;
+        if (prim.material != nullptr) {
+          const auto needs = NeedsOf(*prim.material);
+          has_material_textures = has_material_textures || needs.uvs;
+          has_tangent_space_textures
+            = has_tangent_space_textures || needs.tangents;
         }
 
         uint32_t index_count = 0;
@@ -1719,6 +1741,7 @@ namespace {
       item.default_material_key = input.default_material_key;
       item.want_textures = true;
       item.has_material_textures = has_material_textures;
+      item.has_tangent_space_textures = has_tangent_space_textures;
       item.request = input.request;
       item.naming_service = input.naming_service;
       if (!all_normals
@@ -1910,7 +1933,9 @@ namespace {
               const auto tangent
                 = ConvertGltfDirection(glm::vec3 { t.x, t.y, t.z });
               owner->tangents.push_back(tangent);
-              const auto bitangent = glm::cross(n, tangent) * t.w;
+              // glTF's bitangent, cross(N, T) * w, follows the image's up;
+              // Oxygen's follows its down (`space::texture`).
+              const auto bitangent = -glm::cross(n, tangent) * t.w;
               owner->bitangents.push_back(bitangent);
             }
           } else {
@@ -2361,12 +2386,16 @@ auto GltfAdapter::PrepareMaterials(const AdapterInput& input)
       item.material.inputs.roughness = static_cast<float>(pbr.roughness_factor);
     }
 
-    item.material.inputs.emissive_factor[0]
-      = static_cast<float>(material.emissive_factor[0]);
-    item.material.inputs.emissive_factor[1]
-      = static_cast<float>(material.emissive_factor[1]);
-    item.material.inputs.emissive_factor[2]
-      = static_cast<float>(material.emissive_factor[2]);
+    // KHR_materials_emissive_strength scales the emission; the factor holds
+    // HDR emission, so the strength folds into it.
+    const auto emissive_strength = material.has_emissive_strength != 0
+      ? material.emissive_strength.emissive_strength
+      : 1.0F;
+    const auto source_emission = std::span(material.emissive_factor);
+    for (auto&& [channel, value] :
+      std::views::enumerate(std::span(item.material.inputs.emissive_factor))) {
+      value = static_cast<float>(source_emission[channel] * emissive_strength);
+    }
 
     if (material.normal_texture.texture != nullptr) {
       item.material.inputs.normal_scale
@@ -2580,7 +2609,7 @@ auto GltfAdapter::PrepareTextures(const AdapterInput& input) const
       return;
     }
 
-    const auto* image = view.texture->image;
+    const auto* image = SourceImage(*view.texture);
     auto desc = MakeDescFromPreset(PresetForUsage(usage));
     desc.source_id = source_id;
     desc.stop_token = input.stop_token;
@@ -2592,6 +2621,8 @@ auto GltfAdapter::PrepareTextures(const AdapterInput& input) const
     item.external_texture_id = source_id;
     item.source_key = view.texture;
     item.desc = std::move(desc);
+    // glTF declares every normal map green-up.
+    item.normal_maps_green_up = true;
     if (image != nullptr) {
       const auto uri = image->uri != nullptr ? std::string_view(image->uri)
                                              : std::string_view {};
@@ -2624,17 +2655,9 @@ auto GltfAdapter::PrepareTextures(const AdapterInput& input) const
         MakeCancelDiagnostic(input.source_id_prefix));
       return result;
     }
-    const auto& material
-      = base::CheckedAt(std::span(data.materials, data.materials_count), i);
-    if (material.has_pbr_metallic_roughness != 0) {
-      const auto& pbr = material.pbr_metallic_roughness;
-      register_texture(pbr.base_color_texture, TextureUsage::kBaseColor);
-      register_texture(
-        pbr.metallic_roughness_texture, TextureUsage::kMetallicRoughness);
-    }
-    register_texture(material.normal_texture, TextureUsage::kNormal);
-    register_texture(material.occlusion_texture, TextureUsage::kOcclusion);
-    register_texture(material.emissive_texture, TextureUsage::kEmissive);
+    VisitMaterialTextures(
+      base::CheckedAt(std::span(data.materials, data.materials_count), i),
+      register_texture);
   }
 
   result.sources.reserve(work_items.size());
@@ -2665,8 +2688,8 @@ auto GltfAdapter::BuildWorkItems(TextureWorkTag /*unused*/,
     }
     const auto* texture = static_cast<const cgltf_texture*>(source.source_key);
     auto resolved = std::optional<ResolvedTextureSource> {};
-    if (texture->image != nullptr) {
-      resolved = ResolveImageBytes(*texture->image, input.request.source_path,
+    if (const auto* image = SourceImage(*texture); image != nullptr) {
+      resolved = ResolveImageBytes(*image, input.request.source_path,
         impl_->data_owner, result.diagnostics, source.source_id,
         input.external_texture_bytes);
     } else {

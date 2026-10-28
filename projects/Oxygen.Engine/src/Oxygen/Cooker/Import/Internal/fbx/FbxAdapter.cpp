@@ -67,6 +67,7 @@
 #include <Oxygen/Cooker/Import/Naming.h>
 #include <Oxygen/Cooker/Import/SceneSourceInspection.h>
 #include <Oxygen/Cooker/Import/TextureImportPresets.h>
+#include <Oxygen/Cooker/Import/TextureImportTypes.h>
 #include <Oxygen/Core/Transforms/Decompose.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/CameraAspectMode.h>
@@ -676,9 +677,13 @@ namespace {
       } else if (!smoothing_normals.empty()) {
         out.normals.push_back(smoothing_normals.at(idx));
       }
+      // FBX UVs start at the image's bottom row; Oxygen's at its top row, the
+      // first row a decoded image holds (`space::texture`). An authored
+      // bitangent follows the image's up (+dP/dV of the source); Oxygen's
+      // follows its down, so it turns with the flip.
       if (HasAttribute(mesh.vertex_uv)) {
-        out.texcoords.push_back(
-          ToVec2(ufbx_get_vertex_vec2(&mesh.vertex_uv, idx)));
+        const auto uv = ToVec2(ufbx_get_vertex_vec2(&mesh.vertex_uv, idx));
+        out.texcoords.emplace_back(uv.x, 1.0F - uv.y);
       }
       if (HasAttribute(mesh.vertex_tangent)) {
         out.tangents.push_back(
@@ -686,7 +691,7 @@ namespace {
       }
       if (HasAttribute(mesh.vertex_bitangent)) {
         out.bitangents.push_back(
-          ToVec3(ufbx_get_vertex_vec3(&mesh.vertex_bitangent, idx)));
+          -ToVec3(ufbx_get_vertex_vec3(&mesh.vertex_bitangent, idx)));
       }
       if (HasAttribute(mesh.vertex_color)) {
         out.colors.push_back(
@@ -804,13 +809,17 @@ namespace {
 
     if (const auto* skin_deformer = FindSkinDeformer(mesh);
       skin_deformer != nullptr) {
-      out.joint_indices.reserve(mesh.num_vertices);
-      out.joint_weights.reserve(mesh.num_vertices);
+      // The skin weighs control points; the vertices are face corners, each
+      // taking the weights of its control point.
+      auto point_joints = std::vector<glm::uvec4> {};
+      auto point_weights = std::vector<glm::vec4> {};
+      point_joints.reserve(mesh.num_vertices);
+      point_weights.reserve(mesh.num_vertices);
 
       for (size_t i = 0; i < mesh.num_vertices; ++i) {
         if (i >= skin_deformer->vertices.count) {
-          out.joint_indices.emplace_back(0U);
-          out.joint_weights.emplace_back(0.0F);
+          point_joints.emplace_back(0U);
+          point_weights.emplace_back(0.0F);
           continue;
         }
 
@@ -831,12 +840,20 @@ namespace {
           weights.at(slot) = static_cast<float>(weight.weight);
         }
 
-        out.joint_indices.push_back(glm::make_vec4(joints.data()));
-        out.joint_weights.push_back(glm::make_vec4(weights.data()));
+        point_joints.push_back(glm::make_vec4(joints.data()));
+        point_weights.push_back(glm::make_vec4(weights.data()));
       }
 
-      CleanSkinWeights(out.joint_weights, out.joint_indices, diagnostics,
-        source_id, object_path);
+      CleanSkinWeights(
+        point_weights, point_joints, diagnostics, source_id, object_path);
+
+      out.joint_indices.reserve(mesh.num_indices);
+      out.joint_weights.reserve(mesh.num_indices);
+      for (const auto point :
+        std::span(mesh.vertex_indices.data, mesh.vertex_indices.count)) {
+        out.joint_indices.push_back(point_joints.at(point));
+        out.joint_weights.push_back(point_weights.at(point));
+      }
     }
 
     std::vector<std::pair<uint32_t, MaterialRange>> sorted_ranges;
@@ -1068,11 +1085,15 @@ namespace {
     identity.embedded
       = (file_tex->content.data != nullptr && file_tex->content.size > 0);
 
-    // An embedded texture is keyed by its element: two embedded images may
-    // share a name.
+    // An embedded texture is keyed by its image: ufbx gathers the texture
+    // nodes naming one file into one `scene.texture_files` entry, sharing its
+    // embedded bytes, as glTF images are shared by index. Maya writes a texture
+    // node and a video per material for one image. A texture naming no file is
+    // its own image.
     if (identity.embedded) {
-      identity.texture_id
-        = "embedded:fbx_texture_" + std::to_string(file_tex->element_id);
+      identity.texture_id = file_tex->has_file
+        ? "embedded:fbx_file_" + std::to_string(file_tex->file_index)
+        : "embedded:fbx_texture_" + std::to_string(file_tex->element_id);
       return identity;
     }
 
@@ -1115,6 +1136,55 @@ namespace {
     }
 
     return identity;
+  }
+
+  [[nodiscard]] auto ContainsIgnoreCase(
+    const std::string_view text, const std::string_view word) -> bool
+  {
+    return !std::ranges::search(text, word, [](const char a, const char b) {
+      return std::tolower(static_cast<unsigned char>(a))
+        == std::tolower(static_cast<unsigned char>(b));
+    }).empty();
+  }
+
+  //! Whether the application that authored an FBX writes its normal maps
+  //! green-up, or nothing when the application is not one Oxygen knows.
+  /*!
+   FBX does not record a normal map's convention; its authoring application
+   sets it. 3ds Max writes Direct3D maps (green down); Maya, MotionBuilder,
+   Blender, Houdini and Cinema 4D write OpenGL maps (green up).
+  */
+  [[nodiscard]] auto NormalMapsGreenUp(const ufbx_scene& scene)
+    -> std::optional<bool>
+  {
+    if (scene.metadata.exporter == UFBX_EXPORTER_BLENDER_BINARY
+      || scene.metadata.exporter == UFBX_EXPORTER_BLENDER_ASCII) {
+      return true;
+    }
+    constexpr auto kGreenUpApplications = std::to_array<std::string_view>({
+      "maya",
+      "motionbuilder",
+      "blender",
+      "houdini",
+      "cinema 4d",
+    });
+    const auto applications = std::array {
+      &scene.metadata.original_application,
+      &scene.metadata.latest_application,
+    };
+    for (const auto* application : applications) {
+      const auto name = ToStringView(application->name);
+      if (ContainsIgnoreCase(name, "3ds max")
+        || ContainsIgnoreCase(name, "3dsmax")) {
+        return false;
+      }
+      for (const auto green_up : kGreenUpApplications) {
+        if (ContainsIgnoreCase(name, green_up)) {
+          return true;
+        }
+      }
+    }
+    return std::nullopt;
   }
 
   //! The texture's authored name, or its image file's stem.
@@ -1243,11 +1313,20 @@ namespace {
 
   [[nodiscard]] auto HasMaterialTextures(const ufbx_material* material) -> bool
   {
+    return material != nullptr && FbxMaterialTextures::From(*material).Any();
+  }
+
+  //! Whether a material samples a tangent-space texture: a normal or clearcoat
+  //! normal map.
+  [[nodiscard]] auto HasTangentSpaceTextures(const ufbx_material* material)
+    -> bool
+  {
     if (material == nullptr) {
       return false;
     }
-
-    return FbxMaterialTextures::From(*material).Any();
+    const auto textures = FbxMaterialTextures::From(*material);
+    return textures.normal.Texture() != nullptr
+      || textures.clearcoat_normal.Texture() != nullptr;
   }
 
   [[nodiscard]] auto BuildSceneSourceId(
@@ -2143,11 +2222,16 @@ namespace {
     const auto& bake_plan = bake.plan;
     for (size_t index = 0; index < bake_plan.retained_reasons.size(); ++index) {
       if (!bake_plan.retained_reasons.at(index).empty()) {
-        result.diagnostics.push_back(
-          MakeWarningDiagnostic("mesh.transform_bake_retained",
-            "Retained authored node transform: "
-              + bake_plan.retained_reasons.at(index),
-            input.source_id_prefix, "/nodes/" + std::to_string(index)));
+        // The node keeps its transform and the world geometry is unchanged:
+        // nothing is lost, so the import only notes it.
+        result.diagnostics.push_back(ImportDiagnostic {
+          .severity = ImportSeverity::kInfo,
+          .code = "mesh.transform_bake_retained",
+          .message = "Retained authored node transform: "
+            + bake_plan.retained_reasons.at(index),
+          .source_path = std::string(input.source_id_prefix),
+          .object_path = "/nodes/" + std::to_string(index),
+        });
       }
     }
     for (const auto& note : bake.lods.notes) {
@@ -2312,6 +2396,9 @@ namespace {
           = MaterialsOf(*lod_input.mesh, lod_input.material_node);
         if (std::ranges::any_of(Items(materials), HasMaterialTextures)) {
           item.has_material_textures = true;
+        }
+        if (std::ranges::any_of(Items(materials), HasTangentSpaceTextures)) {
+          item.has_tangent_space_textures = true;
         }
 
         auto buffers = BuildTriangleBuffers(*lod_input.mesh, basis,
@@ -3103,8 +3190,27 @@ auto FbxAdapter::PrepareTextures(const AdapterInput& input) const
       textures.transmission.Texture(), TextureUsage::kTransmission);
   }
 
+  // An unknown application's normal maps are taken green-up, as most
+  // applications write them, and the assumption is reported.
+  const auto green_up = NormalMapsGreenUp(scene);
+  const auto has_normal_maps
+    = std::ranges::any_of(work_items, [](const auto& entry) {
+        return entry.second.desc.intent == TextureIntent::kNormalTS;
+      });
+  if (!green_up && has_normal_maps) {
+    const auto application
+      = ToStringView(scene.metadata.original_application.name);
+    result.diagnostics.push_back(
+      MakeWarningDiagnostic("fbx.normal_map_convention_assumed",
+        "FBX authored by '" + std::string(application)
+          + "', an application whose normal map convention is unknown; its "
+            "normal maps are taken green-up (OpenGL)",
+        input.source_id_prefix, input.object_path_prefix));
+  }
+
   result.sources.reserve(work_items.size());
   for (auto& [_, item] : work_items) {
+    item.normal_maps_green_up = green_up.value_or(true);
     result.sources.push_back(std::move(item));
   }
   NameModelTextures(result.sources);
@@ -3646,10 +3752,14 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
             FbxIntensityToLumens(intensity) * intensity_scale,
             rec_light.luminous_flux_lm);
         build.point_lights.push_back(rec_light);
+        // Oxygen has no area or volume lights: the light keeps its colour,
+        // intensity and position, and loses its shape.
         if (light.type != UFBX_LIGHT_POINT) {
           diagnostics.push_back(
             MakeWarningDiagnostic("fbx.light.unsupported_type",
-              "Unsupported FBX light type converted to point light",
+              std::string(light.type == UFBX_LIGHT_AREA ? "Area" : "Volume")
+                + " light imported as a point light; its shape and size are "
+                  "not imported",
               input.source_id, name));
         }
         break;

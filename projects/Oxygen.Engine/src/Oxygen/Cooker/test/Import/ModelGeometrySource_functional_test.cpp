@@ -8,13 +8,19 @@
 //   Import/Internal/gltf/GltfAdapter.cpp,
 //   Import/Internal/Pipelines/MeshBuildPipeline.cpp
 
+#include <array>
 #include <cstddef>
 #include <filesystem>
-#include <memory>
+#include <ranges>
 #include <span>
 #include <string_view>
 #include <utility>
 #include <vector>
+
+#include <glm/gtc/epsilon.hpp>
+#include <glm/vec2.hpp>
+#include <glm/vec3.hpp>
+#include <glm/vector_relational.hpp>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
@@ -91,6 +97,112 @@ namespace {
   {
     CheckGeometryIdentities<adapters::FbxAdapter>("static_scalar_triangle.fbx");
   }
+  //! Each corner of the first geometry's LOD 0: its position and its UV.
+  struct Corner final {
+    glm::vec3 position;
+    glm::vec2 uv;
+  };
+
+  template <typename Adapter>
+  auto CornersOf(const std::string_view filename) -> std::vector<Corner>
+  {
+    const auto path = oxygen::cooker::test::ModelPath(filename);
+    const auto source_id = path.string();
+    NamingService naming;
+    auto input = adapters::AdapterInput {};
+    input.source_id_prefix = source_id;
+    input.request.source_path = path;
+    input.naming_service = observer_ptr { &naming };
+    auto adapter = Adapter {};
+    auto sink = GeometrySink {};
+    if (!adapter.Parse(path, input).success
+      || !adapter.BuildWorkItems(adapters::GeometryWorkTag {}, sink, input)
+        .success
+      || sink.items.empty() || sink.items.front().lods.empty()) {
+      ADD_FAILURE() << filename << " produced no geometry";
+      return {};
+    }
+    const auto& streams = sink.items.front().lods.front().source.streams;
+    auto corners = std::vector<Corner> {};
+    for (const auto [position, uv] :
+      std::views::zip(streams.positions, streams.texcoords)) {
+      corners.push_back({ .position = position, .uv = uv });
+    }
+    return corners;
+  }
+
+  //! glTF's bitangent, cross(N, T) * TANGENT.w, runs up the image; Oxygen's
+  //! runs down it, the way V grows (`space::texture`). The triangle's V grows
+  //! along glTF +Y, Oxygen +Z, and its tangent's w of -1 is what MikkTSpace
+  //! authors for that layout.
+  NOLINT_TEST(ModelGeometrySourceTest, GltfBitangentRunsTheWayVGrows)
+  {
+    constexpr auto document = std::string_view { R"({
+      "asset":{"version":"2.0"},
+      "buffers":[{"byteLength":144,"uri":"data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AACAPwAAAAAAAAAAAACAvwAAgD8AAAAAAAAAAAAAgL8AAIA/AAAAAAAAAAAAAIC/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/"}],
+      "bufferViews":[
+        {"buffer":0,"byteOffset":0,"byteLength":36},
+        {"buffer":0,"byteOffset":36,"byteLength":36},
+        {"buffer":0,"byteOffset":72,"byteLength":48},
+        {"buffer":0,"byteOffset":120,"byteLength":24}],
+      "accessors":[
+        {"bufferView":0,"componentType":5126,"count":3,"type":"VEC3",
+         "min":[0,0,0],"max":[1,1,0]},
+        {"bufferView":1,"componentType":5126,"count":3,"type":"VEC3"},
+        {"bufferView":2,"componentType":5126,"count":3,"type":"VEC4"},
+        {"bufferView":3,"componentType":5126,"count":3,"type":"VEC2"}],
+      "meshes":[{"primitives":[{"attributes":
+        {"POSITION":0,"NORMAL":1,"TANGENT":2,"TEXCOORD_0":3}}]}],
+      "nodes":[{"mesh":0}],"scenes":[{"nodes":[0]}],"scene":0
+    })" };
+    NamingService naming;
+    auto input = adapters::AdapterInput {};
+    input.source_id_prefix = "tangents";
+    input.request.source_path = "authoring/tangents.gltf";
+    input.naming_service = observer_ptr { &naming };
+    auto adapter = adapters::GltfAdapter {};
+    auto sink = GeometrySink {};
+    ASSERT_TRUE(adapter
+        .Parse(
+          std::as_bytes(std::span(document.data(), document.size())), input)
+        .success);
+    ASSERT_TRUE(
+      adapter.BuildWorkItems(adapters::GeometryWorkTag {}, sink, input)
+        .success);
+    ASSERT_FALSE(sink.items.empty());
+    ASSERT_FALSE(sink.items.front().lods.empty());
+
+    const auto& streams = sink.items.front().lods.front().source.streams;
+    ASSERT_EQ(streams.bitangents.size(), 3U);
+    for (const auto& bitangent : streams.bitangents) {
+      EXPECT_EQ(bitangent, glm::vec3(0.0F, 0.0F, 1.0F));
+    }
+  }
+
+  //! UVs start at the image's top row, as glTF's do. FBX UVs start at its
+  //! bottom row, so the importer flips V: the fixture's authored UVs (0,0),
+  //! (1,0) and (0,1), one per corner in polygon order, sample the image at
+  //! (0,1), (1,1) and (0,0).
+  NOLINT_TEST(ModelGeometrySourceTest, FbxUvsStartAtTheImageTopRow)
+  {
+    constexpr auto kTolerance = 1.0e-6F;
+    constexpr auto kExpected = std::to_array<glm::vec2>({
+      { 0.0F, 1.0F },
+      { 1.0F, 1.0F },
+      { 0.0F, 0.0F },
+    });
+
+    const auto corners
+      = CornersOf<adapters::FbxAdapter>("static_textured_triangle.fbx");
+
+    ASSERT_EQ(corners.size(), kExpected.size());
+    for (const auto [corner, expected] : std::views::zip(corners, kExpected)) {
+      EXPECT_TRUE(glm::all(glm::epsilonEqual(corner.uv, expected, kTolerance)))
+        << "uv (" << corner.uv.x << ", " << corner.uv.y << "), expected ("
+        << expected.x << ", " << expected.y << ")";
+    }
+  }
+
   NOLINT_TEST(
     ModelGeometrySourceTest, GltfMetadataDoesNotLoadExternalGeometryBuffers)
   {

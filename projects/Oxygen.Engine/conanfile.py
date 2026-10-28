@@ -493,6 +493,9 @@ class OxygenConan(ConanFile):
         # The Cooker's mesh library: welding, vertex order, simplification and
         # glTF EXT_meshopt_compression decoding.
         self.requires("meshoptimizer/1.3")
+        # The Cooker's WebP and KTX2 (Basis Universal) texture decoders.
+        self.requires("libwebp/1.6.0")
+        self.requires("ktx/4.4.2")
         self.requires("luau/0.739", transitive_headers=True, transitive_libs=True)
         self.requires(
             "joltphysics/5.5.0", transitive_headers=True, transitive_libs=True
@@ -531,6 +534,8 @@ class OxygenConan(ConanFile):
             self.options["tinyexr"].with_thread = True
             self.options["tinyexr"].with_openmp = not self._with_asan
             self.options["pdcurses"].enable_widec = True
+            # The ktx tools pin fmt 11; the Cooker needs only the library.
+            self.options["ktx"].tools = False
             if self.options.with_tracy:
                 self.options["tracy"].enable = True
                 self.options["tracy"].shared = bool(self.options.shared)

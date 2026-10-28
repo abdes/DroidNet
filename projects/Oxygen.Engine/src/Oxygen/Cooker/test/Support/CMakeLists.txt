@@ -54,6 +54,9 @@ target_link_libraries(
     oxygen::testing
     nlohmann_json::nlohmann_json
     nlohmann_json_schema_validator
+  PRIVATE
+    KTX::ktx
+    WebP::webp
 )
 target_compile_definitions(
   Oxygen.Cooker.TestSupport

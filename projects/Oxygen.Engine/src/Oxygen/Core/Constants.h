@@ -85,6 +85,62 @@ namespace space {
     inline constexpr bool FrontFaceCCW = true;
   } // namespace clip
 
+  //! Texture-space conventions: how UVs address an image and how a tangent
+  //! frame carries a tangent-space normal map onto a surface.
+  /*!
+   These conventions follow Direct3D, the engine's main backend. Vulkan and
+   Metal address textures the same way; the normal map convention is a content
+   convention that no API or GPU imposes. Like the space conventions above,
+   they are ENGINE LAW: importers, the tangent generator, procedural meshes and
+   shaders obey them, and every source is converted to them when cooked.
+
+   ### Images and UVs
+
+   - A decoded image holds its rows top first: row 0 is the image's top.
+     Decoders flip sources stored bottom-up (KTX2 with `KTXorientation` "u").
+   - UV (0, 0) is the top-left corner of the image: U grows to the right (+U)
+     and V grows DOWN (+V). UV (1, 1) is the bottom-right corner.
+   - glTF UVs already follow this. FBX UVs grow up from the bottom row and are
+     converted on import: v' = 1 - v.
+
+   ### Tangent-space normal maps
+
+   - A texel encodes a unit vector, each channel mapping [0, 1] to [-1, 1]:
+     +X (red) points right in the image, +Y (green) DOWN the image ("green
+     down", the Direct3D convention) and +Z (blue) out of the surface.
+   - Maps authored green-up ("OpenGL") have their green channel inverted when
+     cooked. Who decides a map's convention:
+     - glTF: its specification; every glTF normal map is green-up.
+     - FBX: the application that authored the file, which FBX records. 3ds Max
+       writes green-down maps; Maya, MotionBuilder, Blender, Houdini and
+       Cinema 4D write green-up ones. Maps from any other application are
+       taken green-up and the import reports
+   `fbx.normal_map_convention_assumed`.
+     - A standalone image records nothing and is taken green-down.
+     - The import setting `flip_normal_green`, for the import or for one
+       texture, reverses that decision for a map authored the other way.
+
+   ### Tangent frames
+
+   - Each vertex carries a normal N, a tangent T and a bitangent B. T points
+     along ImageRight (+dP/dU, where U grows over the surface) and B along
+     ImageDown (+dP/dV), so a normal map's X and Y land on T and B.
+   - B = cross(N, T) * w, where the handedness w is +1, or -1 where the UV
+     layout is mirrored. Shaders evaluate a normal map as
+     `T * n.x + B * n.y + N * n.z`, taking w from the vertex bitangent.
+   - Generated frames (missing tangents) follow +dP/dU and +dP/dV.
+   - glTF's bitangent, cross(N, T) * TANGENT.w, points up the image and is
+     negated on import. An FBX's authored bitangent points up its V-up UVs and
+     is negated with the V flip.
+   - Procedural meshes follow the same rules (abdes/DroidNet#112).
+  */
+  namespace texture {
+    //! Image right in UV space: +U, the direction of a vertex's tangent.
+    inline constexpr Vec2 ImageRight { +1.0F, 0.0F };
+    //! Image down in UV space: +V, the direction of a vertex's bitangent.
+    inline constexpr Vec2 ImageDown { 0.0F, +1.0F };
+  } // namespace texture
+
 } // namespace space
 
 //! Physics-related constants. Use the same world space as the engine. Gravity

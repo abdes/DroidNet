@@ -29,6 +29,7 @@
 #include <glm/ext/vector_float3.hpp>
 #include <glm/ext/vector_float4.hpp>
 #include <glm/ext/vector_uint4.hpp>
+#include <glm/geometric.hpp>
 
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Base/Uuid.h>
@@ -574,6 +575,34 @@ namespace {
       *index, std::optional { data::pak::core::ResourceIndexT { 22U } });
   }
 
+  //! Tangents serve tangent-space textures: a mesh without UVs warns that it
+  //! cannot have them only when one of its materials samples such a texture.
+  NOLINT_TEST_F(
+    GeometryPipelineTest, MissingTangentPrerequisiteWarnsOnlyForMaps)
+  {
+    for (const bool normal_mapped : { false, true }) {
+      auto buffers = MakeTriangleMeshBuffers();
+      buffers->texcoords.clear();
+      auto item = MakeWorkItem(buffers);
+      item.has_material_textures = normal_mapped;
+      item.has_tangent_space_textures = normal_mapped;
+
+      const auto result
+        = RunPipelineOnce<MeshBuildPipeline>(loop_, std::move(item), pool_,
+          MeshBuildPipeline::Config {
+            .queue_capacity = 4,
+            .worker_count = 1,
+            .with_content_hashing = true,
+          });
+
+      ASSERT_TRUE(result.success);
+      EXPECT_EQ(
+        HasDiagnosticCode(result.diagnostics, "mesh.missing_tangent_prereq"),
+        normal_mapped)
+        << "normal mapped: " << normal_mapped;
+    }
+  }
+
   NOLINT_TEST_F(GeometryPipelineTest, CollectWithMissingPositionsReturnsFailure)
   {
     auto buffers = std::make_shared<MeshBuffers>();
@@ -764,6 +793,30 @@ namespace {
         });
     }
   };
+
+  //! Generated tangent frames follow `space::texture`: the tangent runs the
+  //! way U grows over the surface (image right) and the bitangent the way V
+  //! grows (image down). The triangle's U grows along +X and its V along +Y.
+  NOLINT_TEST_F(GeometryPipelineSplitTest, GeneratedFrameFollowsUAndV)
+  {
+    auto item = MakeWorkItem(MakeTriangleMeshBuffers());
+    item.has_tangent_space_textures = true;
+    item.request.options.tangent_policy
+      = GeometryAttributePolicy::kGenerateMissing;
+
+    const auto result = Cook(std::move(item));
+
+    ASSERT_TRUE(result.success);
+    ASSERT_HAS_VALUE(result.cooked);
+    const auto vertices = ReadCookedViews(*result.cooked).vertices;
+    ASSERT_EQ(vertices.size(), 3U);
+    for (const auto& vertex : vertices) {
+      EXPECT_EQ(vertex.tangent, glm::vec3(1.0F, 0.0F, 0.0F));
+      EXPECT_EQ(vertex.bitangent, glm::vec3(0.0F, 1.0F, 0.0F));
+      // An unmirrored layout: the bitangent is cross(N, T).
+      EXPECT_EQ(glm::cross(vertex.normal, vertex.tangent), vertex.bitangent);
+    }
+  }
 
   //! A static submesh above the view limit becomes deterministic views of at
   //! most `kMaxMeshViewTriangles`, each one contiguous index and vertex range,

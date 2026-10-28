@@ -177,7 +177,11 @@ public:
     std::vector<uint32_t> surfaces_used;
     data::AssetKey default_material_key;
     bool want_textures = false;
+    //! A material of the mesh samples a texture, so the mesh needs UVs.
     bool has_material_textures = false;
+    //! A material of the mesh samples a tangent-space texture (a normal or
+    //! clearcoat normal map), so the mesh needs tangents.
+    bool has_tangent_space_textures = false;
 
     //! Callback fired when a worker starts processing this item.
     std::function<void()> on_started {};

@@ -102,9 +102,23 @@ namespace {
     "KHR_materials_volume",
     "KHR_lights_punctual",
     "KHR_materials_variants",
+    "KHR_materials_emissive_strength",
     "KHR_texture_transform",
     "KHR_mesh_quantization",
     "EXT_meshopt_compression",
+    "EXT_texture_webp",
+    "KHR_texture_basisu",
+  });
+
+  //! Extensions the material format cannot hold, whose loss is reported once
+  //! per material that uses them (see ReportGltfMaterial), not again as an
+  //! unread extension.
+  constexpr auto kPerMaterialExtensions = std::to_array<std::string_view>({
+    "KHR_materials_pbrSpecularGlossiness",
+    "KHR_materials_iridescence",
+    "KHR_materials_diffuse_transmission",
+    "KHR_materials_anisotropy",
+    "KHR_materials_dispersion",
   });
 
   auto ReportGltfExtensions(const cgltf_data& source,
@@ -113,7 +127,9 @@ namespace {
   {
     const auto read = [](const std::string_view extension) -> bool {
       return std::ranges::find(kReadExtensions, extension)
-        != kReadExtensions.end();
+        != kReadExtensions.end()
+        || std::ranges::find(kPerMaterialExtensions, extension)
+        != kPerMaterialExtensions.end();
     };
     auto required = std::set<std::string_view> {};
     for (const auto* extension :
@@ -225,7 +241,6 @@ namespace {
     note(material.has_diffuse_transmission != 0, "diffuse transmission");
     note(material.has_anisotropy != 0, "anisotropy");
     note(material.has_dispersion != 0, "dispersion");
-    note(material.has_emissive_strength != 0, "emissive strength");
     if (!unsupported.empty()) {
       const auto separator
         = [&unsupported](const std::size_t at) -> std::string_view {
@@ -239,10 +254,12 @@ namespace {
         list += separator(static_cast<std::size_t>(index));
         list += what;
       }
+      const bool one = unsupported.size() == 1U;
       drop(true,
-        "The material's " + list
-          + " are not imported; the material format has no field for them, "
-            "and the material renders without them.",
+        "The material's " + list + (one ? " is" : " are")
+          + " not imported; the material format has no field for "
+          + (one ? "it" : "them") + ", and the material renders without "
+          + (one ? "it" : "them") + ".",
         path);
     }
   }

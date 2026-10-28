@@ -1194,9 +1194,14 @@ namespace {
     bool tangents_emitted = false;
 
     if (needs_tangents && !has_tangent_prereq) {
-      diagnostics.push_back(MakeWarningDiagnostic("mesh.missing_tangent_prereq",
-        "Tangents require positions, normals, and UVs", item.source_id,
-        item.mesh_name));
+      // Tangents serve tangent-space textures; a mesh none of whose materials
+      // samples one loses nothing without them.
+      if (item.has_tangent_space_textures) {
+        diagnostics.push_back(
+          MakeWarningDiagnostic("mesh.missing_tangent_prereq",
+            "Tangents require positions, normals, and UVs", item.source_id,
+            item.mesh_name));
+      }
     } else if (needs_tangents) {
       const bool has_tangents
         = mesh.streams.tangents.size() == mesh.streams.positions.size()

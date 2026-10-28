@@ -73,6 +73,10 @@ struct ModelTextureSource final {
   const void* source_key = nullptr;
   std::filesystem::path source_path;
   bool embedded = false;
+  //! The source declares its normal maps green-up (glTF, and FBX files from
+  //! green-up applications); the cook turns them green-down
+  //! (`space::texture`).
+  bool normal_maps_green_up = false;
   TextureImportDesc desc;
   std::string packing_policy_id;
   TexturePipeline::OutputFormatPolicy output_format_policy
@@ -117,6 +121,9 @@ inline auto NameModelTextures(std::span<ModelTextureSource> sources) -> void
  job's settings. The maximum size and the green flip of normal maps apply
  whether or not the settings enable the other cooking choices; color textures
  (albedo and emissive) take the color output format, the others the data one.
+ A normal map is flipped to the engine's green-down convention when its source
+ declares it green-up, and `flip_normal_green` reverses that for a map that
+ departs from its source's convention.
 */
 inline auto TuneModelTextures(
   std::span<ModelTextureSource> sources, const ImportOptions& options) -> void
@@ -129,7 +136,8 @@ inline auto TuneModelTextures(
     auto& desc = source.desc;
     desc.max_size = tuning.max_size;
     if (desc.intent == TextureIntent::kNormalTS) {
-      desc.flip_normal_green = tuning.flip_normal_green;
+      desc.flip_normal_green
+        = source.normal_maps_green_up != tuning.flip_normal_green;
     }
     if (tuning.enabled) {
       desc.flip_y_on_decode = tuning.flip_y_on_decode;

@@ -18,7 +18,9 @@ namespace oxygen::content::import::util {
 //! Generates tangent/bitangent vectors for mesh vertices.
 /*!
  Uses a MikkTSpace-style algorithm to compute consistent TBN basis
- from triangles. Requires valid UVs and normals.
+ from triangles. Requires valid UVs and normals. The frame follows
+ `space::texture`: the tangent runs along the image's right (+dP/dU) and the
+ bitangent down it (+dP/dV), the axes a normal map's X and Y encode.
 
  @param vertices The vertex array (modified in place).
  @param buckets Array of index buckets, where each bucket contains
@@ -69,6 +71,7 @@ auto GenerateTangents(std::vector<data::Vertex>& vertices,
       }
       const float r = 1.0F / denom;
 
+      // dP/dU and dP/dV: the image's right and down over the surface.
       const glm::vec3 t = (e1 * d2.y - e2 * d1.y) * r;
       const glm::vec3 b = (e2 * d1.x - e1 * d2.x) * r;
 

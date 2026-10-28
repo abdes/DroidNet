@@ -13,6 +13,7 @@
 #include <cstddef>
 #include <filesystem>
 #include <iterator>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -27,6 +28,10 @@
 #include <Oxygen/Cooker/Import/Internal/Pipelines/TexturePipeline.h>
 #include <Oxygen/Cooker/Import/Internal/fbx/FbxAdapter.h>
 #include <Oxygen/Cooker/Import/Internal/gltf/GltfAdapter.h>
+#include <Oxygen/Cooker/Import/TextureImportTypes.h>
+#include <Oxygen/Cooker/test/Support/Diagnostics.h>
+#include <Oxygen/Cooker/test/Support/FileIo.h>
+#include <Oxygen/Cooker/test/Support/TempDir.h>
 #include <Oxygen/Cooker/test/Support/TestPaths.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Testing/GTest.h>
@@ -139,6 +144,100 @@ namespace {
     ASSERT_EQ(prepared.sources.size(), 2U);
     EXPECT_NE(
       prepared.sources.at(0).source_path, prepared.sources.at(1).source_path);
+  }
+
+  //! Every texture a material binds is produced, the KHR_materials extension
+  //! slots included; one bound but not produced would render the error
+  //! texture.
+  NOLINT_TEST(ModelTextureSourceTest, GltfProducesEveryTextureAMaterialBinds)
+  {
+    constexpr auto document = std::string_view { R"({
+      "asset":{"version":"2.0"},
+      "extensionsUsed":["KHR_materials_specular","KHR_materials_sheen",
+        "KHR_materials_clearcoat","KHR_materials_transmission",
+        "KHR_materials_volume"],
+      "images":[{"uri":"a.png"}],"textures":[{"source":0}],
+      "materials":[{
+        "pbrMetallicRoughness":{"baseColorTexture":{"index":0},
+          "metallicRoughnessTexture":{"index":0}},
+        "normalTexture":{"index":0},"occlusionTexture":{"index":0},
+        "emissiveTexture":{"index":0},
+        "extensions":{
+          "KHR_materials_specular":{"specularTexture":{"index":0}},
+          "KHR_materials_sheen":{"sheenColorTexture":{"index":0}},
+          "KHR_materials_clearcoat":{"clearcoatTexture":{"index":0},
+            "clearcoatNormalTexture":{"index":0}},
+          "KHR_materials_transmission":{"transmissionTexture":{"index":0}},
+          "KHR_materials_volume":{"thicknessTexture":{"index":0}}
+        }
+      }]
+    })" };
+    auto input = adapters::AdapterInput {};
+    input.source_id_prefix = "model";
+    input.request.source_path = "authoring/model.gltf";
+    auto adapter = adapters::GltfAdapter {};
+    ASSERT_TRUE(adapter
+        .Parse(
+          std::as_bytes(std::span(document.data(), document.size())), input)
+        .success);
+
+    const auto prepared = adapter.PrepareTextures(input);
+
+    ASSERT_TRUE(prepared.success);
+    auto usages = std::vector<std::string> {};
+    std::ranges::transform(prepared.sources, std::back_inserter(usages),
+      [](const adapters::ModelTextureSource& source) -> std::string {
+        return source.usage;
+      });
+    EXPECT_THAT(usages,
+      ::testing::UnorderedElementsAre("base_color", "metallic_roughness",
+        "normal", "occlusion", "emissive", "specular", "sheen_color",
+        "clearcoat", "clearcoat_normal", "transmission", "thickness"));
+  }
+
+  //! A texture reads its EXT_texture_webp image, then its KHR_texture_basisu
+  //! image, before its core image, which is only their fallback.
+  NOLINT_TEST(ModelTextureSourceTest, GltfTexturesReadTheirExtensionImage)
+  {
+    constexpr auto document = std::string_view { R"({
+      "asset":{"version":"2.0"},
+      "extensionsUsed":["EXT_texture_webp","KHR_texture_basisu"],
+      "images":[{"uri":"fallback.png"},{"uri":"color.webp"},{"uri":"normal.ktx2"}],
+      "textures":[
+        {"source":0,"extensions":{"EXT_texture_webp":{"source":1}}},
+        {"extensions":{"KHR_texture_basisu":{"source":2}}},
+        {"source":0,"extensions":{
+          "KHR_texture_basisu":{"source":2},"EXT_texture_webp":{"source":1}}}
+      ],
+      "materials":[
+        {"pbrMetallicRoughness":{"baseColorTexture":{"index":0}},
+         "normalTexture":{"index":1},"emissiveTexture":{"index":2}}
+      ]
+    })" };
+    auto input = adapters::AdapterInput {};
+    input.source_id_prefix = "model";
+    input.request.source_path = "authoring/model.gltf";
+    auto adapter = adapters::GltfAdapter {};
+    ASSERT_TRUE(adapter
+        .Parse(
+          std::as_bytes(std::span(document.data(), document.size())), input)
+        .success);
+
+    const auto prepared = adapter.PrepareTextures(input);
+
+    ASSERT_TRUE(prepared.success);
+    const auto path_of = [&](const std::string_view usage) -> std::string {
+      const auto source = std::ranges::find_if(prepared.sources,
+        [usage](const adapters::ModelTextureSource& item) -> bool {
+          return item.source_id.ends_with(usage);
+        });
+      return source != prepared.sources.end()
+        ? source->source_path.generic_string()
+        : std::string {};
+    };
+    EXPECT_EQ(path_of("::base_color"), "authoring/color.webp");
+    EXPECT_EQ(path_of("::normal"), "authoring/normal.ktx2");
+    EXPECT_EQ(path_of("::emissive"), "authoring/color.webp");
   }
 
   //! A texture is named once per image, from the image file's stem when the
@@ -273,6 +372,219 @@ namespace {
       EXPECT_EQ(item->failure_policy, source.failure_policy);
     }
   }
+
+  //! Prepares a model of two materials, each with an embedded base color
+  //! image on its own texture node and video, as Maya writes them; the first
+  //! names `static_textured_checker.png`, the second `second_file`.
+  [[nodiscard]] auto PrepareFbxWithTwoEmbeddedTextures(
+    const std::string_view second_file) -> adapters::ModelTexturePreparation
+  {
+    constexpr auto kContent = std::string_view {
+      "        Content: , "
+      "\"iVBORw0KGgoAAAANSUhEUgAAAAgAAAAECAYAAACzzX7wAAAAG0lEQV"
+      "R4nGP4oCHyX2SLzX9cNAM+SRDNQLEJACwzQuGP5hyxAAAAAElFTkSuQmCC\"\n"
+    };
+    const auto dir = oxygen::cooker::test::ScopedTempDir {};
+    auto text = oxygen::cooker::test::ReadText(
+      oxygen::cooker::test::ModelPath("static_textured_triangle.fbx"));
+    const auto insert_after
+      = [&text](const std::string_view after, const std::string& insert) {
+          const auto at = text.find(after);
+          if (at == std::string::npos) {
+            ADD_FAILURE() << "fixture changed: " << after;
+            return;
+          }
+          text.insert(at + after.size(), insert);
+        };
+    const auto file = std::string(second_file);
+    insert_after("        Type: \"Clip\"\n", std::string(kContent));
+    insert_after("        Cropping: 0,0,0,0\n    }\n",
+      "    Material: 1006, \"Material::Second\", \"\" {\n"
+      "        Version: 102\n"
+      "        ShadingModel: \"phong\"\n"
+      "    }\n"
+      "    Video: 1008, \"Video::Second\", \"Clip\" {\n"
+      "        Type: \"Clip\"\n"
+      "        Filename: \""
+        + file + "\"\n        RelativeFilename: \"" + file + "\"\n"
+        + std::string(kContent)
+        + "    }\n"
+          "    Texture: 1007, \"Texture::Second\", \"TextureVideoClip\" {\n"
+          "        Type: \"TextureVideoClip\"\n"
+          "        Version: 202\n"
+          "        TextureName: \"Texture::Second\"\n"
+          "        Media: \"Video::Second\"\n"
+          "        FileName: \""
+        + file + "\"\n        RelativeFilename: \"" + file
+        + "\"\n"
+          "    }\n");
+    insert_after("    C: \"OO\",1004,1005\n",
+      "    C: \"OO\",1008,1007\n"
+      "    C: \"OP\",1007,1006,\"DiffuseColor\"\n"
+      "    C: \"OO\",1006,1002\n");
+    const auto path = dir.Path() / "embedded.fbx";
+    oxygen::cooker::test::WriteText(path, text);
+    const auto source_id = path.string();
+    auto input = adapters::AdapterInput {};
+    input.source_id_prefix = source_id;
+    input.request.source_path = path;
+    auto adapter = adapters::FbxAdapter {};
+    if (!adapter.Parse(path, input).success) {
+      ADD_FAILURE() << "fixture failed to parse";
+      return {};
+    }
+    return adapter.PrepareTextures(input);
+  }
+
+  //! An embedded image is one texture however many texture nodes and videos
+  //! name it, as Maya writes one of each per material; different embedded
+  //! files stay different textures.
+  NOLINT_TEST(ModelTextureSourceTest, FbxEmbeddedTexturesAreOnePerFile)
+  {
+    const auto shared
+      = PrepareFbxWithTwoEmbeddedTextures("static_textured_checker.png");
+    const auto distinct = PrepareFbxWithTwoEmbeddedTextures("other.png");
+
+    ASSERT_TRUE(shared.success)
+      << oxygen::cooker::test::DiagnosticSummary(shared.diagnostics);
+    ASSERT_TRUE(distinct.success)
+      << oxygen::cooker::test::DiagnosticSummary(distinct.diagnostics);
+    ASSERT_EQ(shared.sources.size(), 1U);
+    EXPECT_TRUE(shared.sources.front().embedded);
+    EXPECT_EQ(shared.sources.front().usage, "base_color");
+    ASSERT_EQ(distinct.sources.size(), 2U);
+    EXPECT_TRUE(std::ranges::all_of(
+      distinct.sources, [](const adapters::ModelTextureSource& source) -> bool {
+        return source.embedded;
+      }));
+  }
+
+  //! Whether a prepared model flips the green channel of its normal map.
+  [[nodiscard]] auto NormalMapFlip(
+    const adapters::ModelTexturePreparation& prepared) -> std::optional<bool>
+  {
+    const auto normal
+      = std::ranges::find(prepared.sources, TextureIntent::kNormalTS,
+        [](const adapters::ModelTextureSource& source) -> TextureIntent {
+          return source.desc.intent;
+        });
+    if (normal == prepared.sources.end()) {
+      return std::nullopt;
+    }
+    return normal->desc.flip_normal_green;
+  }
+
+  //! glTF declares its normal maps green-up; the engine's are green-down
+  //! (`space::texture`), so the cook flips them, and `flip_normal_green`
+  //! reverses that for a map authored the other way. Color maps never flip.
+  NOLINT_TEST(ModelTextureSourceTest, GltfNormalMapsCookGreenDown)
+  {
+    constexpr auto document = std::string_view { R"({
+      "asset":{"version":"2.0"},
+      "images":[{"uri":"color.png"},{"uri":"normal.png"}],
+      "textures":[{"source":0},{"source":1}],
+      "materials":[{"pbrMetallicRoughness":{"baseColorTexture":{"index":0}},
+        "normalTexture":{"index":1}}]
+    })" };
+    for (const bool authored_green_down : { false, true }) {
+      auto input = adapters::AdapterInput {};
+      input.source_id_prefix = "model";
+      input.request.source_path = "authoring/model.gltf";
+      input.request.options.texture_tuning.flip_normal_green
+        = authored_green_down;
+      auto adapter = adapters::GltfAdapter {};
+      ASSERT_TRUE(adapter
+          .Parse(
+            std::as_bytes(std::span(document.data(), document.size())), input)
+          .success);
+
+      const auto prepared = adapter.PrepareTextures(input);
+
+      ASSERT_TRUE(prepared.success);
+      EXPECT_EQ(NormalMapFlip(prepared), !authored_green_down);
+      EXPECT_TRUE(std::ranges::none_of(prepared.sources,
+        [](const adapters::ModelTextureSource& source) -> bool {
+          return source.desc.intent != TextureIntent::kNormalTS
+            && source.desc.flip_normal_green;
+        }));
+    }
+  }
+
+  //! Prepares the textures of the normal-mapped FBX fixture, authored by
+  //! `application` (none: the fixture records no application).
+  [[nodiscard]] auto PrepareFbxAuthoredBy(const std::string_view application)
+    -> adapters::ModelTexturePreparation
+  {
+    const auto dir = oxygen::cooker::test::ScopedTempDir {};
+    const auto fixture
+      = oxygen::cooker::test::ModelPath("static_normal_triangle.fbx");
+    auto text = oxygen::cooker::test::ReadText(fixture);
+    if (!application.empty()) {
+      constexpr auto kCreator
+        = std::string_view { "    Creator: \"Oxygen.Engine Test Fixture\"\n" };
+      const auto at = text.find(kCreator);
+      if (at == std::string::npos) {
+        ADD_FAILURE() << "fixture header changed";
+        return {};
+      }
+      text.insert(at + kCreator.size(),
+        "    SceneInfo: \"SceneInfo::GlobalInfo\", \"UserData\" {\n"
+        "        Properties70: {\n"
+        "            P: \"Original|ApplicationName\", \"KString\", \"\", \"\", "
+        "\""
+          + std::string(application)
+          + "\"\n"
+            "        }\n"
+            "    }\n");
+    }
+    const auto path = dir.Path() / fixture.filename();
+    oxygen::cooker::test::WriteText(path, text);
+    const auto map
+      = oxygen::cooker::test::ModelPath("static_tangent_normal.png");
+    std::filesystem::copy_file(map, dir.Path() / map.filename());
+    const auto source_id = path.string();
+    auto input = adapters::AdapterInput {};
+    input.source_id_prefix = source_id;
+    input.request.source_path = path;
+    auto adapter = adapters::FbxAdapter {};
+    if (!adapter.Parse(path, input).success) {
+      ADD_FAILURE() << "fixture failed to parse";
+      return {};
+    }
+    return adapter.PrepareTextures(input);
+  }
+
+  //! FBX records no normal map convention; its authoring application decides
+  //! it: 3ds Max writes green-down maps, Maya green-up ones.
+  NOLINT_TEST(
+    ModelTextureSourceTest, FbxNormalMapsFollowTheAuthoringApplication)
+  {
+    const auto max = PrepareFbxAuthoredBy("3ds Max");
+    const auto maya = PrepareFbxAuthoredBy("Maya");
+
+    ASSERT_TRUE(max.success && maya.success);
+    EXPECT_EQ(NormalMapFlip(max), false);
+    EXPECT_EQ(NormalMapFlip(maya), true);
+    EXPECT_FALSE(oxygen::cooker::test::HasDiagnosticCode(
+      max.diagnostics, "fbx.normal_map_convention_assumed"));
+    EXPECT_FALSE(oxygen::cooker::test::HasDiagnosticCode(
+      maya.diagnostics, "fbx.normal_map_convention_assumed"));
+  }
+
+  //! An FBX from an application Oxygen does not know has its normal maps taken
+  //! green-up, as most applications write them, and the import says so.
+  NOLINT_TEST(
+    ModelTextureSourceTest, FbxUnknownApplicationNormalMapsAreReported)
+  {
+    const auto prepared = PrepareFbxAuthoredBy({});
+
+    ASSERT_TRUE(prepared.success);
+    EXPECT_EQ(NormalMapFlip(prepared), true);
+    EXPECT_TRUE(oxygen::cooker::test::HasDiagnosticCode(
+      prepared.diagnostics, "fbx.normal_map_convention_assumed"))
+      << oxygen::cooker::test::DiagnosticSummary(prepared.diagnostics);
+  }
+
   //! A missing texture is looked for beside the model, in its textures folders,
   //! then the same in the model folder's parent.
   NOLINT_TEST(TextureFallbackPathsTest, SearchesModelThenParentFolders)

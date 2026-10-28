@@ -10,19 +10,23 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
-#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <ios>
+#include <iterator>
 #include <limits>
+#include <memory>
 #include <optional>
+#include <ranges>
 #include <span>
 #include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
 
+#include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/Result.h>
+#include <Oxygen/Base/Types/Geometry.h>
 #include <Oxygen/Cooker/Import/Internal/ImageDecode.h>
 #include <Oxygen/Cooker/Import/ScratchImage.h>
 #include <Oxygen/Cooker/Import/TextureImportError.h>
@@ -30,8 +34,10 @@
 
 #define STB_IMAGE_IMPLEMENTATION
 #define STBI_NO_THREAD_LOCALS
+#include <ktx.h>
 #include <spng.h>
 #include <tinyexr.h>
+#include <webp/decode.h>
 
 #include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Cooker/Import/Internal/stb/stb_image.h>
@@ -39,6 +45,72 @@
 namespace oxygen::content::import {
 
 namespace {
+
+  //=== C Library Boundary ===------------------------------------------------//
+
+  //! The bytes as the `unsigned char` buffer the C decoders read; `std::byte`
+  //! and `unsigned char` may alias each other.
+  [[nodiscard]] auto AsUChars(std::span<const std::byte> bytes) noexcept
+    -> const unsigned char*
+  {
+    // NOLINTNEXTLINE(*-pro-type-reinterpret-cast)
+    return reinterpret_cast<const unsigned char*>(bytes.data());
+  }
+
+  //! The bytes as the `unsigned char` buffer the C decoders write.
+  [[nodiscard]] auto AsWritableUChars(std::span<std::byte> bytes) noexcept
+    -> unsigned char*
+  {
+    // NOLINTNEXTLINE(*-pro-type-reinterpret-cast)
+    return reinterpret_cast<unsigned char*>(bytes.data());
+  }
+
+  //! The bytes as the `char` buffer `std::istream::read` writes.
+  [[nodiscard]] auto AsChars(std::span<std::byte> bytes) noexcept -> char*
+  {
+    // NOLINTNEXTLINE(*-pro-type-reinterpret-cast)
+    return reinterpret_cast<char*>(bytes.data());
+  }
+
+  //! Whether the bytes start with the ASCII text.
+  [[nodiscard]] auto StartsWithText(std::span<const std::byte> bytes,
+    const std::string_view text) noexcept -> bool
+  {
+    return bytes.size() >= text.size()
+      && std::ranges::equal(bytes.first(text.size()), text,
+        [](const std::byte byte, const char ch) -> bool {
+          return byte == static_cast<std::byte>(ch);
+        });
+  }
+
+  //! Frees an image stb_image allocated.
+  struct StbiFree final {
+    auto operator()(void* image) const noexcept -> void
+    {
+      stbi_image_free(image);
+    }
+  };
+
+  template <typename T> using StbiImage = std::unique_ptr<T, StbiFree>;
+
+  //! Frees memory tinyexr allocated with `malloc`.
+  struct CFree final {
+    auto operator()(void* memory) const noexcept -> void
+    {
+      std::free(memory); // NOLINT(*-no-malloc,*-owning-memory)
+    }
+  };
+
+  template <typename T> using CBuffer = std::unique_ptr<T, CFree>;
+
+  //! Copies `count` elements of a decoder's output into owned bytes.
+  template <typename T>
+  [[nodiscard]] auto CopyBytes(const T* data, const std::size_t count)
+    -> std::vector<std::byte>
+  {
+    const auto bytes = std::as_bytes(std::span(data, count));
+    return { bytes.begin(), bytes.end() };
+  }
 
   //=== String Utilities ===--------------------------------------------------//
 
@@ -66,32 +138,20 @@ namespace {
       std::byte { 0x1A },
       std::byte { 0x0A },
     };
-    if (bytes.size() < kPngSignature.size()) {
-      return false;
-    }
-    return std::equal(
-      kPngSignature.begin(), kPngSignature.end(), bytes.begin());
+    return std::ranges::starts_with(bytes, kPngSignature);
   }
 
   //=== Legacy stb_image RGBA8 Decoder ===------------------------------------//
 
-  [[nodiscard]] auto DecodeWithStb_(
-    const unsigned char* bytes, const int size_bytes) -> ImageDecodeResult
+  [[nodiscard]] auto DecodeWithStb(std::span<const std::byte> bytes)
+    -> ImageDecodeResult
   {
-    if (bytes == nullptr || size_bytes <= 0) {
-      return ImageDecodeResult {
-        .image = std::nullopt,
-        .error = "empty input",
-      };
-    }
-
     int width = 0;
     int height = 0;
     int channels_in_file = 0;
-
-    stbi_uc* decoded = stbi_load_from_memory(
-      bytes, size_bytes, &width, &height, &channels_in_file, STBI_rgb_alpha);
-
+    const auto decoded = StbiImage<stbi_uc>(
+      stbi_load_from_memory(AsUChars(bytes), static_cast<int>(bytes.size()),
+        &width, &height, &channels_in_file, STBI_rgb_alpha));
     if (decoded == nullptr) {
       const char* reason = stbi_failure_reason();
       return ImageDecodeResult {
@@ -101,22 +161,13 @@ namespace {
       };
     }
 
-    const auto decoded_size = static_cast<size_t>(width)
-      * static_cast<size_t>(height) * static_cast<size_t>(4);
-
-    std::vector<std::byte> pixels;
-    pixels.resize(decoded_size);
-
-    const auto* src = reinterpret_cast<const std::byte*>(decoded);
-    std::copy_n(src, decoded_size, pixels.data());
-
-    stbi_image_free(decoded);
-
+    const auto decoded_size = static_cast<std::size_t>(width)
+      * static_cast<std::size_t>(height) * std::size_t { 4 };
     return ImageDecodeResult {
       .image = DecodedImageRgba8 {
         .width = static_cast<uint32_t>(width),
         .height = static_cast<uint32_t>(height),
-        .pixels = std::move(pixels),
+        .pixels = CopyBytes(decoded.get(), decoded_size),
       },
       .error = {},
     };
@@ -124,25 +175,66 @@ namespace {
 
   //=== Image Y-Flip Utility ===----------------------------------------------//
 
-  void FlipImageY(std::span<std::byte> pixels, uint32_t width, uint32_t height,
-    uint32_t bytes_per_pixel)
+  //! Reverses the order of the rows of an image whose rows are `row_pitch`
+  //! bytes apart.
+  auto FlipImageY(std::span<std::byte> pixels, const std::size_t row_pitch)
+    -> void
   {
-    const auto row_bytes = static_cast<size_t>(width) * bytes_per_pixel;
-    std::vector<std::byte> row_buffer(row_bytes);
-
-    for (uint32_t y = 0; y < height / 2; ++y) {
-      const auto top_offset = static_cast<size_t>(y) * row_bytes;
-      const auto bottom_offset
-        = static_cast<size_t>(height - 1 - y) * row_bytes;
-
-      std::memcpy(row_buffer.data(), pixels.data() + top_offset, row_bytes);
-      std::memcpy(
-        pixels.data() + top_offset, pixels.data() + bottom_offset, row_bytes);
-      std::memcpy(pixels.data() + bottom_offset, row_buffer.data(), row_bytes);
+    if (row_pitch == 0) {
+      return;
+    }
+    const auto rows = pixels.size() / row_pitch;
+    for (std::size_t top = 0; top < rows / 2; ++top) {
+      const auto bottom = rows - 1 - top;
+      std::ranges::swap_ranges(pixels.subspan(top * row_pitch, row_pitch),
+        pixels.subspan(bottom * row_pitch, row_pitch));
     }
   }
 
+  //=== RGBA32F Images ===----------------------------------------------------//
+
+  //! The size of a decoded image, in pixels.
+  using ImageExtent = Extent<uint32_t>;
+
+  [[nodiscard]] auto PixelCount(const ImageExtent extent) noexcept
+    -> std::size_t
+  {
+    return static_cast<std::size_t>(extent.width)
+      * static_cast<std::size_t>(extent.height);
+  }
+
+  constexpr auto kRgba32FBytesPerPixel
+    = static_cast<uint32_t>(4U * sizeof(float));
+
+  //! The interleaved RGBA32F pixels of an image, top row first.
+  [[nodiscard]] auto Rgba32FPixels(const float* rgba, const ImageExtent extent)
+    -> std::span<const float>
+  {
+    return { rgba, PixelCount(extent) * 4U };
+  }
+
+  //! An RGBA32F image of the interleaved pixels, top row first.
+  [[nodiscard]] auto Rgba32FImage(std::span<const float> rgba,
+    const ImageExtent extent, const DecodeOptions& options) -> ScratchImage
+  {
+    const auto row_pitch = extent.width * kRgba32FBytesPerPixel;
+    const auto bytes = std::as_bytes(rgba);
+    auto pixel_data = std::vector<std::byte>(bytes.begin(), bytes.end());
+    if (options.flip_y) {
+      FlipImageY(pixel_data, row_pitch);
+    }
+    return ScratchImage::CreateFromData(extent.width, extent.height,
+      Format::kRGBA32Float, row_pitch, std::move(pixel_data));
+  }
+
   //=== EXR Decoder ===-------------------------------------------------------//
+
+  auto ReleaseExrError(const char* error) noexcept -> void
+  {
+    if (error != nullptr) {
+      FreeEXRErrorMessage(error);
+    }
+  }
 
   //! RAII wrapper for EXRHeader.
   struct EXRHeaderGuard {
@@ -157,10 +249,8 @@ namespace {
       }
     }
 
-    EXRHeaderGuard(const EXRHeaderGuard&) = delete;
-    auto operator=(const EXRHeaderGuard&) -> EXRHeaderGuard& = delete;
-    EXRHeaderGuard(EXRHeaderGuard&&) = delete;
-    auto operator=(EXRHeaderGuard&&) -> EXRHeaderGuard& = delete;
+    OXYGEN_MAKE_NON_COPYABLE(EXRHeaderGuard)
+    OXYGEN_MAKE_NON_MOVABLE(EXRHeaderGuard)
   };
 
   //! RAII wrapper for EXRImage.
@@ -176,303 +266,265 @@ namespace {
       }
     }
 
-    EXRImageGuard(const EXRImageGuard&) = delete;
-    auto operator=(const EXRImageGuard&) -> EXRImageGuard& = delete;
-    EXRImageGuard(EXRImageGuard&&) = delete;
-    auto operator=(EXRImageGuard&&) -> EXRImageGuard& = delete;
+    OXYGEN_MAKE_NON_COPYABLE(EXRImageGuard)
+    OXYGEN_MAKE_NON_MOVABLE(EXRImageGuard)
   };
 
-  //! Try to decode EXR using the simple API first (single-part).
-  [[nodiscard]] auto TryDecodeExrSimple(std::span<const std::byte> bytes,
-    float** out_rgba, int* width, int* height) -> int
-  {
-    const char* err = nullptr;
-    const int result = LoadEXRFromMemory(out_rgba, width, height,
-      reinterpret_cast<const unsigned char*>(bytes.data()), bytes.size(), &err);
-
-    if (err != nullptr) {
-      FreeEXRErrorMessage(err);
+  //! The headers of the parts of a multipart EXR, which tinyexr allocates.
+  class ExrPartHeaders final {
+  public:
+    ExrPartHeaders() = default;
+    ~ExrPartHeaders()
+    {
+      for (auto* header : Headers()) {
+        FreeEXRHeader(header);
+        std::free(header); // NOLINT(*-no-malloc,*-owning-memory)
+      }
+      // NOLINTNEXTLINE(*-no-malloc,*-owning-memory)
+      std::free(static_cast<void*>(headers_));
     }
-    return result;
+
+    OXYGEN_MAKE_NON_COPYABLE(ExrPartHeaders)
+    OXYGEN_MAKE_NON_MOVABLE(ExrPartHeaders)
+
+    [[nodiscard]] auto Parse(
+      EXRVersion& version, std::span<const std::byte> bytes) noexcept -> bool
+    {
+      const char* error = nullptr;
+      const auto result = ParseEXRMultipartHeaderFromMemory(
+        &headers_, &count_, &version, AsUChars(bytes), bytes.size(), &error);
+      ReleaseExrError(error);
+      return result == TINYEXR_SUCCESS;
+    }
+
+    [[nodiscard]] auto Headers() const noexcept -> std::span<EXRHeader* const>
+    {
+      return { headers_, static_cast<std::size_t>(count_) };
+    }
+
+    [[nodiscard]] auto ForLoading() const noexcept -> const EXRHeader**
+    {
+      return const_cast<const EXRHeader**>(headers_);
+    }
+
+  private:
+    EXRHeader** headers_ = nullptr;
+    int count_ = 0;
+  };
+
+  //! The images of the parts of a multipart EXR, one per header.
+  class ExrPartImages final {
+  public:
+    explicit ExrPartImages(const std::size_t count)
+      : images_(count)
+    {
+      for (auto& image : images_) {
+        InitEXRImage(&image);
+      }
+    }
+
+    ~ExrPartImages()
+    {
+      for (auto& image : images_) {
+        FreeEXRImage(&image);
+      }
+    }
+
+    OXYGEN_MAKE_NON_COPYABLE(ExrPartImages)
+    OXYGEN_MAKE_NON_MOVABLE(ExrPartImages)
+
+    [[nodiscard]] auto Data() noexcept -> EXRImage* { return images_.data(); }
+
+    [[nodiscard]] auto At(const std::size_t index) const -> const EXRImage&
+    {
+      return images_.at(index);
+    }
+
+  private:
+    std::vector<EXRImage> images_;
+  };
+
+  //! Has tinyexr decode every channel of the header as 32-bit float.
+  auto RequestFloatPixels(EXRHeader& header) -> void
+  {
+    std::ranges::fill(std::span(header.requested_pixel_types,
+                        static_cast<std::size_t>(header.num_channels)),
+      TINYEXR_PIXELTYPE_FLOAT);
   }
 
-  //! Decode multipart EXR using the low-level API.
-  /*!
-   For multipart EXR files, we load the first part that contains image data.
-   This handles files where the simple LoadEXRFromMemory API fails.
-  */
-  [[nodiscard]] auto DecodeExrMultipart(std::span<const std::byte> bytes,
-    const DecodeOptions& options) -> Result<ScratchImage, TextureImportError>
+  [[nodiscard]] auto ChannelName(const EXRChannelInfo& channel) noexcept
+    -> std::string_view
   {
-    const auto* data = reinterpret_cast<const unsigned char*>(bytes.data());
-    const auto size = bytes.size();
-    const char* err = nullptr;
+    const auto name = std::span(channel.name);
+    return { name.begin(), std::ranges::find(name, '\0') };
+  }
 
-    // Parse EXR version to check for multipart
-    EXRVersion version {};
-    int ret = ParseEXRVersionFromMemory(&version, data, size);
-    if (ret != TINYEXR_SUCCESS) {
+  [[nodiscard]] auto ChannelIndex(const EXRHeader& header,
+    const std::string_view name) -> std::optional<std::size_t>
+  {
+    const auto channels = std::span(
+      header.channels, static_cast<std::size_t>(header.num_channels));
+    const auto it = std::ranges::find(channels, name, ChannelName);
+    if (it == channels.end()) {
+      return std::nullopt;
+    }
+    return static_cast<std::size_t>(
+      std::ranges::distance(channels.begin(), it));
+  }
+
+  //! A channel plane decoded as float (see RequestFloatPixels); tinyexr hands
+  //! every plane out as bytes.
+  [[nodiscard]] auto FloatPlane(const unsigned char* plane,
+    const std::size_t count) noexcept -> std::span<const float>
+  {
+    // NOLINTNEXTLINE(*-pro-type-reinterpret-cast)
+    return { reinterpret_cast<const float*>(plane), count };
+  }
+
+  //! Interleaves the R, G, B and, when present, A planes of a decoded EXR
+  //! part into RGBA32F; a part without alpha is opaque. A tiled part, whose
+  //! pixels are in tiles rather than planes, is refused.
+  [[nodiscard]] auto ExrPartToScratchImage(const EXRHeader& header,
+    const EXRImage& image, const DecodeOptions& options)
+    -> Result<ScratchImage, TextureImportError>
+  {
+    if (image.images == nullptr || image.width <= 0 || image.height <= 0) {
+      return Err(TextureImportError::kUnsupportedFormat);
+    }
+    // Channel indices come from the header and select the image's planes.
+    if (image.num_channels != header.num_channels) {
       return Err(TextureImportError::kCorruptedData);
     }
-
-    // For multipart files, we need to use the multipart API
-    if (version.multipart != 0) {
-      // Parse all headers
-      EXRHeader** headers = nullptr;
-      int num_headers = 0;
-
-      ret = ParseEXRMultipartHeaderFromMemory(
-        &headers, &num_headers, &version, data, size, &err);
-      if (ret != TINYEXR_SUCCESS) {
-        if (err != nullptr) {
-          FreeEXRErrorMessage(err);
-        }
-        return Err(TextureImportError::kCorruptedData);
-      }
-
-      // Find first valid image part (skip deep/tiled for now)
-      int part_idx = -1;
-      for (int i = 0; i < num_headers; ++i) {
-        if (headers[i]->tiled == 0) {
-          part_idx = i;
-          break;
-        }
-      }
-
-      if (part_idx < 0) {
-        // No suitable part found
-        for (int i = 0; i < num_headers; ++i) {
-          FreeEXRHeader(headers[i]);
-          free(headers[i]);
-        }
-        free(headers);
-        return Err(TextureImportError::kUnsupportedFormat);
-      }
-
-      // Request float output for all channels in all headers
-      for (int h = 0; h < num_headers; ++h) {
-        for (int c = 0; c < headers[h]->num_channels; ++c) {
-          headers[h]->requested_pixel_types[c] = TINYEXR_PIXELTYPE_FLOAT;
-        }
-      }
-
-      // Load all images
-      std::vector<EXRImage> images(static_cast<size_t>(num_headers));
-      for (int i = 0; i < num_headers; ++i) {
-        InitEXRImage(&images.at(static_cast<size_t>(i)));
-      }
-
-      ret = LoadEXRMultipartImageFromMemory(images.data(),
-        const_cast<const EXRHeader**>(headers),
-        static_cast<unsigned int>(num_headers), data, size, &err);
-
-      if (ret != TINYEXR_SUCCESS) {
-        if (err != nullptr) {
-          FreeEXRErrorMessage(err);
-        }
-        for (int i = 0; i < num_headers; ++i) {
-          FreeEXRImage(&images.at(static_cast<size_t>(i)));
-          FreeEXRHeader(headers[i]);
-          free(headers[i]);
-        }
-        free(headers);
-        return Err(TextureImportError::kDecodeFailed);
-      }
-
-      // Get the selected part
-      const EXRHeader& hdr = *headers[part_idx];
-      const EXRImage& img = images.at(static_cast<size_t>(part_idx));
-      const int width = img.width;
-      const int height = img.height;
-
-      // Find RGBA channels
-      int idx_r = -1, idx_g = -1, idx_b = -1, idx_a = -1;
-      for (int c = 0; c < hdr.num_channels; ++c) {
-        const char* name = hdr.channels[c].name;
-        if (name[0] == 'R' && name[1] == '\0') {
-          idx_r = c;
-        } else if (name[0] == 'G' && name[1] == '\0') {
-          idx_g = c;
-        } else if (name[0] == 'B' && name[1] == '\0') {
-          idx_b = c;
-        } else if (name[0] == 'A' && name[1] == '\0') {
-          idx_a = c;
-        }
-      }
-
-      // Must have at least RGB
-      if (idx_r < 0 || idx_g < 0 || idx_b < 0) {
-        for (int i = 0; i < num_headers; ++i) {
-          FreeEXRImage(&images.at(static_cast<size_t>(i)));
-          FreeEXRHeader(headers[i]);
-          free(headers[i]);
-        }
-        free(headers);
-        return Err(TextureImportError::kUnsupportedFormat);
-      }
-
-      // Assemble RGBA float data
-      const auto pixel_count
-        = static_cast<size_t>(width) * static_cast<size_t>(height);
-      const auto byte_size = pixel_count * 4 * sizeof(float);
-      std::vector<std::byte> pixel_data(byte_size);
-      auto* out = reinterpret_cast<float*>(pixel_data.data());
-
-      const auto* r_data = reinterpret_cast<const float*>(
-        img.images[static_cast<size_t>(idx_r)]);
-      const auto* g_data = reinterpret_cast<const float*>(
-        img.images[static_cast<size_t>(idx_g)]);
-      const auto* b_data = reinterpret_cast<const float*>(
-        img.images[static_cast<size_t>(idx_b)]);
-      const float* a_data = (idx_a >= 0)
-        ? reinterpret_cast<const float*>(img.images[static_cast<size_t>(idx_a)])
-        : nullptr;
-
-      for (size_t i = 0; i < pixel_count; ++i) {
-        out[(i * 4) + 0] = r_data[i];
-        out[(i * 4) + 1] = g_data[i];
-        out[(i * 4) + 2] = b_data[i];
-        out[(i * 4) + 3] = a_data != nullptr ? a_data[i] : 1.0F;
-      }
-
-      // Cleanup
-      for (int i = 0; i < num_headers; ++i) {
-        FreeEXRImage(&images.at(static_cast<size_t>(i)));
-        FreeEXRHeader(headers[i]);
-        free(headers[i]);
-      }
-      free(headers);
-
-      // Apply Y-flip if requested
-      if (options.flip_y) {
-        FlipImageY(pixel_data, static_cast<uint32_t>(width),
-          static_cast<uint32_t>(height), 16);
-      }
-
-      return Ok(ScratchImage::CreateFromData(static_cast<uint32_t>(width),
-        static_cast<uint32_t>(height), Format::kRGBA32Float,
-        static_cast<uint32_t>(width) * 16, std::move(pixel_data)));
-    }
-
-    // Single-part: use simpler header/image loading
-    EXRHeaderGuard hdr_guard;
-    ret
-      = ParseEXRHeaderFromMemory(&hdr_guard.header, &version, data, size, &err);
-    if (ret != TINYEXR_SUCCESS) {
-      if (err != nullptr) {
-        FreeEXRErrorMessage(err);
-      }
-      return Err(TextureImportError::kCorruptedData);
-    }
-    hdr_guard.initialized = true;
-
-    // Request float output for all channels
-    for (int i = 0; i < hdr_guard.header.num_channels; ++i) {
-      hdr_guard.header.requested_pixel_types[i] = TINYEXR_PIXELTYPE_FLOAT;
-    }
-
-    EXRImageGuard img_guard;
-    ret = LoadEXRImageFromMemory(
-      &img_guard.image, &hdr_guard.header, data, size, &err);
-    if (ret != TINYEXR_SUCCESS) {
-      if (err != nullptr) {
-        FreeEXRErrorMessage(err);
-      }
-      return Err(TextureImportError::kDecodeFailed);
-    }
-    img_guard.initialized = true;
-
-    const int width = img_guard.image.width;
-    const int height = img_guard.image.height;
-
-    // Find RGBA channels
-    int idx_r = -1, idx_g = -1, idx_b = -1, idx_a = -1;
-    for (int c = 0; c < hdr_guard.header.num_channels; ++c) {
-      const char* name = hdr_guard.header.channels[c].name;
-      if (name[0] == 'R' && name[1] == '\0') {
-        idx_r = c;
-      } else if (name[0] == 'G' && name[1] == '\0') {
-        idx_g = c;
-      } else if (name[0] == 'B' && name[1] == '\0') {
-        idx_b = c;
-      } else if (name[0] == 'A' && name[1] == '\0') {
-        idx_a = c;
-      }
-    }
-
-    if (idx_r < 0 || idx_g < 0 || idx_b < 0) {
+    const auto red_channel = ChannelIndex(header, "R");
+    const auto green_channel = ChannelIndex(header, "G");
+    const auto blue_channel = ChannelIndex(header, "B");
+    const auto alpha_channel = ChannelIndex(header, "A");
+    if (!red_channel || !green_channel || !blue_channel) {
       return Err(TextureImportError::kUnsupportedFormat);
     }
 
-    // Assemble RGBA float data
-    const auto pixel_count
-      = static_cast<size_t>(width) * static_cast<size_t>(height);
-    const auto byte_size = pixel_count * 4 * sizeof(float);
-    std::vector<std::byte> pixel_data(byte_size);
-    auto* out = reinterpret_cast<float*>(pixel_data.data());
+    const auto extent = ImageExtent {
+      .width = static_cast<uint32_t>(image.width),
+      .height = static_cast<uint32_t>(image.height),
+    };
+    const auto pixel_count = PixelCount(extent);
+    const auto planes
+      = std::span(image.images, static_cast<std::size_t>(image.num_channels));
+    const auto plane = [&planes, pixel_count](const std::size_t channel) {
+      return FloatPlane(planes[channel], pixel_count);
+    };
+    const auto red = plane(*red_channel);
+    const auto green = plane(*green_channel);
+    const auto blue = plane(*blue_channel);
+    const auto alpha
+      = alpha_channel ? plane(*alpha_channel) : std::span<const float> {};
 
-    const auto* r_data = reinterpret_cast<const float*>(
-      img_guard.image.images[static_cast<size_t>(idx_r)]);
-    const auto* g_data = reinterpret_cast<const float*>(
-      img_guard.image.images[static_cast<size_t>(idx_g)]);
-    const auto* b_data = reinterpret_cast<const float*>(
-      img_guard.image.images[static_cast<size_t>(idx_b)]);
-    const float* a_data = (idx_a >= 0)
-      ? reinterpret_cast<const float*>(
-          img_guard.image.images[static_cast<size_t>(idx_a)])
-      : nullptr;
+    auto rgba = std::vector<float>(pixel_count * 4U);
+    const auto pixels = std::span(rgba);
+    for (std::size_t i = 0; i < pixel_count; ++i) {
+      const auto pixel = pixels.subspan(i * 4U, 4U);
+      pixel[0] = red[i];
+      pixel[1] = green[i];
+      pixel[2] = blue[i];
+      pixel[3] = alpha.empty() ? 1.0F : alpha[i];
+    }
+    return Ok(Rgba32FImage(rgba, extent, options));
+  }
 
-    for (size_t i = 0; i < pixel_count; ++i) {
-      out[(i * 4) + 0] = r_data[i];
-      out[(i * 4) + 1] = g_data[i];
-      out[(i * 4) + 2] = b_data[i];
-      out[(i * 4) + 3] = a_data != nullptr ? a_data[i] : 1.0F;
+  //! Decodes the first scanline part of a multipart EXR.
+  [[nodiscard]] auto DecodeExrMultipart(std::span<const std::byte> bytes,
+    EXRVersion& version, const DecodeOptions& options)
+    -> Result<ScratchImage, TextureImportError>
+  {
+    auto headers = ExrPartHeaders {};
+    if (!headers.Parse(version, bytes)) {
+      return Err(TextureImportError::kCorruptedData);
     }
 
-    // Apply Y-flip if requested
-    if (options.flip_y) {
-      FlipImageY(pixel_data, static_cast<uint32_t>(width),
-        static_cast<uint32_t>(height), 16);
+    const auto parts = headers.Headers();
+    const auto part = std::ranges::find_if(
+      parts, [](const EXRHeader* header) { return header->tiled == 0; });
+    if (part == parts.end()) {
+      return Err(TextureImportError::kUnsupportedFormat);
+    }
+    for (auto* header : parts) {
+      RequestFloatPixels(*header);
     }
 
-    return Ok(ScratchImage::CreateFromData(static_cast<uint32_t>(width),
-      static_cast<uint32_t>(height), Format::kRGBA32Float,
-      static_cast<uint32_t>(width) * 16, std::move(pixel_data)));
+    auto images = ExrPartImages(parts.size());
+    const char* error = nullptr;
+    const auto result = LoadEXRMultipartImageFromMemory(images.Data(),
+      headers.ForLoading(), static_cast<unsigned int>(parts.size()),
+      AsUChars(bytes), bytes.size(), &error);
+    ReleaseExrError(error);
+    if (result != TINYEXR_SUCCESS) {
+      return Err(TextureImportError::kDecodeFailed);
+    }
+
+    const auto index
+      = static_cast<std::size_t>(std::ranges::distance(parts.begin(), part));
+    return ExrPartToScratchImage(**part, images.At(index), options);
+  }
+
+  //! Decodes an EXR that the simple tinyexr API refused: a multipart file, or
+  //! a single part read with the low-level API.
+  [[nodiscard]] auto DecodeExrLowLevel(std::span<const std::byte> bytes,
+    const DecodeOptions& options) -> Result<ScratchImage, TextureImportError>
+  {
+    EXRVersion version {};
+    if (ParseEXRVersionFromMemory(&version, AsUChars(bytes), bytes.size())
+      != TINYEXR_SUCCESS) {
+      return Err(TextureImportError::kCorruptedData);
+    }
+    if (version.multipart != 0) {
+      return DecodeExrMultipart(bytes, version, options);
+    }
+
+    const char* error = nullptr;
+    EXRHeaderGuard header;
+    auto result = ParseEXRHeaderFromMemory(
+      &header.header, &version, AsUChars(bytes), bytes.size(), &error);
+    ReleaseExrError(error);
+    if (result != TINYEXR_SUCCESS) {
+      return Err(TextureImportError::kCorruptedData);
+    }
+    header.initialized = true;
+    RequestFloatPixels(header.header);
+
+    EXRImageGuard image;
+    error = nullptr;
+    result = LoadEXRImageFromMemory(
+      &image.image, &header.header, AsUChars(bytes), bytes.size(), &error);
+    ReleaseExrError(error);
+    if (result != TINYEXR_SUCCESS) {
+      return Err(TextureImportError::kDecodeFailed);
+    }
+    image.initialized = true;
+
+    return ExrPartToScratchImage(header.header, image.image, options);
   }
 
   [[nodiscard]] auto DecodeExrToScratchImage(std::span<const std::byte> bytes,
     const DecodeOptions& options) -> Result<ScratchImage, TextureImportError>
   {
-    // Try simple API first (faster for single-part files)
-    float* out_rgba = nullptr;
+    // The simple API reads most single-part files to interleaved RGBA.
+    float* decoded = nullptr;
     int width = 0;
     int height = 0;
-
-    const int result = TryDecodeExrSimple(bytes, &out_rgba, &width, &height);
-
-    if (result == TINYEXR_SUCCESS && out_rgba != nullptr) {
-      // Simple API succeeded
-      const auto pixel_count
-        = static_cast<size_t>(width) * static_cast<size_t>(height);
-      const auto byte_size = pixel_count * 4 * sizeof(float);
-
-      std::vector<std::byte> pixel_data(byte_size);
-      std::memcpy(pixel_data.data(), out_rgba, byte_size);
-
-      free(out_rgba);
-
-      if (options.flip_y) {
-        FlipImageY(pixel_data, static_cast<uint32_t>(width),
-          static_cast<uint32_t>(height), 16);
-      }
-
-      return Ok(ScratchImage::CreateFromData(static_cast<uint32_t>(width),
-        static_cast<uint32_t>(height), Format::kRGBA32Float,
-        static_cast<uint32_t>(width) * 16, std::move(pixel_data)));
+    const char* error = nullptr;
+    const auto result = LoadEXRFromMemory(
+      &decoded, &width, &height, AsUChars(bytes), bytes.size(), &error);
+    ReleaseExrError(error);
+    const auto rgba = CBuffer<float>(decoded);
+    if (result == TINYEXR_SUCCESS && rgba != nullptr) {
+      const auto extent = ImageExtent {
+        .width = static_cast<uint32_t>(width),
+        .height = static_cast<uint32_t>(height),
+      };
+      return Ok(
+        Rgba32FImage(Rgba32FPixels(rgba.get(), extent), extent, options));
     }
-
-    // Simple API failed - try multipart/low-level API
-    return DecodeExrMultipart(bytes, options);
+    return DecodeExrLowLevel(bytes, options);
   }
 
   //=== HDR (Radiance) Decoder ===--------------------------------------------//
@@ -483,124 +535,129 @@ namespace {
     int width = 0;
     int height = 0;
     int channels_in_file = 0;
-
-    // stbi_loadf handles Radiance HDR (.hdr) format
-    float* decoded = stbi_loadf_from_memory(
-      reinterpret_cast<const unsigned char*>(bytes.data()),
-      static_cast<int>(bytes.size()), &width, &height, &channels_in_file,
-      STBI_rgb_alpha); // Force RGBA
-
+    const auto decoded = StbiImage<float>(
+      stbi_loadf_from_memory(AsUChars(bytes), static_cast<int>(bytes.size()),
+        &width, &height, &channels_in_file, STBI_rgb_alpha));
     if (decoded == nullptr) {
       return Err(TextureImportError::kDecodeFailed);
     }
-
-    const auto pixel_count
-      = static_cast<size_t>(width) * static_cast<size_t>(height);
-    const auto byte_size = pixel_count * 4 * sizeof(float);
-
-    std::vector<std::byte> pixel_data(byte_size);
-    std::memcpy(pixel_data.data(), decoded, byte_size);
-
-    stbi_image_free(decoded);
-
-    // Apply Y-flip if requested
-    if (options.flip_y) {
-      FlipImageY(pixel_data, static_cast<uint32_t>(width),
-        static_cast<uint32_t>(height), 16);
-    }
-
-    return Ok(ScratchImage::CreateFromData(static_cast<uint32_t>(width),
-      static_cast<uint32_t>(height), Format::kRGBA32Float,
-      static_cast<uint32_t>(width) * 16, std::move(pixel_data)));
+    const auto extent = ImageExtent {
+      .width = static_cast<uint32_t>(width),
+      .height = static_cast<uint32_t>(height),
+    };
+    return Ok(
+      Rgba32FImage(Rgba32FPixels(decoded.get(), extent), extent, options));
   }
 
   //=== PNG Decoder (libspng) ===-------------------------------------------//
 
+  struct SpngContextFree final {
+    auto operator()(spng_ctx* context) const noexcept -> void
+    {
+      spng_ctx_free(context);
+    }
+  };
+
+  //! The output libspng decodes a PNG to: grayscale keeps its one or two
+  //! channels unless RGBA is forced; everything else decodes to RGBA8.
+  struct PngOutput final {
+    int spng_format = SPNG_FMT_RGBA8;
+    Format format = Format::kRGBA8UNorm;
+    uint32_t bytes_per_pixel = 4U;
+  };
+
+  [[nodiscard]] auto PngOutputFor(
+    const spng_ihdr& ihdr, const DecodeOptions& options) noexcept -> PngOutput
+  {
+    if (options.force_rgba) {
+      return {};
+    }
+    switch (ihdr.color_type) {
+    case SPNG_COLOR_TYPE_GRAYSCALE:
+      return {
+        .spng_format = SPNG_FMT_G8,
+        .format = Format::kR8UNorm,
+        .bytes_per_pixel = 1U,
+      };
+    case SPNG_COLOR_TYPE_GRAYSCALE_ALPHA:
+      return {
+        .spng_format = SPNG_FMT_GA8,
+        .format = Format::kRG8UNorm,
+        .bytes_per_pixel = 2U,
+      };
+    default:
+      return {};
+    }
+  }
+
   [[nodiscard]] auto DecodePngToScratchImage(std::span<const std::byte> bytes,
     const DecodeOptions& options) -> Result<ScratchImage, TextureImportError>
   {
-    spng_ctx* ctx = spng_ctx_new(0);
-    if (ctx == nullptr) {
+    const auto context
+      = std::unique_ptr<spng_ctx, SpngContextFree>(spng_ctx_new(0));
+    if (context == nullptr) {
       return Err(TextureImportError::kOutOfMemory);
     }
-
-    const auto Cleanup = [ctx] -> void { spng_ctx_free(ctx); };
-
-    if (spng_set_png_buffer(ctx, bytes.data(), bytes.size()) != 0) {
-      Cleanup();
+    if (spng_set_png_buffer(context.get(), bytes.data(), bytes.size()) != 0) {
       return Err(TextureImportError::kDecodeFailed);
     }
-
     spng_ihdr ihdr {};
-    if (spng_get_ihdr(ctx, &ihdr) != 0) {
-      Cleanup();
+    if (spng_get_ihdr(context.get(), &ihdr) != 0) {
       return Err(TextureImportError::kDecodeFailed);
     }
 
-    int spng_format = SPNG_FMT_RGBA8;
-    Format output_format = Format::kRGBA8UNorm;
-    uint32_t bytes_per_pixel = 4U;
-
-    if (!options.force_rgba) {
-      switch (ihdr.color_type) {
-      case SPNG_COLOR_TYPE_GRAYSCALE:
-        spng_format = SPNG_FMT_G8;
-        output_format = Format::kR8UNorm;
-        bytes_per_pixel = 1U;
-        break;
-      case SPNG_COLOR_TYPE_GRAYSCALE_ALPHA:
-        spng_format = SPNG_FMT_GA8;
-        output_format = Format::kRG8UNorm;
-        bytes_per_pixel = 2U;
-        break;
-      case SPNG_COLOR_TYPE_TRUECOLOR:
-        spng_format = SPNG_FMT_RGBA8;
-        output_format = Format::kRGBA8UNorm;
-        bytes_per_pixel = 4U;
-        break;
-      case SPNG_COLOR_TYPE_TRUECOLOR_ALPHA:
-        spng_format = SPNG_FMT_RGBA8;
-        output_format = Format::kRGBA8UNorm;
-        bytes_per_pixel = 4U;
-        break;
-      case SPNG_COLOR_TYPE_INDEXED:
-        spng_format = SPNG_FMT_RGBA8;
-        output_format = Format::kRGBA8UNorm;
-        bytes_per_pixel = 4U;
-        break;
-      default:
-        spng_format = SPNG_FMT_RGBA8;
-        output_format = Format::kRGBA8UNorm;
-        bytes_per_pixel = 4U;
-        break;
-      }
-    }
-
-    size_t decoded_size = 0;
-    if (spng_decoded_image_size(ctx, spng_format, &decoded_size) != 0
+    const auto output = PngOutputFor(ihdr, options);
+    std::size_t decoded_size = 0;
+    if (spng_decoded_image_size(
+          context.get(), output.spng_format, &decoded_size)
+        != 0
       || decoded_size == 0) {
-      Cleanup();
       return Err(TextureImportError::kDecodeFailed);
     }
-
-    std::vector<std::byte> pixel_data(decoded_size);
-    if (spng_decode_image(ctx, pixel_data.data(), decoded_size, spng_format, 0)
+    auto pixel_data = std::vector<std::byte>(decoded_size);
+    if (spng_decode_image(
+          context.get(), pixel_data.data(), decoded_size, output.spng_format, 0)
       != 0) {
-      Cleanup();
       return Err(TextureImportError::kDecodeFailed);
     }
 
-    Cleanup();
-
+    const auto row_pitch = ihdr.width * output.bytes_per_pixel;
     if (options.flip_y) {
-      FlipImageY(pixel_data, ihdr.width, ihdr.height, bytes_per_pixel);
+      FlipImageY(pixel_data, row_pitch);
     }
-
     return Ok(ScratchImage::CreateFromData(ihdr.width, ihdr.height,
-      output_format, ihdr.width * bytes_per_pixel, std::move(pixel_data)));
+      output.format, row_pitch, std::move(pixel_data)));
   }
 
   //=== LDR Decoder (stb_image RGBA8) ===-------------------------------------//
+
+  //! The format of a stb_image decode: one and two channels keep their
+  //! channels, three are expanded to RGBA8.
+  [[nodiscard]] auto LdrFormat(const int channels) noexcept -> Format
+  {
+    switch (channels) {
+    case 1:
+      return Format::kR8UNorm;
+    case 2:
+      return Format::kRG8UNorm;
+    default:
+      return Format::kRGBA8UNorm;
+    }
+  }
+
+  //! Expands RGB8 pixels to opaque RGBA8.
+  [[nodiscard]] auto ExpandRgbToRgba(std::span<const stbi_uc> rgb)
+    -> std::vector<std::byte>
+  {
+    auto rgba = std::vector<std::byte>(rgb.size() / 3U * 4U);
+    for (auto&& [source, target] : std::views::zip(
+           rgb | std::views::chunk(3), rgba | std::views::chunk(4))) {
+      std::ranges::transform(source, target.begin(),
+        [](const stbi_uc channel) { return std::byte { channel }; });
+      target[3] = std::byte { 0xFF };
+    }
+    return rgba;
+  }
 
   [[nodiscard]] auto DecodeLdrToScratchImage(std::span<const std::byte> bytes,
     const DecodeOptions& options) -> Result<ScratchImage, TextureImportError>
@@ -616,74 +673,208 @@ namespace {
     int width = 0;
     int height = 0;
     int channels_in_file = 0;
-
     const int desired_channels = options.force_rgba ? STBI_rgb_alpha : 0;
-
-    stbi_uc* decoded = stbi_load_from_memory(
-      reinterpret_cast<const unsigned char*>(bytes.data()),
-      static_cast<int>(bytes.size()), &width, &height, &channels_in_file,
-      desired_channels);
-
+    const auto decoded = StbiImage<stbi_uc>(
+      stbi_load_from_memory(AsUChars(bytes), static_cast<int>(bytes.size()),
+        &width, &height, &channels_in_file, desired_channels));
     if (decoded == nullptr) {
       return Err(TextureImportError::kDecodeFailed);
     }
 
-    const int actual_channels
+    const auto extent = ImageExtent {
+      .width = static_cast<uint32_t>(width),
+      .height = static_cast<uint32_t>(height),
+    };
+    const int channels
       = (desired_channels != 0) ? desired_channels : channels_in_file;
-    const auto pixel_count
-      = static_cast<size_t>(width) * static_cast<size_t>(height);
-    const auto byte_size = pixel_count * static_cast<size_t>(actual_channels);
+    const auto decoded_pixels = std::span(
+      decoded.get(), PixelCount(extent) * static_cast<std::size_t>(channels));
+    auto pixel_data = channels == 3
+      ? ExpandRgbToRgba(decoded_pixels)
+      : CopyBytes(decoded_pixels.data(), decoded_pixels.size());
 
-    std::vector<std::byte> pixel_data;
-    if (actual_channels == 3) {
-      const auto rgba_bytes = pixel_count * 4U;
-      pixel_data.resize(rgba_bytes);
-      const auto* src = decoded;
-      auto* dst = reinterpret_cast<uint8_t*>(pixel_data.data());
-      for (size_t i = 0; i < pixel_count; ++i) {
-        dst[(i * 4) + 0] = src[(i * 3) + 0];
-        dst[(i * 4) + 1] = src[(i * 3) + 1];
-        dst[(i * 4) + 2] = src[(i * 3) + 2];
-        dst[(i * 4) + 3] = 255U;
-      }
-    } else {
-      pixel_data.resize(byte_size);
-      std::memcpy(pixel_data.data(), decoded, byte_size);
-    }
-
-    stbi_image_free(decoded);
-
-    // Apply Y-flip if requested
+    const auto bytes_per_pixel
+      = static_cast<uint32_t>(channels == 3 ? 4 : channels);
+    const auto row_pitch = extent.width * bytes_per_pixel;
     if (options.flip_y) {
-      const uint32_t flip_channels
-        = (actual_channels == 3) ? 4U : static_cast<uint32_t>(actual_channels);
-      FlipImageY(pixel_data, static_cast<uint32_t>(width),
-        static_cast<uint32_t>(height), flip_channels);
+      FlipImageY(pixel_data, row_pitch);
     }
+    return Ok(ScratchImage::CreateFromData(extent.width, extent.height,
+      LdrFormat(channels), row_pitch, std::move(pixel_data)));
+  }
 
-    // Determine format based on channel count
-    Format format;
-    switch (actual_channels) {
-    case 1:
-      format = Format::kR8UNorm;
-      break;
-    case 2:
-      format = Format::kRG8UNorm;
-      break;
-    case 4:
-      format = Format::kRGBA8UNorm;
-      break;
+  //=== WebP Decoder (libwebp) ===--------------------------------------------//
+
+  //! Detects a RIFF container of the WebP form ("RIFF", size, "WEBP").
+  [[nodiscard]] auto IsWebpSignature(std::span<const std::byte> bytes) noexcept
+    -> bool
+  {
+    constexpr auto kFormOffset = std::size_t { 8 };
+    return bytes.size() >= kFormOffset && StartsWithText(bytes, "RIFF")
+      && StartsWithText(bytes.subspan(kFormOffset), "WEBP");
+  }
+
+  [[nodiscard]] auto WebpError(const VP8StatusCode status) -> TextureImportError
+  {
+    switch (status) {
+    case VP8_STATUS_OUT_OF_MEMORY:
+      return TextureImportError::kOutOfMemory;
+    case VP8_STATUS_UNSUPPORTED_FEATURE:
+      return TextureImportError::kUnsupportedFormat;
+    case VP8_STATUS_BITSTREAM_ERROR:
+    case VP8_STATUS_NOT_ENOUGH_DATA:
+      return TextureImportError::kCorruptedData;
     default:
-      // 3-channel (RGB) - expand to RGBA8
-      format = Format::kRGBA8UNorm;
-      break;
+      return TextureImportError::kDecodeFailed;
+    }
+  }
+
+  //! Decodes a still WebP image, lossy or lossless, to RGBA8. An animated
+  //! WebP is not a texture and is refused.
+  [[nodiscard]] auto DecodeWebpToScratchImage(std::span<const std::byte> bytes,
+    const DecodeOptions& options) -> Result<ScratchImage, TextureImportError>
+  {
+    auto features = WebPBitstreamFeatures {};
+    if (const auto status
+      = WebPGetFeatures(AsUChars(bytes), bytes.size(), &features);
+      status != VP8_STATUS_OK) {
+      return Err(WebpError(status));
+    }
+    if (features.has_animation != 0) {
+      return Err(TextureImportError::kUnsupportedFormat);
     }
 
-    return Ok(ScratchImage::CreateFromData(static_cast<uint32_t>(width),
-      static_cast<uint32_t>(height), format,
-      static_cast<uint32_t>(width)
-        * static_cast<uint32_t>((actual_channels == 3) ? 4 : actual_channels),
-      std::move(pixel_data)));
+    const auto width = static_cast<uint32_t>(features.width);
+    const auto height = static_cast<uint32_t>(features.height);
+    constexpr auto kBytesPerPixel = 4U;
+    const auto row_pitch = width * kBytesPerPixel;
+    auto pixel_data = std::vector<std::byte>(
+      static_cast<std::size_t>(row_pitch) * static_cast<std::size_t>(height));
+    if (WebPDecodeRGBAInto(AsUChars(bytes), bytes.size(),
+          AsWritableUChars(pixel_data), pixel_data.size(),
+          static_cast<int>(row_pitch))
+      == nullptr) {
+      return Err(TextureImportError::kDecodeFailed);
+    }
+
+    if (options.flip_y) {
+      FlipImageY(pixel_data, row_pitch);
+    }
+    return Ok(ScratchImage::CreateFromData(
+      width, height, Format::kRGBA8UNorm, row_pitch, std::move(pixel_data)));
+  }
+
+  //=== KTX2 Decoder (libktx, Basis Universal) ===----------------------------//
+
+  //! Detects the KTX 2.0 file identifier.
+  [[nodiscard]] auto IsKtx2Signature(std::span<const std::byte> bytes) noexcept
+    -> bool
+  {
+    constexpr auto kIdentifier = std::to_array<std::byte>({
+      std::byte { 0xAB },
+      std::byte { 'K' },
+      std::byte { 'T' },
+      std::byte { 'X' },
+      std::byte { ' ' },
+      std::byte { '2' },
+      std::byte { '0' },
+      std::byte { 0xBB },
+      std::byte { '\r' },
+      std::byte { '\n' },
+      std::byte { 0x1A },
+      std::byte { '\n' },
+    });
+    return std::ranges::starts_with(bytes, kIdentifier);
+  }
+
+  struct KtxTextureDeleter final {
+    auto operator()(ktxTexture2* texture) const noexcept -> void
+    {
+      ktxTexture2_Destroy(texture);
+    }
+  };
+
+  using KtxTexturePtr = std::unique_ptr<ktxTexture2, KtxTextureDeleter>;
+
+  [[nodiscard]] auto KtxError(const KTX_error_code code) -> TextureImportError
+  {
+    switch (code) {
+    case KTX_OUT_OF_MEMORY:
+      return TextureImportError::kOutOfMemory;
+    case KTX_FILE_DATA_ERROR:
+    case KTX_FILE_UNEXPECTED_EOF:
+    case KTX_UNKNOWN_FILE_FORMAT:
+      return TextureImportError::kCorruptedData;
+    case KTX_UNSUPPORTED_TEXTURE_TYPE:
+    case KTX_UNSUPPORTED_FEATURE:
+      return TextureImportError::kUnsupportedFormat;
+    default:
+      return TextureImportError::kDecodeFailed;
+    }
+  }
+
+  //! Decodes a KTX2 texture compressed with Basis Universal (ETC1S or UASTC,
+  //! zstd supercompressed or not) by transcoding its base level to RGBA8.
+  /*!
+   The decoded image is one 2D image, top row first like every other decoder:
+   a texture stored bottom-up (`KTXorientation` "u") is flipped. The cook
+   regenerates the mip chain, so the file's other levels are not read. A KTX2
+   texture in any other encoding (raw or GPU block formats), or with array
+   layers, cube faces or depth, is refused.
+  */
+  [[nodiscard]] auto DecodeKtx2ToScratchImage(std::span<const std::byte> bytes,
+    const DecodeOptions& options) -> Result<ScratchImage, TextureImportError>
+  {
+    ktxTexture2* created = nullptr;
+    if (const auto code = ktxTexture2_CreateFromMemory(AsUChars(bytes),
+          bytes.size(), KTX_TEXTURE_CREATE_LOAD_IMAGE_DATA_BIT, &created);
+      code != KTX_SUCCESS) {
+      return Err(KtxError(code));
+    }
+    const auto texture = KtxTexturePtr(created);
+
+    if (texture->isArray || texture->isCubemap || texture->numLayers > 1U
+      || texture->numFaces > 1U) {
+      return Err(TextureImportError::kArrayLayerCountInvalid);
+    }
+    if (texture->numDimensions > 2U || texture->baseDepth > 1U) {
+      return Err(TextureImportError::kDepthInvalidFor2D);
+    }
+    if (!ktxTexture2_NeedsTranscoding(texture.get())) {
+      return Err(TextureImportError::kUnsupportedFormat);
+    }
+    if (const auto code
+      = ktxTexture2_TranscodeBasis(texture.get(), KTX_TTF_RGBA32, 0);
+      code != KTX_SUCCESS) {
+      return Err(KtxError(code));
+    }
+
+    auto offset = ktx_size_t { 0 };
+    if (const auto code
+      = ktxTexture2_GetImageOffset(texture.get(), 0U, 0U, 0U, &offset);
+      code != KTX_SUCCESS) {
+      return Err(KtxError(code));
+    }
+    const auto width = texture->baseWidth;
+    const auto height = texture->baseHeight;
+    constexpr auto kBytesPerPixel = 4U;
+    const auto row_pitch = width * kBytesPerPixel;
+    const auto image_size
+      = static_cast<std::size_t>(row_pitch) * static_cast<std::size_t>(height);
+    const auto data
+      = std::as_bytes(std::span(texture->pData, texture->dataSize));
+    if (offset > data.size() || image_size > data.size() - offset) {
+      return Err(TextureImportError::kCorruptedData);
+    }
+    const auto image = data.subspan(offset, image_size);
+    auto pixel_data = std::vector<std::byte>(image.begin(), image.end());
+
+    const bool stored_bottom_up = texture->orientation.y == KTX_ORIENT_Y_UP;
+    if (options.flip_y != stored_bottom_up) {
+      FlipImageY(pixel_data, row_pitch);
+    }
+    return Ok(ScratchImage::CreateFromData(
+      width, height, Format::kRGBA8UNorm, row_pitch, std::move(pixel_data)));
   }
 
   //=== File Reading Utility ===----------------------------------------------//
@@ -702,18 +893,20 @@ namespace {
       return Err(TextureImportError::kFileReadFailed);
     }
 
-    std::vector<std::byte> bytes;
-    bytes.resize(size);
-
+    auto bytes = std::vector<std::byte>(static_cast<std::size_t>(size));
     file.seekg(0, std::ios::beg);
-    file.read(reinterpret_cast<char*>(bytes.data()),
-      static_cast<std::streamsize>(bytes.size()));
-
+    file.read(AsChars(bytes), static_cast<std::streamsize>(bytes.size()));
     if (!file) {
       return Err(TextureImportError::kFileReadFailed);
     }
 
     return Ok(std::move(bytes));
+  }
+
+  [[nodiscard]] auto FitsStb(std::span<const std::byte> bytes) noexcept -> bool
+  {
+    return bytes.size()
+      <= static_cast<std::size_t>(std::numeric_limits<int>::max());
   }
 
 } // namespace
@@ -730,59 +923,29 @@ auto DecodeImageRgba8FromMemory(std::span<const std::byte> bytes)
     };
   }
 
-  if (bytes.size() > static_cast<size_t>(std::numeric_limits<int>::max())) {
+  if (!FitsStb(bytes)) {
     return ImageDecodeResult {
       .image = std::nullopt,
       .error = "input too large for stb",
     };
   }
 
-  return DecodeWithStb_(reinterpret_cast<const unsigned char*>(bytes.data()),
-    static_cast<int>(bytes.size()));
+  return DecodeWithStb(bytes);
 }
 
 auto DecodeImageRgba8FromFile(const std::filesystem::path& path)
   -> ImageDecodeResult
 {
-  std::ifstream file(base::ToNativePath(path), std::ios::binary);
-  if (!file) {
+  auto bytes = ReadFileBytes(path);
+  if (!bytes) {
     return ImageDecodeResult {
       .image = std::nullopt,
-      .error = "failed to open file",
+      .error = bytes.error() == TextureImportError::kFileNotFound
+        ? "failed to open file"
+        : "failed to read file",
     };
   }
-
-  file.seekg(0, std::ios::end);
-  const auto size = file.tellg();
-  if (size <= 0) {
-    return ImageDecodeResult {
-      .image = std::nullopt,
-      .error = "empty file",
-    };
-  }
-
-  if (size > static_cast<std::streamoff>(std::numeric_limits<int>::max())) {
-    return ImageDecodeResult {
-      .image = std::nullopt,
-      .error = "file too large for stb",
-    };
-  }
-
-  std::vector<std::byte> bytes;
-  bytes.resize(size);
-
-  file.seekg(0, std::ios::beg);
-  file.read(reinterpret_cast<char*>(bytes.data()),
-    static_cast<std::streamsize>(bytes.size()));
-
-  if (!file) {
-    return ImageDecodeResult {
-      .image = std::nullopt,
-      .error = "failed to read file",
-    };
-  }
-
-  return DecodeImageRgba8FromMemory(bytes);
+  return DecodeImageRgba8FromMemory(bytes.value());
 }
 
 //=== Format Detection ===----------------------------------------------------//
@@ -801,32 +964,7 @@ auto IsExrSignature(std::span<const std::byte> bytes) noexcept -> bool
 auto IsHdrSignature(std::span<const std::byte> bytes) noexcept -> bool
 {
   // Radiance HDR signature: "#?RADIANCE" or "#?RGBE"
-  if (bytes.size() < 2) {
-    return false;
-  }
-
-  // Check for "#?" prefix
-  constexpr std::array prefix { std::byte { '#' }, std::byte { '?' } };
-  if (!std::ranges::starts_with(bytes, prefix)) {
-    return false;
-  }
-
-  // Check for "RADIANCE" or "RGBE" after "#?"
-  if (bytes.size() >= 10) {
-    const char* data = reinterpret_cast<const char*>(bytes.data());
-    if (std::strncmp(data + 2, "RADIANCE", 8) == 0) {
-      return true;
-    }
-  }
-
-  if (bytes.size() >= 6) {
-    const char* data = reinterpret_cast<const char*>(bytes.data());
-    if (std::strncmp(data + 2, "RGBE", 4) == 0) {
-      return true;
-    }
-  }
-
-  return false;
+  return StartsWithText(bytes, "#?RADIANCE") || StartsWithText(bytes, "#?RGBE");
 }
 
 auto IsHdrFormat(
@@ -846,17 +984,9 @@ auto IsHdrFormat(
   }
 
   // Also check stb_image's HDR detection
-  if ((!bytes.empty()
-        && bytes.size()
-          <= static_cast<size_t>((std::numeric_limits<int>::max)()))
-    && (stbi_is_hdr_from_memory(
-          reinterpret_cast<const unsigned char*>(bytes.data()),
-          static_cast<int>(bytes.size()))
-      != 0)) {
-    return true;
-  }
-
-  return false;
+  return !bytes.empty() && FitsStb(bytes)
+    && stbi_is_hdr_from_memory(AsUChars(bytes), static_cast<int>(bytes.size()))
+    != 0;
 }
 
 //=== Unified Decode API ===--------------------------------------------------//
@@ -868,7 +998,7 @@ auto DecodeToScratchImage(std::span<const std::byte> bytes,
     return Err(TextureImportError::kCorruptedData);
   }
 
-  if (bytes.size() > static_cast<size_t>(std::numeric_limits<int>::max())) {
+  if (!FitsStb(bytes)) {
     return Err(TextureImportError::kOutOfMemory);
   }
 
@@ -889,7 +1019,15 @@ auto DecodeToScratchImage(std::span<const std::byte> bytes,
     return DecodeExrToScratchImage(bytes, options);
   }
 
-  // 4. Fallback to LDR decoder (stb_image)
+  // 4. WebP and KTX2 signatures
+  if (IsWebpSignature(bytes)) {
+    return DecodeWebpToScratchImage(bytes, options);
+  }
+  if (IsKtx2Signature(bytes)) {
+    return DecodeKtx2ToScratchImage(bytes, options);
+  }
+
+  // 5. Fallback to LDR decoder (stb_image)
   return DecodeLdrToScratchImage(bytes, options);
 }
 
