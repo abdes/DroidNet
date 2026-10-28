@@ -1,6 +1,6 @@
 # ED-M09.14 - Scene Instances And The Model Editor
 
-Status: `in_progress`
+Status: `done`
 
 Last Updated: 2026-10-28
 
@@ -180,7 +180,7 @@ ED-M09 item 14 points here and is `done` when every slice below is.
 | E7    | done  | 219e7f2d3                                                                   |
 | E8    | done  | d7abbad2f                                                                   |
 | E9    | done  | 41ffd72d5, cec1bdf8f, aa575871b, 74aa353fc                                  |
-| E10   | open  | -                                                                           |
+| E10   | done  | fffd9daf2, 6a9f6a290, 027f371d1, fb2444478, d27580a29, 9c7c58312, c22583b46 |
 | E11   | done  | dc4c70efe, a42a7e355                                                        |
 | D1    | done  | -                                                                           |
 | D2    | done  | 48fbde4e2                                                                   |
