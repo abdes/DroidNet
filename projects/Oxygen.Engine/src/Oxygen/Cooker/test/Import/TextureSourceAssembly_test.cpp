@@ -7,9 +7,10 @@
 // Covers: Import/TextureSourceAssembly.cpp
 
 #include <array>
-#include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -23,9 +24,20 @@
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Testing/GTest.h>
 
-using namespace oxygen::content::import;
 using oxygen::Format;
 using oxygen::TextureType;
+using oxygen::content::import::AssembleCubeFromFaces;
+using oxygen::content::import::ConvertEquirectangularToCube;
+using oxygen::content::import::CubeFace;
+using oxygen::content::import::EquirectToCubeOptions;
+using oxygen::content::import::kCubeFaceCount;
+using oxygen::content::import::MipFilter;
+using oxygen::content::import::ScratchImage;
+using oxygen::content::import::SubresourceId;
+using oxygen::content::import::TextureImportError;
+using oxygen::content::import::TextureSource;
+using oxygen::content::import::TextureSourceSet;
+using oxygen::content::import::to_string;
 
 namespace {
 
@@ -338,102 +350,6 @@ NOLINT_TEST(TextureSourceAssemblyTest, DefaultsToFaceSize512AndKaiserFilter)
   EXPECT_EQ(options.sample_filter, MipFilter::kKaiser);
 }
 
-//=== CubeFaceBasis Tests
-//===-----------------------------------------------===//
-
-//! kCubeFaceBases has correct size for all 6 faces.
-NOLINT_TEST(TextureSourceAssemblyTest, ArrayHasSixEntries)
-{
-  EXPECT_EQ(kCubeFaceBases.size(), 6);
-}
-
-//! +X face has correct basis vectors.
-NOLINT_TEST(TextureSourceAssemblyTest, PositiveXHasCorrectBasis)
-{
-  const auto& basis = GetCubeFaceBasis(CubeFace::kPositiveX);
-
-  // Center (+1, 0, 0), right (0, +1, 0), up (0, 0, +1)
-  EXPECT_FLOAT_EQ(basis.center.x, 1.0F);
-  EXPECT_FLOAT_EQ(basis.center.y, 0.0F);
-  EXPECT_FLOAT_EQ(basis.center.z, 0.0F);
-  EXPECT_FLOAT_EQ(basis.right.x, 0.0F);
-  EXPECT_FLOAT_EQ(basis.right.y, 1.0F);
-  EXPECT_FLOAT_EQ(basis.right.z, 0.0F);
-  EXPECT_FLOAT_EQ(basis.up.x, 0.0F);
-  EXPECT_FLOAT_EQ(basis.up.y, 0.0F);
-  EXPECT_FLOAT_EQ(basis.up.z, 1.0F);
-}
-
-//! +Z face has correct basis vectors (up face in Z-up coordinate system).
-NOLINT_TEST(TextureSourceAssemblyTest, PositiveZHasCorrectBasis)
-{
-  const auto& basis = GetCubeFaceBasis(CubeFace::kPositiveZ);
-
-  // Center (0, 0, +1), right (+1, 0, 0), up (0, -1, 0)
-  EXPECT_FLOAT_EQ(basis.center.x, 0.0F);
-  EXPECT_FLOAT_EQ(basis.center.y, 0.0F);
-  EXPECT_FLOAT_EQ(basis.center.z, 1.0F);
-  EXPECT_FLOAT_EQ(basis.right.x, 1.0F);
-  EXPECT_FLOAT_EQ(basis.right.y, 0.0F);
-  EXPECT_FLOAT_EQ(basis.right.z, 0.0F);
-  EXPECT_FLOAT_EQ(basis.up.x, 0.0F);
-  EXPECT_FLOAT_EQ(basis.up.y, -1.0F);
-  EXPECT_FLOAT_EQ(basis.up.z, 0.0F);
-}
-
-//=== ComputeCubeDirection Tests
-//===-----------------------------------------===//
-
-//! ComputeCubeDirection at face center (0.5, 0.5) returns the face normal.
-NOLINT_TEST(TextureSourceAssemblyTest, AtCenterReturnsFaceNormal)
-{
-  const auto dir_px = ComputeCubeDirection(CubeFace::kPositiveX, 0.5F, 0.5F);
-  const auto dir_pz = ComputeCubeDirection(CubeFace::kPositiveZ, 0.5F, 0.5F);
-  const auto dir_ny = ComputeCubeDirection(CubeFace::kNegativeY, 0.5F, 0.5F);
-
-  // At center, direction equals the face normal
-  EXPECT_FLOAT_EQ(dir_px.x, 1.0F);
-  EXPECT_FLOAT_EQ(dir_px.y, 0.0F);
-  EXPECT_FLOAT_EQ(dir_px.z, 0.0F);
-
-  EXPECT_FLOAT_EQ(dir_pz.x, 0.0F);
-  EXPECT_FLOAT_EQ(dir_pz.y, 0.0F);
-  EXPECT_FLOAT_EQ(dir_pz.z, 1.0F);
-
-  EXPECT_FLOAT_EQ(dir_ny.x, 0.0F);
-  EXPECT_FLOAT_EQ(dir_ny.y, -1.0F);
-  EXPECT_FLOAT_EQ(dir_ny.z, 0.0F);
-}
-
-//! ComputeCubeDirection returns normalized vectors.
-NOLINT_TEST(TextureSourceAssemblyTest, ReturnsNormalizedVectors)
-{
-  // Sample at corner (not unit direction before normalization)
-  const auto dir = ComputeCubeDirection(CubeFace::kPositiveX, 0.0F, 0.0F);
-
-  // Compute magnitude
-  const float magnitude
-    = std::sqrt((dir.x * dir.x) + (dir.y * dir.y) + (dir.z * dir.z));
-
-  // Should be 1.0 (normalized)
-  EXPECT_NEAR(magnitude, 1.0F, 1e-6F);
-}
-
-//! ComputeCubeDirection at corner points toward cube corner.
-NOLINT_TEST(TextureSourceAssemblyTest, AtCornerPointsTowardCubeCorner)
-{
-  // Arrange & Act - bottom-left corner of +X face
-  // UV (0, 0) -> s=-1, t=-1 -> direction = center + (-1)*right + (-1)*up
-  // For +X: center=(1,0,0), right=(0,1,0), up=(0,0,1)
-  // Result: (1, -1, -1) normalized
-  const auto dir = ComputeCubeDirection(CubeFace::kPositiveX, 0.0F, 0.0F);
-
-  // Direction should have positive X, negative Y, negative Z
-  EXPECT_GT(dir.x, 0.0F);
-  EXPECT_LT(dir.y, 0.0F);
-  EXPECT_LT(dir.z, 0.0F);
-}
-
 //=== AssembleCubeFromFaces Tests
 //===-----------------------------------------===//
 
@@ -445,7 +361,8 @@ auto MakeTestFace(uint8_t color_value) -> ScratchImage
   constexpr uint32_t kBytesPerPixel = 4;
   constexpr uint32_t kRowPitch = kWidth * kBytesPerPixel;
   std::vector<std::byte> data(
-    kWidth * kHeight * kBytesPerPixel, std::byte { color_value });
+    static_cast<size_t>(kWidth) * kHeight * kBytesPerPixel,
+    std::byte { color_value });
   return ScratchImage::CreateFromData(
     kWidth, kHeight, Format::kRGBA8UNorm, kRowPitch, std::move(data));
 }
@@ -524,7 +441,8 @@ NOLINT_TEST(TextureSourceAssemblyTest, NonSquareFaceFails)
   constexpr uint32_t kHeight = 2; // Non-square
   constexpr uint32_t kBytesPerPixel = 4;
   constexpr uint32_t kRowPitch = kWidth * kBytesPerPixel;
-  std::vector<std::byte> data(kWidth * kHeight * kBytesPerPixel);
+  std::vector<std::byte> data(
+    static_cast<size_t>(kWidth) * kHeight * kBytesPerPixel);
   auto non_square = ScratchImage::CreateFromData(
     kWidth, kHeight, Format::kRGBA8UNorm, kRowPitch, std::move(data));
 
@@ -551,7 +469,8 @@ NOLINT_TEST(TextureSourceAssemblyTest, MismatchedDimensionsFails)
   constexpr uint32_t kHeight = 4;
   constexpr uint32_t kBytesPerPixel = 4;
   constexpr uint32_t kRowPitch = kWidth * kBytesPerPixel;
-  std::vector<std::byte> large_data(kWidth * kHeight * kBytesPerPixel);
+  std::vector<std::byte> large_data(
+    static_cast<size_t>(kWidth) * kHeight * kBytesPerPixel);
   auto large_face = ScratchImage::CreateFromData(
     kWidth, kHeight, Format::kRGBA8UNorm, kRowPitch, std::move(large_data));
 
@@ -573,30 +492,59 @@ NOLINT_TEST(TextureSourceAssemblyTest, MismatchedDimensionsFails)
 //=== ConvertEquirectangularToCube Tests
 //===---------------------------------===//
 
-//! Create a test equirectangular image (2:1 aspect, RGBA32F).
-auto MakeEquirect(const uint32_t width, const uint32_t height,
-  const float r = 1.0F, const float g = 0.5F, const float b = 0.0F,
-  const float a = 1.0F) -> ScratchImage
+//! Pixel dimensions of a test image.
+struct ImageSize {
+  uint32_t width;
+  uint32_t height;
+};
+
+//! RGBA color of a solid test image.
+struct Rgba {
+  float r = 1.0F;
+  float g = 0.5F;
+  float b = 0.0F;
+  float a = 1.0F;
+};
+
+//! Copy float values into a freshly allocated byte buffer.
+auto FloatsToBytes(const std::span<const float> values)
+  -> std::vector<std::byte>
 {
-  const uint32_t pixel_count = width * height;
-  std::vector<std::byte> data(pixel_count * 16); // 4 floats per pixel
-  auto* floats = reinterpret_cast<float*>(data.data());
-  for (uint32_t i = 0; i < pixel_count; ++i) {
-    floats[(i * 4) + 0] = r;
-    floats[(i * 4) + 1] = g;
-    floats[(i * 4) + 2] = b;
-    floats[(i * 4) + 3] = a;
+  std::vector<std::byte> bytes(values.size_bytes());
+  std::memcpy(bytes.data(), values.data(), values.size_bytes());
+  return bytes;
+}
+
+//! Read the float at `float_index` of a byte buffer.
+auto ReadFloat(const std::span<const std::byte> bytes, const size_t float_index)
+  -> float
+{
+  float value = 0.0F;
+  std::memcpy(
+    &value, bytes.subspan(float_index * sizeof(value)).data(), sizeof(value));
+  return value;
+}
+
+//! Create a test equirectangular image (2:1 aspect, RGBA32F).
+auto MakeEquirect(const ImageSize size, const Rgba& color = {}) -> ScratchImage
+{
+  const size_t pixel_count = static_cast<size_t>(size.width) * size.height;
+  std::vector<float> floats(pixel_count * 4);
+  for (size_t i = 0; i < pixel_count; ++i) {
+    floats[(i * 4) + 0] = color.r;
+    floats[(i * 4) + 1] = color.g;
+    floats[(i * 4) + 2] = color.b;
+    floats[(i * 4) + 3] = color.a;
   }
-  return ScratchImage::CreateFromData(
-    width, height, Format::kRGBA32Float, width * 16, std::move(data));
+  return ScratchImage::CreateFromData(size.width, size.height,
+    Format::kRGBA32Float, size.width * 16, FloatsToBytes(floats));
 }
 
 //! Create a test equirectangular with gradient (longitude varies R, lat G).
 auto MakeGradientEquirect(const uint32_t width, const uint32_t height)
   -> ScratchImage
 {
-  std::vector<std::byte> data(width * height * 16);
-  auto* floats = reinterpret_cast<float*>(data.data());
+  std::vector<float> floats(static_cast<size_t>(width) * height * 4);
   for (uint32_t y = 0; y < height; ++y) {
     for (uint32_t x = 0; x < width; ++x) {
       const size_t idx = ((static_cast<size_t>(y) * width) + x) * 4;
@@ -609,13 +557,74 @@ auto MakeGradientEquirect(const uint32_t width, const uint32_t height)
     }
   }
   return ScratchImage::CreateFromData(
-    width, height, Format::kRGBA32Float, width * 16, std::move(data));
+    width, height, Format::kRGBA32Float, width * 16, FloatsToBytes(floats));
+}
+
+//! Column and row of a texel, rows top first.
+struct TexelCoord {
+  uint32_t x;
+  uint32_t y;
+};
+
+//! One channel of the texel at `texel` of a cube face.
+auto CubeTexel(const ScratchImage& cube, const uint16_t face,
+  const TexelCoord texel, const uint32_t channel) -> float
+{
+  const auto view = cube.GetImage(face, 0);
+  const auto row
+    = view.pixels.subspan(static_cast<size_t>(texel.y) * view.row_pitch_bytes);
+  return ReadFloat(row, (static_cast<size_t>(texel.x) * 4U) + channel);
+}
+
+//! A panorama's centre (u = 0.5) is Oxygen's forward, -Y, which the cube holds
+//! on hardware face +Z (index 4); u grows toward +X (hardware +X, index 0); its
+//! top row is Oxygen's up, +Z, on hardware face +Y (index 2). Faces keep their
+//! rows top first, as the shaders sample them (CubemapGeometry.hlsli).
+NOLINT_TEST(TextureSourceAssemblyTest, EquirectMapsOxygenAxesOntoHardwareFaces)
+{
+  constexpr uint32_t kFace = 32;
+  auto equirect = MakeGradientEquirect(256, 128);
+  const EquirectToCubeOptions options { .face_size = kFace };
+
+  auto result = ConvertEquirectangularToCube(equirect, options);
+
+  ASSERT_HAS_VALUE(result);
+  const auto& cube = result.value();
+  constexpr uint32_t kMid = kFace / 2;
+  constexpr float kTolerance = 0.05F;
+  // R holds the panorama's u, G its v.
+  EXPECT_NEAR(CubeTexel(cube, 4, { kMid, kMid }, 0), 0.5F, kTolerance);
+  EXPECT_NEAR(CubeTexel(cube, 4, { kMid, kMid }, 1), 0.5F, kTolerance);
+  EXPECT_NEAR(CubeTexel(cube, 0, { kMid, kMid }, 0), 0.75F, kTolerance);
+  EXPECT_NEAR(CubeTexel(cube, 0, { kMid, kMid }, 1), 0.5F, kTolerance);
+  EXPECT_LT(CubeTexel(cube, 2, { kMid, kMid }, 1), kTolerance);
+  EXPECT_GT(CubeTexel(cube, 3, { kMid, kMid }, 1), 1.0F - kTolerance);
+}
+
+//! On a side face, image right is the viewer's right and image down is down:
+//! on the forward face (index 4), the right column lies toward +X and the
+//! bottom row lower than the top one.
+NOLINT_TEST(TextureSourceAssemblyTest, EquirectSideFacesKeepImageOrientation)
+{
+  constexpr uint32_t kFace = 8;
+  auto equirect = MakeGradientEquirect(256, 128);
+  const EquirectToCubeOptions options { .face_size = kFace };
+
+  auto result = ConvertEquirectangularToCube(equirect, options);
+
+  ASSERT_HAS_VALUE(result);
+  const auto& cube = result.value();
+  constexpr uint32_t kMid = kFace / 2;
+  EXPECT_GT(CubeTexel(cube, 4, { kFace - 1, kMid }, 0),
+    CubeTexel(cube, 4, { 0, kMid }, 0));
+  EXPECT_GT(CubeTexel(cube, 4, { kMid, kFace - 1 }, 1),
+    CubeTexel(cube, 4, { kMid, 0 }, 1));
 }
 
 //! ConvertEquirectangularToCube creates valid cube map from valid input.
 NOLINT_TEST(TextureSourceAssemblyTest, ValidInputCreatesCubeMap)
 {
-  auto equirect = MakeEquirect(64, 32);
+  auto equirect = MakeEquirect({ .width = 64, .height = 32 });
   EquirectToCubeOptions options { .face_size = 16 };
 
   auto result = ConvertEquirectangularToCube(equirect, options);
@@ -646,7 +655,7 @@ NOLINT_TEST(TextureSourceAssemblyTest, InvalidInputFails)
 NOLINT_TEST(TextureSourceAssemblyTest, WrongAspectRatioFails)
 {
   // 1:1 aspect ratio (square)
-  auto square = MakeEquirect(32, 32);
+  auto square = MakeEquirect({ .width = 32, .height = 32 });
   const EquirectToCubeOptions options {};
 
   auto result = ConvertEquirectangularToCube(square, options);
@@ -659,7 +668,7 @@ NOLINT_TEST(TextureSourceAssemblyTest, WrongAspectRatioFails)
 NOLINT_TEST(TextureSourceAssemblyTest, NonFloatFormatFails)
 {
   // RGBA8 format
-  std::vector<std::byte> data(64 * 32 * 4);
+  std::vector<std::byte> data(static_cast<size_t>(64) * 32 * 4);
   auto rgba8 = ScratchImage::CreateFromData(
     64, 32, Format::kRGBA8UNorm, 64 * 4, std::move(data));
   const EquirectToCubeOptions options {};
@@ -673,7 +682,7 @@ NOLINT_TEST(TextureSourceAssemblyTest, NonFloatFormatFails)
 //! ConvertEquirectangularToCube rejects zero face size.
 NOLINT_TEST(TextureSourceAssemblyTest, ZeroFaceSizeFails)
 {
-  auto equirect = MakeEquirect(64, 32);
+  auto equirect = MakeEquirect({ .width = 64, .height = 32 });
   EquirectToCubeOptions options { .face_size = 0 };
 
   auto result = ConvertEquirectangularToCube(equirect, options);
@@ -686,7 +695,8 @@ NOLINT_TEST(TextureSourceAssemblyTest, ZeroFaceSizeFails)
 NOLINT_TEST(TextureSourceAssemblyTest, SolidColorPreservesColor)
 {
   // Solid orange equirect
-  auto equirect = MakeEquirect(64, 32, 1.0F, 0.5F, 0.0F, 1.0F);
+  auto equirect = MakeEquirect({ .width = 64, .height = 32 },
+    { .r = 1.0F, .g = 0.5F, .b = 0.0F, .a = 1.0F });
   EquirectToCubeOptions options { .face_size = 4 };
 
   auto result = ConvertEquirectangularToCube(equirect, options);
@@ -696,19 +706,21 @@ NOLINT_TEST(TextureSourceAssemblyTest, SolidColorPreservesColor)
 
   // Check center pixel of +X face
   const auto face_view = cube.GetImage(0, 0); // face 0, mip 0
-  const auto* pixels = reinterpret_cast<const float*>(face_view.pixels.data());
+  const std::span<const std::byte> pixels = face_view.pixels;
   // Center pixel at (2, 2) in 4x4 face
-  const size_t center_idx = ((2 * 4) + 2) * 4;
-  EXPECT_NEAR(pixels[center_idx + 0], 1.0F, 0.1F); // R
-  EXPECT_NEAR(pixels[center_idx + 1], 0.5F, 0.1F); // G
-  EXPECT_NEAR(pixels[center_idx + 2], 0.0F, 0.1F); // B
-  EXPECT_NEAR(pixels[center_idx + 3], 1.0F, 0.1F); // A
+  constexpr size_t kFaceSize = 4;
+  constexpr size_t kChannels = 4;
+  constexpr size_t center_idx = ((2 * kFaceSize) + 2) * kChannels;
+  EXPECT_NEAR(ReadFloat(pixels, center_idx + 0), 1.0F, 0.1F); // R
+  EXPECT_NEAR(ReadFloat(pixels, center_idx + 1), 0.5F, 0.1F); // G
+  EXPECT_NEAR(ReadFloat(pixels, center_idx + 2), 0.0F, 0.1F); // B
+  EXPECT_NEAR(ReadFloat(pixels, center_idx + 3), 1.0F, 0.1F); // A
 }
 
 //! ConvertEquirectangularToCube works with bilinear (box) filter.
 NOLINT_TEST(TextureSourceAssemblyTest, BoxFilterWorks)
 {
-  auto equirect = MakeEquirect(64, 32);
+  auto equirect = MakeEquirect({ .width = 64, .height = 32 });
   EquirectToCubeOptions options {
     .face_size = 8,
     .sample_filter = MipFilter::kBox,
@@ -723,7 +735,7 @@ NOLINT_TEST(TextureSourceAssemblyTest, BoxFilterWorks)
 //! ConvertEquirectangularToCube works with Kaiser filter.
 NOLINT_TEST(TextureSourceAssemblyTest, KaiserFilterWorks)
 {
-  auto equirect = MakeEquirect(64, 32);
+  auto equirect = MakeEquirect({ .width = 64, .height = 32 });
   EquirectToCubeOptions options {
     .face_size = 8,
     .sample_filter = MipFilter::kKaiser,
@@ -738,7 +750,7 @@ NOLINT_TEST(TextureSourceAssemblyTest, KaiserFilterWorks)
 //! ConvertEquirectangularToCube works with Lanczos filter.
 NOLINT_TEST(TextureSourceAssemblyTest, LanczosFilterWorks)
 {
-  auto equirect = MakeEquirect(64, 32);
+  auto equirect = MakeEquirect({ .width = 64, .height = 32 });
   EquirectToCubeOptions options {
     .face_size = 8,
     .sample_filter = MipFilter::kLanczos,

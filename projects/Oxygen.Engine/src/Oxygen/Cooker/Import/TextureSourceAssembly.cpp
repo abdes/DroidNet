@@ -242,46 +242,69 @@ auto TextureSourceSet::GetSource(const size_t index) const
 //=== Cube Map Assembly Helpers
 //===------------------------------------------===//
 
-auto ComputeCubeDirection(const CubeFace face, const float u,
-  const float v) noexcept -> CubeFaceDirection
-{
-  // Map [0,1] UV coordinates to [-1,+1] face coordinates
-  const float s = (2.0F * u) - 1.0F; // -1 (left) to +1 (right)
-  const float t = (2.0F * v) - 1.0F; // -1 (bottom) to +1 (top)
+namespace {
 
-  const auto& basis = GetCubeFaceBasis(face);
+  //! Normalized texture-space coordinates; (0,0) is the top-left corner.
+  struct TexCoord {
+    float u;
+    float v;
+  };
 
-  // Compute direction: center + s * right + t * up
-  const float x = basis.center.x + (s * basis.right.x) + (t * basis.up.x);
-  const float y = basis.center.y + (s * basis.right.y) + (t * basis.up.y);
-  const float z = basis.center.z + (s * basis.right.z) + (t * basis.up.z);
+  //! Pixel dimensions of an image.
+  struct ImageExtent {
+    uint32_t width;
+    uint32_t height;
+  };
 
-  // Normalize the direction
-  const float length = std::sqrt((x * x) + (y * y) + (z * z));
-  return CubeFaceDirection { x / length, y / length, z / length };
-}
+  //! Read one RGBA32F pixel (16 bytes) at `pixel_index` from a byte buffer.
+  auto ReadRgba32F(const std::span<const std::byte> pixels,
+    const size_t pixel_index) -> std::array<float, 4>
+  {
+    std::array<float, 4> value {};
+    const auto bytes
+      = pixels.subspan(pixel_index * sizeof(value), sizeof(value));
+    std::memcpy(value.data(), bytes.data(), sizeof(value));
+    return value;
+  }
 
-//! Compute direction for standard GPU cubemap convention (D3D/OpenGL/Vulkan).
-auto ComputeCubeDirectionD3D(const CubeFace face, const float u,
-  const float v) noexcept -> CubeFaceDirection
-{
-  // Map [0,1] UV coordinates to [-1,+1] face coordinates.
-  // In texture space: u=0 is left, u=1 is right.
-  // In texture space: v=0 is TOP, v=1 is BOTTOM (opposite of math Y).
-  const float s = (2.0F * u) - 1.0F; // -1 (left) to +1 (right)
-  const float t = 1.0F - (2.0F * v); // +1 at v=0 (top), -1 at v=1 (bottom)
+  //! Write one RGBA32F pixel (16 bytes) at `pixel_index` into a byte buffer.
+  auto WriteRgba32F(const std::span<std::byte> pixels, const size_t pixel_index,
+    const std::array<float, 4>& value) -> void
+  {
+    const auto bytes
+      = pixels.subspan(pixel_index * sizeof(value), sizeof(value));
+    std::memcpy(bytes.data(), value.data(), sizeof(value));
+  }
 
-  const auto& basis = kGpuCubeFaceBases.at(static_cast<size_t>(face));
+  //! Compute direction for standard GPU cubemap convention (D3D/OpenGL/Vulkan).
+  auto ComputeCubeDirectionD3D(const CubeFace face, const TexCoord uv) noexcept
+    -> CubeFaceDirection
+  {
+    const float u = uv.u;
+    const float v = uv.v;
+    // Map [0,1] UV coordinates to [-1,+1] face coordinates.
+    // In texture space: u=0 is left, u=1 is right.
+    // In texture space: v=0 is TOP, v=1 is BOTTOM (opposite of math Y).
+    const float s = (2.0F * u) - 1.0F; // -1 (left) to +1 (right)
+    const float t = 1.0F - (2.0F * v); // +1 at v=0 (top), -1 at v=1 (bottom)
 
-  // Compute direction: center + s * right + t * up
-  const float x = basis.center.x + (s * basis.right.x) + (t * basis.up.x);
-  const float y = basis.center.y + (s * basis.right.y) + (t * basis.up.y);
-  const float z = basis.center.z + (s * basis.right.z) + (t * basis.up.z);
+    const auto& basis = kGpuCubeFaceBases.at(static_cast<size_t>(face));
 
-  // Normalize the direction
-  const float length = std::sqrt((x * x) + (y * y) + (z * z));
-  return CubeFaceDirection { x / length, y / length, z / length };
-}
+    // Compute direction: center + s * right + t * up
+    const float x = basis.center.x + (s * basis.right.x) + (t * basis.up.x);
+    const float y = basis.center.y + (s * basis.right.y) + (t * basis.up.y);
+    const float z = basis.center.z + (s * basis.right.z) + (t * basis.up.z);
+
+    // Normalize the direction
+    const float length = std::sqrt((x * x) + (y * y) + (z * z));
+    return CubeFaceDirection {
+      .x = x / length,
+      .y = y / length,
+      .z = z / length,
+    };
+  }
+
+} // namespace
 
 auto AssembleCubeFromFaces(std::span<const ScratchImage, kCubeFaceCount> faces)
   -> Result<ScratchImage, TextureImportError>
@@ -345,8 +368,7 @@ auto AssembleCubeFromFaces(std::span<const ScratchImage, kCubeFaceCount> faces)
       return Err(TextureImportError::kDimensionMismatch);
     }
 
-    std::copy(
-      src_image.pixels.begin(), src_image.pixels.end(), dst_pixels.data());
+    std::ranges::copy(src_image.pixels, dst_pixels.begin());
   }
 
   return Ok(std::move(cube));
@@ -369,9 +391,13 @@ namespace {
     @param v       Vertical coordinate (0-1, clamps)
     @return Interpolated RGBA color
   */
-  auto SampleBilinear(std::span<const std::byte> pixels, const uint32_t width,
-    const uint32_t height, const float u, const float v) -> std::array<float, 4>
+  auto SampleBilinear(std::span<const std::byte> pixels,
+    const ImageExtent extent, const TexCoord uv) -> std::array<float, 4>
   {
+    const uint32_t width = extent.width;
+    const uint32_t height = extent.height;
+    const float u = uv.u;
+    const float v = uv.v;
     // Map to pixel coordinates
     const float px = (u * static_cast<float>(width)) - 0.5F;
     const float py = (v * static_cast<float>(height)) - 0.5F;
@@ -397,14 +423,11 @@ namespace {
     const float fy = py - std::floor(py);
 
     // Sample 4 pixels (RGBA32F = 16 bytes per pixel)
-    const auto* data = reinterpret_cast<const float*>(pixels.data());
-    const auto stride = width * 4U; // floats per row
-
     auto sample
       = [&](const int32_t x, const int32_t y) -> std::array<float, 4> {
       const size_t idx
-        = (static_cast<size_t>(y) * stride) + (static_cast<size_t>(x) * 4U);
-      return { data[idx], data[idx + 1], data[idx + 2], data[idx + 3] };
+        = (static_cast<size_t>(y) * width) + static_cast<size_t>(x);
+      return ReadRgba32F(pixels, idx);
     };
 
     const auto p00 = sample(x0, y0);
@@ -448,9 +471,13 @@ namespace {
     @param v       Vertical coordinate (0-1, clamps)
     @return Interpolated RGBA color
   */
-  auto SampleBicubic(std::span<const std::byte> pixels, const uint32_t width,
-    const uint32_t height, const float u, const float v) -> std::array<float, 4>
+  auto SampleBicubic(std::span<const std::byte> pixels,
+    const ImageExtent extent, const TexCoord uv) -> std::array<float, 4>
   {
+    const uint32_t width = extent.width;
+    const uint32_t height = extent.height;
+    const float u = uv.u;
+    const float v = uv.v;
     // Map to pixel coordinates
     const float px = (u * static_cast<float>(width)) - 0.5F;
     const float py = (v * static_cast<float>(height)) - 0.5F;
@@ -460,9 +487,6 @@ namespace {
     const float fx = px - static_cast<float>(x0);
     const float fy = py - static_cast<float>(y0);
 
-    const auto* data = reinterpret_cast<const float*>(pixels.data());
-    const auto stride = width * 4U;
-
     auto sample = [&](int32_t x, int32_t y) -> std::array<float, 4> {
       // Wrap horizontal
       x = ((x % static_cast<int32_t>(width)) + static_cast<int32_t>(width))
@@ -470,8 +494,8 @@ namespace {
       // Clamp vertical
       y = std::clamp(y, 0, static_cast<int32_t>(height) - 1);
       const size_t idx
-        = (static_cast<size_t>(y) * stride) + (static_cast<size_t>(x) * 4U);
-      return { data[idx], data[idx + 1], data[idx + 2], data[idx + 3] };
+        = (static_cast<size_t>(y) * width) + static_cast<size_t>(x);
+      return ReadRgba32F(pixels, idx);
     };
 
     // Sample 4x4 grid
@@ -541,7 +565,6 @@ namespace detail {
     -> void
   {
     auto dst_pixels = cube.GetMutablePixels(static_cast<uint16_t>(face), 0);
-    auto* dst_data = reinterpret_cast<float*>(dst_pixels.data());
 
     for (uint32_t y = 0; y < face_size; ++y) {
       for (uint32_t x = 0; x < face_size; ++x) {
@@ -550,24 +573,22 @@ namespace detail {
         const float v
           = (static_cast<float>(y) + 0.5F) / static_cast<float>(face_size);
 
-        const auto dir = ComputeCubeDirectionD3D(face, u, v);
+        const auto dir
+          = ComputeCubeDirectionD3D(face, TexCoord { .u = u, .v = v });
         const auto [eq_u, eq_v] = DirectionToEquirectUV(dir);
 
-        std::array<float, 4> color {};
-        if (use_bicubic) {
-          color = SampleBicubic(
-            src_pixels, src_meta.width, src_meta.height, eq_u, eq_v);
-        } else {
-          color = SampleBilinear(
-            src_pixels, src_meta.width, src_meta.height, eq_u, eq_v);
-        }
+        const ImageExtent src_extent {
+          .width = src_meta.width,
+          .height = src_meta.height,
+        };
+        const TexCoord eq_uv { .u = eq_u, .v = eq_v };
+        const auto color = use_bicubic
+          ? SampleBicubic(src_pixels, src_extent, eq_uv)
+          : SampleBilinear(src_pixels, src_extent, eq_uv);
 
         const size_t dst_idx
-          = ((static_cast<size_t>(y) * face_size) + static_cast<size_t>(x)) * 4;
-        dst_data[dst_idx + 0] = color.at(0);
-        dst_data[dst_idx + 1] = color.at(1);
-        dst_data[dst_idx + 2] = color.at(2);
-        dst_data[dst_idx + 3] = color.at(3);
+          = (static_cast<size_t>(y) * face_size) + static_cast<size_t>(x);
+        WriteRgba32F(dst_pixels, dst_idx, color);
       }
     }
   }
@@ -852,8 +873,8 @@ namespace {
       const std::size_t dst_offset
         = static_cast<std::size_t>(y) * dst_row_pitch;
 
-      std::memcpy(dst_pixels.data() + dst_offset,
-        src_pixels.data() + src_offset, face_row_bytes);
+      std::memcpy(dst_pixels.subspan(dst_offset, face_row_bytes).data(),
+        src_pixels.subspan(src_offset, face_row_bytes).data(), face_row_bytes);
     }
   }
 

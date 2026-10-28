@@ -150,7 +150,9 @@ static inline bool GetLocalFogDirectionalLight(
 static inline float3 TransformTranslatedWorldVectorToLocal(
     DecodedLocalFogVolumeInstanceData instance, float3 translated_world_vector)
 {
-    return mul(translated_world_vector, instance.pre_translated_inv_transform);
+    // The rows are the volume's local axes in world space, so mul(M, v)
+    // projects a world vector onto them.
+    return mul(instance.pre_translated_inv_transform, translated_world_vector);
 }
 
 static inline float3 TransformTranslatedWorldPositionToLocal(

@@ -123,7 +123,7 @@ struct ShaderCompileProfile {
 [[nodiscard]] inline auto GetDxcArgumentSchema(
   const ShaderCompileProfile& profile) -> std::string
 {
-  std::string schema = "-Ges;-enable-16bit-types;-HV=2021;sm=6_6;";
+  std::string schema = "-Ges;-Zpc;-enable-16bit-types;-HV=2021;sm=6_6;";
   schema += profile.config == ShaderConfig::kDebug ? "-Od;" : "-O3;";
   switch (profile.debug_info) {
   case ShaderDebugInfo::kNone:

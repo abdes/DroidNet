@@ -20,6 +20,7 @@
 #include <glm/ext/vector_float4.hpp>
 #include <glm/geometric.hpp>
 
+#include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Data/HalfFloat.h>
 #include <Oxygen/Data/PakFormat_render.h>
@@ -34,26 +35,8 @@ namespace {
   inline constexpr std::uint32_t kCubeFaceCount = 6U;
   inline constexpr float kFp16MaxFinite = 65504.0F;
 
-  struct CubeFaceBasis {
-    glm::vec3 center;
-    glm::vec3 right;
-    glm::vec3 up;
-  };
-
-  // Oxygen cube face order is +X, -X, +Y, -Y, +Z, -Z. The basis is duplicated
-  // here to keep runtime Vortex independent from Cooker while preserving the
-  // same +Z-up face convention recorded by the import pipeline.
-  // clang-format off
-  inline constexpr std::array<CubeFaceBasis, kCubeFaceCount> kCubeFaceBases {{
-    { { +1.0F,  0.0F,  0.0F }, {  0.0F, +1.0F,  0.0F }, { 0.0F,  0.0F, +1.0F } },
-    { { -1.0F,  0.0F,  0.0F }, {  0.0F, -1.0F,  0.0F }, { 0.0F,  0.0F, +1.0F } },
-    { {  0.0F, +1.0F,  0.0F }, { -1.0F,  0.0F,  0.0F }, { 0.0F,  0.0F, +1.0F } },
-    { {  0.0F, -1.0F,  0.0F }, { +1.0F,  0.0F,  0.0F }, { 0.0F,  0.0F, +1.0F } },
-    { {  0.0F,  0.0F, +1.0F }, { +1.0F,  0.0F,  0.0F }, { 0.0F, -1.0F,  0.0F } },
-    { {  0.0F,  0.0F, -1.0F }, { +1.0F,  0.0F,  0.0F }, { 0.0F, +1.0F,  0.0F } },
-  },};
-  // clang-format on
-
+  // Cubemaps hold hardware faces with rows top first, in hardware cube space,
+  // as the shaders sample them (`environment` in Oxygen/Core/Constants.h).
   struct ShVector3 {
     std::array<float, 9> r {};
     std::array<float, 9> g {};
@@ -66,25 +49,73 @@ namespace {
     std::uint32_t y { 0U };
   };
 
-  [[nodiscard]] auto TexelDirection(const std::uint32_t face,
-    const std::uint32_t x, const std::uint32_t y, const std::uint32_t face_size)
-    -> glm::vec3
+  //! Column and row of a texel within one cube face.
+  struct TexelCoord {
+    std::uint32_t x { 0U };
+    std::uint32_t y { 0U };
+  };
+
+  //! Layout of the processed mip chain: every face holds `mip_count` mips,
+  //! each half the size of the previous one, starting at `base_face_size`.
+  struct MipChain {
+    std::uint32_t base_face_size { 0U };
+    std::uint32_t mip_count { 0U };
+  };
+
+  //! A face and mip level of the processed mip chain.
+  struct MipSlot {
+    std::uint32_t face { 0U };
+    std::uint32_t mip { 0U };
+  };
+
+  //! One radiance sample, projected onto the spherical harmonics basis.
+  struct ShSample {
+    glm::vec3 radiance { 0.0F };
+    glm::vec3 direction { 0.0F };
+    float weight { 0.0F };
+  };
+
+  [[nodiscard]] auto TexelDirection(
+    const SourceTexel texel, const std::uint32_t face_size) -> glm::vec3
   {
     const auto inv_size = 1.0F / static_cast<float>(face_size);
-    const auto s = ((static_cast<float>(x) + 0.5F) * inv_size * 2.0F) - 1.0F;
-    const auto t = ((static_cast<float>(y) + 0.5F) * inv_size * 2.0F) - 1.0F;
-    const auto& basis = kCubeFaceBases.at(face);
-    return glm::normalize(basis.center + s * basis.right + t * basis.up);
+    const auto s
+      = ((static_cast<float>(texel.x) + 0.5F) * inv_size * 2.0F) - 1.0F;
+    const auto t
+      = ((static_cast<float>(texel.y) + 0.5F) * inv_size * 2.0F) - 1.0F;
+    glm::vec3 cube {};
+    switch (texel.face) {
+    case 0U:
+      cube = { 1.0F, -t, -s };
+      break;
+    case 1U:
+      cube = { -1.0F, -t, s };
+      break;
+    case 2U:
+      cube = { s, 1.0F, t };
+      break;
+    case 3U:
+      cube = { s, -1.0F, -t };
+      break;
+    case 4U:
+      cube = { s, -t, 1.0F };
+      break;
+    default:
+      cube = { -s, -t, -1.0F };
+      break;
+    }
+    return glm::normalize(space::environment::WorldFromCube(cube));
   }
 
   [[nodiscard]] auto ComputeMipCount(std::uint32_t face_size) noexcept
     -> std::uint32_t
   {
-    auto mip_count = 0U;
-    do {
+    auto mip_count = 1U;
+    face_size >>= 1U;
+    while (face_size > 0U) {
       ++mip_count;
       face_size >>= 1U;
-    } while (face_size > 0U);
+    }
     return mip_count;
   }
 
@@ -94,27 +125,27 @@ namespace {
     return (std::max)(1U, base_face_size >> mip);
   }
 
-  [[nodiscard]] auto FaceMipElementCount(const std::uint32_t base_face_size,
-    const std::uint32_t mip_count) noexcept -> std::size_t
+  [[nodiscard]] auto FaceMipElementCount(const MipChain chain) noexcept
+    -> std::size_t
   {
     auto total = std::size_t { 0U };
-    for (std::uint32_t mip = 0U; mip < mip_count; ++mip) {
+    for (std::uint32_t mip = 0U; mip < chain.mip_count; ++mip) {
       const auto mip_size
-        = static_cast<std::size_t>(MipFaceSize(base_face_size, mip));
+        = static_cast<std::size_t>(MipFaceSize(chain.base_face_size, mip));
       total += mip_size * mip_size;
     }
     return total;
   }
 
-  [[nodiscard]] auto ProcessedMipOffset(const std::uint32_t face,
-    const std::uint32_t mip, const std::uint32_t base_face_size,
-    const std::uint32_t mip_count) noexcept -> std::size_t
+  [[nodiscard]] auto ProcessedMipOffset(
+    const MipChain chain, const MipSlot slot) noexcept -> std::size_t
   {
-    auto offset = static_cast<std::size_t>(face)
-      * FaceMipElementCount(base_face_size, mip_count);
-    for (std::uint32_t current_mip = 0U; current_mip < mip; ++current_mip) {
-      const auto mip_size
-        = static_cast<std::size_t>(MipFaceSize(base_face_size, current_mip));
+    auto offset
+      = static_cast<std::size_t>(slot.face) * FaceMipElementCount(chain);
+    for (std::uint32_t current_mip = 0U; current_mip < slot.mip;
+      ++current_mip) {
+      const auto mip_size = static_cast<std::size_t>(
+        MipFaceSize(chain.base_face_size, current_mip));
       offset += mip_size * mip_size;
     }
     return offset;
@@ -135,24 +166,30 @@ namespace {
   [[nodiscard]] auto SelectSourceTexel(const glm::vec3 direction_ws,
     const std::uint32_t source_size) noexcept -> SourceTexel
   {
-    auto best_face = std::uint32_t { 0U };
-    auto best_axis = -1.0F;
-    for (std::uint32_t face = 0U; face < kCubeFaceCount; ++face) {
-      const auto axis = glm::dot(direction_ws, kCubeFaceBases[face].center);
-      if (axis > best_axis) {
-        best_axis = axis;
-        best_face = face;
-      }
+    // The inverse of TexelDirection; dominant-axis ties choose X, then Y.
+    const auto d = space::environment::CubeFromWorld(direction_ws);
+    const auto a = glm::abs(d);
+    auto face = std::uint32_t { 0U };
+    auto s = 0.0F;
+    auto t = 0.0F;
+    if (a.x >= a.y && a.x >= a.z) {
+      face = d.x >= 0.0F ? 0U : 1U;
+      s = (d.x >= 0.0F ? -d.z : d.z) / a.x;
+      t = d.y / a.x;
+    } else if (a.y >= a.z) {
+      face = d.y >= 0.0F ? 2U : 3U;
+      s = d.x / a.y;
+      t = (d.y >= 0.0F ? -d.z : d.z) / a.y;
+    } else {
+      face = d.z >= 0.0F ? 4U : 5U;
+      s = (d.z >= 0.0F ? d.x : -d.x) / a.z;
+      t = d.y / a.z;
     }
-
-    const auto& basis = kCubeFaceBases[best_face];
-    const auto denominator = (std::max)(best_axis, 1.0e-6F);
-    const auto s = glm::dot(direction_ws, basis.right) / denominator;
-    const auto t = glm::dot(direction_ws, basis.up) / denominator;
+    // t points up the face; rows run top first.
     const auto u = glm::clamp((s + 1.0F) * 0.5F, 0.0F, 0.999999F);
-    const auto v = glm::clamp((t + 1.0F) * 0.5F, 0.0F, 0.999999F);
+    const auto v = glm::clamp((1.0F - t) * 0.5F, 0.0F, 0.999999F);
     return {
-      .face = best_face,
+      .face = face,
       .x = static_cast<std::uint32_t>(u * static_cast<float>(source_size)),
       .y = static_cast<std::uint32_t>(v * static_cast<float>(source_size)),
     };
@@ -164,14 +201,14 @@ namespace {
     return std::atan2(x * y, std::sqrt((x * x) + (y * y) + 1.0F));
   }
 
-  [[nodiscard]] auto TexelSolidAngle(const std::uint32_t x,
-    const std::uint32_t y, const std::uint32_t face_size) noexcept -> float
+  [[nodiscard]] auto TexelSolidAngle(
+    const TexelCoord texel, const std::uint32_t face_size) noexcept -> float
   {
     const auto inv_size = 1.0F / static_cast<float>(face_size);
-    const auto x0 = (2.0F * static_cast<float>(x) * inv_size) - 1.0F;
-    const auto y0 = (2.0F * static_cast<float>(y) * inv_size) - 1.0F;
-    const auto x1 = (2.0F * static_cast<float>(x + 1U) * inv_size) - 1.0F;
-    const auto y1 = (2.0F * static_cast<float>(y + 1U) * inv_size) - 1.0F;
+    const auto x0 = (2.0F * static_cast<float>(texel.x) * inv_size) - 1.0F;
+    const auto y0 = (2.0F * static_cast<float>(texel.y) * inv_size) - 1.0F;
+    const auto x1 = (2.0F * static_cast<float>(texel.x + 1U) * inv_size) - 1.0F;
+    const auto y1 = (2.0F * static_cast<float>(texel.y + 1U) * inv_size) - 1.0F;
     return SolidAngleElement(x1, y1) - SolidAngleElement(x0, y1)
       - SolidAngleElement(x1, y0) + SolidAngleElement(x0, y0);
   }
@@ -193,15 +230,14 @@ namespace {
     };
   }
 
-  auto AccumulateSh(ShVector3& sh, const glm::vec3 radiance,
-    const glm::vec3 direction, const float weight) noexcept -> void
+  auto AccumulateSh(ShVector3& sh, const ShSample& sample) noexcept -> void
   {
-    const auto basis = ShBasis3(direction);
+    const auto basis = ShBasis3(sample.direction);
     for (std::size_t index = 0U; index < basis.size(); ++index) {
-      const auto weighted_basis = basis[index] * weight;
-      sh.r[index] += radiance.r * weighted_basis;
-      sh.g[index] += radiance.g * weighted_basis;
-      sh.b[index] += radiance.b * weighted_basis;
+      const auto weighted_basis = basis[index] * sample.weight;
+      sh.r[index] += sample.radiance.r * weighted_basis;
+      sh.g[index] += sample.radiance.g * weighted_basis;
+      sh.b[index] += sample.radiance.b * weighted_basis;
     }
   }
 
@@ -211,18 +247,21 @@ namespace {
   {
     const auto sqrt_pi = std::sqrt(std::numbers::pi_v<float>);
     const auto coefficient0 = 1.0F / (2.0F * sqrt_pi);
-    const auto coefficient1 = std::sqrt(3.0F) / (3.0F * sqrt_pi);
+    const auto coefficient1 = std::numbers::sqrt3_v<float> / (3.0F * sqrt_pi);
     const auto coefficient2 = std::sqrt(15.0F) / (8.0F * sqrt_pi);
     const auto coefficient3 = std::sqrt(5.0F) / (16.0F * sqrt_pi);
     const auto coefficient4 = 0.5F * coefficient2;
 
     std::array<glm::vec4, kStaticSkyLightDiffuseShElementCount> packed {};
     packed[0] = { -coefficient1 * sh.r[3], -coefficient1 * sh.r[1],
-      coefficient1 * sh.r[2], coefficient0 * sh.r[0] - coefficient3 * sh.r[6] };
+      coefficient1 * sh.r[2],
+      (coefficient0 * sh.r[0]) - (coefficient3 * sh.r[6]) };
     packed[1] = { -coefficient1 * sh.g[3], -coefficient1 * sh.g[1],
-      coefficient1 * sh.g[2], coefficient0 * sh.g[0] - coefficient3 * sh.g[6] };
+      coefficient1 * sh.g[2],
+      (coefficient0 * sh.g[0]) - (coefficient3 * sh.g[6]) };
     packed[2] = { -coefficient1 * sh.b[3], -coefficient1 * sh.b[1],
-      coefficient1 * sh.b[2], coefficient0 * sh.b[0] - coefficient3 * sh.b[6] };
+      coefficient1 * sh.b[2],
+      (coefficient0 * sh.b[0]) - (coefficient3 * sh.b[6]) };
     packed[3] = { coefficient2 * sh.r[4], -coefficient2 * sh.r[5],
       3.0F * coefficient3 * sh.r[6], -coefficient2 * sh.r[7] };
     packed[4] = { coefficient2 * sh.g[4], -coefficient2 * sh.g[5],
@@ -243,7 +282,8 @@ namespace {
     const auto offset = static_cast<std::size_t>(layout.offset_bytes)
       + (static_cast<std::size_t>(y) * layout.row_pitch_bytes)
       + (static_cast<std::size_t>(x) * sizeof(float) * 4U);
-    std::memcpy(&value, data.data() + offset, sizeof(value));
+    std::memcpy(
+      &value, data.subspan(offset, sizeof(value)).data(), sizeof(value));
     return value;
   }
 
@@ -255,7 +295,8 @@ namespace {
       + (static_cast<std::size_t>(y) * layout.row_pitch_bytes)
       + (static_cast<std::size_t>(x) * sizeof(std::uint16_t) * 4U);
     std::array<std::uint16_t, 4> encoded {};
-    std::memcpy(encoded.data(), data.data() + offset,
+    std::memcpy(encoded.data(),
+      data.subspan(offset, encoded.size() * sizeof(std::uint16_t)).data(),
       encoded.size() * sizeof(std::uint16_t));
     return {
       data::HalfFloat { encoded[0] }.ToFloat(),
@@ -265,12 +306,12 @@ namespace {
     };
   }
 
-  [[nodiscard]] auto ReadSourcePixel(const data::TextureResource& texture,
-    const std::uint32_t face, const std::uint32_t x, const std::uint32_t y)
+  [[nodiscard]] auto ReadSourcePixel(
+    const data::TextureResource& texture, const SourceTexel texel)
     -> std::expected<glm::vec4, StaticSkyLightProcessFailure>
   {
     const auto mip_count = static_cast<std::uint32_t>(texture.GetMipCount());
-    const auto layout_index = (face * mip_count);
+    const auto layout_index = (texel.face * mip_count);
     const auto layouts = texture.GetSubresourceLayouts();
     if (layout_index >= layouts.size()) {
       return std::unexpected(
@@ -280,9 +321,9 @@ namespace {
     const auto data = texture.GetData();
     switch (texture.GetFormat()) {
     case Format::kRGBA32Float:
-      return ReadRgba32Float(data, layouts[layout_index], x, y);
+      return ReadRgba32Float(data, layouts[layout_index], texel.x, texel.y);
     case Format::kRGBA16Float:
-      return ReadRgba16Float(data, layouts[layout_index], x, y);
+      return ReadRgba16Float(data, layouts[layout_index], texel.x, texel.y);
     default:
       return std::unexpected(StaticSkyLightProcessFailure::kUnsupportedFormat);
     }
@@ -311,7 +352,8 @@ namespace {
     const double scale = products.source_radiance_scale;
     double maximum_gain = std::numeric_limits<double>::infinity();
     for (const auto& pixel : products.processed_rgba) {
-      std::array<double, 3> reference {}, recovered {};
+      std::array<double, 3> reference {};
+      std::array<double, 3> recovered {};
       for (std::size_t channel = 0U; channel < 3U; ++channel) {
         const auto value = pixel[static_cast<glm::length_t>(channel)];
         const double narrowed = data::HalfFloat { value }.ToFloat();
@@ -324,16 +366,16 @@ namespace {
         // Canonical resources serve views with different gains. Qualify the
         // bounded exposure envelope, without introducing view-owned P here.
         const double excess
-          = error - std::abs(reference[channel]) * relative_budget;
+          = error - (std::abs(reference[channel]) * relative_budget);
         if (excess > 0.0) {
           maximum_gain = (std::min)(maximum_gain,
             absolute_budget / (maximum_display_gain * excess));
         }
       }
-      const double luminance
-        = reference[0] * .2126 + reference[1] * .7152 + reference[2] * .0722;
-      const double narrowed_luminance
-        = recovered[0] * .2126 + recovered[1] * .7152 + recovered[2] * .0722;
+      const double luminance = (reference[0] * .2126) + (reference[1] * .7152)
+        + (reference[2] * .0722);
+      const double narrowed_luminance = (recovered[0] * .2126)
+        + (recovered[1] * .7152) + (recovered[2] * .0722);
       if (luminance > 0.0
         && (narrowed_luminance <= 0.0
           || std::abs(std::log2(narrowed_luminance / luminance))
@@ -345,7 +387,7 @@ namespace {
       const double narrowed_alpha = data::HalfFloat { pixel.a }.ToFloat();
       if (!std::isfinite(narrowed_alpha)
         || std::abs(alpha - narrowed_alpha)
-          > relative_budget * std::abs(alpha) + absolute_budget) {
+          > (relative_budget * std::abs(alpha)) + absolute_budget) {
         return -1.0;
       }
     }
@@ -354,34 +396,36 @@ namespace {
 
   auto GenerateProcessedMips(StaticSkyLightCpuProducts& products) -> void
   {
+    const MipChain chain {
+      .base_face_size = products.output_face_size,
+      .mip_count = products.mip_count,
+    };
     for (std::uint32_t face = 0U; face < kCubeFaceCount; ++face) {
       for (std::uint32_t mip = 1U; mip < products.mip_count; ++mip) {
         const auto dst_size = MipFaceSize(products.output_face_size, mip);
         const auto src_size = MipFaceSize(products.output_face_size, mip - 1U);
-        const auto src_offset = ProcessedMipOffset(
-          face, mip - 1U, products.output_face_size, products.mip_count);
-        const auto dst_offset = ProcessedMipOffset(
-          face, mip, products.output_face_size, products.mip_count);
+        const auto src_offset
+          = ProcessedMipOffset(chain, { .face = face, .mip = mip - 1U });
+        const auto dst_offset
+          = ProcessedMipOffset(chain, { .face = face, .mip = mip });
 
         for (std::uint32_t y = 0U; y < dst_size; ++y) {
+          const auto dst_row
+            = dst_offset + (static_cast<std::size_t>(y) * dst_size);
           for (std::uint32_t x = 0U; x < dst_size; ++x) {
             const auto src_x0 = (std::min)(x * 2U, src_size - 1U);
             const auto src_y0 = (std::min)(y * 2U, src_size - 1U);
             const auto src_x1 = (std::min)(src_x0 + 1U, src_size - 1U);
             const auto src_y1 = (std::min)(src_y0 + 1U, src_size - 1U);
-            const auto sample00
-              = products
-                  .processed_rgba[src_offset + src_y0 * src_size + src_x0];
-            const auto sample10
-              = products
-                  .processed_rgba[src_offset + src_y0 * src_size + src_x1];
-            const auto sample01
-              = products
-                  .processed_rgba[src_offset + src_y1 * src_size + src_x0];
-            const auto sample11
-              = products
-                  .processed_rgba[src_offset + src_y1 * src_size + src_x1];
-            products.processed_rgba[dst_offset + y * dst_size + x]
+            const auto src_row0
+              = src_offset + (static_cast<std::size_t>(src_y0) * src_size);
+            const auto src_row1
+              = src_offset + (static_cast<std::size_t>(src_y1) * src_size);
+            const auto sample00 = products.processed_rgba[src_row0 + src_x0];
+            const auto sample10 = products.processed_rgba[src_row0 + src_x1];
+            const auto sample01 = products.processed_rgba[src_row1 + src_x0];
+            const auto sample11 = products.processed_rgba[src_row1 + src_x1];
+            products.processed_rgba[dst_row + x]
               = (sample00 + sample10 + sample01 + sample11) * 0.25F;
           }
         }
@@ -419,7 +463,8 @@ auto ProcessStaticSkyLightCubemapCpu(
   for (std::uint32_t face = 0U; face < kCubeFaceCount; ++face) {
     for (std::uint32_t y = 0U; y < source_size; ++y) {
       for (std::uint32_t x = 0U; x < source_size; ++x) {
-        const auto source = ReadSourcePixel(source_cubemap, face, x, y);
+        const auto source = ReadSourcePixel(
+          source_cubemap, SourceTexel { .face = face, .x = x, .y = y });
         if (!source.has_value()) {
           return std::unexpected(source.error());
         }
@@ -443,8 +488,12 @@ auto ProcessStaticSkyLightCubemapCpu(
   products.output_face_size = output_face_size;
   products.mip_count = ComputeMipCount(output_face_size);
   products.source_radiance_scale = source_radiance_scale;
-  products.processed_rgba.resize(static_cast<std::size_t>(kCubeFaceCount)
-    * FaceMipElementCount(output_face_size, products.mip_count));
+  const MipChain chain {
+    .base_face_size = output_face_size,
+    .mip_count = products.mip_count,
+  };
+  products.processed_rgba.resize(
+    static_cast<std::size_t>(kCubeFaceCount) * FaceMipElementCount(chain));
 
   ShVector3 sh {};
   auto accumulated_solid_angle = 0.0F;
@@ -453,14 +502,14 @@ auto ProcessStaticSkyLightCubemapCpu(
   for (std::uint32_t face = 0U; face < kCubeFaceCount; ++face) {
     for (std::uint32_t y = 0U; y < output_face_size; ++y) {
       for (std::uint32_t x = 0U; x < output_face_size; ++x) {
-        const auto direction_ws = TexelDirection(face, x, y, output_face_size);
+        const auto direction_ws = TexelDirection(
+          SourceTexel { .face = face, .x = x, .y = y }, output_face_size);
         const auto source_direction_ws
           = RotateYaw(direction_ws, sky_light.source_cubemap_angle_radians);
 
         const auto source_texel
           = SelectSourceTexel(source_direction_ws, source_size);
-        const auto source = ReadSourcePixel(
-          source_cubemap, source_texel.face, source_texel.x, source_texel.y);
+        const auto source = ReadSourcePixel(source_cubemap, source_texel);
         if (!source.has_value()) {
           return std::unexpected(source.error());
         }
@@ -474,12 +523,18 @@ auto ProcessStaticSkyLightCubemapCpu(
             StaticSkyLightProcessFailure::kInvalidRadiance);
         }
         const auto index
-          = ProcessedMipOffset(face, 0U, output_face_size, products.mip_count)
+          = ProcessedMipOffset(chain, { .face = face, .mip = 0U })
           + (static_cast<std::size_t>(y) * output_face_size) + x;
         products.processed_rgba[index] = glm::vec4(color, source->a);
 
-        const auto weight = TexelSolidAngle(x, y, output_face_size);
-        AccumulateSh(sh, color, direction_ws, weight);
+        const auto weight
+          = TexelSolidAngle(TexelCoord { .x = x, .y = y }, output_face_size);
+        AccumulateSh(sh,
+          {
+            .radiance = color,
+            .direction = direction_ws,
+            .weight = weight,
+          });
         accumulated_solid_angle += weight;
         accumulated_brightness
           += ((color.r + color.g + color.b) / 3.0F) * weight;

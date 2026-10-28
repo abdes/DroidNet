@@ -151,7 +151,6 @@ using oxygen::vortex::environment::EnvironmentViewProducts;
 using oxygen::vortex::environment::HeightFogModel;
 using oxygen::vortex::environment::IblProbePass;
 using oxygen::vortex::environment::kAtmosphereLightSlotCount;
-using oxygen::vortex::environment::kInvalidAtmosphereLightSlot;
 using oxygen::vortex::environment::SkyLightEnvironmentModel;
 using oxygen::vortex::environment::StaticSkyLightProductStatus;
 using oxygen::vortex::environment::StaticSkyLightUnavailableReason;
@@ -890,6 +889,54 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
   EXPECT_NEAR(side.b, 6.0F, 2.0e-3F);
 }
 
+//! A cubemap holds hardware faces in hardware cube space (+Y up, +Z forward),
+//! as the shaders sample it: face 2 (+Y) lies above an Oxygen scene (+Z) and
+//! face 4 (+Z) in front of it (-Y). The authored rotation turns about +Z.
+NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
+  StaticSkyLightCpuProcessorReadsHardwareCubeFacesInOxygenAxes)
+{
+  const auto black = glm::vec4(0.0F, 0.0F, 0.0F, 1.0F);
+  const std::array face_colors {
+    black,
+    black,
+    glm::vec4(1.0F, 0.0F, 0.0F, 1.0F),
+    black,
+    glm::vec4(0.0F, 1.0F, 0.0F, 1.0F),
+    black,
+  };
+  const auto source_cubemap = MakeTestTextureResource(
+    TextureType::kTextureCube, Format::kRGBA32Float, 6U, face_colors);
+
+  const auto irradiance
+    = [&](const float rotation_radians, const glm::vec3 normal) -> glm::vec3 {
+    auto sky_light = SkyLightEnvironmentModel {};
+    sky_light.lower_hemisphere_is_solid_color = false;
+    sky_light.source_cubemap_angle_radians = rotation_radians;
+    const auto processed
+      = ProcessStaticSkyLightCubemapCpu(*source_cubemap, sky_light, 8U);
+    if (!processed.has_value()) {
+      ADD_FAILURE() << "Expected processed to have a value";
+      return glm::vec3(0.0F);
+    }
+    return EvaluatePackedStaticSkyLightDiffuseSh(
+      processed->diffuse_irradiance_sh, normal);
+  };
+
+  const glm::vec3 up { 0.0F, 0.0F, 1.0F };
+  const glm::vec3 down { 0.0F, 0.0F, -1.0F };
+  const glm::vec3 forward { 0.0F, -1.0F, 0.0F };
+  const glm::vec3 back { 0.0F, 1.0F, 0.0F };
+  EXPECT_GT(irradiance(0.0F, up).r, irradiance(0.0F, down).r + 0.1F);
+  EXPECT_GT(irradiance(0.0F, forward).g, irradiance(0.0F, back).g + 0.1F);
+  EXPECT_NEAR(irradiance(0.0F, forward).r, irradiance(0.0F, back).r, 1.0e-3F);
+
+  // A quarter turn about +Z keeps the top face above and moves the front.
+  const auto quarter = std::numbers::pi_v<float> / 2.0F;
+  EXPECT_GT(irradiance(quarter, up).r, irradiance(quarter, down).r + 0.1F);
+  EXPECT_NEAR(
+    irradiance(quarter, forward).g, irradiance(quarter, back).g, 1.0e-3F);
+}
+
 NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
   StaticSkyLightCpuProcessorAppliesLowerHemisphereAndHdrScale)
 {
@@ -919,26 +966,27 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
   }
   EXPECT_FLOAT_EQ(processed->source_radiance_scale, 2.0F);
   ASSERT_EQ(processed->processed_rgba.size(), 6U);
-  EXPECT_FLOAT_EQ(processed->processed_rgba.at(4).r, 65504.0F);
-  EXPECT_FLOAT_EQ(processed->processed_rgba.at(4).g, 65504.0F);
-  EXPECT_FLOAT_EQ(processed->processed_rgba.at(4).b, 65504.0F);
-  EXPECT_FLOAT_EQ(processed->processed_rgba.at(4).a, 1.0F);
-  EXPECT_FLOAT_EQ(processed->processed_rgba.at(5).r, 0.25F);
-  EXPECT_FLOAT_EQ(processed->processed_rgba.at(5).g, 0.5F);
-  EXPECT_FLOAT_EQ(processed->processed_rgba.at(5).b, 0.75F);
-  EXPECT_FLOAT_EQ(processed->processed_rgba.at(5).a, 1.0F);
+  // Hardware face +Y (2) lies above the scene and -Y (3) below it.
+  EXPECT_FLOAT_EQ(processed->processed_rgba.at(2).r, 65504.0F);
+  EXPECT_FLOAT_EQ(processed->processed_rgba.at(2).g, 65504.0F);
+  EXPECT_FLOAT_EQ(processed->processed_rgba.at(2).b, 65504.0F);
+  EXPECT_FLOAT_EQ(processed->processed_rgba.at(2).a, 1.0F);
+  EXPECT_FLOAT_EQ(processed->processed_rgba.at(3).r, 0.25F);
+  EXPECT_FLOAT_EQ(processed->processed_rgba.at(3).g, 0.5F);
+  EXPECT_FLOAT_EQ(processed->processed_rgba.at(3).b, 0.75F);
+  EXPECT_FLOAT_EQ(processed->processed_rgba.at(3).a, 1.0F);
 }
 
 NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
   StaticSkyLightCpuProcessorAppliesCubemapYawRotation)
 {
   const std::array face_colors {
-    glm::vec4(1.0F, 0.0F, 0.0F, 1.0F), // +X
-    glm::vec4(0.0F, 0.0F, 0.0F, 1.0F), // -X
-    glm::vec4(0.0F, 1.0F, 0.0F, 1.0F), // +Y
-    glm::vec4(0.0F, 0.0F, 0.0F, 1.0F), // -Y
-    glm::vec4(0.0F, 0.0F, 1.0F, 1.0F), // +Z
-    glm::vec4(0.0F, 0.0F, 0.0F, 1.0F), // -Z
+    glm::vec4(1.0F, 0.0F, 0.0F, 1.0F), // +X: world +X
+    glm::vec4(0.0F, 0.0F, 0.0F, 1.0F), // -X: world -X
+    glm::vec4(0.0F, 0.0F, 0.0F, 1.0F), // +Y: world up
+    glm::vec4(0.0F, 0.0F, 0.0F, 1.0F), // -Y: world down
+    glm::vec4(0.0F, 0.0F, 1.0F, 1.0F), // +Z: world forward (-Y)
+    glm::vec4(0.0F, 1.0F, 0.0F, 1.0F), // -Z: world back (+Y)
   };
   const auto source_cubemap = MakeTestTextureResource(
     TextureType::kTextureCube, Format::kRGBA32Float, 6U, face_colors);
@@ -954,6 +1002,8 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
 
     FAIL() << "Expected processed to have a value";
   }
+  // A quarter turn about +Z shows world +Y, held on hardware -Z, where world
+  // +X was: on output face +X.
   ASSERT_GE(processed->processed_rgba.size(), 1U);
   EXPECT_FLOAT_EQ(processed->processed_rgba.at(0).r, 0.0F);
   EXPECT_FLOAT_EQ(processed->processed_rgba.at(0).g, 1.0F);

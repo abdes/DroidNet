@@ -22,28 +22,21 @@
 
 namespace oxygen::content::import {
 
-//! Cube face identifiers matching D3D12/Vulkan face ordering convention.
+//! Cube face identifiers in D3D12/Vulkan face order.
 /*!
-  Face order corresponds to array layer indices for cube map textures.
-
-  ### Oxygen Coordinate System
-
-  Oxygen uses a **Z-up, right-handed** coordinate system:
-  - +X = Right
-  - +Y = Forward
-  - +Z = Up
-
-  The cube face directions correspond to axis-aligned viewing directions in this
-  coordinate system.
+  Face order corresponds to array layer indices for cube map textures. Faces
+  are named by their hardware cube axis: cube space is +Y up and +Z forward,
+  while Oxygen is +Z up and -Y forward, so a world direction (x, y, z) is the
+  cube direction (x, z, -y) (`space::environment` in Oxygen/Core/Constants.h).
 */
 enum class CubeFace : uint8_t {
   // clang-format off
-  kPositiveX = 0,  //!< +X face (right)
-  kNegativeX = 1,  //!< -X face (left)
-  kPositiveY = 2,  //!< +Y face (forward)
-  kNegativeY = 3,  //!< -Y face (back)
-  kPositiveZ = 4,  //!< +Z face (up)
-  kNegativeZ = 5,  //!< -Z face (down)
+  kPositiveX = 0,  //!< +X face: world +X
+  kNegativeX = 1,  //!< -X face: world -X
+  kPositiveY = 2,  //!< +Y face: world +Z (up)
+  kNegativeY = 3,  //!< -Y face: world -Z (down)
+  kPositiveZ = 4,  //!< +Z face: world -Y (forward)
+  kNegativeZ = 5,  //!< -Z face: world +Y (back)
   // clang-format on
 };
 
@@ -222,47 +215,6 @@ struct CubeFaceBasis {
   CubeFaceDirection up; //!< Up vector (positive V direction)
 };
 
-//! Cube face basis vectors for Oxygen's Z-up, right-handed coordinate system.
-/*!
-  These vectors define the orientation of each cube face for sampling
-  equirectangular panoramas or computing cubemap directions.
-
-  ### Oxygen Coordinate System
-
-  - **+X = Right**, **+Y = Forward**, **+Z = Up**
-  - Right-handed coordinate system
-
-  ### Face Definitions
-
-  | Face | Center Direction | Right | Up |
-  | ---- | ---------------- | ----- | -- |
-  | +X   | (+1, 0, 0)       | (0, +1, 0) | (0, 0, +1) |
-  | -X   | (-1, 0, 0)       | (0, -1, 0) | (0, 0, +1) |
-  | +Y   | (0, +1, 0)       | (-1, 0, 0) | (0, 0, +1) |
-  | -Y   | (0, -1, 0)       | (+1, 0, 0) | (0, 0, +1) |
-  | +Z   | (0, 0, +1)       | (+1, 0, 0) | (0, -1, 0) |
-  | -Z   | (0, 0, -1)       | (+1, 0, 0) | (0, +1, 0) |
-
-  These match the GPU cubemap convention where sampling direction (x, y, z) maps
-  to the face whose axis has the largest absolute component.
-*/
-// clang-format off
-inline constexpr std::array<CubeFaceBasis, kCubeFaceCount> kCubeFaceBases = {{
-  // +X: center (+1, 0, 0), right (0, +1, 0), up (0, 0, +1)
-  { {+1.0F, 0.0F, 0.0F}, {0.0F, +1.0F, 0.0F}, {0.0F, 0.0F, +1.0F} },
-  // -X: center (-1, 0, 0), right (0, -1, 0), up (0, 0, +1)
-  { {-1.0F, 0.0F, 0.0F}, {0.0F, -1.0F, 0.0F}, {0.0F, 0.0F, +1.0F} },
-  // +Y: center (0, +1, 0), right (-1, 0, 0), up (0, 0, +1)
-  { {0.0F, +1.0F, 0.0F}, {-1.0F, 0.0F, 0.0F}, {0.0F, 0.0F, +1.0F} },
-  // -Y: center (0, -1, 0), right (+1, 0, 0), up (0, 0, +1)
-  { {0.0F, -1.0F, 0.0F}, {+1.0F, 0.0F, 0.0F}, {0.0F, 0.0F, +1.0F} },
-  // +Z: center (0, 0, +1), right (+1, 0, 0), up (0, -1, 0)
-  { {0.0F, 0.0F, +1.0F}, {+1.0F, 0.0F, 0.0F}, {0.0F, -1.0F, 0.0F} },
-  // -Z: center (0, 0, -1), right (+1, 0, 0), up (0, +1, 0)
-  { {0.0F, 0.0F, -1.0F}, {+1.0F, 0.0F, 0.0F}, {0.0F, +1.0F, 0.0F} },
-},};
-// clang-format on
-
 //! Cube face basis vectors for standard GPU cubemap convention.
 /*!
   These vectors match the standard cubemap layout used by D3D12, OpenGL, and
@@ -305,30 +257,6 @@ inline constexpr std::array<CubeFaceBasis, kCubeFaceCount> kGpuCubeFaceBases = {
   { {0.0F, 0.0F, -1.0F}, {-1.0F, 0.0F, 0.0F}, {0.0F, +1.0F, 0.0F} },
 },};
 // clang-format on
-
-//! Get the basis vectors for a specific cube face.
-/*!
-  @param face The cube face to get basis vectors for
-  @return Reference to the basis vectors for the face
-*/
-[[nodiscard]] inline auto GetCubeFaceBasis(CubeFace face) noexcept
-  -> const CubeFaceBasis&
-{
-  return kCubeFaceBases.at(static_cast<size_t>(face));
-}
-
-//! Compute a normalized 3D direction from face UV coordinates.
-/*!
-  Given a cube face and normalized UV coordinates (0-1 range), computes the
-  corresponding world-space direction vector.
-
-  @param face The cube face
-  @param u    Horizontal coordinate (0 = left, 1 = right)
-  @param v    Vertical coordinate (0 = bottom, 1 = top)
-  @return Normalized direction vector (magnitude = 1)
-*/
-OXGN_COOK_NDAPI auto ComputeCubeDirection(
-  CubeFace face, float u, float v) noexcept -> CubeFaceDirection;
 
 //! Assemble a cube map from 6 individual face images.
 /*!

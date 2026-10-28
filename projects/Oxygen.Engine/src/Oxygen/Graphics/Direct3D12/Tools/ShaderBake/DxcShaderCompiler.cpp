@@ -10,7 +10,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
-#include <limits>
 #include <map>
 #include <memory>
 #include <span>
@@ -63,13 +62,13 @@ auto WideToUtf8String(std::wstring_view in) -> std::string
 auto JoinDxcArgsForLog(IDxcCompilerArgs& args) -> std::string
 {
   std::string joined;
-  const auto argv = args.GetArguments();
+  auto* const argv = args.GetArguments();
   const auto argc = args.GetCount();
-  for (uint32_t index = 0; index < argc; ++index) {
+  for (const wchar_t* const argument : std::span(argv, argc)) {
     if (!joined.empty()) {
       joined.push_back(' ');
     }
-    joined += WideToUtf8String(argv[index]);
+    joined += WideToUtf8String(argument);
   }
   return joined;
 }
@@ -80,12 +79,12 @@ auto ContainsEntryPointToken(std::string_view source, std::string_view entry)
   if (entry.empty()) {
     return false;
   }
-  if (source.find(entry) == std::string_view::npos) {
+  if (!source.contains(entry)) {
     return false;
   }
   std::string needle(entry);
-  needle += "(";
-  return source.find(needle) != std::string_view::npos;
+  needle += '(';
+  return source.contains(needle);
 }
 
 struct DxcFailureContext {
@@ -144,6 +143,9 @@ auto MakeDxcArguments(IDxcUtils& utils, const std::wstring& source_name_w,
   args.option_storage.reserve(16U + (include_dirs.size() * 2U));
 
   args.option_storage.emplace_back(L"-Ges");
+  // Column-major matrices, stated rather than left to DXC's default: C++ glm
+  // matrices upload unchanged and shaders multiply mul(M, v).
+  args.option_storage.emplace_back(L"-Zpc");
   args.option_storage.emplace_back(L"-enable-16bit-types");
   args.option_storage.emplace_back(L"-HV");
   args.option_storage.emplace_back(L"2021");
@@ -356,7 +358,9 @@ auto CompileDxc(IDxcCompiler3& compiler, IDxcIncludeHandler& include_handler,
 
     const auto* const pdb_begin
       = static_cast<const std::byte*>(pdb_blob->GetBufferPointer());
-    pdb.assign(pdb_begin, pdb_begin + pdb_blob->GetBufferSize());
+    const std::span<const std::byte> pdb_bytes(
+      pdb_begin, pdb_blob->GetBufferSize());
+    pdb.assign(pdb_bytes.begin(), pdb_bytes.end());
   }
 
   auto& tracking_include_handler = static_cast<
@@ -386,7 +390,7 @@ auto DiagnosticsBlobToString(IDxcBlob* diagnostics_blob) -> std::string
     return {};
   }
 
-  return std::string(message, message_size);
+  return { message, message_size };
 }
 
 void LogMultilineDiagnostics(std::string_view diagnostics)
@@ -529,10 +533,14 @@ auto DxcShaderCompiler::CompileFromSource(const std::u8string& shader_source,
 
   const std::string shader_identifier
     = oxygen::graphics::FormatShaderLogKey(shader_info);
-  ComPtr<IDxcIncludeHandler> include_handler;
-  include_handler.Attach(new TrackingIncludeHandler(
-    *utils, options.workspace_root, options.include_dirs));
-  return CompileDxc(*compiler, *include_handler.Get(), source_buffer, args,
+  // A COM object frees itself on its last Release: the ComPtr owns the initial
+  // reference, and DXC may take more while it compiles.
+  auto owned_handler = std::make_unique<TrackingIncludeHandler>(
+    *utils, options.workspace_root, options.include_dirs);
+  auto& include_handler = *owned_handler;
+  ComPtr<IDxcIncludeHandler> include_handler_reference;
+  include_handler_reference.Attach(owned_handler.release());
+  return CompileDxc(*compiler, include_handler, source_buffer, args,
     shader_identifier, profile_name, shader_info.entry_point,
     std::string_view(reinterpret_cast<const char*>(shader_source.data()),
       shader_source.size()),
