@@ -128,14 +128,14 @@ BasePassGBufferVSOutput BasePassGBufferVS(
     }
     world_tangent = SafeNormalize(world_tangent);
 
+    // space::texture: B = cross(N, T) * sign(dot(cross(N, T), B_vertex)); a
+    // vertex without a usable bitangent takes the unmirrored B = -cross(N, T).
     const float3 bitangent_from_cross = cross(world_normal, world_tangent);
     const float3 transformed_bitangent = mul(world_basis, vertex.bitangent);
-    const float handedness = dot(bitangent_from_cross, transformed_bitangent) < 0.0f
-        ? -1.0f : 1.0f;
-    float3 world_bitangent = SafeNormalize(bitangent_from_cross * handedness);
-    if (dot(world_bitangent, world_bitangent) < 0.5f) {
-        world_bitangent = float3(0.0f, 1.0f, 0.0f);
-    }
+    const float handedness = dot(bitangent_from_cross, transformed_bitangent) > 0.0f
+        ? 1.0f : -1.0f;
+    const float3 world_bitangent
+        = SafeNormalize(bitangent_from_cross * handedness);
 
     output.position = ComputeMeshClipPosition(world_matrix, vertex.position,
         current_material_wpo_offset, view_matrix, projection_matrix);

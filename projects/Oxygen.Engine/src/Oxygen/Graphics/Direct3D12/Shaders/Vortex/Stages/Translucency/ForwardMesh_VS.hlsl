@@ -104,14 +104,11 @@ VSOutput VS(uint vertexID : SV_VertexID, uint instanceID : SV_InstanceID,
         T = float3(1.0, 0.0, 0.0);
     }
 
-    // Derive bitangent from cross to keep orthogonality and preserve handedness
-    // using the incoming bitangent when available.
+    // space::texture: B = cross(N, T) * sign(dot(cross(N, T), B_vertex)); a
+    // vertex without a usable bitangent takes the unmirrored B = -cross(N, T).
     const float3 B_from_cross = cross(NN, T);
-    const float handedness = (dot(B_from_cross, b_ws_in) < 0.0) ? -1.0 : 1.0;
-    float3 B = SafeNormalize(B_from_cross * handedness);
-    if (dot(B, B) < 0.5) {
-        B = cross(NN, T);
-    }
+    const float handedness = (dot(B_from_cross, b_ws_in) > 0.0) ? 1.0 : -1.0;
+    const float3 B = SafeNormalize(B_from_cross * handedness);
     precise float4 proj_pos = mul(projection_matrix, mul(view_matrix, world_pos));
     output.position = proj_pos;
     output.color = vertex.color.rgb;

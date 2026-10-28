@@ -35,11 +35,13 @@ using Quat = glm::quat;
    - RIGHT-HANDED
    - Z-UP
    - FORWARD = -Y: the direction an asset's front and every node face
-   - RIGHT   = +X: the world's right for a viewer facing an asset's front
+   - +X      : `move::Right`, the world's right for a viewer looking along +Y
+               at an asset's front. It is NOT a frame right: a frame facing
+               FORWARD (-Y) with +Z up has its right on -X (`node::Right`).
+               Never pair `move::Right` with `Forward` and `Up` to build a
+               rotation.
 
- FORWARD and RIGHT are world axes, not one viewer's frame: a viewer facing
- -Y with +Z up has +X on its left. Every node, cameras included, uses the
- `node` frame below, whose right is -X.
+ Every node, cameras included, uses the `node` frame below.
 
  These conventions are ENGINE LAW. They are not configurable.
  Every system (math, rendering, physics, animation, editor, importers)
@@ -88,14 +90,24 @@ using Quat = glm::quat;
 
  ### Winding and mirroring
 
- - Front faces wind counter-clockwise in object space (`clip::FrontFaceCCW`)
-   and back faces are culled.
+ - A triangle (a, b, c) is front-facing on the side cross(b - a, c - a)
+   points to: its vertices run counter-clockwise for a viewer on that side
+   (`clip::FrontFaceCCW`), and back faces are culled. Stored vertex normals
+   point to the front side; a closed mesh's front is its outside.
  - A node world matrix with a negative determinant mirrors its mesh; the
    renderer, not the importer, restores the winding by flipping the front face
    of that draw. A mirroring transform an importer bakes into vertices swaps
    each triangle's last two indices and transforms tangents and bitangents
    with it. Shaders take the tangent frame's handedness from the transformed
    bitangent (the sign of dot(cross(N, T), B)), so mirrored frames stay valid.
+
+ ### Source conventions
+
+ - glTF (+Y up, asset front +Z) converts as (x, y, z) -> (x, -z, y); glTF
+   cameras and lights face local -Z and get a half turn about +Z into the
+   `node` frame.
+ - FBX is converted by ufbx to Z up and -Y forward; a left-handed file is
+   mirrored along Y.
 
  ### Screen and viewport
 
@@ -215,14 +227,39 @@ namespace space {
    - Each vertex carries a normal N, a tangent T and a bitangent B. T points
      along ImageRight (+dP/dU, where U grows over the surface) and B along
      ImageDown (+dP/dV), so a normal map's X and Y land on T and B.
-   - B = cross(N, T) * w, where the handedness w is +1, or -1 where the UV
-     layout is mirrored. Shaders evaluate a normal map as
-     `T * n.x + B * n.y + N * n.z`, taking w from the vertex bitangent.
+   - B = -cross(N, T) * w, where the handedness w is +1 for an unmirrored
+     layout and -1 for a mirrored one (glTF's TANGENT.w). A layout is
+     unmirrored when dot(cross(N, T), B) < 0: seen from the side N points to,
+     the image reads with +U to the viewer's right and +V down, whichever way
+     the viewer is turned about N. B is authoritative: it is +dP/dV and w is
+     derived from it, never the reverse. Shaders rebuild
+     B = cross(N, T) * sign(dot(cross(N, T), B_vertex)) after transforming and
+     re-orthogonalizing, and evaluate `T * n.x + B * n.y + N * n.z`.
+   - A vertex without a usable bitangent takes B = -cross(N, T) (w = +1).
    - Generated frames (missing tangents) follow +dP/dU and +dP/dV.
    - glTF's bitangent, cross(N, T) * TANGENT.w, points up the image and is
      negated on import. An FBX's authored bitangent points up its V-up UVs and
      is negated with the V flip.
-   - Procedural meshes follow the same rules (abdes/DroidNet#112).
+   - Procedural meshes follow the same rules.
+
+   ### UV layout of generated surfaces
+
+   - A generated surface is textured upright for a viewer outside it who
+     faces its front (looks along +Y with +Z up) and turns to see each face.
+   - Vertical face with outward normal N (N.z = 0): T = cross(Up, N),
+     B = Down. Front (-Y): T = +X; right (+X): T = +Y; back (+Y): T = -X;
+     left (-X): T = -Y.
+   - Top face (N = +Z): T = +X, B = Forward (-Y). Bottom face (N = -Z):
+     T = +X, B = Back (+Y).
+   - Surfaces of revolution about +Z (sphere, capsule, cylinder, cone, torus
+     main ring): the seam is at +Y (u = 0 and 1); u = 0.5 at -Y, 0.75 at +X,
+     0.25 at -X (u grows counter-clockwise seen from +Z, which is +X at the
+     front). v = 0 at the +Z end and v = 1 at the -Z end, linear along the
+     meridian. Caps follow the top/bottom face rule.
+   - A torus's v runs around its tube: v = 0 and 1 on the outer equator, and
+     v grows down the outer wall, under the tube, up the inner wall and over
+     the top.
+   - A planar quad's front is -Y with width along +X and height along +Z.
   */
   namespace texture {
     //! Image right in UV space: +U, the direction of a vertex's tangent.
@@ -237,6 +274,8 @@ namespace space {
 
    - Faces are stored in D3D order +X, -X, +Y, -Y, +Z, -Z (array layers 0..5),
      each with its rows top first, in hardware cube space: +Y up, +Z forward.
+     Cube space is read right-handed like the world, so +X lies on the LEFT
+     of a viewer facing +Z.
      A face texel at UV (u, v) with p = 2 * (u, v) - 1 has the cube direction
      +X (1, -p.y, -p.x), -X (-1, -p.y, p.x), +Y (p.x, 1, p.y),
      -Y (p.x, -1, -p.y), +Z (p.x, -p.y, 1), -Z (-p.x, -p.y, -1).
@@ -245,16 +284,24 @@ namespace space {
      (+Z), +Z its forward (-Y) and -Z its back (+Y).
    - The cooker, the sky, sky-light capture, IBL filtering and the CPU static
      sky-light processor all use this mapping (shader side:
-     `Shared/CubemapGeometry.hlsli`). An authored cube or sky rotation turns
-     about world +Z.
+     `Shared/CubemapGeometry.hlsli`).
+   - Authored six-face and cross sources use the Direct3D left-handed layout,
+     which reads unmirrored only in a left-handed frame. The cooker mirrors
+     each authored face about its vertical axis and swaps the +X and -X faces,
+     so the stored cube reads unmirrored from inside.
+   - An authored cube or sky rotation r (radians) turns the sampling
+     direction by r about world +Z by the right-hand rule
+     (`RotateDirectionAroundOxygenUp`), so the content turns by -r: clockwise
+     seen from above for r > 0.
 
    ### Panoramas
 
    - An equirectangular panorama spans longitude across u and latitude down v,
      rows top first: v = 0 is straight up (+Z) and v = 1 straight down.
    - Longitude 0, the panorama's centre column (u = 0.5), faces the world's
-     forward (-Y); u grows toward +X (u = 0.75) and wraps through +Y at the
-     edges.
+     forward (-Y); u grows toward -X (u = 0.75), the right of a viewer inside
+     facing the centre, and wraps through +Y at u = 0 and 1. A panorama
+     therefore reads unmirrored from inside.
   */
   namespace environment {
     //! The hardware cube direction of a world direction.
@@ -276,6 +323,13 @@ namespace space {
 
 //! Physics-related constants. Use the same world space as the engine. Gravity
 //! is always along -Z.
+/*!
+ Shapes: capsules, cylinders and cones are centred at the origin with their
+ axis along +Z; a procedural cone's apex is at +Z. Physics `half_height` is
+ half the straight cylinder length (capsule: tip-to-tip height is
+ 2 * (half_height + radius)) or half the total height (cylinder, cone).
+ Procedural mesh `height` is the total tip-to-tip height. Metres.
+*/
 namespace physics {
   inline constexpr float GravityMagnitude = 9.80665F;
   inline constexpr Vec3 Gravity { 0.0F, 0.0F, -GravityMagnitude };

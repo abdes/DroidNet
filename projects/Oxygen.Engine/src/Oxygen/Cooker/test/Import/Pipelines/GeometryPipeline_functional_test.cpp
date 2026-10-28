@@ -44,6 +44,7 @@
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/test/Support/PipelineHarness.h>
 #include <Oxygen/Cooker/test/Support/SourceLayoutTestSupport.h>
+#include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
@@ -796,8 +797,10 @@ namespace {
 
   //! Generated tangent frames follow `space::texture`: the tangent runs the
   //! way U grows over the surface (image right) and the bitangent the way V
-  //! grows (image down). The triangle's U grows along +X and its V along +Y.
-  NOLINT_TEST_F(GeometryPipelineSplitTest, GeneratedFrameFollowsUAndV)
+  //! grows (image down), mirrored layout or not. This triangle faces +Z with U
+  //! growing along +X and V along +Y: seen from +Z its image reads mirrored,
+  //! so dot(cross(N, T), B) > 0.
+  NOLINT_TEST_F(GeometryPipelineSplitTest, GeneratedFrameFollowsMirroredUAndV)
   {
     auto item = MakeWorkItem(MakeTriangleMeshBuffers());
     item.has_tangent_space_textures = true;
@@ -811,10 +814,41 @@ namespace {
     const auto vertices = ReadCookedViews(*result.cooked).vertices;
     ASSERT_EQ(vertices.size(), 3U);
     for (const auto& vertex : vertices) {
-      EXPECT_EQ(vertex.tangent, glm::vec3(1.0F, 0.0F, 0.0F));
-      EXPECT_EQ(vertex.bitangent, glm::vec3(0.0F, 1.0F, 0.0F));
-      // An unmirrored layout: the bitangent is cross(N, T).
-      EXPECT_EQ(glm::cross(vertex.normal, vertex.tangent), vertex.bitangent);
+      EXPECT_EQ(vertex.normal, space::move::Up);
+      EXPECT_EQ(vertex.tangent, space::move::Right);
+      EXPECT_EQ(vertex.bitangent, space::move::Back);
+      EXPECT_GT(
+        glm::dot(glm::cross(vertex.normal, vertex.tangent), vertex.bitangent),
+        0.0F);
+    }
+  }
+
+  //! The same triangle with V growing along -Y reads unmirrored from +Z: the
+  //! generated bitangent is +dP/dV = -cross(N, T), handedness w = +1.
+  NOLINT_TEST_F(GeometryPipelineSplitTest, GeneratedFrameFollowsUnmirroredUAndV)
+  {
+    auto buffers = MakeTriangleMeshBuffers();
+    buffers->texcoords = {
+      glm::vec2 { 0.0F, 1.0F },
+      glm::vec2 { 1.0F, 1.0F },
+      glm::vec2 { 0.0F, 0.0F },
+    };
+    auto item = MakeWorkItem(buffers);
+    item.has_tangent_space_textures = true;
+    item.request.options.tangent_policy
+      = GeometryAttributePolicy::kGenerateMissing;
+
+    const auto result = Cook(std::move(item));
+
+    ASSERT_TRUE(result.success);
+    ASSERT_HAS_VALUE(result.cooked);
+    const auto vertices = ReadCookedViews(*result.cooked).vertices;
+    ASSERT_EQ(vertices.size(), 3U);
+    for (const auto& vertex : vertices) {
+      EXPECT_EQ(vertex.normal, space::move::Up);
+      EXPECT_EQ(vertex.tangent, space::move::Right);
+      EXPECT_EQ(vertex.bitangent, space::move::Forward);
+      EXPECT_EQ(-glm::cross(vertex.normal, vertex.tangent), vertex.bitangent);
     }
   }
 
