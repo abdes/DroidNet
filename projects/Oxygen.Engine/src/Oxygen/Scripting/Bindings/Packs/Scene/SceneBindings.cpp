@@ -119,8 +119,9 @@ namespace {
     }
 
     scene::SceneNode new_node;
+    scene::SceneNode* parent = nullptr;
     if ((lua_gettop(state) >= 2) && !lua_isnil(state, 2)) {
-      auto* parent = TryCheckSceneNode(state, 2);
+      parent = TryCheckSceneNode(state, 2);
       if ((parent == nullptr) || !parent->IsAlive()
         || !IsNodeInActiveScene(*parent, scene_ref)) {
         lua_pushnil(state);
@@ -139,22 +140,17 @@ namespace {
       lua_pushnil(state);
       return 1;
     }
-    if ((lua_gettop(state) >= 2) && !lua_isnil(state, 2)) {
-      auto* parent = TryCheckSceneNode(state, 2);
-      if (parent == nullptr) {
-        lua_pushnil(state);
-        return 1;
-      }
-      const auto p = parent->GetHandle();
-      const auto n = new_node.GetHandle();
-      LOG_F(INFO,
+    // Scripts create nodes in bulk: one log per node is debug detail.
+    [[maybe_unused]] const auto n = new_node.GetHandle();
+    if (parent != nullptr) {
+      [[maybe_unused]] const auto p = parent->GetHandle();
+      DLOG_F(3,
         "scene.create_node child: name='{}' parent_sid={} parent_idx={} "
         "child_sid={} child_idx={}",
         std::string(name, len), static_cast<unsigned>(p.GetSceneId()),
         static_cast<unsigned>(p.Index()), static_cast<unsigned>(n.GetSceneId()),
         static_cast<unsigned>(n.Index()));
     } else {
-      const auto n = new_node.GetHandle();
       DLOG_F(3, "scene.create_node root: name='{}' sid={} idx={}",
         std::string(name, len), static_cast<unsigned>(n.GetSceneId()),
         static_cast<unsigned>(n.Index()));
@@ -177,17 +173,17 @@ namespace {
       lua_pushboolean(state, 0);
       return 1;
     }
-    const auto handle = node->GetHandle();
-    const auto node_name = node->GetName();
-    const auto* const geometry_ptr
+    [[maybe_unused]] const auto handle = node->GetHandle();
+    [[maybe_unused]] const auto node_name = node->GetName();
+    [[maybe_unused]] const auto* const geometry_ptr
       = static_cast<const void*>(node->GetRenderable().GetGeometry().get());
-    LOG_F(INFO,
+    DLOG_F(3,
       "scene.destroy_node request: name='{}' scene_id={} node_index={} "
       "geom_ptr={}",
       node_name, static_cast<unsigned>(handle.GetSceneId()),
       static_cast<unsigned>(handle.Index()), geometry_ptr);
     const bool destroyed = scene_ref->DestroyNode(*node);
-    LOG_F(INFO,
+    DLOG_F(3,
       "scene.destroy_node result: name='{}' scene_id={} node_index={} ok={}",
       node_name, static_cast<unsigned>(handle.GetSceneId()),
       static_cast<unsigned>(handle.Index()), destroyed);
