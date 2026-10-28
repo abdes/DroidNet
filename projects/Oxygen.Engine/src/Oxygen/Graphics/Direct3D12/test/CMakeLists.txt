@@ -270,6 +270,13 @@ m_gtest_program(
     ${D3D12_TEST_FIXTURES}
 )
 m_gtest_program(
+  BudgetedAllocation
+  GPU
+  SOURCES
+    "BudgetedAllocation_test.cpp"
+    ${D3D12_TEST_FIXTURES}
+)
+m_gtest_program(
   BufferReadbackIntegration
   GPU
   SOURCES

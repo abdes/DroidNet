@@ -5,9 +5,11 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <bit>
 #include <cstdint>
 #include <cstring>
 #include <mutex>
+#include <span>
 #include <utility>
 
 #include <Oxygen/Base/Logging.h>
@@ -22,17 +24,13 @@ namespace oxygen::graphics::headless {
 // View payloads are small PODs owned by the Buffer. Public nested types
 // (CBV/SRV/UAV) are declared in Buffer.h and used below.
 
-Buffer::Buffer(const BufferDesc& desc)
+Buffer::Buffer(BufferDesc desc)
   : graphics::Buffer("HeadlessBuffer")
-  , desc_(desc)
+  , desc_(std::move(desc))
 {
   if (desc_.allocation_budget.owner) {
-    auto charge = desc_.allocation_budget.owner->TryReserve(
+    budget_reservation_ = desc_.allocation_budget.owner->Reserve(
       SizeBytes { desc_.size_bytes }, desc_.allocation_budget.category);
-    if (!charge) {
-      throw AllocationBudgetExceeded {};
-    }
-    budget_reservation_ = std::move(*charge);
   }
   if (desc_.size_bytes > 0) {
     data_.resize(desc_.size_bytes);
@@ -44,14 +42,14 @@ auto Buffer::GetDescriptor() const noexcept -> BufferDesc { return desc_; }
 
 auto Buffer::GetNativeResource() const -> NativeResource
 {
-  return NativeResource(const_cast<Buffer*>(this), ClassTypeId());
+  return { this, ClassTypeId() };
 }
 
 auto Buffer::DoMap(uint64_t /*offset*/, uint64_t /*size*/) -> void*
 {
   DCHECK_F(!IsMapped()); // Guaranteed by the base class
 
-  std::lock_guard lk(data_mutex_);
+  const auto lock = std::scoped_lock(data_mutex_);
   // Mapping when empty returns nullptr (no backing allocated) - allowed.
   if (data_.empty()) {
     mapped_ = true;
@@ -70,7 +68,7 @@ auto Buffer::DoUnMap() noexcept -> void
 
 auto Buffer::Update(const void* data, uint64_t size, uint64_t offset) -> void
 {
-  std::lock_guard lk(data_mutex_);
+  const auto lock = std::scoped_lock(data_mutex_);
   // Update validates parameters and writes into the backing when present.
   if (data == nullptr || size == 0) {
     return;
@@ -82,8 +80,9 @@ auto Buffer::Update(const void* data, uint64_t size, uint64_t offset) -> void
       offset, size, data_.size());
     return;
   }
-  const size_t write_size = std::min(size, data_.size() - offset);
-  std::memcpy(data_.data() + offset, data, write_size);
+  const auto target
+    = std::span(data_).subspan(offset, std::min(size, data_.size() - offset));
+  std::memcpy(target.data(), data, target.size());
 }
 
 auto Buffer::ReadBacking(void* dst, uint64_t src_offset, uint64_t size) const
@@ -99,8 +98,9 @@ auto Buffer::ReadBacking(void* dst, uint64_t src_offset, uint64_t size) const
       src_offset, size, data_.size());
     return;
   }
-  const size_t read_size = std::min(size, data_.size() - src_offset);
-  std::memcpy(dst, data_.data() + src_offset, read_size);
+  const auto source = std::span(data_).subspan(
+    src_offset, std::min(size, data_.size() - src_offset));
+  std::memcpy(dst, source.data(), source.size());
 }
 
 auto Buffer::WriteBacking(const void* src, uint64_t dst_offset, uint64_t size)
@@ -116,8 +116,9 @@ auto Buffer::WriteBacking(const void* src, uint64_t dst_offset, uint64_t size)
       dst_offset, size, data_.size());
     return;
   }
-  const size_t write_size = std::min(size, data_.size() - dst_offset);
-  std::memcpy(data_.data() + dst_offset, src, write_size);
+  const auto target = std::span(data_).subspan(
+    dst_offset, std::min(size, data_.size() - dst_offset));
+  std::memcpy(target.data(), src, target.size());
 }
 
 auto Buffer::GetSize() const noexcept -> uint64_t { return desc_.size_bytes; }
@@ -135,8 +136,7 @@ auto Buffer::GetGPUVirtualAddress() const -> uint64_t
 {
   // Return a stable fake GPU virtual address for headless testing. Use the
   // pointer value of the object as a deterministic unique address.
-  const auto ptr = reinterpret_cast<uintptr_t>(this);
-  return ptr;
+  return std::bit_cast<std::uintptr_t>(this);
 }
 
 //! View payloads created here are owned by the Buffer instance.
@@ -151,55 +151,42 @@ auto Buffer::CreateConstantBufferView(
   const DescriptorAllocationHandle& /*view_handle*/,
   const BufferRange& /*range*/) const -> NativeView
 {
-  // Allocate raw memory for payload and construct in-place. Use a
-  // function-pointer deleter that calls operator delete for the raw
-  // allocation to avoid deleting an incomplete type with default deleter.
-  void* raw = operator new(sizeof(CBV));
-  auto typed = new (raw) CBV { this, BufferRange {}, Format::kUnknown, 0 };
-  const void* payload_ptr = typed;
-  ViewPayloadPtr payload(raw, [](void* p) -> void {
-    if (p) {
-      // Explicitly call destructor and free raw memory
-      static_cast<CBV*>(p)->~CBV();
-      operator delete(p);
-    }
+  return OwnView(CBV {
+    {
+      .buffer = this,
+      .range = {},
+      .format = Format::kUnknown,
+      .stride = 0,
+    },
   });
-  owned_view_payloads_.push_back(std::move(payload));
-  return NativeView(const_cast<void*>(payload_ptr), ClassTypeId());
 }
 
 auto Buffer::CreateShaderResourceView(
   const DescriptorAllocationHandle& /*view_handle*/, Format /*format*/,
   BufferRange /*range*/, uint32_t /*stride*/) const -> NativeView
 {
-  void* raw = operator new(sizeof(SRV));
-  auto typed = new (raw) SRV { this, BufferRange {}, Format::kUnknown, 0 };
-  const void* payload_ptr = typed;
-  ViewPayloadPtr payload(raw, [](void* p) -> void {
-    if (p) {
-      static_cast<SRV*>(p)->~SRV();
-      operator delete(p);
-    }
+  return OwnView(SRV {
+    {
+      .buffer = this,
+      .range = {},
+      .format = Format::kUnknown,
+      .stride = 0,
+    },
   });
-  owned_view_payloads_.push_back(std::move(payload));
-  return NativeView(const_cast<void*>(payload_ptr), ClassTypeId());
 }
 
 auto Buffer::CreateUnorderedAccessView(
   const DescriptorAllocationHandle& /*view_handle*/, Format /*format*/,
   BufferRange /*range*/, uint32_t /*stride*/) const -> NativeView
 {
-  void* raw = operator new(sizeof(UAV));
-  auto typed = new (raw) UAV { this, BufferRange {}, Format::kUnknown, 0 };
-  const void* payload_ptr = typed;
-  ViewPayloadPtr payload(raw, [](void* p) -> void {
-    if (p) {
-      static_cast<UAV*>(p)->~UAV();
-      operator delete(p);
-    }
+  return OwnView(UAV {
+    {
+      .buffer = this,
+      .range = {},
+      .format = Format::kUnknown,
+      .stride = 0,
+    },
   });
-  owned_view_payloads_.push_back(std::move(payload));
-  return NativeView(const_cast<void*>(payload_ptr), ClassTypeId());
 }
 
 } // namespace oxygen::graphics::headless

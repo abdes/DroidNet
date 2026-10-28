@@ -7,9 +7,11 @@
 #pragma once
 
 #include <cstdint>
+#include <expected>
 #include <memory>
 #include <optional>
 #include <stdexcept>
+#include <string>
 
 #include <Oxygen/Core/Types/ByteUnits.h>
 #include <Oxygen/Graphics/Common/AllocationBudgetTag.h>
@@ -70,22 +72,70 @@ public:
   [[nodiscard]] OXGN_GFX_API auto TryReserve(SizeBytes actual_bytes,
     AllocationCategory category = AllocationCategory::kGeneral)
     -> std::optional<AllocationReservation>;
+  //! Reserve like TryReserve, for resource factories.
+  //! @throw AllocationBudgetExceeded with the bytes still available when the
+  //! request does not fit.
+  [[nodiscard]] OXGN_GFX_API auto Reserve(SizeBytes actual_bytes,
+    AllocationCategory category = AllocationCategory::kGeneral)
+    -> AllocationReservation;
   [[nodiscard]] OXGN_GFX_API auto Snapshot() const -> AllocationBudgetSnapshot;
   //! Backend rejection uses the same bounded, caller-readable failure record.
   OXGN_GFX_API auto RecordRejection(SizeBytes requested, SizeBytes available)
     -> void;
 
 private:
+  //! Admit a request, or return the bytes still available.
+  auto Admit(SizeBytes actual_bytes, AllocationCategory category)
+    -> std::expected<AllocationReservation, SizeBytes>;
+
   std::shared_ptr<detail::AllocationBudgetState> state_;
 };
 
-//! Resource factories throw this before exposing an unadmitted allocation.
+//! Resource factories throw this before exposing an unadmitted allocation,
+//! whether the budget's own limit or the driver's segment budget refused it.
 class AllocationBudgetExceeded final : public std::runtime_error {
 public:
-  AllocationBudgetExceeded()
-    : std::runtime_error("GPU resource allocation exceeds available budget")
+  //! @param requested Bytes the refused allocation needs.
+  //! @param available Bytes the budget could still admit.
+  //! @param driver_headroom Reserve kept free below the driver's segment
+  //! budget; zero when the budget's own limit refused the request.
+  AllocationBudgetExceeded(SizeBytes requested, SizeBytes available,
+    SizeBytes driver_headroom = SizeBytes { 0U })
+    : std::runtime_error(Describe(requested, available, driver_headroom))
+    , requested_(requested)
+    , available_(available)
+    , driver_headroom_(driver_headroom)
   {
   }
+
+  [[nodiscard]] auto Requested() const noexcept -> SizeBytes
+  {
+    return requested_;
+  }
+  [[nodiscard]] auto Available() const noexcept -> SizeBytes
+  {
+    return available_;
+  }
+  [[nodiscard]] auto DriverHeadroom() const noexcept -> SizeBytes
+  {
+    return driver_headroom_;
+  }
+
+private:
+  static auto Describe(SizeBytes requested, SizeBytes available,
+    SizeBytes driver_headroom) -> std::string
+  {
+    auto text = "GPU allocation of " + to_string(requested)
+      + " exceeds the budget: " + to_string(available) + " available";
+    if (driver_headroom != SizeBytes { 0U }) {
+      text += " after " + to_string(driver_headroom) + " of driver headroom";
+    }
+    return text;
+  }
+
+  SizeBytes requested_;
+  SizeBytes available_;
+  SizeBytes driver_headroom_;
 };
 
 } // namespace oxygen::graphics

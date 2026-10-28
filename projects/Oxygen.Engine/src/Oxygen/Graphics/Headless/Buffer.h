@@ -8,10 +8,11 @@
 
 #include <cstdint>
 #include <deque>
-#include <memory>
 #include <mutex>
+#include <variant>
 #include <vector>
 
+#include <Oxygen/Base/Macros.h>
 #include <Oxygen/Graphics/Common/AllocationBudget.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Headless/api_export.h>
@@ -99,14 +100,17 @@ public:
   struct SRV : ViewBase { };
   struct UAV : ViewBase { };
 
-  OXGN_HDLS_API explicit Buffer(const BufferDesc& desc);
+  OXGN_HDLS_API explicit Buffer(BufferDesc desc);
   ~Buffer() override = default;
+
+  OXYGEN_MAKE_NON_COPYABLE(Buffer)
+  OXYGEN_MAKE_NON_MOVABLE(Buffer)
 
   // Buffer interface
   OXGN_HDLS_NDAPI auto GetDescriptor() const noexcept -> BufferDesc override;
   OXGN_HDLS_NDAPI auto GetNativeResource() const -> NativeResource override;
-  OXGN_HDLS_NDAPI auto Update(
-    const void* data, uint64_t size, uint64_t offset = 0) -> void override;
+  OXGN_HDLS_API auto Update(const void* data, uint64_t size, uint64_t offset)
+    -> void override;
   OXGN_HDLS_NDAPI auto GetSize() const noexcept -> uint64_t override;
   OXGN_HDLS_NDAPI auto GetUsage() const noexcept -> BufferUsage override;
   OXGN_HDLS_NDAPI auto GetMemoryType() const noexcept -> BufferMemory override;
@@ -116,25 +120,24 @@ public:
   // Headless-only helpers to access the CPU backing store. These are safe
   // no-ops for non-headless buffers and perform bounds-checked copies for
   // headless buffers.
-  OXGN_HDLS_NDAPI auto ReadBacking(
+  OXGN_HDLS_API auto ReadBacking(
     void* dst, uint64_t src_offset, uint64_t size) const -> void;
-  OXGN_HDLS_NDAPI auto WriteBacking(
+  OXGN_HDLS_API auto WriteBacking(
     const void* src, uint64_t dst_offset, uint64_t size) -> void;
 
 protected:
-  OXGN_HDLS_NDAPI auto DoMap(size_t offset = 0, uint64_t size = 0)
-    -> void* override;
-  OXGN_HDLS_NDAPI auto DoUnMap() noexcept -> void override;
+  OXGN_HDLS_NDAPI auto DoMap(size_t offset, uint64_t size) -> void* override;
+  OXGN_HDLS_API auto DoUnMap() noexcept -> void override;
 
   [[nodiscard]] auto CreateConstantBufferView(
     const DescriptorAllocationHandle& view_handle,
-    const BufferRange& range = {}) const -> NativeView override;
+    const BufferRange& range) const -> NativeView override;
   [[nodiscard]] auto CreateShaderResourceView(
     const DescriptorAllocationHandle& view_handle, Format format,
-    BufferRange range = {}, uint32_t stride = 0) const -> NativeView override;
+    BufferRange range, uint32_t stride) const -> NativeView override;
   [[nodiscard]] auto CreateUnorderedAccessView(
     const DescriptorAllocationHandle& view_handle, Format format,
-    BufferRange range = {}, uint32_t stride = 0) const -> NativeView override;
+    BufferRange range, uint32_t stride) const -> NativeView override;
 
 private:
   BufferDesc desc_ {};
@@ -148,13 +151,17 @@ private:
   // multi-threaded helpers.
   mutable std::mutex data_mutex_;
 
-  // Owned view payloads to keep NativeView pointers valid without leaking.
-  // Use a custom deleter type (function pointer) because deleting an
-  // incomplete type with the default deleter is undefined. We allocate the
-  // payloads with operator new and destroy with operator delete via the
-  // function deleter.
-  using ViewPayloadPtr = std::unique_ptr<void, void (*)(void*)>;
-  mutable std::deque<ViewPayloadPtr> owned_view_payloads_;
+  //! Keep a view payload for the Buffer's lifetime and return a non-owning
+  //! view of it; deque elements never move when others are added.
+  template <typename View> auto OwnView(View view) const -> NativeView
+  {
+    return {
+      &std::get<View>(owned_view_payloads_.emplace_back(view)),
+      ClassTypeId(),
+    };
+  }
+
+  mutable std::deque<std::variant<CBV, SRV, UAV>> owned_view_payloads_;
 };
 
 } // namespace oxygen::graphics::headless

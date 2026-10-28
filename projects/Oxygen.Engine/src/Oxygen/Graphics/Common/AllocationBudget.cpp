@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <expected>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -105,6 +106,27 @@ auto AllocationReservation::ReduceTo(SizeBytes actual_bytes) -> void
 auto AllocationBudget::TryReserve(SizeBytes actual_bytes,
   AllocationCategory category) -> std::optional<AllocationReservation>
 {
+  auto admitted = Admit(actual_bytes, category);
+  if (!admitted) {
+    return std::nullopt;
+  }
+  return std::move(*admitted);
+}
+
+auto AllocationBudget::Reserve(
+  SizeBytes actual_bytes, AllocationCategory category) -> AllocationReservation
+{
+  auto admitted = Admit(actual_bytes, category);
+  if (!admitted) {
+    throw AllocationBudgetExceeded { actual_bytes, admitted.error() };
+  }
+  return std::move(*admitted);
+}
+
+auto AllocationBudget::Admit(
+  SizeBytes actual_bytes, AllocationCategory category)
+  -> std::expected<AllocationReservation, SizeBytes>
+{
   const auto lock = std::scoped_lock(state_->mutex);
   auto available = state_->limits.total.get() - state_->allocated;
   if (category == AllocationCategory::kCompactIndices) {
@@ -115,7 +137,7 @@ auto AllocationBudget::TryReserve(SizeBytes actual_bytes,
     ++state_->rejected;
     state_->last_requested = actual_bytes;
     state_->last_available = SizeBytes { available };
-    return std::nullopt;
+    return std::unexpected(SizeBytes { available });
   }
   state_->allocated += actual_bytes.get();
   if (category == AllocationCategory::kCompactIndices) {

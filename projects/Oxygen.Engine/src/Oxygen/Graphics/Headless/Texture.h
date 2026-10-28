@@ -10,6 +10,8 @@
 #include <cstdint>
 #include <deque>
 #include <memory>
+#include <span>
+#include <variant>
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
@@ -84,11 +86,10 @@ struct TextureLayoutStrategy {
    bounds-checked, clamped memcpy operations into/from the backing. Null
    pointers and zero sizes are ignored. These helpers are convenience APIs for
    tests and do not model GPU-side transfer or synchronization semantics.
- - **View payloads**: `Create*View()` allocates small POD view payloads
-   (SRV/UAV/RTV/DSV) via raw allocation and stores them in
-   `owned_view_payloads_`. Returned `NativeView` values are non-owning
-   pointers into that storage and remain valid for the lifetime of the `Texture`
-   instance.
+ - **View payloads**: `Create*View()` stores small POD view payloads
+   (SRV/UAV/RTV/DSV) in `owned_view_payloads_`. Returned `NativeView` values are
+ non-owning pointers into that storage and remain valid for the lifetime of the
+ `Texture` instance.
 
  ### Usage Examples
 
@@ -158,7 +159,7 @@ public:
   // Nested headless-only contiguous layout strategy. Kept inside the
   // headless Texture so the implementation is not exported as a separate
   // public type.
-  OXGN_HDLS_API explicit Texture(const TextureDesc& desc);
+  OXGN_HDLS_API explicit Texture(TextureDesc desc);
   ~Texture() override = default;
 
   OXYGEN_MAKE_NON_COPYABLE(Texture)
@@ -182,8 +183,7 @@ public:
   }
   [[nodiscard]] auto GetBackingData() const noexcept -> const std::byte*
   {
-    return data_.empty() ? nullptr
-                         : reinterpret_cast<const std::byte*>(data_.data());
+    return data_.empty() ? nullptr : std::as_bytes(std::span(data_)).data();
   }
 
 private:
@@ -198,11 +198,17 @@ private:
 
   // Headless-specific Contiguous layout strategy (owned by the texture)
   std::unique_ptr<TextureLayoutStrategy> layout_strategy_;
-  // Owned view payloads. The Texture must keep payloads alive for any
-  // NativeView pointers returned to callers. Use a function-pointer
-  // deleter to avoid deleting incomplete types with the default deleter.
-  using ViewPayloadPtr = std::unique_ptr<void, void (*)(void*)>;
-  mutable std::deque<ViewPayloadPtr> owned_view_payloads_;
+  //! Keep a view payload for the Texture's lifetime and return a non-owning
+  //! view of it; deque elements never move when others are added.
+  template <typename View> auto OwnView(View view) const -> NativeView
+  {
+    return {
+      &std::get<View>(owned_view_payloads_.emplace_back(view)),
+      ClassTypeId(),
+    };
+  }
+
+  mutable std::deque<std::variant<SRV, UAV, RTV, DSV>> owned_view_payloads_;
 
 public:
   // Headless-only helpers to access CPU-side backing. Bounds-checked copies.

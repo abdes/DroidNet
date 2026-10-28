@@ -131,6 +131,24 @@ auto Shortfalls(const DeviceFeatures& features,
     | std::ranges::to<std::vector>();
 }
 
+//! Log the driver's memory budgets; budget admission is measured against
+//! them. A UMA adapter has one shared segment, reported as local.
+auto LogMemoryBudget(D3D12MA::Allocator& allocator) -> void
+{
+  auto local = D3D12MA::Budget {};
+  auto non_local = D3D12MA::Budget {};
+  allocator.GetBudget(&local, &non_local);
+  if (allocator.IsUMA() != FALSE) {
+    LOG_F(INFO, "Memory budget: unified {} (usage {})",
+      FormatMemorySize(local.BudgetBytes), FormatMemorySize(local.UsageBytes));
+    return;
+  }
+  LOG_F(INFO, "Memory budget: local {} (usage {}), non-local {} (usage {})",
+    FormatMemorySize(local.BudgetBytes), FormatMemorySize(local.UsageBytes),
+    FormatMemorySize(non_local.BudgetBytes),
+    FormatMemorySize(non_local.UsageBytes));
+}
+
 } // namespace
 
 auto AdapterInfo::MemoryAsString() const -> std::string
@@ -344,6 +362,7 @@ auto DeviceManager::InitializeContext(Context& context) const -> bool
     allocatorDesc.pDevice = context.device.Get();
     allocatorDesc.pAdapter = context.adapter.Get();
     ThrowOnFailed(D3D12MA::CreateAllocator(&allocatorDesc, &context.allocator));
+    LogMemoryBudget(*context.allocator.Get());
 
     // Initialize the command queues
     LOG_F(INFO, "Command Queues");

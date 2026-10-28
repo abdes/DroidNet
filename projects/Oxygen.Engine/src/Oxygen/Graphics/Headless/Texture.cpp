@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <cstring>
 #include <memory>
+#include <span>
 #include <utility>
 
 #include <Oxygen/Base/Logging.h>
@@ -25,12 +26,11 @@
 
 namespace oxygen::graphics::headless {
 
-Texture::Texture(const TextureDesc& desc)
+Texture::Texture(TextureDesc desc)
   : graphics::Texture("HeadlessTexture")
-  , desc_(desc)
+  , desc_(std::move(desc))
+  , is_readback_surface_(desc_.cpu_access == ResourceAccessMode::kReadBack)
 {
-  is_readback_surface_ = desc_.cpu_access == ResourceAccessMode::kReadBack;
-
   // Determine backing size using the layout strategy so that all mip/data
   // ranges computed by the strategy are addressable via Read/WriteBacking.
   struct ContiguousLayout : TextureLayoutStrategy {
@@ -46,8 +46,8 @@ Texture::Texture(const TextureDesc& desc)
       return (std::max)(1U, base >> mip);
     }
 
-    auto ComputeMipSizeBytes(const TextureDesc& desc, uint32_t mip) const
-      -> uint32_t override
+    [[nodiscard]] auto ComputeMipSizeBytes(
+      const TextureDesc& desc, uint32_t mip) const -> uint32_t override
     {
       const auto finfo = detail::GetFormatInfo(desc.format);
       const uint32_t w = MipDim(desc.width, mip);
@@ -69,8 +69,8 @@ Texture::Texture(const TextureDesc& desc)
       return static_cast<uint32_t>(v);
     }
 
-    auto ComputeTotalBytesPerArraySlice(const TextureDesc& desc) const
-      -> uint32_t override
+    [[nodiscard]] auto ComputeTotalBytesPerArraySlice(
+      const TextureDesc& desc) const -> uint32_t override
     {
       uint64_t total = 0;
       for (uint32_t m = 0; m < desc.mip_levels; ++m) {
@@ -79,7 +79,9 @@ Texture::Texture(const TextureDesc& desc)
       return static_cast<uint32_t>(total);
     }
 
-    auto ComputeSliceMipBaseOffset(const TextureDesc& desc,
+    // The parameter order is the TextureLayoutStrategy interface's.
+    [[nodiscard]] auto ComputeSliceMipBaseOffset(const TextureDesc& desc,
+      // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
       uint32_t array_slice, uint32_t mip) const -> uint32_t override
     {
       const uint64_t per_slice = ComputeTotalBytesPerArraySlice(desc);
@@ -97,12 +99,8 @@ Texture::Texture(const TextureDesc& desc)
   const uint32_t layers = std::max<uint32_t>(1U, desc_.array_size);
   const uint64_t bytes = static_cast<uint64_t>(per_slice) * layers;
   if (desc_.allocation_budget.owner) {
-    auto charge = desc_.allocation_budget.owner->TryReserve(
+    budget_reservation_ = desc_.allocation_budget.owner->Reserve(
       SizeBytes { bytes }, desc_.allocation_budget.category);
-    if (!charge) {
-      throw AllocationBudgetExceeded {};
-    }
-    budget_reservation_ = std::move(*charge);
   }
   constexpr uint64_t kMaxBacking = 1024ULL * 1024ULL * 128ULL; // 128MB cap
   if (bytes > 0 && bytes <= kMaxBacking) {
@@ -123,8 +121,9 @@ auto Texture::ReadBacking(void* dst, uint32_t src_offset, uint32_t size) const
     LOG_F(WARNING, "Texture::ReadBacking: src_offset out of range");
     return;
   }
-  const uint32_t to_copy = std::min<uint32_t>(size, avail - src_offset);
-  std::memcpy(dst, data_.data() + src_offset, to_copy);
+  const auto source = std::span(data_).subspan(
+    src_offset, std::min<uint32_t>(size, avail - src_offset));
+  std::memcpy(dst, source.data(), source.size());
 }
 
 auto Texture::WriteBacking(const void* src, uint32_t dst_offset, uint32_t size)
@@ -138,8 +137,9 @@ auto Texture::WriteBacking(const void* src, uint32_t dst_offset, uint32_t size)
     LOG_F(WARNING, "Texture::WriteBacking: dst_offset out of range");
     return;
   }
-  const uint32_t to_copy = std::min<uint32_t>(size, avail - dst_offset);
-  std::memcpy(data_.data() + dst_offset, src, to_copy);
+  const auto target = std::span(data_).subspan(
+    dst_offset, std::min<uint32_t>(size, avail - dst_offset));
+  std::memcpy(target.data(), src, target.size());
 }
 
 auto Texture::GetDescriptor() const -> const TextureDesc& { return desc_; }
@@ -153,7 +153,7 @@ auto Texture::GetBackingSize() const -> uint32_t
 
 auto Texture::GetNativeResource() const -> NativeResource
 {
-  return NativeResource(const_cast<Texture*>(this), ClassTypeId());
+  return { this, ClassTypeId() };
 }
 
 auto Texture::GetLayoutStrategy() const -> const TextureLayoutStrategy&
@@ -189,26 +189,17 @@ auto Texture::CreateShaderResourceView(
         += strat.ComputeMipSizeBytes(desc_, resolved.base_mip_level + m);
     }
   }
-  (void)total_size; // debug log removed
 
-  void* raw = operator new(sizeof(SRV));
-  auto typed = new (raw) SRV {
-    this,
-    Format::kUnknown,
-    TextureType::kTexture2D,
-    resolved,
+  return OwnView(SRV {
+    {
+      .texture = this,
+      .format = Format::kUnknown,
+      .dimension = TextureType::kTexture2D,
+      .subresources = resolved,
+    },
     base_offset,
     total_size,
-  };
-  const void* payload_ptr = typed;
-  ViewPayloadPtr payload(raw, [](void* p) -> void {
-    if (p) {
-      static_cast<SRV*>(p)->~SRV();
-      operator delete(p);
-    }
   });
-  owned_view_payloads_.push_back(std::move(payload));
-  return NativeView(const_cast<void*>(payload_ptr), ClassTypeId());
 }
 
 auto Texture::CreateUnorderedAccessView(
@@ -229,24 +220,16 @@ auto Texture::CreateUnorderedAccessView(
     }
   }
 
-  void* raw = operator new(sizeof(UAV));
-  auto typed = new (raw) UAV {
-    this,
-    Format::kUnknown,
-    TextureType::kTexture2D,
-    resolved,
+  return OwnView(UAV {
+    {
+      .texture = this,
+      .format = Format::kUnknown,
+      .dimension = TextureType::kTexture2D,
+      .subresources = resolved,
+    },
     base_offset,
     total_size,
-  };
-  const void* payload_ptr = typed;
-  ViewPayloadPtr payload(raw, [](void* p) -> void {
-    if (p) {
-      static_cast<UAV*>(p)->~UAV();
-      operator delete(p);
-    }
   });
-  owned_view_payloads_.push_back(std::move(payload));
-  return NativeView(const_cast<void*>(payload_ptr), ClassTypeId());
 }
 
 auto Texture::CreateRenderTargetView(
@@ -255,18 +238,14 @@ auto Texture::CreateRenderTargetView(
 {
   // Resolve subresources for RTV (often entire texture or a single mip)
   const auto resolved = sub_resources.Resolve(desc_, /*single_mip_level=*/true);
-  void* raw = operator new(sizeof(RTV));
-  auto typed = new (raw)
-    RTV { this, Format::kUnknown, TextureType::kTexture2D, resolved };
-  const void* payload_ptr = typed;
-  ViewPayloadPtr payload(raw, [](void* p) -> void {
-    if (p) {
-      static_cast<RTV*>(p)->~RTV();
-      operator delete(p);
-    }
+  return OwnView(RTV {
+    {
+      .texture = this,
+      .format = Format::kUnknown,
+      .dimension = TextureType::kTexture2D,
+      .subresources = resolved,
+    },
   });
-  owned_view_payloads_.push_back(std::move(payload));
-  return NativeView(const_cast<void*>(payload_ptr), ClassTypeId());
 }
 
 auto Texture::CreateDepthStencilView(
@@ -274,23 +253,15 @@ auto Texture::CreateDepthStencilView(
   TextureSubResourceSet sub_resources, bool is_read_only) const -> NativeView
 {
   const auto resolved = sub_resources.Resolve(desc_, /*single_mip_level=*/true);
-  void* raw = operator new(sizeof(DSV));
-  auto typed = new (raw) DSV {
-    this,
-    Format::kUnknown,
-    TextureType::kTexture2D,
-    resolved,
+  return OwnView(DSV {
+    {
+      .texture = this,
+      .format = Format::kUnknown,
+      .dimension = TextureType::kTexture2D,
+      .subresources = resolved,
+    },
     is_read_only,
-  };
-  const void* payload_ptr = typed;
-  ViewPayloadPtr payload(raw, [](void* p) -> void {
-    if (p) {
-      static_cast<DSV*>(p)->~DSV();
-      operator delete(p);
-    }
   });
-  owned_view_payloads_.push_back(std::move(payload));
-  return NativeView(const_cast<void*>(payload_ptr), ClassTypeId());
 }
 
 } // namespace oxygen::graphics::headless

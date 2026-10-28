@@ -6845,17 +6845,14 @@ void AllocatorPimpl::GetBudget(
 void AllocatorPimpl::GetBudgetForHeapType(
   Budget& outBudget, D3D12_HEAP_TYPE heapType)
 {
-  switch (heapType) {
-  case D3D12_HEAP_TYPE_DEFAULT:
-  case D3D12_HEAP_TYPE_GPU_UPLOAD_COPY:
+  // Oxygen: on a UMA adapter every heap type is in the local segment group;
+  // the non-local one is always 0, which made every within-budget upload and
+  // readback allocation fail.
+  if (StandardHeapTypeToMemorySegmentGroup(heapType)
+    == DXGI_MEMORY_SEGMENT_GROUP_LOCAL_COPY) {
     GetBudget(&outBudget, NULL);
-    break;
-  case D3D12_HEAP_TYPE_UPLOAD:
-  case D3D12_HEAP_TYPE_READBACK:
+  } else {
     GetBudget(NULL, &outBudget);
-    break;
-  default:
-    D3D12MA_ASSERT(0);
   }
 }
 

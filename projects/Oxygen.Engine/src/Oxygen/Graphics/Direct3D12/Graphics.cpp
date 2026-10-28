@@ -878,36 +878,62 @@ auto Graphics::AllocateResource(const AllocationBudgetTag& tag,
     throw std::invalid_argument(
       "Invalid native resource allocation requirements");
   }
+  const auto requested = SizeBytes { requirements.SizeInBytes };
   auto charge = AllocationReservation {};
   if (tag.owner) {
-    auto reservation = tag.owner->TryReserve(
-      SizeBytes { requirements.SizeInBytes }, tag.category);
-    if (!reservation) {
-      throw AllocationBudgetExceeded {};
-    }
-    charge = std::move(*reservation);
+    charge = tag.owner->Reserve(requested, tag.category);
   }
-  const auto check_parent = [&](const std::uint64_t growth) -> void {
-    if (!tag.owner) {
-      return;
-    }
+  // The driver's budget for the segment the allocation lands in: on a UMA
+  // adapter every heap type shares the local segment.
+  struct SegmentRoom {
+    std::string_view name;
+    D3D12MA::Budget budget;
+    std::uint64_t remaining;
+    std::uint64_t headroom;
+    std::uint64_t available;
+  };
+  const auto segment_room = [&] -> SegmentRoom {
     auto local = D3D12MA::Budget {};
     auto non_local = D3D12MA::Budget {};
     GetAllocator()->GetBudget(&local, &non_local);
-    const auto& segment = GetAllocator()->IsUMA()
-        || requested_allocation.HeapType == D3D12_HEAP_TYPE_DEFAULT
-      ? local
-      : non_local;
+    const auto uma = GetAllocator()->IsUMA() != FALSE;
+    const auto is_local
+      = uma || requested_allocation.HeapType == D3D12_HEAP_TYPE_DEFAULT;
+    const auto& segment = is_local ? local : non_local;
     const auto committed
       = std::max(segment.UsageBytes, segment.Stats.BlockBytes);
     const auto headroom = tag.owner->Snapshot().limits.driver_headroom.get();
     const auto remaining
       = committed < segment.BudgetBytes ? segment.BudgetBytes - committed : 0U;
-    const auto available = headroom < remaining ? remaining - headroom : 0U;
-    if (growth > available || headroom > remaining) {
-      tag.owner->RecordRejection(
-        SizeBytes { requirements.SizeInBytes }, SizeBytes { available });
-      throw AllocationBudgetExceeded {};
+    auto name = std::string_view { "unified" };
+    if (!uma) {
+      name = is_local ? "local" : "non-local";
+    }
+    return {
+      .name = name,
+      .budget = segment,
+      .remaining = remaining,
+      .headroom = headroom,
+      .available = headroom < remaining ? remaining - headroom : 0U,
+    };
+  };
+  const auto reject = [&](const SegmentRoom& room) -> void {
+    tag.owner->RecordRejection(requested, SizeBytes { room.available });
+    LOG_F(WARNING,
+      "Allocation of {} bytes refused by the {} segment: budget {}, usage {}, "
+      "heap blocks {}, driver headroom {}",
+      requested.get(), room.name, room.budget.BudgetBytes,
+      room.budget.UsageBytes, room.budget.Stats.BlockBytes, room.headroom);
+    throw AllocationBudgetExceeded { requested, SizeBytes { room.available },
+      SizeBytes { room.headroom } };
+  };
+  const auto check_parent = [&](const std::uint64_t growth) -> void {
+    if (!tag.owner) {
+      return;
+    }
+    if (const auto room = segment_room();
+      growth > room.available || room.headroom > room.remaining) {
+      reject(room);
     }
   };
   auto request = requested_allocation;
@@ -943,6 +969,14 @@ auto Graphics::AllocateResource(const AllocationBudgetTag& tag,
     check_parent(requirements.SizeInBytes);
     result = GetAllocator()->CreateResource(&request, &description,
       initial_state, clear_value, allocation, IID_PPV_ARGS(resource));
+  }
+  if (tag.owner && result == E_OUTOFMEMORY) {
+    // Within-budget allocation refuses what the driver's segment budget
+    // cannot hold: a budget decision, not an exhausted device. Any other
+    // out-of-memory failure stays a COM error.
+    if (const auto room = segment_room(); requested.get() > room.available) {
+      reject(room);
+    }
   }
   oxygen::windows::ThrowOnFailed(result);
   if (tag.owner) {

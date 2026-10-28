@@ -29,12 +29,12 @@ namespace {
       .driver_headroom = SizeBytes { 0U },
     });
     auto general = budget.TryReserve(SizeBytes { kGeneral });
-    ASSERT_TRUE(general);
+    ASSERT_HAS_VALUE(general);
     EXPECT_FALSE(
       budget.TryReserve(SizeBytes { 4U }, AllocationCategory::kCompactIndices));
     auto compact = budget.TryReserve(
       SizeBytes { 3U }, AllocationCategory::kCompactIndices);
-    ASSERT_TRUE(compact);
+    ASSERT_HAS_VALUE(compact);
     EXPECT_EQ(budget.Snapshot().allocated.get(), 10U);
     *general = std::move(*compact);
     EXPECT_EQ(budget.Snapshot().allocated.get(), 3U);
@@ -95,6 +95,48 @@ namespace {
     release.count_down();
     threads.clear();
     EXPECT_EQ(budget.Snapshot().allocated.get(), 0U);
+  }
+
+  //! A refused Reserve throws with the request and the bytes still available,
+  //! and records the rejection like TryReserve.
+  NOLINT_TEST(AllocationBudgetTest, ReserveThrowsWithRequestedAndAvailable)
+  {
+    auto budget = AllocationBudget({
+      .total = SizeBytes { 64U },
+      .compact_indices = SizeBytes { 16U },
+      .driver_headroom = SizeBytes { 32U },
+    });
+    auto charge = budget.Reserve(SizeBytes { 48U });
+
+    try {
+      (void)budget.Reserve(SizeBytes { 24U });
+      FAIL() << "Reserve admitted a request beyond the limit";
+    } catch (const AllocationBudgetExceeded& error) {
+      EXPECT_EQ(error.Requested().get(), 24U);
+      EXPECT_EQ(error.Available().get(), 16U);
+      EXPECT_EQ(error.DriverHeadroom().get(), 0U);
+      EXPECT_STREQ(error.what(),
+        "GPU allocation of 24 bytes exceeds the budget: 16 bytes available");
+    }
+    const auto snapshot = budget.Snapshot();
+    EXPECT_EQ(snapshot.rejected_requests, 1U);
+    EXPECT_EQ(snapshot.last_requested.get(), 24U);
+    EXPECT_EQ(snapshot.last_available.get(), 16U);
+    EXPECT_EQ(charge.Size().get(), 48U);
+  }
+
+  //! A driver-budget refusal names the headroom kept below the segment budget.
+  NOLINT_TEST(AllocationBudgetTest, DriverRefusalDescribesHeadroom)
+  {
+    const auto error = AllocationBudgetExceeded {
+      SizeBytes { 4096U },
+      SizeBytes { 0U },
+      SizeBytes { 1024U },
+    };
+
+    EXPECT_STREQ(error.what(),
+      "GPU allocation of 4096 bytes exceeds the budget: 0 bytes available "
+      "after 1024 bytes of driver headroom");
   }
 } // namespace
 } // namespace oxygen::graphics
