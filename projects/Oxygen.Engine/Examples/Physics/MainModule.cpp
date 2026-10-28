@@ -215,7 +215,7 @@ auto MainModule::BuildWindowProperties() const -> platform::window::Properties
 // is not recoverable.
 // NOLINTNEXTLINE(bugprone-exception-escape)
 auto MainModule::OnAttachedImpl(
-  oxygen::observer_ptr<oxygen::IAsyncEngine> /*engine*/) noexcept
+  [[maybe_unused]] oxygen::observer_ptr<oxygen::IAsyncEngine> engine) noexcept
   -> std::unique_ptr<DemoShell>
 {
   DCHECK_NOTNULL_F(engine, "expecting a valid engine");

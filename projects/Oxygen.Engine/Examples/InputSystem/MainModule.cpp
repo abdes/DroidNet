@@ -145,7 +145,8 @@ auto MainModule::StageInitialScene() -> void
 // Attaching only builds the shell and its bindings; running out of memory there
 // is not recoverable.
 // NOLINTNEXTLINE(bugprone-exception-escape)
-auto MainModule::OnAttachedImpl(observer_ptr<IAsyncEngine> /*engine*/) noexcept
+auto MainModule::OnAttachedImpl(
+  [[maybe_unused]] observer_ptr<IAsyncEngine> engine) noexcept
   -> std::unique_ptr<DemoShell>
 {
   DCHECK_NOTNULL_F(engine, "expecting a valid engine");
