@@ -5,9 +5,11 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <map>
 #include <numbers>
 #include <optional>
 #include <unordered_map>
@@ -17,6 +19,7 @@
 #include <glm/ext/vector_float3.hpp>
 #include <glm/geometric.hpp>
 
+#include <Oxygen/Data/Procedural/SurfaceLayout.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
 #include <Oxygen/Data/Vertex.h>
 
@@ -35,36 +38,105 @@ constexpr float kEpsilon = 1.0e-6F;
   return glm::normalize(v);
 }
 
-[[nodiscard]] auto BuildVertexFromUnitNormal(const glm::vec3& unit_normal)
-  -> oxygen::data::Vertex
+//! A triangle corner's place in the revolution layout of `space::texture`.
+struct CornerLayout final {
+  double u;
+  float v;
+  bool pole;
+};
+
+//! The layout of the unit direction `unit`: u from its azimuth (0 at `Back`,
+//! counter-clockwise seen from +Z), v from its polar angle (0 at +Z).
+[[nodiscard]] auto LayoutOf(const glm::vec3& unit) -> CornerLayout
 {
-  const auto normal = NormalizeSafe(unit_normal);
-  const auto position = normal * kSphereRadius;
-  constexpr float kPi = std::numbers::pi_v<float>;
-  constexpr float kTwoPi = 2.0F * kPi;
-
-  const auto azimuth = std::atan2(normal.y, normal.x);
-  const auto u = (azimuth / kTwoPi) + 0.5F;
-  const auto v = 1.0F - std::acos(std::clamp(normal.z, -1.0F, 1.0F)) / kPi;
-
-  // Derive a stable tangent basis even near poles.
-  auto ref_axis = glm::vec3 { 0.0F, 0.0F, 1.0F };
-  if (std::abs(normal.z) > 0.95F) {
-    ref_axis = glm::vec3 { 0.0F, 1.0F, 0.0F };
+  constexpr auto kTwoPi = 2.0 * std::numbers::pi_v<double>;
+  constexpr auto kPi = std::numbers::pi_v<float>;
+  const auto horizontal = std::hypot(unit.x, unit.y);
+  auto u = std::atan2(-static_cast<double>(unit.x), static_cast<double>(unit.y))
+    / kTwoPi;
+  if (u < 0.0) {
+    u += 1.0;
   }
-  auto tangent = glm::cross(ref_axis, normal);
-  if (glm::dot(tangent, tangent) <= kEpsilon) {
-    tangent = glm::cross(glm::vec3 { 1.0F, 0.0F, 0.0F }, normal);
-  }
-  tangent = NormalizeSafe(tangent);
-  const auto bitangent = NormalizeSafe(glm::cross(normal, tangent));
+  return {
+    .u = u,
+    .v = std::acos(std::clamp(unit.z, -1.0F, 1.0F)) / kPi,
+    .pole = horizontal <= kEpsilon,
+  };
+}
 
+//! Lays out one triangle's corners. A triangle straddling the seam continues
+//! past u = 1 rather than wrapping inside it: of the ways to move corners
+//! across the seam (u + 1), it takes the one with the smallest u span. A pole
+//! corner takes the middle u of the triangle's other corners.
+[[nodiscard]] auto LayOutTriangle(std::array<CornerLayout, 3> corners)
+  -> std::array<CornerLayout, 3>
+{
+  auto best_span = 2.0;
+  auto best_threshold = 0.0;
+  for (const auto& pivot : corners) {
+    if (pivot.pole) {
+      continue;
+    }
+    // Every corner below the pivot's u moves across the seam.
+    auto min_u = 2.0;
+    auto max_u = -1.0;
+    for (const auto& corner : corners) {
+      if (!corner.pole) {
+        const auto u = corner.u < pivot.u ? corner.u + 1.0 : corner.u;
+        min_u = (std::min)(min_u, u);
+        max_u = (std::max)(max_u, u);
+      }
+    }
+    if (max_u - min_u < best_span) {
+      best_span = max_u - min_u;
+      best_threshold = pivot.u;
+    }
+  }
+  auto min_u = 2.0;
+  for (const auto& corner : corners) {
+    if (!corner.pole) {
+      min_u = (std::min)(min_u,
+        corner.u < best_threshold ? corner.u + 1.0 : corner.u);
+    }
+  }
+  // Keep the triangle's span starting inside [0, 1).
+  const auto shift = min_u >= 1.0 ? -1.0 : 0.0;
+  auto sum_u = 0.0;
+  auto counted = 0;
+  for (auto& corner : corners) {
+    if (corner.pole) {
+      continue;
+    }
+    corner.u += (corner.u < best_threshold ? 1.0 : 0.0) + shift;
+    sum_u += corner.u;
+    ++counted;
+  }
+  for (auto& corner : corners) {
+    if (corner.pole) {
+      corner.u = sum_u / counted;
+    }
+  }
+  return corners;
+}
+
+//! The vertex at unit direction `unit` with layout `layout`.
+[[nodiscard]] auto BuildVertex(
+  const glm::vec3& unit, const CornerLayout& layout) -> oxygen::data::Vertex
+{
+  namespace procedural = oxygen::data::procedural;
+  const auto ring = procedural::RingAtTurn(layout.u);
+  auto sin_theta = std::hypot(unit.x, unit.y);
+  auto cos_theta = unit.z;
+  if (layout.pole) {
+    sin_theta = 0.0F;
+    cos_theta = std::copysign(1.0F, unit.z);
+  }
   return oxygen::data::Vertex {
-    .position = position,
-    .normal = normal,
-    .texcoord = { u, v },
-    .tangent = tangent,
-    .bitangent = bitangent,
+    .position = unit * kSphereRadius,
+    .normal = unit,
+    .texcoord = { static_cast<float>(layout.u), layout.v },
+    .tangent = ring.tangent,
+    .bitangent = procedural::MeridianAt(ring, sin_theta, cos_theta).bitangent,
     .color = { 1.0F, 1.0F, 1.0F, 1.0F },
   };
 }
@@ -78,6 +150,26 @@ constexpr float kEpsilon = 1.0e-6F;
 
 } // namespace
 
+/*!
+ Creates vertex and index buffers for a radius-0.5 icosphere centred at the
+ origin: an icosahedron whose triangles are split `subdivision_level` times
+ and pushed onto the sphere. It follows the revolution layout of
+ `space::texture` (u from the azimuth with the seam at the back, v from the
+ polar angle with v = 0 at +Z), so a texture reads upright and unmirrored from
+ outside. Triangles straddling the seam continue past u = 1 (samplers wrap),
+ and a corner at a pole takes its triangle's middle u, so the seam and the
+ poles have their own vertices: weld by position to share them.
+
+ @param subdivision_level Number of subdivisions, in [0, 8].
+ @return Vertex and index vectors, or std::nullopt above the maximum level.
+
+ ### Performance Characteristics
+
+ - Time Complexity: O(20 * 4^subdivision_level).
+ - Output: 60 * 4^subdivision_level indices.
+
+ @see GenerateMesh, procedural::RingAtTurn
+*/
 auto oxygen::data::MakeIcoSphereMeshAsset(const unsigned int subdivision_level)
   -> std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>>
 {
@@ -85,7 +177,7 @@ auto oxygen::data::MakeIcoSphereMeshAsset(const unsigned int subdivision_level)
     return std::nullopt;
   }
 
-  constexpr float phi = 1.6180339887498948482F;
+  constexpr float phi = std::numbers::phi_v<float>;
   auto unit_positions = std::vector<glm::vec3> {
     NormalizeSafe(glm::vec3 { -1.0F, phi, 0.0F }),
     NormalizeSafe(glm::vec3 { 1.0F, phi, 0.0F }),
@@ -214,11 +306,29 @@ auto oxygen::data::MakeIcoSphereMeshAsset(const unsigned int subdivision_level)
     }
   }
 
+  // Split the seam and the poles: every corner takes its triangle's layout,
+  // and corners with the same direction and u share one vertex.
   auto vertices = std::vector<Vertex> {};
-  vertices.reserve(unit_positions.size());
-  for (const auto& p : unit_positions) {
-    vertices.push_back(BuildVertexFromUnitNormal(p));
+  auto split_indices = std::vector<uint32_t> {};
+  split_indices.reserve(indices.size());
+  auto corner_vertices = std::map<std::pair<uint32_t, double>, uint32_t> {};
+  for (size_t i = 0; i + 2 < indices.size(); i += 3U) {
+    auto corners = std::array<CornerLayout, 3> {};
+    for (size_t k = 0; k < corners.size(); ++k) {
+      corners.at(k) = LayoutOf(unit_positions[indices[i + k]]);
+    }
+    corners = LayOutTriangle(corners);
+    for (size_t k = 0; k < corners.size(); ++k) {
+      const auto source = indices[i + k];
+      const auto key = std::make_pair(source, corners.at(k).u);
+      auto [it, inserted] = corner_vertices.try_emplace(
+        key, static_cast<uint32_t>(vertices.size()));
+      if (inserted) {
+        vertices.push_back(BuildVertex(unit_positions[source], corners.at(k)));
+      }
+      split_indices.push_back(it->second);
+    }
   }
 
-  return { { std::move(vertices), std::move(indices) } };
+  return { { std::move(vertices), std::move(split_indices) } };
 }

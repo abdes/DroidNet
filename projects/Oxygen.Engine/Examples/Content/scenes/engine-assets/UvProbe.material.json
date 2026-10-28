@@ -1,0 +1,21 @@
+{
+  "$schema": "../../../../src/Oxygen/Cooker/Import/Schemas/oxygen.material-descriptor.schema.json",
+  "name": "UvProbe",
+  "domain": "opaque",
+  "alpha_mode": "opaque",
+  "parameters": {
+    "base_color": [1.0, 1.0, 1.0, 1.0],
+    "metalness": 0.0,
+    "roughness": 0.55,
+    "normal_scale": 1.0,
+    "ambient_occlusion": 1.0
+  },
+  "textures": {
+    "base_color": {
+      "virtual_path": "/.cooked/Resources/Textures/UvProbe_albedo.otex"
+    },
+    "normal": {
+      "virtual_path": "/.cooked/Resources/Textures/UvProbe_normal.otex"
+    }
+  }
+}

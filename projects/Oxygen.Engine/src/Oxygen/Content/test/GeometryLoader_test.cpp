@@ -4,10 +4,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <algorithm>
 #include <cstddef>
 #include <cstdint>
-#include <iterator>
+#include <exception>
 #include <memory>
 #include <span>
 #include <stdexcept>
@@ -47,8 +46,10 @@ constexpr uint32_t kCubeIndexCount = 36U;
 constexpr uint8_t kInvalidMeshType = 0xFFU;
 
 //! The one surface the procedural test geometry declares.
-const auto kSlot
-  = oxygen::data::SurfaceId::FromStableIdentity("GeometryLoaderTest/slot");
+[[nodiscard]] auto Slot() -> oxygen::data::SurfaceId
+{
+  return oxygen::data::SurfaceId::FromStableIdentity("GeometryLoaderTest/slot");
+}
 
 //! Descriptor fields a test can make invalid.
 struct GeometryOverrides {
@@ -56,10 +57,14 @@ struct GeometryOverrides {
     = kGeometryAssetVersion;
   //! Maximum x of the mesh view; the submesh bounds are all zero.
   float view_max_x = 0.0F;
+  //! Vertices the mesh view spans from the first vertex.
+  uint32_t view_vertex_count = kCubeVertexCount;
   //! The surface table; the declared surface, drawn and casting, by default.
   std::vector<SurfaceDesc> surfaces {
-    { .surface_id = kSlot,
-      .flags = kSurfaceFlag_Visible | kSurfaceFlag_CastsShadows },
+    {
+      .surface_id = Slot(),
+      .flags = kSurfaceFlag_Visible | kSurfaceFlag_CastsShadows,
+    },
   };
   LodPolicyRecord lod_policy {};
 };
@@ -93,7 +98,7 @@ protected:
     mesh.mesh_view_count = 1;
     mesh.info.procedural.params_size = static_cast<uint32_t>(parameters.size());
     SubMeshDesc submesh {};
-    submesh.surface_id = kSlot;
+    submesh.surface_id = Slot();
     submesh.material_asset_key
       = oxygen::data::AssetKey::FromVirtualPath("/Art/Materials/Shared.omat");
     submesh.mesh_view_count = 1;
@@ -101,7 +106,7 @@ protected:
       .first_index = 0,
       .index_count = kCubeIndexCount,
       .first_vertex = 0,
-      .vertex_count = kCubeVertexCount,
+      .vertex_count = overrides.view_vertex_count,
     };
     view.bounding_box_max[0] = overrides.view_max_x;
     const auto surface_bytes
@@ -200,6 +205,19 @@ NOLINT_TEST_F(GeometryLoaderContractTest, InvalidProceduralParametersThrow)
   }
 }
 
+//! A view cooked against another generator revision can span more vertices
+//! than the generator now produces; the load fails instead of aborting.
+NOLINT_TEST_F(GeometryLoaderContractTest, StaleProceduralViewRangeThrows)
+{
+  ASSERT_NO_FATAL_FAILURE(WriteProceduralGeometry("Cube/Mesh", {},
+    GeometryOverrides { .view_vertex_count = kCubeVertexCount + 1U }));
+  for (const auto parse_only : { false, true }) {
+    auto [context, collector] = MakeDecodeLoaderContext();
+    context.parse_only = parse_only;
+    EXPECT_THROW((void)LoadGeometryAsset(context), std::runtime_error);
+  }
+}
+
 //! Valid procedural recipes still materialize in parse-only inspector mode.
 NOLINT_TEST_F(
   GeometryLoaderContractTest, ValidProceduralMeshLoadsInDecodeAndParseOnlyModes)
@@ -270,7 +288,7 @@ NOLINT_TEST_F(
   mesh.mesh_view_count = 2;
   SubMeshDesc submesh {};
   submesh.material_asset_key = material;
-  submesh.surface_id = kSlot;
+  submesh.surface_id = Slot();
   submesh.mesh_view_count = 1;
   const MeshViewDesc view {
     .first_index = 0,
@@ -279,7 +297,7 @@ NOLINT_TEST_F(
     .vertex_count = 3,
   };
   const SurfaceDesc surface {
-    .surface_id = kSlot,
+    .surface_id = Slot(),
     .flags = kSurfaceFlag_Visible,
   };
   const auto strings = oxygen::data::DescriptorStringsBuilder {};
@@ -321,21 +339,23 @@ NOLINT_TEST_F(GeometryLoaderContractTest, AssetDefaultsLoad)
   ASSERT_NO_FATAL_FAILURE(WriteProceduralGeometry("Cube/Mesh", {},
     {
       .surfaces
-      = { { .surface_id = kSlot, .flags = kSurfaceFlag_CastsShadows } },
+      = { { .surface_id = Slot(), .flags = kSurfaceFlag_CastsShadows } },
       .lod_policy = policy,
     }));
   auto [context, collector] = MakeDecodeLoaderContext();
   const auto geometry = LoadGeometryAsset(context);
 
-  const auto* surface = geometry->FindSurface(kSlot);
+  const auto* surface = geometry->FindSurface(Slot());
   ASSERT_NE(surface, nullptr);
-  ASSERT_TRUE(surface->defaults.has_value());
-  EXPECT_FALSE(surface->defaults->visible);
-  EXPECT_TRUE(surface->defaults->casts_shadows);
-  ASSERT_TRUE(geometry->DefaultLodPolicy().has_value());
-  EXPECT_EQ(geometry->DefaultLodPolicy()->type, LodPolicyType::kDistance);
-  EXPECT_EQ(geometry->DefaultLodPolicy()->boundary_count, 2U);
-  EXPECT_EQ(geometry->DefaultLodPolicy()->thresholds[1], 0.75F);
+  const auto& defaults = surface->defaults;
+  ASSERT_HAS_VALUE(defaults);
+  EXPECT_FALSE(defaults->visible);
+  EXPECT_TRUE(defaults->casts_shadows);
+  const auto lod_policy = geometry->DefaultLodPolicy();
+  ASSERT_HAS_VALUE(lod_policy);
+  EXPECT_EQ(lod_policy->type, LodPolicyType::kDistance);
+  EXPECT_EQ(lod_policy->boundary_count, 2U);
+  EXPECT_EQ(lod_policy->thresholds[1], 0.75F);
 }
 
 //! A cooked geometry must declare the defaults of every surface it declares.

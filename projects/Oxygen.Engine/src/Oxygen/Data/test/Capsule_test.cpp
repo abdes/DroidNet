@@ -57,9 +57,10 @@ NOLINT_TEST(CapsuleTest, SurfaceFramesAndTrianglesMatchTheAnalyticCapsule)
           EXPECT_NEAR(glm::dot(vertex.normal, vertex.tangent), 0.0F, 1e-6F);
           EXPECT_NEAR(glm::dot(vertex.normal, vertex.bitangent), 0.0F, 1e-6F);
           EXPECT_NEAR(glm::dot(vertex.tangent, vertex.bitangent), 0.0F, 1e-6F);
-          EXPECT_GT(glm::dot(glm::cross(vertex.tangent, vertex.bitangent),
-                      vertex.normal),
-            0.999F);
+          // Unmirrored (`space::texture`): dot(cross(N, T), B) = -1.
+          EXPECT_LT(glm::dot(glm::cross(vertex.normal, vertex.tangent),
+                      vertex.bitangent),
+            -0.999F);
           EXPECT_GE(vertex.texcoord.x, 0.0F);
           EXPECT_LE(vertex.texcoord.x, 1.0F);
           EXPECT_GE(vertex.texcoord.y, 0.0F);
@@ -79,8 +80,12 @@ NOLINT_TEST(CapsuleTest, SurfaceFramesAndTrianglesMatchTheAnalyticCapsule)
           // Also rejects duplicate equators or degenerate pole triangles.
           EXPECT_GT(glm::dot(cross, a.normal + b.normal + c.normal), 0.0F);
         }
+        // Each pole has `radial` vertices; every ring between them repeats
+        // its first vertex at u = 1, closing the seam exactly.
         const auto stride = radial + 1U;
-        for (auto row = size_t { 0 }; row < vertices.size(); row += stride) {
+        ASSERT_EQ((vertices.size() - (size_t { 2U } * radial)) % stride, 0U);
+        for (auto row = size_t { radial }; row + radial < vertices.size();
+          row += stride) {
           const auto& first = vertices.at(row);
           const auto& last = vertices.at(row + radial);
           EXPECT_EQ(first.position, last.position);

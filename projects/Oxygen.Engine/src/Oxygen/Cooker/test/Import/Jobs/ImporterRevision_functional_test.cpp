@@ -108,7 +108,7 @@ namespace {
     },
     {
       .importer = Importer::kGeometryDescriptor,
-      .revision = 2,
+      .revision = 3,
       .digest
       = "8835adccf95dfbe6e97dbf95c4f32d0fdd321b9f51e11069b29d062f060cfd04",
     },

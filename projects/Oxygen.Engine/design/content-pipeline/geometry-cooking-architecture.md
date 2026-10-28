@@ -702,7 +702,7 @@ Valid `generator` values and associated param schemas:
 | `"Sphere"`         | `latitude_segments` (≥3), `longitude_segments` (≥3)                                                | `16`, `32`               |
 | `"IcoSphere"`      | `subdivision_level` (0–8)                                                                          | `2`                      |
 | `"Capsule"`        | `hemisphere_segments` (1–64), `radial_segments` (3–256), total `height` (≥2×radius), `radius` (>0) | `8`, `32`, `2.0`, `0.5`  |
-| `"Plane"`          | `x_segments` (≥1), `z_segments` (≥1), `size` (>0)                                                  | `1`, `1`, `1.0`          |
+| `"Plane"`          | `x_segments` (≥1), `y_segments` (≥1), `size` (>0)                                                  | `1`, `1`, `1.0`          |
 | `"Cylinder"`       | `segments` (≥3), `height` (>0), `radius` (>0)                                                      | `32`, `1.0`, `0.5`       |
 | `"Cone"`           | `segments` (≥3), `height` (>0), `radius` (>0)                                                      | `32`, `1.0`, `0.5`       |
 | `"Torus"`          | `major_segments` (≥3), `minor_segments` (≥3), `major_radius` (>0), `minor_radius` (>0)             | `32`, `16`, `0.4`, `0.1` |
@@ -717,6 +717,17 @@ The parameter blob is encoded by `BuildProceduralParamBlob` (packed binary,
 `uint32_t` / `float`) and stored verbatim in the `.ogeo` file immediately after
 the corresponding `MeshDesc`. `GenerateMeshBuffers` is called at cook time only
 to derive `vertex_count` and `index_count` for `MeshViewDesc` population.
+
+Every generator lays out its UVs and tangent frames by `space::texture` "UV
+layout of generated surfaces" in `Oxygen/Core/Constants.h`: textures read
+upright and unmirrored from outside, tangents follow +dP/dU and bitangents
++dP/dV, and seams, poles and cone apexes have their own vertices so no
+triangle is degenerate or wraps its UVs. Closed shapes share positions exactly
+along their seams and edges, so welding by position closes them (soft-body
+cooking does). The loader regenerates the buffers from the stored parameters;
+a cooked view that spans more than the generator now produces (content cooked
+by an older generator revision) fails the load instead of aborting it, and the
+`geometry_descriptor` importer revision forces such content to be recooked.
 
 #### 7.2.7 Surface defaults and the default LOD policy
 

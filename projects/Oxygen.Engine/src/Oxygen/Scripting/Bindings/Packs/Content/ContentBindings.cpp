@@ -51,7 +51,7 @@ auto DescribeContentBindings() -> std::span<const BindingNamespaceDescription>
       = "{ segments: number?, latitude_segments: number?, "
         "longitude_segments: number?, hemisphere_segments: number?, "
         "radial_segments: number?, subdivision_level: number?, "
-        "x_segments: number?, z_segments: number?, "
+        "x_segments: number?, y_segments: number?, "
         "major_segments: number?, minor_segments: number?, "
         "height: number?, radius: number?, size: number?, "
         "major_radius: number?, minor_radius: number?, "

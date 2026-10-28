@@ -14,7 +14,8 @@
 
 /*!
  Creates vertex and index buffers for a unit axis-aligned cube centred at the
- origin. Each face has separate vertices and a constant outward normal.
+ origin: the one-cell subdivided cube. Each face has separate vertices, a
+ constant outward normal and the face layout of `space::texture`.
 
  @return A pair of vertex and index vectors wrapped in an engaged optional.
 
@@ -32,63 +33,10 @@
  }
  ```
 
- @see GenerateMesh, Vertex
+ @see GenerateMesh, MakeSubdividedCubeMeshAsset, Vertex
 */
 auto oxygen::data::MakeCubeMeshAsset()
   -> std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>>
 {
-  // Vertices for a unit cube centered at the origin, 24 vertices (4 per face)
-  constexpr float h = 0.5F;
-  std::vector<Vertex> vertices = {
-    // clang-format off
-    // -Z face (bottom)
-    { { -h, -h, -h }, {  0,  0, -1 }, { 0, 0 }, { 1, 0, 0 }, { 0, 0, 0 }, { 1, 1, 1, 1 } },
-    { {  h, -h, -h }, {  0,  0, -1 }, { 1, 0 }, { 1, 0, 0 }, { 0, 0, 0 }, { 1, 1, 1, 1 } },
-    { {  h,  h, -h }, {  0,  0, -1 }, { 1, 1 }, { 1, 0, 0 }, { 0, 0, 0 }, { 1, 1, 1, 1 } },
-    { { -h,  h, -h }, {  0,  0, -1 }, { 0, 1 }, { 1, 0, 0 }, { 0, 0, 0 }, { 1, 1, 1, 1 } },
-    // +Z face (top)
-    { { -h, -h,  h }, {  0,  0,  1 }, { 0, 0 }, { 1, 0, 0 }, { 0, 0, 0 }, { 1, 1, 1, 1 } },
-    { {  h, -h,  h }, {  0,  0,  1 }, { 1, 0 }, { 1, 0, 0 }, { 0, 0, 0 }, { 1, 1, 1, 1 } },
-    { {  h,  h,  h }, {  0,  0,  1 }, { 1, 1 }, { 1, 0, 0 }, { 0, 0, 0 }, { 1, 1, 1, 1 } },
-    { { -h,  h,  h }, {  0,  0,  1 }, { 0, 1 }, { 1, 0, 0 }, { 0, 0, 0 }, { 1, 1, 1, 1 } },
-    // -X face (left)
-    { { -h, -h, -h }, { -1,  0,  0 }, { 0, 0 }, { 0, 1, 0 }, { 0, 0, 0 }, { 1, 1, 1, 1 } },
-    { { -h,  h, -h }, { -1,  0,  0 }, { 1, 0 }, { 0, 1, 0 }, { 0, 0, 0 }, { 1, 1, 1, 1 } },
-    { { -h,  h,  h }, { -1,  0,  0 }, { 1, 1 }, { 0, 1, 0 }, { 0, 0, 0 }, { 1, 1, 1, 1 } },
-    { { -h, -h,  h }, { -1,  0,  0 }, { 0, 1 }, { 0, 1, 0 }, { 0, 0, 0 }, { 1, 1, 1, 1 } },
-    // +X face (right)
-    { {  h, -h, -h }, {  1,  0,  0 }, { 0, 0 }, { 0, 1, 0 }, { 0, 0, 0 }, { 1, 1, 1, 1 } },
-    { {  h,  h, -h }, {  1,  0,  0 }, { 1, 0 }, { 0, 1, 0 }, { 0, 0, 0 }, { 1, 1, 1, 1 } },
-    { {  h,  h,  h }, {  1,  0,  0 }, { 1, 1 }, { 0, 1, 0 }, { 0, 0, 0 }, { 1, 1, 1, 1 } },
-    { {  h, -h,  h }, {  1,  0,  0 }, { 0, 1 }, { 0, 1, 0 }, { 0, 0, 0 }, { 1, 1, 1, 1 } },
-    // -Y face (front)
-    { { -h, -h, -h }, {  0, -1,  0 }, { 0, 0 }, { 1, 0, 0 }, { 0, 0, 0 }, { 1, 1, 1, 1 } },
-    { {  h, -h, -h }, {  0, -1,  0 }, { 1, 0 }, { 1, 0, 0 }, { 0, 0, 0 }, { 1, 1, 1, 1 } },
-    { {  h, -h,  h }, {  0, -1,  0 }, { 1, 1 }, { 1, 0, 0 }, { 0, 0, 0 }, { 1, 1, 1, 1 } },
-    { { -h, -h,  h }, {  0, -1,  0 }, { 0, 1 }, { 1, 0, 0 }, { 0, 0, 0 }, { 1, 1, 1, 1 } },
-    // +Y face (back)
-    { { -h,  h, -h }, {  0,  1,  0 }, { 0, 0 }, { 1, 0, 0 }, { 0, 0, 0 }, { 1, 1, 1, 1 } },
-    { {  h,  h, -h }, {  0,  1,  0 }, { 1, 0 }, { 1, 0, 0 }, { 0, 0, 0 }, { 1, 1, 1, 1 } },
-    { {  h,  h,  h }, {  0,  1,  0 }, { 1, 1 }, { 1, 0, 0 }, { 0, 0, 0 }, { 1, 1, 1, 1 } },
-    { { -h,  h,  h }, {  0,  1,  0 }, { 0, 1 }, { 1, 0, 0 }, { 0, 0, 0 }, { 1, 1, 1, 1 } },
-    // clang-format off
-  };
-  std::vector<uint32_t> indices = {
-    // clang-format off
-    // -Z face (bottom) - triangle winding must produce outward normal = -Z
-    0, 2, 1, 0, 3, 2,
-    // +Z face (top)
-    4, 5, 6, 4, 6, 7,
-    // -X face (left) - triangle winding must produce outward normal = -X
-    8, 10, 9, 8, 11, 10,
-    // +X face (right)
-    12, 13, 14, 12, 14, 15,
-    // -Y face (front)
-    16, 17, 18, 16, 18, 19,
-    // +Y face (back) - triangle winding must produce outward normal = +Y
-    20, 22, 21, 20, 23, 22,
-    // clang-format off
-  };
-
-  return { { std::move(vertices), std::move(indices) } };
+  return MakeSubdividedCubeMeshAsset(1U);
 }

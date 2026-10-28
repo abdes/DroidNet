@@ -2,7 +2,7 @@
   "version": 15,
   "name": "EngineAssets",
   "starting_camera": {
-    "node": 12
+    "node": 40
   },
   "nodes": [
     {
@@ -34,7 +34,7 @@
       "name": "Cube",
       "parent": 0,
       "transform": {
-        "translation": [-4.0, 0.0, 0.5],
+        "translation": [-10.0, 0.0, 0.5],
         "rotation": [0.0, 0.0, 0.0, 1.0],
         "scale": [1.0, 1.0, 1.0]
       },
@@ -49,7 +49,7 @@
       "name": "SubdividedCube",
       "parent": 0,
       "transform": {
-        "translation": [-2.0, 0.0, 0.5],
+        "translation": [-8.0, 0.0, 0.5],
         "rotation": [0.0, 0.0, 0.0, 1.0],
         "scale": [1.0, 1.0, 1.0]
       },
@@ -64,38 +64,8 @@
       "name": "Sphere",
       "parent": 0,
       "transform": {
-        "translation": [0.0, 0.0, 0.5],
+        "translation": [-6.0, 0.0, 0.5],
         "rotation": [0.0, 0.0, 0.0, 1.0],
-        "scale": [1.0, 1.0, 1.0]
-      },
-      "flags": {
-        "visible": "shown",
-        "casts_shadows": "on",
-        "receives_shadows": "on"
-      }
-    },
-    {
-      "id": "7cdef6f6-2430-5a4e-b40b-691efdb4688a",
-      "name": "Cylinder",
-      "parent": 0,
-      "transform": {
-        "translation": [2.0, 0.0, 0.5],
-        "rotation": [0.0, 0.0, 0.0, 1.0],
-        "scale": [1.0, 1.0, 1.0]
-      },
-      "flags": {
-        "visible": "shown",
-        "casts_shadows": "on",
-        "receives_shadows": "on"
-      }
-    },
-    {
-      "id": "7f3638d1-4d6b-54df-946a-ca9ba2457856",
-      "name": "Quad",
-      "parent": 0,
-      "transform": {
-        "translation": [4.0, 0.0, 0.5],
-        "rotation": [0.70710678, 0.0, 0.0, 0.70710678],
         "scale": [1.0, 1.0, 1.0]
       },
       "flags": {
@@ -109,22 +79,7 @@
       "name": "IcoSphere",
       "parent": 0,
       "transform": {
-        "translation": [-4.0, 2.5, 0.5],
-        "rotation": [0.0, 0.0, 0.0, 1.0],
-        "scale": [1.0, 1.0, 1.0]
-      },
-      "flags": {
-        "visible": "shown",
-        "casts_shadows": "on",
-        "receives_shadows": "on"
-      }
-    },
-    {
-      "id": "43d20502-3183-5376-9ad0-d0417f59ef88",
-      "name": "Cone",
-      "parent": 0,
-      "transform": {
-        "translation": [-2.0, 2.5, 0.5],
+        "translation": [-4.0, 0.0, 0.5],
         "rotation": [0.0, 0.0, 0.0, 1.0],
         "scale": [1.0, 1.0, 1.0]
       },
@@ -139,7 +94,37 @@
       "name": "Capsule",
       "parent": 0,
       "transform": {
-        "translation": [0.0, 2.5, 1.0],
+        "translation": [-2.0, 0.0, 1.0],
+        "rotation": [0.0, 0.0, 0.0, 1.0],
+        "scale": [1.0, 1.0, 1.0]
+      },
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      }
+    },
+    {
+      "id": "7cdef6f6-2430-5a4e-b40b-691efdb4688a",
+      "name": "Cylinder",
+      "parent": 0,
+      "transform": {
+        "translation": [0.0, 0.0, 0.5],
+        "rotation": [0.0, 0.0, 0.0, 1.0],
+        "scale": [1.0, 1.0, 1.0]
+      },
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      }
+    },
+    {
+      "id": "43d20502-3183-5376-9ad0-d0417f59ef88",
+      "name": "Cone",
+      "parent": 0,
+      "transform": {
+        "translation": [2.0, 0.0, 0.5],
         "rotation": [0.0, 0.0, 0.0, 1.0],
         "scale": [1.0, 1.0, 1.0]
       },
@@ -154,9 +139,39 @@
       "name": "Torus",
       "parent": 0,
       "transform": {
-        "translation": [2.0, 2.5, 0.1],
+        "translation": [4.0, 0.0, 0.1],
         "rotation": [0.0, 0.0, 0.0, 1.0],
-        "scale": [2.0, 2.0, 2.0]
+        "scale": [1.0, 1.0, 1.0]
+      },
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      }
+    },
+    {
+      "id": "7f3638d1-4d6b-54df-946a-ca9ba2457856",
+      "name": "Quad",
+      "parent": 0,
+      "transform": {
+        "translation": [6.0, 0.0, 0.5],
+        "rotation": [0.0, 0.0, 0.0, 1.0],
+        "scale": [1.0, 1.0, 1.0]
+      },
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      }
+    },
+    {
+      "id": "92f8cc68-74d1-56d1-8a31-3efe0b9d021a",
+      "name": "Plane",
+      "parent": 0,
+      "transform": {
+        "translation": [8.0, 0.0, 0.5],
+        "rotation": [0.70710678, 0.0, 0.0, 0.70710678],
+        "scale": [1.0, 1.0, 1.0]
       },
       "flags": {
         "visible": "shown",
@@ -169,7 +184,412 @@
       "name": "ArrowGizmo",
       "parent": 0,
       "transform": {
-        "translation": [4.0, 2.5, 0.0],
+        "translation": [10.0, 0.0, 0.1],
+        "rotation": [0.0, 0.0, 0.0, 1.0],
+        "scale": [1.0, 1.0, 1.0]
+      },
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      }
+    },
+    {
+      "id": "e5994ea0-0245-5c8a-976a-f6ead8d8da71",
+      "name": "CubeBack",
+      "parent": 0,
+      "transform": {
+        "translation": [-10.0, 3.5, 0.5],
+        "rotation": [0.0, 0.0, 1.0, 0.0],
+        "scale": [1.0, 1.0, 1.0]
+      },
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      }
+    },
+    {
+      "id": "9e147caa-8e9d-5db1-8b10-028059ab7209",
+      "name": "SubdividedCubeBack",
+      "parent": 0,
+      "transform": {
+        "translation": [-8.0, 3.5, 0.5],
+        "rotation": [0.0, 0.0, 1.0, 0.0],
+        "scale": [1.0, 1.0, 1.0]
+      },
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      }
+    },
+    {
+      "id": "a004b0a4-3944-5852-ac96-db2fc0b4fc65",
+      "name": "SphereBack",
+      "parent": 0,
+      "transform": {
+        "translation": [-6.0, 3.5, 0.5],
+        "rotation": [0.0, 0.0, 1.0, 0.0],
+        "scale": [1.0, 1.0, 1.0]
+      },
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      }
+    },
+    {
+      "id": "614b6523-84ea-552d-a2ef-8bf7f036c20b",
+      "name": "IcoSphereBack",
+      "parent": 0,
+      "transform": {
+        "translation": [-4.0, 3.5, 0.5],
+        "rotation": [0.0, 0.0, 1.0, 0.0],
+        "scale": [1.0, 1.0, 1.0]
+      },
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      }
+    },
+    {
+      "id": "9ce8ceb6-7bb1-5d8d-a07d-b44b20336b3a",
+      "name": "CapsuleBack",
+      "parent": 0,
+      "transform": {
+        "translation": [-2.0, 3.5, 1.0],
+        "rotation": [0.0, 0.0, 1.0, 0.0],
+        "scale": [1.0, 1.0, 1.0]
+      },
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      }
+    },
+    {
+      "id": "1f33f5a7-9fa7-5872-99c9-8f3b02fbee6b",
+      "name": "CylinderBack",
+      "parent": 0,
+      "transform": {
+        "translation": [0.0, 3.5, 0.5],
+        "rotation": [0.0, 0.0, 1.0, 0.0],
+        "scale": [1.0, 1.0, 1.0]
+      },
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      }
+    },
+    {
+      "id": "0b39a383-a353-5063-8cfd-f91e47141867",
+      "name": "ConeBack",
+      "parent": 0,
+      "transform": {
+        "translation": [2.0, 3.5, 0.5],
+        "rotation": [0.0, 0.0, 1.0, 0.0],
+        "scale": [1.0, 1.0, 1.0]
+      },
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      }
+    },
+    {
+      "id": "6c00d595-fc4f-58c9-a4bc-f998c964e2a2",
+      "name": "TorusBack",
+      "parent": 0,
+      "transform": {
+        "translation": [4.0, 3.5, 0.1],
+        "rotation": [0.0, 0.0, 1.0, 0.0],
+        "scale": [1.0, 1.0, 1.0]
+      },
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      }
+    },
+    {
+      "id": "4d176ccb-730d-5dfe-981a-ecf281a5b289",
+      "name": "QuadBack",
+      "parent": 0,
+      "transform": {
+        "translation": [6.0, 3.5, 0.5],
+        "rotation": [0.0, 0.0, 1.0, 0.0],
+        "scale": [1.0, 1.0, 1.0]
+      },
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      }
+    },
+    {
+      "id": "d34c6657-9dc7-5357-9e89-984a91e790ab",
+      "name": "PlaneBack",
+      "parent": 0,
+      "transform": {
+        "translation": [8.0, 3.5, 0.5],
+        "rotation": [0.0, 0.70710678, 0.70710678, 0.0],
+        "scale": [1.0, 1.0, 1.0]
+      },
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      }
+    },
+    {
+      "id": "2271e59d-4148-524d-aa06-ec071c9a2d05",
+      "name": "ArrowGizmoBack",
+      "parent": 0,
+      "transform": {
+        "translation": [10.0, 3.5, 0.1],
+        "rotation": [0.0, 0.0, 1.0, 0.0],
+        "scale": [1.0, 1.0, 1.0]
+      },
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      }
+    },
+    {
+      "id": "94428615-3db7-553f-9bec-fe14070b8035",
+      "name": "CubeUnder",
+      "parent": 0,
+      "transform": {
+        "translation": [-10.0, 7.0, 0.5],
+        "rotation": [0.0, 1.0, 0.0, 0.0],
+        "scale": [1.0, 1.0, 1.0]
+      },
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      }
+    },
+    {
+      "id": "2a99edf8-96ec-5ae8-a149-27ebba8493db",
+      "name": "SubdividedCubeUnder",
+      "parent": 0,
+      "transform": {
+        "translation": [-8.0, 7.0, 0.5],
+        "rotation": [0.0, 1.0, 0.0, 0.0],
+        "scale": [1.0, 1.0, 1.0]
+      },
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      }
+    },
+    {
+      "id": "3e66e662-258a-502f-80e9-1d18a83047dd",
+      "name": "SphereUnder",
+      "parent": 0,
+      "transform": {
+        "translation": [-6.0, 7.0, 0.5],
+        "rotation": [0.0, 1.0, 0.0, 0.0],
+        "scale": [1.0, 1.0, 1.0]
+      },
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      }
+    },
+    {
+      "id": "7f053ec1-e0aa-52c3-9403-db1ba4d7cd26",
+      "name": "IcoSphereUnder",
+      "parent": 0,
+      "transform": {
+        "translation": [-4.0, 7.0, 0.5],
+        "rotation": [0.0, 1.0, 0.0, 0.0],
+        "scale": [1.0, 1.0, 1.0]
+      },
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      }
+    },
+    {
+      "id": "c75ba95e-36ff-542d-bc61-430f5e1fc00b",
+      "name": "CapsuleUnder",
+      "parent": 0,
+      "transform": {
+        "translation": [-2.0, 7.0, 1.0],
+        "rotation": [0.0, 1.0, 0.0, 0.0],
+        "scale": [1.0, 1.0, 1.0]
+      },
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      }
+    },
+    {
+      "id": "9436ffe8-a958-5cb4-b4dc-ab2f1832d798",
+      "name": "CylinderUnder",
+      "parent": 0,
+      "transform": {
+        "translation": [0.0, 7.0, 0.5],
+        "rotation": [0.0, 1.0, 0.0, 0.0],
+        "scale": [1.0, 1.0, 1.0]
+      },
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      }
+    },
+    {
+      "id": "1babc131-d8ea-55ad-a8cf-620ca8ae7c0d",
+      "name": "ConeUnder",
+      "parent": 0,
+      "transform": {
+        "translation": [2.0, 7.0, 0.5],
+        "rotation": [0.0, 1.0, 0.0, 0.0],
+        "scale": [1.0, 1.0, 1.0]
+      },
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      }
+    },
+    {
+      "id": "61a73e64-0117-5b20-a690-9ed592a22489",
+      "name": "TorusUnder",
+      "parent": 0,
+      "transform": {
+        "translation": [4.0, 7.0, 0.1],
+        "rotation": [0.0, 1.0, 0.0, 0.0],
+        "scale": [1.0, 1.0, 1.0]
+      },
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      }
+    },
+    {
+      "id": "bc829b00-b4ad-5c37-9afd-69859d9ec08e",
+      "name": "QuadUnder",
+      "parent": 0,
+      "transform": {
+        "translation": [6.0, 7.0, 0.5],
+        "rotation": [0.0, 1.0, 0.0, 0.0],
+        "scale": [1.0, 1.0, 1.0]
+      },
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      }
+    },
+    {
+      "id": "f0f318db-03c5-5633-ab23-cfa4bb7d0c30",
+      "name": "PlaneUnder",
+      "parent": 0,
+      "transform": {
+        "translation": [8.0, 7.0, 0.5],
+        "rotation": [0.0, 0.70710678, -0.70710678, 0.0],
+        "scale": [1.0, 1.0, 1.0]
+      },
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      }
+    },
+    {
+      "id": "9e28b678-a72f-57b1-8f2e-dc57a76c4d9f",
+      "name": "ArrowGizmoUnder",
+      "parent": 0,
+      "transform": {
+        "translation": [10.0, 7.0, 0.78],
+        "rotation": [0.0, 1.0, 0.0, 0.0],
+        "scale": [1.0, 1.0, 1.0]
+      },
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      }
+    },
+    {
+      "id": "19fdbf8a-e803-5897-9266-3978cb67e918",
+      "name": "CubeMaterial",
+      "parent": 0,
+      "transform": {
+        "translation": [-4.0, 10.5, 0.5],
+        "rotation": [0.0, 0.0, 0.0, 1.0],
+        "scale": [1.0, 1.0, 1.0]
+      },
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      }
+    },
+    {
+      "id": "123e5816-a763-5501-afb6-c493ab2b0468",
+      "name": "SubdividedCubeMaterialB",
+      "parent": 0,
+      "transform": {
+        "translation": [-2.0, 10.5, 0.5],
+        "rotation": [0.0, 0.0, 0.0, 1.0],
+        "scale": [1.0, 1.0, 1.0]
+      },
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      }
+    },
+    {
+      "id": "092b851b-ee45-5422-9197-8804aee8d994",
+      "name": "SphereMaterialC",
+      "parent": 0,
+      "transform": {
+        "translation": [0.0, 10.5, 0.5],
+        "rotation": [0.0, 0.0, 0.0, 1.0],
+        "scale": [1.0, 1.0, 1.0]
+      },
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      }
+    },
+    {
+      "id": "463894bd-61b4-54c7-8e5e-3256491fa387",
+      "name": "CylinderMaterialD",
+      "parent": 0,
+      "transform": {
+        "translation": [2.0, 10.5, 0.5],
+        "rotation": [0.0, 0.0, 0.0, 1.0],
+        "scale": [1.0, 1.0, 1.0]
+      },
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      }
+    },
+    {
+      "id": "e7200e95-389d-5c0b-a0d1-a504f0b718fb",
+      "name": "QuadMaterialD",
+      "parent": 0,
+      "transform": {
+        "translation": [4.0, 10.5, 0.5],
         "rotation": [0.0, 0.0, 0.0, 1.0],
         "scale": [1.0, 1.0, 1.0]
       },
@@ -184,8 +604,8 @@
       "name": "MainCamera",
       "parent": 0,
       "transform": {
-        "translation": [0.0, -11.0, 7.0],
-        "rotation": [0.0, 0.24140626, 0.97043335, 0.0],
+        "translation": [0.0, -15.0, 10.0],
+        "rotation": [0.0, 0.22975249, 0.97324909, 0.0],
         "scale": [1.0, 1.0, 1.0]
       },
       "flags": {
@@ -199,38 +619,8 @@
       "name": "Sun",
       "parent": 0,
       "transform": {
-        "translation": [0.0, 5.0, 8.0],
-        "rotation": [0.5, 0.0, 0.0, 0.8660254],
-        "scale": [1.0, 1.0, 1.0]
-      },
-      "flags": {
-        "visible": "shown",
-        "casts_shadows": "on",
-        "receives_shadows": "on"
-      }
-    },
-    {
-      "id": "9e3c7097-2685-5140-ad0b-bf706f3d524e",
-      "name": "FillLight",
-      "parent": 0,
-      "transform": {
-        "translation": [1.0, 1.25, 2.0],
-        "rotation": [0.0, 0.0, 0.0, 1.0],
-        "scale": [1.0, 1.0, 1.0]
-      },
-      "flags": {
-        "visible": "shown",
-        "casts_shadows": "on",
-        "receives_shadows": "on"
-      }
-    },
-    {
-      "id": "b14f34d9-3452-5977-8fe0-ced3f13feb7f",
-      "name": "SpotRig",
-      "parent": 0,
-      "transform": {
-        "translation": [-2.0, 0.0, 3.0],
-        "rotation": [0.0, 0.0, 0.0, 1.0],
+        "translation": [0.0, 0.0, 10.0],
+        "rotation": [0.17670354, 0.33944435, 0.81949115, 0.42660009],
         "scale": [1.0, 1.0, 1.0]
       },
       "flags": {
@@ -255,7 +645,7 @@
             "id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
             "layout_revision": "70d2458daeb2184329ef81aef4e913cb828e2494a8cd5eda069969aff3f64aa6",
             "values": {
-              "/material": "/.cooked/Materials/MatCube.omat"
+              "/material": "/.cooked/Materials/UvProbe.omat"
             }
           }
         ]
@@ -271,7 +661,7 @@
             "id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
             "layout_revision": "70d2458daeb2184329ef81aef4e913cb828e2494a8cd5eda069969aff3f64aa6",
             "values": {
-              "/material": "/.cooked/Materials/MatCubeB.omat"
+              "/material": "/.cooked/Materials/UvProbe.omat"
             }
           }
         ]
@@ -287,7 +677,7 @@
             "id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
             "layout_revision": "70d2458daeb2184329ef81aef4e913cb828e2494a8cd5eda069969aff3f64aa6",
             "values": {
-              "/material": "/.cooked/Materials/MatCubeC.omat"
+              "/material": "/.cooked/Materials/UvProbe.omat"
             }
           }
         ]
@@ -295,6 +685,534 @@
     },
     {
       "node": 5,
+      "geometry_ref": "/Engine/Generated/BasicShapes/IcoSphere.ogeo",
+      "overrides": {
+        "parts": [
+          {
+            "kind": "surface",
+            "id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+            "layout_revision": "70d2458daeb2184329ef81aef4e913cb828e2494a8cd5eda069969aff3f64aa6",
+            "values": {
+              "/material": "/.cooked/Materials/UvProbe.omat"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "node": 6,
+      "geometry_ref": "/Engine/Generated/BasicShapes/Capsule.ogeo",
+      "overrides": {
+        "parts": [
+          {
+            "kind": "surface",
+            "id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+            "layout_revision": "70d2458daeb2184329ef81aef4e913cb828e2494a8cd5eda069969aff3f64aa6",
+            "values": {
+              "/material": "/.cooked/Materials/UvProbe.omat"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "node": 7,
+      "geometry_ref": "/Engine/Generated/BasicShapes/Cylinder.ogeo",
+      "overrides": {
+        "parts": [
+          {
+            "kind": "surface",
+            "id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+            "layout_revision": "70d2458daeb2184329ef81aef4e913cb828e2494a8cd5eda069969aff3f64aa6",
+            "values": {
+              "/material": "/.cooked/Materials/UvProbe.omat"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "node": 8,
+      "geometry_ref": "/Engine/Generated/BasicShapes/Cone.ogeo",
+      "overrides": {
+        "parts": [
+          {
+            "kind": "surface",
+            "id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+            "layout_revision": "70d2458daeb2184329ef81aef4e913cb828e2494a8cd5eda069969aff3f64aa6",
+            "values": {
+              "/material": "/.cooked/Materials/UvProbe.omat"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "node": 9,
+      "geometry_ref": "/Engine/Generated/BasicShapes/Torus.ogeo",
+      "overrides": {
+        "parts": [
+          {
+            "kind": "surface",
+            "id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+            "layout_revision": "70d2458daeb2184329ef81aef4e913cb828e2494a8cd5eda069969aff3f64aa6",
+            "values": {
+              "/material": "/.cooked/Materials/UvProbe.omat"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "node": 10,
+      "geometry_ref": "/Engine/Generated/BasicShapes/Quad.ogeo",
+      "overrides": {
+        "parts": [
+          {
+            "kind": "surface",
+            "id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+            "layout_revision": "70d2458daeb2184329ef81aef4e913cb828e2494a8cd5eda069969aff3f64aa6",
+            "values": {
+              "/material": "/.cooked/Materials/UvProbe.omat"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "node": 11,
+      "geometry_ref": "/Engine/Generated/BasicShapes/Plane.ogeo",
+      "overrides": {
+        "parts": [
+          {
+            "kind": "surface",
+            "id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+            "layout_revision": "70d2458daeb2184329ef81aef4e913cb828e2494a8cd5eda069969aff3f64aa6",
+            "values": {
+              "/material": "/.cooked/Materials/UvProbe.omat"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "node": 12,
+      "geometry_ref": "/Engine/Internal/ArrowGizmo.ogeo",
+      "overrides": {
+        "parts": [
+          {
+            "kind": "surface",
+            "id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+            "layout_revision": "70d2458daeb2184329ef81aef4e913cb828e2494a8cd5eda069969aff3f64aa6",
+            "values": {
+              "/material": "/.cooked/Materials/UvProbe.omat"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "node": 13,
+      "geometry_ref": "/Engine/Generated/BasicShapes/Cube.ogeo",
+      "overrides": {
+        "parts": [
+          {
+            "kind": "surface",
+            "id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+            "layout_revision": "70d2458daeb2184329ef81aef4e913cb828e2494a8cd5eda069969aff3f64aa6",
+            "values": {
+              "/material": "/.cooked/Materials/UvProbe.omat"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "node": 14,
+      "geometry_ref": "/Engine/Generated/BasicShapes/SubdividedCube.ogeo",
+      "overrides": {
+        "parts": [
+          {
+            "kind": "surface",
+            "id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+            "layout_revision": "70d2458daeb2184329ef81aef4e913cb828e2494a8cd5eda069969aff3f64aa6",
+            "values": {
+              "/material": "/.cooked/Materials/UvProbe.omat"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "node": 15,
+      "geometry_ref": "/Engine/Generated/BasicShapes/Sphere.ogeo",
+      "overrides": {
+        "parts": [
+          {
+            "kind": "surface",
+            "id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+            "layout_revision": "70d2458daeb2184329ef81aef4e913cb828e2494a8cd5eda069969aff3f64aa6",
+            "values": {
+              "/material": "/.cooked/Materials/UvProbe.omat"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "node": 16,
+      "geometry_ref": "/Engine/Generated/BasicShapes/IcoSphere.ogeo",
+      "overrides": {
+        "parts": [
+          {
+            "kind": "surface",
+            "id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+            "layout_revision": "70d2458daeb2184329ef81aef4e913cb828e2494a8cd5eda069969aff3f64aa6",
+            "values": {
+              "/material": "/.cooked/Materials/UvProbe.omat"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "node": 17,
+      "geometry_ref": "/Engine/Generated/BasicShapes/Capsule.ogeo",
+      "overrides": {
+        "parts": [
+          {
+            "kind": "surface",
+            "id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+            "layout_revision": "70d2458daeb2184329ef81aef4e913cb828e2494a8cd5eda069969aff3f64aa6",
+            "values": {
+              "/material": "/.cooked/Materials/UvProbe.omat"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "node": 18,
+      "geometry_ref": "/Engine/Generated/BasicShapes/Cylinder.ogeo",
+      "overrides": {
+        "parts": [
+          {
+            "kind": "surface",
+            "id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+            "layout_revision": "70d2458daeb2184329ef81aef4e913cb828e2494a8cd5eda069969aff3f64aa6",
+            "values": {
+              "/material": "/.cooked/Materials/UvProbe.omat"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "node": 19,
+      "geometry_ref": "/Engine/Generated/BasicShapes/Cone.ogeo",
+      "overrides": {
+        "parts": [
+          {
+            "kind": "surface",
+            "id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+            "layout_revision": "70d2458daeb2184329ef81aef4e913cb828e2494a8cd5eda069969aff3f64aa6",
+            "values": {
+              "/material": "/.cooked/Materials/UvProbe.omat"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "node": 20,
+      "geometry_ref": "/Engine/Generated/BasicShapes/Torus.ogeo",
+      "overrides": {
+        "parts": [
+          {
+            "kind": "surface",
+            "id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+            "layout_revision": "70d2458daeb2184329ef81aef4e913cb828e2494a8cd5eda069969aff3f64aa6",
+            "values": {
+              "/material": "/.cooked/Materials/UvProbe.omat"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "node": 21,
+      "geometry_ref": "/Engine/Generated/BasicShapes/Quad.ogeo",
+      "overrides": {
+        "parts": [
+          {
+            "kind": "surface",
+            "id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+            "layout_revision": "70d2458daeb2184329ef81aef4e913cb828e2494a8cd5eda069969aff3f64aa6",
+            "values": {
+              "/material": "/.cooked/Materials/UvProbe.omat"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "node": 22,
+      "geometry_ref": "/Engine/Generated/BasicShapes/Plane.ogeo",
+      "overrides": {
+        "parts": [
+          {
+            "kind": "surface",
+            "id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+            "layout_revision": "70d2458daeb2184329ef81aef4e913cb828e2494a8cd5eda069969aff3f64aa6",
+            "values": {
+              "/material": "/.cooked/Materials/UvProbe.omat"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "node": 23,
+      "geometry_ref": "/Engine/Internal/ArrowGizmo.ogeo",
+      "overrides": {
+        "parts": [
+          {
+            "kind": "surface",
+            "id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+            "layout_revision": "70d2458daeb2184329ef81aef4e913cb828e2494a8cd5eda069969aff3f64aa6",
+            "values": {
+              "/material": "/.cooked/Materials/UvProbe.omat"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "node": 24,
+      "geometry_ref": "/Engine/Generated/BasicShapes/Cube.ogeo",
+      "overrides": {
+        "parts": [
+          {
+            "kind": "surface",
+            "id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+            "layout_revision": "70d2458daeb2184329ef81aef4e913cb828e2494a8cd5eda069969aff3f64aa6",
+            "values": {
+              "/material": "/.cooked/Materials/UvProbe.omat"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "node": 25,
+      "geometry_ref": "/Engine/Generated/BasicShapes/SubdividedCube.ogeo",
+      "overrides": {
+        "parts": [
+          {
+            "kind": "surface",
+            "id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+            "layout_revision": "70d2458daeb2184329ef81aef4e913cb828e2494a8cd5eda069969aff3f64aa6",
+            "values": {
+              "/material": "/.cooked/Materials/UvProbe.omat"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "node": 26,
+      "geometry_ref": "/Engine/Generated/BasicShapes/Sphere.ogeo",
+      "overrides": {
+        "parts": [
+          {
+            "kind": "surface",
+            "id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+            "layout_revision": "70d2458daeb2184329ef81aef4e913cb828e2494a8cd5eda069969aff3f64aa6",
+            "values": {
+              "/material": "/.cooked/Materials/UvProbe.omat"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "node": 27,
+      "geometry_ref": "/Engine/Generated/BasicShapes/IcoSphere.ogeo",
+      "overrides": {
+        "parts": [
+          {
+            "kind": "surface",
+            "id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+            "layout_revision": "70d2458daeb2184329ef81aef4e913cb828e2494a8cd5eda069969aff3f64aa6",
+            "values": {
+              "/material": "/.cooked/Materials/UvProbe.omat"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "node": 28,
+      "geometry_ref": "/Engine/Generated/BasicShapes/Capsule.ogeo",
+      "overrides": {
+        "parts": [
+          {
+            "kind": "surface",
+            "id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+            "layout_revision": "70d2458daeb2184329ef81aef4e913cb828e2494a8cd5eda069969aff3f64aa6",
+            "values": {
+              "/material": "/.cooked/Materials/UvProbe.omat"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "node": 29,
+      "geometry_ref": "/Engine/Generated/BasicShapes/Cylinder.ogeo",
+      "overrides": {
+        "parts": [
+          {
+            "kind": "surface",
+            "id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+            "layout_revision": "70d2458daeb2184329ef81aef4e913cb828e2494a8cd5eda069969aff3f64aa6",
+            "values": {
+              "/material": "/.cooked/Materials/UvProbe.omat"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "node": 30,
+      "geometry_ref": "/Engine/Generated/BasicShapes/Cone.ogeo",
+      "overrides": {
+        "parts": [
+          {
+            "kind": "surface",
+            "id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+            "layout_revision": "70d2458daeb2184329ef81aef4e913cb828e2494a8cd5eda069969aff3f64aa6",
+            "values": {
+              "/material": "/.cooked/Materials/UvProbe.omat"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "node": 31,
+      "geometry_ref": "/Engine/Generated/BasicShapes/Torus.ogeo",
+      "overrides": {
+        "parts": [
+          {
+            "kind": "surface",
+            "id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+            "layout_revision": "70d2458daeb2184329ef81aef4e913cb828e2494a8cd5eda069969aff3f64aa6",
+            "values": {
+              "/material": "/.cooked/Materials/UvProbe.omat"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "node": 32,
+      "geometry_ref": "/Engine/Generated/BasicShapes/Quad.ogeo",
+      "overrides": {
+        "parts": [
+          {
+            "kind": "surface",
+            "id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+            "layout_revision": "70d2458daeb2184329ef81aef4e913cb828e2494a8cd5eda069969aff3f64aa6",
+            "values": {
+              "/material": "/.cooked/Materials/UvProbe.omat"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "node": 33,
+      "geometry_ref": "/Engine/Generated/BasicShapes/Plane.ogeo",
+      "overrides": {
+        "parts": [
+          {
+            "kind": "surface",
+            "id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+            "layout_revision": "70d2458daeb2184329ef81aef4e913cb828e2494a8cd5eda069969aff3f64aa6",
+            "values": {
+              "/material": "/.cooked/Materials/UvProbe.omat"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "node": 34,
+      "geometry_ref": "/Engine/Internal/ArrowGizmo.ogeo",
+      "overrides": {
+        "parts": [
+          {
+            "kind": "surface",
+            "id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+            "layout_revision": "70d2458daeb2184329ef81aef4e913cb828e2494a8cd5eda069969aff3f64aa6",
+            "values": {
+              "/material": "/.cooked/Materials/UvProbe.omat"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "node": 35,
+      "geometry_ref": "/Engine/Generated/BasicShapes/Cube.ogeo",
+      "overrides": {
+        "parts": [
+          {
+            "kind": "surface",
+            "id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+            "layout_revision": "70d2458daeb2184329ef81aef4e913cb828e2494a8cd5eda069969aff3f64aa6",
+            "values": {
+              "/material": "/.cooked/Materials/MatCube.omat"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "node": 36,
+      "geometry_ref": "/Engine/Generated/BasicShapes/SubdividedCube.ogeo",
+      "overrides": {
+        "parts": [
+          {
+            "kind": "surface",
+            "id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+            "layout_revision": "70d2458daeb2184329ef81aef4e913cb828e2494a8cd5eda069969aff3f64aa6",
+            "values": {
+              "/material": "/.cooked/Materials/MatCubeB.omat"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "node": 37,
+      "geometry_ref": "/Engine/Generated/BasicShapes/Sphere.ogeo",
+      "overrides": {
+        "parts": [
+          {
+            "kind": "surface",
+            "id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+            "layout_revision": "70d2458daeb2184329ef81aef4e913cb828e2494a8cd5eda069969aff3f64aa6",
+            "values": {
+              "/material": "/.cooked/Materials/MatCubeC.omat"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "node": 38,
       "geometry_ref": "/Engine/Generated/BasicShapes/Cylinder.ogeo",
       "overrides": {
         "parts": [
@@ -310,7 +1228,7 @@
       }
     },
     {
-      "node": 6,
+      "node": 39,
       "geometry_ref": "/Engine/Generated/BasicShapes/Quad.ogeo",
       "overrides": {
         "parts": [
@@ -324,32 +1242,12 @@
           }
         ]
       }
-    },
-    {
-      "node": 7,
-      "geometry_ref": "/Engine/Generated/BasicShapes/IcoSphere.ogeo"
-    },
-    {
-      "node": 8,
-      "geometry_ref": "/Engine/Generated/BasicShapes/Cone.ogeo"
-    },
-    {
-      "node": 9,
-      "geometry_ref": "/Engine/Generated/BasicShapes/Capsule.ogeo"
-    },
-    {
-      "node": 10,
-      "geometry_ref": "/Engine/Generated/BasicShapes/Torus.ogeo"
-    },
-    {
-      "node": 11,
-      "geometry_ref": "/Engine/Internal/ArrowGizmo.ogeo"
     }
   ],
   "cameras": {
     "perspective": [
       {
-        "node": 12,
+        "node": 40,
         "fov_y": 0.785398,
         "aspect_ratio": 1.777778,
         "aspect_mode": "fixed",
@@ -361,7 +1259,7 @@
   "lights": {
     "directional": [
       {
-        "node": 13,
+        "node": 41,
         "common": {
           "affects_world": true,
           "color_rgb": [1.0, 0.98, 0.92],
@@ -374,44 +1272,11 @@
         "atmosphere_light_slot": 1,
         "intensity_lux": 150000.0
       }
-    ],
-    "point": [
-      {
-        "node": 14,
-        "common": {
-          "affects_world": true,
-          "color_rgb": [1.0, 0.35, 0.25],
-          "casts_shadows": false,
-          "shadow": {
-            "bias": 0.03
-          }
-        },
-        "range": 8.0,
-        "source_radius": 0.05,
-        "luminous_flux_lm": 1200.0
-      }
-    ],
-    "spot": [
-      {
-        "node": 15,
-        "common": {
-          "affects_world": true,
-          "color_rgb": [0.25, 0.6, 1.0],
-          "casts_shadows": false,
-          "shadow": {
-            "bias": 0.03
-          }
-        },
-        "range": 12.0,
-        "inner_cone_angle_radians": 0.25,
-        "outer_cone_angle_radians": 0.45,
-        "source_radius": 0.02,
-        "luminous_flux_lm": 3000.0
-      }
     ]
   },
   "references": {
     "materials": [
+      "/.cooked/Materials/UvProbe.omat",
       "/.cooked/Materials/MatCube.omat",
       "/.cooked/Materials/MatCubeB.omat",
       "/.cooked/Materials/MatCubeC.omat",

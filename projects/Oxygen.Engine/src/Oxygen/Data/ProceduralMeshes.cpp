@@ -64,14 +64,13 @@ using MeshDataPair
 auto HandleSphereMesh(std::span<const std::byte> param_blob)
   -> std::optional<MeshDataPair>
 {
-  using oxygen::serio::MemoryStream;
   using oxygen::serio::Reader;
+  using oxygen::serio::ReadOnlyMemoryStream;
   auto defaults = std::make_tuple(
     recipe::kSphereLatitudeSegments, recipe::kSphereLongitudeSegments);
   if (!param_blob.empty()) {
-    MemoryStream stream(std::span<std::byte>(
-      const_cast<std::byte*>(param_blob.data()), param_blob.size()));
-    Reader<MemoryStream> reader(stream);
+    ReadOnlyMemoryStream stream(param_blob);
+    Reader<ReadOnlyMemoryStream> reader(stream);
     bool exhausted = false;
     [&]<std::size_t... Is>(std::index_sequence<Is...>) -> auto {
       (void(std::initializer_list<int> { (
@@ -138,13 +137,12 @@ auto HandleCapsuleMesh(std::span<const std::byte> param_blob)
 auto HandleIcoSphereMesh(std::span<const std::byte> param_blob)
   -> std::optional<MeshDataPair>
 {
-  using oxygen::serio::MemoryStream;
   using oxygen::serio::Reader;
+  using oxygen::serio::ReadOnlyMemoryStream;
   auto defaults = std::make_tuple(recipe::kIcoSphereSubdivisionLevel);
   if (!param_blob.empty()) {
-    MemoryStream stream(std::span<std::byte>(
-      const_cast<std::byte*>(param_blob.data()), param_blob.size()));
-    Reader<MemoryStream> reader(stream);
+    ReadOnlyMemoryStream stream(param_blob);
+    Reader<ReadOnlyMemoryStream> reader(stream);
     bool exhausted = false;
     [&]<std::size_t... Is>(std::index_sequence<Is...>) -> auto {
       (void(std::initializer_list<int> { (
@@ -170,13 +168,12 @@ auto HandleIcoSphereMesh(std::span<const std::byte> param_blob)
 auto HandleSubdividedCubeMesh(std::span<const std::byte> param_blob)
   -> std::optional<MeshDataPair>
 {
-  using oxygen::serio::MemoryStream;
   using oxygen::serio::Reader;
+  using oxygen::serio::ReadOnlyMemoryStream;
   auto defaults = std::make_tuple(recipe::kSubdividedCubeSegments);
   if (!param_blob.empty()) {
-    MemoryStream stream(std::span<std::byte>(
-      const_cast<std::byte*>(param_blob.data()), param_blob.size()));
-    Reader<MemoryStream> reader(stream);
+    ReadOnlyMemoryStream stream(param_blob);
+    Reader<ReadOnlyMemoryStream> reader(stream);
     bool exhausted = false;
     [&]<std::size_t... Is>(std::index_sequence<Is...>) -> auto {
       (void(std::initializer_list<int> { (
@@ -202,14 +199,13 @@ auto HandleSubdividedCubeMesh(std::span<const std::byte> param_blob)
 auto HandlePlaneMesh(std::span<const std::byte> param_blob)
   -> std::optional<MeshDataPair>
 {
-  using oxygen::serio::MemoryStream;
   using oxygen::serio::Reader;
+  using oxygen::serio::ReadOnlyMemoryStream;
   auto defaults = std::make_tuple(
-    recipe::kPlaneXSegments, recipe::kPlaneZSegments, recipe::kPlaneSize);
+    recipe::kPlaneXSegments, recipe::kPlaneYSegments, recipe::kPlaneSize);
   if (!param_blob.empty()) {
-    MemoryStream stream(std::span<std::byte>(
-      const_cast<std::byte*>(param_blob.data()), param_blob.size()));
-    Reader<MemoryStream> reader(stream);
+    ReadOnlyMemoryStream stream(param_blob);
+    Reader<ReadOnlyMemoryStream> reader(stream);
     bool exhausted = false;
     [&]<std::size_t... Is>(std::index_sequence<Is...>) -> auto {
       (void(std::initializer_list<int> { (
@@ -235,14 +231,13 @@ auto HandlePlaneMesh(std::span<const std::byte> param_blob)
 auto HandleCylinderMesh(std::span<const std::byte> param_blob)
   -> std::optional<MeshDataPair>
 {
-  using oxygen::serio::MemoryStream;
   using oxygen::serio::Reader;
+  using oxygen::serio::ReadOnlyMemoryStream;
   auto defaults = std::make_tuple(recipe::kCylinderSegments,
     recipe::kCylinderHeight, recipe::kCylinderRadius);
   if (!param_blob.empty()) {
-    MemoryStream stream(std::span<std::byte>(
-      const_cast<std::byte*>(param_blob.data()), param_blob.size()));
-    Reader<MemoryStream> reader(stream);
+    ReadOnlyMemoryStream stream(param_blob);
+    Reader<ReadOnlyMemoryStream> reader(stream);
     bool exhausted = false;
     [&]<std::size_t... Is>(std::index_sequence<Is...>) -> auto {
       (void(std::initializer_list<int> { (
@@ -268,14 +263,13 @@ auto HandleCylinderMesh(std::span<const std::byte> param_blob)
 auto HandleConeMesh(std::span<const std::byte> param_blob)
   -> std::optional<MeshDataPair>
 {
-  using oxygen::serio::MemoryStream;
   using oxygen::serio::Reader;
+  using oxygen::serio::ReadOnlyMemoryStream;
   auto defaults = std::make_tuple(
     recipe::kConeSegments, recipe::kConeHeight, recipe::kConeRadius);
   if (!param_blob.empty()) {
-    MemoryStream stream(std::span<std::byte>(
-      const_cast<std::byte*>(param_blob.data()), param_blob.size()));
-    Reader<MemoryStream> reader(stream);
+    ReadOnlyMemoryStream stream(param_blob);
+    Reader<ReadOnlyMemoryStream> reader(stream);
     bool exhausted = false;
     [&]<std::size_t... Is>(std::index_sequence<Is...>) -> auto {
       (void(std::initializer_list<int> { (
@@ -301,15 +295,14 @@ auto HandleConeMesh(std::span<const std::byte> param_blob)
 auto HandleTorusMesh(std::span<const std::byte> param_blob)
   -> std::optional<MeshDataPair>
 {
-  using oxygen::serio::MemoryStream;
   using oxygen::serio::Reader;
+  using oxygen::serio::ReadOnlyMemoryStream;
   auto defaults
     = std::make_tuple(recipe::kTorusMajorSegments, recipe::kTorusMinorSegments,
       recipe::kTorusMajorRadius, recipe::kTorusMinorRadius);
   if (!param_blob.empty()) {
-    MemoryStream stream(std::span<std::byte>(
-      const_cast<std::byte*>(param_blob.data()), param_blob.size()));
-    Reader<MemoryStream> reader(stream);
+    ReadOnlyMemoryStream stream(param_blob);
+    Reader<ReadOnlyMemoryStream> reader(stream);
     bool exhausted = false;
     [&]<std::size_t... Is>(std::index_sequence<Is...>) -> auto {
       (void(std::initializer_list<int> { (
@@ -335,13 +328,12 @@ auto HandleTorusMesh(std::span<const std::byte> param_blob)
 auto HandleQuadMesh(std::span<const std::byte> param_blob)
   -> std::optional<MeshDataPair>
 {
-  using oxygen::serio::MemoryStream;
   using oxygen::serio::Reader;
+  using oxygen::serio::ReadOnlyMemoryStream;
   auto defaults = std::make_tuple(recipe::kQuadWidth, recipe::kQuadHeight);
   if (!param_blob.empty()) {
-    MemoryStream stream(std::span<std::byte>(
-      const_cast<std::byte*>(param_blob.data()), param_blob.size()));
-    Reader<MemoryStream> reader(stream);
+    ReadOnlyMemoryStream stream(param_blob);
+    Reader<ReadOnlyMemoryStream> reader(stream);
     bool exhausted = false;
     [&]<std::size_t... Is>(std::index_sequence<Is...>) -> auto {
       (void(std::initializer_list<int> { (
@@ -367,9 +359,6 @@ auto HandleQuadMesh(std::span<const std::byte> param_blob)
 auto InvokeGenerator(std::string_view generator_id,
   std::span<const std::byte> param_blob) -> std::optional<MeshDataPair>
 {
-  using oxygen::serio::MemoryStream;
-  using oxygen::serio::Reader;
-
   std::optional<MeshDataPair> mesh_data;
 
   if (generator_id == "Cube") {

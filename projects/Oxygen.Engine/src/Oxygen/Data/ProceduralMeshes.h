@@ -25,8 +25,10 @@ namespace oxygen::data {
 OXGN_DATA_NDAPI auto MakeCubeMeshAsset()
   -> std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>>;
 
-//! Creates a unit cube surface with welded vertices and configurable
-//! subdivisions per face edge.
+//! Creates a unit cube whose faces are grids of `segments` x `segments` cells,
+//! each face with its own vertices, flat normal and the face layout of
+//! `space::texture`; faces share edge positions exactly, so welding by
+//! position closes the surface (soft-body sources do).
 OXGN_DATA_NDAPI auto MakeSubdividedCubeMeshAsset(
   unsigned int segments = procedural::kSubdividedCubeSegments)
   -> std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>>;
@@ -52,7 +54,8 @@ OXGN_DATA_NDAPI auto MakeCapsuleMeshAsset(
   -> std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>>;
 
 //! Creates vertex/index buffers for a radius-0.5 icosphere centred at the
-//! origin.
+//! origin, with the revolution layout of `space::texture`. The seam and poles
+//! have their own vertices; seam triangles continue past u = 1.
 OXGN_DATA_NDAPI auto MakeIcoSphereMeshAsset(
   unsigned int subdivision_level = procedural::kIcoSphereSubdivisionLevel)
   -> std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>>;
@@ -62,7 +65,7 @@ OXGN_DATA_NDAPI auto MakeIcoSphereMeshAsset(
 //! Size must be finite and positive; unrepresentable grid cells/counts fail.
 OXGN_DATA_NDAPI auto MakePlaneMeshAsset(
   unsigned int x_segments = procedural::kPlaneXSegments,
-  unsigned int z_segments = procedural::kPlaneZSegments,
+  unsigned int y_segments = procedural::kPlaneYSegments,
   float size = procedural::kPlaneSize)
   -> std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>>;
 
@@ -87,8 +90,9 @@ OXGN_DATA_NDAPI auto MakeConeMeshAsset(
 //! Creates vertex/index buffers for a torus centred at the origin, with its
 //! main ring in XY around the Z axis. Default radii are 0.4 m to the tube
 //! centre and 0.1 m for the tube, giving a 1 m outer diameter.
-//! Radii must be finite and positive. Horn/spindle parameterizations remain
-//! supported; overflow or a tube lost to float32 rounding fails generation.
+//! Radii must be finite and positive with minor < major (a horn or spindle
+//! torus self-intersects and is rejected); overflow or a tube lost to float32
+//! rounding fails generation.
 OXGN_DATA_NDAPI auto MakeTorusMeshAsset(
   unsigned int major_segments = procedural::kTorusMajorSegments,
   unsigned int minor_segments = procedural::kTorusMinorSegments,

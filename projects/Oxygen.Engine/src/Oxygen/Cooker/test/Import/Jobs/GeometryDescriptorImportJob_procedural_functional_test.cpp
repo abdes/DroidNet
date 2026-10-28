@@ -30,7 +30,7 @@
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
 #include <Oxygen/Data/Schema/Generated.SceneComponents.h>
-#include <Oxygen/Data/SurfaceId.h>
+#include <Oxygen/Data/StableId.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
 #include <Oxygen/Testing/GTest.h>
@@ -200,7 +200,7 @@ NOLINT_TEST(GeometryDescriptorImportJobProceduralTest,
                 "params",
                 {
                   { "x_segments", 10U },
-                  { "z_segments", 10U },
+                  { "y_segments", 10U },
                   { "size", 10.0F },
                 },
               },
@@ -401,10 +401,12 @@ NOLINT_TEST(GeometryDescriptorImportJobProceduralTest,
     { .name = "schema_defaults", .surfaces = nullptr, .lod_policy = nullptr },
     {
       .name = "authored",
-      .surfaces = json::array({ {
-        { "surface_id", surface },
-        { "casts_shadows", false },
-      } }),
+      .surfaces = json::array({
+        {
+          { "surface_id", surface },
+          { "casts_shadows", false },
+        },
+      }),
       .lod_policy = { { "type", "fixed" }, { "lod_index", 3 } },
     },
   };

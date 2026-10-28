@@ -7,18 +7,20 @@
 #include <cmath>
 #include <cstdint>
 #include <limits>
-#include <numbers>
 #include <optional>
 #include <utility>
 #include <vector>
 
+#include <Oxygen/Data/Procedural/Revolution.h>
+#include <Oxygen/Data/Procedural/SurfaceLayout.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
 #include <Oxygen/Data/Vertex.h>
 
 /*!
- Creates vertex and index buffers for a cylinder aligned along the Z axis.
- The cylinder has a side surface and two end caps at z = -height/2 and
- z = +height/2. Its radial centre is x = y = 0.
+ Creates vertex and index buffers for a closed cylinder along the Z axis, with
+ caps at z = -height/2 and z = +height/2 and its axis through x = y = 0. The
+ side follows the revolution layout of `space::texture` (seam at the back,
+ v = 0 at the top), the caps the top and bottom face layouts.
 
  @param segments Number of radial segments (minimum 3).
  @param height Finite positive height along Z.
@@ -41,7 +43,7 @@
  }
  ```
 
- @see GenerateMesh, Vertex
+ @see GenerateMesh, procedural::AppendCylinder
 */
 auto oxygen::data::MakeCylinderMeshAsset(
   const unsigned int segments, const float height, const float radius)
@@ -55,125 +57,20 @@ auto oxygen::data::MakeCylinderMeshAsset(
     || radius <= 0.0F) {
     return std::nullopt;
   }
-  constexpr double pi = std::numbers::pi_v<double>;
-  std::vector<Vertex> vertices;
-  std::vector<uint32_t> indices;
 
-  // Side vertices
-  for (unsigned int i = 0; i <= segments; ++i) {
-    const auto theta = i == segments ? 0.0 : 2.0 * pi * i / segments;
-    const auto x = static_cast<float>(std::cos(theta));
-    const auto y = static_cast<float>(std::sin(theta));
-    if (i > 0 && x * radius == vertices.back().position.x
-      && y * radius == vertices.back().position.y) {
-      return std::nullopt;
-    }
-    glm::vec3 normal = { x, y, 0.0F };
-    glm::vec3 tangent = { -y, x, 0.0F };
-    glm::vec3 bitangent = { 0.0F, 0.0F, -1.0F };
-    float u = static_cast<float>(i) / static_cast<float>(segments);
-
-    // Bottom (side)
-    vertices.push_back(Vertex {
-      .position = { x * radius, y * radius, -half_height },
-      .normal = normal,
-      .texcoord = { u, 1.0F },
-      .tangent = tangent,
-      .bitangent = bitangent,
-      .color = { 1, 1, 1, 1 },
-    });
-    // Top (side)
-    vertices.push_back(Vertex {
-      .position = { x * radius, y * radius, half_height },
-      .normal = normal,
-      .texcoord = { u, 0.0F },
-      .tangent = tangent,
-      .bitangent = bitangent,
-      .color = { 1, 1, 1, 1 },
-    });
+  auto buffers = procedural::MeshBuffers {};
+  if (!procedural::AppendCylinder(buffers,
+        procedural::AxialExtent {
+          .bottom_z = -half_height,
+          .top_z = half_height,
+          .radius = radius,
+        },
+        procedural::SolidStyle {
+          .segments = segments,
+          .color = { 1.0F, 1.0F, 1.0F, 1.0F },
+        })) {
+    return std::nullopt;
   }
-
-  // Side indices
-  for (unsigned int i = 0; i < segments; ++i) {
-    uint32_t i0 = i * 2;
-    uint32_t i1 = i0 + 1;
-    uint32_t i2 = i0 + 2;
-    uint32_t i3 = i0 + 3;
-    // CCW: (bottom_curr, bottom_next, top_curr) and (top_curr, bottom_next,
-    // top_next)
-    indices.push_back(i0);
-    indices.push_back(i2);
-    indices.push_back(i1);
-    indices.push_back(i1);
-    indices.push_back(i2);
-    indices.push_back(i3);
-  }
-
-  // Caps
-  std::vector<uint32_t> bottom_cap_rim_indices;
-  std::vector<uint32_t> top_cap_rim_indices;
-  for (unsigned int i = 0; i < segments; ++i) {
-    const auto theta = 2.0 * pi * i / segments;
-    const auto x = static_cast<float>(std::cos(theta));
-    const auto y = static_cast<float>(std::sin(theta));
-    float u = (x + 1.0F) * 0.5F;
-    float v = (y + 1.0F) * 0.5F;
-
-    // Bottom cap rim vertex
-    vertices.push_back(Vertex {
-      .position = { x * radius, y * radius, -half_height },
-      .normal = { 0, 0, -1 },
-      .texcoord = { u, v },
-      .tangent = { 1, 0, 0 },
-      .bitangent = { 0, 1, 0 },
-      .color = { 1, 1, 1, 1 },
-    });
-    bottom_cap_rim_indices.push_back(
-      static_cast<uint32_t>(vertices.size() - 1));
-
-    // Top cap rim vertex
-    vertices.push_back(Vertex {
-      .position = { x * radius, y * radius, half_height },
-      .normal = { 0, 0, 1 },
-      .texcoord = { u, v },
-      .tangent = { 1, 0, 0 },
-      .bitangent = { 0, 1, 0 },
-      .color = { 1, 1, 1, 1 },
-    });
-    top_cap_rim_indices.push_back(static_cast<uint32_t>(vertices.size() - 1));
-  }
-
-  // Center vertices for caps
-  uint32_t bottom_center_index = static_cast<uint32_t>(vertices.size());
-  vertices.push_back(Vertex {
-    .position = { 0, 0, -half_height },
-    .normal = { 0, 0, -1 },
-    .texcoord = { 0.5F, 0.5F },
-    .tangent = { 1, 0, 0 },
-    .bitangent = { 0, 1, 0 },
-    .color = { 1, 1, 1, 1 },
-  });
-  uint32_t top_center_index = static_cast<uint32_t>(vertices.size());
-  vertices.push_back(Vertex {
-    .position = { 0, 0, half_height },
-    .normal = { 0, 0, 1 },
-    .texcoord = { 0.5F, 0.5F },
-    .tangent = { 1, 0, 0 },
-    .bitangent = { 0, 1, 0 },
-    .color = { 1, 1, 1, 1 },
-  });
-
-  for (unsigned int i = 0; i < segments; ++i) {
-    // Bottom cap (normal -Z): CCW is center, next, current
-    indices.push_back(bottom_center_index);
-    indices.push_back(bottom_cap_rim_indices[(i + 1) % segments]);
-    indices.push_back(bottom_cap_rim_indices[i]);
-
-    // Top cap (normal +Z): CCW is center, current, next
-    indices.push_back(top_center_index);
-    indices.push_back(top_cap_rim_indices[i]);
-    indices.push_back(top_cap_rim_indices[(i + 1) % segments]);
-  }
-
-  return { { std::move(vertices), std::move(indices) } };
+  return std::make_pair(
+    std::move(buffers.vertices), std::move(buffers.indices));
 }

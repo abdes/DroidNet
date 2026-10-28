@@ -329,6 +329,34 @@ namespace detail {
     }
   }
 
+  //! A procedural mesh's buffers are generated at load time from its
+  //! parameters, so a view cooked against another generator revision can
+  //! point past them; such a record fails the load instead of aborting.
+  struct GeneratedBufferCounts final {
+    std::size_t vertices;
+    std::size_t indices;
+  };
+
+  inline auto ValidateGeneratedMeshViewRange(
+    const data::pak::geometry::MeshViewDesc& view,
+    const GeneratedBufferCounts& generated, const uint32_t submesh_index,
+    const std::size_t view_index) -> void
+  {
+    const auto vertex_end
+      = static_cast<std::uint64_t>(view.first_vertex) + view.vertex_count;
+    const auto index_end
+      = static_cast<std::uint64_t>(view.first_index) + view.index_count;
+    if (vertex_end > generated.vertices || index_end > generated.indices) {
+      throw std::runtime_error(fmt::format(
+        "submesh {} mesh view {} spans vertices [{}, {}) and indices [{}, {}) "
+        "but the procedural generator produced {} vertices and {} indices; "
+        "the geometry was cooked by another generator revision and must be "
+        "recooked",
+        submesh_index, view_index, view.first_vertex, vertex_end,
+        view.first_index, index_end, generated.vertices, generated.indices));
+    }
+  }
+
   inline auto LoadSubMeshDesc(serio::AnyReader& desc_reader)
     -> data::pak::geometry::SubMeshDesc
   {
@@ -456,6 +484,10 @@ inline auto LoadMesh(LoaderContext context, const data::LodIndex lod,
   MeshBuilder builder(lod, name);
   builder.WithDescriptor(desc);
 
+  const auto generated = detail::GeneratedBufferCounts {
+    .vertices = vertices.size(),
+    .indices = indices.size(),
+  };
   if (desc.IsProcedural()) {
     builder.WithVertices(std::move(vertices)).WithIndices(std::move(indices));
   } else {
@@ -473,6 +505,10 @@ inline auto LoadMesh(LoaderContext context, const data::LodIndex lod,
     }
     for (std::size_t view = 0; view < mesh_views.size(); ++view) {
       detail::ValidateMeshViewBounds(sm_desc, mesh_views[view], i, view);
+      if (desc.IsProcedural()) {
+        detail::ValidateGeneratedMeshViewRange(
+          mesh_views[view], generated, i, view);
+      }
     }
     total_read_views += sm_desc.mesh_view_count;
 

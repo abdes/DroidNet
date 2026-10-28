@@ -47,6 +47,7 @@ m_gtest_program(
     "MeshBoundingSphere_test.cpp"
     "MeshBuilder_test.cpp"
     "MeshView_test.cpp"
+    "ProceduralConformance_test.cpp"
     "ProceduralMeshes_test.cpp"
     "SceneNodeReferences_test.cpp"
     "SceneOverrides_test.cpp"

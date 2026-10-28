@@ -6,17 +6,21 @@
 
 #include <cmath>
 #include <cstdint>
+#include <initializer_list>
 #include <optional>
 #include <utility>
 #include <vector>
 
+#include <Oxygen/Data/Procedural/SurfaceLayout.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
 #include <Oxygen/Data/Vertex.h>
 
 /*!
  Creates vertex and index buffers for a rectangle in the XZ plane at y = 0,
- centred at the origin. The quad has two triangles, normals along -Y, and
- texture coordinates spanning [0,1] across its width and height.
+ centred at the origin, facing the front (-Y). The quad has two triangles and
+ the front face layout of `space::texture`: u spans the width along +X and v
+ the height downward, so a texture reads upright and unmirrored from the
+ front.
 
  @param width Finite positive width along X.
  @param height Finite positive height along Z.
@@ -48,48 +52,25 @@ auto oxygen::data::MakeQuadMeshAsset(const float width, const float height)
     || half_h <= 0.0F) {
     return std::nullopt;
   }
-  std::vector<Vertex> vertices = {
-    {
-      .position = { -half_w, 0.0F, -half_h },
-      .normal = { 0, -1, 0 },
-      .texcoord = { 0, 1 },
-      .tangent = { 1, 0, 0 },
-      .bitangent = { 0, 0, -1 },
-      .color = { 1, 1, 1, 1 },
-    },
-    {
-      .position = { half_w, 0.0F, -half_h },
-      .normal = { 0, -1, 0 },
-      .texcoord = { 1, 1 },
-      .tangent = { 1, 0, 0 },
-      .bitangent = { 0, 0, -1 },
-      .color = { 1, 1, 1, 1 },
-    },
-    {
-      .position = { half_w, 0.0F, half_h },
-      .normal = { 0, -1, 0 },
-      .texcoord = { 1, 0 },
-      .tangent = { 1, 0, 0 },
-      .bitangent = { 0, 0, -1 },
-      .color = { 1, 1, 1, 1 },
-    },
-    {
-      .position = { -half_w, 0.0F, half_h },
-      .normal = { 0, -1, 0 },
-      .texcoord = { 0, 0 },
-      .tangent = { 1, 0, 0 },
-      .bitangent = { 0, 0, -1 },
-      .color = { 1, 1, 1, 1 },
-    },
-  };
-  std::vector<uint32_t> indices = {
-    0,
-    1,
-    2, // triangle 1
-    0,
-    2,
-    3, // triangle 2
-  };
+  // The front face layout: +U along the width, +V down the height.
+  const auto& face = procedural::kFrontFace;
+  std::vector<Vertex> vertices;
+  vertices.reserve(4U);
+  for (const auto v : { 0.0F, 1.0F }) {
+    for (const auto u : { 0.0F, 1.0F }) {
+      vertices.push_back(Vertex {
+        .position = (face.tangent * ((u - 0.5F) * width))
+          + (face.bitangent * ((v - 0.5F) * height)),
+        .normal = face.normal,
+        .texcoord = { u, v },
+        .tangent = face.tangent,
+        .bitangent = face.bitangent,
+        .color = { 1, 1, 1, 1 },
+      });
+    }
+  }
+  // (p(0, 0), p(0, 1), p(1, 0)) winds counter-clockwise seen from the front.
+  std::vector<uint32_t> indices = { 0, 2, 1, 1, 2, 3 };
 
   return { { std::move(vertices), std::move(indices) } };
 }

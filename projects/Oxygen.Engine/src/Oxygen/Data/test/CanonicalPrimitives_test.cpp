@@ -102,9 +102,10 @@ NOLINT_TEST(CanonicalPrimitivesTest, PlaneAndQuadHaveDistinctMetricOrientations)
   ExpectFiniteFrames(plane_data);
   ExpectOutwardTriangles(quad_data);
   ExpectOutwardTriangles(plane_data);
-  // The edge from V=1 to V=0 points opposite the stored increasing-V axis.
-  EXPECT_LT(
-    glm::dot(quad_data.first.at(3).position - quad_data.first.at(0).position,
+  // Vertex 2 is at V = 1 below vertex 0 at V = 0: V grows along the stored
+  // bitangent, down the quad.
+  EXPECT_GT(
+    glm::dot(quad_data.first.at(2).position - quad_data.first.at(0).position,
       quad_data.first.at(0).bitangent),
     0.0F);
 }
@@ -141,12 +142,9 @@ NOLINT_TEST(CanonicalPrimitivesTest, TorusDefaultsAndAnalyticFramesAreCanonical)
       }
     }
   }
-  // Horn and spindle parameterizations retain finite analytic frames even
-  // at singular/self-intersecting samples; they are not regular ring tori.
+  // Horn and spindle tori self-intersect: they are not closed surfaces.
   for (const auto minor_radius : { 1.0F, 2.0F }) {
-    const auto buffers = MakeTorusMeshAsset(8, 8, 1.0F, minor_radius);
-    ASSERT_TRUE(buffers.has_value());
-    ExpectFiniteFrames(*buffers);
+    EXPECT_FALSE(MakeTorusMeshAsset(8, 8, 1.0F, minor_radius).has_value());
   }
 }
 
@@ -180,7 +178,7 @@ NOLINT_TEST(CanonicalPrimitivesTest, AxialFramesRespectSurfaceAndUvDirections)
   }
   // Computing radius/height in float32 would overflow and corrupt normals.
   const auto flat_cone = MakeConeMeshAsset(8, 1e-20F, 1e20F);
-  ASSERT_TRUE(flat_cone.has_value());
+  ASSERT_HAS_VALUE(flat_cone);
   ExpectFiniteFrames(*flat_cone);
 }
 

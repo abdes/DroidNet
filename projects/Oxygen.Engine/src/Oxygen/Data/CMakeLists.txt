@@ -144,8 +144,11 @@ set(
   "Procedural/IcoSphere.cpp"
   "Procedural/Plane.cpp"
   "Procedural/Quad.cpp"
+  "Procedural/Revolution.cpp"
+  "Procedural/Revolution.h"
   "Procedural/Sphere.cpp"
   "Procedural/SubdividedCube.cpp"
+  "Procedural/SurfaceLayout.h"
   "Procedural/Torus.cpp"
 )
 

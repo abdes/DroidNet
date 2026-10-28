@@ -12,13 +12,16 @@
 #include <utility>
 #include <vector>
 
+#include <Oxygen/Data/Procedural/Revolution.h>
+#include <Oxygen/Data/Procedural/SurfaceLayout.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
 #include <Oxygen/Data/Vertex.h>
 
 /*!
  Creates vertex and index buffers for a UV sphere of radius 0.5, centred at
- the origin. Latitude runs between the +Z and -Z poles; longitude runs around
- the Z axis. Normals, UVs, tangents, bitangents and colours accompany positions.
+ the origin, with its poles on the Z axis. It follows the revolution layout of
+ `space::texture`: the seam at the back, u counter-clockwise seen from +Z and
+ v = 0 at the +Z pole, so a texture reads upright and unmirrored from outside.
 
  @param latitude_segments Number of intervals between the poles (minimum 3).
  @param longitude_segments Number of intervals around the equator (minimum 3).
@@ -28,9 +31,10 @@
  ### Performance Characteristics
 
  - Time Complexity: O(latitude_segments * longitude_segments).
- - Output: (latitude_segments+1)*(longitude_segments+1) vertices and
-   6*latitude_segments*longitude_segments indices, including pole degeneracies.
- - The longitude seam and pole vertices are duplicated for UV coordinates.
+ - Output: 2*longitude_segments + (latitude_segments-1)*(longitude_segments+1)
+   vertices and 6*longitude_segments*(latitude_segments-1) indices.
+ - The longitude seam is duplicated; each pole has one vertex per segment,
+   at the segment's middle u, and no triangle is degenerate.
 
  ### Usage Example
 
@@ -41,7 +45,7 @@
  }
  ```
 
- @see GenerateMesh, Vertex
+ @see GenerateMesh, procedural::AppendLatitudeSurface
 */
 auto oxygen::data::MakeSphereMeshAsset(
   unsigned int latitude_segments, unsigned int longitude_segments)
@@ -49,6 +53,7 @@ auto oxygen::data::MakeSphereMeshAsset(
 {
   constexpr auto kMaxCount = std::numeric_limits<uint32_t>::max();
   constexpr auto kIndicesPerCell = 6U;
+  constexpr auto kRadius = 0.5F;
   if (latitude_segments < 3 || longitude_segments < 3
     || (static_cast<uint64_t>(latitude_segments) + 1U)
       > kMaxCount / (static_cast<uint64_t>(longitude_segments) + 1U)
@@ -56,57 +61,37 @@ auto oxygen::data::MakeSphereMeshAsset(
       > kMaxCount / kIndicesPerCell) {
     return std::nullopt;
   }
-  std::vector<Vertex> vertices;
-  std::vector<uint32_t> indices;
-  constexpr float pi = std::numbers::pi_v<float>;
 
-  for (unsigned int lat = 0; lat <= latitude_segments; ++lat) {
-    float theta
-      = pi * static_cast<float>(lat) / static_cast<float>(latitude_segments);
-    float sin_theta = std::sin(theta);
-    float cos_theta = std::cos(theta);
-
-    for (unsigned int lon = 0; lon <= longitude_segments; ++lon) {
-      float phi = 2.0F * pi * static_cast<float>(lon)
-        / static_cast<float>(longitude_segments);
-      float sin_phi = std::sin(phi);
-      float cos_phi = std::cos(phi);
-
-      float x = sin_theta * cos_phi;
-      float y = sin_theta * sin_phi;
-      float z = cos_theta; // Z is UP
-
-      Vertex v {
-        .position = { x * 0.5F, y * 0.5F, z * 0.5F },
-        .normal = { x, y, z },
-        .texcoord
-        = { static_cast<float>(lon) / static_cast<float>(longitude_segments),
-          1.0F
-            - static_cast<float>(lat) / static_cast<float>(latitude_segments), },
-        .tangent = { -sin_phi, cos_phi, 0.0F },
-        .bitangent = { -cos_theta * cos_phi, -cos_theta * sin_phi, sin_theta },
-        .color = { 1, 1, 1, 1 },
-      };
-      vertices.push_back(v);
+  constexpr auto kPi = std::numbers::pi_v<double>;
+  std::vector<procedural::Latitude> latitudes;
+  latitudes.reserve(latitude_segments + 1U);
+  for (uint32_t row = 0; row <= latitude_segments; ++row) {
+    const auto theta
+      = kPi * static_cast<double>(row) / static_cast<double>(latitude_segments);
+    // The poles are exact: theta is 0 at the +Z pole and pi at the -Z pole.
+    auto sin_theta = static_cast<float>(std::sin(theta));
+    auto cos_theta = static_cast<float>(std::cos(theta));
+    if (row == 0U) {
+      sin_theta = 0.0F;
+      cos_theta = 1.0F;
+    } else if (row == latitude_segments) {
+      sin_theta = 0.0F;
+      cos_theta = -1.0F;
     }
+    latitudes.push_back(procedural::Latitude {
+      .ring_radius = kRadius * sin_theta,
+      .z = kRadius * cos_theta,
+      .sin_theta = sin_theta,
+      .cos_theta = cos_theta,
+      .v = procedural::GridCoordinate(row, latitude_segments),
+    });
   }
 
-  for (unsigned int lat = 0; lat < latitude_segments; ++lat) {
-    for (unsigned int lon = 0; lon < longitude_segments; ++lon) {
-      uint32_t i0 = lat * (longitude_segments + 1) + lon;
-      uint32_t i1 = (lat + 1) * (longitude_segments + 1) + lon;
-      uint32_t i2 = i0 + 1;
-      uint32_t i3 = i1 + 1;
-
-      // CCW: (TL, BL, TR) and (TR, BL, BR)
-      indices.push_back(i0);
-      indices.push_back(i1);
-      indices.push_back(i2);
-      indices.push_back(i2);
-      indices.push_back(i1);
-      indices.push_back(i3);
-    }
+  auto buffers = procedural::MeshBuffers {};
+  if (!procedural::AppendLatitudeSurface(
+        buffers, latitudes, longitude_segments)) {
+    return std::nullopt;
   }
-
-  return { { std::move(vertices), std::move(indices) } };
+  return std::make_pair(
+    std::move(buffers.vertices), std::move(buffers.indices));
 }

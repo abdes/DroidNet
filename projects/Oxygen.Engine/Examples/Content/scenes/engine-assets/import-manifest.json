@@ -4,6 +4,31 @@
   "output": "../../.cooked/main",
   "jobs": [
     {
+      "id": "texture.UvProbe_albedo",
+      "type": "texture-descriptor",
+      "source": "./UvProbe_albedo.texture.json",
+      "virtual_path": "/.cooked/Resources/Textures/UvProbe_albedo.otex",
+      "name": "UvProbe_albedo",
+      "content_hashing": true
+    },
+    {
+      "id": "texture.UvProbe_normal",
+      "type": "texture-descriptor",
+      "source": "./UvProbe_normal.texture.json",
+      "virtual_path": "/.cooked/Resources/Textures/UvProbe_normal.otex",
+      "name": "UvProbe_normal",
+      "content_hashing": true
+    },
+    {
+      "id": "material.UvProbe",
+      "type": "material-descriptor",
+      "source": "./UvProbe.material.json",
+      "virtual_path": "/.cooked/Materials/UvProbe.omat",
+      "name": "UvProbe",
+      "content_hashing": true,
+      "depends_on": ["texture.UvProbe_albedo", "texture.UvProbe_normal"]
+    },
+    {
       "id": "material.MatCube",
       "type": "material-descriptor",
       "source": "./MatCube.material.json",
@@ -52,6 +77,7 @@
       "name": "EngineAssets",
       "content_hashing": true,
       "depends_on": [
+        "material.UvProbe",
         "material.MatCube",
         "material.MatCubeB",
         "material.MatCubeC",

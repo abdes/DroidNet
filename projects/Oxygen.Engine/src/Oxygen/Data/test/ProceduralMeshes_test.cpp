@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 // Standard library
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
@@ -29,50 +30,60 @@ namespace {
 //! Fixture covering procedural mesh factory validation and geometry sanity.
 class ProceduralMeshTest : public testing::Test { };
 
-using testing::AllOf;
-using testing::IsNull;
-using testing::NotNull;
-using testing::SizeIs;
-
 //! Checks that all procedural mesh factories reject invalid input and succeed
 //! on valid input.
 NOLINT_TEST_F(ProceduralMeshTest, ValidInvalidInput)
 {
   // Arrange
-  using namespace oxygen::data;
+  using oxygen::data::MakeArrowGizmoMeshAsset;
+  using oxygen::data::MakeConeMeshAsset;
+  using oxygen::data::MakeCubeMeshAsset;
+  using oxygen::data::MakeCylinderMeshAsset;
+  using oxygen::data::MakeIcoSphereMeshAsset;
+  using oxygen::data::MakePlaneMeshAsset;
+  using oxygen::data::MakeQuadMeshAsset;
+  using oxygen::data::MakeSphereMeshAsset;
+  using oxygen::data::MakeSubdividedCubeMeshAsset;
+  using oxygen::data::MakeTorusMeshAsset;
 
   struct SphereCase {
     int lat;
     int lon;
     bool valid;
     const char* note;
-  } sphere_cases[] = {
-    { 2, 2, false, "both below min" },
-    { 8, 8, true, "typical valid" },
   };
+
+  const auto sphere_cases = std::to_array<SphereCase>({
+    { .lat = 2, .lon = 2, .valid = false, .note = "both below min" },
+    { .lat = 8, .lon = 8, .valid = true, .note = "typical valid" },
+  });
 
   struct IcoSphereCase {
     int subdivisions;
     bool valid;
     const char* note;
-  } icosphere_cases[] = {
-    { 0, true, "base icosahedron" },
-    { 2, true, "default-like detail" },
-    { 8, true, "maximum supported detail" },
-    { 9, false, "beyond supported limit" },
   };
+
+  const auto icosphere_cases = std::to_array<IcoSphereCase>({
+    { .subdivisions = 0, .valid = true, .note = "base icosahedron" },
+    { .subdivisions = 2, .valid = true, .note = "default-like detail" },
+    { .subdivisions = 8, .valid = true, .note = "maximum supported detail" },
+    { .subdivisions = 9, .valid = false, .note = "beyond supported limit" },
+  });
 
   struct SubdividedCubeCase {
     int segments;
     bool valid;
     const char* note;
-  } subdivided_cube_cases[] = {
-    { 0, false, "segments must be >= 1" },
-    { 1, true, "minimum valid resolution" },
-    { 6, true, "default-like detail" },
-    { 64, true, "maximum supported detail" },
-    { 65, false, "beyond supported limit" },
   };
+
+  const auto subdivided_cube_cases = std::to_array<SubdividedCubeCase>({
+    { .segments = 0, .valid = false, .note = "segments must be >= 1" },
+    { .segments = 1, .valid = true, .note = "minimum valid resolution" },
+    { .segments = 6, .valid = true, .note = "default-like detail" },
+    { .segments = 64, .valid = true, .note = "maximum supported detail" },
+    { .segments = 65, .valid = false, .note = "beyond supported limit" },
+  });
 
   struct PlaneCase {
     int x;
@@ -80,12 +91,14 @@ NOLINT_TEST_F(ProceduralMeshTest, ValidInvalidInput)
     float size;
     bool valid;
     const char* note;
-  } plane_cases[] = {
-    { 0, 1, 1.0F, false, "x=0 invalid" },
-    { 1, 0, 1.0F, false, "z=0 invalid" },
-    { 1, 1, 0.0F, false, "size=0 invalid" },
-    { 2, 2, 1.0F, true, "baseline valid" },
   };
+
+  const auto plane_cases = std::to_array<PlaneCase>({
+    { .x = 0, .z = 1, .size = 1.0F, .valid = false, .note = "x=0 invalid" },
+    { .x = 1, .z = 0, .size = 1.0F, .valid = false, .note = "z=0 invalid" },
+    { .x = 1, .z = 1, .size = 0.0F, .valid = false, .note = "size=0 invalid" },
+    { .x = 2, .z = 2, .size = 1.0F, .valid = true, .note = "baseline valid" },
+  });
 
   struct CylinderCase {
     int segments;
@@ -93,12 +106,38 @@ NOLINT_TEST_F(ProceduralMeshTest, ValidInvalidInput)
     float radius;
     bool valid;
     const char* note;
-  } cylinder_cases[] = {
-    { 2, 1.0F, 0.5F, false, "segments below min" },
-    { 8, -1.0F, 0.5F, false, "negative height" },
-    { 8, 1.0F, -0.5F, false, "negative radius" },
-    { 8, 1.0F, 0.5F, true, "valid" },
   };
+
+  const auto cylinder_cases = std::to_array<CylinderCase>({
+    {
+      .segments = 2,
+      .height = 1.0F,
+      .radius = 0.5F,
+      .valid = false,
+      .note = "segments below min",
+    },
+    {
+      .segments = 8,
+      .height = -1.0F,
+      .radius = 0.5F,
+      .valid = false,
+      .note = "negative height",
+    },
+    {
+      .segments = 8,
+      .height = 1.0F,
+      .radius = -0.5F,
+      .valid = false,
+      .note = "negative radius",
+    },
+    {
+      .segments = 8,
+      .height = 1.0F,
+      .radius = 0.5F,
+      .valid = true,
+      .note = "valid",
+    },
+  });
 
   struct ConeCase {
     int segments;
@@ -106,12 +145,38 @@ NOLINT_TEST_F(ProceduralMeshTest, ValidInvalidInput)
     float radius;
     bool valid;
     const char* note;
-  } cone_cases[] = {
-    { 2, 1.0F, 0.5F, false, "segments below min" },
-    { 8, -1.0F, 0.5F, false, "negative height" },
-    { 8, 1.0F, -0.5F, false, "negative radius" },
-    { 8, 1.0F, 0.5F, true, "valid" },
   };
+
+  const auto cone_cases = std::to_array<ConeCase>({
+    {
+      .segments = 2,
+      .height = 1.0F,
+      .radius = 0.5F,
+      .valid = false,
+      .note = "segments below min",
+    },
+    {
+      .segments = 8,
+      .height = -1.0F,
+      .radius = 0.5F,
+      .valid = false,
+      .note = "negative height",
+    },
+    {
+      .segments = 8,
+      .height = 1.0F,
+      .radius = -0.5F,
+      .valid = false,
+      .note = "negative radius",
+    },
+    {
+      .segments = 8,
+      .height = 1.0F,
+      .radius = 0.5F,
+      .valid = true,
+      .note = "valid",
+    },
+  });
 
   struct TorusCase {
     int major_seg;
@@ -120,24 +185,63 @@ NOLINT_TEST_F(ProceduralMeshTest, ValidInvalidInput)
     float minor_r;
     bool valid;
     const char* note;
-  } torus_cases[] = {
-    { 2, 8, 1.0F, 0.25F, false, "major segments below min" },
-    { 8, 2, 1.0F, 0.25F, false, "minor segments below min" },
-    { 8, 8, -1.0F, 0.25F, false, "negative major radius" },
-    { 8, 8, 1.0F, -0.25F, false, "negative minor radius" },
-    { 8, 8, 1.0F, 0.25F, true, "valid" },
   };
+
+  const auto torus_cases = std::to_array<TorusCase>({
+    {
+      .major_seg = 2,
+      .minor_seg = 8,
+      .major_r = 1.0F,
+      .minor_r = 0.25F,
+      .valid = false,
+      .note = "major segments below min",
+    },
+    {
+      .major_seg = 8,
+      .minor_seg = 2,
+      .major_r = 1.0F,
+      .minor_r = 0.25F,
+      .valid = false,
+      .note = "minor segments below min",
+    },
+    {
+      .major_seg = 8,
+      .minor_seg = 8,
+      .major_r = -1.0F,
+      .minor_r = 0.25F,
+      .valid = false,
+      .note = "negative major radius",
+    },
+    {
+      .major_seg = 8,
+      .minor_seg = 8,
+      .major_r = 1.0F,
+      .minor_r = -0.25F,
+      .valid = false,
+      .note = "negative minor radius",
+    },
+    {
+      .major_seg = 8,
+      .minor_seg = 8,
+      .major_r = 1.0F,
+      .minor_r = 0.25F,
+      .valid = true,
+      .note = "valid",
+    },
+  });
 
   struct QuadCase {
     float w;
     float h;
     bool valid;
     const char* note;
-  } quad_cases[] = {
-    { 0.0F, 1.0F, false, "zero width" },
-    { 1.0F, 0.0F, false, "zero height" },
-    { 1.0F, 1.0F, true, "valid" },
   };
+
+  const auto quad_cases = std::to_array<QuadCase>({
+    { .w = 0.0F, .h = 1.0F, .valid = false, .note = "zero width" },
+    { .w = 1.0F, .h = 0.0F, .valid = false, .note = "zero height" },
+    { .w = 1.0F, .h = 1.0F, .valid = true, .note = "valid" },
+  });
 
   // Act & Assert
   for (const auto& c : sphere_cases) {
@@ -194,15 +298,27 @@ NOLINT_TEST_F(ProceduralMeshTest, ValidInvalidInput)
 NOLINT_TEST_F(ProceduralMeshTest, MeshValidity)
 {
   // Arrange
-  using namespace oxygen::data;
+  using oxygen::data::MakeArrowGizmoMeshAsset;
+  using oxygen::data::MakeConeMeshAsset;
+  using oxygen::data::MakeCubeMeshAsset;
+  using oxygen::data::MakeCylinderMeshAsset;
+  using oxygen::data::MakeIcoSphereMeshAsset;
+  using oxygen::data::MakePlaneMeshAsset;
+  using oxygen::data::MakeQuadMeshAsset;
+  using oxygen::data::MakeSphereMeshAsset;
+  using oxygen::data::MakeSubdividedCubeMeshAsset;
+  using oxygen::data::MakeTorusMeshAsset;
+  using oxygen::data::Vertex;
   struct MeshFactory {
     const char* name;
     std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>> (
       *fn)();
-  } factories[] = {
-    { "Cube", &MakeCubeMeshAsset },
-    { "ArrowGizmo", &MakeArrowGizmoMeshAsset },
   };
+
+  const auto factories = std::to_array<MeshFactory>({
+    { .name = "Cube", .fn = &MakeCubeMeshAsset },
+    { .name = "ArrowGizmo", .fn = &MakeArrowGizmoMeshAsset },
+  });
 
   // Factories with params
   const auto sphere = MakeSphereMeshAsset(8, 8);
@@ -213,28 +329,28 @@ NOLINT_TEST_F(ProceduralMeshTest, MeshValidity)
   const auto cone = MakeConeMeshAsset(8, 1.0F, 0.5F);
   const auto torus = MakeTorusMeshAsset(8, 8, 1.0F, 0.25F);
   const auto quad = MakeQuadMeshAsset(1.0F, 1.0F);
-  std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>> assets[]
-    = {
-        sphere,
-        icosphere,
-        subdivided_cube,
-        plane,
-        cylinder,
-        cone,
-        torus,
-        quad,
-      };
+  using MeshData = std::pair<std::vector<Vertex>, std::vector<uint32_t>>;
+  const auto assets = std::to_array<std::optional<MeshData>>({
+    sphere,
+    icosphere,
+    subdivided_cube,
+    plane,
+    cylinder,
+    cone,
+    torus,
+    quad,
+  });
 
   // Act & Assert
   for (const auto& f : factories) {
     auto mesh_opt = f.fn();
-    ASSERT_TRUE(mesh_opt.has_value()) << f.name;
+    ASSERT_HAS_VALUE(mesh_opt) << f.name;
     const auto& [vertices, indices] = *mesh_opt;
     EXPECT_GT(vertices.size(), 0U) << f.name;
     EXPECT_GT(indices.size(), 0U) << f.name;
   }
   for (const auto& mesh_opt : assets) {
-    ASSERT_TRUE(mesh_opt.has_value());
+    ASSERT_HAS_VALUE(mesh_opt);
     const auto& [vertices, indices] = *mesh_opt;
     EXPECT_GT(vertices.size(), 0U);
     EXPECT_GT(indices.size(), 0U);
@@ -245,9 +361,9 @@ NOLINT_TEST_F(ProceduralMeshTest, MeshValidity)
 NOLINT_TEST_F(ProceduralMeshTest, BoundingBox)
 {
   // Arrange
-  using namespace oxygen::data;
+  using oxygen::data::MakeCubeMeshAsset;
   const auto mesh_opt = MakeCubeMeshAsset();
-  ASSERT_TRUE(mesh_opt.has_value());
+  ASSERT_HAS_VALUE(mesh_opt);
   const auto& [vertices, indices] = *mesh_opt;
 
   // Compute bounding box from vertices
@@ -275,7 +391,7 @@ NOLINT_TEST_F(ProceduralMeshTest, BoundingBox)
 NOLINT_TEST_F(ProceduralMeshTest, SphereMinimumValidSegments)
 {
   // Arrange
-  using namespace oxygen::data;
+  using oxygen::data::MakeSphereMeshAsset;
   // Act & Assert
   EXPECT_FALSE(MakeSphereMeshAsset(2, 3).has_value())
     << "Latitude=2 should be invalid (min 3)";
@@ -285,7 +401,9 @@ NOLINT_TEST_F(ProceduralMeshTest, SphereMinimumValidSegments)
     << "(3,3) should be the minimum valid sphere";
 }
 
-//! Verifies icosphere topology growth follows expected refinement factors.
+//! Verifies icosphere topology growth follows expected refinement factors:
+//! each level splits every triangle in four; the seam and poles add vertices
+//! beyond the 10 * 4^level + 2 shared positions.
 NOLINT_TEST_F(ProceduralMeshTest, IcoSphereSubdivisionGrowth)
 {
   using oxygen::data::MakeIcoSphereMeshAsset;
@@ -293,19 +411,20 @@ NOLINT_TEST_F(ProceduralMeshTest, IcoSphereSubdivisionGrowth)
   const auto sub0 = MakeIcoSphereMeshAsset(0);
   const auto sub1 = MakeIcoSphereMeshAsset(1);
   const auto sub2 = MakeIcoSphereMeshAsset(2);
-  ASSERT_TRUE(sub0.has_value());
-  ASSERT_TRUE(sub1.has_value());
-  ASSERT_TRUE(sub2.has_value());
+  ASSERT_HAS_VALUE(sub0);
+  ASSERT_HAS_VALUE(sub1);
+  ASSERT_HAS_VALUE(sub2);
 
-  EXPECT_EQ(sub0->first.size(), 12U);
+  EXPECT_GT(sub0->first.size(), 12U);
   EXPECT_EQ(sub0->second.size(), 60U);
-  EXPECT_EQ(sub1->first.size(), 42U);
+  EXPECT_GT(sub1->first.size(), 42U);
   EXPECT_EQ(sub1->second.size(), 240U);
-  EXPECT_EQ(sub2->first.size(), 162U);
+  EXPECT_GT(sub2->first.size(), 162U);
   EXPECT_EQ(sub2->second.size(), 960U);
 }
 
-//! Verifies subdivided-cube topology growth follows expected formulas.
+//! Verifies subdivided-cube topology growth follows expected formulas: each
+//! face has its own (segments + 1)^2 vertices.
 NOLINT_TEST_F(ProceduralMeshTest, SubdividedCubeResolutionGrowth)
 {
   using oxygen::data::MakeSubdividedCubeMeshAsset;
@@ -313,44 +432,37 @@ NOLINT_TEST_F(ProceduralMeshTest, SubdividedCubeResolutionGrowth)
   const auto seg1 = MakeSubdividedCubeMeshAsset(1);
   const auto seg2 = MakeSubdividedCubeMeshAsset(2);
   const auto seg4 = MakeSubdividedCubeMeshAsset(4);
-  ASSERT_TRUE(seg1.has_value());
-  ASSERT_TRUE(seg2.has_value());
-  ASSERT_TRUE(seg4.has_value());
+  ASSERT_HAS_VALUE(seg1);
+  ASSERT_HAS_VALUE(seg2);
+  ASSERT_HAS_VALUE(seg4);
 
-  EXPECT_EQ(seg1->first.size(), 8U);
+  EXPECT_EQ(seg1->first.size(), 24U);
   EXPECT_EQ(seg1->second.size(), 36U);
 
-  EXPECT_EQ(seg2->first.size(), 26U);
+  EXPECT_EQ(seg2->first.size(), 54U);
   EXPECT_EQ(seg2->second.size(), 144U);
 
-  EXPECT_EQ(seg4->first.size(), 98U);
+  EXPECT_EQ(seg4->first.size(), 150U);
   EXPECT_EQ(seg4->second.size(), 576U);
 }
 
 //! Boundary tests for plane minimum resolution and size parameter.
-//! Verifies documented constraints: x_segments>=1, z_segments>=1, size>0.
+//! Verifies documented constraints: x_segments>=1, y_segments>=1, size>0.
 NOLINT_TEST_F(ProceduralMeshTest, PlaneMinimumResolution)
 {
   // Arrange
-  using namespace oxygen::data;
+  using oxygen::data::MakePlaneMeshAsset;
   // Invalid just-below boundaries
   // Act & Assert
   EXPECT_FALSE(MakePlaneMeshAsset(0, 1, 1.0F).has_value())
     << "x_segments=0 invalid";
   EXPECT_FALSE(MakePlaneMeshAsset(1, 0, 1.0F).has_value())
-    << "z_segments=0 invalid";
+    << "y_segments=0 invalid";
   EXPECT_FALSE(MakePlaneMeshAsset(1, 1, 0.0F).has_value()) << "size<=0 invalid";
-  // Minimum valid (1,1,size>0) should succeed according to generator but
-  // existing ValidInvalidInput test expects (2,2) as first positive. We
-  // confirm behavior explicitly: if (1,1,1.0f) becomes valid later this test
-  // will capture the change.
-  auto one_one = MakePlaneMeshAsset(1, 1, 1.0F);
-  // Accept either current (nullopt) or future (has_value) behavior without
-  // failing the suite; we only assert that (2,2) definitely succeeds.
-  if (one_one.has_value()) {
-    EXPECT_GT(one_one->first.size(), 0U);
-    EXPECT_GT(one_one->second.size(), 0U);
-  }
+  const auto one_one = MakePlaneMeshAsset(1, 1, 1.0F);
+  ASSERT_HAS_VALUE(one_one);
+  EXPECT_EQ(one_one->first.size(), 4U);
+  EXPECT_EQ(one_one->second.size(), 6U);
   EXPECT_TRUE(MakePlaneMeshAsset(2, 2, 1.0F).has_value())
     << "(2,2) must be valid";
 }
@@ -359,9 +471,9 @@ NOLINT_TEST_F(ProceduralMeshTest, PlaneMinimumResolution)
 NOLINT_TEST_F(ProceduralMeshTest, DefaultView)
 {
   // Arrange
-  using namespace oxygen::data;
+  using oxygen::data::MakeCubeMeshAsset;
   const auto mesh_opt = MakeCubeMeshAsset();
-  ASSERT_TRUE(mesh_opt.has_value());
+  ASSERT_HAS_VALUE(mesh_opt);
   const auto& [vertices, indices] = *mesh_opt;
 
   // Act & Assert: the only view is the full data
@@ -374,28 +486,90 @@ NOLINT_TEST_F(ProceduralMeshTest, DefaultView)
 NOLINT_TEST_F(ProceduralMeshTest, PerMeshType)
 {
   // Arrange
-  using namespace oxygen::data;
+  using oxygen::data::MakeArrowGizmoMeshAsset;
+  using oxygen::data::MakeConeMeshAsset;
+  using oxygen::data::MakeCubeMeshAsset;
+  using oxygen::data::MakeCylinderMeshAsset;
+  using oxygen::data::MakeIcoSphereMeshAsset;
+  using oxygen::data::MakePlaneMeshAsset;
+  using oxygen::data::MakeQuadMeshAsset;
+  using oxygen::data::MakeSphereMeshAsset;
+  using oxygen::data::MakeSubdividedCubeMeshAsset;
+  using oxygen::data::MakeTorusMeshAsset;
+  using oxygen::data::Vertex;
   struct MeshType {
-    const char* name;
+    const char* name { "" };
     std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>> asset;
-    size_t min_vertices;
-    size_t min_indices;
-  } types[] = {
-    { "Cube", MakeCubeMeshAsset(), 24, 36 },
-    { "SubdividedCube", MakeSubdividedCubeMeshAsset(6), 218, 1296 },
-    { "Sphere", MakeSphereMeshAsset(8, 8), 81, 384 },
-    { "IcoSphere", MakeIcoSphereMeshAsset(2), 162, 960 },
-    { "Plane", MakePlaneMeshAsset(2, 2, 1.0F), 9, 24 },
-    { "Cylinder", MakeCylinderMeshAsset(8, 1.0F, 0.5F), 18, 72 },
-    { "Cone", MakeConeMeshAsset(8, 1.0F, 0.5F), 11, 48 },
-    { "Torus", MakeTorusMeshAsset(8, 8, 1.0F, 0.25F), 81, 384 },
-    { "Quad", MakeQuadMeshAsset(1.0F, 1.0F), 4, 6 },
-    { "ArrowGizmo", MakeArrowGizmoMeshAsset(), 0, 0 },
+    size_t min_vertices { 0 };
+    size_t min_indices { 0 };
   };
+
+  const auto types = std::to_array<MeshType>({
+    {
+      .name = "Cube",
+      .asset = MakeCubeMeshAsset(),
+      .min_vertices = 24,
+      .min_indices = 36,
+    },
+    {
+      .name = "SubdividedCube",
+      .asset = MakeSubdividedCubeMeshAsset(6),
+      .min_vertices = 294,
+      .min_indices = 1296,
+    },
+    {
+      .name = "Sphere",
+      .asset = MakeSphereMeshAsset(8, 8),
+      .min_vertices = 79,
+      .min_indices = 336,
+    },
+    {
+      .name = "IcoSphere",
+      .asset = MakeIcoSphereMeshAsset(2),
+      .min_vertices = 162,
+      .min_indices = 960,
+    },
+    {
+      .name = "Plane",
+      .asset = MakePlaneMeshAsset(2, 2, 1.0F),
+      .min_vertices = 9,
+      .min_indices = 24,
+    },
+    {
+      .name = "Cylinder",
+      .asset = MakeCylinderMeshAsset(8, 1.0F, 0.5F),
+      .min_vertices = 18,
+      .min_indices = 72,
+    },
+    {
+      .name = "Cone",
+      .asset = MakeConeMeshAsset(8, 1.0F, 0.5F),
+      .min_vertices = 11,
+      .min_indices = 48,
+    },
+    {
+      .name = "Torus",
+      .asset = MakeTorusMeshAsset(8, 8, 1.0F, 0.25F),
+      .min_vertices = 81,
+      .min_indices = 384,
+    },
+    {
+      .name = "Quad",
+      .asset = MakeQuadMeshAsset(1.0F, 1.0F),
+      .min_vertices = 4,
+      .min_indices = 6,
+    },
+    {
+      .name = "ArrowGizmo",
+      .asset = MakeArrowGizmoMeshAsset(),
+      .min_vertices = 0,
+      .min_indices = 0,
+    },
+  });
 
   // Act & Assert
   for (const auto& t : types) {
-    ASSERT_TRUE(t.asset.has_value()) << t.name;
+    ASSERT_HAS_VALUE(t.asset) << t.name;
     const auto& [vertices, indices] = *t.asset;
     if (t.min_vertices > 0) {
       EXPECT_GE(vertices.size(), t.min_vertices) << t.name;
@@ -413,25 +587,36 @@ NOLINT_TEST_F(ProceduralMeshTest, PerMeshType)
 NOLINT_TEST_F(ProceduralMeshTest, ShapesTopologyValid)
 {
   // Arrange
-  using namespace oxygen::data;
+  using oxygen::data::MakeConeMeshAsset;
+  using oxygen::data::MakeCubeMeshAsset;
+  using oxygen::data::MakeCylinderMeshAsset;
+  using oxygen::data::MakeIcoSphereMeshAsset;
+  using oxygen::data::MakePlaneMeshAsset;
+  using oxygen::data::MakeQuadMeshAsset;
+  using oxygen::data::MakeSphereMeshAsset;
+  using oxygen::data::MakeSubdividedCubeMeshAsset;
+  using oxygen::data::MakeTorusMeshAsset;
+  using oxygen::data::Vertex;
   struct NamedAsset {
     const char* name;
     std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>> asset;
-  } assets[] = {
-    { "Cube", MakeCubeMeshAsset() },
-    { "SubdividedCube", MakeSubdividedCubeMeshAsset(6) },
-    { "Sphere", MakeSphereMeshAsset(8, 8) },
-    { "IcoSphere", MakeIcoSphereMeshAsset(2) },
-    { "Plane", MakePlaneMeshAsset(2, 2, 1.0F) },
-    { "Cylinder", MakeCylinderMeshAsset(8, 1.0F, 0.5F) },
-    { "Cone", MakeConeMeshAsset(8, 1.0F, 0.5F) },
-    { "Torus", MakeTorusMeshAsset(8, 8, 1.0F, 0.25F) },
-    { "Quad", MakeQuadMeshAsset(1.0F, 1.0F) },
   };
+
+  const auto assets = std::to_array<NamedAsset>({
+    { .name = "Cube", .asset = MakeCubeMeshAsset() },
+    { .name = "SubdividedCube", .asset = MakeSubdividedCubeMeshAsset(6) },
+    { .name = "Sphere", .asset = MakeSphereMeshAsset(8, 8) },
+    { .name = "IcoSphere", .asset = MakeIcoSphereMeshAsset(2) },
+    { .name = "Plane", .asset = MakePlaneMeshAsset(2, 2, 1.0F) },
+    { .name = "Cylinder", .asset = MakeCylinderMeshAsset(8, 1.0F, 0.5F) },
+    { .name = "Cone", .asset = MakeConeMeshAsset(8, 1.0F, 0.5F) },
+    { .name = "Torus", .asset = MakeTorusMeshAsset(8, 8, 1.0F, 0.25F) },
+    { .name = "Quad", .asset = MakeQuadMeshAsset(1.0F, 1.0F) },
+  });
 
   // Act & Assert
   for (const auto& a : assets) {
-    ASSERT_TRUE(a.asset.has_value()) << a.name;
+    ASSERT_HAS_VALUE(a.asset) << a.name;
     const auto& vertices = a.asset->first;
     const auto& indices = a.asset->second;
     ASSERT_FALSE(vertices.empty()) << a.name;
@@ -444,55 +629,15 @@ NOLINT_TEST_F(ProceduralMeshTest, ShapesTopologyValid)
   }
 }
 
-//! Validates normals are approximately unit length and UV coordinates lie in
-//! [0,1] (with small epsilon tolerance) for representative procedural shapes.
-NOLINT_TEST_F(ProceduralMeshTest, ShapesNormalsAndUVsValid)
-{
-  // Arrange
-  using namespace oxygen::data;
-  auto sphere = MakeSphereMeshAsset(8, 8);
-  auto icosphere = MakeIcoSphereMeshAsset(2);
-  auto subdivided_cube = MakeSubdividedCubeMeshAsset(6);
-  auto plane = MakePlaneMeshAsset(2, 2, 1.0F);
-  auto cylinder = MakeCylinderMeshAsset(8, 1.0F, 0.5F);
-  auto cone = MakeConeMeshAsset(8, 1.0F, 0.5F);
-  auto torus = MakeTorusMeshAsset(8, 8, 1.0F, 0.25F);
-  std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>> shapes[]
-    = {
-        sphere,
-        icosphere,
-        subdivided_cube,
-        plane,
-        cylinder,
-        cone,
-        torus,
-      };
-
-  constexpr float kNormTol
-    = 1e-3F; // loosen vs vertex epsilon for accumulated ops
-  for (const auto& s : shapes) {
-    ASSERT_TRUE(s.has_value());
-    const auto& vertices = s->first;
-    for (const auto& v : vertices) {
-      float len = glm::length(v.normal);
-      EXPECT_NEAR(len, 1.0F, kNormTol);
-      EXPECT_GE(v.texcoord.x, -kNormTol);
-      EXPECT_GE(v.texcoord.y, -kNormTol);
-      EXPECT_LE(v.texcoord.x, 1.0F + kNormTol);
-      EXPECT_LE(v.texcoord.y, 1.0F + kNormTol);
-    }
-  }
-}
-
 //! Ensures the torus contains no degenerate triangles (no triangle where any
 //! two consecutive indices are identical). This guards against topology bugs
 //! when wrapping segment seams.
 NOLINT_TEST_F(ProceduralMeshTest, Torus_NoDegenerateTriangles)
 {
   // Arrange
-  using namespace oxygen::data;
+  using oxygen::data::MakeTorusMeshAsset;
   auto torus = MakeTorusMeshAsset(8, 8, 1.0F, 0.25F);
-  ASSERT_TRUE(torus.has_value());
+  ASSERT_HAS_VALUE(torus);
   const auto& indices = torus->second;
 
   // Act & Assert

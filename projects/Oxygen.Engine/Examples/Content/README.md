@@ -71,8 +71,14 @@ engine content pak, which every cook receives as a cooked context root. An
 installed SDK uses its `share/oxygen/engine.pak`; a source checkout builds the
 `oxygen-engine-content` target with the importer and uses the pak the selected
 build tree records. `-EnginePak` selects another pak and is required with an
-explicit `-ToolPath` outside an SDK. `engine-assets` shows every `/Engine` asset
-on a large floor, with the example materials overriding the shapes' surface.
+explicit `-ToolPath` outside an SDK. `engine-assets` shows every `/Engine`
+shape with the `UvProbe` material, in three rows: as authored, turned to show
+its back, and upside down to show its underside. The probe's "F" reads upright
+and unmirrored on every face that follows the texture layout of
+`space::texture` in `Oxygen/Core/Constants.h`, and its domes are lit from the
+sun's side (upper left) where the tangent frames are right; `UvProbe.py`
+regenerates the two textures. A fourth row shows the example materials
+(opaque, masked, blended, double-sided).
 `surface-overrides` shows surface and LOD policy overrides against asset
 defaults and checks them while it plays; it uses the models `sdk-furniture`
 cooks, which `-All` cooks first.

@@ -17,7 +17,7 @@
         "mesh_name": "Floor",
         "params": {
           "x_segments": 10,
-          "z_segments": 10,
+          "y_segments": 10,
           "size": 10.0
         }
       },

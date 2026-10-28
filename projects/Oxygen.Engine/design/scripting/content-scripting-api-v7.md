@@ -171,7 +171,7 @@ Supported geometry `kind` values:
 | `sphere`          | `latitude_segments`, `longitude_segments`                          |
 | `capsule`         | `hemisphere_segments`, `radial_segments`, `height`, `radius`       |
 | `icosphere`       | `subdivision_level` (zero is valid)                                |
-| `plane`           | `x_segments`, `z_segments`, `size`                                 |
+| `plane`           | `x_segments`, `y_segments`, `size`                                 |
 | `cylinder`        | `segments`, `height`, `radius`                                     |
 | `cone`            | `segments`, `height`, `radius`                                     |
 | `torus`           | `major_segments`, `minor_segments`, `major_radius`, `minor_radius` |
@@ -194,7 +194,7 @@ Notes:
    Unsupported kinds and recipes rejected by the native factory return `nil`.
    They never substitute a default shape or clamp invalid supplied values.
 4. Geometry uses Oxygen's right-handed Z-up world convention. Capsule and
-   Cylinder axes are Z; Plane lies in XY (`z_segments` names its second, Y-axis
+   Cylinder axes are Z; Plane lies in XY (`y_segments` names its second, Y-axis
    subdivision count); Quad lies in XZ and faces -Y. Capsule height includes its
    hemispheres and defaults to 2 m with radius 0.5 m; the matching Physics capsule
    has cylindrical `half_height = height / 2 - radius`. Torus defaults are major

@@ -7,22 +7,22 @@
 #include <cmath>
 #include <cstdint>
 #include <limits>
-#include <numbers>
 #include <optional>
 #include <utility>
 #include <vector>
 
-#include <glm/ext/vector_float3.hpp>
-#include <glm/geometric.hpp>
-
+#include <Oxygen/Data/Procedural/Revolution.h>
+#include <Oxygen/Data/Procedural/SurfaceLayout.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
 #include <Oxygen/Data/Vertex.h>
 
 /*!
- Creates vertex and index buffers for a cone aligned along the Z axis.
- The base cap lies at z = -height/2 and the apex at z = +height/2, with the
- axis passing through x = y = 0. The origin is halfway along the height,
- not the cone's centre of mass.
+ Creates vertex and index buffers for a closed cone along the Z axis. The base
+ cap lies at z = -height/2 and the apex at z = +height/2, with the axis through
+ x = y = 0; the origin is halfway along the height, not the cone's centre of
+ mass. The side follows the revolution layout of `space::texture` (seam at
+ the back, v = 0 at the apex) with one apex vertex per segment, the base the
+ bottom face layout.
 
  @param segments Number of radial segments (minimum 3).
  @param height Finite positive height along Z.
@@ -33,7 +33,7 @@
  ### Performance Characteristics
 
  - Time Complexity: O(segments).
- - Output: 2*segments+3 vertices and 6*segments indices.
+ - Output: 3*segments+2 vertices and 6*segments indices.
  - Side and cap rim vertices are separate to preserve their normal/UV seams.
 
  ### Usage Example
@@ -45,10 +45,10 @@
  }
  ```
 
- @see GenerateMesh, Vertex
+ @see GenerateMesh, procedural::AppendCone
 */
 auto oxygen::data::MakeConeMeshAsset(
-  unsigned int segments, float height, float radius)
+  const unsigned int segments, const float height, const float radius)
   -> std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>>
 {
   constexpr auto kIndicesPerSegment = 6U;
@@ -59,92 +59,20 @@ auto oxygen::data::MakeConeMeshAsset(
     || radius <= 0.0F) {
     return std::nullopt;
   }
-  constexpr double pi = std::numbers::pi_v<double>;
-  std::vector<Vertex> vertices;
-  std::vector<uint32_t> indices;
-  glm::vec3 apex_pos = { 0.0F, 0.0F, half_height };
-  const auto slant = std::hypot(static_cast<double>(height), radius);
-  const auto normal_radius = static_cast<float>(height / slant);
-  const auto normal_height = static_cast<float>(radius / slant);
 
-  // Side vertices (base ring)
-  for (unsigned int i = 0; i <= segments; ++i) {
-    const auto theta = i == segments ? 0.0 : 2.0 * pi * i / segments;
-    const auto x = static_cast<float>(std::cos(theta));
-    const auto y = static_cast<float>(std::sin(theta));
-    float u = static_cast<float>(i) / static_cast<float>(segments);
-    glm::vec3 pos = { x * radius, y * radius, -half_height };
-    if (i > 0 && pos == vertices.back().position) {
-      return std::nullopt;
-    }
-    // Normal points out and up
-    glm::vec3 dir = { x * normal_radius, y * normal_radius, normal_height };
-    glm::vec3 tangent = { -y, x, 0.0F };
-    glm::vec3 bitangent = -glm::cross(dir, tangent);
-    vertices.push_back(Vertex {
-      .position = pos,
-      .normal = dir,
-      .texcoord = { u, 1.0F },
-      .tangent = tangent,
-      .bitangent = bitangent,
-      .color = { 1, 1, 1, 1 },
-    });
+  auto buffers = procedural::MeshBuffers {};
+  if (!procedural::AppendCone(buffers,
+        procedural::AxialExtent {
+          .bottom_z = -half_height,
+          .top_z = half_height,
+          .radius = radius,
+        },
+        procedural::SolidStyle {
+          .segments = segments,
+          .color = { 1.0F, 1.0F, 1.0F, 1.0F },
+        })) {
+    return std::nullopt;
   }
-
-  // Apex vertex
-  vertices.push_back(Vertex {
-    .position = apex_pos,
-    .normal = { 0.0F, 0.0F, 1.0F },
-    .texcoord = { 0.5F, 0.0F },
-    .tangent = { 1, 0, 0 },
-    .bitangent = { 0, 1, 0 },
-    .color = { 1, 1, 1, 1 },
-  });
-  uint32_t apex_index = static_cast<uint32_t>(vertices.size() - 1);
-
-  // Side indices: CCW is (current, next, apex)
-  for (unsigned int i = 0; i < segments; ++i) {
-    indices.push_back(i);
-    indices.push_back(i + 1);
-    indices.push_back(apex_index);
-  }
-
-  // Base cap rim vertices
-  std::vector<uint32_t> base_cap_rim_indices;
-  for (unsigned int i = 0; i < segments; ++i) {
-    const auto theta = 2.0 * pi * i / segments;
-    const auto x = static_cast<float>(std::cos(theta));
-    const auto y = static_cast<float>(std::sin(theta));
-    float u = (x + 1.0F) * 0.5F;
-    float v = (y + 1.0F) * 0.5F;
-    vertices.push_back(Vertex {
-      .position = { x * radius, y * radius, -half_height },
-      .normal = { 0, 0, -1 },
-      .texcoord = { u, v },
-      .tangent = { 1, 0, 0 },
-      .bitangent = { 0, 1, 0 },
-      .color = { 1, 1, 1, 1 },
-    });
-    base_cap_rim_indices.push_back(static_cast<uint32_t>(vertices.size() - 1));
-  }
-
-  // Center vertex for base cap
-  vertices.push_back(Vertex {
-    .position = { 0, 0, -half_height },
-    .normal = { 0, 0, -1 },
-    .texcoord = { 0.5F, 0.5F },
-    .tangent = { 1, 0, 0 },
-    .bitangent = { 0, 1, 0 },
-    .color = { 1, 1, 1, 1 },
-  });
-  uint32_t base_center = static_cast<uint32_t>(vertices.size() - 1);
-
-  // Base cap indices: CCW is (center, next, current)
-  for (unsigned int i = 0; i < segments; ++i) {
-    indices.push_back(base_center);
-    indices.push_back(base_cap_rim_indices[(i + 1) % segments]);
-    indices.push_back(base_cap_rim_indices[i]);
-  }
-
-  return { { std::move(vertices), std::move(indices) } };
+  return std::make_pair(
+    std::move(buffers.vertices), std::move(buffers.indices));
 }

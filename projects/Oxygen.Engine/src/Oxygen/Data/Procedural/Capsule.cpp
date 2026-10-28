@@ -5,16 +5,14 @@
 //===----------------------------------------------------------------------===//
 
 #include <cmath>
-#include <cstddef>
 #include <cstdint>
 #include <numbers>
 #include <optional>
 #include <utility>
 #include <vector>
 
-#include <glm/ext/vector_double3.hpp>
-#include <glm/geometric.hpp>
-
+#include <Oxygen/Data/Procedural/Revolution.h>
+#include <Oxygen/Data/Procedural/SurfaceLayout.h>
 #include <Oxygen/Data/ProceduralMeshDefaults.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
 #include <Oxygen/Data/Vertex.h>
@@ -33,9 +31,13 @@
  dimensions that collapse the sampled surface in float32 vertex storage.
 
  Height equal to the diameter produces a sphere with one shared equator.
- UVs use longitude and normalized meridian arc length. Tangent frames are
- orthonormal, including at the poles. Bounded segment counts limit allocation
- and keep all vertex/index counts representable by the native mesh format.
+ It follows the revolution layout of `space::texture`: the seam at the back,
+ u counter-clockwise seen from +Z and v the normalized meridian arc length
+ from the +Z pole, so a texture reads upright and unmirrored from outside.
+ Each pole has one vertex per segment at the segment's middle u. Tangent
+ frames are orthonormal, including at the poles. Bounded segment counts limit
+ allocation and keep all vertex/index counts representable by the native mesh
+ format.
 
  @see GenerateMeshBuffers, MakeSphereMeshAsset
 */
@@ -56,16 +58,12 @@ auto oxygen::data::MakeCapsuleMeshAsset(const unsigned int hemisphere_segments,
   const auto half_cylinder = half_height - radius;
   const auto is_sphere = half_cylinder == 0.0F;
   const auto row_count = (2U * hemisphere_segments) + (is_sphere ? 1U : 2U);
-  const auto stride = radial_segments + 1U;
-  std::vector<Vertex> vertices;
-  std::vector<uint32_t> indices;
-  vertices.reserve(static_cast<size_t>(row_count) * stride);
-  constexpr auto kIndicesPerQuad = size_t { 3 } * 2U;
-  indices.reserve(kIndicesPerQuad * radial_segments * (row_count - 2U));
 
   constexpr auto pi = std::numbers::pi_v<double>;
   const auto cylinder_length = 2.0 * half_cylinder;
   const auto meridian_length = (pi * radius) + cylinder_length;
+  std::vector<procedural::Latitude> latitudes;
+  latitudes.reserve(row_count);
   auto previous_z = half_height;
   for (auto row = 0U; row < row_count; ++row) {
     const auto upper = row <= hemisphere_segments;
@@ -94,58 +92,21 @@ auto oxygen::data::MakeCapsuleMeshAsset(const unsigned int hemisphere_segments,
     }
     previous_z = z;
     const auto distance = (radius * angle) + (upper ? 0.0 : cylinder_length);
-    const auto v = static_cast<float>(1.0 - (distance / meridian_length));
-
-    for (auto longitude = 0U; longitude <= radial_segments; ++longitude) {
-      // Close the seam exactly, while retaining the distinct u = 1 vertex.
-      const auto phi = longitude == radial_segments
-        ? 0.0
-        : 2.0 * pi * static_cast<double>(longitude) / radial_segments;
-      const auto cos_phi = static_cast<float>(std::cos(phi));
-      const auto sin_phi = static_cast<float>(std::sin(phi));
-      const auto normal
-        = glm::vec3(sin_angle * cos_phi, sin_angle * sin_phi, cos_angle);
-      const auto tangent = glm::vec3(-sin_phi, cos_phi, 0.0F);
-      vertices.push_back(Vertex {
-        .position = { radius * normal.x, radius * normal.y, z },
-        .normal = normal,
-        .texcoord
-        = { static_cast<float>(longitude) / static_cast<float>(radial_segments),
-          v, },
-        .tangent = tangent,
-        .bitangent = glm::cross(normal, tangent),
-        .color = { 1, 1, 1, 1 },
-      });
-    }
+    latitudes.push_back(procedural::Latitude {
+      .ring_radius = radius * sin_angle,
+      .z = z,
+      .sin_theta = sin_angle,
+      .cos_theta = cos_angle,
+      .v = static_cast<float>(distance / meridian_length),
+    });
   }
 
-  const auto append_triangle
-    = [&](const uint32_t a, const uint32_t b, const uint32_t c) -> bool {
-    const auto first = glm::dvec3(vertices.at(a).position);
-    const auto second = glm::dvec3(vertices.at(b).position);
-    const auto third = glm::dvec3(vertices.at(c).position);
-    const auto normal = glm::dvec3(
-      vertices.at(a).normal + vertices.at(b).normal + vertices.at(c).normal);
-    // Test stored positions, using double to avoid overflow/underflow in the
-    // validation itself. Tiny radii can collapse different longitudes too.
-    if (glm::dot(glm::cross(second - first, third - first), normal) <= 0.0) {
-      return false;
-    }
-    indices.insert(indices.end(), { a, b, c });
-    return true;
-  };
-  for (auto row = 0U; row + 1U < row_count; ++row) {
-    for (auto longitude = 0U; longitude < radial_segments; ++longitude) {
-      const auto top = (row * stride) + longitude;
-      const auto bottom = top + stride;
-      if (row != 0U && !append_triangle(top, bottom, top + 1U)) {
-        return std::nullopt;
-      }
-      if (row + 2U != row_count
-        && !append_triangle(top + 1U, bottom, bottom + 1U)) {
-        return std::nullopt;
-      }
-    }
+  // Tiny radii can collapse different longitudes too: the builder rejects any
+  // triangle that no longer faces outward in vertex storage.
+  auto buffers = procedural::MeshBuffers {};
+  if (!procedural::AppendLatitudeSurface(buffers, latitudes, radial_segments)) {
+    return std::nullopt;
   }
-  return { { std::move(vertices), std::move(indices) } };
+  return std::make_pair(
+    std::move(buffers.vertices), std::move(buffers.indices));
 }

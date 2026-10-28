@@ -212,10 +212,10 @@ namespace {
     if (kind == "plane") {
       const auto x_segments
         = read_uint("x_segments", defaults::kPlaneXSegments);
-      const auto z_segments
-        = read_uint("z_segments", defaults::kPlaneZSegments);
+      const auto y_segments
+        = read_uint("y_segments", defaults::kPlaneYSegments);
       const float size = read_float("size", defaults::kPlaneSize);
-      return data::MakePlaneMeshAsset(x_segments, z_segments, size);
+      return data::MakePlaneMeshAsset(x_segments, y_segments, size);
     }
     if (kind == "cylinder") {
       const auto segments = read_uint("segments", defaults::kCylinderSegments);

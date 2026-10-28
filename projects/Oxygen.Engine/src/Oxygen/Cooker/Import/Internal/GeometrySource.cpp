@@ -135,7 +135,7 @@ namespace {
         "subdivision_level", params, recipe::kIcoSphereSubdivisionLevel);
     } else if (generator == "Plane") {
       ok = write_u32("x_segments", params, recipe::kPlaneXSegments)
-        && write_u32("z_segments", params, recipe::kPlaneZSegments)
+        && write_u32("y_segments", params, recipe::kPlaneYSegments)
         && write_f32("size", params, recipe::kPlaneSize);
     } else if (generator == "Cylinder") {
       ok = write_u32("segments", params, recipe::kCylinderSegments)
