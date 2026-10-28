@@ -111,7 +111,7 @@
                                     Text="Reimport"
                                     ToolTipService.ToolTip="{x:Bind ViewModel.ReimportToolTip, Mode=OneWay}">
                                     <MenuFlyoutItem.Icon>
-                                        <SymbolIcon Symbol="Refresh" />
+                                        <FontIcon Glyph="&#xE8B5;" />
                                     </MenuFlyoutItem.Icon>
                                 </MenuFlyoutItem>
                                 <MenuFlyoutItem
@@ -550,7 +550,11 @@
                         <MenuFlyoutItem
                             Command="{x:Bind ViewModel.ReimportSelectedSourceCommand}"
                             Text="Reimport"
-                            ToolTipService.ToolTip="{x:Bind ViewModel.ReimportToolTip, Mode=OneWay}" />
+                            ToolTipService.ToolTip="{x:Bind ViewModel.ReimportToolTip, Mode=OneWay}">
+                            <MenuFlyoutItem.Icon>
+                                <FontIcon Glyph="&#xE8B5;" />
+                            </MenuFlyoutItem.Icon>
+                        </MenuFlyoutItem>
                         <MenuFlyoutItem
                             Command="{x:Bind ViewModel.ShowImportSourceCommand}"
                             Text="Show import source"
