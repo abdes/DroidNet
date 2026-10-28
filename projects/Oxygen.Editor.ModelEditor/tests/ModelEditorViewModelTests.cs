@@ -29,8 +29,8 @@ namespace Oxygen.Editor.ModelEditor.Tests;
 
 /// <summary>
 /// The Model Editor's toolbar (model editor 5.1, scene instances 8.6): <em>Add to scene</em> places the model in the
-/// open scene, <em>Reimport</em> is enabled when the source changed or the last import failed, and <em>Browse to
-/// asset</em> reveals the model file when nothing is selected. Its tab never leaves its window.
+/// open scene, <em>Reimport</em> is enabled whenever the source is there and no import of the model runs, and
+/// <em>Browse to asset</em> reveals the model file when nothing is selected. Its tab never leaves its window.
 /// </summary>
 [TestClass]
 public sealed class ModelEditorViewModelTests
@@ -89,7 +89,7 @@ public sealed class ModelEditorViewModelTests
     [DataRow(AssetCookFreshness.OutOfDate, true)]
     [DataRow(AssetCookFreshness.InvalidSource, true)]
     [DataRow(AssetCookFreshness.Current, false)]
-    public async Task Reimport_IsEnabledWhenTheSourceChangedOrTheImportFailed(AssetCookFreshness freshness, bool enabled)
+    public async Task Reimport_IsEnabledWhateverTheImportSays_TheStatusOnlyWhenItNeedsOne(AssetCookFreshness freshness, bool reported)
     {
         using var documents = new TestSceneDocuments(TestProject.Create(new MockFileSystem()));
         using var services = new TestModelEditorServices(documents);
@@ -98,10 +98,10 @@ public sealed class ModelEditorViewModelTests
 
         services.Assets.OnNext([ProductOf(Car, freshness)]);
 
-        _ = editor.ReimportCommand.CanExecute(parameter: null).Should().Be(enabled);
-        _ = editor.ImportStatusText.Should().Be(enabled ? ModelImportStatus.TextOf(editor.ImportState) : string.Empty, "a current import says nothing");
-        _ = editor.HasImportStatus.Should().Be(enabled);
-        _ = editor.ImportStatusSeverity.Should().Be(enabled ? ModelImportStatus.SeverityOf(editor.ImportState) : DiagnosticSeverity.Info);
+        _ = editor.ReimportCommand.CanExecute(parameter: null).Should().BeTrue("the user may reimport a current import too");
+        _ = editor.ImportStatusText.Should().Be(reported ? ModelImportStatus.TextOf(editor.ImportState) : string.Empty, "a current import says nothing");
+        _ = editor.HasImportStatus.Should().Be(reported);
+        _ = editor.ImportStatusSeverity.Should().Be(reported ? ModelImportStatus.SeverityOf(editor.ImportState) : DiagnosticSeverity.Info);
     }
 
     [TestMethod]

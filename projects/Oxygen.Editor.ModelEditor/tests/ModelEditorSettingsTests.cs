@@ -76,6 +76,45 @@ public sealed class ModelEditorSettingsTests : IDisposable
     }
 
     [TestMethod]
+    public async Task ReimportWithUnsavedSettingsSavesThemAndImportsWithThem()
+    {
+        var path = this.RecordPathOf(LateRecordWriter.WriteRecord(this.documents, Car));
+        byte[]? written = null;
+        _ = this.services.ContentPipeline
+            .Setup(value => value.ReplaceModelRecordAsync(Car, It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<ProjectContext>(), It.IsAny<CancellationToken>()))
+            .Callback((AssetPath _, ReadOnlyMemory<byte> _, ReadOnlyMemory<byte> replacement, ProjectContext _, CancellationToken _) =>
+            {
+                written = replacement.ToArray();
+                this.documents.Project.Context.FileSystem.File.WriteAllBytes(path, written);
+            })
+            .ReturnsAsync(Succeeded());
+        var (car, editor) = await this.OpenAsync().ConfigureAwait(false);
+        editor.Settings.ImportCameras.Value = false;
+
+        await editor.ReimportCommand.ExecuteAsync(parameter: null).ConfigureAwait(false);
+
+        _ = car.IsDirty.Should().BeFalse("the reimport saved the settings it imports with");
+        _ = ModelImportSettingCatalog.ImportCameras.ReadFrom(ModelImportSettings.Parse(written!).Settings).Should().Be(false);
+        this.services.ContentPipeline.Verify(value => value.ReimportSourceAsync(It.IsAny<AssetPath>(), It.IsAny<ProjectContext>(), It.IsAny<CancellationToken>()), Times.Never(), "saving the settings is the import");
+    }
+
+    [TestMethod]
+    public async Task ReimportWithoutEditsImportsTheSavedSettingsAgain()
+    {
+        _ = LateRecordWriter.WriteRecord(this.documents, Car);
+        _ = this.services.ContentPipeline
+            .Setup(value => value.ReimportSourceAsync(Car, It.IsAny<ProjectContext>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Succeeded());
+        var (car, editor) = await this.OpenAsync().ConfigureAwait(false);
+
+        await editor.ReimportCommand.ExecuteAsync(parameter: null).ConfigureAwait(false);
+
+        _ = car.IsDirty.Should().BeFalse();
+        this.services.ContentPipeline.Verify(value => value.ReimportSourceAsync(Car, It.IsAny<ProjectContext>(), It.IsAny<CancellationToken>()), Times.Once());
+        this.services.ContentPipeline.Verify(value => value.ReplaceModelRecordAsync(It.IsAny<AssetPath>(), It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<ProjectContext>(), It.IsAny<CancellationToken>()), Times.Never());
+    }
+
+    [TestMethod]
     public async Task SaveReplacesTheRecordThroughTheContentPipeline()
     {
         var path = this.RecordPathOf(LateRecordWriter.WriteRecord(this.documents, Car));
@@ -357,7 +396,7 @@ public sealed class ModelEditorSettingsTests : IDisposable
         var scene = new StructureScene(Guid.NewGuid(), Car.VirtualPath);
         var path = NodePath.Of(NodeId.FromValue(bodyId));
         this.services.Structures.Publish(new SceneStructure(Car, scene, [new StructureNode(path, "Body", Parent: null, scene, Instance: null, BodyGeometry, HasCamera: false)], []));
-        GeometrySurfaceBinding[] bindings = [new(0, 0, PaintMaterial), new(1, 0, PaintMaterial)];
+        GeometrySurfaceBinding[] bindings = [new(0, 0, PaintMaterial, TriangleCount: 12), new(1, 0, PaintMaterial, TriangleCount: 6)];
         _ = this.services.Surfaces
             .Setup(value => value.ReadAsync(It.IsAny<ProjectContext>(), BodyGeometry, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new GeometrySurfaceMetadata(BodyGeometry, GeometryKey, new string('c', 64), [new GeometrySurface(PaintSurface, "Paint", Visible: true, CastsShadows: true, [.. bindings])], new LodPolicy.Distance([5f], 0.1f)));

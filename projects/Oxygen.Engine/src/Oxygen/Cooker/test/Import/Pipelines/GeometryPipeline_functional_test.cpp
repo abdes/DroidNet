@@ -7,12 +7,15 @@
 // Covers: Import/Internal/Pipelines/GeometryPipeline.cpp,
 //   Import/Internal/Pipelines/MeshBuildPipeline.cpp
 
+#include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <limits>
 #include <memory>
+#include <numbers>
 #include <optional>
 #include <span>
 #include <string>
@@ -30,6 +33,7 @@
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Base/Uuid.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/ImportEventLoop.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/GeometryPipeline.h>
@@ -44,6 +48,7 @@
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/MeshType.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Data/Vertex.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
@@ -402,8 +407,8 @@ namespace {
         });
 
     ASSERT_TRUE(result.success);
-    ASSERT_TRUE(result.cooked.has_value());
-    const auto& bytes = result.cooked->descriptor_bytes;
+    ASSERT_HAS_VALUE(result.cooked);
+    const auto& bytes = result.cooked.value().descriptor_bytes;
     const auto asset
       = ReadStructAt<data::pak::geometry::GeometryAssetDesc>(bytes, 0);
     const auto mesh = ReadStructAt<data::pak::geometry::MeshDesc>(
@@ -761,8 +766,9 @@ namespace {
   };
 
   //! A static submesh above the view limit becomes deterministic views of at
-  //! most `kMaxMeshViewTriangles`, each one contiguous index and vertex range
-  //! with tight bounds inside the submesh bounds.
+  //! most `kMaxMeshViewTriangles`, each one contiguous index and vertex range,
+  //! its triangles sharing their vertices, with tight bounds inside the
+  //! submesh bounds.
   NOLINT_TEST_F(GeometryPipelineSplitTest, LargeStaticSubmeshSplitsIntoViews)
   {
     // 80 x 64 quads = 10240 triangles.
@@ -795,7 +801,7 @@ namespace {
       EXPECT_LE(view.index_count, kMax * 3U);
       EXPECT_EQ(view.first_index, next_index);
       EXPECT_EQ(view.first_vertex, next_vertex);
-      EXPECT_EQ(view.vertex_count, view.index_count);
+      EXPECT_LT(view.vertex_count, view.index_count);
       next_index += view.index_count;
       next_vertex += view.vertex_count;
 
@@ -854,6 +860,288 @@ namespace {
     const auto views = ReadCookedViews(result.cooked.value());
     ASSERT_EQ(views.views.size(), 1U);
     EXPECT_EQ(views.views.front().index_count, buffers->indices.size());
+  }
+
+  //=== Welding And Generated LODs
+  //===-----------------------------------------------//
+
+  //! Corners that agree on every attribute share one vertex: a 4 x 2 quad grid
+  //! cooks its 15 grid points, not one vertex per corner.
+  NOLINT_TEST_F(GeometryPipelineSplitTest, EqualCornersShareOneVertex)
+  {
+    const auto result = Cook(MakeWorkItem(MakeGridMeshBuffers(4U, 2U)));
+
+    ASSERT_TRUE(result.success);
+    ASSERT_HAS_VALUE(result.cooked) << "Expected cooked geometry";
+    const auto views = ReadCookedViews(result.cooked.value());
+    EXPECT_EQ(views.vertices.size(), 15U);
+    EXPECT_EQ(views.indices.size(), 48U);
+  }
+
+  //! What a cooked geometry's descriptor says of each LOD.
+  struct CookedLod {
+    std::vector<data::SurfaceId> surfaces;
+  };
+
+  //! The asset descriptor and each LOD's submesh surfaces of a cooked
+  //! standard geometry.
+  struct CookedLods {
+    data::pak::geometry::GeometryAssetDesc asset {};
+    std::vector<CookedLod> lods;
+  };
+
+  [[nodiscard]] auto ReadCookedLods(
+    const MeshBuildPipeline::CookedGeometryPayload& cooked) -> CookedLods
+  {
+    using data::pak::geometry::GeometryAssetDesc;
+    using data::pak::geometry::MeshDesc;
+    using data::pak::geometry::MeshViewDesc;
+    using data::pak::geometry::SubMeshDesc;
+
+    auto result = CookedLods {};
+    result.asset = ReadStructAt<GeometryAssetDesc>(cooked.descriptor_bytes, 0);
+    auto offset = sizeof(GeometryAssetDesc);
+    for (uint32_t lod = 0U; lod < result.asset.lod_count; ++lod) {
+      const auto mesh = ReadStructAt<MeshDesc>(cooked.descriptor_bytes, offset);
+      offset += sizeof(MeshDesc);
+      auto& read = result.lods.emplace_back();
+      for (uint32_t submesh = 0U; submesh < mesh.submesh_count; ++submesh) {
+        const auto desc
+          = ReadStructAt<SubMeshDesc>(cooked.descriptor_bytes, offset);
+        offset += sizeof(SubMeshDesc)
+          + (static_cast<size_t>(desc.mesh_view_count) * sizeof(MeshViewDesc));
+        read.surfaces.push_back(desc.surface_id);
+      }
+    }
+    return result;
+  }
+
+  [[nodiscard]] auto WithGeneratedLods(MeshBuildPipeline::WorkItem item,
+    const uint32_t levels) -> MeshBuildPipeline::WorkItem
+  {
+    item.request.options.lod_generation = LodGenerationOptions {
+      .enabled = true,
+      .levels = levels,
+      .reduction_percent = 50.0F,
+    };
+    return item;
+  }
+
+  //! Generate LODs adds the requested levels after LOD 0, each with at most
+  //! three quarters of the previous level's triangles and LOD 0's surfaces,
+  //! switched by a screen-space error policy with a boundary per level.
+  NOLINT_TEST_F(GeometryPipelineSplitTest, GeneratedLodsReduceEachLevel)
+  {
+    const auto result = Cook(
+      WithGeneratedLods(MakeWorkItem(MakeGridMeshBuffers(32U, 32U)), 3U));
+
+    ASSERT_TRUE(result.success);
+    ASSERT_HAS_VALUE(result.cooked) << "Expected cooked geometry";
+    EXPECT_FALSE(
+      HasDiagnosticCode(result.diagnostics, "import.lod_generation.stopped"));
+    const auto& cooked = result.cooked.value();
+    ASSERT_EQ(cooked.lods.size(), 4U);
+    for (size_t lod = 1U; lod < cooked.lods.size(); ++lod) {
+      EXPECT_LE(cooked.lods.at(lod).index_buffer.data.size() * 4U,
+        cooked.lods.at(lod - 1U).index_buffer.data.size() * 3U);
+    }
+    const auto read = ReadCookedLods(cooked);
+    ASSERT_EQ(read.lods.size(), 4U);
+    for (const auto& lod : read.lods) {
+      EXPECT_EQ(lod.surfaces, read.lods.front().surfaces);
+    }
+    const auto& policy = read.asset.default_lod_policy;
+    EXPECT_EQ(
+      policy.type, data::pak::geometry::LodPolicyType::kScreenSpaceError);
+    EXPECT_EQ(policy.boundary_count, 3U);
+  }
+
+  //! A skinned geometry's generated LODs carry one joint and weight entry per
+  //! vertex of their own.
+  NOLINT_TEST_F(GeometryPipelineSplitTest, GeneratedSkinnedLodsKeepTheirJoints)
+  {
+    const auto result = Cook(WithGeneratedLods(
+      MakeSkinnedWorkItem(MakeSkinnedGridMeshBuffers(32U, 32U)), 2U));
+
+    ASSERT_TRUE(result.success);
+    ASSERT_HAS_VALUE(result.cooked) << "Expected cooked geometry";
+    const auto& cooked = result.cooked.value();
+    ASSERT_EQ(cooked.lods.size(), 3U);
+    for (const auto& lod : cooked.lods) {
+      const auto vertex_count
+        = lod.vertex_buffer.data.size() / sizeof(data::Vertex);
+      ASSERT_GE(lod.auxiliary_buffers.size(), 2U);
+      EXPECT_EQ(lod.auxiliary_buffers.at(0).data.size(),
+        vertex_count * sizeof(glm::uvec4));
+      EXPECT_EQ(lod.auxiliary_buffers.at(1).data.size(),
+        vertex_count * sizeof(glm::vec4));
+    }
+  }
+
+  //! A geometry with authored LODs keeps them and says so.
+  NOLINT_TEST_F(GeometryPipelineSplitTest, AuthoredLodsSkipGeneration)
+  {
+    const auto result = Cook(WithGeneratedLods(
+      MakeWorkItemWithLods(MakeGridMeshBuffers(8U, 8U), 2U), 3U));
+
+    ASSERT_TRUE(result.success);
+    ASSERT_HAS_VALUE(result.cooked) << "Expected cooked geometry";
+    EXPECT_EQ(result.cooked.value().lods.size(), 2U);
+    EXPECT_TRUE(
+      HasDiagnosticCode(result.diagnostics, "import.lod_generation.skipped"));
+  }
+
+  //! A geometry that cannot be reduced cooks its LOD 0 alone and reports
+  //! where the chain stopped.
+  NOLINT_TEST_F(GeometryPipelineSplitTest, UnreducibleGeometryStopsTheChain)
+  {
+    const auto result
+      = Cook(WithGeneratedLods(MakeWorkItem(MakeTriangleMeshBuffers()), 3U));
+
+    ASSERT_TRUE(result.success);
+    ASSERT_HAS_VALUE(result.cooked) << "Expected cooked geometry";
+    EXPECT_EQ(result.cooked.value().lods.size(), 1U);
+    const auto stopped = std::ranges::find(result.diagnostics,
+      "import.lod_generation.stopped", &ImportDiagnostic::code);
+    ASSERT_NE(stopped, result.diagnostics.end());
+    EXPECT_THAT(stopped->message,
+      testing::HasSubstr("LOD 1 kept 1 triangles, more than the 0"));
+  }
+
+  //! Quad counts around and along a sphere.
+  struct SphereTessellation {
+    uint32_t segments;
+    uint32_t rings;
+  };
+
+  //! A closed sphere of `segments` x `rings` quads with positions only, its
+  //! vertices shared by the triangles around them, as an indexed source
+  //! without normals or UVs.
+  [[nodiscard]] auto MakeSphereMeshBuffers(
+    const SphereTessellation tessellation) -> std::shared_ptr<MeshBuffers>
+  {
+    const auto [segments, rings] = tessellation;
+    auto buffers = std::make_shared<MeshBuffers>();
+    buffers->positions.emplace_back(0.0F, 0.0F, 1.0F);
+    for (uint32_t ring = 1U; ring < rings; ++ring) {
+      const auto polar = std::numbers::pi_v<float>
+        * static_cast<float>(ring) / static_cast<float>(rings);
+      for (uint32_t segment = 0U; segment < segments; ++segment) {
+        const auto azimuth = 2.0F * std::numbers::pi_v<float>
+          * static_cast<float>(segment) / static_cast<float>(segments);
+        buffers->positions.emplace_back(std::sin(polar) * std::cos(azimuth),
+          std::sin(polar) * std::sin(azimuth), std::cos(polar));
+      }
+    }
+    buffers->positions.emplace_back(0.0F, 0.0F, -1.0F);
+    const auto south = static_cast<uint32_t>(buffers->positions.size() - 1U);
+    const auto at
+      = [segments](const uint32_t ring, const uint32_t segment) -> uint32_t {
+      return 1U + ((ring - 1U) * segments) + (segment % segments);
+    };
+    auto& indices = buffers->indices;
+    for (uint32_t segment = 0U; segment < segments; ++segment) {
+      indices.insert(
+        indices.end(), { 0U, at(1U, segment), at(1U, segment + 1U) });
+      indices.insert(indices.end(),
+        { south, at(rings - 1U, segment + 1U), at(rings - 1U, segment) });
+    }
+    for (uint32_t ring = 1U; ring + 1U < rings; ++ring) {
+      for (uint32_t segment = 0U; segment < segments; ++segment) {
+        indices.insert(indices.end(),
+          {
+            at(ring, segment),
+            at(ring + 1U, segment),
+            at(ring + 1U, segment + 1U),
+            at(ring, segment),
+            at(ring + 1U, segment + 1U),
+            at(ring, segment + 1U),
+          });
+      }
+    }
+    buffers->ranges = {
+      TriangleRange {
+        .surface = 0,
+        .first_index = 0,
+        .index_count = static_cast<uint32_t>(indices.size()),
+      },
+    };
+    return buffers;
+  }
+
+  //! A source without normals, given flat ones as glTF requires (smoothing
+  //! angle 0), keeps every corner apart at LOD 0, yet simplifies on its own
+  //! shared vertices into the requested LODs, each faceted in turn.
+  NOLINT_TEST_F(GeometryPipelineSplitTest, FacetedSourceStillGetsItsLods)
+  {
+    const auto buffers
+      = MakeSphereMeshBuffers({ .segments = 32U, .rings = 16U });
+    const auto source_vertices = buffers->positions.size();
+    auto item = WithGeneratedLods(MakeWorkItem(buffers), 3U);
+    item.request.options.normals_smoothing_angle_deg = 0.0F;
+
+    const auto result = Cook(std::move(item));
+
+    ASSERT_TRUE(result.success);
+    ASSERT_HAS_VALUE(result.cooked) << "Expected cooked geometry";
+    EXPECT_FALSE(
+      HasDiagnosticCode(result.diagnostics, "import.lod_generation.stopped"));
+    const auto& cooked = result.cooked.value();
+    ASSERT_EQ(cooked.lods.size(), 4U);
+    // Faceted: the corners of a vertex take their faces' normals, so LOD 0
+    // has more vertices than the source shares.
+    EXPECT_GT(
+      cooked.lods.front().vertex_buffer.data.size() / sizeof(data::Vertex),
+      source_vertices);
+    for (size_t lod = 1U; lod < cooked.lods.size(); ++lod) {
+      EXPECT_LE(cooked.lods.at(lod).index_buffer.data.size() * 4U,
+        cooked.lods.at(lod - 1U).index_buffer.data.size() * 3U);
+    }
+  }
+
+  //! Generated smooth normals give the corners around a vertex one normal, so
+  //! they weld back into the source's vertices.
+  NOLINT_TEST_F(GeometryPipelineSplitTest, SmoothGeneratedNormalsWeld)
+  {
+    const auto buffers
+      = MakeSphereMeshBuffers({ .segments = 32U, .rings = 16U });
+    const auto source_vertices = buffers->positions.size();
+
+    const auto result = Cook(MakeWorkItem(buffers));
+
+    ASSERT_TRUE(result.success);
+    ASSERT_HAS_VALUE(result.cooked) << "Expected cooked geometry";
+    const auto views = ReadCookedViews(result.cooked.value());
+    EXPECT_EQ(views.vertices.size(), source_vertices);
+  }
+
+  //! Two faces folded beyond the smoothing angle keep a hard edge: the corners
+  //! on the fold stay two vertices each, one per face.
+  NOLINT_TEST_F(GeometryPipelineSplitTest, SharpFoldsKeepSeparateNormals)
+  {
+    auto buffers = std::make_shared<MeshBuffers>();
+    buffers->positions = {
+      glm::vec3 { 0.0F, 0.0F, 0.0F },
+      glm::vec3 { 1.0F, 0.0F, 0.0F },
+      glm::vec3 { 0.0F, 1.0F, 0.0F },
+      glm::vec3 { 0.0F, 0.0F, 1.0F },
+    };
+    buffers->indices = { 0, 1, 2, 0, 3, 1 };
+    buffers->ranges = {
+      TriangleRange {
+        .surface = 0,
+        .first_index = 0,
+        .index_count = 6,
+      },
+    };
+
+    const auto result = Cook(MakeWorkItem(buffers));
+
+    ASSERT_TRUE(result.success);
+    ASSERT_HAS_VALUE(result.cooked) << "Expected cooked geometry";
+    const auto views = ReadCookedViews(result.cooked.value());
+    EXPECT_EQ(views.vertices.size(), 6U)
+      << "a 90 degree fold beyond the default 60 degrees stays hard";
   }
 
 } // namespace

@@ -152,6 +152,9 @@ namespace {
   constexpr auto kModelImportKeys = std::array {
     std::string_view { "content.import.up_axis" },
     std::string_view { "content.import.smoothing_angle" },
+    std::string_view { "content.import.generate_lods" },
+    std::string_view { "content.import.lod_levels" },
+    std::string_view { "content.import.lod_reduction" },
     std::string_view { "content.import.lights" },
     std::string_view { "content.import.cameras" },
     std::string_view { "content.import.light_intensity_scale" },
@@ -198,6 +201,11 @@ namespace {
     EXPECT_EQ(
       options.coordinate.up_axis, content::import::SourceUpAxis::kFromFile);
     EXPECT_FLOAT_EQ(options.normals_smoothing_angle_deg, 60.0F);
+    const auto lods = content::import::LodGenerationOptions {};
+    EXPECT_FALSE(options.lod_generation.enabled);
+    EXPECT_EQ(options.lod_generation.levels, lods.levels);
+    EXPECT_FLOAT_EQ(
+      options.lod_generation.reduction_percent, lods.reduction_percent);
     EXPECT_TRUE(options.import_lights);
     EXPECT_TRUE(options.import_cameras);
     EXPECT_FLOAT_EQ(options.light_intensity_scale, 1.0F);
@@ -212,6 +220,11 @@ namespace {
     auto options = service.GetImportOptions();
     options.coordinate.up_axis = content::import::SourceUpAxis::kZ;
     options.normals_smoothing_angle_deg = 35.5F;
+    options.lod_generation = {
+      .enabled = true,
+      .levels = 5U,
+      .reduction_percent = 40.0F,
+    };
     options.import_lights = false;
     options.import_cameras = false;
     options.light_intensity_scale = 2.5F;
@@ -223,6 +236,9 @@ namespace {
     const auto restored = service.GetImportOptions();
     EXPECT_EQ(restored.coordinate.up_axis, content::import::SourceUpAxis::kZ);
     EXPECT_FLOAT_EQ(restored.normals_smoothing_angle_deg, 35.5F);
+    EXPECT_TRUE(restored.lod_generation.enabled);
+    EXPECT_EQ(restored.lod_generation.levels, 5U);
+    EXPECT_FLOAT_EQ(restored.lod_generation.reduction_percent, 40.0F);
     EXPECT_FALSE(restored.import_lights);
     EXPECT_FALSE(restored.import_cameras);
     EXPECT_FLOAT_EQ(restored.light_intensity_scale, 2.5F);

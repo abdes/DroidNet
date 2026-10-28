@@ -99,6 +99,29 @@ auto MakeImportedLodPolicy(const std::size_t lod_count) -> LodPolicyRecord
   return record;
 }
 
+auto MakeGeneratedLodPolicy(const std::span<const float> lod_errors,
+  const float radius) -> LodPolicyRecord
+{
+  constexpr auto kExitRatio = 0.8F;
+  constexpr auto kLeastRelativeError = 1e-6F;
+  if (lod_errors.empty()) {
+    return MakeDefaultLodPolicy(std::nullopt);
+  }
+  auto record = LodPolicyRecord {};
+  record.type = LodPolicyType::kScreenSpaceError;
+  record.boundary_count = static_cast<uint8_t>((std::min)(lod_errors.size(),
+    std::size_t { data::pak::geometry::kMaxLodBoundaryCount }));
+  const auto enter = std::span<float> { record.enter_finer_sse };
+  const auto exit = std::span<float> { record.exit_coarser_sse };
+  const auto least_error = kLeastRelativeError * radius;
+  for (std::size_t boundary = 0; boundary < record.boundary_count; ++boundary) {
+    const auto error = (std::max)(lod_errors[boundary], least_error);
+    enter[boundary] = error > 0.0F ? radius / error : 0.0F;
+    exit[boundary] = enter[boundary] * kExitRatio;
+  }
+  return record;
+}
+
 auto ReadLodPolicy(const json& document) -> std::optional<LodPolicyRecord>
 {
   auto record = LodPolicyRecord {};

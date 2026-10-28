@@ -97,6 +97,11 @@ namespace {
   constexpr std::string_view kUpAxis = "demo.content.import.up_axis";
   constexpr std::string_view kSmoothingAngle
     = "demo.content.import.smoothing_angle";
+  constexpr std::string_view kGenerateLods
+    = "demo.content.import.generate_lods";
+  constexpr std::string_view kLodLevels = "demo.content.import.lod_levels";
+  constexpr std::string_view kLodReduction
+    = "demo.content.import.lod_reduction";
   constexpr std::string_view kImportLights = "demo.content.import.lights";
   constexpr std::string_view kImportCameras = "demo.content.import.cameras";
   constexpr std::string_view kLightScale
@@ -283,7 +288,7 @@ namespace {
     },
   };
 
-  auto UpAxisLabel(const content::import::SourceUpAxis axis) -> std::string
+  auto UpAxisLabel(const content::import::SourceUpAxis axis) -> std::string_view
   {
     switch (axis) {
     case content::import::SourceUpAxis::kFromFile:
@@ -307,8 +312,9 @@ namespace {
   auto UpAxisLabels() -> std::vector<std::string>
   {
     std::vector<std::string> labels;
+    labels.reserve(kUpAxes.size());
     for (const auto axis : kUpAxes) {
-      labels.push_back(UpAxisLabel(axis));
+      labels.emplace_back(UpAxisLabel(axis));
     }
     return labels;
   }
@@ -316,6 +322,7 @@ namespace {
   auto MaxSizeLabels() -> std::vector<std::string>
   {
     std::vector<std::string> labels;
+    labels.reserve(kMaxSizes.size());
     for (const auto size : kMaxSizes) {
       labels.push_back(MaxSizeLabel(size));
     }
@@ -537,6 +544,28 @@ namespace {
           vm, [v](auto& o) -> void { o.normals_smoothing_angle_deg = v; });
       },
       0.0F, 180.0F);
+    commands.AddBool(Name(kGenerateLods), "Generate LODs",
+      "Generate LODs for geometries with one LOD", [vm](const bool v) -> void {
+        EditImport(vm, [v](auto& o) -> void { o.lod_generation.enabled = v; });
+      });
+    commands.AddInt(
+      Name(kLodLevels), "LOD Levels", "LODs generated after LOD 0",
+      [vm](const int v) -> void {
+        EditImport(vm, [v](auto& o) -> void {
+          o.lod_generation.levels = static_cast<uint32_t>(v);
+        });
+      },
+      static_cast<int>(content::import::LodGenerationOptions::kMinLevels),
+      static_cast<int>(content::import::LodGenerationOptions::kMaxLevels));
+    commands.AddFloat(
+      Name(kLodReduction), "LOD Reduction",
+      "Triangles each generated LOD removes, in percent of the previous LOD's",
+      [vm](const float v) -> void {
+        EditImport(
+          vm, [v](auto& o) -> void { o.lod_generation.reduction_percent = v; });
+      },
+      content::import::LodGenerationOptions::kMinReductionPercent,
+      content::import::LodGenerationOptions::kMaxReductionPercent);
     commands.AddBool(Name(kImportLights), "Import Lights",
       "Import the source's lights", [vm](const bool v) -> void {
         EditImport(vm, [v](auto& o) -> void { o.import_lights = v; });
@@ -1151,10 +1180,27 @@ auto ContentLoaderPanel::DrawImportSettings() -> void
       }
     }
     LabeledCombo(*commands_, kUpAxis, "Up Axis",
-      UpAxisLabel(options.coordinate.up_axis), UpAxisLabels());
+      std::string(UpAxisLabel(options.coordinate.up_axis)), UpAxisLabels());
     float smoothing = options.normals_smoothing_angle_deg;
     if (ImGui::DragFloat("Smoothing Angle", &smoothing, 1.0F, 0.0F, 180.0F)) {
       commands_->RunFloat(kSmoothingAngle, smoothing);
+    }
+    Checkbox(*commands_, kGenerateLods, "Generate LODs",
+      options.lod_generation.enabled);
+    if (options.lod_generation.enabled) {
+      using content::import::LodGenerationOptions;
+      int levels = static_cast<int>(options.lod_generation.levels);
+      if (ImGui::SliderInt("LOD Levels", &levels,
+            static_cast<int>(LodGenerationOptions::kMinLevels),
+            static_cast<int>(LodGenerationOptions::kMaxLevels))) {
+        commands_->RunInt(kLodLevels, levels);
+      }
+      float reduction = options.lod_generation.reduction_percent;
+      if (ImGui::DragFloat("Reduction per LOD (%)", &reduction, 1.0F,
+            LodGenerationOptions::kMinReductionPercent,
+            LodGenerationOptions::kMaxReductionPercent)) {
+        commands_->RunFloat(kLodReduction, reduction);
+      }
     }
     EnumCombo(*commands_, kNormalPolicy, "Normal Policy", options.normal_policy,
       kGeometryPolicies);

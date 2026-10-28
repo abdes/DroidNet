@@ -50,11 +50,11 @@ public sealed class ModelImportStatusTests
     [TestMethod]
     [DataRow(ModelImportState.SourceChanged, true)]
     [DataRow(ModelImportState.ImportFailed, true)]
-    [DataRow(ModelImportState.Imported, false)]
+    [DataRow(ModelImportState.Imported, true)]
+    [DataRow(ModelImportState.NotImported, true)]
     [DataRow(ModelImportState.Importing, false)]
-    [DataRow(ModelImportState.NotImported, false)]
     [DataRow(ModelImportState.SourceMissing, false)]
-    public void CanReimport_OnlyWhenTheSourceChangedOrTheImportFailed(ModelImportState state, bool expected)
+    public void CanReimport_WheneverTheSourceIsThereAndNoImportRuns(ModelImportState state, bool expected)
         => _ = ModelImportStatus.CanReimport(state).Should().Be(expected);
 
     [TestMethod]

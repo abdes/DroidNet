@@ -52,6 +52,20 @@ OXGN_COOK_NDAPI auto MakeDefaultLodPolicy(
 OXGN_COOK_NDAPI auto MakeImportedLodPolicy(std::size_t lod_count)
   -> data::pak::geometry::LodPolicyRecord;
 
+//! The default LOD policy of a geometry whose LODs after LOD 0 were generated
+//! with the simplification errors `lod_errors`, in the geometry's units.
+/*!
+ The runtime's screen-space error is the projected radius of the geometry's
+ bounding sphere, `radius`, in pixels, so LOD `n`'s error `e_n` projects to
+ `sse * e_n / radius` pixels. Boundary `i` enters its finer LOD when the
+ coarser LOD's error would exceed one pixel, at `radius / e_(i+1)`, and its
+ coarser LOD at 0.8 of that. An error below `1e-6 * radius` counts as that,
+ so every threshold is finite. `lod_errors` never decrease, so the thresholds
+ never increase; a uniform scale changes the radius and the errors alike.
+*/
+OXGN_COOK_NDAPI auto MakeGeneratedLodPolicy(std::span<const float> lod_errors,
+  float radius) -> data::pak::geometry::LodPolicyRecord;
+
 //! The LOD policy `document` spells, as a descriptor's `lod_policy` object.
 /*!
  `document` has passed the descriptor schema's `lod_policy` definition. Returns

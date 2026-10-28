@@ -8,4 +8,5 @@ namespace Oxygen.Editor.ContentPipeline.Inspection;
 /// <param name="LodIndex">The zero-based LOD index.</param>
 /// <param name="SubmeshIndex">The zero-based submesh index.</param>
 /// <param name="DefaultMaterialKey">The native material key; empty retains the omitted-reference sentinel.</param>
-public sealed record GeometrySurfaceBinding(uint LodIndex, uint SubmeshIndex, Guid DefaultMaterialKey);
+/// <param name="TriangleCount">The triangles the bound submesh draws at this LOD.</param>
+public sealed record GeometrySurfaceBinding(uint LodIndex, uint SubmeshIndex, Guid DefaultMaterialKey, ulong TriangleCount);

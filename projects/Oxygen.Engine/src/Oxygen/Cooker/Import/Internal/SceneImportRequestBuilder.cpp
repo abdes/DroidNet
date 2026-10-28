@@ -186,6 +186,11 @@ auto SceneImportSettings::Prepare(const ImportFormat expected_format,
   options.import_cameras = settings.import_cameras;
   options.light_intensity_scale = settings.light_intensity_scale;
   options.normals_smoothing_angle_deg = settings.normals_smoothing_angle_deg;
+  options.lod_generation = {
+    .enabled = settings.generate_lods,
+    .levels = settings.lod_levels,
+    .reduction_percent = settings.lod_reduction_percent,
+  };
   options.material_remap.insert(
     settings.material_remap.begin(), settings.material_remap.end());
   options.geometry_defaults.insert(
@@ -234,6 +239,25 @@ auto SceneImportSettings::Prepare(const ImportFormat expected_format,
     || settings.normals_smoothing_angle_deg > 180.0F) {
     error_stream << "ERROR: normals smoothing angle must be from 0 to 180 "
                     "degrees\n";
+    return std::nullopt;
+  }
+
+  if (settings.lod_levels < LodGenerationOptions::kMinLevels
+    || settings.lod_levels > LodGenerationOptions::kMaxLevels) {
+    error_stream << "ERROR: LOD levels must be from "
+                 << LodGenerationOptions::kMinLevels << " to "
+                 << LodGenerationOptions::kMaxLevels << "\n";
+    return std::nullopt;
+  }
+
+  if (!std::isfinite(settings.lod_reduction_percent)
+    || settings.lod_reduction_percent
+      < LodGenerationOptions::kMinReductionPercent
+    || settings.lod_reduction_percent
+      > LodGenerationOptions::kMaxReductionPercent) {
+    error_stream << "ERROR: LOD reduction must be from "
+                 << LodGenerationOptions::kMinReductionPercent << " to "
+                 << LodGenerationOptions::kMaxReductionPercent << " percent\n";
     return std::nullopt;
   }
 

@@ -15,13 +15,16 @@
 #include <exception>
 #include <limits>
 #include <map>
+#include <numeric>
 #include <optional>
+#include <ranges>
 #include <span>
 #include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
 
+#include <fmt/format.h>
 #include <glm/ext/matrix_float3x3.hpp>
 #include <glm/ext/matrix_float4x4.hpp>
 #include <glm/ext/vector_float3.hpp>
@@ -40,6 +43,8 @@
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/GeometryDefaults.h>
 #include <Oxygen/Cooker/Import/Internal/ImportPipeline.h>
+#include <Oxygen/Cooker/Import/Internal/LodGeneration.h>
+#include <Oxygen/Cooker/Import/Internal/MeshOptimization.h>
 #include <Oxygen/Cooker/Import/Internal/MeshTransformBake.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/GeometryPipeline_tangents.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/MeshBuildPipeline.h>
@@ -107,7 +112,6 @@ namespace {
     uint16_t joint_count = 0;
     uint16_t influences_per_vertex = 0;
     Bounds3 bounds {};
-    uint32_t attr_mask = 0;
   };
 
   [[nodiscard]] auto MakeErrorDiagnostic(std::string code, std::string message,
@@ -259,11 +263,15 @@ namespace {
 
   //! Generates the normals of `vertices`, one vertex per triangle corner.
   /*!
-   A corner's normal is the area-weighted sum of its own triangle's face
-   normal and those of the triangles at its position whose face normal is
-   within `smoothing_angle_deg` of it, so a sharper edge stays hard and an
-   angle of 0 gives flat normals. A corner of a degenerate triangle sums every
-   triangle at its position.
+   The triangles around a position fall into smoothing groups, as DCC tools
+   auto-smooth: two of them are in one group when they share an edge there and
+   their face normals are within `smoothing_angle_deg` of each other, and a
+   group takes in every triangle it reaches that way. Every corner of a group
+   gets the group's one normal, the area-weighted sum of its triangles' face
+   normals, summed in one order, so the corners are equal and weld into one
+   vertex; a sharper edge splits the groups and stays hard, and an angle of 0
+   makes every triangle its own group, flat. A corner of a degenerate triangle
+   takes the sum of every triangle at its position.
   */
   auto ComputeNormalsFromTriangles(std::vector<data::Vertex>& vertices,
     const std::span<const SubmeshBucket> buckets,
@@ -273,8 +281,12 @@ namespace {
       return;
     }
 
-    // Each corner's face normal, weighted by twice the triangle's area.
+    using PositionKey = std::array<uint32_t, 3>;
+
+    // Each corner's face normal, weighted by twice the triangle's area, and
+    // the positions of its triangle's two other corners.
     std::vector faces(vertices.size(), glm::vec3(0.0F));
+    auto others = std::vector<std::array<PositionKey, 2>>(vertices.size());
     for (const auto& bucket : buckets) {
       const auto tri_count = bucket.indices.size() / 3;
       for (size_t tri = 0; tri < tri_count; ++tri) {
@@ -286,30 +298,58 @@ namespace {
           continue;
         }
 
-        const auto& v0 = vertices.at(i0).position;
-        const auto n = glm::cross(
-          vertices.at(i1).position - v0, vertices.at(i2).position - v0);
+        const auto& p0 = vertices.at(i0).position;
+        const auto& p1 = vertices.at(i1).position;
+        const auto& p2 = vertices.at(i2).position;
+        const auto n = glm::cross(p1 - p0, p2 - p0);
         faces.at(i0) = n;
         faces.at(i1) = n;
         faces.at(i2) = n;
+        const auto k0 = PositionBits(p0);
+        const auto k1 = PositionBits(p1);
+        const auto k2 = PositionBits(p2);
+        others.at(i0) = { k1, k2 };
+        others.at(i1) = { k2, k0 };
+        others.at(i2) = { k0, k1 };
       }
     }
 
     auto units = std::vector<glm::vec3>(faces.size());
-    std::ranges::transform(faces, units.begin(), [](const glm::vec3& face) {
-      const auto len = glm::length(face);
-      return len > kMinNormalLength ? face / len : glm::vec3(0.0F);
-    });
+    std::ranges::transform(
+      faces, units.begin(), [](const glm::vec3& face) -> glm::vec3 {
+        const auto len = glm::length(face);
+        return len > kMinNormalLength ? face / len : glm::vec3(0.0F);
+      });
+    const bool smooths = smoothing_angle_deg > 0.0F;
     const auto min_cos = std::cos(glm::radians(smoothing_angle_deg));
+    const auto degenerate = [&units](const uint32_t corner) -> bool {
+      return units.at(corner) == glm::vec3(0.0F);
+    };
+    const auto share_edge
+      = [&others](const uint32_t a, const uint32_t b) -> bool {
+      const auto& first = others.at(a);
+      const auto& second = others.at(b);
+      return std::ranges::any_of(
+        first, [&second](const PositionKey& key) -> bool {
+          return std::ranges::find(second, key) != second.end();
+        });
+    };
+    const auto normal_of = [](const glm::vec3& sum) -> glm::vec3 {
+      const auto len = glm::length(sum);
+      return len > kMinNormalLength ? sum / len : glm::vec3(0.0F, 1.0F, 0.0F);
+    };
 
     // Corners sorted by position, so the corners of one position are a run.
-    using Keyed = std::pair<std::array<uint32_t, 3>, uint32_t>;
+    using Keyed = std::pair<PositionKey, uint32_t>;
     auto corners = std::vector<Keyed>(vertices.size());
     for (uint32_t corner = 0; corner < corners.size(); ++corner) {
       corners.at(corner)
         = { PositionBits(vertices.at(corner).position), corner };
     }
     std::ranges::sort(corners);
+
+    auto groups = std::vector<std::size_t> {};
+    auto sums = std::vector<glm::vec3> {};
     for (size_t first = 0; first < corners.size();) {
       auto last = first + 1;
       while (last < corners.size()
@@ -317,25 +357,45 @@ namespace {
         ++last;
       }
       const auto shared = std::span(corners).subspan(first, last - first);
-      for (const auto& entry : shared) {
-        const auto corner = entry.second;
-        const auto& own = units.at(corner);
-        const bool degenerate = own == glm::vec3(0.0F);
-        auto n = glm::vec3(0.0F);
-        for (const auto& other_entry : shared) {
-          // A unit normal's dot with itself can round below cos(0) = 1, so the
-          // corner's own face is taken without the angle test.
-          const auto other = other_entry.second;
-          if (other == corner || degenerate
-            || glm::dot(own, units.at(other)) >= min_cos) {
-            n += faces.at(other);
+      first = last;
+
+      // Union-find over the run: each entry starts as its own group.
+      groups.resize(shared.size());
+      std::ranges::iota(groups, std::size_t { 0 });
+      const auto root = [&groups](std::size_t entry) -> std::size_t {
+        while (groups.at(entry) != entry) {
+          groups.at(entry) = groups.at(groups.at(entry));
+          entry = groups.at(entry);
+        }
+        return entry;
+      };
+      for (size_t a = 0; smooths && a < shared.size(); ++a) {
+        const auto corner_a = shared[a].second;
+        if (degenerate(corner_a)) {
+          continue;
+        }
+        for (size_t b = a + 1; b < shared.size(); ++b) {
+          const auto corner_b = shared[b].second;
+          if (!degenerate(corner_b) && share_edge(corner_a, corner_b)
+            && glm::dot(units.at(corner_a), units.at(corner_b)) >= min_cos) {
+            groups.at(root(b)) = root(a);
           }
         }
-        const auto len = glm::length(n);
-        vertices.at(corner).normal
-          = len > kMinNormalLength ? n / len : glm::vec3(0.0F, 1.0F, 0.0F);
       }
-      first = last;
+
+      // Each group's sum, and the whole position's, in run order.
+      sums.assign(shared.size(), glm::vec3(0.0F));
+      auto all = glm::vec3(0.0F);
+      for (size_t entry = 0; entry < shared.size(); ++entry) {
+        const auto& face = faces.at(shared[entry].second);
+        sums.at(root(entry)) += face;
+        all += face;
+      }
+      for (size_t entry = 0; entry < shared.size(); ++entry) {
+        const auto corner = shared[entry].second;
+        vertices.at(corner).normal
+          = normal_of(degenerate(corner) ? all : sums.at(root(entry)));
+      }
     }
   }
 
@@ -414,7 +474,9 @@ namespace {
 
   [[nodiscard]] auto BuildDescriptorBytes(const std::string_view mesh_name,
     const std::vector<LodBuildData>& lods, const Bounds3& bounds,
-    const GeometryImportDefaults* defaults, const uint32_t attr_mask,
+    const GeometryImportDefaults* defaults,
+    const data::pak::geometry::LodPolicyRecord& imported_policy,
+    const uint32_t attr_mask,
     std::vector<MeshBuildPipeline::SurfacePatchOffset>& material_patch_offsets,
     std::vector<ImportDiagnostic>& diagnostics, std::string_view source_id)
     -> std::vector<std::byte>
@@ -436,8 +498,8 @@ namespace {
     std::ranges::copy(bounds.max, std::begin(asset_desc.bounding_box_max));
 
     // The import settings' geometry defaults, when they name this geometry;
-    // otherwise the surfaces take the scene schema's, and several LODs a policy
-    // that switches them.
+    // otherwise the surfaces take the scene schema's, and several LODs the
+    // import's policy that switches them.
     auto declared = std::vector<data::SurfaceId> {};
     for (const auto& lod : lods) {
       for (const auto& submesh : lod.submeshes) {
@@ -454,7 +516,7 @@ namespace {
     asset_desc.default_lod_policy
       = defaults != nullptr && defaults->lod_policy.has_value()
       ? *defaults->lod_policy
-      : internal::MakeImportedLodPolicy(lods.size());
+      : imported_policy;
 
     serio::MemoryStream stream;
     serio::Writer writer(stream);
@@ -616,7 +678,7 @@ namespace {
     const ImportRequest& request, const GeometryAttributePolicy normal_policy,
     const std::span<const TriangleRange> ranges,
     std::vector<SubmeshBucket>& buckets, std::vector<data::Vertex>& vertices,
-    std::vector<uint32_t>& indices, std::vector<glm::uvec4>& joint_indices,
+    std::vector<glm::uvec4>& joint_indices,
     std::vector<glm::vec4>& joint_weights,
     std::vector<ImportDiagnostic>& diagnostics,
     const std::string_view source_id, const std::string_view object_path)
@@ -738,7 +800,6 @@ namespace {
         }
 
         vertices.push_back(vertex);
-        indices.push_back(next_index);
         bucket->indices.push_back(next_index);
         ++next_index;
 
@@ -786,76 +847,58 @@ namespace {
     }
   }
 
-  //! Splits static submeshes above `kMaxMeshViewTriangles` into mesh views.
+  //! Orders a static submesh's triangles into its mesh views.
   /*!
-   A large bucket's triangles are stably ordered by the Morton code of their
-   centroids within the bucket bounds, then cut into runs of at most
-   `kMaxMeshViewTriangles`. Vertices are expanded one per index, so when any
-   bucket splits the vertices are laid out again in bucket and run order: each
-   view then owns one contiguous index range and one contiguous vertex range.
-   Buckets, surfaces and material ranges are unchanged.
+   A submesh above `kMaxMeshViewTriangles` has its triangles stably ordered by
+   the Morton code of their centroids within its bounds, then cut into runs of
+   at most `kMaxMeshViewTriangles`. Returns each view's triangle count, in
+   index order; a smaller submesh is one view.
   */
-  auto SplitBucketsIntoViews(std::vector<data::Vertex>& vertices,
-    std::vector<SubmeshBucket>& buckets) -> void
+  [[nodiscard]] auto OrderIntoViewRuns(
+    const std::span<const data::Vertex> vertices,
+    std::vector<uint32_t>& indices) -> std::vector<uint32_t>
   {
     constexpr auto kMaxTriangles = MeshBuildPipeline::kMaxMeshViewTriangles;
-    bool any_split = false;
-    for (auto& bucket : buckets) {
-      const auto triangle_count
-        = static_cast<uint32_t>(bucket.indices.size() / 3U);
-      if (triangle_count <= kMaxTriangles) {
-        continue;
-      }
-      any_split = true;
-
-      auto bounds = MakeEmptyBounds();
-      for (const auto vi : bucket.indices) {
-        ExpandBounds(bounds, vertices.at(vi).position);
-      }
-      auto order = std::vector<std::pair<uint32_t, uint32_t>> {};
-      order.reserve(triangle_count);
-      for (uint32_t triangle = 0U; triangle < triangle_count; ++triangle) {
-        const auto first = static_cast<size_t>(triangle) * 3U;
-        const auto centroid
-          = (vertices.at(bucket.indices.at(first)).position
-              + vertices.at(bucket.indices.at(first + 1U)).position
-              + vertices.at(bucket.indices.at(first + 2U)).position)
-          / 3.0F;
-        order.emplace_back(MortonCode(centroid, bounds), triangle);
-      }
-      std::ranges::stable_sort(
-        order, {}, &std::pair<uint32_t, uint32_t>::first);
-
-      auto ordered = std::vector<uint32_t> {};
-      ordered.reserve(bucket.indices.size());
-      for (const auto& [code, triangle] : order) {
-        static_cast<void>(code);
-        const auto first = static_cast<size_t>(triangle) * 3U;
-        ordered.push_back(bucket.indices.at(first));
-        ordered.push_back(bucket.indices.at(first + 1U));
-        ordered.push_back(bucket.indices.at(first + 2U));
-      }
-      bucket.indices = std::move(ordered);
-
-      for (auto remaining = triangle_count; remaining > 0U;) {
-        const auto run = (std::min)(remaining, kMaxTriangles);
-        bucket.view_triangle_counts.push_back(run);
-        remaining -= run;
-      }
-    }
-    if (!any_split) {
-      return;
+    const auto triangle_count = static_cast<uint32_t>(indices.size() / 3U);
+    if (triangle_count <= kMaxTriangles) {
+      return { triangle_count };
     }
 
-    auto laid_out = std::vector<data::Vertex> {};
-    laid_out.reserve(vertices.size());
-    for (auto& bucket : buckets) {
-      for (auto& vi : bucket.indices) {
-        laid_out.push_back(vertices.at(vi));
-        vi = static_cast<uint32_t>(laid_out.size() - 1U);
-      }
+    auto bounds = MakeEmptyBounds();
+    for (const auto vi : indices) {
+      ExpandBounds(bounds, base::CheckedAt(vertices, vi).position);
     }
-    vertices = std::move(laid_out);
+    auto order = std::vector<std::pair<uint32_t, uint32_t>> {};
+    order.reserve(triangle_count);
+    for (uint32_t triangle = 0U; triangle < triangle_count; ++triangle) {
+      const auto first = static_cast<size_t>(triangle) * 3U;
+      const auto centroid
+        = (base::CheckedAt(vertices, indices.at(first)).position
+            + base::CheckedAt(vertices, indices.at(first + 1U)).position
+            + base::CheckedAt(vertices, indices.at(first + 2U)).position)
+        / 3.0F;
+      order.emplace_back(MortonCode(centroid, bounds), triangle);
+    }
+    std::ranges::stable_sort(order, {}, &std::pair<uint32_t, uint32_t>::first);
+
+    auto ordered = std::vector<uint32_t> {};
+    ordered.reserve(indices.size());
+    for (const auto& [code, triangle] : order) {
+      static_cast<void>(code);
+      const auto first = static_cast<size_t>(triangle) * 3U;
+      ordered.push_back(indices.at(first));
+      ordered.push_back(indices.at(first + 1U));
+      ordered.push_back(indices.at(first + 2U));
+    }
+    indices = std::move(ordered);
+
+    auto runs = std::vector<uint32_t> {};
+    for (auto remaining = triangle_count; remaining > 0U;) {
+      const auto run = (std::min)(remaining, kMaxTriangles);
+      runs.push_back(run);
+      remaining -= run;
+    }
+    return runs;
   }
 
   auto BuildSubmeshDescriptors(const std::vector<data::Vertex>& vertices,
@@ -1007,17 +1050,51 @@ namespace {
     return std::nullopt;
   }
 
-  [[nodiscard]] auto BuildLodData(const TriangleMesh& authored,
-    const MeshLod& lod_source, const WorkItem& item,
-    const SurfaceGeometryProvenance& allocation,
-    const uint64_t max_data_blob_bytes,
-    std::vector<ImportDiagnostic>& diagnostics, uint32_t& attr_mask)
-    -> std::optional<LodBuildData>
+  //! The attributes the import generates for every LOD's triangles.
+  struct AttributeGeneration {
+    //! Whether normals are generated, with smoothing groups by this angle.
+    bool normals = false;
+    float smoothing_angle_deg = 0.0F;
+    //! Whether MikkTSpace tangents are generated.
+    bool tangents = false;
+    //! Whether the LOD has tangents, authored or generated, to repair.
+    bool repairs_tangents = false;
+  };
+
+  //! A LOD's submeshes over the source's own vertices, before the import
+  //! generates their normals and tangents.
+  struct PreparedLod {
+    std::string lod_name;
+    data::MeshType mesh_type = data::MeshType::kStandard;
+    //! The submeshes' materials and slots; their indices are filled where a
+    //! LOD's corners or layout are built.
+    std::vector<SubmeshBucket> buckets;
+    //! Each bucket's triangles over the source's own vertices, welded, in
+    //! bucket order: what simplification reads.
+    std::vector<internal::IndexedSurface> sources;
+    AttributeGeneration generation;
+    std::vector<glm::mat4> inverse_bind_matrices;
+    std::vector<uint32_t> joint_remap;
+    //! The source's bounds, when nothing moved its vertices.
+    std::optional<Bounds3> authored_bounds;
+    uint32_t attr_mask = 0;
+  };
+
+  //! Reads a LOD's triangles over the source's own vertices and welds them.
+  /*!
+   The vertices carry what the source authors (positions, UVs, colours,
+   joints, and the normals and tangents the policies keep), already baked. The
+   normals and tangents the import generates are not part of them: they are
+   generated for each LOD's own triangles by `CompleteLod`, so simplification
+   reads the source's topology and every LOD shades by the same rule.
+  */
+  [[nodiscard]] auto PrepareLod(const MeshLod& lod_source, const WorkItem& item,
+    std::vector<ImportDiagnostic>& diagnostics) -> std::optional<PreparedLod>
   {
-    DLOG_F(1, "Build LOD data");
+    DLOG_F(1, "Prepare LOD");
     // Skin data that cannot bind the mesh is dropped: the LOD builds as static
     // geometry in its bind pose.
-    auto mesh = authored;
+    auto mesh = lod_source.source;
     if (mesh.mesh_type == data::MeshType::kSkinned) {
       if (const auto defect = SkinDefect(mesh); defect.has_value()) {
         diagnostics.push_back(MakeWarningDiagnostic(defect->first,
@@ -1031,7 +1108,7 @@ namespace {
         mesh.joint_remap = {};
       }
     }
-    LodBuildData lod;
+    PreparedLod lod;
     lod.lod_name = lod_source.lod_name;
     lod.mesh_type = mesh.mesh_type;
 
@@ -1057,16 +1134,18 @@ namespace {
       return std::nullopt;
     }
 
-    lod.vertices.reserve(mesh.indices.size());
-    lod.indices.reserve(mesh.indices.size());
+    auto corners = std::vector<data::Vertex> {};
+    auto corner_joints = std::vector<glm::uvec4> {};
+    auto corner_weights = std::vector<glm::vec4> {};
+    corners.reserve(mesh.indices.size());
 
-    auto buckets = BuildBucketsForRanges(
+    lod.buckets = BuildBucketsForRanges(
       mesh.ranges, item.material_keys, item.default_material_key);
 
     BuildVerticesFromRanges(mesh, item.request,
-      item.request.options.normal_policy, mesh.ranges, buckets, lod.vertices,
-      lod.indices, lod.joint_indices, lod.joint_weights, diagnostics,
-      item.source_id, item.mesh_name);
+      item.request.options.normal_policy, mesh.ranges, lod.buckets, corners,
+      corner_joints, corner_weights, diagnostics, item.source_id,
+      item.mesh_name);
 
     if (HasAnyError(diagnostics)) {
       return std::nullopt;
@@ -1098,11 +1177,11 @@ namespace {
       || normal_policy == GeometryAttributePolicy::kAlwaysRecalculate;
 
     // kNone keeps the defaults; the mask will not include normals.
-    if (normal_policy == GeometryAttributePolicy::kAlwaysRecalculate
-      || (!has_normals && should_generate_normals)) {
-      ComputeNormalsFromTriangles(lod.vertices, buckets,
-        item.request.options.normals_smoothing_angle_deg);
-    }
+    lod.generation.normals
+      = normal_policy == GeometryAttributePolicy::kAlwaysRecalculate
+      || (!has_normals && should_generate_normals);
+    lod.generation.smoothing_angle_deg
+      = item.request.options.normals_smoothing_angle_deg;
 
     const bool final_has_normals
       = normal_policy != GeometryAttributePolicy::kNone
@@ -1126,20 +1205,13 @@ namespace {
       if (tangent_policy == GeometryAttributePolicy::kAlwaysRecalculate
         || (tangent_policy == GeometryAttributePolicy::kGenerateMissing
           && !has_tangents)) {
-        if (item.stop_token.stop_requested()) {
-          return std::nullopt;
-        }
-        util::GenerateTangents(lod.vertices,
-          std::span<const SubmeshBucket>(buckets.data(), buckets.size()));
+        lod.generation.tangents = true;
         tangents_emitted = true;
       } else if (has_tangents) {
         tangents_emitted = true;
       }
-
-      if (tangents_emitted) {
-        FixInvalidTangents(lod.vertices);
-      }
     }
+    lod.generation.repairs_tangents = tangents_emitted;
 
     // A LOD's own transform takes its source into the geometry's space; the
     // item's then applies to the geometry as a whole.
@@ -1178,7 +1250,7 @@ namespace {
         normalized = glm::normalize(value / largest);
         return finite(normalized);
       };
-      for (auto& vertex : lod.vertices) {
+      for (auto& vertex : corners) {
         vertex.position
           = glm::vec3(transform * glm::vec4(vertex.position, 1.0F));
         if (!finite(vertex.position)
@@ -1193,9 +1265,8 @@ namespace {
           return std::nullopt;
         }
       }
-      FixInvalidTangents(lod.vertices);
       if (glm::determinant(linear) < 0.0F) {
-        for (auto& bucket : buckets) {
+        for (auto& bucket : lod.buckets) {
           for (size_t index = 0; index < bucket.indices.size(); index += 3) {
             std::swap(
               bucket.indices.at(index + 1), bucket.indices.at(index + 2));
@@ -1204,8 +1275,172 @@ namespace {
       }
     }
 
-    if (lod.mesh_type == data::MeshType::kStandard) {
-      SplitBucketsIntoViews(lod.vertices, buckets);
+    if (mesh.bounds.has_value() && !bake_transform.has_value()) {
+      lod.authored_bounds = *mesh.bounds;
+    }
+
+    if (final_has_normals) {
+      lod.attr_mask |= kGeomAttr_Normal;
+    }
+    if (tangents_emitted) {
+      lod.attr_mask |= kGeomAttr_Tangent;
+      lod.attr_mask |= kGeomAttr_Bitangent;
+    }
+    if (has_uvs) {
+      lod.attr_mask |= kGeomAttr_Texcoord0;
+    }
+    if (mesh.streams.colors.size() == mesh.streams.positions.size()) {
+      lod.attr_mask |= kGeomAttr_Color0;
+    }
+    if (lod.mesh_type == data::MeshType::kSkinned) {
+      lod.attr_mask |= kGeomAttr_JointIndices;
+      lod.attr_mask |= kGeomAttr_JointWeights;
+    }
+
+    const auto streams = internal::CornerStreams {
+      .vertices = corners,
+      .joint_indices = corner_joints,
+      .joint_weights = corner_weights,
+    };
+    lod.sources.reserve(lod.buckets.size());
+    for (auto& bucket : lod.buckets) {
+      if (item.stop_token.stop_requested()) {
+        return std::nullopt;
+      }
+      lod.sources.push_back(internal::WeldCorners(streams, bucket.indices));
+      bucket.indices.clear();
+    }
+    return lod;
+  }
+
+  //! A LOD's surfaces, its normals and tangents generated: the triangles
+  //! `surface_indices` lists over each of `prepared`'s sources.
+  /*!
+   The triangles are expanded to corners, given the normals and tangents the
+   import generates, by the same rule for LOD 0 and every generated LOD, then
+   welded: corners left equal share a vertex, a hard edge or a faceted surface
+   keeps its corners apart. Returns nullopt when the import is canceled.
+  */
+  [[nodiscard]] auto CompleteLod(const PreparedLod& prepared,
+    const std::span<const std::vector<uint32_t>> surface_indices,
+    const std::stop_token& stop_token)
+    -> std::optional<std::vector<internal::IndexedSurface>>
+  {
+    auto corners = std::vector<data::Vertex> {};
+    auto corner_joints = std::vector<glm::uvec4> {};
+    auto corner_weights = std::vector<glm::vec4> {};
+    auto buckets = prepared.buckets;
+    for (auto&& [index, bucket] : std::views::enumerate(buckets)) {
+      const auto at = static_cast<size_t>(index);
+      const auto& source = prepared.sources.at(at);
+      const auto skinned = !source.joint_indices.empty();
+      bucket.indices.clear();
+      for (const auto vertex : base::CheckedAt(surface_indices, at)) {
+        bucket.indices.push_back(static_cast<uint32_t>(corners.size()));
+        corners.push_back(source.vertices.at(vertex));
+        if (skinned) {
+          corner_joints.push_back(source.joint_indices.at(vertex));
+          corner_weights.push_back(source.joint_weights.at(vertex));
+        }
+      }
+    }
+
+    const auto& generation = prepared.generation;
+    if (generation.normals) {
+      ComputeNormalsFromTriangles(
+        corners, buckets, generation.smoothing_angle_deg);
+    }
+    if (generation.tangents) {
+      if (stop_token.stop_requested()) {
+        return std::nullopt;
+      }
+      util::GenerateTangents(corners, std::span<const SubmeshBucket>(buckets));
+    }
+    if (generation.repairs_tangents) {
+      FixInvalidTangents(corners);
+    }
+
+    const auto streams = internal::CornerStreams {
+      .vertices = corners,
+      .joint_indices = corner_joints,
+      .joint_weights = corner_weights,
+    };
+    auto surfaces = std::vector<internal::IndexedSurface> {};
+    surfaces.reserve(buckets.size());
+    for (const auto& bucket : buckets) {
+      if (stop_token.stop_requested()) {
+        return std::nullopt;
+      }
+      surfaces.push_back(internal::WeldCorners(streams, bucket.indices));
+    }
+    return surfaces;
+  }
+
+  //! The triangles of each of `surfaces`, as they are.
+  [[nodiscard]] auto IndicesOf(
+    const std::span<const internal::IndexedSurface> surfaces)
+    -> std::vector<std::vector<uint32_t>>
+  {
+    auto indices = std::vector<std::vector<uint32_t>> {};
+    indices.reserve(surfaces.size());
+    for (const auto& surface : surfaces) {
+      indices.push_back(surface.indices);
+    }
+    return indices;
+  }
+
+  //! Lays a LOD's completed surfaces out into its buffers, views and
+  //! submeshes.
+  /*!
+   `surfaces` holds one surface per bucket of `prepared`, from `CompleteLod`.
+   Each mesh view takes its own contiguous vertex range, ordered for the GPU,
+   with only the vertices its triangles use.
+  */
+  [[nodiscard]] auto LayOutLod(const PreparedLod& prepared,
+    std::string lod_name,
+    const std::span<const internal::IndexedSurface> surfaces,
+    const std::optional<Bounds3>& authored_bounds, const WorkItem& item,
+    const SurfaceGeometryProvenance& allocation,
+    const uint64_t max_data_blob_bytes,
+    std::vector<ImportDiagnostic>& diagnostics) -> std::optional<LodBuildData>
+  {
+    LodBuildData lod;
+    lod.lod_name = std::move(lod_name);
+    lod.mesh_type = prepared.mesh_type;
+    lod.inverse_bind_matrices = prepared.inverse_bind_matrices;
+    lod.joint_remap = prepared.joint_remap;
+
+    auto buckets = prepared.buckets;
+    for (auto&& [index, bucket] : std::views::enumerate(buckets)) {
+      const auto at = static_cast<size_t>(index);
+      const auto& surface = base::CheckedAt(surfaces, at);
+      auto triangles = surface.indices;
+      const auto runs = lod.mesh_type == data::MeshType::kStandard
+        ? OrderIntoViewRuns(surface.vertices, triangles)
+        : std::vector<uint32_t> {
+            static_cast<uint32_t>(triangles.size() / 3U),
+          };
+      // Each view takes its own vertices first, so ordering it costs the view,
+      // not the whole surface.
+      const auto parts = internal::SplitTriangles(surface,
+        internal::TriangleRuns {
+          .indices = triangles,
+          .triangle_counts = runs,
+        });
+      for (const auto& [part, run] : std::views::zip(parts, runs)) {
+        const auto view = internal::OrderForGpu(part, part.indices);
+        const auto first_vertex = lod.vertices.size();
+        lod.vertices.insert(
+          lod.vertices.end(), view.vertices.begin(), view.vertices.end());
+        lod.joint_indices.insert(lod.joint_indices.end(),
+          view.joint_indices.begin(), view.joint_indices.end());
+        lod.joint_weights.insert(lod.joint_weights.end(),
+          view.joint_weights.begin(), view.joint_weights.end());
+        for (const auto vi : view.indices) {
+          bucket.indices.push_back(static_cast<uint32_t>(first_vertex + vi));
+        }
+        bucket.view_triangle_counts.push_back(run);
+      }
     }
 
     const auto computed_bounds = BuildSubmeshDescriptors(lod.vertices, buckets,
@@ -1213,21 +1448,7 @@ namespace {
       lod.submesh_surfaces, lod.views, lod.indices);
     DLOG_F(INFO, "Mesh '{}' LOD '{}' submesh_count={} view_count={}",
       item.mesh_name, lod.lod_name, lod.submeshes.size(), lod.views.size());
-    std::size_t views_with_base_vertex = 0;
-    for (const auto& view : lod.views) {
-      if (view.first_vertex != 0) {
-        ++views_with_base_vertex;
-      }
-    }
-    if (views_with_base_vertex > 0) {
-      DLOG_F(INFO, "Mesh '{}' LOD '{}' views_with_base_vertex={}",
-        item.mesh_name, lod.lod_name, views_with_base_vertex);
-    }
-    if (mesh.bounds.has_value() && !bake_transform.has_value()) {
-      lod.bounds = *mesh.bounds;
-    } else {
-      lod.bounds = computed_bounds;
-    }
+    lod.bounds = authored_bounds.value_or(computed_bounds);
 
     if (lod.vertices.empty() || lod.indices.empty() || lod.submeshes.empty()) {
       diagnostics.push_back(MakeErrorDiagnostic("mesh.missing_buffers",
@@ -1261,21 +1482,7 @@ namespace {
       return std::nullopt;
     }
 
-    if (final_has_normals) {
-      attr_mask |= kGeomAttr_Normal;
-    }
-    if (tangents_emitted) {
-      attr_mask |= kGeomAttr_Tangent;
-      attr_mask |= kGeomAttr_Bitangent;
-    }
-    if (has_uvs) {
-      attr_mask |= kGeomAttr_Texcoord0;
-    }
-    if (mesh.streams.colors.size() == mesh.streams.positions.size()) {
-      attr_mask |= kGeomAttr_Color0;
-    }
-
-    if (mesh.mesh_type == data::MeshType::kSkinned) {
+    if (lod.mesh_type == data::MeshType::kSkinned) {
       const auto joint_bytes = lod.joint_indices.size() * sizeof(glm::uvec4);
       const auto weight_bytes = lod.joint_weights.size() * sizeof(glm::vec4);
       const auto inverse_bind_bytes
@@ -1308,9 +1515,6 @@ namespace {
           = static_cast<uint16_t>((std::min)(required_joint_count, max_u16));
         lod.influences_per_vertex = 4;
       }
-
-      attr_mask |= kGeomAttr_JointIndices;
-      attr_mask |= kGeomAttr_JointWeights;
     }
 
     return lod;
@@ -1454,7 +1658,8 @@ namespace {
   }
 
   [[nodiscard]] auto BuildCookedGeometryPayload(const WorkItem& item,
-    const std::vector<LodBuildData>& lods, const uint32_t attr_mask,
+    const std::vector<LodBuildData>& lods,
+    const std::span<const float> generated_errors, const uint32_t attr_mask,
     const bool with_content_hashing,
     const co::ThreadPool::CancelToken& canceled,
     std::vector<ImportDiagnostic>& diagnostics)
@@ -1470,11 +1675,20 @@ namespace {
           lod.bounds.max.at(0), lod.bounds.max.at(1), lod.bounds.max.at(2)));
     }
 
+    const auto radius = 0.5F
+      * glm::length(glm::vec3(geom_bounds.max.at(0), geom_bounds.max.at(1),
+                      geom_bounds.max.at(2))
+        - glm::vec3(
+          geom_bounds.min.at(0), geom_bounds.min.at(1), geom_bounds.min.at(2)));
+    const auto imported_policy = generated_errors.empty()
+      ? internal::MakeImportedLodPolicy(lods.size())
+      : internal::MakeGeneratedLodPolicy(generated_errors, radius);
+
     auto material_patch_offsets
       = std::vector<MeshBuildPipeline::SurfacePatchOffset> {};
     auto descriptor_bytes = BuildDescriptorBytes(item.mesh_name, lods,
-      geom_bounds, GeometryDefaultsOf(item), attr_mask, material_patch_offsets,
-      diagnostics, item.source_id);
+      geom_bounds, GeometryDefaultsOf(item), imported_policy, attr_mask,
+      material_patch_offsets, diagnostics, item.source_id);
     if (HasAnyError(diagnostics)) {
       return std::nullopt;
     }
@@ -1495,6 +1709,108 @@ namespace {
     }
 
     return cooked_payload;
+  }
+
+  [[nodiscard]] auto MakeInfoDiagnostic(std::string code, std::string message,
+    std::string_view source_id, std::string_view object_path)
+    -> ImportDiagnostic
+  {
+    return ImportDiagnostic {
+      .severity = ImportSeverity::kInfo,
+      .code = std::move(code),
+      .message = std::move(message),
+      .source_path = std::string(source_id),
+      .object_path = std::string(object_path),
+    };
+  }
+
+  //! The triangles and vertices of `surfaces`.
+  struct SurfaceTotals {
+    std::size_t triangles = 0;
+    std::size_t vertices = 0;
+  };
+
+  [[nodiscard]] auto TotalsOf(
+    const std::span<const internal::IndexedSurface> surfaces) -> SurfaceTotals
+  {
+    auto totals = SurfaceTotals {};
+    for (const auto& surface : surfaces) {
+      totals.triangles += surface.indices.size() / 3U;
+      totals.vertices += surface.vertices.size();
+    }
+    return totals;
+  }
+
+  //! Generates the LODs after `lod0` and lays them out into `lods`.
+  /*!
+   Simplification reads `lod0`'s surfaces over the source's own vertices; each
+   generated LOD is then completed like LOD 0, its normals and tangents
+   generated for its own triangles. Returns each generated LOD's
+   simplification error, or nullopt when one could not be laid out or the
+   import was canceled.
+  */
+  [[nodiscard]] auto AppendGeneratedLods(const PreparedLod& lod0,
+    const WorkItem& item, const SurfaceGeometryProvenance& allocation,
+    const uint64_t max_data_blob_bytes, std::vector<LodBuildData>& lods,
+    std::vector<ImportDiagnostic>& diagnostics)
+    -> std::optional<std::vector<float>>
+  {
+    const auto& options = item.request.options.lod_generation;
+    const auto source = TotalsOf(lod0.sources);
+    LOG_F(INFO,
+      "Mesh '{}': generating {} LODs, {}% fewer triangles each, from {} "
+      "triangles over {} source vertices",
+      item.mesh_name, options.levels, options.reduction_percent,
+      source.triangles, source.vertices);
+
+    // Normals the import generates are not the source's: simplification
+    // weighs only the attributes the source authors.
+    const auto generated = internal::GenerateLods(lod0.sources, options,
+      internal::SimplifiedAttributes {
+        .normals
+        = (lod0.attr_mask & kGeomAttr_Normal) != 0U && !lod0.generation.normals,
+        .texcoords = (lod0.attr_mask & kGeomAttr_Texcoord0) != 0U,
+        .colors = (lod0.attr_mask & kGeomAttr_Color0) != 0U,
+      },
+      item.stop_token);
+    if (item.stop_token.stop_requested()) {
+      return std::nullopt;
+    }
+
+    auto errors = std::vector<float> {};
+    errors.reserve(generated.lods.size());
+    for (const auto& [index, generated_lod] :
+      std::views::enumerate(generated.lods)) {
+      const auto level = static_cast<std::size_t>(index) + 1U;
+      const auto surfaces
+        = CompleteLod(lod0, generated_lod.surface_indices, item.stop_token);
+      if (!surfaces.has_value()) {
+        return std::nullopt;
+      }
+      auto lod_data = LayOutLod(lod0, "LOD" + std::to_string(level), *surfaces,
+        std::nullopt, item, allocation, max_data_blob_bytes, diagnostics);
+      if (!lod_data.has_value()) {
+        return std::nullopt;
+      }
+      LOG_F(INFO, "Mesh '{}': LOD {} has {} triangles, error {:.6g}",
+        item.mesh_name, level, generated_lod.triangle_count,
+        generated_lod.error);
+      lods.push_back(std::move(*lod_data));
+      errors.push_back(generated_lod.error);
+    }
+    if (generated.stopped.has_value()) {
+      const auto& stopped = *generated.stopped;
+      auto message = fmt::format(
+        "Generated {} of {} LODs for '{}': LOD {} kept {} triangles, more than "
+        "the {} that half its {}% reduction allows",
+        generated.lods.size(), options.levels, item.mesh_name, stopped.level,
+        stopped.triangle_count, stopped.allowed_triangle_count,
+        options.reduction_percent);
+      LOG_F(INFO, "{}", message);
+      diagnostics.push_back(MakeInfoDiagnostic("import.lod_generation.stopped",
+        std::move(message), item.source_id, item.mesh_name));
+    }
+    return errors;
   }
 
   [[nodiscard]] auto BuildGeometryOutcome(const WorkItem& item,
@@ -1542,19 +1858,59 @@ namespace {
     }
 
     uint32_t attr_mask = 0;
+    auto only_lod = std::optional<PreparedLod> {};
     for (const auto& lod : item.lods) {
       if (item.stop_token.stop_requested()) {
         out.canceled = true;
         return out;
       }
 
-      const auto& triangle_mesh = lod.source;
-      auto lod_data = BuildLodData(triangle_mesh, lod, item, allocation,
-        max_data_blob_bytes, out.diagnostics, attr_mask);
+      auto prepared = PrepareLod(lod, item, out.diagnostics);
+      if (!prepared.has_value()) {
+        out.canceled
+          = item.stop_token.stop_requested() && !HasAnyError(out.diagnostics);
+        return out;
+      }
+      attr_mask |= prepared->attr_mask;
+      const auto surfaces
+        = CompleteLod(*prepared, IndicesOf(prepared->sources), item.stop_token);
+      if (!surfaces.has_value()) {
+        out.canceled = true;
+        return out;
+      }
+      auto lod_data = LayOutLod(*prepared, prepared->lod_name, *surfaces,
+        prepared->authored_bounds, item, allocation, max_data_blob_bytes,
+        out.diagnostics);
       if (!lod_data.has_value()) {
         return out;
       }
       lods.push_back(std::move(*lod_data));
+      if (item.lods.size() == 1U) {
+        only_lod = std::move(prepared);
+      }
+    }
+
+    auto generated_errors = std::vector<float> {};
+    if (item.request.options.lod_generation.enabled) {
+      if (only_lod.has_value()) {
+        auto errors = AppendGeneratedLods(*only_lod, item, allocation,
+          max_data_blob_bytes, lods, out.diagnostics);
+        if (!errors.has_value()) {
+          out.canceled
+            = item.stop_token.stop_requested() && !HasAnyError(out.diagnostics);
+          return out;
+        }
+        generated_errors = std::move(*errors);
+      } else {
+        auto message = fmt::format(
+          "Generate LODs is on, but '{}' has {} authored LODs, which are kept "
+          "as they are",
+          item.mesh_name, item.lods.size());
+        LOG_F(INFO, "{}", message);
+        out.diagnostics.push_back(
+          MakeInfoDiagnostic("import.lod_generation.skipped",
+            std::move(message), item.source_id, item.mesh_name));
+      }
     }
 
     if (item.stop_token.stop_requested()) {
@@ -1565,8 +1921,9 @@ namespace {
       return out;
     }
 
-    auto cooked_payload = BuildCookedGeometryPayload(
-      item, lods, attr_mask, with_content_hashing, canceled, out.diagnostics);
+    auto cooked_payload
+      = BuildCookedGeometryPayload(item, lods, generated_errors, attr_mask,
+        with_content_hashing, canceled, out.diagnostics);
     if (!cooked_payload.has_value()) {
       return out;
     }

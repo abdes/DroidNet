@@ -50,7 +50,8 @@
                     "required": [
                       "lod_index",
                       "submesh_index",
-                      "default_material_key"
+                      "default_material_key",
+                      "triangle_count"
                     ],
                     "properties": {
                       "lod_index": {
@@ -63,7 +64,12 @@
                         "minimum": 0,
                         "maximum": 4294967295
                       },
-                      "default_material_key": { "$ref": "#/definitions/key" }
+                      "default_material_key": { "$ref": "#/definitions/key" },
+                      "triangle_count": {
+                        "description": "The triangles the bound submesh draws at this LOD.",
+                        "type": "integer",
+                        "minimum": 0
+                      }
                     }
                   }
                 }

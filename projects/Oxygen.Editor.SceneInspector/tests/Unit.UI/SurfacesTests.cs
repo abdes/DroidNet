@@ -276,8 +276,8 @@ internal sealed class SurfacesTests : DroidNet.Tests.VisualUserInterfaceTests
             Guid.Parse("20000000-0000-0000-0000-000000000001"),
             paint.LayoutRevision,
             [
-                new(paint.SurfaceId, "Paint", Visible: true, CastsShadows: true, [new(0, 0, Guid.Empty)]),
-                new(InteriorId, "Interior", Visible: true, CastsShadows: false, [new(0, 1, Guid.Empty), new(1, 2, Guid.Empty)]),
+                new(paint.SurfaceId, "Paint", Visible: true, CastsShadows: true, [new(0, 0, Guid.Empty, TriangleCount: 12)]),
+                new(InteriorId, "Interior", Visible: true, CastsShadows: false, [new(0, 1, Guid.Empty, TriangleCount: 8), new(1, 2, Guid.Empty, TriangleCount: 4)]),
             ],
             SceneSchema.Geometry.Defaults.LodPolicy));
     }

@@ -10,7 +10,8 @@ using Oxygen.Editor.Models;
 namespace Oxygen.Editor.ModelEditor.Settings;
 
 /// <summary>A setting row whose value is a number, shown as a number field with its unit or prefix, validated against
-/// the setting's range and indeterminate while the files' values differ.</summary>
+/// the setting's range and indeterminate while the files' values differ; a whole-number setting takes whole numbers
+/// only.</summary>
 public sealed partial class NumberRow : SettingRow
 {
     /// <summary>Initializes a new instance of the <see cref="NumberRow"/> class.</summary>
@@ -33,6 +34,11 @@ public sealed partial class NumberRow : SettingRow
     /// <summary>Gets the prefix shown before the value.</summary>
     public string Prefix { get; }
 
+    /// <summary>Gets the number field's mask: whole numbers for a whole-number setting, else up to three decimals.</summary>
+    public string Mask => this.IsWholeNumber ? "#." : "~.###";
+
+    private bool IsWholeNumber => this.Setting.Kind == ModelImportSettingKind.WholeNumber;
+
     /// <summary>Gets or sets the shown value; an accepted edit applies it to every file the row edits.</summary>
     [ObservableProperty]
     public partial double NumberValue { get; set; }
@@ -50,19 +56,20 @@ public sealed partial class NumberRow : SettingRow
     /// <returns>The error text, or empty when the setting accepts the value.</returns>
     public string Check(double value)
     {
-        if (this.Setting.Accepts(value))
+        if (this.ToSettingValue(value) is { } setting && this.Setting.Accepts(setting))
         {
             return string.Empty;
         }
 
         var minimum = this.Setting.Minimum?.ToString(CultureInfo.CurrentCulture);
         var maximum = this.Setting.Maximum?.ToString(CultureInfo.CurrentCulture);
+        var kind = this.IsWholeNumber ? "a whole number" : "a value";
         return (minimum, maximum, this.Setting.IsMinimumExclusive) switch
         {
-            ({ } low, { } high, _) => $"Enter a value from {low} to {high}.",
-            ({ } low, null, true) => $"Enter a value greater than {low}.",
-            ({ } low, null, false) => $"Enter a value of at least {low}.",
-            _ => "Enter a number.",
+            ({ } low, { } high, _) => $"Enter {kind} from {low} to {high}.",
+            ({ } low, null, true) => $"Enter {kind} greater than {low}.",
+            ({ } low, null, false) => $"Enter {kind} of at least {low}.",
+            _ => this.IsWholeNumber ? "Enter a whole number." : "Enter a number.",
         };
     }
 
@@ -70,7 +77,12 @@ public sealed partial class NumberRow : SettingRow
     protected override void OnRefreshed(object? value)
     {
         this.ErrorText = string.Empty;
-        this.NumberValue = value is double number ? number : 0;
+        this.NumberValue = value switch
+        {
+            double number => number,
+            int number => number,
+            _ => 0,
+        };
     }
 
     partial void OnNumberValueChanged(double value)
@@ -83,7 +95,13 @@ public sealed partial class NumberRow : SettingRow
         this.ErrorText = this.Check(value);
         if (!this.HasError)
         {
-            this.Apply(value);
+            this.Apply(this.ToSettingValue(value));
         }
     }
+
+    // The setting's value of a typed number: the number itself, or for a whole-number setting the integer it equals,
+    // null when it equals none.
+    private object? ToSettingValue(double value)
+        => !this.IsWholeNumber ? value
+            : double.IsInteger(value) && value is >= int.MinValue and <= int.MaxValue ? (int)value : null;
 }

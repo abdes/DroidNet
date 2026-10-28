@@ -142,6 +142,9 @@ auto SceneImportSettings::FromOptions(const ImportOptions& options)
   settings.import_cameras = options.import_cameras;
   settings.light_intensity_scale = options.light_intensity_scale;
   settings.normals_smoothing_angle_deg = options.normals_smoothing_angle_deg;
+  settings.generate_lods = options.lod_generation.enabled;
+  settings.lod_levels = options.lod_generation.levels;
+  settings.lod_reduction_percent = options.lod_generation.reduction_percent;
   settings.material_remap.insert(
     options.material_remap.begin(), options.material_remap.end());
   settings.geometry_defaults.insert(

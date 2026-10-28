@@ -59,14 +59,15 @@ internal sealed class ModelFactsReader : IModelFacts, IDisposable
             Source = source,
             LastImport = ModelImportStatus.TextOf(ModelImportStatus.Of(source, entries)),
             SourceFacts = contents.SourceFacts,
-            LodCount = contents.LodCount,
+            LodCount = contents.Geometry?.LodCount,
+            TriangleCount = contents.Geometry?.TriangleCount,
         };
     }
 
     /// <inheritdoc />
     public void Dispose() => this.structures.Changed -= this.OnStructuresChanged;
 
-    // The model's counts and LODs, read once and shared by every reader until the model's structure changes; a read that
+    // The model's counts, LODs and triangles, read once and shared by every reader until the model's structure changes; a read that
     // failed is read again.
     private Task<ModelContents> ContentsOf(ProjectContext project, AssetPath source)
     {
@@ -90,23 +91,26 @@ internal sealed class ModelFactsReader : IModelFacts, IDisposable
             : null;
         return new ModelContents(
             analysis is { Complete: true } ? analysis.Facts : null,
-            await this.ReadLodCountAsync(project, source).ConfigureAwait(false));
+            await this.ReadGeometryFactsAsync(project, source).ConfigureAwait(false));
     }
 
-    // The most LODs of the geometries an instance of the model renders; null when none of them can be read.
-    private async Task<int?> ReadLodCountAsync(ProjectContext project, AssetPath source)
+    // The most LODs and the LOD 0 triangles of the geometries an instance of the model renders, each geometry counted
+    // once; null when none of them can be read.
+    private async Task<GeometryFacts?> ReadGeometryFactsAsync(ProjectContext project, AssetPath source)
     {
-        int? most = null;
+        GeometryFacts? facts = null;
         var geometries = this.structures.Find(project, source)?.Nodes.Select(static node => node.Geometry).OfType<AssetPath>().Distinct() ?? [];
         foreach (var geometry in geometries)
         {
             if (await this.surfaces.ReadAsync(project, geometry).ConfigureAwait(false) is { } metadata)
             {
-                most = Math.Max(most ?? 0, metadata.LodCount);
+                facts = new GeometryFacts(
+                    Math.Max(facts?.LodCount ?? 0, metadata.LodCount),
+                    (facts?.TriangleCount ?? 0) + metadata.TriangleCountOf(0));
             }
         }
 
-        return most;
+        return facts;
     }
 
     // A model whose imported structure was read anew, as after a reimport, has its facts read again.
@@ -124,7 +128,9 @@ internal sealed class ModelFactsReader : IModelFacts, IDisposable
         }
     }
 
-    private sealed record ModelContents(ModelSourceFacts? SourceFacts, int? LodCount);
+    private sealed record ModelContents(ModelSourceFacts? SourceFacts, GeometryFacts? Geometry);
+
+    private sealed record GeometryFacts(int LodCount, ulong TriangleCount);
 
     private sealed record KeptContents(ProjectContext Project, SceneStructure? Structure, Task<ModelContents> Read);
 }

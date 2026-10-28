@@ -58,10 +58,12 @@ internal static class ModelImportStatus
         _ => throw new ArgumentOutOfRangeException(nameof(state), state, "Unknown import state."),
     };
 
-    /// <summary>Gets a value indicating whether a model is worth reimporting: its source changed, or its last import failed.</summary>
+    /// <summary>Gets a value indicating whether a model can be reimported: its source is there and no import of it runs.</summary>
+    /// <remarks>Reimport is an explicit command: it runs whenever the user asks, a current import included, so the same
+    /// settings import again.</remarks>
     /// <param name="state">The model's import state.</param>
     /// <returns><see langword="true"/> when <em>Reimport</em> is enabled.</returns>
-    public static bool CanReimport(ModelImportState state) => state is ModelImportState.SourceChanged or ModelImportState.ImportFailed;
+    public static bool CanReimport(ModelImportState state) => state is not (ModelImportState.Importing or ModelImportState.SourceMissing);
 
     /// <summary>Gets how serious an import state is, which colors the toolbar's status.</summary>
     /// <param name="state">The model's import state.</param>

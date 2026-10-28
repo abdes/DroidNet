@@ -18,4 +18,12 @@ public sealed record GeometrySurfaceMetadata(AssetPath GeometryUri, Guid NativeG
 {
     /// <summary>Gets the geometry's number of LODs: every LOD binds a submesh to a surface, and a geometry has at least one.</summary>
     public int LodCount => this.Surfaces.SelectMany(static surface => surface.Bindings).Select(static binding => (int)binding.LodIndex + 1).DefaultIfEmpty(1).Max();
+
+    /// <summary>Gets the triangles the geometry draws at a LOD: the sum over the submeshes its surfaces bind there.</summary>
+    /// <param name="lod">The zero-based LOD index.</param>
+    /// <returns>The LOD's triangles; zero for a LOD the geometry does not have.</returns>
+    public ulong TriangleCountOf(int lod)
+        => this.Surfaces.SelectMany(static surface => surface.Bindings)
+            .Where(binding => binding.LodIndex == (uint)lod)
+            .Aggregate(0UL, static (sum, binding) => sum + binding.TriangleCount);
 }

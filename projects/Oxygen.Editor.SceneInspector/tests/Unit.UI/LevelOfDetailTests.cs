@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Globalization;
 using AwesomeAssertions;
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.Controls.PropertyEditors;
@@ -15,8 +16,8 @@ using Oxygen.Editor.World.Serialization;
 namespace Oxygen.Editor.SceneInspector.Unit.UI.Tests;
 
 /// <summary>
-/// The Level of detail rows (instance-overrides-inspector.md 4): the geometry's LOD policy, the nodes' override or the
-/// asset's, one boundary per transition between LODs, whole-policy edits in one undo step, refusals with their code, reset
+/// The Level of detail rows (instance-overrides-inspector.md 4; model editor 5.4): each LOD's triangles, the geometry's LOD
+/// policy, the nodes' override or the asset's, one boundary per transition between LODs, whole-policy edits in one undo step, refusals with their code, reset
 /// to the asset's policy, and mixed policies across nodes that share the geometry.
 /// </summary>
 [TestClass]
@@ -42,6 +43,30 @@ internal sealed class LevelOfDetailTests : DroidNet.Tests.VisualUserInterfaceTes
         _ = lod.Hysteresis.Should().BeApproximately(0.1, 1e-6);
         _ = lod.Summary.Should().Be("4 LODs, from the asset");
         _ = lod.OverrideState.Should().Be(OverrideState.None, "an asset value is not a change of this scene");
+    });
+
+    [TestMethod]
+    public Task TrianglesListEachLodFinestFirst() => EnqueueAsync(async () =>
+    {
+        using var fixture = new GeometryFixture();
+        PublishFourLods(fixture);
+        using var host = fixture.Authoring.CreateInspectorHost("Geometry", assetProvider: fixture.Assets.Object);
+        _ = await OpenAsync(host).ConfigureAwait(true);
+        var geometry = host.PropertyEditors.OfType<GeometryViewModel>().Single();
+
+        _ = geometry.HasLodTriangles.Should().BeTrue();
+        _ = geometry.LodTriangles.Should().Be(TrianglesLine(12_480, 6_236, 3_110, 1_552));
+    });
+
+    [TestMethod]
+    public Task ASingleLodGeometryShowsItsTriangles() => EnqueueAsync(async () =>
+    {
+        using var fixture = new GeometryFixture();
+        using var host = fixture.Authoring.CreateInspectorHost("Geometry", assetProvider: fixture.Assets.Object);
+        _ = await OpenAsync(host).ConfigureAwait(true);
+        var geometry = host.PropertyEditors.OfType<GeometryViewModel>().Single();
+
+        _ = geometry.LodTriangles.Should().Be(TrianglesLine(12), "the line shows for every geometry, unlike the policy rows");
     });
 
     [TestMethod]
@@ -179,6 +204,9 @@ internal sealed class LevelOfDetailTests : DroidNet.Tests.VisualUserInterfaceTes
         _ = policy.Should().Be(AssetPolicy, "a kind the asset uses starts from the asset's values");
     });
 
+    private static string TrianglesLine(params ulong[] counts)
+        => string.Join(" · ", counts.Select(static count => count.ToString("N0", CultureInfo.CurrentCulture)));
+
     private static async Task<LodPolicyEditorModel> OpenAsync(SceneInspectorViewModel host)
     {
         var model = host.PropertyEditors.OfType<GeometryViewModel>().Single();
@@ -186,7 +214,8 @@ internal sealed class LevelOfDetailTests : DroidNet.Tests.VisualUserInterfaceTes
         return model.LevelOfDetail;
     }
 
-    // One surface bound in each of four LODs, with a Distance policy.
+    // One surface bound in each of four LODs, each with half the previous LOD's triangles or so, with a Distance
+    // policy.
     private static void PublishFourLods(GeometryFixture fixture)
     {
         var surface = SceneAuthoringFixture.TargetFor(fixture.Geometry.Geometry);
@@ -194,7 +223,7 @@ internal sealed class LevelOfDetailTests : DroidNet.Tests.VisualUserInterfaceTes
             fixture.Geometry.Geometry,
             Guid.Parse("20000000-0000-0000-0000-000000000001"),
             surface.LayoutRevision,
-            [new(surface.SurfaceId, "Body", Visible: true, CastsShadows: true, [new(0, 0, Guid.Empty), new(1, 0, Guid.Empty), new(2, 0, Guid.Empty), new(3, 0, Guid.Empty)])],
+            [new(surface.SurfaceId, "Body", Visible: true, CastsShadows: true, [new(0, 0, Guid.Empty, TriangleCount: 12_480), new(1, 0, Guid.Empty, TriangleCount: 6_236), new(2, 0, Guid.Empty, TriangleCount: 3_110), new(3, 0, Guid.Empty, TriangleCount: 1_552)])],
             AssetPolicy));
     }
 }

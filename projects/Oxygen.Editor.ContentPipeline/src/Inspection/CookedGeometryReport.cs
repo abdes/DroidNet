@@ -41,7 +41,10 @@ public sealed class CookedGeometryReport
             {
                 var surfaceId = surface.GetProperty("surface_id").GetGuid();
                 var bindings = surface.GetProperty("bindings").EnumerateArray().Select(static binding => new GeometrySurfaceBinding(
-                    binding.GetProperty("lod_index").GetUInt32(), binding.GetProperty("submesh_index").GetUInt32(), binding.GetProperty("default_material_key").GetGuid())).ToImmutableArray();
+                    binding.GetProperty("lod_index").GetUInt32(),
+                    binding.GetProperty("submesh_index").GetUInt32(),
+                    binding.GetProperty("default_material_key").GetGuid(),
+                    binding.GetProperty("triangle_count").GetUInt64())).ToImmutableArray();
                 if (!ids.Add(surfaceId) || bindings.Any(binding => !locations.Add((binding.LodIndex, binding.SubmeshIndex))))
                 {
                     throw new InvalidDataException("The native geometry inventory contains duplicate surface identities or surface bindings.");

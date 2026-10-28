@@ -198,9 +198,23 @@ public sealed partial class ModelEditorViewModel : ObservableObject, IDocumentWi
 
     private bool CanReimport() => !this.disposed && !this.services.Imports.IsImporting(this.Source) && ModelImportStatus.CanReimport(this.ImportState);
 
-    /// <summary>Reimports the model with its import settings, when its source changed or its last import failed.</summary>
+    /// <summary>Imports the model again now, with the settings the panel shows.</summary>
+    /// <remarks>
+    /// Unsaved setting edits are saved first, which imports with them; otherwise the saved settings import again even
+    /// when the last import is current. Either way the import runs: a reimport is never answered by a check.
+    /// </remarks>
+    /// <returns>A task that completes when the import did, or failed.</returns>
     [RelayCommand(CanExecute = nameof(CanReimport))]
-    private Task ReimportAsync() => this.services.Imports.ReimportAsync(this.Source);
+    private async Task ReimportAsync()
+    {
+        if (this.Document.IsDirty)
+        {
+            await this.SaveAsync().ConfigureAwait(true);
+            return;
+        }
+
+        await this.services.Imports.ReimportAsync(this.Source).ConfigureAwait(true);
+    }
 
     /// <summary>Returns the model's preview to the default sky, sun and exposure, and forgets its file.</summary>
     [RelayCommand]

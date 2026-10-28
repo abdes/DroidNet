@@ -93,6 +93,38 @@ public sealed class ModelImportSettingsPanelViewModelTests
     }
 
     [TestMethod]
+    public void LodRowsShowWithGenerateLods_AndLevelsAreWholeNumbers()
+    {
+        var (project, sources) = CreateProject("Car.glb");
+        using var dialog = Create(project);
+        _ = dialog.AddFiles(sources);
+        dialog.UpdateSelection([.. dialog.Files]);
+        var panel = dialog.Settings;
+        _ = panel.LodLevels.IsVisible.Should().BeFalse("LOD generation is off by default");
+        _ = panel.LodReduction.IsVisible.Should().BeFalse();
+
+        panel.GenerateLods.Value = true;
+
+        _ = panel.LodLevels.IsVisible.Should().BeTrue();
+        _ = panel.LodReduction.IsVisible.Should().BeTrue();
+        _ = panel.LodLevels.NumberValue.Should().Be(3, "an unset value shows the importer's default");
+        _ = panel.LodReduction.NumberValue.Should().Be(50);
+        _ = panel.LodLevels.Mask.Should().Be("#.");
+
+        panel.LodLevels.NumberValue = 2.5;
+        _ = panel.LodLevels.HasError.Should().BeTrue("levels are whole numbers");
+        panel.LodLevels.NumberValue = 8;
+        _ = panel.LodLevels.HasError.Should().BeTrue("at most seven LODs follow LOD 0");
+        panel.LodLevels.NumberValue = 5;
+        panel.LodReduction.NumberValue = 40;
+
+        var settings = dialog.Files[0].Settings;
+        _ = ModelImportSettingCatalog.GenerateLods.ReadFrom(settings).Should().Be(true);
+        _ = ModelImportSettingCatalog.LodLevels.ReadFrom(settings).Should().Be(5);
+        _ = ModelImportSettingCatalog.LodReduction.ReadFrom(settings).Should().Be(40d);
+    }
+
+    [TestMethod]
     public void KeepNodePivotsIsTheInverseOfBakingTransforms()
     {
         var (project, sources) = CreateProject("Car.fbx");

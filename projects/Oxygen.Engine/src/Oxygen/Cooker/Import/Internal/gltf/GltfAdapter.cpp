@@ -74,6 +74,7 @@
 #include <Oxygen/Cooker/Import/Internal/SceneNodeImportDefaults.h>
 #include <Oxygen/Cooker/Import/Internal/SourceLayoutHash.h>
 #include <Oxygen/Cooker/Import/Internal/gltf/GltfAdapter.h>
+#include <Oxygen/Cooker/Import/Internal/gltf/GltfMeshopt.h>
 #include <Oxygen/Cooker/Import/Internal/gltf/cgltf.h>
 #include <Oxygen/Cooker/Import/Naming.h>
 #include <Oxygen/Cooker/Import/SceneSourceInspection.h>
@@ -365,6 +366,20 @@ namespace {
     return { nullptr, &cgltf_free };
   }
 
+  //! Decodes a loaded document's compressed buffer views, so accessors read
+  //! the decoded bytes; refuses the document when one does not decode.
+  [[nodiscard]] auto DecodeCompressedViews(CgltfDataPtr data,
+    const AdapterInput& input, std::vector<ImportDiagnostic>& diagnostics)
+    -> CgltfDataPtr
+  {
+    if (data == nullptr
+      || internal::DecodeMeshoptBufferViews(
+        *data, input.source_id_prefix, diagnostics)) {
+      return data;
+    }
+    return { nullptr, &cgltf_free };
+  }
+
   [[nodiscard]] auto SceneName(const cgltf_scene& scene) -> std::string_view
   {
     return scene.name != nullptr ? std::string_view(scene.name)
@@ -553,7 +568,9 @@ namespace {
       return { nullptr, &cgltf_free };
     }
 
-    return ValidateData({ data, &cgltf_free }, input, diagnostics);
+    return DecodeCompressedViews(
+      ValidateData({ data, &cgltf_free }, input, diagnostics), input,
+      diagnostics);
   }
 
   [[nodiscard]] auto LoadDataFromMemory(const std::span<const std::byte> bytes,
@@ -595,7 +612,9 @@ namespace {
       return { nullptr, &cgltf_free };
     }
 
-    return ValidateData({ data, &cgltf_free }, input, diagnostics);
+    return DecodeCompressedViews(
+      ValidateData({ data, &cgltf_free }, input, diagnostics), input,
+      diagnostics);
   }
 
   auto ExternalSourcePath(const char* source_uri,

@@ -165,9 +165,10 @@ Writes schema version 1 geometry inventories using
 layout revision, default LOD policy (`lod_policy`, in the shared
 `oxygen.lod-policy.schema.json` spelling) and ordered surfaces. Each surface
 retains its opaque ID, display label, asset defaults (`visible`,
-`casts_shadows`) and exact LOD/submesh/default material bindings. Equal labels
-or material keys never merge surfaces. Nil default material keys remain the
-omitted-reference sentinel.
+`casts_shadows`) and exact LOD/submesh/default material bindings, each with
+the triangles its submesh draws (`triangle_count`, `SubMesh::TriangleCount()`).
+Equal labels or material keys never merge surfaces. Nil default material keys
+remain the omitted-reference sentinel.
 
 The native loader supplies these records without loading vertex/index buffers or
 starting the renderer. An invalid geometry returns exit code 2 before writing a
@@ -225,12 +226,18 @@ batched metadata operation; source files and cooked containers are not required.
 Invalid requests leave an existing output report untouched. Request and response
 schemas are installed alongside the other cooker schemas.
 
+### Versions
+
+`versions` prints the version of every cooked format and asset the tool reads,
+from `PakFormatVersions.inc`; `--json` prints them as one object. The tool
+reads only these versions.
+
 ## Exit codes
 
 - `0`: success
-- `1`: CLI usage / unknown command
-- `2`: validation or runtime error while loading/inspecting
-- `3`: unexpected top-level failure
+- `1`: CLI usage error, including an unknown command or option
+- `2`: validation or runtime error while loading/inspecting, or an unexpected
+  failure
 
 ## Implementation notes
 

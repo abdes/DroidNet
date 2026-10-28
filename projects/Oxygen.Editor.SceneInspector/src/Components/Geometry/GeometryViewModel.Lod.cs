@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Globalization;
+using CommunityToolkit.Mvvm.ComponentModel;
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.Controls.PropertyEditors;
 using Oxygen.Editor.SceneInspector.Editing;
@@ -12,7 +13,8 @@ using Oxygen.Editor.World.Serialization;
 
 namespace Oxygen.Editor.SceneInspector.Components.Geometry;
 
-/// <summary>The Level of detail rows: the LOD policy of the selected nodes' shared geometry, as an override of the asset's.</summary>
+/// <summary>The Level of detail rows: each LOD's triangles, and the LOD policy of the selected nodes' shared geometry, as
+/// an override of the asset's.</summary>
 /// <remarks>
 /// The rows edit the policy as the nodes' override; reset removes it so the asset's policy applies. A value the scene
 /// refuses, such as boundaries out of order, is reported with its diagnostic. The rows show the scene and the inventory
@@ -22,6 +24,15 @@ public sealed partial class GeometryViewModel
 {
     /// <summary>Gets the Level of detail rows.</summary>
     public LodPolicyEditorModel LevelOfDetail { get; }
+
+    /// <summary>Gets the triangles of each LOD of the selected geometry, finest first, as one line such as
+    /// "12,480 · 6,236 · 3,110"; empty while no inventory is shown.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasLodTriangles))]
+    public partial string LodTriangles { get; private set; } = string.Empty;
+
+    /// <summary>Gets a value indicating whether the Triangles line shows.</summary>
+    public bool HasLodTriangles => this.LodTriangles.Length != 0;
 
     /// <summary>Sets the LOD policy of every selected node, or resets it to the asset's, as one undoable edit.</summary>
     /// <remarks>The rows show the scene afterwards; a refused policy, such as one with boundaries out of order, is reported.</remarks>
@@ -67,6 +78,12 @@ public sealed partial class GeometryViewModel
         return overriding == count ? $"Overridden; {source}" : string.Create(CultureInfo.CurrentCulture, $"Overridden on {overriding} of {count} nodes; {source}");
     }
 
+    // Each LOD's triangles, read from the cooked geometry's report.
+    private static string LodTrianglesOf(GeometrySurfaceMetadata inventory)
+        => string.Join(
+            " · ",
+            Enumerable.Range(0, inventory.LodCount).Select(lod => inventory.TriangleCountOf(lod).ToString("N0", CultureInfo.CurrentCulture)));
+
     private LodPolicyEditorModel CreateLevelOfDetail()
         => new(this.SetLodPolicyAsync)
         {
@@ -82,6 +99,7 @@ public sealed partial class GeometryViewModel
         var agreed = policies.TrueForAll(policy => policy.Equals(policies[0])) ? policies[0] : null;
         var overriding = nodes.Count(overrides => overrides.Changes.TryGet(SceneSchema.Geometry.LodPolicy, out _));
         var reset = $"Reset to the asset's policy ({LodPolicyShapes.NameOf(asset)})";
+        this.LodTriangles = LodTrianglesOf(inventory);
 
         // A single LOD always shows, so its policy changes nothing; an override, such as one kept from a geometry with
         // more LODs, still shows so it can be reset.
@@ -93,5 +111,12 @@ public sealed partial class GeometryViewModel
             ResetToolTip = overriding == nodes.Count ? reset : string.Create(CultureInfo.CurrentCulture, $"{reset}, on the {overriding} of {nodes.Count} nodes that change it"),
             Summary = LodSummaryOf(agreed is null, overriding, nodes.Count, lodCount, asset),
         });
+    }
+
+    // No geometry's inventory is shown: neither its triangles nor its policy.
+    private void ClearLevelOfDetail()
+    {
+        this.LodTriangles = string.Empty;
+        this.LevelOfDetail.Clear();
     }
 }

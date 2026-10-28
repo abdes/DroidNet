@@ -490,6 +490,9 @@ class OxygenConan(ConanFile):
         self.requires("pdcurses/3.9")
         self.requires("ftxui/6.1.9")
         self.requires("libspng/0.7.4")
+        # The Cooker's mesh library: welding, vertex order, simplification and
+        # glTF EXT_meshopt_compression decoding.
+        self.requires("meshoptimizer/1.3")
         self.requires("luau/0.739", transitive_headers=True, transitive_libs=True)
         self.requires(
             "joltphysics/5.5.0", transitive_headers=True, transitive_libs=True

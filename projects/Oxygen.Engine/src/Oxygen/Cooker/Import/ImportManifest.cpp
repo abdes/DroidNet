@@ -798,7 +798,11 @@ namespace {
       || !ReadFloatField(
         obj, "light_intensity_scale", settings.light_intensity_scale, errors)
       || !ReadFloatField(obj, "normals_smoothing_angle_deg",
-        settings.normals_smoothing_angle_deg, errors)) {
+        settings.normals_smoothing_angle_deg, errors)
+      || !ReadBoolField(obj, "generate_lods", settings.generate_lods, errors)
+      || !ReadUIntField(obj, "lod_levels", settings.lod_levels, errors)
+      || !ReadFloatField(
+        obj, "lod_reduction_percent", settings.lod_reduction_percent, errors)) {
       return false;
     }
     if (obj.contains("material_remap")) {

@@ -148,6 +148,12 @@ Scene controls:
   up, whatever the file states
 - `--smoothing-angle <degrees>` (default 60): faces that meet at a larger angle
   keep separate normals wherever the import generates or recalculates normals
+- `--generate-lods`: each geometry with one LOD gets generated LODs,
+  simplified from LOD 0; a geometry with authored LODs keeps them
+- `--lod-levels <count>` (default 3, from 1 to 7): the LODs generated after
+  LOD 0
+- `--lod-reduction <percent>` (default 50, from 1 to 99): the triangles each
+  generated LOD removes from the previous one
 - `--no-import-lights`, `--no-import-cameras`
 - `--light-intensity-scale <float>` (default 1): multiplies every imported
   light's intensity

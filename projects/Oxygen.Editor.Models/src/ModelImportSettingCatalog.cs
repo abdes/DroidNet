@@ -80,6 +80,34 @@ public static class ModelImportSettingCatalog
         Default = false,
     };
 
+    /// <summary>Gets whether each geometry with one LOD gets generated LODs, simplified from LOD 0.</summary>
+    public static ModelImportSetting GenerateLods { get; } = new()
+    {
+        Key = "generate_lods",
+        Kind = ModelImportSettingKind.Toggle,
+        Default = false,
+    };
+
+    /// <summary>Gets the LODs generated after LOD 0.</summary>
+    public static ModelImportSetting LodLevels { get; } = new()
+    {
+        Key = "lod_levels",
+        Kind = ModelImportSettingKind.WholeNumber,
+        Default = 3,
+        Minimum = 1,
+        Maximum = 7,
+    };
+
+    /// <summary>Gets the triangles each generated LOD removes, in percent of the previous LOD's.</summary>
+    public static ModelImportSetting LodReduction { get; } = new()
+    {
+        Key = "lod_reduction_percent",
+        Kind = ModelImportSettingKind.Number,
+        Default = 50d,
+        Minimum = 1,
+        Maximum = 99,
+    };
+
     /// <summary>Gets whether empty nodes are dropped.</summary>
     public static ModelImportSetting NodePruning { get; } = new()
     {
@@ -174,8 +202,8 @@ public static class ModelImportSettingCatalog
     /// <summary>Gets every setting of this catalog.</summary>
     public static ImmutableArray<ModelImportSetting> All { get; } =
     [
-        UnitPolicy, UnitScale, UpAxis, NormalsPolicy, SmoothingAngle, TangentsPolicy, BakeTransforms, NodePruning,
-        GltfScene, MaxTextureSize, Bc7Quality, FlipNormalGreen, ImportLights, LightIntensityScale, OmittedLightRange,
-        ImportCameras,
+        UnitPolicy, UnitScale, UpAxis, NormalsPolicy, SmoothingAngle, TangentsPolicy, BakeTransforms, GenerateLods,
+        LodLevels, LodReduction, NodePruning, GltfScene, MaxTextureSize, Bc7Quality, FlipNormalGreen, ImportLights,
+        LightIntensityScale, OmittedLightRange, ImportCameras,
     ];
 }

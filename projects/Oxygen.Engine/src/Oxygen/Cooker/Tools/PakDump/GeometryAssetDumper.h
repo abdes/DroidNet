@@ -38,42 +38,42 @@ public:
     using oxygen::data::pak::geometry::MeshViewDesc;
     using oxygen::data::pak::geometry::SubMeshDesc;
 
-    std::cout << "Asset #" << idx << ":\n";
+    ctx.Out() << "Asset #" << idx << ":\n";
     asset_dump_helpers::PrintAssetKey(entry.asset_key, ctx);
-    asset_dump_helpers::PrintAssetMetadata(entry);
+    asset_dump_helpers::PrintAssetMetadata(ctx.Out(), entry);
 
     const auto data = asset_dump_helpers::ReadDescriptorBytes(pak, entry);
     if (!data) {
-      std::cout << "    Failed to read asset descriptor data\n\n";
+      ctx.Out() << "    Failed to read asset descriptor data\n\n";
       co_return;
     }
 
     asset_dump_helpers::PrintAssetDescriptorHexPreview(*data, ctx);
     if (data->size() < sizeof(GeometryAssetDesc)) {
-      std::cout << "    GeometryAssetDesc: (insufficient data)\n\n";
+      ctx.Out() << "    GeometryAssetDesc: (insufficient data)\n\n";
       co_return;
     }
 
     GeometryAssetDesc geo {};
     std::memcpy(&geo, data->data(), sizeof(geo));
 
-    asset_dump_helpers::PrintAssetHeaderFields(geo.header,
+    asset_dump_helpers::PrintAssetHeaderFields(ctx.Out(), geo.header,
       asset_dump_helpers::DescriptorString(
         *data, geo.header, geo.header.name_offset),
       4);
 
-    std::cout << "    --- Geometry Descriptor Fields ---\n";
-    PrintUtils::Field("LOD Count", geo.lod_count, 8);
-    PrintUtils::Field(
-      "AABB Min", asset_dump_helpers::FormatVec3(geo.bounding_box_min), 8);
-    PrintUtils::Field(
-      "AABB Max", asset_dump_helpers::FormatVec3(geo.bounding_box_max), 8);
-    PrintUtils::Field("Surface Count", geo.surface_count, 8);
-    PrintLodPolicy(geo.default_lod_policy);
-    std::cout << "\n";
+    ctx.Out() << "    --- Geometry Descriptor Fields ---\n";
+    PrintUtils::Field(ctx.Out(), "LOD Count", geo.lod_count, 8);
+    PrintUtils::Field(ctx.Out(), "AABB Min",
+      asset_dump_helpers::FormatVec3(geo.bounding_box_min), 8);
+    PrintUtils::Field(ctx.Out(), "AABB Max",
+      asset_dump_helpers::FormatVec3(geo.bounding_box_max), 8);
+    PrintUtils::Field(ctx.Out(), "Surface Count", geo.surface_count, 8);
+    PrintLodPolicy(ctx.Out(), geo.default_lod_policy);
+    ctx.Out() << "\n";
 
     if (geo.lod_count == 0) {
-      std::cout << "\n";
+      ctx.Out() << "\n";
       co_return;
     }
 
@@ -81,7 +81,7 @@ public:
       = static_cast<size_t>(geo.lod_count) * sizeof(MeshDesc);
     const size_t min_required = sizeof(GeometryAssetDesc) + mesh_desc_bytes;
     if (data->size() < min_required) {
-      std::cout << "    MeshDesc array (" << geo.lod_count
+      ctx.Out() << "    MeshDesc array (" << geo.lod_count
                 << "): (not present in descriptor: need at least "
                 << min_required << " bytes, have " << data->size() << ")\n\n";
       co_return;
@@ -92,7 +92,7 @@ public:
       MeshDesc mesh_desc {};
       if (!asset_dump_helpers::ReadStructAt(
             *data, offset, sizeof(mesh_desc), &mesh_desc)) {
-        std::cout << "    LOD[" << lod << "]: MeshDesc: (insufficient data)\n";
+        ctx.Out() << "    LOD[" << lod << "]: MeshDesc: (insufficient data)\n";
         break;
       }
 
@@ -101,59 +101,62 @@ public:
 
       const auto mesh_type = static_cast<MeshType>(mesh_desc.mesh_type);
 
-      std::cout << "    LOD[" << lod << "] Mesh: " << mesh_name << "\n";
-      PrintUtils::Field("Mesh Type",
+      ctx.Out() << "    LOD[" << lod << "] Mesh: " << mesh_name << "\n";
+      PrintUtils::Field(ctx.Out(), "Mesh Type",
         std::string(nostd::to_string(mesh_type)) + " ("
           + std::to_string(mesh_desc.mesh_type) + ")",
         8);
-      PrintUtils::Field("SubMesh Count", mesh_desc.submesh_count, 8);
-      PrintUtils::Field("MeshView Count", mesh_desc.mesh_view_count, 8);
+      PrintUtils::Field(ctx.Out(), "SubMesh Count", mesh_desc.submesh_count, 8);
+      PrintUtils::Field(
+        ctx.Out(), "MeshView Count", mesh_desc.mesh_view_count, 8);
 
       if (mesh_type == MeshType::kStandard || mesh_desc.IsStandard()) {
         PrintUtils::Field(
-          "Vertex Buffer", mesh_desc.info.standard.vertex_buffer, 8);
+          ctx.Out(), "Vertex Buffer", mesh_desc.info.standard.vertex_buffer, 8);
         PrintUtils::Field(
-          "Index Buffer", mesh_desc.info.standard.index_buffer, 8);
-        PrintUtils::Field("Mesh AABB Min",
+          ctx.Out(), "Index Buffer", mesh_desc.info.standard.index_buffer, 8);
+        PrintUtils::Field(ctx.Out(), "Mesh AABB Min",
           asset_dump_helpers::FormatVec3(
             mesh_desc.info.standard.bounding_box_min),
           8);
-        PrintUtils::Field("Mesh AABB Max",
+        PrintUtils::Field(ctx.Out(), "Mesh AABB Max",
           asset_dump_helpers::FormatVec3(
             mesh_desc.info.standard.bounding_box_max),
           8);
       } else if (mesh_type == MeshType::kSkinned || mesh_desc.IsSkinned()) {
         PrintUtils::Field(
-          "Vertex Buffer", mesh_desc.info.skinned.vertex_buffer, 8);
+          ctx.Out(), "Vertex Buffer", mesh_desc.info.skinned.vertex_buffer, 8);
         PrintUtils::Field(
-          "Index Buffer", mesh_desc.info.skinned.index_buffer, 8);
-        PrintUtils::Field(
-          "Joint Index Buffer", mesh_desc.info.skinned.joint_index_buffer, 8);
-        PrintUtils::Field(
-          "Joint Weight Buffer", mesh_desc.info.skinned.joint_weight_buffer, 8);
-        PrintUtils::Field(
-          "Inverse Bind Buffer", mesh_desc.info.skinned.inverse_bind_buffer, 8);
-        PrintUtils::Field(
-          "Joint Remap Buffer", mesh_desc.info.skinned.joint_remap_buffer, 8);
-        PrintUtils::Field("Skeleton Asset",
+          ctx.Out(), "Index Buffer", mesh_desc.info.skinned.index_buffer, 8);
+        PrintUtils::Field(ctx.Out(), "Joint Index Buffer",
+          mesh_desc.info.skinned.joint_index_buffer, 8);
+        PrintUtils::Field(ctx.Out(), "Joint Weight Buffer",
+          mesh_desc.info.skinned.joint_weight_buffer, 8);
+        PrintUtils::Field(ctx.Out(), "Inverse Bind Buffer",
+          mesh_desc.info.skinned.inverse_bind_buffer, 8);
+        PrintUtils::Field(ctx.Out(), "Joint Remap Buffer",
+          mesh_desc.info.skinned.joint_remap_buffer, 8);
+        PrintUtils::Field(ctx.Out(), "Skeleton Asset",
           oxygen::data::to_string(mesh_desc.info.skinned.skeleton_asset_key),
           8);
-        PrintUtils::Field("Joint Count", mesh_desc.info.skinned.joint_count, 8);
-        PrintUtils::Field("Influences Per Vertex",
+        PrintUtils::Field(
+          ctx.Out(), "Joint Count", mesh_desc.info.skinned.joint_count, 8);
+        PrintUtils::Field(ctx.Out(), "Influences Per Vertex",
           mesh_desc.info.skinned.influences_per_vertex, 8);
-        PrintUtils::Field("Skinned Flags", mesh_desc.info.skinned.flags, 8);
-        PrintUtils::Field("Mesh AABB Min",
+        PrintUtils::Field(
+          ctx.Out(), "Skinned Flags", mesh_desc.info.skinned.flags, 8);
+        PrintUtils::Field(ctx.Out(), "Mesh AABB Min",
           asset_dump_helpers::FormatVec3(
             mesh_desc.info.skinned.bounding_box_min),
           8);
-        PrintUtils::Field("Mesh AABB Max",
+        PrintUtils::Field(ctx.Out(), "Mesh AABB Max",
           asset_dump_helpers::FormatVec3(
             mesh_desc.info.skinned.bounding_box_max),
           8);
       } else if (mesh_type == MeshType::kProcedural
         || mesh_desc.IsProcedural()) {
         PrintUtils::Field(
-          "Params Size", mesh_desc.info.procedural.params_size, 8);
+          ctx.Out(), "Params Size", mesh_desc.info.procedural.params_size, 8);
       }
 
       offset += sizeof(MeshDesc);
@@ -281,47 +284,47 @@ public:
                 << std::noboolalpha << "\n";
     }
 
-    std::cout << "\n";
+    ctx.Out() << "\n";
     co_return;
   }
 
 private:
-  static auto PrintLodPolicy(const data::pak::geometry::LodPolicyRecord& policy)
-    -> void
+  static auto PrintLodPolicy(std::ostream& out,
+    const data::pak::geometry::LodPolicyRecord& policy) -> void
   {
     using data::pak::geometry::LodPolicyType;
 
-    const auto print_list = [&policy](const std::string_view name,
+    const auto print_list = [&out, &policy](const std::string_view name,
                               const std::span<const float> values) -> void {
-      std::cout << "        " << name << ": [";
+      out << "        " << name << ": [";
       // A damaged record may claim more boundaries than the arrays hold.
       const auto shown = values.first(
         (std::min)(std::size_t { policy.boundary_count }, values.size()));
       auto separator = std::string_view {};
       for (const auto value : shown) {
-        std::cout << separator << value;
+        out << separator << value;
         separator = ", ";
       }
-      std::cout << "]\n";
+      out << "]\n";
     };
     switch (policy.type) {
     case LodPolicyType::kFixed:
-      std::cout << "        LOD Policy: fixed, lod_index="
-                << static_cast<uint32_t>(policy.lod_index) << "\n";
+      out << "        LOD Policy: fixed, lod_index="
+          << static_cast<uint32_t>(policy.lod_index) << "\n";
       return;
     case LodPolicyType::kDistance:
-      std::cout << "        LOD Policy: distance, hysteresis_ratio="
-                << policy.hysteresis_ratio << "\n";
+      out << "        LOD Policy: distance, hysteresis_ratio="
+          << policy.hysteresis_ratio << "\n";
       print_list("thresholds", policy.thresholds);
       return;
     case LodPolicyType::kScreenSpaceError:
-      std::cout << "        LOD Policy: screen_space_error\n";
+      out << "        LOD Policy: screen_space_error\n";
       print_list("enter_finer_sse", policy.enter_finer_sse);
       print_list("exit_coarser_sse", policy.exit_coarser_sse);
       return;
     }
-    std::cout << "        LOD Policy: unknown type "
-              << static_cast<uint32_t>(policy.type) << "\n";
+    out << "        LOD Policy: unknown type "
+        << static_cast<uint32_t>(policy.type) << "\n";
   }
 };
 

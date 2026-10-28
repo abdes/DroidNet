@@ -766,6 +766,25 @@
           "maximum": 180,
           "default": 60
         },
+        "generate_lods": {
+          "description": "Whether each geometry with one LOD gets generated LODs, simplified from LOD 0. A geometry with authored LODs keeps them.",
+          "type": "boolean",
+          "default": false
+        },
+        "lod_levels": {
+          "description": "The LODs generated after LOD 0, when generate_lods is on.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 7,
+          "default": 3
+        },
+        "lod_reduction_percent": {
+          "description": "The triangles each generated LOD removes, in percent of the previous LOD's, when generate_lods is on.",
+          "type": "number",
+          "minimum": 1,
+          "maximum": 99,
+          "default": 50
+        },
         "import_lights": {
           "type": "boolean",
           "default": true
@@ -1188,6 +1207,25 @@
           "minimum": 0,
           "maximum": 180,
           "default": 60
+        },
+        "generate_lods": {
+          "description": "Whether each geometry with one LOD gets generated LODs, simplified from LOD 0. A geometry with authored LODs keeps them.",
+          "type": "boolean",
+          "default": false
+        },
+        "lod_levels": {
+          "description": "The LODs generated after LOD 0, when generate_lods is on.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 7,
+          "default": 3
+        },
+        "lod_reduction_percent": {
+          "description": "The triangles each generated LOD removes, in percent of the previous LOD's, when generate_lods is on.",
+          "type": "number",
+          "minimum": 1,
+          "maximum": 99,
+          "default": 50
         },
         "import_lights": {
           "type": "boolean",

@@ -8,12 +8,14 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <optional>
 #include <ranges>
 #include <set>
 #include <span>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
@@ -36,15 +38,15 @@ namespace {
 
   auto Coordinates(const cgltf_texture_view& view) -> TextureCoordinates
   {
+    const bool transformed = view.has_transform != 0;
+    const bool texcoord_set = transformed && view.transform.has_texcoord != 0;
     return {
-      .set = view.has_transform && view.transform.has_texcoord
-        ? view.transform.texcoord
-        : view.texcoord,
-      .scale = view.has_transform ? std::to_array(view.transform.scale)
-                                  : std::array { 1.0F, 1.0F },
-      .offset = view.has_transform ? std::to_array(view.transform.offset)
-                                   : std::array<cgltf_float, 2> {},
-      .rotation = view.has_transform ? view.transform.rotation : 0.0F,
+      .set = texcoord_set ? view.transform.texcoord : view.texcoord,
+      .scale = transformed ? std::to_array(view.transform.scale)
+                           : std::array { 1.0F, 1.0F },
+      .offset = transformed ? std::to_array(view.transform.offset)
+                            : std::array<cgltf_float, 2> {},
+      .rotation = transformed ? view.transform.rotation : 0.0F,
     };
   }
 
@@ -81,11 +83,12 @@ namespace {
   auto HasAuthoredProperty(const ufbx_props& properties, const char* name)
     -> bool
   {
+    constexpr auto kNotAuthored
+      = static_cast<uint32_t>(UFBX_PROP_FLAG_NOT_FOUND)
+      | static_cast<uint32_t>(UFBX_PROP_FLAG_SYNTHETIC);
     const auto* property = ufbx_find_prop(&properties, name);
     return property != nullptr
-      && (property->flags
-           & (UFBX_PROP_FLAG_NOT_FOUND | UFBX_PROP_FLAG_SYNTHETIC))
-      == 0;
+      && (static_cast<uint32_t>(property->flags) & kNotAuthored) == 0U;
   }
 
   //! Extensions the glTF adapter reads.
@@ -101,6 +104,7 @@ namespace {
     "KHR_materials_variants",
     "KHR_texture_transform",
     "KHR_mesh_quantization",
+    "EXT_meshopt_compression",
   });
 
   auto ReportGltfExtensions(const cgltf_data& source,
@@ -223,11 +227,16 @@ namespace {
     note(material.has_dispersion != 0, "dispersion");
     note(material.has_emissive_strength != 0, "emissive strength");
     if (!unsupported.empty()) {
+      const auto separator
+        = [&unsupported](const std::size_t at) -> std::string_view {
+        if (at == 0) {
+          return "";
+        }
+        return at + 1 == unsupported.size() ? " and " : ", ";
+      };
       auto list = std::string {};
       for (const auto& [index, what] : std::views::enumerate(unsupported)) {
-        list += index == 0                                            ? ""
-          : static_cast<std::size_t>(index) + 1 == unsupported.size() ? " and "
-                                                                      : ", ";
+        list += separator(static_cast<std::size_t>(index));
         list += what;
       }
       drop(true,

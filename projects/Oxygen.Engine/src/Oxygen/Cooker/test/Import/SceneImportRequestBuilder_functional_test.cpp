@@ -39,6 +39,7 @@ using nlohmann::json;
 using oxygen::Uuid;
 using oxygen::content::import::ImportFormat;
 using oxygen::content::import::ImportManifest;
+using oxygen::content::import::LodGenerationOptions;
 using oxygen::content::import::ModelImportRecord;
 using oxygen::content::import::ModelImportRecordContent;
 using oxygen::content::import::ModelNodeContinuity;
@@ -306,8 +307,9 @@ NOLINT_TEST_F(SceneImportRequestBuilderTest, JobsCarryNoIdentityOfTheirOwn)
 }
 
 //! The model import settings a record holds reach the import: up axis,
-//! smoothing angle, light and camera flags, intensity scale, texture size,
-//! material remap and per-geometry defaults; the record writes them back.
+//! smoothing angle, LOD generation, light and camera flags, intensity scale,
+//! texture size, material remap and per-geometry defaults; the record writes
+//! them back.
 NOLINT_TEST_F(SceneImportRequestBuilderTest, ModelImportSettingsReachTheImport)
 {
   using oxygen::content::import::SourceUpAxis;
@@ -317,6 +319,9 @@ NOLINT_TEST_F(SceneImportRequestBuilderTest, ModelImportSettingsReachTheImport)
   const auto settings_json = json {
     { "up_axis", "z" },
     { "normals_smoothing_angle_deg", 30 },
+    { "generate_lods", true },
+    { "lod_levels", 5 },
+    { "lod_reduction_percent", 40 },
     { "import_lights", false },
     { "import_cameras", false },
     { "light_intensity_scale", 2.5 },
@@ -373,6 +378,9 @@ NOLINT_TEST_F(SceneImportRequestBuilderTest, ModelImportSettingsReachTheImport)
   const auto& options = request->options;
   EXPECT_EQ(options.coordinate.up_axis, SourceUpAxis::kZ);
   EXPECT_FLOAT_EQ(options.normals_smoothing_angle_deg, 30.0F);
+  EXPECT_TRUE(options.lod_generation.enabled);
+  EXPECT_EQ(options.lod_generation.levels, 5U);
+  EXPECT_FLOAT_EQ(options.lod_generation.reduction_percent, 40.0F);
   EXPECT_FALSE(options.import_lights);
   EXPECT_FALSE(options.import_cameras);
   EXPECT_FLOAT_EQ(options.light_intensity_scale, 2.5F);
@@ -397,6 +405,9 @@ NOLINT_TEST_F(SceneImportRequestBuilderTest, ModelImportSettingsReachTheImport)
     ModelImportRecord::MakeSettings(SceneImportSettings::FromOptions(options)));
   EXPECT_EQ(written.at("up_axis"), "z");
   EXPECT_EQ(written.at("import_lights"), false);
+  EXPECT_EQ(written.at("generate_lods"), true);
+  EXPECT_EQ(written.at("lod_levels"), 5);
+  EXPECT_EQ(written.at("lod_reduction_percent"), 40);
   EXPECT_EQ(written.at("max_size"), 1024);
   EXPECT_EQ(written.at("material_remap"), settings_json.at("material_remap"));
   EXPECT_EQ(written.at("geometry_defaults").at("Body").at("surfaces"),
@@ -407,8 +418,8 @@ NOLINT_TEST_F(SceneImportRequestBuilderTest, ModelImportSettingsReachTheImport)
 }
 
 //! Without settings, the import takes the engine defaults, the same as the
-//! editor's: the file's up axis, 60 degrees, lights and cameras at scale 1,
-//! source texture size.
+//! editor's: the file's up axis, 60 degrees, no generated LODs, lights and
+//! cameras at scale 1, source texture size.
 NOLINT_TEST_F(SceneImportRequestBuilderTest, ModelImportSettingsDefaults)
 {
   using oxygen::content::import::SourceUpAxis;
@@ -417,6 +428,11 @@ NOLINT_TEST_F(SceneImportRequestBuilderTest, ModelImportSettingsDefaults)
   ASSERT_HAS_VALUE(request) << errors.str();
   EXPECT_EQ(request->options.coordinate.up_axis, SourceUpAxis::kFromFile);
   EXPECT_FLOAT_EQ(request->options.normals_smoothing_angle_deg, 60.0F);
+  const auto lods = LodGenerationOptions {};
+  EXPECT_FALSE(request->options.lod_generation.enabled);
+  EXPECT_EQ(request->options.lod_generation.levels, lods.levels);
+  EXPECT_FLOAT_EQ(
+    request->options.lod_generation.reduction_percent, lods.reduction_percent);
   EXPECT_TRUE(request->options.import_lights);
   EXPECT_TRUE(request->options.import_cameras);
   EXPECT_FLOAT_EQ(request->options.light_intensity_scale, 1.0F);
@@ -429,8 +445,9 @@ NOLINT_TEST_F(SceneImportRequestBuilderTest, ModelImportSettingsDefaults)
 }
 
 //! Settings whose values break their rules are refused: a smoothing angle
-//! above 180 degrees, an unknown up axis, a LOD policy whose thresholds
-//! decrease, and a surface key that is not a surface ID.
+//! above 180 degrees, an unknown up axis, LOD levels or a reduction outside
+//! their ranges, a LOD policy whose thresholds decrease, and a surface key
+//! that is not a surface ID.
 NOLINT_TEST_F(
   SceneImportRequestBuilderTest, InvalidModelImportSettingsAreRefused)
 {
@@ -438,7 +455,16 @@ NOLINT_TEST_F(
   angle.normals_smoothing_angle_deg = 181.0F;
   auto axis = Settings();
   axis.up_axis = "x";
-  for (const auto& settings : { angle, axis }) {
+  auto no_levels = Settings();
+  no_levels.lod_levels = LodGenerationOptions::kMinLevels - 1U;
+  auto too_many_levels = Settings();
+  too_many_levels.lod_levels = LodGenerationOptions::kMaxLevels + 1U;
+  auto no_reduction = Settings();
+  no_reduction.lod_reduction_percent = 0.0F;
+  auto full_reduction = Settings();
+  full_reduction.lod_reduction_percent = 100.0F;
+  for (const auto& settings :
+    { angle, axis, no_levels, too_many_levels, no_reduction, full_reduction }) {
     std::ostringstream errors;
     EXPECT_FALSE(settings.Prepare(ImportFormat::kGltf, errors).has_value());
   }

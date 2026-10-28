@@ -29,4 +29,10 @@ public sealed record ModelFacts
     /// read.
     /// </summary>
     public int? LodCount { get; init; }
+
+    /// <summary>
+    /// Gets the triangles of the imported model's LOD 0, summed over its geometries; <see langword="null"/> when no
+    /// imported geometry could be read.
+    /// </summary>
+    public ulong? TriangleCount { get; init; }
 }

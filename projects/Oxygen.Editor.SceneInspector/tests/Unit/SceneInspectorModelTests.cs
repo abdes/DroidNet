@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Globalization;
 using System.Reactive.Linq;
 using AwesomeAssertions;
 using DroidNet.Hosting.WinUI;
@@ -53,6 +54,7 @@ internal sealed class SceneInspectorModelTests
             Textures = ["Paint_BaseColor"],
         },
         LodCount = 3,
+        TriangleCount = 12_480,
     };
 
     public TestContext TestContext { get; set; }
@@ -114,6 +116,7 @@ internal sealed class SceneInspectorModelTests
             new ModelFactRow("Last import", "Imported"),
             new ModelFactRow("Nodes", "12"),
             new ModelFactRow("Meshes", "5"),
+            new ModelFactRow("Triangles", 12_480UL.ToString("N0", CultureInfo.CurrentCulture)),
             new ModelFactRow("LODs", "3"),
             new ModelFactRow("Materials", "2"),
             new ModelFactRow("Textures", "1"));
@@ -121,7 +124,7 @@ internal sealed class SceneInspectorModelTests
     [TestMethod]
     public void RowsOf_UnreadableSource_LeavesItsCountsUnknown()
     {
-        var rows = SceneInspectorViewModel.RowsOf(CarFacts with { SourceFacts = null, LodCount = null });
+        var rows = SceneInspectorViewModel.RowsOf(CarFacts with { SourceFacts = null, LodCount = null, TriangleCount = null });
 
         _ = rows.Where(static row => row.Label is not ("Source" or "Last import")).Should().OnlyContain(static row => row.Value == "Unknown");
     }

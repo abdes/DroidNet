@@ -43,12 +43,31 @@ public sealed class GeometryMetadataTests
         var source = JsonNode.Parse(SurfaceReport())!;
         var geometry = source["geometries"]![0]!;
         geometry["lod_policy"] = JsonNode.Parse("""{"hysteresis_ratio": 0.2, "thresholds": [0.25, 0.5, 0.8], "type": "distance"}""");
-        geometry["surfaces"]![0]!["bindings"]!.AsArray().Add(JsonNode.Parse("""{"lod_index": 3, "submesh_index": 0, "default_material_key": "00000000-0000-0000-0000-000000000000"}"""));
+        geometry["surfaces"]![0]!["bindings"]!.AsArray().Add(JsonNode.Parse("""{"lod_index": 3, "submesh_index": 0, "default_material_key": "00000000-0000-0000-0000-000000000000", "triangle_count": 6}"""));
 
         var result = CookedGeometryReport.Parse(source.ToJsonString()).SingleOrDefault(AssetPath.Parse("/Content/Geometry/Test.ogeo"))!;
 
         _ = result.LodPolicy.Should().Be(new LodPolicy.Distance([0.25f, 0.5f, 0.8f], 0.2f));
         _ = result.LodCount.Should().Be(4);
+    }
+
+    /// <summary>A LOD's triangles are the sum over the submeshes its surfaces bind there, read from each binding.</summary>
+    [TestMethod]
+    public void GeometryMetadataSumsEachLodsTriangles()
+    {
+        var source = JsonNode.Parse(SurfaceReport())!;
+        var surfaces = source["geometries"]![0]!["surfaces"]!.AsArray();
+        surfaces[0]!["bindings"]!.AsArray().Add(JsonNode.Parse("""{"lod_index": 1, "submesh_index": 1, "default_material_key": "00000000-0000-0000-0000-000000000000", "triangle_count": 40}"""));
+        var second = surfaces[0]!.DeepClone();
+        second["surface_id"] = "00000000-0000-0000-0000-000000000002";
+        second["bindings"] = JsonNode.Parse("""[{"lod_index": 0, "submesh_index": 0, "default_material_key": "00000000-0000-0000-0000-000000000000", "triangle_count": 20}]""");
+        surfaces.Add(second);
+
+        var result = CookedGeometryReport.Parse(source.ToJsonString()).SingleOrDefault(AssetPath.Parse("/Content/Geometry/Test.ogeo"))!;
+
+        _ = result.TriangleCountOf(0).Should().Be(120);
+        _ = result.TriangleCountOf(1).Should().Be(40);
+        _ = result.TriangleCountOf(2).Should().Be(0, "the geometry has no third LOD");
     }
 
     /// <summary>A policy the engine would not accept is a defect of the report, not a value to show.</summary>
@@ -102,7 +121,7 @@ public sealed class GeometryMetadataTests
               "visible": true,
               "casts_shadows": false,
               "bindings": [{"lod_index": 0, "submesh_index": 1,
-                "default_material_key": "00000000-0000-0000-0000-000000000000"}]
+                "default_material_key": "00000000-0000-0000-0000-000000000000", "triangle_count": 100}]
             }]
           }]
         }

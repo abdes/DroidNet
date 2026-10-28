@@ -15,6 +15,7 @@ using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.Testing;
 using Oxygen.Editor.Data.Services;
+using Oxygen.Editor.Documents;
 using Oxygen.Editor.LivePreview.Scenes;
 using Oxygen.Editor.LivePreview.Settings;
 using Oxygen.Editor.Projects;
@@ -33,7 +34,8 @@ namespace Oxygen.Editor.ModelEditor.TestSupport;
 /// <summary>The session's services a model editor uses, over test documents and an engine that shows nothing.</summary>
 /// <remarks>
 /// The content pipeline, the source analysis, the geometry and material reads and the publication's kept diagnostics
-/// answer nothing until the test sets them up; the cook runs complete when the test raises them.
+/// answer nothing until the test sets them up; the cook runs complete when the test raises them. Saving a document
+/// through the shell saves it, as the shell's document service does.
 /// </remarks>
 internal sealed class TestModelEditorServices : IDisposable
 {
@@ -58,6 +60,13 @@ internal sealed class TestModelEditorServices : IDisposable
         _ = this.MaterialTextures
             .Setup(value => value.ReadTexturesAsync(It.IsAny<ProjectContext>(), It.IsAny<AssetPath>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(ImmutableDictionary<Guid, ImmutableArray<string>>.Empty);
+        _ = this.Documents
+            .Setup(value => value.SaveAsync(It.IsAny<Document>()))
+            .Returns(async (Document document) =>
+            {
+                _ = await document.SaveAsync().ConfigureAwait(false);
+                return !document.IsDirty;
+            });
         this.Imports = new ModelImports(this.ContentPipeline.Object, documents.Session, publisher, reducer, NullLoggerFactory.Instance);
         this.Problems = new ModelImportProblems(documents.Open, this.Scenes, this.CookRuns.Object, this.Published.Object, documents.Session);
         records?.Target = this.Imports;
@@ -69,7 +78,7 @@ internal sealed class TestModelEditorServices : IDisposable
             this.Scenes,
             this.Selection,
             documents.Open,
-            Mock.Of<IDocumentService>(),
+            this.Documents.Object,
             this.ContentPipeline.Object,
             documents.Session,
             this.AssetFeed.Object,
@@ -88,6 +97,9 @@ internal sealed class TestModelEditorServices : IDisposable
 
     /// <summary>Gets the services.</summary>
     public ModelEditorServices Services { get; }
+
+    /// <summary>Gets the shell's document service, which saves the document it is given.</summary>
+    public Mock<IDocumentService> Documents { get; } = new();
 
     /// <summary>Gets the editors that place instances in the scenes, which a test attaches its scene's view to.</summary>
     public SceneViews Views { get; } = new();

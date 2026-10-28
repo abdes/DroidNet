@@ -6,6 +6,8 @@
 
 #pragma once
 
+#include <type_traits>
+
 #include <Oxygen/Base/Compilers.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/PakFormat_core.h>
@@ -259,6 +261,7 @@ struct MeshDesc {
 // - SubMeshDesc submeshes[submesh_count];
 #pragma pack(pop)
 static_assert(sizeof(MeshDesc) == 85);
+static_assert(std::is_trivially_copyable_v<MeshDesc>);
 
 //! Sub-mesh descriptor (64 bytes + MeshView table)
 /*!
@@ -290,6 +293,7 @@ struct SubMeshDesc {
 // Followed by: MeshViewDesc mesh_views[mesh_view_count]
 #pragma pack(pop)
 static_assert(sizeof(SubMeshDesc) == 64);
+static_assert(std::is_trivially_copyable_v<SubMeshDesc>);
 
 //! Mesh view descriptor
 /*!
@@ -323,6 +327,7 @@ struct MeshViewDesc {
 };
 #pragma pack(pop)
 static_assert(sizeof(MeshViewDesc) == 40);
+static_assert(std::is_trivially_copyable_v<MeshViewDesc>);
 
 } // namespace oxygen::data::pak::geometry
 

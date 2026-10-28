@@ -280,18 +280,29 @@ protected:
       ASSERT_EQ(original_vertices.size(), vertices.size());
       glm::vec3 minimum(std::numeric_limits<float>::max());
       glm::vec3 maximum(std::numeric_limits<float>::lowest());
-      for (size_t index = 0; index < vertices.size(); ++index) {
-        ExpectVec3Near(
-          glm::vec3(baked_world * glm::vec4(vertices.at(index).position, 1)),
-          glm::vec3(original_world
-            * glm::vec4(original_vertices.at(index).position, 1)));
+      // Vertices are laid out in first-use order and a mirrored bake flips the
+      // winding, so each baked vertex is matched to the retained vertex at the
+      // same world position rather than to the one in the same slot.
+      constexpr auto kTolerance = 1e-4F;
+      for (const auto& vertex : vertices) {
+        const auto world
+          = glm::vec3(baked_world * glm::vec4(vertex.position, 1));
+        const auto match = std::ranges::find_if(
+          original_vertices, [&](const data::Vertex& original) -> bool {
+            return glm::length(
+                     glm::vec3(original_world * glm::vec4(original.position, 1))
+                     - world)
+              < kTolerance;
+          });
+        ASSERT_NE(match, original_vertices.end())
+          << "No retained vertex at a baked vertex's world position";
         ExpectVec3Near(
           glm::normalize(glm::transpose(glm::inverse(glm::mat3(baked_world)))
-            * vertices.at(index).normal),
+            * vertex.normal),
           glm::normalize(glm::transpose(glm::inverse(glm::mat3(original_world)))
-            * original_vertices.at(index).normal));
-        minimum = glm::min(minimum, vertices.at(index).position);
-        maximum = glm::max(maximum, vertices.at(index).position);
+            * match->normal));
+        minimum = glm::min(minimum, vertex.position);
+        maximum = glm::max(maximum, vertex.position);
       }
       ExpectVec3Near(glm::vec3(cooked.bounds.min.at(0), cooked.bounds.min.at(1),
                        cooked.bounds.min.at(2)),
@@ -414,6 +425,11 @@ NOLINT_TEST_F(MeshTransformBakeTest, GltfRetainsAnimatedAndMorphNodeTransforms)
   for (const bool animated : { false, true }) {
     auto document = GltfFixture();
     if (animated) {
+      // The animation's buffer, views and accessors follow the fixture's own.
+      const auto buffer = document.at("buffers").size();
+      const auto view = document.at("bufferViews").size();
+      const auto input = document.at("accessors").size();
+      const auto output = input + 1U;
       document.at("buffers").push_back({
         { "byteLength", 32 },
         {
@@ -425,13 +441,13 @@ NOLINT_TEST_F(MeshTransformBakeTest, GltfRetainsAnimatedAndMorphNodeTransforms)
       });
       document.at("bufferViews")
         .push_back(
-          { { "buffer", 1 }, { "byteOffset", 0 }, { "byteLength", 8 } });
+          { { "buffer", buffer }, { "byteOffset", 0 }, { "byteLength", 8 } });
       document.at("bufferViews")
         .push_back(
-          { { "buffer", 1 }, { "byteOffset", 8 }, { "byteLength", 24 } });
+          { { "buffer", buffer }, { "byteOffset", 8 }, { "byteLength", 24 } });
       document.at("accessors")
         .push_back({
-          { "bufferView", 1 },
+          { "bufferView", view },
           { "componentType", 5126 },
           { "count", 2 },
           { "type", "SCALAR" },
@@ -440,7 +456,7 @@ NOLINT_TEST_F(MeshTransformBakeTest, GltfRetainsAnimatedAndMorphNodeTransforms)
         });
       document.at("accessors")
         .push_back({
-          { "bufferView", 2 },
+          { "bufferView", view + 1U },
           { "componentType", 5126 },
           { "count", 2 },
           { "type", "VEC3" },
@@ -449,7 +465,7 @@ NOLINT_TEST_F(MeshTransformBakeTest, GltfRetainsAnimatedAndMorphNodeTransforms)
         {
           "samplers",
           nlohmann::json::array({
-            { { "input", 1 }, { "output", 2 } },
+            { { "input", input }, { "output", output } },
           }),
         },
         {

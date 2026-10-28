@@ -190,6 +190,30 @@ auto FbxCommand::BuildCommand() -> std::shared_ptr<clap::Command>
         .StoreTo(&options_.normals_smoothing_angle_deg)
         .Build();
 
+  auto generate_lods = Option::WithKey("generate-lods")
+                         .About("Generate LODs for geometries with one LOD")
+                         .Long("generate-lods")
+                         .WithValue<bool>()
+                         .StoreTo(&options_.generate_lods)
+                         .Build();
+
+  auto lod_levels = Option::WithKey("lod-levels")
+                      .About("LODs generated after LOD 0, from 1 to 7 "
+                             "(default 3)")
+                      .Long("lod-levels")
+                      .WithValue<uint32_t>()
+                      .StoreTo(&options_.lod_levels)
+                      .Build();
+
+  auto lod_reduction
+    = Option::WithKey("lod-reduction")
+        .About("Triangles each generated LOD removes, in percent of the "
+               "previous LOD's, from 1 to 99 (default 50)")
+        .Long("lod-reduction")
+        .WithValue<float>()
+        .StoreTo(&options_.lod_reduction_percent)
+        .Build();
+
   auto no_import_lights = Option::WithKey("no-import-lights")
                             .About("Disable light import")
                             .Long("no-import-lights")
@@ -248,6 +272,9 @@ auto FbxCommand::BuildCommand() -> std::shared_ptr<clap::Command>
     .WithOption(std::move(tangents))
     .WithOption(std::move(prune_nodes))
     .WithOption(std::move(smoothing_angle))
+    .WithOption(std::move(generate_lods))
+    .WithOption(std::move(lod_levels))
+    .WithOption(std::move(lod_reduction))
     .WithOption(std::move(no_import_lights))
     .WithOption(std::move(no_import_cameras))
     .WithOption(std::move(light_intensity_scale))

@@ -79,6 +79,9 @@ namespace {
   constexpr auto kTangentPolicyKey = "content.import.tangent_policy";
   constexpr auto kUpAxisKey = "content.import.up_axis";
   constexpr auto kSmoothingAngleKey = "content.import.smoothing_angle";
+  constexpr auto kGenerateLodsKey = "content.import.generate_lods";
+  constexpr auto kLodLevelsKey = "content.import.lod_levels";
+  constexpr auto kLodReductionKey = "content.import.lod_reduction";
   constexpr auto kImportLightsKey = "content.import.lights";
   constexpr auto kImportCamerasKey = "content.import.cameras";
   constexpr auto kLightScaleKey = "content.import.light_intensity_scale";
@@ -193,6 +196,19 @@ auto ContentSettingsService::GetImportOptions() const
   if (auto val = settings->GetFloat(kSmoothingAngleKey)) {
     o.normals_smoothing_angle_deg = std::clamp(*val, 0.0F, 180.0F);
   }
+  using content::import::LodGenerationOptions;
+  if (auto val = settings->GetBool(kGenerateLodsKey)) {
+    o.lod_generation.enabled = *val;
+  }
+  if (auto val = settings->GetFloat(kLodLevelsKey)) {
+    o.lod_generation.levels = std::clamp(static_cast<uint32_t>(*val),
+      LodGenerationOptions::kMinLevels, LodGenerationOptions::kMaxLevels);
+  }
+  if (auto val = settings->GetFloat(kLodReductionKey)) {
+    o.lod_generation.reduction_percent
+      = std::clamp(*val, LodGenerationOptions::kMinReductionPercent,
+        LodGenerationOptions::kMaxReductionPercent);
+  }
   if (auto val = settings->GetBool(kImportLightsKey)) {
     o.import_lights = *val;
   }
@@ -224,6 +240,11 @@ auto ContentSettingsService::SetImportOptions(
   settings->SetFloat(kUpAxisKey,
     static_cast<float>(static_cast<int>(options.coordinate.up_axis)));
   settings->SetFloat(kSmoothingAngleKey, options.normals_smoothing_angle_deg);
+  settings->SetBool(kGenerateLodsKey, options.lod_generation.enabled);
+  settings->SetFloat(
+    kLodLevelsKey, static_cast<float>(options.lod_generation.levels));
+  settings->SetFloat(
+    kLodReductionKey, options.lod_generation.reduction_percent);
   settings->SetBool(kImportLightsKey, options.import_lights);
   settings->SetBool(kImportCamerasKey, options.import_cameras);
   settings->SetFloat(kLightScaleKey, options.light_intensity_scale);

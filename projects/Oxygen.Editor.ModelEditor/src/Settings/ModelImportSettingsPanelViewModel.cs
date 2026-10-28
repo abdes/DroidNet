@@ -24,6 +24,7 @@ public sealed partial class ModelImportSettingsPanelViewModel : ObservableObject
 {
     private const string FbxFiles = "FBX files";
     private const string GltfFiles = "glTF files";
+    private const string GeneratingFiles = "Files that generate LODs";
     private const string MaterialGlyph = "";
 
     private IReadOnlyList<ModelImportFile> selection = [];
@@ -45,6 +46,9 @@ public sealed partial class ModelImportSettingsPanelViewModel : ObservableObject
         this.Tangents = new("Tangents", ModelImportSettingCatalog.TangentsPolicy, [
             new("generate", "From the file, generate missing"), new("recalculate", "Always recalculate")]);
         this.KeepNodePivots = new("Keep node pivots", ModelImportSettingCatalog.BakeTransforms, static keep => !keep, static bake => bake is bool baked ? !baked : null);
+        this.GenerateLods = new("Generate LODs", ModelImportSettingCatalog.GenerateLods);
+        this.LodLevels = new("LOD levels", ModelImportSettingCatalog.LodLevels, qualifier: GeneratingFiles, appliesTo: static file => GeneratesLods(file));
+        this.LodReduction = new("Reduction per level", ModelImportSettingCatalog.LodReduction, unit: "%", qualifier: GeneratingFiles, appliesTo: static file => GeneratesLods(file));
         this.DropEmptyNodes = new("Drop empty nodes", ModelImportSettingCatalog.NodePruning, static drop => drop ? "drop-empty" : "keep", static pruning => pruning is string value ? string.Equals(value, "drop-empty", StringComparison.Ordinal) : null);
         IReadOnlyList<ChoiceOption> sizes = [new(null, "Source size"), new(4096, "4096"), new(2048, "2048"), new(1024, "1024"), new(512, "512")];
         IReadOnlyList<ChoiceOption> qualities = [new("default", "Default"), new("fast", "Fast"), new("high", "High")];
@@ -99,6 +103,15 @@ public sealed partial class ModelImportSettingsPanelViewModel : ObservableObject
 
     /// <summary>Gets whether node pivots are kept, the inverse of baking transforms into meshes.</summary>
     public ToggleRow KeepNodePivots { get; }
+
+    /// <summary>Gets whether geometries with one LOD get generated LODs.</summary>
+    public ToggleRow GenerateLods { get; }
+
+    /// <summary>Gets the LODs generated after LOD 0, shown for files that generate LODs.</summary>
+    public NumberRow LodLevels { get; }
+
+    /// <summary>Gets the triangles each generated LOD removes, shown for files that generate LODs.</summary>
+    public NumberRow LodReduction { get; }
 
     /// <summary>Gets whether empty nodes are dropped.</summary>
     public ToggleRow DropEmptyNodes { get; }
@@ -169,8 +182,9 @@ public sealed partial class ModelImportSettingsPanelViewModel : ObservableObject
         =>
         [
             this.Scene, this.UnitPolicy, this.UnitScale, this.UpAxis, this.Normals, this.SmoothingAngle, this.Tangents,
-            this.KeepNodePivots, this.DropEmptyNodes, this.MaxTextureSize, this.CompressionQuality, this.FlipNormalGreen,
-            this.ImportLights, this.LightIntensityScale, this.OmittedLightRange, this.ImportCameras,
+            this.KeepNodePivots, this.GenerateLods, this.LodLevels, this.LodReduction, this.DropEmptyNodes,
+            this.MaxTextureSize, this.CompressionQuality, this.FlipNormalGreen, this.ImportLights,
+            this.LightIntensityScale, this.OmittedLightRange, this.ImportCameras,
         ];
 
     /// <summary>Shows the settings of the selected files.</summary>
@@ -234,6 +248,10 @@ public sealed partial class ModelImportSettingsPanelViewModel : ObservableObject
 
     private static bool IsCustomUnits(ModelImportFile file)
         => string.Equals(ModelImportSettingCatalog.UnitPolicy.ReadFrom(file.Settings) as string, "custom", StringComparison.Ordinal);
+
+    private static bool GeneratesLods(ModelImportFile file)
+        => ModelImportSettingCatalog.GenerateLods.ReadFrom(file.Settings) as bool?
+            ?? (bool)ModelImportSettingCatalog.GenerateLods.Default!;
 
     // The default scene first, as the file's own choice, then every scene by its selector.
     private static IReadOnlyList<ChoiceOption> SceneOptions(ModelSourceFacts? facts)

@@ -32,6 +32,7 @@
                 HasError="{x:Bind HasError, Mode=OneWay}"
                 IsMixed="{x:Bind IsMixed, Mode=OneWay}"
                 Label="{x:Bind Label}"
+                Mask="{x:Bind Mask}"
                 NumberValue="{x:Bind NumberValue, Mode=TwoWay}"
                 OverrideState="{x:Bind OverrideState, Mode=OneWay}"
                 Prefix="{x:Bind Prefix}"
@@ -276,7 +277,7 @@
         </editorcontrols:PropertiesExpander>
 
         <editorcontrols:PropertiesExpander
-            Description="Normals, tangents and node pivots"
+            Description="Normals, tangents, node pivots and LODs"
             Header="Geometry"
             HeaderIcon="{ui:FontIcon Glyph='&#xF158;'}"
             IsExpanded="True">
@@ -301,6 +302,21 @@
                     ContentTemplate="{StaticResource ToggleRowTemplate}"
                     Style="{StaticResource RowHost}"
                     Visibility="{x:Bind ViewModel.KeepNodePivots.IsVisible, Mode=OneWay}" />
+                <ContentControl
+                    Content="{x:Bind ViewModel.GenerateLods}"
+                    ContentTemplate="{StaticResource ToggleRowTemplate}"
+                    Style="{StaticResource RowHost}"
+                    Visibility="{x:Bind ViewModel.GenerateLods.IsVisible, Mode=OneWay}" />
+                <ContentControl
+                    Content="{x:Bind ViewModel.LodLevels}"
+                    ContentTemplate="{StaticResource NumberRowTemplate}"
+                    Style="{StaticResource RowHost}"
+                    Visibility="{x:Bind ViewModel.LodLevels.IsVisible, Mode=OneWay}" />
+                <ContentControl
+                    Content="{x:Bind ViewModel.LodReduction}"
+                    ContentTemplate="{StaticResource NumberRowTemplate}"
+                    Style="{StaticResource RowHost}"
+                    Visibility="{x:Bind ViewModel.LodReduction.IsVisible, Mode=OneWay}" />
             </editorcontrols:PropertiesExpander.Items>
         </editorcontrols:PropertiesExpander>
 

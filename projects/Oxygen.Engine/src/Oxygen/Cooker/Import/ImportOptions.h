@@ -336,6 +336,31 @@ struct GeometryImportDefaults final {
   std::map<data::SurfaceId, SurfaceImportDefaults> surfaces;
 };
 
+//! How a model import generates LODs for its geometries that have one.
+/*!
+ Level `n` is simplified from LOD 0 to LOD 0's triangles multiplied by
+ `(1 - reduction_percent / 100)^n`. A geometry with authored LODs keeps them.
+*/
+struct LodGenerationOptions final {
+  //! Fewest generated levels.
+  static constexpr uint32_t kMinLevels = 1;
+  //! Most generated levels: LOD 0 and these fill `kMaxLodCount`.
+  static constexpr uint32_t kMaxLevels = data::pak::geometry::kMaxLodCount - 1U;
+  //! Smallest reduction per level, in percent.
+  static constexpr float kMinReductionPercent = 1.0F;
+  //! Largest reduction per level, in percent.
+  static constexpr float kMaxReductionPercent = 99.0F;
+
+  //! Whether geometries with one LOD get generated LODs.
+  bool enabled = false;
+
+  //! Generated levels after LOD 0.
+  uint32_t levels = 3;
+
+  //! Triangles each level removes, in percent of the previous level's.
+  float reduction_percent = 50.0F;
+};
+
 //! Import tuning options.
 /*!
  This struct carries cross-cutting **runtime behavioral policy** that applies
@@ -438,6 +463,9 @@ struct ImportOptions final {
   //! The largest angle, in degrees, between two faces that share a smoothed
   //! normal where a model import generates or recalculates normals.
   float normals_smoothing_angle_deg = 60.0F;
+
+  //! LOD generation for geometries with one LOD.
+  LodGenerationOptions lod_generation;
 
   //! Source materials replaced by existing materials, from a material's name
   //! in the import (its storage name) to the replacing material's virtual

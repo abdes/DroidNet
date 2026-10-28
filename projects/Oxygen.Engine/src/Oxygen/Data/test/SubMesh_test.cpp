@@ -39,7 +39,8 @@ protected:
   void SetUp() override { }
   void TearDown() override { }
 
-  auto MakeMaterial() const -> std::shared_ptr<const MaterialAsset>
+  [[nodiscard]] auto MakeMaterial() const
+    -> std::shared_ptr<const MaterialAsset>
   {
     return std::make_shared<const MaterialAsset>(oxygen::data::AssetKey {},
       oxygen::data::pak::render::MaterialAssetDesc {},
@@ -103,7 +104,8 @@ NOLINT_TEST_F(SubMeshBuilderFixture, ConstructAndAccess)
   EXPECT_EQ(CheckedAt(submesh.MeshViews(), 0).IndexBuffer().Count(), 2U);
 }
 
-//! Tests SubMesh handles multiple mesh views correctly via builder.
+//! Tests SubMesh handles multiple mesh views correctly via builder, its
+//! triangles summed over them.
 NOLINT_TEST_F(SubMeshBuilderFixture, MultipleMeshViews)
 {
   // Arrange
@@ -146,6 +148,7 @@ NOLINT_TEST_F(SubMeshBuilderFixture, MultipleMeshViews)
   EXPECT_THAT(submesh.MeshViews(), SizeIs(2));
   EXPECT_THAT(CheckedAt(submesh.MeshViews(), 0).Vertices(), SizeIs(3));
   EXPECT_THAT(CheckedAt(submesh.MeshViews(), 1).Vertices(), SizeIs(3));
+  EXPECT_EQ(submesh.TriangleCount(), 2U);
 }
 
 //! (7) Aggregation correctness: total indices/vertices across views sum as

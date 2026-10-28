@@ -201,7 +201,14 @@
                     </Grid>
                 </editorcontrols:PropertyCard>
 
-                <!--  Level of detail: the policy, then its boundaries under a disclosure whose summary names the source.  -->
+                <!--  Level of detail: each LOD's triangles, then the policy and its boundaries under a disclosure whose summary names the source.  -->
+                <editorcontrols:PropertyCard PropertyName="Triangles" Visibility="{x:Bind ViewModel.HasLodTriangles, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                    <TextBlock
+                        VerticalAlignment="Center"
+                        Text="{x:Bind ViewModel.LodTriangles, Mode=OneWay}"
+                        TextTrimming="CharacterEllipsis"
+                        ToolTipService.ToolTip="Triangles of each LOD, finest first" />
+                </editorcontrols:PropertyCard>
                 <propertyeditors:LodPolicyEditor Model="{x:Bind ViewModel.LevelOfDetail}" />
 
                 <!--  Surfaces: title and count, then refresh and clear-unresolved.  -->

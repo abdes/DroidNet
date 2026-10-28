@@ -66,6 +66,9 @@ struct SceneImportSettings {
   bool import_cameras = true;
   float light_intensity_scale = 1.0F;
   float normals_smoothing_angle_deg = 60.0F;
+  bool generate_lods = LodGenerationOptions {}.enabled;
+  uint32_t lod_levels = LodGenerationOptions {}.levels;
+  float lod_reduction_percent = LodGenerationOptions {}.reduction_percent;
   std::map<std::string, std::string> material_remap;
   std::map<std::string, GeometryImportDefaults> geometry_defaults;
 

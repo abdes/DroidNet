@@ -47,7 +47,7 @@ public sealed class ModelFactsReaderTests
     public TestContext TestContext { get; set; }
 
     [TestMethod]
-    public async Task ReadAsync_ImportedModel_ReadsItsSourceItsImportAndItsLods()
+    public async Task ReadAsync_ImportedModel_ReadsItsSourceItsImportItsLodsAndItsTriangles()
     {
         using var harness = new Harness(complete: true);
         harness.Surfaces.Publish(MetadataOf(Body, lods: 4));
@@ -59,6 +59,7 @@ public sealed class ModelFactsReaderTests
         _ = facts.LastImport.Should().Be(ModelImportStatus.TextOf(ModelImportState.Imported));
         _ = facts.SourceFacts.Should().BeSameAs(SourceFacts);
         _ = facts.LodCount.Should().Be(4);
+        _ = facts.TriangleCount.Should().Be(24, "LOD 0 holds 12 triangles in each of the two geometries");
     }
 
     [TestMethod]
@@ -72,13 +73,14 @@ public sealed class ModelFactsReaderTests
     }
 
     [TestMethod]
-    public async Task ReadAsync_NoImportedGeometry_LeavesTheLodsOut()
+    public async Task ReadAsync_NoImportedGeometry_LeavesTheLodsAndTrianglesOut()
     {
         using var harness = new Harness(complete: true);
 
         var facts = await harness.Reader.ReadAsync(Car, this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = facts.LodCount.Should().BeNull();
+        _ = facts.TriangleCount.Should().BeNull();
     }
 
     [TestMethod]
@@ -113,7 +115,7 @@ public sealed class ModelFactsReaderTests
             geometry,
             Guid.NewGuid(),
             "1",
-            [new(Guid.NewGuid(), "Surface", Visible: true, CastsShadows: true, [.. Enumerable.Range(0, lods).Select(static lod => new GeometrySurfaceBinding((uint)lod, 0, Guid.Empty))])],
+            [new(Guid.NewGuid(), "Surface", Visible: true, CastsShadows: true, [.. Enumerable.Range(0, lods).Select(static lod => new GeometrySurfaceBinding((uint)lod, 0, Guid.Empty, TriangleCount: 12UL >> lod))])],
             SceneSchema.Geometry.Defaults.LodPolicy);
 
     // A project holding Car.glb, imported, whose instance renders Body and Wheel.

@@ -13,6 +13,7 @@
 #include <span>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -126,13 +127,8 @@ public:
 private:
   friend class SubMesh;
 
-  auto SetBounds(const glm::vec3& min, const glm::vec3& max) noexcept -> void
-  {
-    for (glm::length_t axis = 0; axis < 3; ++axis) {
-      desc_.bounding_box_min[axis] = min[axis];
-      desc_.bounding_box_max[axis] = max[axis];
-    }
-  }
+  //! Takes the bounds of `submesh`, for a view built without cooked bounds.
+  auto TakeBoundsOf(const SubMesh& submesh) noexcept -> void;
 
   std::reference_wrapper<const Mesh> mesh_;
 
@@ -184,7 +180,10 @@ public:
   OXYGEN_DEFAULT_MOVABLE(SubMesh)
 
   //! Returns the submesh name (for debugging/tools, not for runtime use).
-  auto GetName() const noexcept -> std::string_view { return name_; }
+  [[nodiscard]] auto GetName() const noexcept -> std::string_view
+  {
+    return name_;
+  }
 
   //! Returns the minimum corner of the submesh's axis-aligned bounding box.
   [[nodiscard]] auto BoundingBoxMin() const noexcept -> const glm::vec3&
@@ -201,6 +200,20 @@ public:
   [[nodiscard]] auto MeshViews() const noexcept -> std::span<const MeshView>
   {
     return mesh_views_;
+  }
+
+  //! The triangles this submesh draws: its mesh views' indices over three.
+  /*!
+   Reads only the views' descriptors, so it holds for a descriptor-only load
+   whose buffers are not resident.
+  */
+  [[nodiscard]] auto TriangleCount() const noexcept -> uint64_t
+  {
+    auto triangles = uint64_t { 0 };
+    for (const auto& view : mesh_views_) {
+      triangles += view.IndexCount() / 3U;
+    }
+    return triangles;
   }
 
   //! Returns the mesh view at `view`, or nullptr if out of range.
@@ -247,10 +260,10 @@ protected:
   }
 
   // Only for SubMeshBuilder: set PAK descriptor for bounding optimization
-  void SetDescriptor(pak::geometry::SubMeshDesc desc)
+  void SetDescriptor(const pak::geometry::SubMeshDesc& desc)
   {
     surface_id_ = desc.surface_id;
-    desc_ = std::move(desc);
+    desc_ = desc;
   }
 
 private:
@@ -323,6 +336,23 @@ private:
 
 namespace detail {
 
+  //! The elements of type `T` that `bytes` holds.
+  /*!
+   `bytes` were written as an array of `T`, aligned for `T`, by the cooker
+   or a buffer loader; a trailing partial element is not part of the view.
+  */
+  template <typename T>
+    requires std::is_trivially_copyable_v<T>
+  [[nodiscard]] auto ElementsOf(const std::span<const std::byte> bytes) noexcept
+    -> std::span<const T>
+  {
+    // The bytes hold `T` objects. C++20, which the editor interop builds
+    // this header with, has no std::start_lifetime_as_array to say so.
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
+    const auto* first = reinterpret_cast<const T*>(bytes.data());
+    return std::span<const T>(first, bytes.size() / sizeof(T));
+  }
+
   //=== Index Buffer Types ===------------------------------------------------//
 
   //! Index element type used by meshes.
@@ -371,7 +401,7 @@ namespace detail {
       if (type != IndexType::kUInt16) {
         return {};
       }
-      return { reinterpret_cast<const std::uint16_t*>(bytes.data()), Count() };
+      return ElementsOf<std::uint16_t>(bytes);
     }
 
     [[nodiscard]] auto AsU32() const noexcept -> std::span<const std::uint32_t>
@@ -379,23 +409,19 @@ namespace detail {
       if (type != IndexType::kUInt32) {
         return {};
       }
-      return { reinterpret_cast<const std::uint32_t*>(bytes.data()), Count() };
+      return ElementsOf<std::uint32_t>(bytes);
     }
 
     // Widened iteration (always yields uint32_t)
     // --------------------------------
     struct WidenedIterator {
-      const std::byte* data { nullptr };
-      IndexType type { IndexType::kNone };
+      std::span<const std::uint16_t> u16;
+      std::span<const std::uint32_t> u32;
       std::size_t index { 0 };
       [[nodiscard]] auto operator*() const noexcept -> std::uint32_t
       {
-        if (type == IndexType::kUInt16) {
-          auto p = reinterpret_cast<const std::uint16_t*>(data);
-          return static_cast<std::uint32_t>(p[index]);
-        }
-        auto p = reinterpret_cast<const std::uint32_t*>(data);
-        return p[index];
+        return u16.empty() ? u32[index]
+                           : static_cast<std::uint32_t>(u16[index]);
       }
       auto operator++() noexcept -> WidenedIterator&
       {
@@ -409,23 +435,31 @@ namespace detail {
       }
     };
 
+    //! The indices of one element type: `u16` for 16-bit indices, `u32`
+    //! otherwise; the other span is empty.
     struct WidenedRange {
-      const std::byte* data { nullptr };
-      IndexType type { IndexType::kNone };
-      std::size_t count { 0 };
+      std::span<const std::uint16_t> u16;
+      std::span<const std::uint32_t> u32;
       [[nodiscard]] auto begin() const noexcept -> WidenedIterator
       {
-        return { data, type, 0 };
+        return { .u16 = u16, .u32 = u32, .index = 0 };
       }
       [[nodiscard]] auto end() const noexcept -> WidenedIterator
       {
-        return { data, type, count };
+        return {
+          .u16 = u16,
+          .u32 = u32,
+          .index = u16.empty() ? u32.size() : u16.size(),
+        };
       }
     };
 
     [[nodiscard]] auto Widened() const noexcept -> WidenedRange
     {
-      return WidenedRange { bytes.data(), type, Count() };
+      return WidenedRange {
+        .u16 = AsU16(),
+        .u32 = AsU32(),
+      };
     }
 
     // Slice without copying (byte-range must align with element size).
@@ -438,7 +472,10 @@ namespace detail {
       if (byte_off > bytes.size() || byte_off + byte_len > bytes.size()) {
         return {}; // invalid slice -> empty
       }
-      return IndexBufferView { bytes.subspan(byte_off, byte_len), type };
+      return IndexBufferView {
+        .bytes = bytes.subspan(byte_off, byte_len),
+        .type = type,
+      };
     }
   };
 
@@ -459,7 +496,7 @@ namespace detail {
       }
       auto raw = std::span<const std::uint32_t>(indices.data(), indices.size());
       auto bytes = std::as_bytes(raw);
-      return IndexBufferView { bytes, IndexType::kUInt32 };
+      return IndexBufferView { .bytes = bytes, .type = IndexType::kUInt32 };
     }
   };
 
@@ -476,9 +513,8 @@ namespace detail {
       if (!vertex_buffer_resource) {
         return {};
       }
-      auto data = vertex_buffer_resource->GetData();
-      return { reinterpret_cast<const Vertex*>(data.data()),
-        data.size() / sizeof(Vertex) };
+      return ElementsOf<Vertex>(
+        std::as_bytes(vertex_buffer_resource->GetData()));
     }
 
     OXGN_DATA_API void InitializeIndexInfo() const noexcept;
@@ -489,10 +525,10 @@ namespace detail {
       if (cached_index_type == IndexType::kNone || !index_buffer_resource) {
         return {};
       }
-      auto data_u8 = index_buffer_resource->GetData();
-      auto bytes_span = std::span<const std::byte>(
-        reinterpret_cast<const std::byte*>(data_u8.data()), data_u8.size());
-      return IndexBufferView { bytes_span, cached_index_type };
+      return IndexBufferView {
+        .bytes = std::as_bytes(index_buffer_resource->GetData()),
+        .type = cached_index_type,
+      };
     }
   };
 
@@ -510,24 +546,38 @@ public:
   OXYGEN_DEFAULT_MOVABLE(Mesh)
 
   //! Returns the mesh name (for debugging/tools, not for runtime use).
-  auto GetName() const noexcept -> std::string_view { return name_; }
+  [[nodiscard]] auto GetName() const noexcept -> std::string_view
+  {
+    return name_;
+  }
 
   //! Returns a span of all vertices.
   [[nodiscard]] virtual auto Vertices() const noexcept
     -> std::span<const Vertex>
   {
-    return std::visit(
-      [](const auto& storage) -> auto { return storage.GetVertices(); },
-      buffer_storage_);
+    if (const auto* owned
+      = std::get_if<detail::OwnedBufferStorage>(&buffer_storage_)) {
+      return owned->GetVertices();
+    }
+    if (const auto* referenced
+      = std::get_if<detail::ReferencedBufferStorage>(&buffer_storage_)) {
+      return referenced->GetVertices();
+    }
+    return {};
   }
 
   //! Returns the index buffer view (may be empty / kNone).
   [[nodiscard]] auto IndexBuffer() const noexcept -> detail::IndexBufferView
   {
-    return std::visit(
-      [](
-        const auto& storage) -> auto { return storage.BuildIndexBufferView(); },
-      buffer_storage_);
+    if (const auto* owned
+      = std::get_if<detail::OwnedBufferStorage>(&buffer_storage_)) {
+      return owned->BuildIndexBufferView();
+    }
+    if (const auto* referenced
+      = std::get_if<detail::ReferencedBufferStorage>(&buffer_storage_)) {
+      return referenced->BuildIndexBufferView();
+    }
+    return {};
   }
 
   //! Returns the number of vertices.
@@ -596,17 +646,17 @@ public:
   //! Returns true if this mesh is skinned.
   [[nodiscard]] auto IsSkinned() const noexcept -> bool
   {
-    return desc_.has_value() && desc_.value().IsSkinned();
+    return desc_.has_value() && desc_->IsSkinned();
   }
 
   //! Returns the skinned mesh descriptor if available.
   [[nodiscard]] auto SkinnedDescriptor() const noexcept
     -> const pak::geometry::SkinnedMeshInfo*
   {
-    if (!desc_.has_value() || !desc_.value().IsSkinned()) {
+    if (!desc_.has_value() || !desc_->IsSkinned()) {
       return nullptr;
     }
-    return &desc_.value().info.skinned;
+    return &desc_->info.skinned;
   }
 
   //! Returns true if any skinning buffer resource is set.
@@ -708,9 +758,9 @@ protected:
   void SetName(std::string name) { name_ = std::move(name); }
 
   // Only for MeshBuilder: set PAK descriptor for bounding optimization
-  void SetDescriptor(pak::geometry::MeshDesc desc)
+  void SetDescriptor(const pak::geometry::MeshDesc& desc)
   {
-    desc_ = std::move(desc);
+    desc_ = desc;
     ComputeBounds();
   }
 
@@ -873,17 +923,15 @@ public:
   {
   }
 
-  ~SubMeshBuilder() = default;
-
-  auto WithMeshView(pak::geometry::MeshViewDesc desc) -> SubMeshBuilder&
+  auto WithMeshView(const pak::geometry::MeshViewDesc& desc) -> SubMeshBuilder&
   {
-    mesh_views_.push_back(std::move(desc));
+    mesh_views_.push_back(desc);
     return *this;
   }
 
-  auto WithDescriptor(pak::geometry::SubMeshDesc desc) -> SubMeshBuilder&
+  auto WithDescriptor(const pak::geometry::SubMeshDesc& desc) -> SubMeshBuilder&
   {
-    desc_ = std::move(desc);
+    desc_ = desc;
     return *this;
   }
 
@@ -991,8 +1039,6 @@ public:
   {
   }
 
-  ~MeshBuilder() = default;
-
   //! Sets the mesh vertices (replaces any existing vertices).
   auto WithVertices(std::span<const Vertex> vertices) -> MeshBuilder&
   {
@@ -1073,9 +1119,9 @@ public:
     return *this;
   }
 
-  auto WithDescriptor(pak::geometry::MeshDesc desc) -> MeshBuilder&
+  auto WithDescriptor(const pak::geometry::MeshDesc& desc) -> MeshBuilder&
   {
-    desc_ = std::move(desc);
+    desc_ = desc;
     return *this;
   }
 
@@ -1125,12 +1171,13 @@ public:
     if (!submesh_builder.HasMeshViews()) {
       throw std::logic_error("SubMesh must have at least one MeshView");
     }
+    auto finished = std::move(submesh_builder);
     submeshes_.emplace_back(SubMeshSpec {
-      .name = submesh_builder.Name(),
-      .material = submesh_builder.Material(),
-      .mesh_views = submesh_builder.MeshViews(),
-      .desc = submesh_builder.desc_,
-      .surface_id = submesh_builder.surface_id_,
+      .name = std::move(finished.name_),
+      .material = std::move(finished.material_),
+      .mesh_views = std::move(finished.mesh_views_),
+      .desc = finished.desc_,
+      .surface_id = finished.surface_id_,
     });
     submesh_in_progress_ = false;
     return *this;

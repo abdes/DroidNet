@@ -47,6 +47,8 @@ oxygen_cooker_test(
     "Import/EngineContent_test.cpp"
     "Import/FileError_test.cpp"
     "Import/GeometrySource_test.cpp"
+    "Import/LodGeneration_test.cpp"
+    "Import/MeshOptimization_test.cpp"
     "Import/ImageDecode_test.cpp"
     "Import/ImageProcessing_test.cpp"
     "Import/ImportPlanner_test.cpp"
@@ -102,6 +104,7 @@ oxygen_cooker_test(
   DEPS
     oxygen::content
     oxygen::serio
+    meshoptimizer::meshoptimizer
     nlohmann_json::nlohmann_json
     nlohmann_json_schema_validator
   SOURCES
@@ -112,6 +115,7 @@ oxygen_cooker_test(
     "Import/CollisionShapeDescriptorImportRequestBuilder_functional_test.cpp"
     "Import/FbxLodGroups_functional_test.cpp"
     "Import/GeometryDescriptorImportRequestBuilder_functional_test.cpp"
+    "Import/GltfMeshopt_functional_test.cpp"
     "Import/ImageDecode_functional_test.cpp"
     "Import/ImportEventLoop_functional_test.cpp"
     "Import/ImportJob_functional_test.cpp"

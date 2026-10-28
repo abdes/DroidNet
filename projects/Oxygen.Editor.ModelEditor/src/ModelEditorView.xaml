@@ -42,9 +42,9 @@
                 Command="{x:Bind ViewModel.ReimportCommand}"
                 Label="Reimport"
                 ToolBarLabelPosition="Collapsed"
-                ToolTipService.ToolTip="Reimport the model: its source changed, or its last import failed">
+                ToolTipService.ToolTip="Import the model again now, with the settings shown; unsaved settings are saved first">
                 <dnc:ToolBarButton.Icon>
-                    <FontIconSource Glyph="&#xE72C;" />
+                    <FontIconSource Glyph="&#xE8B5;" />
                 </dnc:ToolBarButton.Icon>
             </dnc:ToolBarButton>
 

@@ -230,10 +230,12 @@ namespace {
   {
     auto document = MakeDescriptor();
     document.emplace("surfaces",
-      nlohmann::json::array({ {
-        { "surface_id", kSurface },
-        { "visible", false },
-      } }));
+      nlohmann::json::array({
+        {
+          { "surface_id", kSurface },
+          { "visible", false },
+        },
+      }));
     document.emplace("lod_policy",
       nlohmann::json::parse(
         R"({"type":"distance","thresholds":[0.5,0.75],"hysteresis_ratio":0.1})"));
@@ -255,10 +257,12 @@ namespace {
   {
     auto document = MakeDescriptor();
     document.emplace("surfaces",
-      nlohmann::json::array({ {
-        { "surface_id", "018f8f8f-2222-7222-8222-222222222222" },
-        { "visible", false },
-      } }));
+      nlohmann::json::array({
+        {
+          { "surface_id", "018f8f8f-2222-7222-8222-222222222222" },
+          { "visible", false },
+        },
+      }));
     auto diagnostics = std::vector<ImportDiagnostic> {};
     EXPECT_FALSE(GeometrySource::FromDescriptor(
       document.dump(), "geometry.json", diagnostics));
@@ -377,6 +381,31 @@ namespace {
       testing::ElementsAre(
         testing::FloatEq(204.8F), testing::FloatEq(102.4F), 0.0F));
     EXPECT_TRUE(data::IsValidLodPolicy(three));
+  }
+
+  //! Generated LODs switch where the coarser LOD's error would exceed one
+  //! pixel: boundary `i` enters its finer LOD at `radius / e_(i+1)` pixels,
+  //! exits at 0.8 of that, and an error below a millionth of the radius counts
+  //! as that millionth.
+  NOLINT_TEST(GeometryDefaultsTest, GeneratedLodPolicyFollowsTheErrors)
+  {
+    constexpr auto kRadius = 2.0F;
+    const auto errors = std::array { 0.0F, 0.01F, 0.5F };
+
+    const auto policy = internal::MakeGeneratedLodPolicy(errors, kRadius);
+
+    EXPECT_EQ(
+      policy.type, data::pak::geometry::LodPolicyType::kScreenSpaceError);
+    ASSERT_EQ(policy.boundary_count, 3U);
+    EXPECT_THAT(std::span<const float>(policy.enter_finer_sse).first(4),
+      testing::ElementsAre(testing::FloatNear(1'000'000.0F, 1.0F),
+        testing::FloatEq(200.0F), testing::FloatEq(4.0F), 0.0F));
+    EXPECT_THAT(std::span<const float>(policy.exit_coarser_sse).first(4),
+      testing::ElementsAre(testing::FloatNear(800'000.0F, 1.0F),
+        testing::FloatEq(160.0F), testing::FloatEq(3.2F), 0.0F));
+    EXPECT_TRUE(data::IsValidLodPolicy(policy));
+    EXPECT_EQ(internal::MakeGeneratedLodPolicy({}, kRadius).type,
+      data::schema::geometry::kLodPolicyDefault.type);
   }
 } // namespace
 } // namespace oxygen::content::import::test

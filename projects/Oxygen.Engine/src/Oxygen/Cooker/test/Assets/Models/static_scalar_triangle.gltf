@@ -7,6 +7,10 @@
     {
       "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAA",
       "byteLength": 36
+    },
+    {
+      "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAEAAAACAAAA",
+      "byteLength": 72
     }
   ],
   "bufferViews": [
@@ -14,6 +18,21 @@
       "buffer": 0,
       "byteOffset": 0,
       "byteLength": 36
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 0,
+      "byteLength": 36
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 36,
+      "byteLength": 24
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 60,
+      "byteLength": 12
     }
   ],
   "accessors": [
@@ -32,6 +51,24 @@
         1,
         0
       ]
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5126,
+      "count": 3,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 2,
+      "componentType": 5126,
+      "count": 3,
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 3,
+      "componentType": 5125,
+      "count": 3,
+      "type": "SCALAR"
     }
   ],
   "materials": [
@@ -55,9 +92,12 @@
       "primitives": [
         {
           "attributes": {
-            "POSITION": 0
+            "POSITION": 0,
+            "NORMAL": 1,
+            "TEXCOORD_0": 2
           },
-          "material": 0
+          "material": 0,
+          "indices": 3
         }
       ]
     }

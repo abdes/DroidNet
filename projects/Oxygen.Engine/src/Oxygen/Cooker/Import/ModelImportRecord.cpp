@@ -689,6 +689,9 @@ auto ModelImportRecord::MakeSettings(const SceneImportSettings& settings)
     { "import_cameras", settings.import_cameras },
     { "light_intensity_scale", settings.light_intensity_scale },
     { "normals_smoothing_angle_deg", settings.normals_smoothing_angle_deg },
+    { "generate_lods", settings.generate_lods },
+    { "lod_levels", settings.lod_levels },
+    { "lod_reduction_percent", settings.lod_reduction_percent },
   });
   const auto add = [&](const char* name, const std::string& value) -> void {
     if (!value.empty()) {

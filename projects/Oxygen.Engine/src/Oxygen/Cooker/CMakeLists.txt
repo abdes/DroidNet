@@ -23,6 +23,7 @@ find_package(tinyexr CONFIG REQUIRED)
 find_package(nlohmann_json REQUIRED)
 find_package(nlohmann_json_schema_validator REQUIRED)
 find_package(SPNG REQUIRED)
+find_package(meshoptimizer CONFIG REQUIRED)
 
 # ==============================================================================
 # Build instructions
@@ -191,6 +192,7 @@ set(
   "Import/Internal/fbx/ufbx.h"
   "Import/Internal/gltf/cgltf.h"
   "Import/Internal/gltf/GltfAdapter.h"
+  "Import/Internal/gltf/GltfMeshopt.h"
   "Import/Internal/ImageDecode.h"
   "Import/Internal/ImageProcessing.h"
   "Import/Internal/ImportEventLoop.h"
@@ -203,6 +205,8 @@ set(
   "Import/Internal/ImportSourceSnapshot.h"
   "Import/Internal/BufferSource.h"
   "Import/Internal/GeometryDefaults.h"
+  "Import/Internal/LodGeneration.h"
+  "Import/Internal/MeshOptimization.h"
   "Import/Internal/GeometrySource.h"
   "Import/Internal/NodePathTable.h"
   "Import/Internal/NodeReferenceJson.h"
@@ -310,6 +314,7 @@ set(
   "Import/Internal/fbx/ufbx.c"
   "Import/Internal/gltf/cgltf.cpp"
   "Import/Internal/gltf/GltfAdapter.cpp"
+  "Import/Internal/gltf/GltfMeshopt.cpp"
   "Import/Internal/DroppedSourceFeatures.cpp"
   "Import/Internal/DroppedSourceFeatures.h"
   "Import/Internal/ImageDecode.cpp"
@@ -357,6 +362,8 @@ set(
   "Import/Internal/ImportSourceSnapshot.cpp"
   "Import/Internal/BufferSource.cpp"
   "Import/Internal/GeometryDefaults.cpp"
+  "Import/Internal/LodGeneration.cpp"
+  "Import/Internal/MeshOptimization.cpp"
   "Import/Internal/GeometrySource.cpp"
   "Import/Internal/SceneSource.cpp"
   "Import/Internal/MaterialSource.cpp"
@@ -435,6 +442,7 @@ if(OXYGEN_BUILD_TESTS AND BUILD_SHARED_LIBS)
       oxygen::content
     PRIVATE
       glm::glm
+      meshoptimizer::meshoptimizer
       spng::spng_static
       tinyexr::tinyexr
       nlohmann_json::nlohmann_json
@@ -491,6 +499,7 @@ target_link_libraries(
     oxygen::scene
     oxygen::physics
     glm::glm
+    meshoptimizer::meshoptimizer
     spng::spng_static
     tinyexr::tinyexr
     nlohmann_json::nlohmann_json

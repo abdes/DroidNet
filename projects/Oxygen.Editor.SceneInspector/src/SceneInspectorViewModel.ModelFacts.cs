@@ -51,7 +51,8 @@ public sealed partial class SceneInspectorViewModel
 
     /// <summary>Gets the lines the pane shows of a model's facts.</summary>
     /// <param name="facts">The model's facts.</param>
-    /// <returns>The source, the last import, then the counts of nodes, meshes, LODs, materials and textures.</returns>
+    /// <returns>The source, the last import, then the counts of nodes, meshes, LOD 0 triangles, LODs, materials and
+    /// textures.</returns>
     public static IReadOnlyList<ModelFactRow> RowsOf(ModelFacts facts)
     {
         ArgumentNullException.ThrowIfNull(facts);
@@ -62,12 +63,15 @@ public sealed partial class SceneInspectorViewModel
             new("Last import", facts.LastImport),
             new("Nodes", Count(source?.NodeCount)),
             new("Meshes", Count(source?.MeshCount)),
+            new("Triangles", Count(facts.TriangleCount)),
             new("LODs", Count(facts.LodCount)),
             new("Materials", Count(source?.Materials.Length)),
             new("Textures", Count(source?.Textures.Length)),
         ];
 
-        static string Count(int? value) => value?.ToString(CultureInfo.CurrentCulture) ?? UnknownFact;
+        static string Count<T>(T? value)
+            where T : struct, IFormattable
+            => value?.ToString("N0", CultureInfo.CurrentCulture) ?? UnknownFact;
     }
 
     // The model the selection stands for, in the model's own document: its instance root, selected alone.

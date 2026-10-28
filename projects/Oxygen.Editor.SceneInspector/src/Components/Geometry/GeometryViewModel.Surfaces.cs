@@ -326,7 +326,7 @@ public sealed partial class GeometryViewModel
             // The inventory is another selection's or geometry's; a refresh reads the current one.
             this.Surfaces = [];
             this.KeptChanges = [];
-            this.LevelOfDetail.Clear();
+            this.ClearLevelOfDetail();
             return;
         }
 
@@ -384,7 +384,7 @@ public sealed partial class GeometryViewModel
         this.IsSurfaceInventoryFailed = false;
         this.Surfaces = [];
         this.KeptChanges = [];
-        this.LevelOfDetail.Clear();
+        this.ClearLevelOfDetail();
         this.SurfaceNotice = message;
     }
 

@@ -128,6 +128,16 @@ auto MeshView::IndexBuffer() const noexcept -> detail::IndexBufferView
   return full.SliceElements(desc_.first_index, desc_.index_count);
 }
 
+auto MeshView::TakeBoundsOf(const SubMesh& submesh) noexcept -> void
+{
+  const auto& min = submesh.BoundingBoxMin();
+  const auto& max = submesh.BoundingBoxMax();
+  for (glm::length_t axis = 0; axis < 3; ++axis) {
+    desc_.bounding_box_min[axis] = min[axis];
+    desc_.bounding_box_max[axis] = max[axis];
+  }
+}
+
 SubMesh::SubMesh(const Mesh& mesh, std::string name,
   std::shared_ptr<const MaterialAsset> material)
   : mesh_(mesh)
@@ -257,7 +267,7 @@ auto SubMesh::ComputeBounds() -> void
     }
     // Views built without cooked bounds are bounded conservatively.
     for (auto& mesh_view : mesh_views_) {
-      mesh_view.SetBounds(bbox_min_, bbox_max_);
+      mesh_view.TakeBoundsOf(*this);
     }
   }
 
