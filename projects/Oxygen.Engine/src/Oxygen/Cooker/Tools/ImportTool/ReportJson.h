@@ -18,12 +18,13 @@
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportProgress.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
+#include <Oxygen/Cooker/Import/ImportRequest.h>
 
 namespace oxygen::content::import::tool {
 
 using nlohmann::ordered_json;
 
-inline constexpr std::string_view kReportVersion = "3";
+inline constexpr std::string_view kReportVersion = "4";
 
 constexpr auto PhaseCount() -> size_t
 {
@@ -73,6 +74,11 @@ auto UpdateProgressTrace(JobProgressTrace& trace, const ProgressEvent& progress,
 
 [[nodiscard]] auto BuildDiagnosticsJson(
   const std::vector<ImportDiagnostic>& diagnostics) -> ordered_json;
+
+//! The importer that cooks `request` and its revision, as `name` and
+//! `revision`, or nullopt when no importer handles the request.
+[[nodiscard]] auto BuildImporterJson(const ImportRequest& request)
+  -> std::optional<ordered_json>;
 
 [[nodiscard]] auto BuildOutputsJson(
   const std::vector<ImportOutputRecord>& outputs) -> ordered_json;

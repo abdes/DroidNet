@@ -6,9 +6,11 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <cstdlib>
 #include <exception>
 #include <filesystem>
+#include <iostream>
 #include <optional>
 #include <span>
 #include <stdexcept>
@@ -25,15 +27,19 @@
 
 #include <windows.h> // IWYU pragma: keep
 
+#include <fmt/format.h>
+#include <nlohmann/json.hpp>
+
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Clap/CommandLineContext.h>
 #include <Oxygen/Clap/Fluent/DSL.h>
+#include <Oxygen/Graphics/Common/ShaderLibraryIO.h>
+#include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/ActionKey.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/Bake.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/CompileProfile.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/DxcShaderCompiler.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/Inspect.h>
-
-using oxygen::graphics::d3d12::tools::shader_bake::DxcShaderCompiler;
+#include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/ModuleArtifact.h>
 
 namespace {
 
@@ -48,7 +54,12 @@ constexpr std::string_view kDefaultShaderSourceRoot
   = "src/Oxygen/Graphics/Direct3D12/Shaders";
 constexpr std::string_view kDefaultOxygenIncludeRoot = "src/Oxygen";
 constexpr std::string_view kLegacyBakeCommand = "bake";
+constexpr std::string_view kProgramName = "ShaderBake";
+constexpr std::string_view kVersion = "0.1";
 
+using oxygen::clap::CliBuilder;
+using oxygen::clap::Option;
+using oxygen::clap::OptionBuilder;
 using oxygen::graphics::d3d12::tools::shader_bake::BakeArgs;
 using oxygen::graphics::d3d12::tools::shader_bake::InspectArgs;
 using oxygen::graphics::d3d12::tools::shader_bake::MakeShaderCompileProfile;
@@ -69,6 +80,10 @@ struct BakeCliStorage {
   std::string debug_info_string;
 };
 
+struct VersionsCliStorage {
+  bool json { false };
+};
+
 struct InspectCliStorage {
   std::string file_string;
 
@@ -83,8 +98,6 @@ struct InspectCliStorage {
 auto AddBakeOptions(
   oxygen::clap::CommandBuilder& command, BakeCliStorage& storage) -> void
 {
-  using namespace oxygen::clap;
-
   command
     .WithOption(OptionBuilder("verbose")
         .Long("verbose")
@@ -153,8 +166,6 @@ auto AddBakeOptions(
 auto AddInspectOptions(
   oxygen::clap::CommandBuilder& command, InspectCliStorage& storage) -> void
 {
-  using namespace oxygen::clap;
-
   command
     .WithOption(OptionBuilder("file")
         .Short("f")
@@ -371,6 +382,68 @@ auto RunInspectCommand(const InspectCliStorage& storage) -> int
     args);
 }
 
+struct NamedVersion {
+  std::string_view name;
+  uint64_t value { 0 };
+};
+
+struct VersionGroup {
+  std::string_view name;
+  std::vector<NamedVersion> versions;
+};
+
+//! Prints the versions of what ShaderBake writes: the library and module
+//! formats, and the revision of its action keys.
+auto PrintVersions(const bool json) -> void
+{
+  using oxygen::graphics::kOxslVersion;
+  using oxygen::graphics::d3d12::tools::shader_bake::kActionSchemaVersion;
+  using oxygen::graphics::d3d12::tools::shader_bake::kOxsmVersion;
+
+  const auto groups = std::vector<VersionGroup> {
+    {
+      .name = "formats",
+      .versions = {
+        { .name = "oxsl", .value = kOxslVersion },
+        { .name = "oxsm", .value = kOxsmVersion },
+      },
+    },
+    {
+      .name = "revisions",
+      .versions = { { .name = "action_schema", .value = kActionSchemaVersion } },
+    },
+  };
+
+  if (json) {
+    auto document = nlohmann::ordered_json {
+      { "program", kProgramName },
+      { "version", kVersion },
+    };
+    for (const auto& group : groups) {
+      auto versions = nlohmann::ordered_json::object();
+      for (const auto& version : group.versions) {
+        versions[std::string(version.name)] = version.value;
+      }
+      document[std::string(group.name)] = std::move(versions);
+    }
+    std::cout << document.dump(2) << '\n';
+    return;
+  }
+
+  std::cout << fmt::format("{} version {}\n", kProgramName, kVersion);
+  for (const auto& group : groups) {
+    auto width = std::size_t { 0 };
+    for (const auto& version : group.versions) {
+      width = std::max(width, version.name.size());
+    }
+    std::cout << fmt::format("\n{}\n", group.name);
+    for (const auto& version : group.versions) {
+      std::cout << fmt::format(
+        "  {:<{}}  {}\n", version.name, width, version.value);
+    }
+  }
+}
+
 auto IsInspectCommand(const oxygen::clap::Command& command) -> bool
 {
   if (command.IsDefault()) {
@@ -383,13 +456,9 @@ auto IsInspectCommand(const oxygen::clap::Command& command) -> bool
 
 auto RunShaderBakeCli(std::span<const char*> args) -> int
 {
-  using namespace oxygen::clap;
-
-  const int argc = static_cast<int>(args.size());
-  const char** argv = args.data();
-
   BakeCliStorage bake_storage;
   InspectCliStorage inspect_storage;
+  VersionsCliStorage versions_storage;
 
   oxygen::clap::CommandBuilder default_update {
     oxygen::clap::Command::DEFAULT
@@ -418,9 +487,19 @@ auto RunShaderBakeCli(std::span<const char*> args) -> int
   inspect.About("Inspect and print the contents of a shader library");
   AddInspectOptions(inspect, inspect_storage);
 
+  oxygen::clap::CommandBuilder versions { "versions" };
+  versions.About("Print the versions of the shader formats this tool writes.")
+    .WithOption(Option::WithKey("json")
+        .About("Print one JSON object")
+        .Long("json")
+        .WithValue<bool>()
+        .DefaultValue(false)
+        .StoreTo(&versions_storage.json)
+        .Build());
+
   auto cli = CliBuilder()
-               .ProgramName("ShaderBake")
-               .Version("0.1")
+               .ProgramName(std::string(kProgramName))
+               .Version(std::string(kVersion))
                .About("Build-time shader library producer (OXSL v1).")
                .WithHelpCommand()
                .WithVersionCommand()
@@ -430,9 +509,10 @@ auto RunShaderBakeCli(std::span<const char*> args) -> int
                .WithCommand(clean_cache.Build())
                .WithCommand(bake.Build())
                .WithCommand(inspect.Build())
+               .WithCommand(versions.Build())
                .Build();
 
-  const auto context = cli->Parse(argc, argv);
+  const auto context = cli->Parse(args);
   if (!context.active_command) {
     throw std::runtime_error("no active command selected");
   }
@@ -443,6 +523,11 @@ auto RunShaderBakeCli(std::span<const char*> args) -> int
     || context.active_command->PathAsString() == oxygen::clap::Command::HELP
     || context.active_command->PathAsString()
       == oxygen::clap::Command::VERSION) {
+    return 0;
+  }
+
+  if (context.active_command->PathAsString() == "versions") {
+    PrintVersions(versions_storage.json);
     return 0;
   }
 

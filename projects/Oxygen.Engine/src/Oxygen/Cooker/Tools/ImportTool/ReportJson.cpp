@@ -26,6 +26,8 @@
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportProgress.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
+#include <Oxygen/Cooker/Import/ImportRequest.h>
+#include <Oxygen/Cooker/Import/Importer.h>
 #include <Oxygen/Cooker/Tools/ImportTool/ReportJson.h>
 
 namespace oxygen::content::import::tool {
@@ -230,6 +232,19 @@ auto BuildDiagnosticsJson(const std::vector<ImportDiagnostic>& diagnostics)
     entries.push_back(std::move(entry));
   });
   return entries;
+}
+
+auto BuildImporterJson(const ImportRequest& request)
+  -> std::optional<ordered_json>
+{
+  const auto importer = ImporterOf(request);
+  if (!importer.has_value()) {
+    return std::nullopt;
+  }
+  return ordered_json {
+    { "name", nostd::to_string(*importer) },
+    { "revision", RevisionOf(*importer) },
+  };
 }
 
 auto BuildOutputsJson(const std::vector<ImportOutputRecord>& outputs)

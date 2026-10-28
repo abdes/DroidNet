@@ -40,6 +40,27 @@ using oxygen::graphics::d3d12::tools::shader_bake::ShaderDebugInfo;
 constexpr std::string_view kBoundViewHeader
   = "Vortex/Contracts/View/ViewConstants.hlsli";
 
+//! A header the compilation includes, copied from the include root that holds
+//! it, as the bake searches the shader root and the engine source root.
+struct IncludedHeader {
+  std::string_view include_root;
+  std::string_view path;
+};
+
+//! The bound-view header and every header it includes. Each must lie in the
+//! test's own root, since the bake refuses includes outside its workspace.
+constexpr auto kIncludedHeaders = std::to_array<IncludedHeader>({
+  { .include_root = OXYGEN_ENGINE_SHADER_ROOT, .path = kBoundViewHeader },
+  {
+    .include_root = OXYGEN_ENGINE_SHADER_ROOT,
+    .path = "Vortex/Contracts/View/Generated.ViewConstants.hlsli",
+  },
+  {
+    .include_root = OXYGEN_ENGINE_SOURCE_ROOT,
+    .path = "Core/Bindless/Generated.BindlessAbi.hlsl",
+  },
+});
+
 // Reads one camera view constant, so it compiles only as a camera entry.
 constexpr std::string_view kProbeSource = R"(
 #include "Vortex/Contracts/View/ViewConstants.hlsli"
@@ -65,11 +86,12 @@ protected:
     std::filesystem::create_directories(root_);
 
     // The engine's own bound-view header, so the test follows its guard.
-    const auto header = root_ / kBoundViewHeader;
-    std::filesystem::create_directories(header.parent_path());
-    std::filesystem::copy_file(
-      std::filesystem::path(OXYGEN_ENGINE_SHADER_ROOT) / kBoundViewHeader,
-      header);
+    for (const auto& [include_root, path] : kIncludedHeaders) {
+      const auto header = root_ / path;
+      std::filesystem::create_directories(header.parent_path());
+      std::filesystem::copy_file(
+        std::filesystem::path(include_root) / path, header);
+    }
     WriteTextFile(root_ / "Probe.hlsl", kProbeSource);
   }
 

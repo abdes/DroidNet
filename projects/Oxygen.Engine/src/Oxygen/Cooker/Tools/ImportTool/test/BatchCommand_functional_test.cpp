@@ -27,6 +27,7 @@
 #include <Oxygen/Clap/CommandLineContext.h> // IWYU pragma: keep
 #include <Oxygen/Clap/Fluent/CliBuilder.h>
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
+#include <Oxygen/Cooker/Import/Importer.h>
 #include <Oxygen/Cooker/Tools/ImportTool/BatchCommand.h>
 #include <Oxygen/Cooker/Tools/ImportTool/GlobalOptions.h>
 #include <Oxygen/Cooker/Tools/ImportTool/MessageWriter.h>
@@ -266,9 +267,18 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, ReportListsEachSourcesProducts)
   auto stream = std::ifstream(report_path);
   ASSERT_TRUE(stream.is_open());
   const auto report = nlohmann::json::parse(stream);
-  EXPECT_EQ(report.at("report_version"), "3");
+  EXPECT_EQ(report.at("report_version"), "4");
   const auto& jobs = report.at("jobs");
   ASSERT_EQ(jobs.size(), 2U);
+  // Each job names the importer that cooked it, at its revision.
+  using oxygen::content::import::Importer;
+  using oxygen::content::import::RevisionOf;
+  EXPECT_EQ(jobs.at(0).at("importer").at("name"), "material_descriptor");
+  EXPECT_EQ(jobs.at(0).at("importer").at("revision"),
+    RevisionOf(Importer::kMaterialDescriptor));
+  EXPECT_EQ(jobs.at(1).at("importer").at("name"), "input");
+  EXPECT_EQ(
+    jobs.at(1).at("importer").at("revision"), RevisionOf(Importer::kInput));
 
   const auto& material = jobs.at(0).at("products");
   ASSERT_EQ(material.size(), 1U);

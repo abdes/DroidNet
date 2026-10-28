@@ -16,6 +16,11 @@
 
 namespace oxygen::graphics::d3d12::tools::shader_bake {
 
+//! Revision of what an action key covers. It goes up when a compiled module
+//! changes for the same request, sources and toolchain, so that every module
+//! is compiled again.
+inline constexpr uint64_t kActionSchemaVersion = 5;
+
 [[nodiscard]] auto ComputeToolchainHash(const ShaderCompileProfile& profile)
   -> uint64_t;
 

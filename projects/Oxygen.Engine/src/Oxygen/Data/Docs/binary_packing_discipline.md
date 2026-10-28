@@ -132,7 +132,9 @@ owns the remaining editor authoring and qualification.
 index and asset versions. Native format declarations, producers and inspection
 tools consume this catalog. Tools accept only those current versions. Format
 changes require rebuilding tools and recooking content, without compatibility
-readers.
+readers. The catalog also holds the revision of each importer, which goes up
+when an importer's output changes while every format stays the same. Every
+content tool reports the catalog with `versions` (`--json` for one object).
 
 ### Reference representation
 

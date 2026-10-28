@@ -229,6 +229,7 @@ target_compile_definitions(
   Oxygen.Graphics.Direct3D12.ShaderBakeRequestCompilation.Tests
   PRIVATE
     "OXYGEN_ENGINE_SHADER_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}/../Shaders\""
+    "OXYGEN_ENGINE_SOURCE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}/../../..\""
 )
 oxygen_stage_dxc_runtime(
   Oxygen.Graphics.Direct3D12.ShaderBakeRequestCompilation.Tests

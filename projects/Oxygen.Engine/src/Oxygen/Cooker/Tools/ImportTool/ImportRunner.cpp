@@ -334,6 +334,9 @@ auto RunImportJob(const ImportRequest& request,
     ordered_json job = ordered_json::object();
     job.update({ { "index", 1 } });
     job.update({ { "type", job_type } });
+    if (auto importer = BuildImporterJson(request); importer.has_value()) {
+      job.update({ { "importer", std::move(*importer) } });
+    }
     job.update({
       {
         "work_items",

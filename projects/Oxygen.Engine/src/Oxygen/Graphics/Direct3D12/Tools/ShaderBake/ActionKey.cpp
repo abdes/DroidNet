@@ -108,7 +108,6 @@ namespace {
       ^ (value + kGoldenRatio + (seed << kShiftLeft) + (seed >> kShiftRight));
   }
 
-  constexpr uint64_t kShaderBakeActionSchemaVersion = 5;
   //! Hashed in place of a define value, so `NAME` and `NAME=` differ.
   constexpr uint64_t kValuelessDefineMarker = 0xA5A5A5A5U;
 
@@ -168,7 +167,7 @@ auto ComputeShaderActionKey(const ShaderRequest& request,
       seed, oxygen::ComputeFNV1a64(normalized.data(), normalized.size()));
   }
 
-  seed = HashCombine(seed, kShaderBakeActionSchemaVersion);
+  seed = HashCombine(seed, kActionSchemaVersion);
   return seed;
 }
 

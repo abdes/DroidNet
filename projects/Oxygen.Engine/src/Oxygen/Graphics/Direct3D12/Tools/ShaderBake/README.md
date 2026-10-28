@@ -93,6 +93,13 @@ not inspect `.oxsm` module artifacts.
 
 Legacy compatibility alias for `update`.
 
+### `versions`
+
+Prints the versions of what ShaderBake writes: the `oxsl` library and `oxsm`
+module formats, and the `action_schema` revision its action keys hold, which
+goes up when a compiled module changes for the same request, sources and
+toolchain. `--json` prints them as one object.
+
 ## CLI Reference
 
 ### Build Commands

@@ -1761,6 +1761,10 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
               job.request.source_path.string()),
           },
         });
+        if (auto importer = BuildImporterJson(job.request);
+          importer.has_value()) {
+          job_json.update({ { "importer", std::move(*importer) } });
+        }
         if (report.has_value()) {
           const auto& report_value = *report;
           total_io_ms += ComputeIoMillis(report_value.telemetry);

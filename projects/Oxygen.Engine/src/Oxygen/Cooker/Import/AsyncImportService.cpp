@@ -38,6 +38,7 @@
 #include <Oxygen/Cooker/Import/ImportProgress.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
+#include <Oxygen/Cooker/Import/Importer.h>
 #include <Oxygen/Cooker/Import/Internal/AsyncImporter.h>
 #include <Oxygen/Cooker/Import/Internal/ImportEventLoop.h>
 #include <Oxygen/Cooker/Import/Internal/ImportJob.h>
@@ -149,18 +150,78 @@ namespace {
       + name_part;
   }
 
-  [[nodiscard]] auto CreateJobForFormat(ImportFormat format,
+  [[nodiscard]] auto MakeDefaultJobName(const Importer importer,
+    const ImportRequest& request, const ImportJobId job_id) -> std::string
+  {
+    const auto& source_path = request.source_path;
+    switch (importer) {
+    case Importer::kInput:
+      return std::string("input:") + nostd::to_string(job_id) + ":"
+        + source_path.filename().string();
+    case Importer::kBufferContainer:
+      return MakeBufferContainerJobName(job_id, source_path);
+    case Importer::kMaterialDescriptor:
+      return MakeMaterialDescriptorJobName(job_id, source_path);
+    case Importer::kPhysicsMaterialDescriptor:
+      return MakePhysicsMaterialDescriptorJobName(job_id, source_path);
+    case Importer::kCollisionShapeDescriptor:
+      return MakeCollisionShapeDescriptorJobName(job_id, source_path);
+    case Importer::kGeometryDescriptor:
+      return MakeGeometryDescriptorJobName(job_id, source_path);
+    case Importer::kSceneDescriptor:
+      return MakeSceneDescriptorJobName(job_id, source_path);
+    case Importer::kScriptAsset:
+    case Importer::kScriptingSidecar:
+      return MakeScriptingJobName(
+        request.options.scripting.import_kind, job_id, source_path);
+    case Importer::kPhysicsSidecar:
+      return MakePhysicsSidecarJobName(job_id, source_path);
+    case Importer::kGltf:
+    case Importer::kFbx:
+    case Importer::kTexture:
+      return MakeJobName(request.GetFormat(), job_id, source_path);
+    }
+    return MakeJobName(ImportFormat::kUnknown, job_id, source_path);
+  }
+
+  [[nodiscard]] auto CreateJob(const Importer importer,
     detail::ImportJobParams params) -> std::shared_ptr<detail::ImportJob>
   {
-    switch (format) {
-    case ImportFormat::kFbx:
-      return std::make_shared<detail::FbxImportJob>(std::move(params));
-    case ImportFormat::kGltf:
+    switch (importer) {
+    case Importer::kInput:
+      return std::make_shared<detail::InputImportJob>(std::move(params));
+    case Importer::kBufferContainer:
+      return std::make_shared<detail::BufferContainerImportJob>(
+        std::move(params));
+    case Importer::kMaterialDescriptor:
+      return std::make_shared<detail::MaterialDescriptorImportJob>(
+        std::move(params));
+    case Importer::kPhysicsMaterialDescriptor:
+      return std::make_shared<detail::PhysicsMaterialDescriptorImportJob>(
+        std::move(params));
+    case Importer::kCollisionShapeDescriptor:
+      return std::make_shared<detail::CollisionShapeDescriptorImportJob>(
+        std::move(params));
+    case Importer::kGeometryDescriptor:
+      return std::make_shared<detail::GeometryDescriptorImportJob>(
+        std::move(params));
+    case Importer::kSceneDescriptor:
+      return std::make_shared<detail::SceneDescriptorImportJob>(
+        std::move(params));
+    case Importer::kScriptAsset:
+      return std::make_shared<detail::ScriptAssetImportJob>(std::move(params));
+    case Importer::kScriptingSidecar:
+      return std::make_shared<detail::ScriptingSidecarImportJob>(
+        std::move(params));
+    case Importer::kPhysicsSidecar:
+      return std::make_shared<detail::PhysicsSidecarImportJob>(
+        std::move(params));
+    case Importer::kGltf:
       return std::make_shared<detail::GlbImportJob>(std::move(params));
-    case ImportFormat::kTextureImage:
+    case Importer::kFbx:
+      return std::make_shared<detail::FbxImportJob>(std::move(params));
+    case Importer::kTexture:
       return std::make_shared<detail::TextureImportJob>(std::move(params));
-    case ImportFormat::kUnknown:
-      break;
     }
     return {};
   }
@@ -443,15 +504,20 @@ auto AsyncImportService::SubmitModelImport(
     return std::nullopt;
   }
   auto request = publication->Request();
-  const auto format = request.GetFormat();
+  const auto importer = ImporterOf(request);
+  if (!importer.has_value()) {
+    LOG_F(WARNING, "Submit rejected: unknown model format for '{}'",
+      request.source_path.string());
+    return std::nullopt;
+  }
   return SubmitImport(std::move(request), on_complete, on_progress,
-    [publication = std::move(publication), format,
+    [publication = std::move(publication), importer = *importer,
       loop = observer_ptr(impl_->event_loop_.get())](
       detail::ImportJobParams params) -> std::shared_ptr<detail::ImportJob> {
       publication->ClaimSubmission();
       params.model_import_record = publication;
       params.generation_writer = CreateAsyncFileWriter(*loop);
-      return CreateJobForFormat(format, std::move(params));
+      return CreateJob(importer, std::move(params));
     });
 }
 
@@ -508,47 +574,11 @@ auto AsyncImportService::SubmitImport(ImportRequest request,
   }
 
   const bool use_custom_factory = static_cast<bool>(job_factory);
-  const auto scripting_kind = request.options.scripting.import_kind;
-  const bool is_physics_sidecar_request = request.physics.has_value();
-  const bool is_input_request = request.input.has_value();
-  const bool is_buffer_container_request = request.buffer_container.has_value();
-  const bool is_material_descriptor_request
-    = request.material_descriptor.has_value();
-  const bool is_physics_material_descriptor_request
-    = request.physics_material_descriptor.has_value();
-  const bool is_collision_shape_descriptor_request
-    = request.collision_shape_descriptor.has_value();
-  const bool is_geometry_descriptor_request
-    = request.geometry_descriptor.has_value();
-  const bool is_scene_descriptor_request = request.scene_descriptor.has_value();
-  const auto is_script_asset_request
-    = (scripting_kind == ScriptingImportKind::kScriptAsset);
-  const auto is_sidecar_request
-    = (scripting_kind == ScriptingImportKind::kScriptingSidecar);
-  const auto is_scripting_request
-    = is_script_asset_request || is_sidecar_request;
-
-  auto format = ImportFormat::kUnknown;
-  if (!use_custom_factory) {
-    if (!is_scripting_request && !is_input_request
-      && !is_physics_sidecar_request && !is_buffer_container_request
-      && !is_material_descriptor_request
-      && !is_physics_material_descriptor_request
-      && !is_collision_shape_descriptor_request
-      && !is_geometry_descriptor_request && !is_scene_descriptor_request) {
-      format = request.GetFormat();
-    }
-    if (!is_scripting_request && !is_input_request
-      && !is_physics_sidecar_request && !is_buffer_container_request
-      && !is_material_descriptor_request
-      && !is_physics_material_descriptor_request
-      && !is_collision_shape_descriptor_request
-      && !is_geometry_descriptor_request && !is_scene_descriptor_request
-      && format == ImportFormat::kUnknown) {
-      LOG_F(WARNING, "Submit rejected: unknown format for '{}'",
-        request.source_path.string());
-      return std::nullopt;
-    }
+  const auto importer = ImporterOf(request);
+  if (!use_custom_factory && !importer.has_value()) {
+    LOG_F(WARNING, "Submit rejected: unknown format for '{}'",
+      request.source_path.string());
+    return std::nullopt;
   }
 
   // Claim one admission slot, or refuse the job while the service is full.
@@ -593,36 +623,9 @@ auto AsyncImportService::SubmitImport(ImportRequest request,
 
   const auto source_path_string = request.source_path.string();
 
-  auto default_job_name = std::string {};
-  if (use_custom_factory) {
-    default_job_name = std::string("custom:") + nostd::to_string(job_id);
-  } else if (is_input_request) {
-    default_job_name = std::string("input:") + nostd::to_string(job_id) + ":"
-      + request.source_path.filename().string();
-  } else if (is_buffer_container_request) {
-    default_job_name = MakeBufferContainerJobName(job_id, request.source_path);
-  } else if (is_material_descriptor_request) {
-    default_job_name
-      = MakeMaterialDescriptorJobName(job_id, request.source_path);
-  } else if (is_physics_material_descriptor_request) {
-    default_job_name
-      = MakePhysicsMaterialDescriptorJobName(job_id, request.source_path);
-  } else if (is_collision_shape_descriptor_request) {
-    default_job_name
-      = MakeCollisionShapeDescriptorJobName(job_id, request.source_path);
-  } else if (is_geometry_descriptor_request) {
-    default_job_name
-      = MakeGeometryDescriptorJobName(job_id, request.source_path);
-  } else if (is_scene_descriptor_request) {
-    default_job_name = MakeSceneDescriptorJobName(job_id, request.source_path);
-  } else if (is_scripting_request) {
-    default_job_name
-      = MakeScriptingJobName(scripting_kind, job_id, request.source_path);
-  } else if (is_physics_sidecar_request) {
-    default_job_name = MakePhysicsSidecarJobName(job_id, request.source_path);
-  } else {
-    default_job_name = MakeJobName(format, job_id, request.source_path);
-  }
+  const auto default_job_name = use_custom_factory
+    ? std::string("custom:") + nostd::to_string(job_id)
+    : MakeDefaultJobName(*importer, request, job_id);
   const auto job_name = request.job_name.value_or(default_job_name);
 
   const auto file_reader = observer_ptr(impl_->file_reader_.get());
@@ -651,37 +654,8 @@ auto AsyncImportService::SubmitImport(ImportRequest request,
     .stop_token = impl_->stop_source_.get_token(),
   };
 
-  std::shared_ptr<detail::ImportJob> job;
-  if (use_custom_factory) {
-    job = job_factory(std::move(params));
-  } else if (is_input_request) {
-    job = std::make_shared<detail::InputImportJob>(std::move(params));
-  } else if (is_buffer_container_request) {
-    job = std::make_shared<detail::BufferContainerImportJob>(std::move(params));
-  } else if (is_material_descriptor_request) {
-    job = std::make_shared<detail::MaterialDescriptorImportJob>(
-      std::move(params));
-  } else if (is_physics_material_descriptor_request) {
-    job = std::make_shared<detail::PhysicsMaterialDescriptorImportJob>(
-      std::move(params));
-  } else if (is_collision_shape_descriptor_request) {
-    job = std::make_shared<detail::CollisionShapeDescriptorImportJob>(
-      std::move(params));
-  } else if (is_geometry_descriptor_request) {
-    job = std::make_shared<detail::GeometryDescriptorImportJob>(
-      std::move(params));
-  } else if (is_scene_descriptor_request) {
-    job = std::make_shared<detail::SceneDescriptorImportJob>(std::move(params));
-  } else if (is_script_asset_request) {
-    job = std::make_shared<detail::ScriptAssetImportJob>(std::move(params));
-  } else if (is_sidecar_request) {
-    job
-      = std::make_shared<detail::ScriptingSidecarImportJob>(std::move(params));
-  } else if (is_physics_sidecar_request) {
-    job = std::make_shared<detail::PhysicsSidecarImportJob>(std::move(params));
-  } else {
-    job = CreateJobForFormat(format, std::move(params));
-  }
+  auto job = use_custom_factory ? job_factory(std::move(params))
+                                : CreateJob(*importer, std::move(params));
   if (!job) {
     LOG_F(WARNING, "Submit rejected: failed to create job for '{}'",
       source_path_string);
@@ -809,7 +783,7 @@ auto AsyncImportService::CancelAll() const -> void
     }
   }
 
-  DLOG_F(INFO, "Triggered cancellation for {} jobs", cancel_count);
+  LOG_F(INFO, "Triggered cancellation for {} jobs", cancel_count);
 }
 
 auto AsyncImportService::RequestShutdown() const -> void
