@@ -4,9 +4,11 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstddef>
 #include <cstdlib>
 #include <iostream>
 #include <memory>
+#include <span>
 
 #include <Oxygen/Clap/Cli.h>
 #include <Oxygen/Clap/Command.h>
@@ -14,7 +16,12 @@
 #include <Oxygen/Clap/Fluent/DSL.h>
 #include <Oxygen/Clap/Option.h>
 
-using namespace oxygen::clap;
+using oxygen::clap::Cli;
+using oxygen::clap::CliBuilder;
+using oxygen::clap::Command;
+using oxygen::clap::CommandBuilder;
+using oxygen::clap::Option;
+using oxygen::clap::Options;
 
 #include <Oxygen/Base/Logging.h>
 
@@ -91,7 +98,8 @@ auto main(int argc, char** argv) -> int
     return EXIT_FAILURE;
   }
 
-  const auto context = cli->Parse(argc, const_cast<const char**>(argv));
+  const auto context
+    = cli->Parse(std::span(argv, static_cast<std::size_t>(argc)));
 
   return EXIT_SUCCESS;
 }

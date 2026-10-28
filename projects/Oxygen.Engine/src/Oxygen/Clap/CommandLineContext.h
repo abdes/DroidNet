@@ -7,9 +7,11 @@
 #pragma once
 
 #include <iostream>
+#include <string>
 #include <utility>
 #include <vector>
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Clap/Command.h>
 #include <Oxygen/Clap/OptionValuesMap.h>
 
@@ -18,14 +20,27 @@ namespace oxygen::clap {
 // Forward declaration; see CliTheme.h for definition
 struct CliTheme;
 
+//! Where a parse writes its help, version and error text; by default, the
+//! process standard output and error streams.
+struct CliStreams {
+  observer_ptr<std::ostream> out { &std::cout };
+  observer_ptr<std::ostream> err { &std::cerr };
+};
+
+//! One parse of a command line: its settings, and what it found.
+/*!
+ The context owns what the parse finds, the active command and the option
+ values, so it can outlive the parser that filled it.
+*/
 struct CommandLineContext {
   explicit CommandLineContext(std::string _program_name,
-    Command::Ptr& active_command_ref, OptionValuesMap& ovm_ref,
-    unsigned int output_width_value)
+    Command::Ptr initial_command, const unsigned int output_width_value,
+    const CliStreams streams = {})
     : output_width { output_width_value }
+    , out { streams.out }
+    , err { streams.err }
     , program_name { std::move(_program_name) }
-    , active_command { active_command_ref }
-    , ovm { ovm_ref }
+    , active_command { std::move(initial_command) }
   {
   }
 
@@ -38,9 +53,10 @@ struct CommandLineContext {
   const std::vector<std::pair<Options::Ptr, bool>>* global_option_groups
     = nullptr;
 
-  std::istream& in { std::cin };
-  std::ostream& out { std::cout };
-  std::ostream& err { std::cerr };
+  //! The stream help and version text go to.
+  observer_ptr<std::ostream> out;
+  //! The stream parse errors go to.
+  observer_ptr<std::ostream> err;
 
   std::string program_name;
 
@@ -51,9 +67,10 @@ struct CommandLineContext {
    * valid command on the command line. All options during subsequent parsing
    * will be relative to this command.
    */
-  Command::Ptr& active_command;
+  Command::Ptr active_command;
 
-  OptionValuesMap& ovm;
+  //! The values of the options the command line set, or that have defaults.
+  OptionValuesMap ovm;
 };
 
 } // namespace oxygen::clap

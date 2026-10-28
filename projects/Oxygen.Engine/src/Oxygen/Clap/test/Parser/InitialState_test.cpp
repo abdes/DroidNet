@@ -8,11 +8,9 @@
 
 #include "TestHelpers.h"
 #include "gtest/gtest.h"
-#include <gtest/gtest.h>
 
 #include <Oxygen/Clap/Command.h>
 #include <Oxygen/Clap/CommandLineContext.h>
-#include <Oxygen/Clap/OptionValuesMap.h>
 #include <Oxygen/Clap/Parser/Context.h>
 #include <Oxygen/Clap/Parser/States.h>
 #include <Oxygen/Clap/Parser/Tokenizer.h>
@@ -38,9 +36,8 @@ namespace {
 
       const Tokenizer tokenizer(args);
       const auto commands = BuildCommands(command_paths);
-      OptionValuesMap ovm;
       Command::Ptr command;
-      const CommandLineContext base_context("test", command, ovm, 80U);
+      const CommandLineContext base_context("test", command, 80U);
       auto context = StateTest::MakeParserContext(base_context, commands);
       SetupInitialState(context);
       std::get<InitialStateTestData>(state_check).Check(state());
@@ -245,14 +242,14 @@ namespace {
   // NOLINTNEXTLINE
   TEST_P(InitialStateTransitionsTest, CheckStateAfterLastToken)
   {
-    const auto test_value = GetParam();
+    const auto& test_value = GetParam();
     DoCheckStateAfterLastToken(test_value);
   }
 
   // NOLINTNEXTLINE
   TEST_P(InitialStateErrorsTest, CheckStateAfterLastToken)
   {
-    const auto test_value = GetParam();
+    const auto& test_value = GetParam();
     DoCheckStateAfterLastToken(test_value);
   }
 

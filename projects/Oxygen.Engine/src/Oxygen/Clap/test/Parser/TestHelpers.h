@@ -65,18 +65,10 @@ public:
     return empty;
   }
 
-  static auto EmptyGlobalOptionGroups()
-    -> const std::vector<std::pair<Options::Ptr, bool>>&
-  {
-    static const std::vector<std::pair<Options::Ptr, bool>> empty;
-    return empty;
-  }
-
   static auto MakeParserContext(const CommandLineContext& base,
     const CommandsList& commands) -> ParserContextPtr
   {
-    return ParserContext::New(
-      base, commands, EmptyGlobalOptions(), EmptyGlobalOptionGroups());
+    return ParserContext::New(base, commands, EmptyGlobalOptions());
   }
 
   static auto predefined_commands() -> std::map<std::string, CommandPtr>&

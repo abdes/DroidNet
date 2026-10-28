@@ -9,6 +9,7 @@
 #include <iostream>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -39,25 +40,56 @@ struct AppletInfo {
 auto BuildApplets() -> std::vector<AppletInfo>
 {
   return {
-    { "cat", "Concatenate files to stdout.", "File" },
-    { "cp", "Copy files and directories.", "File" },
-    { "echo", "Print arguments to stdout.", "Shell" },
-    { "grep", "Search for PATTERN in each FILE.", "Text" },
-    { "head", "Print the first lines of files.", "Text" },
-    { "ls", "List directory contents.", "File" },
-    { "mkdir", "Create directories.", "File" },
-    { "mv", "Move or rename files.", "File" },
-    { "rm", "Remove files or directories.", "File" },
-    { "tail", "Print the last lines of files.", "Text" },
-    { "uname", "Print system information.", "System" },
+    {
+      .name = "cat",
+      .about = "Concatenate files to stdout.",
+      .category = "File",
+    },
+    {
+      .name = "cp",
+      .about = "Copy files and directories.",
+      .category = "File",
+    },
+    {
+      .name = "echo",
+      .about = "Print arguments to stdout.",
+      .category = "Shell",
+    },
+    {
+      .name = "grep",
+      .about = "Search for PATTERN in each FILE.",
+      .category = "Text",
+    },
+    {
+      .name = "head",
+      .about = "Print the first lines of files.",
+      .category = "Text",
+    },
+    { .name = "ls", .about = "List directory contents.", .category = "File" },
+    { .name = "mkdir", .about = "Create directories.", .category = "File" },
+    { .name = "mv", .about = "Move or rename files.", .category = "File" },
+    {
+      .name = "rm",
+      .about = "Remove files or directories.",
+      .category = "File",
+    },
+    {
+      .name = "tail",
+      .about = "Print the last lines of files.",
+      .category = "Text",
+    },
+    {
+      .name = "uname",
+      .about = "Print system information.",
+      .category = "System",
+    },
   };
 }
 
 auto FindApplet(const std::vector<AppletInfo>& applets, std::string_view name)
   -> const AppletInfo*
 {
-  const auto match = std::find_if(applets.begin(), applets.end(),
-    [name](const AppletInfo& applet) -> bool { return applet.name == name; });
+  const auto match = std::ranges::find(applets, name, &AppletInfo::name);
   if (match == applets.end()) {
     return nullptr;
   }
@@ -603,7 +635,8 @@ auto main(int argc, char** argv) -> int
           .WithCommand(uname_command)
           .WithCommand(busybox_command);
 
-    const auto context = cli->Parse(argc, const_cast<const char**>(argv));
+    const auto context
+      = cli->Parse(std::span(argv, static_cast<std::size_t>(argc)));
     const auto command_path = context.active_command->PathAsString();
     const auto& ovm = context.ovm;
 

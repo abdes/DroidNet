@@ -9,19 +9,20 @@
 #include <memory>
 #include <optional>
 #include <ostream>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include <Oxygen/Clap/Command.h>
+#include <Oxygen/Clap/CommandLineContext.h>
 #include <Oxygen/Clap/OptionValuesMap.h>
 #include <Oxygen/Clap/api_export.h>
 
 /// Namespace for command line parsing related APIs.
 namespace oxygen::clap {
 
-struct CommandLineContext;
 struct CliTheme;
 
 /*!
@@ -94,7 +95,11 @@ public:
     return !global_options_.empty();
   }
 
-  OXGN_CLP_API auto Parse(int argc, const char** argv) -> CommandLineContext;
+  //! Parses `command_line`, the program name first, as `main`
+  //! receives it; help, version and error text go to `streams`, which must
+  //! outlive the returned context.
+  OXGN_CLP_API auto Parse(std::span<const char* const> command_line,
+    CliStreams streams = {}) -> CommandLineContext;
 
   /** Produces a human-readable  output of 'desc', listing options,
       their descriptions and allowed parameters. Other options_description
@@ -204,10 +209,8 @@ private:
   std::string version_;
   std::string about_;
   std::string footer_;
-  std::optional<std::string> program_name_ {};
+  std::optional<std::string> program_name_;
   std::vector<std::shared_ptr<Command>> commands_;
-  Command::Ptr active_command_;
-  OptionValuesMap ovm_;
 
   bool has_version_command_ = false;
   bool has_help_command_ = false;

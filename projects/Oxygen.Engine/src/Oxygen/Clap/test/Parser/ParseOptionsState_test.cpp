@@ -10,13 +10,11 @@
 #include "TestHelpers.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include <gtest/gtest.h>
 
 #include <Oxygen/Clap/Command.h>
 #include <Oxygen/Clap/CommandLineContext.h>
 #include <Oxygen/Clap/Fluent/DSL.h>
 #include <Oxygen/Clap/Option.h>
-#include <Oxygen/Clap/OptionValuesMap.h>
 #include <Oxygen/Clap/Parser/Context.h>
 #include <Oxygen/Clap/Parser/Events.h>
 #include <Oxygen/Clap/Parser/States.h>
@@ -155,14 +153,13 @@ namespace {
   // NOLINTNEXTLINE
   TEST_P(ParseOptionsStateTransitionsTest, CheckStateAfterLastToken)
   {
-    auto test_value = GetParam();
+    const auto& test_value = GetParam();
     const auto& [command_paths, args, action_check, state_check] = test_value;
 
     Tokenizer tokenizer(args);
     const auto commands = BuildCommands(command_paths);
-    OptionValuesMap ovm;
     Command::Ptr command;
-    const CommandLineContext base_context("test", command, ovm, 80U);
+    const CommandLineContext base_context("test", command, 80U);
     auto context = StateTest::MakeParserContext(base_context, commands);
     context->active_command = predefined_commands().at("with-options");
     auto token = tokenizer.NextToken();
@@ -188,9 +185,8 @@ namespace {
   {
     const auto state = std::make_unique<ParseOptionsState>();
     const auto event = TokenEvent<TokenType::EndOfInput>("");
-    OptionValuesMap ovm;
     Command::Ptr command;
-    const CommandLineContext base_context("test", command, ovm, 80U);
+    const CommandLineContext base_context("test", command, 80U);
     auto context = StateTest::MakeParserContext(
       base_context, { StateTest::predefined_commands().at("default") });
     CHECK_VIOLATES_CONTRACT(state->OnEnter(event, context));
@@ -210,9 +206,8 @@ namespace {
   {
     const auto state = std::make_unique<ParseOptionsState>();
     const auto event = TokenEvent<TokenType::Value>("xxx");
-    OptionValuesMap ovm;
     Command::Ptr command;
-    const CommandLineContext base_context("test", command, ovm, 80U);
+    const CommandLineContext base_context("test", command, 80U);
     auto context = StateTest::MakeParserContext(
       base_context, { StateTest::predefined_commands().at("default") });
     CHECK_VIOLATES_CONTRACT(state->OnEnter(event, {}));

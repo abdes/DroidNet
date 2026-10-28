@@ -4,9 +4,11 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstddef>
 #include <cstdlib>
 #include <iostream>
 #include <memory>
+#include <span>
 #include <string>
 
 #include <Oxygen/Base/Logging.h>
@@ -95,7 +97,8 @@ auto main(int argc, char** argv) -> int
           .WithHelpCommand()
           .WithCommand(command_builder);
 
-    const auto context = cli->Parse(argc, const_cast<const char**>(argv));
+    const auto context
+      = cli->Parse(std::span(argv, static_cast<std::size_t>(argc)));
     const auto command_path = context.active_command->PathAsString();
 
     const auto& ovm = context.ovm;
@@ -107,7 +110,7 @@ auto main(int argc, char** argv) -> int
 
     if (!quiet) {
       std::cout << "-- Simple command line invoked, value of `lines` is: "
-                << ovm.ValuesOf("lines").at(0).GetAs<int>() << std::endl;
+                << ovm.ValuesOf("lines").at(0).GetAs<int>() << '\n';
     }
     loguru::flush();
     loguru::g_global_verbosity = loguru::Verbosity_OFF;

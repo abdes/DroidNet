@@ -27,20 +27,12 @@ namespace oxygen::clap::detail {
 class Arguments {
 public:
   /*!
-   * \brief Constructor to automatically covert from {argc, argv} to safer
-   * types.
+   * \brief The arguments of a command line, as `main` receives them.
    *
-   * \param [in] argc Non-negative value representing the number of arguments
-   * passed to the program from the environment in which the program is run.
-   *
-   * \param [in] argv Pointer to the first element of an array of `argc + 1`
-   * pointers, of which the last one is null and the previous ones, if any,
-   * point to null-terminated multi-byte strings that represent the arguments
-   * passed to the program from the execution environment. If `argv[0]` is not a
-   * null pointer (or, equivalently, if `argc > 0`), it points to a string that
-   * represents the name used to invoke the program, or to an empty string.
+   * \param [in] args The program name, then each argument, as null-terminated
+   * strings; not empty.
    */
-  OXGN_CLP_API Arguments(int argc, const char** argv);
+  OXGN_CLP_API explicit Arguments(std::span<const char* const> args);
 
   /*!
    * \brief The program name, originally provided as the first element of the

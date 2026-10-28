@@ -10,14 +10,12 @@
 #include "TestHelpers.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include <gtest/gtest.h>
 
 #include <Oxygen/Base/StateMachine.h>
 #include <Oxygen/Clap/Command.h>
 #include <Oxygen/Clap/CommandLineContext.h>
 #include <Oxygen/Clap/Fluent/DSL.h>
 #include <Oxygen/Clap/Option.h>
-#include <Oxygen/Clap/OptionValuesMap.h>
 #include <Oxygen/Clap/Parser/Context.h>
 #include <Oxygen/Clap/Parser/Events.h>
 #include <Oxygen/Clap/Parser/States.h>
@@ -104,7 +102,7 @@ namespace {
       const Tokenizer tokenizer(args);
       const auto commands = BuildCommands(command_paths);
       Command::Ptr command;
-      const CommandLineContext base_context("test", command, ovm_, 80U);
+      const CommandLineContext base_context("test", command, 80U);
       const auto context = StateTest::MakeParserContext(base_context, commands);
       context->active_command = predefined_commands().at("with-options");
       auto token = tokenizer.NextToken();
@@ -121,7 +119,6 @@ namespace {
 
   private:
     std::unique_ptr<ParseShortOptionState> state_;
-    OptionValuesMap ovm_;
   };
 
   class ParseShortOptionStateTransitionsTest
@@ -163,7 +160,7 @@ namespace {
   // NOLINTNEXTLINE
   TEST_P(ParseShortOptionStateTransitionsTest, TransitionWithNoError)
   {
-    const auto test_value = GetParam();
+    const auto& test_value = GetParam();
     DoCheckStateAfterLastToken(test_value);
   }
 
@@ -199,14 +196,13 @@ namespace {
   // NOLINTNEXTLINE
   TEST_P(ParseShortOptionStateUnrecognizedOptionTest, FailWithAnException)
   {
-    auto test_value = GetParam();
+    const auto& test_value = GetParam();
     const auto& [command_paths, args, action_check, state_check] = test_value;
 
     Tokenizer tokenizer(args);
     const auto commands = BuildCommands(command_paths);
-    OptionValuesMap ovm;
     Command::Ptr command;
-    const CommandLineContext base_context("test", command, ovm, 80U);
+    const CommandLineContext base_context("test", command, 80U);
     auto context = StateTest::MakeParserContext(base_context, commands);
     context->active_command = predefined_commands().at("with-options");
     auto token = tokenizer.NextToken();

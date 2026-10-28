@@ -189,8 +189,11 @@ determined by the type of token encountered. The main states are:
 
 ### 4. Contextual Result
 
-- The result of parsing is a `CommandLineContext` object, containing the active
-  command, parsed option values, and I/O streams for further interaction.
+- The result of parsing is a `CommandLineContext` object. It owns the active
+  command and the parsed option values, so it outlives the parser.
+- Help, version and error text go to the `CliStreams` given to `Parse`, the
+  process standard output and error streams by default. A caller that captures
+  output, such as a test, passes its own streams.
 
 ---
 

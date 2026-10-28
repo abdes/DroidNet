@@ -10,7 +10,6 @@
 #include <Oxygen/Testing/GTest.h>
 
 using testing::Eq;
-using testing::Ne;
 
 using oxygen::clap::detail::Arguments;
 
@@ -18,18 +17,16 @@ namespace {
 
 NOLINT_TEST(ConstructArguments, WithNonEmptyProgramName)
 {
-  constexpr auto argc = 1;
   std::array<const char*, 1> argv { { "bin/test-program" } };
-  const Arguments cla { argc, argv.data() };
+  const Arguments cla { argv };
   EXPECT_THAT(cla.ProgramName(), Eq("bin/test-program"));
   EXPECT_THAT(cla.Args(), ::testing::IsEmpty());
 }
 
 NOLINT_TEST(ConstructArguments, WithManyArgs)
 {
-  constexpr auto argc = 4;
   std::array<const char*, 4> argv { { "test", "-x", "--opt=value", "arg" } };
-  const Arguments cla { argc, argv.data() };
+  const Arguments cla { argv };
   EXPECT_THAT(cla.ProgramName(), Eq("test"));
   EXPECT_THAT(cla.Args(), ::testing::ElementsAre("-x", "--opt=value", "arg"));
 }

@@ -314,7 +314,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
           .WithOptions(host::MakeAdvancedCaptureOptions(runtime), true);
     const auto cli = host::BuildCli(
       "Oxygen.Player", "Plays one cooked Oxygen scene", default_command);
-    const auto context = cli->Parse(static_cast<int>(args.size()), args.data());
+    const auto context = cli->Parse(args);
     if (host::HandleMetaCommand(context, default_command)) {
       exit_code = EXIT_SUCCESS;
     } else if (launch_path.empty()) {

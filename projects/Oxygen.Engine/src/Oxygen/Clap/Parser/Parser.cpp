@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <utility>
 #include <variant>
 
 #include <fmt/format.h>
@@ -43,7 +44,15 @@ struct Overload : Ts... {
 // template parameters out of the constructor arguments.
 template <class... Ts> Overload(Ts...) -> Overload<Ts...>;
 
-auto oxygen::clap::parser::CmdLineParser::Parse() const -> bool
+auto oxygen::clap::parser::CmdLineParser::Parse() -> bool
+{
+  const auto succeeded = Run();
+  result_->active_command = context_->active_command;
+  result_->ovm = std::move(context_->ovm);
+  return succeeded;
+}
+
+auto oxygen::clap::parser::CmdLineParser::Run() const -> bool
 {
   auto machine = Machine { InitialState { context_ }, IdentifyCommandState {},
     ParseOptionsState {}, ParseShortOptionState {}, ParseLongOptionState {},
@@ -51,9 +60,9 @@ auto oxygen::clap::parser::CmdLineParser::Parse() const -> bool
 
   bool continue_running { true };
   bool no_errors { true };
-  auto token = tokenizer_.NextToken();
+  auto token = tokenizer_->NextToken();
   bool reissue = false;
-  do {
+  while (continue_running) {
     const auto& [token_type, token_value] = token;
     DLOG_F(1, "next event: {}/{}", token.first, token.second);
 
@@ -103,9 +112,9 @@ auto oxygen::clap::parser::CmdLineParser::Parse() const -> bool
         [this, &continue_running, &no_errors](
           const TerminateWithError& status) -> void {
           LOG_F(ERROR, "{}", status.error_message);
-          context_->err << fmt::format(
+          *context_->err << fmt::format(
             "{}: {}", context_->program_name, status.error_message)
-                        << '\n';
+                         << '\n';
           continue_running = false;
           no_errors = false;
         },
@@ -127,16 +136,16 @@ auto oxygen::clap::parser::CmdLineParser::Parse() const -> bool
         if (token.first == TokenType::kEndOfInput) {
           LOG_F(ERROR,
             "parser reached end-of-input but state requested continuation");
-          context_->err
+          *context_->err
             << "internal parser error: unexpected continuation at end-of-input"
             << '\n';
           continue_running = false;
           no_errors = false;
           continue;
         }
-        token = tokenizer_.NextToken();
+        token = tokenizer_->NextToken();
       }
     }
-  } while (continue_running);
+  }
   return no_errors;
 }

@@ -4,7 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <cstddef>
 #include <span>
 #include <string_view>
 #include <vector>
@@ -13,28 +12,25 @@
 #include <Oxygen/Clap/Internal/Args.h>
 
 struct oxygen::clap::detail::Arguments::ArgumentsImpl {
-  ArgumentsImpl(const int argc, const char** argv)
+  explicit ArgumentsImpl(const std::span<const char* const> command_line)
   {
-    DCHECK_GT_F(argc, 0);
-    DCHECK_NOTNULL_F(argv);
+    DCHECK_F(!command_line.empty());
 
-    auto s_argv = std::span(argv, static_cast<size_t>(argc));
-    // Extract the program name from the first argument (should always be there)
-    // and keep the rest of the arguments for later parsing
-    program_name.assign(s_argv[0]);
-    if (argc > 1) {
-      args.assign(++s_argv.begin(), s_argv.end());
-    }
+    // The program name comes first; the rest are the arguments to parse.
+    program_name.assign(command_line.front());
+    const auto arguments = command_line.subspan(1);
+    args.assign(arguments.begin(), arguments.end());
 
     DCHECK_F(!program_name.empty());
   }
 
   std::string program_name;
-  std::vector<std::string> args {};
+  std::vector<std::string> args;
 };
 
-oxygen::clap::detail::Arguments::Arguments(int argc, const char** argv)
-  : impl_(new ArgumentsImpl(argc, argv),
+oxygen::clap::detail::Arguments::Arguments(
+  const std::span<const char* const> args)
+  : impl_(new ArgumentsImpl(args),
       // NOLINTNEXTLINE(cppcoreguidelines-owning-memory)
       [](const ArgumentsImpl* impl) -> void { delete impl; })
 {
@@ -48,5 +44,5 @@ auto oxygen::clap::detail::Arguments::ProgramName() const -> std::string_view
 auto oxygen::clap::detail::Arguments::Args() const
   -> std::span<const std::string>
 {
-  return std::span<const std::string>(impl_->args);
+  return { impl_->args };
 }

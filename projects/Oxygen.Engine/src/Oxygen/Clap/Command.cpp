@@ -6,7 +6,6 @@
 
 #include <algorithm>
 #include <memory>
-#include <sstream>
 #include <string>
 #include <utility>
 
@@ -30,34 +29,34 @@ auto oxygen::clap::Command::ProgramName() const -> std::string
 auto oxygen::clap::Command::PrintSynopsis(
   const CommandLineContext& context) const -> void
 {
-  context.out << ProgramName() << " " << PathAsString() << " ";
+  *context.out << ProgramName() << " " << PathAsString() << " ";
   for (const auto& option : options_) {
-    context.out << (option->value_semantic()->IsRequired() ? "" : "[");
+    *context.out << (option->value_semantic()->IsRequired() ? "" : "[");
     if (!option->Short().empty()) {
-      context.out << "-" << option->Short();
+      *context.out << "-" << option->Short();
       if (!option->Long().empty()) {
-        context.out << ",";
+        *context.out << ",";
       }
     }
     if (!option->Long().empty()) {
-      context.out << "--" << option->Long();
+      *context.out << "--" << option->Long();
     }
-    context.out << (option->value_semantic()->IsRequired() ? " " : "] ");
+    *context.out << (option->value_semantic()->IsRequired() ? " " : "] ");
   }
 
   for (const auto& option : positional_args_) {
     if (option->IsPositionalRest()) {
       if (!option->IsRequired()) {
-        context.out << "[";
+        *context.out << "[";
       }
-      context.out << "<" << option->UserFriendlyName() << ">";
+      *context.out << "<" << option->UserFriendlyName() << ">";
       if (!option->IsRequired()) {
-        context.out << "]";
+        *context.out << "]";
       }
     } else {
-      context.out << " " << (option->value_semantic()->IsRequired() ? "" : "[")
-                  << option->Key()
-                  << (option->value_semantic()->IsRequired() ? "" : "]");
+      *context.out << " " << (option->value_semantic()->IsRequired() ? "" : "[")
+                   << option->Key()
+                   << (option->value_semantic()->IsRequired() ? "" : "]");
     }
   }
 }
@@ -79,19 +78,19 @@ auto oxygen::clap::Command::PrintOptions(
       continue;
     }
     options_[option_index]->Print(context, width);
-    context.out << "\n\n";
+    *context.out << "\n\n";
   }
 
-  for (auto [group, hidden] : groups_) {
+  for (const auto& [group, hidden] : groups_) {
     if (!hidden) {
       group->Print(context, width);
-      context.out << "\n\n";
+      *context.out << "\n\n";
     }
   }
 
   for (const auto& positional : positional_args_) {
     positional->Print(context, width);
-    context.out << "\n\n";
+    *context.out << "\n\n";
   }
 }
 
@@ -104,7 +103,7 @@ auto oxygen::clap::Command::PrintHiddenOptions(
       continue;
     }
     if (wrote_anything) {
-      context.out << "\n\n";
+      *context.out << "\n\n";
     }
     group->Print(context, width);
     wrote_anything = true;
@@ -137,24 +136,17 @@ auto oxygen::clap::Command::WithOption(std::shared_ptr<Option>&& option) -> void
 auto oxygen::clap::Command::Print(
   const CommandLineContext& context, unsigned int width) const -> void
 {
-  wrap::TextWrapper wrap = detail::MakeStyledWrapper(width, "   ", "   ");
-  std::ostringstream ostr;
+  const wrap::TextWrapper wrap = detail::MakeStyledWrapper(width, "   ", "   ");
 
   const CliTheme& theme = context.theme ? *context.theme : CliTheme::Plain();
-  context.out << fmt::format(theme.section_header, "SYNOPSIS\n");
+  *context.out << fmt::format(theme.section_header, "SYNOPSIS\n");
   PrintSynopsis(context);
-  context.out << wrap.Fill(ostr.str()).value();
-  ostr.str("");
-  ostr.clear();
-  context.out << "\n\n";
+  *context.out << "\n\n";
 
-  context.out << fmt::format(theme.section_header, "DESCRIPTION\n");
-  if (PathAsString() == DEFAULT) {
-    context.out << wrap.Fill(parent_cli_->About()).value();
-  } else {
-    context.out << wrap.Fill(about_).value();
-  }
-  context.out << "\n\n";
+  *context.out << fmt::format(theme.section_header, "DESCRIPTION\n");
+  const auto& about = PathAsString() == DEFAULT ? parent_cli_->About() : about_;
+  *context.out << wrap.Fill(about).value_or("__wrapping_error__");
+  *context.out << "\n\n";
 
   bool has_visible_globals = false;
   if (context.global_option_groups && !context.global_option_groups->empty()) {
@@ -167,12 +159,12 @@ auto oxygen::clap::Command::Print(
   }
 
   if (has_visible_globals) {
-    context.out << fmt::format(theme.section_header, "GLOBAL OPTIONS\n")
-                << "\n";
+    *context.out << fmt::format(theme.section_header, "GLOBAL OPTIONS\n")
+                 << "\n";
     for (const auto& [group, hidden] : *context.global_option_groups) {
       if (!hidden && group) {
         group->Print(context, width);
-        context.out << "\n\n";
+        *context.out << "\n\n";
       }
     }
   }
@@ -198,7 +190,7 @@ auto oxygen::clap::Command::Print(
   }
 
   if (has_visible_command_options) {
-    context.out << fmt::format(theme.section_header, "OPTIONS\n") << "\n";
+    *context.out << fmt::format(theme.section_header, "OPTIONS\n") << "\n";
     PrintOptions(context, width);
   }
 }

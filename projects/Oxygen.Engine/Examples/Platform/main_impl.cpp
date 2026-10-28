@@ -592,9 +592,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
     auto cli = oxygen::host::BuildCli(
       "platform", "Interactive platform window controls demo", default_command);
 
-    const int argc = static_cast<int>(args.size());
-    const char** argv = args.data();
-    auto context = cli->Parse(argc, argv);
+    auto context = cli->Parse(args);
     if (oxygen::host::HandleMetaCommand(context, default_command)) {
       return EXIT_SUCCESS;
     }

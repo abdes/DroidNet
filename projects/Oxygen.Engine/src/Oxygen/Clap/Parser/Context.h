@@ -9,6 +9,9 @@
 #include <memory>
 #include <optional>
 #include <ranges>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include <Oxygen/Clap/Command.h>
 #include <Oxygen/Clap/CommandLineContext.h>
@@ -53,31 +56,27 @@ struct ParserContext : CommandLineContext {
    * gets passed from state to state via action data.
    *
    * \param base the base CLI context that this parser context would use to
-   * initialize its base class data.
-   * \param cli_commands the list of commands
-   * supported by the CLI. \return a shared smart pointer to a new instance of
-   * `ParserContext`.
+   * initialize its base class data, including its global option groups.
+   * \param cli_commands the list of commands supported by the CLI.
+   * \param globals the options accepted before or after any command.
+   * \return a shared smart pointer to a new instance of `ParserContext`.
    */
-  static auto New(const CommandLineContext& base,
-    const CommandsList& cli_commands,
-    const std::vector<OptionPtr>& global_options,
-    const std::vector<std::pair<Options::Ptr, bool>>& global_option_groups)
-    -> Ptr
+  static auto New(const CommandLineContext& base, CommandsList cli_commands,
+    std::vector<OptionPtr> globals) -> Ptr
   {
-    return std::shared_ptr<ParserContext>(new ParserContext(
-      base, cli_commands, global_options, global_option_groups));
+    return std::shared_ptr<ParserContext>(
+      new ParserContext(base, std::move(cli_commands), std::move(globals)));
   }
 
   /*!
    * \brief The list of all known command for this CLI, including the `default`
    * command if one has been specified.
    *
-   * This field is always populated when the parser context is created and
-   * remains valid for its lifetime.
+   * This field is always populated when the parser context is created.
    */
-  const CommandsList& commands;
-  const std::vector<OptionPtr>& global_options;
-  const std::vector<std::pair<Options::Ptr, bool>>& global_option_groups;
+  CommandsList commands;
+  //! The options accepted before or after any command.
+  std::vector<OptionPtr> global_options;
   /*!
    * \brief Tracks the `oxygen::clap::Option` object for the command line option
    * currently being parsed.
@@ -152,14 +151,19 @@ struct ParserContext : CommandLineContext {
 
 private:
   // Constructor is private. Use `New()` to create an instance of this class.
+  // The parse starts from the settings and the active command of `base`, with
+  // no option values: it fills its own, which the parser hands back to `base`.
   explicit ParserContext(const CommandLineContext& base,
-    const CommandsList& cli_commands, const std::vector<OptionPtr>& globals,
-    const std::vector<std::pair<Options::Ptr, bool>>& global_groups)
-    : CommandLineContext(base)
-    , commands { cli_commands }
-    , global_options { globals }
-    , global_option_groups { global_groups }
+    CommandsList cli_commands, std::vector<OptionPtr> globals)
+    : CommandLineContext(base.program_name, base.active_command,
+        base.output_width, CliStreams { .out = base.out, .err = base.err })
+    , commands { std::move(cli_commands) }
+    , global_options { std::move(globals) }
   {
+    theme = base.theme;
+    allow_long_option_value_with_no_equal
+      = base.allow_long_option_value_with_no_equal;
+    global_option_groups = base.global_option_groups;
   }
 };
 using ParserContextPtr = std::shared_ptr<ParserContext>;

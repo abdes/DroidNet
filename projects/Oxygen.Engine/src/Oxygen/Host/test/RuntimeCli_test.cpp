@@ -59,7 +59,7 @@ protected:
     cli_ = BuildCli("host-test", "Runtime CLI test", command);
     argv_ = { "host-test" };
     argv_.insert(argv_.end(), arguments);
-    return cli_->Parse(static_cast<int>(argv_.size()), argv_.data());
+    return cli_->Parse(argv_);
   }
 
   auto ParseAndApply(std::initializer_list<const char*> arguments) -> void

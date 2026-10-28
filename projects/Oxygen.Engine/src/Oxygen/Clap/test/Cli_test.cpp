@@ -6,12 +6,15 @@
 
 #include <array>
 #include <memory>
+#include <ostream>
+#include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include <fmt/format.h>
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Clap/Cli.h>
 #include <Oxygen/Clap/CliTheme.h>
 #include <Oxygen/Clap/Command.h>
@@ -278,10 +281,16 @@ namespace {
                        .Build();
 
     constexpr int argc = 5;
-    const char* argv[argc] = { "tool", "--verbose", "run", "--count", "3" };
+    const auto argv = std::array<const char*, argc> {
+      "tool",
+      "--verbose",
+      "run",
+      "--count",
+      "3",
+    };
 
     // Act
-    const auto context = cli->Parse(argc, argv);
+    const auto context = cli->Parse(argv);
 
     // Assert
     const auto& ovm = context.ovm;
@@ -289,6 +298,40 @@ namespace {
     EXPECT_TRUE(ovm.HasOption("count"));
     EXPECT_THAT(ovm.ValuesOf("count").at(0).GetAs<int>(), Eq(3));
     EXPECT_THAT(ovm.ValuesOf("verbose").at(0).GetAs<bool>(), IsTrue());
+  }
+
+  //! Scenario: A global option stores its value, or its default, as a command
+  //! option does.
+  NOLINT_TEST(GlobalOptions, StoreTo_IsApplied)
+  {
+    // Arrange
+    auto verbose = false;
+    auto level = 0;
+    const auto cli = CliBuilder()
+                       .ProgramName("tool")
+                       .WithGlobalOption(Option::WithKey("verbose")
+                           .Long("verbose")
+                           .WithValue<bool>()
+                           .StoreTo(&verbose)
+                           .Build())
+                       .WithGlobalOption(Option::WithKey("level")
+                           .Long("level")
+                           .WithValue<int>()
+                           .DefaultValue(2)
+                           .StoreTo(&level)
+                           .Build())
+                       .WithCommand(CommandBuilder("run"))
+                       .Build();
+    constexpr int argc = 3;
+    const auto argv
+      = std::array<const char*, argc> { "tool", "--verbose", "run" };
+
+    // Act
+    (void)cli->Parse(argv);
+
+    // Assert
+    EXPECT_TRUE(verbose);
+    EXPECT_EQ(level, 2);
   }
 
   //! Scenario: Global options after the command are rejected.
@@ -306,10 +349,11 @@ namespace {
                        .Build();
 
     constexpr int argc = 3;
-    const char* argv[argc] = { "tool", "run", "--verbose" };
+    const auto argv
+      = std::array<const char*, argc> { "tool", "run", "--verbose" };
 
     // Act & Assert
-    const auto context = cli->Parse(argc, argv);
+    const auto context = cli->Parse(argv);
     const auto& ovm = context.ovm;
     EXPECT_TRUE(ovm.HasOption("verbose"));
   }
@@ -330,10 +374,11 @@ namespace {
                        .Build();
 
     constexpr int argc = 4;
-    const char* argv[argc] = { "tool", "run", "--mode", "7" };
+    const auto argv
+      = std::array<const char*, argc> { "tool", "run", "--mode", "7" };
 
     // Act
-    const auto context = cli->Parse(argc, argv);
+    const auto context = cli->Parse(argv);
 
     // Assert
     const auto& ovm = context.ovm;
@@ -359,11 +404,11 @@ namespace {
                        .Build();
 
     constexpr int argc = 3;
-    const char* argv[argc] = { "tool", "run", "--help" };
+    const auto argv = std::array<const char*, argc> { "tool", "run", "--help" };
     testing::internal::CaptureStdout();
 
     // Act
-    (void)cli->Parse(argc, argv);
+    (void)cli->Parse(argv);
     const auto output = testing::internal::GetCapturedStdout();
 
     // Assert
@@ -387,10 +432,10 @@ namespace {
                        .Build();
 
     constexpr int argc = 2;
-    const char* argv[argc] = { "tool", "--verbose" };
+    const auto argv = std::array<const char*, argc> { "tool", "--verbose" };
 
     // Act & Assert
-    NOLINT_EXPECT_THROW(cli->Parse(argc, argv), CmdLineArgumentsError);
+    NOLINT_EXPECT_THROW(cli->Parse(argv), CmdLineArgumentsError);
   }
 
   //! Scenario: Dash-dash before any command is rejected.
@@ -408,10 +453,10 @@ namespace {
                        .Build();
 
     constexpr int argc = 2;
-    const char* argv[argc] = { "tool", "--" };
+    const auto argv = std::array<const char*, argc> { "tool", "--" };
 
     // Act & Assert
-    NOLINT_EXPECT_THROW(cli->Parse(argc, argv), CmdLineArgumentsError);
+    NOLINT_EXPECT_THROW(cli->Parse(argv), CmdLineArgumentsError);
   }
 
   //! Scenario: Dash-dash routes all following tokens to default positionals.
@@ -432,11 +477,17 @@ namespace {
                        .Build();
 
     constexpr int argc = 6;
-    const char* argv[argc]
-      = { "tool", "--", "batch", "--manifest", "m.json", "--to-ui" };
+    const auto argv = std::array<const char*, argc> {
+      "tool",
+      "--",
+      "batch",
+      "--manifest",
+      "m.json",
+      "--to-ui",
+    };
 
     // Act
-    const auto context = cli->Parse(argc, argv);
+    const auto context = cli->Parse(argv);
 
     // Assert
     ASSERT_TRUE(context.ovm.HasOption(Option::key_rest_));
@@ -462,10 +513,10 @@ namespace {
                        .Build();
 
     constexpr int argc = 3;
-    const char* argv[argc] = { "tool", "--", "batch" };
+    const auto argv = std::array<const char*, argc> { "tool", "--", "batch" };
 
     // Act & Assert
-    NOLINT_EXPECT_THROW(cli->Parse(argc, argv), CmdLineArgumentsError);
+    NOLINT_EXPECT_THROW(cli->Parse(argv), CmdLineArgumentsError);
   }
 
   //! Scenario: Hidden global options are not listed in help output.
@@ -485,11 +536,11 @@ namespace {
                        .Build();
 
     constexpr int argc = 3;
-    const char* argv[argc] = { "tool", "run", "--help" };
+    const auto argv = std::array<const char*, argc> { "tool", "run", "--help" };
     testing::internal::CaptureStdout();
 
     // Act
-    (void)cli->Parse(argc, argv);
+    (void)cli->Parse(argv);
     const auto output = testing::internal::GetCapturedStdout();
 
     // Assert
@@ -512,8 +563,7 @@ namespace {
     Command::Ptr active_command = CommandBuilder(Command::DEFAULT)
                                     .WithOptions(visible_group)
                                     .WithOptions(hidden_group, true);
-    OptionValuesMap ovm;
-    CommandLineContext context("tool", active_command, ovm, 80U);
+    CommandLineContext context("tool", active_command, 80U);
     context.theme = &CliTheme::Plain();
 
     testing::internal::CaptureStdout();
@@ -542,11 +592,17 @@ namespace {
                        .Build();
 
     constexpr int argc = 5;
-    const char* argv[argc] = { "tool", "--theme", "plain", "run", "--help" };
+    const auto argv = std::array<const char*, argc> {
+      "tool",
+      "--theme",
+      "plain",
+      "run",
+      "--help",
+    };
     testing::internal::CaptureStdout();
 
     // Act
-    (void)cli->Parse(argc, argv);
+    (void)cli->Parse(argv);
     const auto output = testing::internal::GetCapturedStdout();
 
     // Assert
@@ -572,10 +628,11 @@ namespace {
       = CliBuilder().ProgramName("tool").WithCommand(command).Build();
 
     constexpr int argc = 5;
-    const char* argv[argc] = { "tool", "--tag", "1", "--tag", "2" };
+    const auto argv
+      = std::array<const char*, argc> { "tool", "--tag", "1", "--tag", "2" };
 
     // Act
-    (void)cli->Parse(argc, argv);
+    (void)cli->Parse(argv);
 
     // Assert
     ASSERT_EQ(values.size(), 2U);
@@ -602,10 +659,10 @@ namespace {
       = CliBuilder().ProgramName("tool").WithCommand(command).Build();
 
     constexpr int argc = 1;
-    const char* argv[argc] = { "tool" };
+    const auto argv = std::array<const char*, argc> { "tool" };
 
     // Act
-    (void)cli->Parse(argc, argv);
+    (void)cli->Parse(argv);
 
     // Assert
     EXPECT_TRUE(values.empty());
@@ -624,16 +681,47 @@ namespace {
                        .Build();
 
     constexpr int argc = 2;
-    const char* argv[argc] = { "tool", "--help" };
+    const auto argv = std::array<const char*, argc> { "tool", "--help" };
     testing::internal::CaptureStdout();
 
     // Act
-    (void)cli->Parse(argc, argv);
+    (void)cli->Parse(argv);
     const auto output = testing::internal::GetCapturedStdout();
 
     // Assert
     EXPECT_NE(output.find("FOOTER"), std::string::npos);
     EXPECT_NE(output.find("Footer text goes here."), std::string::npos);
+  }
+
+  //! Scenario: Help goes to the output stream the caller gives, not to the
+  //! process standard output.
+  NOLINT_TEST(HelpOutput, GoesToTheGivenStream)
+  {
+    // Arrange
+    const auto cli = CliBuilder()
+                       .ProgramName("tool")
+                       .WithTheme(CliTheme::Plain())
+                       .WithHelpCommand()
+                       .WithCommand(CommandBuilder(Command::DEFAULT))
+                       .Build();
+    constexpr int argc = 2;
+    const auto argv = std::array<const char*, argc> { "tool", "--help" };
+    auto out = std::ostringstream {};
+    auto err = std::ostringstream {};
+    testing::internal::CaptureStdout();
+
+    // Act
+    (void)cli->Parse(argv,
+      CliStreams {
+        .out = make_observer<std::ostream>(&out),
+        .err = make_observer<std::ostream>(&err),
+      });
+    const auto process_output = testing::internal::GetCapturedStdout();
+
+    // Assert
+    EXPECT_NE(out.str().find("SUB-COMMANDS"), std::string::npos);
+    EXPECT_TRUE(process_output.empty());
+    EXPECT_TRUE(err.str().empty());
   }
 
   NOLINT_TEST(PositionalArguments,
@@ -647,13 +735,11 @@ namespace {
     const auto cli
       = CliBuilder().ProgramName("tool").WithCommand(command).Build();
     auto absent_args = std::array { "tool", "run" };
-    const auto absent
-      = cli->Parse(static_cast<int>(absent_args.size()), absent_args.data());
+    const auto absent = cli->Parse(absent_args);
     ASSERT_TRUE(absent.ovm.HasOption("source"));
     EXPECT_TRUE(absent.ovm.ValuesOf("source").front().IsDefaulted());
     auto explicit_args = std::array { "tool", "run", "source.gltf" };
-    const auto explicit_context = cli->Parse(
-      static_cast<int>(explicit_args.size()), explicit_args.data());
+    const auto explicit_context = cli->Parse(explicit_args);
     ASSERT_TRUE(explicit_context.ovm.HasOption("source"));
     ASSERT_EQ(explicit_context.ovm.ValuesOf("source").size(), 1U);
     EXPECT_FALSE(explicit_context.ovm.ValuesOf("source").front().IsDefaulted());
@@ -669,8 +755,7 @@ namespace {
     const auto cli
       = CliBuilder().ProgramName("tool").WithCommand(command).Build();
     auto args = std::array { "tool", "run" };
-    NOLINT_EXPECT_THROW(cli->Parse(static_cast<int>(args.size()), args.data()),
-      CmdLineArgumentsError);
+    NOLINT_EXPECT_THROW(cli->Parse(args), CmdLineArgumentsError);
   }
 
   NOLINT_TEST(PositionalArguments, OmittedDefaultRemainsDistinguishable)
@@ -683,7 +768,7 @@ namespace {
     const auto cli
       = CliBuilder().ProgramName("tool").WithCommand(command).Build();
     auto args = std::array { "tool", "run" };
-    const auto context = cli->Parse(static_cast<int>(args.size()), args.data());
+    const auto context = cli->Parse(args);
     ASSERT_TRUE(context.ovm.HasOption("source"));
     EXPECT_TRUE(context.ovm.ValuesOf("source").front().IsDefaulted());
     EXPECT_EQ(context.ovm.ValuesOf("source").front().GetAs<std::string>(),
@@ -703,11 +788,12 @@ namespace {
       = CliBuilder().ProgramName("tool").WithCommand(command).Build();
 
     constexpr int argc = 3;
-    const char* argv[argc] = { "tool", "--count", "nope" };
+    const auto argv
+      = std::array<const char*, argc> { "tool", "--count", "nope" };
     testing::internal::CaptureStderr();
 
     // Act
-    NOLINT_EXPECT_THROW(cli->Parse(argc, argv), CmdLineArgumentsError);
+    NOLINT_EXPECT_THROW(cli->Parse(argv), CmdLineArgumentsError);
     const auto err = testing::internal::GetCapturedStderr();
 
     // Assert
@@ -723,11 +809,11 @@ namespace {
       = CliBuilder().ProgramName("tool").WithCommand(run_command).Build();
 
     constexpr int argc = 2;
-    const char* argv[argc] = { "tool", "rnu" };
+    const auto argv = std::array<const char*, argc> { "tool", "rnu" };
     testing::internal::CaptureStderr();
 
     // Act
-    NOLINT_EXPECT_THROW(cli->Parse(argc, argv), CmdLineArgumentsError);
+    NOLINT_EXPECT_THROW(cli->Parse(argv), CmdLineArgumentsError);
     const auto err = testing::internal::GetCapturedStderr();
 
     // Assert
@@ -749,11 +835,11 @@ namespace {
       = CliBuilder().ProgramName("tool").WithCommand(command).Build();
 
     constexpr int argc = 2;
-    const char* argv[argc] = { "tool", "--verobse" };
+    const auto argv = std::array<const char*, argc> { "tool", "--verobse" };
     testing::internal::CaptureStderr();
 
     // Act
-    NOLINT_EXPECT_THROW(cli->Parse(argc, argv), CmdLineArgumentsError);
+    NOLINT_EXPECT_THROW(cli->Parse(argv), CmdLineArgumentsError);
     const auto err = testing::internal::GetCapturedStderr();
 
     // Assert
@@ -772,11 +858,11 @@ namespace {
                        .Build();
 
     constexpr int argc = 2;
-    const char* argv[argc] = { "tool", "vex" };
+    const auto argv = std::array<const char*, argc> { "tool", "vex" };
     testing::internal::CaptureStderr();
 
     // Act
-    NOLINT_EXPECT_THROW(cli->Parse(argc, argv), CmdLineArgumentsError);
+    NOLINT_EXPECT_THROW(cli->Parse(argv), CmdLineArgumentsError);
     const auto err = testing::internal::GetCapturedStderr();
 
     // Assert

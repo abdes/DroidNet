@@ -9,11 +9,9 @@
 #include "TestHelpers.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include <gtest/gtest.h>
 
 #include <Oxygen/Clap/Command.h>
 #include <Oxygen/Clap/CommandLineContext.h>
-#include <Oxygen/Clap/OptionValuesMap.h>
 #include <Oxygen/Clap/Parser/Context.h>
 #include <Oxygen/Clap/Parser/Events.h>
 #include <Oxygen/Clap/Parser/States.h>
@@ -60,9 +58,8 @@ namespace {
 
       const Tokenizer tokenizer(args);
       const auto commands = BuildCommands(command_paths);
-      OptionValuesMap ovm;
       Command::Ptr command;
-      const CommandLineContext base_context("test", command, ovm, 80U);
+      const CommandLineContext base_context("test", command, 80U);
       const auto context = StateTest::MakeParserContext(base_context, commands);
       EnterState(tokenizer.NextToken(), context);
       while (true) {
@@ -266,14 +263,14 @@ namespace {
   // NOLINTNEXTLINE
   TEST_P(IdentifyCommandStateTransitionsTest, CheckStateAfterLastToken)
   {
-    const auto test_value = GetParam();
+    const auto& test_value = GetParam();
     DoCheckStateAfterLastToken(test_value);
   }
 
   // NOLINTNEXTLINE
   TEST_P(IdentifyCommandStateErrorsTest, CheckStateAfterLastToken)
   {
-    const auto test_value = GetParam();
+    const auto& test_value = GetParam();
     DoCheckStateAfterLastToken(test_value);
   }
 
@@ -282,7 +279,10 @@ namespace {
   {
     const auto test_value
       = TestValueType { { "default", "just do it" }, { "just", "do" },
-          ParseOptionsTransitionTestData { "default", { "just", "do" } },
+          ParseOptionsTransitionTestData {
+            .command_path = "default",
+            .positional_tokens = { "just", "do" },
+          },
           IdentifyCommandStateTestData {} };
     DoCheckStateAfterLastToken(test_value);
     DoCheckStateAfterLastToken(test_value);

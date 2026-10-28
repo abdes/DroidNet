@@ -23,10 +23,7 @@ using oxygen::clap::Command;
 using oxygen::clap::CommandBuilder;
 using oxygen::clap::Option;
 
-using testing::_;
-using testing::ElementsAre;
 using testing::Eq;
-using testing::SizeIs;
 
 namespace {
 
@@ -82,7 +79,7 @@ NOLINT_TEST(
 
   const std::unique_ptr<Cli> cli
     = CliBuilder().ProgramName("positional_args").WithCommand(default_command);
-  const auto& matches = cli->Parse(argc, argv.data()).ovm;
+  const auto& matches = cli->Parse(argv).ovm;
 
   const auto& v_rest = matches.ValuesOf(Option::key_rest_);
   EXPECT_THAT(v_rest.size(), Eq(4));
@@ -113,7 +110,7 @@ NOLINT_TEST(PositionalArgumentsTest,
 
   const std::unique_ptr<Cli> cli
     = CliBuilder().ProgramName("positional_args").WithCommand(default_command);
-  const auto& matches = cli->Parse(argc, argv.data()).ovm;
+  const auto& matches = cli->Parse(argv).ovm;
 
   const auto& v_before_1 = matches.ValuesOf("BEFORE_1");
   EXPECT_THAT(v_before_1.size(), Eq(1));
@@ -150,7 +147,7 @@ NOLINT_TEST(
 
   const std::unique_ptr<Cli> cli
     = CliBuilder().ProgramName("positional_args").WithCommand(default_command);
-  NOLINT_EXPECT_THROW(cli->Parse(argc, argv.data()), std::runtime_error);
+  NOLINT_EXPECT_THROW(cli->Parse(argv), std::runtime_error);
 }
 
 NOLINT_TEST(
@@ -174,7 +171,7 @@ NOLINT_TEST(
 
   const std::unique_ptr<Cli> cli
     = CliBuilder().ProgramName("positional_args").WithCommand(default_command);
-  NOLINT_EXPECT_THROW(cli->Parse(argc, argv.data()), std::runtime_error);
+  NOLINT_EXPECT_THROW(cli->Parse(argv), std::runtime_error);
 }
 
 NOLINT_TEST(PositionalArgumentsTest, NoPositionals_ArgumentsProvided_Throws)
@@ -189,7 +186,7 @@ NOLINT_TEST(PositionalArgumentsTest, NoPositionals_ArgumentsProvided_Throws)
   const std::unique_ptr<Cli> cli
     = CliBuilder().ProgramName("positional_args").WithCommand(default_command);
 
-  NOLINT_EXPECT_THROW(cli->Parse(argc, argv.data()), std::runtime_error);
+  NOLINT_EXPECT_THROW(cli->Parse(argv), std::runtime_error);
 }
 
 //! Verifies that parsing with only the program name and no positionals
@@ -205,7 +202,7 @@ NOLINT_TEST(PositionalArgumentsTest, NoArguments_NoPositionals_Succeeds)
 
   const std::unique_ptr<Cli> cli
     = CliBuilder().ProgramName("positional_args").WithCommand(default_command);
-  EXPECT_NO_THROW(cli->Parse(argc, argv.data()));
+  EXPECT_NO_THROW(cli->Parse(argv));
 }
 
 //! Verifies that too few arguments for required positionals throws.
@@ -227,7 +224,7 @@ NOLINT_TEST(
 
   const std::unique_ptr<Cli> cli
     = CliBuilder().ProgramName("positional_args").WithCommand(default_command);
-  NOLINT_EXPECT_THROW(cli->Parse(argc, argv.data()), std::runtime_error);
+  NOLINT_EXPECT_THROW(cli->Parse(argv), std::runtime_error);
 }
 
 //! Verifies that an empty rest positional is handled correctly.
@@ -243,7 +240,7 @@ NOLINT_TEST(
 
   const std::unique_ptr<Cli> cli
     = CliBuilder().ProgramName("positional_args").WithCommand(default_command);
-  const auto& matches = cli->Parse(argc, argv.data()).ovm;
+  const auto& matches = cli->Parse(argv).ovm;
   EXPECT_FALSE(matches.HasOption(Option::key_rest_));
 }
 
@@ -268,7 +265,7 @@ NOLINT_TEST(
 
   const std::unique_ptr<Cli> cli
     = CliBuilder().ProgramName("positional_args").WithCommand(default_command);
-  NOLINT_EXPECT_THROW(cli->Parse(argc, argv.data()), std::runtime_error);
+  NOLINT_EXPECT_THROW(cli->Parse(argv), std::runtime_error);
 }
 
 //! Verifies that multiple trailing positionals after rest is rejected (if not
@@ -293,7 +290,7 @@ NOLINT_TEST(
 
   const std::unique_ptr<Cli> cli
     = CliBuilder().ProgramName("positional_args").WithCommand(default_command);
-  NOLINT_EXPECT_THROW(cli->Parse(argc, argv.data()), std::runtime_error);
+  NOLINT_EXPECT_THROW(cli->Parse(argv), std::runtime_error);
 }
 
 } // namespace

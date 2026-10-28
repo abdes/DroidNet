@@ -43,7 +43,7 @@ public:
   OptionValuesMap(OptionValuesMap&&) noexcept = default;
 
   auto operator=(const OptionValuesMap&) -> OptionValuesMap& = delete;
-  auto operator=(OptionValuesMap&&) -> OptionValuesMap& = delete;
+  auto operator=(OptionValuesMap&&) noexcept -> OptionValuesMap& = default;
 
   ~OptionValuesMap() = default;
 

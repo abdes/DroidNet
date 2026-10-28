@@ -77,7 +77,7 @@ auto RunDemo(std::span<const char*> args, DemoMain demo) -> int
     builder.WithOptions(host::MakeAdvancedCaptureOptions(demo.runtime), true);
     const clap::Command::Ptr default_command = builder;
     const auto cli = host::BuildCli(demo.program, demo.about, default_command);
-    const auto context = cli->Parse(static_cast<int>(args.size()), args.data());
+    const auto context = cli->Parse(args);
     if (host::HandleMetaCommand(context, default_command)) {
       return EXIT_SUCCESS;
     }

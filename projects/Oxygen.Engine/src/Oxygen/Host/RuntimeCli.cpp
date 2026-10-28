@@ -338,9 +338,9 @@ auto HandleMetaCommand(const clap::CommandLineContext& context,
   }
   default_command->Print(context, context.output_width);
   if (default_command->HasHiddenOptionGroups()) {
-    context.out << "\nADVANCED OPTIONS\n\n";
+    *context.out << "\nADVANCED OPTIONS\n\n";
     default_command->PrintHiddenOptions(context, context.output_width);
-    context.out << "\n";
+    *context.out << "\n";
   }
   return true;
 }

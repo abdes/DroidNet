@@ -5,23 +5,28 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
-#include <cstdlib>
+#include <charconv>
+#include <cstddef>
 #include <memory>
 #include <optional>
-#include <stdlib.h>
+#include <span>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <utility>
 #include <vector>
 
 #include <fmt/color.h>
 
 #include <Oxygen/Clap/Command.h>
+#include <Oxygen/Clap/CommandLineContext.h>
 #include <Oxygen/TextWrap/TextWrap.h>
 
 #ifdef _WIN32
 #  include <windows.h> // IWYU pragma: keep
 #else
+#  include <cstdlib>
+
 #  include <sys/ioctl.h>
 #  include <unistd.h>
 #endif
@@ -47,52 +52,64 @@ namespace {
 
   constexpr unsigned int kFallbackOutputWidth = 80;
 
-  auto TryParseColumnsEnv() -> std::optional<unsigned int>
+  //! The value of the environment variable `name`, if it is set.
+  auto ReadEnvironment(const char* name) -> std::optional<std::string>
   {
 #ifdef _WIN32
-    char* columns = nullptr;
-    size_t length = 0;
-    if (_dupenv_s(&columns, &length, "COLUMNS") != 0 || columns == nullptr) {
+    // The MSVC runtime deprecates `std::getenv`; the Win32 call is the
+    // supported way to read the environment.
+    const auto size = GetEnvironmentVariableA(name, nullptr, 0);
+    if (size == 0) {
       return std::nullopt;
     }
-    const auto cleanup
-      = std::unique_ptr<char, decltype(&std::free)>(columns, &std::free);
-    if (*columns == '\0') {
+    auto value = std::string(size, '\0');
+    const auto written = GetEnvironmentVariableA(name, value.data(), size);
+    if (written == 0 || written >= size) {
       return std::nullopt;
     }
-    char* end = nullptr;
-    const auto value = std::strtoul(columns, &end, 10);
-    if (end == columns || *end != '\0' || value < 1U) {
-      return std::nullopt;
-    }
-    return static_cast<unsigned int>(value);
+    value.resize(written);
+    return value;
 #else
-    const char* columns = std::getenv("COLUMNS");
-    if (columns == nullptr || *columns == '\0') {
+    const char* value = std::getenv(name);
+    if (value == nullptr) {
       return std::nullopt;
     }
-    char* end = nullptr;
-    const auto value = std::strtoul(columns, &end, 10);
-    if (end == columns || *end != '\0' || value < 1U) {
-      return std::nullopt;
-    }
-    return static_cast<unsigned int>(value);
+    return std::string(value);
 #endif
+  }
+
+  //! The terminal width the `COLUMNS` environment variable states, if it
+  //! states a positive number.
+  auto TryParseColumnsEnv() -> std::optional<unsigned int>
+  {
+    const auto columns = ReadEnvironment("COLUMNS");
+    if (!columns.has_value()) {
+      return std::nullopt;
+    }
+    const auto* const first = std::to_address(columns->begin());
+    const auto* const last = std::to_address(columns->end());
+    auto value = 0U;
+    const auto [end, error] = std::from_chars(first, last, value);
+    if (error != std::errc {} || end != last || value < 1U) {
+      return std::nullopt;
+    }
+    return value;
   }
 
   auto GetTerminalWidth() -> std::optional<unsigned int>
   {
 #ifdef _WIN32
-    const HANDLE handle = GetStdHandle(STD_OUTPUT_HANDLE);
+    // `HANDLE` is a pointer; spelling it out keeps the handle itself constant,
+    // not what it points to.
+    auto* const handle = GetStdHandle(STD_OUTPUT_HANDLE);
     if (handle == INVALID_HANDLE_VALUE || handle == nullptr) {
       return TryParseColumnsEnv();
     }
     CONSOLE_SCREEN_BUFFER_INFO info;
-    if (!GetConsoleScreenBufferInfo(handle, &info)) {
+    if (GetConsoleScreenBufferInfo(handle, &info) == FALSE) {
       return TryParseColumnsEnv();
     }
-    const auto width
-      = static_cast<int>(info.srWindow.Right - info.srWindow.Left + 1);
+    const auto width = info.srWindow.Right - info.srWindow.Left + 1;
     if (width < 1) {
       return TryParseColumnsEnv();
     }
@@ -120,9 +137,10 @@ namespace {
 
 } // namespace
 
-auto Cli::Parse(const int argc, const char** argv) -> CommandLineContext
+auto Cli::Parse(const std::span<const char* const> command_line,
+  const CliStreams streams) -> CommandLineContext
 {
-  const Arguments cla { argc, argv };
+  const Arguments cla { command_line };
 
   if (!program_name_) {
     program_name_ = cla.ProgramName();
@@ -163,19 +181,15 @@ auto Cli::Parse(const int argc, const char** argv) -> CommandLineContext
     }
   }
 
-  // Each parse starts from an empty value map; values (including defaults)
-  // from a previous parse must not leak into this one.
-  ovm_.Clear();
-
   const parser::Tokenizer tokenizer { args };
   const auto resolved_width
     = ResolveOutputWidth(output_width_, auto_output_width_);
-  CommandLineContext context(
-    ProgramName(), active_command_, ovm_, resolved_width);
+  // Each parse fills a context of its own, so values, including defaults, from
+  // a previous parse cannot leak into it.
+  CommandLineContext context(ProgramName(), nullptr, resolved_width, streams);
   context.theme = theme_ ? theme_ : &CliTheme::Dark();
   context.global_option_groups = &global_option_groups_;
-  parser::CmdLineParser parser(
-    context, tokenizer, commands_, global_options_, global_option_groups_);
+  parser::CmdLineParser parser(context, tokenizer, commands_, global_options_);
   if (parser.Parse()) {
     if (context.ovm.HasOption("theme")) {
       const auto& values = context.ovm.ValuesOf("theme");
@@ -191,8 +205,9 @@ auto Cli::Parse(const int argc, const char** argv) -> CommandLineContext
       HandleVersionCommand(context);
     }
 
-    // Finalize values for all options across all commands so that StoreTo
-    // side-effects are applied (and defaults propagated) once.
+    // Finalize values for all options across all commands, and for the global
+    // options, so that StoreTo side-effects are applied (and defaults
+    // propagated) once.
     for (const auto& cmd : commands_) {
       for (const auto& opt : cmd->CommandOptions()) {
         opt->FinalizeValue(context.ovm);
@@ -201,13 +216,17 @@ auto Cli::Parse(const int argc, const char** argv) -> CommandLineContext
         opt->FinalizeValue(context.ovm);
       }
     }
+    for (const auto& opt : global_options_) {
+      opt->FinalizeValue(context.ovm);
+    }
 
     return context;
   }
+  // The hint belongs with the error the parser has just reported.
   if (HasHelpCommand()) {
-    context.out << fmt::format(
+    *context.err << fmt::format(
       "Try '{} --help' for more information.", program_name_.value())
-                << '\n';
+                 << '\n';
   }
   throw CmdLineArgumentsError(
     fmt::format("command line arguments parsing failed, try '{} --help' for "
@@ -229,17 +248,18 @@ auto Cli::PrintCommands(
   const CommandLineContext& context, const unsigned int width) const -> void
 {
   const CliTheme& theme = context.theme ? *context.theme : CliTheme::Plain();
-  context.out << fmt::format(theme.section_header, "SUB-COMMANDS\n\n");
+  *context.out << fmt::format(theme.section_header, "SUB-COMMANDS\n\n");
   for (const auto& command : commands_) {
     if (!command->IsDefault()) {
-      context.out << "   "
-                  << fmt::format(
-                       theme.command_name, "{}", command->PathAsString())
-                  << "\n";
+      *context.out << "   "
+                   << fmt::format(
+                        theme.command_name, "{}", command->PathAsString())
+                   << "\n";
       wrap::TextWrapper wrap
         = detail::MakeStyledWrapper(width, "     ", "     ");
-      context.out << wrap.Fill(command->About()).value_or("__wrapping_error__");
-      context.out << "\n\n";
+      *context.out
+        << wrap.Fill(command->About()).value_or("__wrapping_error__");
+      *context.out << "\n\n";
     }
   }
 }
@@ -251,10 +271,10 @@ auto Cli::PrintFooter(
     return;
   }
   const CliTheme& theme = context.theme ? *context.theme : CliTheme::Plain();
-  context.out << fmt::format(theme.section_header, "FOOTER\n");
+  *context.out << fmt::format(theme.section_header, "FOOTER\n");
   const wrap::TextWrapper wrap = detail::MakeStyledWrapper(width, "   ", "   ");
-  context.out << wrap.Fill(footer_).value_or("__wrapping_error__");
-  context.out << "\n\n";
+  *context.out << wrap.Fill(footer_).value_or("__wrapping_error__");
+  *context.out << "\n\n";
 }
 
 auto Cli::Print(
@@ -278,9 +298,9 @@ auto Cli::EnableVersionCommand() -> void
 
 auto Cli::HandleVersionCommand(const CommandLineContext& context) const -> void
 {
-  context.out << fmt::format(
+  *context.out << fmt::format(
     "{} version {}\n", program_name_.value_or("__no_program_name__"), version_)
-              << '\n';
+               << '\n';
 }
 
 auto Cli::EnableHelpCommand() -> void
@@ -326,12 +346,12 @@ auto Cli::HandleHelpCommand(const CommandLineContext& context) const -> void
         (*command)->Print(context, context.output_width);
         PrintFooter(context, context.output_width);
       } else {
-        context.err << fmt::format(
+        *context.err << fmt::format(
           "The path `{}` does not correspond to a known command.\n",
           fmt::join(command_path, " "));
-        context.out << fmt::format("Try '{} --help' for more information.",
+        *context.err << fmt::format("Try '{} --help' for more information.",
           program_name_.value_or("__no_program_name__"))
-                    << '\n';
+                     << '\n';
       }
     } else {
       PrintDefaultCommand(context, context.output_width);

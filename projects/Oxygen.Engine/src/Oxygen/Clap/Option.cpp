@@ -30,20 +30,20 @@ auto Option::PrintValueDescription(
 {
   const CliTheme& theme = context.theme ? *context.theme : CliTheme::Plain();
   if (value_semantic_ && !value_semantic_->IsFlag()) {
-    context.out << separator;
+    *context.out << separator;
     if (!value_semantic_->IsRequired()) {
-      context.out << "[";
+      *context.out << "[";
     }
-    context.out << fmt::format(
+    *context.out << fmt::format(
       theme.placeholder, "<{}>", value_semantic_->UserFriendlyName());
     if (value_semantic_->IsRepeatable()) {
-      context.out << "...";
+      *context.out << "...";
     }
     if (!value_semantic_->IsRequired()) {
-      context.out << "]";
+      *context.out << "]";
     }
   }
-  context.out << "\n";
+  *context.out << "\n";
 }
 
 auto Option::Print(
@@ -51,34 +51,34 @@ auto Option::Print(
 {
   const CliTheme& theme = context.theme ? *context.theme : CliTheme::Plain();
   if (IsPositional()) {
-    context.out << "   ";
+    *context.out << "   ";
     if (!IsRequired()) {
-      context.out << "[";
+      *context.out << "[";
     }
-    context.out << fmt::format(theme.placeholder, "<{}>", UserFriendlyName());
+    *context.out << fmt::format(theme.placeholder, "<{}>", UserFriendlyName());
     if (!IsRequired()) {
-      context.out << "]";
+      *context.out << "]";
     }
-    context.out << "\n";
+    *context.out << "\n";
   } else {
-    context.out << "   ";
+    *context.out << "   ";
     if (!short_name_.empty() && !long_name_.empty()) {
-      context.out << fmt::format(
+      *context.out << fmt::format(
         theme.option_flag, "-{}, --{}", short_name_, long_name_);
       PrintValueDescription(context, " ");
     } else if (!short_name_.empty()) {
-      context.out << fmt::format(theme.option_flag, "-{}", short_name_);
+      *context.out << fmt::format(theme.option_flag, "-{}", short_name_);
       PrintValueDescription(context, " ");
     } else if (!long_name_.empty()) {
-      context.out << fmt::format(theme.option_flag, "--{}", long_name_);
+      *context.out << fmt::format(theme.option_flag, "--{}", long_name_);
       PrintValueDescription(context, "=");
     } else {
-      context.out << "\n";
+      *context.out << "\n";
     }
   }
 
   const wrap::TextWrapper wrap = detail::MakeStyledWrapper(width, "   ", "   ");
-  context.out << wrap.Fill(About()).value_or("__wrapping_error__");
+  *context.out << wrap.Fill(About()).value_or("__wrapping_error__");
 }
 
 auto Option::WithKey(std::string key) -> OptionBuilder
@@ -101,13 +101,13 @@ auto Options::Print(
 {
   const CliTheme& theme = context.theme ? *context.theme : CliTheme::Plain();
   if (!label.empty()) {
-    context.out << fmt::format(theme.section_header, "{}", label) << '\n';
+    *context.out << fmt::format(theme.section_header, "{}", label) << '\n';
   }
   for (size_t option_index = 0; option_index < options.size(); ++option_index) {
     const auto& option = options[option_index];
     option->Print(context, width);
     if (option_index + 1U < options.size()) {
-      context.out << "\n\n";
+      *context.out << "\n\n";
     }
   }
 }

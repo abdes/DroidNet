@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <array>
 #include <cstddef>
 #include <memory>
 #include <string>
@@ -261,11 +262,11 @@ NOLINT_TEST(CliBuilder, OutputWidthIsUsedForHelpFormatting)
                      .Build();
 
   constexpr int argc = 2;
-  const char* argv[argc] = { "clap-test", "--help" };
+  const auto argv = std::array<const char*, argc> { "clap-test", "--help" };
   testing::internal::CaptureStdout();
 
   // Act
-  (void)cli->Parse(argc, argv);
+  (void)cli->Parse(argv);
   const auto output = testing::internal::GetCapturedStdout();
 
   // Assert
