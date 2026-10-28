@@ -58,14 +58,14 @@ public static class SceneNodeTemplates
         var transform = node.Transform;
         transform.LocalPosition = kind switch
         {
-            LightKind.Point => new Vector3(0f, 2f, 0f),
+            LightKind.Point => new Vector3(0f, 0f, 2f),
             LightKind.Spot => new Vector3(0f, 3f, 3f),
             _ => Vector3.Zero,
         };
         transform.LocalRotation = kind switch
         {
             LightKind.Directional => DirectionalLightComponent.DefaultLocalRotation,
-            LightKind.Spot => Quaternion.CreateFromYawPitchRoll(0f, -0.7853982f, 0f),
+            LightKind.Spot => Quaternion.CreateFromAxisAngle(Vector3.UnitX, MathF.PI / 4f),
             _ => Quaternion.Identity,
         };
 

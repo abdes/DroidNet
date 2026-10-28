@@ -13,9 +13,10 @@ namespace Oxygen.Editor.World.Components;
 public sealed partial class DirectionalLightComponent : LightComponent
 {
     /// <summary>
-    /// Default local rotation for new directional lights.
+    /// Default local rotation for new directional lights: 45 degrees about X, which tilts the light's forward (-Y)
+    /// down toward -Z.
     /// </summary>
-    public static readonly Quaternion DefaultLocalRotation = Quaternion.CreateFromYawPitchRoll(0f, 0.7853982f, 0f);
+    public static readonly Quaternion DefaultLocalRotation = Quaternion.CreateFromAxisAngle(Vector3.UnitX, MathF.PI / 4f);
 
     private float intensityLux = SceneSchema.DirectionalLight.Defaults.IntensityLux;
     private float angularSizeRadians = SceneSchema.DirectionalLight.Defaults.AngularSizeRadians;

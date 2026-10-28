@@ -26,8 +26,8 @@ public sealed class SceneNodeTemplatesTests
     public static IEnumerable<TestDataRow<LightTransformCase>> LightTransforms =>
     [
         new(new LightTransformCase(LightKind.Directional, Vector3.Zero, DirectionalLightComponent.DefaultLocalRotation)) { DisplayName = "Directional" },
-        new(new LightTransformCase(LightKind.Point, new Vector3(0, 2, 0), Quaternion.Identity)) { DisplayName = "Point" },
-        new(new LightTransformCase(LightKind.Spot, new Vector3(0, 3, 3), Quaternion.CreateFromAxisAngle(Vector3.UnitX, -MathF.PI / 4))) { DisplayName = "Spot" },
+        new(new LightTransformCase(LightKind.Point, new Vector3(0, 0, 2), Quaternion.Identity)) { DisplayName = "Point" },
+        new(new LightTransformCase(LightKind.Spot, new Vector3(0, 3, 3), Quaternion.CreateFromAxisAngle(Vector3.UnitX, MathF.PI / 4))) { DisplayName = "Spot" },
     ];
 
     public static IEnumerable<TestDataRow<AppendCase>> Scopes =>
@@ -73,6 +73,20 @@ public sealed class SceneNodeTemplatesTests
         var transform = node.Components.OfType<TransformData>().Single();
         _ = transform.Position.Should().Be(row.Position);
         SceneAssert.SameRotation(transform.Rotation, row.Rotation);
+    }
+
+    [TestMethod]
+    public async Task SpotLight_DefaultPointsAtTheOrigin()
+    {
+        using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
+
+        var node = SceneNodeTemplates.Light(fixture.Scene, LightKind.Spot);
+
+        // A light shines along its node's forward, local -Y (Oxygen/Core/Constants.h).
+        var transform = node.Components.OfType<TransformData>().Single();
+        var direction = Vector3.Transform(-Vector3.UnitY, transform.Rotation);
+        var toOrigin = Vector3.Normalize(-transform.Position);
+        _ = Vector3.Dot(direction, toOrigin).Should().BeApproximately(1f, 1e-5f);
     }
 
     [TestMethod]
