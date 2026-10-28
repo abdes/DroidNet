@@ -259,6 +259,26 @@ static_assert(sizeof(SoftBodyBindingRecord) == 68);
 `settings_scale` is applied to shared-settings vertices before runtime
 constraint derivation.
 
+The cook builds the Jolt shared settings from the soft body's
+`source_mesh_ref` geometry (standard buffers, or a procedural recipe it
+generates):
+
+- The surface is welded by position first: vertices at the same position
+  (-0 and +0 equal) become one particle, and vertices no face uses are dropped.
+  Render meshes split vertices at UV seams, poles and hard edges, which would
+  otherwise tear the soft body apart along every split.
+- The welded surface must be one oriented 2-manifold piece: every edge borders
+  at most two faces, running opposite ways (`physics.sidecar.
+soft_body_surface_not_manifold`), and the faces form one connected part
+  (`physics.sidecar.soft_body_surface_disconnected`).
+- `pressure_coefficient > 0` needs a closed surface
+  (`physics.sidecar.soft_body_surface_not_closed`) wound outward, enclosing a
+  positive rest volume.
+- `pinned_vertices` and `kinematic_vertices` name source mesh vertices; each
+  lands on its welded particle, and one that no face uses is rejected
+  (`physics.sidecar.soft_body_pin_invalid`). The sidecar schema keeps each list
+  free of duplicates.
+
 **Joints/Constraints Binding:**
 Declares an articulated link or two-body constraint between nodes. Because Jolt constraint properties (motor settings, limits, degrees of freedom) are highly variable and complex, the record points to a serialized `JPH::ConstraintSettings` binary block.
 
@@ -433,25 +453,25 @@ Hydration events and mutations must adhere strictly to Oxygen phase boundaries:
 
 1. **Scene build/load phase**:
 
-- Instantiate Scene nodes/components first.
-- Resolve SceneNodeIndexT -> NodeHandle mapping once.
+   - Instantiate Scene nodes/components first.
+   - Resolve SceneNodeIndexT -> NodeHandle mapping once.
 
 2. **Physics hydration phase (module-owned)**:
 
-- Apply PhysicsSceneAssetDesc records via ScenePhysics/PhysicsModule APIs.
-- No writes to SceneNodeImpl physics members (none should exist).
+   - Apply PhysicsSceneAssetDesc records via ScenePhysics/PhysicsModule APIs.
+   - No writes to SceneNodeImpl physics members (none should exist).
 
 3. **Runtime phase ownership**:
 
-- kGameplay: stage command intents + flush structural changes (from Scripts & C++ game code).
-- kFixedSimulation: backend step only (Jolt executes).
-- kSceneMutation: pull simulation state to scene (Jolt updates static/spatial hierarchies).
+   - kGameplay: stage command intents + flush structural changes (from Scripts & C++ game code).
+   - kFixedSimulation: backend step only (Jolt executes).
+   - kSceneMutation: pull simulation state to scene (Jolt updates static/spatial hierarchies).
 
 4. **Authority guarantees**:
 
-- Rigid static/kinematic: scene/command authority per contract.
-- Dynamic/soft-body/articulation: simulation authority.
-- Vehicle: command input authority + simulation state ownership.
+   - Rigid static/kinematic: scene/command authority per contract.
+   - Dynamic/soft-body/articulation: simulation authority.
+   - Vehicle: command input authority + simulation state ownership.
 
 ## 9. Validation and Diagnostics Contract (Required)
 

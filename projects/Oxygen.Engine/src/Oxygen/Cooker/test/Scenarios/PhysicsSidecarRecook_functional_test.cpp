@@ -563,23 +563,28 @@ namespace {
       VertexPosition { .x = -0.12F, .y = -0.10F, .z = -0.12F },
       VertexPosition { .x = 0.12F, .y = -0.10F, .z = -0.12F },
       VertexPosition { .x = 0.0F, .y = -0.10F, .z = 0.14F },
-      VertexPosition { .x = -0.06F, .y = 0.02F, .z = 0.08F },
+      VertexPosition { .x = 0.0F, .y = 0.15F, .z = 0.0F },
       VertexPosition { .x = 0.06F, .y = 0.02F, .z = 0.08F },
       VertexPosition { .x = 0.0F, .y = -0.02F, .z = -0.04F },
     };
+    // A tetrahedron wound outward, so the pressure the bindings author has a
+    // positive rest volume. Vertex 4 is a seam copy of vertex 0 that one face
+    // uses: the surface is closed only once the cook welds them, and a pin on
+    // vertex 4 lands on the welded apex. No face uses vertices 5 and 6, which
+    // the cook drops.
     const auto indices = std::array<uint32_t, 12> {
       0U,
-      1U,
-      2U, // top
-      0U,
       2U,
-      3U, // side
+      1U, // top
+      4U,
+      3U,
+      2U, // side
       0U,
-      3U,
-      1U, // side
       1U,
-      3U,
-      2U, // base
+      3U, // side
+      1U,
+      2U,
+      3U, // base
     };
 
     auto descriptor = geometry::GeometryAssetDesc {};
@@ -1302,7 +1307,7 @@ NOLINT_TEST(PhysicsPhase3ClosureTest,
     << "Expected geometry_asset_before to contain a value";
 
   const auto second_bindings
-    = BuildComplexSidecarBindings({ 1U, 4U, 6U }, { 2U, 3U });
+    = BuildComplexSidecarBindings({ 1U, 4U }, { 2U, 3U });
   const auto second_sidecar_report = SubmitAndWait(service,
     MakePhysicsSidecarRequest(cooked_root, kSceneVirtualPath, second_bindings));
   ASSERT_HAS_VALUE(second_sidecar_report);
@@ -1465,6 +1470,61 @@ NOLINT_TEST(PhysicsPhase3ClosureTest,
   EXPECT_TRUE(has_backend_mismatch);
 
   service.Stop();
+}
+
+namespace {
+
+  //! Cooks the complex sidecar with `pinned` source vertices and returns the
+  //! diagnostic codes its report carries.
+  auto CookComplexSidecarCodes(const std::string_view temp_name,
+    const std::vector<uint32_t>& pinned) -> std::vector<std::string>
+  {
+    auto service = AsyncImportService(AsyncImportService::Config {
+      .thread_pool_size = 2U,
+    });
+    [[maybe_unused]] auto stop_service
+      = oxygen::Finally([&service] -> void { service.Stop(); });
+    const oxygen::cooker::test::ScopedTempDir temp;
+    const auto cooked_root = temp.Path() / temp_name;
+    std::filesystem::create_directories(cooked_root);
+
+    RegisterStubGeometryAsset(
+      cooked_root, kGeometryVirtualPath, "Geometry/cloth.ogeo");
+    const auto scene_report = SubmitAndWait(
+      service, MakeSceneDescriptorRequest(cooked_root, kSceneName, 10U));
+    const auto material_report
+      = SubmitAndWait(service, MakePhysicsMaterialRequest(cooked_root));
+    const auto shape_report
+      = SubmitAndWait(service, MakeCompoundShapeRequest(cooked_root));
+    if (!scene_report.has_value() || !scene_report->success
+      || !material_report.has_value() || !material_report->success
+      || !shape_report.has_value() || !shape_report->success) {
+      ADD_FAILURE() << "The complex scene's inputs must cook";
+      return {};
+    }
+
+    const auto report = SubmitAndWait(service,
+      MakePhysicsSidecarRequest(cooked_root, kSceneVirtualPath,
+        BuildComplexSidecarBindings(pinned, { 1U, 3U })));
+    auto codes = std::vector<std::string> {};
+    if (report.has_value()) {
+      for (const auto& diagnostic : report->diagnostics) {
+        codes.push_back(diagnostic.code);
+      }
+    }
+    service.Stop();
+    return codes;
+  }
+
+} // namespace
+
+//! A pin names a source mesh vertex; one no face uses is not on the surface.
+NOLINT_TEST(
+  PhysicsPhase3ClosureTest, SoftBodyPinOnAVertexNoFaceUsesFailsTheCook)
+{
+  const auto codes = CookComplexSidecarCodes("pin_not_on_surface", { 0U, 5U });
+  EXPECT_NE(std::ranges::find(codes, "physics.sidecar.soft_body_pin_invalid"),
+    codes.end());
 }
 
 } // namespace oxygen::content::import::test

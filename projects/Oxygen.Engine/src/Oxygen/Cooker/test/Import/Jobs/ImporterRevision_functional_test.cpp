@@ -132,7 +132,7 @@ namespace {
     },
     {
       .importer = Importer::kPhysicsSidecar,
-      .revision = 1,
+      .revision = 2,
       .digest
       = "c835b5d47f2f69af87acd5a0fd6e35447c23a4790a1c3fc8a01def19b0a700ea",
     },

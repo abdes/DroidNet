@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <bit>
 #include <chrono>
 #include <cmath>
 #include <cstddef>
@@ -19,10 +20,13 @@
 #include <fstream>
 #include <ios>
 #include <limits>
+#include <map>
 #include <mutex>
+#include <numeric>
 #include <optional>
 #include <span>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <type_traits>
@@ -61,6 +65,7 @@
 #include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Base/Span.h>
 #include <Oxygen/Content/VirtualPathResolver.h>
@@ -214,7 +219,8 @@ namespace {
     if (bytes.size() < kOffset + sizeof(hash)) {
       return;
     }
-    std::memcpy(bytes.data() + kOffset, &hash, sizeof(hash));
+    std::memcpy(std::span { bytes }.subspan(kOffset, sizeof(hash)).data(),
+      &hash, sizeof(hash));
   }
 
   struct RigidBodyBindingSource final {
@@ -238,7 +244,7 @@ namespace {
   struct SoftBodyBindingSource final {
     phys::SoftBodyBindingRecord record {};
     std::string source_mesh_ref;
-    data::AssetKey source_mesh_asset_key {};
+    data::AssetKey source_mesh_asset_key;
     std::string source_mesh_descriptor_relpath;
     data::AssetReferences source_mesh_references;
     std::optional<std::string> collision_mesh_ref;
@@ -284,10 +290,9 @@ namespace {
     std::vector<phys::AggregateBindingRecord> aggregates;
   };
 
-  auto ReadRequiredString(const nlohmann::json& obj, const char* field,
-    std::string& out, std::string& error) -> bool
+  auto ReadRequiredString(
+    const nlohmann::json& obj, const char* field, std::string& out) -> bool
   {
-    (void)error;
     out = obj.at(field).get<std::string>();
     return true;
   }
@@ -313,17 +318,6 @@ namespace {
   {
     (void)error;
     out = obj.at(field).get<float>();
-    return true;
-  }
-
-  auto ReadRequiredFloat3(const nlohmann::json& obj, const char* field,
-    float (&out)[3], std::string& error) -> bool
-  {
-    (void)error;
-    const auto values = obj.at(field).get<std::array<float, 3>>();
-    out[0] = values.at(0);
-    out[1] = values.at(1);
-    out[2] = values.at(2);
     return true;
   }
 
@@ -441,7 +435,7 @@ namespace {
   }
 
   auto ReadOptionalFloat3(const nlohmann::json& obj, const char* field,
-    float (&out)[3], uint32_t& has_override, std::string& error) -> bool
+    std::span<float, 3> out, uint32_t& has_override, std::string& error) -> bool
   {
     (void)error;
     if (!obj.contains(field)) {
@@ -713,19 +707,6 @@ namespace {
     }
   }
 
-  [[nodiscard]] auto BackendForVehicleFormat(
-    const phys::PhysicsResourceFormat format) -> std::optional<PhysicsBackend>
-  {
-    switch (format) {
-    case phys::PhysicsResourceFormat::kJoltVehicleConstraintBinary:
-      return PhysicsBackend::kJolt;
-    case phys::PhysicsResourceFormat::kPhysXVehicleSettingsBinary:
-      return PhysicsBackend::kPhysX;
-    default:
-      return std::nullopt;
-    }
-  }
-
   auto ParseRigidBodyBackend(const nlohmann::json& obj,
     phys::RigidBodyBindingRecord& out, std::string& error) -> bool
   {
@@ -881,10 +862,10 @@ namespace {
     if (!ReadRequiredUInt32(binding, "node_index", node_index, error)) {
       return false;
     }
-    if (!ReadRequiredString(binding, "shape_ref", out.shape_ref, error)) {
+    if (!ReadRequiredString(binding, "shape_ref", out.shape_ref)) {
       return false;
     }
-    if (!ReadRequiredString(binding, "material_ref", out.material_ref, error)) {
+    if (!ReadRequiredString(binding, "material_ref", out.material_ref)) {
       return false;
     }
 
@@ -934,10 +915,10 @@ namespace {
     if (!ReadRequiredUInt32(binding, "node_index", node_index, error)) {
       return false;
     }
-    if (!ReadRequiredString(binding, "shape_ref", out.shape_ref, error)) {
+    if (!ReadRequiredString(binding, "shape_ref", out.shape_ref)) {
       return false;
     }
-    if (!ReadRequiredString(binding, "material_ref", out.material_ref, error)) {
+    if (!ReadRequiredString(binding, "material_ref", out.material_ref)) {
       return false;
     }
 
@@ -961,7 +942,7 @@ namespace {
     if (!ReadRequiredUInt32(binding, "node_index", node_index, error)) {
       return false;
     }
-    if (!ReadRequiredString(binding, "shape_ref", out.shape_ref, error)) {
+    if (!ReadRequiredString(binding, "shape_ref", out.shape_ref)) {
       return false;
     }
 
@@ -994,8 +975,7 @@ namespace {
     if (!ReadRequiredUInt32(binding, "node_index", node_index, error)) {
       return false;
     }
-    if (!ReadRequiredString(
-          binding, "source_mesh_ref", out.source_mesh_ref, error)) {
+    if (!ReadRequiredString(binding, "source_mesh_ref", out.source_mesh_ref)) {
       return false;
     }
     out.record.node_index = node_index;
@@ -1089,8 +1069,7 @@ namespace {
     const auto& wheels = binding.at("wheels");
     out.wheels.clear();
     out.wheels.reserve(wheels.size());
-    for (size_t i = 0; i < wheels.size(); ++i) {
-      const auto& wheel = wheels.at(i);
+    for (const auto& wheel : wheels) {
       auto wheel_source = VehicleWheelSource {};
       uint32_t wheel_node_index = 0;
       uint32_t axle_index_u32 = 0;
@@ -1135,7 +1114,7 @@ namespace {
   template <typename RecordT, typename ParseFn>
   auto ParseBindingsArray(const nlohmann::json& bindings, const char* key,
     std::vector<RecordT>& out, ImportSession& session,
-    const ImportRequest& request, ParseFn&& parse_fn) -> void
+    const ImportRequest& request, const ParseFn& parse_fn) -> void
   {
     if (!bindings.contains(key)) {
       return;
@@ -1180,7 +1159,7 @@ namespace {
 
   template <typename RecordT, typename NodeIndexFn>
   auto ValidateSingletonBindings(const std::vector<RecordT>& records,
-    std::string_view category, NodeIndexFn&& node_index_of,
+    std::string_view category, const NodeIndexFn& node_index_of,
     ImportSession& session, const ImportRequest& request) -> void
   {
     auto singleton_nodes = std::vector<uint32_t> {};
@@ -1281,41 +1260,48 @@ namespace {
   }
 
   struct BindingValidationContext final {
-    ImportSession& session;
-    const ImportRequest& request;
-    content::VirtualPathResolver& resolver;
+    observer_ptr<ImportSession> session;
+    observer_ptr<const ImportRequest> request;
+    observer_ptr<content::VirtualPathResolver> resolver;
     std::span<const SidecarCookedInspectionContext> cooked_contexts;
-    const AssetRecordMap& target_assets;
-    const std::filesystem::path& target_cooked_root;
+    observer_ptr<const AssetRecordMap> target_assets;
     uint32_t node_count = 0;
+  };
+
+  //! The diagnostic codes of a reference that fails to resolve.
+  struct ReferenceCodes final {
+    //! The virtual path names no cooked asset.
+    std::string_view unresolved;
+    //! The asset it names has the wrong type.
+    std::string_view wrong_type;
   };
 
   auto ResolveAssetKeyForVirtualPath(BindingValidationContext& ctx,
     std::string_view virtual_path, std::string_view object_path,
-    const data::AssetType expected_type, std::string_view unresolved_code,
-    std::string_view wrong_type_code) -> std::optional<data::AssetKey>
+    const data::AssetType expected_type, const ReferenceCodes& codes)
+    -> std::optional<data::AssetKey>
   {
     auto resolved_key = std::optional<data::AssetKey> {};
     try {
-      resolved_key = ctx.resolver.ResolveAssetKey(virtual_path);
+      resolved_key = ctx.resolver->ResolveAssetKey(virtual_path);
     } catch (const std::exception& ex) {
-      AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
-        std::string(unresolved_code),
+      AddDiagnosticAtPath(*ctx.session, *ctx.request, ImportSeverity::kError,
+        std::string(codes.unresolved),
         "Invalid virtual path: " + std::string(ex.what()),
         std::string(object_path));
       return std::nullopt;
     }
 
     if (!resolved_key.has_value()) {
-      AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
-        std::string(unresolved_code),
+      AddDiagnosticAtPath(*ctx.session, *ctx.request, ImportSeverity::kError,
+        std::string(codes.unresolved),
         "Resolved key not found for virtual path: " + std::string(virtual_path),
         std::string(object_path));
       return std::nullopt;
     }
 
-    const auto target_it = ctx.target_assets.find(*resolved_key);
-    if (target_it == ctx.target_assets.end()) {
+    const auto target_it = ctx.target_assets->find(*resolved_key);
+    if (target_it == ctx.target_assets->end()) {
       bool found_in_other_source = false;
       for (const auto& context : ctx.cooked_contexts) {
         for (const auto& asset : context.inspection.Assets()) {
@@ -1329,9 +1315,9 @@ namespace {
         }
       }
 
-      AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
+      AddDiagnosticAtPath(*ctx.session, *ctx.request, ImportSeverity::kError,
         found_in_other_source ? "physics.sidecar.reference_source_mismatch"
-                              : std::string(unresolved_code),
+                              : std::string(codes.unresolved),
         found_in_other_source
           ? "Resolved reference is not in the target scene source domain"
           : "Resolved key not found for virtual path: "
@@ -1342,8 +1328,8 @@ namespace {
 
     if (static_cast<data::AssetType>(target_it->second->asset_type)
       != expected_type) {
-      AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
-        std::string(wrong_type_code),
+      AddDiagnosticAtPath(*ctx.session, *ctx.request, ImportSeverity::kError,
+        std::string(codes.wrong_type),
         "Resolved reference has unexpected asset type",
         std::string(object_path));
       return std::nullopt;
@@ -1374,20 +1360,24 @@ namespace {
       const auto base_path = std::string("bindings.") + std::string(category)
         + "[" + std::to_string(i) + "]";
       if (!ValidateNodeIndex(binding.record.node_index, ctx.node_count,
-            ctx.session, ctx.request, base_path)) {
+            *ctx.session, *ctx.request, base_path)) {
         continue;
       }
 
       const auto shape_key
         = ResolveAssetKeyForVirtualPath(ctx, binding.shape_ref,
           base_path + ".shape_ref", data::AssetType::kCollisionShape,
-          "physics.sidecar.shape_ref_unresolved",
-          "physics.sidecar.shape_ref_not_collision_shape");
+          ReferenceCodes {
+            .unresolved = "physics.sidecar.shape_ref_unresolved",
+            .wrong_type = "physics.sidecar.shape_ref_not_collision_shape",
+          });
       const auto material_key
         = ResolveAssetKeyForVirtualPath(ctx, binding.material_ref,
           base_path + ".material_ref", data::AssetType::kPhysicsMaterial,
-          "physics.sidecar.material_ref_unresolved",
-          "physics.sidecar.material_ref_not_physics_material");
+          ReferenceCodes {
+            .unresolved = "physics.sidecar.material_ref_unresolved",
+            .wrong_type = "physics.sidecar.material_ref_not_physics_material",
+          });
       if (shape_key.has_value()) {
         binding.record.shape_asset_key = *shape_key;
       }
@@ -1406,15 +1396,17 @@ namespace {
       const auto base_path = std::string("bindings.") + std::string(category)
         + "[" + std::to_string(i) + "]";
       if (!ValidateNodeIndex(binding.record.node_index, ctx.node_count,
-            ctx.session, ctx.request, base_path)) {
+            *ctx.session, *ctx.request, base_path)) {
         continue;
       }
 
       const auto shape_key
         = ResolveAssetKeyForVirtualPath(ctx, binding.shape_ref,
           base_path + ".shape_ref", data::AssetType::kCollisionShape,
-          "physics.sidecar.shape_ref_unresolved",
-          "physics.sidecar.shape_ref_not_collision_shape");
+          ReferenceCodes {
+            .unresolved = "physics.sidecar.shape_ref_unresolved",
+            .wrong_type = "physics.sidecar.shape_ref_not_collision_shape",
+          });
       if (shape_key.has_value()) {
         binding.record.shape_asset_key = *shape_key;
       }
@@ -1435,8 +1427,10 @@ namespace {
       const auto inner_shape_key
         = ResolveAssetKeyForVirtualPath(ctx, *binding.inner_shape_ref,
           base_path + ".inner_shape_ref", data::AssetType::kCollisionShape,
-          "physics.sidecar.inner_shape_ref_unresolved",
-          "physics.sidecar.inner_shape_ref_not_collision_shape");
+          ReferenceCodes {
+            .unresolved = "physics.sidecar.inner_shape_ref_unresolved",
+            .wrong_type = "physics.sidecar.inner_shape_ref_not_collision_shape",
+          });
       if (inner_shape_key.has_value()) {
         binding.record.inner_shape_asset_key = *inner_shape_key;
       }
@@ -1445,14 +1439,14 @@ namespace {
 
   template <typename RecordT, typename NodeIndexFn>
   auto ValidateNodeBindings(const std::vector<RecordT>& records,
-    std::string_view category, NodeIndexFn&& node_index_of,
+    std::string_view category, const NodeIndexFn& node_index_of,
     BindingValidationContext& ctx) -> void
   {
     for (size_t i = 0; i < records.size(); ++i) {
       const auto path = std::string("bindings.") + std::string(category) + "["
         + std::to_string(i) + "]";
       (void)ValidateNodeIndex(node_index_of(records.at(i)), ctx.node_count,
-        ctx.session, ctx.request, path);
+        *ctx.session, *ctx.request, path);
     }
   }
 
@@ -1463,7 +1457,7 @@ namespace {
     const auto expected_format_opt
       = SoftBodyFormatForBackend(requested_backend);
     if (!expected_format_opt.has_value()) {
-      AddDiagnostic(ctx.session, ctx.request, ImportSeverity::kError,
+      AddDiagnostic(*ctx.session, *ctx.request, ImportSeverity::kError,
         "physics.sidecar.backend_unsupported",
         "Requested physics backend is not supported for soft-body topology "
         "cooking: "
@@ -1475,7 +1469,7 @@ namespace {
       const auto base_path
         = std::string("bindings.soft_bodies[") + std::to_string(i) + "]";
       if (!ValidateNodeIndex(records.at(i).record.node_index, ctx.node_count,
-            ctx.session, ctx.request, base_path + ".node_index")) {
+            *ctx.session, *ctx.request, base_path + ".node_index")) {
         continue;
       }
 
@@ -1483,35 +1477,35 @@ namespace {
         return std::isfinite(value) && value >= 0.0F;
       };
       if (!is_finite_non_negative(records.at(i).record.edge_compliance)) {
-        AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
+        AddDiagnosticAtPath(*ctx.session, *ctx.request, ImportSeverity::kError,
           "physics.sidecar.payload_invalid",
           "soft_bodies.edge_compliance must be finite and >= 0",
           base_path + ".edge_compliance");
         continue;
       }
       if (!is_finite_non_negative(records.at(i).record.shear_compliance)) {
-        AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
+        AddDiagnosticAtPath(*ctx.session, *ctx.request, ImportSeverity::kError,
           "physics.sidecar.payload_invalid",
           "soft_bodies.shear_compliance must be finite and >= 0",
           base_path + ".shear_compliance");
         continue;
       }
       if (!is_finite_non_negative(records.at(i).record.bend_compliance)) {
-        AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
+        AddDiagnosticAtPath(*ctx.session, *ctx.request, ImportSeverity::kError,
           "physics.sidecar.payload_invalid",
           "soft_bodies.bend_compliance must be finite and >= 0",
           base_path + ".bend_compliance");
         continue;
       }
       if (!is_finite_non_negative(records.at(i).record.volume_compliance)) {
-        AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
+        AddDiagnosticAtPath(*ctx.session, *ctx.request, ImportSeverity::kError,
           "physics.sidecar.payload_invalid",
           "soft_bodies.volume_compliance must be finite and >= 0",
           base_path + ".volume_compliance");
         continue;
       }
       if (!std::isfinite(records.at(i).record.pressure_coefficient)) {
-        AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
+        AddDiagnosticAtPath(*ctx.session, *ctx.request, ImportSeverity::kError,
           "physics.sidecar.payload_invalid",
           "soft_bodies.pressure_coefficient must be finite",
           base_path + ".pressure_coefficient");
@@ -1519,14 +1513,14 @@ namespace {
       }
       if (!is_finite_non_negative(
             records.at(i).record.tether_max_distance_multiplier)) {
-        AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
+        AddDiagnosticAtPath(*ctx.session, *ctx.request, ImportSeverity::kError,
           "physics.sidecar.payload_invalid",
           "soft_bodies.tether_max_distance_multiplier must be finite and >= 0",
           base_path + ".tether_max_distance_multiplier");
         continue;
       }
       if (!is_finite_non_negative(records.at(i).record.global_damping)) {
-        AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
+        AddDiagnosticAtPath(*ctx.session, *ctx.request, ImportSeverity::kError,
           "physics.sidecar.payload_invalid",
           "soft_bodies.global_damping must be finite and >= 0",
           base_path + ".global_damping");
@@ -1534,28 +1528,28 @@ namespace {
       }
 
       if (!is_finite_non_negative(records.at(i).record.restitution)) {
-        AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
+        AddDiagnosticAtPath(*ctx.session, *ctx.request, ImportSeverity::kError,
           "physics.sidecar.payload_invalid",
           "soft_bodies.restitution must be finite and >= 0",
           base_path + ".restitution");
         continue;
       }
       if (!is_finite_non_negative(records.at(i).record.friction)) {
-        AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
+        AddDiagnosticAtPath(*ctx.session, *ctx.request, ImportSeverity::kError,
           "physics.sidecar.payload_invalid",
           "soft_bodies.friction must be finite and >= 0",
           base_path + ".friction");
         continue;
       }
       if (!is_finite_non_negative(records.at(i).record.vertex_radius)) {
-        AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
+        AddDiagnosticAtPath(*ctx.session, *ctx.request, ImportSeverity::kError,
           "physics.sidecar.payload_invalid",
           "soft_bodies.vertex_radius must be finite and >= 0",
           base_path + ".vertex_radius");
         continue;
       }
       if (records.at(i).record.solver_iteration_count == 0U) {
-        AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
+        AddDiagnosticAtPath(*ctx.session, *ctx.request, ImportSeverity::kError,
           "physics.sidecar.payload_invalid",
           "soft_bodies.solver_iteration_count must be greater than zero",
           base_path + ".solver_iteration_count");
@@ -1563,7 +1557,7 @@ namespace {
       }
       if (records.at(i).pinned_vertices.size()
         > static_cast<size_t>(std::numeric_limits<uint32_t>::max())) {
-        AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
+        AddDiagnosticAtPath(*ctx.session, *ctx.request, ImportSeverity::kError,
           "physics.sidecar.payload_invalid",
           "soft_bodies.pinned_vertices exceeds uint32 range",
           base_path + ".pinned_vertices");
@@ -1571,7 +1565,7 @@ namespace {
       }
       if (records.at(i).kinematic_vertices.size()
         > static_cast<size_t>(std::numeric_limits<uint32_t>::max())) {
-        AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
+        AddDiagnosticAtPath(*ctx.session, *ctx.request, ImportSeverity::kError,
           "physics.sidecar.payload_invalid",
           "soft_bodies.kinematic_vertices exceeds uint32 range",
           base_path + ".kinematic_vertices");
@@ -1586,16 +1580,18 @@ namespace {
       const auto source_mesh_key
         = ResolveAssetKeyForVirtualPath(ctx, records.at(i).source_mesh_ref,
           base_path + ".source_mesh_ref", data::AssetType::kGeometry,
-          "physics.sidecar.source_mesh_ref_unresolved",
-          "physics.sidecar.source_mesh_ref_not_geometry");
+          ReferenceCodes {
+            .unresolved = "physics.sidecar.source_mesh_ref_unresolved",
+            .wrong_type = "physics.sidecar.source_mesh_ref_not_geometry",
+          });
       if (!source_mesh_key.has_value()) {
         continue;
       }
       records.at(i).source_mesh_asset_key = *source_mesh_key;
-      const auto source_mesh_entry = ctx.target_assets.find(*source_mesh_key);
-      if (source_mesh_entry == ctx.target_assets.end()
+      const auto source_mesh_entry = ctx.target_assets->find(*source_mesh_key);
+      if (source_mesh_entry == ctx.target_assets->end()
         || source_mesh_entry->second->descriptor_relpath.empty()) {
-        AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
+        AddDiagnosticAtPath(*ctx.session, *ctx.request, ImportSeverity::kError,
           "physics.sidecar.source_mesh_ref_unresolved",
           "Resolved source mesh has no descriptor path in target cooked root",
           base_path + ".source_mesh_ref");
@@ -1610,11 +1606,13 @@ namespace {
       if (collision_mesh_ref) {
         (void)ResolveAssetKeyForVirtualPath(ctx, *collision_mesh_ref,
           base_path + ".collision_mesh_ref", data::AssetType::kGeometry,
-          "physics.sidecar.collision_mesh_ref_unresolved",
-          "physics.sidecar.collision_mesh_ref_not_geometry");
+          ReferenceCodes {
+            .unresolved = "physics.sidecar.collision_mesh_ref_unresolved",
+            .wrong_type = "physics.sidecar.collision_mesh_ref_not_geometry",
+          });
         if (requested_backend == PhysicsBackend::kJolt) {
-          AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
-            "physics.sidecar.payload_invalid",
+          AddDiagnosticAtPath(*ctx.session, *ctx.request,
+            ImportSeverity::kError, "physics.sidecar.payload_invalid",
             "soft_bodies.collision_mesh_ref is not supported for jolt backend",
             base_path + ".collision_mesh_ref");
           continue;
@@ -1626,8 +1624,8 @@ namespace {
           = BackendForSoftBodyFormat(records.at(i).record.topology_format);
         if (!authored_backend.has_value()
           || *authored_backend != requested_backend) {
-          AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
-            "physics.sidecar.backend_mismatch",
+          AddDiagnosticAtPath(*ctx.session, *ctx.request,
+            ImportSeverity::kError, "physics.sidecar.backend_mismatch",
             "soft-body backend.target must match requested import backend "
               + std::string(BackendName(requested_backend)),
             base_path + ".backend.target");
@@ -1644,7 +1642,7 @@ namespace {
   {
     const auto expected_format_opt = JointFormatForBackend(requested_backend);
     if (!expected_format_opt.has_value()) {
-      AddDiagnostic(ctx.session, ctx.request, ImportSeverity::kError,
+      AddDiagnostic(*ctx.session, *ctx.request, ImportSeverity::kError,
         "physics.sidecar.backend_unsupported",
         "Requested physics backend is not supported for joint constraint "
         "cooking: "
@@ -1657,11 +1655,11 @@ namespace {
         = std::string("bindings.joints[") + std::to_string(i) + "]";
       const bool node_a_ok
         = ValidateNodeIndex(records.at(i).record.node_index_a, ctx.node_count,
-          ctx.session, ctx.request, base_path + ".node_index_a");
+          *ctx.session, *ctx.request, base_path + ".node_index_a");
       const bool node_b_ok
         = (records.at(i).record.node_index_b == phys::kWorldAttachmentNodeIndex)
         || ValidateNodeIndex(records.at(i).record.node_index_b, ctx.node_count,
-          ctx.session, ctx.request, base_path + ".node_index_b");
+          *ctx.session, *ctx.request, base_path + ".node_index_b");
       if (!(node_a_ok && node_b_ok)) {
         continue;
       }
@@ -1671,8 +1669,8 @@ namespace {
           = BackendForJointFormat(records.at(i).constraint_format);
         if (!authored_backend.has_value()
           || *authored_backend != requested_backend) {
-          AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
-            "physics.sidecar.backend_mismatch",
+          AddDiagnosticAtPath(*ctx.session, *ctx.request,
+            ImportSeverity::kError, "physics.sidecar.backend_mismatch",
             "joint backend.target must match requested import backend "
               + std::string(BackendName(requested_backend)),
             base_path + ".backend.target");
@@ -1690,7 +1688,7 @@ namespace {
   {
     const auto expected_format_opt = VehicleFormatForBackend(requested_backend);
     if (!expected_format_opt.has_value()) {
-      AddDiagnostic(ctx.session, ctx.request, ImportSeverity::kError,
+      AddDiagnostic(*ctx.session, *ctx.request, ImportSeverity::kError,
         "physics.sidecar.backend_unsupported",
         "Requested physics backend is not supported for vehicle constraint "
         "cooking: "
@@ -1703,12 +1701,12 @@ namespace {
       const auto base_path
         = std::string("bindings.vehicles[") + std::to_string(i) + "]";
       if (!ValidateNodeIndex(records.at(i).record.node_index, ctx.node_count,
-            ctx.session, ctx.request, base_path + ".node_index")) {
+            *ctx.session, *ctx.request, base_path + ".node_index")) {
         continue;
       }
 
       if (records.at(i).wheels.size() < 2U) {
-        AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
+        AddDiagnosticAtPath(*ctx.session, *ctx.request, ImportSeverity::kError,
           "physics.sidecar.payload_invalid",
           "Vehicle must declare at least two wheels", base_path + ".wheels");
         continue;
@@ -1723,20 +1721,20 @@ namespace {
         const auto wheel_path
           = base_path + ".wheels[" + std::to_string(w) + "]";
         const auto& wheel = records.at(i).wheels.at(w);
-        if (!ValidateNodeIndex(wheel.node_index, ctx.node_count, ctx.session,
-              ctx.request, wheel_path + ".node_index")) {
+        if (!ValidateNodeIndex(wheel.node_index, ctx.node_count, *ctx.session,
+              *ctx.request, wheel_path + ".node_index")) {
           continue;
         }
         if (wheel.node_index == records.at(i).record.node_index) {
-          AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
-            "physics.sidecar.payload_invalid",
+          AddDiagnosticAtPath(*ctx.session, *ctx.request,
+            ImportSeverity::kError, "physics.sidecar.payload_invalid",
             "Vehicle wheel node_index must differ from chassis node_index",
             wheel_path + ".node_index");
           continue;
         }
         if (!wheel_nodes.insert(wheel.node_index).second) {
-          AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
-            "physics.sidecar.payload_invalid",
+          AddDiagnosticAtPath(*ctx.session, *ctx.request,
+            ImportSeverity::kError, "physics.sidecar.payload_invalid",
             "Vehicle wheels must reference distinct node_index values",
             wheel_path + ".node_index");
           continue;
@@ -1744,22 +1742,22 @@ namespace {
         const auto role_key = (static_cast<uint32_t>(wheel.axle_index) << 16U)
           | static_cast<uint32_t>(wheel.side);
         if (!wheel_roles.insert(role_key).second) {
-          AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
-            "physics.sidecar.payload_invalid",
+          AddDiagnosticAtPath(*ctx.session, *ctx.request,
+            ImportSeverity::kError, "physics.sidecar.payload_invalid",
             "Vehicle wheel role (axle_index + side) must be unique",
             wheel_path);
           continue;
         }
         if (slice_count == std::numeric_limits<uint32_t>::max()) {
-          AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
-            "physics.sidecar.payload_invalid",
+          AddDiagnosticAtPath(*ctx.session, *ctx.request,
+            ImportSeverity::kError, "physics.sidecar.payload_invalid",
             "Vehicle wheel count exceeds uint32 range", wheel_path);
           continue;
         }
         if (wheel.backend_target != PhysicsBackend::kNone
           && wheel.backend_target != requested_backend) {
-          AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
-            "physics.sidecar.backend_mismatch",
+          AddDiagnosticAtPath(*ctx.session, *ctx.request,
+            ImportSeverity::kError, "physics.sidecar.backend_mismatch",
             "vehicle wheel backend.target must match requested import backend "
               + std::string(BackendName(requested_backend)),
             wheel_path + ".backend.target");
@@ -1777,7 +1775,7 @@ namespace {
       }
 
       if (slice_count < 2U) {
-        AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
+        AddDiagnosticAtPath(*ctx.session, *ctx.request, ImportSeverity::kError,
           "physics.sidecar.payload_invalid",
           "Vehicle wheel bindings must resolve to at least two valid wheels",
           base_path + ".wheels");
@@ -1786,7 +1784,7 @@ namespace {
       }
 
       if (wheel_offset > std::numeric_limits<uint32_t>::max()) {
-        AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
+        AddDiagnosticAtPath(*ctx.session, *ctx.request, ImportSeverity::kError,
           "physics.sidecar.payload_invalid",
           "Vehicle wheel table offset exceeds uint32 range", base_path);
         wheel_records.resize(wheel_offset);
@@ -1821,15 +1819,6 @@ namespace {
     return obj.at(key).get<float>();
   }
 
-  [[nodiscard]] auto JsonBoolOr(
-    const nlohmann::json& obj, const char* key, const bool fallback) -> bool
-  {
-    if (!obj.contains(key)) {
-      return fallback;
-    }
-    return obj.at(key).get<bool>();
-  }
-
   [[nodiscard]] auto JsonVec3Or(const nlohmann::json& obj, const char* key,
     const JPH::Vec3& fallback) -> JPH::Vec3
   {
@@ -1858,18 +1847,24 @@ namespace {
     return true;
   }
 
+  auto AssignBlobBytes(
+    const std::string_view blob, std::vector<std::byte>& out_bytes) -> void
+  {
+    const auto bytes = std::as_bytes(std::span { blob });
+    out_bytes.assign(bytes.begin(), bytes.end());
+  }
+
   auto SerializeJoltConstraintSettings(const JPH::ConstraintSettings& settings,
     std::vector<std::byte>& out_bytes) -> bool
   {
-    auto stream = std::ostringstream(std::ios::out | std::ios::binary);
+    auto stream = std::ostringstream(std::ios::binary);
     auto wrapped = JPH::StreamOutWrapper(stream);
     settings.SaveBinaryState(wrapped);
     if (wrapped.IsFailed()) {
       return false;
     }
     const auto blob = stream.str();
-    out_bytes.assign(reinterpret_cast<const std::byte*>(blob.data()),
-      reinterpret_cast<const std::byte*>(blob.data()) + blob.size());
+    AssignBlobBytes(blob, out_bytes);
     return true;
   }
 
@@ -1877,15 +1872,14 @@ namespace {
     const JPH::VehicleConstraintSettings& settings,
     std::vector<std::byte>& out_bytes) -> bool
   {
-    auto stream = std::ostringstream(std::ios::out | std::ios::binary);
+    auto stream = std::ostringstream(std::ios::binary);
     auto wrapped = JPH::StreamOutWrapper(stream);
     settings.SaveBinaryState(wrapped);
     if (wrapped.IsFailed()) {
       return false;
     }
     const auto blob = stream.str();
-    out_bytes.assign(reinterpret_cast<const std::byte*>(blob.data()),
-      reinterpret_cast<const std::byte*>(blob.data()) + blob.size());
+    AssignBlobBytes(blob, out_bytes);
     return true;
   }
 
@@ -1893,15 +1887,14 @@ namespace {
     const JPH::SoftBodySharedSettings& settings, std::vector<std::byte>& out)
     -> bool
   {
-    auto stream = std::ostringstream(std::ios::out | std::ios::binary);
+    auto stream = std::ostringstream(std::ios::binary);
     auto wrapped = JPH::StreamOutWrapper(stream);
     settings.SaveBinaryState(wrapped);
     if (wrapped.IsFailed()) {
       return false;
     }
     const auto blob = stream.str();
-    out.assign(reinterpret_cast<const std::byte*>(blob.data()),
-      reinterpret_cast<const std::byte*>(blob.data()) + blob.size());
+    AssignBlobBytes(blob, out);
     return true;
   }
 
@@ -2066,6 +2059,18 @@ namespace {
   struct SoftBodySurfaceMesh final {
     std::vector<JPH::Float3> vertices;
     std::vector<JPH::SoftBodySharedSettings::Face> faces;
+    //! Each source vertex's welded vertex, or `kNotOnSurface` when no face
+    //! uses it; filled by `WeldSurfaceMesh`.
+    std::vector<uint32_t> welded_of_source;
+  };
+
+  constexpr auto kNotOnSurface = std::numeric_limits<uint32_t>::max();
+
+  //! Why a soft body's topology failed to cook: a diagnostic code and the
+  //! reason it reports.
+  struct SoftBodyCookError final {
+    std::string_view code = "physics.sidecar.resource_serialize_failed";
+    std::string reason;
   };
 
   struct SoftBodyGeometryTopologyInput final {
@@ -2092,11 +2097,12 @@ namespace {
   auto ReadBinaryFile(const std::filesystem::path& path,
     std::vector<std::byte>& out, std::string& error) -> bool
   {
-    auto in = std::ifstream(path, std::ios::binary | std::ios::ate);
+    auto in = std::ifstream(path, std::ios::binary);
     if (!in.is_open()) {
       error = "failed opening file '" + path.string() + "'";
       return false;
     }
+    in.seekg(0, std::ios::end);
     const auto end = in.tellg();
     if (end < 0) {
       error = "failed reading file size for '" + path.string() + "'";
@@ -2105,12 +2111,13 @@ namespace {
     out.resize(static_cast<size_t>(end));
     in.seekg(0, std::ios::beg);
     if (!out.empty()) {
-      in.read(reinterpret_cast<char*>(out.data()),
-        static_cast<std::streamsize>(out.size()));
+      auto buffer = std::string(out.size(), '\0');
+      in.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
       if (!(in.good() || in.eof())) {
         error = "failed reading file bytes from '" + path.string() + "'";
         return false;
       }
+      std::ranges::copy(std::as_bytes(std::span { buffer }), out.begin());
     }
     return true;
   }
@@ -2123,7 +2130,7 @@ namespace {
     if (offset > bytes.size() || bytes.size() - offset < sizeof(T)) {
       return false;
     }
-    std::memcpy(&out, bytes.data() + offset, sizeof(T));
+    std::memcpy(&out, bytes.subspan(offset).data(), sizeof(T));
     return true;
   }
 
@@ -2187,8 +2194,8 @@ namespace {
         error = "geometry descriptor procedural params exceed descriptor size";
         return false;
       }
-      out.procedural_params.assign(descriptor_bytes.begin() + offset,
-        descriptor_bytes.begin() + offset + params_size);
+      const auto params = descriptor_bytes.subspan(offset, params_size);
+      out.procedural_params.assign(params.begin(), params.end());
       offset += params_size;
     } else {
       error = "soft-body source mesh must be standard or procedural geometry";
@@ -2280,7 +2287,8 @@ namespace {
       return false;
     }
 
-    payload = std::span<const std::byte>(resources.data.data() + offset, size);
+    payload
+      = std::span<const std::byte> { resources.data }.subspan(offset, size);
     return true;
   }
 
@@ -2310,10 +2318,13 @@ namespace {
       auto x = 0.0F;
       auto y = 0.0F;
       auto z = 0.0F;
-      const auto* record = payload.data() + (i * stride);
-      std::memcpy(&x, record + (0U * sizeof(float)), sizeof(float));
-      std::memcpy(&y, record + (1U * sizeof(float)), sizeof(float));
-      std::memcpy(&z, record + (2U * sizeof(float)), sizeof(float));
+      const auto record = payload.subspan(i * stride, stride);
+      std::memcpy(&x, record.subspan(0U * sizeof(float), sizeof(float)).data(),
+        sizeof(float));
+      std::memcpy(&y, record.subspan(1U * sizeof(float), sizeof(float)).data(),
+        sizeof(float));
+      std::memcpy(&z, record.subspan(2U * sizeof(float), sizeof(float)).data(),
+        sizeof(float));
       if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z)) {
         error = "vertex buffer contains non-finite positions";
         return false;
@@ -2358,15 +2369,15 @@ namespace {
     if (element_size == sizeof(uint32_t)) {
       for (size_t i = 0; i < count; ++i) {
         auto value = uint32_t { 0 };
-        std::memcpy(
-          &value, payload.data() + (i * sizeof(uint32_t)), sizeof(uint32_t));
+        std::memcpy(&value, payload.subspan(i * sizeof(uint32_t)).data(),
+          sizeof(uint32_t));
         indices.push_back(value);
       }
     } else {
       for (size_t i = 0; i < count; ++i) {
         auto value = uint16_t { 0 };
-        std::memcpy(
-          &value, payload.data() + (i * sizeof(uint16_t)), sizeof(uint16_t));
+        std::memcpy(&value, payload.subspan(i * sizeof(uint16_t)).data(),
+          sizeof(uint16_t));
         indices.push_back(static_cast<uint32_t>(value));
       }
     }
@@ -2543,11 +2554,8 @@ namespace {
       out.vertices.emplace_back(v.position.x, v.position.y, v.position.z);
     }
 
-    if (!BuildFacesFromMeshViews(source_indices, topology.mesh_views,
-          out.vertices, out.faces, error)) {
-      return false;
-    }
-    return true;
+    return BuildFacesFromMeshViews(
+      source_indices, topology.mesh_views, out.vertices, out.faces, error);
   }
 
   auto BuildSurfaceMeshFromStandard(
@@ -2625,6 +2633,137 @@ namespace {
     return false;
   }
 
+  //! Welds the surface by position: vertices at the same position (with -0
+  //! and +0 equal) become one, and vertices no face uses are dropped.
+  /*!
+   Render meshes split vertices along UV seams, at poles and on hard edges;
+   a soft body needs one particle per surface point, or it tears along every
+   split. Faces keep their order and winding.
+  */
+  auto WeldSurfaceMesh(SoftBodySurfaceMesh& mesh) -> void
+  {
+    using PositionKey = std::array<uint32_t, 3>;
+    const auto key_of = [](const JPH::Float3& p) -> PositionKey {
+      return {
+        std::bit_cast<uint32_t>(p.x + 0.0F),
+        std::bit_cast<uint32_t>(p.y + 0.0F),
+        std::bit_cast<uint32_t>(p.z + 0.0F),
+      };
+    };
+    auto welded_ids = std::map<PositionKey, uint32_t> {};
+    auto welded = std::vector<JPH::Float3> {};
+    mesh.welded_of_source.assign(mesh.vertices.size(), kNotOnSurface);
+    for (auto& face : mesh.faces) {
+      for (auto& index : face.mVertex) {
+        auto& target = mesh.welded_of_source.at(index);
+        if (target == kNotOnSurface) {
+          const auto& position = mesh.vertices.at(index);
+          const auto [it, inserted] = welded_ids.try_emplace(
+            key_of(position), static_cast<uint32_t>(welded.size()));
+          if (inserted) {
+            welded.push_back(position);
+          }
+          target = it->second;
+        }
+        index = target;
+      }
+    }
+    mesh.vertices = std::move(welded);
+  }
+
+  //! Checks a welded surface is one oriented 2-manifold piece: every edge
+  //! borders at most two faces, running opposite ways, and every face is
+  //! reachable from every other. With `closed`, every edge borders two.
+  auto ValidateSurfaceTopology(const SoftBodySurfaceMesh& mesh,
+    const bool closed, SoftBodyCookError& error) -> bool
+  {
+    auto directed = std::map<std::pair<uint32_t, uint32_t>, uint32_t> {};
+    auto parent = std::vector<uint32_t>(mesh.vertices.size());
+    std::ranges::iota(parent, 0U);
+    const auto root = [&parent](uint32_t id) -> uint32_t {
+      while (parent.at(id) != id) {
+        parent.at(id) = parent.at(parent.at(id));
+        id = parent.at(id);
+      }
+      return id;
+    };
+    for (const auto& face : mesh.faces) {
+      if (face.mVertex[0] == face.mVertex[1]
+        || face.mVertex[1] == face.mVertex[2]
+        || face.mVertex[2] == face.mVertex[0]) {
+        error = {
+          .code = "physics.sidecar.soft_body_surface_not_manifold",
+          .reason = "a face collapses once its vertices are welded",
+        };
+        return false;
+      }
+      for (size_t k = 0; k < 3U; ++k) {
+        const auto from = face.mVertex[k];
+        const auto to = face.mVertex[(k + 1U) % 3U];
+        if (++directed[{ from, to }] > 1U) {
+          error = {
+            .code = "physics.sidecar.soft_body_surface_not_manifold",
+            .reason = "an edge borders more than two faces, or two faces "
+                      "that wind the same way",
+          };
+          return false;
+        }
+        parent.at(root(from)) = root(to);
+      }
+    }
+    if (closed) {
+      for (const auto& [edge, count] : directed) {
+        if (!directed.contains({ edge.second, edge.first })) {
+          error = {
+            .code = "physics.sidecar.soft_body_surface_not_closed",
+            .reason = "pressure needs a closed surface, and an edge borders "
+                      "one face",
+          };
+          return false;
+        }
+      }
+    }
+    auto components = size_t { 0 };
+    for (uint32_t id = 0; id < parent.size(); ++id) {
+      components += root(id) == id ? 1U : 0U;
+    }
+    if (components != 1U) {
+      error = {
+        .code = "physics.sidecar.soft_body_surface_disconnected",
+        .reason
+        = "the surface has " + std::to_string(components) + " separate parts",
+      };
+      return false;
+    }
+    return true;
+  }
+
+  //! Makes the authored source vertices kinematic on the welded surface.
+  /*!
+   Pins name source mesh vertices, so they stay valid whatever the welding
+   does; each must be on the surface. The sidecar schema keeps each list free
+   of duplicates.
+  */
+  auto ApplyKinematicVertices(const SoftBodySurfaceMesh& mesh,
+    const std::vector<uint32_t>& source_vertices, const std::string_view field,
+    JPH::SoftBodySharedSettings& settings, SoftBodyCookError& error) -> bool
+  {
+    for (const auto source : source_vertices) {
+      if (source >= mesh.welded_of_source.size()
+        || mesh.welded_of_source.at(source) == kNotOnSurface) {
+        error = {
+          .code = "physics.sidecar.soft_body_pin_invalid",
+          .reason = std::string(field) + " names vertex "
+            + std::to_string(source)
+            + ", which no face of the source mesh uses",
+        };
+        return false;
+      }
+      settings.mVertices.at(mesh.welded_of_source.at(source)).mInvMass = 0.0F;
+    }
+    return true;
+  }
+
   constexpr float kMinCookedVolumeCompliance = 1.0e-6F;
   constexpr double kMinAbsCookedSurfaceRestVolume = 1.0e-8;
 
@@ -2654,8 +2793,7 @@ namespace {
     const JPH::SoftBodySharedSettings& settings,
     const float pressure_coefficient, std::string& error) -> bool
   {
-    for (size_t i = 0; i < settings.mVolumeConstraints.size(); ++i) {
-      const auto& volume = settings.mVolumeConstraints.at(i);
+    for (const auto& volume : settings.mVolumeConstraints) {
       if (!std::isfinite(volume.mCompliance)
         || volume.mCompliance < kMinCookedVolumeCompliance) {
         error = "volume_compliance must be finite and >= "
@@ -2670,10 +2808,13 @@ namespace {
         error = "pressure_coefficient > 0 requires a non-empty closed surface";
         return false;
       }
+      // A closed surface wound outward (`clip::FrontFaceCCW`, normals out)
+      // encloses a positive volume; a negative one is wound inward.
       const auto signed_volume = ComputeSignedSurfaceVolume(settings);
       if (!std::isfinite(signed_volume)
-        || std::abs(signed_volume) < kMinAbsCookedSurfaceRestVolume) {
-        error = "pressure_coefficient > 0 requires finite non-zero rest volume";
+        || signed_volume < kMinAbsCookedSurfaceRestVolume) {
+        error = "pressure_coefficient > 0 requires a finite positive rest "
+                "volume: a closed surface wound outward";
         return false;
       }
     }
@@ -2683,13 +2824,18 @@ namespace {
   auto CookJoltSoftBodyBlob(const SoftBodyBindingSource& source,
     const std::filesystem::path& target_cooked_root,
     const LooseCookedLayout& layout, std::vector<std::byte>& out_blob,
-    std::string& error) -> bool
+    SoftBodyCookError& error) -> bool
   {
     EnsureJoltAllocatorReady();
 
     auto surface_mesh = SoftBodySurfaceMesh {};
     if (!BuildSoftBodySurfaceMesh(
-          source, target_cooked_root, layout, surface_mesh, error)) {
+          source, target_cooked_root, layout, surface_mesh, error.reason)) {
+      return false;
+    }
+    WeldSurfaceMesh(surface_mesh);
+    if (!ValidateSurfaceTopology(
+          surface_mesh, source.record.pressure_coefficient > 0.0F, error)) {
       return false;
     }
 
@@ -2697,7 +2843,7 @@ namespace {
       new JPH::SoftBodySharedSettings()
     };
     if (shared_settings == nullptr) {
-      error = "failed to allocate Jolt soft-body shared settings";
+      error.reason = "failed to allocate Jolt soft-body shared settings";
       return false;
     }
     shared_settings->mVertices.reserve(surface_mesh.vertices.size());
@@ -2722,21 +2868,11 @@ namespace {
       volume.mCompliance = source.record.volume_compliance;
     }
 
-    const auto vertex_count
-      = static_cast<uint32_t>(shared_settings->mVertices.size());
-    for (const auto vertex_index : source.pinned_vertices) {
-      if (vertex_index >= vertex_count) {
-        error = "pinned_vertices contains out-of-range vertex index";
-        return false;
-      }
-      shared_settings->mVertices.at(vertex_index).mInvMass = 0.0F;
-    }
-    for (const auto vertex_index : source.kinematic_vertices) {
-      if (vertex_index >= vertex_count) {
-        error = "kinematic_vertices contains out-of-range vertex index";
-        return false;
-      }
-      shared_settings->mVertices.at(vertex_index).mInvMass = 0.0F;
+    if (!ApplyKinematicVertices(surface_mesh, source.pinned_vertices,
+          "pinned_vertices", *shared_settings, error)
+      || !ApplyKinematicVertices(surface_mesh, source.kinematic_vertices,
+        "kinematic_vertices", *shared_settings, error)) {
+      return false;
     }
 
     shared_settings->CalculateEdgeLengths();
@@ -2745,7 +2881,7 @@ namespace {
     shared_settings->CalculateLRALengths(
       source.record.tether_max_distance_multiplier);
     if (!ValidateCookedSoftBodySettings(
-          *shared_settings, source.record.pressure_coefficient, error)) {
+          *shared_settings, source.record.pressure_coefficient, error.reason)) {
       return false;
     }
     shared_settings->Optimize();
@@ -2784,13 +2920,13 @@ namespace {
     }
     if (transmission.contains("forward_gear_ratios")) {
       out.mGearRatios.clear();
-      for (const auto ratio : transmission.at("forward_gear_ratios")) {
+      for (const auto& ratio : transmission.at("forward_gear_ratios")) {
         out.mGearRatios.push_back(ratio.get<float>());
       }
     }
     if (transmission.contains("reverse_gear_ratios")) {
       out.mReverseGearRatios.clear();
-      for (const auto ratio : transmission.at("reverse_gear_ratios")) {
+      for (const auto& ratio : transmission.at("reverse_gear_ratios")) {
         out.mReverseGearRatios.push_back(ratio.get<float>());
       }
     }
@@ -2970,17 +3106,18 @@ namespace {
   auto CookSoftBodyTopologyBlob(const SoftBodyBindingSource& source,
     const std::filesystem::path& target_cooked_root,
     const LooseCookedLayout& layout, std::vector<std::byte>& out_blob,
-    std::string& error) -> bool
+    SoftBodyCookError& error) -> bool
   {
     switch (source.record.topology_format) {
     case phys::PhysicsResourceFormat::kJoltSoftBodySharedSettingsBinary:
       return CookJoltSoftBodyBlob(
         source, target_cooked_root, layout, out_blob, error);
     case phys::PhysicsResourceFormat::kPhysXSoftBodySettingsBinary:
-      error = "physx soft-body cooking is not implemented";
+      error.reason = "physx soft-body cooking is not implemented";
       return false;
     default:
-      error = "soft-body topology format does not match any supported backend";
+      error.reason
+        = "soft-body topology format does not match any supported backend";
       return false;
     }
   }
@@ -3062,16 +3199,16 @@ namespace {
       = EffectiveContentHashingEnabled(request.options.with_content_hashing);
     for (size_t i = 0; i < records.size(); ++i) {
       auto blob_bytes = std::vector<std::byte> {};
-      auto cook_error = std::string {};
+      auto cook_error = SoftBodyCookError {};
       if (!CookSoftBodyTopologyBlob(records.at(i), target_cooked_root, layout,
             blob_bytes, cook_error)) {
         LOG_F(ERROR,
           "PhysicsSidecarImportPipeline: soft-body topology cooking failed "
-          "(source_mesh_ref='{}' reason='{}')",
-          records.at(i).source_mesh_ref, cook_error);
+          "(source_mesh_ref='{}' code='{}' reason='{}')",
+          records.at(i).source_mesh_ref, cook_error.code, cook_error.reason);
         AddDiagnosticAtPath(session, request, ImportSeverity::kError,
-          "physics.sidecar.resource_serialize_failed",
-          "Failed to cook soft-body topology resource: " + cook_error,
+          std::string(cook_error.code),
+          "Failed to cook soft-body topology resource: " + cook_error.reason,
           "bindings.soft_bodies[" + std::to_string(i) + "]");
         continue;
       }
@@ -3246,16 +3383,22 @@ namespace {
       blob.bytes.resize(
         previous_size + fixed_size + pinned_size_bytes + kinematic_size_bytes);
 
-      std::memcpy(blob.bytes.data() + previous_size, &record, fixed_size);
+      const auto dest = std::span { blob.bytes };
+      std::memcpy(
+        dest.subspan(previous_size, fixed_size).data(), &record, fixed_size);
       auto write_cursor = previous_size + fixed_size;
       if (pinned_size_bytes > 0U) {
-        std::memcpy(blob.bytes.data() + write_cursor,
+        std::memcpy(
+          dest.subspan(write_cursor, static_cast<size_t>(pinned_size_bytes))
+            .data(),
           source.pinned_vertices.data(),
           static_cast<size_t>(pinned_size_bytes));
         write_cursor += static_cast<size_t>(pinned_size_bytes);
       }
       if (kinematic_size_bytes > 0U) {
-        std::memcpy(blob.bytes.data() + write_cursor,
+        std::memcpy(
+          dest.subspan(write_cursor, static_cast<size_t>(kinematic_size_bytes))
+            .data(),
           source.kinematic_vertices.data(),
           static_cast<size_t>(kinematic_size_bytes));
       }
@@ -3454,13 +3597,12 @@ namespace {
       return false;
     }
     auto validation_ctx = BindingValidationContext {
-      session,
-      request,
-      resolver,
-      cooked_contexts,
-      target_assets,
-      target_context->cooked_root,
-      resolved_scene_state.node_count,
+      .session = observer_ptr { &session },
+      .request = observer_ptr { &request },
+      .resolver = observer_ptr { &resolver },
+      .cooked_contexts = cooked_contexts,
+      .target_assets = observer_ptr { &target_assets },
+      .node_count = resolved_scene_state.node_count,
     };
 
     ResolveShapeAndMaterialBindings(
