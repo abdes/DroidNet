@@ -203,6 +203,41 @@ auto DestroyBackend() -> void
   backend.reset();
 }
 
+auto EnumerateAdapters(
+  void* context, const oxygen::graphics::AdapterVisitorFunc visit) -> bool
+{
+  try {
+    const auto adapters = oxygen::graphics::d3d12::DeviceManager::ListAdapters(
+      oxygen::graphics::d3d12::DeviceManagerDesc {
+        .enable_debug_layer = false,
+        .enable_aftermath = false,
+      });
+    for (const auto& adapter : adapters) {
+      const auto feature_level_text = adapter.MeetsFeatureLevel()
+        ? adapter.MaxFeatureLevelAsString()
+        : std::string {};
+      visit(context,
+        oxygen::graphics::GraphicsAdapterRecord {
+          .name = adapter.Name().c_str(),
+          .vendor_id = adapter.VendorId(),
+          .device_id = adapter.DeviceId(),
+          .dedicated_memory = adapter.Memory(),
+          .has_display = adapter.IsConnectedToDisplay(),
+          .usable = adapter.MeetsFeatureLevel(),
+          .feature_level = feature_level_text.c_str(),
+          .default_choice = adapter.IsBest(),
+        });
+    }
+    return true;
+  } catch (const std::exception& ex) {
+    LOG_F(ERROR, "Failed to enumerate D3D12 adapters: {}", ex.what());
+    return false;
+  } catch (...) {
+    LOG_F(ERROR, "Failed to enumerate D3D12 adapters: unknown error");
+    return false;
+  }
+}
+
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -214,6 +249,7 @@ extern "C" __declspec(dllexport) auto GetGraphicsModuleApi() -> void*
   static oxygen::graphics::GraphicsModuleApi render_module;
   render_module.CreateBackend = CreateBackend;
   render_module.DestroyBackend = DestroyBackend;
+  render_module.EnumerateAdapters = EnumerateAdapters;
   return &render_module;
 }
 
@@ -580,10 +616,8 @@ Graphics::Graphics(const SerializedBackendConfig& config,
     desc.preferred_card_device_id
       = jsonConfig.at("preferred_card_device_id").get<oxygen::DeviceId>();
   }
-  if (desc.preferred_card_name.has_value()
-    && desc.preferred_card_device_id.has_value()) {
-    throw std::invalid_argument("Serialized backend config cannot prefer both "
-                                "a card name and a card device id");
+  if (jsonConfig.contains("require_display")) {
+    desc.require_display = jsonConfig.at("require_display").get<bool>();
   }
   if (jsonConfig.contains("enable_vsync")) {
     enable_vsync_ = jsonConfig.at("enable_vsync").get<bool>();

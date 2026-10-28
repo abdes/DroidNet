@@ -93,9 +93,9 @@ target_compile_definitions(
     $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:OXGN_HOST_STATIC>
 )
 
-# The public headers expose the engine, platform, renderer, ImGui and command
-# line types a host module and its entry point work with. The input system and
-# the backend loader are used only to start the engine.
+# The public headers expose the engine, platform, renderer, ImGui, command
+# line and graphics adapter types a host module and its entry point work with.
+# The input system is used only to start the engine.
 target_link_libraries(
   ${META_MODULE_TARGET}
   PUBLIC
@@ -108,13 +108,13 @@ target_link_libraries(
     oxygen::engine
     oxygen::graphics-common
     oxygen::imgui
+    oxygen::loader
     oxygen::oxco
     oxygen::platform
     oxygen::scene
     oxygen::vortex
   PRIVATE
     oxygen::input
-    oxygen::loader
 )
 
 # ------------------------------------------------------------------------------

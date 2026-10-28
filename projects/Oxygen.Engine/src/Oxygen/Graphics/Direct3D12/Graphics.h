@@ -128,12 +128,11 @@ public:
   OXGN_D3D12_NDAPI auto GetMemoryStatistics() const -> MemoryStatistics;
   //! Serialize parent-allocator admission with resource creation. The returned
   //! domain charge follows the native allocation through deferred retirement.
-  OXGN_D3D12_NDAPI auto AllocateResource(const AllocationBudgetTag& budget,
-    const D3D12MA::ALLOCATION_DESC& allocation_desc,
-    const D3D12_RESOURCE_DESC& resource_desc,
-    D3D12_RESOURCE_STATES initial_state, const D3D12_CLEAR_VALUE* clear_value,
-    D3D12MA::Allocation** allocation, ID3D12Resource** resource) const
-    -> AllocationReservation;
+  OXGN_D3D12_NDAPI auto AllocateResource(const AllocationBudgetTag& tag,
+    const D3D12MA::ALLOCATION_DESC& requested_allocation,
+    const D3D12_RESOURCE_DESC& description, D3D12_RESOURCE_STATES initial_state,
+    const D3D12_CLEAR_VALUE* clear_value, D3D12MA::Allocation** allocation,
+    ID3D12Resource** resource) const -> AllocationReservation;
   //! @}
 
   //=== D3D12 Helpers ===---------------------------------------------------//

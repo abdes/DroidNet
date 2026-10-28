@@ -69,10 +69,10 @@ struct FrameCaptureConfig {
   uint32_t frame_count { 0 };
 
   //! Explicit module path used only with kExplicitPath.
-  std::string module_path {};
+  std::string module_path;
 
   //! Optional capture file path template passed to the provider.
-  std::string capture_file_template {};
+  std::string capture_file_template;
 };
 
 //! Graphics configuration data, serialized to JSON and used to configure the
@@ -88,19 +88,22 @@ struct GraphicsConfig {
 
   //! Device selection guidance.
   /*!
-    The graphics backend will try to select the most suitable GPU based on its
-    capabilities, but the selection can be influenced by the following
-    properties.
+    The graphics backend selects the most suitable GPU by its capabilities:
+    the highest feature level, then the most dedicated memory. These
+    properties change that choice.
 
-    \note The properties are hints and if they cannot be satisfied, the
-    renderer will fall back to the default behavior.
+    \note `preferred_card_name` (a part of the adapter name) and
+    `preferred_card_device_id` (its PCI device id) are mutually exclusive
+    hints. A usable adapter that matches comes first; without one, the
+    backend falls back to the default choice.
 
-    \note The `preferred_card_name` and `preferred_card_device_id` are
-    mutually exclusive.
+    \note `require_display` restricts the default choice to adapters that
+    drive a display. It does not apply to an adapter that matches a hint.
   */
   //! @{
   std::optional<std::string> preferred_card_name;
   std::optional<DeviceId> preferred_card_device_id;
+  bool require_display { false };
   //! @}
 
   bool headless { false }; //!< Run the engine without a window.

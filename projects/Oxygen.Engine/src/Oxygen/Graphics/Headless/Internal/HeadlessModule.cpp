@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <memory>
+#include <utility>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Config/GraphicsConfig.h>
@@ -14,10 +15,14 @@
 #include <Oxygen/Graphics/Headless/api_export.h>
 
 namespace {
-// Store the backend instance in a static shared_ptr so the module keeps it
-// alive until DestroyBackend is called.
-std::shared_ptr<oxygen::graphics::headless::Graphics> g_headless_instance;
+// The module keeps the backend instance alive until DestroyBackend is called.
+auto HeadlessInstance()
+  -> std::shared_ptr<oxygen::graphics::headless::Graphics>&
+{
+  static std::shared_ptr<oxygen::graphics::headless::Graphics> instance;
+  return instance;
 }
+} // namespace
 
 extern "C" {
 
@@ -27,19 +32,16 @@ OXGN_HDLS_API auto CreateBackendImpl(
 {
   LOG_F(INFO, "Headless backend CreateBackend called");
   // Create and store the shared instance. For phase 1 we ignore config.
-  if (!g_headless_instance) {
-    auto* instance
-      = new oxygen::graphics::headless::Graphics(config, path_finder_config);
-    g_headless_instance
-      = std::static_pointer_cast<oxygen::graphics::headless::Graphics>(
-        oxygen::graphics::AdoptBackendObject(
-          static_cast<oxygen::Graphics*>(instance),
-          [](void* object) noexcept -> void {
-            delete static_cast<oxygen::Graphics*>(object);
-          },
-          instance->GetBackendLifetime()));
+  auto& backend = HeadlessInstance();
+  if (!backend) {
+    auto instance = std::make_unique<oxygen::graphics::headless::Graphics>(
+      config, path_finder_config);
+    auto lifetime = instance->GetBackendLifetime();
+    backend = std::static_pointer_cast<oxygen::graphics::headless::Graphics>(
+      oxygen::graphics::AdoptBackendObject(
+        std::move(instance), std::move(lifetime)));
   }
-  return g_headless_instance.get();
+  return backend.get();
 }
 
 OXGN_HDLS_API auto DestroyBackendImpl() -> void
@@ -48,15 +50,24 @@ OXGN_HDLS_API auto DestroyBackendImpl() -> void
   // Ensure orderly shutdown before resetting the stored shared_ptr. Any
   // external shared_ptr copies must be released by the caller to fully destroy
   // the instance.
-  if (g_headless_instance) {
-    g_headless_instance->Close();
+  auto& backend = HeadlessInstance();
+  if (backend) {
+    backend->Close();
   }
-  g_headless_instance.reset();
+  backend.reset();
+}
+
+//! The headless backend renders on no hardware adapter.
+OXGN_HDLS_API auto EnumerateAdaptersImpl(
+  void* /*context*/, oxygen::graphics::AdapterVisitorFunc /*visit*/) -> bool
+{
+  return true;
 }
 
 static oxygen::graphics::GraphicsModuleApi kHeadlessApi {
   .CreateBackend = &CreateBackendImpl,
   .DestroyBackend = &DestroyBackendImpl,
+  .EnumerateAdapters = &EnumerateAdaptersImpl,
 };
 
 } // extern "C"

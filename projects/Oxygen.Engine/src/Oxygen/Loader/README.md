@@ -19,8 +19,8 @@ module. Enforcement:
   address → module handle).
 - Subsequent optional resets (injecting custom `PlatformServices`) must also
   originate from the main module.
-- Loader methods (`LoadBackend`, `UnloadBackend`) enforce the main-module
-  restriction.
+- Loader methods (`LoadBackend`, `UnloadBackend`, `ListAdapters`) enforce the
+  main-module restriction.
 
 ### Relaxed Mode (`GetInstanceRelaxed`)
 
@@ -63,6 +63,15 @@ full path is resolved as follows:
 
 If the DLL cannot be located or loaded, a `std::runtime_error` is thrown.
 
+## Listing Adapters
+
+`ListAdapters(backend)` loads the backend module, calls its
+`EnumerateAdapters` entry point and releases the module, without creating a
+backend instance. Each `loader::GraphicsAdapter` carries the name, vendor and
+PCI device ids, dedicated memory, display connection, feature level and
+whether the backend selects it without hints. The host's `--list-gpus` option
+prints this list.
+
 ---
 
 ## Configuration Data
@@ -103,8 +112,8 @@ config.enable_validation = true;
 config.enable_aftermath = false;     // Default: disabled in all builds
 config.enable_imgui = true;          // Example additional flag
 config.enable_vsync = true;          // VSync preference
-config.preferred_card_name = "NVIDIA";
-config.preferred_card_device_id = 123456789;
+config.preferred_card_name = "NVIDIA"; // Or preferred_card_device_id
+config.require_display = false;
 config.headless = false;
 config.frame_capture = {
   .provider = oxygen::FrameCaptureProvider::kRenderDoc,
@@ -151,7 +160,7 @@ producing an equivalent string as following:
     "capture_file_template": "captures/render_scene"
   },
   "preferred_card_name": "NVIDIA",
-  "preferred_card_device_id": 123456789,
+  "require_display": false,
   "custom_option": 42,
   "shader_cache": true
 }

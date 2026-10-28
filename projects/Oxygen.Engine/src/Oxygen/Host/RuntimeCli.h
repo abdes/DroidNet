@@ -8,6 +8,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -20,6 +21,7 @@
 #include <Oxygen/Config/GraphicsConfig.h>
 #include <Oxygen/Host/HostConfig.h>
 #include <Oxygen/Host/api_export.h>
+#include <Oxygen/Loader/GraphicsBackendLoader.h>
 
 namespace oxygen::host {
 
@@ -50,6 +52,13 @@ struct RuntimeCliState {
   bool enable_debug_layer { DefaultGraphicsDebugLayerEnabled() };
   bool enable_aftermath { DefaultGraphicsAftermathEnabled() };
 
+  //! Preferred GPU: a part of its name, or its PCI device id (decimal or
+  //! `0x` hexadecimal). Empty prefers none.
+  std::string gpu;
+  std::string gpu_id;
+  bool require_display { false };
+  bool list_gpus { false };
+
   std::string capture_provider { "off" };
   std::string capture_load { "attached" };
   std::string capture_library;
@@ -78,6 +87,11 @@ OXGN_HOST_NDAPI auto MakeRuntimeOptions(RuntimeCliState& state,
 OXGN_HOST_NDAPI auto MakeGraphicsToolingOptions(RuntimeCliState& state)
   -> clap::Options::Ptr;
 
+//! GPU selection: a preferred GPU by name or PCI device id, whether the
+//! automatic choice needs a GPU that drives a display, and `--list-gpus`.
+OXGN_HOST_NDAPI auto MakeGraphicsAdapterOptions(RuntimeCliState& state)
+  -> clap::Options::Ptr;
+
 //! The frame capture provider.
 OXGN_HOST_NDAPI auto MakeCaptureOptions(RuntimeCliState& state)
   -> clap::Options::Ptr;
@@ -92,10 +106,18 @@ OXGN_HOST_NDAPI auto BuildCli(const std::string& program_name,
   std::string about, clap::Command::Ptr default_command)
   -> std::unique_ptr<clap::Cli>;
 
-//! Handles help, version and `help-advanced`; true when the program should
-//! exit without running.
+//! Handles help, version, `help-advanced` and `--list-gpus`; true when the
+//! program should exit without running.
+/*!
+ \throws std::runtime_error when `--list-gpus` cannot enumerate the GPUs.
+*/
 OXGN_HOST_NDAPI auto HandleMetaCommand(const clap::CommandLineContext& context,
   const clap::Command::Ptr& default_command) -> bool;
+
+//! The GPU table `--list-gpus` prints, with the values `--gpu` and `--gpu-id`
+//! take and the GPU chosen without them.
+OXGN_HOST_NDAPI auto FormatGraphicsAdapters(
+  std::span<const loader::GraphicsAdapter> adapters) -> std::string;
 
 //! True when `option` was given on the command line, not just defaulted.
 OXGN_HOST_NDAPI auto WasPassed(
@@ -105,10 +127,19 @@ OXGN_HOST_NDAPI auto WasPassed(
 OXGN_HOST_NDAPI auto ParseWindowResolution(std::string_view value)
   -> Extent<std::uint32_t>;
 
+//! Validates the GPU selection values and writes them into `config`.
+/*!
+ \throws RuntimeCliError when both `--gpu` and `--gpu-id` are given, or the
+ device id is malformed.
+*/
+OXGN_HOST_API auto ApplyGraphicsAdapterCli(
+  const RuntimeCliState& state, GraphicsConfig& config) -> void;
+
 //! Validates the parsed values and writes them into `config`.
 /*!
- Sets the frame count, frame rate, vsync, graphics tooling, frame capture,
- headless and window options and the control server port, and seeds the
+ Sets the frame count, frame rate, vsync, graphics tooling, GPU selection,
+ frame capture, headless and window options and the control server port, and
+ seeds the
  `ngin.target_fps` and `gfx.vsync` startup variables when those options were
  passed, so they win over persisted console values.
 

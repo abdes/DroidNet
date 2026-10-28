@@ -50,3 +50,13 @@ cmake --build out/build-ninja --config Debug --target Oxygen.Vortex.Exposure.Tes
 Run GPU cases serially. The correctness executable contains no benchmark cases.
 Performance and memory experiments remain disabled by default in their own
 executable and require their existing explicit filters and environment settings.
+
+### GPU environment
+
+The GPU fixture reads these environment variables; each is unset by default.
+
+| Variable                    | Effect                                                                                                    |
+| --------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `OXYGEN_GPU_DRED`           | Enables Device Removed Extended Data for a device-removal investigation                                   |
+| `OXYGEN_GPU_VALIDATION`     | Enables GPU-based validation                                                                              |
+| `OXYGEN_GPU_CRASH_ANALYSIS` | Disables the debug layer and DRED so external crash analysis (e.g. Radeon GPU Detective) sees the removal |

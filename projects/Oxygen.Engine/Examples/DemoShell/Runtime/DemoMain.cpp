@@ -70,6 +70,7 @@ auto RunDemo(std::span<const char*> args, DemoMain demo) -> int
     builder
       .WithOptions(host::MakeRuntimeOptions(demo.runtime, demo.runtime_options))
       .WithOptions(host::MakeGraphicsToolingOptions(demo.runtime))
+      .WithOptions(host::MakeGraphicsAdapterOptions(demo.runtime))
       .WithOptions(host::MakeCaptureOptions(demo.runtime));
     for (auto& [options, hidden] : demo.options) {
       builder.WithOptions(std::move(options), hidden);

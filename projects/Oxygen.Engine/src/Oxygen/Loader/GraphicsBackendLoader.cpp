@@ -16,12 +16,14 @@
 #include <string_view>
 #include <type_traits>
 #include <utility>
+#include <vector>
 
 #include <fmt/format.h>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/NoStd.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/ReturnAddress.h>
 #include <Oxygen/Config/GraphicsConfig.h>
 #include <Oxygen/Config/PathFinderConfig.h>
@@ -41,6 +43,7 @@ using oxygen::SerializedBackendConfig;
 using oxygen::SerializedPathFinderConfig;
 using oxygen::graphics::BackendType;
 using oxygen::graphics::GetGraphicsModuleApiFunc;
+using oxygen::graphics::GraphicsAdapterRecord;
 using oxygen::graphics::GraphicsModuleApi;
 using oxygen::graphics::kGetGraphicsModuleApi;
 using oxygen::loader::detail::PlatformServices;
@@ -207,6 +210,8 @@ auto SerializeConfigToJson(
     + ",\n";
   json += "  \"enable_imgui\": "
     + std::string(config.enable_imgui ? "true" : "false") + ",\n";
+  json += "  \"require_display\": "
+    + std::string(config.require_display ? "true" : "false") + ",\n";
   json += "  \"enable_vsync\": "
     + std::string(config.enable_vsync ? "true" : "false") + ",\n";
   json += "  \"frame_capture\": {\n";
@@ -243,7 +248,7 @@ auto SerializeConfigToJson(
     if (json.size() > 2) {
       json.pop_back(); // Remove newline
       json.pop_back(); // Remove comma
-      json += "\n";
+      json += '\n';
     }
   } else {
     // Extract content from between braces and append
@@ -262,7 +267,7 @@ auto SerializeConfigToJson(
   }
 
   // Close JSON object
-  json += "}";
+  json += '}';
 
   return json;
 }
@@ -277,7 +282,7 @@ auto SerializePathFinderConfigToJson(const oxygen::PathFinderConfig& config)
     + EscapeJsonString(config.ShaderLibraryPath().string()) + "\",\n";
   json += R"(  "cvars_archive_path": ")"
     + EscapeJsonString(config.CVarsArchivePath().string()) + "\"\n";
-  json += "}";
+  json += '}';
   return json;
 }
 
@@ -308,6 +313,11 @@ struct BackendModulePin {
   PlatformServices::ModuleHandle module { nullptr };
   BackendType backend { BackendType::kDirect3D12 };
   std::shared_ptr<IncarnationRecord> record;
+
+  BackendModulePin() = default;
+  OXYGEN_MAKE_NON_COPYABLE(BackendModulePin)
+  OXYGEN_MAKE_NON_MOVABLE(BackendModulePin)
+
   ~BackendModulePin() noexcept
   {
     if (module) {
@@ -330,6 +340,15 @@ struct BackendModulePin {
 struct BackendOwner {
   oxygen::Graphics* graphics { nullptr };
   oxygen::graphics::DestroyBackendFunc destroy { nullptr };
+
+  explicit BackendOwner(
+    const oxygen::graphics::DestroyBackendFunc destroy_backend)
+    : destroy(destroy_backend)
+  {
+  }
+  OXYGEN_MAKE_NON_COPYABLE(BackendOwner)
+  OXYGEN_MAKE_NON_MOVABLE(BackendOwner)
+
   ~BackendOwner() noexcept
   {
     if (graphics) {
@@ -384,7 +403,7 @@ public:
       throw oxygen::loader::InvalidOperationError(
         "BackendRetiring: previous incarnation still owns resources");
     }
-    if (gate.next_id == (std::numeric_limits<uint64_t>::max)()) {
+    if (gate.next_id == std::numeric_limits<uint64_t>::max()) {
       throw oxygen::loader::InvalidOperationError(
         "Backend incarnation IDs exhausted");
     }
@@ -401,36 +420,30 @@ public:
       module->record = record;
       if (!module->module) {
         module->services = platform_services;
-        auto base_dir = platform_services->GetModuleDirectory(origin_module_);
-        if (base_dir.empty()) {
-          base_dir = platform_services->GetExecutableDirectory();
-        }
-        module->module = platform_services->LoadModule(
-          base_dir + GetBackendModuleDllName(backend));
+        module->module
+          = platform_services->LoadModule(BackendModulePath(backend));
       }
-      auto get_api
-        = platform_services->GetFunctionAddress<GetGraphicsModuleApiFunc>(
-          module->module, kGetGraphicsModuleApi);
-      auto* api = static_cast<GraphicsModuleApi*>(get_api());
-      if (!api || !api->CreateBackend || !api->DestroyBackend) {
-        throw std::runtime_error("Invalid graphics backend module API");
-      }
+      const auto* api = GetModuleApi(module->module);
       const auto config_json = SerializeConfigToJson(config, backend);
       const auto path_json
         = SerializePathFinderConfigToJson(path_finder_config);
       const SerializedBackendConfig serialized_config {
-        config_json.c_str(),
-        config_json.size(),
+        .json_data = config_json.c_str(),
+        .size = config_json.size(),
       };
       const SerializedPathFinderConfig serialized_path {
-        path_json.c_str(),
-        path_json.size(),
+        .json_data = path_json.c_str(),
+        .size = path_json.size(),
       };
-      auto* owner = new BackendOwner { nullptr, api->DestroyBackend };
+      // The adopting control block owns the backend owner; a failed adoption
+      // destroys it through the same deleter.
+      auto owner_storage = std::make_unique<BackendOwner>(api->DestroyBackend);
+      const auto owner = oxygen::observer_ptr { owner_storage.get() };
       canonical = oxygen::graphics::AdoptBackendObject(
-        owner,
+        owner_storage.release(),
         [](void* object) noexcept -> void {
-          delete static_cast<BackendOwner*>(object);
+          const auto doomed
+            = std::unique_ptr<BackendOwner>(static_cast<BackendOwner*>(object));
         },
         module);
       owner->graphics = static_cast<oxygen::Graphics*>(
@@ -449,7 +462,7 @@ public:
       record->phase.store(
         BackendLifecycle::kClosing, std::memory_order_release);
       // Keep exception vtables/code loaded through the caller's catch frame.
-      failed_module_ = module;
+      failed_module_ = std::move(module);
       lock.unlock();
       canonical.reset();
       lock.lock();
@@ -466,7 +479,7 @@ public:
     std::shared_ptr<IncarnationRecord> record;
     {
       auto& gate = *gate_;
-      std::lock_guard lock(gate.mutex);
+      std::scoped_lock lock(gate.mutex);
       owner = std::move(backend_instance);
       failed = std::move(failed_module_);
       if (owner) {
@@ -486,9 +499,41 @@ public:
     failed.reset();
   }
 
+  auto ListAdapters(const BackendType backend)
+    -> std::vector<oxygen::loader::GraphicsAdapter>
+  {
+    // A pin of its own: listing never touches the backend incarnation.
+    const auto pin = std::make_shared<BackendModulePin>();
+    pin->services = platform_services;
+    pin->backend = backend;
+    pin->module = platform_services->LoadModule(BackendModulePath(backend));
+    const auto* api = GetModuleApi(pin->module);
+
+    auto adapters = std::vector<oxygen::loader::GraphicsAdapter> {};
+    const auto visit
+      = [](void* context, const GraphicsAdapterRecord& record) -> void {
+      static_cast<std::vector<oxygen::loader::GraphicsAdapter>*>(context)
+        ->push_back({
+          .name = record.name,
+          .vendor_id = record.vendor_id,
+          .device_id = record.device_id,
+          .dedicated_memory = record.dedicated_memory,
+          .has_display = record.has_display,
+          .usable = record.usable,
+          .feature_level = record.feature_level,
+          .default_choice = record.default_choice,
+        });
+    };
+    if (!api->EnumerateAdapters(&adapters, visit)) {
+      throw std::runtime_error(
+        fmt::format("Failed to enumerate the {} adapters", to_string(backend)));
+    }
+    return adapters;
+  }
+
   [[nodiscard]] auto GetBackend() noexcept -> std::weak_ptr<Graphics>
   {
-    std::lock_guard lock(gate_->mutex);
+    std::scoped_lock lock(gate_->mutex);
     return backend_instance;
   }
   [[nodiscard]] auto GetPlatformServices() const
@@ -498,6 +543,30 @@ public:
   }
 
 private:
+  [[nodiscard]] auto BackendModulePath(const BackendType backend) const
+    -> std::string
+  {
+    auto base_dir = platform_services->GetModuleDirectory(origin_module_);
+    if (base_dir.empty()) {
+      base_dir = platform_services->GetExecutableDirectory();
+    }
+    return base_dir + GetBackendModuleDllName(backend);
+  }
+
+  [[nodiscard]] auto GetModuleApi(PlatformServices::ModuleHandle module) const
+    -> const GraphicsModuleApi*
+  {
+    auto get_api
+      = platform_services->GetFunctionAddress<GetGraphicsModuleApiFunc>(
+        module, kGetGraphicsModuleApi);
+    const auto* api = static_cast<GraphicsModuleApi*>(get_api());
+    if (!api || !api->CreateBackend || !api->DestroyBackend
+      || !api->EnumerateAdapters) {
+      throw std::runtime_error("Invalid graphics backend module API");
+    }
+    return api;
+  }
+
   std::shared_ptr<IncarnationGate> gate_ { BackendGate() };
   std::shared_ptr<Graphics> backend_instance;
   std::shared_ptr<BackendModulePin> failed_module_;
@@ -604,7 +673,7 @@ auto GraphicsBackendLoader::GetInstance(
   static bool first_call = true;
   // MSVC 14.51.36231 miscompiles the conditional initializer into a self-move.
   static std::shared_ptr<PlatformServices> services
-    = [&platform_services]() -> std::shared_ptr<PlatformServices> {
+    = [&platform_services] -> std::shared_ptr<PlatformServices> {
     if (platform_services) {
       return std::move(platform_services);
     }
@@ -731,7 +800,7 @@ auto GraphicsBackendLoader::GetInstanceRelaxed(
   static PlatformServices::ModuleHandle origin_module_handle = nullptr;
   // MSVC 14.51.36231 miscompiles the conditional initializer into a self-move.
   static std::shared_ptr<PlatformServices> services
-    = [&platform_services]() -> std::shared_ptr<PlatformServices> {
+    = [&platform_services] -> std::shared_ptr<PlatformServices> {
     if (platform_services) {
       return std::move(platform_services);
     }
@@ -930,6 +999,16 @@ auto GraphicsBackendLoader::UnloadBackend() const noexcept -> void
  @note This method does not enforce main module restriction since it's a
        read-only operation that doesn't affect singleton state.
 */
+auto GraphicsBackendLoader::ListAdapters(const BackendType backend) const
+  -> std::vector<loader::GraphicsAdapter>
+{
+  if (GetLoaderInitMode() == LoaderInitMode::kStrict) {
+    EnforceMainModuleRestriction(
+      pimpl_->GetPlatformServices(), "ListAdapters", oxygen::ReturnAddress<>());
+  }
+  return pimpl_->ListAdapters(backend);
+}
+
 auto GraphicsBackendLoader::GetBackend() const noexcept
   -> std::weak_ptr<Graphics>
 {

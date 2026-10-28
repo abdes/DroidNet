@@ -58,9 +58,8 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
 {
   using namespace oxygen::clap; // NOLINT
 
-  oxygen::host::RuntimeCliState graphics_tooling_cli {};
+  oxygen::host::RuntimeCliState graphics_cli {};
   bool enable_validation = false;
-  bool require_display = true;
   bool auto_select_adapter = false;
   std::string feature_level = "12_0";
 
@@ -73,14 +72,6 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
         .DefaultValue(false)
         .UserFriendlyName("validation")
         .StoreTo(&enable_validation)
-        .Build());
-    device_options->Add(Option::WithKey("require-display")
-        .About("Require a display-capable adapter")
-        .Long("require-display")
-        .WithValue<bool>()
-        .DefaultValue(true)
-        .UserFriendlyName("require-display")
-        .StoreTo(&require_display)
         .Build());
     device_options->Add(Option::WithKey("auto-select-adapter")
         .About("Automatically pick the best adapter")
@@ -101,8 +92,8 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
 
     const Command::Ptr default_command
       = CommandBuilder(Command::DEFAULT)
-          .WithOptions(
-            oxygen::host::MakeGraphicsToolingOptions(graphics_tooling_cli))
+          .WithOptions(oxygen::host::MakeGraphicsToolingOptions(graphics_cli))
+          .WithOptions(oxygen::host::MakeGraphicsAdapterOptions(graphics_cli))
           .WithOptions(device_options);
     auto cli = oxygen::host::BuildCli(
       "devices", "D3D12 device removal demo", default_command);
@@ -113,21 +104,24 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
     }
 
     if (!oxygen::AreGraphicsToolingOptionsMutuallyExclusive(
-          graphics_tooling_cli.enable_debug_layer,
-          graphics_tooling_cli.enable_aftermath)) {
+          graphics_cli.enable_debug_layer, graphics_cli.enable_aftermath)) {
       throw oxygen::host::RuntimeCliError(
         "--debug-layer and --aftermath are mutually exclusive");
     }
     LOG_F(INFO, "Devices: debug_layer={} aftermath={}",
-      graphics_tooling_cli.enable_debug_layer,
-      graphics_tooling_cli.enable_aftermath);
+      graphics_cli.enable_debug_layer, graphics_cli.enable_aftermath);
+
+    auto adapter_config = oxygen::GraphicsConfig {};
+    oxygen::host::ApplyGraphicsAdapterCli(graphics_cli, adapter_config);
 
     const oxygen::graphics::d3d12::DeviceManagerDesc props {
-      .enable_debug_layer = graphics_tooling_cli.enable_debug_layer,
+      .enable_debug_layer = graphics_cli.enable_debug_layer,
       .enable_validation = enable_validation,
-      .enable_aftermath = graphics_tooling_cli.enable_aftermath,
-      .require_display = require_display,
+      .enable_aftermath = graphics_cli.enable_aftermath,
+      .require_display = adapter_config.require_display,
       .auto_select_adapter = auto_select_adapter,
+      .preferred_card_name = adapter_config.preferred_card_name,
+      .preferred_card_device_id = adapter_config.preferred_card_device_id,
       .minFeatureLevel = ParseFeatureLevel(feature_level),
     };
     DeviceManager device_manager(props);

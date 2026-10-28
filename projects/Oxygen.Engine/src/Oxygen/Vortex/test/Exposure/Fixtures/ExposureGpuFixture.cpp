@@ -187,12 +187,7 @@ auto ExposureGpuTest::BackendConfigJson() const -> std::string
   const auto environment_flag = [&](const char* name) -> bool {
     return environment_value(name).has_value();
   };
-  // A part of an adapter name (OXYGEN_GPU_ADAPTER) selects that adapter, e.g.
-  // an integrated GPU that does not drive the desktop.
   auto config = nlohmann::json::object();
-  if (const auto adapter = environment_value("OXYGEN_GPU_ADAPTER")) {
-    config.emplace("preferred_card_name", *adapter);
-  }
   // External GPU crash analysis (e.g. Radeon GPU Detective) needs the device
   // without the debug layer and DRED, which otherwise intercept removal.
   if (environment_flag("OXYGEN_GPU_CRASH_ANALYSIS")) {

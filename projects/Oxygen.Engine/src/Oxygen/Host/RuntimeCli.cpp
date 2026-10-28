@@ -10,10 +10,14 @@
 #include <cstdint>
 #include <limits>
 #include <memory>
+#include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <system_error>
 #include <utility>
+
+#include <fmt/format.h>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Types/Geometry.h>
@@ -28,14 +32,17 @@
 #include <Oxygen/Clap/OptionValue.h>
 #include <Oxygen/Config/GraphicsConfig.h>
 #include <Oxygen/Control/ControlServer.h>
+#include <Oxygen/Graphics/Common/BackendModule.h>
 #include <Oxygen/Host/HostConfig.h>
 #include <Oxygen/Host/RuntimeCli.h>
+#include <Oxygen/Loader/GraphicsBackendLoader.h>
 
 namespace oxygen::host {
 
 namespace {
 
   constexpr std::string_view kAdvancedHelpCommand = "help-advanced";
+  constexpr std::string_view kListGpusOption = "list-gpus";
 
   auto NormalizeToken(std::string value) -> std::string
   {
@@ -114,6 +121,39 @@ namespace {
       .module_path = state.capture_library,
       .capture_file_template = state.capture_output,
     };
+  }
+
+  //! A PCI device id, decimal or `0x` hexadecimal.
+  auto ParseGpuDeviceId(std::string_view value) -> DeviceId
+  {
+    auto base = 10;
+    if (value.starts_with("0x") || value.starts_with("0X")) {
+      value.remove_prefix(2U);
+      base = 16;
+    }
+    auto id = DeviceId { 0 };
+    const auto* const begin = std::to_address(value.begin());
+    const auto* const end = std::to_address(value.end());
+    const auto parsed = std::from_chars(begin, end, id, base);
+    if (value.empty() || parsed.ec != std::errc {} || parsed.ptr != end
+      || id < 0) {
+      throw RuntimeCliError(
+        "--gpu-id expects a PCI device id, decimal or 0x hexadecimal");
+    }
+    return id;
+  }
+
+  //! `--list-gpus` was given and is true.
+  auto ListGpusRequested(const clap::CommandLineContext& context) -> bool
+  {
+    const auto key = std::string(kListGpusOption);
+    if (!context.ovm.HasOption(key)) {
+      return false;
+    }
+    return std::ranges::any_of(
+      context.ovm.ValuesOf(key), [](const clap::OptionValue& value) -> bool {
+        return !value.IsDefaulted() && value.GetAs<bool>();
+      });
   }
 
   auto MakeAdvancedHelpCommand() -> clap::Command::Ptr
@@ -239,6 +279,45 @@ auto MakeGraphicsToolingOptions(RuntimeCliState& state) -> clap::Options::Ptr
   return options;
 }
 
+auto MakeGraphicsAdapterOptions(RuntimeCliState& state) -> clap::Options::Ptr
+{
+  auto options = std::make_shared<clap::Options>("Graphics adapter options");
+  options->Add(clap::Option::WithKey("gpu")
+      .About("Prefer the GPU whose name contains this text; mutually "
+             "exclusive with --gpu-id")
+      .Long("gpu")
+      .WithValue<std::string>()
+      .UserFriendlyName("name")
+      .StoreTo(&state.gpu)
+      .Build());
+  options->Add(clap::Option::WithKey("gpu-id")
+      .About("Prefer the GPU with this PCI device id, decimal or 0x "
+             "hexadecimal; mutually exclusive with --gpu")
+      .Long("gpu-id")
+      .WithValue<std::string>()
+      .UserFriendlyName("id")
+      .StoreTo(&state.gpu_id)
+      .Build());
+  options->Add(clap::Option::WithKey("require-display")
+      .About("Choose automatically only among GPUs that drive a display; a "
+             "preferred GPU is exempt")
+      .Long("require-display")
+      .WithValue<bool>()
+      .DefaultValue(state.require_display)
+      .UserFriendlyName("required")
+      .StoreTo(&state.require_display)
+      .Build());
+  options->Add(clap::Option::WithKey(std::string(kListGpusOption))
+      .About("List the GPUs with their names and ids, then exit")
+      .Long(std::string(kListGpusOption))
+      .WithValue<bool>()
+      .DefaultValue(state.list_gpus)
+      .UserFriendlyName("list")
+      .StoreTo(&state.list_gpus)
+      .Build());
+  return options;
+}
+
 auto MakeCaptureOptions(RuntimeCliState& state) -> clap::Options::Ptr
 {
   auto options = std::make_shared<clap::Options>("Capture options");
@@ -333,6 +412,13 @@ auto HandleMetaCommand(const clap::CommandLineContext& context,
     || context.ovm.HasOption(clap::Command::HELP)) {
     return true;
   }
+  if (ListGpusRequested(context)) {
+    const auto adapters
+      = GraphicsBackendLoader::GetInstanceRelaxed().ListAdapters(
+        graphics::BackendType::kDirect3D12);
+    *context.out << FormatGraphicsAdapters(adapters);
+    return true;
+  }
   if (command != kAdvancedHelpCommand) {
     return false;
   }
@@ -343,6 +429,35 @@ auto HandleMetaCommand(const clap::CommandLineContext& context,
     *context.out << "\n";
   }
   return true;
+}
+
+auto FormatGraphicsAdapters(
+  const std::span<const loader::GraphicsAdapter> adapters) -> std::string
+{
+  if (adapters.empty()) {
+    return "No hardware GPU found.\n";
+  }
+  constexpr std::string_view kNameHeader = "GPU";
+  auto name_width = kNameHeader.size();
+  for (const auto& adapter : adapters) {
+    name_width = std::max(name_width, adapter.name.size());
+  }
+
+  constexpr double kBytesPerGiB = 1024.0 * 1024.0 * 1024.0;
+  auto text
+    = fmt::format("{:<{}}  {:<6}  {:<6}  {:>9}  {:<7}  {}\n", kNameHeader,
+      name_width, "Id", "Vendor", "Memory", "Display", "Feature level");
+  for (const auto& adapter : adapters) {
+    text
+      += fmt::format("{:<{}}  0x{:04X}  0x{:04X}  {:>6.2f} GB  {:<7}  {}{}\n",
+        adapter.name, name_width, adapter.device_id, adapter.vendor_id,
+        static_cast<double>(adapter.dedicated_memory) / kBytesPerGiB,
+        adapter.has_display ? "yes" : "no",
+        adapter.usable ? adapter.feature_level : "unsupported",
+        adapter.default_choice ? "  (default)" : "");
+  }
+  text += "\nSelect one with --gpu \"<part of the name>\" or --gpu-id <id>.\n";
+  return text;
 }
 
 auto WasPassed(
@@ -382,6 +497,20 @@ auto ParseWindowResolution(const std::string_view value)
   };
 }
 
+auto ApplyGraphicsAdapterCli(
+  const RuntimeCliState& state, GraphicsConfig& config) -> void
+{
+  if (!state.gpu.empty() && !state.gpu_id.empty()) {
+    throw RuntimeCliError("--gpu and --gpu-id are mutually exclusive");
+  }
+  config.preferred_card_name
+    = state.gpu.empty() ? std::nullopt : std::optional { state.gpu };
+  config.preferred_card_device_id = state.gpu_id.empty()
+    ? std::nullopt
+    : std::optional { ParseGpuDeviceId(state.gpu_id) };
+  config.require_display = state.require_display;
+}
+
 auto ApplyRuntimeCli(const clap::CommandLineContext& context,
   const RuntimeCliState& state, HostConfig& config) -> void
 {
@@ -400,6 +529,7 @@ auto ApplyRuntimeCli(const clap::CommandLineContext& context,
   config.engine.graphics.enable_vsync = state.vsync;
   config.engine.graphics.enable_debug_layer = state.enable_debug_layer;
   config.engine.graphics.enable_aftermath = state.enable_aftermath;
+  ApplyGraphicsAdapterCli(state, config.engine.graphics);
   config.engine.graphics.frame_capture = BuildFrameCaptureConfig(state);
   config.platform.headless = state.headless;
   config.window.fullscreen = state.fullscreen;
@@ -436,10 +566,12 @@ auto ApplyRuntimeCli(const clap::CommandLineContext& context,
 
   LOG_F(INFO,
     "Runtime options: frames={} fps={} headless={} fullscreen={} vsync={} "
-    "resolution='{}' debug_layer={} aftermath={} capture_provider={}",
+    "resolution='{}' debug_layer={} aftermath={} gpu='{}' gpu_id='{}' "
+    "require_display={} capture_provider={}",
     state.frames, state.target_fps, state.headless, state.fullscreen,
     state.vsync, state.resolution, state.enable_debug_layer,
-    state.enable_aftermath, state.capture_provider);
+    state.enable_aftermath, state.gpu, state.gpu_id, state.require_display,
+    state.capture_provider);
 }
 
 } // namespace oxygen::host

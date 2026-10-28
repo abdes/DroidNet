@@ -8,6 +8,7 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 #include <gmock/gmock.h>
 
@@ -32,6 +33,8 @@
 
 using oxygen::SerializedBackendConfig;
 using oxygen::SerializedPathFinderConfig;
+using oxygen::graphics::AdapterVisitorFunc;
+using oxygen::graphics::GraphicsAdapterRecord;
 using oxygen::graphics::GraphicsModuleApi;
 using oxygen::graphics::kGetGraphicsModuleApi;
 using oxygen::loader::detail::PlatformServices;
@@ -133,6 +136,7 @@ protected:
       : mock_api {
         .CreateBackend = &MockBackend::CreateBackendStatic,
         .DestroyBackend = &MockBackend::DestroyBackendStatic,
+        .EnumerateAdapters = &MockBackend::EnumerateAdaptersStatic,
       }
     {
     }
@@ -189,6 +193,36 @@ protected:
     {
       auto& instance = GetInstance();
       instance.mock_graphics.reset();
+    }
+
+    // Static callback for EnumerateAdapters: a discrete GPU without a display,
+    // selected by default, and an integrated GPU that drives the display.
+    static auto EnumerateAdaptersStatic(
+      void* context, const AdapterVisitorFunc visit) -> bool
+    {
+      visit(context,
+        GraphicsAdapterRecord {
+          .name = "Discrete GPU",
+          .vendor_id = 0x1002U,
+          .device_id = 0x7550U,
+          .dedicated_memory = 16ULL << 30U,
+          .has_display = false,
+          .usable = true,
+          .feature_level = "12_2",
+          .default_choice = true,
+        });
+      visit(context,
+        GraphicsAdapterRecord {
+          .name = "Integrated GPU",
+          .vendor_id = 0x1002U,
+          .device_id = 0x13C0U,
+          .dedicated_memory = 2ULL << 30U,
+          .has_display = true,
+          .usable = true,
+          .feature_level = "12_2",
+          .default_choice = false,
+        });
+      return true;
     }
 
     GraphicsModuleApi mock_api;
@@ -271,6 +305,32 @@ NOLINT_TEST_F(GraphicsBackendLoaderTest, LoadBackendFromMainModule)
     oxygen::graphics::BackendType::kDirect3D12, config, {});
   EXPECT_FALSE(backend.expired());
 }
+// Listing adapters loads the module, copies every record and releases the
+// module, without creating a backend.
+NOLINT_TEST_F(GraphicsBackendLoaderTest, ListAdaptersCopiesEveryRecord)
+{
+  auto& loader = oxygen::GraphicsBackendLoader::GetInstance(platform);
+  EXPECT_CALL(*platform, CloseModule(testing::_)).Times(1);
+
+  const auto adapters
+    = loader.ListAdapters(oxygen::graphics::BackendType::kDirect3D12);
+
+  ASSERT_EQ(adapters.size(), 2U);
+  EXPECT_EQ(adapters[0].name, "Discrete GPU");
+  EXPECT_EQ(adapters[0].device_id, 0x7550U);
+  EXPECT_EQ(adapters[0].dedicated_memory, 16ULL << 30U);
+  EXPECT_FALSE(adapters[0].has_display);
+  EXPECT_TRUE(adapters[0].default_choice);
+  EXPECT_EQ(adapters[1].name, "Integrated GPU");
+  EXPECT_EQ(adapters[1].vendor_id, 0x1002U);
+  EXPECT_EQ(adapters[1].device_id, 0x13C0U);
+  EXPECT_TRUE(adapters[1].has_display);
+  EXPECT_TRUE(adapters[1].usable);
+  EXPECT_EQ(adapters[1].feature_level, "12_2");
+  EXPECT_FALSE(adapters[1].default_choice);
+  EXPECT_TRUE(loader.GetBackend().expired());
+}
+
 // Test unloading a backend
 NOLINT_TEST_F(GraphicsBackendLoaderTest, UnloadBackendFromMainModule)
 {
@@ -510,6 +570,7 @@ NOLINT_TEST_F(GraphicsBackendLoaderTest, ConfigSerialization)
   config.enable_imgui = true;
   config.preferred_card_name = "Test GPU";
   config.preferred_card_device_id = 1;
+  config.require_display = true;
   config.frame_capture = {
     .provider = oxygen::FrameCaptureProvider::kRenderDoc,
     .init_mode = oxygen::FrameCaptureInitMode::kExplicitPath,
@@ -549,6 +610,7 @@ NOLINT_TEST_F(GraphicsBackendLoaderTest, ConfigSerialization)
   EXPECT_TRUE(json_str.contains(R"("enable_imgui": true)"));
   EXPECT_TRUE(json_str.contains(R"("preferred_card_name": "Test GPU")"));
   EXPECT_TRUE(json_str.contains(R"("preferred_card_device_id": 1)"));
+  EXPECT_TRUE(json_str.contains(R"("require_display": true)"));
   EXPECT_TRUE(json_str.contains(R"("provider": "renderdoc")"));
   EXPECT_TRUE(json_str.contains(R"("init_mode": "path")"));
   EXPECT_TRUE(json_str.contains(R"("from_frame": 1)"));

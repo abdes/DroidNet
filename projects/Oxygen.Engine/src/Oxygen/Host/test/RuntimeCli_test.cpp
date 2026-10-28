@@ -8,6 +8,7 @@
 #include <initializer_list>
 #include <memory>
 #include <optional>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -20,6 +21,7 @@
 #include <Oxygen/Console/CVar.h>
 #include <Oxygen/Host/HostConfig.h>
 #include <Oxygen/Host/RuntimeCli.h>
+#include <Oxygen/Loader/GraphicsBackendLoader.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {
@@ -33,9 +35,11 @@ using oxygen::clap::CommandLineContext;
 using oxygen::console::CVarValue;
 using oxygen::host::ApplyRuntimeCli;
 using oxygen::host::BuildCli;
+using oxygen::host::FormatGraphicsAdapters;
 using oxygen::host::HostConfig;
 using oxygen::host::MakeAdvancedCaptureOptions;
 using oxygen::host::MakeCaptureOptions;
+using oxygen::host::MakeGraphicsAdapterOptions;
 using oxygen::host::MakeGraphicsToolingOptions;
 using oxygen::host::MakeRuntimeOptions;
 using oxygen::host::ParseWindowResolution;
@@ -54,6 +58,7 @@ protected:
       = CommandBuilder(Command::DEFAULT)
           .WithOptions(MakeRuntimeOptions(state_, selection))
           .WithOptions(MakeGraphicsToolingOptions(state_))
+          .WithOptions(MakeGraphicsAdapterOptions(state_))
           .WithOptions(MakeCaptureOptions(state_))
           .WithOptions(MakeAdvancedCaptureOptions(state_), true);
     cli_ = BuildCli("host-test", "Runtime CLI test", command);
@@ -102,6 +107,9 @@ NOLINT_TEST_F(RuntimeCliTest, NoArgumentsKeepApplicationDefaults)
   EXPECT_FALSE(Config().window.resolution.has_value());
   EXPECT_EQ(Config().engine.graphics.frame_capture.provider,
     FrameCaptureProvider::kNone);
+  EXPECT_FALSE(Config().engine.graphics.preferred_card_name.has_value());
+  EXPECT_FALSE(Config().engine.graphics.preferred_card_device_id.has_value());
+  EXPECT_FALSE(Config().engine.graphics.require_display);
   EXPECT_FALSE(FindCVar("ngin.target_fps").has_value());
   // A defaulted option is not passed, so persisted values still apply.
   EXPECT_FALSE(FindCVar("gfx.vsync").has_value());
@@ -172,6 +180,97 @@ NOLINT_TEST_F(RuntimeCliTest, GraphicsToolingReachesGraphicsConfig)
   EXPECT_TRUE(Config().engine.graphics.enable_aftermath);
 }
 
+//! `--gpu` prefers the GPU whose name contains the text.
+NOLINT_TEST_F(RuntimeCliTest, GpuNameReachesGraphicsConfig)
+{
+  ParseAndApply({ "--gpu=Radeon(TM) Graphics" });
+
+  EXPECT_EQ(Config().engine.graphics.preferred_card_name,
+    std::optional<std::string> { "Radeon(TM) Graphics" });
+  EXPECT_FALSE(Config().engine.graphics.preferred_card_device_id.has_value());
+}
+
+//! `--gpu-id` takes a decimal or `0x` hexadecimal PCI device id.
+NOLINT_TEST_F(RuntimeCliTest, GpuIdAcceptsDecimalAndHexadecimal)
+{
+  ParseAndApply({ "--gpu-id=0x13C0" });
+  EXPECT_EQ(Config().engine.graphics.preferred_card_device_id,
+    std::optional<oxygen::DeviceId> { 0x13C0 });
+
+  ParseAndApply({ "--gpu-id=5056" });
+  EXPECT_EQ(Config().engine.graphics.preferred_card_device_id,
+    std::optional<oxygen::DeviceId> { 5056 });
+  EXPECT_FALSE(Config().engine.graphics.preferred_card_name.has_value());
+}
+
+//! A device id must be a whole non-negative number.
+NOLINT_TEST_F(RuntimeCliTest, MalformedGpuIdIsRejected)
+{
+  for (const auto* value :
+    { "--gpu-id=abc", "--gpu-id=0x", "--gpu-id=-1", "--gpu-id=12z" }) {
+    NOLINT_EXPECT_THROW(ParseAndApply({ value }), RuntimeCliError) << value;
+  }
+}
+
+//! The two GPU preferences are mutually exclusive.
+NOLINT_TEST_F(RuntimeCliTest, GpuWithGpuIdIsRejected)
+{
+  NOLINT_EXPECT_THROW(
+    ParseAndApply({ "--gpu=Radeon", "--gpu-id=0x13C0" }), RuntimeCliError);
+}
+
+//! `--require-display` reaches the graphics configuration.
+NOLINT_TEST_F(RuntimeCliTest, RequireDisplayReachesGraphicsConfig)
+{
+  ParseAndApply({ "--require-display=true" });
+
+  EXPECT_TRUE(Config().engine.graphics.require_display);
+}
+
+//! The GPU table shows the values `--gpu` and `--gpu-id` take, and marks
+//! the GPU chosen without them.
+NOLINT_TEST(RuntimeCliGpuListTest, TableShowsNamesIdsAndTheDefaultChoice)
+{
+  const auto adapters = std::vector<oxygen::loader::GraphicsAdapter> {
+    {
+      .name = "AMD Radeon RX 9070 XT",
+      .vendor_id = 0x1002U,
+      .device_id = 0x7550U,
+      .dedicated_memory = 16ULL << 30U,
+      .has_display = false,
+      .usable = true,
+      .feature_level = "12_2",
+      .default_choice = true,
+    },
+    {
+      .name = "Legacy GPU",
+      .vendor_id = 0x10DEU,
+      .device_id = 0x13C0U,
+      .dedicated_memory = 1ULL << 30U,
+      .has_display = true,
+      .usable = false,
+    },
+  };
+
+  const auto table = FormatGraphicsAdapters(adapters);
+
+  EXPECT_TRUE(
+    table.contains("AMD Radeon RX 9070 XT  0x7550  0x1002   16.00 GB  "
+                   "no       12_2  (default)\n"))
+    << table;
+  EXPECT_TRUE(
+    table.contains("Legacy GPU             0x13C0  0x10DE    1.00 GB  "
+                   "yes      unsupported\n"))
+    << table;
+  EXPECT_TRUE(table.contains("--gpu-id")) << table;
+}
+
+//! Without hardware GPUs the table says so.
+NOLINT_TEST(RuntimeCliGpuListTest, NoGpuIsReported)
+{
+  EXPECT_EQ(FormatGraphicsAdapters({}), "No hardware GPU found.\n");
+}
+
 //! Capture options produce the frame capture configuration.
 NOLINT_TEST_F(RuntimeCliTest, CaptureOptionsBuildCaptureConfig)
 {
@@ -239,12 +338,14 @@ NOLINT_TEST_F(RuntimeCliTest, ControlServerIsOffByDefault)
 NOLINT_TEST_F(RuntimeCliTest, ControlStartsTheServer)
 {
   ParseAndApply({ "--control" });
-  ASSERT_TRUE(Config().control.has_value());
-  EXPECT_EQ(Config().control->port, 0U);
+  const auto& ephemeral = Config().control;
+  ASSERT_HAS_VALUE(ephemeral);
+  EXPECT_EQ(ephemeral->port, 0U);
 
   ParseAndApply({ "--control=50513" });
-  ASSERT_TRUE(Config().control.has_value());
-  EXPECT_EQ(Config().control->port, 50513U);
+  const auto& fixed = Config().control;
+  ASSERT_HAS_VALUE(fixed);
+  EXPECT_EQ(fixed->port, 50513U);
 }
 
 //! The command line's port keeps the ownership rule the application set.
@@ -258,10 +359,11 @@ NOLINT_TEST_F(RuntimeCliTest, ControlPortKeepsTheOwnershipRule)
 
   ParseAndApply({ "--control=50513" });
 
-  ASSERT_TRUE(Config().control.has_value());
-  EXPECT_EQ(Config().control->port, 50513U);
-  EXPECT_EQ(Config().control->application, "Launcher");
-  EXPECT_TRUE(Config().control->exit_when_owner_leaves);
+  const auto& control = Config().control;
+  ASSERT_HAS_VALUE(control);
+  EXPECT_EQ(control->port, 50513U);
+  EXPECT_EQ(control->application, "Launcher");
+  EXPECT_TRUE(control->exit_when_owner_leaves);
 }
 
 //! `--control-name` labels the instance for control clients.
@@ -269,8 +371,9 @@ NOLINT_TEST_F(RuntimeCliTest, ControlNameLabelsTheInstance)
 {
   ParseAndApply({ "--control", "--control-name=left" });
 
-  ASSERT_TRUE(Config().control.has_value());
-  EXPECT_EQ(Config().control->name, "left");
+  const auto& control = Config().control;
+  ASSERT_HAS_VALUE(control);
+  EXPECT_EQ(control->name, "left");
 }
 
 //! A label without a control server labels nothing.

@@ -34,6 +34,27 @@ using CreateBackendFunc
     const oxygen::SerializedPathFinderConfig& path_finder_config);
 using DestroyBackendFunc = void (*)();
 
+//! One hardware adapter as the backend sees it; the strings live until the
+//! visitor returns.
+struct GraphicsAdapterRecord {
+  const char* name;
+  std::uint32_t vendor_id;
+  std::uint32_t device_id;
+  std::uint64_t dedicated_memory;
+  bool has_display;
+  //! Supports the backend's minimum feature level.
+  bool usable;
+  //! Highest supported feature level, e.g. `12_2`; empty when not usable.
+  const char* feature_level;
+  //! The adapter the backend selects without hints.
+  bool default_choice;
+};
+
+using AdapterVisitorFunc
+  = void (*)(void* context, const GraphicsAdapterRecord& adapter);
+//! Visit every hardware adapter; false when enumeration failed.
+using EnumerateAdaptersFunc = bool (*)(void* context, AdapterVisitorFunc visit);
+
 //! Interface for the renderer module.
 struct GraphicsModuleApi {
 
@@ -61,6 +82,13 @@ struct GraphicsModuleApi {
    referring to the backend instance are invalidated.
   */
   DestroyBackendFunc DestroyBackend;
+
+  //! Enumerate the hardware adapters without creating a backend instance.
+  /*!
+   Callable whether or not a backend instance exists; it creates no device
+   and changes no backend state.
+  */
+  EnumerateAdaptersFunc EnumerateAdapters;
 };
 
 }; // extern "C"

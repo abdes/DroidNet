@@ -10,11 +10,12 @@
 #include <array>
 #include <cstddef>
 #include <exception>
-#include <iterator>
 #include <memory>
+#include <optional>
 #include <span>
 #include <stdexcept>
 #include <string>
+#include <tuple>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -37,11 +38,14 @@
 #include <Oxygen/Config/GraphicsConfig.h>
 #include <Oxygen/Graphics/Direct3D12/Allocator/D3D12MemAlloc.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/Types.h>
+#include <Oxygen/Graphics/Direct3D12/Devices/AdapterSelection.h>
 #include <Oxygen/Graphics/Direct3D12/Devices/DebugLayer.h>
 #include <Oxygen/Graphics/Direct3D12/Devices/DeviceManager.h>
 
 using Microsoft::WRL::ComPtr;
 using oxygen::graphics::d3d12::AdapterInfo;
+using oxygen::graphics::d3d12::AdapterSelectionPolicy;
+using oxygen::graphics::d3d12::AdapterTraits;
 using oxygen::graphics::d3d12::DeviceManager;
 using oxygen::windows::ThrowOnFailed;
 
@@ -102,9 +106,12 @@ auto FeatureLevelToString(const D3D_FEATURE_LEVEL feature_level) -> std::string
   }
 }
 
-auto GetMaxFeatureLevel(
-  const ComPtr<oxygen::graphics::d3d12::dx::IDevice>& device)
-  -> D3D_FEATURE_LEVEL
+//! The highest feature level, at least `minimum`, the adapter supports. A null
+//! output device asks the runtime whether creation would succeed, without
+//! creating a device on an adapter that may never be selected.
+auto ProbeMaxFeatureLevel(
+  const ComPtr<oxygen::graphics::d3d12::dxgi::IAdapter>& adapter,
+  const D3D_FEATURE_LEVEL minimum) -> std::optional<D3D_FEATURE_LEVEL>
 {
   static constexpr std::array feature_levels {
     D3D_FEATURE_LEVEL_12_2,
@@ -114,18 +121,16 @@ auto GetMaxFeatureLevel(
     D3D_FEATURE_LEVEL_11_0,
   };
 
-  auto feature_level_info = D3D12_FEATURE_DATA_FEATURE_LEVELS {
-    .NumFeatureLevels = static_cast<UINT>(feature_levels.size()),
-    .pFeatureLevelsRequested = feature_levels.data(),
-    .MaxSupportedFeatureLevel = D3D_FEATURE_LEVEL_11_0,
-  };
-
-  if (SUCCEEDED(device->CheckFeatureSupport(D3D12_FEATURE_FEATURE_LEVELS,
-        &feature_level_info, sizeof(feature_level_info)))) {
-    return feature_level_info.MaxSupportedFeatureLevel;
+  for (const auto level : feature_levels) {
+    if (level < minimum) {
+      break;
+    }
+    if (SUCCEEDED(D3D12CreateDevice(
+          adapter.Get(), level, __uuidof(ID3D12Device), nullptr))) {
+      return level;
+    }
   }
-
-  return D3D_FEATURE_LEVEL_11_0;
+  return std::nullopt;
 }
 
 auto SupportsShaderModel(
@@ -145,6 +150,11 @@ auto SupportsShaderModel(
 auto AdapterInfo::MemoryAsString() const -> std::string
 {
   return FormatMemorySize(memory);
+}
+
+auto AdapterInfo::MaxFeatureLevelAsString() const -> std::string
+{
+  return FeatureLevelToString(max_feature_level);
 }
 
 void DeviceManager::InitializeFactory()
@@ -172,100 +182,8 @@ void DeviceManager::DiscoverAdapters()
   DCHECK_NOTNULL_F(factory_, "DXGI factory not initialized");
   LOG_SCOPE_F(INFO, "Discover adapters");
 
-  contexts_.clear(); // Clear any previous entries
-
-  int best_score = -1;
-  size_t best_adapter_index { 0 };
-
-  try {
-    // Enumerate high-performance adapters only
-    ComPtr<dxgi::IAdapter> adapter;
-    UINT adapter_index = 0;
-    while (SUCCEEDED(factory_->EnumAdapterByGpuPreference(adapter_index,
-      DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE, IID_PPV_ARGS(&adapter)))) {
-
-      DXGI_ADAPTER_DESC1 desc;
-      ThrowOnFailed(adapter->GetDesc1(&desc));
-
-      if ((desc.Flags & static_cast<UINT>(DXGI_ADAPTER_FLAG_SOFTWARE)) != 0U) {
-        // Don't select the Basic Render Driver adapter.
-        ++adapter_index;
-        continue;
-      }
-
-      auto adapter_name = GetAdapterName(desc);
-
-      // Check min and max feature levels
-      auto meets_feature_level { false };
-      D3D_FEATURE_LEVEL max_feature_level { D3D_FEATURE_LEVEL_11_0 };
-      try {
-        ComPtr<dx::IDevice> device;
-        ThrowOnFailed(D3D12CreateDevice(
-          adapter.Get(), props_.minFeatureLevel, IID_PPV_ARGS(&device)));
-        max_feature_level = GetMaxFeatureLevel(device);
-        meets_feature_level
-          = SupportsShaderModel(device, props_.min_shader_model);
-        if (!meets_feature_level) {
-          LOG_F(WARNING,
-            "adapter `{}` does not support the required shader model 0x{:X}",
-            adapter_name, static_cast<unsigned>(props_.min_shader_model));
-        }
-      } catch (std::exception& ex) {
-        LOG_F(ERROR, "failed to check adapter `{}` feature level: {}",
-          adapter_name, ex.what());
-      }
-
-      AdapterInfo adapter_info(std::move(adapter_name), desc.VendorId,
-        desc.DeviceId, desc.DedicatedVideoMemory,
-        CheckConnectedDisplay(adapter), meets_feature_level, max_feature_level,
-        desc.AdapterLuid);
-
-      // Score the new adapter
-      auto score = GetAdapterScore(adapter_info);
-      if (score > best_score) {
-        best_score = score;
-        best_adapter_index = contexts_.size();
-      }
-
-      contexts_.emplace_back(std::move(adapter_info), adapter);
-      ++adapter_index;
-    }
-  } catch (const std::exception& ex) {
-    LOG_F(ERROR, "discovery cancelled due to exception: {}", ex.what());
-    contexts_.clear();
-    throw;
-  }
-
-  if (props_.preferred_card_name.has_value()
-    || props_.preferred_card_device_id.has_value()) {
-    const auto preferred
-      = std::ranges::find_if(contexts_, [this](const Context& context) -> bool {
-          return context.info.MeetsFeatureLevel()
-            && MatchesPreferredAdapter(context.info);
-        });
-    if (preferred != contexts_.end()) {
-      best_adapter_index
-        = static_cast<size_t>(std::distance(contexts_.begin(), preferred));
-      LOG_F(INFO, "Preferred adapter: {}", preferred->info.Name());
-    } else {
-      LOG_F(WARNING,
-        "No usable adapter matches the preferred card (name `{}`, device id "
-        "{}); selecting by score",
-        props_.preferred_card_name.value_or(""),
-        props_.preferred_card_device_id.value_or(0));
-    }
-  }
-
-  if (best_score < 0) {
-    throw std::runtime_error(fmt::format("No adapter supports feature level "
-                                         "0x{:X} and shader model 0x{:X}",
-      static_cast<unsigned>(props_.minFeatureLevel),
-      static_cast<unsigned>(props_.min_shader_model)));
-  }
-
-  if (!contexts_.empty()) {
-    contexts_.at(best_adapter_index).info.is_best = true;
-  }
+  contexts_ = DiscoverContexts(*factory_.Get(), props_.minFeatureLevel);
+  ranking_ = RankContexts(contexts_, props_);
 
   std::ranges::for_each(Adapters(), [](const AdapterInfo& a) -> void {
     LOG_F(INFO, "[{}] {} {} ({}-{})", "+", a.Name(), a.MemoryAsString(),
@@ -278,41 +196,113 @@ void DeviceManager::DiscoverAdapters()
   });
 }
 
-auto DeviceManager::GetAdapterScore(AdapterInfo& adapter) const -> int
+auto DeviceManager::DiscoverContexts(dx::IFactory& factory,
+  const D3D_FEATURE_LEVEL minimum) -> std::vector<Context>
 {
-  // An adapter without the required feature level and shader model is never
-  // selected.
-  if (!adapter.MeetsFeatureLevel()) {
-    return -1;
+  auto contexts = std::vector<Context> {};
+  // Enumerate high-performance adapters only
+  ComPtr<dxgi::IAdapter> adapter;
+  UINT adapter_index = 0;
+  while (SUCCEEDED(factory.EnumAdapterByGpuPreference(adapter_index,
+    DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE, IID_PPV_ARGS(&adapter)))) {
+
+    DXGI_ADAPTER_DESC1 desc;
+    ThrowOnFailed(adapter->GetDesc1(&desc));
+
+    if ((desc.Flags & static_cast<UINT>(DXGI_ADAPTER_FLAG_SOFTWARE)) != 0U) {
+      // Don't select the Basic Render Driver adapter.
+      ++adapter_index;
+      continue;
+    }
+
+    auto adapter_name = GetAdapterName(desc);
+    const auto max_feature_level = ProbeMaxFeatureLevel(adapter, minimum);
+    LOG_IF_F(WARNING, !max_feature_level.has_value(),
+      "adapter `{}` does not support feature level 0x{:X}", adapter_name,
+      static_cast<unsigned>(minimum));
+
+    AdapterInfo adapter_info(std::move(adapter_name), desc.VendorId,
+      desc.DeviceId, desc.DedicatedVideoMemory, CheckConnectedDisplay(adapter),
+      max_feature_level.has_value(),
+      max_feature_level.value_or(D3D_FEATURE_LEVEL_11_0), desc.AdapterLuid);
+
+    contexts.emplace_back(std::move(adapter_info), adapter);
+    ++adapter_index;
   }
-  int score = 1;
-  score += static_cast<int>(adapter.MaxFeatureLevel())
-    - static_cast<int>(props_.minFeatureLevel);
-
-  // Score based on display connection
-  if (props_.require_display && adapter.IsConnectedToDisplay()) {
-    score += 1;
-  }
-
-  // Score based on dedicated memory
-  constexpr int kMegaShift
-    = 20; // 1 megabyte (MB) is equal to 1,048,576 bytes (2^20 bytes)
-  score += static_cast<int>(adapter.Memory()
-    / (std::size_t { 1U } << static_cast<unsigned>(
-         kMegaShift))); // Convert bytes to MB
-
-  return score;
+  return contexts;
 }
 
-auto DeviceManager::MatchesPreferredAdapter(const AdapterInfo& adapter) const
-  -> bool
+auto DeviceManager::RankContexts(const std::span<Context> contexts,
+  const DeviceManagerDesc& desc) -> std::vector<std::size_t>
 {
-  if (props_.preferred_card_name.has_value()) {
-    return adapter.Name().contains(*props_.preferred_card_name);
+  auto traits = std::vector<AdapterTraits> {};
+  traits.reserve(contexts.size());
+  for (const auto& context : contexts) {
+    const auto& info = context.info;
+    traits.push_back({
+      .name = info.Name(),
+      .device_id = info.DeviceId(),
+      .dedicated_memory = info.Memory(),
+      .has_display = info.IsConnectedToDisplay(),
+      .max_feature_level = info.MeetsFeatureLevel()
+        ? std::optional { info.MaxFeatureLevel() }
+        : std::nullopt,
+    });
   }
-  return props_.preferred_card_device_id.has_value()
-    && static_cast<DeviceId>(adapter.DeviceId())
-    == *props_.preferred_card_device_id;
+
+  const auto ranking = RankAdapters(traits,
+    AdapterSelectionPolicy {
+      .require_display = desc.require_display,
+      .preferred_card_name = desc.preferred_card_name,
+      .preferred_card_device_id = desc.preferred_card_device_id,
+    });
+  if (ranking.order.empty()) {
+    LOG_F(WARNING, "No adapter supports feature level 0x{:X}{}",
+      static_cast<unsigned>(desc.minFeatureLevel),
+      desc.require_display ? " and drives a display" : "");
+    return {};
+  }
+
+  const auto& best = contexts[ranking.order.front()];
+  MarkBest(contexts, best);
+  if (ranking.reason == AdapterChoiceReason::kNoPreferredMatch) {
+    LOG_F(WARNING,
+      "No usable adapter matches the preferred card (name `{}`, device id "
+      "{})",
+      desc.preferred_card_name.value_or(""),
+      desc.preferred_card_device_id.value_or(0));
+  }
+  LOG_IF_F(WARNING,
+    ranking.reason == AdapterChoiceReason::kPreferredCard
+      && desc.require_display && !best.info.IsConnectedToDisplay(),
+    "Preferred adapter `{}` drives no display", best.info.Name());
+  LOG_F(INFO, "Best adapter: `{}` ({})", best.info.Name(),
+    to_string(ranking.reason));
+  return ranking.order;
+}
+
+auto DeviceManager::MarkBest(
+  const std::span<Context> contexts, const Context& best) -> void
+{
+  for (auto& context : contexts) {
+    context.info.is_best = &context == &best;
+  }
+}
+
+auto DeviceManager::ListAdapters(const DeviceManagerDesc& desc)
+  -> std::vector<AdapterInfo>
+{
+  ComPtr<dx::IFactory> factory;
+  ThrowOnFailed(CreateDXGIFactory2(0, IID_PPV_ARGS(&factory)));
+  auto contexts = DiscoverContexts(*factory.Get(), desc.minFeatureLevel);
+  std::ignore = RankContexts(contexts, desc);
+
+  auto adapters = std::vector<AdapterInfo> {};
+  adapters.reserve(contexts.size());
+  for (const auto& context : contexts) {
+    adapters.push_back(context.info);
+  }
+  return adapters;
 }
 
 auto DeviceManager::InitializeContext(Context& context) const -> bool
@@ -324,6 +314,11 @@ auto DeviceManager::InitializeContext(Context& context) const -> bool
     LOG_F(INFO, "Device");
     ThrowOnFailed(D3D12CreateDevice(context.adapter.Get(),
       props_.minFeatureLevel, IID_PPV_ARGS(&context.device)));
+    if (!SupportsShaderModel(context.device, props_.min_shader_model)) {
+      throw std::runtime_error(
+        fmt::format("adapter `{}` does not support shader model 0x{:X}",
+          context.info.Name(), static_cast<unsigned>(props_.min_shader_model)));
+    }
 
     if (props_.enable_debug_layer) {
       DebugLayer::ConfigureDeviceInfoQueue(context.device.Get());
@@ -471,7 +466,13 @@ DeviceManager::DeviceManager(DeviceManagerDesc desc)
 
   if (props_.auto_select_adapter) {
     LOG_F(INFO, "Auto-selecting best adapter");
-    SelectBestAdapter();
+    if (!SelectBestAdapter()) {
+      throw std::runtime_error(fmt::format(
+        "No adapter supports feature level 0x{:X} and shader model 0x{:X}{}",
+        static_cast<unsigned>(props_.minFeatureLevel),
+        static_cast<unsigned>(props_.min_shader_model),
+        props_.require_display ? " and drives a display" : ""));
+    }
   }
 }
 

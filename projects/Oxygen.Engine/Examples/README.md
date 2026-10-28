@@ -28,8 +28,14 @@ For a controlled, uncapped Full HD run:
 Oxygen.Examples.MultiView.exe --resolution 1920x1080 --fullscreen true --fps 0 --vsync false
 ```
 
-These options, the graphics tooling switches (`--debug-layer`, `--aftermath`)
-and frame capture come from `Oxygen.Host`'s `RuntimeCli`. `help-advanced`
+These options, the graphics tooling switches (`--debug-layer`, `--aftermath`),
+GPU selection and frame capture come from `Oxygen.Host`'s `RuntimeCli`.
+`--list-gpus` prints each GPU's name and id and the one chosen by default.
+`--gpu <name>` prefers the GPU whose name contains the text and `--gpu-id <id>`
+the one with that PCI device id (decimal or `0x` hexadecimal); without a usable
+match the backend picks the GPU with the highest feature level, then the most
+dedicated memory. `--require-display true` limits that automatic choice to GPUs
+that drive a display. `help-advanced`
 lists the hidden groups. The host's `HostWindow` applies the window request
 through the platform window API.
 

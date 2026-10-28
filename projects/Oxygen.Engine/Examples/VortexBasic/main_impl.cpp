@@ -446,6 +446,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
           .WithOptions(host::MakeRuntimeOptions(runtime))
           .WithOptions(vortex_options)
           .WithOptions(host::MakeGraphicsToolingOptions(runtime))
+          .WithOptions(host::MakeGraphicsAdapterOptions(runtime))
           .WithOptions(host::MakeCaptureOptions(runtime))
           .WithOptions(host::MakeAdvancedCaptureOptions(runtime), true);
     const auto cli = host::BuildCli("vortex-basic",

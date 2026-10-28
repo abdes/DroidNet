@@ -310,6 +310,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
             }))
           .WithOptions(MakeEngineOptions(engine))
           .WithOptions(host::MakeGraphicsToolingOptions(runtime))
+          .WithOptions(host::MakeGraphicsAdapterOptions(runtime))
           .WithOptions(host::MakeCaptureOptions(runtime))
           .WithOptions(host::MakeAdvancedCaptureOptions(runtime), true);
     const auto cli = host::BuildCli(

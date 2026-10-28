@@ -51,6 +51,13 @@ m_gtest_program(
     "HeapAllocationStrategy_domain_test.cpp"
     "HeapAllocationStrategy_test.cpp"
 )
+m_gtest_program(AdapterSelection SOURCES "AdapterSelection_test.cpp")
+m_gtest_program(
+  DeviceManagerSelection
+  GPU
+  SOURCES
+    "DeviceManagerSelection_test.cpp"
+)
 m_gtest_program(DescriptorSegment SOURCES "DescriptorSegment_test.cpp")
 m_gtest_program(
   PipelineStateCache

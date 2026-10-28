@@ -6,8 +6,11 @@
 
 #pragma once
 
+#include <cstdint>
 #include <memory>
 #include <stdexcept>
+#include <string>
+#include <vector>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Config/PathFinderConfig.h>
@@ -29,6 +32,21 @@ namespace loader {
   namespace detail {
     class PlatformServices;
   } // namespace detail
+
+  //! One hardware adapter a graphics backend can render on.
+  struct GraphicsAdapter {
+    std::string name;
+    std::uint32_t vendor_id { 0U };
+    std::uint32_t device_id { 0U };
+    std::uint64_t dedicated_memory { 0U };
+    bool has_display { false };
+    //! Supports the backend's minimum feature level.
+    bool usable { false };
+    //! Highest supported feature level, e.g. `12_2`; empty when not usable.
+    std::string feature_level;
+    //! The adapter the backend selects without hints.
+    bool default_choice { false };
+  };
 } // namespace loader
 
 //! A singleton class that dynamically loads and unloads a graphics backend.
@@ -84,6 +102,16 @@ public:
   //! reload reports BackendRetiring until their actual destruction and module
   //! release.
   void UnloadBackend() const noexcept;
+
+  //! The hardware adapters of `backend`, in its enumeration order.
+  /*!
+   Loads the backend module without creating a backend instance.
+
+   \throws std::runtime_error when the module cannot be loaded or the
+   enumeration fails.
+  */
+  [[nodiscard]] auto ListAdapters(graphics::BackendType backend) const
+    -> std::vector<loader::GraphicsAdapter>;
 
   //! Gets the backend instance if one is currently loaded.
   [[nodiscard]] auto GetBackend() const noexcept -> std::weak_ptr<Graphics>;

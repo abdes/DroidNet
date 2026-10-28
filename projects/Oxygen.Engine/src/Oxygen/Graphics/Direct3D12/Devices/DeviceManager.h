@@ -9,10 +9,12 @@
 #include <Windows.h> // IWYU pragma: keep
 
 #include <concepts>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <optional>
 #include <ranges>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <type_traits>
@@ -61,6 +63,7 @@ public:
   [[nodiscard]] auto IsConnectedToDisplay() const { return has_display; }
   [[nodiscard]] auto MeetsFeatureLevel() const { return meets_feature_level; }
   [[nodiscard]] auto MaxFeatureLevel() const { return max_feature_level; }
+  [[nodiscard]] auto MaxFeatureLevelAsString() const -> std::string;
   [[nodiscard]] auto IsBest() const { return is_best; }
 
 private:
@@ -102,9 +105,10 @@ concept AdapterPredicate = requires(Callable c, const AdapterInfo& a) {
 
 template <typename Callable>
 concept DeviceRemovalHandler
-  = std::is_same_v<Callable, std::nullptr_t> || requires(Callable c) {
-      { std::invoke(c) } -> std::same_as<void>;
-    };
+  = std::is_same_v<std::remove_cvref_t<Callable>, std::nullptr_t>
+  || requires(Callable c) {
+       { std::invoke(c) } -> std::same_as<void>;
+     };
 
 struct DeviceManagerDesc {
   bool enable_debug_layer { DefaultGraphicsDebugLayerEnabled() };
@@ -114,11 +118,11 @@ struct DeviceManagerDesc {
   bool enable_dred { true };
   bool enable_aftermath { DefaultGraphicsAftermathEnabled() };
   FrameCaptureConfig frame_capture {};
-  bool require_display { true };
+  //! Adapter selection, ranked as `AdapterSelectionPolicy` states: a usable
+  //! adapter matching a hint first, then, among adapters that drive a display
+  //! when `require_display` is set, the best score.
+  bool require_display { false };
   bool auto_select_adapter { true };
-  //! Adapter hints, mutually exclusive: the best adapter is a usable one whose
-  //! name contains `preferred_card_name`, or whose PCI device id equals
-  //! `preferred_card_device_id`. Without a usable match, scoring decides.
   std::optional<std::string> preferred_card_name;
   std::optional<DeviceId> preferred_card_device_id;
   D3D_FEATURE_LEVEL minFeatureLevel { D3D_FEATURE_LEVEL_12_0 };
@@ -136,12 +140,10 @@ public:
   OXYGEN_MAKE_NON_COPYABLE(DeviceManager)
   OXYGEN_MAKE_NON_MOVABLE(DeviceManager)
 
-  // Special tag to indicate re-discovery of adapters
-  struct ReDiscoverTag {
-    constexpr ReDiscoverTag() = default;
-  };
-
-  static constexpr ReDiscoverTag re_discover {};
+  //! The hardware adapters, ranked by `desc`'s selection policy, with the
+  //! best one marked; creates no device and leaves the tooling policy alone.
+  OXGN_D3D12_NDAPI static auto ListAdapters(const DeviceManagerDesc& desc)
+    -> std::vector<AdapterInfo>;
 
   [[nodiscard]] auto Factory() const -> dx::IFactory* { return factory_.Get(); }
 
@@ -177,11 +179,6 @@ public:
         });
   }
 
-  [[nodiscard]] auto Adapters(ReDiscoverTag /*tag*/)
-  {
-    DiscoverAdapters();
-    return Adapters();
-  }
   template <AdapterPredicate Pred,
     DeviceRemovalHandler Handler = std::nullptr_t>
   auto SelectAdapter(Pred&& criteria, Handler&& on_device_removed = nullptr)
@@ -217,19 +214,26 @@ public:
       std::forward<Handler>(on_device_removed));
   }
 
+  //! Select the best ranked adapter whose device initializes; an adapter that
+  //! fails, e.g. below the minimum shader model, gives way to the next one.
   template <DeviceRemovalHandler Handler = std::nullptr_t>
-  auto SelectBestAdapter(Handler&& on_device_removed = nullptr) -> bool
+  auto SelectBestAdapter(Handler on_device_removed = nullptr) -> bool
   {
     // Optimize the case of re-selecting the current context
     if (current_context_ != nullptr && current_context_->info.IsBest()) {
-      return SelectAdapter(
-        *current_context_, std::forward<Handler>(on_device_removed));
+      return SelectAdapter(*current_context_, on_device_removed);
     }
 
-    // Otherwise, find and select the requested adapter
-    return SelectAdapter(
-      [&](const AdapterInfo& adapter) -> auto { return adapter.IsBest(); },
-      std::forward<Handler>(on_device_removed));
+    for (const auto index : ranking_) {
+      auto& context = contexts_.at(index);
+      if (SelectAdapter(context, on_device_removed)) {
+        MarkBest(contexts_, context);
+        return true;
+      }
+      LOG_F(WARNING, "Adapter `{}` is unusable; trying the next ranked one",
+        context.info.Name());
+    }
+    return false;
   }
 
   [[nodiscard]] auto GetCommandQueue(D3D12_COMMAND_LIST_TYPE type) const
@@ -259,8 +263,12 @@ private:
 
   auto InitializeFactory() -> void;
   auto DiscoverAdapters() -> void;
-  auto GetAdapterScore(AdapterInfo& adapter) const -> int;
-  auto MatchesPreferredAdapter(const AdapterInfo& adapter) const -> bool;
+  static auto DiscoverContexts(dx::IFactory& factory, D3D_FEATURE_LEVEL minimum)
+    -> std::vector<Context>;
+  static auto RankContexts(std::span<Context> contexts,
+    const DeviceManagerDesc& desc) -> std::vector<std::size_t>;
+  OXGN_D3D12_API static auto MarkBest(
+    std::span<Context> contexts, const Context& best) -> void;
 
   template <DeviceRemovalHandler Handler = std::nullptr_t>
   auto SelectAdapter(
@@ -283,7 +291,8 @@ private:
     // context
     if (CheckForDeviceLoss(new_context)) {
       // Invoke the handler if provided before we attempt the recovery
-      if constexpr (!std::is_same_v<Handler, std::nullptr_t>) {
+      if constexpr (!std::is_same_v<std::remove_cvref_t<Handler>,
+                      std::nullptr_t>) {
         std::invoke(std::forward<Handler>(on_device_removed));
       }
       if (!RecoverFromDeviceLoss(new_context)) {
@@ -306,6 +315,8 @@ private:
 
   Context* current_context_ { nullptr };
   std::vector<Context> contexts_;
+  //! Indices into `contexts_` of the selectable adapters, best first.
+  std::vector<std::size_t> ranking_;
   std::shared_ptr<DebugLayer> debug_layer_;
 };
 
