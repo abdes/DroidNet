@@ -9,8 +9,8 @@ owner's order from section 3; the LLD gaps of section 2 start once their
 dependencies are closed. An item is `done` only when the done gate of section 6
 holds; its row then names the commit.
 
-**Next: item 16**, #112 procedural mesh tangent frames follow `space::texture`:
-it has no dependencies.
+**Next: item 17**, #118 full paks pack only referenced resources: it has no
+dependencies.
 
 | Order | Item                                                                                           | Needs          | State | Commit    |
 | ----- | ---------------------------------------------------------------------------------------------- | -------------- | ----- | --------- |
@@ -29,7 +29,7 @@ it has no dependencies.
 | 13    | #77 slice 77.7: LOD policy in the editor                                                       | 11, #95, #76   | done  | 859eaa824 |
 | 14    | #77 slice 77.8: scene instances ([ED-M09.14](ED-M09.14-scene-instances.md))                    | 11, 12, 10     | done  | ED-M09.14 |
 | 15    | #28 + #29 GPU adapter selection and integrated-GPU budgets                                     | -              | done  | 81587defd |
-| 16    | #112 procedural mesh tangent frames follow `space::texture`                                    | -              | open  | -         |
+| 16    | #112 procedural mesh tangent frames follow `space::texture`                                    | -              | done  | 7ed47da07 |
 | 17    | #118 full paks pack only referenced resources                                                  | -              | open  | -         |
 | 18    | #30 RenderDoc past v1.46 for count-buffer `ExecuteIndirect` captures                           | -              | open  | -         |
 | 19    | #109 per-view draw bounds and the viewport Show menu                                           | -              | open  | -         |
