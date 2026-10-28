@@ -3,7 +3,7 @@
 Status: validated (2026-09-25). Structured commit delivery was authorized after user review.
 
 Use the existing ImGui 1.92.5 Conan package's matching Test Engine option.
-`generate-builds.ps1` enables `UiTests` by default for development in Debug,
+`build-tree.ps1 generate` enables `UiTests` by default for development in Debug,
 Release and RelWithDebInfo. Final-release generation uses `-UiTests:$false`.
 The script forwards the choice through Conan to `OXYGEN_BUILD_UI_TESTS`; direct
 Conan/package defaults remain false and can be overridden with `-o ui_tests=True`.
@@ -78,7 +78,7 @@ rejected when it disagrees with the dependency variant. Dependency deployment
 follows the generator's usual settings in both development and final-release mode.
 
 ```powershell
-./tools/generate-builds.ps1 profiles/windows-msvc.ini -Generator Ninja -WithTracy -NoClean
+./tools/build-tree.ps1 generate profiles/windows-msvc.ini -Generator Ninja -WithTracy
 cmake --build out/build-tracy-ninja --config Release --target oxygen-examples-lightbench oxygen-examples-texturedcube --parallel 8
 ./tools/cli/oxy-ui-tests.ps1 -Demo LightBench -BuildTree build-tracy-ninja -Config Release
 ./tools/cli/oxy-ui-tests.ps1 -Demo TexturedCube -BuildTree build-tracy-ninja -Config Release

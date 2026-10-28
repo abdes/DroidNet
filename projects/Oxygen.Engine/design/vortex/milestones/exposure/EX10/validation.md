@@ -53,7 +53,7 @@ is clean for new translation units and changed owner lines; unrelated existing
 owner warnings remain documented. A repository-wide clean-lint claim is not made.
 
 The later development-workflow update makes `UiTests` enabled by default in
-`generate-builds.ps1`; final-release generation uses `-UiTests:$false`. The
+`build-tree.ps1 generate`; final-release generation uses `-UiTests:$false`. The
 actual non-Tracy Ninja development tree is now configured with Test Engine,
 and VS Code's clangd resolves all three UI translation units without errors.
 Manual checks confirmed that repair. Earlier disabled-build qualification records
