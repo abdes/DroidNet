@@ -229,7 +229,8 @@ auto MaterialsSandboxVm::BrowseForSourcePath() -> void
     // config.initial_directory = ...
     config.filters.push_back({
       .description = "Image Files",
-      .extensions = { ".png", ".jpg", ".tga", ".bmp", ".hdr", ".exr" },
+      .extensions = { ".png", ".jpg", ".jpeg", ".tga", ".bmp", ".webp", ".ktx2",
+        ".hdr", ".exr", },
     });
 
     if (import_state_.source_path[0] != '\0') {
@@ -419,15 +420,14 @@ auto MaterialsSandboxVm::Update() -> void
   // 3. Consume report (if any finished)
   oxygen::content::import::ImportReport report;
   if (texture_service_->ConsumeImportReport(report)) {
-    if (!report.success && !report.diagnostics.empty()) {
-      import_state_.status_message = report.diagnostics.front().message;
-      // import_state_.in_flight = false;
+    if (!report.success) {
+      // The service's status names the first error; nothing new is cooked.
+      import_state_.status_message
+        = texture_service_->GetImportStatus().message;
       import_state_.workflow_state = ImportState::WorkflowState::Finished;
       import_state_.last_import_success = false;
       import_state_.progress = 1.0F;
-    } else {
-      // Success case?
-      // Report success handled below.
+      return;
     }
 
     std::string error;

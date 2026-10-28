@@ -317,8 +317,9 @@ auto MakeSkyboxFileBrowserConfig(const ContentRootPaths& roots)
   return FileBrowserConfig {
     .title = "Select Skybox Image",
     .initial_directory = roots.images_directory,
-    .filters = { MakeFilter(
-      "Skybox", { ".hdr", ".exr", ".png", ".jpg", ".jpeg", ".tga", ".bmp" }), },
+    .filters = { MakeFilter("Skybox",
+      { ".hdr", ".exr", ".png", ".jpg", ".jpeg", ".tga", ".bmp", ".webp",
+        ".ktx2", }), },
   };
 }
 

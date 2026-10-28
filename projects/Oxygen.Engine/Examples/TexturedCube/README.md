@@ -22,7 +22,7 @@ the new texture import system including:
 
 ### Texture Loading (Materials/UV Tab)
 
-- **Browse/Load**: Load any PNG, JPG, HDR, or EXR image
+- **Browse/Load**: Load any PNG, JPG, TGA, BMP, WebP, KTX2, HDR or EXR image
 - **BC7 compression**: Toggle GPU-compressed BC7 format (smaller VRAM, fast sampling)
 - **Generate mips**: Toggle mip map generation for better filtering at distance
 - **UV controls**: Adjust UV scale and offset for texture mapping
@@ -52,6 +52,9 @@ the new texture import system including:
 | PNG    | LDR  | Standard 8-bit images                                      |
 | JPG    | LDR  | Compressed 8-bit images                                    |
 | BMP    | LDR  | Uncompressed 8-bit images                                  |
+| TGA    | LDR  | Truevision 8-bit images                                    |
+| WebP   | LDR  | Still images, lossy or lossless                            |
+| KTX2   | LDR  | Basis Universal (ETC1S, UASTC), base level                 |
 | HDR    | HDR  | Radiance RGBE format (equirectangular panoramas)           |
 | EXR    | HDR  | OpenEXR format (high precision, equirectangular panoramas) |
 
@@ -70,13 +73,15 @@ the new texture import system including:
 When the texture index mode is set to **Custom**, you can:
 
 - Enter a texture resource index (non-zero)
-- Browse for an image file (PNG, JPG, HDR, EXR)
+- Browse for an image file (PNG, JPG, TGA, BMP, WebP, KTX2, HDR, EXR)
 - Enable BC7 compression for GPU-optimized textures
 - Generate mip maps for improved filtering
 
 The sample uses the new texture import pipeline with support for:
 
-- stb_image for LDR formats (PNG, JPG, BMP)
+- libspng for PNG, stb_image for the other LDR formats (JPG, TGA, BMP)
+- libwebp for WebP
+- libktx for KTX2 (Basis Universal transcoded to RGBA8)
 - stb_image for Radiance HDR
 - tinyexr for OpenEXR
 

@@ -102,16 +102,16 @@ preserve the source radiance range.
 
 ## Startup selection and source precedence
 
-`--scene <token>` mounts the shared main library from the SDK or source checkout. It discards a restored active-scene load,
-then selects the first matching entry among **all available mounted scenes**.
-Matching is case-insensitive and accepts a virtual path, filename stem, asset
-key, or substring.
+`--scene <token>` discards a restored active-scene load, then selects the first
+matching entry among the mounted scenes: the PAKs and loose indexes the saved
+settings mount. Only when none of them holds the scene does it mount the shared
+main library from the SDK or source checkout and look again. Matching is
+case-insensitive and accepts a virtual path, filename stem, asset key, or
+substring.
 
 - Prefer a full virtual path or key; short substrings can match multiple scenes.
-- Persisted PAK/index mounts still participate. Duplicate keys or paths can exist
-  in loose and PAK generations; check the resolved **source path** in the log.
-- For a controlled test, mount one intended source. To test `all.pak`, launch
-  without `--scene` and use the Library controls below.
+- With `all.pak` mounted, `--scene` plays the scene from `all.pak` and mounts
+  nothing else. The log names the resolved **source path**.
 - A scene load mounts a missing source, refreshes a changed source, and preserves
   the cache for an unchanged mounted source. Selection does not always remount
   the source or force it above every other mount.

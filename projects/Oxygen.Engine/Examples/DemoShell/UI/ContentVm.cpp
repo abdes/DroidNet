@@ -17,6 +17,7 @@
 #include <ranges>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <system_error>
 #include <unordered_map>
 #include <utility>
@@ -297,6 +298,16 @@ auto ContentVm::Update() -> void
   }
 }
 
+auto ModelVirtualPath(const std::string_view mount_root,
+  const std::filesystem::path& content_root,
+  const std::filesystem::path& source) -> std::string
+{
+  const auto under_root = source.lexically_relative(content_root);
+  const bool inside = !under_root.empty() && *under_root.begin() != "..";
+  return std::string(mount_root) + "/"
+    + (inside ? under_root : source.filename()).generic_string();
+}
+
 auto ContentVm::StartImport(const std::filesystem::path& source_path) -> void
 {
   if (IsImportInProgress()) {
@@ -321,11 +332,9 @@ auto ContentVm::StartImport(const std::filesystem::path& source_path) -> void
     const auto layout = settings_->GetDefaultLayout();
     auto model = content::import::SceneImportSettings::FromOptions(options);
     model.source_path = source_path.string();
-    // The model is identified by its file at the virtual root; its products
-    // are named under it.
-    model.virtual_path = layout.virtual_mount_root + "/"
-      + source_path.filename().generic_string();
     const auto content_root = file_browser_->GetContentRoots().content_root;
+    model.virtual_path
+      = ModelVirtualPath(layout.virtual_mount_root, content_root, source_path);
     auto location = content::import::ModelImportRecord::LocateRecord({
       .content_root = content_root,
       .source = source_path,
@@ -453,25 +462,20 @@ auto ContentVm::RefreshSources() -> void
       }
 
       const auto ext = entry.path().extension().string();
-      if (s.include_fbx && ext == ".fbx") {
-        sources.push_back({
-          .path = base::ToLogicalPath(entry.path()),
-          .format = content::import::ImportFormat::kFbx,
-        });
-        DLOG_F(INFO, "ContentVm: Found FBX: {}", entry.path().string());
-      } else if (s.include_glb && ext == ".glb") {
-        sources.push_back({
-          .path = base::ToLogicalPath(entry.path()),
-          .format = content::import::ImportFormat::kGltf,
-        });
-        DLOG_F(INFO, "ContentVm: Found GLB: {}", entry.path().string());
-      } else if (s.include_gltf && ext == ".gltf") {
-        sources.push_back({
-          .path = base::ToLogicalPath(entry.path()),
-          .format = content::import::ImportFormat::kGltf,
-        });
-        DLOG_F(INFO, "ContentVm: Found GLTF: {}", entry.path().string());
+      const bool included = (s.include_fbx && ext == ".fbx")
+        || (s.include_glb && ext == ".glb")
+        || (s.include_gltf && ext == ".gltf");
+      if (!included) {
+        continue;
       }
+      const auto path = base::ToLogicalPath(entry.path());
+      sources.push_back({
+        .path = path,
+        .relative_path = path.lexically_relative(s.model_root).generic_string(),
+        .format = ext == ".fbx" ? content::import::ImportFormat::kFbx
+                                : content::import::ImportFormat::kGltf,
+      });
+      DLOG_F(INFO, "ContentVm: Found source: {}", entry.path().string());
     }
     if (ec) {
       LOG_F(ERROR, "ContentVm: Iteration ended with error: {}", ec.message());

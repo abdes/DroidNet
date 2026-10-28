@@ -5,7 +5,6 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
-#include <atomic>
 #include <cctype>
 #include <cstddef>
 #include <cstdint>
@@ -57,17 +56,6 @@ namespace oxygen::examples::render_scene {
 namespace {
   constexpr std::string_view kLooseCookedIndexFileName = "container.index.bin";
   constexpr size_t kSceneInitialCapacity = 10000; // FIXME hack
-
-  auto AllocateMainViewStateHandle() -> vortex::CompositionView::ViewStateHandle
-  {
-    static std::atomic_uint64_t next_handle { 1U };
-    const auto handle = vortex::CompositionView::ViewStateHandle {
-      next_handle.fetch_add(1U, std::memory_order_relaxed)
-    };
-    CHECK_F(handle != vortex::CompositionView::kInvalidViewStateHandle,
-      "RenderScene temporal view state identity exhausted");
-    return handle;
-  }
 
   auto ToLowerAscii(std::string value) -> std::string
   {
@@ -268,14 +256,10 @@ auto MainModule::OnAttachedImpl(observer_ptr<IAsyncEngine> engine) noexcept
     pending_physics_sidecar_.reset();
     active_scene_load_key_.reset();
 
-    const auto cooked_index = runtime_paths.content / ".cooked" / "main"
+    // The scene is looked for in the mounted sources first; the main library
+    // is mounted only when none of them holds it.
+    startup_library_index_ = runtime_paths.content / ".cooked" / "main"
       / std::filesystem::path(kLooseCookedIndexFileName);
-    pending_source_requests_.push_back(PendingSourceRequest {
-      .action = PendingSourceAction::kMountIndex,
-      .path = cooked_index,
-    });
-    LOG_F(INFO, "RenderScene: Startup scene override '{}' will mount '{}'",
-      *startup_scene_name_, cooked_index.string());
   }
 
   StageFallbackScene();
@@ -619,12 +603,25 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
       }
     }
 
-    if (!startup_scene_load_requested_ && !startup_scene_missing_logged_) {
-      startup_scene_missing_logged_ = true;
-      LOG_F(WARNING,
-        "RenderScene: Startup scene override '{}' did not match any mounted "
-        "scene",
-        *startup_scene_name_);
+    // Sources still mounting may hold the scene.
+    if (!startup_scene_load_requested_ && pending_source_requests_.empty()) {
+      if (!startup_library_mount_requested_) {
+        startup_library_mount_requested_ = true;
+        pending_source_requests_.push_back(PendingSourceRequest {
+          .action = PendingSourceAction::kMountIndex,
+          .path = startup_library_index_,
+        });
+        LOG_F(INFO,
+          "RenderScene: Startup scene override '{}' is in no mounted source; "
+          "mounting the main library '{}'",
+          *startup_scene_name_, startup_library_index_.string());
+      } else if (!startup_scene_missing_logged_) {
+        startup_scene_missing_logged_ = true;
+        LOG_F(WARNING,
+          "RenderScene: Startup scene override '{}' did not match any mounted "
+          "scene",
+          *startup_scene_name_);
+      }
     }
   }
 
@@ -937,20 +934,13 @@ auto MainModule::BuildViews(
     return;
   }
 
-  if (!main_view_state_scene_.IsValid() || !main_view_state_camera_.IsAlive()
-    || main_view_state_camera_.GetHandle() != main_camera_.GetHandle()) {
-    // Retire the published handle before replacing it so exposure resources
-    // cannot survive into a different scene or camera under the same ViewId.
-    ResetMainViewState(observer_ptr { &context });
-    main_view_state_handle_ = AllocateMainViewStateHandle();
-    main_view_state_scene_ = active_scene_;
-    main_view_state_camera_ = main_camera_;
-  }
-
   // An unset viewport covers the window.
   auto main_comp
     = vortex::CompositionView::ForScene(main_view_id_, View {}, main_camera_);
-  main_comp.view_state_handle = main_view_state_handle_;
+  main_comp.view_state_handle = main_view_state_
+                                  .For(context, ResolveRenderer(),
+                                    main_view_id_, active_scene_, main_camera_)
+                                  .handle;
   main_comp.with_atmosphere = true;
   main_comp.with_height_fog = shell.IsHeightFogPassRequested();
   main_comp.with_local_fog = shell.IsLocalFogPassRequested();
@@ -961,19 +951,7 @@ auto MainModule::BuildViews(
 auto MainModule::ResetMainViewState(
   const observer_ptr<engine::FrameContext> context) -> void
 {
-  if (main_view_state_handle_
-    != vortex::CompositionView::kInvalidViewStateHandle) {
-    if (auto renderer = ResolveRenderer(); renderer != nullptr) {
-      if (context != nullptr) {
-        renderer->RemovePublishedRuntimeView(*context, main_view_id_);
-      } else {
-        renderer->RemovePublishedRuntimeView(main_view_id_);
-      }
-    }
-  }
-  main_view_state_handle_ = vortex::CompositionView::kInvalidViewStateHandle;
-  main_view_state_scene_ = {};
-  main_view_state_camera_ = {};
+  main_view_state_.Reset(context, ResolveRenderer(), main_view_id_);
 }
 
 auto MainModule::ClearSceneRuntime(const char* /*reason*/) -> void

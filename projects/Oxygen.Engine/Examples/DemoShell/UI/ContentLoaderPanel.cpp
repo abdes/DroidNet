@@ -1028,12 +1028,14 @@ auto ContentLoaderPanel::DrawSourcesSection() -> void
   const std::string_view filter(source_filter_.data());
   if (ImGui::BeginChild("SourcesList", ImVec2(0, 0), 1)) {
     for (const auto& src : sources) {
-      const std::string filename = src.path.filename().string();
-      if (!filter.empty() && !filename.contains(filter)) {
+      if (!filter.empty() && !src.relative_path.contains(filter)) {
         continue;
       }
 
-      if (ImGui::Selectable(filename.c_str())) {
+      // The row shows the path under the model root; its ID is the full path.
+      const auto label
+        = fmt::format("{}##{}", src.relative_path, src.path.string());
+      if (ImGui::Selectable(label.c_str())) {
         commands_->RunText(kImport, src.path.string());
       }
       if (ImGui::IsItemHovered()) {

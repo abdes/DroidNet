@@ -16,6 +16,7 @@
 
 #include "DemoShell/DemoShell.h"
 #include "DemoShell/Runtime/DemoModuleBase.h"
+#include "DemoShell/Runtime/MainViewState.h"
 #include "DemoShell/UI/ContentVm.h"
 #include <glm/vec3.hpp>
 
@@ -143,12 +144,7 @@ private:
   host::ActiveScene active_scene_;
   ViewId main_view_id_ { kInvalidViewId };
   scene::SceneNode main_camera_;
-  //! Temporal history belongs to this scene/camera session, not main_view_id_.
-  vortex::CompositionView::ViewStateHandle main_view_state_handle_ {
-    vortex::CompositionView::kInvalidViewStateHandle
-  };
-  host::ActiveScene main_view_state_scene_;
-  scene::SceneNode main_view_state_camera_;
+  MainViewState main_view_state_;
 
   std::shared_ptr<oxygen::examples::SceneLoaderService> scene_loader_;
   bool scene_load_cancel_requested_ { false };
@@ -183,6 +179,10 @@ private:
   bool startup_sky_light_lifecycle_enable_applied_ { false };
   bool startup_scene_load_requested_ { false };
   bool startup_scene_missing_logged_ { false };
+  //! The main library's index, mounted for a startup scene that no mounted
+  //! source holds.
+  std::filesystem::path startup_library_index_;
+  bool startup_library_mount_requested_ { false };
   std::unordered_map<std::filesystem::path, std::filesystem::file_time_type>
     mounted_pak_write_times_;
   std::unordered_map<std::filesystem::path, std::filesystem::file_time_type>

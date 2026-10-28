@@ -14,6 +14,7 @@
 #include <mutex>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -63,8 +64,19 @@ struct SceneEntry {
 //! Represents a source file (FBX, GLB, etc.) that can be imported.
 struct ContentSource {
   std::filesystem::path path;
+  //! The path relative to the model root, which tells apart sources of one
+  //! file name in different folders.
+  std::string relative_path;
   content::import::ImportFormat format;
 };
+
+//! The virtual path that identifies a model imported from `source`: the
+//! source's path under `content_root`, or its file name for a source outside
+//! it, below `mount_root`. Models of one file name in two folders stay two
+//! models; the model's products are named under this path.
+[[nodiscard]] auto ModelVirtualPath(std::string_view mount_root,
+  const std::filesystem::path& content_root,
+  const std::filesystem::path& source) -> std::string;
 
 //! View Model orchestrating all content-related operations.
 class ContentVm {

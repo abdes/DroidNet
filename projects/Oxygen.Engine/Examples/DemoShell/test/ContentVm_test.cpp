@@ -310,5 +310,33 @@ namespace {
     ASSERT_EQ(requested.size(), 1U);
     EXPECT_EQ(requested.front().key, scene.scene_key);
   }
+
+  //! A model is identified by its source's path under the content root, so
+  //! two files of one name in two folders are two models.
+  NOLINT_TEST(ModelVirtualPathTest, NamesTheSourceByItsPathUnderTheContentRoot)
+  {
+    const auto root = std::filesystem::path("H:/Game/Content");
+
+    EXPECT_EQ(
+      ui::ModelVirtualPath("/.cooked", root, root / "models/a/Watch.gltf"),
+      "/.cooked/models/a/Watch.gltf");
+    EXPECT_EQ(
+      ui::ModelVirtualPath("/.cooked", root, root / "models/b/Watch.gltf"),
+      "/.cooked/models/b/Watch.gltf");
+  }
+
+  //! A source outside the content root has no path under it: its file name
+  //! identifies it.
+  NOLINT_TEST(ModelVirtualPathTest, NamesAnOutsideSourceByItsFileName)
+  {
+    EXPECT_EQ(
+      ui::ModelVirtualPath("/.cooked", std::filesystem::path("H:/Game/Content"),
+        std::filesystem::path("D:/Downloads/Watch.glb")),
+      "/.cooked/Watch.glb");
+    EXPECT_EQ(
+      ui::ModelVirtualPath("/.cooked", std::filesystem::path("H:/Game/Content"),
+        std::filesystem::path("H:/Game/Other/Watch.glb")),
+      "/.cooked/Watch.glb");
+  }
 } // namespace
 } // namespace oxygen::examples::testing

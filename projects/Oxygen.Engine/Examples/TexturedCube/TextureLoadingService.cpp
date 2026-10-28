@@ -34,6 +34,7 @@
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Content/ResourceKey.h>
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportJobId.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportProgress.h>
@@ -58,8 +59,10 @@ using oxygen::TextureType;
 using oxygen::content::import::Bc7Quality;
 using oxygen::content::import::CubeMapImageLayout;
 using oxygen::content::import::ImportContentFlags;
+using oxygen::content::import::ImportDiagnostic;
 using oxygen::content::import::ImportOptions;
 using oxygen::content::import::ImportReport;
+using oxygen::content::import::ImportSeverity;
 using oxygen::content::import::MipFilter;
 using oxygen::content::import::MipPolicy;
 using oxygen::content::import::ProgressEvent;
@@ -74,6 +77,16 @@ auto ContentHashPrefix(const oxygen::data::pak::core::ContentHashDigest& hash)
   uint64_t prefix = 0;
   std::memcpy(&prefix, hash.data(), sizeof(prefix));
   return prefix;
+}
+
+//! The status line of a failed import: its first error, code and message.
+auto FailureMessage(const ImportReport& report) -> std::string
+{
+  const auto error = std::ranges::find(
+    report.diagnostics, ImportSeverity::kError, &ImportDiagnostic::severity);
+  return error != report.diagnostics.end()
+    ? fmt::format("Import failed: [{}] {}", error->code, error->message)
+    : std::string("Import failed");
 }
 
 auto IsHdrPath(const std::filesystem::path& path) -> bool
@@ -308,6 +321,11 @@ auto TextureLoadingService::SubmitImport(const ImportSettings& settings) -> bool
   oxygen::content::import::ImportRequest request {};
   request.source_path = settings.source_path;
   request.cooked_root = std::filesystem::absolute(settings.cooked_root);
+  // A texture import names the descriptor it cooks; the refresh matches it to
+  // its pending settings by the source's stem.
+  request.asset_virtual_path
+    = request.loose_cooked_layout.DescriptorVirtualPath(
+      "Textures/" + settings.source_path.stem().string() + ".otex");
   request.options = std::move(options);
 
   import_status_.message = "Submitting import...";
@@ -335,10 +353,7 @@ auto TextureLoadingService::SubmitImport(const ImportSettings& settings) -> bool
     import_status_.in_flight = false;
     import_status_.overall_progress = 1.0F;
     import_status_.message
-      = report.success ? "Import complete" : "Import failed";
-
-    import_status_.message
-      = report.success ? "Import complete" : "Import failed";
+      = report.success ? "Import complete" : FailureMessage(report);
 
     if (report.success && !report.outputs.empty()) {
       LOG_F(INFO, "TextureLoadingService: Import report has {} outputs",
@@ -352,7 +367,16 @@ auto TextureLoadingService::SubmitImport(const ImportSettings& settings) -> bool
     if (report.success) {
       LOG_F(INFO, "TextureLoadingService: Import completed successfully");
     } else {
-      LOG_F(ERROR, "TextureLoadingService: Import failed");
+      LOG_F(ERROR, "TextureLoadingService: Import of '{}' failed",
+        settings.source_path.string());
+    }
+    for (const auto& diagnostic : report.diagnostics) {
+      VLOG_F(diagnostic.severity == ImportSeverity::kError
+          ? loguru::Verbosity_ERROR
+          : loguru::Verbosity_WARNING,
+        "TextureLoadingService: {} [{}] {} ({})",
+        to_string(diagnostic.severity), diagnostic.code, diagnostic.message,
+        diagnostic.object_path);
     }
   };
 
