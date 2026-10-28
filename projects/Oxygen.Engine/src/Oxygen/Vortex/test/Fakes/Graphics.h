@@ -987,6 +987,11 @@ public:
   {
     throw_texture_views_ = value;
   }
+  [[nodiscard]] auto GetCapabilities() const noexcept
+    -> graphics::GraphicsCapabilities override
+  {
+    return {};
+  }
   auto GetDescriptorAllocator() const
     -> const graphics::DescriptorAllocator& override
   {

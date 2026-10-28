@@ -12,6 +12,8 @@
 #include <string_view>
 #include <vector>
 
+#include <nlohmann/json.hpp>
+
 #include <Oxygen/Base/Types/Geometry.h>
 #include <Oxygen/Clap/Cli.h>
 #include <Oxygen/Clap/Command.h>
@@ -19,6 +21,7 @@
 #include <Oxygen/Clap/Fluent/CommandBuilder.h>
 #include <Oxygen/Config/GraphicsConfig.h>
 #include <Oxygen/Console/CVar.h>
+#include <Oxygen/Graphics/Common/GraphicsCapabilities.h>
 #include <Oxygen/Host/HostConfig.h>
 #include <Oxygen/Host/RuntimeCli.h>
 #include <Oxygen/Loader/GraphicsBackendLoader.h>
@@ -36,6 +39,7 @@ using oxygen::console::CVarValue;
 using oxygen::host::ApplyRuntimeCli;
 using oxygen::host::BuildCli;
 using oxygen::host::FormatGraphicsAdapters;
+using oxygen::host::FormatGraphicsAdaptersJson;
 using oxygen::host::HostConfig;
 using oxygen::host::MakeAdvancedCaptureOptions;
 using oxygen::host::MakeCaptureOptions;
@@ -227,19 +231,29 @@ NOLINT_TEST_F(RuntimeCliTest, RequireDisplayReachesGraphicsConfig)
   EXPECT_TRUE(Config().engine.graphics.require_display);
 }
 
-//! The GPU table shows the values `--gpu` and `--gpu-id` take, and marks
-//! the GPU chosen without them.
-NOLINT_TEST(RuntimeCliGpuListTest, TableShowsNamesIdsAndTheDefaultChoice)
+//! GPUs as `--list-gpus` reports them: one with every optional feature, and
+//! one whose device could not be created to query it.
+auto MakeListedGpus() -> std::vector<oxygen::loader::GraphicsAdapter>
 {
-  const auto adapters = std::vector<oxygen::loader::GraphicsAdapter> {
+  return {
     {
       .name = "AMD Radeon RX 9070 XT",
       .vendor_id = 0x1002U,
       .device_id = 0x7550U,
       .dedicated_memory = 16ULL << 30U,
       .has_display = false,
-      .usable = true,
-      .feature_level = "12_2",
+      .features = oxygen::loader::GraphicsAdapterFeatures {
+        .feature_level = "12_2",
+        .shader_model = "6.8",
+        .binding_tier = 3U,
+        .wave_ops = true,
+        .memory_architecture = oxygen::graphics::MemoryArchitecture::kDedicated,
+        .ray_tracing = "1.1",
+        .variable_shading_rate = 2U,
+        .mesh_shaders = 1U,
+        .sampler_feedback = "1.0",
+      },
+      .missing_requirements = {},
       .default_choice = true,
     },
     {
@@ -248,21 +262,60 @@ NOLINT_TEST(RuntimeCliGpuListTest, TableShowsNamesIdsAndTheDefaultChoice)
       .device_id = 0x13C0U,
       .dedicated_memory = 1ULL << 30U,
       .has_display = true,
-      .usable = false,
+      .features = std::nullopt,
+      .missing_requirements = { "feature level 12_0" },
+      .default_choice = false,
     },
   };
+}
 
-  const auto table = FormatGraphicsAdapters(adapters);
+//! One row per GPU, with its features and, when it falls short, what it
+//! misses on the lines below.
+NOLINT_TEST(RuntimeCliGpuListTest, TableListsEachGpuWithDetails)
+{
+  const auto table = FormatGraphicsAdapters(MakeListedGpus());
 
-  EXPECT_TRUE(
-    table.contains("AMD Radeon RX 9070 XT  0x7550  0x1002   16.00 GB  "
-                   "no       12_2  (default)\n"))
-    << table;
-  EXPECT_TRUE(
-    table.contains("Legacy GPU             0x13C0  0x10DE    1.00 GB  "
-                   "yes      unsupported\n"))
-    << table;
-  EXPECT_TRUE(table.contains("--gpu-id")) << table;
+  EXPECT_EQ(table,
+    "INDEX  ID      VENDOR  MEMORY    DEFAULT  DISPLAY  REQUIREMENTS  NAME\n"
+    "[0]    0x7550  0x1002  16.00 GB  yes      no       met           "
+    "AMD Radeon RX 9070 XT\n"
+    "       Features: FL 12_2, SM 6.8, tier 3, wave ops, dedicated, RT 1.1, "
+    "VRS 2, mesh 1, sampler 1.0\n"
+    "\n"
+    "[1]    0x13c0  0x10de   1.00 GB  no       yes      missing       "
+    "Legacy GPU\n"
+    "       Missing: feature level 12_0\n");
+}
+
+//! The JSON has typed fields; a GPU without a queried device has `null`
+//! features and lists what it misses.
+NOLINT_TEST(RuntimeCliGpuListTest, JsonHasTypedFields)
+{
+  const auto json
+    = nlohmann::json::parse(FormatGraphicsAdaptersJson(MakeListedGpus()));
+
+  ASSERT_EQ(json.size(), 2U);
+  const auto& discrete = json[0];
+  EXPECT_EQ(discrete["id"], "0x7550");
+  EXPECT_EQ(discrete["vendor_id"], "0x1002");
+  EXPECT_EQ(discrete["name"], "AMD Radeon RX 9070 XT");
+  EXPECT_EQ(discrete["memory_bytes"], 16ULL << 30U);
+  EXPECT_EQ(discrete["memory_human"], "16.00 GB");
+  EXPECT_EQ(discrete["is_default"], true);
+  EXPECT_EQ(discrete["has_display"], false);
+  EXPECT_EQ(discrete["requirements_met"], true);
+  EXPECT_EQ(discrete["missing_requirements"], nlohmann::json::array());
+  EXPECT_EQ(discrete["features"], nlohmann::json::parse(R"({
+      "feature_level": "12_2", "shader_model": "6.8", "binding_tier": 3,
+      "ray_tracing": "1.1", "vrs": 2, "mesh_shaders": 1,
+      "sampler_feedback": "1.0", "memory_type": "dedicated", "wave_ops": true
+    })"));
+
+  const auto& legacy = json[1];
+  EXPECT_EQ(legacy["requirements_met"], false);
+  EXPECT_EQ(legacy["missing_requirements"],
+    nlohmann::json::array({ "feature level 12_0" }));
+  EXPECT_TRUE(legacy["features"].is_null());
 }
 
 //! Without hardware GPUs the table says so.

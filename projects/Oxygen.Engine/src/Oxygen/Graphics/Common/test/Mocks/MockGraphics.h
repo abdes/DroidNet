@@ -26,6 +26,7 @@ public:
   // clang-format off
   // NOLINTBEGIN
   MOCK_METHOD((std::shared_ptr<CommandQueue>), CreateCommandQueue, (const QueueKey&, QueueRole), (override));
+  MOCK_METHOD((GraphicsCapabilities), GetCapabilities, (), (const, noexcept, override));
   MOCK_METHOD((const DescriptorAllocator&), GetDescriptorAllocator, (), (const, override));
   MOCK_METHOD((DescriptorAllocator&), GetDescriptorAllocator, (), (override));
   MOCK_METHOD((std::unique_ptr<Surface>), CreateSurface, (std::weak_ptr<platform::Window>, observer_ptr<CommandQueue>), (const, override));

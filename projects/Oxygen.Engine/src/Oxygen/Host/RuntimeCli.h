@@ -58,6 +58,8 @@ struct RuntimeCliState {
   std::string gpu_id;
   bool require_display { false };
   bool list_gpus { false };
+  //! Print the `--list-gpus` output as JSON.
+  bool json { false };
 
   std::string capture_provider { "off" };
   std::string capture_load { "attached" };
@@ -109,14 +111,23 @@ OXGN_HOST_NDAPI auto BuildCli(const std::string& program_name,
 //! Handles help, version, `help-advanced` and `--list-gpus`; true when the
 //! program should exit without running.
 /*!
- \throws std::runtime_error when `--list-gpus` cannot enumerate the GPUs.
+ @throw std::runtime_error When `--list-gpus` cannot enumerate the GPUs.
 */
 OXGN_HOST_NDAPI auto HandleMetaCommand(const clap::CommandLineContext& context,
   const clap::Command::Ptr& default_command) -> bool;
 
-//! The GPU table `--list-gpus` prints, with the values `--gpu` and `--gpu-id`
-//! take and the GPU chosen without them.
+//! The GPU table `--list-gpus` prints.
+/*!
+ One row per GPU (index, id, vendor, memory, default choice, display,
+ requirements and name), followed by a line with its features and, when it
+ falls short, a line with the requirements it misses.
+*/
 OXGN_HOST_NDAPI auto FormatGraphicsAdapters(
+  std::span<const loader::GraphicsAdapter> adapters) -> std::string;
+
+//! The JSON array `--list-gpus --json` prints: one object per GPU with typed
+//! fields; unsupported optional features are `null`.
+OXGN_HOST_NDAPI auto FormatGraphicsAdaptersJson(
   std::span<const loader::GraphicsAdapter> adapters) -> std::string;
 
 //! True when `option` was given on the command line, not just defaulted.
@@ -129,7 +140,7 @@ OXGN_HOST_NDAPI auto ParseWindowResolution(std::string_view value)
 
 //! Validates the GPU selection values and writes them into `config`.
 /*!
- \throws RuntimeCliError when both `--gpu` and `--gpu-id` are given, or the
+ @throw RuntimeCliError When both `--gpu` and `--gpu-id` are given, or the
  device id is malformed.
 */
 OXGN_HOST_API auto ApplyGraphicsAdapterCli(
@@ -143,7 +154,7 @@ OXGN_HOST_API auto ApplyGraphicsAdapterCli(
  `ngin.target_fps` and `gfx.vsync` startup variables when those options were
  passed, so they win over persisted console values.
 
- \throws RuntimeCliError for contradictory or malformed values.
+ @throw RuntimeCliError For contradictory or malformed values.
 */
 OXGN_HOST_API auto ApplyRuntimeCli(const clap::CommandLineContext& context,
   const RuntimeCliState& state, HostConfig& config) -> void;

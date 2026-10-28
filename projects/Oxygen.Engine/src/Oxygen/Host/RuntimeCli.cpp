@@ -11,6 +11,7 @@
 #include <limits>
 #include <memory>
 #include <optional>
+#include <ranges>
 #include <span>
 #include <string>
 #include <string_view>
@@ -18,8 +19,11 @@
 #include <utility>
 
 #include <fmt/format.h>
+#include <fmt/ranges.h>
+#include <nlohmann/json.hpp>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Base/Types/Geometry.h>
 #include <Oxygen/Clap/Cli.h>
 #include <Oxygen/Clap/Command.h>
@@ -43,6 +47,7 @@ namespace {
 
   constexpr std::string_view kAdvancedHelpCommand = "help-advanced";
   constexpr std::string_view kListGpusOption = "list-gpus";
+  constexpr std::string_view kJsonOption = "json";
 
   auto NormalizeToken(std::string value) -> std::string
   {
@@ -143,17 +148,98 @@ namespace {
     return id;
   }
 
-  //! `--list-gpus` was given and is true.
-  auto ListGpusRequested(const clap::CommandLineContext& context) -> bool
+  //! The flag `key` was given and is true.
+  auto IsFlagSet(
+    const clap::CommandLineContext& context, const std::string_view key) -> bool
   {
-    const auto key = std::string(kListGpusOption);
-    if (!context.ovm.HasOption(key)) {
+    const auto name = std::string(key);
+    if (!context.ovm.HasOption(name)) {
       return false;
     }
     return std::ranges::any_of(
-      context.ovm.ValuesOf(key), [](const clap::OptionValue& value) -> bool {
+      context.ovm.ValuesOf(name), [](const clap::OptionValue& value) -> bool {
         return !value.IsDefaulted() && value.GetAs<bool>();
       });
+  }
+
+  //! `0x7550`: PCI ids are written as four lowercase hexadecimal digits.
+  auto HexId(const std::uint32_t id) -> std::string
+  {
+    return fmt::format("0x{:04x}", id);
+  }
+
+  auto MemoryText(const std::uint64_t bytes) -> std::string
+  {
+    constexpr double kBytesPerGiB = 1024.0 * 1024.0 * 1024.0;
+    return fmt::format("{:.2f} GB", static_cast<double>(bytes) / kBytesPerGiB);
+  }
+
+  //! `FL 12_2, SM 6.8, tier 3, wave ops, dedicated, RT 1.1, VRS 2, mesh 1,
+  //! sampler 1.0`: required features first, then the optional ones the device
+  //! has.
+  auto FeaturesText(const loader::GraphicsAdapterFeatures& features)
+    -> std::string
+  {
+    auto text = fmt::format("FL {}, SM {}, tier {}{}, {}",
+      features.feature_level, features.shader_model, features.binding_tier,
+      features.wave_ops ? ", wave ops" : "",
+      nostd::to_string(features.memory_architecture));
+    if (features.ray_tracing) {
+      text += fmt::format(", RT {}", *features.ray_tracing);
+    }
+    if (features.variable_shading_rate) {
+      text += fmt::format(", VRS {}", *features.variable_shading_rate);
+    }
+    if (features.mesh_shaders) {
+      text += fmt::format(", mesh {}", *features.mesh_shaders);
+    }
+    if (features.sampler_feedback) {
+      text += fmt::format(", sampler {}", *features.sampler_feedback);
+    }
+    return text;
+  }
+
+  template <typename T>
+  auto OptionalJson(const std::optional<T>& value) -> nlohmann::ordered_json
+  {
+    return value ? nlohmann::ordered_json(*value) : nlohmann::ordered_json();
+  }
+
+  auto FeaturesJson(const loader::GraphicsAdapterFeatures& features)
+    -> nlohmann::ordered_json
+  {
+    return {
+      { "feature_level", features.feature_level },
+      { "shader_model", features.shader_model },
+      { "binding_tier", features.binding_tier },
+      { "ray_tracing", OptionalJson(features.ray_tracing) },
+      { "vrs", OptionalJson(features.variable_shading_rate) },
+      { "mesh_shaders", OptionalJson(features.mesh_shaders) },
+      { "sampler_feedback", OptionalJson(features.sampler_feedback) },
+      { "memory_type", nostd::to_string(features.memory_architecture) },
+      { "wave_ops", features.wave_ops },
+    };
+  }
+
+  auto AdapterJson(const loader::GraphicsAdapter& adapter)
+    -> nlohmann::ordered_json
+  {
+    return {
+      { "id", HexId(adapter.device_id) },
+      { "vendor_id", HexId(adapter.vendor_id) },
+      { "name", adapter.name },
+      { "memory_bytes", adapter.dedicated_memory },
+      { "memory_human", MemoryText(adapter.dedicated_memory) },
+      { "is_default", adapter.default_choice },
+      { "has_display", adapter.has_display },
+      { "requirements_met", adapter.missing_requirements.empty() },
+      { "missing_requirements", adapter.missing_requirements },
+      {
+        "features",
+        adapter.features ? FeaturesJson(*adapter.features)
+                         : nlohmann::ordered_json(),
+      },
+    };
   }
 
   auto MakeAdvancedHelpCommand() -> clap::Command::Ptr
@@ -308,12 +394,21 @@ auto MakeGraphicsAdapterOptions(RuntimeCliState& state) -> clap::Options::Ptr
       .StoreTo(&state.require_display)
       .Build());
   options->Add(clap::Option::WithKey(std::string(kListGpusOption))
-      .About("List the GPUs with their names and ids, then exit")
+      .About("List the GPUs with their ids, requirements and features, then "
+             "exit")
       .Long(std::string(kListGpusOption))
       .WithValue<bool>()
       .DefaultValue(state.list_gpus)
       .UserFriendlyName("list")
       .StoreTo(&state.list_gpus)
+      .Build());
+  options->Add(clap::Option::WithKey(std::string(kJsonOption))
+      .About("Print the --list-gpus output as JSON")
+      .Long(std::string(kJsonOption))
+      .WithValue<bool>()
+      .DefaultValue(state.json)
+      .UserFriendlyName("json")
+      .StoreTo(&state.json)
       .Build());
   return options;
 }
@@ -412,11 +507,13 @@ auto HandleMetaCommand(const clap::CommandLineContext& context,
     || context.ovm.HasOption(clap::Command::HELP)) {
     return true;
   }
-  if (ListGpusRequested(context)) {
+  if (IsFlagSet(context, kListGpusOption)) {
     const auto adapters
       = GraphicsBackendLoader::GetInstanceRelaxed().ListAdapters(
         graphics::BackendType::kDirect3D12);
-    *context.out << FormatGraphicsAdapters(adapters);
+    *context.out << (IsFlagSet(context, kJsonOption)
+        ? FormatGraphicsAdaptersJson(adapters)
+        : FormatGraphicsAdapters(adapters));
     return true;
   }
   if (command != kAdvancedHelpCommand) {
@@ -437,27 +534,43 @@ auto FormatGraphicsAdapters(
   if (adapters.empty()) {
     return "No hardware GPU found.\n";
   }
-  constexpr std::string_view kNameHeader = "GPU";
-  auto name_width = kNameHeader.size();
-  for (const auto& adapter : adapters) {
-    name_width = std::max(name_width, adapter.name.size());
-  }
+  constexpr std::string_view kHeader = "INDEX  ID      VENDOR  MEMORY    "
+                                       "DEFAULT  DISPLAY  REQUIREMENTS  NAME\n";
+  constexpr std::string_view kRow
+    = "{:<5}  {:<6}  {:<6}  {:>8}  {:<7}  {:<7}  {:<12}  {}\n";
+  constexpr std::string_view kDetailIndent = "       ";
 
-  constexpr double kBytesPerGiB = 1024.0 * 1024.0 * 1024.0;
-  auto text
-    = fmt::format("{:<{}}  {:<6}  {:<6}  {:>9}  {:<7}  {}\n", kNameHeader,
-      name_width, "Id", "Vendor", "Memory", "Display", "Feature level");
-  for (const auto& adapter : adapters) {
-    text
-      += fmt::format("{:<{}}  0x{:04X}  0x{:04X}  {:>6.2f} GB  {:<7}  {}{}\n",
-        adapter.name, name_width, adapter.device_id, adapter.vendor_id,
-        static_cast<double>(adapter.dedicated_memory) / kBytesPerGiB,
-        adapter.has_display ? "yes" : "no",
-        adapter.usable ? adapter.feature_level : "unsupported",
-        adapter.default_choice ? "  (default)" : "");
+  auto text = std::string { kHeader };
+  for (const auto& [index, adapter] : std::views::enumerate(adapters)) {
+    if (index != 0) {
+      text += '\n';
+    }
+    const auto meets_requirements = adapter.missing_requirements.empty();
+    text += fmt::format(kRow, fmt::format("[{}]", index),
+      HexId(adapter.device_id), HexId(adapter.vendor_id),
+      MemoryText(adapter.dedicated_memory),
+      adapter.default_choice ? "yes" : "no", adapter.has_display ? "yes" : "no",
+      meets_requirements ? "met" : "missing", adapter.name);
+    if (adapter.features) {
+      text += fmt::format(
+        "{}Features: {}\n", kDetailIndent, FeaturesText(*adapter.features));
+    }
+    if (!meets_requirements) {
+      text += fmt::format("{}Missing: {}\n", kDetailIndent,
+        fmt::join(adapter.missing_requirements, "; "));
+    }
   }
-  text += "\nSelect one with --gpu \"<part of the name>\" or --gpu-id <id>.\n";
   return text;
+}
+
+auto FormatGraphicsAdaptersJson(
+  const std::span<const loader::GraphicsAdapter> adapters) -> std::string
+{
+  auto list = nlohmann::ordered_json::array();
+  for (const auto& adapter : adapters) {
+    list.push_back(AdapterJson(adapter));
+  }
+  return list.dump(2) + "\n";
 }
 
 auto WasPassed(

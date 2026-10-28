@@ -82,6 +82,7 @@ set(
   "FrameCaptureController.h"
   "Framebuffer.h"
   "Graphics.h"
+  "GraphicsCapabilities.h"
   "MemoryBlock.h"
   "NativeObject.h"
   "ObjectRelease.h"

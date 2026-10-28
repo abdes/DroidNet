@@ -11,6 +11,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Graphics/Common/DescriptorHandle.h>
+#include <Oxygen/Graphics/Common/GraphicsCapabilities.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/Graphics/Common/Queues.h>
@@ -211,7 +212,7 @@ auto oxygen::graphics::to_string(const ShaderStageFlags value) -> std::string
     = [&](const ShaderStageFlags flag, const char* name) -> void {
     if ((value & flag) == flag) {
       if (!first) {
-        result += "|";
+        result += '|';
       }
       result += name;
       first = false;
@@ -347,7 +348,7 @@ auto oxygen::graphics::to_string(const ClearFlags value) -> std::string
     = [&](const ClearFlags flag_to_check, const char* name) -> void {
     if ((value & flag_to_check) == flag_to_check) {
       if (!first) {
-        result += "|";
+        result += '|';
       }
       result += name;
       first = false;
@@ -394,7 +395,7 @@ auto oxygen::graphics::to_string(const CullMode value) -> std::string
     = [&](const CullMode flag_to_check, const char* name) -> void {
     if ((value & flag_to_check) == flag_to_check) {
       if (!first) {
-        result += "|";
+        result += '|';
       }
       result += name;
       first = false;
@@ -526,7 +527,7 @@ auto oxygen::graphics::to_string(const ColorWriteMask value) -> std::string
     = [&](const ColorWriteMask flag_to_check, const char* name) -> void {
     if ((value & flag_to_check) == flag_to_check) {
       if (!first) {
-        result += "|";
+        result += '|';
       }
       result += name;
       first = false;
@@ -584,4 +585,17 @@ auto oxygen::graphics::to_string(const FenceValue v) -> std::string
     return fmt::format("FenceValue(__Invalid__)");
   }
   return fmt::format("FenceValue({})", v.get());
+}
+
+auto oxygen::graphics::to_string(const MemoryArchitecture value) -> const char*
+{
+  switch (value) {
+  case MemoryArchitecture::kDedicated:
+    return "dedicated";
+  case MemoryArchitecture::kUnified:
+    return "unified";
+  case MemoryArchitecture::kCacheCoherentUnified:
+    return "cache-coherent unified";
+  }
+  return "__NotSupported__";
 }

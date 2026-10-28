@@ -20,6 +20,7 @@
 #include <Oxygen/Graphics/Common/BackendLifetime.h>
 #include <Oxygen/Graphics/Common/CommandRecording.h>
 #include <Oxygen/Graphics/Common/Detail/DeferredReclaimer.h>
+#include <Oxygen/Graphics/Common/GraphicsCapabilities.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/Shaders.h>
@@ -175,6 +176,10 @@ public:
   */
   OXGN_GFX_API virtual auto SetVSyncEnabled(bool enabled) -> void;
   OXGN_GFX_NDAPI virtual auto IsVSyncEnabled() const noexcept -> bool;
+
+  //! The capabilities of the device the backend runs on.
+  OXGN_GFX_NDAPI virtual auto GetCapabilities() const noexcept
+    -> graphics::GraphicsCapabilities = 0;
   OXGN_GFX_API auto RegisterConsoleBindings(
     observer_ptr<console::Console> console) const noexcept -> void;
   OXGN_GFX_API auto RegisterCommands(

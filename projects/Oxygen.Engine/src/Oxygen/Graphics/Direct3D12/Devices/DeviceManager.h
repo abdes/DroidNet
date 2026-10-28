@@ -29,6 +29,7 @@
 #include <Oxygen/Composition/Component.h>
 #include <Oxygen/Config/GraphicsConfig.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/Types.h>
+#include <Oxygen/Graphics/Direct3D12/Devices/DeviceFeatures.h>
 #include <Oxygen/Graphics/Direct3D12/api_export.h>
 
 namespace D3D12MA {
@@ -52,7 +53,6 @@ public:
   [[nodiscard]] auto IsConnectedToDisplay() const { return has_display; }
   [[nodiscard]] auto MeetsFeatureLevel() const { return meets_feature_level; }
   [[nodiscard]] auto MaxFeatureLevel() const { return max_feature_level; }
-  [[nodiscard]] auto MaxFeatureLevelAsString() const -> std::string;
   [[nodiscard]] auto IsBest() const { return is_best; }
 
 private:
@@ -85,6 +85,15 @@ private:
   bool is_best { false };
 };
 
+//! One hardware adapter as `DeviceManager::ListAdapters` reports it.
+struct AdapterReport {
+  AdapterInfo info;
+  //! Queried with a short-lived device; none when no device could be created.
+  std::optional<DeviceFeatures> features;
+  //! Why the adapter cannot be selected; empty when it qualifies.
+  std::vector<std::string> shortfalls;
+};
+
 template <typename Callable>
 concept DeviceRemovalHandler
   = std::is_same_v<std::remove_cvref_t<Callable>, std::nullptr_t>
@@ -107,9 +116,7 @@ struct DeviceManagerDesc {
   bool auto_select_adapter { true };
   std::optional<std::string> preferred_card_name;
   std::optional<DeviceId> preferred_card_device_id;
-  D3D_FEATURE_LEVEL min_feature_level { D3D_FEATURE_LEVEL_12_0 };
-  //! Shaders read the draw's first instance from SV_StartInstanceLocation.
-  D3D_SHADER_MODEL min_shader_model { D3D_SHADER_MODEL_6_8 };
+  DeviceRequirements requirements {};
 };
 
 class DeviceManager final : public Component {
@@ -122,10 +129,19 @@ public:
   OXYGEN_MAKE_NON_COPYABLE(DeviceManager)
   OXYGEN_MAKE_NON_MOVABLE(DeviceManager)
 
-  //! The hardware adapters, ranked by `desc`'s selection policy, with the
-  //! best one marked; creates no device and leaves the tooling policy alone.
+  //! The hardware adapters with their features and shortfalls.
+  /*!
+   Each adapter at the minimum feature level is probed with a short-lived
+   device. The adapter marked best is the one `SelectBestAdapter` would pick:
+   the first ranked adapter that meets every requirement. The tooling policy is
+   left alone.
+
+   @param desc The selection policy and requirements to report against.
+   @return The adapters in enumeration order.
+   @throw oxygen::windows::ComError When the DXGI factory cannot be created.
+  */
   OXGN_D3D12_NDAPI static auto ListAdapters(const DeviceManagerDesc& desc)
-    -> std::vector<AdapterInfo>;
+    -> std::vector<AdapterReport>;
 
   [[nodiscard]] auto Factory() const -> dx::IFactory* { return factory_.Get(); }
 
@@ -152,6 +168,15 @@ public:
     return current_context_->allocator.Get();
   }
 
+  //! The features of the selected device.
+  [[nodiscard]] auto Features() const -> const DeviceFeatures&
+  {
+    if (current_context_ == nullptr) {
+      throw std::runtime_error("No adapter selected.");
+    }
+    return current_context_->features;
+  }
+
   [[nodiscard]] auto Adapters() const
   {
     return contexts_
@@ -161,8 +186,8 @@ public:
         });
   }
 
-  //! Select the best ranked adapter whose device initializes; an adapter that
-  //! fails, e.g. below the minimum shader model, gives way to the next one.
+  //! Select the best ranked adapter whose device initializes and meets the
+  //! requirements; an adapter that falls short gives way to the next one.
   template <DeviceRemovalHandler Handler = std::nullptr_t>
   auto SelectBestAdapter(Handler on_device_removed = nullptr) -> bool
   {
@@ -193,6 +218,7 @@ private:
     Microsoft::WRL::ComPtr<dxgi::IAdapter> adapter;
     Microsoft::WRL::ComPtr<dx::IDevice> device;
     Microsoft::WRL::ComPtr<D3D12MA::Allocator> allocator;
+    DeviceFeatures features;
 
     std::vector<Microsoft::WRL::ComPtr<dx::ICommandQueue>> commandQueues_;
 
@@ -213,6 +239,8 @@ private:
     const DeviceManagerDesc& desc) -> std::vector<std::size_t>;
   OXGN_D3D12_API static auto MarkBest(
     std::span<Context> contexts, const Context& best) -> void;
+  static auto ProbeAdapter(const Context& context,
+    const DeviceRequirements& requirements) -> AdapterReport;
 
   template <DeviceRemovalHandler Handler = std::nullptr_t>
   auto SelectAdapter(

@@ -27,6 +27,13 @@ public:
 
   ~Graphics() override;
 
+  //! The headless device lives in system memory.
+  [[nodiscard]] auto GetCapabilities() const noexcept
+    -> GraphicsCapabilities override
+  {
+    return { .memory_architecture = MemoryArchitecture::kUnified };
+  }
+
   OXGN_HDLS_NDAPI auto GetDescriptorAllocator() const
     -> const DescriptorAllocator& override;
   OXGN_HDLS_NDAPI auto GetDescriptorAllocator()

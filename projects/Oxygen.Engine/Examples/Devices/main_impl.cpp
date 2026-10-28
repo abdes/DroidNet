@@ -114,7 +114,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
       .auto_select_adapter = false,
       .preferred_card_name = adapter_config.preferred_card_name,
       .preferred_card_device_id = adapter_config.preferred_card_device_id,
-      .min_feature_level = ParseFeatureLevel(feature_level),
+      .requirements = { .min_feature_level = ParseFeatureLevel(feature_level) },
     };
     DeviceManager device_manager(props);
 

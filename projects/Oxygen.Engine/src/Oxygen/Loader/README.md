@@ -68,9 +68,13 @@ If the DLL cannot be located or loaded, a `std::runtime_error` is thrown.
 `ListAdapters(backend)` loads the backend module, calls its
 `EnumerateAdapters` entry point and releases the module, without creating a
 backend instance. Each `loader::GraphicsAdapter` carries the name, vendor and
-PCI device ids, dedicated memory, display connection, feature level and
-whether the backend selects it without hints. The host's `--list-gpus` option
-prints this list.
+PCI device ids, dedicated memory, display connection, typed device features
+(none when no device could be created), the requirements it misses and
+whether the backend selects it without hints.
+The D3D12 backend probes each adapter with a short-lived device to report
+capabilities; listing is an explicit diagnostic action, whereas startup creates
+a device only on the selected adapter. The host's `--list-gpus` option prints
+this list.
 
 ---
 

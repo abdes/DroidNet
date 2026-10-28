@@ -30,7 +30,9 @@ Oxygen.Examples.MultiView.exe --resolution 1920x1080 --fullscreen true --fps 0 -
 
 These options, the graphics tooling switches (`--debug-layer`, `--aftermath`),
 GPU selection and frame capture come from `Oxygen.Host`'s `RuntimeCli`.
-`--list-gpus` prints each GPU's name and id and the one chosen by default.
+`--list-gpus` prints one row per GPU (index, id, vendor, memory, default
+choice, display, requirements and name) with its features and, when it falls
+short, the requirements it misses; add `--json` for a typed JSON array.
 `--gpu <name>` prefers the GPU whose name contains the text and `--gpu-id <id>`
 the one with that PCI device id (decimal or `0x` hexadecimal); without a usable
 match the backend picks the GPU with the highest feature level, then the most

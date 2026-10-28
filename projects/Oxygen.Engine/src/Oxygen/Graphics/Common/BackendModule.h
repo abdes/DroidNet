@@ -6,19 +6,24 @@
 
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 
 #include <Oxygen/Base/Compilers.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Config/GraphicsConfig.h>
+#include <Oxygen/Graphics/Common/GraphicsCapabilities.h>
 
 namespace oxygen::graphics {
 
 //! Possible graphic backend types for the renderer.
 enum class BackendType : uint8_t {
-  kDirect3D12 = 0, //!< Direct3D12 backend.
-  kVulkan = 1, //!< Vulkan backend.
-  kHeadless = 2, //!< Headless backend.
+  //! Direct3D12 backend.
+  kDirect3D12 = 0,
+  //! Vulkan backend.
+  kVulkan = 1,
+  //! Headless backend.
+  kHeadless = 2,
 };
 
 constexpr auto kGetGraphicsModuleApi = "GetGraphicsModuleApi";
@@ -34,18 +39,39 @@ using CreateBackendFunc
     const oxygen::SerializedPathFinderConfig& path_finder_config);
 using DestroyBackendFunc = void (*)();
 
-//! One hardware adapter as the backend sees it; the strings live until the
-//! visitor returns.
+//! What a hardware adapter's device supports.
+struct GraphicsAdapterFeaturesRecord {
+  //! The feature level as the API names it, e.g. `12_2`.
+  const char* feature_level;
+  //! The shader model, e.g. `6.8`.
+  const char* shader_model;
+  std::uint32_t binding_tier;
+  bool wave_ops;
+  MemoryArchitecture memory_architecture;
+  //! The ray tracing tier, e.g. `1.1`; empty when unsupported.
+  const char* ray_tracing;
+  //! The variable-rate shading tier; 0 when unsupported.
+  std::uint32_t variable_shading_rate;
+  //! The mesh shader tier; 0 when unsupported.
+  std::uint32_t mesh_shaders;
+  //! The sampler feedback tier, e.g. `1.0`; empty when unsupported.
+  const char* sampler_feedback;
+};
+
+//! One hardware adapter as the backend sees it; everything it points to lives
+//! until the visitor returns.
 struct GraphicsAdapterRecord {
   const char* name;
   std::uint32_t vendor_id;
   std::uint32_t device_id;
   std::uint64_t dedicated_memory;
   bool has_display;
-  //! Supports the backend's minimum feature level.
-  bool usable;
-  //! Highest supported feature level, e.g. `12_2`; empty when not usable.
-  const char* feature_level;
+  //! Null when no device could be created to query the adapter.
+  const GraphicsAdapterFeaturesRecord* features;
+  //! The requirements the adapter misses, each with what it needs and what
+  //! the device has; none when it meets them all.
+  const char* const* missing_requirements;
+  std::size_t missing_requirement_count;
   //! The adapter the backend selects without hints.
   bool default_choice;
 };

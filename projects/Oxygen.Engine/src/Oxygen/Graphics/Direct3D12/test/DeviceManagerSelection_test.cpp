@@ -5,14 +5,15 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
-#include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <ranges>
 #include <string>
 #include <vector>
 
 #include <Oxygen/Config/GraphicsConfig.h>
 #include <Oxygen/Graphics/Common/BackendModule.h>
+#include <Oxygen/Graphics/Direct3D12/Devices/DeviceFeatures.h>
 #include <Oxygen/Graphics/Direct3D12/Devices/DeviceManager.h>
 #include <Oxygen/Testing/GTest.h>
 
@@ -21,9 +22,23 @@ extern "C" auto GetGraphicsModuleApi() -> void*;
 namespace oxygen::graphics::d3d12 {
 namespace {
 
-  struct DiscoveredAdapter {
+  using ::testing::Contains;
+  using ::testing::ElementsAreArray;
+  using ::testing::Field;
+  using ::testing::IsEmpty;
+  using ::testing::IsTrue;
+  using ::testing::Not;
+  using ::testing::Property;
+
+  //! What a listing says about one adapter, comparable across the module
+  //! boundary.
+  struct ListedAdapter {
     std::string name;
     std::uint32_t device_id { 0U };
+    bool qualifies { false };
+    bool default_choice { false };
+
+    auto operator==(const ListedAdapter&) const -> bool = default;
   };
 
   //! A plain device: no debug layer or Aftermath, which add nothing to
@@ -36,135 +51,121 @@ namespace {
     };
   }
 
-  //! The adapters this machine can select, discovered without selecting one.
-  auto DiscoverUsableAdapters() -> std::vector<DiscoveredAdapter>
+  auto ToListed(const AdapterReport& report) -> ListedAdapter
   {
-    auto desc = MakeDesc();
-    desc.auto_select_adapter = false;
-    const auto manager = DeviceManager(desc);
-    auto adapters = std::vector<DiscoveredAdapter> {};
-    for (const auto& adapter : manager.Adapters()) {
-      if (adapter.MeetsFeatureLevel()) {
-        adapters.push_back({
-          .name = adapter.Name(),
-          .device_id = adapter.DeviceId(),
-        });
-      }
-    }
-    return adapters;
+    return ListedAdapter {
+      .name = report.info.Name(),
+      .device_id = report.info.DeviceId(),
+      .qualifies = report.shortfalls.empty(),
+      .default_choice = report.info.IsBest(),
+    };
   }
 
-  //! The adapter `SelectBestAdapter` selected, which must have a device.
+  //! The adapters on this machine that meet every requirement.
+  auto QualifyingAdapters() -> std::vector<AdapterInfo>
+  {
+    return DeviceManager::ListAdapters(MakeDesc())
+      | std::views::filter(
+        [](const AdapterReport& report) { return report.shortfalls.empty(); })
+      | std::views::transform(&AdapterReport::info)
+      | std::ranges::to<std::vector>();
+  }
+
+  //! The adapter `manager` selected; none when it has no device.
   auto SelectedAdapter(const DeviceManager& manager)
-    -> std::optional<DiscoveredAdapter>
+    -> std::optional<AdapterInfo>
   {
     if (manager.Device() == nullptr) {
       return std::nullopt;
     }
     for (const auto& adapter : manager.Adapters()) {
       if (adapter.IsBest()) {
-        return DiscoveredAdapter {
-          .name = adapter.Name(),
-          .device_id = adapter.DeviceId(),
-        };
+        return adapter;
       }
     }
     return std::nullopt;
   }
 
-  //! Without hints, a usable adapter is selected.
-  NOLINT_TEST(DeviceManagerSelectionTest, DefaultSelectsAUsableAdapter)
+  //! A device manager built from `desc` selects `expected`, and the selected
+  //! device meets the requirements.
+  auto ExpectSelects(const DeviceManagerDesc& desc, const AdapterInfo& expected)
+    -> void
   {
-    const auto usable = DiscoverUsableAdapters();
-    ASSERT_FALSE(usable.empty());
-
-    const auto manager = DeviceManager(MakeDesc());
+    const auto manager = DeviceManager(desc);
 
     const auto selected = SelectedAdapter(manager);
     ASSERT_HAS_VALUE(selected);
-    EXPECT_TRUE(std::ranges::any_of(
-      usable, [&selected](const DiscoveredAdapter& adapter) -> bool {
-        return adapter.device_id == selected->device_id;
-      }));
+    EXPECT_EQ(selected->DeviceId(), expected.DeviceId());
+    EXPECT_TRUE(selected->Name().contains(expected.Name()));
+    EXPECT_THAT(
+      MissingRequirements(manager.Features(), desc.requirements), IsEmpty());
   }
 
-  //! Every usable adapter can be selected by its PCI device id.
+  //! The listing marks one default adapter, and it is the one a device manager
+  //! selects without hints.
+  NOLINT_TEST(DeviceManagerSelectionTest, ListedDefaultIsTheSelectedAdapter)
+  {
+    const auto reports = DeviceManager::ListAdapters(MakeDesc());
+
+    EXPECT_THAT(reports,
+      Contains(
+        Field(&AdapterReport::info, Property(&AdapterInfo::IsBest, IsTrue())))
+        .Times(1));
+    const auto best = std::ranges::find_if(reports,
+      [](const AdapterReport& report) { return report.info.IsBest(); });
+    ASSERT_NE(best, reports.end());
+    EXPECT_THAT(best->shortfalls, IsEmpty());
+    GCHECK_F(ExpectSelects(MakeDesc(), best->info));
+  }
+
+  //! Every qualifying adapter can be selected by its PCI device id.
   NOLINT_TEST(DeviceManagerSelectionTest, DeviceIdHintSelectsEachAdapter)
   {
-    const auto usable = DiscoverUsableAdapters();
-    ASSERT_FALSE(usable.empty());
+    const auto adapters = QualifyingAdapters();
+    ASSERT_THAT(adapters, Not(IsEmpty()));
 
-    for (const auto& adapter : usable) {
-      SCOPED_TRACE(adapter.name);
+    for (const auto& adapter : adapters) {
       auto desc = MakeDesc();
-      desc.preferred_card_device_id = static_cast<DeviceId>(adapter.device_id);
-
-      const auto manager = DeviceManager(desc);
-
-      const auto selected = SelectedAdapter(manager);
-      ASSERT_HAS_VALUE(selected);
-      EXPECT_EQ(selected->device_id, adapter.device_id);
+      desc.preferred_card_device_id = static_cast<DeviceId>(adapter.DeviceId());
+      TRACE_GCHECK_F(ExpectSelects(desc, adapter), adapter.Name());
     }
   }
 
-  //! Every usable adapter can be selected by its name.
+  //! Every qualifying adapter can be selected by its name.
   NOLINT_TEST(DeviceManagerSelectionTest, NameHintSelectsEachAdapter)
   {
-    const auto usable = DiscoverUsableAdapters();
-    ASSERT_FALSE(usable.empty());
+    const auto adapters = QualifyingAdapters();
+    ASSERT_THAT(adapters, Not(IsEmpty()));
 
-    for (const auto& adapter : usable) {
-      SCOPED_TRACE(adapter.name);
+    for (const auto& adapter : adapters) {
       auto desc = MakeDesc();
-      desc.preferred_card_name = adapter.name;
-
-      const auto manager = DeviceManager(desc);
-
-      const auto selected = SelectedAdapter(manager);
-      ASSERT_HAS_VALUE(selected);
-      EXPECT_TRUE(selected->name.contains(adapter.name));
+      desc.preferred_card_name = adapter.Name();
+      TRACE_GCHECK_F(ExpectSelects(desc, adapter), adapter.Name());
     }
   }
 
-  //! The module lists every adapter without a backend instance, and its
-  //! default choice is the adapter a device manager selects without hints.
-  NOLINT_TEST(DeviceManagerSelectionTest, ModuleEnumerationMatchesSelection)
+  //! The backend module lists the same adapters, requirement results and
+  //! default choice as the device manager.
+  NOLINT_TEST(DeviceManagerSelectionTest, ModuleEnumerationMatchesListing)
   {
     const auto* api
       = static_cast<const GraphicsModuleApi*>(GetGraphicsModuleApi());
     ASSERT_NE(api, nullptr);
-    auto listed = std::vector<GraphicsAdapterRecord> {};
-    auto names = std::vector<std::string> {};
-    struct Sink {
-      std::vector<std::string>* names;
-      std::vector<GraphicsAdapterRecord>* records;
-    } sink { .names = &names, .records = &listed };
+    auto listed = std::vector<ListedAdapter> {};
 
     ASSERT_TRUE(api->EnumerateAdapters(
-      &sink, [](void* context, const GraphicsAdapterRecord& record) -> void {
-        auto* target = static_cast<Sink*>(context);
-        target->names->emplace_back(record.name);
-        auto copy = record;
-        copy.name = nullptr;
-        copy.feature_level = nullptr;
-        target->records->push_back(copy);
+      &listed, [](void* context, const GraphicsAdapterRecord& record) {
+        static_cast<std::vector<ListedAdapter>*>(context)->push_back({
+          .name = record.name,
+          .device_id = record.device_id,
+          .qualifies = record.missing_requirement_count == 0U,
+          .default_choice = record.default_choice,
+        });
       }));
 
-    const auto usable = DiscoverUsableAdapters();
-    ASSERT_FALSE(usable.empty());
-    const auto manager = DeviceManager(MakeDesc());
-    const auto selected = SelectedAdapter(manager);
-    ASSERT_HAS_VALUE(selected);
-
-    auto defaults = 0;
-    for (std::size_t index = 0U; index < listed.size(); ++index) {
-      if (listed[index].default_choice) {
-        ++defaults;
-        EXPECT_EQ(names[index], selected->name);
-        EXPECT_EQ(listed[index].device_id, selected->device_id);
-      }
-    }
-    EXPECT_EQ(defaults, 1);
+    EXPECT_THAT(listed,
+      ElementsAreArray(DeviceManager::ListAdapters(MakeDesc())
+        | std::views::transform(ToListed) | std::ranges::to<std::vector>()));
   }
 
 } // namespace

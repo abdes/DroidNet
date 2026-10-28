@@ -92,12 +92,12 @@ struct GraphicsConfig {
     the highest feature level, then the most dedicated memory. These
     properties change that choice.
 
-    \note `preferred_card_name` (a part of the adapter name) and
+    @note `preferred_card_name` (a part of the adapter name) and
     `preferred_card_device_id` (its PCI device id) are mutually exclusive
     hints. A usable adapter that matches comes first; without one, the
     backend falls back to the default choice.
 
-    \note `require_display` restricts the default choice to adapters that
+    @note `require_display` restricts the default choice to adapters that
     drive a display. It does not apply to an adapter that matches a hint.
   */
   //! @{

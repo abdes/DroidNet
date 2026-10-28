@@ -50,9 +50,12 @@ struct AdapterSelectionPolicy {
 
 //! Why the first adapter of a ranking is first.
 enum class AdapterChoiceReason : std::uint8_t {
-  kPreferredCard, //!< It matches the hint.
-  kScore, //!< No hint was given; it has the best score.
-  kNoPreferredMatch, //!< No usable adapter matches the hint; best score.
+  //! It matches the hint.
+  kPreferredCard,
+  //! No hint was given; it has the best score.
+  kScore,
+  //! No usable adapter matches the hint; it has the best score.
+  kNoPreferredMatch,
 };
 
 OXGN_D3D12_NDAPI auto to_string(AdapterChoiceReason reason) -> std::string_view;
@@ -65,7 +68,7 @@ struct AdapterRanking {
 
 //! Order the selectable adapters by the policy.
 /*!
-  \throws std::invalid_argument when the policy sets both hints.
+  @throw std::invalid_argument When the policy sets both hints.
 */
 OXGN_D3D12_NDAPI auto RankAdapters(std::span<const AdapterTraits> adapters,
   const AdapterSelectionPolicy& policy) -> AdapterRanking;

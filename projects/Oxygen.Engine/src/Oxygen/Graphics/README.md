@@ -6,7 +6,7 @@ The Oxygen Graphics Engine implements a modern, modular graphics system supporti
 
 ## Architecture Components
 
-#### 🎮 Graphics Context
+### 🎮 Graphics Context
 
 Central access point for all graphics subsystems.
 
@@ -25,7 +25,10 @@ Hardware interface and capability management.
 
 - **Core Responsibilities**:
   - **Physical Device Management**
-    - D3D12: Adapter enumeration and capability querying, holds DXGIFactory
+    - D3D12: Adapter enumeration and ranking, holds DXGIFactory; each
+      device's capabilities are queried once and checked against the
+      engine's `DeviceRequirements` (feature level, shader model, resource
+      binding tier, wave operations) before it is selected
     - Vulkan: Physical device selection and queue family mapping
 
   - **Queue Management**

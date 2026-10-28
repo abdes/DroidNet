@@ -52,6 +52,7 @@ m_gtest_program(
     "HeapAllocationStrategy_test.cpp"
 )
 m_gtest_program(AdapterSelection SOURCES "AdapterSelection_test.cpp")
+m_gtest_program(DeviceFeatures SOURCES "DeviceFeatures_test.cpp")
 m_gtest_program(
   DeviceManagerSelection
   GPU

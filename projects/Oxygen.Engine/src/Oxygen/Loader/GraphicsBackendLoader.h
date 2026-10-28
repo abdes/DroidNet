@@ -8,6 +8,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -15,6 +16,7 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Config/PathFinderConfig.h>
 #include <Oxygen/Graphics/Common/BackendModule.h>
+#include <Oxygen/Graphics/Common/GraphicsCapabilities.h>
 
 namespace oxygen {
 
@@ -33,6 +35,27 @@ namespace loader {
     class PlatformServices;
   } // namespace detail
 
+  //! What a hardware adapter's device supports.
+  struct GraphicsAdapterFeatures {
+    //! The feature level as the API names it, e.g. `12_2`.
+    std::string feature_level;
+    //! The shader model, e.g. `6.8`.
+    std::string shader_model;
+    std::uint32_t binding_tier { 0U };
+    bool wave_ops { false };
+    graphics::MemoryArchitecture memory_architecture {
+      graphics::MemoryArchitecture::kDedicated,
+    };
+    //! The ray tracing tier, e.g. `1.1`; none when unsupported.
+    std::optional<std::string> ray_tracing;
+    //! The variable-rate shading tier; none when unsupported.
+    std::optional<std::uint32_t> variable_shading_rate;
+    //! The mesh shader tier; none when unsupported.
+    std::optional<std::uint32_t> mesh_shaders;
+    //! The sampler feedback tier, e.g. `1.0`; none when unsupported.
+    std::optional<std::string> sampler_feedback;
+  };
+
   //! One hardware adapter a graphics backend can render on.
   struct GraphicsAdapter {
     std::string name;
@@ -40,10 +63,11 @@ namespace loader {
     std::uint32_t device_id { 0U };
     std::uint64_t dedicated_memory { 0U };
     bool has_display { false };
-    //! Supports the backend's minimum feature level.
-    bool usable { false };
-    //! Highest supported feature level, e.g. `12_2`; empty when not usable.
-    std::string feature_level;
+    //! None when no device could be created to query the adapter.
+    std::optional<GraphicsAdapterFeatures> features;
+    //! The requirements the adapter misses, each with what it needs and what
+    //! the device has; empty when it meets them all.
+    std::vector<std::string> missing_requirements;
     //! The adapter the backend selects without hints.
     bool default_choice { false };
   };
@@ -107,7 +131,7 @@ public:
   /*!
    Loads the backend module without creating a backend instance.
 
-   \throws std::runtime_error when the module cannot be loaded or the
+   @throw std::runtime_error When the module cannot be loaded or the
    enumeration fails.
   */
   [[nodiscard]] auto ListAdapters(graphics::BackendType backend) const

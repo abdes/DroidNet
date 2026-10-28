@@ -17,10 +17,12 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <ranges>
 #include <stdexcept>
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 #include <combaseapi.h>
 #include <d3d12.h>
@@ -52,6 +54,7 @@
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/FrameCaptureController.h>
+#include <Oxygen/Graphics/Common/GraphicsCapabilities.h>
 #include <Oxygen/Graphics/Common/ImGui/ImGuiGraphicsBackend.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
@@ -73,6 +76,7 @@
 #include <Oxygen/Graphics/Direct3D12/Detail/PipelineStateCache.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/Types.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/WindowSurface.h>
+#include <Oxygen/Graphics/Direct3D12/Devices/DeviceFeatures.h>
 #include <Oxygen/Graphics/Direct3D12/Devices/DeviceManager.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
 #include <Oxygen/Graphics/Direct3D12/ImGui/ImGuiBackend.h>
@@ -203,30 +207,68 @@ auto DestroyBackend() -> void
   backend.reset();
 }
 
+//! Visit `report` as a backend record; everything the record points to lives
+//! for the duration of the call.
+auto VisitReport(void* context,
+  const oxygen::graphics::AdapterVisitorFunc visit,
+  const oxygen::graphics::d3d12::AdapterReport& report) -> void
+{
+  namespace d3d12 = oxygen::graphics::d3d12;
+
+  const auto missing = report.shortfalls
+    | std::views::transform(
+      [](const std::string& shortfall) { return shortfall.c_str(); })
+    | std::ranges::to<std::vector>();
+  auto record = oxygen::graphics::GraphicsAdapterRecord {
+    .name = report.info.Name().c_str(),
+    .vendor_id = report.info.VendorId(),
+    .device_id = report.info.DeviceId(),
+    .dedicated_memory = report.info.Memory(),
+    .has_display = report.info.IsConnectedToDisplay(),
+    .features = nullptr,
+    .missing_requirements = missing.data(),
+    .missing_requirement_count = missing.size(),
+    .default_choice = report.info.IsBest(),
+  };
+  if (!report.features.has_value()) {
+    visit(context, record);
+    return;
+  }
+
+  const auto& features = *report.features;
+  const auto feature_level
+    = std::string { d3d12::FeatureLevelName(features.feature_level) };
+  const auto shader_model = d3d12::ShaderModelName(features.shader_model);
+  const auto ray_tracing = d3d12::RaytracingTierName(features.raytracing_tier);
+  const auto sampler_feedback
+    = d3d12::SamplerFeedbackTierName(features.sampler_feedback_tier);
+  const auto feature_record = oxygen::graphics::GraphicsAdapterFeaturesRecord {
+    .feature_level = feature_level.c_str(),
+    .shader_model = shader_model.c_str(),
+    .binding_tier = static_cast<std::uint32_t>(features.resource_binding_tier),
+    .wave_ops = features.wave_ops,
+    .memory_architecture = features.memory_architecture,
+    .ray_tracing = ray_tracing.c_str(),
+    .variable_shading_rate
+    = static_cast<std::uint32_t>(features.variable_shading_rate_tier),
+    .mesh_shaders = d3d12::MeshShaderTierNumber(features.mesh_shader_tier),
+    .sampler_feedback = sampler_feedback.c_str(),
+  };
+  record.features = &feature_record;
+  visit(context, record);
+}
+
 auto EnumerateAdapters(
   void* context, const oxygen::graphics::AdapterVisitorFunc visit) -> bool
 {
   try {
-    const auto adapters = oxygen::graphics::d3d12::DeviceManager::ListAdapters(
+    const auto reports = oxygen::graphics::d3d12::DeviceManager::ListAdapters(
       oxygen::graphics::d3d12::DeviceManagerDesc {
         .enable_debug_layer = false,
         .enable_aftermath = false,
       });
-    for (const auto& adapter : adapters) {
-      const auto feature_level_text = adapter.MeetsFeatureLevel()
-        ? adapter.MaxFeatureLevelAsString()
-        : std::string {};
-      visit(context,
-        oxygen::graphics::GraphicsAdapterRecord {
-          .name = adapter.Name().c_str(),
-          .vendor_id = adapter.VendorId(),
-          .device_id = adapter.DeviceId(),
-          .dedicated_memory = adapter.Memory(),
-          .has_display = adapter.IsConnectedToDisplay(),
-          .usable = adapter.MeetsFeatureLevel(),
-          .feature_level = feature_level_text.c_str(),
-          .default_choice = adapter.IsBest(),
-        });
+    for (const auto& report : reports) {
+      VisitReport(context, visit, report);
     }
     return true;
   } catch (const std::exception& ex) {
@@ -618,6 +660,10 @@ Graphics::Graphics(const SerializedBackendConfig& config,
     enable_vsync_ = jsonConfig.at("enable_vsync").get<bool>();
   }
   AddComponent<DeviceManager>(desc);
+  capabilities_ = graphics::GraphicsCapabilities {
+    .memory_architecture
+    = GetComponent<DeviceManager>().Features().memory_architecture,
+  };
   CreateIndirectCommandSignatures();
   if (frame_capture_config.provider
     == oxygen::FrameCaptureProvider::kRenderDoc) {

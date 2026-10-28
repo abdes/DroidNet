@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <array>
 #include <cstdint>
 #include <memory>
 #include <stdexcept>
@@ -21,6 +22,7 @@
 #include <Oxygen/Graphics/Common/CommandQueue.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
+#include <Oxygen/Graphics/Common/GraphicsCapabilities.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/ShaderByteCode.h>
@@ -34,9 +36,11 @@
 using oxygen::SerializedBackendConfig;
 using oxygen::SerializedPathFinderConfig;
 using oxygen::graphics::AdapterVisitorFunc;
+using oxygen::graphics::GraphicsAdapterFeaturesRecord;
 using oxygen::graphics::GraphicsAdapterRecord;
 using oxygen::graphics::GraphicsModuleApi;
 using oxygen::graphics::kGetGraphicsModuleApi;
+using oxygen::graphics::MemoryArchitecture;
 using oxygen::loader::detail::PlatformServices;
 
 using testing::NiceMock;
@@ -63,6 +67,7 @@ public:
 
   // clang-format off
   // NOLINTBEGIN(modernize-use-trailing-return-type)
+  MOCK_METHOD((oxygen::graphics::GraphicsCapabilities), GetCapabilities, (), (const, noexcept, override));
   MOCK_METHOD((const oxygen::graphics::DescriptorAllocator&), GetDescriptorAllocator, (), (const, override));
   MOCK_METHOD((oxygen::graphics::DescriptorAllocator&), GetDescriptorAllocator, (), (override));
   MOCK_METHOD(std::shared_ptr<oxygen::graphics::IShaderByteCode>, GetShader, (const oxygen::graphics::ShaderRequest&), (const, override));
@@ -197,9 +202,40 @@ protected:
 
     // Static callback for EnumerateAdapters: a discrete GPU without a display,
     // selected by default, and an integrated GPU that drives the display.
+    // Static callback for EnumerateAdapters: a discrete GPU with every
+    // optional feature, an integrated GPU with none that misses two
+    // requirements, and a GPU whose device could not be created.
     static auto EnumerateAdaptersStatic(
       void* context, const AdapterVisitorFunc visit) -> bool
     {
+      constexpr auto kDiscreteFeatures = GraphicsAdapterFeaturesRecord {
+        .feature_level = "12_2",
+        .shader_model = "6.8",
+        .binding_tier = 3U,
+        .wave_ops = true,
+        .memory_architecture = MemoryArchitecture::kDedicated,
+        .ray_tracing = "1.1",
+        .variable_shading_rate = 2U,
+        .mesh_shaders = 1U,
+        .sampler_feedback = "1.0",
+      };
+      constexpr auto kIntegratedFeatures = GraphicsAdapterFeaturesRecord {
+        .feature_level = "12_1",
+        .shader_model = "6.6",
+        .binding_tier = 2U,
+        .wave_ops = true,
+        .memory_architecture = MemoryArchitecture::kUnified,
+        .ray_tracing = "",
+        .variable_shading_rate = 0U,
+        .mesh_shaders = 0U,
+        .sampler_feedback = "",
+      };
+      constexpr auto kIntegratedMissing = std::array {
+        "shader model 6.8 (device has 6.6)",
+        "resource binding tier 3 (device has 2)",
+      };
+      constexpr auto kLegacyMissing = std::array { "feature level 12_0" };
+
       visit(context,
         GraphicsAdapterRecord {
           .name = "Discrete GPU",
@@ -207,8 +243,9 @@ protected:
           .device_id = 0x7550U,
           .dedicated_memory = 16ULL << 30U,
           .has_display = false,
-          .usable = true,
-          .feature_level = "12_2",
+          .features = &kDiscreteFeatures,
+          .missing_requirements = nullptr,
+          .missing_requirement_count = 0U,
           .default_choice = true,
         });
       visit(context,
@@ -218,8 +255,21 @@ protected:
           .device_id = 0x13C0U,
           .dedicated_memory = 2ULL << 30U,
           .has_display = true,
-          .usable = true,
-          .feature_level = "12_2",
+          .features = &kIntegratedFeatures,
+          .missing_requirements = kIntegratedMissing.data(),
+          .missing_requirement_count = kIntegratedMissing.size(),
+          .default_choice = false,
+        });
+      visit(context,
+        GraphicsAdapterRecord {
+          .name = "Legacy GPU",
+          .vendor_id = 0x10DEU,
+          .device_id = 0x1111U,
+          .dedicated_memory = 1ULL << 30U,
+          .has_display = false,
+          .features = nullptr,
+          .missing_requirements = kLegacyMissing.data(),
+          .missing_requirement_count = kLegacyMissing.size(),
           .default_choice = false,
         });
       return true;
@@ -309,25 +359,49 @@ NOLINT_TEST_F(GraphicsBackendLoaderTest, LoadBackendFromMainModule)
 // module, without creating a backend.
 NOLINT_TEST_F(GraphicsBackendLoaderTest, ListAdaptersCopiesEveryRecord)
 {
+  using testing::ElementsAre;
+  using testing::IsEmpty;
   auto& loader = oxygen::GraphicsBackendLoader::GetInstance(platform);
   EXPECT_CALL(*platform, CloseModule(testing::_)).Times(1);
 
   const auto adapters
     = loader.ListAdapters(oxygen::graphics::BackendType::kDirect3D12);
 
-  ASSERT_EQ(adapters.size(), 2U);
-  EXPECT_EQ(adapters[0].name, "Discrete GPU");
-  EXPECT_EQ(adapters[0].device_id, 0x7550U);
-  EXPECT_EQ(adapters[0].dedicated_memory, 16ULL << 30U);
-  EXPECT_FALSE(adapters[0].has_display);
-  EXPECT_TRUE(adapters[0].default_choice);
-  EXPECT_EQ(adapters[1].name, "Integrated GPU");
-  EXPECT_EQ(adapters[1].vendor_id, 0x1002U);
-  EXPECT_EQ(adapters[1].device_id, 0x13C0U);
-  EXPECT_TRUE(adapters[1].has_display);
-  EXPECT_TRUE(adapters[1].usable);
-  EXPECT_EQ(adapters[1].feature_level, "12_2");
-  EXPECT_FALSE(adapters[1].default_choice);
+  ASSERT_EQ(adapters.size(), 3U);
+  const auto& discrete = adapters[0];
+  EXPECT_EQ(discrete.name, "Discrete GPU");
+  EXPECT_EQ(discrete.device_id, 0x7550U);
+  EXPECT_EQ(discrete.dedicated_memory, 16ULL << 30U);
+  EXPECT_FALSE(discrete.has_display);
+  EXPECT_TRUE(discrete.default_choice);
+  EXPECT_THAT(discrete.missing_requirements, IsEmpty());
+  ASSERT_HAS_VALUE(discrete.features);
+  EXPECT_EQ(discrete.features->feature_level, "12_2");
+  EXPECT_EQ(discrete.features->shader_model, "6.8");
+  EXPECT_EQ(discrete.features->binding_tier, 3U);
+  EXPECT_EQ(
+    discrete.features->memory_architecture, MemoryArchitecture::kDedicated);
+  EXPECT_EQ(discrete.features->ray_tracing, "1.1");
+  EXPECT_EQ(discrete.features->variable_shading_rate, 2U);
+  EXPECT_EQ(discrete.features->mesh_shaders, 1U);
+  EXPECT_EQ(discrete.features->sampler_feedback, "1.0");
+
+  // Empty names and zero tiers mean unsupported in the record.
+  const auto& integrated = adapters[1];
+  EXPECT_THAT(integrated.missing_requirements,
+    ElementsAre("shader model 6.8 (device has 6.6)",
+      "resource binding tier 3 (device has 2)"));
+  ASSERT_HAS_VALUE(integrated.features);
+  EXPECT_EQ(
+    integrated.features->memory_architecture, MemoryArchitecture::kUnified);
+  EXPECT_FALSE(integrated.features->ray_tracing.has_value());
+  EXPECT_FALSE(integrated.features->variable_shading_rate.has_value());
+  EXPECT_FALSE(integrated.features->mesh_shaders.has_value());
+  EXPECT_FALSE(integrated.features->sampler_feedback.has_value());
+
+  const auto& legacy = adapters[2];
+  EXPECT_FALSE(legacy.features.has_value());
+  EXPECT_THAT(legacy.missing_requirements, ElementsAre("feature level 12_0"));
   EXPECT_TRUE(loader.GetBackend().expired());
 }
 

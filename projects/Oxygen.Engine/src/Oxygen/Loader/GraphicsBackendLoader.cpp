@@ -11,6 +11,9 @@
 #include <limits>
 #include <memory>
 #include <mutex>
+#include <optional>
+#include <ranges>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -43,6 +46,7 @@ using oxygen::SerializedBackendConfig;
 using oxygen::SerializedPathFinderConfig;
 using oxygen::graphics::BackendType;
 using oxygen::graphics::GetGraphicsModuleApiFunc;
+using oxygen::graphics::GraphicsAdapterFeaturesRecord;
 using oxygen::graphics::GraphicsAdapterRecord;
 using oxygen::graphics::GraphicsModuleApi;
 using oxygen::graphics::kGetGraphicsModuleApi;
@@ -308,6 +312,57 @@ auto BackendGate() -> std::shared_ptr<IncarnationGate>
   return gate;
 }
 
+//! A value when `tier` is supported; 0 means unsupported in the record.
+auto SupportedTier(const std::uint32_t tier) -> std::optional<std::uint32_t>
+{
+  return tier == 0U ? std::nullopt : std::optional { tier };
+}
+
+//! A value when `name` is not empty; empty means unsupported in the record.
+auto SupportedName(const std::string_view name) -> std::optional<std::string>
+{
+  return name.empty() ? std::nullopt : std::optional { std::string { name } };
+}
+
+auto ToGraphicsAdapterFeatures(const GraphicsAdapterFeaturesRecord& record)
+  -> oxygen::loader::GraphicsAdapterFeatures
+{
+  return {
+    .feature_level = record.feature_level,
+    .shader_model = record.shader_model,
+    .binding_tier = record.binding_tier,
+    .wave_ops = record.wave_ops,
+    .memory_architecture = record.memory_architecture,
+    .ray_tracing = SupportedName(record.ray_tracing),
+    .variable_shading_rate = SupportedTier(record.variable_shading_rate),
+    .mesh_shaders = SupportedTier(record.mesh_shaders),
+    .sampler_feedback = SupportedName(record.sampler_feedback),
+  };
+}
+
+//! Copy everything `record` points to; the backend owns it only for the visit.
+auto ToGraphicsAdapter(const GraphicsAdapterRecord& record)
+  -> oxygen::loader::GraphicsAdapter
+{
+  const auto missing
+    = std::span(record.missing_requirements, record.missing_requirement_count);
+  return {
+    .name = record.name,
+    .vendor_id = record.vendor_id,
+    .device_id = record.device_id,
+    .dedicated_memory = record.dedicated_memory,
+    .has_display = record.has_display,
+    .features = record.features != nullptr
+      ? std::optional { ToGraphicsAdapterFeatures(*record.features) }
+      : std::nullopt,
+    .missing_requirements = missing
+      | std::views::transform(
+        [](const char* requirement) { return std::string { requirement }; })
+      | std::ranges::to<std::vector>(),
+    .default_choice = record.default_choice,
+  };
+}
+
 struct BackendModulePin {
   std::shared_ptr<PlatformServices> services;
   PlatformServices::ModuleHandle module { nullptr };
@@ -513,16 +568,7 @@ public:
     const auto visit
       = [](void* context, const GraphicsAdapterRecord& record) -> void {
       static_cast<std::vector<oxygen::loader::GraphicsAdapter>*>(context)
-        ->push_back({
-          .name = record.name,
-          .vendor_id = record.vendor_id,
-          .device_id = record.device_id,
-          .dedicated_memory = record.dedicated_memory,
-          .has_display = record.has_display,
-          .usable = record.usable,
-          .feature_level = record.feature_level,
-          .default_choice = record.default_choice,
-        });
+        ->push_back(ToGraphicsAdapter(record));
     };
     if (!api->EnumerateAdapters(&adapters, visit)) {
       throw std::runtime_error(

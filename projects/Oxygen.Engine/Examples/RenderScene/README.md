@@ -134,7 +134,7 @@ exact name match.
 | `--startup-skybox <image>`                | Equip a skybox through Custom; layout/output come from demo settings. Conflicts with an explicit non-Custom profile.                                    |
 | `--debug-layer=true`, `--aftermath=true`  | Diagnostic tooling; mutually exclusive.                                                                                                                 |
 | `--gpu <name>`, `--gpu-id <id>`           | Prefer a GPU by part of its name or by PCI device id; mutually exclusive.                                                                               |
-| `--list-gpus`                             | List the GPUs with their names and ids, then exit.                                                                                                      |
+| `--list-gpus`, `--json`                   | List the GPUs with their ids, requirements and features, then exit; `--json` prints a typed JSON array.                                                 |
 
 ## Lighting and preview sun
 

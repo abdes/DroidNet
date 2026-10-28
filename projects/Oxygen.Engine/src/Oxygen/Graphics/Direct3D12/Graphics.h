@@ -90,6 +90,12 @@ public:
     return enable_vsync_;
   }
 
+  [[nodiscard]] auto GetCapabilities() const noexcept
+    -> graphics::GraphicsCapabilities override
+  {
+    return capabilities_;
+  }
+
   OXGN_D3D12_API auto SetVSyncEnabled(bool enabled) -> void override;
 
   //=== D3D12 specific factories ===----------------------------------------//
@@ -179,6 +185,7 @@ private:
   mutable std::unordered_map<DXGI_FORMAT, uint8_t>
     dxgi_format_plane_count_cache_;
   bool enable_vsync_ { true };
+  graphics::GraphicsCapabilities capabilities_ {};
   // Indexed by IndirectCommandKind; created with the device.
   std::array<Microsoft::WRL::ComPtr<ID3D12CommandSignature>, 2>
     indirect_command_signatures_;
