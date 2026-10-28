@@ -67,10 +67,10 @@ namespace {
 
   auto AuthoredRotation() -> glm::quat
   {
-    // Camera-local -Z points into the Z-up world; include roll to ensure idle
-    // synchronization does not silently constrain an authored orientation.
+    // The camera faces its node forward tilted down; include roll to ensure
+    // idle synchronization does not silently constrain an authored orientation.
     return glm::normalize(kAuthoredTilt
-      * glm::angleAxis(kAuthoredRollRadians, space::look::Forward));
+      * glm::angleAxis(kAuthoredRollRadians, space::node::Forward));
   }
 
 } // namespace
@@ -93,7 +93,7 @@ NOLINT_TEST(OrbitCameraController, SyncThenIdlePreservesAuthoredPose)
     const auto radius = glm::length(position);
     EXPECT_NEAR(controller.GetDistance(), radius, kTolerance);
     ExpectPosition(controller.GetTarget(),
-      position + (rotation * space::look::Forward) * radius);
+      position + (rotation * space::node::Forward) * radius);
     for (int frame = 0; frame < 3; ++frame) {
       controller.Update(camera, kFrameTime);
       ExpectPosition(
@@ -122,7 +122,7 @@ NOLINT_TEST(OrbitCameraController, ExplicitPivotAndZoomRemainAuthoritative)
     controller.SetTarget(pivot);
     controller.SetDistance(kOrbitRadius);
     controller.Update(camera, kFrameTime);
-    const auto forward = rotation * space::look::Forward;
+    const auto forward = rotation * space::node::Forward;
     ExpectPosition(CheckedValue(camera.GetTransform().GetLocalPosition()),
       pivot - forward * kOrbitRadius);
     ExpectRotation(
@@ -165,7 +165,7 @@ NOLINT_TEST(OrbitCameraController, OrbitInputRotatesAroundSynchronizedPivot)
     ExpectPosition(controller.GetTarget(), pivot);
     EXPECT_NEAR(glm::distance(position, pivot), radius, kTolerance);
     ExpectPosition(
-      position + (rotation * space::look::Forward) * radius, pivot);
+      position + (rotation * space::node::Forward) * radius, pivot);
     EXPECT_LT(std::abs(glm::dot(rotation, before_rotation)), 0.999F);
   }
 }
@@ -200,7 +200,7 @@ NOLINT_TEST(OrbitCameraController, ParentLocalAndWorldPoseSurviveIdleSync)
     controller.SyncFromTransform(child);
     ExpectPosition(controller.GetTarget(),
       CheckedValue(world_position)
-        + (CheckedValue(world_rotation) * space::look::Forward)
+        + (CheckedValue(world_rotation) * space::node::Forward)
           * controller.GetDistance());
     controller.Update(child, kFrameTime);
     scene->Update();
@@ -256,7 +256,7 @@ NOLINT_TEST(OrbitCameraController, ParentedCameraUsesWorldPivotForZoomAndOrbit)
           = kOrbitRadius - (kZoomInput * controller.GetZoomStep());
         ExpectPosition(controller.GetTarget(), world_pivot);
         ExpectPosition(CheckedValue(camera.GetTransform().GetWorldPosition()),
-          world_pivot - (initial_rotation * space::look::Forward) * radius);
+          world_pivot - (initial_rotation * space::node::Forward) * radius);
         ExpectRotation(CheckedValue(camera.GetTransform().GetWorldRotation()),
           initial_rotation);
         EXPECT_EQ(
@@ -272,7 +272,7 @@ NOLINT_TEST(OrbitCameraController, ParentedCameraUsesWorldPivotForZoomAndOrbit)
         ExpectPosition(controller.GetTarget(), world_pivot);
         EXPECT_NEAR(glm::distance(position, world_pivot), radius, kTolerance);
         ExpectPosition(
-          position + (rotation * space::look::Forward) * radius, world_pivot);
+          position + (rotation * space::node::Forward) * radius, world_pivot);
         EXPECT_EQ(
           CheckedValue(camera.GetTransform().GetLocalScale()), camera_scale);
       }
@@ -303,7 +303,7 @@ NOLINT_TEST(OrbitCameraController, IgnoreParentTransformKeepsWorldPivotContract)
   controller.Update(camera, kFrameTime);
   scene->Update();
   const auto expected
-    = pivot - (AuthoredRotation() * space::look::Forward) * kOrbitRadius;
+    = pivot - (AuthoredRotation() * space::node::Forward) * kOrbitRadius;
   ExpectPosition(
     CheckedValue(camera.GetTransform().GetLocalPosition()), expected);
   ExpectPosition(
@@ -351,7 +351,7 @@ NOLINT_TEST(OrbitCameraController, SettingsRestoreUsesPersistedWorldPivot)
   service.OnMainViewReady(ViewId { 1U }, camera, kViewport);
   scene->Update();
   ExpectPosition(CheckedValue(camera.GetTransform().GetWorldPosition()),
-    pivot - (world_rotation * space::look::Forward) * kOrbitRadius);
+    pivot - (world_rotation * space::node::Forward) * kOrbitRadius);
   ExpectPosition(rig.GetOrbitController()->GetTarget(), pivot);
   EXPECT_NEAR(
     rig.GetOrbitController()->GetDistance(), kOrbitRadius, kTolerance);
@@ -393,7 +393,7 @@ NOLINT_TEST(OrbitCameraController, RootScaleDoesNotChangeCameraOrientation)
     controller.SetDistance(kOrbitRadius);
     controller.Update(camera, kFrameTime);
     ExpectPosition(CheckedValue(camera.GetTransform().GetLocalPosition()),
-      pivot - (rotation * space::look::Forward) * kOrbitRadius);
+      pivot - (rotation * space::node::Forward) * kOrbitRadius);
     ExpectRotation(
       CheckedValue(camera.GetTransform().GetLocalRotation()), rotation);
     EXPECT_EQ(CheckedValue(camera.GetTransform().GetLocalScale()), scale);

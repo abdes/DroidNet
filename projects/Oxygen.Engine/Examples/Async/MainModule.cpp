@@ -22,14 +22,12 @@
 #include "DemoShell/DemoShell.h"
 #include "DemoShell/UI/CameraRigController.h"
 #include "DemoShell/UI/DroneCameraController.h"
-#include <glm/ext/quaternion_trigonometric.hpp>
 #include <glm/ext/vector_float3.hpp>
 #include <glm/ext/vector_uint2.hpp>
 #include <glm/gtc/constants.hpp>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
-#include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Core/Types/ViewPort.h>
@@ -199,15 +197,10 @@ auto MainModule::EnsureCameraSpotLight() -> void
     camera_spot_light_.GetTransform().SetLocalPosition(
       glm::vec3(2.0F, 0.5F, 0.0F));
 
-    // Engine conventions:
-    // - World/light forward = space::move::Forward (-Y).
-    // - Camera look forward = space::look::Forward (-Z).
-    // The camera spot light is a child of the camera, so we rotate the light
-    // by +90deg about +X to map move::Forward to look::Forward while still
-    // inheriting the camera's rotation.
-    constexpr auto kPitch = glm::half_pi<float>();
+    // Cameras and lights share the node frame: unrotated, the child light
+    // shines where the camera looks.
     camera_spot_light_.GetTransform().SetLocalRotation(
-      glm::angleAxis(kPitch, space::move::Right));
+      glm::quat { 1.0F, 0.0F, 0.0F, 0.0F });
   }
 
   if (camera_spot_light_.IsAlive() && !camera_spot_light_.HasLight()) {

@@ -15,6 +15,7 @@
 #include <Oxygen/Composition/Component.h>
 #include <Oxygen/Composition/Typed.h>
 #include <Oxygen/Core/Constants.h>
+#include <Oxygen/Core/Transforms/NodeFrame.h>
 #include <Oxygen/Core/Types/CameraAspectMode.h>
 #include <Oxygen/Core/Types/ViewHelpers.h>
 #include <Oxygen/Core/Types/ViewPort.h>
@@ -28,9 +29,8 @@ namespace oxygen::scene {
 
  @return The perspective projection matrix.
 
- @note The projection matrix is right-handed and z in [0, 1].
-  - D3D12: Y+ up, matches Direct3D 12 conventions.
-  - Vulkan: Y+ down, matches Vulkan conventions (Y axis flipped).
+ @note The projection matrix is right-handed, z in [0, 1] and reversed-Z, with
+ NDC +Y up on every backend (`space::clip`).
  @warning Undefined behavior if aspect ratio or near/far planes are invalid.
  @see GetFieldOfView, GetAspectRatio, GetNearPlane, GetFarPlane
  @see https://en.wikipedia.org/wiki/3D_projection
@@ -82,7 +82,8 @@ auto PerspectiveCamera::ScreenToWorld(const Vec2& p, const Vec4& viewport) const
   const float y = 1.0F - (2.0F * (p.y - viewport.y) / viewport.w);
   const glm::vec4 ndc(x, y, 1.0F, 1.0F);
   // Compute inverse view-projection matrix
-  const glm::mat4 view = glm::inverse(transform_->GetWorldMatrix());
+  const glm::mat4 view = transforms::NodeViewMatrix(
+    transform_->GetWorldPosition(), transform_->GetWorldRotation());
   const Mat4 proj = ProjectionMatrix(ViewPort {
     .top_left_x = viewport.x,
     .top_left_y = viewport.y,
@@ -114,7 +115,8 @@ auto PerspectiveCamera::WorldToScreen(const Vec2& p, const Vec4& viewport) const
 {
   DCHECK_NOTNULL_F(transform_);
   const glm::vec4 world(p.x, p.y, 0.0F, 1.0F);
-  const glm::mat4 view = glm::inverse(transform_->GetWorldMatrix());
+  const glm::mat4 view = transforms::NodeViewMatrix(
+    transform_->GetWorldPosition(), transform_->GetWorldRotation());
   const Mat4 proj = ProjectionMatrix(ViewPort {
     .top_left_x = viewport.x,
     .top_left_y = viewport.y,

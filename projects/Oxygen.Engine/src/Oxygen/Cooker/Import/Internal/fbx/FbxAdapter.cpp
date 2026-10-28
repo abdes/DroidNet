@@ -1508,7 +1508,8 @@ namespace {
     opts.target_axes = policy.up_axis == SourceUpAxis::kFromFile
       ? coord::EngineWorldTargetAxes()
       : kUnknownAxes;
-    opts.target_camera_axes = coord::EngineCameraTargetAxes();
+    opts.target_camera_axes = coord::EngineNodeTargetAxes();
+    opts.target_light_axes = coord::EngineNodeTargetAxes();
     opts.geometry_transform_handling
       = UFBX_GEOMETRY_TRANSFORM_HANDLING_HELPER_NODES;
     opts.space_conversion = UFBX_SPACE_CONVERSION_MODIFY_GEOMETRY;
@@ -1532,6 +1533,7 @@ namespace {
   {
     opts.target_axes = kUnknownAxes;
     opts.target_camera_axes = kUnknownAxes;
+    opts.target_light_axes = kUnknownAxes;
     opts.target_unit_meters = 0.0;
     opts.generate_missing_normals = false;
     opts.handedness_conversion_axis = UFBX_MIRROR_AXIS_NONE;

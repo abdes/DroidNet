@@ -61,7 +61,9 @@ local function apply_sun_node_settings(sun_node, azimuth_deg, elevation_deg, col
     return
   end
 
-  local pitch = math.rad(-elevation_deg)
+  -- The light shines along its node's -Y; turning it about +X by the elevation
+  -- tilts that ray down, so the sun stands above the horizon.
+  local pitch = math.rad(elevation_deg)
   local yaw = math.rad(azimuth_deg)
   sun_node:set_local_rotation(omath.quat_from_euler_xyz(pitch, 0.0, yaw))
 end

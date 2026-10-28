@@ -17,16 +17,16 @@
 #include <glm/gtc/quaternion.hpp>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Core/Constants.h>
+#include <Oxygen/Core/Transforms/NodeFrame.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Data/GeometryAsset.h>
-#include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Data/ShaderReference.h>
-#include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Data/Vertex.h>
 #include <Oxygen/Scene/Camera/Orthographic.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
@@ -42,7 +42,6 @@
 
 namespace oxygen::vortex::testing {
 namespace {
-  using oxygen::vortex::testing::FirstSurfaceOf;
 
   auto MakePlane(const float extent, const std::string& name)
     -> std::shared_ptr<data::GeometryAsset>
@@ -107,7 +106,7 @@ auto CreateLightingWorkloadScene(const LightingWorkload& workload)
 {
   auto result = LightingWorkloadScene {};
   result.scene = std::make_shared<scene::Scene>(
-    "Many-light baseline", workload.lights.size() * 2U + 4U);
+    "Many-light baseline", (workload.lights.size() * 2U) + 4U);
   result.scene->SetEnvironment(std::make_unique<scene::SceneEnvironment>());
   auto& post = result.scene->GetEnvironment()
                  ->AddSystem<scene::environment::PostProcessVolume>();
@@ -179,13 +178,16 @@ auto CreateLightingWorkloadScene(const LightingWorkload& workload)
       = result.scene->CreateNode("Camera " + std::to_string(view.id.get()));
     camera.GetTransform().SetLocalPosition(
       { view.eye_ws.at(0), view.eye_ws.at(1), view.eye_ws.at(2) });
+    camera.GetTransform().SetLocalRotation(transforms::LookRotation(
+      { .forward = space::move::Down, .up = space::move::Back }));
     const auto viewport = ViewPort {
       .top_left_x = view.content_origin_px.at(0),
       .top_left_y = view.content_origin_px.at(1),
       .width = static_cast<float>(view.width),
       .height = static_cast<float>(view.height),
     };
-    const auto aspect = static_cast<float>(view.width) / view.height;
+    const auto aspect
+      = static_cast<float>(view.width) / static_cast<float>(view.height);
     if (view.projection == WorkloadProjection::kPerspective) {
       auto lens = std::make_unique<scene::PerspectiveCamera>();
       lens->SetViewport(viewport);

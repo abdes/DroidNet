@@ -31,6 +31,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Transforms/Decompose.h>
+#include <Oxygen/Core/Transforms/NodeFrame.h>
 #include <Oxygen/Scene/Camera/Orthographic.h>
 #include <Oxygen/Scene/Detail/TransformComponent.h>
 #include <Oxygen/Scene/SceneNodeImpl.h>
@@ -194,14 +195,12 @@ void OrbitCameraController::Update(
     }
     const glm::vec3 up_ws = glm::cross(right_ws, forward_ws_norm);
 
-    const glm::mat4 view_basis(glm::vec4(right_ws, 0.0F),
-      glm::vec4(up_ws, 0.0F), glm::vec4(-forward_ws_norm, 0.0F),
-      glm::vec4(0.0F, 0.0F, 0.0F, 1.0F));
-    orbit_rot_ = glm::normalize(glm::quat_cast(view_basis));
+    orbit_rot_
+      = transforms::LookRotation({ .forward = forward_ws_norm, .up = up_ws });
   }
 
   const auto cam_pos
-    = target_ - orbit_rot_ * (space::look::Forward * distance_);
+    = target_ - orbit_rot_ * (space::node::Forward * distance_);
   if (!SetWorldPose(node, cam_pos, orbit_rot_)) {
     LOG_F(ERROR,
       "Orbit camera '{}' cannot apply a world pose through its transform",
@@ -235,7 +234,7 @@ void OrbitCameraController::SyncFromTransform(scene::SceneNode& node)
     }
   }
 
-  const glm::vec3 forward = rot * space::look::Forward;
+  const glm::vec3 forward = rot * space::node::Forward;
   distance_ = std::max(min_distance_, glm::distance(pos, target_));
   // Keep the chosen radius, but place its pivot on the camera's view ray.
   // A stale/default target must not translate the camera on an idle update.
@@ -261,8 +260,8 @@ void OrbitCameraController::ApplyOrbit(const glm::vec2& delta)
   if (mode_ == OrbitMode::kTrackball) {
     const float phi0 = -delta.y * sensitivity_;
     const float phi1 = delta.x * sensitivity_;
-    const glm::vec3 view_x_ws = glm::normalize(orbit_rot_ * space::look::Right);
-    const glm::vec3 view_y_ws = glm::normalize(orbit_rot_ * space::look::Up);
+    const glm::vec3 view_x_ws = glm::normalize(orbit_rot_ * space::node::Right);
+    const glm::vec3 view_y_ws = glm::normalize(orbit_rot_ * space::node::Up);
     const glm::vec3 rot_vec_ws = view_x_ws * phi0 + view_y_ws * phi1;
     const float angle = glm::length(rot_vec_ws);
     if (angle > math::Epsilon) {
@@ -280,8 +279,8 @@ void OrbitCameraController::ApplyOrbit(const glm::vec2& delta)
 
 void OrbitCameraController::ApplyPan(const glm::vec2& delta)
 {
-  const glm::vec3 right = orbit_rot_ * space::look::Right;
-  const glm::vec3 up = orbit_rot_ * space::look::Up;
+  const glm::vec3 right = orbit_rot_ * space::node::Right;
+  const glm::vec3 up = orbit_rot_ * space::node::Up;
   target_
     += (right * -delta.x + up * delta.y) * (distance_ * kPanSensitivityScale);
 }

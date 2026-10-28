@@ -14,6 +14,7 @@
 #include <glm/mat4x4.hpp>
 
 #include <Oxygen/Core/Constants.h>
+#include <Oxygen/Core/Transforms/NodeFrame.h>
 
 namespace oxygen::interop::module {
 
@@ -78,10 +79,8 @@ namespace oxygen::interop::module {
     const glm::vec3 camera_position = focus_point + params.camera_offset;
     (void)transform.SetLocalPosition(camera_position);
 
-    const glm::quat look_rotation = viewport::LookRotationFromPositionToTarget(
-      camera_position,
-      focus_point,
-      params.up);
+    const glm::quat look_rotation = oxygen::transforms::LookRotation(
+      { .forward = focus_point - camera_position, .up = params.up });
     (void)transform.SetLocalRotation(look_rotation);
   }
 

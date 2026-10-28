@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <memory>
@@ -29,6 +30,7 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Core/Transforms/NodeFrame.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Data/AssetType.h>
@@ -127,7 +129,10 @@ auto MainModule::StageInitialScene() -> void
   CHECK_F(attached, "Failed to attach PerspectiveCamera to MainCamera");
   auto tf = main_camera_.GetTransform();
   tf.SetLocalPosition(Vec3 { 0.0F, -6.0F, 3.0F });
-  tf.SetLocalRotation(glm::quat(glm::radians(Vec3 { -20.0F, 0.0F, 0.0F })));
+  // Face the scene (+Y), pitched 20 degrees down.
+  const auto pitch = glm::radians(-20.0F);
+  tf.SetLocalRotation(transforms::LookRotation(
+    { .forward = Vec3 { 0.0F, std::cos(pitch), std::sin(pitch) } }));
   Stage().SetStagedMainCamera(main_camera_);
   sun_light_node_ = EnsureDefaultSceneLighting(*staged_scene,
     DefaultSceneLightingDesc {
@@ -140,7 +145,7 @@ auto MainModule::StageInitialScene() -> void
 // Attaching only builds the shell and its bindings; running out of memory there
 // is not recoverable.
 // NOLINTNEXTLINE(bugprone-exception-escape)
-auto MainModule::OnAttachedImpl(observer_ptr<IAsyncEngine> engine) noexcept
+auto MainModule::OnAttachedImpl(observer_ptr<IAsyncEngine> /*engine*/) noexcept
   -> std::unique_ptr<DemoShell>
 {
   DCHECK_NOTNULL_F(engine, "expecting a valid engine");

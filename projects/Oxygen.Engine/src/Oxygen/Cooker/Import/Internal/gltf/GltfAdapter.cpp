@@ -1171,14 +1171,28 @@ namespace {
 
   [[nodiscard]] auto GltfToOxygenBasis() -> glm::mat4
   {
-    // glTF: Y-up, -Z forward, X right
-    // Oxygen: Z-up, -Y forward, X right
+    // A glTF asset's front faces +Z with +Y up; an Oxygen node's faces -Y
+    // (space::node::Forward) with +Z up. C maps +Y to +Z and +Z to -Y.
     return glm::mat4 {
       glm::vec4 { 1.0F, 0.0F, 0.0F, 0.0F },
       glm::vec4 { 0.0F, 0.0F, 1.0F, 0.0F },
       glm::vec4 { 0.0F, -1.0F, 0.0F, 0.0F },
       glm::vec4 { 0.0F, 0.0F, 0.0F, 1.0F },
     };
+  }
+
+  //! The rotation from a converted glTF camera or light frame to the node
+  //! frame (`space::node`).
+  /*!
+   glTF cameras and lights face local -Z with +Y up and +X right. The node
+   conversion C * M * inverse(C) turns that frame into one facing +Y with +Z up
+   and +X right. A half turn about +Z faces it -Y with +Z up and -X right, the
+   node frame.
+  */
+  [[nodiscard]] auto GltfEmitterToNodeFrame() -> glm::quat
+  {
+    // (w, x, y, z): exactly a half turn about +Z.
+    return glm::quat { 0.0F, 0.0F, 0.0F, 1.0F };
   }
 
   [[nodiscard]] auto ComputeUnitScale(const CoordinateConversionPolicy& policy)
@@ -3131,11 +3145,10 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
       uint32_t camera_node_index = i;
       if (cam.type == cgltf_camera_type_perspective
         || cam.type == cgltf_camera_type_orthographic) {
-        // General nodes use C * M * inverse(C), but cameras retain their
-        // local -Z forward/+Y up basis. A camera-only child with local C
-        // produces C * M without rotating the owner's mesh, light or children.
-        camera_node_index = append_attachment(
-          node, i, "Camera", glm::quat_cast(GltfToOxygenBasis()));
+        // A camera-only child turns the glTF camera frame into the node
+        // frame without rotating the owner's mesh, light or children.
+        camera_node_index
+          = append_attachment(node, i, "Camera", GltfEmitterToNodeFrame());
       }
       const auto unit_scale = ComputeUnitScale(request.options.coordinate);
       auto commit = detail::ImportedPropertyCommit {};
@@ -3210,12 +3223,10 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
       auto light_node_index = i;
       if (light.type == cgltf_light_type_directional
         || light.type == cgltf_light_type_spot) {
-        // glTF emits along local -Z, which C maps to +Y. Native lights emit
-        // along -Y. Rotate the light attachment 180 degrees about Oxygen +Z
-        // to align emission and preserve local up. Directional and circular
-        // spot lights have no roll-dependent shape; point lights need no basis.
+        // A light-only child turns the glTF light frame into the node frame,
+        // which emits along its forward. Point lights need no basis.
         light_node_index
-          = append_attachment(node, i, "Light", glm::quat(0, 0, 0, 1));
+          = append_attachment(node, i, "Light", GltfEmitterToNodeFrame());
       }
       auto commit = detail::ImportedPropertyCommit {};
       const auto color

@@ -9,17 +9,15 @@
 #include <memory>
 #include <utility>
 
-#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/EngineTag.h>
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Core/Transforms/NodeFrame.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Core/Types/View.h>
-#include <Oxygen/Data/GeometryAsset.h>
-#include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Data/MaterialDomain.h>
-#include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Graphics/Common/FrameCaptureController.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Scene/Camera/CameraExposure.h>
@@ -714,6 +712,8 @@ NOLINT_TEST_F(
     auto lens = std::make_unique<scene::PerspectiveCamera>();
     lens->SetViewport(view.viewport);
     ASSERT_TRUE(camera.AttachCamera(std::move(lens)));
+    camera.GetTransform().SetLocalRotation(transforms::LookRotation(
+      { .forward = space::move::Down, .up = space::move::Back }));
     mesh_node = scene->CreateNode("Replacement radiance");
     mesh_node.GetRenderable().SetGeometry(geometry);
     SetSurface(data::MaterialDomain::kOpaque, emission);

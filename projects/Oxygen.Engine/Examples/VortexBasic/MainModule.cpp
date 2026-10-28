@@ -10,7 +10,6 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
-#include <limits>
 #include <memory>
 #include <optional>
 #include <random>
@@ -39,6 +38,7 @@
 #include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Core/Transforms/NodeFrame.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/Atmosphere.h>
 #include <Oxygen/Core/Types/PostProcess.h>
@@ -164,37 +164,6 @@ auto SetShadowParticipation(oxygen::scene::SceneNode& node,
     flags = flags.SetFlag(oxygen::scene::SceneNodeFlags::kReceivesShadows,
       oxygen::scene::SceneFlag {}.SetEffectiveValueBit(receives_shadows));
   }
-}
-
-auto CameraLookRotation(const glm::vec3& position, const glm::vec3& target)
-  -> glm::quat
-{
-  const auto forward_raw = target - position;
-  const float forward_len2 = glm::dot(forward_raw, forward_raw);
-  if (forward_len2 <= 1e-8F) {
-    return { 1.0F, 0.0F, 0.0F, 0.0F };
-  }
-
-  const auto forward = glm::normalize(forward_raw);
-  glm::vec3 up_dir = oxygen::space::move::Up;
-  const float dot_abs = std::abs(glm::dot(forward, glm::normalize(up_dir)));
-  if (dot_abs > 0.999F) {
-    up_dir = (std::abs(forward.z) > 0.9F) ? oxygen::space::move::Back
-                                          : oxygen::space::move::Up;
-  }
-
-  const auto right_raw = glm::cross(forward, up_dir);
-  const float right_len2 = glm::dot(right_raw, right_raw);
-  if (right_len2 <= std::numeric_limits<float>::epsilon()) {
-    return { 1.0F, 0.0F, 0.0F, 0.0F };
-  }
-
-  const auto right = right_raw / std::sqrt(right_len2);
-  const auto up = glm::cross(right, forward);
-
-  const glm::mat4 look_matrix { glm::vec4(right, 0.0F), glm::vec4(up, 0.0F),
-    glm::vec4(-forward, 0.0F), glm::vec4(0.0F, 0.0F, 0.0F, 1.0F) };
-  return glm::quat_cast(look_matrix);
 }
 
 //! A solid-colour material without textures, unless it has a normal map.
@@ -1195,8 +1164,8 @@ auto MainModule::EnsureCamera(uint32_t width, uint32_t height) -> void
   const glm::vec3 kCameraTarget
     = chart_camera ? glm::vec3 { 0.0F } : glm::vec3 { 0.0F, 0.0F, 1.5F };
   camera_node_.GetTransform().SetLocalPosition(kCameraPosition);
-  camera_node_.GetTransform().SetLocalRotation(
-    CameraLookRotation(kCameraPosition, kCameraTarget));
+  camera_node_.GetTransform().SetLocalRotation(oxygen::transforms::LookRotation(
+    { .forward = kCameraTarget - kCameraPosition }));
 
   const auto cam_ref = camera_node_.GetCameraAs<PerspectiveCamera>();
   if (cam_ref) {

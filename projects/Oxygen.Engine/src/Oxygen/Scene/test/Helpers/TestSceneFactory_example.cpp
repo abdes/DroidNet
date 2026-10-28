@@ -76,7 +76,7 @@ NOLINT_TEST_F(TestSceneFactoryExample, CreateParentChild)
   EXPECT_FALSE(parent.HasParent());
 
   auto first_child = parent.GetFirstChild();
-  ASSERT_TRUE(first_child.has_value());
+  ASSERT_HAS_VALUE(first_child);
   EXPECT_TRUE(first_child->HasParent());
   EXPECT_FALSE(first_child->HasChildren());
 }
@@ -126,8 +126,8 @@ NOLINT_TEST_F(TestSceneFactoryExample, DefaultNameGenerator)
 
   // Root should be named based on our prefix + role
   auto root_obj = roots[0].GetImpl();
-  ASSERT_TRUE(root_obj.has_value());
-  EXPECT_TRUE(root_obj->get().GetName().find("Test") != std::string::npos);
+  ASSERT_HAS_VALUE(root_obj);
+  EXPECT_TRUE(root_obj->get().GetName().contains("Test"));
 }
 
 NOLINT_TEST_F(TestSceneFactoryExample, PositionalNameGenerator)
@@ -144,7 +144,7 @@ NOLINT_TEST_F(TestSceneFactoryExample, PositionalNameGenerator)
   ASSERT_EQ(roots.size(), 1);
 
   auto root_obj = roots[0].GetImpl();
-  ASSERT_TRUE(root_obj.has_value());
+  ASSERT_HAS_VALUE(root_obj);
   EXPECT_EQ(root_obj->get().GetName(), "NodeFirst");
 }
 
@@ -194,7 +194,7 @@ NOLINT_TEST_F(TestSceneFactoryExample, SimpleTemplate)
   ASSERT_EQ(roots.size(), 1);
 
   auto root_obj = roots[0].GetImpl();
-  ASSERT_TRUE(root_obj.has_value());
+  ASSERT_HAS_VALUE(root_obj);
   EXPECT_EQ(root_obj->get().GetName(), "SimpleRoot");
 }
 
@@ -206,7 +206,7 @@ NOLINT_TEST_F(TestSceneFactoryExample, ComplexHierarchyTemplate)
       {
         "name": "Player",
         "transform": {
-          "position": [0, 1, 0],
+          "position": [0, 0, 1],
           "rotation": [0, 0, 0],
           "scale": [1, 1, 1]
         },
@@ -225,15 +225,15 @@ NOLINT_TEST_F(TestSceneFactoryExample, ComplexHierarchyTemplate)
           {
             "name": "WeaponMount",
             "transform": {
-              "position": [0.5, 0.8, 0],
-              "rotation": [0, 90, 0],
+              "position": [0.5, 0, 0.8],
+              "rotation": [0, 0, 90],
               "scale": [1, 1, 1]
             },
             "children": [
               {
                 "name": "Rifle",
                 "transform": {
-                  "position": [0, 0, 0.3],
+                  "position": [0, -0.3, 0],
                   "rotation": [0, 0, 0],
                   "scale": [1, 1, 1]
                 }
@@ -243,7 +243,7 @@ NOLINT_TEST_F(TestSceneFactoryExample, ComplexHierarchyTemplate)
           {
             "name": "Camera",
             "transform": {
-              "position": [0, 1.7, 0],
+              "position": [0, 0, 1.7],
               "rotation": [0, 0, 0],
               "scale": [1, 1, 1]
             }
@@ -263,15 +263,15 @@ NOLINT_TEST_F(TestSceneFactoryExample, ComplexHierarchyTemplate)
             "transform": {
               "position": [0, 0, 0],
               "rotation": [0, 0, 0],
-              "scale": [10, 1, 10]
+              "scale": [10, 10, 1]
             }
           },
           {
             "name": "Building",
             "transform": {
-              "position": [5, 0, 5],
-              "rotation": [0, 45, 0],
-              "scale": [2, 3, 2]
+              "position": [5, -5, 0],
+              "rotation": [0, 0, 45],
+              "scale": [2, 2, 3]
             }
           }
         ]
@@ -304,14 +304,14 @@ NOLINT_TEST_F(TestSceneFactoryExample, ComplexHierarchyTemplate)
   // Check Player's transform
   auto player_transform = player.GetTransform();
   auto player_pos = player_transform.GetLocalPosition();
-  ASSERT_TRUE(player_pos.has_value());
+  ASSERT_HAS_VALUE(player_pos);
   EXPECT_FLOAT_EQ(player_pos->x, 0.0F);
-  EXPECT_FLOAT_EQ(player_pos->y, 1.0F);
-  EXPECT_FLOAT_EQ(player_pos->z, 0.0F);
+  EXPECT_FLOAT_EQ(player_pos->y, 0.0F);
+  EXPECT_FLOAT_EQ(player_pos->z, 1.0F);
 
   // Validate WeaponMount exists and has correct position
   auto first_child = player.GetFirstChild();
-  ASSERT_TRUE(first_child.has_value());
+  ASSERT_HAS_VALUE(first_child);
 
   // Find WeaponMount among children
   bool found_weapon_mount = false;
@@ -324,10 +324,10 @@ NOLINT_TEST_F(TestSceneFactoryExample, ComplexHierarchyTemplate)
       // Check WeaponMount transform
       auto weapon_transform = current_child->GetTransform();
       auto weapon_pos = weapon_transform.GetLocalPosition();
-      ASSERT_TRUE(weapon_pos.has_value());
+      ASSERT_HAS_VALUE(weapon_pos);
       EXPECT_FLOAT_EQ(weapon_pos->x, 0.5F);
-      EXPECT_FLOAT_EQ(weapon_pos->y, 0.8F);
-      EXPECT_FLOAT_EQ(weapon_pos->z, 0.0F);
+      EXPECT_FLOAT_EQ(weapon_pos->y, 0.0F);
+      EXPECT_FLOAT_EQ(weapon_pos->z, 0.8F);
 
       // Check that WeaponMount has Rifle child
       EXPECT_TRUE(current_child->HasChildren());
@@ -346,7 +346,7 @@ NOLINT_TEST_F(TestSceneFactoryExample, DirectJsonCreation)
       {
         "name": "LightSystem",
         "transform": {
-          "position": [0, 10, 0],
+          "position": [0, 0, 10],
           "rotation": [45, 0, 0],
           "scale": [1, 1, 1]
         },
@@ -384,13 +384,13 @@ NOLINT_TEST_F(TestSceneFactoryExample, DirectJsonCreation)
 
   auto light_system = roots[0];
   auto light_obj = light_system.GetImpl();
-  ASSERT_TRUE(light_obj.has_value());
+  ASSERT_HAS_VALUE(light_obj);
   EXPECT_EQ(light_obj->get().GetName(), "LightSystem");
 
   // Verify transform with rotation
   auto transform = light_system.GetTransform();
   auto rotation = transform.GetLocalRotation();
-  ASSERT_TRUE(rotation.has_value());
+  ASSERT_HAS_VALUE(rotation);
 
   // The rotation should be approximately 45 degrees around X-axis
   // Note: glm::quat constructor from euler angles expects radians
@@ -445,7 +445,7 @@ NOLINT_TEST_F(TestSceneFactoryExample, MixedNamingJson)
 
   auto root = roots[0];
   auto root_obj = root.GetImpl();
-  ASSERT_TRUE(root_obj.has_value());
+  ASSERT_HAS_VALUE(root_obj);
   EXPECT_EQ(root_obj->get().GetName(), "ExplicitRoot");
 
   // Count children and check that some have generated names
@@ -459,12 +459,12 @@ NOLINT_TEST_F(TestSceneFactoryExample, MixedNamingJson)
   while (child.has_value()) {
     child_count++;
     auto child_obj = child->GetImpl();
-    ASSERT_TRUE(child_obj.has_value());
+    ASSERT_HAS_VALUE(child_obj);
 
     const auto& name = child_obj->get().GetName();
     if (name == "ExplicitChild") {
       found_explicit_child = true;
-    } else if (name.find("Test") != std::string::npos) { // Our prefix
+    } else if (name.contains("Test")) { // Our prefix
       found_generated_name = true;
     }
 
@@ -514,15 +514,16 @@ NOLINT_TEST_F(TestSceneFactoryExample, LargeSceneFromJson)
 
   // Generate buildings programmatically
   for (int i = 0; i < 10; ++i) {
+    const auto fi = static_cast<float>(i);
     if (i > 0) {
-      large_scene += ",";
+      large_scene += ',';
     }
     large_scene += fmt::format(R"(
           {{
             "name": "Building{}",
             "transform": {{
-              "position": [{}, 0, {}],
-              "scale": [1, {}, 1]
+              "position": [{}, {}, 0],
+              "scale": [1, 1, {}]
             }},
             "children": [
               {{
@@ -534,12 +535,12 @@ NOLINT_TEST_F(TestSceneFactoryExample, LargeSceneFromJson)
               {{
                 "name": "Building{}_Roof",
                 "transform": {{
-                  "position": [0, {}, 0]
+                  "position": [0, 0, {}]
                 }}
               }}
             ]
           }})",
-      i, i * 2.0F, i * 3.0F, 2.0F + i * 0.5F, i, i, 2.0F + i * 0.5F);
+      i, fi * 2.0F, -fi * 3.0F, 2.0F + (fi * 0.5F), i, i, 2.0F + (fi * 0.5F));
   }
 
   large_scene += R"(
@@ -559,7 +560,7 @@ NOLINT_TEST_F(TestSceneFactoryExample, LargeSceneFromJson)
 
   auto city = roots[0];
   auto city_obj = city.GetImpl();
-  ASSERT_TRUE(city_obj.has_value());
+  ASSERT_HAS_VALUE(city_obj);
   EXPECT_EQ(city_obj->get().GetName(), "City");
 
   // Verify first building exists and has correct structure
@@ -567,10 +568,10 @@ NOLINT_TEST_F(TestSceneFactoryExample, LargeSceneFromJson)
   // order So the "first child" is actually the last building created
   // (Building9)
   auto first_building = city.GetFirstChild();
-  ASSERT_TRUE(first_building.has_value());
+  ASSERT_HAS_VALUE(first_building);
 
   auto building_obj = first_building->GetImpl();
-  ASSERT_TRUE(building_obj.has_value());
+  ASSERT_HAS_VALUE(building_obj);
   EXPECT_EQ(building_obj->get().GetName(),
     "Building9"); // Last created building becomes first child
 
@@ -593,7 +594,7 @@ NOLINT_TEST_F(TestSceneFactoryExample, LargeSceneFromJson)
   while (current_building.has_value()) {
     auto current_building_obj
       = current_building->GetImpl(); // Renamed to avoid shadowing
-    ASSERT_TRUE(current_building_obj.has_value());
+    ASSERT_HAS_VALUE(current_building_obj);
 
     const auto& name = current_building_obj->get().GetName();
     if (name.starts_with("Building")) {
@@ -610,8 +611,7 @@ NOLINT_TEST_F(TestSceneFactoryExample, LargeSceneFromJson)
   for (int i = 0; i < 10; ++i) {
     const auto expected_name = fmt::format("Building{}", i);
     EXPECT_TRUE(
-      std::find(building_names.begin(), building_names.end(), expected_name)
-      != building_names.end())
+      std::ranges::find(building_names, expected_name) != building_names.end())
       << "Missing building: " << expected_name;
   }
 }

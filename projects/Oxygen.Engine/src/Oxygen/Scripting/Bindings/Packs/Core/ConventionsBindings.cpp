@@ -25,6 +25,7 @@ namespace {
   constexpr auto kConventionsFields = std::to_array<BindingField>({
     { .name = "handedness", .type = "string" },
     { .name = "world", .type = "Axes" },
+    { .name = "node", .type = "Axes" },
     { .name = "view", .type = "Axes" },
     { .name = "clip", .type = "ClipConventions" },
   });
@@ -69,7 +70,16 @@ auto RegisterConventionsBindings(lua_State* state, const int oxygen_table_index)
   lua_setfield(state, -2, "right");
   lua_setfield(state, conventions_index, "world");
 
-  lua_newtable(state); // view
+  lua_newtable(state); // node: the local frame of every node, cameras included
+  PushVec3(state, space::node::Up);
+  lua_setfield(state, -2, "up");
+  PushVec3(state, space::node::Forward);
+  lua_setfield(state, -2, "forward");
+  PushVec3(state, space::node::Right);
+  lua_setfield(state, -2, "right");
+  lua_setfield(state, conventions_index, "node");
+
+  lua_newtable(state); // view space, which describes no node
   PushVec3(state, space::look::Up);
   lua_setfield(state, -2, "up");
   PushVec3(state, space::look::Forward);

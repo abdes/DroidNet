@@ -4,12 +4,10 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
-#include <iterator>
 #include <memory>
 #include <string>
 #include <utility>
@@ -624,8 +622,7 @@ auto SceneBootstrapper::EnsureCylinder(scene::Scene& scene) -> void
   cylinder_node_.GetTransform().SetLocalPosition({ -0.5F, -0.5F, 0.0F });
 
   // Rotate the cylinder so it's easier to inspect in 3D from the main view.
-  // Apply 30° pitch and 45° yaw (converted to radians) to give a clear 3D
-  // perspective.
+  // Turn it 30° about X, then 45° about Y, to give a clear 3D perspective.
   cylinder_node_.GetTransform().SetLocalRotation(
     glm::quat(glm::vec3(glm::radians(30.0F), glm::radians(45.0F), 0.0F)));
 
@@ -694,9 +691,8 @@ auto SceneBootstrapper::EnsureCone(scene::Scene& scene) -> void
   cone_node_.GetTransform().SetLocalPosition({ -2.5F, -0.5F, 0.0F });
 
   // Rotate the cone so the base (bottom face) faces the main camera
-  // MainView camera lives at +Z looking down -Z; rotate 90° pitch so the
-  // base normal (-Y) maps to -Z (facing the camera). Add a small yaw for
-  // better perspective.
+  // MainView camera lives at +Z looking down -Z. Turn it 30° about X, then
+  // 20° about Y, for a better perspective.
   cone_node_.GetTransform().SetLocalRotation(
     glm::quat(glm::vec3(glm::radians(30.0F), glm::radians(20.0F), 0.0F)));
 

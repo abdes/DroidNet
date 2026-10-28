@@ -59,6 +59,7 @@
 #include <Oxygen/Cooker/test/Support/TempDir.h>
 #include <Oxygen/Cooker/test/Support/TestPaths.h>
 #include <Oxygen/Cooker/test/Support/TestValues.h>
+#include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/CameraAspectMode.h>
 #include <Oxygen/Core/Types/DescriptorExtensions.h>
@@ -578,9 +579,12 @@ NOLINT_TEST_F(
       const auto transform = CameraWorldTransform(*scene, index);
       ExpectVec3Near(
         glm::vec3(glm::column(transform, 3)), camera_positions.at(ordinal));
-      ExpectVec3Near(glm::normalize(-glm::vec3(glm::column(transform, 2))),
+      // A camera faces its node's forward with its node's up.
+      ExpectVec3Near(
+        glm::normalize(glm::mat3(transform) * oxygen::space::node::Forward),
         camera_forwards.at(ordinal));
-      ExpectVec3Near(glm::normalize(glm::vec3(glm::column(transform, 1))),
+      ExpectVec3Near(
+        glm::normalize(glm::mat3(transform) * oxygen::space::node::Up),
         camera_ups.at(ordinal));
       EXPECT_NEAR(glm::determinant(glm::mat3(transform)), 1.0F, 0.0001F);
     }
@@ -718,12 +722,13 @@ NOLINT_TEST_F(
       const auto transform = CameraWorldTransform(*scene, index);
       ExpectVec3Near(
         glm::vec3(glm::column(transform, 3)), camera_positions.at(ordinal));
-      // glTF cameras and oriented lights share local -Z. Oxygen uses -Z
-      // for cameras and -Y for lights; their world rays must agree.
+      // glTF cameras and oriented lights share local -Z; their nodes share
+      // the node frame, so their world rays agree.
       ExpectVec3Near(
-        glm::normalize(glm::vec3(transform * glm::vec4(0, -1, 0, 0))),
+        glm::normalize(glm::mat3(transform) * oxygen::space::node::Forward),
         camera_forwards.at(ordinal));
-      ExpectVec3Near(glm::normalize(glm::vec3(glm::column(transform, 2))),
+      ExpectVec3Near(
+        glm::normalize(glm::mat3(transform) * oxygen::space::node::Up),
         camera_ups.at(ordinal));
       EXPECT_NEAR(glm::determinant(glm::mat3(transform)), 1.0F, 0.0001F);
     }

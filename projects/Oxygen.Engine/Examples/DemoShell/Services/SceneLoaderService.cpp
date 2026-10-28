@@ -41,6 +41,7 @@
 #include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Content/ResidencyPolicy.h>
 #include <Oxygen/Core/Constants.h>
+#include <Oxygen/Core/Transforms/NodeFrame.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Data/PakFormat_physics.h>
@@ -79,54 +80,10 @@ namespace {
 
   constexpr std::string_view kSceneName = "RenderScene";
 
-  //! Squared length below which a direction is degenerate.
-  constexpr float kDegenerateLengthSquared = 1e-8F;
-  //! |cos| above which forward is treated as colinear with up.
-  constexpr float kColinearCosine = 0.999F;
-  //! |forward.z| above which Back is the alternate up direction.
-  constexpr float kVerticalForwardZ = 0.9F;
   //! Tolerance of IsNearlyEqual.
   constexpr float kNearlyEqualTolerance = 1e-5F;
   //! Smallest dynamic body mass derived from a material density, in kg.
   constexpr float kMinDynamicMassKg = 0.001F;
-
-  auto MakeLookRotationFromPosition(
-    const glm::vec3& position, const glm::vec3& target) -> glm::quat
-  {
-    const auto forward_raw = target - position;
-    const float forward_len2 = glm::dot(forward_raw, forward_raw);
-    if (forward_len2 <= kDegenerateLengthSquared) {
-      return { 1.0F, 0.0F, 0.0F, 0.0F };
-    }
-
-    const auto forward = glm::normalize(forward_raw);
-    // Avoid singularities when forward is colinear with up.
-    glm::vec3 up_dir = space::move::Up;
-    const float dot_abs = std::abs(glm::dot(forward, glm::normalize(up_dir)));
-    if (dot_abs > kColinearCosine) {
-      // Pick an alternate up that is guaranteed to be non-colinear.
-      up_dir = (std::abs(forward.z) > kVerticalForwardZ) ? space::move::Back
-                                                         : space::move::Up;
-    }
-
-    const auto right_raw = glm::cross(forward, up_dir);
-    const float right_len2 = glm::dot(right_raw, right_raw);
-    if (right_len2 <= kDegenerateLengthSquared) {
-      return { 1.0F, 0.0F, 0.0F, 0.0F };
-    }
-
-    const auto right = right_raw / std::sqrt(right_len2);
-    const auto up = glm::cross(right, forward);
-
-    glm::mat4 look_matrix(1.0F);
-    // NOLINTBEGIN(*-pro-bounds-avoid-unchecked-container-access)
-    look_matrix[0] = glm::vec4(right, 0.0F);
-    look_matrix[1] = glm::vec4(up, 0.0F);
-    look_matrix[2] = glm::vec4(-forward, 0.0F);
-    // NOLINTEND(*-pro-bounds-avoid-unchecked-container-access)
-
-    return glm::quat_cast(look_matrix);
-  }
 
   auto IsNearlyEqual(const float lhs, const float rhs) noexcept -> bool
   {
@@ -2348,7 +2305,8 @@ void SceneLoaderService::EnsureCameraAndViewport(scene::Scene& scene)
     constexpr glm::vec3 cam_target(0.0F, 0.0F, 0.0F);
     auto tf = active_camera_.GetTransform();
     tf.SetLocalPosition(cam_pos);
-    tf.SetLocalRotation(MakeLookRotationFromPosition(cam_pos, cam_target));
+    tf.SetLocalRotation(
+      transforms::LookRotation({ .forward = cam_target - cam_pos }));
     const auto handle = active_camera_.GetHandle();
     const bool already_tracked = std::ranges::any_of(
       runtime_nodes_, [&](const scene::SceneNode& node) -> bool {

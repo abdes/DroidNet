@@ -729,7 +729,7 @@ auto CameraVm::SetOrthographic(const bool orthographic) -> void
     const auto position
       = transform.GetLocalPosition().value_or(glm::vec3(0.0F));
     std::ignore = transform.SetLocalPosition(
-      position - (rotation * space::look::Forward) * (0.5F * far_plane));
+      position - (rotation * space::node::Forward) * (0.5F * far_plane));
     if (camera_rig_) {
       camera_rig_->SyncFromActiveCamera();
     }

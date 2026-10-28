@@ -27,8 +27,10 @@
 #include <Oxygen/Config/RendererConfig.h>
 #include <Oxygen/Console/Console.h>
 #include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/EngineTag.h>
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Core/Transforms/NodeFrame.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Graphics/Common/CommandRecording.h>
@@ -744,6 +746,8 @@ NOLINT_TEST_F(
   };
   lens->SetViewport(view.viewport);
   ASSERT_TRUE(camera.AttachCamera(std::move(lens)));
+  camera.GetTransform().SetLocalRotation(transforms::LookRotation(
+    { .forward = space::move::Down, .up = space::move::Back }));
   auto color = CreateRegisteredTexture({
     .width = 4U,
     .height = 4U,

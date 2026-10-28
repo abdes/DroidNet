@@ -53,10 +53,10 @@ namespace {
     const Scene& scene_ref, const SceneNodeImpl& node) -> glm::vec3
   {
     const auto direction
-      = ResolveWorldRotation(scene_ref, node) * space::move::Forward;
+      = ResolveWorldRotation(scene_ref, node) * space::node::Forward;
     const auto length_sq = glm::dot(direction, direction);
     if (length_sq <= math::EpsilonDirection) {
-      return space::move::Forward;
+      return space::node::Forward;
     }
     return glm::normalize(direction);
   }
@@ -90,7 +90,7 @@ namespace {
       const auto emitted_ray_direction_ws
         = ComputeEmittedRayDirectionWs(scene, node);
       resolved.emplace_back(visited.handle, node, light,
-        emitted_ray_direction_ws, -emitted_ray_direction_ws, traversal_index++);
+        emitted_ray_direction_ws, traversal_index++);
       return VisitResult::kContinue;
     };
 
@@ -104,13 +104,11 @@ namespace {
 ResolvedDirectionalLightView::ResolvedDirectionalLightView(
   const scene::NodeHandle node_handle, const SceneNodeImpl& node,
   const DirectionalLight& light, const glm::vec3& emitted_ray_direction_ws,
-  const glm::vec3& direction_to_light_ws,
   const std::uint32_t traversal_index) noexcept
   : node_handle_(node_handle)
   , node_(std::cref(node))
   , light_(std::cref(light))
   , emitted_ray_direction_ws_(emitted_ray_direction_ws)
-  , direction_to_light_ws_(direction_to_light_ws)
   , traversal_index_(traversal_index)
 {
 }
@@ -194,7 +192,7 @@ auto DirectionalLightResolver::ResolveDirectionalLights() const
   -> std::span<const ResolvedDirectionalLightView>
 {
   Validate();
-  return std::span<const ResolvedDirectionalLightView>(directional_lights_);
+  return { directional_lights_ };
 }
 
 auto DirectionalLightResolver::OnLightChanged(
@@ -253,8 +251,9 @@ auto DirectionalLightResolver::ResolveCanonicalAtmosphereLights() const
 
   for (const auto& entry : directional_lights_) {
     const auto slot = entry.Light().GetAtmosphereLightSlot();
-    if (slot == AtmosphereLightSlot::kNone)
+    if (slot == AtmosphereLightSlot::kNone) {
       continue;
+    }
     const auto index = slot == AtmosphereLightSlot::kPrimary ? 0U : 1U;
     result.slots[index] = entry;
     result.explicit_slot_claims[index] = true;
@@ -273,12 +272,14 @@ auto DirectionalLightResolver::ValidationErrorMessage() const
   const auto& scene = std::as_const(*scene_);
   static_cast<void>(scene.Traverse().Traverse(
     [&](const ConstVisitedNode& visited, bool) -> VisitResult {
-      if (!visited.node_impl->HasComponent<DirectionalLight>())
+      if (!visited.node_impl->HasComponent<DirectionalLight>()) {
         return VisitResult::kContinue;
+      }
       const auto slot = visited.node_impl->GetComponent<DirectionalLight>()
                           .GetAtmosphereLightSlot();
-      if (slot == AtmosphereLightSlot::kNone)
+      if (slot == AtmosphereLightSlot::kNone) {
         return VisitResult::kContinue;
+      }
       if (slot > AtmosphereLightSlot::kSecondary) {
         error = "Unknown atmosphere light slot";
         return VisitResult::kStop;
@@ -293,8 +294,9 @@ auto DirectionalLightResolver::ValidationErrorMessage() const
       owners[index] = name.empty() ? "<unnamed>" : name;
       return VisitResult::kContinue;
     }));
-  if (error)
+  if (error) {
     return error;
+  }
 
   return std::nullopt;
 }

@@ -15,6 +15,7 @@
 #include <Oxygen/Composition/Component.h>
 #include <Oxygen/Composition/Typed.h>
 #include <Oxygen/Core/Constants.h>
+#include <Oxygen/Core/Transforms/NodeFrame.h>
 #include <Oxygen/Core/Types/CameraAspectMode.h>
 #include <Oxygen/Core/Types/ViewHelpers.h>
 #include <Oxygen/Core/Types/ViewPort.h>
@@ -84,7 +85,8 @@ auto OrthographicCamera::ScreenToWorld(
   const float x = (2.0F * (p.x - viewport.x) / viewport.z) - 1.0F;
   const float y = 1.0F - (2.0F * (p.y - viewport.y) / viewport.w);
   const glm::vec4 ndc(x, y, 1.0F, 1.0F);
-  const glm::mat4 view = glm::inverse(transform_->GetWorldMatrix());
+  const glm::mat4 view = transforms::NodeViewMatrix(
+    transform_->GetWorldPosition(), transform_->GetWorldRotation());
   const Mat4 proj = ProjectionMatrix();
   const glm::mat4 inv_vp = glm::inverse(proj * view);
   const glm::vec4 world = inv_vp * ndc;
@@ -105,7 +107,8 @@ auto OrthographicCamera::WorldToScreen(
 {
   DCHECK_NOTNULL_F(transform_);
   const glm::vec4 world(p.x, p.y, 0.0F, 1.0F);
-  const glm::mat4 view = glm::inverse(transform_->GetWorldMatrix());
+  const glm::mat4 view = transforms::NodeViewMatrix(
+    transform_->GetWorldPosition(), transform_->GetWorldRotation());
   const Mat4 proj = ProjectionMatrix();
   const glm::vec4 clip = proj * view * world;
   const float x = (((clip.x + 1.0F) * 0.5F) * viewport.z) + viewport.x;

@@ -181,7 +181,7 @@ public:
     Assert::IsTrue(IsNear(view.GetFocusPoint(), center, 1.0e-4F));
     const auto position
       = transform.GetLocalPosition().value_or(glm::vec3 { 0.0F });
-    const glm::vec3 forward = rotation * oxygen::space::look::Forward;
+    const glm::vec3 forward = rotation * oxygen::space::node::Forward;
     const glm::vec3 to_center = center - position;
     // Same orientation, looking straight at the centre.
     Assert::IsTrue(IsNear(glm::normalize(to_center), forward, 1.0e-4F));

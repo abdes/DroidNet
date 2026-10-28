@@ -582,12 +582,13 @@ def build() -> SceneBuilder:
 
 
 def look_rotation(forward, up=(0.0, 0.0, 1.0)):
-    """Quaternion (x, y, z, w) turning view -Z to `forward` with +Y up."""
+    """Quaternion (x, y, z, w) facing a node's forward (local -Y) to `forward`
+    with its up (local +Z) toward `up`."""
     f = _normalize(forward)
     r = _normalize(_cross(f, up))
     u = _cross(r, f)
-    # Columns: right, up, -forward.
-    m = [[r[0], u[0], -f[0]], [r[1], u[1], -f[1]], [r[2], u[2], -f[2]]]
+    # Columns: the images of local +X (-right), +Y (-forward) and +Z (up).
+    m = [[-r[0], -f[0], u[0]], [-r[1], -f[1], u[1]], [-r[2], -f[2], u[2]]]
     return _matrix_to_quaternion(m)
 
 

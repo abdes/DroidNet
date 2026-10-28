@@ -8,7 +8,6 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
-#include <iterator>
 #include <memory>
 #include <string>
 #include <utility>
@@ -129,8 +128,8 @@ auto LightScene::CreateReferenceCamera(scene::Scene& scene) -> scene::SceneNode
   auto transform = camera.GetTransform();
   CHECK_F(transform.SetLocalPosition(Vec3 { 0.0F, 6.0F, 1.0F }),
     "Could not position reference camera");
-  CHECK_F(transform.SetLocalRotation(
-            glm::quatLookAtRH(space::move::Forward, space::move::Up)),
+  // An unrotated camera faces the node forward, -Y, toward the objects.
+  CHECK_F(transform.SetLocalRotation(Quat { 1.0F, 0.0F, 0.0F, 0.0F }),
     "Could not orient reference camera");
   FitReferenceCamera(camera, 16.0F / 9.0F);
   return camera;

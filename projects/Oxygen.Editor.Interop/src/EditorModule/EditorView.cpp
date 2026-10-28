@@ -20,6 +20,7 @@
 #include "EditorModule/EditorCameraPlacement.h"
 
 #include <Oxygen/Core/Constants.h>
+#include <Oxygen/Core/Transforms/NodeFrame.h>
 #include <Oxygen/Scene/Camera/Orthographic.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Scene.h>
@@ -79,25 +80,6 @@ struct SceneFrameBounds {
   return std::isfinite(value) && value > near_plane
     ? value
     : std::max(near_plane + 1.0F, kDefaultPerspectiveFarPlane);
-}
-
-[[nodiscard]] auto LookRotationFromPositionToTarget(
-  const glm::vec3& position,
-  const glm::vec3& target_position,
-  const glm::vec3& up_direction) noexcept -> glm::quat {
-  const glm::vec3 forward =
-    NormalizeSafe(target_position - position, glm::vec3(0.0f, 0.0f, -1.0f));
-  const glm::vec3 right =
-    NormalizeSafe(glm::cross(forward, up_direction), glm::vec3(1.0f, 0.0f, 0.0f));
-  const glm::vec3 up = glm::cross(right, forward);
-
-  // Build a rotation matrix with -Z as forward.
-  glm::mat4 look_matrix(1.0f);
-  look_matrix[0] = glm::vec4(right, 0.0f);
-  look_matrix[1] = glm::vec4(up, 0.0f);
-  look_matrix[2] = glm::vec4(-forward, 0.0f);
-
-  return glm::quat_cast(look_matrix);
 }
 
 [[nodiscard]] auto IsUsableSphere(const Vec4& sphere) noexcept -> bool {
@@ -197,14 +179,15 @@ auto ApplyPerspectiveProjectionSettings(scene::PerspectiveCamera& camera,
   case CameraViewPreset::kRight:
     return oxygen::space::move::Right;
   case CameraViewPreset::kFront:
-    // "Front" view: camera is in +Y looking toward -Y.
-    return oxygen::space::move::Back;
-  case CameraViewPreset::kBack:
-    // "Back" view: camera is in -Y looking toward +Y.
+    // "Front" view: an asset's front faces -Y, so the camera is in -Y
+    // looking toward +Y, with +X on the right as in the top view.
     return oxygen::space::move::Forward;
+  case CameraViewPreset::kBack:
+    // "Back" view: camera is in +Y looking toward -Y.
+    return oxygen::space::move::Back;
   case CameraViewPreset::kPerspective:
   default:
-    return oxygen::space::move::Back;
+    return oxygen::space::move::Forward;
   }
 }
 
@@ -349,19 +332,8 @@ auto EditorView::OnPreRender(vortex::Renderer &renderer) -> oxygen::co::Co<> {
     const glm::vec3 position =
       transform.GetLocalPosition().value_or(glm::vec3(0.0f, 0.0f, 0.0f));
 
-    const glm::vec3 forward =
-      NormalizeSafe(focus_point_ - position, oxygen::space::look::Forward);
-    const glm::vec3 up_dir = oxygen::space::move::Up;
-    const glm::vec3 right =
-      NormalizeSafe(glm::cross(forward, up_dir), oxygen::space::look::Right);
-    const glm::vec3 up = glm::cross(right, forward);
-
-    glm::mat4 look_matrix(1.0f);
-    look_matrix[0] = glm::vec4(right, 0.0f);
-    look_matrix[1] = glm::vec4(up, 0.0f);
-    look_matrix[2] = glm::vec4(-forward, 0.0f);
-
-    (void)transform.SetLocalRotation(glm::quat_cast(look_matrix));
+    (void)transform.SetLocalRotation(
+      oxygen::transforms::LookRotation({ .forward = focus_point_ - position }));
     initial_orientation_set_ = true;
   }
 
@@ -501,8 +473,8 @@ void EditorView::CreateCamera(scene::Scene &camera_scene) {
   const glm::vec3 position = focus_point_ + view_direction * default_distance;
   auto transform = camera_node_.GetTransform();
   (void)transform.SetLocalPosition(position);
-  (void)transform.SetLocalRotation(LookRotationFromPositionToTarget(
-    position, focus_point_, oxygen::space::move::Up));
+  (void)transform.SetLocalRotation(
+    oxygen::transforms::LookRotation({ .forward = focus_point_ - position }));
   initial_orientation_set_ = true;
 
   LOG_F(INFO,
@@ -575,8 +547,8 @@ void EditorView::UpdateCameraForFrame() {
           const glm::vec3 position = focus_point_ + view_direction * camera_distance;
           auto transform = camera_node_.GetTransform();
           (void)transform.SetLocalPosition(position);
-          (void)transform.SetLocalRotation(LookRotationFromPositionToTarget(
-            position, focus_point_, oxygen::space::move::Up));
+          (void)transform.SetLocalRotation(oxygen::transforms::LookRotation(
+            { .forward = focus_point_ - position }));
 
           ortho_half_height_ = std::max(1.0F, scene_radius * kFrameMargin);
           initial_orientation_set_ = true;
@@ -697,7 +669,8 @@ void EditorView::SetCameraViewPreset(CameraViewPreset preset) {
   const glm::vec3 new_position = focus + view_dir * radius;
 
   const glm::vec3 up = ResolvePresetUp(preset);
-  const glm::quat rot = LookRotationFromPositionToTarget(new_position, focus, up);
+  const glm::quat rot = oxygen::transforms::LookRotation(
+    { .forward = focus - new_position, .up = up });
 
   (void)transform.SetLocalPosition(new_position);
   (void)transform.SetLocalRotation(rot);
@@ -781,7 +754,7 @@ auto EditorView::BeginFraming(const glm::vec3& center, const float radius)
   const glm::quat rotation = transform.GetLocalRotation().value_or(
     glm::quat { 1.0F, 0.0F, 0.0F, 0.0F });
   const glm::vec3 forward = NormalizeSafe(
-    rotation * oxygen::space::look::Forward, oxygen::space::look::Forward);
+    rotation * oxygen::space::node::Forward, oxygen::space::node::Forward);
   const float aspect
     = (width_ > 0.0F && height_ > 0.0F) ? (width_ / height_) : 1.0F;
   const float fitted = std::max(radius, kMinRadius) * kMargin;
@@ -984,7 +957,7 @@ void EditorView::SeatProxyOnSceneCamera() {
   // Orbit around the point the camera looks at on the ground, or ahead.
   constexpr float kDefaultFocusDistance = 10.0F;
   constexpr float kMaxFocusDistance = 1000.0F;
-  const glm::vec3 forward = rotation * oxygen::space::look::Forward;
+  const glm::vec3 forward = rotation * oxygen::space::node::Forward;
   float distance = kDefaultFocusDistance;
   if (forward.z < -1.0e-3F) {
     const float ground = -position.z / forward.z;

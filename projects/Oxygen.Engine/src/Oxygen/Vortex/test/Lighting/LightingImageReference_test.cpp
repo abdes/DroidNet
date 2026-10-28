@@ -31,10 +31,8 @@
 #include <glm/matrix.hpp>
 #include <glm/trigonometric.hpp>
 
-#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/EngineModule.h>
 #include <Oxygen/Core/PhaseRegistry.h>
-#include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Scene/Types/Flags.h>
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/quaternion.hpp>
@@ -46,6 +44,7 @@
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/EngineTag.h>
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Core/Transforms/NodeFrame.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Data/GeometryAsset.h>
@@ -192,9 +191,14 @@ namespace {
           SCOPED_TRACE(variant);
           camera.GetTransform().SetLocalPosition(
             glm::vec3 { variant == 1U ? 0.3F : 0.0F, 0, 0 });
+          // Down with +Y at the top; variant 2 yaws it 0.2 rad about +Y.
           camera.GetTransform().SetLocalRotation(variant == 2U
-              ? glm::quat { 0.99500417F, 0, 0.09983342F, 0 }
-              : glm::quat { 1, 0, 0, 0 });
+              ? transforms::LookRotation({
+                  .forward = glm::vec3 { -0.19866933F, 0.0F, -0.98006658F },
+                  .up = space::move::Back,
+                })
+              : transforms::LookRotation(
+                  { .forward = space::move::Down, .up = space::move::Back }));
           if (variant == 3U) {
             auto lens = std::make_unique<scene::PerspectiveCamera>();
             lens->SetViewport(view.viewport);
@@ -713,7 +717,9 @@ namespace {
         *inspection->records, { 0U, count * sizeof(ShadowCascadeBinding) });
       const auto mask
         = GetReadbackManager()->ReadBufferNow(*inspection->receiver_mask,
-          { 0U, count * kMaskBlock * sizeof(std::uint32_t) });
+          { 0U,
+            static_cast<std::size_t>(count) * kMaskBlock
+              * sizeof(std::uint32_t) });
       if (!records.has_value() || !mask.has_value()) {
         return std::nullopt;
       }
@@ -740,8 +746,9 @@ namespace {
       const auto tile
         = glm::min(glm::uvec2 { uv * static_cast<float>(kMaskResolution) },
           glm::uvec2 { kMaskResolution - 1U });
-      return fit.mask.at((cascade * kMaskBlock) + kMaskTiles
-        + (tile.y * kMaskResolution) + tile.x);
+      return fit.mask.at((static_cast<std::size_t>(cascade) * kMaskBlock)
+        + kMaskTiles + (static_cast<std::size_t>(tile.y) * kMaskResolution)
+        + tile.x);
     }
 
     //! Whether a receiver tile lies under the light-space footprint of the box
@@ -777,8 +784,9 @@ namespace {
       const auto tile_hi = to_tile(uv_max);
       for (auto y = tile_lo.y; y <= tile_hi.y; ++y) {
         for (auto x = tile_lo.x; x <= tile_hi.x; ++x) {
-          if (fit.mask.at(
-                (cascade * kMaskBlock) + kMaskTiles + (y * kMaskResolution) + x)
+          if (fit.mask.at((static_cast<std::size_t>(cascade) * kMaskBlock)
+                + kMaskTiles + (static_cast<std::size_t>(y) * kMaskResolution)
+                + x)
             != 0U) {
             return true;
           }
@@ -861,7 +869,7 @@ namespace {
     // Same height, well beyond the view's half-width: its shadow, shifted
     // toward -x by the 60 degree light, still lands outside the view.
     auto lens = camera.GetCameraAs<scene::PerspectiveCamera>();
-    ASSERT_TRUE(lens.has_value());
+    ASSERT_HAS_VALUE(lens);
     const auto half_width = std::tan(0.5F * lens->get().GetFieldOfView());
     const auto near_position = blocker.GetTransform().GetLocalPosition();
     ASSERT_HAS_VALUE(near_position);

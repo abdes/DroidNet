@@ -28,6 +28,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Core/Constants.h>
+#include <Oxygen/Core/Transforms/NodeFrame.h>
 #include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Scene/Camera/Orthographic.h>
 #include <Oxygen/Scene/Environment/PostProcessVolume.h>
@@ -187,8 +188,8 @@ auto ReferenceSettings() -> LightBenchSettings
   for (std::size_t i = 0; i < objects.size(); ++i) {
     result.objects.at(i) = *objects.at(i);
   }
-  result.camera_rotation
-    = glm::quatLookAtRH(space::move::Forward, space::move::Up);
+  // An unrotated camera faces the node forward, -Y, toward the objects.
+  result.camera_rotation = Quat { 1.0F, 0.0F, 0.0F, 0.0F };
   result.exposure.mode = engine::ExposureMode::kManual;
   result.exposure.manual_ev = reference::kExposureEv;
   result.exposure.key = reference::kExposureKey;
@@ -325,9 +326,10 @@ auto PresetSettings(LightBenchPreset preset) -> LightBenchSettings
   s.directional.direction_ws = { -.3F, -1.0F, -.5F };
   s.directional.casts_shadows = true;
   s.camera_position = { 4.0F, 7.0F, 4.5F };
-  s.camera_rotation = glm::quatLookAtRH(
-    glm::normalize(Vec3 { 0.0F, 1.0F, .5F } - s.camera_position),
-    space::move::Up);
+  s.camera_rotation = transforms::LookRotation({
+    .forward = glm::normalize(Vec3 { 0.0F, 1.0F, .5F } - s.camera_position),
+    .up = space::move::Up,
+  });
   s.exposure.manual_ev = 8.0F;
   s.tone_mapper = engine::ToneMapper::kAcesFitted;
   if (preset == LightBenchPreset::kMaterialLighting) {

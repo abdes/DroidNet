@@ -202,7 +202,7 @@
         {
           "name": "Player",
           "transform": {
-            "position": [0, 1, 0],
+            "position": [0, 0, 1],
             "rotation": [0, 0, 0],
             "scale": [1, 1, 1]
           },
@@ -220,14 +220,14 @@
             {
               "name": "WeaponMount",
               "transform": {
-                "position": [0.5, 0.8, 0],
-                "rotation": [0, 90, 0]
+                "position": [0.5, 0, 0.8],
+                "rotation": [0, 0, 90]
               },
               "children": [
                 {
                   "name": "Rifle",
                   "transform": {
-                    "position": [0, 0, 0.3]
+                    "position": [0, -0.3, 0]
                   }
                 }
               ]
@@ -235,7 +235,7 @@
             {
               "name": "Camera",
               "transform": {
-                "position": [0, 1.7, 0]
+                "position": [0, 0, 1.7]
               }
             }
           ]
@@ -255,15 +255,15 @@
               "name": "Ground",
               "transform": {
                 "position": [0, 0, 0],
-                "scale": [10, 1, 10]
+                "scale": [10, 10, 1]
               }
             },
             {
               "name": "Building",
               "transform": {
-                "position": [5, 0, 5],
-                "rotation": [0, 45, 0],
-                "scale": [2, 3, 2]
+                "position": [5, -5, 0],
+                "rotation": [0, 0, 45],
+                "scale": [2, 2, 3]
               }
             }
           ]

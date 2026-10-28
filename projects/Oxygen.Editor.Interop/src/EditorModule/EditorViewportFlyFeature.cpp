@@ -21,6 +21,7 @@
 #include <glm/mat4x4.hpp>
 
 #include <Oxygen/Core/Constants.h>
+#include <Oxygen/Core/Transforms/NodeFrame.h>
 #include <Oxygen/Scene/Camera/Orthographic.h>
 #include <Oxygen/Scene/Types/NodeHandle.h>
 
@@ -67,17 +68,15 @@ namespace oxygen::interop::module {
       glm::vec3 right_ws = glm::cross(forward_ws, world_up);
       const float right_len2 = glm::dot(right_ws, right_ws);
       if (right_len2 <= 1e-8f) {
-        right_ws = glm::vec3(std::cos(yaw_radians), std::sin(yaw_radians), 0.0f);
+        // forward x up at this yaw, so the poles keep the screen's right.
+        right_ws =
+          glm::vec3(-std::cos(yaw_radians), -std::sin(yaw_radians), 0.0f);
       } else {
         right_ws /= std::sqrt(right_len2);
       }
 
       const glm::vec3 up_ws = glm::normalize(glm::cross(right_ws, forward_ws));
-      glm::mat4 view_basis(1.0f);
-      view_basis[0] = glm::vec4(right_ws, 0.0f);
-      view_basis[1] = glm::vec4(up_ws, 0.0f);
-      view_basis[2] = glm::vec4(-glm::normalize(forward_ws), 0.0f);
-      return glm::normalize(glm::quat_cast(view_basis));
+      return oxygen::transforms::LookRotation({ .forward = forward_ws, .up = up_ws });
     }
 
     [[nodiscard]] auto GetOrInitFlyState(
@@ -93,8 +92,8 @@ namespace oxygen::interop::module {
         transform.GetLocalRotation().value_or(
           glm::quat{ 1.0f, 0.0f, 0.0f, 0.0f });
       const glm::vec3 current_forward =
-        viewport::NormalizeSafe(current_rot * oxygen::space::look::Forward,
-          oxygen::space::look::Forward);
+        viewport::NormalizeSafe(current_rot * oxygen::space::node::Forward,
+          oxygen::space::node::Forward);
       state.pitch_radians = ClampPitchRadians(params,
         std::asin(std::clamp(current_forward.z, -1.0f, 1.0f)));
       state.yaw_radians = std::atan2(current_forward.x, -current_forward.y);
@@ -286,8 +285,8 @@ namespace oxygen::interop::module {
         : params.base_speed_units_per_second;
       const float speed = base_speed
         * (held(shift_action_) ? params.fast_multiplier : 1.0f);
-      const glm::vec3 fly_right = applied_rot * glm::vec3(1.0f, 0.0f, 0.0f);
-      const glm::vec3 fly_forward = applied_rot * glm::vec3(0.0f, 0.0f, -1.0f);
+      const glm::vec3 fly_right = applied_rot * oxygen::space::node::Right;
+      const glm::vec3 fly_forward = applied_rot * oxygen::space::node::Forward;
       next_position += (fly_forward * forward_axis + fly_right * right_axis
                          + params.up * up_axis)
         * (speed * dt_seconds);
@@ -297,7 +296,7 @@ namespace oxygen::interop::module {
     // Keep the orbit pivot in front of the camera at its kept distance, so a
     // later orbit turns around what the camera now looks at.
     focus_point = next_position
-      + (applied_rot * glm::vec3(0.0f, 0.0f, -1.0f)) * focus_distance;
+      + (applied_rot * oxygen::space::node::Forward) * focus_distance;
   }
 
 } // namespace oxygen::interop::module

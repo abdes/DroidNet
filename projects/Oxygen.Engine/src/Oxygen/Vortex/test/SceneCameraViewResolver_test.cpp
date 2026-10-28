@@ -9,7 +9,9 @@
 #include <glm/ext/quaternion_float.hpp>
 #include <glm/gtc/matrix_access.hpp>
 #include <glm/trigonometric.hpp>
+#include <glm/vec4.hpp>
 
+#include <Oxygen/Core/Transforms/NodeFrame.h>
 #include <Oxygen/Core/Types/CameraAspectMode.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Core/Types/ViewPort.h>
@@ -317,6 +319,59 @@ TEST(SceneCameraViewResolverTest, RootCameraCanResolveWithoutSceneUpdate)
   EXPECT_FLOAT_EQ(resolved.Viewport().width, 1280.0F);
   EXPECT_FLOAT_EQ(resolved.Viewport().height, 720.0F);
   EXPECT_GT(resolved.FocalLengthPixels(), 0.0F);
+}
+
+//! An unrotated camera looks along world -Y with world +Z up and -X right.
+TEST(SceneCameraViewResolverTest, UnrotatedCameraLooksAlongWorldMinusY)
+{
+  auto scene = std::make_shared<Scene>("resolver-node-frame", 4U);
+  auto camera_node = scene->CreateNode("camera");
+  ASSERT_TRUE(camera_node.AttachCamera(std::make_unique<PerspectiveCamera>()));
+  camera_node.GetTransform().SetLocalPosition(
+    oxygen::Vec3 { 2.0F, 3.0F, 4.0F });
+  scene->Update();
+
+  const auto resolver = SceneCameraViewResolver(
+    [camera_node](const ViewId&) -> SceneNode { return camera_node; });
+  const auto view = resolver(ViewId { 1U }).ViewMatrix();
+
+  const auto forward = view * glm::vec4(0.0F, -1.0F, 0.0F, 0.0F);
+  const auto up = view * glm::vec4(0.0F, 0.0F, 1.0F, 0.0F);
+  const auto right = view * glm::vec4(-1.0F, 0.0F, 0.0F, 0.0F);
+  EXPECT_NEAR(forward.z, -1.0F, 1.0e-5F);
+  EXPECT_NEAR(forward.x, 0.0F, 1.0e-5F);
+  EXPECT_NEAR(forward.y, 0.0F, 1.0e-5F);
+  EXPECT_NEAR(up.y, 1.0F, 1.0e-5F);
+  EXPECT_NEAR(up.x, 0.0F, 1.0e-5F);
+  EXPECT_NEAR(up.z, 0.0F, 1.0e-5F);
+  EXPECT_NEAR(right.x, 1.0F, 1.0e-5F);
+  EXPECT_NEAR(right.y, 0.0F, 1.0e-5F);
+  EXPECT_NEAR(right.z, 0.0F, 1.0e-5F);
+
+  const auto at_eye = view * glm::vec4(2.0F, 3.0F, 4.0F, 1.0F);
+  EXPECT_NEAR(at_eye.x, 0.0F, 1.0e-5F);
+  EXPECT_NEAR(at_eye.y, 0.0F, 1.0e-5F);
+  EXPECT_NEAR(at_eye.z, 0.0F, 1.0e-5F);
+}
+
+//! A LookRotation camera faces the requested world direction.
+TEST(SceneCameraViewResolverTest, LookRotationCameraFacesRequestedDirection)
+{
+  auto scene = std::make_shared<Scene>("resolver-look-rotation", 4U);
+  auto camera_node = scene->CreateNode("camera");
+  ASSERT_TRUE(camera_node.AttachCamera(std::make_unique<PerspectiveCamera>()));
+  camera_node.GetTransform().SetLocalRotation(oxygen::transforms::LookRotation(
+    { .forward = oxygen::Vec3 { 1.0F, 0.0F, 0.0F } }));
+  scene->Update();
+
+  const auto resolver = SceneCameraViewResolver(
+    [camera_node](const ViewId&) -> SceneNode { return camera_node; });
+  const auto view = resolver(ViewId { 1U }).ViewMatrix();
+
+  const auto forward = view * glm::vec4(1.0F, 0.0F, 0.0F, 0.0F);
+  const auto up = view * glm::vec4(0.0F, 0.0F, 1.0F, 0.0F);
+  EXPECT_NEAR(forward.z, -1.0F, 1.0e-5F);
+  EXPECT_NEAR(up.y, 1.0F, 1.0e-5F);
 }
 
 } // namespace

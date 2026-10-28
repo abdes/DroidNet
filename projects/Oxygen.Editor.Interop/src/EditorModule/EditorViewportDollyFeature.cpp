@@ -19,6 +19,7 @@
 #include <limits>
 
 #include <Oxygen/Core/Constants.h>
+#include <Oxygen/Core/Transforms/NodeFrame.h>
 #include <Oxygen/Scene/Camera/Orthographic.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Types/NodeHandle.h>
@@ -146,14 +147,14 @@ namespace oxygen::interop::module {
       (void)transform.SetLocalPosition(safe_position);
 
       const glm::quat look_rotation =
-        viewport::LookRotationFromPositionToTarget(safe_position, focus_point,
-          params.up);
+        oxygen::transforms::LookRotation(
+          { .forward = focus_point - safe_position, .up = params.up });
       (void)transform.SetLocalRotation(look_rotation);
       return;
     }
 
     const glm::vec3 fallback_dir = viewport::NormalizeSafe(
-      -(rotation * glm::vec3(0.0f, 0.0f, -1.0f)),
+      -(rotation * oxygen::space::node::Forward),
       glm::vec3(0.0f, 0.0f, 1.0f));
 
     const glm::vec3 offset = position - focus_point;
@@ -190,8 +191,7 @@ namespace oxygen::interop::module {
     (void)transform.SetLocalPosition(new_position);
 
     const glm::quat look_rotation =
-      viewport::LookRotationFromPositionToTarget(new_position, focus_point,
-        params.up);
+      oxygen::transforms::LookRotation({ .forward = focus_point - new_position, .up = params.up });
     (void)transform.SetLocalRotation(look_rotation);
   }
 

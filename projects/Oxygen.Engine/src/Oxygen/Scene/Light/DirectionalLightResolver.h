@@ -36,7 +36,6 @@ public:
   OXGN_SCN_API ResolvedDirectionalLightView(NodeHandle node_handle,
     const SceneNodeImpl& node, const DirectionalLight& light,
     const glm::vec3& emitted_ray_direction_ws,
-    const glm::vec3& direction_to_light_ws,
     std::uint32_t traversal_index) noexcept;
 
   [[nodiscard]] auto NodeHandle() const noexcept -> scene::NodeHandle
@@ -59,9 +58,10 @@ public:
     return emitted_ray_direction_ws_;
   }
 
+  //! The opposite of the emitted ray: from the receiver toward the light.
   [[nodiscard]] auto DirectionToLightWs() const noexcept -> glm::vec3
   {
-    return direction_to_light_ws_;
+    return -emitted_ray_direction_ws_;
   }
 
   [[nodiscard]] auto TraversalIndex() const noexcept -> std::uint32_t
@@ -74,7 +74,6 @@ private:
   std::reference_wrapper<const SceneNodeImpl> node_;
   std::reference_wrapper<const DirectionalLight> light_;
   glm::vec3 emitted_ray_direction_ws_ { 0.0F, -1.0F, 0.0F };
-  glm::vec3 direction_to_light_ws_ { 0.0F, 1.0F, 0.0F };
   std::uint32_t traversal_index_ { 0U };
 };
 

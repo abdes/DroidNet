@@ -558,9 +558,9 @@ void CameraControlPanel::DrawCameraPoseInfo()
   const glm::quat rotation = vm_->GetCameraRotation();
 
   // Basis vectors
-  const glm::vec3 forward = rotation * space::look::Forward;
-  const glm::vec3 up = rotation * space::look::Up;
-  const glm::vec3 right = rotation * space::look::Right;
+  const glm::vec3 forward = rotation * space::node::Forward;
+  const glm::vec3 up = rotation * space::node::Up;
+  const glm::vec3 right = rotation * space::node::Right;
 
   ImGui::PushID("CameraPoseTable");
   if (ImGui::BeginTable(

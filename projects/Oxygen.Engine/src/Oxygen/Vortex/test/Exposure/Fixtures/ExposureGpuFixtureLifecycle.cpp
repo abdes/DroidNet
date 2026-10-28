@@ -24,7 +24,9 @@
 #include <Oxygen/Commands/CommandRegistry.h>
 #include <Oxygen/Config/RendererConfig.h>
 #include <Oxygen/Console/Console.h>
+#include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Core/Transforms/NodeFrame.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/PostProcess.h>
@@ -82,6 +84,8 @@ auto ExposureGpuTest::CheckOffscreenSharing(const bool inside_frame) -> void
   };
   lens->SetViewport(view.viewport);
   ASSERT_TRUE(camera.AttachCamera(std::move(lens)));
+  camera.GetTransform().SetLocalRotation(transforms::LookRotation(
+    { .forward = space::move::Down, .up = space::move::Back }));
   scene->Update();
   auto frame = engine::FrameContext {};
   auto settings = scene::ExposureSettings {};
@@ -270,6 +274,8 @@ auto ExposureGpuTest::CheckSceneExposureRetry(
   };
   lens->SetViewport(view.viewport);
   ASSERT_TRUE(camera.AttachCamera(std::move(lens)));
+  camera.GetTransform().SetLocalRotation(transforms::LookRotation(
+    { .forward = space::move::Down, .up = space::move::Back }));
   scene->Update();
   auto output = CreateRegisteredTexture({
     .width = 4U,
@@ -519,6 +525,8 @@ auto ExposureGpuTest::CheckFogViewRetirement(
   };
   lens->SetViewport(view.viewport);
   ASSERT_TRUE(camera.AttachCamera(std::move(lens)));
+  camera.GetTransform().SetLocalRotation(transforms::LookRotation(
+    { .forward = space::move::Down, .up = space::move::Back }));
   scene->Update();
   auto color = CreateRegisteredTexture({
     .width = 4U,

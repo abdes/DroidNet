@@ -62,6 +62,7 @@
 #include <Oxygen/Cooker/test/Support/ModelImportTestBase.h>
 #include <Oxygen/Cooker/test/Support/TestPaths.h>
 #include <Oxygen/Cooker/test/Support/TestValues.h>
+#include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Data/AssetReferences.h>
@@ -641,18 +642,22 @@ NOLINT_TEST_F(ModelValuesTest, FbxCookPreservesUnitsHandednessAndValues)
                 scene.GetComponents<RenderableRecord>().front().node_index);
               EXPECT_NEAR(std::abs(shown.rotation[3]), 1.0F, 0.0001F);
             }
-            // Cameras and lights keep their frames: the FBX camera looks along
-            // its +X with +Y up, and the FBX light points down its -Y.
+            // Cameras and lights face their node's forward: the FBX camera
+            // looks along its +X with +Y up, and the FBX light points down its
+            // -Y.
             if (!reflected) {
               const auto camera_world
                 = glm::mat3(WorldTransform(scene, cameras.front().node_index));
-              ExpectVec3Near(glm::normalize(camera_world * glm::vec3(0, 0, -1)),
+              ExpectVec3Near(
+                glm::normalize(camera_world * oxygen::space::node::Forward),
                 { 1, 0, 0 });
               ExpectVec3Near(
-                glm::normalize(camera_world * glm::vec3(0, 1, 0)), { 0, 0, 1 });
+                glm::normalize(camera_world * oxygen::space::node::Up),
+                { 0, 0, 1 });
               const auto light_world
                 = glm::mat3(WorldTransform(scene, lights.front().node_index));
-              ExpectVec3Near(glm::normalize(light_world * glm::vec3(0, -1, 0)),
+              ExpectVec3Near(
+                glm::normalize(light_world * oxygen::space::node::Forward),
                 { 0, 0, -1 });
             }
             ExpectVec3Near({ lights.front().common.color_rgb[0],

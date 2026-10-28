@@ -31,6 +31,8 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Config/RendererConfig.h>
+#include <Oxygen/Core/Constants.h>
+#include <Oxygen/Core/Transforms/NodeFrame.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/PostProcess.h>
@@ -137,6 +139,8 @@ NOLINT_TEST_F(ExposureGpuTest,
   };
   lens->SetViewport(view.viewport);
   ASSERT_TRUE(camera.AttachCamera(std::move(lens)));
+  camera.GetTransform().SetLocalRotation(transforms::LookRotation(
+    { .forward = space::move::Down, .up = space::move::Back }));
   auto output = CreateRegisteredTexture({
     .width = 4U,
     .height = 4U,
@@ -993,6 +997,8 @@ NOLINT_TEST_F(
   view.viewport = { .width = 4.0F, .height = 4.0F };
   lens->SetViewport(view.viewport);
   ASSERT_TRUE(camera.AttachCamera(std::move(lens)));
+  camera.GetTransform().SetLocalRotation(transforms::LookRotation(
+    { .forward = space::move::Down, .up = space::move::Back }));
   auto output = CreateRegisteredTexture({
     .width = 4U,
     .height = 4U,

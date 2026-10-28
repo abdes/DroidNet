@@ -33,6 +33,7 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Core/Transforms/NodeFrame.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Data/AssetType.h>
@@ -214,7 +215,7 @@ auto MainModule::BuildWindowProperties() const -> platform::window::Properties
 // is not recoverable.
 // NOLINTNEXTLINE(bugprone-exception-escape)
 auto MainModule::OnAttachedImpl(
-  oxygen::observer_ptr<oxygen::IAsyncEngine> engine) noexcept
+  oxygen::observer_ptr<oxygen::IAsyncEngine> /*engine*/) noexcept
   -> std::unique_ptr<DemoShell>
 {
   DCHECK_NOTNULL_F(engine, "expecting a valid engine");
@@ -859,7 +860,10 @@ auto MainModule::StageScenarioScene() -> bool
     "Failed to attach PerspectiveCamera to MainCamera");
   auto tf = camera_node.GetTransform();
   tf.SetLocalPosition(Vec3 { 0.0F, -26.0F, 13.0F });
-  tf.SetLocalRotation(glm::quat(glm::radians(Vec3 { -24.0F, 0.0F, 0.0F })));
+  // Face the scene (+Y), pitched 24 degrees down.
+  const auto pitch = glm::radians(-24.0F);
+  tf.SetLocalRotation(transforms::LookRotation(
+    { .forward = Vec3 { 0.0F, std::cos(pitch), std::sin(pitch) } }));
   Stage().SetStagedMainCamera(std::move(camera_node));
   sun_light_node_ = EnsureDefaultSceneLighting(*staged_scene,
     DefaultSceneLightingDesc {

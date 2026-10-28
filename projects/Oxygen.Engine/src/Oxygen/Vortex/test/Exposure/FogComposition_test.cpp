@@ -26,8 +26,10 @@
 #include <Oxygen/Console/Console.h>
 #include <Oxygen/Core/Bindless/Generated.BindlessAbi.h>
 #include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/EngineTag.h>
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Core/Transforms/NodeFrame.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Core/Types/TextureType.h>
@@ -124,6 +126,8 @@ NOLINT_TEST_F(
   };
   lens->SetViewport(view.viewport);
   ASSERT_TRUE(camera.AttachCamera(std::move(lens)));
+  camera.GetTransform().SetLocalRotation(transforms::LookRotation(
+    { .forward = space::move::Down, .up = space::move::Back }));
   struct DomainOverride final : IViewExtension {
     observer_ptr<Renderer> renderer;
     explicit DomainOverride(Renderer& value)

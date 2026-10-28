@@ -25,6 +25,7 @@
 #include <glm/gtx/quaternion.hpp>
 
 #include <Oxygen/Core/Constants.h>
+#include <Oxygen/Core/Transforms/NodeFrame.h>
 #include <Oxygen/Scene/Camera/Orthographic.h>
 #include <Oxygen/Scene/SceneNode.h>
 
@@ -72,10 +73,8 @@ void FlyCameraController::Update(
   }
   const glm::vec3 up_ws = glm::normalize(glm::cross(right_ws, forward_ws));
 
-  const glm::mat4 view_basis(glm::vec4(right_ws, 0.0F), glm::vec4(up_ws, 0.0F),
-    glm::vec4(-glm::normalize(forward_ws), 0.0F),
-    glm::vec4(0.0F, 0.0F, 0.0F, 1.0F));
-  const glm::quat orientation = glm::normalize(glm::quat_cast(view_basis));
+  const glm::quat orientation
+    = transforms::LookRotation({ .forward = forward_ws, .up = up_ws });
 
   // 2. Handle Movement
   auto tf = node.GetTransform();
@@ -122,8 +121,8 @@ void FlyCameraController::Update(
       pos += world_up * move_dir.y * speed * dt;
     } else {
       // Movement is relative to full orientation (includes pitch).
-      const glm::vec3 forward = orientation * space::look::Forward;
-      const glm::vec3 right = orientation * space::look::Right;
+      const glm::vec3 forward = orientation * space::node::Forward;
+      const glm::vec3 right = orientation * space::node::Right;
 
       pos += right * move_dir.x * speed * dt;
       pos += forward * move_dir.z * speed * dt;
@@ -148,7 +147,7 @@ void FlyCameraController::SyncFromTransform(scene::SceneNode& node)
     = tf.GetLocalRotation().value_or(glm::quat(1.0F, 0.0F, 0.0F, 0.0F));
 
   // Extract forward vector from rotation
-  const glm::vec3 forward = rot * space::look::Forward;
+  const glm::vec3 forward = rot * space::node::Forward;
 
   // Calculate yaw and pitch from forward vector (Z-up, forward=-Y reference).
   // forward_xy = (sin(yaw), -cos(yaw)) and forward.z = sin(pitch)

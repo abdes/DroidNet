@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cmath>
 #include <cstddef>
 #include <filesystem>
 #include <memory>
@@ -28,6 +29,7 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Content/ResourceKey.h>
+#include <Oxygen/Core/Transforms/NodeFrame.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Data/MaterialAsset.h>
@@ -234,7 +236,10 @@ auto MainModule::StageScene(DemoShell& shell) -> void
   CHECK_F(attached, "Failed to attach PerspectiveCamera to MainCamera");
   auto tf = camera_node.GetTransform();
   tf.SetLocalPosition(Vec3 { 0.0F, -6.0F, 3.0F });
-  tf.SetLocalRotation(glm::quat(glm::radians(Vec3 { -20.0F, 0.0F, 0.0F })));
+  // Face the cube (+Y), pitched 20 degrees down.
+  const auto pitch = glm::radians(-20.0F);
+  tf.SetLocalRotation(transforms::LookRotation(
+    { .forward = Vec3 { 0.0F, std::cos(pitch), std::sin(pitch) } }));
   Stage().SetStagedMainCamera(std::move(camera_node));
 
   auto asset_loader = Host().engine->GetAssetLoader();

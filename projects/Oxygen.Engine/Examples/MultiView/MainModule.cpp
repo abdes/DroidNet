@@ -37,6 +37,7 @@
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/Time/SimulationClock.h>
+#include <Oxygen/Core/Transforms/NodeFrame.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Core/Types/TextureType.h>
@@ -448,16 +449,19 @@ auto MainModule::UpdateCameras(const platform::window::ExtentT& extent) -> void
       constexpr float kMainCamFar = 100.0F;
 
       main_camera_node_.GetTransform().SetLocalPosition(kMainCamPos);
+      // Look straight down, with +Y at the top of the image.
+      main_camera_node_.GetTransform().SetLocalRotation(
+        transforms::LookRotation(
+          { .forward = space::move::Down, .up = space::move::Back }));
       if (config_.exposure_proof != ExposureProofScenario::kNone) {
         const bool daylight
           = config_.exposure_proof == ExposureProofScenario::kConsumerVisual;
         const glm::vec3 position = daylight ? glm::vec3(4.0F, -7.0F, 1.7F)
                                             : glm::vec3(4.0F, -6.0F, 4.0F);
         const glm::vec3 target(-0.75F, 0.0F, daylight ? 0.5F : 0.0F);
-        const auto view_matrix = glm::lookAt(position, target, space::move::Up);
         main_camera_node_.GetTransform().SetLocalPosition(position);
         main_camera_node_.GetTransform().SetLocalRotation(
-          glm::quat_cast(glm::inverse(view_matrix)));
+          transforms::LookRotation({ .forward = target - position }));
       }
       cam.SetFieldOfView(glm::radians(kMainCamFov));
       cam.SetAspectRatio(extent.height > 0
@@ -499,10 +503,8 @@ auto MainModule::UpdateCameras(const platform::window::ExtentT& extent) -> void
       pip_camera_node_.GetTransform().SetLocalPosition(pip_position);
 
       const glm::vec3 target(-0.75F, 0.0F, daylight ? 0.5F : 0.0F);
-      constexpr glm::vec3 world_up = space::move::Up;
-      const glm::mat4 view_mat = glm::lookAt(pip_position, target, world_up);
-      const glm::quat pip_rot = glm::quat_cast(glm::inverse(view_mat));
-      pip_camera_node_.GetTransform().SetLocalRotation(pip_rot);
+      pip_camera_node_.GetTransform().SetLocalRotation(
+        transforms::LookRotation({ .forward = target - pip_position }));
 
       // PiP aspect ratio from its intended viewport
       const auto pip_layout = ComputePipLayout(extent, viewport_proof_resized_);
@@ -555,11 +557,9 @@ auto MainModule::UpdateCameras(const platform::window::ExtentT& extent) -> void
     }
 
     auto& cam = cam_opt->get();
-    const glm::mat4 view_mat
-      = glm::lookAt(pose.position, pose.target, space::move::Up);
     node.GetTransform().SetLocalPosition(pose.position);
     node.GetTransform().SetLocalRotation(
-      glm::quat_cast(glm::inverse(view_mat)));
+      transforms::LookRotation({ .forward = pose.target - pose.position }));
     cam.SetFieldOfView(glm::radians(pose.fov_degrees));
     cam.SetAspectRatio(aspect_ratio);
     cam.SetNearPlane(0.05F);
@@ -659,11 +659,9 @@ auto MainModule::UpdateCameras(const platform::window::ExtentT& extent) -> void
     }
 
     auto& cam = cam_opt->get();
-    const glm::mat4 view_mat
-      = glm::lookAt(pose.position, pose.target, space::move::Up);
     node.GetTransform().SetLocalPosition(pose.position);
     node.GetTransform().SetLocalRotation(
-      glm::quat_cast(glm::inverse(view_mat)));
+      transforms::LookRotation({ .forward = pose.target - pose.position }));
     cam.SetFieldOfView(glm::radians(pose.fov_degrees));
     cam.SetAspectRatio(
       static_cast<float>(size.width) / static_cast<float>(size.height));
@@ -1427,11 +1425,9 @@ auto MainModule::ApplyInteractionProof(engine::FrameContext& context,
       const auto position = *base
         + glm::vec3 { direction * .6F * std::sin(phase * .07F),
             .3F * std::sin(phase * .045F), 0 };
-      const auto matrix
-        = glm::lookAt(position, glm::vec3 { -.75F, 0, 0 }, space::move::Up);
       node.GetTransform().SetLocalPosition(position);
-      node.GetTransform().SetLocalRotation(
-        glm::quat_cast(glm::inverse(matrix)));
+      node.GetTransform().SetLocalRotation(transforms::LookRotation(
+        { .forward = glm::vec3 { -.75F, 0, 0 } - position }));
     };
     move_camera(main_camera_node_, 1);
     move_camera(pip_camera_node_, -1);

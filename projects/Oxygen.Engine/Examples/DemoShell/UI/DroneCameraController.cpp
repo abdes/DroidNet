@@ -28,6 +28,7 @@
 
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Time/Types.h>
+#include <Oxygen/Core/Transforms/NodeFrame.h>
 #include <Oxygen/Scene/SceneNode.h>
 
 namespace oxygen::examples::ui {
@@ -533,7 +534,7 @@ void DroneCameraController::Update(
   // Apply lateral noise (smoothed)
   auto right = glm::cross(tangent, space::move::Up);
   if (glm::dot(right, right) <= std::numeric_limits<float>::epsilon()) {
-    right = impl_->current_rot * space::move::Right;
+    right = impl_->current_rot * space::node::Right;
   } else {
     right = glm::normalize(right);
   }
@@ -594,7 +595,8 @@ void DroneCameraController::Update(
   final_fwd = ClampPitch(final_fwd);
 
   constexpr glm::vec3 base_up = space::move::Up;
-  glm::quat desired_rot = glm::quatLookAtRH(final_fwd, base_up);
+  glm::quat desired_rot
+    = transforms::LookRotation({ .forward = final_fwd, .up = base_up });
 
   // Bank with route curvature, not positional smoothing error.
   if (impl_->tangent_valid && impl_->bank_factor > 0.0) {

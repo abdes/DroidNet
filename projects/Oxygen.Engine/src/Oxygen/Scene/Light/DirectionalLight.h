@@ -28,7 +28,7 @@ enum class AtmosphereLightSlot : std::uint8_t {
 //! Directional light component for scene nodes.
 /*!
  Represents a light at infinity (e.g. sun/moon). The light direction is derived
- from the owning node's transform (see `oxygen::space::move::Forward` in the
+ from the owning node's transform (see `oxygen::space::node::Forward` in the
  lighting design).
 
  The component stores authored properties and caches a pointer to the owning

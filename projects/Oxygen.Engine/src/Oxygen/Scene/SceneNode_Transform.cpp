@@ -10,18 +10,16 @@
 #include <utility>
 
 #include <fmt/format.h>
-#include <glm/geometric.hpp>
-#include <glm/gtc/quaternion.hpp>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Core/Constants.h>
+#include <Oxygen/Core/Transforms/NodeFrame.h>
 #include <Oxygen/Scene/Detail/TransformComponent.h>
 #include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Scene/SceneNodeImpl.h>
 
 using oxygen::scene::SceneNode;
-using oxygen::scene::SceneNodeImpl;
 
 // =============================================================================
 // SceneNode::Transform Validator Implementations
@@ -458,11 +456,10 @@ auto SceneNode::Transform::GetWorldScale() const noexcept -> std::optional<Vec3>
 }
 
 /*!
- Rotates the node so that its forward direction (Oxygen local/world forward:
- `-Y`) points
- toward the target position. This sets the local rotation directly without
- attempting to compute inverse parent transforms, as world transform computation
- is deferred and handled by the Scene.
+ Rotates the node so that its forward (`space::node::Forward`) points toward
+ the target position and its up leans toward `up_direction`. This sets the local
+ rotation directly without attempting to compute inverse parent transforms, as
+ world transform computation is deferred and handled by the Scene.
 
  @param target_position World-space position to look at.
  @param up_direction World-space up direction (default:
@@ -481,20 +478,8 @@ auto SceneNode::Transform::LookAt(
       return false;
     }
 
-    // Compute look-at rotation in world space
-    const auto forward = glm::normalize(target_position - *world_pos);
-    const auto right = glm::normalize(glm::cross(forward, up_direction));
-    const auto up = glm::cross(right, forward);
-
-    // Create rotation matrix using Oxygen's world/object basis:
-    // Right = +X, Forward = -Y, Up = +Z.
-    Mat4 look_matrix(1.0F);
-    look_matrix[0] = glm::vec4(right, 0);
-    look_matrix[1] = glm::vec4(-forward, 0);
-    look_matrix[2] = glm::vec4(up, 0);
-
-    // Convert to quaternion and set as local rotation
-    const auto look_rotation = glm::quat_cast(look_matrix);
+    const auto look_rotation = transforms::LookRotation(
+      { .forward = target_position - *world_pos, .up = up_direction });
 
     const auto was_dirty = state.transform_component->IsDirty();
     state.transform_component->SetLocalRotation(look_rotation);

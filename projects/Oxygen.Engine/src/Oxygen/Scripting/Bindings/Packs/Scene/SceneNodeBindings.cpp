@@ -542,7 +542,7 @@ namespace {
       lua_pushboolean(state, 0);
       return 1;
     }
-    Vec3 up = oxygen::space::look::Up;
+    Vec3 up = oxygen::space::node::Up;
     if ((lua_gettop(state) >= 3) && (!TryCheckVec3(state, 3, up))) {
       lua_pushboolean(state, 0);
       return 1;

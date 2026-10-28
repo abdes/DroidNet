@@ -20,7 +20,8 @@ namespace oxygen::content::import::coord {
  - Z-up
  - Forward = -Y
 
- ufbx `front` axis is the forward direction.
+ ufbx's `front` axis is the direction an asset's front faces, toward a viewer
+ looking at it: Oxygen's forward, -Y.
 
  @return Coordinate axes for ufbx_load_opts::target_axes.
 */
@@ -34,20 +35,22 @@ namespace oxygen::content::import::coord {
   };
 }
 
-//! Returns ufbx coordinate axes matching Oxygen engine camera/view space.
+//! Returns ufbx coordinate axes matching the local frame of an Oxygen node.
 /*!
- Oxygen camera/view conventions (Oxygen/Core/Constants.h):
- - view forward = -Z, up = +Y, right = +X
+ Every Oxygen node, cameras and lights included, faces its local forward -Y
+ with up +Z and right -X (`space::node` in Oxygen/Core/Constants.h). ufbx's
+ `front` axis points opposite to where a camera looks or a light shines.
 
- @return Coordinate axes for ufbx_load_opts::target_camera_axes.
+ @return Coordinate axes for ufbx_load_opts::target_camera_axes and
+   ufbx_load_opts::target_light_axes.
 */
-[[nodiscard]] inline auto EngineCameraTargetAxes() noexcept
+[[nodiscard]] inline auto EngineNodeTargetAxes() noexcept
   -> ufbx_coordinate_axes
 {
   return ufbx_coordinate_axes {
-    .right = UFBX_COORDINATE_AXIS_POSITIVE_X,
-    .up = UFBX_COORDINATE_AXIS_POSITIVE_Y,
-    .front = UFBX_COORDINATE_AXIS_POSITIVE_Z,
+    .right = UFBX_COORDINATE_AXIS_NEGATIVE_X,
+    .up = UFBX_COORDINATE_AXIS_POSITIVE_Z,
+    .front = UFBX_COORDINATE_AXIS_POSITIVE_Y,
   };
 }
 

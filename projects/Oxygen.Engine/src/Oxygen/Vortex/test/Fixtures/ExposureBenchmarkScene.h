@@ -23,6 +23,7 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Constants.h>
+#include <Oxygen/Core/Transforms/NodeFrame.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/GeometryIndices.h>
@@ -532,14 +533,13 @@ struct MixedExposureBenchmarkScene {
     lens->SetFarPlane(100.0F);
     CHECK_F(node.AttachCamera(std::move(lens)));
     node.GetTransform().SetLocalPosition(position);
-    const auto view = glm::lookAt(position,
-      glm::vec3 {
-        -.75F,
-        0.0F,
-        0.0F,
-      },
-      space::move::Up);
-    node.GetTransform().SetLocalRotation(glm::quat_cast(glm::inverse(view)));
+    const auto target = glm::vec3 {
+      -.75F,
+      0.0F,
+      0.0F,
+    };
+    node.GetTransform().SetLocalRotation(transforms::LookRotation(
+      { .forward = target - position, .up = space::move::Up }));
     return node;
   };
   result.main_camera = camera("MainCamera",

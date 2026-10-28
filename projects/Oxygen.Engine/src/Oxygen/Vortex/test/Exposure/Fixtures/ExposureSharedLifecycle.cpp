@@ -10,7 +10,9 @@
 #include <utility>
 #include <vector>
 
+#include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Core/Transforms/NodeFrame.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Core/Types/View.h>
@@ -37,7 +39,6 @@
 
 namespace oxygen::vortex::testing::exposure {
 
-using graphics::Framebuffer;
 using graphics::FramebufferDesc;
 using graphics::ResourceStates;
 using graphics::Texture;
@@ -67,6 +68,8 @@ auto ExposureLightingGpuTest::QualifySharedSceneLifecycle(bool forward) -> void
   auto lens = std::make_unique<scene::PerspectiveCamera>();
   lens->SetViewport(view.viewport);
   ASSERT_TRUE(consumer_camera.AttachCamera(std::move(lens)));
+  consumer_camera.GetTransform().SetLocalRotation(transforms::LookRotation(
+    { .forward = space::move::Down, .up = space::move::Back }));
   consumer_camera.GetTransform().SetLocalPosition({
     20,
     0,

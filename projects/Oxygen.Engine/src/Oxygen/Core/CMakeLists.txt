@@ -120,6 +120,7 @@ set(
   # Transforms manipulation
   "Transforms/Decompose.h"
   "Transforms/IsFinite.h"
+  "Transforms/NodeFrame.h"
 )
 # Remove any headers that do not exist so we only add existing files to the
 # target. We modify OXYGEN_CORE_HEADERS in-place rather than creating a new
@@ -146,6 +147,7 @@ set(
   "Time/PresentationClock.cpp"
   "Time/SimulationClock.cpp"
   "Transforms/Decompose.cpp"
+  "Transforms/NodeFrame.cpp"
   "Types/AssetKey.cpp"
   "Types/Frustum.cpp"
   "Types/ResolvedView.cpp"

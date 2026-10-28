@@ -24,6 +24,7 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Constants.h>
+#include <Oxygen/Core/Transforms/NodeFrame.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/OxCo/Co.h>
@@ -63,15 +64,13 @@ auto ExposureBaselineScenario::UpdatePath(const unsigned sample_frame) -> void
       1.2F,
     };
     cameras.at(index).GetTransform().SetLocalPosition(position);
-    const auto camera_view = glm::lookAt(position,
-      glm::vec3 {
-        -.75F,
-        0.0F,
-        .25F,
-      },
-      space::move::Up);
-    cameras.at(index).GetTransform().SetLocalRotation(
-      glm::quat_cast(glm::inverse(camera_view)));
+    const auto target = glm::vec3 {
+      -.75F,
+      0.0F,
+      .25F,
+    };
+    cameras.at(index).GetTransform().SetLocalRotation(transforms::LookRotation(
+      { .forward = target - position, .up = space::move::Up }));
   }
   fixture_.scene->Update();
   fixture_.scene->SyncObservers();

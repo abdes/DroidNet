@@ -228,7 +228,7 @@ namespace oxygen::interop::module {
       helper.position = *position;
       const auto rotation = transform.GetWorldRotation().value_or(
         glm::quat(1.0F, 0.0F, 0.0F, 0.0F));
-      const auto direction = rotation * space::move::Forward;
+      const auto direction = rotation * space::node::Forward;
       if (glm::length(direction) > 1.0e-4F) {
         helper.direction = glm::normalize(direction);
       }

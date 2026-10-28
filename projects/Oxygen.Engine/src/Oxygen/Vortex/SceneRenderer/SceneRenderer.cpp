@@ -533,10 +533,10 @@ namespace {
     const scene::Scene& scene, const scene::SceneNodeImpl& node) -> glm::vec3
   {
     const auto direction
-      = ResolveWorldRotation(scene, node) * space::move::Forward;
+      = ResolveWorldRotation(scene, node) * space::node::Forward;
     const auto length_sq = glm::dot(direction, direction);
     if (length_sq <= math::EpsilonDirection) {
-      return space::move::Forward;
+      return space::node::Forward;
     }
     return glm::normalize(direction);
   }

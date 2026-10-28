@@ -21,6 +21,7 @@
 #include <unordered_map>
 
 #include <Oxygen/Core/Constants.h>
+#include <Oxygen/Core/Transforms/NodeFrame.h>
 #include <Oxygen/Scene/Camera/Orthographic.h>
 #include <Oxygen/Scene/Types/NodeHandle.h>
 
@@ -58,7 +59,7 @@ namespace oxygen::interop::module {
       const float yaw_radians,
       const glm::vec3& world_up) noexcept -> glm::quat {
       const glm::vec3 forward = viewport::NormalizeSafe(
-        forward_ws, oxygen::space::look::Forward);
+        forward_ws, oxygen::space::node::Forward);
 
       glm::vec3 right = glm::cross(forward, world_up);
       const float right_len2 = glm::dot(right, right);
@@ -66,18 +67,14 @@ namespace oxygen::interop::module {
         // At the poles, world-up is colinear with the forward vector. Use yaw
         // to preserve a stable horizontal screen axis instead of snapping.
         right = viewport::NormalizeSafe(
-          glm::vec3(std::cos(yaw_radians), std::sin(yaw_radians), 0.0f),
-          oxygen::space::look::Right);
+          glm::vec3(-std::cos(yaw_radians), -std::sin(yaw_radians), 0.0f),
+          oxygen::space::node::Right);
       } else {
         right /= std::sqrt(right_len2);
       }
 
-      const glm::vec3 up = glm::cross(right, forward);
-      glm::mat4 view_basis(1.0f);
-      view_basis[0] = glm::vec4(right, 0.0f);
-      view_basis[1] = glm::vec4(up, 0.0f);
-      view_basis[2] = glm::vec4(-forward, 0.0f);
-      return glm::normalize(glm::quat_cast(view_basis));
+      return oxygen::transforms::LookRotation(
+        { .forward = forward, .up = glm::cross(right, forward) });
     }
 
     [[nodiscard]] auto GetOrInitOrbitState(
@@ -157,7 +154,7 @@ namespace oxygen::interop::module {
       state.was_active = true;
 
       const glm::vec3 forward = viewport::NormalizeSafe(
-        focus_point - position, oxygen::space::look::Forward);
+        focus_point - position, oxygen::space::node::Forward);
       state.yaw_radians = std::atan2(forward.x, -forward.y);
       state.pitch_radians = ClampPitchRadians(params,
         std::asin(std::clamp(forward.z, -1.0f, 1.0f)));
@@ -175,11 +172,11 @@ namespace oxygen::interop::module {
         const float pitch_delta = -mouse_delta.y * params.radians_per_pixel;
         const float yaw_delta = -mouse_delta.x * params.radians_per_pixel;
         const glm::vec3 view_x = viewport::NormalizeSafe(
-          state.orbit_rotation * oxygen::space::look::Right,
-          oxygen::space::look::Right);
+          state.orbit_rotation * oxygen::space::node::Right,
+          oxygen::space::node::Right);
         const glm::vec3 view_y = viewport::NormalizeSafe(
-          state.orbit_rotation * oxygen::space::look::Up,
-          oxygen::space::look::Up);
+          state.orbit_rotation * oxygen::space::node::Up,
+          oxygen::space::node::Up);
         const glm::vec3 axis_angle =
           (view_x * pitch_delta) + (view_y * yaw_delta);
         const float angle = glm::length(axis_angle);
@@ -198,7 +195,7 @@ namespace oxygen::interop::module {
 
     if (trackball) {
       const glm::vec3 forward =
-        state.orbit_rotation * oxygen::space::look::Forward;
+        state.orbit_rotation * oxygen::space::node::Forward;
       const glm::vec3 new_position =
         focus_point - (forward * std::max(state.radius, params.min_radius));
       (void)transform.SetLocalPosition(new_position);

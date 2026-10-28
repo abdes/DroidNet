@@ -66,13 +66,13 @@ namespace {
   constexpr auto kGolden = std::to_array<GoldenOutput>({
     {
       .importer = Importer::kGltf,
-      .revision = 3,
+      .revision = 4,
       .digest
       = "e14ee29097e2c2bdf66734216ee2426ba721f186f0ec69f354225af638a35b9d",
     },
     {
       .importer = Importer::kFbx,
-      .revision = 3,
+      .revision = 4,
       .digest
       = "5678785ffcca919f74d48658d8ff84ccabb2ac47299fbb65ac5abe03cdc138bb",
     },

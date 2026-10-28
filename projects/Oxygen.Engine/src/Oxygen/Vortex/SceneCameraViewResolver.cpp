@@ -11,9 +11,8 @@
 #include <functional>
 #include <optional>
 
-#include <glm/ext/matrix_transform.hpp>
-
 #include <Oxygen/Core/Constants.h>
+#include <Oxygen/Core/Transforms/NodeFrame.h>
 #include <Oxygen/Core/Types/CameraAspectMode.h>
 #include <Oxygen/Core/Types/ResolvedView.h>
 #include <Oxygen/Core/Types/Scissors.h>
@@ -129,11 +128,7 @@ auto FromNodeLookup::ResolveForNode(scene::SceneNode& camera_node,
     }
   }
 
-  const auto view_m = [](const Vec3& pos, const Quat& rot) -> Mat4 {
-    const Vec3 forward = rot * space::look::Forward;
-    const Vec3 up = rot * space::look::Up;
-    return glm::lookAt(pos, pos + forward, up);
-  }(cam_pos, cam_rot);
+  const auto view_m = transforms::NodeViewMatrix(cam_pos, cam_rot);
 
   Mat4 proj_m { 1.0F };
   float near_plane = kDefaultNearPlane;

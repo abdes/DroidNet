@@ -37,6 +37,7 @@
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/Time/Types.h>
+#include <Oxygen/Core/Transforms/NodeFrame.h>
 #include <Oxygen/Core/Types/CameraAspectMode.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Core/Types/ViewPort.h>
@@ -102,46 +103,6 @@ namespace {
       return ui::CameraControlMode::kFly;
     }
     return std::nullopt;
-  }
-
-  auto MakeLookRotationFromPosition(
-    const glm::vec3& position, const glm::vec3& target) -> glm::quat
-  {
-    // NOLINTBEGIN(*-magic-numbers)
-    const auto forward_raw = target - position;
-    const float forward_len2 = glm::dot(forward_raw, forward_raw);
-    if (forward_len2 <= 1e-8F) {
-      return { 1.0F, 0.0F, 0.0F, 0.0F };
-    }
-
-    const auto forward = glm::normalize(forward_raw);
-    // Avoid singularities when forward is colinear with up.
-    glm::vec3 up_dir = space::move::Up;
-    const float dot_abs = std::abs(glm::dot(forward, glm::normalize(up_dir)));
-    if (dot_abs > 0.999F) {
-      // Pick an alternate up that is guaranteed to be non-colinear.
-      up_dir
-        = (std::abs(forward.z) > 0.9F) ? space::move::Back : space::move::Up;
-    }
-
-    const auto right_raw = glm::cross(forward, up_dir);
-    const float right_len2 = glm::dot(right_raw, right_raw);
-    if (right_len2 <= std::numeric_limits<float>::epsilon()) {
-      return { 1.0F, 0.0F, 0.0F, 0.0F };
-    }
-
-    const auto right = right_raw / std::sqrt(right_len2);
-    const auto up = glm::cross(right, forward);
-
-    glm::mat4 look_matrix(1.0F);
-    // NOLINTBEGIN(*-pro-bounds-avoid-unchecked-container-access)
-    look_matrix[0] = glm::vec4(right, 0.0F);
-    look_matrix[1] = glm::vec4(up, 0.0F);
-    look_matrix[2] = glm::vec4(-forward, 0.0F);
-    // NOLINTEND(*-pro-bounds-avoid-unchecked-container-access)
-
-    return glm::quat_cast(look_matrix);
-    // NOLINTEND(*-magic-numbers)
   }
 
   constexpr std::string_view kCameraRigKey = "camera_rig";
@@ -730,7 +691,7 @@ void CameraSettingsService::EnsureFlyCameraFacingScene()
   const glm::vec3 cam_pos = tf.GetLocalPosition().value_or(glm::vec3(0.0F));
   const glm::quat cam_rot
     = tf.GetLocalRotation().value_or(glm::quat(1.0F, 0.0F, 0.0F, 0.0F));
-  const glm::vec3 forward = cam_rot * space::look::Forward;
+  const glm::vec3 forward = cam_rot * space::node::Forward;
   constexpr glm::vec3 target(0.0F, 0.0F, 0.0F);
   const glm::vec3 to_target = target - cam_pos;
   const float len2 = glm::dot(to_target, to_target);
@@ -743,7 +704,8 @@ void CameraSettingsService::EnsureFlyCameraFacingScene()
     return;
   }
 
-  const glm::quat look_rot = MakeLookRotationFromPosition(cam_pos, target);
+  const glm::quat look_rot
+    = transforms::LookRotation({ .forward = target - cam_pos });
   tf.SetLocalRotation(look_rot);
   initial_camera_rotation_ = look_rot;
 
@@ -794,14 +756,15 @@ void CameraSettingsService::ApplyPendingReset()
     float orbit_distance = glm::length(initial_camera_position_ - orbit_target);
     if (!std::isfinite(orbit_distance) || orbit_distance < 1.0F) {
       orbit_distance = kDefaultOrbitResetDistance;
-      reset_position = orbit_target - space::look::Forward * orbit_distance;
+      reset_position = orbit_target - space::node::Forward * orbit_distance;
     } else {
       // Keep the baseline direction, but enforce a valid orbit radius.
       const glm::vec3 baseline_dir
         = glm::normalize(initial_camera_position_ - orbit_target);
       reset_position = orbit_target + baseline_dir * orbit_distance;
     }
-    reset_rotation = MakeLookRotationFromPosition(reset_position, orbit_target);
+    reset_rotation
+      = transforms::LookRotation({ .forward = orbit_target - reset_position });
 
     if (camera_rig_) {
       if (const auto orbit = camera_rig_->GetOrbitController(); orbit) {

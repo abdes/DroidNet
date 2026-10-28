@@ -31,6 +31,7 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Constants.h>
+#include <Oxygen/Core/Transforms/NodeFrame.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/GeometryAsset.h>
@@ -635,9 +636,10 @@ auto AsyncScene::Populate(scene::Scene& scene) -> void
     CHECK_F(attached, "Failed to attach PerspectiveCamera to MainCamera");
     auto tf = main_camera_.GetTransform();
     tf.SetLocalPosition(kInitialCameraPosition);
-    tf.SetLocalRotation(glm::quatLookAtRH(
-      glm::normalize(kSceneFocusPoint - kInitialCameraPosition),
-      space::move::Up));
+    tf.SetLocalRotation(transforms::LookRotation({
+      .forward = glm::normalize(kSceneFocusPoint - kInitialCameraPosition),
+      .up = space::move::Up,
+    }));
   }
 
   sun_light_ = EnsureDefaultSceneLighting(

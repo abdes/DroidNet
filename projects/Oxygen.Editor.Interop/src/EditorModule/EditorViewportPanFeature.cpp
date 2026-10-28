@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <unordered_map>
 
+#include <Oxygen/Core/Constants.h>
 #include <Oxygen/Scene/Camera/Orthographic.h>
 #include <Oxygen/Scene/Types/NodeHandle.h>
 
@@ -113,8 +114,8 @@ namespace oxygen::interop::module {
       pan_scale_y = pan_scale;
     }
 
-    const glm::vec3 right = rotation * glm::vec3(1.0f, 0.0f, 0.0f);
-    const glm::vec3 up = rotation * glm::vec3(0.0f, 1.0f, 0.0f);
+    const glm::vec3 right = rotation * oxygen::space::node::Right;
+    const glm::vec3 up = rotation * oxygen::space::node::Up;
 
     // Pan convention: the scene follows the drag direction.
     // Drag right => scene moves right => camera moves left.

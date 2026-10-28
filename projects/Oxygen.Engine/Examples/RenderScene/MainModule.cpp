@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <exception>
@@ -35,6 +36,7 @@
 #include <Oxygen/Config/PathFinderConfig.h>
 #include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Core/Transforms/NodeFrame.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Data/SourceKey.h>
@@ -981,8 +983,10 @@ auto MainModule::StageFallbackScene() -> void
   CHECK_F(attached, "Failed to attach PerspectiveCamera to MainCamera");
   auto tf = camera_node.GetTransform();
   tf.SetLocalPosition(kFallbackCameraPosition);
-  tf.SetLocalRotation(
-    glm::quat(glm::radians(Vec3 { kFallbackCameraPitchDegrees, 0.0F, 0.0F })));
+  // Face the scene (+Y), pitched down.
+  const auto pitch = glm::radians(kFallbackCameraPitchDegrees);
+  tf.SetLocalRotation(transforms::LookRotation(
+    { .forward = Vec3 { 0.0F, std::cos(pitch), std::sin(pitch) } }));
   Stage().SetStagedMainCamera(std::move(camera_node));
 }
 
