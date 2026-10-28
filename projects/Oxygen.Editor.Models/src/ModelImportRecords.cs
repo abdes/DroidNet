@@ -2,20 +2,28 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Collections.Concurrent;
 using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
 using System.IO.Abstractions;
+using System.Runtime.CompilerServices;
 
 namespace Oxygen.Editor.Models;
 
 /// <summary>The model import records of a project, by source path and by virtual path.</summary>
 /// <remarks>
 /// A model is imported when a record names it. The index reads <c>&lt;ProjectRoot&gt;/imports/</c> when it is created,
-/// so a new index sees the folder as it is; callers create one per operation instead of keeping one. A record that
-/// cannot be read is skipped and listed in <see cref="Problems"/>, so one damaged record does not hide the others.
+/// so a new index sees the folder as it is; callers create one per operation instead of keeping one. A record file
+/// is parsed again only when its size or last write time changed, so creating an index per lookup costs a folder
+/// listing. A record that cannot be read is skipped and listed in <see cref="Problems"/>, so one damaged record does not
+/// hide the others.
 /// </remarks>
 public sealed class ModelImportRecords
 {
+    // The parsed record files of each file system, by path. A model's record can be large, and an asset listing looks
+    // up the record of every product of the model.
+    private static readonly ConditionalWeakTable<IFileSystem, ConcurrentDictionary<string, ParsedRecord>> Parsed = [];
+
     private readonly ImmutableArray<ModelImportRecord> records;
 
     /// <summary>Initializes a new instance of the <see cref="ModelImportRecords"/> class from the project's records.</summary>
@@ -34,8 +42,7 @@ public sealed class ModelImportRecords
             {
                 try
                 {
-                    var settings = ModelImportSettings.Parse(path, fileSystem.File.ReadAllBytes(path));
-                    found.Add(new(path, settings, settings.ResolveSource(path)));
+                    found.Add(Read(fileSystem, path));
                 }
                 catch (Exception failure) when (failure is IOException or InvalidDataException or System.Text.Json.JsonException or UnauthorizedAccessException)
                 {
@@ -76,4 +83,25 @@ public sealed class ModelImportRecords
         record = this.records.FirstOrDefault(entry => string.Equals(entry.SourcePath, path, StringComparison.Ordinal));
         return record is not null;
     }
+
+    // The record of one file, parsed again only when the file changed since it was last parsed.
+    private static ModelImportRecord Read(IFileSystem fileSystem, string path)
+    {
+        var parsed = Parsed.GetValue(fileSystem, static _ => new(StringComparer.Ordinal));
+        var file = fileSystem.FileInfo.New(path);
+        var length = file.Length;
+        var written = file.LastWriteTimeUtc;
+        if (parsed.TryGetValue(path, out var known) && known.Length == length && known.Written == written)
+        {
+            return known.Record;
+        }
+
+        var settings = ModelImportSettings.Parse(path, fileSystem.File.ReadAllBytes(path));
+        var record = new ModelImportRecord(path, settings, settings.ResolveSource(path));
+        parsed[path] = new(length, written, record);
+        return record;
+    }
+
+    // A parsed record file, with the size and last write time it had when it was read.
+    private sealed record ParsedRecord(long Length, DateTime Written, ModelImportRecord Record);
 }
