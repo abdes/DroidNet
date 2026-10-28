@@ -5,6 +5,7 @@
 using DroidNet.Composition;
 using DroidNet.Storage;
 using DryIoc;
+using Microsoft.Extensions.Logging;
 using Oxygen.Editor.ContentPipeline.Authoring;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Inspection;
@@ -92,7 +93,8 @@ public sealed class ContentPipelineSessionModule : IScopeModule<ISessionLayer>
             resolver.Resolve<INativeCompatibilityService>(EditorNativeCompatibilityService.CookingServiceKey),
             resolver.Resolve<IAtomicFileStore>(),
             resolver.Resolve<CookPublicationService>(),
-            resolver.Resolve<IEngineContentPak>()),
+            resolver.Resolve<IEngineContentPak>(),
+            resolver.Resolve<ILoggerFactory>()),
             Reuse.Singleton);
         scope.RegisterDelegate(
             resolver => (IGeometrySurfaceProvider)resolver.Resolve<IContentPipelineService>(), Reuse.Singleton);

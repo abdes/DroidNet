@@ -3,6 +3,9 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.Immutable;
+using System.Diagnostics;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.ContentPipeline.Incremental;
 using Oxygen.Editor.ContentPipeline.Publication;
@@ -21,12 +24,16 @@ namespace Oxygen.Editor.ContentPipeline.Status;
 /// </remarks>
 /// <param name="publication">The committed metadata verifier.</param>
 /// <param name="engineContent">The engine content pak, the lowest library engine references resolve through.</param>
+/// <param name="loggerFactory">Creates the logger of the read times.</param>
 public sealed partial class AssetCookStatusReader(
     CookPublicationService publication,
-    IEngineContentPak engineContent) : IAssetCookStatusReader
+    IEngineContentPak engineContent,
+    ILoggerFactory? loggerFactory = null) : IAssetCookStatusReader
 {
     /// <summary>The code of the status of an asset that cannot be a cook input, such as a deleted script.</summary>
     internal const string InputUnresolvedCode = "asset_status.input_unresolved";
+
+    private readonly ILogger logger = loggerFactory?.CreateLogger<AssetCookStatusReader>() ?? NullLogger<AssetCookStatusReader>.Instance;
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<AssetCookStatus>> ReadAsync(ProjectContext project, IReadOnlyList<AssetPath> assetUris, CancellationToken cancellationToken = default)
@@ -64,6 +71,7 @@ public sealed partial class AssetCookStatusReader(
         var prior = snapshot.ProductState;
         const bool metadataUnavailable = false;
 
+        var started = Stopwatch.GetTimestamp();
         var requested = assetUris.Distinct().ToArray();
         var resolved = requested
             .Select(uri => (Requested: uri, Container: CookInputResolver.ResolveContainer(project, uri, ContentCookInputRole.Primary)))
@@ -75,12 +83,17 @@ public sealed partial class AssetCookStatusReader(
         var unresolved = resolved.Select(static item => item.Input.Unresolved).OfType<AssetCookStatus>().ToArray();
         var mapped = resolved.Where(static item => item.Input.Input is not null).Select(static item => (item.Requested, item.Container)).ToArray();
         var inputs = resolved.Select(static item => item.Input.Input).OfType<ContentCookInput>().ToArray();
+        var inputsResolved = Stopwatch.GetTimestamp();
         using var libraries = await CookedLibraryReadSet.AcquireAsync(project, engineContent, cancellationToken, uri => ImportedOutputs.ResolveOutput(project, uri, ContentCookInputRole.Dependency), [.. prior.ProducedAssets]).ConfigureAwait(false);
+        var librariesRead = Stopwatch.GetTimestamp();
         var graph = await CreateDependencyDiscovery(project, prior, libraries).DiscoverAsync(project, inputs, cancellationToken).ConfigureAwait(false);
         graph = libraries.Apply(graph);
         var validGraph = WithCompleteAssets(graph);
+        var discovered = Stopwatch.GetTimestamp();
         var plan = await ReadFreshnessAsync(snapshot, validGraph, prior, cancellationToken).ConfigureAwait(false);
+        var freshnessRead = Stopwatch.GetTimestamp();
         var changed = await FindChangedInputsAsync(graph.Files, cancellationToken).ConfigureAwait(false);
+        this.LogReadTimes(new(started, inputsResolved, librariesRead, discovered, freshnessRead, Stopwatch.GetTimestamp()), requested.Length, graph.Files.Length);
         var products = prior.Products.ToDictionary(static product => product.SourceUri);
         var sourceStatuses = inputs.DistinctBy(static input => input.AssetUri).ToDictionary(static input => input.AssetUri, input => CreateStatus(
             input,

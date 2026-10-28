@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Projects;
@@ -18,11 +19,21 @@ public sealed partial class AssetFeed
     [SuppressMessage("Usage", "CA2213:Disposable fields should be disposed", Justification = "Non-owning alias; the scan's using scope disposes this source after its readers drain.")]
     private CancellationTokenSource? scanCancellation;
     private long catalogRevision;
+    private long catalogChanges;
     private long publishedRevision = -1;
     private ProjectContext? publishedProject;
 
     // The catalog would see the change only when its file watcher reports it; reading again now shows it at once.
-    private void OnEditorFilesChanged(object? sender, AssetFilesChangedEventArgs args) => this.OnCatalogChanged();
+    private void OnEditorFilesChanged(object? sender, AssetFilesChangedEventArgs args)
+    {
+        lock (this.refreshSync)
+        {
+            if (!this.disposed)
+            {
+                _ = this.RequestRefresh(invalidate: true);
+            }
+        }
+    }
 
     private Task RequestRefresh(bool invalidate)
     {
@@ -52,12 +63,15 @@ public sealed partial class AssetFeed
         }
     }
 
+    // A catalog change counts apart from the other invalidations: a listing reads the catalog after its own refresh, so
+    // the changes the catalog published until then, such as the records its first refresh lists, are in that reading.
     private void OnCatalogChanged()
     {
         lock (this.refreshSync)
         {
             if (!this.disposed)
             {
+                this.catalogChanges++;
                 _ = this.RequestRefresh(invalidate: true);
             }
         }
@@ -91,10 +105,14 @@ public sealed partial class AssetFeed
             {
                 using var cancellation = new CancellationTokenSource();
                 long revision;
+                long startChanges;
+                long readChanges;
                 lock (this.refreshSync)
                 {
                     ObjectDisposedException.ThrowIf(this.disposed, this);
                     revision = this.catalogRevision;
+                    startChanges = this.catalogChanges;
+                    readChanges = startChanges;
                     this.scanCancellation = cancellation;
                 }
 
@@ -104,11 +122,21 @@ public sealed partial class AssetFeed
                 {
                     if (project is not null)
                     {
+                        var started = Stopwatch.GetTimestamp();
                         await this.catalog.RefreshAsync(cancellation.Token).ConfigureAwait(false);
+                        var refreshed = Stopwatch.GetTimestamp();
+                        lock (this.refreshSync)
+                        {
+                            readChanges = this.catalogChanges;
+                        }
+
                         using var captured = await this.catalog.ReadSnapshotAsync(new AssetQuery(AssetQueryScope.All), cancellation.Token).ConfigureAwait(false);
+                        var read = Stopwatch.GetTimestamp();
                         var scope = this.projectCookScopeProvider.CreateScope(project);
                         var reduced = this.reducer.Reduce(captured.Records, project, scope);
+                        var rows = Stopwatch.GetTimestamp();
                         snapshot = await this.ApplyCookStatusAsync(project, reduced, cancellation.Token, captured.Publication, captured.PublicationError).ConfigureAwait(false);
+                        this.LogRefreshTimes(new(started, refreshed, read, rows, Stopwatch.GetTimestamp()), captured.Records.Count, snapshot.Count);
                     }
                 }
                 catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
@@ -123,10 +151,12 @@ public sealed partial class AssetFeed
                     }
                 }
 
-                if (this.TryPublishSnapshot(revision, project, snapshot, completion))
+                if (this.TryPublishSnapshot(revision + (readChanges - startChanges), project, snapshot, completion))
                 {
                     return;
                 }
+
+                this.LogRefreshSuperseded();
             }
         }
         catch (Exception exception)
@@ -144,6 +174,7 @@ public sealed partial class AssetFeed
         }
     }
 
+    // The revision is the one the listing reflects: the revision it started from and the catalog changes it read.
     private bool TryPublishSnapshot(long revision, ProjectContext? project, IReadOnlyList<AssetEntry> snapshot, TaskCompletionSource completion)
     {
         lock (this.refreshSync)

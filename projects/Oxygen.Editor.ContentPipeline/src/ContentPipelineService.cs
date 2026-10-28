@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.Immutable;
+using Microsoft.Extensions.Logging;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Incremental;
 using Oxygen.Editor.ContentPipeline.Inspection;
@@ -28,6 +29,8 @@ namespace Oxygen.Editor.ContentPipeline;
 /// <param name="nativeCompatibility">The compatible producer identity and file ownership.</param>
 /// <param name="files">Atomic storage for model import records.</param>
 /// <param name="publication">The shared journal and runtime-publication owner.</param>
+/// <param name="engineContent">The engine content pak, the lowest library engine references resolve through.</param>
+/// <param name="loggerFactory">Creates the loggers of the cook status reads.</param>
 public sealed partial class ContentPipelineService(
     IProjectSession session,
     IContentCookCoordinator cookCoordinator,
@@ -39,7 +42,8 @@ public sealed partial class ContentPipelineService(
     INativeCompatibilityService nativeCompatibility,
     DroidNet.Storage.IAtomicFileStore files,
     Publication.CookPublicationService publication,
-    IEngineContentPak engineContent) : IContentPipelineService
+    IEngineContentPak engineContent,
+    ILoggerFactory? loggerFactory = null) : IContentPipelineService
 {
     /// <summary>The code of the Info diagnostic that names a moved or deleted source whose cooked output a cook removes.</summary>
     internal const string OutputRetiredCode = "asset_cook.output_retired";
