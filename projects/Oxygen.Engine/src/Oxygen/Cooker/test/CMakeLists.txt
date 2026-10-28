@@ -301,5 +301,12 @@ oxygen_cooker_test(
     "Scenarios/GltfModelImport_functional_test.cpp"
     "Scenarios/ModelTextureCapture_functional_test.cpp"
     "Scenarios/ModelValues_functional_test.cpp"
+    "Scenarios/PhysicsDomainsParity_functional_test.cpp"
     "Scenarios/PhysicsSidecarRecook_functional_test.cpp"
+)
+# The parity test reads the maintained physics_domains example content.
+target_compile_definitions(
+  "Oxygen.Cooker.Scenarios.Functional.Tests"
+  PRIVATE
+    OXYGEN_EXAMPLE_SCENES_DIR="${OXYGEN_SOURCE_DIR}/../Examples/Content/scenes"
 )
