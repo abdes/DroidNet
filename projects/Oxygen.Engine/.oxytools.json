@@ -12,6 +12,7 @@
     "src/Oxygen/Base/Detail/NamedType_*.h",
     "src/Oxygen/Cooker/Import/Internal/fbx/ufbx.*",
     "src/Oxygen/Cooker/Import/Internal/gltf/cgltf.*",
+    "src/Oxygen/Cooker/Import/Internal/mikktspace/mikktspace.*",
     "src/Oxygen/Cooker/Import/Internal/stb/**",
     "**/imgui_impl_*"
   ]

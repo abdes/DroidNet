@@ -195,6 +195,7 @@ set(
   "Import/Internal/fbx/FbxAdapter.h"
   "Import/Internal/fbx/ufbx.h"
   "Import/Internal/gltf/cgltf.h"
+  "Import/Internal/mikktspace/mikktspace.h"
   "Import/Internal/gltf/GltfAdapter.h"
   "Import/Internal/gltf/GltfMeshopt.h"
   "Import/Internal/ImageDecode.h"
@@ -321,6 +322,7 @@ set(
   "Import/Internal/gltf/cgltf.cpp"
   "Import/Internal/gltf/GltfAdapter.cpp"
   "Import/Internal/gltf/GltfMeshopt.cpp"
+  "Import/Internal/mikktspace/mikktspace.c"
   "Import/Internal/DroppedSourceFeatures.cpp"
   "Import/Internal/DroppedSourceFeatures.h"
   "Import/Internal/ImageDecode.cpp"
@@ -359,6 +361,7 @@ set(
   "Import/Internal/Pipelines/GeometryPipeline.cpp"
   "Import/Internal/Pipelines/InputImportPipeline.cpp"
   "Import/Internal/Pipelines/MaterialPipeline.cpp"
+  "Import/Internal/Pipelines/GeometryPipeline_tangents.cpp"
   "Import/Internal/Pipelines/MeshBuildPipeline.cpp"
   "Import/Internal/ModelNodeIdentity.cpp"
   "Import/Internal/SurfaceAllocation.cpp"
@@ -478,6 +481,15 @@ set_source_files_properties(
   PROPERTIES
     COMPILE_OPTIONS
       "$<$<CXX_COMPILER_ID:MSVC>:/openmp>$<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-fopenmp>"
+)
+
+# Vendored MikkTSpace stays unmodified: silence its shadowed locals (C4456)
+# and nameless union (C4201) rather than editing it.
+set_source_files_properties(
+  "Import/Internal/mikktspace/mikktspace.c"
+  PROPERTIES
+    COMPILE_OPTIONS
+      "$<$<C_COMPILER_ID:MSVC>:/wd4456;/wd4201>"
 )
 
 target_compile_options(

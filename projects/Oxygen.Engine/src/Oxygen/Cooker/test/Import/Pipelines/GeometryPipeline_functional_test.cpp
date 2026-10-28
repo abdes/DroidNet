@@ -852,6 +852,233 @@ namespace {
     }
   }
 
+  //! The base triangle with authored frames that ignore its UVs: the tangent
+  //! runs along +Y while U grows along +X.
+  [[nodiscard]] auto MakeTriangleWithCrossedFrames()
+    -> std::shared_ptr<MeshBuffers>
+  {
+    auto buffers = MakeTriangleMeshBuffers();
+    buffers->tangents.assign(3, space::move::Back);
+    buffers->bitangents.assign(3, space::move::Right);
+    return buffers;
+  }
+
+  //! Authored frames that do not follow the UVs are unusable for a normal
+  //! map: under kGenerateMissing the import warns and generates them.
+  NOLINT_TEST_F(GeometryPipelineSplitTest, UnusableAuthoredFramesAreGenerated)
+  {
+    auto item = MakeWorkItem(MakeTriangleWithCrossedFrames());
+    item.has_tangent_space_textures = true;
+    item.request.options.tangent_policy
+      = GeometryAttributePolicy::kGenerateMissing;
+
+    const auto result = Cook(std::move(item));
+
+    ASSERT_TRUE(result.success);
+    EXPECT_TRUE(
+      HasDiagnosticCode(result.diagnostics, "mesh.tangents_unusable"));
+    ASSERT_HAS_VALUE(result.cooked);
+    for (const auto& vertex : ReadCookedViews(*result.cooked).vertices) {
+      EXPECT_EQ(vertex.tangent, space::move::Right);
+      EXPECT_EQ(vertex.bitangent, space::move::Back);
+    }
+  }
+
+  //! Under kPreserveIfPresent unusable authored frames are kept, with the
+  //! same warning.
+  NOLINT_TEST_F(GeometryPipelineSplitTest, UnusableAuthoredFramesArePreserved)
+  {
+    auto item = MakeWorkItem(MakeTriangleWithCrossedFrames());
+    item.has_tangent_space_textures = true;
+    item.request.options.tangent_policy
+      = GeometryAttributePolicy::kPreserveIfPresent;
+
+    const auto result = Cook(std::move(item));
+
+    ASSERT_TRUE(result.success);
+    EXPECT_TRUE(
+      HasDiagnosticCode(result.diagnostics, "mesh.tangents_unusable"));
+    ASSERT_HAS_VALUE(result.cooked);
+    for (const auto& vertex : ReadCookedViews(*result.cooked).vertices) {
+      EXPECT_EQ(vertex.tangent, space::move::Back);
+      EXPECT_EQ(vertex.bitangent, space::move::Right);
+    }
+  }
+
+  //! Where vertex normals lean far from their face, no frame follows the UVs:
+  //! authored frames that fail there are kept, since generated ones fail too.
+  NOLINT_TEST_F(
+    GeometryPipelineSplitTest, AuthoredFramesNoGenerationImprovesOnAreKept)
+  {
+    auto buffers = MakeTriangleMeshBuffers();
+    // 60 degrees off the face's +Z: any bitangent across N misses dP/dV (+Y).
+    const auto leaning
+      = glm::normalize(glm::vec3 { 0.0F, std::numbers::sqrt3_v<float>, 1.0F });
+    buffers->normals.assign(3, leaning);
+    buffers->tangents.assign(3, space::move::Right);
+    buffers->bitangents.assign(3, glm::cross(space::move::Right, leaning));
+    auto item = MakeWorkItem(buffers);
+    item.has_tangent_space_textures = true;
+    item.request.options.tangent_policy
+      = GeometryAttributePolicy::kGenerateMissing;
+
+    const auto result = Cook(std::move(item));
+
+    ASSERT_TRUE(result.success);
+    EXPECT_FALSE(
+      HasDiagnosticCode(result.diagnostics, "mesh.tangents_unusable"));
+    ASSERT_HAS_VALUE(result.cooked);
+    for (const auto& vertex : ReadCookedViews(*result.cooked).vertices) {
+      EXPECT_NEAR(glm::dot(vertex.tangent, space::move::Right), 1.0F, 1e-6F);
+      EXPECT_NEAR(
+        glm::dot(vertex.bitangent, glm::cross(space::move::Right, leaning)),
+        1.0F, 1e-5F);
+    }
+  }
+
+  //! Authored frames that follow the UVs, though not exactly along dP/dU, are
+  //! kept as authored.
+  NOLINT_TEST_F(GeometryPipelineSplitTest, UsableAuthoredFramesArePreserved)
+  {
+    auto buffers = MakeTriangleMeshBuffers();
+    const auto tangent = glm::normalize(glm::vec3 { 1.0F, 0.25F, 0.0F });
+    buffers->tangents.assign(3, tangent);
+    buffers->bitangents.assign(3, glm::cross(space::move::Up, tangent));
+    auto item = MakeWorkItem(buffers);
+    item.has_tangent_space_textures = true;
+    item.request.options.tangent_policy
+      = GeometryAttributePolicy::kGenerateMissing;
+
+    const auto result = Cook(std::move(item));
+
+    ASSERT_TRUE(result.success);
+    EXPECT_FALSE(
+      HasDiagnosticCode(result.diagnostics, "mesh.tangents_unusable"));
+    ASSERT_HAS_VALUE(result.cooked);
+    for (const auto& vertex : ReadCookedViews(*result.cooked).vertices) {
+      EXPECT_NEAR(glm::dot(vertex.tangent, tangent), 1.0F, 1e-6F);
+    }
+  }
+
+  //! A preserved frame without a usable bitangent takes the unmirrored one,
+  //! B = -cross(N, T).
+  NOLINT_TEST_F(GeometryPipelineSplitTest, FrameWithoutBitangentIsUnmirrored)
+  {
+    auto buffers = MakeTriangleMeshBuffers();
+    buffers->tangents.assign(3, space::move::Right);
+    buffers->bitangents.assign(3, glm::vec3 { 0.0F });
+    auto item = MakeWorkItem(buffers);
+    item.has_tangent_space_textures = true;
+    item.request.options.tangent_policy
+      = GeometryAttributePolicy::kPreserveIfPresent;
+
+    const auto result = Cook(std::move(item));
+
+    ASSERT_TRUE(result.success);
+    ASSERT_HAS_VALUE(result.cooked);
+    for (const auto& vertex : ReadCookedViews(*result.cooked).vertices) {
+      EXPECT_EQ(vertex.tangent, space::move::Right);
+      EXPECT_EQ(vertex.bitangent, space::move::Forward);
+    }
+  }
+
+  //! A quad whose UVs mirror across its diagonal: the corners on the seam
+  //! share position, normal and UV, but each triangle keeps its own
+  //! handedness, so the seam vertices split rather than averaging opposite
+  //! bitangents away.
+  NOLINT_TEST_F(GeometryPipelineSplitTest, GeneratedFramesSplitAtMirrorSeams)
+  {
+    auto buffers = std::make_shared<MeshBuffers>();
+    buffers->positions = {
+      glm::vec3 { 0.0F, 0.0F, 0.0F },
+      glm::vec3 { 1.0F, 0.0F, 0.0F },
+      glm::vec3 { 1.0F, 1.0F, 0.0F },
+      glm::vec3 { 0.0F, 1.0F, 0.0F },
+    };
+    buffers->normals.assign(4, space::move::Up);
+    buffers->texcoords = {
+      glm::vec2 { 0.0F, 0.0F },
+      glm::vec2 { 1.0F, 0.0F },
+      glm::vec2 { 1.0F, 1.0F },
+      glm::vec2 { 1.0F, 0.0F },
+    };
+    buffers->indices = { 0, 1, 2, 0, 2, 3 };
+    buffers->ranges = {
+      TriangleRange { .surface = 0, .first_index = 0, .index_count = 6 },
+    };
+    auto item = MakeWorkItem(buffers);
+    item.has_tangent_space_textures = true;
+    item.request.options.tangent_policy
+      = GeometryAttributePolicy::kGenerateMissing;
+
+    const auto result = Cook(std::move(item));
+
+    ASSERT_TRUE(result.success);
+    ASSERT_HAS_VALUE(result.cooked);
+    const auto cooked = ReadCookedViews(*result.cooked);
+    EXPECT_EQ(cooked.vertices.size(), 6U);
+    ASSERT_EQ(cooked.indices.size(), 6U);
+    // Seen from +Z a triangle reads mirrored when its UVs wind
+    // counter-clockwise; each corner's handedness follows its own triangle.
+    for (size_t first = 0; first < cooked.indices.size(); first += 3U) {
+      const auto& v0 = cooked.vertices.at(cooked.indices.at(first));
+      const auto& v1 = cooked.vertices.at(cooked.indices.at(first + 1U));
+      const auto& v2 = cooked.vertices.at(cooked.indices.at(first + 2U));
+      const auto d1 = v1.texcoord - v0.texcoord;
+      const auto d2 = v2.texcoord - v0.texcoord;
+      const auto mirrored = (d1.x * d2.y) - (d1.y * d2.x) > 0.0F;
+      for (const auto* vertex : { &v0, &v1, &v2 }) {
+        const auto handedness = glm::dot(
+          glm::cross(vertex->normal, vertex->tangent), vertex->bitangent);
+        EXPECT_EQ(handedness > 0.0F, mirrored) << "triangle " << first / 3U;
+      }
+    }
+  }
+
+  //! Generated frames are accumulated over the triangles that share a vertex:
+  //! a quad whose two triangles stretch U differently still welds into four
+  //! vertices, each with one frame.
+  NOLINT_TEST_F(GeometryPipelineSplitTest, GeneratedFramesAreSmooth)
+  {
+    auto buffers = std::make_shared<MeshBuffers>();
+    buffers->positions = {
+      glm::vec3 { 0.0F, 0.0F, 0.0F },
+      glm::vec3 { 1.0F, 0.0F, 0.0F },
+      glm::vec3 { 1.0F, 1.0F, 0.0F },
+      glm::vec3 { 0.0F, 1.0F, 0.0F },
+    };
+    buffers->normals.assign(4, space::move::Up);
+    // Not an affine map: the first triangle's dP/dU runs along +X, the
+    // second's leans toward +Y.
+    buffers->texcoords = {
+      glm::vec2 { 0.0F, 1.0F },
+      glm::vec2 { 1.0F, 1.0F },
+      glm::vec2 { 1.0F, 0.25F },
+      glm::vec2 { 0.0F, 0.0F },
+    };
+    buffers->indices = { 0, 1, 2, 0, 2, 3 };
+    buffers->ranges = {
+      TriangleRange { .surface = 0, .first_index = 0, .index_count = 6 },
+    };
+    auto item = MakeWorkItem(buffers);
+    item.has_tangent_space_textures = true;
+    item.request.options.tangent_policy
+      = GeometryAttributePolicy::kGenerateMissing;
+
+    const auto result = Cook(std::move(item));
+
+    ASSERT_TRUE(result.success);
+    ASSERT_HAS_VALUE(result.cooked);
+    const auto vertices = ReadCookedViews(*result.cooked).vertices;
+    EXPECT_EQ(vertices.size(), 4U);
+    for (const auto& vertex : vertices) {
+      EXPECT_NEAR(glm::dot(vertex.tangent, vertex.normal), 0.0F, 1e-6F);
+      EXPECT_LT(
+        glm::dot(glm::cross(vertex.normal, vertex.tangent), vertex.bitangent),
+        0.0F);
+    }
+  }
+
   //! A static submesh above the view limit becomes deterministic views of at
   //! most `kMaxMeshViewTriangles`, each one contiguous index and vertex range,
   //! its triangles sharing their vertices, with tight bounds inside the

@@ -52,6 +52,7 @@
 #include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Cooker/Import/SurfaceProvenance.h>
+#include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/DescriptorExtensions.h>
 #include <Oxygen/Core/Types/Format.h>
@@ -154,6 +155,25 @@ namespace {
   constexpr auto kMinNormalLength = 1e-8F;
   //! Shortest tangent-frame vector treated as valid.
   constexpr auto kMinTangentLength = 1e-6F;
+  //! Share of triangles whose authored frames follow their UVs from which the
+  //! frames are kept without comparing them with generated ones. Seams and
+  //! folds leave a few disagreeing triangles in a sound export.
+  constexpr auto kMinAuthoredFrameAgreement = 0.9F;
+  //! How many more triangles, as a share, generated frames must follow their
+  //! UVs on to replace authored ones. Where vertex normals lean far from
+  //! their faces no frame follows the UVs, so authored frames are replaced
+  //! only by clearly better ones.
+  constexpr auto kMinGeneratedFrameGain = 0.1F;
+
+  //! Drops `corners`' tangent frames, so generation replaces them and the
+  //! corners they kept apart weld and share one smooth frame.
+  auto DropTangentFrames(std::vector<data::Vertex>& corners) -> void
+  {
+    for (auto& corner : corners) {
+      corner.tangent = space::move::Right;
+      corner.bitangent = space::move::Forward;
+    }
+  }
 
   //! Spreads the low 10 bits of `value` to every third bit.
   [[nodiscard]] constexpr auto SpreadMortonBits(uint32_t value) -> uint32_t
@@ -399,48 +419,42 @@ namespace {
     }
   }
 
+  //! Makes every vertex's frame orthonormal and follow `space::texture`.
+  /*!
+   The tangent is projected into the surface plane and the bitangent rebuilt
+   as B = -cross(N, T) * w, keeping the handedness w its bitangent gave. A
+   vertex whose tangent is unusable (not finite, or along its normal) takes a
+   frame about its normal, and one without a usable bitangent takes w = +1.
+  */
   auto FixInvalidTangents(std::vector<data::Vertex>& vertices) -> void
   {
+    const auto finite = [](const glm::vec3& value) -> bool {
+      return std::isfinite(value.x) && std::isfinite(value.y)
+        && std::isfinite(value.z);
+    };
     for (auto& v : vertices) {
-      const bool t_has_nan = !std::isfinite(v.tangent.x)
-        || !std::isfinite(v.tangent.y) || !std::isfinite(v.tangent.z);
-      const bool b_has_nan = !std::isfinite(v.bitangent.x)
-        || !std::isfinite(v.bitangent.y) || !std::isfinite(v.bitangent.z);
-
-      const auto t_len = t_has_nan ? 0.0F : glm::length(v.tangent);
-      const auto b_len = b_has_nan ? 0.0F : glm::length(v.bitangent);
-
-      constexpr float kMinValidLen = 0.5F;
-      constexpr float kMaxValidLen = 2.0F;
-
-      const bool t_invalid
-        = t_has_nan || t_len < kMinValidLen || t_len > kMaxValidLen;
-      const bool b_invalid
-        = b_has_nan || b_len < kMinValidLen || b_len > kMaxValidLen;
-
-      if (t_invalid || b_invalid) {
-        glm::vec3 n = v.normal;
-        if (!std::isfinite(n.x) || !std::isfinite(n.y) || !std::isfinite(n.z)
-          || glm::length(n) < kMinTangentLength) {
-          n = glm::vec3(0.0F, 0.0F, 1.0F);
-        } else {
-          n = glm::normalize(n);
-        }
-
-        const glm::vec3 axis = (std::abs(n.z) < 0.9F)
-          ? glm::vec3(0.0F, 0.0F, 1.0F)
-          : glm::vec3(1.0F, 0.0F, 0.0F);
-
-        const glm::vec3 t = glm::normalize(glm::cross(n, axis));
-        const glm::vec3 b = glm::normalize(glm::cross(n, t));
-
-        v.tangent = t;
-        v.bitangent = b;
-        continue;
+      auto n = glm::vec3 { space::move::Up };
+      if (finite(v.normal) && glm::length(v.normal) >= kMinTangentLength) {
+        n = glm::normalize(v.normal);
       }
 
-      v.tangent = glm::normalize(v.tangent);
-      v.bitangent = glm::normalize(v.bitangent);
+      auto t = finite(v.tangent) ? v.tangent - n * glm::dot(n, v.tangent)
+                                 : glm::vec3(0.0F);
+      if (glm::length(t) < kMinTangentLength) {
+        // Without a usable tangent no direction is preferred: any axis away
+        // from the normal serves.
+        const auto axis = std::abs(glm::dot(n, space::move::Right)) < 0.9F
+          ? glm::vec3 { space::move::Right }
+          : glm::vec3 { space::move::Back };
+        t = axis - n * glm::dot(n, axis);
+      }
+      t = glm::normalize(t);
+
+      const auto unmirrored = -glm::cross(n, t);
+      const auto mirrored
+        = finite(v.bitangent) && glm::dot(unmirrored, v.bitangent) < 0.0F;
+      v.tangent = t;
+      v.bitangent = mirrored ? -unmirrored : unmirrored;
     }
   }
 
@@ -667,10 +681,12 @@ namespace {
 
   auto PopulateVertexDefaults(data::Vertex& vertex) -> void
   {
-    vertex.normal = glm::vec3(0.0F, 1.0F, 0.0F);
+    // The unmirrored frame of a surface facing up: `space::texture`'s top
+    // face layout.
+    vertex.normal = space::move::Up;
     vertex.texcoord = glm::vec2(0.0F, 0.0F);
-    vertex.tangent = glm::vec3(1.0F, 0.0F, 0.0F);
-    vertex.bitangent = glm::vec3(0.0F, 0.0F, 1.0F);
+    vertex.tangent = space::move::Right;
+    vertex.bitangent = space::move::Forward;
     vertex.color = glm::vec4(1.0F, 1.0F, 1.0F, 1.0F);
   }
 
@@ -1214,6 +1230,32 @@ namespace {
         tangents_emitted = true;
       } else if (has_tangents) {
         tangents_emitted = true;
+        const auto buckets = std::span<const SubmeshBucket>(lod.buckets);
+        const auto authored = util::TangentFrameAgreement(
+          std::span<const data::Vertex>(corners), buckets);
+        auto generated = authored;
+        if (authored < kMinAuthoredFrameAgreement) {
+          auto generated_corners = corners;
+          DropTangentFrames(generated_corners);
+          util::GenerateTangents(generated_corners, buckets);
+          generated = util::TangentFrameAgreement(
+            std::span<const data::Vertex>(generated_corners), buckets);
+        }
+        if (generated >= authored + kMinGeneratedFrameGain) {
+          const auto regenerate
+            = tangent_policy == GeometryAttributePolicy::kGenerateMissing;
+          diagnostics.push_back(MakeWarningDiagnostic("mesh.tangents_unusable",
+            fmt::format("Authored tangent frames follow the UVs on {:.0f}% of "
+                        "triangles, generated ones on {:.0f}%; {}",
+              authored * 100.0F, generated * 100.0F,
+              regenerate ? "they are generated instead"
+                         : "they are preserved as the policy asks"),
+            item.source_id, item.mesh_name));
+          if (regenerate) {
+            DropTangentFrames(corners);
+            lod.generation.tangents = true;
+          }
+        }
       }
     }
     lod.generation.repairs_tangents = tangents_emitted;
