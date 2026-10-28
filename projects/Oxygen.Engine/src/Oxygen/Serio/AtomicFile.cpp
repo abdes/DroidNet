@@ -6,11 +6,15 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <cstdio>
+#include <cstring>
 #include <filesystem>
 #include <limits>
 #include <span>
 #include <system_error>
+#include <utility>
+#include <vector>
 
 #include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Base/Platforms.h>
@@ -31,6 +35,8 @@
 #  include <winbase.h>
 #  include <winnt.h>
 #else
+#  include <cerrno>
+
 #  include <fcntl.h>
 #  include <sys/stat.h>
 #  include <unistd.h>
@@ -98,6 +104,73 @@ namespace {
   }
 
 #ifdef OXYGEN_WINDOWS
+  auto LastWindowsError() -> std::error_code
+  {
+    return { static_cast<int>(GetLastError()), std::system_category() };
+  }
+
+  //! Renames the temporary over the destination with POSIX semantics: readers
+  //! holding the destination open with shared deletion keep the file they
+  //! opened, and the name moves to the new file without waiting for them. A
+  //! file system without POSIX renames gets a classic replacing move, which
+  //! fails while any reader holds the destination.
+  auto ReplaceDestination(const std::filesystem::path& temporary,
+    const std::filesystem::path& destination) -> Result<AtomicFileCommit>
+  {
+    {
+      auto* const handle
+        = CreateFileW(temporary.c_str(), GENERIC_WRITE | DELETE | SYNCHRONIZE,
+          FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
+          OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+      if (handle == INVALID_HANDLE_VALUE) {
+        return Result<AtomicFileCommit>::Err(LastWindowsError());
+      }
+      const auto close
+        = ScopeGuard([handle] noexcept -> void { CloseHandle(handle); });
+
+      // FILE_RENAME_INFO ends with a variable-length name. FileNameLength
+      // excludes the terminator, but Windows converts the name as a
+      // NUL-terminated path, so the zeroed storage must hold one.
+      const auto target = std::filesystem::absolute(destination).native();
+      const auto name_bytes = target.size() * sizeof(wchar_t);
+      const auto info_bytes
+        = offsetof(FILE_RENAME_INFO, FileName) + name_bytes + sizeof(wchar_t);
+      auto storage = std::vector<uint64_t>(
+        (info_bytes + sizeof(uint64_t) - 1) / sizeof(uint64_t));
+      // NOLINTNEXTLINE(*-reinterpret-cast) - Win32 variable-length record
+      auto* const info = reinterpret_cast<FILE_RENAME_INFO*>(storage.data());
+      info->Flags
+        = FILE_RENAME_FLAG_REPLACE_IF_EXISTS | FILE_RENAME_FLAG_POSIX_SEMANTICS;
+      info->RootDirectory = nullptr;
+      info->FileNameLength = static_cast<DWORD>(name_bytes);
+      std::memcpy(
+        static_cast<void*>(info->FileName), target.data(), name_bytes);
+      if (SetFileInformationByHandle(handle, FileRenameInfoEx, info,
+            static_cast<DWORD>(storage.size() * sizeof(uint64_t)))
+        != FALSE) {
+        // The handle now names the destination; flushing it commits the
+        // rename as MOVEFILE_WRITE_THROUGH would.
+        if (FlushFileBuffers(handle) == FALSE) {
+          return Ok(
+            AtomicFileCommit { .durability_error = LastWindowsError() });
+        }
+        return Ok(AtomicFileCommit {});
+      }
+      const auto error = GetLastError();
+      if (error != ERROR_INVALID_PARAMETER && error != ERROR_NOT_SUPPORTED
+        && error != ERROR_INVALID_FUNCTION) {
+        return Result<AtomicFileCommit>::Err(
+          std::error_code(static_cast<int>(error), std::system_category()));
+      }
+    }
+    if (MoveFileExW(temporary.c_str(), destination.c_str(),
+          MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)
+      == FALSE) {
+      return Result<AtomicFileCommit>::Err(LastWindowsError());
+    }
+    return Ok(AtomicFileCommit {});
+  }
+
   //! Gives the temporary the destination's DACL, keeping its protection, so
   //! the rename preserves access permissions. A missing destination has none.
   auto CopyAccessControl(const std::filesystem::path& destination,
@@ -181,12 +254,7 @@ auto WriteFileAtomically(const std::filesystem::path& path,
 #ifdef OXYGEN_WINDOWS
   // One same-directory rename that always replaces: concurrent publishers
   // never see a missing destination or race an existence check.
-  if (MoveFileExW(temporary.c_str(), native_path.c_str(),
-        MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)
-    == FALSE) {
-    return Result<AtomicFileCommit>::Err(std::error_code(
-      static_cast<int>(GetLastError()), std::system_category()));
-  }
+  return ReplaceDestination(temporary, native_path);
 #else
   if (::rename(temporary.c_str(), path.c_str()) != 0) {
     return Result<AtomicFileCommit>::Err(
@@ -205,8 +273,78 @@ auto WriteFileAtomically(const std::filesystem::path& path,
     return Ok(AtomicFileCommit {
       .durability_error = std::error_code(errno, std::generic_category()) });
   }
-#endif
   return Ok(AtomicFileCommit {});
+#endif
+}
+
+auto ReadPublishedFile(const std::filesystem::path& path)
+  -> Result<std::vector<std::byte>>
+{
+#ifdef OXYGEN_WINDOWS
+  auto* const handle = CreateFileW(base::ToNativePath(path).c_str(),
+    GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+    nullptr, OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, nullptr);
+  if (handle == INVALID_HANDLE_VALUE) {
+    return Result<std::vector<std::byte>>::Err(LastWindowsError());
+  }
+  const auto close
+    = ScopeGuard([handle] noexcept -> void { CloseHandle(handle); });
+  LARGE_INTEGER size {};
+  if (GetFileSizeEx(handle, &size) == FALSE) {
+    return Result<std::vector<std::byte>>::Err(LastWindowsError());
+  }
+  if (static_cast<uint64_t>(size.QuadPart)
+    > std::numeric_limits<size_t>::max()) {
+    return Result<std::vector<std::byte>>::Err(
+      std::make_error_code(std::errc::file_too_large));
+  }
+  auto bytes = std::vector<std::byte>(static_cast<size_t>(size.QuadPart));
+  auto remaining = std::span(bytes);
+  while (!remaining.empty()) {
+    const auto count = static_cast<DWORD>((std::min)(remaining.size(),
+      static_cast<size_t>(std::numeric_limits<DWORD>::max())));
+    DWORD read = 0;
+    if (ReadFile(handle, remaining.data(), count, &read, nullptr) == FALSE) {
+      return Result<std::vector<std::byte>>::Err(LastWindowsError());
+    }
+    if (read == 0U) {
+      return Result<std::vector<std::byte>>::Err(
+        std::make_error_code(std::errc::io_error));
+    }
+    remaining = remaining.subspan(read);
+  }
+#else
+  const auto descriptor = ::open(path.c_str(), O_RDONLY | O_CLOEXEC);
+  if (descriptor < 0) {
+    return Result<std::vector<std::byte>>::Err(
+      std::error_code(errno, std::generic_category()));
+  }
+  const auto close
+    = ScopeGuard([descriptor]() noexcept { ::close(descriptor); });
+  struct stat status {};
+  if (::fstat(descriptor, &status) != 0) {
+    return Result<std::vector<std::byte>>::Err(
+      std::error_code(errno, std::generic_category()));
+  }
+  auto bytes = std::vector<std::byte>(static_cast<size_t>(status.st_size));
+  auto remaining = std::span(bytes);
+  while (!remaining.empty()) {
+    const auto read = ::read(descriptor, remaining.data(), remaining.size());
+    if (read < 0) {
+      if (errno == EINTR) {
+        continue;
+      }
+      return Result<std::vector<std::byte>>::Err(
+        std::error_code(errno, std::generic_category()));
+    }
+    if (read == 0) {
+      return Result<std::vector<std::byte>>::Err(
+        std::make_error_code(std::errc::io_error));
+    }
+    remaining = remaining.subspan(static_cast<size_t>(read));
+  }
+#endif
+  return Ok(std::move(bytes));
 }
 
 } // namespace oxygen::serio

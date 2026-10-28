@@ -229,7 +229,13 @@ namespace {
   auto ReadIndexHeaderOrThrow(const std::filesystem::path& index_path)
     -> IndexHeader
   {
-    serio::FileStream stream(index_path, std::ios::in);
+    // A shared read never blocks another process publishing the index.
+    auto bytes = serio::ReadPublishedFile(index_path);
+    if (!bytes) {
+      throw std::runtime_error(
+        "Failed to read existing index: " + bytes.error().message());
+    }
+    serio::MemoryStream stream(*bytes);
     serio::Reader reader(stream);
 
     auto header_result = reader.Read<IndexHeader>();

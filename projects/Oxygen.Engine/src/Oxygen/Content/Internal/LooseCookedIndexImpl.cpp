@@ -9,7 +9,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
-#include <ios>
 #include <iterator>
 #include <memory>
 #include <mutex>
@@ -22,6 +21,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
+#include <vector>
 
 #include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Base/NoStd.h>
@@ -35,7 +35,8 @@
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/SourceKey.h>
-#include <Oxygen/Serio/FileStream.h>
+#include <Oxygen/Serio/AtomicFile.h>
+#include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
 
 using oxygen::data::loose_cooked::AssetEntry;
@@ -268,7 +269,7 @@ auto ValidateGuid(const IndexHeader& header) -> void
 namespace oxygen::content::internal {
 
 struct LooseCookedIndexImpl::IndexLoadContext {
-  oxygen::observer_ptr<serio::Reader<serio::FileStream<>>> reader;
+  oxygen::observer_ptr<serio::Reader<serio::MemoryStream>> reader;
   uint64_t file_size;
   uint64_t next_reference_offset = 0;
   IndexHeader header;
@@ -321,24 +322,20 @@ auto LooseCookedIndexImpl::LoadFromFile(const std::filesystem::path& index_path)
 auto LooseCookedIndexImpl::LoadFromLockedFile(
   const std::filesystem::path& index_path) -> LooseCookedIndexImpl
 {
-  serio::FileStream<> stream(index_path, std::ios::in);
-  auto size_result = stream.Size();
-  if (!size_result) {
+  // A shared read never blocks the cooker replacing the published index.
+  auto bytes = serio::ReadPublishedFile(index_path);
+  if (!bytes) {
     throw std::runtime_error(
-      "Failed to get index file size: " + size_result.error().message());
+      "Failed to read index file: " + bytes.error().message());
   }
 
-  const auto file_size = size_result.value();
+  const auto file_size = bytes->size();
   if (file_size < sizeof(IndexHeader)) {
     throw std::runtime_error("Index file too small: " + index_path.string());
   }
 
-  if (auto res = stream.Seek(0); !res) {
-    throw std::runtime_error(
-      "Failed to seek index file: " + res.error().message());
-  }
-
-  serio::Reader<serio::FileStream<>> reader(stream);
+  serio::MemoryStream stream(*bytes);
+  serio::Reader<serio::MemoryStream> reader(stream);
   LooseCookedIndexImpl out;
   IndexLoadContext context {
     .reader = oxygen::make_observer(&reader),
