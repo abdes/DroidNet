@@ -145,6 +145,10 @@ $EnginePak = Get-OxygenEngineContentPak -SourceRoot $RepoRoot -Selection $tools.
 $CookedRoot = Get-FullPath $CookedRoot
 $OutputDir = Get-FullPath $OutputDir
 
+# Two records for one source would package the model twice.
+. (Join-Path $PSScriptRoot 'internal/ModelImportRecords.ps1')
+Assert-OneModelImportRecordPerSource (Get-FullPath $ContentRoot)
+
 if (-not (Test-Path $CookedRoot -PathType Container)) {
     throw "Cooked root not found: $CookedRoot"
 }

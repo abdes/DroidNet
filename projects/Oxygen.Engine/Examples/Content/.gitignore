@@ -1,7 +1,5 @@
 pak/
 .cooked/
-!glb/*.glb
-glb/
 scripts.bin
 import-sources.local.json
 # Importing a model in RenderScene makes its record here; it is the user's.

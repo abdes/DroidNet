@@ -77,6 +77,7 @@ def prepare(source, output, scenes):
         "pak_content.cmd",
         "import_models.ps1",
         "import_models.cmd",
+        "internal/ModelImportRecords.ps1",
         "play_scene.ps1",
         "play_scene.cmd",
         "import-sources.schema.json",

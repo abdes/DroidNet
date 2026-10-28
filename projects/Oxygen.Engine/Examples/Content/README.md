@@ -139,6 +139,11 @@ are never modified. Records and cooked generations are owned by Content. The
 machine-local list is only for creating or deliberately changing recipes;
 `-Record` and `-All` replay the saved settings without applying new defaults.
 
+One source has one record. `import_models` and `pak_content` stop, naming the
+records, when two records under `imports` name the same source: both would be
+imported and packaged, so the model would appear twice under two virtual paths.
+Delete the stale record, or reimport the source with `-Record`.
+
 New/applied recipes default to fast BC7, box-filtered full mip chains, sRGB
 color textures and linear data textures. They import all content, normalize
 units, bake transforms, generate missing normals/tangents, retain nodes and

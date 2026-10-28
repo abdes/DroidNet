@@ -111,7 +111,10 @@ if ($installedSdk) {
     . (Join-Path $engineRoot 'tools/cli/BuildSelection.ps1')
 }
 $ContentRoot = Get-AbsolutePath $ContentRoot
+. (Join-Path $PSScriptRoot 'internal/ModelImportRecords.ps1')
+Assert-OneModelImportRecordPerSource $ContentRoot
 if ($SourceList) {
+    $recordsBySource = Get-ModelImportRecordsBySource $ContentRoot
     $SourceList = Get-AbsolutePath $SourceList
     if (-not (Test-Path -LiteralPath $SourceList -PathType Leaf)) { throw "Source list not found: $SourceList" }
     $sourceJson = Get-Content -LiteralPath $SourceList -Raw
@@ -135,6 +138,14 @@ if ($SourceList) {
             $source.virtual_path
         } else {
             "/.cooked/Models/$($source.name)$([IO.Path]::GetExtension($original))"
+        }
+        # The importer finds a record by source and virtual path, so another
+        # virtual path would give this source a second record.
+        if ($recordsBySource.ContainsKey($original)) {
+            $existing = $recordsBySource[$original][0]
+            if ($existing.VirtualPath -cne $virtualPath) {
+                throw "$original already has the import record $($existing.Record) under $($existing.VirtualPath); reimport it with -Record, or give its source list entry that virtual path."
+            }
         }
         @{
             id = $source.name; name = $source.name; type = $type; source = $original
