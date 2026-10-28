@@ -577,11 +577,6 @@ Graphics::Graphics(const SerializedBackendConfig& config,
   const auto frame_capture_config = ParseFrameCaptureConfig(jsonConfig);
   if (jsonConfig.contains("enable_debug_layer")) {
     desc.enable_debug_layer = jsonConfig.at("enable_debug_layer").get<bool>();
-  } else if (jsonConfig.contains("enable_debug")) {
-    desc.enable_debug_layer = jsonConfig.at("enable_debug").get<bool>();
-    LOG_F(WARNING,
-      "D3D12 Graphics: legacy serialized key 'enable_debug' detected; "
-      "treating it as 'enable_debug_layer'");
   }
   if (jsonConfig.contains("enable_validation")) {
     desc.enable_validation = jsonConfig.at("enable_validation").get<bool>();

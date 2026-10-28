@@ -31,16 +31,6 @@
 #include <Oxygen/Graphics/Direct3D12/Detail/Types.h>
 #include <Oxygen/Graphics/Direct3D12/api_export.h>
 
-inline auto operator==(const LUID& lhs, const LUID& rhs) -> bool
-{
-  return (lhs.LowPart == rhs.LowPart) && (lhs.HighPart == rhs.HighPart);
-}
-
-inline auto operator!=(const LUID& lhs, const LUID& rhs) -> bool
-{
-  return !(lhs == rhs);
-}
-
 namespace D3D12MA {
 class Allocator; // NOLINT
 } // namespace D3D12MA
@@ -55,7 +45,6 @@ public:
   friend class DeviceManager;
 
   [[nodiscard]] auto Name() const -> auto& { return name; }
-  [[nodiscard]] auto UniqueId() const { return luid; }
   [[nodiscard]] auto VendorId() const { return vendor_id; }
   [[nodiscard]] auto DeviceId() const { return device_id; }
   [[nodiscard]] auto Memory() const { return memory; }
@@ -75,7 +64,7 @@ private:
   AdapterInfo(std::string name,
     uint32_t vendor_id, // NOLINT(*-easily-swappable-parameters)
     uint32_t device_id, size_t memory, bool has_display,
-    bool meets_feature_level, D3D_FEATURE_LEVEL max_feature_level, LUID luid)
+    bool meets_feature_level, D3D_FEATURE_LEVEL max_feature_level)
     : name(std::move(name))
     , vendor_id(vendor_id)
     , device_id(device_id)
@@ -83,7 +72,6 @@ private:
     , has_display(has_display)
     , meets_feature_level(meets_feature_level)
     , max_feature_level(max_feature_level)
-    , luid(luid)
   {
   }
 
@@ -94,13 +82,7 @@ private:
   bool has_display;
   bool meets_feature_level;
   D3D_FEATURE_LEVEL max_feature_level;
-  LUID luid;
   bool is_best { false };
-};
-
-template <typename Callable>
-concept AdapterPredicate = requires(Callable c, const AdapterInfo& a) {
-  { c(a) } -> std::convertible_to<bool>;
 };
 
 template <typename Callable>
@@ -125,8 +107,8 @@ struct DeviceManagerDesc {
   bool auto_select_adapter { true };
   std::optional<std::string> preferred_card_name;
   std::optional<DeviceId> preferred_card_device_id;
-  D3D_FEATURE_LEVEL minFeatureLevel { D3D_FEATURE_LEVEL_12_0 };
-  //! Mesh shaders read their draw index from SV_StartInstanceLocation.
+  D3D_FEATURE_LEVEL min_feature_level { D3D_FEATURE_LEVEL_12_0 };
+  //! Shaders read the draw's first instance from SV_StartInstanceLocation.
   D3D_SHADER_MODEL min_shader_model { D3D_SHADER_MODEL_6_8 };
 };
 
@@ -179,41 +161,6 @@ public:
         });
   }
 
-  template <AdapterPredicate Pred,
-    DeviceRemovalHandler Handler = std::nullptr_t>
-  auto SelectAdapter(Pred&& criteria, Handler&& on_device_removed = nullptr)
-    -> bool
-  {
-    // Find the context matching the criteria
-    auto it
-      = std::ranges::find_if(contexts_, [&](const Context& context) -> auto {
-          return std::forward<Pred>(criteria)(context.info);
-        });
-
-    if (it == contexts_.end()) {
-      return false;
-    }
-
-    return SelectAdapter(*it, std::forward<Handler>(on_device_removed));
-  }
-
-  template <DeviceRemovalHandler Handler = std::nullptr_t>
-  auto SelectAdapter(LUID luid, Handler&& on_device_removed = nullptr) -> bool
-  {
-    // Optimize the case of re-selecting the current context
-    if (current_context_ != nullptr && current_context_->info.luid == luid) {
-      return SelectAdapter(
-        *current_context_, std::forward<Handler>(on_device_removed));
-    }
-
-    // Otherwise, find and select the requested adapter
-    return SelectAdapter(
-      [&](const AdapterInfo& adapter) -> auto {
-        return adapter.UniqueId() == luid;
-      },
-      std::forward<Handler>(on_device_removed));
-  }
-
   //! Select the best ranked adapter whose device initializes; an adapter that
   //! fails, e.g. below the minimum shader model, gives way to the next one.
   template <DeviceRemovalHandler Handler = std::nullptr_t>
@@ -236,11 +183,8 @@ public:
     return false;
   }
 
-  [[nodiscard]] auto GetCommandQueue(D3D12_COMMAND_LIST_TYPE type) const
+  OXGN_D3D12_NDAPI auto GetCommandQueue(D3D12_COMMAND_LIST_TYPE type) const
     -> dx::ICommandQueue*;
-
-  // TODO(abdes) Implement feature check support in device manager
-  [[nodiscard]] auto CheckFeatureSupport(D3D12_FEATURE feature) const -> bool;
 
 private:
   struct Context {

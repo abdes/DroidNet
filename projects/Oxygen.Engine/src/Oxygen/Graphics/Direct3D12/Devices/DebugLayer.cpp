@@ -859,7 +859,15 @@ void PrintBreadcrumbNode(const D3D12_AUTO_BREADCRUMB_NODE1* node) noexcept
 
 void PrintPageFaultInfo(const D3D12_DRED_PAGE_FAULT_OUTPUT& page_fault) noexcept
 {
-  LOG_SCOPE_F(INFO, "Memory Allocations at Fault");
+  if (page_fault.PageFaultVA == 0U
+    && page_fault.pHeadExistingAllocationNode == nullptr
+    && page_fault.pHeadRecentFreedAllocationNode == nullptr) {
+    LOG_F(INFO, "Page fault: none");
+    return;
+  }
+
+  LOG_SCOPE_F(INFO, "Page Fault");
+  LOG_F(INFO, "Address: 0x{:016X}", page_fault.PageFaultVA);
 
   if (page_fault.pHeadExistingAllocationNode != nullptr) {
     LOG_SCOPE_F(INFO, "Active Allocations");
@@ -876,32 +884,38 @@ void PrintPageFaultInfo(const D3D12_DRED_PAGE_FAULT_OUTPUT& page_fault) noexcept
 void DebugLayer::PrintDredReport(dx::IDevice* device) noexcept
 {
   Microsoft::WRL::ComPtr<ID3D12DeviceRemovedExtendedData1> dred;
-  if (!SUCCEEDED(device->QueryInterface(IID_PPV_ARGS(&dred)))) {
+  if (const auto hr = device->QueryInterface(IID_PPV_ARGS(&dred)); FAILED(hr)) {
+    LOG_F(WARNING,
+      "No DRED report: the device exposes no DRED interface (hr=0x{:08X})",
+      static_cast<unsigned int>(hr));
     return;
   }
 
   LOG_SCOPE_F(INFO, "Device Removed Extended Data (DRED) Report");
+  LOG_F(INFO, "Removal reason: hr=0x{:08X}",
+    static_cast<unsigned int>(device->GetDeviceRemovedReason()));
+
   D3D12_DRED_AUTO_BREADCRUMBS_OUTPUT1 breadcrumbs {};
-  D3D12_DRED_PAGE_FAULT_OUTPUT page_fault {};
-  bool has_data = false;
-
-  if (SUCCEEDED(dred->GetAutoBreadcrumbsOutput1(&breadcrumbs))
-    && breadcrumbs.pHeadAutoBreadcrumbNode != nullptr) {
+  if (const auto hr = dred->GetAutoBreadcrumbsOutput1(&breadcrumbs);
+    FAILED(hr)) {
+    LOG_F(WARNING, "Command history unavailable (hr=0x{:08X})",
+      static_cast<unsigned int>(hr));
+  } else if (breadcrumbs.pHeadAutoBreadcrumbNode == nullptr) {
+    LOG_F(INFO, "Command history: no command lists recorded");
+  } else {
     LOG_SCOPE_F(INFO, "Command History");
-
     for (const auto* node = breadcrumbs.pHeadAutoBreadcrumbNode;
       node != nullptr; node = node->pNext) {
       PrintBreadcrumbNode(node);
     }
-    has_data = true;
   }
 
-  if (SUCCEEDED(dred->GetPageFaultAllocationOutput(&page_fault))) {
+  D3D12_DRED_PAGE_FAULT_OUTPUT page_fault {};
+  if (const auto hr = dred->GetPageFaultAllocationOutput(&page_fault);
+    FAILED(hr)) {
+    LOG_F(WARNING, "Page fault data unavailable (hr=0x{:08X})",
+      static_cast<unsigned int>(hr));
+  } else {
     PrintPageFaultInfo(page_fault);
-    has_data = true;
-  }
-
-  if (!has_data) {
-    LOG_F(WARNING, "No DRED data available");
   }
 }

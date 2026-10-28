@@ -60,7 +60,6 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
 
   oxygen::host::RuntimeCliState graphics_cli {};
   bool enable_validation = false;
-  bool auto_select_adapter = false;
   std::string feature_level = "12_0";
 
   try {
@@ -72,14 +71,6 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
         .DefaultValue(false)
         .UserFriendlyName("validation")
         .StoreTo(&enable_validation)
-        .Build());
-    device_options->Add(Option::WithKey("auto-select-adapter")
-        .About("Automatically pick the best adapter")
-        .Long("auto-select-adapter")
-        .WithValue<bool>()
-        .DefaultValue(false)
-        .UserFriendlyName("auto-select-adapter")
-        .StoreTo(&auto_select_adapter)
         .Build());
     device_options->Add(Option::WithKey("feature-level")
         .About("Minimum D3D feature level: 12_0 or 12_1")
@@ -119,22 +110,29 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
       .enable_validation = enable_validation,
       .enable_aftermath = graphics_cli.enable_aftermath,
       .require_display = adapter_config.require_display,
-      .auto_select_adapter = auto_select_adapter,
+      // The example selects the adapter itself, with a removal handler.
+      .auto_select_adapter = false,
       .preferred_card_name = adapter_config.preferred_card_name,
       .preferred_card_device_id = adapter_config.preferred_card_device_id,
-      .minFeatureLevel = ParseFeatureLevel(feature_level),
+      .min_feature_level = ParseFeatureLevel(feature_level),
     };
     DeviceManager device_manager(props);
 
-    device_manager.SelectBestAdapter(
-      [] { LOG_F(INFO, "Device removal detected!"); });
+    if (!device_manager.SelectBestAdapter(
+          [] { LOG_F(INFO, "Device removal detected!"); })) {
+      LOG_F(ERROR, "Devices: no usable adapter");
+      return EXIT_FAILURE;
+    }
 
-    auto* device = device_manager.Device();
-    device->GetDeviceRemovedReason();
-    device->RemoveDevice();
+    device_manager.Device()->RemoveDevice();
 
-    device_manager.SelectBestAdapter(
-      [] { LOG_F(INFO, "Device removal handler called"); });
+    // Detects the removal, prints the DRED report, then recreates the device.
+    if (!device_manager.SelectBestAdapter(
+          [] { LOG_F(INFO, "Device removal handler called"); })) {
+      LOG_F(ERROR, "Devices: recovery from the device removal failed");
+      return EXIT_FAILURE;
+    }
+    LOG_F(INFO, "Devices: recovered on a new device");
     return EXIT_SUCCESS;
   } catch (const CmdLineArgumentsError& e) {
     LOG_F(ERROR, "Devices CLI parse failed: {}", e.what());

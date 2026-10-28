@@ -182,18 +182,8 @@ void DeviceManager::DiscoverAdapters()
   DCHECK_NOTNULL_F(factory_, "DXGI factory not initialized");
   LOG_SCOPE_F(INFO, "Discover adapters");
 
-  contexts_ = DiscoverContexts(*factory_.Get(), props_.minFeatureLevel);
+  contexts_ = DiscoverContexts(*factory_.Get(), props_.min_feature_level);
   ranking_ = RankContexts(contexts_, props_);
-
-  std::ranges::for_each(Adapters(), [](const AdapterInfo& a) -> void {
-    LOG_F(INFO, "[{}] {} {} ({}-{})", "+", a.Name(), a.MemoryAsString(),
-      a.VendorId(), a.DeviceId());
-    LOG_F(1, "  Meets Feature Level   : {}", a.MeetsFeatureLevel());
-    LOG_F(1, "  Has Connected Display : {}", a.IsConnectedToDisplay());
-    LOG_F(1, "  Max Feature Level     : {}",
-      FeatureLevelToString(a.MaxFeatureLevel()));
-    LOG_F(1, "  Is Best Adapter       : {}", a.IsBest());
-  });
 }
 
 auto DeviceManager::DiscoverContexts(dx::IFactory& factory,
@@ -221,10 +211,19 @@ auto DeviceManager::DiscoverContexts(dx::IFactory& factory,
       "adapter `{}` does not support feature level 0x{:X}", adapter_name,
       static_cast<unsigned>(minimum));
 
+    LOG_F(INFO, "[+] {} {} (vendor 0x{:04X}, device 0x{:04X})", adapter_name,
+      FormatMemorySize(desc.DedicatedVideoMemory), desc.VendorId,
+      desc.DeviceId);
+    const auto has_display = CheckConnectedDisplay(adapter);
+    LOG_F(1, "  Has Connected Display : {}", has_display);
+    LOG_F(1, "  Max Feature Level     : {}",
+      max_feature_level.has_value() ? FeatureLevelToString(*max_feature_level)
+                                    : std::string { "unsupported" });
+
     AdapterInfo adapter_info(std::move(adapter_name), desc.VendorId,
-      desc.DeviceId, desc.DedicatedVideoMemory, CheckConnectedDisplay(adapter),
+      desc.DeviceId, desc.DedicatedVideoMemory, has_display,
       max_feature_level.has_value(),
-      max_feature_level.value_or(D3D_FEATURE_LEVEL_11_0), desc.AdapterLuid);
+      max_feature_level.value_or(D3D_FEATURE_LEVEL_11_0));
 
     contexts.emplace_back(std::move(adapter_info), adapter);
     ++adapter_index;
@@ -258,7 +257,7 @@ auto DeviceManager::RankContexts(const std::span<Context> contexts,
     });
   if (ranking.order.empty()) {
     LOG_F(WARNING, "No adapter supports feature level 0x{:X}{}",
-      static_cast<unsigned>(desc.minFeatureLevel),
+      static_cast<unsigned>(desc.min_feature_level),
       desc.require_display ? " and drives a display" : "");
     return {};
   }
@@ -294,7 +293,7 @@ auto DeviceManager::ListAdapters(const DeviceManagerDesc& desc)
 {
   ComPtr<dx::IFactory> factory;
   ThrowOnFailed(CreateDXGIFactory2(0, IID_PPV_ARGS(&factory)));
-  auto contexts = DiscoverContexts(*factory.Get(), desc.minFeatureLevel);
+  auto contexts = DiscoverContexts(*factory.Get(), desc.min_feature_level);
   std::ignore = RankContexts(contexts, desc);
 
   auto adapters = std::vector<AdapterInfo> {};
@@ -313,7 +312,7 @@ auto DeviceManager::InitializeContext(Context& context) const -> bool
     // Initialize the device
     LOG_F(INFO, "Device");
     ThrowOnFailed(D3D12CreateDevice(context.adapter.Get(),
-      props_.minFeatureLevel, IID_PPV_ARGS(&context.device)));
+      props_.min_feature_level, IID_PPV_ARGS(&context.device)));
     if (!SupportsShaderModel(context.device, props_.min_shader_model)) {
       throw std::runtime_error(
         fmt::format("adapter `{}` does not support shader model 0x{:X}",
@@ -374,9 +373,8 @@ DeviceManager::Context::~Context() noexcept
   // The destructor may be called when the vector is constructing a new
   // Context in place. In that case, the placeholder object in the vector was
   // not initialized.
-  if (adapter != nullptr) {
-    LOG_F(INFO, "Releasing context for: {} ({}active)", info.Name(),
-      IsActive() ? "" : "not ");
+  if (adapter != nullptr && IsActive()) {
+    LOG_F(INFO, "Releasing context for: {}", info.Name());
   }
 }
 
@@ -469,7 +467,7 @@ DeviceManager::DeviceManager(DeviceManagerDesc desc)
     if (!SelectBestAdapter()) {
       throw std::runtime_error(fmt::format(
         "No adapter supports feature level 0x{:X} and shader model 0x{:X}{}",
-        static_cast<unsigned>(props_.minFeatureLevel),
+        static_cast<unsigned>(props_.min_feature_level),
         static_cast<unsigned>(props_.min_shader_model),
         props_.require_display ? " and drives a display" : ""));
     }
