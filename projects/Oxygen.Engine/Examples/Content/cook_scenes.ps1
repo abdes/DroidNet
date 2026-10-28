@@ -169,9 +169,26 @@ foreach ($SceneDir in $ScenesToCook) {
     # Global ImportTool options precede the batch subcommand.
     $ArgsList = @()
     if ($NoTUI) { $ArgsList += '--no-tui' }
-    $ArgsList += @('batch', '--manifest', $ManifestPath, '--cooked-context-root', $EnginePak)
-    Invoke-OxygenTool -Context $tools -Target 'oxygen-cooker-importtool' -Arguments $ArgsList
-    $ExitCode = $LASTEXITCODE
+    $ReportPath = [IO.Path]::GetTempFileName()
+    $ArgsList += @('batch', '--manifest', $ManifestPath, '--cooked-context-root', $EnginePak, '--report', $ReportPath)
+    try {
+        Invoke-OxygenTool -Context $tools -Target 'oxygen-cooker-importtool' -Arguments $ArgsList
+        $ExitCode = $LASTEXITCODE
+        # The importer reports what it left out or repaired only in the report.
+        if ((Get-Item -LiteralPath $ReportPath).Length -gt 0) {
+            $Report = Get-Content -LiteralPath $ReportPath -Raw | ConvertFrom-Json
+            foreach ($Job in @($Report.jobs)) {
+                foreach ($Diagnostic in @($Job.diagnostics | Where-Object { $_ -and $_.severity -ne 'info' })) {
+                    # The report omits an empty object path.
+                    $ObjectPath = $Diagnostic.PSObject.Properties['object_path']
+                    $Where = if ($ObjectPath) { " ($($ObjectPath.Value))" } else { '' }
+                    Write-Warning "job $($Job.index) [$($Diagnostic.code)] $($Diagnostic.message)$Where"
+                }
+            }
+        }
+    } finally {
+        Remove-Item -LiteralPath $ReportPath -Force -ErrorAction SilentlyContinue
+    }
 
     if ($ExitCode -ne 0) {
         Write-Host "FAILED: Cooking scene $($SceneDir.Name) exited with code $ExitCode" -ForegroundColor Red

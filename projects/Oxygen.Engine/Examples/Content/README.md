@@ -76,10 +76,16 @@ on a large floor, with the example materials overriding the shapes' surface.
 `surface-overrides` shows surface and LOD policy overrides against asset
 defaults and checks them while it plays; it uses the models `sdk-furniture`
 cooks, which `-All` cooks first.
+`compressed-textures` places the Khronos Chronograph Watch with KTX2 (Basis
+Universal) and with WebP textures, and the KTX2 Anisotropy Barn Lamp, on a floor
+whose material cooks the Rock030 WebP maps under `images/webp/`.
+`kenney-characters` places Kenney's `characterMedium.fbx` twice, its `skin`
+surface given the survivor and the zombie skin; skins and animations are not
+imported, so both stand in their bind pose.
 
 `-All` processes each `scenes/*/import-manifest.json` in name order, including
 its materials, geometry, textures, scripts, inputs and physics sidecars. It does
-not reimport external models or build PAKs. The checkout has eighteen
+not reimport external models or build PAKs. The checkout has twenty
 scene manifests; the SDK ships a smaller selection. Unreferenced raw models and
 images are imported explicitly by their consumers.
 
@@ -149,7 +155,9 @@ normalize names. Quality switches apply only with `-SourceList`:
 Each source imports sequentially and publishes independently. Native publication
 validates the candidate and atomically selects its generation and provenance.
 Failures keep the previous selection. The script then checks the complete native
-file inventory, including digests, and fails if any issue is reported. Temporary
+file inventory, including digests, and fails if any issue is reported. Every
+warning and error the importer reports is printed with its code and object path;
+`cook_scenes` prints those of each scene's jobs the same way. Temporary
 recipes/reports are removed. Camera, environment and other demo settings are not
 part of this workflow.
 
@@ -188,7 +196,10 @@ commands with a selected model import generation when inspecting it directly.
 
 Packaging reads `.cooked/main` and the generation each model import record
 publishes, so one PAK holds the scenes and every imported model, and resolves
-external script sources against Content. Default outputs are `pak/all.pak`,
+external script sources against Content. A record that a scene manifest cooks is
+packed from `.cooked/main`, never from its own generation, which would shadow
+the scene's copy. After an importer change, replay the records
+(`import_models -All`), recook the scenes (`cook_scenes -All`), then package. Default outputs are `pak/all.pak`,
 `all.catalog.json` and `all.manifest.json`. `-ContentRoot` selects another
 authored Content directory and its default cooked/PAK paths. Keep the stable PAK
 source key when rebuilding the same content line. Close readers before replacing

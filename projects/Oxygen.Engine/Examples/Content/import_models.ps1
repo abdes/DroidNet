@@ -204,7 +204,6 @@ try {
         $reportPath = [IO.Path]::GetTempFileName()
         $temporaryFiles.Add($reportPath)
         # A new model's record is found, or made, from its source and virtual path; it is named by its identity.
-        $recordArguments = @('--record', $job.record)
         if ($SourceList) {
             $recipePath = [IO.Path]::GetTempFileName()
             $temporaryFiles.Add($recipePath)
@@ -212,6 +211,8 @@ try {
             foreach ($setting in $texture.GetEnumerator()) { $recipeJob[$setting.Key] = $setting.Value }
             @{ version = 1; jobs = @($recipeJob) } | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $recipePath -Encoding utf8NoBOM
             $recordArguments = @('--recipe', $recipePath, '--content-root', $ContentRoot)
+        } else {
+            $recordArguments = @('--record', $job.record)
         }
         Write-Host "Importing $($job.name)..."
         $importArguments = @(
@@ -220,6 +221,13 @@ try {
         ) + $recordArguments
         Invoke-OxygenTool -Context $tools -Target 'oxygen-cooker-importtool' -Arguments $importArguments -CheckExitCode
         $report = Get-Content -LiteralPath $reportPath -Raw | ConvertFrom-Json
+        # The importer reports what it left out or repaired only in the report.
+        foreach ($diagnostic in @($report.jobs | ForEach-Object { $_.diagnostics } | Where-Object { $_ -and $_.severity -ne 'info' })) {
+            # The report omits an empty object path.
+            $objectPath = $diagnostic.PSObject.Properties['object_path']
+            $where = if ($objectPath) { " ($($objectPath.Value))" } else { '' }
+            Write-Warning "[$($diagnostic.code)] $($diagnostic.message)$where"
+        }
         $publishedRoot = $report.session.cooked_root
         $inventoryPath = [IO.Path]::GetTempFileName()
         $temporaryFiles.Add($inventoryPath)

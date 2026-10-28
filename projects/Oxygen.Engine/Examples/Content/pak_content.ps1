@@ -160,8 +160,22 @@ $ManifestPath = Join-Path $OutputDir ($BaseName + ".manifest.json")
 $ImportRoots = @()
 $Records = Join-Path $ContentRoot 'imports'
 $Generations = Join-Path $ContentRoot '.cooked/imports'
+# A scene manifest's model job cooks its record into the main root, which holds
+# its products; that record's own generation would shadow them, stale or not.
+$SceneCookedRecords = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+foreach ($Manifest in @(Get-ChildItem -Path (Join-Path $ContentRoot 'scenes') -Filter 'import-manifest.json' -Recurse -File -ErrorAction SilentlyContinue)) {
+    foreach ($Job in @((Get-Content -LiteralPath $Manifest.FullName -Raw | ConvertFrom-Json).jobs)) {
+        if ($Job.PSObject.Properties['record'] -and $Job.record) {
+            [void]$SceneCookedRecords.Add([IO.Path]::GetFullPath((Join-Path $Manifest.DirectoryName $Job.record)))
+        }
+    }
+}
 if (Test-Path -LiteralPath $Records -PathType Container) {
     $ImportRoots = @(Get-ChildItem -LiteralPath $Records -Filter '*.import.json' -File | Sort-Object Name | ForEach-Object {
+        if ($SceneCookedRecords.Contains($_.FullName)) {
+            Write-Host "Packing $($_.Name) from the main root, where a scene manifest cooks it." -ForegroundColor DarkGray
+            return
+        }
         $identity = (Get-Content -LiteralPath $_.FullName -Raw | ConvertFrom-Json).source_identity
         $head = Join-Path $Generations "$identity/head.json"
         # A record that never published here, such as one cooked by a scene manifest into the main root, adds nothing.
