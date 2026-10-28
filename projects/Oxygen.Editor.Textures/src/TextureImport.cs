@@ -43,6 +43,16 @@ public sealed class TextureImport(IFileSystem fileSystem)
     public static bool IsSupportedImage(string path)
         => !string.IsNullOrWhiteSpace(path) && ImageExtensions.Contains(Path.GetExtension(path));
 
+    /// <summary>Returns whether an image holds linear high dynamic range values: a Radiance HDR or OpenEXR image.</summary>
+    /// <param name="path">The selected image path.</param>
+    /// <returns>True for <c>.hdr</c> and <c>.exr</c> images.</returns>
+    public static bool IsHdrImage(string path)
+    {
+        var extension = Path.GetExtension(path);
+        return string.Equals(extension, ".hdr", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(extension, ".exr", StringComparison.OrdinalIgnoreCase);
+    }
+
     /// <summary>Infers how a single image lays out a cube from its aspect ratio.</summary>
     /// <param name="width">The image width in pixels.</param>
     /// <param name="height">The image height in pixels.</param>
@@ -158,7 +168,7 @@ public sealed class TextureImport(IFileSystem fileSystem)
     }
 
     /// <summary>Reads an image's width and height from its header, without decoding its pixels.</summary>
-    /// <param name="path">A PNG, JPEG, BMP, TGA or Radiance HDR image.</param>
+    /// <param name="path">A PNG, JPEG, BMP, TGA, Radiance HDR, OpenEXR, WebP or KTX2 image.</param>
     /// <returns>The dimensions, or <see langword="null"/> when the header cannot be read.</returns>
     public (int Width, int Height)? ReadDimensions(string path) => ImageDimensions.TryRead(this.fileSystem, path);
 

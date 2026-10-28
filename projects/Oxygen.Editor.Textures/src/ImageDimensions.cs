@@ -14,7 +14,11 @@ internal static class ImageDimensions
 {
     private const int HeaderBytes = 64 * 1024;
 
-    /// <summary>Reads the width and height of a PNG, JPEG, BMP, TGA or Radiance HDR image.</summary>
+    private static ReadOnlySpan<byte> OpenExrMagic => [0x76, 0x2F, 0x31, 0x01];
+
+    private static ReadOnlySpan<byte> Ktx2Identifier => [0xAB, (byte)'K', (byte)'T', (byte)'X', (byte)' ', (byte)'2', (byte)'0', 0xBB, 0x0D, 0x0A, 0x1A, 0x0A];
+
+    /// <summary>Reads the width and height of a PNG, JPEG, BMP, TGA, Radiance HDR, OpenEXR, WebP or KTX2 image.</summary>
     /// <param name="fileSystem">The file system that holds the image.</param>
     /// <param name="path">The image file.</param>
     /// <returns>The dimensions, or null when the header cannot be read.</returns>
@@ -31,6 +35,9 @@ internal static class ImageDimensions
                 : Is(".bmp") ? Bmp(buffer)
                 : Is(".tga") ? Tga(buffer)
                 : Is(".hdr") ? Radiance(buffer)
+                : Is(".exr") ? OpenExr(buffer)
+                : Is(".webp") ? Webp(buffer)
+                : Is(".ktx2") ? Ktx2(buffer)
                 : null;
 
             bool Is(string suffix) => string.Equals(extension, suffix, StringComparison.OrdinalIgnoreCase);
@@ -54,6 +61,90 @@ internal static class ImageDimensions
     private static (int Width, int Height)? Tga(byte[] data)
         => data.Length >= 18
             ? (BinaryPrimitives.ReadUInt16LittleEndian(data.AsSpan(12)), BinaryPrimitives.ReadUInt16LittleEndian(data.AsSpan(14)))
+            : null;
+
+    // The first chunk of the RIFF "WEBP" form holds the size: a lossy "VP8 " frame header, a lossless "VP8L" header or
+    // an extended "VP8X" canvas.
+    private static (int Width, int Height)? Webp(byte[] data)
+    {
+        if (data.Length < 30 || !data.AsSpan(0, 4).SequenceEqual("RIFF"u8) || !data.AsSpan(8, 4).SequenceEqual("WEBP"u8))
+        {
+            return null;
+        }
+
+        var chunk = data.AsSpan(12, 4);
+        if (chunk.SequenceEqual("VP8 "u8))
+        {
+            return (BinaryPrimitives.ReadUInt16LittleEndian(data.AsSpan(26)) & 0x3FFF, BinaryPrimitives.ReadUInt16LittleEndian(data.AsSpan(28)) & 0x3FFF);
+        }
+
+        if (chunk.SequenceEqual("VP8L"u8))
+        {
+            var bits = BinaryPrimitives.ReadUInt32LittleEndian(data.AsSpan(21));
+            return ((int)(bits & 0x3FFF) + 1, (int)((bits >> 14) & 0x3FFF) + 1);
+        }
+
+        return chunk.SequenceEqual("VP8X"u8) ? (ReadUInt24(data, 24) + 1, ReadUInt24(data, 27) + 1) : null;
+
+        static int ReadUInt24(byte[] bytes, int offset) => bytes[offset] | (bytes[offset + 1] << 8) | (bytes[offset + 2] << 16);
+    }
+
+    // After the magic number and version, the OpenEXR header is a list of attributes (name, type, byte size, value)
+    // ended by an empty name; the "dataWindow" box2i holds xMin, yMin, xMax and yMax, inclusive.
+    private static (int Width, int Height)? OpenExr(byte[] data)
+    {
+        if (data.Length < 8 || !data.AsSpan(0, 4).SequenceEqual(OpenExrMagic))
+        {
+            return null;
+        }
+
+        var offset = 8;
+        while (offset < data.Length && data[offset] != 0)
+        {
+            var name = ReadString(data, ref offset);
+            var type = ReadString(data, ref offset);
+            if (name is null || type is null || offset + 4 > data.Length)
+            {
+                return null;
+            }
+
+            var size = BinaryPrimitives.ReadInt32LittleEndian(data.AsSpan(offset));
+            offset += 4;
+            if (size < 0 || offset + size > data.Length)
+            {
+                return null;
+            }
+
+            if (name == "dataWindow" && type == "box2i" && size == 16)
+            {
+                var box = data.AsSpan(offset);
+                return (BinaryPrimitives.ReadInt32LittleEndian(box[8..]) - BinaryPrimitives.ReadInt32LittleEndian(box) + 1,
+                    BinaryPrimitives.ReadInt32LittleEndian(box[12..]) - BinaryPrimitives.ReadInt32LittleEndian(box[4..]) + 1);
+            }
+
+            offset += size;
+        }
+
+        return null;
+
+        static string? ReadString(byte[] bytes, ref int position)
+        {
+            var end = Array.IndexOf(bytes, (byte)0, position);
+            if (end < 0)
+            {
+                return null;
+            }
+
+            var text = Encoding.ASCII.GetString(bytes, position, end - position);
+            position = end + 1;
+            return text;
+        }
+    }
+
+    // The KTX 2.0 header follows its 12-byte identifier with vkFormat, typeSize, pixelWidth and pixelHeight.
+    private static (int Width, int Height)? Ktx2(byte[] data)
+        => data.Length >= 28 && data.AsSpan(0, 12).SequenceEqual(Ktx2Identifier)
+            ? ((int)BinaryPrimitives.ReadUInt32LittleEndian(data.AsSpan(20)), (int)BinaryPrimitives.ReadUInt32LittleEndian(data.AsSpan(24)))
             : null;
 
     // Walks JPEG segments to the first start-of-frame marker.

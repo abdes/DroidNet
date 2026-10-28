@@ -55,7 +55,7 @@ public sealed record TextureImportTarget(string MountName, AssetPath VirtualPath
         ArgumentException.ThrowIfNullOrWhiteSpace(request.SourcePath, nameof(request));
         if (!TextureImport.IsSupportedImage(request.SourcePath))
         {
-            throw new TextureImportException(TextureImportCodes.ImageUnsupported, "Choose a PNG, JPEG, TGA, BMP or HDR image.");
+            throw new TextureImportException(TextureImportCodes.ImageUnsupported, "Choose a PNG, JPEG, TGA, BMP, HDR, EXR, WebP or KTX2 image.");
         }
 
         if (!import.ImageExists(request.SourcePath))

@@ -135,6 +135,9 @@ public static class AssetFileTypes
             new(".tga", AssetFileCategory.Image, CookedExtension: null, AssetType.Unknown),
             new(".bmp", AssetFileCategory.Image, CookedExtension: null, AssetType.Unknown),
             new(".hdr", AssetFileCategory.Image, CookedExtension: null, AssetType.Unknown),
+            new(".exr", AssetFileCategory.Image, CookedExtension: null, AssetType.Unknown),
+            new(".webp", AssetFileCategory.Image, CookedExtension: null, AssetType.Unknown),
+            new(".ktx2", AssetFileCategory.Image, CookedExtension: null, AssetType.Unknown),
         },
         .. CookedAssets.Select(static entry => new AssetFileType(entry.Extension + DescriptorSuffix, AssetFileCategory.Descriptor, entry.Extension, entry.Type)
         {

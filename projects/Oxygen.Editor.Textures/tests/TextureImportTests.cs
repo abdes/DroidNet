@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Buffers.Binary;
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
@@ -227,6 +228,99 @@ public sealed class TextureImportTests
 
         _ = size.Should().Be((width, height));
         _ = TextureImport.DetectCubeLayout(width, height).Should().Be(expected);
+    }
+
+    [TestMethod]
+    [DataRow("lossy.webp", 300, 200)]
+    [DataRow("lossless.webp", 1024, 16)]
+    [DataRow("extended.webp", 4096, 2048)]
+    [DataRow("basis.ktx2", 512, 256)]
+    [DataRow("panorama.exr", 2048, 1024)]
+    public void TheSizeIsReadFromWebpKtx2AndExrHeaders(string name, int width, int height)
+    {
+        var image = this.WriteOutside(name, Header(Path.GetFileNameWithoutExtension(name), width, height));
+
+        _ = this.import.ReadDimensions(image).Should().Be((width, height));
+    }
+
+    [TestMethod]
+    [DataRow("sky.hdr", true)]
+    [DataRow("sky.EXR", true)]
+    [DataRow("sky.png", false)]
+    [DataRow("sky.webp", false)]
+    [DataRow("sky.ktx2", false)]
+    public void RadianceAndOpenExrImagesAreHdr(string name, bool expected)
+        => _ = TextureImport.IsHdrImage(name).Should().Be(expected);
+
+    // The leading bytes of a WebP file of each bitstream kind, a KTX2 file or an OpenEXR file, holding the size as
+    // each stores it.
+    private static byte[] Header(string kind, int width, int height)
+    {
+        if (kind == "panorama")
+        {
+            return OpenExrHeader(width, height);
+        }
+
+        var bytes = new byte[32];
+        if (kind == "basis")
+        {
+            byte[] identifier = [0xAB, (byte)'K', (byte)'T', (byte)'X', (byte)' ', (byte)'2', (byte)'0', 0xBB, 0x0D, 0x0A, 0x1A, 0x0A];
+            identifier.CopyTo(bytes, 0);
+            BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(20), (uint)width);
+            BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(24), (uint)height);
+            return bytes;
+        }
+
+        "RIFF"u8.CopyTo(bytes);
+        "WEBP"u8.CopyTo(bytes.AsSpan(8));
+        switch (kind)
+        {
+            case "lossy":
+                "VP8 "u8.CopyTo(bytes.AsSpan(12));
+                BinaryPrimitives.WriteUInt16LittleEndian(bytes.AsSpan(26), (ushort)width);
+                BinaryPrimitives.WriteUInt16LittleEndian(bytes.AsSpan(28), (ushort)height);
+                break;
+            case "lossless":
+                "VP8L"u8.CopyTo(bytes.AsSpan(12));
+                bytes[20] = 0x2F;
+                BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(21), (uint)(width - 1) | ((uint)(height - 1) << 14));
+                break;
+            default:
+                "VP8X"u8.CopyTo(bytes.AsSpan(12));
+                WriteUInt24(bytes, 24, width - 1);
+                WriteUInt24(bytes, 27, height - 1);
+                break;
+        }
+
+        return bytes;
+
+        static void WriteUInt24(byte[] target, int offset, int value)
+        {
+            target[offset] = (byte)value;
+            target[offset + 1] = (byte)(value >> 8);
+            target[offset + 2] = (byte)(value >> 16);
+        }
+    }
+
+    // An OpenEXR header with a "compression" attribute before a "dataWindow" whose origin is not zero.
+    private static byte[] OpenExrHeader(int width, int height)
+    {
+        using var stream = new MemoryStream();
+        using var writer = new BinaryWriter(stream, Encoding.ASCII);
+        byte[] magicAndVersion = [0x76, 0x2F, 0x31, 0x01, 0x02, 0x00, 0x00, 0x00];
+        writer.Write(magicAndVersion);
+        writer.Write("compression\0compression\0"u8);
+        writer.Write(1);
+        writer.Write((byte)0);
+        writer.Write("dataWindow\0box2i\0"u8);
+        writer.Write(16);
+        writer.Write(10);
+        writer.Write(20);
+        writer.Write(10 + width - 1);
+        writer.Write(20 + height - 1);
+        writer.Write((byte)0);
+        writer.Flush();
+        return stream.ToArray();
     }
 
     // A Radiance HDR header: the resolution line follows the blank line that ends the text header.

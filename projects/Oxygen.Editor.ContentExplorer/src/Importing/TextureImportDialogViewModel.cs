@@ -101,10 +101,10 @@ public sealed partial class TextureImportDialogViewModel : ObservableObject
             this.OnPropertyChanged();
             this.OnPropertyChanged(nameof(this.IsCube));
 
-            // Environment cubemaps default to HDR; 2D textures default to color. A Radiance
-            // image holds linear radiance, while PNG, JPEG, TGA and BMP pixels are sRGB encoded.
+            // Environment cubemaps default to HDR; 2D textures default to color. A Radiance or
+            // OpenEXR image holds linear radiance, while the other formats' pixels are sRGB encoded.
             this.Intent = cube ? "hdr_env" : "albedo";
-            this.ColorSpace = cube && string.Equals(Path.GetExtension(this.SourcePath), ".hdr", StringComparison.OrdinalIgnoreCase) ? "linear" : "srgb";
+            this.ColorSpace = cube && TextureImport.IsHdrImage(this.SourcePath) ? "linear" : "srgb";
             this.Format = cube ? "rgba16f" : "rgba8_srgb";
             this.Revalidate();
         }

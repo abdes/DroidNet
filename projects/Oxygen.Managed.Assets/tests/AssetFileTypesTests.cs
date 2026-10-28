@@ -24,6 +24,9 @@ public sealed class AssetFileTypesTests
     [DataRow("/Content/Models/Crate.glb.preview.json", AssetFileCategory.ModelPreview, null, AssetType.Unknown)]
     [DataRow("C:/Models/Crate.FBX", AssetFileCategory.Model, null, AssetType.Unknown)]
     [DataRow("C:/Images/Sky.hdr", AssetFileCategory.Image, null, AssetType.Unknown)]
+    [DataRow("C:/Images/Sky.exr", AssetFileCategory.Image, null, AssetType.Unknown)]
+    [DataRow("C:/Images/Sky.webp", AssetFileCategory.Image, null, AssetType.Unknown)]
+    [DataRow("C:/Images/Sky.ktx2", AssetFileCategory.Image, null, AssetType.Unknown)]
     [DataRow("textures.table", AssetFileCategory.CookedResource, null, AssetType.Unknown)]
     public void FileTypeNamesWhatAFileIsAndWhatItCooksInto(string path, AssetFileCategory category, string? cooked, AssetType assetType)
     {
