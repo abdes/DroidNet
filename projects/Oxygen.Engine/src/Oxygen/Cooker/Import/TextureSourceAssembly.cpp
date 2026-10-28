@@ -276,6 +276,58 @@ namespace {
     std::memcpy(bytes.data(), value.data(), sizeof(value));
   }
 
+  //! The authored face a stored face takes.
+  /*!
+   Authored faces use the Direct3D left-handed layout. The stored cube is that
+   layout reflected across cube-space x = 0, so it reads unmirrored from inside
+   (`space::environment`): +X and -X swap and every face mirrors about its
+   vertical axis (`CopyMirroredFace`).
+  */
+  constexpr auto AuthoredFaceOf(const CubeFace stored) noexcept -> CubeFace
+  {
+    switch (stored) {
+    case CubeFace::kPositiveX:
+      return CubeFace::kNegativeX;
+    case CubeFace::kNegativeX:
+      return CubeFace::kPositiveX;
+    default:
+      return stored;
+    }
+  }
+
+  //! A face-sized square of an authored image, from its top-left texel.
+  struct AuthoredFace final {
+    std::span<const std::byte> pixels;
+    std::size_t row_pitch_bytes { 0U };
+  };
+
+  //! The size of a square face and of its texels.
+  struct FaceShape final {
+    uint32_t face_size;
+    std::size_t bytes_per_pixel;
+  };
+
+  //! Copies an authored face into a stored face, mirrored about its vertical
+  //! axis: stored texel (x, y) takes authored texel (size - 1 - x, y).
+  auto CopyMirroredFace(const AuthoredFace& authored, const FaceShape& shape,
+    const std::span<std::byte> stored, const std::size_t stored_row_pitch)
+    -> void
+  {
+    const auto row_bytes = shape.face_size * shape.bytes_per_pixel;
+    for (uint32_t y = 0; y < shape.face_size; ++y) {
+      const auto src_row
+        = authored.pixels.subspan(y * authored.row_pitch_bytes, row_bytes);
+      const auto dst_row = stored.subspan(y * stored_row_pitch, row_bytes);
+      for (uint32_t x = 0; x < shape.face_size; ++x) {
+        const auto src_x = shape.face_size - 1U - x;
+        std::ranges::copy(
+          src_row.subspan(src_x * shape.bytes_per_pixel, shape.bytes_per_pixel),
+          dst_row.subspan(x * shape.bytes_per_pixel, shape.bytes_per_pixel)
+            .begin());
+      }
+    }
+  }
+
   //! Compute direction for standard GPU cubemap convention (D3D/OpenGL/Vulkan).
   auto ComputeCubeDirectionD3D(const CubeFace face, const TexCoord uv) noexcept
     -> CubeFaceDirection
@@ -359,16 +411,27 @@ auto AssembleCubeFromFaces(std::span<const ScratchImage, kCubeFaceCount> faces)
     return Err(TextureImportError::kOutOfMemory);
   }
 
-  // Copy each face into the cube map
-  for (size_t i = 0; i < kCubeFaceCount; ++i) {
-    const auto src_image = oxygen::base::CheckedAt(faces, i).GetImage(0, 0);
-    const auto dst_pixels = cube.GetMutablePixels(static_cast<uint16_t>(i), 0);
+  const auto bytes_per_pixel = detail::GetBytesPerPixel(format);
+  if (bytes_per_pixel == 0) {
+    return Err(TextureImportError::kUnsupportedFormat);
+  }
 
-    if (src_image.pixels.size() != dst_pixels.size()) {
-      return Err(TextureImportError::kDimensionMismatch);
-    }
-
-    std::ranges::copy(src_image.pixels, dst_pixels.begin());
+  // Each stored face takes its authored face, mirrored (AuthoredFaceOf).
+  for (uint16_t layer = 0; layer < kCubeFaceCount; ++layer) {
+    const auto authored_face = AuthoredFaceOf(static_cast<CubeFace>(layer));
+    const auto src_image
+      = oxygen::base::CheckedAt(faces, static_cast<size_t>(authored_face))
+          .GetImage(0, 0);
+    CopyMirroredFace(
+      AuthoredFace {
+        .pixels = src_image.pixels,
+        .row_pitch_bytes = src_image.row_pitch_bytes,
+      },
+      FaceShape {
+        .face_size = face_width,
+        .bytes_per_pixel = bytes_per_pixel,
+      },
+      cube.GetMutablePixels(layer, 0), cube.GetImage(layer, 0).row_pitch_bytes);
   }
 
   return Ok(std::move(cube));
@@ -531,33 +594,29 @@ namespace {
     Maps a normalized direction vector to UV coordinates in an equirectangular
     (latitude-longitude) projection.
 
-    @param dir Normalized direction vector in standard GPU cubemap convention
-    (X=right, Y=up, Z=forward).
+    @param dir Normalized direction in hardware cube space: +Y up, +Z
+    forward, read right-handed (+X on the left of a viewer facing +Z).
     @return UV coordinates where u=[0,1] is longitude and v=[0,1] is latitude
   */
   auto DirectionToEquirectUV(const CubeFaceDirection& dir)
     -> std::pair<float, float>
   {
-    // Input direction is in standard GPU cubemap convention:
-    //   X = right, Y = up, Z = forward.
-    // Equirectangular mapping:
-    //   theta (longitude) = atan2(x, z) in [-π, π], wrapping around +Y axis.
+    // `space::environment` panoramas: the centre column faces cube +Z (world
+    // forward) and u grows toward cube -X (world -X), the right of a viewer
+    // inside, so the panorama reads unmirrored from inside.
+    //   theta (longitude) = atan2(-x, z) in [-π, π], about cube +Y.
     //   phi (latitude)    = asin(y) in [-π/2, π/2], elevation from XZ plane.
-    const float theta = std::atan2(dir.x, dir.z);
+    const float theta = std::atan2(-dir.x, dir.z);
     const float phi = std::asin(std::clamp(dir.y, -1.0F, 1.0F));
 
     // Map to [0, 1] UV coordinates.
-    // u: θ=0 (Forward +Z) maps to u=0.5.
-    // v: φ=π/2 (Up +Y) maps to v=0 (top of texture).
+    // u: θ=0 (cube +Z) maps to u=0.5.
+    // v: φ=π/2 (cube +Y, world up) maps to v=0 (top of texture).
     const float u = ((theta / std::numbers::pi_v<float>)+1.0F) * 0.5F;
     const float v = 0.5F - (phi / std::numbers::pi_v<float>);
 
     return { u, v };
   }
-
-} // namespace
-
-namespace detail {
 
   auto ConvertEquirectangularFace(const ScratchImageMeta& src_meta,
     const std::span<const std::byte> src_pixels, const CubeFace face,
@@ -593,7 +652,7 @@ namespace detail {
     }
   }
 
-} // namespace detail
+} // namespace
 
 auto ConvertEquirectangularToCube(
   const ScratchImage& equirect, const EquirectToCubeOptions& options)
@@ -651,7 +710,7 @@ auto ConvertEquirectangularToCube(
   const uint32_t face_size = options.face_size;
   for (uint32_t face_idx = 0; face_idx < kCubeFaceCount; ++face_idx) {
     const auto face = static_cast<CubeFace>(face_idx);
-    detail::ConvertEquirectangularFace(
+    ConvertEquirectangularFace(
       src_meta, src_pixels, face, face_size, use_bicubic, cube);
   }
 
@@ -852,44 +911,25 @@ namespace {
     return { .x = 0, .y = 0 };
   }
 
-  //! Copy a face region from source to destination.
-  /*!
-    Copies a square region from the source image to the destination pixels.
-    Handles row pitch differences between source and destination.
-  */
-  auto CopyFaceRegion(const std::span<const std::byte> src_pixels,
-    const uint32_t src_row_pitch, const FaceGridPos& grid_pos,
-    const uint32_t face_size, const std::size_t bytes_per_pixel,
-    std::span<std::byte> dst_pixels, const uint32_t dst_row_pitch) -> void
+  //! Stores `face` from its authored region of a layout image
+  //! (`AuthoredFaceOf`, `CopyMirroredFace`).
+  auto ExtractCubeFaceFromLayout(const ImageView& src_view,
+    const CubeMapImageLayout layout, const FaceShape& shape,
+    const CubeFace face, ScratchImage& cube) -> void
   {
-    const uint32_t src_base_x = grid_pos.x * face_size;
-    const uint32_t src_base_y = grid_pos.y * face_size;
-    const std::size_t face_row_bytes = face_size * bytes_per_pixel;
-
-    for (uint32_t y = 0; y < face_size; ++y) {
-      const std::size_t src_offset
-        = (static_cast<std::size_t>(src_base_y + y) * src_row_pitch)
-        + (static_cast<std::size_t>(src_base_x) * bytes_per_pixel);
-      const std::size_t dst_offset
-        = static_cast<std::size_t>(y) * dst_row_pitch;
-
-      std::memcpy(dst_pixels.subspan(dst_offset, face_row_bytes).data(),
-        src_pixels.subspan(src_offset, face_row_bytes).data(), face_row_bytes);
-    }
-  }
-
-  auto ExtractCubeFaceFromLayoutImpl(const ImageView& src_view,
-    const CubeMapImageLayout layout, const uint32_t face_size,
-    const std::size_t bytes_per_pixel, const CubeFace face, ScratchImage& cube)
-    -> void
-  {
-    const auto grid_pos = GetFaceGridPos(layout, face);
-
-    auto dst_pixels = cube.GetMutablePixels(static_cast<uint16_t>(face), 0);
-    const auto dst_view = cube.GetImage(static_cast<uint16_t>(face), 0);
-
-    CopyFaceRegion(src_view.pixels, src_view.row_pitch_bytes, grid_pos,
-      face_size, bytes_per_pixel, dst_pixels, dst_view.row_pitch_bytes);
+    const auto grid_pos = GetFaceGridPos(layout, AuthoredFaceOf(face));
+    const auto origin = (static_cast<std::size_t>(grid_pos.y) * shape.face_size
+                          * src_view.row_pitch_bytes)
+      + (static_cast<std::size_t>(grid_pos.x) * shape.face_size
+        * shape.bytes_per_pixel);
+    const auto layer = static_cast<uint16_t>(face);
+    CopyMirroredFace(
+      AuthoredFace {
+        .pixels = src_view.pixels.subspan(origin),
+        .row_pitch_bytes = src_view.row_pitch_bytes,
+      },
+      shape, cube.GetMutablePixels(layer, 0),
+      cube.GetImage(layer, 0).row_pitch_bytes);
   }
 
 } // namespace
@@ -921,15 +961,6 @@ namespace detail {
     default:
       return 0;
     }
-  }
-
-  auto ExtractCubeFaceFromLayout(const ImageView& src_view,
-    const CubeMapImageLayout layout, const uint32_t face_size,
-    const std::size_t bytes_per_pixel, const CubeFace face, ScratchImage& cube)
-    -> void
-  {
-    ExtractCubeFaceFromLayoutImpl(
-      src_view, layout, face_size, bytes_per_pixel, face, cube);
   }
 
 } // namespace detail
@@ -986,8 +1017,12 @@ auto ExtractCubeFacesFromLayout(const ScratchImage& layout_image,
 
   for (uint32_t face_idx = 0; face_idx < kCubeFaceCount; ++face_idx) {
     const auto face = static_cast<CubeFace>(face_idx);
-    detail::ExtractCubeFaceFromLayout(
-      src_view, layout, face_size, bytes_per_pixel, face, cube);
+    ExtractCubeFaceFromLayout(src_view, layout,
+      FaceShape {
+        .face_size = face_size,
+        .bytes_per_pixel = bytes_per_pixel,
+      },
+      face, cube);
   }
 
   return Ok(std::move(cube));

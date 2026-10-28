@@ -78,7 +78,7 @@ namespace {
     },
     {
       .importer = Importer::kTexture,
-      .revision = 1,
+      .revision = 2,
       .digest
       = "2dce4eb519fb4564e9f0a4760aeb81c22fa4a77d86a378622344b5401391b9c0",
     },

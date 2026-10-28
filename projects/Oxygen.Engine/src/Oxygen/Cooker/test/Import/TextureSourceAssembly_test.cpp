@@ -29,7 +29,9 @@ using oxygen::TextureType;
 using oxygen::content::import::AssembleCubeFromFaces;
 using oxygen::content::import::ConvertEquirectangularToCube;
 using oxygen::content::import::CubeFace;
+using oxygen::content::import::CubeMapImageLayout;
 using oxygen::content::import::EquirectToCubeOptions;
+using oxygen::content::import::ExtractCubeFacesFromLayout;
 using oxygen::content::import::kCubeFaceCount;
 using oxygen::content::import::MipFilter;
 using oxygen::content::import::ScratchImage;
@@ -390,8 +392,10 @@ NOLINT_TEST(TextureSourceAssemblyTest, ValidFacesCreatesCubeMap)
   EXPECT_EQ(meta.texture_type, TextureType::kTextureCube);
 }
 
-//! AssembleCubeFromFaces copies face data correctly.
-NOLINT_TEST(TextureSourceAssemblyTest, CopiesFaceDataCorrectly)
+//! Stored +X takes authored -X and the reverse; the other faces keep their
+//! layer (`space::environment`: authored faces are stored reflected across
+//! cube-space x = 0).
+NOLINT_TEST(TextureSourceAssemblyTest, StoresAuthoredXFacesSwapped)
 {
   // Each face has unique pixel data
   std::array<ScratchImage, 6> faces = {
@@ -406,12 +410,106 @@ NOLINT_TEST(TextureSourceAssemblyTest, CopiesFaceDataCorrectly)
   auto result = AssembleCubeFromFaces(faces);
   ASSERT_HAS_VALUE(result);
 
-  // Verify each face has the expected data
-  for (uint16_t i = 0; i < 6; ++i) {
+  constexpr std::array<uint8_t, kCubeFaceCount> kExpected {
+    0x20,
+    0x10,
+    0x30,
+    0x40,
+    0x50,
+    0x60,
+  };
+  for (uint16_t i = 0; i < kCubeFaceCount; ++i) {
     const auto image = result->GetImage(i, 0);
-    const auto expected = static_cast<uint8_t>((i + 1) * 0x10);
-    EXPECT_EQ(static_cast<uint8_t>(image.pixels[0]), expected);
+    EXPECT_EQ(static_cast<uint8_t>(image.pixels[0]), kExpected.at(i));
   }
+}
+
+//! The byte values of a test face's left and right columns.
+struct TwoColumns final {
+  uint8_t left { 0U };
+  uint8_t right { 0U };
+};
+
+//! A 2x2 RGBA8 face whose columns hold `columns`.
+auto MakeTwoColumnFace(const TwoColumns columns) -> ScratchImage
+{
+  constexpr uint32_t kSize = 2;
+  constexpr uint32_t kBytesPerPixel = 4;
+  std::vector<std::byte> data;
+  for (uint32_t y = 0; y < kSize; ++y) {
+    data.insert(data.end(), kBytesPerPixel, std::byte { columns.left });
+    data.insert(data.end(), kBytesPerPixel, std::byte { columns.right });
+  }
+  return ScratchImage::CreateFromData(
+    kSize, kSize, Format::kRGBA8UNorm, kSize * kBytesPerPixel, std::move(data));
+}
+
+//! A texel of a cube face, rows top first.
+struct FaceTexel final {
+  uint16_t face { 0U };
+  uint32_t x { 0U };
+  uint32_t y { 0U };
+};
+
+//! The first byte of an RGBA8 cube texel.
+auto FaceByte(const ScratchImage& cube, const FaceTexel texel) -> uint8_t
+{
+  const auto view = cube.GetImage(texel.face, 0);
+  return static_cast<uint8_t>(
+    view.pixels[(static_cast<size_t>(texel.y) * view.row_pitch_bytes)
+      + (static_cast<size_t>(texel.x) * 4U)]);
+}
+
+//! Every stored face is its authored face mirrored about the vertical axis:
+//! the authored right column becomes the stored left column.
+NOLINT_TEST(TextureSourceAssemblyTest, StoresAuthoredFacesMirrored)
+{
+  std::array<ScratchImage, 6> faces = {
+    MakeTwoColumnFace({ .left = 0x10, .right = 0x11 }),
+    MakeTwoColumnFace({ .left = 0x20, .right = 0x21 }),
+    MakeTwoColumnFace({ .left = 0x30, .right = 0x31 }),
+    MakeTwoColumnFace({ .left = 0x40, .right = 0x41 }),
+    MakeTwoColumnFace({ .left = 0x50, .right = 0x51 }),
+    MakeTwoColumnFace({ .left = 0x60, .right = 0x61 }),
+  };
+
+  auto result = AssembleCubeFromFaces(faces);
+
+  ASSERT_HAS_VALUE(result);
+  EXPECT_EQ(FaceByte(*result, { .face = 4, .x = 0, .y = 1 }), 0x51);
+  EXPECT_EQ(FaceByte(*result, { .face = 4, .x = 1, .y = 1 }), 0x50);
+  EXPECT_EQ(FaceByte(*result, { .face = 0, .x = 0, .y = 0 }), 0x21);
+  EXPECT_EQ(FaceByte(*result, { .face = 1, .x = 1, .y = 0 }), 0x10);
+}
+
+//! A layout image stores its faces like `AssembleCubeFromFaces`: X faces
+//! swapped, every face mirrored. The horizontal strip holds authored faces
+//! +X, -X, +Y, -Y, +Z, -Z from left to right.
+NOLINT_TEST(TextureSourceAssemblyTest, StoresLayoutFacesReflected)
+{
+  constexpr uint32_t kFace = 2;
+  constexpr uint32_t kBytesPerPixel = 4;
+  constexpr uint32_t kWidth = kFace * kCubeFaceCount;
+  std::vector<std::byte> data;
+  for (uint32_t y = 0; y < kFace; ++y) {
+    for (uint32_t x = 0; x < kWidth; ++x) {
+      const auto face = x / kFace;
+      const auto value
+        = static_cast<uint8_t>(((face + 1U) * 0x10U) + (x % kFace));
+      data.insert(data.end(), kBytesPerPixel, std::byte { value });
+    }
+  }
+  const auto strip = ScratchImage::CreateFromData(kWidth, kFace,
+    Format::kRGBA8UNorm, kWidth * kBytesPerPixel, std::move(data));
+
+  auto result
+    = ExtractCubeFacesFromLayout(strip, CubeMapImageLayout::kHorizontalStrip);
+
+  ASSERT_HAS_VALUE(result);
+  EXPECT_EQ(FaceByte(*result, { .face = 0, .x = 0, .y = 0 }), 0x21);
+  EXPECT_EQ(FaceByte(*result, { .face = 1, .x = 0, .y = 0 }), 0x11);
+  EXPECT_EQ(FaceByte(*result, { .face = 4, .x = 0, .y = 1 }), 0x51);
+  EXPECT_EQ(FaceByte(*result, { .face = 4, .x = 1, .y = 1 }), 0x50);
 }
 
 //! AssembleCubeFromFaces fails with invalid face.
@@ -577,9 +675,10 @@ auto CubeTexel(const ScratchImage& cube, const uint16_t face,
 }
 
 //! A panorama's centre (u = 0.5) is Oxygen's forward, -Y, which the cube holds
-//! on hardware face +Z (index 4); u grows toward +X (hardware +X, index 0); its
-//! top row is Oxygen's up, +Z, on hardware face +Y (index 2). Faces keep their
-//! rows top first, as the shaders sample them (CubemapGeometry.hlsli).
+//! on hardware face +Z (index 4); u grows toward world -X
+//! (`space::environment`), so world +X (hardware +X, index 0) holds u = 0.25;
+//! its top row is Oxygen's up, +Z, on hardware face +Y (index 2). Faces keep
+//! their rows top first, as the shaders sample them (CubemapGeometry.hlsli).
 NOLINT_TEST(TextureSourceAssemblyTest, EquirectMapsOxygenAxesOntoHardwareFaces)
 {
   constexpr uint32_t kFace = 32;
@@ -595,16 +694,18 @@ NOLINT_TEST(TextureSourceAssemblyTest, EquirectMapsOxygenAxesOntoHardwareFaces)
   // R holds the panorama's u, G its v.
   EXPECT_NEAR(CubeTexel(cube, 4, { kMid, kMid }, 0), 0.5F, kTolerance);
   EXPECT_NEAR(CubeTexel(cube, 4, { kMid, kMid }, 1), 0.5F, kTolerance);
-  EXPECT_NEAR(CubeTexel(cube, 0, { kMid, kMid }, 0), 0.75F, kTolerance);
+  EXPECT_NEAR(CubeTexel(cube, 0, { kMid, kMid }, 0), 0.25F, kTolerance);
+  EXPECT_NEAR(CubeTexel(cube, 1, { kMid, kMid }, 0), 0.75F, kTolerance);
   EXPECT_NEAR(CubeTexel(cube, 0, { kMid, kMid }, 1), 0.5F, kTolerance);
   EXPECT_LT(CubeTexel(cube, 2, { kMid, kMid }, 1), kTolerance);
   EXPECT_GT(CubeTexel(cube, 3, { kMid, kMid }, 1), 1.0F - kTolerance);
 }
 
-//! On a side face, image right is the viewer's right and image down is down:
-//! on the forward face (index 4), the right column lies toward +X and the
-//! bottom row lower than the top one.
-NOLINT_TEST(TextureSourceAssemblyTest, EquirectSideFacesKeepImageOrientation)
+//! The panorama reads unmirrored from inside: on the forward face (index 4),
+//! a viewer inside facing world -Y has world -X, the face's left column
+//! (hardware -X), on their right, and that column holds the panorama's larger
+//! u; the bottom row holds the larger v.
+NOLINT_TEST(TextureSourceAssemblyTest, EquirectReadsUnmirroredFromInside)
 {
   constexpr uint32_t kFace = 8;
   auto equirect = MakeGradientEquirect(256, 128);
@@ -615,8 +716,8 @@ NOLINT_TEST(TextureSourceAssemblyTest, EquirectSideFacesKeepImageOrientation)
   ASSERT_HAS_VALUE(result);
   const auto& cube = result.value();
   constexpr uint32_t kMid = kFace / 2;
-  EXPECT_GT(CubeTexel(cube, 4, { kFace - 1, kMid }, 0),
-    CubeTexel(cube, 4, { 0, kMid }, 0));
+  EXPECT_GT(CubeTexel(cube, 4, { 0, kMid }, 0),
+    CubeTexel(cube, 4, { kFace - 1, kMid }, 0));
   EXPECT_GT(CubeTexel(cube, 4, { kMid, kFace - 1 }, 1),
     CubeTexel(cube, 4, { kMid, 0 }, 1));
 }

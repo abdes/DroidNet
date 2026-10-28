@@ -8,14 +8,11 @@
 
 #include <array>
 #include <cstddef>
-#include <cstdint>
 #include <filesystem>
 #include <optional>
-#include <span>
 #include <string>
 
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
-#include <Oxygen/Cooker/Import/ScratchImage.h>
 #include <Oxygen/Cooker/Import/TextureSourceAssembly.h>
 #include <Oxygen/Core/Types/Format.h>
 
@@ -53,15 +50,5 @@ private:
 
 //! Get bytes per pixel for a given format.
 [[nodiscard]] auto GetBytesPerPixel(Format format) -> std::size_t;
-
-//! Convert a single cube face from an equirectangular source.
-auto ConvertEquirectangularFace(const ScratchImageMeta& src_meta,
-  std::span<const std::byte> src_pixels, CubeFace face, uint32_t face_size,
-  bool use_bicubic, ScratchImage& cube) -> void;
-
-//! Extract a single cube face from a layout image.
-auto ExtractCubeFaceFromLayout(const ImageView& src_view,
-  CubeMapImageLayout layout, uint32_t face_size, std::size_t bytes_per_pixel,
-  CubeFace face, ScratchImage& cube) -> void;
 
 } // namespace oxygen::content::import::detail

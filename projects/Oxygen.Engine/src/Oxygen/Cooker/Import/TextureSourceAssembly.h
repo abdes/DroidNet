@@ -217,18 +217,15 @@ struct CubeFaceBasis {
 
 //! Cube face basis vectors for standard GPU cubemap convention.
 /*!
-  These vectors match the standard cubemap layout used by D3D12, OpenGL, and
-  Vulkan. All major graphics APIs share the same cubemap face orientation
-  convention.
+  These vectors are the hardware face table that D3D12, OpenGL and Vulkan
+  sample with: the cube direction of texel (u, v) of each face.
 
-  Use these when generating cubemaps from equirectangular panoramas that will
-  be sampled using standard TextureCube sampling.
+  ### Hardware Cube Space
 
-  ### Standard GPU Cubemap Convention (Y-up)
-
-  - **+X = Right**, **+Y = Up**, **+Z = Forward**
-  - Face array order: +X, -X, +Y, -Y, +Z, -Z
-  - Shared by D3D12, OpenGL, and Vulkan
+  - +Y up, +Z forward, read right-handed like the world (`space::environment`
+    in Oxygen/Core/Constants.h): +X lies on the LEFT of a viewer facing +Z.
+  - Face array order: +X, -X, +Y, -Y, +Z, -Z.
+  - "Right" in the table below is the face's +u direction, the image's right.
 
   ### Face Definitions
 
@@ -265,7 +262,13 @@ inline constexpr std::array<CubeFaceBasis, kCubeFaceCount> kGpuCubeFaceBases = {
 
   All face images must have identical dimensions and format.
 
-  @param faces Array of 6 face images in CubeFace order (+X, -X, +Y, -Y, +Z, -Z)
+  Authored faces use the Direct3D left-handed layout. The stored cube reflects
+  them across cube-space x = 0 so it reads unmirrored from inside
+  (`space::environment`): stored +X takes authored -X and the reverse, and
+  every face is mirrored about its vertical axis.
+
+  @param faces Array of 6 authored face images in CubeFace order
+         (+X, -X, +Y, -Y, +Z, -Z)
   @return Assembled cube map or error if faces are incompatible
 
   ### Example
@@ -309,9 +312,11 @@ struct EquirectToCubeOptions {
   ### Algorithm
 
   For each face and texel (u, v):
-  1. Compute 3D direction from face basis and UV
-  2. Convert direction to spherical (θ, φ)
-  3. Map to equirect UV: u = (θ/π + 1)/2, v = (φ/(π/2) + 1)/2
+  1. Compute the cube direction (x, y, z) from the face basis and UV
+  2. Longitude θ = atan2(-x, z), latitude φ = asin(y)
+  3. Map to equirect UV: u = (θ/π + 1)/2, v = 1/2 - φ/π: the centre column
+     faces cube +Z (world forward) and u grows toward cube -X, the right of a
+     viewer inside (`space::environment`)
   4. Sample equirect image with chosen filter
 
   ### Example
@@ -440,6 +445,9 @@ OXGN_COOK_NDAPI auto DetectCubeMapLayout(const ScratchImage& image) noexcept
   - Center face is +Z (front)
   - Adjacent faces are -X (left), +X (right), +Y (top), -Y (bottom)
   - Opposite face is -Z (back)
+
+  These are authored faces in the Direct3D left-handed layout; they are stored
+  reflected across cube-space x = 0, as `AssembleCubeFromFaces` stores them.
 
   @param layout_image Source image containing all 6 faces
   @param layout       Layout type (must not be kUnknown)

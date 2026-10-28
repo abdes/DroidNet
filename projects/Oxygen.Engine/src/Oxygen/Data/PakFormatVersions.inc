@@ -32,7 +32,7 @@ OXDAT_FORMAT_VERSION(kExposureExtensionVersion, exposure_extension, uint32_t, 1)
 // is how the ImportTool reports it.
 OXDAT_IMPORTER_REVISION(kGltf, gltf, 4)
 OXDAT_IMPORTER_REVISION(kFbx, fbx, 4)
-OXDAT_IMPORTER_REVISION(kTexture, texture, 1)
+OXDAT_IMPORTER_REVISION(kTexture, texture, 2)
 OXDAT_IMPORTER_REVISION(kBufferContainer, buffer_container, 1)
 OXDAT_IMPORTER_REVISION(kMaterialDescriptor, material_descriptor, 1)
 OXDAT_IMPORTER_REVISION(
