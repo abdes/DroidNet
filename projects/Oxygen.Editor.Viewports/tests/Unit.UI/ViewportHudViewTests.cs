@@ -41,12 +41,12 @@ internal sealed class ViewportHudViewTests : DroidNet.Tests.VisualUserInterfaceT
         // View mode: every mode, in its group.
         await OpenAsync(dropDowns[1], content => _ = Texts(content).Should().Contain(["Lit", "Lighting", "Buffer visualization", "Shadow mask"])).ConfigureAwait(true);
 
-        // Show: the three overlays, bound to the pane.
+        // Show: the preview environment and the overlays, bound to the pane.
         await OpenAsync(dropDowns[2], content =>
         {
             var checks = content.FindDescendants().OfType<CheckBox>().ToList();
-            _ = checks.Select(check => check.Content).Should().Equal("Grid", "Selection outline", "Camera preview", "Statistics");
-            checks[3].IsChecked = true;
+            _ = checks.Select(check => check.Content).Should().Equal("Preview environment", "Grid", "Selection outline", "Camera preview", "Statistics");
+            checks[^1].IsChecked = true;
         }).ConfigureAwait(true);
         _ = model.ShowStatistics.Should().BeTrue();
 

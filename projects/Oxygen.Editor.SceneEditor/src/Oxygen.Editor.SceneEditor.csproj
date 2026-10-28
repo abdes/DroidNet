@@ -55,7 +55,6 @@
 
     <ItemGroup>
         <InternalsVisibleTo Include="Oxygen.Editor.SceneEditor.Unit.Tests" />
-        <InternalsVisibleTo Include="Oxygen.Editor.SceneEditor.Unit.UI.Tests" />
     </ItemGroup>
 
 </Project>
