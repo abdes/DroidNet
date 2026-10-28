@@ -34,6 +34,24 @@ uint2 MipExtent(HzbBuildPassConstants c, uint level)
     return max(uint2(1u, 1u), uint2(c.root_width, c.root_height) >> level);
 }
 
+// The UAV slots of a mip, read from the pass constants buffer at a computed
+// offset. Indexing a local copy of the slot arrays instead makes the RDNA4
+// driver keep them in a register array that it clobbers while the tail
+// dispatch runs, so texels load and store through the wrong mips (#110).
+uint ClosestMipUav(uint level)
+{
+    StructuredBuffer<HzbBuildPassConstants> pass
+        = ResourceDescriptorHeap[g_PassConstantsIndex];
+    return pass[0].closest_mip_uavs[level];
+}
+
+uint FurthestMipUav(uint level)
+{
+    StructuredBuffer<HzbBuildPassConstants> pass
+        = ResourceDescriptorHeap[g_PassConstantsIndex];
+    return pass[0].furthest_mip_uavs[level];
+}
+
 // Returns (closest, furthest) inputs of `level` at `coord`, clamped to the
 // source view rect for mip 0 and to the previous mip otherwise.
 float2 LoadInput(HzbBuildPassConstants c, uint level, uint2 coord)
@@ -52,13 +70,13 @@ float2 LoadInput(HzbBuildPassConstants c, uint level, uint2 coord)
 
     const uint2 texel = min(coord, MipExtent(c, level - 1u) - 1u);
     float2 depths = float2(0.0f, 1.0f);
-    const uint closest_uav = c.closest_mip_uavs[level - 1u];
+    const uint closest_uav = ClosestMipUav(level - 1u);
     if (closest_uav != K_INVALID_BINDLESS_INDEX)
     {
         RWTexture2D<float> closest = ResourceDescriptorHeap[closest_uav];
         depths.x = closest[texel];
     }
-    const uint furthest_uav = c.furthest_mip_uavs[level - 1u];
+    const uint furthest_uav = FurthestMipUav(level - 1u);
     if (furthest_uav != K_INVALID_BINDLESS_INDEX)
     {
         RWTexture2D<float> furthest = ResourceDescriptorHeap[furthest_uav];
@@ -105,13 +123,13 @@ void Store(HzbBuildPassConstants c, uint level, uint2 coord, float2 depths)
     {
         return;
     }
-    const uint closest_uav = c.closest_mip_uavs[level];
+    const uint closest_uav = ClosestMipUav(level);
     if (closest_uav != K_INVALID_BINDLESS_INDEX)
     {
         RWTexture2D<float> closest = ResourceDescriptorHeap[closest_uav];
         closest[coord] = depths.x;
     }
-    const uint furthest_uav = c.furthest_mip_uavs[level];
+    const uint furthest_uav = FurthestMipUav(level);
     if (furthest_uav != K_INVALID_BINDLESS_INDEX)
     {
         RWTexture2D<float> furthest = ResourceDescriptorHeap[furthest_uav];
