@@ -1,6 +1,9 @@
 {
   "version": 15,
   "name": "physics_domains_vsm_benchmark",
+  "starting_camera": {
+    "node": 21
+  },
   "starting_input_contexts": [
     {
       "context_ref": "/.cooked/Input/physics_domains.input/PhysicsDomainsVehicleContext.oimap",

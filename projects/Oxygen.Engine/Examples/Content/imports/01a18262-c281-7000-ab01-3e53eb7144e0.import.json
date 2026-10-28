@@ -1,0 +1,330 @@
+{
+  "schema_version": 1,
+  "source": "../fbx/kenney-animated-characters/Model/characterMedium.fbx",
+  "virtual_path": "/.cooked/fbx/kenney-animated-characters/Model/characterMedium.fbx",
+  "settings": {
+    "bake_hdr": false,
+    "bake_transforms": false,
+    "bc7_quality": "fast",
+    "color_space": "srgb",
+    "content_flags": {
+      "geometry": true,
+      "materials": true,
+      "scene": true,
+      "textures": true
+    },
+    "content_hashing": true,
+    "cubemap": false,
+    "data_format": "bc7",
+    "equirect_to_cube": false,
+    "exposure_ev": 0.0,
+    "flip_normal_green": false,
+    "flip_y": false,
+    "force_rgba": true,
+    "generate_lods": false,
+    "gltf_omitted_light_range_m": 4096.0,
+    "hdr_handling": "tonemap",
+    "import_cameras": true,
+    "import_lights": true,
+    "intent": "albedo",
+    "light_intensity_scale": 1.0,
+    "lod_levels": 3,
+    "lod_reduction_percent": 50.0,
+    "max_mips": 1,
+    "mip_filter": "box",
+    "mip_policy": "full",
+    "node_pruning": "keep",
+    "normals_policy": "generate",
+    "normals_smoothing_angle_deg": 60.0,
+    "output_format": "bc7_srgb",
+    "packing_policy": "d3d12",
+    "renormalize": true,
+    "tangents_policy": "generate",
+    "unit_policy": "normalize"
+  },
+  "source_identity": "01a18262-c281-7000-ab01-3e53eb7144e0",
+  "surface_provenance": {
+    "geometries": [
+      {
+        "allocations": [
+          {
+            "declaration_key": 0,
+            "surface_id": "6c5b50db-f4b2-2f69-42fc-76dd31b868c5"
+          }
+        ],
+        "geometry_asset_key": "4f80c805-6877-59ef-adc6-eaece028a15d",
+        "layout_revision": "15463d3e34e0718658ccf7baf56574aef72d0477990c3ce617bf12259c82495d",
+        "source_geometry_anchor": "characterMedium",
+        "source_layout_witness": "a605c822122ffb8b02355f2f82593c2afd50c7f03c75256f11ccc9e9bd5b81d7",
+        "surfaces": [
+          {
+            "bindings": [
+              {
+                "default_material_key": "a8b00d49-049f-5d16-bc15-c0adfee146a6",
+                "lod_index": 0,
+                "submesh_index": 0
+              }
+            ],
+            "display_name": "skin",
+            "surface_id": "6c5b50db-f4b2-2f69-42fc-76dd31b868c5"
+          }
+        ]
+      }
+    ],
+    "schema_version": 2
+  },
+  "node_continuity": [],
+  "published_nodes": [
+    {
+      "anchor": "#root",
+      "node_id": "b6701710-525e-3360-761b-4ba66f97b590"
+    },
+    {
+      "anchor": "Root",
+      "node_id": "efc6897e-df5e-e98c-d8d3-258d9533bab8"
+    },
+    {
+      "anchor": "Root/LeftFootCtrl",
+      "node_id": "86920b60-e793-ad2d-037a-fc54f13d5303"
+    },
+    {
+      "anchor": "Root/LeftFootCtrl/LeftHeelRoll",
+      "node_id": "b16ff26b-898a-e08a-9038-9b9fbe8131cb"
+    },
+    {
+      "anchor": "Root/LeftFootCtrl/LeftHeelRoll/LeftToeRoll",
+      "node_id": "4c9e06f2-ca4d-e896-fc53-99ef152616a9"
+    },
+    {
+      "anchor": "Root/LeftFootCtrl/LeftHeelRoll/LeftToeRoll/LeftFootIK",
+      "node_id": "f0c4c4cb-fafd-5aa0-89b3-6e0ef682dcf1"
+    },
+    {
+      "anchor": "Root/LeftFootCtrl/LeftHeelRoll/LeftToeRoll/LeftFootIK/LeftFootIK_end",
+      "node_id": "8ddd436c-d234-8420-b4f9-0f26c55e562f"
+    },
+    {
+      "anchor": "Root/LeftFootCtrl/LeftFootRollCtrl",
+      "node_id": "dc32ce7f-9723-91d4-2135-6b480a8e34a8"
+    },
+    {
+      "anchor": "Root/LeftFootCtrl/LeftFootRollCtrl/LeftFootRollCtrl_end",
+      "node_id": "66b7ebcf-e5ca-96c6-3840-1234bd08bfce"
+    },
+    {
+      "anchor": "Root/LeftFootCtrl/LeftKneeCtrl",
+      "node_id": "a74443fe-c15b-0700-39bb-8d3da779fd1b"
+    },
+    {
+      "anchor": "Root/LeftFootCtrl/LeftKneeCtrl/LeftKneeCtrl_end",
+      "node_id": "4e63e589-97cf-b2c4-3df8-28a80839b3f4"
+    },
+    {
+      "anchor": "Root/RightFootCtrl",
+      "node_id": "efbbcf87-20b8-99cc-4458-29bab2486663"
+    },
+    {
+      "anchor": "Root/RightFootCtrl/RightHeelRoll",
+      "node_id": "3cd72e89-1055-edef-aca1-b80a4520f334"
+    },
+    {
+      "anchor": "Root/RightFootCtrl/RightHeelRoll/RightToeRoll",
+      "node_id": "9052c86c-ace8-5f4f-7bd2-900a60590f97"
+    },
+    {
+      "anchor": "Root/RightFootCtrl/RightHeelRoll/RightToeRoll/RightFootIK",
+      "node_id": "fa31e664-d23f-1987-4c59-9a3ea54ccf3c"
+    },
+    {
+      "anchor": "Root/RightFootCtrl/RightHeelRoll/RightToeRoll/RightFootIK/RightFootIK_end",
+      "node_id": "7d6f9482-052f-a583-39d5-afbe2923a46a"
+    },
+    {
+      "anchor": "Root/RightFootCtrl/RightFootRollCtrl",
+      "node_id": "642eaac8-34fa-aa1b-71f3-6899896a375a"
+    },
+    {
+      "anchor": "Root/RightFootCtrl/RightFootRollCtrl/RightFootRollCtrl_end",
+      "node_id": "f4e577bf-8c0a-4cd8-23cc-8087e23c4de6"
+    },
+    {
+      "anchor": "Root/RightFootCtrl/RightKneeCtrl",
+      "node_id": "0fdfea8e-0ddb-1396-105a-1af3d5524ae8"
+    },
+    {
+      "anchor": "Root/RightFootCtrl/RightKneeCtrl/RightKneeCtrl_end",
+      "node_id": "6915b561-99c4-3ae7-45c5-b1869cbaa129"
+    },
+    {
+      "anchor": "Root/HipsCtrl",
+      "node_id": "9628a187-46d1-4bdd-97af-a7ec774a6acb"
+    },
+    {
+      "anchor": "Root/HipsCtrl/Hips",
+      "node_id": "8b7034e0-687b-0d3b-3b2f-4c175ed0d304"
+    },
+    {
+      "anchor": "Root/HipsCtrl/Hips/Spine",
+      "node_id": "c7629346-d623-2cd1-10d0-f3003b765af5"
+    },
+    {
+      "anchor": "Root/HipsCtrl/Hips/Spine/Chest",
+      "node_id": "c0f0e5fc-5c0a-abf5-b294-a15ac6d5b791"
+    },
+    {
+      "anchor": "Root/HipsCtrl/Hips/Spine/Chest/UpperChest",
+      "node_id": "e6df16a7-239c-de84-dab6-a91b3bea5395"
+    },
+    {
+      "anchor": "Root/HipsCtrl/Hips/Spine/Chest/UpperChest/Neck",
+      "node_id": "b1cb46df-2089-d65e-99a1-9dd2fe94cbc1"
+    },
+    {
+      "anchor": "Root/HipsCtrl/Hips/Spine/Chest/UpperChest/Neck/Head",
+      "node_id": "dcdde3d6-8f64-b5c6-44e0-02d7fb5eee91"
+    },
+    {
+      "anchor": "Root/HipsCtrl/Hips/Spine/Chest/UpperChest/Neck/Head/Head_end",
+      "node_id": "1ea1da10-72ef-1907-3c57-90dfcce939f4"
+    },
+    {
+      "anchor": "Root/HipsCtrl/Hips/Spine/Chest/UpperChest/LeftShoulder",
+      "node_id": "f3cf61e3-c95b-7027-891a-5b22584888be"
+    },
+    {
+      "anchor": "Root/HipsCtrl/Hips/Spine/Chest/UpperChest/LeftShoulder/LeftArm",
+      "node_id": "1a61619b-8fa2-3613-54d2-e5f990bca6ca"
+    },
+    {
+      "anchor": "Root/HipsCtrl/Hips/Spine/Chest/UpperChest/LeftShoulder/LeftArm/LeftForeArm",
+      "node_id": "8ee66b33-3271-d2ea-d755-bb50cd8def4d"
+    },
+    {
+      "anchor": "Root/HipsCtrl/Hips/Spine/Chest/UpperChest/LeftShoulder/LeftArm/LeftForeArm/LeftHand",
+      "node_id": "de1f10f0-3508-a831-e979-0cc1f51ccd8a"
+    },
+    {
+      "anchor": "Root/HipsCtrl/Hips/Spine/Chest/UpperChest/LeftShoulder/LeftArm/LeftForeArm/LeftHand/LeftHandIndex1",
+      "node_id": "9cfe894a-5619-1009-5040-89cc762cdd74"
+    },
+    {
+      "anchor": "Root/HipsCtrl/Hips/Spine/Chest/UpperChest/LeftShoulder/LeftArm/LeftForeArm/LeftHand/LeftHandIndex1/LeftHandIndex2",
+      "node_id": "749247aa-c630-23f5-1bfe-1d0b7527363d"
+    },
+    {
+      "anchor": "Root/HipsCtrl/Hips/Spine/Chest/UpperChest/LeftShoulder/LeftArm/LeftForeArm/LeftHand/LeftHandIndex1/LeftHandIndex2/LeftHandIndex3",
+      "node_id": "cc399f09-2573-aafc-3108-4be892277428"
+    },
+    {
+      "anchor": "Root/HipsCtrl/Hips/Spine/Chest/UpperChest/LeftShoulder/LeftArm/LeftForeArm/LeftHand/LeftHandIndex1/LeftHandIndex2/LeftHandIndex3/LeftHandIndex3_end",
+      "node_id": "0bc45cc6-5c4e-bf41-7ff9-4e363025ccc0"
+    },
+    {
+      "anchor": "Root/HipsCtrl/Hips/Spine/Chest/UpperChest/LeftShoulder/LeftArm/LeftForeArm/LeftHand/LeftHandThumb1",
+      "node_id": "1c9e25ab-9bb1-0dfc-613b-9f3f58c11087"
+    },
+    {
+      "anchor": "Root/HipsCtrl/Hips/Spine/Chest/UpperChest/LeftShoulder/LeftArm/LeftForeArm/LeftHand/LeftHandThumb1/LeftHandThumb2",
+      "node_id": "d754fcd6-fbfe-5a4c-83cc-b796ad8dbb91"
+    },
+    {
+      "anchor": "Root/HipsCtrl/Hips/Spine/Chest/UpperChest/LeftShoulder/LeftArm/LeftForeArm/LeftHand/LeftHandThumb1/LeftHandThumb2/LeftHandThumb2_end",
+      "node_id": "fa795db3-350f-8a28-ad99-b53aed5934d4"
+    },
+    {
+      "anchor": "Root/HipsCtrl/Hips/Spine/Chest/UpperChest/RightShoulder",
+      "node_id": "00b89c25-01c5-80a3-b57a-f4a5ef2e7ed0"
+    },
+    {
+      "anchor": "Root/HipsCtrl/Hips/Spine/Chest/UpperChest/RightShoulder/RightArm",
+      "node_id": "8b25f2c6-f06c-7803-6ad3-338fb73a0a49"
+    },
+    {
+      "anchor": "Root/HipsCtrl/Hips/Spine/Chest/UpperChest/RightShoulder/RightArm/RightForeArm",
+      "node_id": "62f557f9-91f2-a097-1986-46cc8451b1a8"
+    },
+    {
+      "anchor": "Root/HipsCtrl/Hips/Spine/Chest/UpperChest/RightShoulder/RightArm/RightForeArm/RightHand",
+      "node_id": "df397f89-f972-a90d-207b-75029e982e2c"
+    },
+    {
+      "anchor": "Root/HipsCtrl/Hips/Spine/Chest/UpperChest/RightShoulder/RightArm/RightForeArm/RightHand/RightHandIndex1",
+      "node_id": "7f4262f2-fd53-186a-a4b1-0193c6254924"
+    },
+    {
+      "anchor": "Root/HipsCtrl/Hips/Spine/Chest/UpperChest/RightShoulder/RightArm/RightForeArm/RightHand/RightHandIndex1/RightHandIndex2",
+      "node_id": "1791bbf1-16ec-08c8-cc16-642833779f48"
+    },
+    {
+      "anchor": "Root/HipsCtrl/Hips/Spine/Chest/UpperChest/RightShoulder/RightArm/RightForeArm/RightHand/RightHandIndex1/RightHandIndex2/RightHandIndex3",
+      "node_id": "b8532f4d-9250-e077-de20-d0f22a6743b8"
+    },
+    {
+      "anchor": "Root/HipsCtrl/Hips/Spine/Chest/UpperChest/RightShoulder/RightArm/RightForeArm/RightHand/RightHandIndex1/RightHandIndex2/RightHandIndex3/RightHandIndex3_end",
+      "node_id": "b32d7d08-a8bf-d5c1-0e49-56dc2293e677"
+    },
+    {
+      "anchor": "Root/HipsCtrl/Hips/Spine/Chest/UpperChest/RightShoulder/RightArm/RightForeArm/RightHand/RightHandThumb1",
+      "node_id": "e97401ea-9709-1384-d1e5-5519a89f9308"
+    },
+    {
+      "anchor": "Root/HipsCtrl/Hips/Spine/Chest/UpperChest/RightShoulder/RightArm/RightForeArm/RightHand/RightHandThumb1/RightHandThumb2",
+      "node_id": "57e1c73d-0f42-1cd3-9957-c68928f286ce"
+    },
+    {
+      "anchor": "Root/HipsCtrl/Hips/Spine/Chest/UpperChest/RightShoulder/RightArm/RightForeArm/RightHand/RightHandThumb1/RightHandThumb2/RightHandThumb2_end",
+      "node_id": "597bdb68-9ba0-4f40-8ddf-8dd8d1f4c3f5"
+    },
+    {
+      "anchor": "Root/HipsCtrl/Hips/LeftUpLeg",
+      "node_id": "405f032b-3f9f-c1ba-eff4-4ed35733ab20"
+    },
+    {
+      "anchor": "Root/HipsCtrl/Hips/LeftUpLeg/LeftLeg",
+      "node_id": "a3a5280e-bcef-ae9c-bff5-73348a769ccf"
+    },
+    {
+      "anchor": "Root/HipsCtrl/Hips/LeftUpLeg/LeftLeg/LeftFoot",
+      "node_id": "2df430e5-5053-78d7-670a-8435b7f99f25"
+    },
+    {
+      "anchor": "Root/HipsCtrl/Hips/LeftUpLeg/LeftLeg/LeftFoot/LeftToes",
+      "node_id": "3cee4532-9152-fdc8-185b-ba0bbe144bce"
+    },
+    {
+      "anchor": "Root/HipsCtrl/Hips/LeftUpLeg/LeftLeg/LeftFoot/LeftToes/LeftToes_end",
+      "node_id": "25f6f6ec-6d43-bcd8-7d49-d3aee7ec22ae"
+    },
+    {
+      "anchor": "Root/HipsCtrl/Hips/RightUpLeg",
+      "node_id": "ff7ca699-be48-d397-f6de-2f5585b9e366"
+    },
+    {
+      "anchor": "Root/HipsCtrl/Hips/RightUpLeg/RightLeg",
+      "node_id": "19099690-6489-f799-42c9-c8a9ab5f9ad9"
+    },
+    {
+      "anchor": "Root/HipsCtrl/Hips/RightUpLeg/RightLeg/RightFoot",
+      "node_id": "fe96f528-0f5c-7078-087d-3beaf9f7c6ac"
+    },
+    {
+      "anchor": "Root/HipsCtrl/Hips/RightUpLeg/RightLeg/RightFoot/RightToes",
+      "node_id": "1b27efc4-47a8-21e0-7693-5abd1919a402"
+    },
+    {
+      "anchor": "Root/HipsCtrl/Hips/RightUpLeg/RightLeg/RightFoot/RightToes/RightToes_end",
+      "node_id": "7e555628-4919-7e82-d1cd-ad4e6cc4fb1d"
+    },
+    {
+      "anchor": "characterMedium",
+      "node_id": "fba67ebd-44a0-9fe4-da6e-d4f22601ed39"
+    }
+  ],
+  "new_nodes": [],
+  "vanished_nodes": [],
+  "source_fingerprint": {
+    "size": 167212,
+    "sha256": "18835fef534eede635b081ee7fe647d01a885550a591d2e6bf071010906167d8",
+    "files": []
+  }
+}

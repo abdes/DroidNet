@@ -1,0 +1,64 @@
+{
+  "$schema": "../../../../src/Oxygen/Cooker/Import/Schemas/oxygen.import-manifest.schema.json",
+  "version": 1,
+  "max_in_flight_jobs": 1,
+  "output": "../../.cooked/main",
+  "jobs": [
+    {
+      "id": "character_medium",
+      "type": "model",
+      "record": "../../imports/01a18262-c281-7000-ab01-3e53eb7144e0.import.json"
+    },
+    {
+      "id": "SkinSurvivor_base_color",
+      "type": "texture-descriptor",
+      "source": "./SkinSurvivor_base_color.texture.json",
+      "virtual_path": "/.cooked/Resources/Textures/SkinSurvivor_base_color.otex",
+      "name": "SkinSurvivor_base_color"
+    },
+    {
+      "id": "SkinZombie_base_color",
+      "type": "texture-descriptor",
+      "source": "./SkinZombie_base_color.texture.json",
+      "virtual_path": "/.cooked/Resources/Textures/SkinZombie_base_color.otex",
+      "name": "SkinZombie_base_color"
+    },
+    {
+      "id": "SkinSurvivor",
+      "type": "material-descriptor",
+      "source": "./SkinSurvivor.material.json",
+      "virtual_path": "/.cooked/Materials/SkinSurvivor.omat",
+      "name": "SkinSurvivor",
+      "depends_on": ["SkinSurvivor_base_color"]
+    },
+    {
+      "id": "SkinZombie",
+      "type": "material-descriptor",
+      "source": "./SkinZombie.material.json",
+      "virtual_path": "/.cooked/Materials/SkinZombie.omat",
+      "name": "SkinZombie",
+      "depends_on": ["SkinZombie_base_color"]
+    },
+    {
+      "id": "KcFloor",
+      "type": "material-descriptor",
+      "source": "./KcFloor.material.json",
+      "virtual_path": "/.cooked/Materials/KcFloor.omat",
+      "name": "KcFloor"
+    },
+    {
+      "id": "scene",
+      "type": "scene-descriptor",
+      "source": "./KenneyCharacters.scene.json",
+      "virtual_path": "/.cooked/Scenes/KenneyCharacters.oscene",
+      "name": "KenneyCharacters",
+      "content_hashing": true,
+      "depends_on": [
+        "character_medium",
+        "SkinSurvivor",
+        "SkinZombie",
+        "KcFloor"
+      ]
+    }
+  ]
+}

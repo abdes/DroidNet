@@ -1,6 +1,9 @@
 {
   "version": 15,
   "name": "PointShadowValidation",
+  "starting_camera": {
+    "node": 5
+  },
   "nodes": [
     {
       "id": "5529a0e0-0ed6-565d-a0fb-910e9d8d286a",

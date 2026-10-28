@@ -1,0 +1,19 @@
+{
+  "$schema": "../../../../src/Oxygen/Cooker/Import/Schemas/oxygen.material-descriptor.schema.json",
+  "name": "SkinSurvivor",
+  "domain": "opaque",
+  "alpha_mode": "opaque",
+  "orm_policy": "auto",
+  "parameters": {
+    "base_color": [1, 1, 1, 1],
+    "metalness": 0,
+    "roughness": 0.8,
+    "normal_scale": 1,
+    "ambient_occlusion": 1
+  },
+  "textures": {
+    "base_color": {
+      "virtual_path": "/.cooked/Resources/Textures/SkinSurvivor_base_color.otex"
+    }
+  }
+}

@@ -1,6 +1,9 @@
 {
   "version": 15,
   "name": "EmissiveScene",
+  "starting_camera": {
+    "node": 7
+  },
   "nodes": [
     {
       "id": "562d9499-9585-5827-ae1a-06be6a7bb531",

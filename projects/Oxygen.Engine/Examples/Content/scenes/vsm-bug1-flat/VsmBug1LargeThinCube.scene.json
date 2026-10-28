@@ -1,6 +1,9 @@
 {
   "version": 15,
   "name": "VsmBug1LargeThinCube",
+  "starting_camera": {
+    "node": 3
+  },
   "nodes": [
     {
       "id": "4b35fd02-f1e3-511a-a3ea-0afcc75f1d4c",

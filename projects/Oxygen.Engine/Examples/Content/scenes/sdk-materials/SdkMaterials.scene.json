@@ -2,6 +2,9 @@
   "$schema": "../../../../src/Oxygen/Cooker/Import/Schemas/oxygen.scene-descriptor.schema.json",
   "version": 15,
   "name": "SdkMaterials",
+  "starting_camera": {
+    "node": 4
+  },
   "nodes": [
     {
       "id": "b837581e-7276-5e06-bd05-8126437ae727",

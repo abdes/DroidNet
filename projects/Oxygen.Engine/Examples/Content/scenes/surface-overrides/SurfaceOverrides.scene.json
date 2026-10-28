@@ -1,6 +1,9 @@
 {
   "version": 15,
   "name": "SurfaceOverrides",
+  "starting_camera": {
+    "node": 19
+  },
   "starting_input_contexts": [
     {
       "context_ref": "/.cooked/Input/surface_overrides.input/SurfaceOverridesContext.oimap",

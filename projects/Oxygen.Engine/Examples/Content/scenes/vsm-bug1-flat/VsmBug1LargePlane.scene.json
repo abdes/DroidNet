@@ -1,6 +1,9 @@
 {
   "version": 15,
   "name": "VsmBug1LargePlane",
+  "starting_camera": {
+    "node": 3
+  },
   "nodes": [
     {
       "id": "b7a658bf-33b4-5908-a26f-b524980a3b6c",

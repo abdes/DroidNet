@@ -3,7 +3,8 @@
   "source": "./waterbottle_normal.png",
   "intent": "normal",
   "decode": {
-    "color_space": "linear"
+    "color_space": "linear",
+    "flip_normal_green": true
   },
   "output": {
     "format": "bc7"

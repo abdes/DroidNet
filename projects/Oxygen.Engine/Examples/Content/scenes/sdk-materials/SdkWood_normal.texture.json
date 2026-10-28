@@ -3,7 +3,8 @@
   "source": "../../images/showcase/Wood051_1K-JPG_NormalGL.jpg",
   "intent": "normal",
   "decode": {
-    "color_space": "linear"
+    "color_space": "linear",
+    "flip_normal_green": true
   },
   "output": {
     "format": "bc7"

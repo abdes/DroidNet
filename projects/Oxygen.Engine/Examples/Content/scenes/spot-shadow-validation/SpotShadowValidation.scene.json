@@ -1,6 +1,9 @@
 {
   "version": 15,
   "name": "SpotShadowValidation",
+  "starting_camera": {
+    "node": 5
+  },
   "nodes": [
     {
       "id": "72780600-ba71-5862-ba6d-44679039ca7b",

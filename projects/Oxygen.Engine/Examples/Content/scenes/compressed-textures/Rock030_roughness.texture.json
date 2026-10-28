@@ -1,0 +1,11 @@
+{
+  "$schema": "../../../../src/Oxygen/Cooker/Import/Schemas/oxygen.texture-descriptor.schema.json",
+  "source": "../../images/webp/Rock030_Roughness.webp",
+  "intent": "roughness",
+  "decode": {
+    "color_space": "linear"
+  },
+  "output": {
+    "format": "bc7"
+  }
+}

@@ -1,6 +1,9 @@
 {
   "version": 15,
   "name": "EngineAssets",
+  "starting_camera": {
+    "node": 12
+  },
   "nodes": [
     {
       "id": "e4ebbfd5-cede-55ec-bbbd-307598a20478",

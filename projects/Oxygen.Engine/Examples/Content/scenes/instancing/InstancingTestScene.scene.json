@@ -1,6 +1,9 @@
 {
   "version": 15,
   "name": "InstancingTestScene",
+  "starting_camera": {
+    "node": 1
+  },
   "nodes": [
     {
       "id": "4bf3fbd4-8acd-5f77-90c9-83c23c2465cb",

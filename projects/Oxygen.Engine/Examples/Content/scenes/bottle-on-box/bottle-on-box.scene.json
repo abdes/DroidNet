@@ -1,6 +1,9 @@
 {
   "version": 15,
   "name": "bottle-on-box",
+  "starting_camera": {
+    "node": 6
+  },
   "nodes": [
     {
       "id": "3b110db7-18f5-5bab-b7e7-419e29c56ac0",

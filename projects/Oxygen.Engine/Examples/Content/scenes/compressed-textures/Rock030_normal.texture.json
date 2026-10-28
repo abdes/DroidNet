@@ -1,0 +1,12 @@
+{
+  "$schema": "../../../../src/Oxygen/Cooker/Import/Schemas/oxygen.texture-descriptor.schema.json",
+  "source": "../../images/webp/Rock030_NormalGL.webp",
+  "intent": "normal",
+  "decode": {
+    "color_space": "linear",
+    "flip_normal_green": true
+  },
+  "output": {
+    "format": "bc7"
+  }
+}

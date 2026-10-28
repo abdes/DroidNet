@@ -1,6 +1,9 @@
 {
   "version": 15,
   "name": "VsmTwoCubes",
+  "starting_camera": {
+    "node": 5
+  },
   "nodes": [
     {
       "id": "03738942-b328-53f0-b1f4-447d3544c2d2",

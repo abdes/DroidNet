@@ -1,6 +1,9 @@
 {
   "version": 15,
   "name": "multi_script_scene",
+  "starting_camera": {
+    "node": 2
+  },
   "starting_input_contexts": [
     {
       "context_ref": "/.cooked/Input/multi_script_scene.input/RotateRuntimeInputContext.oimap",

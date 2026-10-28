@@ -1,0 +1,180 @@
+{
+  "version": 15,
+  "name": "KenneyCharacters",
+  "starting_camera": {
+    "node": 4
+  },
+  "nodes": [
+    {
+      "id": "0be260ce-df0e-587a-b6ea-a78c10d075f1",
+      "name": "Root"
+    },
+    {
+      "id": "cf9b9603-d6bd-5e03-b9fb-58bea92ceb9d",
+      "name": "Floor",
+      "parent": 0,
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      },
+      "transform": {
+        "translation": [0.0, 2.0, 0.0],
+        "scale": [16.0, 16.0, 1.0]
+      }
+    },
+    {
+      "id": "e9d9f6f5-cce0-5290-84ae-84f7413a4206",
+      "name": "Survivor",
+      "parent": 0,
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      },
+      "transform": {
+        "translation": [-2.2, 0.0, 0.0]
+      },
+      "instance": {
+        "scene_ref": "/.cooked/fbx/kenney-animated-characters/Model/characterMedium.fbx/characterMedium.oscene",
+        "overrides": [
+          {
+            "path": ["fba67ebd-44a0-9fe4-da6e-d4f22601ed39"],
+            "components": {
+              "geometry": {
+                "parts": [
+                  {
+                    "kind": "surface",
+                    "id": "6c5b50db-f4b2-2f69-42fc-76dd31b868c5",
+                    "layout_revision": "15463d3e34e0718658ccf7baf56574aef72d0477990c3ce617bf12259c82495d",
+                    "values": {
+                      "/material": "/.cooked/Materials/SkinSurvivor.omat"
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "f2990828-f9ca-5392-9f2e-17aca0739720",
+      "name": "Zombie",
+      "parent": 0,
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      },
+      "transform": {
+        "translation": [2.2, 0.0, 0.0]
+      },
+      "instance": {
+        "scene_ref": "/.cooked/fbx/kenney-animated-characters/Model/characterMedium.fbx/characterMedium.oscene",
+        "overrides": [
+          {
+            "path": ["fba67ebd-44a0-9fe4-da6e-d4f22601ed39"],
+            "components": {
+              "geometry": {
+                "parts": [
+                  {
+                    "kind": "surface",
+                    "id": "6c5b50db-f4b2-2f69-42fc-76dd31b868c5",
+                    "layout_revision": "15463d3e34e0718658ccf7baf56574aef72d0477990c3ce617bf12259c82495d",
+                    "values": {
+                      "/material": "/.cooked/Materials/SkinZombie.omat"
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "6ccc3164-a6ba-5d8d-a7fe-b7a0158374ea",
+      "name": "MainCamera",
+      "parent": 0,
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      },
+      "transform": {
+        "translation": [0.0, -10.0, 1.9],
+        "rotation": [0.70710678, 0.0, 0.0, 0.70710678]
+      }
+    },
+    {
+      "id": "597486ac-83a4-510c-af51-b5bec47edf3f",
+      "name": "Sun",
+      "parent": 0,
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      },
+      "transform": {
+        "translation": [0.0, 5.0, 8.0],
+        "rotation": [0.0, 0.5, 0.8660254, 0.0]
+      }
+    }
+  ],
+  "renderables": [
+    {
+      "node": 1,
+      "geometry_ref": "/Engine/Generated/BasicShapes/Plane.ogeo",
+      "overrides": {
+        "parts": [
+          {
+            "kind": "surface",
+            "id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+            "layout_revision": "70d2458daeb2184329ef81aef4e913cb828e2494a8cd5eda069969aff3f64aa6",
+            "values": {
+              "/material": "/.cooked/Materials/KcFloor.omat"
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "cameras": {
+    "perspective": [
+      {
+        "node": 4,
+        "fov_y": 0.785398,
+        "aspect_ratio": 1.777778,
+        "aspect_mode": "fixed",
+        "near_plane": 0.01,
+        "far_plane": 100.0
+      }
+    ]
+  },
+  "lights": {
+    "directional": [
+      {
+        "node": 5,
+        "common": {
+          "affects_world": true,
+          "color_rgb": [1.0, 0.98, 0.92],
+          "casts_shadows": true,
+          "shadow": {
+            "bias": 0.03
+          }
+        },
+        "angular_size_radians": 0.00935,
+        "atmosphere_light_slot": 1,
+        "intensity_lux": 120000.0
+      }
+    ]
+  },
+  "references": {
+    "materials": [
+      "/.cooked/Materials/KcFloor.omat",
+      "/.cooked/Materials/SkinSurvivor.omat",
+      "/.cooked/Materials/SkinZombie.omat"
+    ]
+  }
+}

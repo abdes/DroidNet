@@ -1,0 +1,157 @@
+{
+  "version": 15,
+  "name": "CompressedTextures",
+  "starting_camera": {
+    "node": 5
+  },
+  "nodes": [
+    {
+      "id": "c96b82c7-2e0b-5c0c-ad49-295f102d292b",
+      "name": "Root"
+    },
+    {
+      "id": "63557d99-7bb3-58be-98e8-40a916dee5b6",
+      "name": "Floor",
+      "parent": 0,
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      },
+      "transform": {
+        "translation": [0.0, 0.5, 0.0],
+        "scale": [3.0, 3.0, 1.0]
+      }
+    },
+    {
+      "id": "0c208f76-9db5-5032-9112-7b6fdc5a0049",
+      "name": "Watch_KTX2",
+      "parent": 0,
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      },
+      "transform": {
+        "translation": [-0.35, 0.0, 0.16],
+        "scale": [0.05, 0.05, 0.05]
+      },
+      "instance": {
+        "scene_ref": "/.cooked/models/ChronographWatch-ktx2/ChronographWatch.gltf/ChronographWatch.oscene"
+      }
+    },
+    {
+      "id": "d2cc9e5d-f695-5775-9063-f9510a88f630",
+      "name": "Watch_WebP",
+      "parent": 0,
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      },
+      "transform": {
+        "translation": [0.0, 0.0, 0.16],
+        "scale": [0.05, 0.05, 0.05]
+      },
+      "instance": {
+        "scene_ref": "/.cooked/models/ChronographWatch-webp/ChronographWatch.gltf/ChronographWatch.oscene"
+      }
+    },
+    {
+      "id": "58351104-edbe-5390-827c-14953d6c011a",
+      "name": "BarnLamp_KTX2",
+      "parent": 0,
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      },
+      "transform": {
+        "translation": [0.4, 0.0, 0.3],
+        "scale": [1.5, 1.5, 1.5]
+      },
+      "instance": {
+        "scene_ref": "/.cooked/models/AnisotropyBarnLamp-ktx2/AnisotropyBarnLamp.gltf/AnisotropyBarnLamp.oscene"
+      }
+    },
+    {
+      "id": "da65779e-7fe5-5295-9d14-f9d8de67080a",
+      "name": "MainCamera",
+      "parent": 0,
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      },
+      "transform": {
+        "translation": [0.0, -1.4, 0.25],
+        "rotation": [0.70710678, 0.0, 0.0, 0.70710678]
+      }
+    },
+    {
+      "id": "39407156-a9d3-5b36-9366-559f656aa6bb",
+      "name": "Sun",
+      "parent": 0,
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      },
+      "transform": {
+        "translation": [0.0, 5.0, 8.0],
+        "rotation": [0.0, 0.5, 0.8660254, 0.0]
+      }
+    }
+  ],
+  "renderables": [
+    {
+      "node": 1,
+      "geometry_ref": "/Engine/Generated/BasicShapes/Plane.ogeo",
+      "overrides": {
+        "parts": [
+          {
+            "kind": "surface",
+            "id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+            "layout_revision": "70d2458daeb2184329ef81aef4e913cb828e2494a8cd5eda069969aff3f64aa6",
+            "values": {
+              "/material": "/.cooked/Materials/Rock030.omat"
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "cameras": {
+    "perspective": [
+      {
+        "node": 5,
+        "fov_y": 0.785398,
+        "aspect_ratio": 1.777778,
+        "aspect_mode": "fixed",
+        "near_plane": 0.01,
+        "far_plane": 50.0
+      }
+    ]
+  },
+  "lights": {
+    "directional": [
+      {
+        "node": 6,
+        "common": {
+          "affects_world": true,
+          "color_rgb": [1.0, 0.98, 0.92],
+          "casts_shadows": true,
+          "shadow": {
+            "bias": 0.03
+          }
+        },
+        "angular_size_radians": 0.00935,
+        "atmosphere_light_slot": 1,
+        "intensity_lux": 120000.0
+      }
+    ]
+  },
+  "references": {
+    "materials": ["/.cooked/Materials/Rock030.omat"]
+  }
+}

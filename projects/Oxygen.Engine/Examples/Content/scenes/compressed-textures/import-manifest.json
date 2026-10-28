@@ -1,0 +1,65 @@
+{
+  "$schema": "../../../../src/Oxygen/Cooker/Import/Schemas/oxygen.import-manifest.schema.json",
+  "version": 1,
+  "max_in_flight_jobs": 1,
+  "output": "../../.cooked/main",
+  "jobs": [
+    {
+      "id": "watch_ktx2",
+      "type": "model",
+      "record": "../../imports/01a18262-b142-7000-a016-275917ae018d.import.json"
+    },
+    {
+      "id": "watch_webp",
+      "type": "model",
+      "record": "../../imports/01a18262-b6dd-7000-90b3-661fc37dca72.import.json"
+    },
+    {
+      "id": "barn_lamp_ktx2",
+      "type": "model",
+      "record": "../../imports/01a18262-bcc1-7000-9a30-57b30f724a2d.import.json"
+    },
+    {
+      "id": "Rock030_base_color",
+      "type": "texture-descriptor",
+      "source": "./Rock030_base_color.texture.json",
+      "virtual_path": "/.cooked/Resources/Textures/Rock030_base_color.otex",
+      "name": "Rock030_base_color"
+    },
+    {
+      "id": "Rock030_normal",
+      "type": "texture-descriptor",
+      "source": "./Rock030_normal.texture.json",
+      "virtual_path": "/.cooked/Resources/Textures/Rock030_normal.otex",
+      "name": "Rock030_normal"
+    },
+    {
+      "id": "Rock030_roughness",
+      "type": "texture-descriptor",
+      "source": "./Rock030_roughness.texture.json",
+      "virtual_path": "/.cooked/Resources/Textures/Rock030_roughness.otex",
+      "name": "Rock030_roughness"
+    },
+    {
+      "id": "Rock030",
+      "type": "material-descriptor",
+      "source": "./Rock030.material.json",
+      "virtual_path": "/.cooked/Materials/Rock030.omat",
+      "name": "Rock030",
+      "depends_on": [
+        "Rock030_base_color",
+        "Rock030_normal",
+        "Rock030_roughness"
+      ]
+    },
+    {
+      "id": "scene",
+      "type": "scene-descriptor",
+      "source": "./CompressedTextures.scene.json",
+      "virtual_path": "/.cooked/Scenes/CompressedTextures.oscene",
+      "name": "CompressedTextures",
+      "content_hashing": true,
+      "depends_on": ["watch_ktx2", "watch_webp", "barn_lamp_ktx2", "Rock030"]
+    }
+  ]
+}

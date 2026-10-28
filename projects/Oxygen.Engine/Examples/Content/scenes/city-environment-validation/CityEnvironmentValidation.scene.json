@@ -1,6 +1,9 @@
 {
   "version": 15,
   "name": "CityEnvironmentValidation",
+  "starting_camera": {
+    "node": 1934
+  },
   "nodes": [
     {
       "id": "c30516ff-3868-5fc1-99a8-dfd1484a7f43",

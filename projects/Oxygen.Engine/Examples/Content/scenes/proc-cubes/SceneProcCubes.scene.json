@@ -1,6 +1,9 @@
 {
   "version": 15,
   "name": "SceneProcCubes",
+  "starting_camera": {
+    "node": 2
+  },
   "nodes": [
     {
       "id": "5faa8cfe-9c03-5cf1-809b-22d23063e6d8",
@@ -40,6 +43,21 @@
         "casts_shadows": "on",
         "receives_shadows": "on"
       }
+    },
+    {
+      "id": "870b9c5c-8fca-5607-b0e5-e18ce93102af",
+      "name": "Sun",
+      "parent": 0,
+      "transform": {
+        "translation": [0.0, 5.0, 8.0],
+        "rotation": [0.5, 0.0, 0.0, 0.8660254],
+        "scale": [1.0, 1.0, 1.0]
+      },
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      }
     }
   ],
   "cameras": {
@@ -57,7 +75,7 @@
   "lights": {
     "directional": [
       {
-        "node": 0,
+        "node": 3,
         "common": {
           "affects_world": true,
           "color_rgb": [1.0, 1.0, 1.0],
