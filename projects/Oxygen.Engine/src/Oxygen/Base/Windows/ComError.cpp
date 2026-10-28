@@ -121,10 +121,12 @@ void oxygen::windows::detail::HandleComErrorImpl(
       err_info_hr == S_OK) {
       // Retrieve error information
       error_message.assign(GetComErrorMessage(hr, p_error_info));
-      DLOG_F(1, "COM Error: 0x{:08X} - {}", hr, error_message.c_str());
+      DLOG_F(1, "COM Error: 0x{:08X} - {}", static_cast<unsigned int>(hr),
+        error_message.c_str());
       p_error_info->Release();
     } else {
-      error_message.assign(fmt::format("COM Error: 0x{:08X}", hr));
+      error_message.assign(
+        fmt::format("COM Error: 0x{:08X}", static_cast<unsigned int>(hr)));
       DLOG_F(1, "{}", error_message.c_str());
     }
     ComError::Throw(static_cast<ComErrorEnum>(hr), std::move(error_message));
