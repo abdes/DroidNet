@@ -22,6 +22,7 @@ using oxygen::vortex::DiagnosticsDebugPath;
 using oxygen::vortex::EnumerateShaderDebugModes;
 using oxygen::vortex::FindShaderDebugModeInfo;
 using oxygen::vortex::GetShaderDebugDefineName;
+using oxygen::vortex::IsGeometryViewDebugMode;
 using oxygen::vortex::IsIblDebugMode;
 using oxygen::vortex::IsLightCullingDebugMode;
 using oxygen::vortex::IsNonIblDebugMode;
@@ -57,6 +58,8 @@ constexpr auto kAllShaderDebugModes = std::array {
   ShaderDebugMode::kSceneDepthLinear,
   ShaderDebugMode::kSceneDepthMismatch,
   ShaderDebugMode::kMaskedAlphaCoverage,
+  ShaderDebugMode::kTextureCoordinates,
+  ShaderDebugMode::kTangentFrameCheck,
 };
 
 [[nodiscard]] auto CatalogContainsDefine(std::string_view define) -> bool
@@ -114,7 +117,7 @@ NOLINT_TEST(ShaderDebugModeRegistryTest, CanonicalNamesAreUniqueAndResolvable)
       << info.canonical_name;
 
     const auto resolved = ResolveShaderDebugMode(info.canonical_name);
-    ASSERT_TRUE(resolved.has_value()) << info.canonical_name;
+    ASSERT_HAS_VALUE(resolved) << info.canonical_name;
     EXPECT_EQ(*resolved, info.mode);
     EXPECT_EQ(FindShaderDebugModeInfo(info.canonical_name), &info);
   }
@@ -164,6 +167,14 @@ NOLINT_TEST(ShaderDebugModeRegistryTest, DebugPathMatchesCatalogShaderFamily)
     case DiagnosticsDebugPath::kExternalToolOnly:
       ADD_FAILURE() << info.canonical_name
                     << " has a shader define but no catalog-backed debug path";
+      break;
+    case DiagnosticsDebugPath::kGeometryView:
+      EXPECT_TRUE(CatalogContainsDefineForPath({
+        .define = info.shader_define,
+        .path = "Vortex/Stages/BasePass/BasePassGeometryView.hlsl",
+      }))
+        << info.canonical_name << " define=" << info.shader_define;
+      EXPECT_TRUE(IsGeometryViewDebugMode(info.mode)) << info.canonical_name;
       break;
     case DiagnosticsDebugPath::kServicePass:
       EXPECT_TRUE(CatalogContainsDefineForPath({
@@ -224,8 +235,13 @@ NOLINT_TEST(ShaderDebugModeRegistryTest, HelperClassificationMatchesRegistry)
       || info.mode == ShaderDebugMode::kSceneDepthRaw
       || info.mode == ShaderDebugMode::kSceneDepthLinear
       || info.mode == ShaderDebugMode::kSceneDepthMismatch
-      || info.mode == ShaderDebugMode::kMaskedAlphaCoverage;
+      || info.mode == ShaderDebugMode::kMaskedAlphaCoverage
+      || info.mode == ShaderDebugMode::kTextureCoordinates
+      || info.mode == ShaderDebugMode::kTangentFrameCheck;
     EXPECT_EQ(IsNonIblDebugMode(info.mode), is_legacy_non_ibl)
+      << info.canonical_name;
+    EXPECT_EQ(IsGeometryViewDebugMode(info.mode),
+      info.path == DiagnosticsDebugPath::kGeometryView)
       << info.canonical_name;
   }
 }
@@ -281,6 +297,8 @@ NOLINT_TEST(ShaderDebugModeRegistryTest, FamilyStringsAreStableForUiGroups)
     "direct-lighting");
   EXPECT_EQ(oxygen::vortex::to_string(ShaderDebugModeFamily::kSceneDepth),
     "scene-depth");
+  EXPECT_EQ(
+    oxygen::vortex::to_string(ShaderDebugModeFamily::kGeometry), "geometry");
 }
 
 } // namespace

@@ -54,6 +54,7 @@
 #include <Oxygen/Vortex/SceneRenderer/Stages/BasePass/BasePassModule.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/Occlusion/Internal/IndirectListBuilder.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/Occlusion/Types/DrawVisibility.h>
+#include <Oxygen/Vortex/ShaderDebugMode.h>
 #include <Oxygen/Vortex/Types/VelocityPublications.h>
 
 namespace oxygen::vortex {
@@ -257,7 +258,7 @@ namespace {
     return desc;
   }
 
-  auto BuildWireframeFramebuffer(SceneTextures& scene_textures,
+  auto BuildGeometryViewFramebuffer(SceneTextures& scene_textures,
     const bool depth_read_only, std::shared_ptr<graphics::Texture> color = {})
     -> graphics::FramebufferDesc
   {
@@ -438,7 +439,7 @@ namespace {
       != scene_textures.GetVelocityResource().get();
   }
 
-  auto NeedsWireframeFramebufferRebuild(
+  auto NeedsGeometryViewFramebufferRebuild(
     const std::shared_ptr<graphics::Framebuffer>& framebuffer,
     const SceneTextures& scene_textures, const bool depth_read_only) -> bool
   {
@@ -507,43 +508,71 @@ namespace {
     };
   }
 
-  auto BuildWireframePipelineDesc(const SceneTextures& scene_textures,
-    const bool alpha_test, const bool reverse_z, const bool depth_write,
-    const bool overlay, const graphics::Texture* color = nullptr)
-    -> graphics::GraphicsPipelineDesc
+  //! What a geometry view pipeline draws: wireframe edges, or with a geometry
+  //! view debug mode, that mode's solid debug colors.
+  struct GeometryViewPipeline final {
+    ShaderDebugMode debug_mode { ShaderDebugMode::kDisabled };
+    internal::MeshRasterState raster_state {};
+    bool reverse_z { true };
+    bool depth_write { true };
+    bool overlay { false };
+  };
+
+  //! The geometry view: the scene's geometry drawn straight to scene color
+  //! with `BasePassGeometryView.hlsl`, never through GBuffer packing.
+  auto BuildGeometryViewPipelineDesc(const SceneTextures& scene_textures,
+    const GeometryViewPipeline& pipeline,
+    const graphics::Texture* color = nullptr) -> graphics::GraphicsPipelineDesc
   {
     if (!color) {
       color = &scene_textures.GetSceneColor();
     }
+    const auto debug = IsGeometryViewDebugMode(pipeline.debug_mode);
     auto root_bindings = vortex::internal::BuildVortexRootBindings();
     auto defines = std::vector<graphics::ShaderDefine> {};
-    AddBooleanDefine(alpha_test, "ALPHA_TEST", defines);
+    AddBooleanDefine(pipeline.raster_state.alpha_test, "ALPHA_TEST", defines);
+    auto pixel_defines = defines;
+    if (debug) {
+      AddBooleanDefine(
+        true, GetShaderDebugDefineName(pipeline.debug_mode), pixel_defines);
+    }
 
     const auto depth_state = graphics::DepthStencilStateDesc {
       .depth_test_enable = true,
-      .depth_write_enable = depth_write,
-      .depth_func = reverse_z ? graphics::CompareOp::kGreaterOrEqual
-                              : graphics::CompareOp::kLessOrEqual,
+      .depth_write_enable = pipeline.depth_write,
+      .depth_func = pipeline.reverse_z ? graphics::CompareOp::kGreaterOrEqual
+                                       : graphics::CompareOp::kLessOrEqual,
       .stencil_enable = false,
     };
+
+    auto debug_name
+      = std::string { pipeline.overlay ? "Vortex.BasePass.WireframeOverlay"
+                                       : "Vortex.BasePass.Wireframe" };
+    if (debug) {
+      debug_name = "Vortex.BasePass.GeometryView.";
+      debug_name += to_string(pipeline.debug_mode);
+    }
 
     return graphics::GraphicsPipelineDesc::Builder {}
       .SetVertexShader(graphics::ShaderRequest {
         .stage = ShaderType::kVertex,
-        .source_path = "Vortex/Stages/BasePass/BasePassWireframe.hlsl",
+        .source_path = "Vortex/Stages/BasePass/BasePassGeometryView.hlsl",
         .entry_point = "BasePassGBufferVS",
         .defines = defines,
       })
       .SetPixelShader(graphics::ShaderRequest {
         .stage = ShaderType::kPixel,
-        .source_path = "Vortex/Stages/BasePass/BasePassWireframe.hlsl",
-        .entry_point = "BasePassWireframePS",
-        .defines = defines,
+        .source_path = "Vortex/Stages/BasePass/BasePassGeometryView.hlsl",
+        .entry_point
+        = debug ? "BasePassGeometryDebugPS" : "BasePassWireframePS",
+        .defines = pixel_defines,
       })
       .SetPrimitiveTopology(graphics::PrimitiveType::kTriangleList)
-      .SetRasterizerState(graphics::RasterizerStateDesc::WireframeNoCulling())
+      .SetRasterizerState(debug
+          ? pipeline.raster_state.Rasterizer()
+          : graphics::RasterizerStateDesc::WireframeNoCulling())
       .SetDepthStencilState(depth_state)
-      .SetBlendState({ MakeWireframeBlendTarget(overlay) })
+      .SetBlendState({ MakeWireframeBlendTarget(pipeline.overlay) })
       .SetFramebufferLayout(graphics::FramebufferLayoutDesc {
         .color_target_formats
         = std::vector<Format> { color->GetDescriptor().format },
@@ -554,8 +583,7 @@ namespace {
       })
       .SetRootBindings(std::span<const graphics::RootBindingItem>(
         root_bindings.data(), root_bindings.size()))
-      .SetDebugName(overlay ? "Vortex.BasePass.WireframeOverlay"
-                            : "Vortex.BasePass.Wireframe")
+      .SetDebugName(std::move(debug_name))
       .Build();
   }
 
@@ -1038,11 +1066,12 @@ auto BasePassModule::Execute(RenderContext& ctx,
   -> BasePassExecutionResult
 {
   last_execution_result_ = {};
-  const auto wireframe_only = config_.render_mode == RenderMode::kWireframe;
+  const auto geometry_view_only = config_.render_mode == RenderMode::kWireframe
+    || IsGeometryViewDebugMode(config_.shader_debug_mode);
   const auto forward_solid
-    = config_.shading_mode == ShadingMode::kForward && !wireframe_only;
+    = config_.shading_mode == ShadingMode::kForward && !geometry_view_only;
   if (config_.shading_mode != ShadingMode::kDeferred && !forward_solid
-    && !wireframe_only) {
+    && !geometry_view_only) {
     return last_execution_result_;
   }
 
@@ -1056,7 +1085,7 @@ auto BasePassModule::Execute(RenderContext& ctx,
   const auto writes_velocity = !forward_solid && config_.write_velocity
     && scene_textures.GetVelocity() != nullptr;
   const auto draw_command_mode
-    = wireframe_only ? ShadingMode::kDeferred : config_.shading_mode;
+    = geometry_view_only ? ShadingMode::kDeferred : config_.shading_mode;
   mesh_processor_->BuildDrawCommands(
     *ctx.current_view.prepared_frame, draw_command_mode, writes_velocity);
   last_execution_result_.draw_count
@@ -1093,12 +1122,12 @@ auto BasePassModule::Execute(RenderContext& ctx,
   const auto view_constants_param
     = static_cast<std::uint32_t>(bindless_d3d12::RootParam::kViewConstants);
 
-  if (wireframe_only) {
+  if (geometry_view_only) {
     const auto depth_read_only = false;
-    if (NeedsWireframeFramebufferRebuild(
-          wireframe_framebuffer_, scene_textures, depth_read_only)) {
-      wireframe_framebuffer_ = gfx->CreateFramebuffer(
-        BuildWireframeFramebuffer(scene_textures, depth_read_only));
+    if (NeedsGeometryViewFramebufferRebuild(
+          geometry_view_framebuffer_, scene_textures, depth_read_only)) {
+      geometry_view_framebuffer_ = gfx->CreateFramebuffer(
+        BuildGeometryViewFramebuffer(scene_textures, depth_read_only));
     }
 
     BeginPersistentWriteTarget(recorder, scene_textures.GetSceneColor());
@@ -1110,19 +1139,25 @@ auto BasePassModule::Execute(RenderContext& ctx,
     recorder.FlushBarriers();
 
     graphics::GpuEventScope wire_scope(recorder,
-      "Vortex.Stage9.BasePass.Wireframe",
+      "Vortex.Stage9.BasePass.GeometryView",
       profiling::ProfileGranularity::kDiagnostic,
       profiling::ProfileCategory::kPass);
     recorder.ClearFramebuffer(
-      *wireframe_framebuffer_, std::nullopt, reverse_z ? 0.0F : 1.0F, 0U);
-    recorder.BindFrameBuffer(*wireframe_framebuffer_);
+      *geometry_view_framebuffer_, std::nullopt, reverse_z ? 0.0F : 1.0F, 0U);
+    recorder.BindFrameBuffer(*geometry_view_framebuffer_);
     SetViewportAndScissor(recorder, ctx, scene_textures);
     const auto wireframe_constants_index
       = WriteWireframeConstants(*gfx, ctx, true);
     occlusion::internal::IndirectListBuilder::Draw(recorder, draw_list,
       [&](const internal::MeshRasterState& raster_state) -> void {
-        recorder.SetPipelineState(BuildWireframePipelineDesc(
-          scene_textures, raster_state.alpha_test, reverse_z, true, false));
+        recorder.SetPipelineState(BuildGeometryViewPipelineDesc(scene_textures,
+          GeometryViewPipeline {
+            .debug_mode = config_.shader_debug_mode,
+            .raster_state = raster_state,
+            .reverse_z = reverse_z,
+            .depth_write = true,
+            .overlay = false,
+          }));
         recorder.SetGraphicsRootConstantBufferView(
           view_constants_param, ctx.view_constants.GpuAddress());
         recorder.SetGraphicsRoot32BitConstant(
@@ -1442,13 +1477,13 @@ auto BasePassModule::ExecuteWireframeOverlay(RenderContext& ctx,
   auto color = display_target
     ? display_target->GetDescriptor().color_attachments.front().texture
     : scene_textures.GetSceneColorResource();
-  const auto& old_target = wireframe_framebuffer_;
+  const auto& old_target = geometry_view_framebuffer_;
   if (!old_target
     || old_target->GetDescriptor().color_attachments.front().texture != color
     || old_target->GetDescriptor().depth_attachment.texture
       != scene_textures.GetSceneDepthResource()) {
-    wireframe_framebuffer_ = gfx->CreateFramebuffer(
-      BuildWireframeFramebuffer(scene_textures, depth_read_only, color));
+    geometry_view_framebuffer_ = gfx->CreateFramebuffer(
+      BuildGeometryViewFramebuffer(scene_textures, depth_read_only, color));
   }
   BeginPersistentWriteTarget(recorder, *color);
   BeginPersistentWriteTarget(recorder, scene_textures.GetSceneDepth());
@@ -1460,7 +1495,7 @@ auto BasePassModule::ExecuteWireframeOverlay(RenderContext& ctx,
     occlusion::internal::MakeIndirectDrawCandidates(
       prepared_frame.GetDrawMetadata(), mesh_processor_->GetDrawCommands()));
   recorder.FlushBarriers();
-  recorder.BindFrameBuffer(*wireframe_framebuffer_);
+  recorder.BindFrameBuffer(*geometry_view_framebuffer_);
   SetViewportAndScissor(recorder, ctx, scene_textures);
 
   const auto reverse_z = ctx.current_view.resolved_view == nullptr
@@ -1473,8 +1508,14 @@ auto BasePassModule::ExecuteWireframeOverlay(RenderContext& ctx,
     = static_cast<std::uint32_t>(bindless_d3d12::RootParam::kViewConstants);
   occlusion::internal::IndirectListBuilder::Draw(recorder, draw_list,
     [&](const internal::MeshRasterState& raster_state) -> void {
-      recorder.SetPipelineState(BuildWireframePipelineDesc(scene_textures,
-        raster_state.alpha_test, reverse_z, false, true, color.get()));
+      recorder.SetPipelineState(BuildGeometryViewPipelineDesc(scene_textures,
+        GeometryViewPipeline {
+          .raster_state = raster_state,
+          .reverse_z = reverse_z,
+          .depth_write = false,
+          .overlay = true,
+        },
+        color.get()));
       recorder.SetGraphicsRootConstantBufferView(
         view_constants_param, ctx.view_constants.GpuAddress());
       recorder.SetGraphicsRoot32BitConstant(

@@ -2110,7 +2110,11 @@ auto SceneRenderer::RenderCurrentView(
   }
 
   const auto shading_mode = ResolveShadingModeForCurrentView(ctx);
-  const auto wireframe_only = ctx.render_mode == RenderMode::kWireframe;
+  // The geometry view (wireframe, or a geometry view debug mode) draws the
+  // geometry straight to scene color: no depth prepass, lighting, sky, fog or
+  // translucency.
+  const auto geometry_view_only = ctx.render_mode == RenderMode::kWireframe
+    || IsGeometryViewDebugMode(ctx.shader_debug_mode);
   const auto feature_spec
     = ResolveViewFeatureProfileSpec(ctx.current_view.feature_profile);
   const auto feature_mask = ctx.current_view.feature_mask;
@@ -2133,13 +2137,14 @@ auto SceneRenderer::RenderCurrentView(
   const auto wants_resolve = wants_scene_lighting || depth_only_variant;
   const auto wants_scene_texture_publication
     = wants_scene_lighting || depth_only_variant;
-  ctx.current_view.screen_hzb_request = wireframe_only || !wants_scene_lighting
+  ctx.current_view.screen_hzb_request
+    = geometry_view_only || !wants_scene_lighting
     ? RenderContext::ScreenHzbRequest {}
     : ResolveScreenHzbRequest(ctx, shading_mode);
   if (depth_only_variant) {
     ctx.current_view.depth_prepass_mode = DepthPrePassMode::kOpaqueAndMasked;
   }
-  if (wireframe_only || !wants_depth_prepass) {
+  if (geometry_view_only || !wants_depth_prepass) {
     ctx.current_view.depth_prepass_mode = DepthPrePassMode::kDisabled;
   }
   ctx.current_view.scene_depth_product_valid = false;
@@ -2532,13 +2537,14 @@ auto SceneRenderer::RenderCurrentView(
       .early_z_pass_done = ctx.current_view.IsEarlyDepthComplete(),
       .shading_mode = shading_mode,
       .render_mode = ctx.render_mode,
+      .shader_debug_mode = ctx.shader_debug_mode,
     });
     const auto base_pass_result
       = base_pass_->Execute(ctx, recorder, scene_textures);
     base_pass_published = base_pass_result.published_base_pass_products;
     base_pass_wrote_scene_color = base_pass_result.wrote_scene_color;
     base_pass_draw_count = base_pass_result.draw_count;
-    if (base_pass_result.wrote_scene_color && !wireframe_only) {
+    if (base_pass_result.wrote_scene_color && !geometry_view_only) {
       ctx.current_view.scene_depth_product_valid = true;
     }
     if (base_pass_result.published_base_pass_products
@@ -2551,7 +2557,7 @@ auto SceneRenderer::RenderCurrentView(
         return false;
       }
     } else if (base_pass_result.wrote_scene_color
-      && shading_mode == ShadingMode::kForward && !wireframe_only) {
+      && shading_mode == ShadingMode::kForward && !geometry_view_only) {
       // Forward base shading writes these attachments without producing
       // GBuffers. Publish them for environment consumers and the HDR resolve.
       setup_mode_.SetFlags(SceneTextureSetupMode::Flag::kSceneColor
@@ -2648,7 +2654,7 @@ auto SceneRenderer::RenderCurrentView(
   // consumed the same products in Stage 9 and are not shaded a second time.
   bool indirect_executed = false;
   if (indirect_ && environment_ && wants_scene_lighting
-    && !rendered_debug_visualization && !wireframe_only
+    && !rendered_debug_visualization && !geometry_view_only
     && !IsNonIblDebugMode(ctx.shader_debug_mode)
     && shading_mode == ShadingMode::kDeferred && base_pass_published) {
     if (const auto* bindings
@@ -2672,7 +2678,7 @@ auto SceneRenderer::RenderCurrentView(
 
   // Stage 15: Sky / atmosphere / fog
   if (post_process_ && ctx.current_view.frame_exposure
-    && base_pass_wrote_scene_color && !wireframe_only
+    && base_pass_wrote_scene_color && !geometry_view_only
     && !rendered_debug_visualization) {
     auto& source = scene_textures.GetSceneColor();
     const auto source_srv = RegisterSceneTextureView(
@@ -2680,7 +2686,7 @@ auto SceneRenderer::RenderCurrentView(
     std::ignore = post_process_->CapturePreEnvironmentRange(
       ctx, recorder, source, source_srv);
   }
-  if (environment_ != nullptr && wants_environment && !wireframe_only
+  if (environment_ != nullptr && wants_environment && !geometry_view_only
     && !IsNonIblDebugMode(ctx.shader_debug_mode)) {
     environment_->RenderSkyAndFog(ctx, recorder, scene_textures);
     const auto& stage14_state = environment_->GetLastStage14State();
@@ -2809,7 +2815,7 @@ auto SceneRenderer::RenderCurrentView(
 
   // Stage 18: Translucency
   auto translucency_result = TranslucencyExecutionResult {};
-  if (translucency_ != nullptr && wants_translucency && !wireframe_only
+  if (translucency_ != nullptr && wants_translucency && !geometry_view_only
     && !IsNonIblDebugMode(ctx.shader_debug_mode)) {
     translucency_result = translucency_->Execute(ctx, recorder, scene_textures);
   }
@@ -2842,7 +2848,7 @@ auto SceneRenderer::RenderCurrentView(
 
   const auto draw_wireframe_overlay
     = [&](const graphics::Framebuffer* target) -> void {
-    if (base_pass_ == nullptr || !wants_scene_lighting || wireframe_only
+    if (base_pass_ == nullptr || !wants_scene_lighting || geometry_view_only
       || ctx.render_mode != RenderMode::kOverlayWireframe) {
       return;
     }
@@ -3075,7 +3081,8 @@ auto SceneRenderer::RenderCurrentView(
   }
 
   // Stage 20: Ground grid
-  if (ground_grid_pass_ != nullptr && wants_scene_lighting && !wireframe_only) {
+  if (ground_grid_pass_ != nullptr && wants_scene_lighting
+    && !geometry_view_only) {
     const auto grid = ground_grid_pass_->Record(
       ctx, recorder, scene_textures, ResolveViewOutputTarget(ctx));
     if (grid.settling) {
@@ -3105,7 +3112,7 @@ auto SceneRenderer::RenderCurrentView(
         .scene_depth_srv = kInvalidShaderVisibleIndex,
       };
       // Wireframe views have no complete depth: nothing counts as hidden.
-      if (!wireframe_only) {
+      if (!geometry_view_only) {
         auto* depth = scene_textures.GetSceneDepthResource().get();
         inputs.scene_depth = observer_ptr<const graphics::Texture> { depth };
         inputs.scene_depth_srv = RegisterSceneTextureView(*depth,
@@ -3135,7 +3142,7 @@ auto SceneRenderer::RenderCurrentView(
         .scene_depth_srv = kInvalidShaderVisibleIndex,
       };
       // Wireframe views have no complete depth: nothing counts as hidden.
-      if (!wireframe_only) {
+      if (!geometry_view_only) {
         auto* depth = scene_textures.GetSceneDepthResource().get();
         inputs.scene_depth = observer_ptr<const graphics::Texture> { depth };
         inputs.scene_depth_srv = RegisterSceneTextureView(*depth,

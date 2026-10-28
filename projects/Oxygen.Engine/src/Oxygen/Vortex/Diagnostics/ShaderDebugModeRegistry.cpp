@@ -271,9 +271,25 @@ namespace {
       .required_capabilities = kDeferredCapabilities,
       .requires_gbuffer = true,
     },
+    ShaderDebugModeInfo {
+      .mode = ShaderDebugMode::kTextureCoordinates,
+      .canonical_name = "texture-coordinates",
+      .display_name = "Texture Coordinates",
+      .family = ShaderDebugModeFamily::kGeometry,
+      .shader_define = "DEBUG_TEXTURE_COORDINATES",
+      .path = DiagnosticsDebugPath::kGeometryView,
+    },
+    ShaderDebugModeInfo {
+      .mode = ShaderDebugMode::kTangentFrameCheck,
+      .canonical_name = "tangent-frame-check",
+      .display_name = "Tangent Frame Check",
+      .family = ShaderDebugModeFamily::kGeometry,
+      .shader_define = "DEBUG_TANGENT_FRAME_CHECK",
+      .path = DiagnosticsDebugPath::kGeometryView,
+    },
   };
 
-  static_assert(kShaderDebugModeRegistry.size() == 24U);
+  static_assert(kShaderDebugModeRegistry.size() == 26U);
 
 } // namespace
 

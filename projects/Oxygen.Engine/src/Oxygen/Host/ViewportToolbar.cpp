@@ -104,6 +104,8 @@ namespace {
       return "Scene Depth";
     case ShaderDebugModeFamily::kMasked:
       return "Masked Materials";
+    case ShaderDebugModeFamily::kGeometry:
+      return "Geometry";
     }
     return "Other";
   }

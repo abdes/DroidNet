@@ -26,6 +26,7 @@ enum class ShaderDebugModeFamily : std::uint8_t {
   kShadow,
   kSceneDepth,
   kMasked,
+  kGeometry,
 };
 
 [[nodiscard]] constexpr auto to_string(
@@ -48,6 +49,8 @@ enum class ShaderDebugModeFamily : std::uint8_t {
     return "scene-depth";
   case ShaderDebugModeFamily::kMasked:
     return "masked";
+  case ShaderDebugModeFamily::kGeometry:
+    return "geometry";
   }
   return "__unknown__";
 }

@@ -58,6 +58,8 @@ using enum ShaderViewBinding;
 //   DEBUG_SCENE_DEPTH_LINEAR: Published scene depth reconstructed to eye depth
 //   DEBUG_SCENE_DEPTH_MISMATCH: Shading depth disagreement vs pre-pass depth
 //   DEBUG_MASKED_ALPHA_COVERAGE: Masked alpha pass/fail classification
+//   DEBUG_TEXTURE_COORDINATES: Geometry view, texture coordinates
+//   DEBUG_TANGENT_FRAME_CHECK: Geometry view, vertex frame vs dP/dU and dP/dV
 
 // clang-format off
 inline constexpr auto kEngineShaders = GenerateCatalog(
@@ -303,8 +305,20 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
     .permutations=std::array<std::string_view, 2> { "HAS_VELOCITY", "ALPHA_TEST" },
   },
   ShaderFileSpec {
-    .path="Vortex/Stages/BasePass/BasePassWireframe.hlsl",
+    .path="Vortex/Stages/BasePass/BasePassGeometryView.hlsl",
     .entries=std::array { EntryPoint { .type=kPixel, .name="BasePassWireframePS", .view_binding=kCamera }, EntryPoint { .type=kVertex, .name="BasePassGBufferVS", .view_binding=kCamera } },
+    .permutations=std::array<std::string_view, 1> { "ALPHA_TEST" },
+  },
+  RequiredDefineShaderFileSpec<1, 1, 1> {
+    .path="Vortex/Stages/BasePass/BasePassGeometryView.hlsl",
+    .entries=std::array { EntryPoint { .type=kPixel, .name="BasePassGeometryDebugPS", .view_binding=kCamera } },
+    .required_defines=std::array<std::string_view, 1> { "DEBUG_TEXTURE_COORDINATES" },
+    .permutations=std::array<std::string_view, 1> { "ALPHA_TEST" },
+  },
+  RequiredDefineShaderFileSpec<1, 1, 1> {
+    .path="Vortex/Stages/BasePass/BasePassGeometryView.hlsl",
+    .entries=std::array { EntryPoint { .type=kPixel, .name="BasePassGeometryDebugPS", .view_binding=kCamera } },
+    .required_defines=std::array<std::string_view, 1> { "DEBUG_TANGENT_FRAME_CHECK" },
     .permutations=std::array<std::string_view, 1> { "ALPHA_TEST" },
   },
   RequiredDefineShaderFileSpec<2, 1, 1> {
@@ -645,6 +659,8 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
 // ALPHA_TEST)
 // - VortexBasePassVelocityMerge: 1
 // - VortexBasePassDebugView: 8 (VS + 7 required debug PS variants)
+// - VortexBasePassGeometryView: 4 (VS + wireframe PS, x ALPHA_TEST) and 4
+//   geometry debug PS (2 required debug defines x ALPHA_TEST)
 // - VortexShadowDepth: 8 (2 entries x ALPHA_TEST x CUBE_SHADOW)
 // - VortexContactShadowCasterDepth: 4 (2 entries x ALPHA_TEST)
 // - VortexDeferredLightDirectional: 2 entries

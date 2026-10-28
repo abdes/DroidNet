@@ -17,6 +17,7 @@
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Vortex/RenderMode.h>
 #include <Oxygen/Vortex/SceneRenderer/ShadingMode.h>
+#include <Oxygen/Vortex/ShaderDebugMode.h>
 #include <Oxygen/Vortex/api_export.h>
 
 namespace oxygen {
@@ -57,6 +58,9 @@ struct BasePassConfig {
   bool early_z_pass_done { true };
   ShadingMode shading_mode { ShadingMode::kDeferred };
   RenderMode render_mode { RenderMode::kSolid };
+  //! A geometry view debug mode (`IsGeometryViewDebugMode`) draws the
+  //! geometry view instead of the GBuffer.
+  ShaderDebugMode shader_debug_mode { ShaderDebugMode::kDisabled };
 };
 
 struct BasePassExecutionResult {
@@ -123,7 +127,7 @@ private:
   std::shared_ptr<oxygen::graphics::Framebuffer> forward_range_framebuffer_;
   std::shared_ptr<oxygen::graphics::Framebuffer>
     forward_color_clear_framebuffer_;
-  std::shared_ptr<oxygen::graphics::Framebuffer> wireframe_framebuffer_;
+  std::shared_ptr<oxygen::graphics::Framebuffer> geometry_view_framebuffer_;
   std::shared_ptr<oxygen::graphics::Texture> velocity_base_copy_;
   std::shared_ptr<oxygen::graphics::Texture>
     velocity_motion_vector_world_offset_;

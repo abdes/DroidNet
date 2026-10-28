@@ -267,6 +267,7 @@ enum class DiagnosticsDebugPath : std::uint8_t {
   kDeferredFullscreen,
   kServicePass,
   kExternalToolOnly,
+  kGeometryView,
 };
 
 using DiagnosticsFeatureSet = DiagnosticsFeature;
@@ -468,6 +469,19 @@ Rules:
   pass writes truthful alpha-test metadata into a published GBuffer channel.
 - Wireframe and wireframe-overlay are render modes, not shader debug modes.
   They belong to renderer settings and the base pass.
+- The base pass's geometry view draws the opaque and masked geometry straight
+  to scene color with a view pixel shader (`BasePassGeometryView.hlsl`), with
+  no GBuffer, lighting, sky, fog or translucency. The wireframe render mode and
+  the Geometry family of debug modes (path `kGeometryView`) use it; those
+  modes show vertex attributes the GBuffer does not keep:
+  - Texture Coordinates: U in red and V in green, wrapped, with a line every
+    1/8 and blue where a coordinate lies outside [0, 1].
+  - Tangent Frame Check: the interpolated vertex tangent and bitangent against
+    the triangle's dP/dU and dP/dV from screen derivatives (`space::texture`):
+    green when both agree within 45 degrees, red when T does not, blue when B
+    does not, magenta when neither, grey on degenerate UVs.
+    The geometry view's pixel shaders are separate entry points compiled only
+    for these modes; the production base pass shaders carry none of them.
 - UI code must consume the registry rather than duplicate mode lists.
 - SceneRenderer can keep executing debug views, but mode classification must
   move to the registry or remain tested against it.

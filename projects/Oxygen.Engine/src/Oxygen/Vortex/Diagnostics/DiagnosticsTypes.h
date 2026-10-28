@@ -92,6 +92,9 @@ enum class DiagnosticsDebugPath : std::uint8_t {
   kDeferredFullscreen,
   kServicePass,
   kExternalToolOnly,
+  //! The base pass's geometry view: geometry drawn to scene color with a
+  //! debug pixel shader (`BasePassGeometryView.hlsl`).
+  kGeometryView,
 };
 
 struct DiagnosticsIssue {
@@ -230,6 +233,8 @@ struct DiagnosticsFrameSnapshot {
     return "ServicePass";
   case DiagnosticsDebugPath::kExternalToolOnly:
     return "ExternalToolOnly";
+  case DiagnosticsDebugPath::kGeometryView:
+    return "GeometryView";
   }
   return "__Unknown__";
 }

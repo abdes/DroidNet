@@ -36,6 +36,8 @@ enum class ShaderDebugMode : std::uint8_t {
   kSceneDepthLinear = 23,
   kSceneDepthMismatch = 24,
   kMaskedAlphaCoverage = 25,
+  kTextureCoordinates = 26,
+  kTangentFrameCheck = 27,
 };
 
 constexpr auto to_string(const ShaderDebugMode mode) noexcept
@@ -67,6 +69,8 @@ constexpr auto to_string(const ShaderDebugMode mode) noexcept
       case ShaderDebugMode::kSceneDepthLinear: return "SceneDepthLinear";
       case ShaderDebugMode::kSceneDepthMismatch: return "SceneDepthMismatch";
       case ShaderDebugMode::kMaskedAlphaCoverage: return "MaskedAlphaCoverage";
+      case ShaderDebugMode::kTextureCoordinates: return "TextureCoordinates";
+      case ShaderDebugMode::kTangentFrameCheck: return "TangentFrameCheck";
     // clang-format on
   }
   return "__Unknown__";
@@ -119,10 +123,22 @@ constexpr auto IsNonIblDebugMode(const ShaderDebugMode mode) noexcept -> bool
   case ShaderDebugMode::kSceneDepthLinear:
   case ShaderDebugMode::kSceneDepthMismatch:
   case ShaderDebugMode::kMaskedAlphaCoverage:
+  case ShaderDebugMode::kTextureCoordinates:
+  case ShaderDebugMode::kTangentFrameCheck:
     return true;
   default:
     return false;
   }
+}
+
+//! Modes the geometry view draws: the scene's geometry drawn straight to
+//! scene color with a debug pixel shader, for vertex attributes the GBuffer
+//! does not keep.
+constexpr auto IsGeometryViewDebugMode(const ShaderDebugMode mode) noexcept
+  -> bool
+{
+  return mode == ShaderDebugMode::kTextureCoordinates
+    || mode == ShaderDebugMode::kTangentFrameCheck;
 }
 
 constexpr auto UsesForwardMeshDebugVariant(const ShaderDebugMode mode) noexcept
@@ -179,6 +195,10 @@ constexpr auto GetShaderDebugDefineName(const ShaderDebugMode mode) noexcept
     return "DEBUG_SCENE_DEPTH_MISMATCH";
   case ShaderDebugMode::kMaskedAlphaCoverage:
     return "DEBUG_MASKED_ALPHA_COVERAGE";
+  case ShaderDebugMode::kTextureCoordinates:
+    return "DEBUG_TEXTURE_COORDINATES";
+  case ShaderDebugMode::kTangentFrameCheck:
+    return "DEBUG_TANGENT_FRAME_CHECK";
   default:
     return {};
   }
