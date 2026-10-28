@@ -53,6 +53,7 @@ public sealed partial class ExplorerNavigationTests : DroidNet.Tests.VisualUserI
         using AssetsLayoutViewModel layout = tiles ? new TilesLayoutViewModel(provider.Object, session, state, hosting) : new ListLayoutViewModel(provider.Object, session, state, hosting);
         RouteStateMapping.ApplyNavigationScope(state, "/(left:folders//right:assets/list)?selected=%2FContent%2FGeometry");
         await layout.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);
+        await layout.InitialLoad.ConfigureAwait(true);
         UserControl view = tiles ? new TilesLayoutView
         {
             ViewModel = (TilesLayoutViewModel)layout,

@@ -40,7 +40,9 @@ public sealed partial class ExplorerContainerTests : DroidNet.Tests.VisualUserIn
         using var tiles = new TilesLayoutViewModel(provider.Object, session, state, CreateStatusHosting());
 
         await list.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);
+        await list.InitialLoad.ConfigureAwait(true);
         await tiles.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);
+        await tiles.InitialLoad.ConfigureAwait(true);
 
         _ = list.Assets.Select(static row => row.Item.Identity).Should().BeEquivalentTo([model.Identity, input.Identity]);
         _ = tiles.Assets.Select(static row => row.Item.Identity).Should().BeEquivalentTo([model.Identity, input.Identity]);

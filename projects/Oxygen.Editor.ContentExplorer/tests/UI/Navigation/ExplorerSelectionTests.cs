@@ -37,8 +37,9 @@ public sealed partial class ExplorerSelectionTests : DroidNet.Tests.VisualUserIn
         using var session = CreateQuerySession();
         var state = new ContentExplorerState();
         using AssetsLayoutViewModel model = tiles ? new TilesLayoutViewModel(provider.Object, session, state, CreateStatusHosting()) : new ListLayoutViewModel(provider.Object, session, state, CreateStatusHosting());
-        // Navigation completes after the first snapshot; with no view loaded yet there is no frame to wait for.
+        // The first snapshot arrives after navigation; with no view loaded yet there is no frame to wait for.
         await model.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);
+        await model.InitialLoad.ConfigureAwait(true);
         model.SelectedAsset = items[^1];
         model.RevealSelection();
         UserControl view = tiles ? new TilesLayoutView
@@ -90,6 +91,7 @@ public sealed partial class ExplorerSelectionTests : DroidNet.Tests.VisualUserIn
         using var list = new ListLayoutViewModel(provider.Object, session, state, CreateStatusHosting());
         using var tiles = new TilesLayoutViewModel(provider.Object, session, state, CreateStatusHosting());
         await list.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);
+        await list.InitialLoad.ConfigureAwait(true);
         var listView = new ListLayoutView
         {
             ViewModel = list,
@@ -100,6 +102,7 @@ public sealed partial class ExplorerSelectionTests : DroidNet.Tests.VisualUserIn
         listSelector.SelectedIndex = 0;
         _ = list.SelectedAsset!.Identity.Should().Be(blue.Identity);
         await tiles.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);
+        await tiles.InitialLoad.ConfigureAwait(true);
         var tileView = new TilesLayoutView
         {
             ViewModel = tiles,
@@ -112,6 +115,7 @@ public sealed partial class ExplorerSelectionTests : DroidNet.Tests.VisualUserIn
         tileSelector.SelectedIndex = 1;
         _ = tiles.SelectedAsset!.Identity.Should().Be(red.Identity);
         await list.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);
+        await list.InitialLoad.ConfigureAwait(true);
         await LoadTestContentAsync(listView).ConfigureAwait(true);
         await WaitForRenderAsync().ConfigureAwait(true);
         _ = listSelector.SelectedItem.Should().BeOfType<AssetBrowserRow>().Which.Item.Identity.Should().Be(red.Identity);
@@ -146,6 +150,7 @@ public sealed partial class ExplorerSelectionTests : DroidNet.Tests.VisualUserIn
         using var tiles = new TilesLayoutViewModel(provider.Object, session, state, CreateStatusHosting());
         using var table = new DetailsLayoutViewModel(provider.Object, session, state, CreateStatusHosting());
         await tiles.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);
+        await tiles.InitialLoad.ConfigureAwait(true);
         var tileView = new TilesLayoutView { ViewModel = tiles };
         await LoadTestContentAsync(tileView).ConfigureAwait(true);
         await WaitForRenderAsync().ConfigureAwait(true);
@@ -166,6 +171,7 @@ public sealed partial class ExplorerSelectionTests : DroidNet.Tests.VisualUserIn
         _ = tileSelector.SelectedItems.Should().HaveCount(2);
 
         await table.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);
+        await table.InitialLoad.ConfigureAwait(true);
         var tableView = new DetailsLayoutView { ViewModel = table };
         await LoadTestContentAsync(tableView).ConfigureAwait(true);
         await WaitForRenderAsync().ConfigureAwait(true);
@@ -190,6 +196,7 @@ public sealed partial class ExplorerSelectionTests : DroidNet.Tests.VisualUserIn
         using var list = new ListLayoutViewModel(provider.Object, session, state, CreateStatusHosting());
         using var tiles = new TilesLayoutViewModel(provider.Object, session, state, CreateStatusHosting());
         await list.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);
+        await list.InitialLoad.ConfigureAwait(true);
         var listView = new ListLayoutView
         {
             ViewModel = list,
@@ -198,6 +205,7 @@ public sealed partial class ExplorerSelectionTests : DroidNet.Tests.VisualUserIn
         await WaitForRenderAsync().ConfigureAwait(true);
         listView.FindDescendant<ListViewBase>()!.SelectedIndex = 0;
         await tiles.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);
+        await tiles.InitialLoad.ConfigureAwait(true);
         var tileView = new TilesLayoutView
         {
             ViewModel = tiles,
@@ -220,6 +228,7 @@ public sealed partial class ExplorerSelectionTests : DroidNet.Tests.VisualUserIn
         _ = invoked.Should().BeFalse();
         state.Query.ClearAllCommand.Execute(parameter: null);
         await list.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);
+        await list.InitialLoad.ConfigureAwait(true);
         await LoadTestContentAsync(listView).ConfigureAwait(true);
         await WaitForRenderAsync().ConfigureAwait(true);
         _ = list.SelectedAsset.Should().BeNull();
@@ -228,6 +237,7 @@ public sealed partial class ExplorerSelectionTests : DroidNet.Tests.VisualUserIn
         RouteStateMapping.ApplyNavigationScope(state, "/(left:folders//right:assets/list)?selected=%2FContent%2FGeometry");
         RouteStateMapping.ApplyNavigationScope(state, "/(left:folders//right:assets/list)?selected=.");
         await tiles.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);
+        await tiles.InitialLoad.ConfigureAwait(true);
         _ = tiles.SelectedAsset.Should().BeNull();
     });
 }

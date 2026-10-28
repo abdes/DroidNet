@@ -57,6 +57,7 @@ public sealed partial class AssetStatusTests : DroidNet.Tests.VisualUserInterfac
         host.RequestedTheme = ElementTheme.Dark;
         host.Child = view;
         await model.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);
+        await model.InitialLoad.ConfigureAwait(true);
         await LoadTestContentAsync(host).ConfigureAwait(true);
         var originalSize = VisualUserInterfaceTestsApp.MainWindow.AppWindow.Size;
         var scale = host.XamlRoot.RasterizationScale;

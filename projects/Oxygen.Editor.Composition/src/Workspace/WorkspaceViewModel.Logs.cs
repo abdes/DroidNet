@@ -52,4 +52,13 @@ public partial class WorkspaceViewModel
 
     private void LogSceneRestorationFailed(Exception exception, string? projectName)
         => LogSceneRestorationFailed(this.logger, exception, projectName);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Error,
+        Message = "The preview or the start scene of project {ProjectName} failed to open.")]
+    private static partial void LogStartupFailed(ILogger logger, Exception exception, string? projectName);
+
+    private void LogStartupFailed(Exception exception, string? projectName)
+        => LogStartupFailed(this.logger, exception, projectName);
 }

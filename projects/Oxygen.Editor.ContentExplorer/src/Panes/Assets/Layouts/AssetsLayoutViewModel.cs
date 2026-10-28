@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.ObjectModel;
+using System.Diagnostics.CodeAnalysis;
 using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -105,6 +106,9 @@ public abstract partial class AssetsLayoutViewModel(
     /// <summary>Gets the visual rows of every selected asset.</summary>
     public IReadOnlyList<AssetBrowserRow> SelectedRows => [.. this.selectedAssets.Select(asset => this.FindRow(asset.Identity)).OfType<AssetBrowserRow>()];
 
+    /// <summary>Gets the completion of the first asset snapshot started by navigation; failures end in the empty state.</summary>
+    internal Task InitialLoad => this.initialization ?? Task.CompletedTask;
+
     private bool IsActiveLayout => !this.disposed && ReferenceEquals(this.contentExplorerState.ActiveAssetLayout, this);
 
     /// <summary>Replaces the selection with visible assets; hidden or unknown assets are dropped.</summary>
@@ -165,29 +169,30 @@ public abstract partial class AssetsLayoutViewModel(
     public Task RefreshAsync() => this.assetProvider.RefreshAsync();
 
     /// <inheritdoc/>
-    public async Task OnNavigatedToAsync(IActiveRoute route, INavigationContext navigationContext)
+    /// <remarks>
+    /// Navigation does not wait for the project's assets: the layout shows its loading state until the first
+    /// snapshot arrives, so the workspace and the preview start while the assets are still being read.
+    /// </remarks>
+    public Task OnNavigatedToAsync(IActiveRoute route, INavigationContext navigationContext)
     {
         ObjectDisposedException.ThrowIf(this.disposed, this);
-        try
+        if (!ReferenceEquals(this.contentExplorerState.ActiveAssetLayout, this))
         {
-            await (this.initialization ??= this.InitializeAsync()).ConfigureAwait(true);
-            ObjectDisposedException.ThrowIf(this.disposed, this);
-            if (!ReferenceEquals(this.contentExplorerState.ActiveAssetLayout, this))
-            {
-                this.pendingReveal = null;
-            }
+            this.pendingReveal = null;
+        }
 
-            this.contentExplorerState.ActiveAssetLayout = this;
-            if (this.hasSnapshot)
-            {
-                this.ReplaceItems(this.latestItems);
-            }
-        }
-        catch
+        this.contentExplorerState.ActiveAssetLayout = this;
+        // A load that ended without a snapshot failed; navigating again retries it.
+        if (this.initialization is not { } load || (load.IsCompleted && !this.hasSnapshot))
         {
-            this.initialization = null;
-            throw;
+            this.initialization = this.LoadAsync();
         }
+        else if (this.hasSnapshot)
+        {
+            this.ReplaceItems(this.latestItems);
+        }
+
+        return Task.CompletedTask;
     }
 
     /// <inheritdoc/>
@@ -315,6 +320,24 @@ public abstract partial class AssetsLayoutViewModel(
         }
     }
 
+    // The asset feed logs its refresh failures; the layout leaves its loading state.
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Navigation does not observe the load; every failure must end the loading state.")]
+    private async Task LoadAsync()
+    {
+        try
+        {
+            await this.InitializeAsync().ConfigureAwait(true);
+        }
+        catch (Exception)
+        {
+            if (!this.disposed)
+            {
+                this.isLoading = false;
+                this.NotifyEmptyState();
+            }
+        }
+    }
+
     private async Task InitializeAsync()
     {
         var firstSnapshot = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -433,9 +456,10 @@ public abstract partial class AssetsLayoutViewModel(
     private AssetBrowserRow? FindRow(AssetPath identity)
         => this.Assets.FirstOrDefault(row => row.Item.Identity == identity);
 
+    // Before its first snapshot a layout has no rows, so it keeps the selection the session retained.
     private void PublishSelection()
     {
-        if (this.IsActiveLayout)
+        if (this.IsActiveLayout && this.hasSnapshot)
         {
             this.contentExplorerState.SelectedIdentity = this.selectedAsset?.Identity;
             this.contentExplorerState.SelectedIdentities = [.. this.selectedAssets.Select(static asset => asset.Identity)];

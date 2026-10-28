@@ -59,7 +59,9 @@ public sealed partial class ExplorerQueryTests : DroidNet.Tests.VisualUserInterf
         using var list = new ListLayoutViewModel(provider.Object, session, state, CreateStatusHosting());
         using var tile = new TilesLayoutViewModel(provider.Object, session, state, CreateStatusHosting());
         await list.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);
+        await list.InitialLoad.ConfigureAwait(true);
         await tile.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);
+        await tile.InitialLoad.ConfigureAwait(true);
         var queryView = new AssetQueryView
         {
             ViewModel = state.Query,
@@ -111,6 +113,7 @@ public sealed partial class ExplorerQueryTests : DroidNet.Tests.VisualUserInterf
         state.SetSelectedFolders([AssetPath.Parse("/Cooked/Content/Materials")]);
         using var model = new ListLayoutViewModel(provider.Object, session, state, CreateStatusHosting());
         await model.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);
+        await model.InitialLoad.ConfigureAwait(true);
         var view = new ListLayoutView
         {
             ViewModel = model,

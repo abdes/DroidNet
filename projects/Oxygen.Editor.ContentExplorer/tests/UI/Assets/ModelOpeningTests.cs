@@ -50,6 +50,7 @@ internal sealed class ModelOpeningTests : DroidNet.Tests.VisualUserInterfaceTest
         var state = new ContentExplorerState();
         using var layout = new ListLayoutViewModel(provider.Object, session, state, CreateStatusHosting());
         await layout.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);
+        await layout.InitialLoad.ConfigureAwait(true);
         var layoutView = new ListLayoutView
         {
             ViewModel = layout,

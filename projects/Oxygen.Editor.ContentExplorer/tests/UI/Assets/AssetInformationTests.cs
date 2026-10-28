@@ -49,6 +49,7 @@ public sealed partial class AssetInformationTests : DroidNet.Tests.VisualUserInt
         using AssetsLayoutViewModel model = tiles ? new TilesLayoutViewModel(provider.Object, session, state, CreateStatusHosting()) : new ListLayoutViewModel(provider.Object, session, state, CreateStatusHosting());
         using var details = new AssetDetailsViewModel(state, session, Mock.Of<IDesktopIntegration>());
         await model.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);
+        await model.InitialLoad.ConfigureAwait(true);
         UserControl view = tiles ? new TilesLayoutView
         {
             ViewModel = (TilesLayoutViewModel)model,

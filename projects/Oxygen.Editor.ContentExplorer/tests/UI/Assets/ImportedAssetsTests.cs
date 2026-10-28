@@ -51,6 +51,7 @@ internal sealed class ImportedAssetsTests : DroidNet.Tests.VisualUserInterfaceTe
         using AssetsLayoutViewModel model = tiles ? new TilesLayoutViewModel(provider.Object, session, state, CreateStatusHosting()) : new ListLayoutViewModel(provider.Object, session, state, CreateStatusHosting());
         using var details = new AssetDetailsViewModel(state, session, Mock.Of<IDesktopIntegration>());
         await model.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);
+        await model.InitialLoad.ConfigureAwait(true);
         UserControl view = tiles ? new TilesLayoutView
         {
             ViewModel = (TilesLayoutViewModel)model,
@@ -111,6 +112,7 @@ internal sealed class ImportedAssetsTests : DroidNet.Tests.VisualUserInterfaceTe
             ViewModel = layout,
         };
         await layout.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);
+        await layout.InitialLoad.ConfigureAwait(true);
         using var browser = CreateAssetsModel(provider.Object, session, state, layout, layoutView, pipeline.Object, assetReveal: reveal.Object, cookedInspections: inspections.Object);
         await browser.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);
         browser.LoadContent(layout, "right");

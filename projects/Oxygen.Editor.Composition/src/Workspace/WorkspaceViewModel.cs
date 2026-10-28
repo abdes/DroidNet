@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Diagnostics.CodeAnalysis;
 using DroidNet.Composition;
 using DroidNet.Routing;
 using DryIoc;
@@ -49,6 +50,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
     private IAssetCatalog? assetCatalog;
     private PreviewSession? previewSession;
     private bool initialSceneOpened;
+    private Task? startup;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="WorkspaceViewModel"/> class.
@@ -93,14 +95,9 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
         await base.OnNavigatedToAsync(route, navigationContext).ConfigureAwait(true);
         this.OnScriptingNavigated();
 
-        // The preview starts the engine and mounts the project's content; the start scene opens even when it fails, so
-        // authoring still works and the workspace shows why the preview is unavailable.
-        if (this.previewSession is { } preview)
-        {
-            _ = await preview.StartAsync().ConfigureAwait(true);
-        }
-
-        await this.OpenInitialSceneAsync().ConfigureAwait(true);
+        // Activation does not wait for the engine: the window replaces the Project Explorer's as soon as its panels
+        // are in place, and the preview and the start scene follow.
+        this.startup ??= this.StartPreviewAsync();
     }
 
     /// <inheritdoc />
@@ -169,6 +166,26 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
                 ]),
             },
         ]);
+
+    // The preview starts the engine and mounts the project's content; the start scene opens even when it fails, so
+    // authoring still works and the workspace shows why the preview is unavailable.
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Nothing awaits the startup after activation; every failure is logged.")]
+    private async Task StartPreviewAsync()
+    {
+        try
+        {
+            if (this.previewSession is { } preview)
+            {
+                _ = await preview.StartAsync().ConfigureAwait(true);
+            }
+
+            await this.OpenInitialSceneAsync().ConfigureAwait(true);
+        }
+        catch (Exception failure)
+        {
+            this.LogStartupFailed(failure, this.session?.Context.Name);
+        }
+    }
 
     private async Task OpenInitialSceneAsync()
     {
