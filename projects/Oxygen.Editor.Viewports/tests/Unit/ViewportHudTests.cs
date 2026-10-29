@@ -23,11 +23,11 @@ internal sealed class ViewportHudTests
     private static readonly RuntimeViewId ViewId = new(71);
 
     [TestMethod]
-    public void ViewModeGroups_ShouldOfferShadingLightingAndBufferViews()
+    public void ViewModeGroups_ShouldOfferShadingLightingBufferAndGeometryViews()
     {
         using var sut = CreateViewport(new Mock<IEngineService>(MockBehavior.Strict).Object);
 
-        _ = sut.ViewModeGroups.Select(group => group.Title).Should().Equal(null, "Lighting", "Buffer visualization");
+        _ = sut.ViewModeGroups.Select(group => group.Title).Should().Equal(null, "Lighting", "Buffer visualization", "Geometry");
         _ = sut.ViewModeGroups.SelectMany(group => group.Options).Select(option => option.Label).Should().Equal(
             "Lit",
             "Unlit",
@@ -39,7 +39,9 @@ internal sealed class ViewportHudTests
             "Roughness",
             "Metalness",
             "Scene depth",
-            "Shadow mask");
+            "Shadow mask",
+            "Texture coordinates",
+            "Tangent frame check");
         _ = SelectedViewModes(sut).Should().Equal("Lit");
         _ = sut.ViewModeLabel.Should().Be("Lit");
     }

@@ -51,6 +51,14 @@ namespace Oxygen::Interop {
 
     /// <summary>Directional light shadowing.</summary>
     ShadowMask = 10,
+
+    /// <summary>
+    /// Texture coordinates, wrapped, with out-of-range values marked.
+    /// </summary>
+    TextureCoordinates = 11,
+
+    /// <summary>Whether tangent frames follow the texture coordinates.</summary>
+    TangentFrameCheck = 12,
   };
 
   [[nodiscard]] inline auto ToNativeViewMode(ViewModeManaged mode)
@@ -77,6 +85,10 @@ namespace Oxygen::Interop {
       return NativeMode::kLinearDepth;
     case ViewModeManaged::ShadowMask:
       return NativeMode::kShadowMask;
+    case ViewModeManaged::TextureCoordinates:
+      return NativeMode::kTextureCoordinates;
+    case ViewModeManaged::TangentFrameCheck:
+      return NativeMode::kTangentFrameCheck;
     case ViewModeManaged::Lit:
     default:
       return NativeMode::kLit;

@@ -37,6 +37,8 @@ public partial class ViewportViewModel
         (ViewportViewMode.Metalness, "Metalness", null),
         (ViewportViewMode.LinearDepth, "Scene depth", null),
         (ViewportViewMode.ShadowMask, "Shadow mask", null),
+        (ViewportViewMode.TextureCoordinates, "Texture coordinates", "U in red, V in green; blue outside 0 to 1"),
+        (ViewportViewMode.TangentFrameCheck, "Tangent frame check", "Green where tangent frames follow the UVs"),
     ];
 
     private bool hasNavigated;
@@ -200,6 +202,7 @@ public partial class ViewportViewModel
             new(Title: null, [Option(0), Option(1), Option(2), Option(3)]),
             new("Lighting", [Option(4), Option(5)]),
             new("Buffer visualization", [Option(6), Option(7), Option(8), Option(9), Option(10)]),
+            new("Geometry", [Option(11), Option(12)]),
         ];
     }
 

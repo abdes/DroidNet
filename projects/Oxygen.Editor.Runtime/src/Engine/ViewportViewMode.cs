@@ -42,4 +42,10 @@ public enum ViewportViewMode
 
     /// <summary>Directional light shadowing.</summary>
     ShadowMask = 10,
+
+    /// <summary>Texture coordinates, wrapped, with out-of-range values marked.</summary>
+    TextureCoordinates = 11,
+
+    /// <summary>Whether tangent frames follow the texture coordinates.</summary>
+    TangentFrameCheck = 12,
 }

@@ -212,6 +212,13 @@ namespace oxygen::interop::module {
         settings.shader_debug_mode
           = vortex::ShaderDebugMode::kDirectionalShadowMask;
         break;
+      case EditorViewMode::kTextureCoordinates:
+        settings.shader_debug_mode
+          = vortex::ShaderDebugMode::kTextureCoordinates;
+        break;
+      case EditorViewMode::kTangentFrameCheck:
+        settings.shader_debug_mode = vortex::ShaderDebugMode::kTangentFrameCheck;
+        break;
       }
     }
 

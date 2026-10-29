@@ -109,6 +109,8 @@ namespace oxygen::interop::module {
     kMetalness,
     kLinearDepth,
     kShadowMask,
+    kTextureCoordinates,
+    kTangentFrameCheck,
   };
 
   //! How a pane presents the scene; editor view state, never authored data.

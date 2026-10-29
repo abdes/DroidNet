@@ -26,6 +26,7 @@ public sealed class NativeSessionConversionTests
         CheckEnum<FrameCaptureInitMode, FrameCaptureInitModeManaged>();
         CheckEnum<CameraControlMode, CameraControlModeManaged>();
         CheckEnum<CameraViewPreset, CameraViewPresetManaged>();
+        CheckEnum<ViewportViewMode, ViewModeManaged>();
     }
 
     /// <summary>An invalid managed enum cannot be passed through as an arbitrary native ordinal.</summary>
