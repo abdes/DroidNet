@@ -66,6 +66,7 @@ oxygen_cooker_test(
     "Import/PhysicsImportRequestBuilder_test.cpp"
     "Import/SceneNodeImportDefaults_test.cpp"
     "Import/SceneSource_test.cpp"
+    "Import/SourceMounts_test.cpp"
     "Import/Schemas/CollisionShapeDescriptorSchema_test.cpp"
     "Import/Schemas/GeometryDescriptorSchema_test.cpp"
     "Import/Schemas/ImportManifestSchema_test.cpp"

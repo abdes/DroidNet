@@ -92,6 +92,8 @@ oxygen_embed_json_schemas(
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.physics-material-descriptor.schema.json"
     kCollisionShapeDescriptorSchema
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.collision-shape-descriptor.schema.json"
+    kMountsSchema
+    "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.mounts.schema.json"
 )
 
 oxygen_embed_json_schemas(
@@ -156,6 +158,7 @@ set(
   "Import/SceneDescriptorImportRequestBuilder.h"
   "Import/SceneDescriptorImportSettings.h"
   "Import/ScratchImage.h"
+  "Import/SourceMounts.h"
   "Import/TextureImportDesc.h"
   "Import/TextureDescriptorImportRequestBuilder.h"
   "Import/TextureDescriptorImportSettings.h"
@@ -401,6 +404,7 @@ set(
   "Import/CapturedInputSet.cpp"
   "Import/ImportSourceAnalysis.cpp"
   "Import/Naming.cpp"
+  "Import/SourceMounts.cpp"
   "Import/ScratchImage.cpp"
   "Import/TextureImportDesc.cpp"
   "Import/TextureImporter.cpp"

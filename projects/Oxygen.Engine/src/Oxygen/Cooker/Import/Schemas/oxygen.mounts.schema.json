@@ -1,0 +1,40 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Oxygen Mounts",
+  "description": "A local .mounts.json: where this machine finds named source mounts. Never committed.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version"],
+  "definitions": {
+    "mount_name": {
+      "description": "A mount name: the first segment of every mount path in it.",
+      "type": "string",
+      "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$"
+    }
+  },
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "version": {
+      "type": "integer",
+      "const": 1
+    },
+    "root": {
+      "description": "True stops the search: no .mounts.json above this one is read.",
+      "type": "boolean",
+      "default": false
+    },
+    "mounts": {
+      "description": "Mount name to folder (a .pak file for a Pak mount): absolute, or relative to this file's folder.",
+      "type": "object",
+      "propertyNames": {
+        "$ref": "#/definitions/mount_name"
+      },
+      "additionalProperties": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  }
+}
