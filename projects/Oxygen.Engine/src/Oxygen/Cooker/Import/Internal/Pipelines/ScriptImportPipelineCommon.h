@@ -6,7 +6,6 @@
 
 #pragma once
 
-#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -15,7 +14,6 @@
 #include <span>
 #include <string>
 #include <string_view>
-#include <system_error>
 
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
@@ -48,61 +46,15 @@ inline auto BuildScriptsDataRelPath(const ImportRequest& request) -> std::string
   return request.loose_cooked_layout.ScriptsDataRelPath();
 }
 
-inline auto HasParentTraversal(const std::filesystem::path& path) -> bool
-{
-  return std::ranges::any_of(
-    path, [](const auto& segment) -> auto { return segment == ".."; });
-}
-
-inline auto TryMakeExternalPathRelativeToRoot(
-  const std::filesystem::path& source_path,
-  const std::filesystem::path& source_root) -> std::optional<std::string>
-{
-  const auto relative = source_path.lexically_relative(source_root);
-  if (relative.empty() || relative.is_absolute()
-    || HasParentTraversal(relative)) {
-    return std::nullopt;
-  }
-
-  const auto relative_path = relative.generic_string();
-  if (relative_path.empty() || relative_path == ".") {
-    return std::nullopt;
-  }
-  return relative_path;
-}
-
-inline auto NormalizeForPathComparison(const std::filesystem::path& path)
-  -> std::optional<std::filesystem::path>
-{
-  if (path.empty()) {
-    return std::nullopt;
-  }
-
-  if (path.is_absolute()) {
-    return path.lexically_normal();
-  }
-
-  std::error_code ec;
-  auto absolute_path = std::filesystem::absolute(path, ec);
-  if (ec) {
-    return std::nullopt;
-  }
-  return absolute_path.lexically_normal();
-}
-
+//! The external source path a script asset stores: its source's mount path,
+//! `/<Mount>/<path in mount>`. Nothing when the source lies in no mount.
 inline auto BuildExternalSourcePath(const ImportRequest& request)
   -> std::optional<std::string>
 {
-  if (request.options.scripting.source_root.empty()) {
+  if (!request.source_mount_path.starts_with('/')) {
     return std::nullopt;
   }
-  const auto source = NormalizeForPathComparison(request.source_path);
-  const auto root
-    = NormalizeForPathComparison(request.options.scripting.source_root);
-  if (!source || !root) {
-    return std::nullopt;
-  }
-  return TryMakeExternalPathRelativeToRoot(*source, *root);
+  return request.source_mount_path;
 }
 
 inline auto ComputeContentHash64(const std::span<const std::byte> bytes)

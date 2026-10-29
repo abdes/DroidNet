@@ -159,12 +159,12 @@ namespace {
       dependency_catalogs.push_back(path.string());
     }
 
-    auto script_roots = ordered_json::array();
-    for (const auto& root : snapshot.script_source_roots) {
-      script_roots.push_back(root.string());
+    auto source_mounts = ordered_json::object();
+    for (const auto& [name, folder] : snapshot.source_mounts) {
+      source_mounts[name] = folder.generic_string();
     }
     return ordered_json {
-      { "script_source_roots", std::move(script_roots) },
+      { "source_mounts", std::move(source_mounts) },
       { "mode", std::string(ModeToString(snapshot.request.mode)) },
       { "source_key", data::to_string(snapshot.request.source_key) },
       { "content_version", snapshot.request.content_version },
@@ -361,7 +361,7 @@ auto ToReportJson(const PakToolBuildReportInput& input) -> ordered_json
 {
   return ordered_json {
     { "$schema", std::string(kBuildReportSchemaRef) },
-    { "schema_version", 2 },
+    { "schema_version", 3 },
     { "tool_name", std::string(kToolName) },
     { "tool_version", input.tool_version },
     { "command", input.command },

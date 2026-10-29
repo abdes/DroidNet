@@ -68,13 +68,13 @@ public:
     return ResolvePath(config_->EngineContentPakPath());
   }
 
-  [[nodiscard]] auto ScriptSourceRoots() const
-    -> std::vector<std::filesystem::path>
+  //! The source mount folders, relative ones resolved against the workspace
+  //! root.
+  [[nodiscard]] auto SourceMounts() const -> PathFinderConfig::SourceMountTable
   {
-    std::vector<std::filesystem::path> resolved;
-    resolved.reserve(config_->ScriptSourceRoots().size());
-    for (const auto& root : config_->ScriptSourceRoots()) {
-      resolved.push_back(ResolvePath(root));
+    auto resolved = PathFinderConfig::SourceMountTable {};
+    for (const auto& [name, folder] : config_->SourceMounts()) {
+      resolved.emplace(name, ResolvePath(folder));
     }
     return resolved;
   }

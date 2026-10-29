@@ -7,11 +7,11 @@
 #include <atomic>
 #include <chrono>
 #include <filesystem>
+#include <ranges>
 #include <string>
 #include <system_error>
 #include <unordered_map>
 #include <utility>
-#include <vector>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Config/PathFinder.h>
@@ -71,9 +71,9 @@ auto ScriptHotReloadService::SetPollInterval(
 
 auto ScriptHotReloadService::WatchLoop() -> co::Co<>
 {
-  const auto roots = path_finder_.ScriptSourceRoots();
-  if (roots.empty()) {
-    LOG_F(WARNING, "no script source roots registered; service idle");
+  const auto mounts = path_finder_.SourceMounts();
+  if (mounts.empty()) {
+    LOG_F(INFO, "no source mounts registered; service idle");
     co_return;
   }
 
@@ -85,15 +85,15 @@ auto ScriptHotReloadService::WatchLoop() -> co::Co<>
   std::unordered_map<std::string, std::filesystem::file_time_type>
     last_write_times;
 
-  // Initial scan of all roots
-  for (const auto& root : roots) {
-    // A configured root, such as the repository-local default, need not exist.
+  // Initial scan of all mount folders
+  for (const auto& [name, root] : mounts) {
     if (!std::filesystem::exists(root)) {
-      LOG_F(INFO, "script source root does not exist, not watched: {}",
-        root.generic_string());
+      LOG_F(INFO, "source mount '{}' folder does not exist, not watched: {}",
+        name, root.generic_string());
       continue;
     }
-    LOG_F(INFO, "starting watch on {}", root.generic_string());
+    LOG_F(
+      INFO, "starting watch on mount '{}': {}", name, root.generic_string());
 
     for (const auto& entry :
       std::filesystem::recursive_directory_iterator(root)) {
@@ -113,7 +113,7 @@ auto ScriptHotReloadService::WatchLoop() -> co::Co<>
       continue;
     }
 
-    for (const auto& root : roots) {
+    for (const auto& root : mounts | std::views::values) {
       if (!std::filesystem::exists(root)) {
         continue;
       }

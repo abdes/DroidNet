@@ -14,6 +14,7 @@
 
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Cooker/Pak/PakBuildRequest.h>
+#include <Oxygen/Cooker/Tools/PakTool/RequestSnapshot.h>
 
 namespace oxygen::content::pak::tool {
 
@@ -35,7 +36,7 @@ struct ScriptSealingResult {
 [[nodiscard]] auto SealLooseCookedSourcesForPakBuild(
   const pak::PakBuildRequest& build_request,
   const std::filesystem::path& staging_parent,
-  std::span<const std::filesystem::path> script_source_roots)
+  const SourceMountFolders& source_mounts)
   -> Result<ScriptSealingResult, ScriptSealingError>;
 
 auto CleanupStagedLooseRoots(

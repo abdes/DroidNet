@@ -119,17 +119,17 @@ specified in [runtime host and debug UI](runtime-host.md).
 `Oxygen.Player.exe --launch <file>`; the file validates against
 `oxygen.player-launch.schema.json`:
 
-| Field                 | Meaning                                                                                                                                                                 |
-| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `version`             | `2`.                                                                                                                                                                    |
-| `mounts`              | Ordered cooked roots or PAK files (a `.pak` file), highest precedence last.                                                                                             |
-| `scene`               | Scene virtual path, e.g. `/.cooked/Scenes/Level.oscene`.                                                                                                                |
-| `script_source_roots` | Roots for external script sources; enables source reload when non-empty.                                                                                                |
-| `window`              | Title, `mode` (`windowed` or `borderless`), framebuffer size in physical pixels while windowed, VSync and frame cap (`0` is off, else frames per second); all optional. |
-| `control`             | Optional; starts the control server below: `port` (`0`, the default, takes an ephemeral one) and `exit_when_owner_leaves` (default `false`).                            |
+| Field           | Meaning                                                                                                                                                                 |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `version`       | `3`.                                                                                                                                                                    |
+| `mounts`        | Ordered cooked roots or PAK files (a `.pak` file), highest precedence last.                                                                                             |
+| `scene`         | Scene virtual path, e.g. `/.cooked/Scenes/Level.oscene`.                                                                                                                |
+| `source_mounts` | Source mount folders by mount name, which external scripts' mount paths name; enables source reload when non-empty.                                                     |
+| `window`        | Title, `mode` (`windowed` or `borderless`), framebuffer size in physical pixels while windowed, VSync and frame cap (`0` is off, else frames per second); all optional. |
+| `control`       | Optional; starts the control server below: `port` (`0`, the default, takes an ephemeral one) and `exit_when_owner_leaves` (default `false`).                            |
 
 Relative paths are relative to the launch file's folder. A launch file that
-breaks the schema, or names a mount or source root that does not exist, ends the
+breaks the schema, or names a mount or source mount folder that does not exist, ends the
 process with an error naming the file, the value and the rule.
 
 No setting persists between launches; the launch file is the whole input: the
@@ -137,7 +137,7 @@ player neither loads nor saves archived console variables or console history
 (`EngineConfig::load_console_state` and `save_console_state` are both off).
 Every Play reads the launch file again and takes its `mounts` and `scene`, so a
 launcher that publishes content to new roots rewrites the file before Play.
-`control` and `script_source_roots` apply at launch only. `window` sets the
+`control` and `source_mounts` apply at launch only. `window` sets the
 window a launch opens with; a launcher changes a running player's display mode,
 window size, VSync and frame rate limit with `host.window.mode`,
 `host.window.size`, `gfx.vsync` and `ngin.target_fps`. A borderless window

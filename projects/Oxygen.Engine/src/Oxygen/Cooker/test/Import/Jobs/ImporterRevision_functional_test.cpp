@@ -238,7 +238,6 @@ namespace {
     request.options.scripting.import_kind = ScriptingImportKind::kScriptAsset;
     request.options.scripting.compile_scripts = false;
     request.options.scripting.script_storage = ScriptStorageMode::kEmbedded;
-    request.options.scripting.source_root = cooked.parent_path();
     request.asset_virtual_path
       = DefaultMountRoot() + "/" + script.stem().string() + ".oscript";
     request.source_mount_path

@@ -276,4 +276,44 @@ NOLINT_TEST(PakToolCliTest, BuildCommandAcceptsDependencyPaks)
     std::filesystem::path("C:/Sdk/share/oxygen/engine.pak"));
 }
 
+//! Script sealing takes source mounts as ImportTool does; the script source
+//! root option is gone.
+NOLINT_TEST(PakToolCliTest, BuildCommandAcceptsSourceMountOptions)
+{
+  auto options = PakToolCliOptions {};
+  auto tool = ParseOnlyTool(options);
+
+  const auto argv = std::array {
+    "Oxygen.Cooker.PakTool",
+    "build",
+    "--out",
+    "C:/Build/game.pak",
+    "--catalog-out",
+    "C:/Build/game.pakcatalog.json",
+    "--content-version",
+    "42",
+    "--source-key",
+    kSourceKey,
+    "--loose-source",
+    "C:/Cooked/Game",
+    "--mount",
+    "Content=C:/Project/Content",
+    "--mount",
+    "Media=D:/Media",
+    "--mounts",
+    "C:/Build/mounts.json",
+    "--root",
+    "C:/Project",
+  };
+
+  static_cast<void>(tool.Cli().Parse(argv));
+
+  ASSERT_EQ(options.request.source_mounts.size(), 2U);
+  EXPECT_EQ(options.request.source_mounts.at(0), "Content=C:/Project/Content");
+  EXPECT_EQ(options.request.source_mounts.at(1), "Media=D:/Media");
+  EXPECT_EQ(
+    options.request.mounts_file, std::filesystem::path("C:/Build/mounts.json"));
+  EXPECT_EQ(options.request.project_root, std::filesystem::path("C:/Project"));
+}
+
 } // namespace

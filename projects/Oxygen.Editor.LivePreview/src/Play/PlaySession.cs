@@ -212,10 +212,17 @@ public sealed partial class PlaySession : ObservableObject, IRuntimeProblemSourc
         _ = this.EndLoggingFailuresAsync();
     }
 
-    private static string LaunchFilePath(ProjectContext project) => Path.Combine(project.ProjectRoot.FullPath, ".build", "play", "launch.json");
+    /// <summary>Gets the source mounts the launch file names: each existing mount folder of the project, by mount name.</summary>
+    /// <remarks>External scripts store mount paths, so the player resolves them through these folders by name.</remarks>
+    /// <param name="project">The project that plays.</param>
+    /// <returns>The mount folders by name; a mount whose folder is missing is left out.</returns>
+    internal static Dictionary<string, string> SourceMounts(ProjectContext project)
+        => project.AuthoringMounts
+            .Select(mount => (mount.Name, Folder: project.ProjectRoot.Combine(mount.RelativePath).FullPath))
+            .Where(mount => project.FileSystem.Directory.Exists(mount.Folder))
+            .ToDictionary(static mount => mount.Name, static mount => mount.Folder, StringComparer.Ordinal);
 
-    private static IReadOnlyList<string> ScriptSourceRoots(ProjectContext project)
-        => [.. project.AuthoringMounts.Select(mount => project.ProjectRoot.Combine(mount.RelativePath).FullPath).Where(Directory.Exists)];
+    private static string LaunchFilePath(ProjectContext project) => Path.Combine(project.ProjectRoot.FullPath, ".build", "play", "launch.json");
 
     private async Task RunPlayAsync(ProjectContext project, PlayRequest request, CancellationToken cancellationToken)
     {
@@ -265,7 +272,7 @@ public sealed partial class PlaySession : ObservableObject, IRuntimeProblemSourc
                 this.Settings.Height,
                 this.Settings.VSync,
                 this.Settings.FrameCap);
-            var launch = new PlayerLaunchFile(mounts.Roots, scenePath, ScriptSourceRoots(project), window);
+            var launch = new PlayerLaunchFile(mounts.Roots, scenePath, SourceMounts(project), window);
             var path = LaunchFilePath(project);
             await launch.WriteAsync(path, cancellationToken).ConfigureAwait(true);
             this.LogLaunchFileWritten(path, mounts.Roots.Count, launch.Scene);

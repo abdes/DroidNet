@@ -407,15 +407,6 @@ namespace {
     return MountedSource { .file = *file, .mount_path = authored->mount_path };
   }
 
-  //! The folder of the mount a mount path names.
-  auto MountFolderOf(const MountTable& mounts, const std::string& mount_path)
-    -> std::filesystem::path
-  {
-    const auto name = mount_path.substr(1, mount_path.find('/', 1) - 1);
-    const auto mount = mounts.Find(name);
-    return mount ? mount->folder : std::filesystem::path {};
-  }
-
   //! The model import record a `model` job names: a mount path, or a path
   //! relative to the project root.
   auto ReadModelRecord(const json& job, const MountTable& mounts,
@@ -2123,9 +2114,6 @@ namespace {
           return std::nullopt;
         }
         manifest_job.source_mount_path = located->mount_path;
-        // A script stores its external path relative to its source's mount.
-        manifest_job.script.source_root
-          = MountFolderOf(manifest.mounts, located->mount_path).string();
         manifest_job.texture.source_path = located->file.string();
         manifest_job.fbx.source_path = manifest_job.texture.source_path;
         manifest_job.gltf.source_path = manifest_job.texture.source_path;

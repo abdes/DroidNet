@@ -21,6 +21,8 @@
 #include <system_error>
 #include <vector>
 
+#include "RequestSnapshot.h"
+
 #include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Content/LooseCookedIndex.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
@@ -48,6 +50,7 @@ using oxygen::content::pak::BuildMode;
 using oxygen::content::pak::PakBuildRequest;
 using oxygen::content::pak::tool::CleanupStagedLooseRoots;
 using oxygen::content::pak::tool::SealLooseCookedSourcesForPakBuild;
+using oxygen::content::pak::tool::SourceMountFolders;
 using oxygen::data::AssetKey;
 using oxygen::data::AssetType;
 using oxygen::data::CookedSource;
@@ -60,6 +63,8 @@ using oxygen::data::pak::scripting::ScriptEncoding;
 using oxygen::data::pak::scripting::ScriptResourceDesc;
 
 constexpr auto kSourceKey = "01234567-89ab-7def-8123-456789abcdef";
+constexpr auto kNotMountPath
+  = std::string_view { "paktool.script_seal.external_source_not_mount_path" };
 
 class PakToolScriptSealingTest : public testing::TestWithParam<bool> {
 protected:
@@ -123,10 +128,12 @@ protected:
   }
 
   //! Seals a loose-cooked source whose script descriptor stores `stored` as
-  //! its external source path and expects sealing to fail.
+  //! its external source path, with `content_root` as the `Content` source
+  //! mount, and expects sealing to fail with `code`.
   auto ExpectSealingRejectsStoredPath(const std::string& stored,
     const std::string_view cooked_name,
-    const std::filesystem::path& content_root) const -> void
+    const std::filesystem::path& content_root,
+    const std::string_view code) const -> void
   {
     const auto cooked = Root() / cooked_name;
     ScriptAssetDesc descriptor {};
@@ -154,12 +161,11 @@ protected:
         .path = cooked,
       },
     };
-    const auto sealed = SealLooseCookedSourcesForPakBuild(
-      request, Root() / "staging", std::span { &content_root, 1 });
-    EXPECT_FALSE(sealed.has_value()) << stored;
-    if (sealed.has_value()) {
-      CleanupStagedLooseRoots(sealed->staged_loose_roots);
-    }
+    const auto sealed = SealLooseCookedSourcesForPakBuild(request,
+      Root() / "staging", SourceMountFolders { { "Content", content_root } });
+    ASSERT_FALSE(sealed.has_value()) << stored;
+    EXPECT_EQ(sealed.error().error_code, code) << stored;
+    EXPECT_EQ(sealed.error().external_source_path, stored);
   }
 
 private:
@@ -186,7 +192,7 @@ NOLINT_TEST_P(PakToolScriptSealingTest,
   descriptor.header.version = oxygen::data::pak::scripting::kScriptAssetVersion;
   descriptor.flags = ScriptAssetFlags::kAllowExternalSource;
   const auto stored_external_path
-    = std::string("scenes/proc-cubes/proc_cubes.lua");
+    = std::string("/Content/scenes/proc-cubes/proc_cubes.lua");
   auto strings = oxygen::data::DescriptorStringsBuilder {};
   descriptor.external_source_path_offset = strings.Add(stored_external_path);
 
@@ -213,8 +219,8 @@ NOLINT_TEST_P(PakToolScriptSealingTest,
     },
   };
 
-  const auto sealed = SealLooseCookedSourcesForPakBuild(
-    request, Root() / "staging", std::span { &content_root, 1 });
+  const auto sealed = SealLooseCookedSourcesForPakBuild(request,
+    Root() / "staging", SourceMountFolders { { "Content", content_root } });
   ASSERT_HAS_VALUE(sealed) << sealed.error().error_code << ": "
                            << sealed.error().error_message;
   ASSERT_EQ(sealed->sealed_script_assets, 1U);
@@ -303,7 +309,7 @@ NOLINT_TEST_P(PakToolScriptSealingTest, RejectsRootRelativeScriptPath)
   WriteTextFile(content_root / "inside.lua", "return 2");
 
   ExpectSealingRejectsStoredPath("\\" + outside.filename().generic_string(),
-    "rooted-script-root-relative", content_root);
+    "rooted-script-root-relative", content_root, kNotMountPath);
 }
 
 NOLINT_TEST_P(PakToolScriptSealingTest, RejectsDriveRelativeScriptPath)
@@ -314,12 +320,47 @@ NOLINT_TEST_P(PakToolScriptSealingTest, RejectsDriveRelativeScriptPath)
 
   ExpectSealingRejectsStoredPath(
     content_root.root_name().generic_string() + "inside.lua",
-    "rooted-script-drive-relative", content_root);
+    "rooted-script-drive-relative", content_root, kNotMountPath);
 #else
   // root_name() is empty on POSIX, so the stored path would be a plain
   // relative path rather than a drive-relative one.
   GTEST_SKIP() << "Drive-relative paths exist only on Windows";
 #endif
+}
+
+//! A stored path that is not `/<Mount>/<path in mount>`, or that leaves its
+//! mount, never seals.
+NOLINT_TEST_P(PakToolScriptSealingTest, RejectsPathsThatAreNotMountPaths)
+{
+  const auto content_root = Root() / "Content";
+  WriteTextFile(content_root / "inside.lua", "return 2");
+  WriteTextFile(Root() / "outside.lua", "return 1");
+
+  ExpectSealingRejectsStoredPath(
+    "inside.lua", "relative-script", content_root, kNotMountPath);
+  ExpectSealingRejectsStoredPath(
+    "/Content/../outside.lua", "escaping-script", content_root, kNotMountPath);
+  ExpectSealingRejectsStoredPath(
+    "/Content/", "folder-script", content_root, kNotMountPath);
+}
+
+//! A script whose mount nothing binds names the mount, not a missing file.
+NOLINT_TEST_P(PakToolScriptSealingTest, RejectsScriptInUnboundMount)
+{
+  const auto content_root = Root() / "Content";
+  WriteTextFile(content_root / "inside.lua", "return 2");
+
+  ExpectSealingRejectsStoredPath("/Other/inside.lua", "unbound-script",
+    content_root, "paktool.script_seal.external_source_mount_unbound");
+}
+
+NOLINT_TEST_P(PakToolScriptSealingTest, RejectsMissingScriptInBoundMount)
+{
+  const auto content_root = Root() / "Content";
+  std::filesystem::create_directories(oxygen::base::ToNativePath(content_root));
+
+  ExpectSealingRejectsStoredPath("/Content/missing.lua", "missing-script",
+    content_root, "paktool.script_seal.external_source_unresolvable");
 }
 
 INSTANTIATE_TEST_SUITE_P(PathLengths, PakToolScriptSealingTest, testing::Bool(),

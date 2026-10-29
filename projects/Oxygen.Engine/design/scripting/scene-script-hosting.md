@@ -154,12 +154,14 @@ script assets with source reload (§6).
 
 ## 6. Source reload
 
-Enabled by `ngin.scripting.hot_reload` with the script source roots.
+Enabled by `ngin.scripting.hot_reload` with the source mounts
+(`PathFinderConfig::SourceMounts`).
 
 The cooker accepts `compile` together with `external` storage: the asset
-embeds bytecode and records the source path. Resolution prefers the source
-when a source root contains it (development), and otherwise runs the
-bytecode (shipped content). Embedded-source storage remains for content that
+embeds bytecode and records the source's mount path,
+`/<Mount>/<path in mount>`. Resolution prefers the source when the run binds
+its mount and the mount's folder holds it (development), and otherwise runs
+the bytecode (shipped content). Embedded-source storage remains for content that
 must not depend on files.
 
 1. The engine's `ScriptHotReloadService` detects a changed `.lua`/`.luau`

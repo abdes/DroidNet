@@ -63,6 +63,9 @@ Common options:
 | `--embed-browse-index`      | Request browse index embedding             |
 | `--no-crc32`                | Disable pak CRC output                     |
 | `--fail-on-warnings`        | Escalate warnings to build failure         |
+| `--mount <Name>=<dir>`      | Repeatable source mount for script sealing |
+| `--mounts <file>`           | Mounts file applied above `.mounts.json`   |
+| `--root <dir>`              | Project root whose `.mounts.json` applies  |
 | `--quiet`                   | Suppress non-error console output          |
 | `--no-color`                | Disable ANSI color in CLI output           |
 
@@ -129,10 +132,19 @@ builder:
 - no bytecode is invented if it was not already cooked
 - the source cooked root is never mutated
 
-Pass each authored content directory with `--script-source-root <directory>`.
-External script paths resolve against those roots in the supplied order. Missing
-sources and paths escaping a declared root fail the build. Moving cooked output
-does not change the authored content root.
+An external script stores its source as a mount path,
+`/<Mount>/<path in mount>`. Bind each mount the scripts name with
+`--mount <Name>=<dir>`, the `.mounts.json` hierarchy of `--root <dir>` or a
+`--mounts <file>`, resolved as ImportTool resolves them; without any of these
+there are no source mounts. Each name has one folder, with no search.
+
+| Code                                                 | Meaning                                  |
+| ---------------------------------------------------- | ---------------------------------------- |
+| `paktool.prepare.source_mount_invalid`               | A `--mount` that is not `<Name>=<dir>`   |
+| `paktool.prepare.source_mounts_invalid`              | The mount table has errors, each listed  |
+| `paktool.script_seal.external_source_not_mount_path` | The stored path is not a mount path      |
+| `paktool.script_seal.external_source_mount_unbound`  | No option or mounts file binds its mount |
+| `paktool.script_seal.external_source_unresolvable`   | The file is not in its mount's folder    |
 
 ## Patch Precedence
 

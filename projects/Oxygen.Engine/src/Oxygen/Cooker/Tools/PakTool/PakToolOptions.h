@@ -23,7 +23,14 @@ struct PakToolOutputOptions {
 
 struct PakToolRequestOptions {
   std::vector<data::CookedSource> sources;
-  std::vector<std::filesystem::path> script_source_roots;
+  //! Source mounts that seal external scripts: `--mount <Name>=<dir>`,
+  //! repeatable, absolute or relative to the working directory.
+  std::vector<std::string> source_mounts;
+  //! `--mounts <file>`: applied above every `.mounts.json`.
+  std::filesystem::path mounts_file;
+  //! `--root <dir>`: the project root whose `.mounts.json` applies; the
+  //! working directory when another mount option is given.
+  std::filesystem::path project_root;
   //! Paks this pak references without containing them, lowest first.
   std::vector<std::filesystem::path> dependency_paks;
   std::filesystem::path output_pak;

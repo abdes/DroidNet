@@ -272,9 +272,9 @@ internal static class EngineStartupSettingsExtensions
             config.CVarsArchivePath = settings.CVarsArchivePath;
         }
 
-        if (settings.ScriptSourceRoots.Count > 0)
+        if (settings.SourceMounts.Count > 0)
         {
-            config.ScriptSourceRoots = [.. settings.ScriptSourceRoots];
+            config.SourceMounts = new Dictionary<string, string>(settings.SourceMounts, StringComparer.Ordinal);
         }
 
         if (!string.IsNullOrWhiteSpace(settings.ScriptBytecodeCachePath))
@@ -287,6 +287,6 @@ internal static class EngineStartupSettingsExtensions
         => !string.IsNullOrWhiteSpace(settings.WorkspaceRootPath)
             || !string.IsNullOrWhiteSpace(settings.ShaderLibraryPath)
             || !string.IsNullOrWhiteSpace(settings.CVarsArchivePath)
-            || settings.ScriptSourceRoots.Count > 0
+            || settings.SourceMounts.Count > 0
             || !string.IsNullOrWhiteSpace(settings.ScriptBytecodeCachePath);
 }

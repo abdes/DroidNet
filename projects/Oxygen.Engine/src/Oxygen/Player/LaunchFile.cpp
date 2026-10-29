@@ -113,16 +113,15 @@ auto ParseLaunchFile(const std::string_view text,
   auto launch = PlayerLaunch {};
   ReadMounts(document, base_dir, source_name, launch);
   launch.scene = document.at("scene").get<std::string>();
-  if (const auto it = document.find("script_source_roots");
-    it != document.end()) {
-    for (const auto& entry : *it) {
-      auto root = Resolve(base_dir, entry.get<std::string>());
-      if (!std::filesystem::is_directory(root)) {
+  if (const auto it = document.find("source_mounts"); it != document.end()) {
+    for (const auto& [name, entry] : it->items()) {
+      auto folder = Resolve(base_dir, entry.get<std::string>());
+      if (!std::filesystem::is_directory(folder)) {
         throw LaunchFileError(
-          fmt::format("{}: script source root '{}' is not a folder",
-            source_name, root.string()));
+          fmt::format("{}: source mount '{}' folder '{}' is not a folder",
+            source_name, name, folder.string()));
       }
-      launch.script_source_roots.push_back(std::move(root));
+      launch.source_mounts.emplace(name, std::move(folder));
     }
   }
   if (const auto it = document.find("window"); it != document.end()) {

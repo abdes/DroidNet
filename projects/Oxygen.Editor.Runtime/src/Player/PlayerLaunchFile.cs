@@ -8,25 +8,27 @@ using System.Text.Json.Serialization;
 namespace Oxygen.Editor.Runtime.Player;
 
 /// <summary>
-/// The whole input of an <c>Oxygen.Player</c> run, as <c>oxygen.player-launch.schema.json</c> version 2 defines it.
+/// The whole input of an <c>Oxygen.Player</c> run, as <c>oxygen.player-launch.schema.json</c> version 3 defines it.
 /// </summary>
 /// <remarks>
 /// The player reads the file at launch and again at every Play, taking the mounts and the scene it names then; the
-/// window, control and script source roots apply at launch only. A launcher changes a running player's window and
+/// window, control and source mounts apply at launch only. A launcher changes a running player's window and
 /// frame pacing through its control commands.
 /// </remarks>
 /// <param name="Mounts">Cooked roots or PAK files, highest precedence last; absolute paths.</param>
 /// <param name="Scene">The virtual path of the scene to play.</param>
-/// <param name="ScriptSourceRoots">Roots of external script sources; non-empty enables source reload.</param>
+/// <param name="SourceMounts">
+/// Source mount folders by mount name, which external scripts' mount paths name; non-empty enables source reload.
+/// </param>
 /// <param name="Window">The player window.</param>
 public sealed record PlayerLaunchFile(
     IReadOnlyList<string> Mounts,
     string Scene,
-    IReadOnlyList<string> ScriptSourceRoots,
+    IReadOnlyDictionary<string, string> SourceMounts,
     PlayerLaunchWindow Window)
 {
     /// <summary>The launch file format version.</summary>
-    public const int Version = 2;
+    public const int Version = 3;
 
     private static readonly JsonSerializerOptions Options = new() { WriteIndented = true };
 
@@ -42,7 +44,7 @@ public sealed record PlayerLaunchFile(
             Version,
             this.Mounts,
             this.Scene,
-            this.ScriptSourceRoots,
+            this.SourceMounts,
             new WindowDocument(
                 this.Window.Title,
                 ModeName(this.Window.Mode),
@@ -71,7 +73,7 @@ public sealed record PlayerLaunchFile(
         [property: JsonPropertyName("version")] int Version,
         [property: JsonPropertyName("mounts")] IReadOnlyList<string> Mounts,
         [property: JsonPropertyName("scene")] string Scene,
-        [property: JsonPropertyName("script_source_roots")] IReadOnlyList<string> ScriptSourceRoots,
+        [property: JsonPropertyName("source_mounts")] IReadOnlyDictionary<string, string> SourceMounts,
         [property: JsonPropertyName("window")] WindowDocument Window,
         [property: JsonPropertyName("control")] ControlDocument Control);
 

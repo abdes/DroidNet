@@ -26,9 +26,9 @@ namespace oxygen::scripting {
 
 //! Background service that monitors script source directories for changes.
 /*!
-  The ScriptHotReloadService is an engine-level service that monitors all
-  registered script source roots (provided via PathFinder) for modifications
-   to .lua and .luau files.
+  The ScriptHotReloadService is an engine-level service that monitors the
+  folders of all source mounts (provided via PathFinder) for modifications
+  to .lua and .luau files.
 
   When a change is detected, it reports the changed file; the engine hands it
   to the receiver set with IAsyncEngine::SetScriptSourceChangedHandler, which
@@ -36,7 +36,7 @@ namespace oxygen::scripting {
 
   ### Design Contracts
   - **Asynchronous**: Runs entirely in a background coroutine loop (WatchLoop).
-  - **Multi-Root**: Automatically watches Engine, Game, and Addon roots.
+  - **Multi-Mount**: Watches the folder of every source mount.
   - **Debounced**: Includes a small delay after detection to ensure the OS
     has finished writing the file before triggering a reload.
 */

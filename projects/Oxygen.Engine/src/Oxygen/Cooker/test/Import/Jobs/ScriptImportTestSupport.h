@@ -113,7 +113,6 @@ inline auto MakeScriptRequest(const ScriptRequestSpec& spec) -> ImportRequest
   request.options.scripting.import_kind = ScriptingImportKind::kScriptAsset;
   request.options.scripting.compile_scripts = spec.compile_scripts;
   request.options.scripting.script_storage = spec.storage;
-  request.options.scripting.source_root = spec.cooked_root.parent_path();
   request.asset_virtual_path
     = CanonicalScriptVirtualPath(spec.source_path.stem().string());
   request.source_mount_path

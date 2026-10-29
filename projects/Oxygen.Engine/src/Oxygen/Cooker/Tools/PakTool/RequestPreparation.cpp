@@ -19,6 +19,8 @@
 
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Content/PakFile.h>
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/SourceMounts.h>
 #include <Oxygen/Cooker/Pak/PakBuildRequest.h>
 #include <Oxygen/Cooker/Tools/PakTool/ArtifactPublication.h>
 #include <Oxygen/Cooker/Tools/PakTool/PakToolOptions.h>
@@ -196,6 +198,82 @@ namespace {
       });
 #endif
     return key;
+  }
+
+  /*!
+   Resolves the source mounts that seal external scripts: the `--mount`
+   options, the project's `.mounts.json` hierarchy and `--mounts`, as
+   ImportTool resolves them. Without any of these options there are none.
+  */
+  auto ResolveSourceMountFolders(const PakToolRequestOptions& options)
+    -> Result<SourceMountFolders, RequestPreparationError>
+  {
+    using import::MountDeclaration;
+    using import::MountKind;
+    using import::MountState;
+
+    auto folders = SourceMountFolders {};
+    if (options.source_mounts.empty() && options.mounts_file.empty()
+      && options.project_root.empty()) {
+      return Result<SourceMountFolders, RequestPreparationError>::Ok(
+        std::move(folders));
+    }
+
+    auto declarations = std::vector<MountDeclaration> {};
+    for (const auto& mount : options.source_mounts) {
+      const auto equals = mount.find('=');
+      if (equals == std::string::npos || equals == 0
+        || equals + 1 == mount.size()) {
+        return Result<SourceMountFolders, RequestPreparationError>::Err(
+          RequestPreparationError {
+            .error_code = "paktool.prepare.source_mount_invalid",
+            .error_message = "--mount '" + mount + "' is not <Name>=<dir>",
+            .path = {},
+          });
+      }
+      declarations.push_back({
+        .name = mount.substr(0, equals),
+        .kind = MountKind::kSource,
+        .path = mount.substr(equals + 1),
+      });
+    }
+
+    const auto working_directory = std::filesystem::current_path();
+    const auto table = import::ResolveMountTable({
+      .project_root
+      = options.project_root.empty() ? working_directory : options.project_root,
+      .declarations = std::move(declarations),
+      .form = import::MountDeclarationForm::kCommandLine,
+      .declared_in = "--mount",
+      .working_directory = working_directory,
+      .mounts_option = options.mounts_file.empty()
+        ? std::nullopt
+        : std::optional { options.mounts_file },
+      .owner = import::MountTableOwner::kProject,
+    });
+    if (!table.IsValid()) {
+      auto message = std::string { "The source mounts are invalid:" };
+      for (const auto& diagnostic : table.diagnostics) {
+        if (diagnostic.severity == import::ImportSeverity::kError) {
+          message += "\n  " + diagnostic.code + ": " + diagnostic.message;
+        }
+      }
+      return Result<SourceMountFolders, RequestPreparationError>::Err(
+        RequestPreparationError {
+          .error_code = "paktool.prepare.source_mounts_invalid",
+          .error_message = std::move(message),
+          .path = table.project_root,
+        });
+    }
+
+    for (const auto& mount : table.mounts) {
+      if (mount.kind == MountKind::kSource
+        && mount.state == MountState::kBound) {
+        folders.emplace(mount.name, mount.folder);
+      }
+    }
+    return Result<SourceMountFolders, RequestPreparationError>::Ok(
+      std::move(folders));
   }
 
   auto ValidateDistinctPaths(const std::vector<NamedPath>& paths)
@@ -490,17 +568,10 @@ auto PreparePakToolRequest(const pak::BuildMode mode,
       validated.error());
   }
 
-  std::vector<std::filesystem::path> script_roots;
-  script_roots.reserve(options.request.script_source_roots.size());
-  for (const auto& input : options.request.script_source_roots) {
-    std::error_code error;
-    const auto root
-      = std::filesystem::absolute(input, error).lexically_normal();
-    if (input.empty() || error || !fs.IsDirectory(root)) {
-      return MakeError("paktool.prepare.script_source_root_invalid",
-        "Script source root must be an existing directory", input);
-    }
-    script_roots.push_back(root);
+  auto source_mounts = ResolveSourceMountFolders(options.request);
+  if (!source_mounts.has_value()) {
+    return Result<PreparedPakToolRequest, RequestPreparationError>::Err(
+      source_mounts.error());
   }
 
   auto build_request = pak::PakBuildRequest {};
@@ -529,7 +600,7 @@ auto PreparePakToolRequest(const pak::BuildMode mode,
         .request = build_request,
         .base_pak_paths = base_pak_paths,
         .dependency_pak_paths = dependency_pak_paths,
-        .script_source_roots = std::move(script_roots),
+        .source_mounts = std::move(source_mounts.value()),
       },
       .publication_plan = publication_plan,
     });

@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <optional>
+#include <string>
 #include <string_view>
 #include <system_error>
 #include <utility>
@@ -193,6 +194,93 @@ NOLINT_TEST_F(PakToolRequestPreparationTest, RejectsInvalidSourceKeyText)
 
   ASSERT_FALSE(prepared.has_value());
   EXPECT_EQ(prepared.error().error_code, "paktool.prepare.invalid_source_key");
+}
+
+//! Source mounts for script sealing come from `--mount` and the project's
+//! `.mounts.json`, as ImportTool resolves them.
+NOLINT_TEST_F(PakToolRequestPreparationTest, ResolvesSourceMountsForSealing)
+{
+  const auto project = TempDir() / "project";
+  const auto content = project / "Content";
+  const auto media = TempDir() / "media";
+  std::filesystem::create_directories(content);
+  std::filesystem::create_directories(media);
+  WriteText(project / ".mounts.json",
+    R"({ "version": 1, "root": true, "mounts": { "Media": ")"
+      + media.generic_string() + R"(" } })");
+  auto options = MakeOptions();
+  options.request.output_pak = TempDir() / "release" / "game.pak";
+  options.request.catalog_output
+    = TempDir() / "release" / "game.pakcatalog.json";
+  options.request.project_root = project;
+  options.request.source_mounts = { "Content=" + content.string() };
+
+  auto fs = RealRequestPreparationFileSystem {};
+  const auto prepared = PreparePakToolRequest(BuildMode::kFull, options, fs);
+
+  ASSERT_HAS_VALUE(prepared)
+    << prepared.error().error_code << ": " << prepared.error().error_message;
+  const auto& mounts = prepared->request_snapshot.source_mounts;
+  ASSERT_EQ(mounts.size(), 2U);
+  ASSERT_TRUE(mounts.contains("Content"));
+  ASSERT_TRUE(mounts.contains("Media"));
+  EXPECT_TRUE(std::filesystem::equivalent(mounts.at("Content"), content));
+  EXPECT_TRUE(std::filesystem::equivalent(mounts.at("Media"), media));
+}
+
+NOLINT_TEST_F(PakToolRequestPreparationTest, NoMountOptionsMeanNoSourceMounts)
+{
+  auto options = MakeOptions();
+  options.request.output_pak = TempDir() / "release" / "game.pak";
+  options.request.catalog_output
+    = TempDir() / "release" / "game.pakcatalog.json";
+
+  auto fs = RealRequestPreparationFileSystem {};
+  const auto prepared = PreparePakToolRequest(BuildMode::kFull, options, fs);
+
+  ASSERT_HAS_VALUE(prepared)
+    << prepared.error().error_code << ": " << prepared.error().error_message;
+  EXPECT_TRUE(prepared->request_snapshot.source_mounts.empty());
+}
+
+NOLINT_TEST_F(PakToolRequestPreparationTest, RejectsMalformedMountOption)
+{
+  auto options = MakeOptions();
+  options.request.output_pak = TempDir() / "release" / "game.pak";
+  options.request.catalog_output
+    = TempDir() / "release" / "game.pakcatalog.json";
+  options.request.source_mounts = { "Content" };
+
+  auto fs = RealRequestPreparationFileSystem {};
+  const auto prepared = PreparePakToolRequest(BuildMode::kFull, options, fs);
+
+  ASSERT_FALSE(prepared.has_value());
+  EXPECT_EQ(
+    prepared.error().error_code, "paktool.prepare.source_mount_invalid");
+}
+
+//! An invalid mount table names each mount diagnostic it failed with.
+NOLINT_TEST_F(PakToolRequestPreparationTest, RejectsInvalidSourceMounts)
+{
+  const auto project = TempDir() / "project";
+  std::filesystem::create_directories(project / "Content");
+  WriteText(project / ".mounts.json", R"({ "version": 1, "root": true })");
+  auto options = MakeOptions();
+  options.request.output_pak = TempDir() / "release" / "game.pak";
+  options.request.catalog_output
+    = TempDir() / "release" / "game.pakcatalog.json";
+  options.request.project_root = project;
+  options.request.source_mounts
+    = { "Bad Name=" + (project / "Content").string() };
+
+  auto fs = RealRequestPreparationFileSystem {};
+  const auto prepared = PreparePakToolRequest(BuildMode::kFull, options, fs);
+
+  ASSERT_FALSE(prepared.has_value());
+  EXPECT_EQ(
+    prepared.error().error_code, "paktool.prepare.source_mounts_invalid");
+  EXPECT_NE(prepared.error().error_message.find("mount.name_invalid"),
+    std::string::npos);
 }
 
 NOLINT_TEST_F(PakToolRequestPreparationTest, RejectsMissingSourcePath)

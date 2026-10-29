@@ -43,7 +43,7 @@ INSTANTIATE_TEST_SUITE_P(Cases, PakBuildReportSchemaCaseTest,
       "AcceptsCanonicalPatchReportDocument",
       R"({
     "$schema": "https://oxygen-engine.dev/schemas/oxygen.pak-build-report.schema.json",
-    "schema_version": 2,
+    "schema_version": 3,
     "tool_name": "Oxygen.Cooker.PakTool",
     "tool_version": "0.1.0",
     "command": "patch",
@@ -62,7 +62,7 @@ INSTANTIATE_TEST_SUITE_P(Cases, PakBuildReportSchemaCaseTest,
           "path": "F:/Cooked/Dlc/base.pak"
         }
       ],
-      "script_source_roots": [],
+      "source_mounts": {},
       "base_paks": [
         "F:/Cooked/Base/base.catalog.json"
       ],
@@ -141,7 +141,7 @@ INSTANTIATE_TEST_SUITE_P(Cases, PakBuildReportSchemaCaseTest,
     SchemaCase {
       "AcceptsFailureReportWithSuppressedManifestPublication",
       R"({
-    "schema_version": 2,
+    "schema_version": 3,
     "tool_name": "Oxygen.Cooker.PakTool",
     "tool_version": "0.1.0",
     "command": "build",
@@ -151,7 +151,7 @@ INSTANTIATE_TEST_SUITE_P(Cases, PakBuildReportSchemaCaseTest,
       "source_key": "01234567-89ab-7def-8123-456789abcdef",
       "content_version": 7,
       "sources": [],
-      "script_source_roots": [],
+      "source_mounts": {},
       "base_paks": [],
       "dependency_paks": [],
       "options": {
@@ -234,7 +234,7 @@ NOLINT_TEST(PakBuildReportSchemaTest,
   RejectsNonCanonicalRequestFieldsAndUnexpectedProperties)
 {
   const auto doc = json::parse(R"({
-    "schema_version": 2,
+    "schema_version": 3,
     "tool_name": "Oxygen.Cooker.PakTool",
     "tool_version": "0.1.0",
     "command": "patch",
@@ -249,7 +249,7 @@ NOLINT_TEST(PakBuildReportSchemaTest,
           "path": "F:/Cooked/Base"
         }
       ],
-      "script_source_roots": [],
+      "source_mounts": {},
       "base_paks": [],
       "dependency_paks": [],
       "options": {

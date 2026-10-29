@@ -40,6 +40,18 @@ public sealed class NativeShaderConfigurationTests
         _ = config.Renderer.PathFinder.ShaderLibraryPath.Should().Be("custom/renderer.bin");
     }
 
+    /// <summary>Source mounts reach the native path finder by name, so external scripts resolve their mount paths.</summary>
+    [TestMethod]
+    public void SourceMountsReachTheNativeConfigByName()
+    {
+        using var fixture = new Fixture();
+        var settings = new EngineStartupSettings();
+        settings.Engine.PathFinder.SourceMounts["Content"] = @"C:\Project\Content";
+        var config = NativeEngineSession.CreateConfig(settings, editorCVarsArchivePath: null, fixture.RuntimeLibrary);
+        _ = config.Engine.PathFinder.SourceMounts.Should().ContainSingle()
+            .Which.Should().Be(new KeyValuePair<string, string>("Content", @"C:\Project\Content"));
+    }
+
     /// <summary>An incomplete SDK fails startup instead of silently running an empty shader cache.</summary>
     [TestMethod]
     public void MissingInstalledArchiveReportsItsExactPath()

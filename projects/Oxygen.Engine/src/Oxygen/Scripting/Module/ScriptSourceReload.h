@@ -33,11 +33,11 @@ class IScriptCompilationService;
 
 //! Recompiles changed script sources into the slots that use them.
 /*!
- A script asset cooked with an external source records its path relative to
- the script source roots. When that file changes, the source is analyzed and
- compiled again. On success every slot of the scene that uses the asset gets
- the new declarations (ScriptingComponent::ReplaceSlotAsset) and the new
- executable (MarkSlotReady), which ends its instance and starts a new one;
+ A script asset cooked with an external source records its source as a mount
+ path, `/<Mount>/<path in mount>`. When that file changes, the source is
+ analyzed and compiled again. On success every slot of the scene that uses the
+ asset gets the new declarations (ScriptingComponent::ReplaceSlotAsset) and the
+ new executable (MarkSlotReady), which ends its instance and starts a new one;
  a slot whose compilation had failed recovers. On failure the slots keep
  their last good executable and the diagnostics are reported.
 */

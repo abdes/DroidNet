@@ -469,7 +469,7 @@ namespace {
         "be found, or that has no bytecode or source to run. The slot stays "
         "disabled; the rest of the scene runs. Check that the script is "
         "cooked with the scene and, for external sources, that the source "
-        "file is under a script source root.",
+        "file is in a source mount the run binds.",
     },
     {
       .code = DiagnosticCode::kOverrideRejected,

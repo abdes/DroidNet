@@ -28,9 +28,9 @@ public:
     const IScriptSourceResolver::ResolveRequest& request) const
     -> IScriptSourceResolver::ResolveResult;
 
-  //! The file the asset's external source path resolves to: the first script
-  //! source root that contains it. Nothing when the asset has no valid
-  //! external source path or no root contains it.
+  //! The file the asset's external source path, `/<Mount>/<path in mount>`,
+  //! names in its source mount's folder. Nothing when the asset has no valid
+  //! mount path, the mount is not bound or the file does not exist.
   OXGN_SCRP_NDAPI auto ResolvePath(const data::ScriptAsset& asset) const
     -> std::optional<std::filesystem::path>;
 

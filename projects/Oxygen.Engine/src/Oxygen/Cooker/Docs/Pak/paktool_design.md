@@ -176,10 +176,10 @@ Sealing rules:
 
 Path resolution rules:
 
-- stored external script paths are resolved relative to the loose-cooked root
-  parent, matching importer normalization semantics.
-- relative paths must be normalized before opening.
-- normalized paths that escape the loose-cooked root parent must be rejected.
+- stored external script paths are mount paths, `/<Mount>/<path in mount>`,
+  resolved in the folder of the named source mount (`--mount`, `--mounts`,
+  `--root`), one folder per name with no search.
+- paths that are not mount paths, or that escape their mount, must be rejected.
 - failed resolution is a hard pak-build error and must identify the script
   descriptor path, stored external path, and resolved filesystem path when
   available.

@@ -96,7 +96,8 @@ scene manifests; the SDK ships a smaller selection. Unreferenced raw models and
 images are imported explicitly by their consumers.
 
 Sources resolve relative to their manifest or descriptor. Shared recipes write
-to `.cooked/main`; external script source roots are declared in the manifests.
+to `.cooked/main`; external scripts store their sources as `Content` mount
+paths.
 Keep those relative relationships when copying inputs. Native schemas validate
 recipes; distinct authored assets need distinct names and virtual paths.
 
@@ -116,8 +117,8 @@ playable scenes, then the model scenes an import produced: the player refuses
 a model scene, which plays only through a scene that instances it. The script
 writes a
 launch file to `%TEMP%/oxygen-player` that mounts `.cooked/main` and, for an
-imported scene, its import root, with this folder as the script source root, so
-editing a scene's script reloads it while it plays. Arguments after `--` go to
+imported scene, its import root, with this folder as the `Content` source
+mount, so editing a scene's script reloads it while it plays. Arguments after `--` go to
 the player unchanged; `-- --help` lists them. Tool selection is the same as for
 `cook_scenes`, with `-PlayerPath` for an explicit player.
 

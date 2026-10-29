@@ -80,16 +80,34 @@ namespace {
         })
         .Build());
 
-    group->Add(Option::WithKey("script-source-root")
-        .About(
-          "Authoring root for external scripts; searched in declaration order")
-        .Long("script-source-root")
+    group->Add(Option::WithKey("mount")
+        .About("Declare a source mount as <Name>=<dir> for sealing external "
+               "scripts, whose sources are mount paths; repeat for several")
+        .Long("mount")
+        .WithValue<std::string>()
+        .UserFriendlyName("NAME=DIR")
+        .Repeatable()
+        .CallOnEachValue([&options](const std::string& mount) -> void {
+          options.source_mounts.push_back(mount);
+        })
+        .Build());
+
+    group->Add(Option::WithKey("mounts")
+        .About("A mounts file applied above every .mounts.json")
+        .Long("mounts")
+        .WithValue<std::filesystem::path>()
+        .UserFriendlyName("FILE")
+        .StoreTo(&options.mounts_file)
+        .Build());
+
+    group->Add(Option::WithKey("root")
+        .About("The project root whose .mounts.json binds source mounts. "
+               "Default: the working directory, when --mount or --mounts "
+               "is given")
+        .Long("root")
         .WithValue<std::filesystem::path>()
         .UserFriendlyName("DIR")
-        .Repeatable()
-        .CallOnEachValue([&options](const std::filesystem::path& path) -> void {
-          options.script_source_roots.push_back(path);
-        })
+        .StoreTo(&options.project_root)
         .Build());
 
     group->Add(Option::WithKey("dependency-pak")

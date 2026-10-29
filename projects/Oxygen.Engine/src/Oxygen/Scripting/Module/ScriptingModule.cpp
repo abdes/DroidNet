@@ -532,9 +532,9 @@ auto ScriptingModule::RegisterCommands(
   }));
 
   static_cast<void>(registry->Register(commands::CommandDefinition {
-    .name = "scripting.list_roots",
-    .label = "List Script Roots",
-    .help = "List all registered script source roots",
+    .name = "scripting.list_mounts",
+    .label = "List Source Mounts",
+    .help = "List the source mounts external scripts resolve through",
     .handler = [this](const commands::CommandArgs&,
                  const commands::CommandContext&) -> commands::CommandResult {
       if (!attached_) {
@@ -544,11 +544,12 @@ auto ScriptingModule::RegisterCommands(
         };
       }
       DCHECK_NOTNULL_F(engine_);
-      const auto roots = engine_->GetPathFinder().ScriptSourceRoots();
-      std::string output = "Registered Script Source Roots:\n";
-      for (const auto& root : roots) {
-        output += fmt::format("  - {} ({})\n", root.generic_string(),
-          std::filesystem::exists(root) ? "active" : "missing");
+      const auto mounts = engine_->GetPathFinder().SourceMounts();
+      std::string output = "Source Mounts:\n";
+      for (const auto& [name, folder] : mounts) {
+        output
+          += fmt::format("  - /{} -> {} ({})\n", name, folder.generic_string(),
+            std::filesystem::exists(folder) ? "active" : "missing");
       }
       return {
         .status = commands::ExecutionStatus::kOk,

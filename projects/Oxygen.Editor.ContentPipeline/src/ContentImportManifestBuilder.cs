@@ -144,8 +144,8 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
             DerivedFrom = input.DerivedFrom,
         };
 
-        // Scripts cook to debug bytecode that records their source, so the player runs the bytecode and reloads
-        // the source when a script source root has it.
+        // Scripts cook to debug bytecode that records their source's mount path, so the player runs the bytecode and
+        // reloads the source when a launch source mount has it.
         return input.Kind == ContentCookAssetKind.Script
             ? job with
             {

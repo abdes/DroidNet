@@ -25,9 +25,10 @@ public sealed class PathFinderSettings
     public string? CVarsArchivePath { get; set; }
 
     /// <summary>
-    ///     Gets the script source roots.
+    ///     Gets the source mount folders by mount name. External scripts store mount paths,
+    ///     <c>/&lt;Mount&gt;/&lt;path in mount&gt;</c>, resolved through them.
     /// </summary>
-    public ICollection<string> ScriptSourceRoots { get; } = [];
+    public IDictionary<string, string> SourceMounts { get; } = new Dictionary<string, string>(StringComparer.Ordinal);
 
     /// <summary>
     ///     Gets or sets the script bytecode cache path.

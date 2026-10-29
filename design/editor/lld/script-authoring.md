@@ -390,8 +390,8 @@ not scene data and are never cooked.
 2. **Cook** the active scene's closure incrementally. A failure stops here with
    its result in the cooking panel.
 3. **Write the launch file** to the project's local (ignored) state folder:
-   project cooked mounts in order, the scene, the project's authoring roots as
-   script source roots, the session settings and a `control` block with
+   project cooked mounts in order, the scene, the project's source mounts by
+   name (`source_mounts`), the session settings and a `control` block with
    `exit_when_owner_leaves`. The editor holds the cooked roots it names until
    the player reads others.
 4. **Launch or reuse.** No player: start `Oxygen.Player.exe` from the installed

@@ -14,7 +14,6 @@
 #include <optional>
 #include <string>
 #include <string_view>
-#include <system_error>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -254,89 +253,31 @@ namespace {
     EXPECT_EQ((desc.flags & ScriptAssetFlags::kAllowExternalSource),
       ScriptAssetFlags::kAllowExternalSource);
 
-    const auto expected_external_path
-      = std::filesystem::relative(source_path, cooked_root.parent_path())
-          .lexically_normal()
-          .generic_string();
-    const auto actual_external_path = ReadExternalSourcePath(descriptor_path);
-    EXPECT_EQ(actual_external_path, expected_external_path);
+    // An external script stores its source's mount path.
+    EXPECT_EQ(ReadExternalSourcePath(descriptor_path), "/Content/external.lua");
   }
 
-  NOLINT_TEST_F(ScriptAssetImportJobTest,
-    ExternalScriptImportNormalizesRelativeSourcePathAgainstContentRoot)
+  //! An external script stores its source's mount path, so a source in no
+  //! mount cannot cook to one.
+  NOLINT_TEST_F(ScriptAssetImportJobTest, ExternalScriptOutsideAnyMountFails)
   {
-    using data::pak::scripting::ScriptAssetFlags;
-
-    auto test_root = std::filesystem::current_path()
-      / "tmp_script_import_relative_external_path";
-    std::error_code ec;
-    std::filesystem::remove_all(test_root, ec);
-
-    const auto cooked_root = test_root / "Content" / ".cooked";
-    const auto source_path_absolute = test_root / "Content" / "scenes"
-      / "physics_domains" / "relative_source.lua";
-    const auto source_path_relative
-      = (std::filesystem::path { "tmp_script_import_relative_external_path" }
-        / "Content" / "scenes" / "physics_domains" / "relative_source.lua")
-          .lexically_normal();
-    WriteText(source_path_absolute, "print('relative')");
-
-    const auto report = Submit(MakeScriptRequest({
-      .source_path = source_path_relative,
+    const ScopedTempDir temp;
+    const auto cooked_root = temp.Path() / "script_import_unmounted";
+    const auto source_path = temp.Path() / "scripts" / "unmounted.lua";
+    WriteText(source_path, "print('unmounted')");
+    auto request = MakeScriptRequest({
+      .source_path = source_path,
       .cooked_root = cooked_root,
       .storage = ScriptStorageMode::kExternal,
-    }));
-    EXPECT_TRUE(report.success);
+    });
+    request.source_mount_path.clear();
 
-    const auto descriptor_path = cooked_root / "relative_source.oscript";
-    ASSERT_TRUE(std::filesystem::exists(descriptor_path));
+    const auto report = Submit(request);
 
-    const auto desc = ReadScriptDescriptor(descriptor_path);
-    EXPECT_EQ((desc.flags & ScriptAssetFlags::kAllowExternalSource),
-      ScriptAssetFlags::kAllowExternalSource);
-    EXPECT_EQ(ReadExternalSourcePath(descriptor_path),
-      "scenes/physics_domains/relative_source.lua");
-
-    std::filesystem::remove_all(test_root, ec);
-  }
-
-  NOLINT_TEST_F(ScriptAssetImportJobTest,
-    ExternalScriptImportNormalizesRelativeCookedRootAgainstContentRoot)
-  {
-    using data::pak::scripting::ScriptAssetFlags;
-
-    auto test_root = std::filesystem::current_path()
-      / "tmp_script_import_relative_cooked_root";
-    std::error_code ec;
-    std::filesystem::remove_all(test_root, ec);
-
-    const auto cooked_root_absolute = test_root / "Content" / ".cooked";
-    const auto cooked_root_relative
-      = (std::filesystem::path { "tmp_script_import_relative_cooked_root" }
-        / "Content" / ".cooked")
-          .lexically_normal();
-    const auto source_path_absolute = test_root / "Content" / "scenes"
-      / "multi-script" / "relative_cooked_root.lua";
-    WriteText(source_path_absolute, "print('relative cooked root')");
-
-    const auto report = Submit(MakeScriptRequest({
-      .source_path = source_path_absolute,
-      .cooked_root = cooked_root_relative,
-      .storage = ScriptStorageMode::kExternal,
-    }));
-    EXPECT_TRUE(report.success);
-
-    const auto descriptor_path
-      = cooked_root_absolute / "relative_cooked_root.oscript";
-    ASSERT_TRUE(std::filesystem::exists(descriptor_path));
-
-    const auto desc = ReadScriptDescriptor(descriptor_path);
-    EXPECT_EQ((desc.flags & ScriptAssetFlags::kAllowExternalSource),
-      ScriptAssetFlags::kAllowExternalSource);
-    EXPECT_EQ(ReadExternalSourcePath(descriptor_path),
-      "scenes/multi-script/relative_cooked_root.lua");
-
-    std::filesystem::remove_all(test_root, ec);
+    EXPECT_FALSE(report.success);
+    EXPECT_TRUE(HasDiagnosticCode(
+      report.diagnostics, "script.asset.external_source_unmounted"));
+    EXPECT_FALSE(std::filesystem::exists(cooked_root / "unmounted.oscript"));
   }
 
   NOLINT_TEST_F(

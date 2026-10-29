@@ -4,7 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <algorithm>
 #include <array>
 #include <atomic>
 #include <chrono>
@@ -116,8 +115,8 @@ protected:
 
     pfc_ = PathFinderConfig::Create()
              .WithWorkspaceRoot(temp_dir_)
-             .AddScriptSourceRoot(temp_dir_ / "root1")
-             .AddScriptSourceRoot(temp_dir_ / "root2")
+             .WithSourceMount("Root1", temp_dir_ / "root1")
+             .WithSourceMount("Root2", temp_dir_ / "root2")
              .BuildShared();
 
     auto& loader = oxygen::GraphicsBackendLoader::GetInstanceRelaxed();
@@ -158,8 +157,8 @@ private:
   TestContext ctx_;
 };
 
-//! 1. ROOT PRECEDENCE TEST: First root wins.
-NOLINT_TEST_F(ScriptingAdvancedTest, FirstRootWinsPrecedence)
+//! 1. MOUNT TEST: a mount path resolves in its own mount, never another.
+NOLINT_TEST_F(ScriptingAdvancedTest, MountPathResolvesInItsOwnMount)
 {
   auto path1 = TempDir() / "root1/shared.lua";
   auto path2 = TempDir() / "root2/shared.lua";
@@ -167,14 +166,13 @@ NOLINT_TEST_F(ScriptingAdvancedTest, FirstRootWinsPrecedence)
   WriteFile(path1, "return 'root1'");
   WriteFile(path2, "return 'root2'");
 
-  // Resolver should find root1 first
   ScriptSourceResolver resolver(PathFinder(PFC(), TempDir()));
 
   oxygen::data::pak::scripting::ScriptAssetDesc desc {};
   desc.flags
     = oxygen::data::pak::scripting::ScriptAssetFlags::kAllowExternalSource;
-  oxygen::data::ScriptAsset asset(
-    MakeAssetKey(1U), desc, oxygen::data::ScriptParameters {}, "shared.lua");
+  oxygen::data::ScriptAsset asset(MakeAssetKey(1U), desc,
+    oxygen::data::ScriptParameters {}, "/Root2/shared.lua");
 
   auto result = resolver.Resolve({
     .asset = asset,
@@ -185,11 +183,12 @@ NOLINT_TEST_F(ScriptingAdvancedTest, FirstRootWinsPrecedence)
   });
 
   ASSERT_TRUE(result.ok);
+  ASSERT_HAS_VALUE(result.blob);
   auto& blob = std::get<ScriptSourceBlob>(*result.blob);
   std::string content(
     reinterpret_cast<const char*>(blob.BytesView().data()), // NOLINT
     blob.Size());
-  EXPECT_EQ(content, "return 'root1'");
+  EXPECT_EQ(content, "return 'root2'");
 }
 
 //! 3. MODULE EXECUTION TEST: Verify ScriptingModule can execute resolved
@@ -205,7 +204,7 @@ NOLINT_TEST_F(ScriptingAdvancedTest, ScriptingModuleExecutesResolvedSource)
   desc.flags
     = oxygen::data::pak::scripting::ScriptAssetFlags::kAllowExternalSource;
   oxygen::data::ScriptAsset asset(MakeAssetKey(1U), desc,
-    oxygen::data::ScriptParameters {}, "module_test.lua");
+    oxygen::data::ScriptParameters {}, "/Root1/module_test.lua");
 
   auto result = resolver.Resolve({
     .asset = asset,
@@ -216,6 +215,7 @@ NOLINT_TEST_F(ScriptingAdvancedTest, ScriptingModuleExecutesResolvedSource)
   });
 
   ASSERT_TRUE(result.ok);
+  ASSERT_HAS_VALUE(result.blob);
   auto& blob = std::get<ScriptSourceBlob>(*result.blob);
 
   constexpr oxygen::engine::ModulePriority kScriptingPriority { 450 };

@@ -473,11 +473,11 @@ table:
 
 | Where              | Today                                                | With mounts                                                                                |
 | ------------------ | ---------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| PakTool sealing    | `--script-source-root`, repeatable, first match      | `--root` and `--mounts`, as ImportTool; one folder per name, no search                     |
+| PakTool sealing    | `--script-source-root`, repeatable, first match      | `--mount`, `--root` and `--mounts`, as ImportTool; one folder per name, no search          |
 | Runtime resolver   | `PathFinderConfig::ScriptSourceRoots()`, first match | `PathFinderConfig::SourceMounts()`: name to folder; `ExternalFileResolver` splits the name |
 | Player launch file | `script_source_roots`: list of folders               | `source_mounts`: object of name to folder, the `.mounts.json` shape                        |
 
-Hot reload watches the folders of the mounts that hold loaded scripts. The
+Hot reload watches the folders of the source mounts the run binds. The
 launch file's existing `mounts` key lists cooked roots and paks; it keeps that
 meaning, and the source table gets its own key to keep the two apart.
 

@@ -200,14 +200,13 @@ auto MakeHostConfig(const player::PlayerLaunch& launch,
   // The launch file is the whole input: nothing persists between launches.
   config.engine.load_console_state = false;
   config.engine.save_console_state = false;
-  config.engine.scripting.enable_hot_reload
-    = !launch.script_source_roots.empty();
+  config.engine.scripting.enable_hot_reload = !launch.source_mounts.empty();
   config.engine.path_finder_config
     = PathFinderConfig::Create()
         .WithWorkspaceRoot(paths.root)
         .WithShaderLibraryPath(paths.shader_library)
         .WithEngineContentPakPath(paths.engine_content_pak)
-        .WithScriptSourceRoots(launch.script_source_roots)
+        .WithSourceMounts(launch.source_mounts)
         .Build();
   // `--control` overrides the launch file's port.
   if (launch.control.has_value()) {

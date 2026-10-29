@@ -243,7 +243,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
         auto paths
           = oxygen::PathFinderConfig::Create()
               .WithWorkspaceRoot(runtime_paths.root)
-              .WithScriptSourceRoots({ runtime_paths.content })
+              .WithSourceMount("Content", runtime_paths.content)
               .WithCVarsArchivePath("bin/Oxygen/render-scene/cvars.json");
         if (runtime_paths.installed) {
           paths = std::move(paths)

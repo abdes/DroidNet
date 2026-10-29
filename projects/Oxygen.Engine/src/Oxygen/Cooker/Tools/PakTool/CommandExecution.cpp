@@ -292,7 +292,7 @@ auto ExecutePakToolCommand(const pak::BuildMode mode,
     : std::filesystem::temp_directory_path();
   const auto sealed_request
     = SealLooseCookedSourcesForPakBuild(request.build_request, sealing_parent,
-      request.request_snapshot.script_source_roots);
+      request.request_snapshot.source_mounts);
   if (!sealed_request.has_value()) {
     LogScriptSealingFailure(sealed_request.error());
     command_result.exit_code = PakToolExitCode::kPreparationFailure;

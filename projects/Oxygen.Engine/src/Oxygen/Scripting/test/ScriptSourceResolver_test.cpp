@@ -4,7 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cstdint>
@@ -13,7 +12,6 @@
 #include <ios>
 #include <memory>
 #include <optional>
-#include <ranges>
 #include <span>
 #include <string>
 #include <string_view>
@@ -48,6 +46,10 @@
 namespace oxygen::scripting::test {
 
 namespace {
+
+  constexpr auto kNotMountPath
+    = std::string_view { "external source path must be a mount path, "
+                         "/<Mount>/<path in mount>, that stays in its mount" };
 
   auto MakeAssetKey(const std::uint8_t seed) -> data::AssetKey
   {
@@ -104,7 +106,7 @@ protected:
 
     auto config = PathFinderConfig::Create()
                     .WithWorkspaceRoot(temp_root_)
-                    .AddScriptSourceRoot("scripts")
+                    .WithSourceMount("Content", "scripts")
                     .BuildShared();
     auto path_finder = PathFinder(config, temp_root_);
     resolver_ = std::make_unique<ScriptSourceResolver>(std::move(path_finder));
@@ -130,7 +132,7 @@ protected:
     const std::filesystem::path& path, std::string_view contents) -> void
   {
     std::filesystem::create_directories(path.parent_path());
-    std::ofstream out(path, std::ios::out | std::ios::binary);
+    std::ofstream out(path, std::ios::binary);
     out << contents;
   }
 
@@ -142,7 +144,7 @@ private:
 NOLINT_TEST_F(
   ScriptSourceResolverTest, ResolvePrefersEmbeddedBytecodeOverSourceAndExternal)
 {
-  const auto asset = MakeScriptAsset("external.luau",
+  const auto asset = MakeScriptAsset("/Content/external.luau",
     ScriptAssetResourceIndices {
       .bytecode_index = data::ResourceReferenceIndex { 1U },
       .source_index = data::ResourceReferenceIndex { 2U },
@@ -170,7 +172,7 @@ NOLINT_TEST_F(
   });
 
   ASSERT_TRUE(result.ok);
-  ASSERT_TRUE(result.blob.has_value());
+  ASSERT_HAS_VALUE(result.blob);
   ASSERT_TRUE(std::holds_alternative<ScriptBytecodeBlob>(*result.blob));
   EXPECT_EQ(std::get<ScriptBytecodeBlob>(*result.blob).Size(), 2);
 }
@@ -178,9 +180,9 @@ NOLINT_TEST_F(
 NOLINT_TEST_F(
   ScriptSourceResolverTest, ResolveFallsBackToExternalWhenNoEmbedded)
 {
-  const auto asset
-    = MakeScriptAsset("runtime/fallback", ScriptAssetResourceIndices {},
-      data::pak::scripting::ScriptAssetFlags::kAllowExternalSource);
+  const auto asset = MakeScriptAsset("/Content/runtime/fallback",
+    ScriptAssetResourceIndices {},
+    data::pak::scripting::ScriptAssetFlags::kAllowExternalSource);
 
   const auto script_path = TempRoot() / "scripts/runtime/fallback.luau";
   WriteFile(script_path, "fallback content");
@@ -195,7 +197,7 @@ NOLINT_TEST_F(
   });
 
   ASSERT_TRUE(result.ok);
-  ASSERT_TRUE(result.blob.has_value());
+  ASSERT_HAS_VALUE(result.blob);
   ASSERT_TRUE(std::holds_alternative<ScriptSourceBlob>(*result.blob));
   EXPECT_EQ(std::get<ScriptSourceBlob>(*result.blob).Size(), 16);
 }
@@ -203,9 +205,9 @@ NOLINT_TEST_F(
 NOLINT_TEST_F(
   ScriptSourceResolverTest, ExternalSourceHashChangesWhenFileChanges)
 {
-  const auto asset
-    = MakeScriptAsset("runtime/hash_test", ScriptAssetResourceIndices {},
-      data::pak::scripting::ScriptAssetFlags::kAllowExternalSource);
+  const auto asset = MakeScriptAsset("/Content/runtime/hash_test",
+    ScriptAssetResourceIndices {},
+    data::pak::scripting::ScriptAssetFlags::kAllowExternalSource);
 
   const auto script_path = TempRoot() / "scripts/runtime/hash_test.luau";
 
@@ -219,7 +221,7 @@ NOLINT_TEST_F(
     .map_resource_origin = {},
   });
   ASSERT_TRUE(first.ok);
-  ASSERT_TRUE(first.blob.has_value());
+  ASSERT_HAS_VALUE(first.blob);
   const auto first_hash = std::get<ScriptSourceBlob>(*first.blob).ContentHash();
 
   // Low-resolution timers might need a small delay or forced timestamp update
@@ -237,7 +239,7 @@ NOLINT_TEST_F(
     .map_resource_origin = {},
   });
   ASSERT_TRUE(second.ok);
-  ASSERT_TRUE(second.blob.has_value());
+  ASSERT_HAS_VALUE(second.blob);
   ASSERT_TRUE(std::holds_alternative<ScriptSourceBlob>(*second.blob));
   const auto second_hash
     = std::get<ScriptSourceBlob>(*second.blob).ContentHash();
@@ -245,7 +247,7 @@ NOLINT_TEST_F(
   EXPECT_NE(first_hash, second_hash);
 }
 
-NOLINT_TEST_F(ScriptSourceResolverTest, ResolveRejectsAbsoluteExternalPath)
+NOLINT_TEST_F(ScriptSourceResolverTest, ResolveRejectsPathThatIsNotMountPath)
 {
   const auto asset
     = MakeScriptAsset("C:/absolute/path.luau", ScriptAssetResourceIndices {},
@@ -261,13 +263,57 @@ NOLINT_TEST_F(ScriptSourceResolverTest, ResolveRejectsAbsoluteExternalPath)
   });
 
   EXPECT_FALSE(result.ok);
-  EXPECT_EQ(result.error_message, "external source path must be relative");
+  EXPECT_EQ(result.error_message, kNotMountPath);
+
+  const auto relative
+    = MakeScriptAsset("runtime/fallback.luau", ScriptAssetResourceIndices {},
+      data::pak::scripting::ScriptAssetFlags::kAllowExternalSource);
+  WriteFile(TempRoot() / "scripts/runtime/fallback.luau", "relative");
+  const auto relative_result = Resolver().Resolve({
+    .asset = *relative,
+    .load_script_resource =
+      [](const data::ResourceReferenceIndex) {
+        return std::shared_ptr<const data::ScriptResource> {};
+      },
+    .map_resource_origin = {},
+  });
+  EXPECT_FALSE(relative_result.ok);
+  EXPECT_EQ(relative_result.error_message, kNotMountPath);
+}
+
+//! A mount this run does not bind falls back silently to the embedded
+//! bytecode, like a missing file, even when another mount holds the path.
+NOLINT_TEST_F(ScriptSourceResolverTest, ResolveFallsThroughForUnboundMount)
+{
+  WriteFile(TempRoot() / "scripts/runtime/unbound.luau", "unbound");
+  const auto asset = MakeScriptAsset("/Other/runtime/unbound.luau",
+    ScriptAssetResourceIndices {
+      .bytecode_index = data::ResourceReferenceIndex { 1U },
+    },
+    data::pak::scripting::ScriptAssetFlags::kAllowExternalSource);
+  auto bytecode = MakeScriptResource(std::vector<uint8_t> { 'b', 'c' },
+    data::pak::scripting::ScriptEncoding::kBytecode);
+
+  const auto result = Resolver().Resolve({
+    .asset = *asset,
+    .load_script_resource =
+      [bytecode](const data::ResourceReferenceIndex index) {
+        return index.get() == 1
+          ? bytecode
+          : std::shared_ptr<const data::ScriptResource> {};
+      },
+    .map_resource_origin = {},
+  });
+
+  ASSERT_TRUE(result.ok) << result.error_message;
+  ASSERT_HAS_VALUE(result.blob);
+  EXPECT_TRUE(std::holds_alternative<ScriptBytecodeBlob>(*result.blob));
 }
 
 NOLINT_TEST_F(ScriptSourceResolverTest, ResolveRejectsParentTraversalPath)
 {
   const auto asset
-    = MakeScriptAsset("../escape.luau", ScriptAssetResourceIndices {},
+    = MakeScriptAsset("/Content/../escape.luau", ScriptAssetResourceIndices {},
       data::pak::scripting::ScriptAssetFlags::kAllowExternalSource);
 
   const auto result = Resolver().Resolve({
@@ -280,8 +326,7 @@ NOLINT_TEST_F(ScriptSourceResolverTest, ResolveRejectsParentTraversalPath)
   });
 
   EXPECT_FALSE(result.ok);
-  EXPECT_EQ(result.error_message,
-    "external source path must not contain parent traversal");
+  EXPECT_EQ(result.error_message, kNotMountPath);
 }
 
 NOLINT_TEST_F(ScriptSourceResolverTest, ResolveUsesMappedLooseCookedOrigin)
@@ -314,7 +359,7 @@ NOLINT_TEST_F(ScriptSourceResolverTest, ResolveUsesMappedLooseCookedOrigin)
   });
 
   ASSERT_TRUE(result.ok);
-  ASSERT_TRUE(result.blob.has_value());
+  ASSERT_HAS_VALUE(result.blob);
   ASSERT_TRUE(std::holds_alternative<ScriptBytecodeBlob>(*result.blob));
   const auto& bytecode_blob = std::get<ScriptBytecodeBlob>(*result.blob);
   EXPECT_EQ(bytecode_blob.GetOrigin(), ScriptBlobOrigin::kLooseCookedResource);
@@ -323,9 +368,9 @@ NOLINT_TEST_F(ScriptSourceResolverTest, ResolveUsesMappedLooseCookedOrigin)
 NOLINT_TEST_F(
   ScriptSourceResolverTest, ScriptingModuleExecutesResolvedSourceBlob)
 {
-  const auto asset
-    = MakeScriptAsset("runtime/module_test", ScriptAssetResourceIndices {},
-      data::pak::scripting::ScriptAssetFlags::kAllowExternalSource);
+  const auto asset = MakeScriptAsset("/Content/runtime/module_test",
+    ScriptAssetResourceIndices {},
+    data::pak::scripting::ScriptAssetFlags::kAllowExternalSource);
 
   const auto script_path = TempRoot() / "scripts/runtime/module_test.luau";
   constexpr auto kScript = "return 42";
@@ -341,6 +386,7 @@ NOLINT_TEST_F(
   });
 
   ASSERT_TRUE(resolve_result.ok);
+  ASSERT_HAS_VALUE(resolve_result.blob);
   const auto& blob = std::get<ScriptSourceBlob>(*resolve_result.blob);
 
   auto platform

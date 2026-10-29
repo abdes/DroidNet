@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <cstring>
 #include <exception>
+#include <expected>
 #include <filesystem>
 #include <fstream>
 #include <ios>
@@ -26,6 +27,8 @@
 #include <unordered_set>
 #include <utility>
 #include <vector>
+
+#include "RequestSnapshot.h"
 
 #include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Base/Logging.h>
@@ -219,29 +222,54 @@ namespace {
     return path;
   }
 
+  //! Why an external source path does not resolve.
+  struct UnresolvedSource {
+    std::string_view code;
+    std::string_view message;
+  };
+
+  //! The file an external source's mount path, `/<Mount>/<path in mount>`,
+  //! names in its source mount's folder.
   [[nodiscard]] auto ResolveExternalSourcePath(
-    const std::span<const std::filesystem::path> source_roots,
+    const SourceMountFolders& source_mounts,
     const std::string_view external_source_path)
-    -> std::optional<std::filesystem::path>
+    -> std::expected<std::filesystem::path, UnresolvedSource>
   {
-    const auto stored
-      = std::filesystem::path(external_source_path).lexically_normal();
-    if (stored.empty() || stored.has_root_path()
-      || HasParentTraversal(stored)) {
-      return std::nullopt;
+    constexpr auto kNotMountPath = UnresolvedSource {
+      .code = "paktool.script_seal.external_source_not_mount_path",
+      .message = "External script source is not a mount path, "
+                 "/<Mount>/<path in mount>, that stays in its mount.",
+    };
+    const auto slash = external_source_path.find('/', 1);
+    if (!external_source_path.starts_with('/')
+      || slash == std::string_view::npos || slash == 1
+      || slash + 1 == external_source_path.size()) {
+      return std::unexpected(kNotMountPath);
     }
-    for (const auto& root : source_roots) {
-      auto candidate = (root / stored).lexically_normal();
-      const auto relative = candidate.lexically_relative(root);
-      if (relative.empty() || relative.has_root_path()
-        || HasParentTraversal(relative)) {
-        continue;
-      }
-      if (std::filesystem::is_regular_file(base::ToNativePath(candidate))) {
-        return candidate;
-      }
+    const auto in_mount
+      = std::filesystem::path(external_source_path.substr(slash + 1))
+          .lexically_normal();
+    if (in_mount.empty() || in_mount.has_root_path()
+      || HasParentTraversal(in_mount)) {
+      return std::unexpected(kNotMountPath);
     }
-    return std::nullopt;
+    const auto mount
+      = source_mounts.find(external_source_path.substr(1, slash - 1));
+    if (mount == source_mounts.end()) {
+      return std::unexpected(UnresolvedSource {
+        .code = "paktool.script_seal.external_source_mount_unbound",
+        .message = "External script source names a source mount that no "
+                   "--mount, --mounts or .mounts.json binds.",
+      });
+    }
+    auto candidate = (mount->second / in_mount).lexically_normal();
+    if (!std::filesystem::is_regular_file(base::ToNativePath(candidate))) {
+      return std::unexpected(UnresolvedSource {
+        .code = "paktool.script_seal.external_source_unresolvable",
+        .message = "External script source was not found in its source mount.",
+      });
+    }
+    return candidate;
   }
 
   [[nodiscard]] auto NormalizeLooseCookedRoot(const std::filesystem::path& root)
@@ -536,7 +564,7 @@ namespace {
   [[nodiscard]] auto RewriteStagedScriptDescriptor(
     const std::filesystem::path& original_root,
     const std::filesystem::path& staged_root, const lc::AssetEntry& asset_entry,
-    ScriptTables& tables, std::span<const std::filesystem::path> source_roots)
+    ScriptTables& tables, const SourceMountFolders& source_mounts)
     -> Result<std::optional<data::AssetReferences>, ScriptSealingError>
   {
     const auto context = ReadScriptAssetContext(staged_root, asset_entry);
@@ -581,13 +609,12 @@ namespace {
       }
 
       const auto resolved_path
-        = ResolveExternalSourcePath(source_roots, *external_source);
+        = ResolveExternalSourcePath(source_mounts, *external_source);
       if (!resolved_path.has_value()) {
         return Result<std::optional<data::AssetReferences>,
           ScriptSealingError>::Err(ScriptSealingError {
-          .error_code = "paktool.script_seal.external_source_unresolvable",
-          .error_message = "External script source was not found under the "
-                           "declared script source roots.",
+          .error_code = std::string(resolved_path.error().code),
+          .error_message = std::string(resolved_path.error().message),
           .source_path = original_root,
           .descriptor_path = context->descriptor_path,
           .external_source_path = std::string(*external_source),
@@ -777,7 +804,7 @@ namespace {
 
   [[nodiscard]] auto SealLooseCookedSource(const data::CookedSource& source,
     const std::filesystem::path& staging_parent, const size_t source_index,
-    const std::span<const std::filesystem::path> source_roots)
+    const SourceMountFolders& source_mounts)
     -> Result<SealedLooseSourceResult, ScriptSealingError>
   {
     const auto normalized_root = NormalizeLooseCookedRoot(source.path);
@@ -877,7 +904,7 @@ namespace {
         continue;
       }
       auto sealed = RewriteStagedScriptDescriptor(
-        *normalized_root, staged_root, asset, *tables, source_roots);
+        *normalized_root, staged_root, asset, *tables, source_mounts);
       if (!sealed.has_value()) {
         cleanup_staged_root();
         return Result<SealedLooseSourceResult, ScriptSealingError>::Err(
@@ -931,7 +958,7 @@ namespace {
 auto SealLooseCookedSourcesForPakBuild(
   const pak::PakBuildRequest& build_request,
   const std::filesystem::path& staging_parent,
-  const std::span<const std::filesystem::path> source_roots)
+  const SourceMountFolders& source_mounts)
   -> Result<ScriptSealingResult, ScriptSealingError>
 {
   auto sealed_request = build_request;
@@ -945,7 +972,7 @@ auto SealLooseCookedSourcesForPakBuild(
     }
 
     const auto sealed_root
-      = SealLooseCookedSource(source, staging_parent, i, source_roots);
+      = SealLooseCookedSource(source, staging_parent, i, source_mounts);
     if (!sealed_root.has_value()) {
       CleanupStagedLooseRoots(
         std::span<const std::filesystem::path>(staged_loose_roots));

@@ -115,8 +115,9 @@ struct EngineConfig {
   //! Configuration for the Scripting module.
   struct ScriptingConfig {
     //! Enables asynchronous polling of script source directories for changes.
-    //! If true, changes to .lua/.luau files in any registered ScriptSourceRoot
-    //! (in PathFinderConfig) will trigger an automatic reload and recompile.
+    //! If true, changes to .lua/.luau files in the folder of any source mount
+    //! (PathFinderConfig::SourceMounts) trigger an automatic reload and
+    //! recompile.
     bool enable_hot_reload { true };
 
     //! Frequency at which source directories are scanned for changes.

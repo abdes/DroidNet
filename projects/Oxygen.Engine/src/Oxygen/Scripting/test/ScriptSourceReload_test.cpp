@@ -4,7 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <ios>
@@ -59,7 +58,7 @@ return script
     return std::make_shared<data::ScriptAsset>(
       data::AssetKey::FromVirtualPath("/test/spin.oscript"), desc,
       data::ScriptParameters { { "speed", 1.0F } },
-      std::string { kScriptFile });
+      "/Content/" + std::string { kScriptFile });
   }
 
   auto MakeExecutable() -> std::shared_ptr<const ScriptExecutable>
@@ -101,7 +100,7 @@ return script
     {
       return { PathFinder(PathFinderConfig::Create()
                             .WithWorkspaceRoot(root_)
-                            .AddScriptSourceRoot(root_)
+                            .WithSourceMount("Content", root_)
                             .BuildShared(),
                  root_),
         observer_ptr<IScriptCompilationService> { &compiler_ },

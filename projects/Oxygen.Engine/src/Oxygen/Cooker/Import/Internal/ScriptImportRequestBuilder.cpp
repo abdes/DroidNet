@@ -17,7 +17,6 @@
 
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
-#include <Oxygen/Cooker/Import/Internal/Pipelines/ScriptImportPipelineCommon.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Cooker/Import/ScriptImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/ScriptImportSettings.h>
@@ -179,15 +178,6 @@ auto BuildScriptAssetRequest(const ScriptAssetImportSettings& settings,
   request->options.scripting.compile_scripts = settings.compile_scripts;
   request->options.scripting.compile_mode = *compile_mode;
   request->options.scripting.script_storage = *storage_mode;
-  request->options.scripting.source_root = settings.source_root.empty()
-    ? std::filesystem::path {}
-    : std::filesystem::absolute(settings.source_root).lexically_normal();
-  if (*storage_mode == ScriptStorageMode::kExternal
-    && !detail::script_import::BuildExternalSourcePath(*request)) {
-    error_stream << "ERROR: external scripts require source_root containing "
-                    "the source file\n";
-    return std::nullopt;
-  }
   request->options.scripting.target_scene_virtual_path.clear();
   request->options.scripting.inline_bindings_json.clear();
   return request;

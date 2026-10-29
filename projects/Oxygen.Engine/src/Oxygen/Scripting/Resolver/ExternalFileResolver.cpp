@@ -85,6 +85,53 @@ namespace {
       path, [](const auto& segment) -> auto { return segment == ".."; });
   }
 
+  //! A mount path split into its mount name and its path in the mount.
+  struct MountPathParts {
+    std::string_view mount;
+    std::filesystem::path in_mount;
+  };
+
+  //! Splits `/<Mount>/<path in mount>`; nothing when the text is not a mount
+  //! path or its path leaves the mount.
+  auto SplitMountPath(const std::string_view text)
+    -> std::optional<MountPathParts>
+  {
+    if (text.size() < 2 || text.front() != '/') {
+      return std::nullopt;
+    }
+    const auto slash = text.find('/', 1);
+    if (slash == std::string_view::npos || slash == 1
+      || slash + 1 == text.size()) {
+      return std::nullopt;
+    }
+    auto in_mount = NormalizeExternalPath(text.substr(slash + 1));
+    if (in_mount.empty() || in_mount.has_root_path()
+      || HasParentTraversal(in_mount)) {
+      return std::nullopt;
+    }
+    return MountPathParts {
+      .mount = text.substr(1, slash - 1),
+      .in_mount = std::move(in_mount),
+    };
+  }
+
+  //! The existing file a mount path names, or nothing when its mount is not a
+  //! source mount or the file does not exist.
+  auto FindMountedFile(const PathFinder& path_finder,
+    const MountPathParts& parts) -> std::optional<std::filesystem::path>
+  {
+    const auto mounts = path_finder.SourceMounts();
+    const auto mount = mounts.find(parts.mount);
+    if (mount == mounts.end()) {
+      return std::nullopt;
+    }
+    auto full_path = (mount->second / parts.in_mount).lexically_normal();
+    if (!std::filesystem::exists(full_path)) {
+      return std::nullopt;
+    }
+    return full_path;
+  }
+
 } // namespace
 
 ExternalFileResolver::ExternalFileResolver(PathFinder path_finder)
@@ -99,17 +146,11 @@ auto ExternalFileResolver::ResolvePath(const data::ScriptAsset& asset) const
   if (!external_path.has_value()) {
     return std::nullopt;
   }
-  const auto relative_path = NormalizeExternalPath(*external_path);
-  if (relative_path.is_absolute() || HasParentTraversal(relative_path)) {
+  const auto parts = SplitMountPath(*external_path);
+  if (!parts.has_value()) {
     return std::nullopt;
   }
-  for (const auto& root : path_finder_.ScriptSourceRoots()) {
-    auto full_path = (root / relative_path).lexically_normal();
-    if (std::filesystem::exists(full_path)) {
-      return full_path;
-    }
-  }
-  return std::nullopt;
+  return FindMountedFile(path_finder_, *parts);
 }
 
 auto ExternalFileResolver::Resolve(
@@ -125,31 +166,18 @@ auto ExternalFileResolver::Resolve(
     };
   }
 
-  auto relative_path = NormalizeExternalPath(*external_path);
-  if (relative_path.is_absolute()) {
+  const auto parts = SplitMountPath(*external_path);
+  if (!parts.has_value()) {
     return IScriptSourceResolver::ResolveResult {
       .ok = false,
       .blob = {},
-      .error_message = "external source path must be relative",
-    };
-  }
-  if (HasParentTraversal(relative_path)) {
-    return IScriptSourceResolver::ResolveResult {
-      .ok = false,
-      .blob = {},
-      .error_message = "external source path must not contain parent traversal",
+      .error_message = "external source path must be a mount path, "
+                       "/<Mount>/<path in mount>, that stays in its mount",
     };
   }
 
-  std::optional<std::filesystem::path> resolved_path;
-  for (const auto& root : path_finder_.ScriptSourceRoots()) {
-    const auto full_path = (root / relative_path).lexically_normal();
-    if (std::filesystem::exists(full_path)) {
-      resolved_path = full_path;
-      break;
-    }
-  }
-
+  // A mount this run does not bind, or a missing file, falls back silently.
+  const auto resolved_path = FindMountedFile(path_finder_, *parts);
   if (!resolved_path) {
     return IScriptSourceResolver::ResolveResult {
       .ok = false,

@@ -178,7 +178,8 @@ using ScriptDataTable = world::SceneDataTable;
  per declared parameter, at a descriptor-relative offset after this struct.
  Authoring hints (range, unit, description, options, color) are not cooked.
  `external_source_path_offset` is in the descriptor string table, which follows
- the declarations; offset `0` (the empty string) means no external source.
+ the declarations; it holds the source's mount path, `/<Mount>/<path in
+ mount>`, and offset `0` (the empty string) means no external source.
 */
 #pragma pack(push, 1)
 struct ScriptAssetDesc {

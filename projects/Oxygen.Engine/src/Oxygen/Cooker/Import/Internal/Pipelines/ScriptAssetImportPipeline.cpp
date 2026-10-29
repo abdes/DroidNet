@@ -437,8 +437,9 @@ namespace {
       = script_import::BuildExternalSourcePath(request);
     if (!external_source_path) {
       script_import::AddDiagnostic(session, request, ImportSeverity::kError,
-        "script.asset.source_root_invalid",
-        "External scripts require a source_root containing the source file");
+        "script.asset.external_source_unmounted",
+        "An external script stores its source's mount path, but the source "
+        "lies in no source mount");
       return false;
     }
     desc.external_source_path_offset

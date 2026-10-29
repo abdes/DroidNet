@@ -67,6 +67,25 @@ public sealed partial class PlaySessionTests
         _ = fixture.Session.NodeOf(problem with { SlotNode = null }).Should().BeNull();
     }
 
+    [TestMethod]
+    public void LaunchSourceMounts_NameEachExistingMountFolderByItsMountName()
+    {
+        var fileSystem = new MockFileSystem();
+        var project = TestProject.Create(
+            fileSystem,
+            @"C:\Project",
+            [new ProjectMountPoint("Content", "Content"), new ProjectMountPoint("Media", "Media"), new ProjectMountPoint("Gone", "Gone")]).Context;
+        fileSystem.Directory.Delete(@"C:\Project\Gone", recursive: true);
+
+        var mounts = PlaySession.SourceMounts(project);
+
+        _ = mounts.Should().BeEquivalentTo(new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["Content"] = @"C:\Project\Content",
+            ["Media"] = @"C:\Project\Media",
+        });
+    }
+
     private sealed partial class PlayFixture : IDisposable
     {
         private readonly DirectoryInfo directory = Directory.CreateTempSubdirectory("Oxygen-PlaySession-");

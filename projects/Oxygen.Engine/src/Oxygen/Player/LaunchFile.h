@@ -14,6 +14,7 @@
 #include <string_view>
 #include <vector>
 
+#include <Oxygen/Config/PathFinderConfig.h>
 #include <Oxygen/Content/ContentMounts.h>
 
 namespace oxygen::player {
@@ -61,8 +62,9 @@ struct PlayerLaunch {
   std::vector<LaunchMount> mounts;
   //! Scene virtual path.
   std::string scene;
-  //! Absolute; non-empty enables source reload.
-  std::vector<std::filesystem::path> script_source_roots;
+  //! Source mount folders by name, absolute; external scripts resolve through
+  //! them, and a non-empty table enables source reload.
+  PathFinderConfig::SourceMountTable source_mounts;
   LaunchWindow window;
   //! Starts the control server when present.
   std::optional<LaunchControl> control;
@@ -71,7 +73,7 @@ struct PlayerLaunch {
 //! Parses launch file text; relative paths resolve against `base_dir`.
 /*!
  The text must validate against `oxygen.player-launch.schema.json`, and
- every mount and script source root must exist.
+ every mount and source mount folder must exist.
 
  \throws LaunchFileError naming `source_name` and the failing value.
 */

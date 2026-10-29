@@ -105,7 +105,6 @@ NOLINT_TEST(ScriptImportRequestBuilderTest,
   settings.script_storage = "external";
   const auto authoring_root
     = std::filesystem::temp_directory_path() / "script_authoring";
-  settings.source_root = authoring_root.string();
   settings.source_path = (authoring_root / "scripts" / "main.lua").string();
   std::ostringstream errors;
 
@@ -115,55 +114,6 @@ NOLINT_TEST(ScriptImportRequestBuilderTest,
   EXPECT_TRUE(request->options.scripting.compile_scripts);
   EXPECT_EQ(
     request->options.scripting.script_storage, ScriptStorageMode::kExternal);
-}
-
-NOLINT_TEST(
-  ScriptImportRequestBuilderTest, ExternalScriptRequiresExplicitAuthoringRoot)
-{
-  auto settings = MakeValidScriptAssetSettings();
-  settings.compile_scripts = false;
-  settings.script_storage = "external";
-  std::ostringstream errors;
-
-  EXPECT_FALSE(BuildScriptAssetRequest(settings, errors).has_value());
-  EXPECT_THAT(errors.str(), ::testing::HasSubstr("source_root"));
-}
-
-NOLINT_TEST(
-  ScriptImportRequestBuilderTest, ExternalScriptRootIsIndependentOfCookedOutput)
-{
-  auto settings = MakeValidScriptAssetSettings();
-  settings.compile_scripts = false;
-  settings.script_storage = "external";
-  const auto authoring_root
-    = std::filesystem::temp_directory_path() / "script_authoring";
-  settings.source_root = authoring_root.string();
-  settings.source_path = (authoring_root / "scripts" / "main.lua").string();
-  std::ostringstream errors;
-
-  const auto request = BuildScriptAssetRequest(settings, errors);
-
-  ASSERT_HAS_VALUE(request) << errors.str();
-  EXPECT_EQ(request->options.scripting.source_root, authoring_root);
-  ASSERT_HAS_VALUE(request->cooked_root) << "Expected an explicit cooked root";
-  EXPECT_NE(request->cooked_root->parent_path(), authoring_root);
-}
-
-NOLINT_TEST(ScriptImportRequestBuilderTest,
-  ExternalScriptRejectsSourceOutsideAuthoringRoot)
-{
-  auto settings = MakeValidScriptAssetSettings();
-  settings.compile_scripts = false;
-  settings.script_storage = "external";
-  const auto authoring_root
-    = std::filesystem::temp_directory_path() / "script_authoring";
-  settings.source_root = authoring_root.string();
-  settings.source_path
-    = (authoring_root.parent_path() / "outside.lua").string();
-  std::ostringstream errors;
-
-  EXPECT_FALSE(BuildScriptAssetRequest(settings, errors).has_value());
-  EXPECT_THAT(errors.str(), ::testing::HasSubstr("source_root"));
 }
 
 NOLINT_TEST(ScriptImportRequestBuilderTest,

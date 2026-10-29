@@ -150,10 +150,10 @@ For each `WorkItem`, the worker performs the following tasks:
    - Dynamically records the generated `ResourceIndexT` identifiers into the
      `ScriptAssetDesc`.
 5. **Data Externalization** (When StorageMode = `kExternal`):
-   - Sets flags `kAllowExternalSource` and writes a normalized relative source
-     path into `external_source_path` (relative to the cooked root parent when
-     possible, e.g. `scenes/physics_domains/foo.lua`), without writing
-     scripts.table/scripts.data payload blobs.
+   - Sets flags `kAllowExternalSource` and writes the source's mount path into
+     `external_source_path` (e.g. `/Content/scenes/physics_domains/foo.lua`),
+     without writing scripts.table/scripts.data payload blobs. A source in no
+     mount fails with `script.asset.external_source_unmounted`.
 6. **Emission**: Passes the fully generated descriptor back to the central
    `AssetEmitter` logic.
 

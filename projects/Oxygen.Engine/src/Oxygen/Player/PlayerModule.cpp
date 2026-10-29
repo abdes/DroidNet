@@ -541,7 +541,7 @@ auto PlayerModule::HandlePlay(const std::optional<std::string>& scene)
     return commands::CommandResult::Failure(
       commands::ExecutionStatus::kError, ex.what());
   }
-  // Window, control and script source roots belong to the process.
+  // Window, control and source mounts belong to the process.
   launch_.mounts = std::move(current.mounts);
   launch_.scene = std::move(current.scene);
   next_scene_ = scene.value_or(launch_.scene);

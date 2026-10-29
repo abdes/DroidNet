@@ -201,7 +201,7 @@ $Arguments = @(
     "build",
     "--loose-source", $CookedRoot,
     "--dependency-pak", $EnginePak,
-    "--script-source-root", (Get-FullPath $ContentRoot),
+    "--mount", "Content=$(Get-FullPath $ContentRoot)",
     "--out", $PakPath,
     "--catalog-out", $CatalogPath,
     "--content-version", $ContentVersion.ToString(),

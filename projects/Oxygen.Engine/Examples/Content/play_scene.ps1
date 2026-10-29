@@ -14,7 +14,7 @@ vtx.occlusion.enable=true`, or `-- --control` to accept JSON-RPC commands on
 loopback; run with `-- --help` to list them.
 
 The launch file mounts .cooked/main and, for an imported scene, its import
-root last so it wins; it uses this folder as the script source root, so
+root last so it wins; it binds this folder as the Content source mount, so
 editing a scene's script reloads it while playing.
 
 In an installed SDK, it uses the player in that SDK's bin directory. In a
@@ -214,11 +214,11 @@ if ((Test-Path -LiteralPath $mainRoot -PathType Container) -and $target.Root -ne
 $mounts += $target.Root
 
 $launch = [ordered]@{
-    version             = 2
-    mounts              = $mounts
-    scene               = $target.VirtualPath
-    script_source_roots = @($ContentDir)
-    window              = [ordered]@{ title = "Oxygen Player - $($target.Name)" }
+    version       = 3
+    mounts        = $mounts
+    scene         = $target.VirtualPath
+    source_mounts = [ordered]@{ Content = $ContentDir }
+    window        = [ordered]@{ title = "Oxygen Player - $($target.Name)" }
 }
 $launchDir = Join-Path ([IO.Path]::GetTempPath()) 'oxygen-player'
 New-Item -ItemType Directory -Force -Path $launchDir | Out-Null

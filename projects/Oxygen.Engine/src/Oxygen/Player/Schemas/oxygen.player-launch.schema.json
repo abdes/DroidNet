@@ -8,7 +8,7 @@
   "required": ["version", "mounts", "scene"],
   "properties": {
     "version": {
-      "const": 2
+      "const": 3
     },
     "mounts": {
       "description": "Cooked content, highest precedence last: a file ending in .pak is a PAK file, anything else a loose cooked root.",
@@ -24,10 +24,10 @@
       "type": "string",
       "pattern": "^/.+"
     },
-    "script_source_roots": {
-      "description": "Roots of external script sources. Non-empty enables reloading a script when its source changes.",
-      "type": "array",
-      "items": {
+    "source_mounts": {
+      "description": "Source mount folders by mount name, the shape of oxygen.mounts.schema.json mounts. External scripts, whose sources are mount paths /<Mount>/<path in mount>, resolve through them; a non-empty table enables reloading a script when its source changes.",
+      "type": "object",
+      "additionalProperties": {
         "type": "string",
         "minLength": 1
       }

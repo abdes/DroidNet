@@ -11,7 +11,6 @@
 #include <filesystem>
 #include <optional>
 #include <string>
-#include <vector>
 
 #include <Oxygen/Config/EngineConfig.h>
 #include <Oxygen/Config/GraphicsConfig.h>
@@ -84,27 +83,14 @@ namespace Oxygen::Interop {
       return std::chrono::milliseconds(
         static_cast<long long>(ts.TotalMilliseconds));
     }
-    inline auto ToPathVector(array<System::String^>^ paths)
-      -> std::vector<std::filesystem::path> {
-      std::vector<std::filesystem::path> result;
-      if (paths == nullptr) {
-        return result;
-      }
-      result.reserve(paths->Length);
-      for each (System::String ^ path in paths) {
-        if (!System::String::IsNullOrWhiteSpace(path)) {
-          result.emplace_back(ToStdString(path));
-        }
-      }
-      return result;
-    }
-    inline auto ToManagedStringArray(
-      std::vector<std::filesystem::path> const& paths)
-      -> array<System::String^>^ {
-      auto result = gcnew array<System::String^>(
-        static_cast<int>(paths.size()));
-      for (std::size_t i = 0; i < paths.size(); ++i) {
-        result[static_cast<int>(i)] = ToManagedString(paths[i].string());
+    inline auto ToManagedSourceMounts(
+      native::PathFinderConfig::SourceMountTable const& mounts)
+      -> System::Collections::Generic::Dictionary<System::String^,
+        System::String^>^ {
+      auto result = gcnew System::Collections::Generic::Dictionary<
+        System::String^, System::String^>();
+      for (auto const& [name, folder] : mounts) {
+        result[ToManagedString(name)] = ToManagedString(folder.string());
       }
       return result;
     }
@@ -117,7 +103,10 @@ namespace Oxygen::Interop {
     System::String^ WorkspaceRootPath;
     System::String^ ShaderLibraryPath;
     System::String^ CVarsArchivePath;
-    array<System::String^>^ ScriptSourceRoots;
+    //! Source mount folders by mount name; external scripts store mount
+    //! paths, /<Mount>/<path in mount>, resolved through them.
+    System::Collections::Generic::IDictionary<System::String^,
+      System::String^>^ SourceMounts;
     System::String^ ScriptBytecodeCachePath;
     //! The engine content pak every runtime mounts beneath its content.
     System::String^ EngineContentPakPath;
@@ -126,7 +115,8 @@ namespace Oxygen::Interop {
       : WorkspaceRootPath(gcnew System::String("")),
       ShaderLibraryPath(gcnew System::String("")),
       CVarsArchivePath(gcnew System::String("")),
-      ScriptSourceRoots(gcnew array<System::String^>(0)),
+      SourceMounts(gcnew System::Collections::Generic::Dictionary<
+        System::String^, System::String^>()),
       ScriptBytecodeCachePath(gcnew System::String("")),
       EngineContentPakPath(gcnew System::String("")) {
     }
@@ -137,7 +127,7 @@ namespace Oxygen::Interop {
       m->WorkspaceRootPath = detail::ToManagedString(n.WorkspaceRootPath().string());
       m->ShaderLibraryPath = detail::ToManagedString(n.ShaderLibraryPath().string());
       m->CVarsArchivePath = detail::ToManagedString(n.CVarsArchivePath().string());
-      m->ScriptSourceRoots = detail::ToManagedStringArray(n.ScriptSourceRoots());
+      m->SourceMounts = detail::ToManagedSourceMounts(n.SourceMounts());
       m->ScriptBytecodeCachePath =
         detail::ToManagedString(n.ScriptBytecodeCachePath().string());
       m->EngineContentPakPath =
@@ -159,9 +149,15 @@ namespace Oxygen::Interop {
         builder = std::move(builder).WithCVarsArchivePath(
           detail::ToStdString(CVarsArchivePath));
       }
-      if (ScriptSourceRoots != nullptr && ScriptSourceRoots->Length > 0) {
-        builder = std::move(builder).WithScriptSourceRoots(
-          detail::ToPathVector(ScriptSourceRoots));
+      if (SourceMounts != nullptr) {
+        for each (System::Collections::Generic::KeyValuePair<System::String^,
+          System::String^> mount in SourceMounts) {
+          if (!System::String::IsNullOrWhiteSpace(mount.Key)
+            && !System::String::IsNullOrWhiteSpace(mount.Value)) {
+            builder = std::move(builder).WithSourceMount(
+              detail::ToStdString(mount.Key), detail::ToStdString(mount.Value));
+          }
+        }
       }
       if (!System::String::IsNullOrWhiteSpace(ScriptBytecodeCachePath)) {
         builder = std::move(builder).WithScriptBytecodeCachePath(

@@ -56,7 +56,7 @@ struct DemoMain {
 /*!
  The command line has the host's runtime, graphics tooling and capture
  options, then the example's groups. The host configuration defaults to the
- workspace with `Examples/Content` as the script source root, the asset
+ workspace with `Examples/Content` as the `Content` source mount, the asset
  loader enabled and a 250 microsecond pacing margin; `configure` may change
  any of it.
 

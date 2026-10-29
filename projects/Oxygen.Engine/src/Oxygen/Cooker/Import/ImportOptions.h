@@ -551,9 +551,6 @@ struct ImportOptions final {
     //! Script payload storage strategy.
     ScriptStorageMode script_storage = ScriptStorageMode::kEmbedded;
 
-    //! Physical authoring root used by external script source resolution.
-    std::filesystem::path source_root;
-
     //! For sidecar imports only: canonical target scene virtual path.
     std::string target_scene_virtual_path;
 

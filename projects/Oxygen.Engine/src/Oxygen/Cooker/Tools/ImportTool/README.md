@@ -325,8 +325,9 @@ Rules:
 - `compile=true` with `script-storage=external` embeds the bytecode and records
   the source path: the runtime prefers the source when its mount folder
   holds it and runs the bytecode otherwise.
-- An external script's stored path is relative to the folder of its source's
-  mount.
+- An external script stores its source's mount path,
+  `/<Mount>/<path in mount>`; a source in no mount fails with
+  `script.asset.external_source_unmounted`.
 - In this tool, script compile is wired through Luau compiler callback.
 
 Script import writes script descriptors (`*.oscript`) and script payload tables:

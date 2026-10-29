@@ -24,7 +24,7 @@ public sealed class PlayerLaunchFileTests
             var launch = new PlayerLaunchFile(
                 [@"C:\Project\.cooked\generations\a", @"C:\Project\.cooked\generations\b"],
                 "/Content/Scenes/Level.oscene",
-                [@"C:\Project\Content"],
+                new Dictionary<string, string>(StringComparer.Ordinal) { ["Content"] = @"C:\Project\Content" },
                 new PlayerLaunchWindow("Level - Oxygen Player", PlayerWindowMode.Borderless, 1600, 900, VSync: false, FrameCap: 60));
 
             await launch.WriteAsync(path, this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -35,7 +35,8 @@ public sealed class PlayerLaunchFileTests
             _ = root.GetProperty("mounts").EnumerateArray().Select(static mount => mount.GetString()).Should()
                 .Equal(@"C:\Project\.cooked\generations\a", @"C:\Project\.cooked\generations\b");
             _ = root.GetProperty("scene").GetString().Should().Be("/Content/Scenes/Level.oscene");
-            _ = root.GetProperty("script_source_roots")[0].GetString().Should().Be(@"C:\Project\Content");
+            _ = root.GetProperty("source_mounts").GetProperty("Content").GetString().Should().Be(@"C:\Project\Content");
+            _ = root.TryGetProperty("script_source_roots", out _).Should().BeFalse();
             var window = root.GetProperty("window");
             _ = window.GetProperty("title").GetString().Should().Be("Level - Oxygen Player");
             _ = window.GetProperty("mode").GetString().Should().Be("borderless");

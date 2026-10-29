@@ -6,10 +6,13 @@
 
 // Covers: Import/ImportManifest.cpp
 
+#include <array>
+#include <cstddef>
 #include <filesystem>
 #include <optional>
 #include <sstream>
 #include <string>
+#include <string_view>
 
 #include <Oxygen/Cooker/Import/ImportManifest.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
@@ -157,13 +160,14 @@ NOLINT_TEST(ImportManifestScriptSidecarTest,
       (manifest_path.parent_path() / "published").lexically_normal()));
 }
 
+//! An external script stores its source's mount path, so each script job's
+//! request carries the mount path of its own mount.
 NOLINT_TEST(ImportManifestScriptSidecarTest,
-  ScriptAuthoringRootsResolveDefaultsAndOverridesFromManifestDirectory)
+  ExternalScriptJobsRecordTheirSourceMountPaths)
 {
   const ScopedTempDir temp;
   const auto manifest_path
-    = temp.Path() / "explicit_script_roots" / "import_manifest.json";
-  const auto output = manifest_path.parent_path() / "generated" / "cooked";
+    = temp.Path() / "script_mounts" / "import_manifest.json";
   WriteText(manifest_path,
     R"({
       "version": 1,
@@ -196,13 +200,15 @@ NOLINT_TEST(ImportManifestScriptSidecarTest,
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   ASSERT_HAS_VALUE(manifest) << errors.str();
   ASSERT_EQ(manifest->jobs.size(), 2U);
-  for (const auto& job : manifest->jobs) {
+  const auto expected = std::array {
+    std::string_view { "/Authoring/main.lua" },
+    std::string_view { "/Other/main.lua" },
+  };
+  for (std::size_t i = 0; i < expected.size(); ++i) {
     std::ostringstream request_errors;
-    const auto request = job.BuildRequest(request_errors);
+    const auto request = manifest->jobs[i].BuildRequest(request_errors);
     ASSERT_HAS_VALUE(request) << request_errors.str();
-    EXPECT_EQ(request->options.scripting.source_root,
-      request->source_path.parent_path());
-    EXPECT_NE(request->options.scripting.source_root, output.parent_path());
+    EXPECT_EQ(request->source_mount_path, expected[i]);
   }
 }
 

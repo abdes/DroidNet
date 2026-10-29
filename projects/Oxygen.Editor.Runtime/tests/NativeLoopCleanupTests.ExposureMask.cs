@@ -34,19 +34,24 @@ public sealed partial class NativeLoopCleanupTests
     {
         // A one-pixel, uncompressed 32-bit TGA. Native cooking owns all Oxygen
         // binary records; this fixture supplies only an ordinary source image.
+        // The sources lie in the project's Content mount, as every cooked source must.
         byte[] image = [0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 32, 8, 255, 255, 255, 255];
-        await File.WriteAllBytesAsync(Path.Combine(root, "Meter.tga"), image, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var content = Directory.CreateDirectory(Path.Combine(root, "Content")).FullName;
+        await File.WriteAllBytesAsync(Path.Combine(content, "Meter.tga"), image, this.TestContext.CancellationToken).ConfigureAwait(false);
         const string descriptor = """
             { "source": "Meter.tga", "intent": "data",
               "decode": { "color_space": "linear" }, "output": { "format": "rgba8" } }
             """;
-        await File.WriteAllTextAsync(Path.Combine(root, "Meter.otex.json"), descriptor, this.TestContext.CancellationToken).ConfigureAwait(false);
+        await File.WriteAllTextAsync(Path.Combine(content, "Meter.otex.json"), descriptor, this.TestContext.CancellationToken).ConfigureAwait(false);
         var cookedRoot = Path.Combine(root, "cooked");
         var manifest = new ContentImportManifest(
             1,
             cookedRoot,
             new ContentImportLayout("/Content"),
-            [new ContentImportJob("mask", "texture-descriptor", "Meter.otex.json", [], Output: null, Name: "Meter") { VirtualPath = "/Content/Textures/Meter.otex" }]);
+            [new ContentImportJob("mask", "texture-descriptor", "/Content/Meter.otex.json", [], Output: null, Name: "Meter") { VirtualPath = "/Content/Textures/Meter.otex" }])
+        {
+            Mounts = [new ContentImportMount("Content", "Content")],
+        };
         using var compatibility = Oxygen.Managed.Core.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
         var api = new ImportToolContentPipelineApi(
             new EngineContentPipelineToolLocator(),

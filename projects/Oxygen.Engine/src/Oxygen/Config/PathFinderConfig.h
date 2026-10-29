@@ -7,11 +7,12 @@
 #pragma once
 
 #include <filesystem>
+#include <functional>
+#include <map>
 #include <memory>
 #include <string>
 #include <string_view>
 #include <utility>
-#include <vector>
 
 #include <Oxygen/Base/Macros.h>
 
@@ -32,6 +33,10 @@ namespace oxygen {
 class PathFinderConfig final {
 public:
   class Builder;
+
+  //! Source mount folders by mount name; names compare exactly.
+  using SourceMountTable
+    = std::map<std::string, std::filesystem::path, std::less<>>;
 
   [[nodiscard]] static auto Create() -> Builder;
 
@@ -106,12 +111,12 @@ public:
     return engine_content_pak_path_;
   }
 
-  //! The list of directories where script source files (.lua, .luau) are
-  //! located. Used for resolution during compilation and for hot-reloading.
-  [[nodiscard]] auto ScriptSourceRoots() const noexcept
-    -> const std::vector<std::filesystem::path>&
+  //! The folder of each source mount, by mount name. External script sources
+  //! are mount paths, `/<Mount>/<path in mount>`, resolved through this table;
+  //! hot reload watches these folders.
+  [[nodiscard]] auto SourceMounts() const noexcept -> const SourceMountTable&
   {
-    return script_source_roots_;
+    return source_mounts_;
   }
 
   //! The path to the persistent bytecode cache file (e.g., scripts.bin).
@@ -125,10 +130,6 @@ private:
   //! Default CVars archive path for repo-local development.
   static constexpr std::string_view kDefaultCVarsArchivePath
     = "bin/Oxygen/cvars.json";
-
-  //! Default scripts root path for repo-local development.
-  static constexpr std::string_view kDefaultScriptsRootPath
-    = "bin/Oxygen/scripts";
 
   //! Default bytecode cache path.
   static constexpr std::string_view kDefaultBytecodeCachePath
@@ -144,9 +145,7 @@ private:
   std::filesystem::path engine_content_pak_path_ {
     DefaultEngineContentPakPathForCurrentBuild(),
   };
-  std::vector<std::filesystem::path> script_source_roots_ {
-    std::filesystem::path(std::string(kDefaultScriptsRootPath)),
-  };
+  SourceMountTable source_mounts_;
   std::filesystem::path script_bytecode_cache_path_ {
     std::string(kDefaultBytecodeCachePath),
   };
@@ -179,17 +178,17 @@ public:
     return std::move(config_);
   }
 
-  [[nodiscard]] auto AddScriptSourceRoot(
-    std::filesystem::path scripts_root_path) && -> Builder&&
+  //! Binds source mount `name` to `folder`, replacing an earlier binding.
+  [[nodiscard]] auto WithSourceMount(
+    std::string name, std::filesystem::path folder) && -> Builder&&
   {
-    config_.script_source_roots_.push_back(std::move(scripts_root_path));
+    config_.source_mounts_.insert_or_assign(std::move(name), std::move(folder));
     return std::move(*this);
   }
 
-  [[nodiscard]] auto WithScriptSourceRoots(
-    std::vector<std::filesystem::path> roots) && -> Builder&&
+  [[nodiscard]] auto WithSourceMounts(SourceMountTable mounts) && -> Builder&&
   {
-    config_.script_source_roots_ = std::move(roots);
+    config_.source_mounts_ = std::move(mounts);
     return std::move(*this);
   }
 
