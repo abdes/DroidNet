@@ -107,7 +107,8 @@ public sealed class ContentExplorerPresentationTests
         var project = TestProject.Create(new MockFileSystem(), "C:/Sources").Context with
         {
             Name = "Sources",
-            AuthoringMounts = [new("Content", "Content"), new("Cooked", ".cooked")],
+            AuthoringMounts = [new("Content", "Content")],
+            OutputFolderViews = [new(ProjectOutputFolders.Cooked)],
         };
         _ = ContentExplorerViewModel.DescribeSource(project, AssetPath.Parse("/Content/Materials")).Should().Be("Authoring source");
         _ = ContentExplorerViewModel.DescribeSource(project, AssetPath.Parse("/Content/Scenes")).Should().Be("Authoring source");

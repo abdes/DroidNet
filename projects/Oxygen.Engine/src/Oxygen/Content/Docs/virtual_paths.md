@@ -52,12 +52,11 @@ The first segment names the mount: an identifier, `[A-Za-z_][A-Za-z0-9_-]*`,
 optionally preceded by `.` (`vpath.mount.invalid`), at most 255 bytes
 (`vpath.segment.too_long`). A mount starting with `.` is reserved by the engine,
 as hidden names are by an operating system. A project names its mounts without
-the dot. The reserved mounts:
+the dot. The reserved mount:
 
-| Mount     | Holds                                                                                                                                                                                                                                                   |
-| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `.cooked` | Content cooked without a project.                                                                                                                                                                                                                       |
-| `.code`   | Never content. The keys of objects created in code, such as input actions and contexts, come from paths below it (`AssetKey::FromCodePath`). The first segment names the owner (`Editor`, `Examples`, `Test`); the leaf has the asset type's extension. |
+| Mount   | Holds                                                                                                                                                                                                                                                   |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `.code` | Never content. The keys of objects created in code, such as input actions and contexts, come from paths below it (`AssetKey::FromCodePath`). The first segment names the owner (`Editor`, `Examples`, `Test`); the leaf has the asset type's extension. |
 
 ## Path
 
@@ -78,7 +77,7 @@ name.
 ## Derived content
 
 A path being authored adds one rule: below the mount, a segment that starts with
-`.` (`.cooked`, `.imported`, `.build`, `.pipeline`) or is `SourceMedia` names
+`.` (such as `.build` or `.pipeline`) or is `SourceMedia` names
 derived content and is refused (`vpath.segment.derived_content`). A path the
 engine writes or resolves accepts it.
 

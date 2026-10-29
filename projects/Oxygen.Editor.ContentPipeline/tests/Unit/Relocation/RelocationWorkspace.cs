@@ -29,7 +29,8 @@ internal sealed partial class RelocationWorkspace : IDisposable
         this.Session = new(TestProject.Create(this.FileSystem).Context with
         {
             Name = "Relocation tests",
-            AuthoringMounts = [new ProjectMountPoint("Content", "Content"), new ProjectMountPoint("Cooked", ".cooked")],
+            AuthoringMounts = [new ProjectMountPoint("Content", "Content")],
+            OutputFolderViews = [new(ProjectOutputFolders.Cooked)],
         });
         this.Coordinator = new(this.Session);
         this.Files = new NativeAtomicFileStore(this.FileSystem);

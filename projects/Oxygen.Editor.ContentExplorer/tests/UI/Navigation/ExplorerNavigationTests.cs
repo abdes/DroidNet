@@ -280,7 +280,8 @@ public sealed partial class ExplorerNavigationTests : DroidNet.Tests.VisualUserI
         var project = TestProject.Create(fileSystem, root.Location).Context with
         {
             Name = "Navigation",
-            AuthoringMounts = [new("Content", "Content"), new("Cooked", ".cooked")],
+            AuthoringMounts = [new("Content", "Content")],
+            OutputFolderViews = [new(ProjectOutputFolders.Cooked)],
             LocalFolderMounts = [new("Library", libraryRoot)],
             DefaultSceneId = SceneId.New(),
         };
@@ -308,7 +309,7 @@ public sealed partial class ExplorerNavigationTests : DroidNet.Tests.VisualUserI
         _ = saved.Should().NotBeNull();
         _ = saved!.AuthoringMounts.Should().Contain(mount => mount.Name == "Content" && mount.RelativePath == "Content");
         _ = saved.DefaultSceneId.Should().Be(project.DefaultSceneId);
-        _ = saved.AuthoringMounts.Should().Contain(mount => mount.Name == "Cooked" && mount.RelativePath == ".cooked");
+        _ = saved.OutputFolderViews.Should().Contain(view => view.Folder == ProjectOutputFolders.Cooked);
         _ = saved.LocalFolderMounts.Should().Contain(mount => mount.Name == "LibraryRenamed" && mount.Root == libraryRoot);
         _ = model.HasUnsavedChanges.Should().BeFalse();
         _ = state.SelectedFolders.Should().Equal(AssetPath.Parse(succeeds ? "/LibraryRenamed" : "/Library"));
@@ -356,7 +357,7 @@ public sealed partial class ExplorerNavigationTests : DroidNet.Tests.VisualUserI
         var first = TestProject.Create(new RealFileSystem(), firstDirectory.Path).Context with
         {
             Name = "First",
-            AuthoringMounts = [new("Cooked", ".cooked")],
+            OutputFolderViews = [new(ProjectOutputFolders.Cooked)],
         };
         using var session = new TestSession(first);
         using var changes = new System.Reactive.Subjects.Subject<Oxygen.Managed.Assets.Catalog.AssetChange>();
@@ -374,7 +375,7 @@ public sealed partial class ExplorerNavigationTests : DroidNet.Tests.VisualUserI
             else
             {
                 // A mount change keeps the session and its project; only the mounts change.
-                session.ChangeContext(first with { AuthoringMounts = [new("Cooked", ".cooked"), new("Content", "Content")] });
+                session.ChangeContext(first with { AuthoringMounts = [new("Content", "Content")] });
                 changes.OnNext(new(Oxygen.Managed.Assets.Catalog.AssetChangeKind.Added, AssetPath.Parse("/Cooked/Published.omat")));
             }
         }

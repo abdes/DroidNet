@@ -393,8 +393,9 @@ auto ContentVm::StartImport(const std::filesystem::path& source_path) -> void
       .settings_json = content::import::ModelImportRecord::MakeSettings(model),
       .mounts = make_observer(&mounts),
     });
-    auto publication = content::import::ModelImportRecord::Prepare(
-      location.record_path, mounts, std::move(location.diagnostics));
+    auto publication
+      = content::import::ModelImportRecord::Prepare(location.record_path,
+        GeneratedStorage(), mounts, std::move(location.diagnostics));
     const auto job_id = import_service_->SubmitModelImport(
       std::move(publication),
       [this](content::import::ImportJobId id,
@@ -731,8 +732,8 @@ auto ContentVm::LoadImportRecord(const std::filesystem::path& path) -> void
 {
   try {
     const auto record = runtime::NormalizePath(path);
-    const auto root
-      = content::import::ModelImportRecord::SelectedGeneration(record);
+    const auto root = content::import::ModelImportRecord::SelectedGeneration(
+      record, GeneratedStorage());
     if (!root
       || !std::filesystem::exists(
         base::ToNativePath(*root / "container.index.bin"))) {
@@ -820,7 +821,8 @@ auto ContentVm::RestorePersistedLibraryState() -> void
     try {
       if (const auto root
         = content::import::ModelImportRecord::SelectedGeneration(
-          pending_scene_selection_restore_->import_record_path)) {
+          pending_scene_selection_restore_->import_record_path,
+          GeneratedStorage())) {
         pending_scene_selection_restore_->source_path
           = *root / "container.index.bin";
         pending_scene_selection_restore_->source_is_pak = false;
@@ -994,7 +996,8 @@ auto ContentVm::FindModelImportRecord(const std::filesystem::path& index_path)
   for (const auto& record : loaded_import_records_) {
     try {
       const auto selected
-        = content::import::ModelImportRecord::SelectedGeneration(record);
+        = content::import::ModelImportRecord::SelectedGeneration(
+          record, GeneratedStorage());
       if (selected
         && runtime::NormalizePath(*selected).parent_path()
           == generation_parent) {
@@ -1193,6 +1196,12 @@ auto ContentVm::SetOnSceneLoadCancelRequested(std::function<void()> callback)
   -> void
 {
   on_scene_load_cancel_requested_ = std::move(callback);
+}
+
+auto ContentVm::GeneratedStorage() const
+  -> content::import::ModelImportGenerations
+{
+  return { .root = GetGeneratedStorageRoot() };
 }
 
 auto ContentVm::GetGeneratedStorageRoot() const -> std::string

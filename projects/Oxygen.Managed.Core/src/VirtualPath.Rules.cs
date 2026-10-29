@@ -182,7 +182,7 @@ public static class VirtualPath
 
     /// <summary>
     /// Gets a value indicating whether a segment below a mount names derived content: it starts with <c>.</c>
-    /// (<c>.cooked</c>, <c>.imported</c>, <c>.build</c>, <c>.pipeline</c>) or is <c>SourceMedia</c>.
+    /// (such as <c>.build</c> or <c>.pipeline</c>) or is <c>SourceMedia</c>.
     /// </summary>
     /// <param name="segment">The segment.</param>
     /// <returns><see langword="true"/> for derived content, which an authored path refuses.</returns>

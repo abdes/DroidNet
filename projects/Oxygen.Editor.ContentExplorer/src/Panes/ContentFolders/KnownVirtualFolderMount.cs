@@ -5,22 +5,17 @@
 namespace Oxygen.Editor.ContentExplorer.Panes.ContentFolders;
 
 /// <summary>
-///     Identifies the built-in virtual folder mounts offered by the Content Folders pane.
+///     Identifies the output folder nodes the Content Folders pane can show; view state, never mounts.
 /// </summary>
 public enum KnownVirtualFolderMount
 {
     /// <summary>
-    ///     Mount the project's cooked output folder (<c>.cooked</c>).
+    ///     Show the project's cooked output folder (<c>.cooked</c>).
     /// </summary>
     Cooked,
 
     /// <summary>
-    ///     Mount the project's imported assets folder (<c>.imported</c>).
-    /// </summary>
-    Imported,
-
-    /// <summary>
-    ///     Mount the project's build output folder (<c>.build</c>).
+    ///     Show the project's build output folder (<c>.build</c>).
     /// </summary>
     Build,
 }

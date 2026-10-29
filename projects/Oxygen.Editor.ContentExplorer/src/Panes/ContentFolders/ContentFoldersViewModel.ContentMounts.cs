@@ -9,6 +9,7 @@ using DroidNet.Controls;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Assets.Persistence.LooseCooked;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentExplorer.Panes.ContentFolders;
@@ -55,6 +56,7 @@ public partial class ContentFoldersViewModel
         candidate.AuthoringMounts.Clear();
         candidate.LocalFolderMounts.Clear();
         candidate.PakFileMounts.Clear();
+        candidate.OutputFolderViews.Clear();
         foreach (var row in rows)
         {
             switch (row.Kind)
@@ -65,8 +67,11 @@ public partial class ContentFoldersViewModel
                 case ContentMountKind.PakLibrary:
                     candidate.PakFileMounts.Add(new(row.Name, FileSystemPath.From(row.AbsolutePath!), row.IsExpanded));
                     continue;
-                case ContentMountKind.ProjectSource or ContentMountKind.Derived:
+                case ContentMountKind.ProjectSource:
                     candidate.AuthoringMounts.Add(new(row.Name, row.RelativePath!, row.IsExpanded));
+                    continue;
+                case ContentMountKind.Derived:
+                    candidate.OutputFolderViews.Add(new(row.RelativePath!, row.IsExpanded));
                     continue;
                 case ContentMountKind.LocalLibrary:
                     break;
@@ -129,9 +134,9 @@ public partial class ContentFoldersViewModel
             return;
         }
 
-        ApplyMountRows(expected, candidate, model.Mounts, folder => expected.FileSystem.File.Exists(Path.Combine(folder, "container.index.bin")));
+        ApplyMountRows(expected, candidate, model.Mounts, folder => expected.FileSystem.File.Exists(Path.Combine(folder, LooseCookedIndex.FileName)));
         if (candidate.AuthoringMounts.SequenceEqual(expected.AuthoringMounts) && candidate.LocalFolderMounts.SequenceEqual(expected.LocalFolderMounts)
-            && candidate.PakFileMounts.SequenceEqual(expected.PakFileMounts))
+            && candidate.PakFileMounts.SequenceEqual(expected.PakFileMounts) && candidate.OutputFolderViews.SequenceEqual(expected.OutputFolderViews))
         {
             return;
         }

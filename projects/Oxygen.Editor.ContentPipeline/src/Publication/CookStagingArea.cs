@@ -6,6 +6,7 @@ using System.Collections.Immutable;
 using DroidNet.Storage;
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Assets.Persistence.LooseCooked;
 
 namespace Oxygen.Editor.ContentPipeline.Publication;
 
@@ -49,7 +50,7 @@ internal sealed class CookStagingArea : IAsyncDisposable
             }
 
             if (!inventories.TryGetValue(root.Mount, out var inventory)
-                || !root.Before.Files.TryGetValue("container.index.bin", out var index)
+                || !root.Before.Files.TryGetValue(LooseCookedIndex.FileName, out var index)
                 || index.Size != inventory.IndexSize
                 || !string.Equals(index.Sha256, inventory.IndexSha256, StringComparison.OrdinalIgnoreCase))
             {
@@ -77,7 +78,7 @@ internal sealed class CookStagingArea : IAsyncDisposable
                 }
             }
 
-            if (root.Before.Files.Keys.Any(path => path is not ("container.index.bin" or ".generation.lock") && !inventory.Files.ContainsKey(path)))
+            if (root.Before.Files.Keys.Any(path => path is not (LooseCookedIndex.FileName or LooseCookedIndex.GenerationLeaseFileName) && !inventory.Files.ContainsKey(path)))
             {
                 throw new IOException($"Cooked membership changed before staging '{root.Mount}'. Retry the cook.");
             }

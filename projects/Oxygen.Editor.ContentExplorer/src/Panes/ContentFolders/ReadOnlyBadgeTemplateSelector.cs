@@ -9,8 +9,8 @@ using DependencyObject = Microsoft.UI.Xaml.DependencyObject;
 namespace Oxygen.Editor.ContentExplorer.Panes.ContentFolders;
 
 /// <summary>
-///     Gives mounted sources (Cooked, Imported, Build, local libraries and paks) a read-only badge, so derived output
-///     is never mistaken for authored content.
+///     Gives read-only sources (the Cooked and Build output folders, local libraries and paks) a read-only badge, so
+///     derived output is never mistaken for authored content.
 /// </summary>
 public partial class ReadOnlyBadgeTemplateSelector : DataTemplateSelector
 {

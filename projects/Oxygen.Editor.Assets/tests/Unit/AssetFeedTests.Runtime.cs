@@ -6,6 +6,7 @@ using AwesomeAssertions;
 using Oxygen.Editor.Assets.Runtime;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.ContentPipeline.Status;
+using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
 using Oxygen.Editor.Assets.TestSupport;
@@ -30,9 +31,9 @@ public sealed partial class AssetFeedTests
         var reader = new DelegateStatusReader((_, _, _) =>
         {
             reads++;
-            return Task.FromResult<IReadOnlyList<AssetCookStatus>>([new(identity, AssetCookFreshness.Current, HasPublishedOutput: true, OutputAvailability: CookedOutputAvailability.Present, [new(identity, identity, Oxygen.Editor.ContentPipeline.ContentCookAssetKind.Material, "Content", "/Content/Materials/Red.omat") { DescriptorRelativePath = "Materials/Red.omat" }], []) { OutputRoots = System.Collections.Immutable.ImmutableDictionary<string, FileSystemPath>.Empty.Add("Content", FileSystemPath.From(workspace.SourcePath(".cooked/Content"))) }]);
+            return Task.FromResult<IReadOnlyList<AssetCookStatus>>([new(identity, AssetCookFreshness.Current, HasPublishedOutput: true, OutputAvailability: CookedOutputAvailability.Present, [new(identity, identity, Oxygen.Editor.ContentPipeline.ContentCookAssetKind.Material, "Content", "/Content/Materials/Red.omat") { DescriptorRelativePath = "Materials/Red.omat" }], []) { OutputRoots = System.Collections.Immutable.ImmutableDictionary<string, FileSystemPath>.Empty.Add("Content", FileSystemPath.From(workspace.SourcePath(".cooked/generations/0123456789abcdef0123456789abcdef"))) }]);
         });
-        using var provider = AssetFeeds.Create(new TestProjectAssetCatalog([new AssetRecord(AssetPath.Parse("/Content/Materials/Red.omat.json"))]), context, new WorkspaceCookScopeProvider(workspace), cookStatus: reader, runtimeStatus: preview);
+        using var provider = AssetFeeds.Create(new TestProjectAssetCatalog([new AssetRecord(AssetPath.Parse("/Content/Materials/Red.omat.json"))]), context, new ProjectCookScopeProvider(), cookStatus: reader, runtimeStatus: preview);
         IReadOnlyList<AssetEntry> rows = [];
         IReadOnlyList<AssetEntry> choices = [];
         provider.Items.Subscribe(new Observer<IReadOnlyList<AssetEntry>>(value => rows = value), this.TestContext.CancellationToken);
@@ -41,7 +42,7 @@ public sealed partial class AssetFeedTests
         _ = rows.Single().PrimaryBadge.Should().Be("Cooked");
         _ = preview.RequestedProjects.Should().Contain(projectId);
         var baselineReads = reads;
-        var mounted = new AssetRuntimeStatus(AssetRuntimeContentState.Mounted, [FileSystemPath.From(workspace.SourcePath(".cooked/Content"))], []);
+        var mounted = new AssetRuntimeStatus(AssetRuntimeContentState.Mounted, [FileSystemPath.From(workspace.SourcePath(".cooked/generations/0123456789abcdef0123456789abcdef"))], []);
         preview.Publish(mounted);
         _ = rows.Single().PrimaryBadge.Should().Be("Ready");
         foreach (var (success, text) in new (bool?, string)[] { (null, "Updating preview"), (false, "Preview issue"), (true, "Ready") })

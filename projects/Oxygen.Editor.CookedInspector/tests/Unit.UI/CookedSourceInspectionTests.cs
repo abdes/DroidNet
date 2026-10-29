@@ -42,7 +42,7 @@ internal sealed class CookedSourceInspectionTests : DroidNet.Tests.VisualUserInt
             };
             var high = low with
             {
-                ContainerPath = session.Context.ProjectRoot.Combine(".cooked").Combine("Content"),
+                ContainerPath = session.Context.ProjectRoot.Combine(".cooked").Combine("generations").Combine(Guid.NewGuid().ToString("N")),
                 AssetKey = new(3, 4),
             };
             var effective = new AssetEntry(asset, "Shared", AssetKind.Material, AssetState.Cooked, DerivedState: null, AssetRuntimeAvailability.Mounted, asset.VirtualPath, SourcePath: null, DescriptorPath: null, CookedPath: high.ContainerPath.Combine("Shared.omat"), AssetGuid: null, [], IsSelectable: true)

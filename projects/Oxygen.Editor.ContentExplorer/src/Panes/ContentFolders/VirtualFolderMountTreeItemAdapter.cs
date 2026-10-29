@@ -13,7 +13,7 @@ using Oxygen.Managed.Core;
 namespace Oxygen.Editor.ContentExplorer.Panes.ContentFolders;
 
 /// <summary>
-///     Represents a virtual folder mount node (utility/secondary roots like .cooked, .imported, .build, or an arbitrary folder).
+///     Represents a virtual folder mount node (the Cooked or Build output folder node, or a local library folder).
 /// </summary>
 public sealed partial class VirtualFolderMountTreeItemAdapter : TreeItemAdapter, IDisposable, ILogicalFolderRoot
 {

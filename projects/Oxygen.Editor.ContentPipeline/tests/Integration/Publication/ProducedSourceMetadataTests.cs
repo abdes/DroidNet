@@ -183,11 +183,11 @@ public sealed class ProducedSourceMetadataTests
         {
             DescriptorRelativePath = "Geometry/Model.ogeo",
         };
-        var path = Path.Combine(project.Root, ".cooked/Content/Geometry/Model.ogeo");
+        var rootPath = Path.Combine(project.Root, ".cooked", "generations", Guid.NewGuid().ToString("N"));
+        var path = Path.Combine(rootPath, "Geometry", "Model.ogeo");
         _ = Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         await File.WriteAllTextAsync(path, "geometry", this.TestContext.CancellationToken).ConfigureAwait(false);
         var product = new CookProvenance.Product(uri, beforeFingerprint, [], [new(output, "Content")]) { ReuseFingerprint = reuseFingerprint };
-        var rootPath = Path.Combine(project.Root, ".cooked", "Content");
         Oxygen.Testing.NativeInventoryFixture.WriteIndex(rootPath, [new(output.VirtualPath, output.Kind) { DescriptorRelativePath = "Geometry/Model.ogeo" }]);
         var inventory = Oxygen.Testing.NativeInventoryFixture.Read(rootPath);
         var root = new CookProvenance.Root("Content", inventory.SourceKey, inventory.IndexSha256);

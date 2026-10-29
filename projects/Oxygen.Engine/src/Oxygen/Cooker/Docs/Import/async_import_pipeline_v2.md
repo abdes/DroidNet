@@ -142,12 +142,14 @@ Original external files are read inputs; importing never writes metadata beside
 them.
 
 Each attempt cooks into a new private directory under
-`<content_root>/.cooked/Imports/<source_identity>/<generation-id>`. It neither
-modifies a published generation nor copies an earlier aggregate root. After successful
-native validation and the check that the source bytes did not change, the
-publisher writes the record's new provenance, published nodes and fingerprint,
-then selects the generation in
-`<content_root>/.cooked/Imports/<source_identity>/head.json`.
+`<generations_root>/<source_identity>/<generation-id>`. The generations root is
+a folder the caller owns and names; it is never derived from the content root,
+whose output folders may belong to another publisher (an editor project's
+`.cooked/` belongs to the editor). An attempt neither modifies a published
+generation nor copies an earlier aggregate root. After successful native
+validation and the check that the source bytes did not change, the publisher
+writes the record's new provenance, published nodes and fingerprint, then
+selects the generation in `<generations_root>/<source_identity>/head.json`.
 Record changes or a competing publication fail the expected-revision check and
 leave the previous generation selected. Failed or interrupted attempts remain
 unselected and leave the record unchanged.
@@ -170,9 +172,8 @@ for the editor and the ImportTool: source, virtual path, settings, source
 identity, surface provenance, node continuity, published nodes and source
 fingerprint. `Prepare` reserves one unique attempt, and
 `AsyncImportService::SubmitModelImport` executes it. The selected
-generation is publication state, kept in
-`<content_root>/.cooked/Imports/<source_identity>/head.json`, never in the
-record. See the editor's
+generation is publication state, kept in the caller's
+`<generations_root>/<source_identity>/head.json`, never in the record. See the editor's
 [scene instances](../../../../../../../design/editor/lld/scene-instances.md)
 NGN14. A prepared attempt is
 submitted once. Staging imports reject writes into marked generation roots.

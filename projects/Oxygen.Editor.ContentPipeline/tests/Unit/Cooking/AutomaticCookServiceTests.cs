@@ -534,7 +534,8 @@ public sealed partial class AutomaticCookServiceTests
             this.Session = new TestSession(TestProject.Create(new MockFileSystem()).Context with
             {
                 Name = "Cook on change",
-                AuthoringMounts = [new("Content", "Content"), new("Cooked", ".cooked")],
+                AuthoringMounts = [new("Content", "Content")],
+                OutputFolderViews = [new(ProjectOutputFolders.Cooked)],
             });
             _ = this.Runs.SetupGet(value => value.Runs).Returns(() => this.InProgress);
             _ = this.Runs.Setup(value => value.WhenWriterIdleAsync(It.IsAny<CancellationToken>()))

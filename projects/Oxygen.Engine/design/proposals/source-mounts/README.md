@@ -461,9 +461,10 @@ hold absolute paths, and a model whose mount moves keeps its record. A record
 lives at its model's identity: the model `/Content/Models/Ship.glb` has the
 record `<project_root>/Imports/Content/Models/Ship.glb.import.json`, and
 `Imports/` is read recursively. The UUIDv7 source identity is stored inside
-the record; giving the model another virtual path moves the record. Its
-generations are at `<project_root>/.cooked/Imports/<source_identity>/` with
-`head.json`. `LocateRecord` matches sources by mount path.
+the record; giving the model another virtual path moves the record. A
+record-only import publishes its generations into a folder the caller owns,
+`<generations_root>/<source_identity>/` with `head.json`, never into the
+project's own output folders. `LocateRecord` matches sources by mount path.
 
 ### Descriptor references
 

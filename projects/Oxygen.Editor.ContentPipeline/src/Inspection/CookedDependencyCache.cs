@@ -6,6 +6,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using DroidNet.Storage.Native;
+using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core.Compatibility;
@@ -94,7 +95,7 @@ internal static class CookedDependencyCache
     }
 
     private static string CachePath(string projectRoot, string fingerprint)
-        => Path.Combine(projectRoot, ".build", "cache", "cooked-dependencies-v3", fingerprint + ".json");
+        => ProjectOutputFolders.BuildPath(projectRoot, "cache", "cooked-dependencies-v3", fingerprint + ".json");
 
     private sealed record CachedReport(string Fingerprint, string Digest, string Report);
 }

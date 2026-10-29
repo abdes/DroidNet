@@ -284,8 +284,9 @@ writer and no reader and are not needed by this design or any planned one:
 | `.imported` | Project layout LLD ("import intermediate/cache output")    | Nothing writes it. The Content Explorer shows it as a built-in `Imported` node, which is always empty | Retired |
 | `.oxygen`   | Project layout LLD ("editor-local project metadata/cache") | Nothing. The `.oxygen-` hits in the code are temporary file-name prefixes, not this folder            | Retired |
 
-Model generations, the only import output, live in `.cooked/imports`, and no
-design plans editor state inside the project folder. A future output folder
+Model generations, the only import output, live in the editor's mount
+generations in `.cooked/generations`, and no design plans editor state inside
+the project folder. A future output folder
 needs no specification: the rule already covers it. Retiring the two removes
 specification and UI, never behavior:
 

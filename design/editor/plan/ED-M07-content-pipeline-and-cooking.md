@@ -21,7 +21,7 @@ Content/Scenes/*.oscene.json
 Content/Materials/*.omat.json
 Content/Geometry/*.ogeo.json
 Content/SourceMedia/...
-.cooked/<Mount>/container.index.bin
+.cooked/generations/<SourceKey>/container.index.bin
 ```
 
 ## 2. PRD Traceability
@@ -118,8 +118,10 @@ Out of scope:
   - manifest validation uses the native `oxygen.import-manifest.schema.json`
     before any import/build execution.
 - Record manifest layout policy for each authored mount:
-  - physical output root is `<ProjectRoot>/.cooked/<MountName>`.
-  - manifest `layout.virtual_mount_root` is `/<MountName>`.
+  - physical output root is the mount's generation,
+    `<ProjectRoot>/.cooked/generations/<SourceKey>`, passed as `--cooked-root`.
+  - the root holds the one mount its identities name; the manifest has no
+    layout.
   - cooked-index virtual paths must round-trip to `asset:///<MountName>/...`.
 - Audit and record every current direct cooked-root refresh publisher:
   - remove or reroute `AssetsCookedMessage` publication from scene save,
@@ -266,11 +268,10 @@ Out of scope:
   request/builder construction is a secondary adapter check, not the primary
   validation path.
 - Manifest serialization must use the native schema property names: `version`,
-  `output`, `layout`, `virtual_mount_root`, `jobs`, `id`, `type`, `source`,
-  `depends_on`, `name`.
-- For each authored mount, manifest `output` is
-  `<ProjectRoot>/.cooked/<MountName>` and `layout.virtual_mount_root` is
-  `/<MountName>`.
+  `mounts`, `source_key`, `jobs`, `id`, `type`, `source`, `depends_on`,
+  `name`.
+- For each authored mount, the ImportTool's `--cooked-root` is
+  `<ProjectRoot>/.cooked/generations/<SourceKey>`.
 - Add tests for scene dependency ordering and source path normalization.
 
 ### ED-M07.7 - Cook Orchestration
@@ -403,7 +404,7 @@ Source/test validation expected before user manual validation:
    environment subobjects.
 7. Manifest builder orders scene dependencies after material/geometry jobs.
 8. Manifest writer emits native schema property names and mount layout:
-   `.cooked/Content` with `virtual_mount_root=/Content`.
+   the mount's generation as `--cooked-root`, with no layout.
 9. Manifest validation uses the native JSON schema before execution.
 10. Cook orchestration does not call `LooseCookedBuildService` directly after a
     managed `ImportService.ImportAsync` path.

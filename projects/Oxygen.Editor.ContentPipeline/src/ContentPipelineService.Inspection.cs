@@ -7,6 +7,7 @@ using Oxygen.Editor.ContentPipeline.Incremental;
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Assets.Persistence.LooseCooked;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
@@ -68,7 +69,7 @@ public sealed partial class ContentPipelineService
             Severity = DiagnosticSeverity.Error,
             Code = ContentPipelineDiagnosticCodes.ValidateFailed,
             Message = "The cooked index no longer matches its publication.",
-            AffectedPath = Path.Combine(rootPath, "container.index.bin"),
+            AffectedPath = Path.Combine(rootPath, LooseCookedIndex.FileName),
         };
 
     private static async Task ReleaseInspectionGateAsync(Task drain, CookPublicationReadLease reader)

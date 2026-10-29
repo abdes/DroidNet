@@ -85,9 +85,10 @@ public sealed partial class ContentMountRow : ObservableObject
 
     /// <summary>
     /// Gets a value indicating whether the mount can be renamed. A project source's name is the first segment of
-    /// every asset identity inside it, so it keeps its name until relocation updates references.
+    /// every asset identity inside it, so it keeps its name until relocation updates references; an output folder node
+    /// keeps its reserved name.
     /// </summary>
-    public bool CanRename => this.Kind is not (ContentMountKind.ProjectSource or ContentMountKind.EngineContent);
+    public bool CanRename => this.Kind is not (ContentMountKind.ProjectSource or ContentMountKind.Derived or ContentMountKind.EngineContent);
 
     /// <summary>Gets a value indicating whether the row offers rename and unmount; the project's own content and the engine content have neither.</summary>
     public bool HasActions => !this.IsPrimary && !this.IsLocked;

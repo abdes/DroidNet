@@ -30,7 +30,7 @@ public sealed partial class ExplorerHistoryJourneyTests : DroidNet.Tests.VisualU
     [DataRow("Library")]
     public Task PhysicalFolderNavigationUsesDeclaredMountIdentity(string mount) => EnqueueAsync(async () =>
     {
-        using var fixture = new ExplorerRevealFixture(persisted: true, "Published");
+        using var fixture = new ExplorerRevealFixture(persisted: true);
         var (physical, expected) = await fixture.ConfigurePhysicalNavigationAsync(mount, this.TestContext.CancellationToken).ConfigureAwait(true);
         await fixture.OpenAsync().ConfigureAwait(true);
         await fixture.NavigateHistoryFolderAsync(physical, this.TestContext.CancellationToken, relativeToContent: false).ConfigureAwait(true);

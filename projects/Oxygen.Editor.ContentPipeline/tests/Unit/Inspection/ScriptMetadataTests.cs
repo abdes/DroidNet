@@ -17,7 +17,7 @@ namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Inspection;
 public sealed class ScriptMetadataTests
 {
     private const string Key = "10203040-5060-7080-90a0-b0c0d0e0f001";
-    private static readonly AssetPath Script = AssetPath.Parse("/.cooked/Scripts/rotate.oscript");
+    private static readonly AssetPath Script = AssetPath.Parse("/Content/Scripts/rotate.oscript");
 
     [TestMethod]
     public void CookedDeclarationsKeepOrderTypesDefaultsAndAssetKinds()
@@ -69,7 +69,7 @@ public sealed class ScriptMetadataTests
     private static string Report(string parameters)
         => $$"""
             { "schema_version": 1, "scripts": [
-              { "virtual_path": "/.cooked/Scripts/rotate.oscript", "asset_key": "{{Key}}", "parameters": [ {{parameters}} ] }
+              { "virtual_path": "/Content/Scripts/rotate.oscript", "asset_key": "{{Key}}", "parameters": [ {{parameters}} ] }
             ] }
             """;
 }

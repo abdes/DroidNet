@@ -5,6 +5,7 @@
 using System.Security.Cryptography;
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.ContentPipeline.Publication;
+using Oxygen.Managed.Assets.Persistence.LooseCooked;
 using Oxygen.Managed.Core.Compatibility;
 
 namespace Oxygen.Editor.ContentPipeline.Incremental;
@@ -25,7 +26,7 @@ internal sealed partial class CookOutputReadLease : IAsyncDisposable, IDisposabl
     private CookOutputReadLease(string root) => this.root = root;
 
     /// <summary>Gets a value indicating whether the adapter produced a physical native index.</summary>
-    public bool HasIndex => this.files.ContainsKey("container.index.bin");
+    public bool HasIndex => this.files.ContainsKey(LooseCookedIndex.FileName);
 
     /// <summary>Opens all existing output files without permitting replacement during validation.</summary>
     /// <param name="root">The physical cooked root.</param>
@@ -34,7 +35,7 @@ internal sealed partial class CookOutputReadLease : IAsyncDisposable, IDisposabl
     /// <returns>The acquired lease; an adapter without physical output yields an empty lease.</returns>
     public static async Task<CookOutputReadLease> AcquireAsync(string root, CancellationToken cancellationToken, bool requireIndex = true)
     {
-        if (!Directory.Exists(root) || (requireIndex && !File.Exists(Path.Combine(root, "container.index.bin"))))
+        if (!Directory.Exists(root) || (requireIndex && !File.Exists(Path.Combine(root, LooseCookedIndex.FileName))))
         {
             return new(root);
         }
@@ -124,7 +125,7 @@ internal sealed partial class CookOutputReadLease : IAsyncDisposable, IDisposabl
         }
 
         ObjectDisposedException.ThrowIf(this.disposed, this);
-        if (!this.files.TryGetValue("container.index.bin", out var index))
+        if (!this.files.TryGetValue(LooseCookedIndex.FileName, out var index))
         {
             throw new InvalidDataException("The protected cooked root has no index.");
         }

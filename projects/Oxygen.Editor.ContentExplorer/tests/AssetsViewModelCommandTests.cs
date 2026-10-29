@@ -242,7 +242,8 @@ public sealed class AssetsViewModelCommandTests
         var session = new TestSession(TestProject.Create(root is null ? new MockFileSystem() : new RealFileSystem(), root).Context with
         {
             Name = "Commands",
-            AuthoringMounts = [new("Content", "Content"), new("Cooked", ".cooked")],
+            AuthoringMounts = [new("Content", "Content")],
+            OutputFolderViews = [new(ProjectOutputFolders.Cooked)],
         });
         var state = new ContentExplorerState();
         var folders = new Mock<IContentFoldersPane>();

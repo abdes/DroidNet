@@ -188,7 +188,7 @@ internal sealed partial class ContentImportManifestBuilderTests
         var projectContext = workspace.Context;
         var scope = new ContentCookScope(
             projectContext,
-            new ProjectCookScope(projectContext.ProjectId, FileSystemPath.From(workspace.Root), Path.Combine(workspace.Root, ".cooked")),
+            new ProjectCookScope(projectContext.ProjectId, FileSystemPath.From(workspace.Root)),
             [CreateMaterialInput(workspace, "Content/Materials/Red.omat.json")],
             CookTargetKind.Asset)
         { Output = workspace.Output };
@@ -231,7 +231,7 @@ internal sealed partial class ContentImportManifestBuilderTests
         var projectContext = workspace.Context;
         var scope = new ContentCookScope(
             projectContext,
-            new ProjectCookScope(projectContext.ProjectId, FileSystemPath.From(workspace.Root), Path.Combine(workspace.Root, ".cooked")),
+            new ProjectCookScope(projectContext.ProjectId, FileSystemPath.From(workspace.Root)),
             [CreateMaterialInput(workspace, "Content/Materials/Red.omat.json")],
             CookTargetKind.Asset)
         { Output = workspace.Output };
@@ -316,7 +316,7 @@ internal sealed partial class ContentImportManifestBuilderTests
         var projectContext = workspace.Context;
         return new ContentCookScope(
             projectContext,
-            new ProjectCookScope(projectContext.ProjectId, FileSystemPath.From(workspace.Root), Path.Combine(workspace.Root, ".cooked")),
+            new ProjectCookScope(projectContext.ProjectId, FileSystemPath.From(workspace.Root)),
             [
                 new ContentCookInput(
                     AssetPath.Parse("/Content/Scenes/Main.oscene"),

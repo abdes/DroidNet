@@ -118,6 +118,15 @@ public sealed class ProjectValidationService(IStorageProvider storage) : IProjec
                 "Project manifest does not declare any authoring mount roots.");
         }
 
+        if (projectInfo.OutputFolderViews.Any(static view => view.Folder is not (ProjectOutputFolders.Cooked or ProjectOutputFolders.Build))
+            || projectInfo.OutputFolderViews.DistinctBy(static view => view.Folder).Count() != projectInfo.OutputFolderViews.Count)
+        {
+            return ProjectValidationResult.Failure(
+                ProjectValidationState.InvalidContentRoots,
+                projectRoot,
+                $"Project manifest may show only {ProjectOutputFolders.Cooked} and {ProjectOutputFolders.Build}, each once.");
+        }
+
         var authoringRootFailure = await this.ValidateAuthoringMountsAsync(projectRoot, projectInfo, cancellationToken)
             .ConfigureAwait(false);
         return authoringRootFailure
@@ -134,10 +143,13 @@ public sealed class ProjectValidationService(IStorageProvider storage) : IProjec
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            // A mount of the pipeline's output is not authored content; it is skipped, not validated.
+            // An output folder is never a mount; the Content Explorer shows one through OutputFolderViews.
             if (ProjectOutputFolders.Contains(mount))
             {
-                continue;
+                return ProjectValidationResult.Failure(
+                    ProjectValidationState.InvalidContentRoots,
+                    projectRoot,
+                    $"Authoring mount '{mount.Name}' is in the output folder '{mount.RelativePath}'; output folders are never mounts.");
             }
 
             if (ProjectAssetFiles.ValidateDeclaredMountName(mount.Name) is not null || string.IsNullOrWhiteSpace(mount.RelativePath))
@@ -178,7 +190,7 @@ public sealed class ProjectValidationService(IStorageProvider storage) : IProjec
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            if (string.IsNullOrWhiteSpace(mount.Name) || mount.Root is null)
+            if (string.IsNullOrWhiteSpace(mount.Name) || ProjectAssetFiles.IsReservedMountName(mount.Name) || mount.Root is null)
             {
                 return ProjectValidationResult.Failure(
                     ProjectValidationState.InvalidContentRoots,
@@ -208,7 +220,7 @@ public sealed class ProjectValidationService(IStorageProvider storage) : IProjec
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            if (string.IsNullOrWhiteSpace(mount.Name) || mount.Path is null || !PakFileMount.IsPakFile(mount.Path.FullPath))
+            if (string.IsNullOrWhiteSpace(mount.Name) || ProjectAssetFiles.IsReservedMountName(mount.Name) || mount.Path is null || !PakFileMount.IsPakFile(mount.Path.FullPath))
             {
                 return ProjectValidationResult.Failure(
                     ProjectValidationState.InvalidContentRoots,

@@ -67,8 +67,8 @@ public sealed class ImportAdapterTests
     public async Task ImportAsync_ShouldPassCookedContextRootsAsArguments()
     {
         using var workspace = new ImportAdapterWorkspace();
-        var first = Path.Combine(workspace.Root, ".cooked", "Reference");
-        var second = Path.Combine(workspace.Root, ".cooked", "Other");
+        var first = Path.Combine(workspace.Root, ".cooked", "generations", Guid.NewGuid().ToString("N"));
+        var second = Path.Combine(workspace.Root, ".cooked", "generations", Guid.NewGuid().ToString("N"));
         var baseManifest = CreateManifest(workspace);
         var manifest = baseManifest with
         {
@@ -134,7 +134,7 @@ public sealed class ImportAdapterTests
     public async Task InspectLooseCookedRootAsync_ShouldReadLooseCookedIndex(byte assetType, ContentCookAssetKind expectedKind)
     {
         using var workspace = new ImportAdapterWorkspace();
-        var cookedRoot = Path.Combine(workspace.Root, ".cooked", "Content");
+        var cookedRoot = Path.Combine(workspace.Root, ".cooked", "generations", Guid.NewGuid().ToString("N"));
         WriteLooseCookedIndex(cookedRoot, assetType: assetType);
         var api = CreateApi(workspace);
 
@@ -155,7 +155,7 @@ public sealed class ImportAdapterTests
     public async Task InspectLooseCookedRootAsync_WhenDescriptorSizeMismatchesIndex_ShouldReturnDiagnostic()
     {
         using var workspace = new ImportAdapterWorkspace();
-        var cookedRoot = Path.Combine(workspace.Root, ".cooked", "Content");
+        var cookedRoot = Path.Combine(workspace.Root, ".cooked", "generations", Guid.NewGuid().ToString("N"));
         WriteLooseCookedIndex(cookedRoot, descriptorSize: 128, actualDescriptorBytes: new byte[256], fileSize: 8, actualFileBytes: new byte[8]);
         var api = CreateApi(workspace);
 
@@ -174,7 +174,7 @@ public sealed class ImportAdapterTests
     public async Task ValidateLooseCookedRootAsync_WhenDescriptorSizeMismatchesIndex_ShouldReturnDiagnostic()
     {
         using var workspace = new ImportAdapterWorkspace();
-        var cookedRoot = Path.Combine(workspace.Root, ".cooked", "Content");
+        var cookedRoot = Path.Combine(workspace.Root, ".cooked", "generations", Guid.NewGuid().ToString("N"));
         WriteLooseCookedIndex(cookedRoot, descriptorSize: 128, actualDescriptorBytes: new byte[256], fileSize: 8, actualFileBytes: new byte[8]);
         var api = CreateApi(workspace);
 
@@ -193,7 +193,7 @@ public sealed class ImportAdapterTests
     public async Task InspectLooseCookedRootAsync_WhenIndexMissing_ShouldReturnSynthesizedDiagnostic()
     {
         using var workspace = new ImportAdapterWorkspace();
-        var cookedRoot = Path.Combine(workspace.Root, ".cooked", "Content");
+        var cookedRoot = Path.Combine(workspace.Root, ".cooked", "generations", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(cookedRoot);
         var api = CreateApi(workspace);
 
@@ -211,7 +211,7 @@ public sealed class ImportAdapterTests
     public async Task ValidateLooseCookedRootAsync_WhenIndexMissing_ShouldReturnSynthesizedDiagnostic()
     {
         using var workspace = new ImportAdapterWorkspace();
-        var cookedRoot = Path.Combine(workspace.Root, ".cooked", "Content");
+        var cookedRoot = Path.Combine(workspace.Root, ".cooked", "generations", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(cookedRoot);
         var api = CreateApi(workspace);
 
@@ -229,7 +229,7 @@ public sealed class ImportAdapterTests
     public async Task InspectLooseCookedRootAsync_WhenIndexVersionIsUnsupported_ShouldReturnSynthesizedDiagnostic()
     {
         using var workspace = new ImportAdapterWorkspace();
-        var cookedRoot = Path.Combine(workspace.Root, ".cooked", "Content");
+        var cookedRoot = Path.Combine(workspace.Root, ".cooked", "generations", Guid.NewGuid().ToString("N"));
         WriteUnsupportedLooseCookedIndex(cookedRoot);
         var api = CreateApi(workspace);
 
@@ -247,7 +247,7 @@ public sealed class ImportAdapterTests
     public async Task ValidateLooseCookedRootAsync_WhenIndexVersionIsUnsupported_ShouldReturnSynthesizedDiagnostic()
     {
         using var workspace = new ImportAdapterWorkspace();
-        var cookedRoot = Path.Combine(workspace.Root, ".cooked", "Content");
+        var cookedRoot = Path.Combine(workspace.Root, ".cooked", "generations", Guid.NewGuid().ToString("N"));
         WriteUnsupportedLooseCookedIndex(cookedRoot);
         var api = CreateApi(workspace);
 

@@ -35,16 +35,27 @@ auto ReclaimCommand::BuildCommand() -> std::shared_ptr<clap::Command>
         .WithValue<std::string>()
         .StoreTo(&record_path_)
         .Build();
+  auto generations
+    = clap::Option::WithKey("output")
+        .About("Generations folder the record's imports published into")
+        .Short("i")
+        .Long("output")
+        .Required()
+        .WithValue<std::string>()
+        .StoreTo(&generations_root_)
+        .Build();
   return clap::CommandBuilder("reclaim")
     .About(
       "Remove unselected, unleased model import generations without importing")
-    .WithOption(std::move(record));
+    .WithOption(std::move(record))
+    .WithOption(std::move(generations));
 }
 
 auto ReclaimCommand::Execute() -> std::expected<void, std::error_code>
 {
   const auto removed = ModelImportRecord::ReclaimUnusedGenerations(
-    base::ToNativePath(record_path_));
+    base::ToNativePath(record_path_),
+    ModelImportGenerations { .root = base::ToNativePath(generations_root_) });
   fmt::print("Reclaimed {} unused generation(s): {}\n", removed, record_path_);
   return {};
 }

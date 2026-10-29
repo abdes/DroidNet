@@ -31,7 +31,7 @@ public sealed class AssetPathTests
     {
         _ = AssetPath.Create("Content").Should().Be(AssetPath.Content);
         _ = AssetPath.Create("Content", relativePath: string.Empty).IsMount.Should().BeTrue();
-        _ = AssetPath.Create(".cooked").VirtualPath.Should().Be("/.cooked");
+        _ = AssetPath.Create(".code").VirtualPath.Should().Be("/.code");
         _ = AssetPath.Content.RelativePath.Should().BeEmpty();
         _ = AssetPath.Content.Parent.Should().BeNull();
     }

@@ -16,6 +16,7 @@ using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentExplorer.Panes.Assets.Layouts;
 using Oxygen.Editor.ContentExplorer.Panes.ContentFolders;
 using Oxygen.Editor.ContentExplorer.TestSupport;
+using Oxygen.Editor.Projects;
 using Oxygen.Managed.Core;
 using static Oxygen.Editor.ContentExplorer.TestSupport.ExplorerTestData;
 
@@ -93,7 +94,7 @@ public sealed partial class ExplorerRevealTests : DroidNet.Tests.VisualUserInter
             _ = fixture.Folders.SelectedItem.Should().NotBeNull("the mounted folder must become the tree selection");
             _ = fixture.Folders.SelectedItem!.Label.Should().Be("Cooked");
         }
-        _ = fixture.Session.Context.AuthoringMounts.Should().ContainSingle(mount => mount.RelativePath == ".cooked");
+        _ = fixture.Session.Context.OutputFolderViews.Should().ContainSingle(view => view.Folder == ProjectOutputFolders.Cooked);
         _ = fixture.MountChanges.Should().Be(persisted ? 0 : 1);
     });
 
@@ -154,14 +155,14 @@ public sealed partial class ExplorerRevealTests : DroidNet.Tests.VisualUserInter
     });
 
     /// <summary>Imported output navigation opens the cooked tree and reveals all participating folders without per-row discovery.</summary>
-    /// <param name="cookedAlias">An already saved output mount name, or null to create the default mount.</param>
+    /// <param name="persisted">Whether the Cooked node was already saved before browser startup.</param>
     /// <returns>The asynchronous complete-browser imported-output regression.</returns>
     [TestMethod]
-    [DataRow(null)]
-    [DataRow("Published")]
-    public Task ImportedOutputsOpenTogetherWithoutManualMounting(string? cookedAlias) => EnqueueAsync(async () =>
+    [DataRow(false)]
+    [DataRow(true)]
+    public Task ImportedOutputsOpenTogetherWithoutManualMounting(bool persisted) => EnqueueAsync(async () =>
     {
-        using var fixture = new ExplorerRevealFixture(persisted: cookedAlias is not null, cookedAlias ?? "Cooked");
+        using var fixture = new ExplorerRevealFixture(persisted);
         var outputs = new[]
         {
             CreateNavigationAsset("/Content/Models/Crate/Materials/Paint.omat", AssetKind.Material),
@@ -171,7 +172,7 @@ public sealed partial class ExplorerRevealTests : DroidNet.Tests.VisualUserInter
         await fixture.OpenAsync().ConfigureAwait(true);
         fixture.Explorer.Query.SearchText = "hidden";
         _ = (await fixture.Explorer.ShowAssetsAsync(outputs.Select(static item => item.Identity).ToArray()).ConfigureAwait(true)).Should().BeTrue(fixture.Diagnostics);
-        _ = fixture.MountChanges.Should().Be(cookedAlias is null ? 1 : 0);
+        _ = fixture.MountChanges.Should().Be(persisted ? 0 : 1);
         _ = fixture.Layout.Assets.Select(static row => row.Item.Identity).Should().BeEquivalentTo(outputs.Select(static item => item.Identity));
         _ = fixture.Explorer.Query.SearchText.Should().BeEmpty();
         _ = fixture.Layout.SelectedAsset!.Identity.Should().Be(outputs[0].Identity);
@@ -196,6 +197,6 @@ public sealed partial class ExplorerRevealTests : DroidNet.Tests.VisualUserInter
         _ = fixture.Layout.SelectedAsset!.Identity.Should().Be(item.Identity);
         _ = fixture.Layout.SelectedAsset.DisplayPath.Should().Be("/Library/Materials/Shared.omat");
         _ = fixture.Explorer.Query.SearchText.Should().BeEmpty();
-        _ = fixture.Session.Context.AuthoringMounts.Should().NotContain(mount => mount.RelativePath == ".cooked");
+        _ = fixture.Session.Context.OutputFolderViews.Should().NotContain(view => view.Folder == ProjectOutputFolders.Cooked);
     });
 }

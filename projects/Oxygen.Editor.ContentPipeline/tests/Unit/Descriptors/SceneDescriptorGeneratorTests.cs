@@ -840,7 +840,7 @@ internal sealed partial class SceneDescriptorGeneratorTests
         var projectContext = workspace.Context;
         return new ContentCookScope(
             projectContext,
-            new ProjectCookScope(projectContext.ProjectId, FileSystemPath.From(workspace.Root), Path.Combine(workspace.Root, ".cooked")),
+            new ProjectCookScope(projectContext.ProjectId, FileSystemPath.From(workspace.Root)),
             [
                 new ContentCookInput(
                     AssetPath.Parse("/Content/Scenes/Main.oscene"),

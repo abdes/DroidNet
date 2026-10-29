@@ -484,7 +484,7 @@ Engine (cooker):
 - The layout's per-type folders go: the material, geometry, scene, texture,
   buffer and descriptors folders and the unused physics helpers of
   `LooseCookedLayout`, the `layout` keys of the import manifest schema except
-  `virtual_mount_root` and `resources_dir`, their parsing
+  `resources_dir`, their parsing
   (`ImportManifest.cpp:818-843`) and `MakeRecipe`'s copy.
 - Surface provenance is keyed by the geometry's name inside its model, not
   by the `AssetKey` of its virtual path (`SurfaceAllocation.cpp:31-52`,
@@ -535,8 +535,8 @@ Editor:
 - Import settings: `NativeSceneImportSettings` loses `OutputDirectory`,
   `OutputDirectories` and `OutputPrefixes`; its schema version is bumped and an
   older version is refused with a code. `SceneImportTarget` goes and
-  `ContentImportLayout` keeps only `virtual_mount_root`; the manifest builder
-  passes the model's identity.
+  `ContentImportLayout` goes, since a cooked root holds the one mount its
+  identities name; the manifest builder passes the model's identity.
 - Import flow: the destination the dialog asks for is where the model's bundle
   goes; `ImportSourceRetention` copies the bundle there instead of
   `SourceMedia/DCC`, refusing an existing destination. The dialog's preview

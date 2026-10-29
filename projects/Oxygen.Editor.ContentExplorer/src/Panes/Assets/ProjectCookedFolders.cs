@@ -10,12 +10,12 @@ namespace Oxygen.Editor.ContentExplorer.Panes.Assets;
 /// <summary>Maps project-output folders using the saved virtual mount names.</summary>
 internal static class ProjectCookedFolders
 {
-    /// <summary>Gets browser roots that expose the project's cooked directory.</summary>
+    /// <summary>Gets the browser root of the project's Cooked node, when the Content Explorer shows it.</summary>
     /// <param name="project">The active project, if any.</param>
-    /// <returns>The configured virtual paths.</returns>
+    /// <returns>The node's virtual path, or none.</returns>
     public static AssetPath[] Roots(ProjectContext? project)
-        => project?.AuthoringMounts.Where(static mount => string.Equals(mount.RelativePath.Replace('\\', '/').Trim('/'), ".cooked", StringComparison.OrdinalIgnoreCase))
-            .Select(static mount => AssetPath.Create(mount.Name)).ToArray() ?? [];
+        => project?.OutputFolderViews.Where(static view => string.Equals(view.Folder, ProjectOutputFolders.Cooked, StringComparison.Ordinal))
+            .Select(static view => AssetPath.Create(view.Name)).ToArray() ?? [];
 
     /// <summary>Removes a configured cooked mount prefix from a browser folder.</summary>
     /// <param name="selectedFolder">The browser location.</param>

@@ -54,7 +54,7 @@ internal static partial class AssetRelocationTransaction
             CreatedDirectories = [.. GetMissingParents(fileSystem, plan.Moves)],
             Edits = [.. plan.Edits.Select(static edit => new JournalEdit(edit.FinalPath.FullPath, edit.Before.Sha256, Hash(edit.AfterContent), edit.BeforeContent))],
         };
-        var path = Path.Combine(project.ProjectRoot.FullPath, ".build", JournalFolder, Guid.NewGuid().ToString("N"), JournalName);
+        var path = ProjectOutputFolders.BuildPath(project.ProjectRoot.FullPath, JournalFolder, Guid.NewGuid().ToString("N"), JournalName);
         _ = fileSystem.Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         await WriteJournalAsync(files, path, journal).ConfigureAwait(false);
         LogJournalOpened(logger, path, journal.Moves.Length, journal.Edits.Length);
@@ -104,7 +104,7 @@ internal static partial class AssetRelocationTransaction
     {
         ArgumentNullException.ThrowIfNull(project);
         var fileSystem = project.FileSystem;
-        var root = Path.Combine(project.ProjectRoot.FullPath, ".build", JournalFolder);
+        var root = ProjectOutputFolders.BuildPath(project.ProjectRoot.FullPath, JournalFolder);
         if (!fileSystem.Directory.Exists(root))
         {
             return;

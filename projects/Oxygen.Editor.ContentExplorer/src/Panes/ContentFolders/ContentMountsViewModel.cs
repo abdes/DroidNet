@@ -14,8 +14,9 @@ namespace Oxygen.Editor.ContentExplorer.Panes.ContentFolders;
 
 /// <summary>
 /// The Content mounts dialog: every mount with its virtual name, backing path and kind, with rename and unmount,
-/// and a form that adds Cooked, Imported, Build, a local folder or a pak file. The engine content is listed last, always
-/// mounted. Edits are staged and applied together.
+/// and a form that adds a local folder, a pak file, or the Cooked or Build output folder node. An output folder node is
+/// view state, never a mount, and keeps its reserved name. The engine content is listed last, always mounted. Edits
+/// are staged and applied together.
 /// </summary>
 public sealed partial class ContentMountsViewModel : ObservableObject
 {
@@ -25,7 +26,7 @@ public sealed partial class ContentMountsViewModel : ObservableObject
     /// <summary>The add-form choice for a pak file anywhere on disk.</summary>
     public const string PakFileKind = "Pak file";
 
-    private static readonly (string Kind, string Path)[] KnownLocations = [("Cooked", ".cooked"), ("Imported", ".imported"), ("Build", ".build")];
+    private static readonly string[] OutputFolders = [ProjectOutputFolders.Cooked, ProjectOutputFolders.Build];
 
     private readonly IDialogService dialogService;
 
@@ -38,15 +39,23 @@ public sealed partial class ContentMountsViewModel : ObservableObject
         ArgumentNullException.ThrowIfNull(project);
         ArgumentNullException.ThrowIfNull(engineContent);
         this.dialogService = dialogService;
-        var content = project.AuthoringMounts.FirstOrDefault(static mount => !ContentFoldersViewModel.IsPersistedProjectRelativeVirtualMount(mount));
+        var content = project.AuthoringMounts.FirstOrDefault();
         foreach (var mount in project.AuthoringMounts)
         {
-            var derived = ContentFoldersViewModel.IsPersistedProjectRelativeVirtualMount(mount);
-            this.Mounts.Add(new(this, mount.Name, "./" + mount.RelativePath.Replace('\\', '/').Trim('/'), derived ? ContentMountKind.Derived : ContentMountKind.ProjectSource)
+            this.Mounts.Add(new(this, mount.Name, "./" + mount.RelativePath.Replace('\\', '/').Trim('/'), ContentMountKind.ProjectSource)
             {
                 RelativePath = mount.RelativePath,
                 IsExpanded = mount.IsExpanded,
                 IsPrimary = ReferenceEquals(mount, content),
+            });
+        }
+
+        foreach (var view in project.OutputFolderViews)
+        {
+            this.Mounts.Add(new(this, view.Name, "./" + view.Folder, ContentMountKind.Derived)
+            {
+                RelativePath = view.Folder,
+                IsExpanded = view.IsExpanded,
             });
         }
 
@@ -76,7 +85,7 @@ public sealed partial class ContentMountsViewModel : ObservableObject
     public ObservableCollection<ContentMountRow> Mounts { get; } = [];
 
     /// <summary>Gets the locations the add form offers.</summary>
-    public IReadOnlyList<string> Kinds { get; } = [LocalFolderKind, PakFileKind, .. KnownLocations.Select(static location => location.Kind)];
+    public IReadOnlyList<string> Kinds { get; } = [LocalFolderKind, PakFileKind, .. OutputFolders.Select(ProjectOutputFolders.ViewName)];
 
     /// <summary>Gets or sets the location to add.</summary>
     [ObservableProperty]
@@ -183,16 +192,11 @@ public sealed partial class ContentMountsViewModel : ObservableObject
 
         if (!this.IsExternal)
         {
-            var (kind, path) = KnownLocations.Single(location => string.Equals(location.Kind, this.SelectedKind, StringComparison.Ordinal));
-            if (this.Mounts.Any(row => row.Kind == ContentMountKind.Derived && string.Equals(row.RelativePath?.Trim('/', '\\'), path, StringComparison.OrdinalIgnoreCase)))
+            var path = OutputFolders.Single(folder => string.Equals(ProjectOutputFolders.ViewName(folder), this.SelectedKind, StringComparison.Ordinal));
+            var kind = ProjectOutputFolders.ViewName(path);
+            if (this.Mounts.Any(row => row.Kind == ContentMountKind.Derived && string.Equals(row.RelativePath, path, StringComparison.Ordinal)))
             {
-                this.ErrorMessage = $"{kind} is already mounted.";
-                return;
-            }
-
-            if (this.ValidateName(kind, ContentMountKind.Derived) is { } conflict)
-            {
-                this.ErrorMessage = conflict;
+                this.ErrorMessage = $"{kind} is already shown.";
                 return;
             }
 

@@ -6,6 +6,7 @@ using Oxygen.Editor.Assets;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
+using LooseCookedIndex = Oxygen.Managed.Assets.Persistence.LooseCooked.LooseCookedIndex;
 
 namespace Oxygen.Editor.ContentExplorer.Panes.Assets;
 
@@ -56,7 +57,7 @@ public static class CookedLibraryFolders
     {
         public bool HasContent(ProjectContext project) => this.Kind == CookedContentSourceKind.PakFile
             ? project.FileSystem.File.Exists(this.Container.FullPath)
-            : project.FileSystem.File.Exists(Path.Combine(this.Container.FullPath, "container.index.bin"));
+            : project.FileSystem.File.Exists(Path.Combine(this.Container.FullPath, LooseCookedIndex.FileName));
 
         public static Library[] Of(ProjectContext project)
             => [.. project.LocalFolderMounts.Select(static folder => new Library(CookedContentSourceKind.LocalFolder, folder.Name, folder.Root)),

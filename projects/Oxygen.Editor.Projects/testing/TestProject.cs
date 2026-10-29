@@ -94,6 +94,7 @@ public sealed class TestProject
             AuthoringMounts = [.. context.AuthoringMounts],
             LocalFolderMounts = [.. context.LocalFolderMounts],
             PakFileMounts = [.. context.PakFileMounts],
+            OutputFolderViews = [.. context.OutputFolderViews],
             CookedContentOrder = [.. context.CookedContentOrder],
             DefaultSceneId = context.DefaultSceneId,
             Settings = context.Settings,

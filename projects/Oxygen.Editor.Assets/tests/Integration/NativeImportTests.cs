@@ -37,7 +37,7 @@ public sealed class NativeImportTests
         using var runs = new ContentCookCoordinator(session, NullLogger<ContentCookCoordinator>.Instance);
         using var compatibility = Oxygen.Managed.Core.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
-        var scopes = new WorkspaceCookScopeProvider(workspace);
+        var scopes = new ProjectCookScopeProvider();
         var storage = new NativeStorageProvider(new RealFileSystem());
         var files = new NativeAtomicFileStore(new RealFileSystem());
         var engineContent = EngineContentPak.Installed();

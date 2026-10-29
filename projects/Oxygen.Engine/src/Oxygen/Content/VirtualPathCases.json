@@ -280,7 +280,7 @@
       "refusal": null
     },
     {
-      "mount": ".cooked",
+      "mount": ".code",
       "refusal": null
     },
     {
@@ -300,7 +300,7 @@
       "refusal": "vpath.mount.invalid"
     },
     {
-      "mount": "..cooked",
+      "mount": "..code",
       "refusal": "vpath.mount.invalid"
     },
     {
@@ -324,7 +324,7 @@
       "refusal": "vpath.mount.invalid"
     },
     {
-      "mount": ".1cooked",
+      "mount": ".1code",
       "refusal": "vpath.mount.invalid"
     },
     {
@@ -373,12 +373,12 @@
       "refusal": null
     },
     {
-      "path": "/.cooked/Materials/Wood.omat",
+      "path": "/.code/Test/Wood.omat",
       "rules": "cooked",
       "refusal": null
     },
     {
-      "path": "/Content/.cooked/Wood.omat",
+      "path": "/Content/.build/Wood.omat",
       "rules": "cooked",
       "refusal": null
     },
@@ -403,7 +403,7 @@
       "refusal": null
     },
     {
-      "path": "/.cooked/Materials/Wood.omat",
+      "path": "/.code/Test/Wood.omat",
       "rules": "authored",
       "refusal": null
     },
@@ -473,7 +473,7 @@
       "refusal": "vpath.mount_only"
     },
     {
-      "path": "/.cooked",
+      "path": "/.code",
       "rules": "cooked",
       "refusal": "vpath.mount_only"
     },
@@ -513,7 +513,7 @@
       "refusal": "vpath.segment.edge_space"
     },
     {
-      "path": "/Content/.cooked/Wood.omat",
+      "path": "/Content/.build/Wood.omat",
       "rules": "authored",
       "refusal": "vpath.segment.derived_content"
     },
@@ -528,7 +528,7 @@
       "refusal": "vpath.segment.derived_content"
     },
     {
-      "path": "/Content/.imported/x.omat",
+      "path": "/Content/.pipeline/x.omat",
       "rules": "authored",
       "refusal": "vpath.segment.derived_content"
     },

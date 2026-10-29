@@ -3,7 +3,7 @@
 Status:
 `Canonical V0.1 contract; implementation and qualification tracked by ED-M08`
 
-Last Updated: 2026-10-29 18:32
+Last Updated: 2026-10-29
 
 **Navigation:** [purpose](#1-purpose),
 [surface identity and reimport](#20-canonical-surface-identity-and-reimport),
@@ -275,10 +275,25 @@ Use an explicit manifest model that can be serialized to the native
 public sealed record ContentImportManifest(
     [property: JsonPropertyName("version")]
     int Version,
-    [property: JsonPropertyName("output")]
-    string Output,
+    [property: JsonIgnore]
+    string Output, // passed as --cooked-root, never written to the file
     [property: JsonPropertyName("jobs")]
-    IReadOnlyList<ContentImportJob> Jobs);
+    IReadOnlyList<ContentImportJob> Jobs)
+{
+    [JsonPropertyName("mounts")]
+    public IReadOnlyList<ContentImportMount>? Mounts { get; init; }
+
+    [JsonPropertyName("source_key")]
+    public Guid? SourceKey { get; init; }
+
+    // thread_pool_size, max_in_flight_jobs and concurrency: the run's settings.
+}
+
+public sealed record ContentImportMount(
+    [property: JsonPropertyName("name")]
+    string Name,
+    [property: JsonPropertyName("path")]
+    string Path);
 
 public sealed record ContentImportJob(
     [property: JsonPropertyName("id")]
@@ -292,7 +307,15 @@ public sealed record ContentImportJob(
     [property: JsonPropertyName("output")]
     string? Output,
     [property: JsonPropertyName("name")]
-    string? Name);
+    string? Name)
+{
+    [JsonPropertyName("virtual_path")]
+    public string? VirtualPath { get; init; }
+
+    // A model job names its record instead of a source.
+    [JsonPropertyName("record")]
+    public string? Record { get; init; }
+}
 ```
 
 The manifest writer must serialize the native schema property names shown above.
@@ -302,15 +325,19 @@ shape.
 
 Mount layout rules:
 
-- Each authored mount cooks to its own physical loose root:
+- Each authored mount cooks to its own physical loose root,
   `<ProjectRoot>/.cooked/generations/<SourceKey>`, selected by the project head.
-- The manifest `output` is that physical loose root.
+- That root is the ImportTool's `--cooked-root`; the manifest file has no
+  `output` and no `layout`.
 - A cooked root holds one mount, the one its identities name
-  (`/<MountName>/...`); the manifest declares no layout root.
+  (`/<MountName>/...`).
+- The manifest's `mounts` name the project's source mounts, without output
+  folders; job sources and descriptor references are mount paths resolved
+  through them.
 - Native descriptor references and cooked-index virtual paths use the same
   `/<MountName>/...` prefix.
 - Example for the built-in content mount:
-  - `output = <ProjectRoot>/.cooked/generations/<SourceKey>`
+  - `--cooked-root <ProjectRoot>/.cooked/generations/<SourceKey>`
   - material descriptor URI `asset:///Content/Materials/Red.omat.json` becomes
     native path `/Content/Materials/Red.omat`
   - cooked index entries must round-trip back to
@@ -1154,9 +1181,9 @@ retain their URIs. External source edits trigger stale state and an explicit
 reimport/cook; they cannot silently replace a dirty authored material.
 
 Portable project truth is Project.oxy, authored Content, retained
-`Content/SourceMedia`, import descriptors/settings, and Config. `.cooked`,
-`.imported`, `.pipeline`, `.build`, and `.oxygen` are reproducible/local and
-excluded from version control. Absolute local mounts are explicit nonportable
+`Content/SourceMedia`, model import records (`Imports/`), and Config. The
+output folders, `.cooked` and `.build` (which holds `.pipeline`), are
+reproducible and excluded from version control. Absolute local mounts are explicit nonportable
 dependencies, reported as such; the portable qualification fixture uses
 project-relative mounts only.
 

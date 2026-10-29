@@ -213,7 +213,7 @@ public sealed class CookedInventoryReport
     {
         if (path.Contains('\\', StringComparison.Ordinal) || path.Contains(':', StringComparison.Ordinal)
             || path.Split('/').Any(static segment => segment is "" or "." or "..")
-            || path is "container.index.bin" or ".generation.lock")
+            || path is LooseCookedIndex.FileName or LooseCookedIndex.GenerationLeaseFileName)
         {
             throw new InvalidDataException($"The native inventory contains a non-content path: {path}.");
         }

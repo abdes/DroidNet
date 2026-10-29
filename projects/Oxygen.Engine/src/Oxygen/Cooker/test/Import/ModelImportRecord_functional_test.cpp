@@ -61,6 +61,7 @@ using oxygen::content::import::ImportDiagnostic;
 using oxygen::content::import::ImportFormat;
 using oxygen::content::import::ImportReport;
 using oxygen::content::import::ImportSeverity;
+using oxygen::content::import::ModelImportGenerations;
 using oxygen::content::import::ModelImportRecord;
 using oxygen::content::import::ModelImportRecordLocation;
 using oxygen::content::import::ModelPublishedNode;
@@ -170,13 +171,20 @@ protected:
   //! Publishes an import that read the record's source as it is now.
   auto PublishRead(const std::filesystem::path& record) -> ImportReport
   {
-    auto attempt = ModelImportRecord::Prepare(record, mounts_);
+    auto attempt = ModelImportRecord::Prepare(record, Generations(), mounts_);
     auto report = Candidate(*attempt);
     report.source_fingerprint
       = Fingerprint(ModelImportRecord::Read(record, mounts_).source);
     attempt->ValidateCandidate(report);
     attempt->Publish(report);
     return report;
+  }
+
+  //! The generations folder the test owns, outside the content root's
+  //! output folders.
+  [[nodiscard]] auto Generations() const -> ModelImportGenerations
+  {
+    return ModelImportGenerations { .root = TempDir() / "Generations" };
   }
 
   MountTable mounts_;
@@ -369,7 +377,8 @@ NOLINT_TEST_F(
 {
   const auto record = NewRecord(source_, "/Content/Models/source.gltf");
 
-  const auto attempt = ModelImportRecord::Prepare(record, mounts_);
+  const auto attempt
+    = ModelImportRecord::Prepare(record, Generations(), mounts_);
 
   EXPECT_EQ(
     attempt->Request().asset_virtual_path, "/Content/Models/source.gltf");
@@ -378,7 +387,8 @@ NOLINT_TEST_F(
   report.source_fingerprint = Fingerprint(source_);
   attempt->ValidateCandidate(report);
   attempt->Publish(report);
-  EXPECT_EQ(ModelImportRecord::SelectedGeneration(record), report.cooked_root);
+  EXPECT_EQ(ModelImportRecord::SelectedGeneration(record, Generations()),
+    report.cooked_root);
 }
 
 NOLINT_TEST_F(ModelImportRecordTest, RecordCannotBeWrittenOutsideItsFolder)
@@ -401,7 +411,8 @@ NOLINT_TEST_F(
         "output_format":"bc7_srgb","data_format":"bc7","mip_policy":"full",
         "mip_filter":"kaiser","bc7_quality":"high"}]})";
   }
-  const auto before = ModelImportRecord::Prepare(record_, mounts_);
+  const auto before
+    = ModelImportRecord::Prepare(record_, Generations(), mounts_);
   ModelImportRecord::SaveRecipeFile(
     {
       .record_path = record_,
@@ -412,7 +423,8 @@ NOLINT_TEST_F(
       .mounts = oxygen::make_observer(&mounts_),
     },
     recipe_path, ImportFormat::kGltf);
-  const auto after = ModelImportRecord::Prepare(record_, mounts_);
+  const auto after
+    = ModelImportRecord::Prepare(record_, Generations(), mounts_);
   EXPECT_TRUE(
     std::filesystem::equivalent(after->Request().source_path, source_));
   EXPECT_EQ(after->Request().surface_provenance->SourceIdentity(),
@@ -453,7 +465,8 @@ NOLINT_TEST_F(ModelImportRecordTest, MissingSourceOnReplayIsSourceMissing)
 {
   std::filesystem::remove(source_);
   try {
-    static_cast<void>(ModelImportRecord::Prepare(record_, mounts_));
+    static_cast<void>(
+      ModelImportRecord::Prepare(record_, Generations(), mounts_));
     FAIL() << "Expected import.source_missing";
   } catch (const std::runtime_error& error) {
     EXPECT_THAT(error.what(), testing::HasSubstr("import.source_missing"));
@@ -464,7 +477,7 @@ NOLINT_TEST_F(ModelImportRecordTest, MissingSourceOnReplayIsSourceMissing)
 //! fingerprint with the generation, and changes nothing else.
 NOLINT_TEST_F(ModelImportRecordTest, PublishCommitsWhatTheImportEstablished)
 {
-  auto attempt = ModelImportRecord::Prepare(record_, mounts_);
+  auto attempt = ModelImportRecord::Prepare(record_, Generations(), mounts_);
   auto report = Candidate(*attempt);
   report.published_nodes = {
     ModelPublishedNode {
@@ -499,18 +512,37 @@ NOLINT_TEST_F(ModelImportRecordTest, PublishCommitsWhatTheImportEstablished)
     json::parse(std::ifstream(record_)).contains("published_generation"));
 }
 
+//! Generations live in the caller's generations folder, under the record's
+//! source identity; nothing is derived inside the content root.
+NOLINT_TEST_F(ModelImportRecordTest, PublishesIntoCallersGenerationsFolder)
+{
+  const auto report = PublishRead(record_);
+
+  EXPECT_EQ(report.cooked_root.parent_path(),
+    Generations().root / identity_.ToString());
+  EXPECT_TRUE(std::filesystem::exists(
+    Generations().root / identity_.ToString() / "head.json"));
+  EXPECT_FALSE(std::filesystem::exists(TempDir() / ".cooked"));
+  EXPECT_FALSE(ModelImportRecord::SelectedGeneration(
+    record_, ModelImportGenerations { .root = TempDir() / "Elsewhere" }));
+  EXPECT_THROW(
+    static_cast<void>(ModelImportRecord::Prepare(record_, {}, mounts_)),
+    std::invalid_argument);
+}
+
 NOLINT_TEST_F(
   ModelImportRecordTest, SelectsOnlyValidatedGenerationAndRetainsIdentity)
 {
-  auto attempt = ModelImportRecord::Prepare(record_, mounts_);
-  EXPECT_FALSE(ModelImportRecord::SelectedGeneration(record_));
+  auto attempt = ModelImportRecord::Prepare(record_, Generations(), mounts_);
+  EXPECT_FALSE(ModelImportRecord::SelectedGeneration(record_, Generations()));
   auto report = Candidate(*attempt);
   EXPECT_THROW(attempt->Publish(report), std::invalid_argument);
   attempt->ValidateCandidate(report);
   attempt->Publish(report);
-  EXPECT_EQ(ModelImportRecord::SelectedGeneration(record_), report.cooked_root);
+  EXPECT_EQ(ModelImportRecord::SelectedGeneration(record_, Generations()),
+    report.cooked_root);
   EXPECT_EQ(report.model_record_path, record_);
-  auto next = ModelImportRecord::Prepare(record_, mounts_);
+  auto next = ModelImportRecord::Prepare(record_, Generations(), mounts_);
   EXPECT_NE(next->Request().cooked_root, report.cooked_root);
   EXPECT_EQ(next->Request().surface_provenance->SourceIdentity(), identity_);
   EXPECT_NE(next->Request().source_key, attempt->Request().source_key);
@@ -519,29 +551,29 @@ NOLINT_TEST_F(
 NOLINT_TEST_F(
   ModelImportRecordTest, ConcurrentAttemptCannotOverwriteAcceptedGeneration)
 {
-  auto first = ModelImportRecord::Prepare(record_, mounts_);
-  auto second = ModelImportRecord::Prepare(record_, mounts_);
+  auto first = ModelImportRecord::Prepare(record_, Generations(), mounts_);
+  auto second = ModelImportRecord::Prepare(record_, Generations(), mounts_);
   auto accepted = Candidate(*first);
   auto stale = Candidate(*second);
   first->ValidateCandidate(accepted);
   second->ValidateCandidate(stale);
   first->Publish(accepted);
   EXPECT_THROW(second->Publish(stale), std::runtime_error);
-  EXPECT_EQ(
-    ModelImportRecord::SelectedGeneration(record_), accepted.cooked_root);
+  EXPECT_EQ(ModelImportRecord::SelectedGeneration(record_, Generations()),
+    accepted.cooked_root);
   EXPECT_TRUE(
     std::filesystem::exists(accepted.cooked_root / "container.index.bin"));
 }
 
 NOLINT_TEST_F(ModelImportRecordTest, SettingsChangeInvalidatesPendingCandidate)
 {
-  auto attempt = ModelImportRecord::Prepare(record_, mounts_);
+  auto attempt = ModelImportRecord::Prepare(record_, Generations(), mounts_);
   auto report = Candidate(*attempt);
   attempt->ValidateCandidate(report);
   settings_.normals_policy = "recalculate";
   SaveRecord(record_, source_, kVirtualPath);
   EXPECT_THROW(attempt->Publish(report), std::runtime_error);
-  EXPECT_FALSE(ModelImportRecord::SelectedGeneration(record_));
+  EXPECT_FALSE(ModelImportRecord::SelectedGeneration(record_, Generations()));
 }
 
 //! A failed or cancelled import leaves the record and the selected
@@ -549,12 +581,12 @@ NOLINT_TEST_F(ModelImportRecordTest, SettingsChangeInvalidatesPendingCandidate)
 NOLINT_TEST_F(
   ModelImportRecordTest, FailedOrCancelledAttemptLeavesTheRecordUnchanged)
 {
-  auto first = ModelImportRecord::Prepare(record_, mounts_);
+  auto first = ModelImportRecord::Prepare(record_, Generations(), mounts_);
   auto accepted = Candidate(*first);
   first->ValidateCandidate(accepted);
   first->Publish(accepted);
   const auto before = oxygen::base::ComputeFileSha256(record_);
-  auto next = ModelImportRecord::Prepare(record_, mounts_);
+  auto next = ModelImportRecord::Prepare(record_, Generations(), mounts_);
   auto failed = Candidate(*next);
   failed.source_fingerprint = Fingerprint(source_);
   failed.success = false;
@@ -564,15 +596,15 @@ NOLINT_TEST_F(
   std::stop_source cancel;
   cancel.request_stop();
   EXPECT_THROW(next->Publish(failed, cancel.get_token()), std::runtime_error);
-  EXPECT_EQ(
-    ModelImportRecord::SelectedGeneration(record_), accepted.cooked_root);
+  EXPECT_EQ(ModelImportRecord::SelectedGeneration(record_, Generations()),
+    accepted.cooked_root);
   EXPECT_EQ(oxygen::base::ComputeFileSha256(record_), before);
 }
 
 NOLINT_TEST_F(
   ModelImportRecordTest, OrdinarySubmissionCannotOverwriteMarkedGeneration)
 {
-  auto attempt = ModelImportRecord::Prepare(record_, mounts_);
+  auto attempt = ModelImportRecord::Prepare(record_, Generations(), mounts_);
   auto selected = Candidate(*attempt);
   attempt->ValidateCandidate(selected);
   attempt->Publish(selected);
@@ -591,13 +623,13 @@ NOLINT_TEST_F(
   ASSERT_EQ(
     future.wait_for(std::chrono::seconds(5)), std::future_status::ready);
   EXPECT_FALSE(future.get().success);
-  EXPECT_EQ(
-    ModelImportRecord::SelectedGeneration(record_), selected.cooked_root);
+  EXPECT_EQ(ModelImportRecord::SelectedGeneration(record_, Generations()),
+    selected.cooked_root);
 }
 
 NOLINT_TEST_F(ModelImportRecordTest, PreparedGenerationCannotBeSubmittedTwice)
 {
-  auto attempt = ModelImportRecord::Prepare(record_, mounts_);
+  auto attempt = ModelImportRecord::Prepare(record_, Generations(), mounts_);
   oxygen::content::import::AsyncImportService service(
     oxygen::content::import::AsyncImportService::Config {
       .thread_pool_size = 2,
@@ -614,14 +646,14 @@ NOLINT_TEST_F(
 {
   const auto report = PublishRead(record_);
   std::filesystem::remove_all(report.cooked_root.parent_path());
-  auto recook = ModelImportRecord::Prepare(record_, mounts_);
+  auto recook = ModelImportRecord::Prepare(record_, Generations(), mounts_);
   EXPECT_EQ(recook->Request().surface_provenance->SourceIdentity(), identity_);
 }
 
 NOLINT_TEST_F(
   ModelImportRecordTest, ReclamationKeepsSelectedAndLeasedGenerations)
 {
-  auto first = ModelImportRecord::Prepare(record_, mounts_);
+  auto first = ModelImportRecord::Prepare(record_, Generations(), mounts_);
   auto before = Candidate(*first);
   first->ValidateCandidate(before);
   first->Publish(before);
@@ -629,35 +661,39 @@ NOLINT_TEST_F(
     before.cooked_root / oxygen::data::loose_cooked::kGenerationLeaseFileName,
     oxygen::serio::FileLockMode::kShared);
   ASSERT_TRUE(reader);
-  auto next = ModelImportRecord::Prepare(record_, mounts_);
+  auto next = ModelImportRecord::Prepare(record_, Generations(), mounts_);
   auto after = Candidate(*next);
   next->ValidateCandidate(after);
   next->Publish(after);
-  EXPECT_EQ(ModelImportRecord::ReclaimUnusedGenerations(record_), 0U);
+  EXPECT_EQ(
+    ModelImportRecord::ReclaimUnusedGenerations(record_, Generations()), 0U);
   EXPECT_TRUE(std::filesystem::exists(before.cooked_root));
   reader = oxygen::Ok(oxygen::serio::FileLock {});
-  EXPECT_EQ(ModelImportRecord::ReclaimUnusedGenerations(record_), 1U);
+  EXPECT_EQ(
+    ModelImportRecord::ReclaimUnusedGenerations(record_, Generations()), 1U);
   EXPECT_FALSE(std::filesystem::exists(before.cooked_root));
   EXPECT_TRUE(std::filesystem::exists(after.cooked_root));
 }
 
 NOLINT_TEST_F(ModelImportRecordTest, ReclamationWaitsForActiveAttemptLease)
 {
-  auto attempt = ModelImportRecord::Prepare(record_, mounts_);
+  auto attempt = ModelImportRecord::Prepare(record_, Generations(), mounts_);
   const auto& cooked_root = attempt->Request().cooked_root;
   if (!cooked_root) {
     FAIL() << "Expected a generation cooked root";
   }
   const auto abandoned = *cooked_root;
-  EXPECT_EQ(ModelImportRecord::ReclaimUnusedGenerations(record_), 0U);
+  EXPECT_EQ(
+    ModelImportRecord::ReclaimUnusedGenerations(record_, Generations()), 0U);
   attempt.reset();
-  EXPECT_EQ(ModelImportRecord::ReclaimUnusedGenerations(record_), 1U);
+  EXPECT_EQ(
+    ModelImportRecord::ReclaimUnusedGenerations(record_, Generations()), 1U);
   EXPECT_FALSE(std::filesystem::exists(abandoned));
 }
 
 NOLINT_TEST_F(ModelImportRecordTest, ChangedPublishedIndexRequiresRecook)
 {
-  auto attempt = ModelImportRecord::Prepare(record_, mounts_);
+  auto attempt = ModelImportRecord::Prepare(record_, Generations(), mounts_);
   auto report = Candidate(*attempt);
   attempt->ValidateCandidate(report);
   attempt->Publish(report);
@@ -666,8 +702,8 @@ NOLINT_TEST_F(ModelImportRecordTest, ChangedPublishedIndexRequiresRecook)
       report.cooked_root / "container.index.bin", std::ios::app);
     index << "changed";
   }
-  EXPECT_THROW(
-    static_cast<void>(ModelImportRecord::SelectedGeneration(record_)),
+  EXPECT_THROW(static_cast<void>(
+                 ModelImportRecord::SelectedGeneration(record_, Generations())),
     std::runtime_error);
 }
 
@@ -675,7 +711,7 @@ NOLINT_TEST_F(ModelImportRecordTest, ChangedPublishedIndexRequiresRecook)
 //! it read.
 NOLINT_TEST_F(ModelImportRecordTest, NativeServicePublishesTheCompleteRecord)
 {
-  auto attempt = ModelImportRecord::Prepare(record_, mounts_);
+  auto attempt = ModelImportRecord::Prepare(record_, Generations(), mounts_);
   oxygen::content::import::AsyncImportService service(
     oxygen::content::import::AsyncImportService::Config {
       .thread_pool_size = 2,
@@ -692,7 +728,8 @@ NOLINT_TEST_F(ModelImportRecordTest, NativeServicePublishesTheCompleteRecord)
     future.wait_for(std::chrono::seconds(15)), std::future_status::ready);
   const auto report = future.get();
   ASSERT_TRUE(report.success);
-  EXPECT_EQ(ModelImportRecord::SelectedGeneration(record_), report.cooked_root);
+  EXPECT_EQ(ModelImportRecord::SelectedGeneration(record_, Generations()),
+    report.cooked_root);
   const auto content = ModelImportRecord::Read(record_, mounts_);
   ASSERT_EQ(content.published_nodes.size(), 1U);
   EXPECT_EQ(content.published_nodes.front().anchor, "Root");
@@ -703,7 +740,7 @@ NOLINT_TEST_F(ModelImportRecordTest, NativeServicePublishesTheCompleteRecord)
 //! in its report.
 NOLINT_TEST_F(ModelImportRecordTest, LookupNotesReachTheImportsDiagnostics)
 {
-  auto attempt = ModelImportRecord::Prepare(record_, mounts_,
+  auto attempt = ModelImportRecord::Prepare(record_, Generations(), mounts_,
     {
       ImportDiagnostic {
         .severity = ImportSeverity::kWarning,
@@ -737,11 +774,13 @@ NOLINT_TEST_F(ModelImportRecordTest, LookupNotesReachTheImportsDiagnostics)
 
 NOLINT_TEST_F(ModelImportRecordTest, CancellingOneImportDoesNotCancelAnother)
 {
-  auto cancelled_attempt = ModelImportRecord::Prepare(record_, mounts_);
+  auto cancelled_attempt
+    = ModelImportRecord::Prepare(record_, Generations(), mounts_);
   const auto other_source = TempDir() / "Models" / "other.gltf";
   WriteModel(other_source);
   const auto other_record = NewRecord(other_source, "/.cooked/other.gltf");
-  auto other_attempt = ModelImportRecord::Prepare(other_record, mounts_);
+  auto other_attempt
+    = ModelImportRecord::Prepare(other_record, Generations(), mounts_);
   oxygen::content::import::AsyncImportService service(
     oxygen::content::import::AsyncImportService::Config {
       .thread_pool_size = 2,
@@ -775,8 +814,9 @@ NOLINT_TEST_F(ModelImportRecordTest, CancellingOneImportDoesNotCancelAnother)
   EXPECT_TRUE(requested);
   EXPECT_FALSE(cancelled_future.get().success);
   EXPECT_TRUE(completed_future.get().success);
-  EXPECT_FALSE(ModelImportRecord::SelectedGeneration(record_));
-  EXPECT_TRUE(ModelImportRecord::SelectedGeneration(other_record));
+  EXPECT_FALSE(ModelImportRecord::SelectedGeneration(record_, Generations()));
+  EXPECT_TRUE(
+    ModelImportRecord::SelectedGeneration(other_record, Generations()));
 }
 
 NOLINT_TEST_F(
@@ -847,8 +887,8 @@ NOLINT_TEST_F(ModelImportRecordTest, AnUnreadableRecordIsSkippedWithAWarning)
   EXPECT_EQ(skipped.severity, ImportSeverity::kWarning);
   EXPECT_NE(skipped.message.find("Outdated.import.json"), std::string::npos);
   EXPECT_EQ(skipped.message.find("not-quoted"), std::string::npos);
-  EXPECT_NO_THROW(
-    static_cast<void>(ModelImportRecord::Prepare(record_, mounts_)));
+  EXPECT_NO_THROW(static_cast<void>(
+    ModelImportRecord::Prepare(record_, Generations(), mounts_)));
 }
 
 //! A moved source imported with the model's virtual path keeps its identity:

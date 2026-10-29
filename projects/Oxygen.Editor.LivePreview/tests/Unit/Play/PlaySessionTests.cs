@@ -86,6 +86,22 @@ public sealed partial class PlaySessionTests
         });
     }
 
+    [TestMethod]
+    public void LaunchSourceMounts_NeverNameAnOutputFolder()
+    {
+        var fileSystem = new MockFileSystem();
+        var project = TestProject.Create(
+            fileSystem,
+            @"C:\Project",
+            [new ProjectMountPoint("Content", "Content"), new ProjectMountPoint("Generated", ".cooked"), new ProjectMountPoint("Scenes", "Content/.pipeline")]).Context;
+        _ = fileSystem.Directory.CreateDirectory(@"C:\Project\.cooked");
+        _ = fileSystem.Directory.CreateDirectory(@"C:\Project\Content\.pipeline");
+
+        var mounts = PlaySession.SourceMounts(project);
+
+        _ = mounts.Keys.Should().Equal("Content");
+    }
+
     private sealed partial class PlayFixture : IDisposable
     {
         private readonly DirectoryInfo directory = Directory.CreateTempSubdirectory("Oxygen-PlaySession-");

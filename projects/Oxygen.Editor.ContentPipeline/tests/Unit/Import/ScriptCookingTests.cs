@@ -373,7 +373,7 @@ internal sealed partial class ScriptCookingTests : IDisposable
         var key = Guid.CreateVersion7();
         return new ContentCookScope(
             context,
-            new ProjectCookScope(context.ProjectId, FileSystemPath.From(this.root), Path.Combine(this.root, ".cooked")),
+            new ProjectCookScope(context.ProjectId, FileSystemPath.From(this.root)),
             [
                 new ContentCookInput(
                     AssetPath.Parse("/Content/Scenes/Main.oscene"),

@@ -31,6 +31,7 @@ public:
 
 private:
   std::string record_path_;
+  std::string generations_root_;
 };
 
 } // namespace oxygen::content::import::tool

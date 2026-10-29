@@ -45,7 +45,7 @@ public sealed partial class ContentPipelineService : IScriptLibrary
                 return null;
             }
 
-            var operationRoot = Path.Combine(project.ProjectRoot.FullPath, ".build", "inspection");
+            var operationRoot = ProjectOutputFolders.BuildPath(project.ProjectRoot.FullPath, "inspection");
             var report = await inspector.InspectScriptsAsync(operationRoot, library.CookedRoot, virtualPath.VirtualPath, token).ConfigureAwait(false);
             token.ThrowIfCancellationRequested();
             var cooked = report.SingleOrDefault(script);

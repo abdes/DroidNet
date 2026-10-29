@@ -10,8 +10,9 @@ refactoring tasks needed to support **mount points** consistent with the
   adapters.
 - The Content Folders pane adds a `DroidNet.Controls.ToolBar` **below** the tree for
   **mount / unmount / rename** actions.
-- The mount UI offers exactly four choices: **Cooked**, **Imported**, **Build**,
-  **Local Folder**.
+- The mount UI offers exactly three choices: **Cooked**, **Build**, **Local
+  Folder**. Cooked and Build are output folder nodes, view state that is never a
+  mount.
 
 Non-goals (out of scope for this doc): context menus, drag/drop,
 filtering/search inside the tree, extra configuration pages.
@@ -65,10 +66,9 @@ Button styling requirements:
 - `Rename` is the **right-most** toolbar item.
 - There is a **separator** between the `Unmount` button and the `Rename` button.
 
-- **Mount** (button). When clicked, opens a menu with four choices:
-  - Known locations:
+- **Mount** (button). When clicked, opens a menu with three choices:
+  - Output folders:
     - Cooked
-    - Imported
     - Build
   - (separator)
   - Local Folder
@@ -88,9 +88,8 @@ Enable/disable rules:
 The Mount menu uses user-friendly labels, and the mounted node label is the
 **mount point name** (not the backing folder name):
 
-- Cooked → mounts folder `.cooked` (node label: `Cooked`)
-- Imported → mounts folder `.imported` (node label: `Imported`)
-- Build → mounts folder `.build` (node label: `Build`)
+- Cooked → shows folder `.cooked` (node label: `Cooked`)
+- Build → shows folder `.build` (node label: `Build`)
 - Local Folder → user provides a mount point name + picks a folder path (node
   label: the provided mount point name)
 
@@ -102,8 +101,8 @@ Every folder under the project root is shown in the tree **except** folders
 whose name starts with `.`.
 
 - Dot-prefixed folders are hidden by default.
-- They are surfaced only by explicitly mounting them (for example: `.cooked`,
-  `.imported`, `.build`).
+- `.cooked` and `.build` are surfaced only through their output folder nodes;
+  no output folder is ever a mount.
 
 ### Node types
 
@@ -122,10 +121,9 @@ The tree is composed of the following adapter types:
   - Children: folders within that mount
 - **Mount point node** (new adapter)
   - Note: this represents a **virtual folder mount** (internal/utility roots
-    like `.cooked`, `.imported`, `.build`, or an arbitrary folder selected by
-    the user).
-  - Label: mount point name (e.g. `Cooked`, `Imported`, `Build`, or
-    user-provided)
+    the `.cooked` or `.build` output folder node, or an arbitrary folder
+    selected by the user).
+  - Label: `Cooked`, `Build`, or the user-provided mount point name
   - Children: folders within that mounted folder
 - **Folder node** (existing or revised adapter)
   - Label: folder name
@@ -143,17 +141,18 @@ nodes.
 - Unmounting never deletes data from disk; it only removes the mount from the
   Content Folders view.
 
-### Built-in mount points
+### Output folder nodes
 
-The following mounts exist as explicit, user-controlled mount points (name →
-backing folder):
+The Cooked and Build nodes show an output folder. They are view state, persisted
+in `Project.oxy` as `OutputFolderViews`, never mounts: nothing is authored or
+cooked from them, and the Player never receives them as source mounts. Their
+names are reserved and cannot be changed (node → folder):
 
 - `Cooked` → `.cooked`
-- `Imported` → `.imported`
 - `Build` → `.build`
 
 They do not need to be auto-shown just because the folders exist on disk; they
-appear when explicitly mounted.
+appear when explicitly shown.
 
 Known mounts must be mountable even when the backing folder does not exist yet.
 
@@ -162,7 +161,7 @@ Known mounts must be mountable even when the backing folder does not exist yet.
 - Its children are empty until the folder exists (or until content is generated
   by the pipeline).
 
-Important: `.cooked`, `.imported`, and `.build` are not shown as regular folders
+Important: `.cooked` and `.build` are not shown as regular folders
 under the project root even if they exist on disk, because they are dot-prefixed
 and therefore hidden by default.
 
@@ -242,7 +241,7 @@ named with its mount and segment rules, and identity is case-sensitive.
 - Folder node under an authoring mount virtual path:
   `/{MountPointName}/{RelativePathWithinMount}`
 
-Virtual folder mounts (`Cooked`, `Imported`, `Build`, Local Folder) do not
+Virtual folder nodes (`Cooked`, `Build`, Local Folder) do not
 define asset identity and are not required to map to canonical virtual paths.
 
 Notes:
@@ -273,11 +272,11 @@ the target behavior.
     - `MountPointName` (string, case-sensitive identity)
     - A backing root folder handle (e.g. `IFolder` from the storage provider, or
       an abstraction for non-project folders)
-    - Backing folder relative path (for built-ins: `.cooked`, `.imported`,
+    - Backing folder relative path (for output folder nodes: `.cooked`,
       `.build`; for Local Folder: an absolute path)
   - Loads children by enumerating folders under the mount root.
-  - Must tolerate a missing backing folder for known mounts (`.cooked`,
-    `.imported`, `.build`) by showing an empty node (no children) rather than
+  - Must tolerate a missing backing folder for output folder nodes (`.cooked`,
+    `.build`) by showing an empty node (no children) rather than
     failing or disabling the mount.
 
   Implementation:
@@ -325,12 +324,12 @@ the target behavior.
 
 - [x] Add `ToolBarButton` items for:
 - [x] Add `ToolBarButton` items for:
-  - Mount (with a flyout/menu offering the four mount choices)
+  - Mount (with a flyout/menu offering the three mount choices)
   - Unmount
   - Rename (icon-only, right-most, separated from Unmount)
 
 - [x] Ensure the Mount flyout menu has a separator between:
-  - the known locations group (Cooked/Imported/Build), and
+  - the output folder group (Cooked/Build), and
   - Local Folder.
 
 ### C) Add commands and state in the ViewModel
@@ -354,7 +353,7 @@ Command design decision (MVVM idioms):
 
 Concrete commands:
 
-- [x] `MountKnownLocationCommand` (argument: `Cooked | Imported | Build`)
+- [x] `MountKnownLocationCommand` (argument: `Cooked | Build`)
 - [x] `MountLocalFolderCommand` (opens the Local Folder mount dialog)
 - [x] `UnmountSelectedItemCommand`
 - [x] `RenameSelectedItemCommand`
@@ -403,11 +402,11 @@ Naming rule:
       authoring mounts.
 
 - [x] Persist the mounted set for **virtual folders**
-      (Cooked/Imported/Build/Local Folder) per project so they can be restored.
+      (Cooked/Build/Local Folder) per project so they can be restored.
   - Do not store these inside `ProjectInfo.AuthoringMounts` (those are for
     authoring mounts / asset identity).
-  - Persist stable identifiers (virtual folder kind for built-ins; name +
-    absolute path for Local Folder).
+  - Persist stable identifiers (the output folder in `OutputFolderViews`;
+    name + absolute path for Local Folder).
 
 ### G) `.build` rename (required)
 

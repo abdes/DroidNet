@@ -2,7 +2,7 @@
 
 Status: `agreed`
 
-Last Updated: 2026-10-20 01:32
+Last Updated: 2026-10-29
 
 ## 1. Purpose
 
@@ -286,7 +286,7 @@ does not re-check a path the engine already reported.
   part of the name. Any segment may contain dots, so `Level.v2.oscene`, a folder
   `v1.2` and a container segment `Player.input` are valid.
 - **Derived content.** Below the mount, a segment starting with `.` names
-  derived content (`.cooked`, `.imported`, `.build`, `.pipeline`) and is refused
+  derived content (such as `.build` or `.pipeline`) and is refused
   in an authored path, as is the `SourceMedia` folder.
 - **Case.** Identity is case-sensitive: the key hashes the bytes as spelled. A
   path that differs from an existing one only in case (Unicode simple case
@@ -299,9 +299,9 @@ does not re-check a path the engine already reported.
   formats store paths in string tables with `uint32` lengths, and the file
   system boundary uses the extended-length form (`Base/Filesystem.h`).
 - **Mount name.** An identifier, `[A-Za-z_][A-Za-z0-9_-]*`, optionally preceded
-  by `.`. A mount starting with `.` is reserved by the engine: `.cooked` is the
-  mount of content cooked without a project. A project names its mounts without
-  the dot, and two mounts may not differ only in case.
+  by `.`. A mount starting with `.` is reserved by the engine (`.code`). A
+  project names its mounts without the dot, and two mounts may not differ only
+  in case.
 - **Unicode data.** Unicode 15.1 is pinned. Its stability policies guarantee
   that NFC and simple case folding of assigned code points never change, so
   implementations on a later Unicode version agree on every accepted segment.

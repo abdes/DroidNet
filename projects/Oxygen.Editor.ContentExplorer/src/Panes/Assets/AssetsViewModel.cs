@@ -549,8 +549,7 @@ public partial class AssetsViewModel(
 
         var project = session.Context;
         var folder = this.GetSelectedFolder();
-        return project.AuthoringMounts.Any(mount => !ContentFoldersViewModel.IsPersistedProjectRelativeVirtualMount(mount)
-            && string.Equals(folder.Mount, mount.Name, StringComparison.Ordinal));
+        return project.AuthoringMounts.Any(mount => string.Equals(folder.Mount, mount.Name, StringComparison.Ordinal));
     }
 
     private void OnAssetSelectionChanged(object? sender, PropertyChangedEventArgs args)

@@ -245,7 +245,10 @@ auto MainModule::RegisterModelImportLibraryUiTest(ImGuiTestEngine* engine)
       IM_CHECK(vm);
       for (const auto& record : records) {
         const auto root
-          = content::import::ModelImportRecord::SelectedGeneration(record);
+          = content::import::ModelImportRecord::SelectedGeneration(record,
+            content::import::ModelImportGenerations {
+              .root = vm->GetGeneratedStorageRoot(),
+            });
         IM_CHECK(root);
         const auto index = (*root / "container.index.bin").lexically_normal();
         const auto count = std::ranges::count_if(

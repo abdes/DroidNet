@@ -437,6 +437,16 @@ auto RunSceneImportJob(const SceneImportSettings& settings,
     if (replay && !settings.content_root.empty()) {
       throw std::invalid_argument("Record replay uses its saved project root");
     }
+    // A record import publishes into a generations folder this tool owns,
+    // checked before anything writes the record.
+    const auto publishes_record = apply_recipe
+      || !settings.model_record_path.empty()
+      || (!settings.content_root.empty() && !settings.source_path.empty());
+    if (publishes_record && settings.cooked_root.empty()) {
+      throw std::invalid_argument(
+        "Record publication needs --output, a generations folder this tool "
+        "owns; the project's own output folders belong to its publisher");
+    }
     if (apply_recipe || replay) {
       if (!globals.parsed_options) {
         throw std::logic_error(
@@ -444,7 +454,6 @@ auto RunSceneImportJob(const SceneImportSettings& settings,
       }
       constexpr auto kContentOverrides = std::array {
         "source",
-        "output",
         "name",
         "no-import-textures",
         "no-import-materials",
@@ -508,11 +517,6 @@ auto RunSceneImportJob(const SceneImportSettings& settings,
       notes = std::move(location.diagnostics);
     }
     if (!record_path.empty()) {
-      if (!settings.cooked_root.empty()) {
-        throw std::invalid_argument(
-          "Record output is derived from the project root; do not "
-          "specify --output");
-      }
       if (!settings.source_path.empty()) {
         ImportRequest source;
         source.source_path = settings.source_path;
@@ -533,8 +537,9 @@ auto RunSceneImportJob(const SceneImportSettings& settings,
           .mounts = make_observer(&*mounts),
         });
       }
-      const auto publication
-        = ModelImportRecord::Prepare(record_path, *mounts, std::move(notes));
+      const auto publication = ModelImportRecord::Prepare(record_path,
+        ModelImportGenerations { .root = settings.cooked_root }, *mounts,
+        std::move(notes));
       if (publication->Request().GetFormat() != format) {
         throw std::invalid_argument(
           "The record's source format does not match this command");

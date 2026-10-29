@@ -31,7 +31,7 @@ public sealed class SceneImportSourceDiscovery(IContentCookCoordinator coordinat
         var primary = Path.GetFullPath(sourcePath);
 
         var directory = Path.GetDirectoryName(primary)!;
-        var operationRoot = Path.Combine(operation.Project.ProjectRoot.FullPath, ".build", "cook", operation.OperationId.ToString("N"));
+        var operationRoot = CookPublicationPaths.Operation(operation.Project.ProjectRoot.FullPath, operation.OperationId);
         var scratch = Path.Combine(operationRoot, "discovery-" + Guid.NewGuid().ToString("N"));
         CookOutputLease.RejectReparsePoint(operationRoot);
         _ = Directory.CreateDirectory(scratch);

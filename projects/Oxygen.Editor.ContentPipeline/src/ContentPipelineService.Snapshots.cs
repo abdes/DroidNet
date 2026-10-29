@@ -368,7 +368,7 @@ public sealed partial class ContentPipelineService
                 input,
                 references,
                 this.engineContentPipelineApi as Inspection.ICookedDependencyInspector,
-                Path.Combine(operation.Project.ProjectRoot.FullPath, ".build", "cook", operation.OperationId.ToString("N")),
+                CookPublicationPaths.Operation(operation.Project.ProjectRoot.FullPath, operation.OperationId),
                 artifacts,
                 token));
 }

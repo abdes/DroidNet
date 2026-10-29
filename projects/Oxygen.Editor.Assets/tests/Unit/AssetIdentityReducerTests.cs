@@ -93,7 +93,7 @@ public sealed partial class AssetIdentityReducerTests
     {
         using var workspace = new TempWorkspace();
         var descriptorPath = workspace.SourcePath("Content/Materials/Red.omat.json");
-        var cookedPath = workspace.SourcePath(".cooked/Content/Materials/Red.omat");
+        var cookedPath = workspace.SourcePath(".cooked/generations/0123456789abcdef0123456789abcdef/Materials/Red.omat");
         WriteMaterial(descriptorPath);
         Directory.CreateDirectory(Path.GetDirectoryName(cookedPath)!);
         File.WriteAllBytes(cookedPath, [1]);
@@ -163,7 +163,7 @@ public sealed partial class AssetIdentityReducerTests
     {
         using var workspace = new TempWorkspace();
         WriteMaterial(workspace.SourcePath("Content/Materials/Red.omat.json"));
-        var cookedPath = workspace.SourcePath(".cooked/Content/Materials/Red.omat");
+        var cookedPath = workspace.SourcePath(".cooked/generations/0123456789abcdef0123456789abcdef/Materials/Red.omat");
         Directory.CreateDirectory(Path.GetDirectoryName(cookedPath)!);
         File.WriteAllBytes(cookedPath, [1]);
 
@@ -187,7 +187,7 @@ public sealed partial class AssetIdentityReducerTests
     {
         using var workspace = new TempWorkspace();
         var descriptorPath = workspace.SourcePath("Content/Materials/Gold.omat.json");
-        var cookedPath = workspace.SourcePath(".cooked/Content/Materials/Gold.omat");
+        var cookedPath = workspace.SourcePath(".cooked/generations/0123456789abcdef0123456789abcdef/Materials/Gold.omat");
         WriteMaterial(descriptorPath);
         Directory.CreateDirectory(Path.GetDirectoryName(cookedPath)!);
         File.WriteAllBytes(cookedPath, [1]);
@@ -222,7 +222,7 @@ public sealed partial class AssetIdentityReducerTests
                 IndexedOutput(AssetPath.Parse("/Content/Materials/Red.omat"), cookedPath),
             ],
             project,
-            new ProjectCookScope(project.ProjectId, project.ProjectRoot, workspace.SourcePath("custom-cooked")));
+            new ProjectCookScope(project.ProjectId, project.ProjectRoot));
 
         _ = rows.Should().ContainSingle();
         _ = rows[0].CookedPath.Should().Be(FileSystemPath.From(cookedPath));
@@ -234,7 +234,7 @@ public sealed partial class AssetIdentityReducerTests
     {
         using var workspace = new TempWorkspace();
         var descriptorPath = workspace.SourcePath("Content/Materials/Red.omat.json");
-        var cookedPath = workspace.SourcePath(".cooked/Content/Materials/Red.omat");
+        var cookedPath = workspace.SourcePath(".cooked/generations/0123456789abcdef0123456789abcdef/Materials/Red.omat");
         WriteMaterial(descriptorPath);
         Directory.CreateDirectory(Path.GetDirectoryName(cookedPath)!);
         File.WriteAllBytes(cookedPath, [1]);
@@ -316,7 +316,7 @@ public sealed partial class AssetIdentityReducerTests
         => TestProject.Create(new RealFileSystem(), workspace.Root.FullPath).Context with { Name = "Test" };
 
     private static ProjectCookScope CreateCookScope(TempWorkspace workspace, ProjectContext project)
-        => new(project.ProjectId, project.ProjectRoot, workspace.SourcePath(".cooked"));
+        => new(project.ProjectId, project.ProjectRoot);
 
     private static void WriteMaterial(string path)
     {

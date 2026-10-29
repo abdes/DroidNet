@@ -118,6 +118,8 @@ public sealed class ProjectAssetFilesTests
     [DataRow("project", DisplayName = "The project's own files")]
     [DataRow("Project", DisplayName = "Its name in another case")]
     [DataRow("Engine", DisplayName = "The engine's content")]
+    [DataRow("Cooked", DisplayName = "The Cooked output folder node")]
+    [DataRow("build", DisplayName = "The Build output folder node in another case")]
     public void ValidateDeclaredMountName_AMountEveryProjectHas_IsRefused(string name)
         => _ = ProjectAssetFiles.ValidateDeclaredMountName(name).Should().NotBeNull();
 

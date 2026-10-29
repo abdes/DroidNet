@@ -10,7 +10,7 @@ public enum ContentMountKind
     /// <summary>Authored project content; the source of asset identity.</summary>
     ProjectSource,
 
-    /// <summary>Cooked, Imported or Build output; read-only.</summary>
+    /// <summary>The Cooked or Build output folder node; view state, never a mount, and read-only.</summary>
     Derived,
 
     /// <summary>A cooked library folder outside the project; read-only.</summary>

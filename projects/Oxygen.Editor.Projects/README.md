@@ -7,22 +7,22 @@ cooking; those modules read the project through it.
 
 ## Components
 
-| Component                   | Holds                                                                         |
-| --------------------------- | ----------------------------------------------------------------------------- |
-| `IProjectSession`           | An open project: its `Context`, `Settings`, loaded `Project` and `Lifetime`   |
-| `IProjectSessionHost`       | Opens, changes the mounts of and closes the editor's one session              |
-| `IProjectManagerService`    | Loads, stages, accepts and saves projects (`Project.oxy` and settings)        |
-| `ProjectContext`            | A project as its mounts are now, with the `FileSystem` that holds its files   |
-| `ProjectSettings`           | Settings saved in the manifest and shared by everyone, such as cook on change |
-| `ProjectAssetFiles`         | The one mapping between the project's virtual paths and its files             |
-| `ProjectOutputFolders`      | The pipeline's output folders inside a project (`.cooked`, `.imported`, ...)  |
-| `CookedContentOrdering`     | The priority of the project's output and its libraries                        |
-| `IProjectCookScopeProvider` | A project's cook scope: its root and cooked output root                       |
-| `IAuthoringTargetResolver`  | Where a new asset of a family is created                                      |
-| `AuthoredAssetTemplate`     | Folder, default name, suffixes and content of a family's new files            |
-| `IProjectCreationService`   | Creates a project from a template                                             |
-| `IProjectValidationService` | Classifies a project folder before it opens                                   |
-| `IRecentProjectAdapter`     | Recent projects with their validation state                                   |
+| Component                   | Holds                                                                           |
+| --------------------------- | ------------------------------------------------------------------------------- |
+| `IProjectSession`           | An open project: its `Context`, `Settings`, loaded `Project` and `Lifetime`     |
+| `IProjectSessionHost`       | Opens, changes the mounts of and closes the editor's one session                |
+| `IProjectManagerService`    | Loads, stages, accepts and saves projects (`Project.oxy` and settings)          |
+| `ProjectContext`            | A project as its mounts are now, with the `FileSystem` that holds its files     |
+| `ProjectSettings`           | Settings saved in the manifest and shared by everyone, such as cook on change   |
+| `ProjectAssetFiles`         | The one mapping between the project's virtual paths and its files               |
+| `ProjectOutputFolders`      | Output folders by rule (any dot-named folder); `.cooked`, `.build`, `.pipeline` |
+| `CookedContentOrdering`     | The priority of the project's output and its libraries                          |
+| `IProjectCookScopeProvider` | A project's cook scope: its root and cooked output root                         |
+| `IAuthoringTargetResolver`  | Where a new asset of a family is created                                        |
+| `AuthoredAssetTemplate`     | Folder, default name, suffixes and content of a family's new files              |
+| `IProjectCreationService`   | Creates a project from a template                                               |
+| `IProjectValidationService` | Classifies a project folder before it opens                                     |
+| `IRecentProjectAdapter`     | Recent projects with their validation state                                     |
 
 `ProjectsModule` registers the services in the editor scope. The session host is
 the composition root's, because it composes the session's scope.

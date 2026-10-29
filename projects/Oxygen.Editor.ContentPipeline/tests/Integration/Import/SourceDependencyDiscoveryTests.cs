@@ -199,7 +199,7 @@ public sealed class SourceDependencyDiscoveryTests
         _ = result.CookedAssets.Should().Contain(asset => asset.SourceAssetUri == AssetPath.Parse("/Content/Geometry/AuthoredCube.ogeo"));
     }
 
-    /// <summary>An existing file outside the project cannot be retained with its source, so discovery refuses the source.</summary>
+    /// <summary>A descriptor path that leaves its mount names a file the source cannot be retained with, so discovery refuses the source.</summary>
     /// <returns>The asynchronous test operation.</returns>
     [TestMethod]
     public async Task GeometryMediaOutsideProjectFailsDiscovery()
@@ -212,13 +212,13 @@ public sealed class SourceDependencyDiscoveryTests
         {
             const string source = "Content/Geometry/AuthoredCube.ogeo.json";
             var descriptor = JsonNode.Parse(workspace.ReadText(source))!;
-            descriptor["buffers"]![0]!["uri"] = outside;
+            descriptor["buffers"]![0]!["uri"] = Path.GetRelativePath(Path.Combine(workspace.Root, "Content", "Geometry"), outside).Replace('\\', '/');
             workspace.WriteText(source, descriptor.ToJsonString());
             var geometry = CookInputResolver.Resolve(workspace.ProjectContext, AssetPath.Parse("/" + source[..^5]), ContentCookInputRole.Primary);
 
             var graph = await NativeSourceFactsFixture.CreateDiscovery(workspace).DiscoverAsync(workspace.ProjectContext, [geometry], this.TestContext.CancellationToken).ConfigureAwait(false);
 
-            _ = graph.Diagnostics.Should().ContainSingle(diagnostic => diagnostic.Code == AssetImportDiagnosticCodes.DependencyOutsideSource
+            _ = graph.Diagnostics.Should().ContainSingle(diagnostic => diagnostic.Code == "import.source_outside_mount"
                 && diagnostic.Severity == DiagnosticSeverity.Error
                 && diagnostic.AffectedVirtualPath == geometry.AssetUri.VirtualPath);
         }
@@ -228,24 +228,25 @@ public sealed class SourceDependencyDiscoveryTests
         }
     }
 
-    /// <summary>Absolute paths to retained media are captured without altering authored descriptor bytes.</summary>
+    /// <summary>An absolute path in a descriptor is refused, as every absolute committed path is; the descriptor is left as authored.</summary>
     /// <returns>The asynchronous test operation.</returns>
     [TestMethod]
-    public async Task GeometryAbsoluteRetainedMediaIsDiscovered()
+    public async Task GeometryAbsoluteMediaPathIsRefused()
     {
         using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         WriteAuthoredGeometry(workspace, withBuffer: true);
         workspace.WriteMaterial("Content/Materials/Red.omat.json", "Red");
         const string source = "Content/Geometry/AuthoredCube.ogeo.json";
         var descriptor = JsonNode.Parse(workspace.ReadText(source))!;
-        var bufferPath = Path.Combine(workspace.Root, "Content", "Geometry", "mesh.bin");
-        descriptor["buffers"]![0]!["uri"] = bufferPath;
+        descriptor["buffers"]![0]!["uri"] = Path.Combine(workspace.Root, "Content", "Geometry", "mesh.bin");
         workspace.WriteText(source, descriptor.ToJsonString());
         var geometry = CookInputResolver.Resolve(workspace.ProjectContext, AssetPath.Parse("/" + source[..^5]), ContentCookInputRole.Primary);
 
         var graph = await NativeSourceFactsFixture.CreateDiscovery(workspace).DiscoverAsync(workspace.ProjectContext, [geometry], this.TestContext.CancellationToken).ConfigureAwait(false);
 
-        _ = graph.Files.Should().ContainSingle(file => file.SourcePath == FileSystemPath.From(bufferPath));
+        _ = graph.Diagnostics.Should().ContainSingle(diagnostic => diagnostic.Code == "path.absolute_committed"
+            && diagnostic.Severity == DiagnosticSeverity.Error
+            && diagnostic.AffectedVirtualPath == geometry.AssetUri.VirtualPath);
         _ = workspace.ReadText(source).Should().Be(descriptor.ToJsonString());
     }
 

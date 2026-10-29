@@ -136,6 +136,8 @@ Required:
   textures and scene are named flat under it (`/Content/Ship/Ship.glb/Paint.omat`,
   `/Content/Ship/Ship.glb/Ship.oscene`); its buffers are files beside its
   geometry (`Ship.glb/Hull.lod0.vertex.obuf`).
+- `--output <path>` with a record (`--record` or `--root`): the generations
+  folder the tool owns and publishes into
 - an import without a record (`--output`) gets a fresh source identity and
   reports `import.source_identity_missing`: its node and surface IDs change on
   every import
@@ -239,10 +241,10 @@ changes; node and surface IDs derive from it, so they survive moving or
 renaming the model.
 
 ```powershell
-Oxygen.Cooker.ImportTool gltf model.glb --root H:/Game --virtual-path /Content/model.glb
-Oxygen.Cooker.ImportTool fbx model.fbx --root H:/Game --record H:/Game/Imports/Content/Models/Ship.glb.import.json
-Oxygen.Cooker.ImportTool fbx --record H:/Game/Imports/Content/Models/Ship.glb.import.json
-Oxygen.Cooker.ImportTool fbx --recipe model.recipe.json --record H:/Game/Imports/Content/Models/Ship.glb.import.json --root H:/Game
+Oxygen.Cooker.ImportTool gltf model.glb --root H:/Game --virtual-path /Content/model.glb --output H:/Scratch/Generations
+Oxygen.Cooker.ImportTool fbx model.fbx --root H:/Game --record H:/Game/Imports/Content/Models/Ship.glb.import.json --output H:/Scratch/Generations
+Oxygen.Cooker.ImportTool fbx --record H:/Game/Imports/Content/Models/Ship.glb.import.json --output H:/Scratch/Generations
+Oxygen.Cooker.ImportTool fbx --recipe model.recipe.json --record H:/Game/Imports/Content/Models/Ship.glb.import.json --root H:/Game --output H:/Scratch/Generations
 ```
 
 With `--root` and a source but no `--record`, the tool finds the record,
@@ -258,13 +260,13 @@ matching sources by mount path; the first step that matches decides:
 Two records with one virtual path, or one source identity, are refused.
 `--record <record> <source>` rebinds that record to the source. A replay whose
 source is gone fails with `import.source_missing`, which names the command that
-rebinds it. Record imports derive their output from Content: do not combine
-them with `--output`.
+rebinds it. Record imports publish into `--output`, a generations folder the
+tool owns; it is required, and never a project's own output folder.
 
 The publisher commits the import's surface provenance, published nodes and
 source fingerprint to the record together with the validated immutable
 generation, which it selects in
-`<content_root>/.cooked/Imports/<source_identity>/head.json`. Failed or
+`<output>/<source_identity>/head.json`. Failed or
 interrupted attempts leave the record and the selection unchanged. External raw sources are
 read only. The
 [pipeline owner](../../Docs/Import/async_import_pipeline_v2.md#model-import-publication)
@@ -280,7 +282,7 @@ belong to `--thread-pool-size`/`--concurrency`, outside records.
 Reclaim unused generations without another import:
 
 ```powershell
-Oxygen.Cooker.ImportTool reclaim --record H:/Game/Imports/Content/Models/Ship.glb.import.json
+Oxygen.Cooker.ImportTool reclaim --record H:/Game/Imports/Content/Models/Ship.glb.import.json --output H:/Scratch/Generations
 ```
 
 This uses the publisher's record lock and generation leases. It keeps the

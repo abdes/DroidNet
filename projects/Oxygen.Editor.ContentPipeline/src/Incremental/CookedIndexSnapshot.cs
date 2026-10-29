@@ -45,7 +45,7 @@ internal sealed class CookedIndexSnapshot
     /// <exception cref="InvalidDataException">The index is damaged.</exception>
     public static async Task<CookedIndexRead> ReadAsync(string root, CancellationToken cancellationToken)
     {
-        var path = Path.GetFullPath(Path.Combine(root, "container.index.bin"));
+        var path = Path.GetFullPath(Path.Combine(root, LooseCookedIndex.FileName));
         var file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 65536, FileOptions.Asynchronous | FileOptions.SequentialScan);
         await using var lifetime = file.ConfigureAwait(false);
         using var bytes = new MemoryStream();
@@ -78,7 +78,7 @@ internal sealed class CookedIndexSnapshot
         var expected = this.Index.Assets.Select(static asset => (Path: asset.DescriptorRelativePath, Size: asset.DescriptorSize))
             .Concat(this.Index.Files.Select(static file => (Path: file.RelativePath, file.Size)))
             .ToDictionary(static file => file.Path, static file => file.Size, StringComparer.Ordinal);
-        foreach (var file in actual.Where(static file => file.RelativePath is not ("container.index.bin" or ".generation.lock")))
+        foreach (var file in actual.Where(static file => file.RelativePath is not (LooseCookedIndex.FileName or LooseCookedIndex.GenerationLeaseFileName)))
         {
             if (!expected.Remove(file.RelativePath, out var size) || file.Size != size)
             {

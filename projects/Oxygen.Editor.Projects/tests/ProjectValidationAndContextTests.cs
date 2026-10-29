@@ -62,6 +62,60 @@ public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
     }
 
     [TestMethod]
+    [DataRow(".cooked", DisplayName = "The cooked output folder")]
+    [DataRow("Content/.pipeline", DisplayName = "An output folder inside a mount")]
+    [DataRow("Content/../.build", DisplayName = "An output folder named through another folder")]
+    public async Task ValidateAsync_ShouldRefuseAnOutputFolderAsAnAuthoringMount(string path)
+    {
+        var (storage, document) = CreateStorageWithProjectFile();
+        var service = new ProjectValidationService(storage.Object);
+        document.Setup(d => d.ReadAllTextAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(CreateManifestJson(schemaVersion: 1, mountName: "Generated", mountPath: path));
+
+        var result = await service.ValidateAsync("project").ConfigureAwait(false);
+
+        _ = result.State.Should().Be(ProjectValidationState.InvalidContentRoots);
+        _ = result.Message.Should().Contain("output folders are never mounts");
+    }
+
+    [TestMethod]
+    [DataRow("Cooked")]
+    [DataRow("build")]
+    [DataRow("Engine")]
+    public async Task ValidateAsync_ShouldRefuseAReservedMountName(string name)
+    {
+        var (storage, document) = CreateStorageWithProjectFile();
+        var service = new ProjectValidationService(storage.Object);
+        document.Setup(d => d.ReadAllTextAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(CreateManifestJson(schemaVersion: 1, mountName: name));
+
+        var result = await service.ValidateAsync("project").ConfigureAwait(false);
+
+        _ = result.State.Should().Be(ProjectValidationState.InvalidContentRoots);
+    }
+
+    [TestMethod]
+    [DataRow(".cooked", ProjectValidationState.Valid)]
+    [DataRow(".build", ProjectValidationState.Valid)]
+    [DataRow(".pipeline", ProjectValidationState.InvalidContentRoots)]
+    [DataRow("Content", ProjectValidationState.InvalidContentRoots)]
+    public async Task ValidateAsync_ShouldShowOnlyCookedAndBuild(string folder, ProjectValidationState expected)
+    {
+        var (storage, document) = CreateStorageWithProjectFile();
+        var service = new ProjectValidationService(storage.Object);
+        document.Setup(d => d.ReadAllTextAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(CreateManifestJson(schemaVersion: 1, outputFolderView: folder));
+
+        var result = await service.ValidateAsync("project").ConfigureAwait(false);
+
+        _ = result.State.Should().Be(expected);
+        if (expected == ProjectValidationState.Valid)
+        {
+            _ = result.ProjectInfo!.OutputFolderViews.Should().ContainSingle(view => view.Folder == folder);
+        }
+    }
+
+    [TestMethod]
     [DataRow("C:/Paks/Props.pak", ProjectValidationState.Valid)]
     [DataRow("C:/Paks/Props.zip", ProjectValidationState.InvalidContentRoots)]
     public async Task ValidateAsync_ShouldAcceptOnlyPakFilesAsPakFileMounts(string pakPath, ProjectValidationState expected)
@@ -78,12 +132,9 @@ public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
     }
 
     [TestMethod]
-    public void ProjectCookScopeProvider_ShouldUseProjectCookedOutputRoot()
+    public void ProjectCookScopeProvider_ShouldScopeTheProject()
     {
-        var storage = new Mock<IStorageProvider>();
-        storage.Setup(s => s.NormalizeRelativeTo(@"C:\Project", Constants.CookedOutputFolderName))
-            .Returns(@"C:\Project\.cooked");
-        var provider = new ProjectCookScopeProvider(storage.Object);
+        var provider = new ProjectCookScopeProvider();
         var context = new ProjectContext
         {
             ProjectId = Guid.NewGuid(),
@@ -97,7 +148,7 @@ public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
 
         var scope = provider.CreateScope(context);
 
-        _ = scope.CookedOutputRoot.Should().Be(@"C:\Project\.cooked");
+        _ = scope.Should().Be(new ProjectCookScope(context.ProjectId, context.ProjectRoot));
     }
 
     [TestMethod]
@@ -546,8 +597,25 @@ public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
         return (storage, document);
     }
 
-    private static string CreateManifestJson(int schemaVersion, bool includeAuthoringMounts = true, string? pakFilePath = null)
+    private static string CreateManifestJson(
+        int schemaVersion,
+        bool includeAuthoringMounts = true,
+        string? pakFilePath = null,
+        string mountName = "Content",
+        string mountPath = "Content",
+        string? outputFolderView = null)
     {
+        var outputFolderViews = outputFolderView is null
+            ? string.Empty
+            : $$"""
+              ,
+                "OutputFolderViews": [
+                  {
+                    "Folder": "{{outputFolderView}}"
+                  }
+                ]
+              """;
+
         var pakFileMounts = pakFilePath is null
             ? string.Empty
             : $$"""
@@ -561,12 +629,12 @@ public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
               """;
 
         var authoringMounts = includeAuthoringMounts
-            ? """
+            ? $$"""
               ,
                 "AuthoringMounts": [
                   {
-                    "Name": "Content",
-                    "RelativePath": "Content"
+                    "Name": "{{mountName}}",
+                    "RelativePath": "{{mountPath}}"
                   }
                 ]
               """
@@ -579,7 +647,7 @@ public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
                    "Name": "Project",
                    "Category": "C44E7604-B265-40D8-9442-11A01ECE334C",
                    "Thumbnail": "Media/Preview.png"{{authoringMounts}},
-                   "LocalFolderMounts": []{{pakFileMounts}}
+                   "LocalFolderMounts": []{{pakFileMounts}}{{outputFolderViews}}
                  }
                  """;
     }

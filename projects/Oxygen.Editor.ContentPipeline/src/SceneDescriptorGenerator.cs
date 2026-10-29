@@ -6,6 +6,7 @@ using System.Globalization;
 using System.Numerics;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Oxygen.Editor.Projects;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
@@ -515,7 +516,7 @@ public sealed partial class SceneDescriptorGenerator : ISceneDescriptorGenerator
     private static string GetDerivedSceneDescriptorPath(ContentCookScope scope, ContentCookInput sceneInput)
     {
         var folder = Path.GetDirectoryName(sceneInput.SourceRelativePath) ?? string.Empty;
-        return Path.Combine(scope.PreparationRoot ?? scope.InputRoot, ".pipeline", "Scenes", folder, Path.GetFileName(sceneInput.SourceRelativePath));
+        return ProjectOutputFolders.PipelinePath(scope.PreparationRoot ?? scope.InputRoot, "Scenes", folder, Path.GetFileName(sceneInput.SourceRelativePath));
     }
 
     private static NativeReferences? CreateNativeReferences(

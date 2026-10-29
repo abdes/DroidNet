@@ -60,7 +60,8 @@ internal static class ExplorerTestData
         => new(TestProject.Create(new MockFileSystem(), "C:/Query").Context with
         {
             Name = "Query",
-            AuthoringMounts = cookedMount ? [new("Content", "Content"), new("Cooked", ".cooked")] : [new("Content", "Content")],
+            AuthoringMounts = [new("Content", "Content")],
+            OutputFolderViews = cookedMount ? [new(ProjectOutputFolders.Cooked)] : [],
         });
 
     internal static AssetEntry CreateQueryAsset(string name, AssetKind kind, AssetCookFreshness freshness)

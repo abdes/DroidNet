@@ -47,6 +47,7 @@ internal static class MountChange
         AuthoringMounts = [.. context.AuthoringMounts],
         LocalFolderMounts = [.. context.LocalFolderMounts],
         PakFileMounts = [.. context.PakFileMounts],
+        OutputFolderViews = [.. context.OutputFolderViews],
         CookedContentOrder = [.. context.CookedContentOrder],
         DefaultSceneId = context.DefaultSceneId,
     };
@@ -81,6 +82,12 @@ internal static class MountChange
             loaded.PakFileMounts.Add(mount);
         }
 
+        loaded.OutputFolderViews.Clear();
+        foreach (var view in candidate.OutputFolderViews)
+        {
+            loaded.OutputFolderViews.Add(view);
+        }
+
         loaded.CookedContentOrder.Clear();
         foreach (var source in candidate.CookedContentOrder)
         {
@@ -90,6 +97,17 @@ internal static class MountChange
 
     private static void Validate(IFileSystem fileSystem, ProjectInfo candidate)
     {
+        if (candidate.AuthoringMounts.FirstOrDefault(ProjectOutputFolders.Contains) is { } output)
+        {
+            throw new InvalidDataException($"The output folder '{output.RelativePath}' cannot be the mount '{output.Name}'; output folders are never mounts.");
+        }
+
+        if (candidate.OutputFolderViews.Any(static view => view.Folder is not (ProjectOutputFolders.Cooked or ProjectOutputFolders.Build))
+            || candidate.OutputFolderViews.DistinctBy(static view => view.Folder).Count() != candidate.OutputFolderViews.Count)
+        {
+            throw new InvalidDataException($"The Content Explorer shows {ProjectOutputFolders.Cooked} and {ProjectOutputFolders.Build}, each once.");
+        }
+
         if (HasInvalidAuthoringMountName(candidate) || HasInvalidLibraryMountName(candidate) || HasDuplicateMountNames(candidate))
         {
             throw new InvalidDataException("Content mount names must be unique folder names.");
@@ -123,15 +141,15 @@ internal static class MountChange
 
         _ = CookedContentOrdering.Resolve(candidate);
 
-        // An authored content folder's mount name must pass the authored virtual path rules; output folders are not
-        // authored content and keep their own names.
+        // An authored content folder's mount name must pass the authored virtual path rules and take no reserved name.
         static bool HasInvalidAuthoringMountName(ProjectInfo candidate)
-            => candidate.AuthoringMounts.Any(static mount => !ProjectOutputFolders.Contains(mount)
-                && VirtualPath.ValidateMountName(mount.Name, VirtualPathRuleSet.Authored) is not null);
+            => candidate.AuthoringMounts.Any(static mount => ProjectAssetFiles.ValidateDeclaredMountName(mount.Name) is not null);
 
-        // A local folder or pak file mount is named by one folder name: not blank, and without a path separator or drive.
+        // A local folder or pak file mount is named by one folder name: not blank, without a path separator or drive,
+        // and not a reserved name.
         static bool HasInvalidLibraryMountName(ProjectInfo candidate)
-            => LibraryMountNames(candidate).Any(static name => string.IsNullOrWhiteSpace(name) || name.IndexOfAny(['/', '\\', ':']) >= 0);
+            => LibraryMountNames(candidate).Any(static name => string.IsNullOrWhiteSpace(name) || name.IndexOfAny(['/', '\\', ':']) >= 0
+                || ProjectAssetFiles.IsReservedMountName(name));
 
         // Mount names share one namespace, case-folded as the virtual file system compares them.
         static bool HasDuplicateMountNames(ProjectInfo candidate)
@@ -140,9 +158,9 @@ internal static class MountChange
             return names.Distinct(VirtualPathComparer.CaseFolded).Take(names.Length + 1).Count() != names.Length;
         }
 
-        // The project keeps somewhere to author content: a mount outside the pipeline's output folders.
+        // The project keeps somewhere to author content.
         static bool HasAuthoringContentFolder(ProjectInfo candidate)
-            => candidate.AuthoringMounts.Any(static mount => !ProjectOutputFolders.Contains(mount));
+            => candidate.AuthoringMounts.Count > 0;
 
         static IEnumerable<string> LibraryMountNames(ProjectInfo candidate)
             => candidate.LocalFolderMounts.Select(static mount => mount.Name).Concat(candidate.PakFileMounts.Select(static mount => mount.Name));

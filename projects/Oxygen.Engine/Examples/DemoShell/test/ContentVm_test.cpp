@@ -103,8 +103,11 @@ namespace {
         / ("oxygen-content-vm-" + Uuid::Generate().ToString());
       std::filesystem::create_directory(root_);
       settings_.explorer.model_root = root_;
-      browser_.ConfigureContentRoots(
-        { .content_root = root_, .cooked_root = root_ / ".cooked" });
+      browser_.ConfigureContentRoots({
+        .content_root = root_,
+        .cooked_root = root_ / ".cooked",
+        .scratch_root = root_,
+      });
       const auto source = root_ / "source.gltf";
       {
         std::ofstream output(source);
@@ -142,11 +145,14 @@ namespace {
         content::import::AsyncImportService::Config { .thread_pool_size = 2 });
       const auto stop
         = ScopeGuard([&service] noexcept -> void { service.Stop(); });
-      ASSERT_TRUE(
-        service.SubmitModelImport(ModelImportRecord::Prepare(record_, mounts),
-          [&completed](auto, const auto& report) -> auto {
-            completed.set_value(report);
-          }));
+      ASSERT_TRUE(service.SubmitModelImport(
+        ModelImportRecord::Prepare(record_,
+          content::import::ModelImportGenerations {
+            .root = root_ / ".cooked" / ModelImportRecord::kRecordsFolder,
+          },
+          mounts),
+        [&completed](
+          auto, const auto& report) -> auto { completed.set_value(report); }));
       ASSERT_EQ(
         future.wait_for(std::chrono::seconds(15)), std::future_status::ready);
       const auto report = future.get();

@@ -2,6 +2,8 @@
 
 Status: `accepted`
 
+Last Updated: 2026-10-29
+
 ## 1. Purpose
 
 This LLD defines the V0.1 on-disk layout for Oxygen Editor projects, the mount
@@ -19,7 +21,7 @@ This LLD owns:
 - `Project.oxy` layout fields related to mounts and template output.
 - predefined template descriptor shape and required template payloads.
 - Content Explorer root positioning rules.
-- derived/output root positioning rules.
+- output folder rules.
 
 This LLD does not own:
 
@@ -102,11 +104,10 @@ Every newly created V0.1 project has this shape:
 
   Config/                          # project/game/editor configuration, not asset content
   Packages/                        # package/plugin payloads when present
+  Imports/                         # model import records, committed: <virtual path>.import.json
 
-  .cooked/                         # derived cooked output, never edited as source
-  .imported/                       # import intermediate/cache output
-  .build/                          # build/package output
-  .oxygen/                         # editor-local project metadata/cache
+  .cooked/                         # output: the editor's publication model
+  .build/                          # output: the editor's working files
 ```
 
 Folder requirements:
@@ -131,10 +132,9 @@ Folder requirements:
 | `Content/SourceMedia/DCC/`    | Yes                                         | Verified after payload copy             | Yes, with layout warning if missing after project creation | Authoring mount       | Raw DCC source          |
 | `Config/`                     | Yes                                         | Verified after payload copy             | No; settings workflows create files inside it              | Project configuration | No                      |
 | `Packages/`                   | No                                          | No                                      | Package workflow creates                                   | Project packages      | No                      |
-| `.cooked/`                    | No                                          | No                                      | Cook creates                                               | Derived output        | No                      |
-| `.imported/`                  | No                                          | No                                      | Import creates                                             | Derived output        | No                      |
-| `.build/`                     | No                                          | No                                      | Build/package creates                                      | Derived output        | No                      |
-| `.oxygen/`                    | No                                          | No                                      | Editor metadata workflow creates                           | Editor-local metadata | No                      |
+| `Imports/`                    | No                                          | No                                      | Model import creates                                       | Project files         | No                      |
+| `.cooked/`                    | No                                          | No                                      | Cook creates                                               | Output folder         | No                      |
+| `.build/`                     | No                                          | No                                      | Cook, Play and relocation create                           | Output folder         | No                      |
 
 Predefined template validation fails with a `ProjectTemplate` diagnostic when a
 folder marked `Required in template payload` is missing. After project creation,
@@ -220,7 +220,7 @@ manifest version.
 - recent usage timestamps.
 - operation results or diagnostics.
 - cooked output state.
-- derived root state.
+- output folder state.
 
 Project creation always writes a new non-empty GUID. Predefined templates must
 not ship `Project.oxy` in their `SourceFolder`; a stray `Project.oxy` rejects
@@ -246,13 +246,14 @@ Rules:
 - rooted paths are rejected.
 - paths containing `..` segments are rejected.
 - paths resolving outside `<ProjectRoot>` are rejected.
-- paths in a pipeline output folder, any folder whose name starts with a dot
-  (`.cooked`, `.imported`, `.build`, `.pipeline`), are rejected
-  (`ProjectOutputFolders`).
+- paths in an output folder (see [Output Folders](#output-folders)) are
+  rejected: an output folder is never a mount.
 - mount names are unique case-insensitively across authoring and local mounts.
 - mount names match `^[A-Za-z][A-Za-z0-9_-]{0,63}$`.
-- reserved mount names are rejected case-insensitively: `Engine`, `Project`,
-  `Config`, `Derived`, `Cooked`, `Imported`, `Build`, `Packages`, `Oxygen`.
+- reserved mount names are rejected case-insensitively, for authoring, local
+  folder and pak file mounts alike: `project` and `Engine`, the mounts every
+  project has, and `Cooked` and `Build`, the Content Explorer's output folder
+  nodes (`ProjectAssetFiles.IsReservedMountName`).
 - `Content` is required and maps to `Content`.
 - changing a mount name changes asset identity and requires an explicit
   project-wide reference update.
@@ -328,7 +329,7 @@ Default create target rules are asset-kind-specific:
 | folder under an explicitly targeted local mount and matching the asset kind     | selected folder   | selected folder      | selected folder     | selected folder    |
 | folder under an explicitly targeted local mount but not matching the asset kind | `/<Local>/Scenes` | `/<Local>/Materials` | `/<Local>/Geometry` | `/<Local>/Scripts` |
 | folder under a local mount not explicitly chosen as target                      | `/Content/Scenes` | `/Content/Materials` | `/Content/Geometry` | `/Content/Scripts` |
-| `Config`, `Packages`, or derived roots                                          | `/Content/Scenes` | `/Content/Materials` | `/Content/Geometry` | `/Content/Scripts` |
+| `Config`, `Packages`, or output folders                                         | `/Content/Scenes` | `/Content/Materials` | `/Content/Geometry` | `/Content/Scripts` |
 
 Before creation, UI presents the effective target as both a virtual folder and
 resulting asset URI. Example:
@@ -338,16 +339,54 @@ Target folder: /Content/Materials
 Asset URI: asset:///Content/Materials/Red.omat.json
 ```
 
-### Derived And Output Roots
+### Output Folders
 
-Derived roots are never authored content roots:
+An output folder is any folder below the project root whose name starts with a
+dot. This is a rule, not a list: `.` and `..` are not folder names, and the
+check runs on the canonical folder below the project root, so
+`Content/../.cooked` is output and `../Media`, which leaves the project, is not.
+Every classification goes through `ProjectOutputFolders.Contains`.
 
-```text
-.cooked/
-.imported/
-.build/
-.oxygen/
-```
+The editor owns a project's output folders. It writes three, each with one
+definition in `ProjectOutputFolders` (a constant and a path helper) from which
+every path under it is built:
+
+| Folder      | Holds                                                                                                                                                                                                              |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `.cooked`   | The publication model: `head.json` selects one immutable publication, `publications/<publicationId>.json`, which names one cooked root per project mount, `generations/<SourceKey>/`, sealed by `.generation.lock` |
+| `.build`    | Working files: `cook/<OperationId>/` (locks, journal, inputs), `cook/publication.lock`, `cook/maintenance.lock`, `import-analysis/`, `inspection/`, `cache/`, `relocation/<id>/journal.json`, `play/launch.json`   |
+| `.pipeline` | Scene descriptors the pipeline generates, below a cook operation's input root in `.build/cook/<OperationId>`                                                                                                       |
+
+Rules:
+
+- an output folder is never a mount: neither an authoring mount nor a source
+  mount passed to the Player. Project validation and every mount change refuse
+  one.
+- the Content Explorer can show `.cooked` and `.build` as read-only `Cooked` and
+  `Build` nodes. They are view state, `OutputFolderViews` in `Project.oxy`, not
+  mounts.
+- nothing but the editor writes in an editor project's output folders. A tool
+  cooks into a root it owns, outside the project: RenderScene cooks the
+  examples project into `Examples/RenderScene/.cooked/Content`, and an
+  ImportTool record-only import publishes into its `--output` generations
+  folder.
+- a model's published generation has one publisher in an editor project, the
+  editor. A `model` job cooks into its mount's generation and returns the
+  record update in its report; the editor commits the update with the
+  publication. The record holds what imports established, never the selected
+  generation.
+- each owner collects only its own folders: the editor's maintenance reclaims
+  GUID-named generations, publications and operations, nothing else.
+- deleting output folders never deletes authored data; the next cook rebuilds
+  them.
+
+### Model Import Records
+
+A model's import record is at `<ProjectRoot>/Imports/<virtual path>.import.json`
+(`/Content/Models/Ship.glb` has `Imports/Content/Models/Ship.glb.import.json`).
+Records are committed state, not output. `Imports/` lies outside every authoring
+mount by convention: a mount whose path is `.` contains it, and cook inputs skip
+it by its prefix.
 
 Cooked output mapping:
 
@@ -367,10 +406,6 @@ Rules:
   index for that mount.
 - `.cooked/generations/<SourceKey>/...` paths are display/diagnostic facts, not
   persisted authored identities.
-- `.imported` contains import intermediate output.
-- `.build` contains build/package output.
-- `.oxygen` contains editor-local project metadata or cache.
-- deleting derived roots must not delete authored source data.
 
 ### Browser Positioning
 
@@ -386,10 +421,8 @@ Project
   <LocalFolderMount>               local authored mount
   Config                           project configuration
   Packages                         project packages, when present
-  Derived
-    Cooked                         .cooked
-    Imported                       .imported
-    Build                          .build
+  Cooked                           .cooked, when shown (view state)
+  Build                            .build, when shown (view state)
 ```
 
 Required labels:
@@ -416,10 +449,10 @@ roots or target folders outside the project layout policy.
 | ------------------------------- | ---------------------------------------------------------------------------------------------- |
 | `Oxygen.Editor.Projects`        | `Project.oxy`, mount validation, project creation layout validation, project cook-scope facts. |
 | `Oxygen.Editor.ProjectExplorer` | predefined template presentation and create-from-template workflow.                            |
-| `Oxygen.Editor.ContentExplorer` | user-facing projection of authoring, local, config, packages, and derived roots.               |
+| `Oxygen.Editor.ContentExplorer` | user-facing projection of authoring, local, config, packages, and output folders.              |
 | `Oxygen.Editor.WorldEditor`     | scene document create/open/save under `Content/Scenes`.                                        |
 | `Oxygen.Editor.MaterialEditor`  | material descriptor create/open/save under `Content/Materials` or selected material target.    |
-| `Oxygen.Editor.ContentPipeline` | import/cook outputs under derived roots and cooked indexes.                                    |
+| `Oxygen.Editor.ContentPipeline` | import/cook outputs under output folders and cooked indexes.                                   |
 | `Oxygen.Managed.Assets`         | reusable asset URI, catalog, import, and cook primitives.                                      |
 
 ## 7. Data Contracts
@@ -596,7 +629,7 @@ Project Explorer:
 
 Content Explorer:
 
-- authoring, local, config, packages, and derived roots use the labels defined
+- authoring, local, config, packages, and output folders use the labels defined
   in Browser Positioning.
 - create actions show target folder and resulting asset URI before confirming.
 - raw source media rows are importable/source rows.
@@ -679,7 +712,7 @@ Project layout/template work is complete when these checks pass:
 6. Built-in template validation fails when required `Icon` or `Preview` media
    paths do not exist in the template payload.
 7. Mount validation rejects rooted authoring paths, `..` authoring paths,
-   duplicate mount names, reserved mount names, derived-root mount paths, and
+   duplicate mount names, reserved mount names, output-folder mount paths, and
    missing `Content`.
 8. Local mount validation rejects relative local paths and duplicate/reserved
    mount names.
@@ -693,8 +726,8 @@ Project layout/template work is complete when these checks pass:
 12. Create actions under a local mount use that mount only when the local mount
     is explicitly selected as the creation target; otherwise they resolve to the
     default `Content` asset-kind folder.
-13. Content Explorer shows authoring, local, config, packages, cooked, imported,
-    and build roots with the required labels.
+13. Content Explorer shows authoring, local, config and packages roots, and the
+    optional Cooked and Build nodes, with the required labels.
 14. `Content/SourceMedia` rows reduce to source/importable state, not cooked
     state.
 15. The selected generation's `container.index.bin` is displayed as derived
@@ -706,11 +739,9 @@ None.
 
 ## 16. Reproduction And Publication Files
 
-`.pipeline` is a derived descriptor cache alongside `.imported`, `.cooked`,
-`.build` and `.oxygen`; it is never an authored mount or creation target.
-Project version-control metadata excludes those derived/local roots while
-retaining Project.oxy, Content/SourceMedia, authored descriptors/import settings
-and Config. Absolute local mounts are nonportable and reported as dependencies;
+Output folders are never authored mounts or creation targets. Project
+version-control metadata excludes them (`.cooked/`, `.build/`) while retaining
+Project.oxy, `Imports/`, Content/SourceMedia, authored descriptors and Config. Absolute local mounts are nonportable and reported as dependencies;
 the release fixture uses project-relative mounts.
 
 Input snapshots and source-recovery files live beneath

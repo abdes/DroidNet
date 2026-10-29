@@ -11,6 +11,7 @@ using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.Documents;
+using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
 using Oxygen.Editor.Assets.TestSupport;
@@ -40,7 +41,7 @@ public sealed partial class AssetFeedTests
         });
         var projects = workspace.OpenSession();
         var project = projects.Context;
-        using var provider = AssetFeeds.Create(catalog, projects, new WorkspaceCookScopeProvider(workspace), cookStatus: reader, documents: unsaved.Port.Object);
+        using var provider = AssetFeeds.Create(catalog, projects, new ProjectCookScopeProvider(), cookStatus: reader, documents: unsaved.Port.Object);
         IReadOnlyList<AssetEntry> rows = [];
         IReadOnlyList<AssetEntry> choices = [];
         provider.Items.Subscribe(
@@ -95,7 +96,7 @@ public sealed partial class AssetFeedTests
             _ = Interlocked.Increment(ref reads);
             return Task.FromResult<IReadOnlyList<AssetCookStatus>>(uris.Select(uri => new AssetCookStatus(uri, AssetCookFreshness.Current, HasPublishedOutput: true, OutputAvailability: CookedOutputAvailability.Present, [], [])).ToArray());
         });
-        using var provider = AssetFeeds.Create(catalog, context, new WorkspaceCookScopeProvider(workspace), cookStatus: reader, cooks: cookService.Object);
+        using var provider = AssetFeeds.Create(catalog, context, new ProjectCookScopeProvider(), cookStatus: reader, cooks: cookService.Object);
         IReadOnlyList<AssetEntry> rows = [];
         var notifications = 0;
         provider.Items.Subscribe(
@@ -155,7 +156,7 @@ public sealed partial class AssetFeedTests
             var complete = Interlocked.Increment(ref reads) > 1;
             return Task.FromResult<IReadOnlyList<AssetCookStatus>>([new(identity, complete ? AssetCookFreshness.Current : AssetCookFreshness.OutOfDate, HasPublishedOutput: true, OutputAvailability: CookedOutputAvailability.Present, [], [])]);
         });
-        using var provider = AssetFeeds.Create(new TestProjectAssetCatalog([new AssetRecord(AssetPath.Parse("/Content/Materials/Red.omat.json"))]), context, new WorkspaceCookScopeProvider(workspace), cookStatus: reader, cooks: cooks.Object);
+        using var provider = AssetFeeds.Create(new TestProjectAssetCatalog([new AssetRecord(AssetPath.Parse("/Content/Materials/Red.omat.json"))]), context, new ProjectCookScopeProvider(), cookStatus: reader, cooks: cooks.Object);
         provider.Items.Subscribe(
             new Observer<IReadOnlyList<AssetEntry>>(items =>
         {

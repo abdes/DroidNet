@@ -63,24 +63,15 @@ public sealed class CapturedInputCookTests
         _ = result.InputsAreCurrent.Should().BeFalse();
     }
 
-    /// <summary>Descriptor-relative and absolute paths select captured buffers without rewriting their descriptor.</summary>
-    /// <param name="absolute">Whether the authored descriptor uses an absolute retained path.</param>
+    /// <summary>Descriptor-relative paths select captured buffers without rewriting their descriptor.</summary>
     /// <returns>The asynchronous snapshot test.</returns>
     [TestMethod]
-    [DataRow(false)]
-    [DataRow(true)]
-    public async Task GeometryJobsReadCapturedBuffersAfterSourceChanges(bool absolute)
+    public async Task GeometryJobsReadCapturedBuffersAfterSourceChanges()
     {
         using var workspace = new CookWorkspace();
         WriteAuthoredGeometry(workspace, withBuffer: true);
         workspace.WriteMaterial("Content/Materials/Red.omat.json", "Red");
         const string source = "Content/Geometry/AuthoredCube.ogeo.json";
-        if (absolute)
-        {
-            var geometry = JsonNode.Parse(workspace.ReadText(source))!;
-            geometry["buffers"]![0]!["uri"] = Path.Combine(workspace.Root, "Content", "Geometry", "mesh.bin");
-            workspace.WriteText(source, geometry.ToJsonString());
-        }
 
         var authored = workspace.ReadText(source);
         var api = new CapturingEngineContentPipelineApi(new(workspace.Root, Succeeded: true, []), SucceededInspection(workspace))
@@ -109,19 +100,59 @@ public sealed class CapturedInputCookTests
         _ = (await File.ReadAllTextAsync(Path.Combine(result.InputSnapshot!.InputRoot, source), this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Be(authored);
     }
 
-    /// <summary>Texture jobs consume the captured image even when the source changes during cooking.</summary>
-    /// <param name="absolute">Whether the descriptor references an absolute retained image path.</param>
+    /// <summary>
+    /// A descriptor that names its file by an absolute path is refused before anything cooks, as the engine refuses
+    /// every absolute committed path; the descriptor is left as authored.
+    /// </summary>
+    /// <param name="geometry">Whether the descriptor is a geometry's buffer rather than a texture's image.</param>
     /// <returns>The asynchronous snapshot test.</returns>
     [TestMethod]
-    [DataRow(false)]
-    [DataRow(true)]
-    public async Task TextureJobsReadCapturedImagesAfterSourceChanges(bool absolute)
+    [DataRow(true, DisplayName = "A geometry's buffer")]
+    [DataRow(false, DisplayName = "A texture's image")]
+    public async Task DescriptorsNamingAnAbsolutePathAreRefused(bool geometry)
+    {
+        using var workspace = new CookWorkspace();
+        string source;
+        if (geometry)
+        {
+            WriteAuthoredGeometry(workspace, withBuffer: true);
+            workspace.WriteMaterial("Content/Materials/Red.omat.json", "Red");
+            source = "Content/Geometry/AuthoredCube.ogeo.json";
+            var descriptor = JsonNode.Parse(workspace.ReadText(source))!;
+            descriptor["buffers"]![0]!["uri"] = Path.Combine(workspace.Root, "Content", "Geometry", "mesh.bin");
+            workspace.WriteText(source, descriptor.ToJsonString());
+        }
+        else
+        {
+            source = "Content/Textures/Meter.otex.json";
+            workspace.WriteText("Content/Textures/meter.png", "saved mask image bytes");
+            workspace.WriteText(source, JsonSerializer.Serialize(new { source = Path.Combine(workspace.Root, "Content", "Textures", "meter.png") }));
+        }
+
+        var authored = workspace.ReadText(source);
+        var api = new CapturingEngineContentPipelineApi(new(workspace.Root, Succeeded: true, []), SucceededInspection(workspace))
+        {
+            SourceAnalysis = NativeSourceFactsFixture.AnalyzeAsync,
+        };
+        var service = CreateService(workspace, api, new CapturingSceneDescriptorGenerator([]));
+
+        var result = await service.CookAssetAsync(AssetPath.Parse("/" + source[..^5]), this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        _ = result.Status.Should().Be(OperationStatus.Failed);
+        _ = result.Diagnostics.Should().Contain(issue => issue.Code == "path.absolute_committed" && issue.Severity == DiagnosticSeverity.Error);
+        _ = workspace.ReadText(source).Should().Be(authored);
+    }
+
+    /// <summary>Texture jobs consume the captured image even when the source changes during cooking.</summary>
+    /// <returns>The asynchronous snapshot test.</returns>
+    [TestMethod]
+    public async Task TextureJobsReadCapturedImagesAfterSourceChanges()
     {
         using var workspace = new CookWorkspace();
         const string source = "Content/Textures/Meter.otex.json";
         const string image = "Content/Textures/meter.png";
         workspace.WriteText(image, "saved mask image bytes");
-        workspace.WriteText(source, JsonSerializer.Serialize(new { source = absolute ? Path.Combine(workspace.Root, image) : "meter.png" }));
+        workspace.WriteText(source, JsonSerializer.Serialize(new { source = "meter.png" }));
 
         var authored = workspace.ReadText(source);
         var inspection = SucceededInspection(workspace) with

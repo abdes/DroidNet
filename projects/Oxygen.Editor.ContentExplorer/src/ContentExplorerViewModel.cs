@@ -260,8 +260,7 @@ public sealed partial class ContentExplorerViewModel(
         }
 
         var authoring = project?.AuthoringMounts.FirstOrDefault(mount => string.Equals(mount.Name, folder.Mount, StringComparison.Ordinal));
-        return authoring is not null && !ContentFoldersViewModel.IsPersistedProjectRelativeVirtualMount(authoring)
-            ? "Authoring source" : "Read-only source";
+        return authoring is not null ? "Authoring source" : "Read-only source";
     }
 
     /// <summary>Builds the footer summary from the active layout's counts and selection.</summary>

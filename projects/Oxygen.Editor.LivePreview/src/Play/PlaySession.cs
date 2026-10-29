@@ -213,16 +213,20 @@ public sealed partial class PlaySession : ObservableObject, IRuntimeProblemSourc
     }
 
     /// <summary>Gets the source mounts the launch file names: each existing mount folder of the project, by mount name.</summary>
-    /// <remarks>External scripts store mount paths, so the player resolves them through these folders by name.</remarks>
+    /// <remarks>
+    /// External scripts store mount paths, so the player resolves them through these folders by name. An output folder
+    /// is never a source mount.
+    /// </remarks>
     /// <param name="project">The project that plays.</param>
-    /// <returns>The mount folders by name; a mount whose folder is missing is left out.</returns>
+    /// <returns>The mount folders by name; a mount whose folder is missing or is output is left out.</returns>
     internal static Dictionary<string, string> SourceMounts(ProjectContext project)
         => project.AuthoringMounts
+            .Where(static mount => !ProjectOutputFolders.Contains(mount))
             .Select(mount => (mount.Name, Folder: project.ProjectRoot.Combine(mount.RelativePath).FullPath))
             .Where(mount => project.FileSystem.Directory.Exists(mount.Folder))
             .ToDictionary(static mount => mount.Name, static mount => mount.Folder, StringComparer.Ordinal);
 
-    private static string LaunchFilePath(ProjectContext project) => Path.Combine(project.ProjectRoot.FullPath, ".build", "play", "launch.json");
+    private static string LaunchFilePath(ProjectContext project) => ProjectOutputFolders.BuildPath(project.ProjectRoot.FullPath, "play", "launch.json");
 
     private async Task RunPlayAsync(ProjectContext project, PlayRequest request, CancellationToken cancellationToken)
     {

@@ -2,7 +2,7 @@
 
 Status: **design for owner review** (ED-M09 item 14, #77 slice 77.8).
 
-Last Updated: 2026-10-28
+Last Updated: 2026-10-29
 
 Summary: a node of a scene can **instance** an imported model (`Car.glb`) or
 another authored scene (`Watchtower.oscene`). The instanced hierarchy appears
@@ -1246,9 +1246,12 @@ settings) would otherwise be written twice.
 
 - **Left out, each owned elsewhere.** The content root: the record's path
   without `Imports/` and its virtual path. The published generation:
-  publication state, kept by each publisher (the ImportTool in
-  `<content_root>/.cooked/Imports/<source_identity>/head.json`, the editor in
-  its publication head). The bundle's file list: the source analysis reports it
+  publication state, never in the record, with one publisher per root. In an
+  editor project that is the editor: a `model` job cooks into its mount's
+  generation and the editor commits the record update with its publication
+  head. The ImportTool's record-only imports publish into a generations folder
+  the tool owns, `<--output>/<source_identity>/head.json`, never into a
+  project's output folders. The bundle's file list: the source analysis reports it
   on every import. The importer's name: the schema version states it.
 - **One job.** An import manifest job of type `model` names a record:
   `{ "type": "model", "record": "Imports/<virtual path>.import.json" }`. The

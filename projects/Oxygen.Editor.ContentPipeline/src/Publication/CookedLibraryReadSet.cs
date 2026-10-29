@@ -9,6 +9,7 @@ using Oxygen.Editor.ContentPipeline.Incremental;
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Assets.Persistence.LooseCooked;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Assets.Catalog.Pak;
@@ -424,7 +425,7 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
     private async Task AddLooseFolderAsync(LocalFolderMount mount, CancellationToken cancellationToken)
     {
         var path = mount.Root.FullPath;
-        if (!File.Exists(Path.Combine(path, "container.index.bin")))
+        if (!File.Exists(Path.Combine(path, LooseCookedIndex.FileName)))
         {
             return;
         }

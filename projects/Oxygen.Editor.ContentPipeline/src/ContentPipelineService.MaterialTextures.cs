@@ -38,7 +38,7 @@ public sealed partial class ContentPipelineService : IMaterialTextures
             return textures.ToImmutable();
         }
 
-        var operationRoot = Path.Combine(project.ProjectRoot.FullPath, ".build", "inspection");
+        var operationRoot = ProjectOutputFolders.BuildPath(project.ProjectRoot.FullPath, "inspection");
         foreach (var mount in product.Outputs.Where(static output => output.Asset.Kind == ContentCookAssetKind.Material).GroupBy(static output => output.RootMount, StringComparer.Ordinal))
         {
             var expectedRoot = prior.Roots.FirstOrDefault(root => string.Equals(root.Mount, mount.Key, StringComparison.Ordinal));

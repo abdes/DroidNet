@@ -38,7 +38,7 @@ public sealed partial class ContentPipelineService : IGeometrySurfaceProvider
 
         using var publicationRead = await this.publication.AcquireReadAsync(project, token).ConfigureAwait(false);
         using var libraries = await CookedLibraryReadSet.AcquireAsync(project, this.engineContent, token, uri => ImportedOutputs.ResolveOutput(project, uri, ContentCookInputRole.Dependency), [.. publicationRead.ProductState.ProducedAssets]).ConfigureAwait(false);
-        var read = new GeometryRead(project, geometryUri, inspector, Path.Combine(project.ProjectRoot.FullPath, ".build", "inspection"));
+        var read = new GeometryRead(project, geometryUri, inspector, ProjectOutputFolders.BuildPath(project.ProjectRoot.FullPath, "inspection"));
         try
         {
             return libraries.FindPreferredAsset(geometryUri) is { } library

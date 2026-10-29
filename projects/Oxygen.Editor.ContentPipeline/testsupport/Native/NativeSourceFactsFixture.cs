@@ -33,7 +33,7 @@ internal sealed class NativeSourceFactsFixture(ProjectContext project) : ICookSo
         var artifacts = verified.Artifacts ?? throw new InvalidOperationException("The installed test SDK is unavailable.");
         await using var lifetime = artifacts.ConfigureAwait(false);
         var native = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
-        var scopes = new ProjectCookScopeProvider(new DroidNet.Storage.Native.NativeStorageProvider(new Testably.Abstractions.RealFileSystem()));
+        var scopes = new ProjectCookScopeProvider();
         var analyzer = new CookSourceAnalyzer(
             operation,
             artifacts,

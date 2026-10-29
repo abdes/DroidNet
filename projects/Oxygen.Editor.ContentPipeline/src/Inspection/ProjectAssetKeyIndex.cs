@@ -35,7 +35,7 @@ internal sealed class ProjectAssetKeyIndex(string cachePath, string[] paths)
         var candidates = EnumeratePaths(project, cancellationToken).Concat(knownOutputs.Select(static uri => uri.VirtualPath))
             .Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray();
         var fingerprint = Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(candidates)));
-        var index = new ProjectAssetKeyIndex(Path.Combine(project.ProjectRoot.FullPath, ".build", "cache", "project-asset-keys-v1", fingerprint + ".json"), candidates);
+        var index = new ProjectAssetKeyIndex(ProjectOutputFolders.BuildPath(project.ProjectRoot.FullPath, "cache", "project-asset-keys-v1", fingerprint + ".json"), candidates);
         await index.ReadCacheAsync(cancellationToken).ConfigureAwait(false);
         return index;
     }

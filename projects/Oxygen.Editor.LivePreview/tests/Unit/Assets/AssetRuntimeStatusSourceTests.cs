@@ -60,7 +60,7 @@ public sealed class AssetRuntimeStatusSourceTests
         await using var lifetime = engine.ConfigureAwait(false);
         using var source = new AssetRuntimeStatusSource(engine);
 
-        _ = source.GetStatus(ProjectId).Roots.Should().Equal(FileSystemPath.From("C:/Project/.cooked/Content"));
+        _ = source.GetStatus(ProjectId).Roots.Should().Equal(FileSystemPath.From("C:/Project/.cooked/generations/0123456789abcdef0123456789abcdef"));
     }
 
     [TestMethod]
@@ -103,7 +103,7 @@ public sealed class AssetRuntimeStatusSourceTests
     private static FakeEngine CreateEngine()
     {
         var engine = new FakeEngine();
-        engine.ContentStatus = new(engine.World.RunId, 1, RuntimeContentState.Mounted, [new("C:/Project/.cooked/Content", RuntimeCookedRootKind.LooseFolder)]);
+        engine.ContentStatus = new(engine.World.RunId, 1, RuntimeContentState.Mounted, [new("C:/Project/.cooked/generations/0123456789abcdef0123456789abcdef", RuntimeCookedRootKind.LooseFolder)]);
         return engine;
     }
 

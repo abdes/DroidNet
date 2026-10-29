@@ -35,11 +35,16 @@ public static class ProjectAssetFiles
             : null;
     }
 
-    /// <summary>Tests whether a name is one of the mounts every project already has, whatever its case.</summary>
+    /// <summary>
+    /// Tests whether a name is reserved, whatever its case: one of the mounts every project already has, or a Content
+    /// Explorer node that shows an output folder.
+    /// </summary>
     /// <param name="name">The mount name.</param>
-    /// <returns>Whether the name is the project files' or the engine content's mount.</returns>
+    /// <returns>Whether the name is the project files', the engine content's, or an output folder node's.</returns>
     public static bool IsReservedMountName(string name)
-        => VirtualPathComparer.CaseFolded.Equals(name, ProjectFilesMount) || VirtualPathComparer.CaseFolded.Equals(name, AssetPath.Engine.Mount);
+        => VirtualPathComparer.CaseFolded.Equals(name, ProjectFilesMount) || VirtualPathComparer.CaseFolded.Equals(name, AssetPath.Engine.Mount)
+           || VirtualPathComparer.CaseFolded.Equals(name, ProjectOutputFolders.CookedViewName)
+           || VirtualPathComparer.CaseFolded.Equals(name, ProjectOutputFolders.BuildViewName);
 
     /// <summary>Finds the file or folder at a virtual path.</summary>
     /// <param name="project">The project.</param>

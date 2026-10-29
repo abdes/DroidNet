@@ -20,6 +20,7 @@ using Oxygen.Editor.ContentPipeline.Mounting;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets.Catalog;
+using Oxygen.Managed.Assets.Persistence.LooseCooked;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentExplorer.Panes.ContentFolders;
@@ -189,17 +190,6 @@ public partial class ContentFoldersViewModel(
         }
     }
 
-    /// <summary>Identifies derived roots retained as project-relative virtual mounts.</summary>
-    /// <param name="mount">The persisted mount declaration.</param>
-    /// <returns>Whether the mount is a derived project root.</returns>
-    internal static bool IsPersistedProjectRelativeVirtualMount(ProjectMountPoint mount)
-    {
-        var relativePath = mount.RelativePath.Trim().Replace('\\', '/').Trim('/');
-        return string.Equals(relativePath, ".cooked", StringComparison.OrdinalIgnoreCase)
-               || string.Equals(relativePath, ".imported", StringComparison.OrdinalIgnoreCase)
-               || string.Equals(relativePath, ".build", StringComparison.OrdinalIgnoreCase);
-    }
-
     /// <summary>
     ///     Protected dispose pattern implementation.
     /// </summary>
@@ -289,26 +279,24 @@ public partial class ContentFoldersViewModel(
     {
         var expected = session.Context;
         var candidate = this.GetActiveProjectInfo();
-        var (name, path) = kind switch
+        var view = new OutputFolderView(kind switch
         {
-            KnownVirtualFolderMount.Cooked => ("Cooked", ".cooked"),
-            KnownVirtualFolderMount.Imported => ("Imported", ".imported"),
-            KnownVirtualFolderMount.Build => ("Build", ".build"),
+            KnownVirtualFolderMount.Cooked => ProjectOutputFolders.Cooked,
+            KnownVirtualFolderMount.Build => ProjectOutputFolders.Build,
             _ => throw new ArgumentOutOfRangeException(nameof(kind)),
-        };
-        var existing = candidate.AuthoringMounts.FirstOrDefault(mount => string.Equals(mount.RelativePath, path, StringComparison.OrdinalIgnoreCase));
-        if (existing is not null)
+        });
+        if (candidate.OutputFolderViews.Any(shown => string.Equals(shown.Folder, view.Folder, StringComparison.Ordinal)))
         {
             await this.ReloadMountTreeAsync().ConfigureAwait(true);
-            contentExplorerState.SetSelectedFolders([AssetPath.Create(existing.Name)]);
+            contentExplorerState.SetSelectedFolders([AssetPath.Create(view.Name)]);
             return;
         }
 
-        candidate.AuthoringMounts.Add(new(name, path));
+        candidate.OutputFolderViews.Add(view);
         await this.ApplyMountCandidateAsync(expected, candidate).ConfigureAwait(true);
-        if (session.Context.AuthoringMounts.Any(mount => string.Equals(mount.Name, name, StringComparison.Ordinal) && string.Equals(mount.RelativePath, path, StringComparison.Ordinal)))
+        if (session.Context.OutputFolderViews.Any(shown => string.Equals(shown.Folder, view.Folder, StringComparison.Ordinal)))
         {
-            contentExplorerState.SetSelectedFolders([AssetPath.Create(name)]);
+            contentExplorerState.SetSelectedFolders([AssetPath.Create(view.Name)]);
         }
     }
 
@@ -327,7 +315,7 @@ public partial class ContentFoldersViewModel(
 
         var folder = FileSystemPath.From(definition.AbsoluteFolderPath);
         var relative = GetRelativeMountPath(expected.ProjectRoot, folder);
-        var isCooked = await storage.DocumentExistsAsync(Path.Combine(definition.AbsoluteFolderPath, "container.index.bin")).ConfigureAwait(true);
+        var isCooked = await storage.DocumentExistsAsync(Path.Combine(definition.AbsoluteFolderPath, LooseCookedIndex.FileName)).ConfigureAwait(true);
         if (relative is not null && !isCooked)
         {
             candidate.AuthoringMounts.Add(new(definition.MountPointName, relative));
@@ -380,6 +368,7 @@ public partial class ContentFoldersViewModel(
 
         projectInfo.LocalFolderMounts.Clear();
         projectInfo.AuthoringMounts.Clear();
+        projectInfo.OutputFolderViews.Clear();
 
         var children = await this.projectRoot.Children.ConfigureAwait(true);
         foreach (var child in children)
@@ -393,9 +382,9 @@ public partial class ContentFoldersViewModel(
 
     private async Task LoadPersistedMountsAsync(ProjectRootTreeItemAdapter root, ProjectInfo projectInfo, ProjectContext context)
     {
-        foreach (var mount in projectInfo.AuthoringMounts.Where(IsPersistedProjectRelativeVirtualMount))
+        foreach (var view in projectInfo.OutputFolderViews)
         {
-            await this.RestoreMountAsync(root, context, mount.Name, mount.RelativePath, isProjectRelative: true, mount.IsExpanded).ConfigureAwait(true);
+            await this.RestoreMountAsync(root, context, view.Name, view.Folder, isProjectRelative: true, view.IsExpanded).ConfigureAwait(true);
         }
 
         foreach (var mount in projectInfo.LocalFolderMounts)
@@ -438,6 +427,11 @@ public partial class ContentFoldersViewModel(
         foreach (var mount in context.PakFileMounts)
         {
             projectInfo.PakFileMounts.Add(mount);
+        }
+
+        foreach (var view in context.OutputFolderViews)
+        {
+            projectInfo.OutputFolderViews.Add(view);
         }
 
         foreach (var source in context.CookedContentOrder)

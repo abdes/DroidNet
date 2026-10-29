@@ -7,9 +7,9 @@ using Oxygen.Managed.Core;
 namespace Oxygen.Editor.Projects;
 
 /// <summary>
-///     Minimal project cook scope available in ED-M01.
+///     The project a cook runs for. Every output path is derived from <see cref="ProjectRoot"/> through
+///     <see cref="ProjectOutputFolders"/>.
 /// </summary>
 /// <param name="ProjectId">The project identity.</param>
 /// <param name="ProjectRoot">The normalized project root path.</param>
-/// <param name="CookedOutputRoot">The normalized cooked output root path.</param>
-public sealed record ProjectCookScope(Guid ProjectId, FileSystemPath ProjectRoot, string CookedOutputRoot);
+public sealed record ProjectCookScope(Guid ProjectId, FileSystemPath ProjectRoot);

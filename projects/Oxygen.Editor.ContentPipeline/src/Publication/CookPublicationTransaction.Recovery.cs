@@ -21,7 +21,7 @@ internal sealed partial class CookPublicationTransaction
         CancellationToken cancellationToken)
     {
         gate.VerifyOwner(project.ProjectRoot);
-        var directory = Path.Combine(project.ProjectRoot.FullPath, ".build", "cook", operationId.ToString("N"));
+        var directory = CookPublicationPaths.Operation(project.ProjectRoot.FullPath, operationId);
         CookOutputLease.RejectReparsePoint(directory);
         var path = Path.Combine(directory, "publication.json");
         CookOutputLease.RejectReparsePoint(path);
@@ -138,7 +138,7 @@ internal sealed partial class CookPublicationTransaction
         CancellationToken cancellationToken)
     {
         var pending = new List<Guid>();
-        var operations = Path.Combine(project.ProjectRoot.FullPath, ".build", "cook");
+        var operations = CookPublicationPaths.Operations(project.ProjectRoot.FullPath);
         foreach (var directory in Directory.EnumerateDirectories(operations))
         {
             cancellationToken.ThrowIfCancellationRequested();

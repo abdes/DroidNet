@@ -10,7 +10,7 @@ It holds contracts and rules, not features. It has no UI, no engine and no
 project: a module can name an asset, check a name a user typed or report a
 failure without depending on the module that owns it.
 
-**At a glance**
+## At a glance
 
 - **Typed identities.** `SceneId`, `NodeId` and `ComponentId` cannot be confused
   with each other or with a bare `Guid`.
@@ -137,7 +137,7 @@ engine source tree.
 | `ValidateMountName(mount, rules)`                  | A mount name; an authored mount refuses the leading dot the engine reserves                     |
 | `NormalizeTypedName(typed)`                        | A name a user typed, trimmed and in NFC, the form it is checked and used in                     |
 | `FoldCase(text)`, `VirtualPathComparer.CaseFolded` | Case-only siblings, which a case-insensitive file system holds in one file                      |
-| `IsDerivedContent(segment)`                        | Segments an authored path refuses: `.cooked`, `.imported`, `.build`, `.pipeline`, `SourceMedia` |
+| `IsDerivedContent(segment)`                        | Segments an authored path refuses: any starting with `.` (`.build`, `.pipeline`), `SourceMedia` |
 
 Identity itself is case-sensitive, as the engine hashes the bytes as spelled;
 the case-folded comparer is for refusing a sibling, never for comparing

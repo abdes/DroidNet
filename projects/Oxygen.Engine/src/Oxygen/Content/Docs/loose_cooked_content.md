@@ -492,8 +492,9 @@ path, file timestamp or generation name. Input fingerprints remain separate.
 
 A cooked root holds one mount, the one its asset identities name
 (`/Content/Scenes/A/B.oscene` lives at `Scenes/A/B.oscene` under a root of the
-`Content` mount). A project keeps sibling containers: RenderScene cooks the
-examples project's scenes into its own `.cooked/Content`, and a project retains
-models in `.cooked/Imports/<source_identity>/<generation>`; the model import
-records `Imports/<identity>.import.json` remain under the content root. No container
+`Content` mount). A tool keeps sibling containers in roots it owns:
+RenderScene cooks the examples project's scenes into its own `.cooked/Content`,
+and a record-only model import retains generations in the caller's
+`<generations_root>/<source_identity>/<generation>`; the model import records
+`Imports/<virtual path>.import.json` remain under the content root. No container
 includes another container's files or ignores arbitrary nested indexes.

@@ -6,6 +6,7 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Assets.Persistence.LooseCooked;
 
 namespace Oxygen.Editor.ContentExplorer.Panes.ContentFolders;
 
@@ -24,7 +25,7 @@ public sealed partial class ContentPriorityViewModel : ObservableObject
                     var folder = project.LocalFolderMounts.Single(mount => string.Equals(mount.Name, source.Name, StringComparison.Ordinal));
 
                     // A folder without an index holds no cooked content to order yet.
-                    if (project.FileSystem.File.Exists(Path.Combine(folder.Root.FullPath, "container.index.bin")))
+                    if (project.FileSystem.File.Exists(Path.Combine(folder.Root.FullPath, LooseCookedIndex.FileName)))
                     {
                         this.Sources.Add(new(source, folder.Name, folder.Root.FullPath));
                     }
@@ -35,7 +36,7 @@ public sealed partial class ContentPriorityViewModel : ObservableObject
                     this.Sources.Add(new(source, pak.Name, pak.Path.FullPath));
                     break;
                 case CookedContentSourceKind.ProjectOutput:
-                    this.Sources.Add(new(source, "Project output", Path.Combine(project.ProjectRoot.FullPath, ".cooked")));
+                    this.Sources.Add(new(source, "Project output", ProjectOutputFolders.CookedPath(project.ProjectRoot.FullPath)));
                     break;
                 default:
                     throw new InvalidDataException("Content priority names an unknown source kind.");

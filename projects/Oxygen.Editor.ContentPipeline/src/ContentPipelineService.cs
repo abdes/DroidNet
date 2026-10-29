@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Incremental;
 using Oxygen.Editor.ContentPipeline.Inspection;
+using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
@@ -590,7 +591,7 @@ public sealed partial class ContentPipelineService(
         var execution = new ContentImportExecution(
             operationId,
             scope.InputRoot,
-            Path.Combine(scope.Project.ProjectRoot.FullPath, ".build", "cook", operationId.ToString("N")),
+            CookPublicationPaths.Operation(scope.Project.ProjectRoot.FullPath, operationId),
             manifest)
         { Artifacts = scope.Artifacts, CapturedInputs = scope.CapturedInputs, Importers = scope.Importers };
         return this.engineContentPipelineApi.ImportAsync(execution, cancellationToken);

@@ -2,12 +2,14 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Managed.Assets.Persistence.LooseCooked;
+
 namespace Oxygen.Editor.ContentPipeline.Publication;
 
 /// <summary>Physical lifetime operations for immutable, project-owned cooked generations.</summary>
 internal sealed partial class CookedGeneration : IDisposable
 {
-    internal const string MarkerFileName = ".generation.lock";
+    internal const string MarkerFileName = LooseCookedIndex.GenerationLeaseFileName;
 
     private readonly string root;
     private readonly FileStream? ownership;
@@ -97,7 +99,7 @@ internal sealed partial class CookedGeneration : IDisposable
         }
 
         var marker = Path.Combine(this.root, MarkerFileName);
-        var index = Path.Combine(this.root, "container.index.bin");
+        var index = Path.Combine(this.root, LooseCookedIndex.FileName);
         CookOutputLease.RejectReparsePoint(index);
         File.Delete(index);
         foreach (var entry in Directory.EnumerateFileSystemEntries(this.root))

@@ -48,7 +48,7 @@ public sealed partial class AssetFeedTests
         var catalog = new TestProjectAssetCatalog([new AssetRecord(source)]);
         var state = new AssetCookStatus(AssetPath.Parse("/Content/Materials/Red.omat"), freshness, published, verified ? CookedOutputAvailability.Present : CookedOutputAvailability.Missing, [], []);
         var reader = new DelegateStatusReader((_, _, _) => Task.FromResult<IReadOnlyList<AssetCookStatus>>([state]));
-        using var provider = AssetFeeds.Create(catalog, workspace.OpenSession(), new WorkspaceCookScopeProvider(workspace), cookStatus: reader);
+        using var provider = AssetFeeds.Create(catalog, workspace.OpenSession(), new ProjectCookScopeProvider(), cookStatus: reader);
         IReadOnlyList<AssetEntry> rows = [];
         IReadOnlyList<AssetEntry> choices = [];
         provider.Items.Subscribe(new Observer<IReadOnlyList<AssetEntry>>(value => rows = value), this.TestContext.CancellationToken);
@@ -78,7 +78,7 @@ public sealed partial class AssetFeedTests
         using var provider = AssetFeeds.Create(
             catalog,
             workspace.OpenSession(),
-            new WorkspaceCookScopeProvider(workspace),
+            new ProjectCookScopeProvider(),
             cookStatus: reader);
         IReadOnlyList<AssetEntry> rows = [];
         provider.Items.Subscribe(new Observer<IReadOnlyList<AssetEntry>>(value => rows = value), this.TestContext.CancellationToken);
@@ -112,7 +112,7 @@ public sealed partial class AssetFeedTests
             return [];
         });
         var catalog = new TestProjectAssetCatalog([new AssetRecord(red)]);
-        using var provider = AssetFeeds.Create(catalog, workspace.OpenSession(), new WorkspaceCookScopeProvider(workspace), cookStatus: reader);
+        using var provider = AssetFeeds.Create(catalog, workspace.OpenSession(), new ProjectCookScopeProvider(), cookStatus: reader);
         var snapshots = new List<IReadOnlyList<AssetEntry>>();
         provider.Items.Subscribe(new Observer<IReadOnlyList<AssetEntry>>(snapshots.Add), this.TestContext.CancellationToken);
         var refresh = provider.RefreshAsync(this.TestContext.CancellationToken);
@@ -163,7 +163,7 @@ public sealed partial class AssetFeedTests
         });
         var context = workspace.OpenSession();
         var catalog = new TestProjectAssetCatalog([new AssetRecord(AssetPath.Parse("/Content/Materials/Red.omat.json"))]);
-        using var provider = AssetFeeds.Create(catalog, context, new WorkspaceCookScopeProvider(workspace), cookStatus: reader);
+        using var provider = AssetFeeds.Create(catalog, context, new ProjectCookScopeProvider(), cookStatus: reader);
         IReadOnlyList<AssetEntry> rows = [];
         provider.Items.Subscribe(new Observer<IReadOnlyList<AssetEntry>>(value => rows = value), this.TestContext.CancellationToken);
         var refresh = provider.RefreshAsync(this.TestContext.CancellationToken);
@@ -201,7 +201,7 @@ public sealed partial class AssetFeedTests
         const string failure = "The publication document does not match the selected digest.";
         var catalog = new TestProjectAssetCatalog([new AssetRecord(source)]) { PublicationError = failure };
         var reader = new DelegateStatusReader((_, _, _) => throw new InvalidOperationException("Must not reopen failed publication."));
-        using var provider = AssetFeeds.Create(catalog, workspace.OpenSession(), new WorkspaceCookScopeProvider(workspace), cookStatus: reader);
+        using var provider = AssetFeeds.Create(catalog, workspace.OpenSession(), new ProjectCookScopeProvider(), cookStatus: reader);
         var item = await provider.ResolveAsync(identity, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = item.Should().NotBeNull();
         _ = item!.IsSelectable.Should().Be(!broken);
@@ -238,7 +238,7 @@ public sealed partial class AssetFeedTests
 
             return [];
         });
-        var provider = AssetFeeds.Create(new TestProjectAssetCatalog([new(source)]), workspace.OpenSession(), new WorkspaceCookScopeProvider(workspace), cookStatus: reader);
+        var provider = AssetFeeds.Create(new TestProjectAssetCatalog([new(source)]), workspace.OpenSession(), new ProjectCookScopeProvider(), cookStatus: reader);
         var refresh = provider.RefreshAsync(this.TestContext.CancellationToken);
         var disposal = Task.CompletedTask;
         try

@@ -28,6 +28,7 @@
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
+#include <Oxygen/Cooker/Import/ModelImportRecord.h>
 #include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 
@@ -253,6 +254,9 @@ private:
   auto OnImportComplete(content::import::ImportJobId job_id,
     const content::import::ImportReport& report) -> void;
   auto OnImportProgress(const content::import::ProgressEvent& progress) -> void;
+  //! The scratch project's generations store; empty without a scratch root.
+  [[nodiscard]] auto GeneratedStorage() const
+    -> content::import::ModelImportGenerations;
   [[nodiscard]] auto ResolveSceneLabel(
     const std::optional<data::AssetKey>& key) const -> std::string;
 

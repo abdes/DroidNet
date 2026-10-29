@@ -117,7 +117,7 @@ public sealed partial class ContentCookCoordinator : IContentCookCoordinator, IC
 
     private static bool IsInOperationFolder(string path, ContentCookOperation operation)
     {
-        var folder = operation.Project.ProjectRoot.Combine(Path.Combine(".build", "cook", operation.OperationId.ToString("N")));
+        var folder = FileSystemPath.From(CookPublicationPaths.Operation(operation.Project.ProjectRoot.FullPath, operation.OperationId));
         var file = FileSystemPath.From(path);
         return file != folder && file.IsSameOrInside(folder);
     }

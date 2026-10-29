@@ -44,7 +44,7 @@ public sealed class CookedLibraryFoldersTests
 
         public Fixture()
         {
-            var output = this.WriteLibrary(".cooked/Content");
+            var output = this.WriteLibrary($".cooked/generations/{Guid.NewGuid():N}");
             this.First = this.WriteLibrary("Libraries/First");
             var second = this.WriteLibrary("Libraries/Second");
             this.Project = TestProject.Create(new RealFileSystem(), this.directory.FullName).Context with

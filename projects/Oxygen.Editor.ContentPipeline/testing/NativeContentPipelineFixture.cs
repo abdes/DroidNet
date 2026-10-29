@@ -34,7 +34,7 @@ public sealed partial class NativeContentPipelineFixture
         this.Pipeline = new ContentPipelineService(
             session,
             coordinator,
-            new ProjectCookScopeProvider(storage),
+            new ProjectCookScopeProvider(),
             new SceneDescriptorGenerator(),
             new ContentImportManifestBuilder(),
             new ContentImportManifestValidator(),

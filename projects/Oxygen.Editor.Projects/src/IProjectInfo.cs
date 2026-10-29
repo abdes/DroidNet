@@ -82,6 +82,9 @@ public interface IProjectInfo
     /// <summary>Gets the pak files the project mounts as read-only cooked libraries.</summary>
     public IList<PakFileMount> PakFileMounts { get; }
 
+    /// <summary>Gets the output folders the Content Explorer shows; view state, never mounts.</summary>
+    public IList<OutputFolderView> OutputFolderViews { get; }
+
     /// <summary>Gets cooked-content source groups in mount order, from lowest to highest priority.</summary>
     public IList<CookedContentSource> CookedContentOrder { get; }
 

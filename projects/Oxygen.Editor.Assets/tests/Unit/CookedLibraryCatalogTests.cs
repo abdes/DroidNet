@@ -83,7 +83,7 @@ public sealed class CookedLibraryCatalogTests
             File.WriteAllText(
                 Path.Combine(this.directory.FullName, "Content", "Shared.omat.json"),
                 """{"name":"Shared","parameters":{"base_color":[1,0,0,1],"metalness":0,"roughness":0.5}}""");
-            (this.ProjectOutput, var projectIndex) = this.WriteRoot(".cooked/Content", 1);
+            (this.ProjectOutput, var projectIndex) = this.WriteRoot(".cooked/generations/0123456789abcdef0123456789abcdef", 1);
             (this.First, var firstIndex) = this.WriteRoot("Libraries/First", 2);
             (this.Second, var secondIndex) = this.WriteRoot("Libraries/Second", 3);
             this.Session = new TestSession(TestProject.Create(new RealFileSystem(), this.directory.FullName).Context with
@@ -123,7 +123,7 @@ public sealed class CookedLibraryCatalogTests
         }
 
         public IReadOnlyList<AssetEntry> Reduce(IReadOnlyList<AssetRecord> records)
-            => new AssetIdentityReducer().Reduce(records, this.Session.Context, new(this.Session.Context.ProjectId, FileSystemPath.From(this.directory.FullName), Path.Combine(this.directory.FullName, ".cooked")));
+            => new AssetIdentityReducer().Reduce(records, this.Session.Context, new(this.Session.Context.ProjectId, FileSystemPath.From(this.directory.FullName)));
 
         /// <summary>Describes the copy of an asset that one library provides.</summary>
         /// <param name="effective">The asset as ordinary resolution selected it.</param>

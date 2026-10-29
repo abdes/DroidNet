@@ -235,24 +235,11 @@ public sealed partial class ProjectRootTreeItemAdapter : TreeItemAdapter, IDispo
         }
     }
 
-    private static bool IsDerivedRootMount(ProjectMountPoint mount)
-    {
-        var relativePath = mount.RelativePath.Trim().Replace('\\', '/').Trim('/');
-        return string.Equals(relativePath, ".cooked", StringComparison.OrdinalIgnoreCase)
-               || string.Equals(relativePath, ".imported", StringComparison.OrdinalIgnoreCase)
-               || string.Equals(relativePath, ".build", StringComparison.OrdinalIgnoreCase);
-    }
-
     private HashSet<string> GetExcludedDirectFolderNames()
     {
         var excluded = new HashSet<string>(StringComparer.Ordinal);
         foreach (var mount in this.ProjectInfo.AuthoringMounts)
         {
-            if (IsDerivedRootMount(mount))
-            {
-                continue;
-            }
-
             // Only exclude direct children of the project root.
             var relative = mount.RelativePath.Trim().Replace('\\', '/');
             if (relative.Contains('/', StringComparison.Ordinal))
@@ -308,7 +295,7 @@ public sealed partial class ProjectRootTreeItemAdapter : TreeItemAdapter, IDispo
         Justification = "Tree load should be resilient to partial failures")]
     private async Task LoadAuthoringMountsAsync()
     {
-        foreach (var mountPoint in this.ProjectInfo.AuthoringMounts.Where(static mount => !IsDerivedRootMount(mount)))
+        foreach (var mountPoint in this.ProjectInfo.AuthoringMounts)
         {
             AuthoringMountPointTreeItemAdapter? mountAdapter = null;
             try

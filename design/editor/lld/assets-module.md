@@ -2,7 +2,7 @@
 
 Status: `agreed`
 
-Last Updated: 2026-10-26
+Last Updated: 2026-10-29
 
 ## 1. Purpose
 
@@ -274,7 +274,7 @@ ContentPipeline exposes the read side of cook publications as two interfaces in
 A changed library root raises `CookedLibraryChangedException`, which publishing
 again resolves. The project's own cooked output not matching its publication is
 damage and raises `InvalidDataException`; it is never republished. Which project
-folders are the pipeline's output (`.cooked`, `.imported`, `.build`) is the
+folders are output (any dot-named folder, such as `.cooked` or `.build`) is the
 project layout's rule, `ProjectOutputFolders` in Oxygen.Editor.Projects; the
 catalog indexes every other authoring mount.
 

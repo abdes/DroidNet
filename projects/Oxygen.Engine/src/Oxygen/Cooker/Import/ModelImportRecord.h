@@ -84,6 +84,12 @@ struct ModelImportRecordQuery final {
 };
 
 //! What `Save` writes into a model import record.
+//! The folder a caller owns where record-only imports publish generations:
+//! `<root>/<source_identity>/`, the selected one named by its `head.json`.
+struct ModelImportGenerations final {
+  std::filesystem::path root;
+};
+
 struct ModelImportRecordSave final {
   std::filesystem::path record_path;
   std::filesystem::path content_root;
@@ -109,10 +115,13 @@ struct ModelImportRecordSave final {
  giving it another virtual path moves the record. The source identity, a
  UUIDv7 the record holds, never changes.
 
- This class is the record's one reader and writer, and the ImportTool's
- publisher: one isolated attempt that publishes an immutable generation and
- commits the import's new record content with it. The selected generation is
- kept in `<content_root>/.cooked/Imports/<source_identity>/head.json`.
+ This class is the record's one reader and writer, and the publisher of
+ record-only imports: one isolated attempt that publishes an immutable
+ generation and commits the import's new record content with it. Generations
+ live in a generations folder the caller owns, never one derived from the
+ content root (`ModelImportGenerations`). A content root whose outputs another
+ publisher owns, such as an editor project, keeps its generations out of this
+ store.
 */
 class ModelImportRecord final {
 public:
@@ -196,12 +205,14 @@ public:
     const std::filesystem::path& recipe_path, ImportFormat expected_format)
     -> ModelImportRecordLocation;
 
-  //! Reads a baseline and reserves a private generation. No source bytes or
-  //! prior cooked output are copied. Concurrent attempts have distinct roots.
-  //! A missing source is `import.source_missing`. `notes` are the lookup's
-  //! diagnostics, added to the attempt's report.
+  //! Reads a baseline and reserves a private generation in `generations`.
+  //! No source bytes or prior cooked output are copied. Concurrent attempts
+  //! have distinct roots. A missing source is `import.source_missing`; an
+  //! empty generations root throws std::invalid_argument. `notes` are the
+  //! lookup's diagnostics, added to the attempt's report.
   OXGN_COOK_NDAPI static auto Prepare(const std::filesystem::path& record_path,
-    const MountTable& mounts, std::vector<ImportDiagnostic> notes = {})
+    const ModelImportGenerations& generations, const MountTable& mounts,
+    std::vector<ImportDiagnostic> notes = {})
     -> std::shared_ptr<ModelImportRecord>;
 
   OXGN_COOK_API ~ModelImportRecord();
@@ -225,14 +236,18 @@ public:
   OXGN_COOK_API auto Publish(
     ImportReport& report, std::stop_token stop_token = {}) -> void;
 
-  //! Removes unselected generations whose writer/reader leases have expired.
-  //! Call on a worker; selected generations and active attempts are retained.
+  //! Removes the record's unselected generations in `generations` whose
+  //! writer/reader leases have expired. Call on a worker; selected
+  //! generations and active attempts are retained.
   OXGN_COOK_NDAPI static auto ReclaimUnusedGenerations(
-    const std::filesystem::path& record_path) -> size_t;
+    const std::filesystem::path& record_path,
+    const ModelImportGenerations& generations) -> size_t;
 
-  //! Resolves the selected immutable root without creating another attempt.
+  //! Resolves the record's selected immutable root in `generations`
+  //! without creating another attempt.
   OXGN_COOK_NDAPI static auto SelectedGeneration(
-    const std::filesystem::path& record_path)
+    const std::filesystem::path& record_path,
+    const ModelImportGenerations& generations)
     -> std::optional<std::filesystem::path>;
 
 private:

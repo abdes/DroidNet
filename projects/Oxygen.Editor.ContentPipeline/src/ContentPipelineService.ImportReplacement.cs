@@ -57,7 +57,7 @@ public sealed partial class ContentPipelineService
     {
         var request = scope.ImportReplacement!;
         var replacement = request.Replacement!;
-        var candidate = Path.Combine(snapshot.Operation.Project.ProjectRoot.FullPath, ".build", "cook", snapshot.Operation.OperationId.ToString("N"), "discarded-source", Path.GetFileName(replacement.BundleRoot), replacement.PrimaryRelativePath);
+        var candidate = Path.Combine(CookPublicationPaths.Operation(snapshot.Operation.Project.ProjectRoot.FullPath, snapshot.Operation.OperationId), "discarded-source", Path.GetFileName(replacement.BundleRoot), replacement.PrimaryRelativePath);
         if (File.Exists(candidate))
         {
             var recovery = request with { ReplacementCandidatePath = candidate };
@@ -247,7 +247,7 @@ public sealed partial class ContentPipelineService
         var execution = new ContentSourceAnalysisExecution(
             operation.OperationId,
             operation.Project.ProjectRoot.FullPath,
-            Path.Combine(operation.Project.ProjectRoot.FullPath, ".build", "cook", operation.OperationId.ToString("N")),
+            CookPublicationPaths.Operation(operation.Project.ProjectRoot.FullPath, operation.OperationId),
             [job])
         {
             Artifacts = artifacts,

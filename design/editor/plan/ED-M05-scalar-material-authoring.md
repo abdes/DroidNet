@@ -157,8 +157,8 @@ Save
 
 Cook
   imports asset:///Content/Materials/Gold.omat.json
-  writes: <ProjectRoot>/.cooked/Content/Materials/Gold.omat
-  index:  <ProjectRoot>/.cooked/Content/container.index.bin
+  writes: <ProjectRoot>/.cooked/generations/<SourceKey>/Materials/Gold.omat
+  index:  <ProjectRoot>/.cooked/generations/<SourceKey>/container.index.bin
 
 Assign
   Geometry > Material opens the picker, refreshes the catalog, and lists the
@@ -434,7 +434,8 @@ Tasks:
   URI. This prevents custom mount folder names from producing cooked output
   under the wrong `.cooked` folder.
 - Verify:
-  - cooked `.omat` exists under `<ProjectRoot>/.cooked/<Mount>/...`;
+  - cooked `.omat` exists under the mount's generation,
+    `<ProjectRoot>/.cooked/generations/<SourceKey>/...`;
   - loose cooked index contains the material virtual path;
   - `LooseCookedIndexAssetCatalog` can expose the cooked material URI.
 - Update material document `MaterialCookState`.

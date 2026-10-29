@@ -115,10 +115,10 @@ internal sealed partial class ExplorerRevealFixture : IDisposable
     private readonly Mock<ILogger> logger = new();
     private readonly FakeCookPublicationReader publications;
 
-    public ExplorerRevealFixture(bool persisted = false, string cookedAlias = "Cooked")
+    public ExplorerRevealFixture(bool persisted = false)
     {
         _ = Directory.CreateDirectory(Path.Combine(this.directory.FullName, "Content", "Materials"));
-        _ = Directory.CreateDirectory(Path.Combine(this.directory.FullName, ".cooked", "Content", "Materials"));
+        _ = Directory.CreateDirectory(Path.Combine(this.directory.FullName, ".cooked", "generations", Guid.NewGuid().ToString("N"), "Materials"));
         this.Material = CreateNavigationAsset("/Content/Materials/Blue.omat", AssetKind.Material);
         this.items = new([this.Material]);
         var provider = CreateQueryProvider(this.items);
@@ -130,7 +130,7 @@ internal sealed partial class ExplorerRevealFixture : IDisposable
         };
         if (persisted)
         {
-            info.AuthoringMounts.Add(new(cookedAlias, ".cooked"));
+            info.OutputFolderViews.Add(new(ProjectOutputFolders.Cooked));
         }
 
         this.Session = new(ProjectContext.FromProjectInfo(info, this.fileSystem));

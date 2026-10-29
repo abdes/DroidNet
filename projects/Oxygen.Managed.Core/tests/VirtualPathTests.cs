@@ -36,7 +36,7 @@ public sealed class VirtualPathTests
     }
 
     [TestMethod]
-    [DataRow(".cooked", true)]
+    [DataRow(".build", true)]
     [DataRow("SourceMedia", true)]
     [DataRow("Sources", false)]
     [DataRow("sourcemedia", false)]
@@ -44,8 +44,8 @@ public sealed class VirtualPathTests
         => _ = VirtualPath.IsDerivedContent(segment).Should().Be(expected);
 
     [TestMethod]
-    [DataRow(".cooked", VirtualPathRuleSet.Cooked, null)]
-    [DataRow(".cooked", VirtualPathRuleSet.Authored, VirtualPathError.DerivedContent)]
+    [DataRow(".build", VirtualPathRuleSet.Cooked, null)]
+    [DataRow(".build", VirtualPathRuleSet.Authored, VirtualPathError.DerivedContent)]
     [DataRow("SourceMedia", VirtualPathRuleSet.Authored, VirtualPathError.DerivedContent)]
     [DataRow("Red:1.omat", VirtualPathRuleSet.Authored, VirtualPathError.ReservedCharacter)]
     [DataRow("Red.omat", VirtualPathRuleSet.Authored, null)]
@@ -53,8 +53,8 @@ public sealed class VirtualPathTests
         => _ = VirtualPath.ValidateSegment(segment, rules).Should().Be(expected);
 
     [TestMethod]
-    [DataRow(".cooked", VirtualPathRuleSet.Cooked, null)]
-    [DataRow(".cooked", VirtualPathRuleSet.Authored, VirtualPathError.InvalidMountName)]
+    [DataRow(".code", VirtualPathRuleSet.Cooked, null)]
+    [DataRow(".code", VirtualPathRuleSet.Authored, VirtualPathError.InvalidMountName)]
     [DataRow("Content", VirtualPathRuleSet.Authored, null)]
     public void ValidateMountName_RuleSet_ReservesTheDotForTheEngine(string mount, VirtualPathRuleSet rules, VirtualPathError? expected)
         => _ = VirtualPath.ValidateMountName(mount, rules).Should().Be(expected);

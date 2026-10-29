@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Editor.Projects;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Publication;
@@ -72,8 +73,8 @@ internal static class CookOutputLease
         }
 
         RejectReparsePoint(root);
-        var build = Path.Combine(root, ".build");
-        var cook = Path.Combine(build, "cook");
+        var build = ProjectOutputFolders.BuildPath(root);
+        var cook = CookPublicationPaths.Operations(root);
         RejectReparsePoint(build);
         RejectReparsePoint(cook);
         _ = Directory.CreateDirectory(cook);

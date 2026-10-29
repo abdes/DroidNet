@@ -32,7 +32,7 @@ public sealed class ModelSourceAnalyzer(IEngineContentPipelineApi native, IConte
         var name = Path.GetFileNameWithoutExtension(source);
         var mount = project.AuthoringMounts is [var firstMount, ..] ? firstMount.Name : AssetPath.Content.Mount;
         var job = manifestBuilder.BuildModelJob(file, [], name, AssetPath.Create(mount, name + "/" + file));
-        var scratch = Path.Combine(project.ProjectRoot.FullPath, ".build", "import-analysis", operationId.ToString("N"));
+        var scratch = ProjectOutputFolders.BuildPath(project.ProjectRoot.FullPath, "import-analysis", operationId.ToString("N"));
         try
         {
             // The source's folder is the analysis root and its one mount: a manifest names no absolute path.

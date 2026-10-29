@@ -24,7 +24,7 @@ public sealed class CookedOutputInspectionTests
     [TestMethod]
     public async Task ProjectInspectionIncludesAllOwnedRootsWithoutCookingMissingOutput()
     {
-        using var workspace = new CookWorkspace([new("Cooked", ".cooked"), new("Content", "Content"), new("Extra", "MoreContent")]);
+        using var workspace = new CookWorkspace([new("Content", "Content"), new("Extra", "MoreContent")]);
         var api = new Mock<IEngineContentPipelineApi>(MockBehavior.Strict);
         var pipeline = CreateService(workspace, api.Object, new CapturingSceneDescriptorGenerator([]));
         var report = await pipeline.InspectCookedOutputAsync(scopeUri: null, this.TestContext.CancellationToken, validate: true).ConfigureAwait(false);

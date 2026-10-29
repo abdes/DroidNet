@@ -81,7 +81,7 @@ public sealed partial class FileSystemAssetCatalog : IAssetCatalog, IRefreshable
 
         // Watching is optional in tests via injected source. The catalog may
         // be created for generated project folders that do not exist yet
-        // (.cooked, .imported, .build). Snapshot enumeration already treats a
+        // (.cooked, .build, .pipeline). Snapshot enumeration already treats a
         // missing root as empty, so construction must not require the exact
         // root directory to exist either.
         if (eventSource is not null)
@@ -142,7 +142,7 @@ public sealed partial class FileSystemAssetCatalog : IAssetCatalog, IRefreshable
         this.folderChanges.Dispose();
     }
 
-    // A segment starting with a dot is hidden: the derived folders (.cooked, .imported) and a save's temporary files.
+    // A segment starting with a dot is hidden: the output folders (.cooked, .build, .pipeline) and a save's temporary files.
     private static bool IsHidden(string relativePath) => relativePath.Split('/').Any(static segment => segment.StartsWith('.'));
 
     private static string FindNearestExistingDirectory(string start)

@@ -48,12 +48,12 @@ public sealed class ContentMountsViewModelTests
 
         model.SelectedKind = "Cooked";
         model.AddMountCommand.Execute(parameter: null);
-        _ = model.ErrorMessage.Should().Be("Cooked is already mounted.");
+        _ = model.ErrorMessage.Should().Be("Cooked is already shown.");
 
-        model.SelectedKind = "Imported";
+        model.SelectedKind = "Build";
         model.AddMountCommand.Execute(parameter: null);
         _ = model.HasError.Should().BeFalse();
-        _ = model.Mounts[^2].Should().BeEquivalentTo(new { Name = "Imported", RelativePath = ".imported", IsNew = true, Kind = ContentMountKind.Derived });
+        _ = model.Mounts[^2].Should().BeEquivalentTo(new { Name = "Build", RelativePath = ProjectOutputFolders.Build, IsNew = true, Kind = ContentMountKind.Derived });
 
         model.SelectedKind = ContentMountsViewModel.LocalFolderKind;
         model.NewMountName = "studio library";
@@ -84,18 +84,29 @@ public sealed class ContentMountsViewModelTests
     public void RenameValidatesBeforeApply()
     {
         var model = CreateModel(CreateProject());
-        var cooked = model.Mounts[1];
+        var library = model.Mounts[2];
 
-        cooked.RenameCommand.Execute(parameter: null);
-        _ = cooked.IsRenaming.Should().BeTrue();
-        cooked.NameDraft = "Content";
+        library.RenameCommand.Execute(parameter: null);
+        _ = library.IsRenaming.Should().BeTrue();
+        library.NameDraft = "Content";
         _ = model.Validate().Should().BeFalse();
         _ = model.ErrorMessage.Should().Be("A mount with this name already exists, or differs from one only in case.");
 
-        cooked.NameDraft = "Published";
+        library.NameDraft = "Published";
         _ = model.Validate().Should().BeTrue();
-        _ = cooked.Name.Should().Be("Published");
-        _ = cooked.IsRenaming.Should().BeFalse();
+        _ = library.Name.Should().Be("Published");
+        _ = library.IsRenaming.Should().BeFalse();
+    }
+
+    /// <summary>A derived output node has a fixed name: it cannot be renamed.</summary>
+    [TestMethod]
+    public void DerivedOutputRowsCannotBeRenamed()
+    {
+        var model = CreateModel(CreateProject());
+
+        _ = model.Mounts[1].Kind.Should().Be(ContentMountKind.Derived);
+        _ = model.Mounts[1].CanRename.Should().BeFalse();
+        _ = model.Mounts[1].RenameCommand.CanExecute(parameter: null).Should().BeFalse();
     }
 
     /// <summary>Applied rows rebuild the project mounts: renames, removals, and new derived and library mounts.</summary>
@@ -105,9 +116,6 @@ public sealed class ContentMountsViewModelTests
         var project = CreateProject();
         var model = CreateModel(project);
         model.Mounts[2].UnmountCommand.Execute(parameter: null);
-        model.Mounts[1].RenameCommand.Execute(parameter: null);
-        model.Mounts[1].NameDraft = "Published";
-        _ = model.Validate().Should().BeTrue();
         model.SelectedKind = "Build";
         model.AddMountCommand.Execute(parameter: null);
         var library = Directory.CreateTempSubdirectory("cb-mount-");
@@ -122,10 +130,8 @@ public sealed class ContentMountsViewModelTests
             var candidate = new ProjectInfo(project.Name, project.Category, project.ProjectRoot.FullPath);
             ContentFoldersViewModel.ApplyMountRows(project, candidate, model.Mounts, static _ => true);
 
-            _ = candidate.AuthoringMounts.Select(static mount => (mount.Name, mount.RelativePath)).Should().Equal(
-                ("Content", "Content"),
-                ("Published", ".cooked"),
-                ("Build", ".build"));
+            _ = candidate.AuthoringMounts.Select(static mount => (mount.Name, mount.RelativePath)).Should().Equal(("Content", "Content"));
+            _ = candidate.OutputFolderViews.Select(static view => view.Folder).Should().Equal(ProjectOutputFolders.Cooked, ProjectOutputFolders.Build);
             _ = candidate.LocalFolderMounts.Select(static mount => mount.Name).Should().Equal("Library");
         }
         finally
@@ -213,7 +219,8 @@ public sealed class ContentMountsViewModelTests
         => TestProject.Create(new MockFileSystem(), "C:/Projects/Mounts").Context with
         {
             Name = "Mounts",
-            AuthoringMounts = [new("Content", "Content"), new("Cooked", ".cooked")],
+            AuthoringMounts = [new("Content", "Content")],
+            OutputFolderViews = [new(ProjectOutputFolders.Cooked)],
             LocalFolderMounts = [new("Studio library", FileSystemPath.From("D:/Studio/EnvironmentLibrary"))],
         };
 }

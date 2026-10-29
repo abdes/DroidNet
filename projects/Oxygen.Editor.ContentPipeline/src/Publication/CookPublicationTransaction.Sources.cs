@@ -16,7 +16,7 @@ internal sealed partial class CookPublicationTransaction
 {
     private static string CapturedSourcePath(ProjectContext project, Guid operationId, string published)
     {
-        var inputs = Path.Combine(project.ProjectRoot.FullPath, ".build", "cook", operationId.ToString("N"), "inputs");
+        var inputs = Path.Combine(CookPublicationPaths.Operation(project.ProjectRoot.FullPath, operationId), "inputs");
         CookOutputLease.RejectReparsePoint(inputs);
         var path = inputs;
         foreach (var segment in Path.GetRelativePath(project.ProjectRoot.FullPath, published).Split(Path.DirectorySeparatorChar))
@@ -71,7 +71,7 @@ internal sealed partial class CookPublicationTransaction
     private static string PublicationSourcePath(ProjectContext project, Guid operationId, string bundleRoot)
     {
         var bundle = ImportSourceRetention.ResolveBundleRoot(project, bundleRoot);
-        var path = Path.Combine(project.ProjectRoot.FullPath, ".build", "cook", operationId.ToString("N"), "source-output", Path.GetFileName(bundle));
+        var path = Path.Combine(CookPublicationPaths.Operation(project.ProjectRoot.FullPath, operationId), "source-output", Path.GetFileName(bundle));
         CookOutputLease.RejectReparsePoint(Path.GetDirectoryName(path)!);
         CookOutputLease.RejectReparsePoint(path);
         return path;

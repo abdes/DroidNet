@@ -56,7 +56,7 @@ public sealed class AssetFeedWorkloadBenchmarks
         var statuses = new AssetCookStatusReader(publication, engineContent, content.Object);
         await using var catalog = new AssetCatalog(session, storage, engineContent, publication);
         var runtime = AssetStatusFixture.CreateUnavailableRuntimeStatus();
-        using var provider = new AssetFeed(catalog, session, new WorkspaceCookScopeProvider(workspace), statuses, documents, runs, runtime, Mock.Of<IAssetRelocationService>(), Mock.Of<IAssetAuthoring>());
+        using var provider = new AssetFeed(catalog, session, new ProjectCookScopeProvider(), statuses, documents, runs, runtime, Mock.Of<IAssetRelocationService>(), Mock.Of<IAssetAuthoring>());
         IReadOnlyList<AssetEntry> rows = [];
         provider.Items.Subscribe(new Observer<IReadOnlyList<AssetEntry>>(value => rows = value.Where(static row => row.Kind == AssetKind.Material).ToArray()), this.TestContext.CancellationToken);
         var watch = Stopwatch.StartNew();

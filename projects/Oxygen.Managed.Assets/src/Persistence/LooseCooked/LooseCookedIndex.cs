@@ -18,6 +18,12 @@ public static class LooseCookedIndex
     public const int Sha256Size = 32;
     public const ushort Version = 7;
 
+    /// <summary>The file name of a loose cooked root's index.</summary>
+    public const string FileName = "container.index.bin";
+
+    /// <summary>The file that marks a cooked root as a leased generation; it is never content.</summary>
+    public const string GenerationLeaseFileName = ".generation.lock";
+
     private static readonly byte[] HeaderMagic = Encoding.ASCII.GetBytes("OXLCIDX\0");
 
     /// <summary>
@@ -290,7 +296,7 @@ public static class LooseCookedIndex
     {
         if (string.IsNullOrEmpty(path) || path.Contains('\\') || path.Contains(':')
             || path.Split('/').Any(static segment => segment is "" or "." or "..")
-            || path is "container.index.bin" or ".generation.lock" || !paths.Add(path))
+            || path is FileName or GenerationLeaseFileName || !paths.Add(path))
         {
             throw new InvalidDataException($"The cooked index contains an invalid or duplicate member path: {path}.");
         }

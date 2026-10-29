@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Editor.Projects;
 using Oxygen.Editor.Projects.Testing;
 using Testably.Abstractions.Testing;
 
@@ -18,7 +19,8 @@ internal static class TestProjects
         return new(TestProject.Create(new MockFileSystem(), "C:/Query").Context with
         {
             Name = "Query",
-            AuthoringMounts = cookedMount ? [new("Content", "Content"), new("Cooked", ".cooked")] : [new("Content", "Content")],
+            AuthoringMounts = [new("Content", "Content")],
+            OutputFolderViews = cookedMount ? [new(ProjectOutputFolders.Cooked)] : [],
         });
     }
 }

@@ -487,7 +487,6 @@ public abstract partial class AssetsLayoutViewModel(
         {
             // All of the output browses the sources of every authoring folder.
             this.contentExplorerState.SetSelectedFolders(this.session.Context.AuthoringMounts
-                .Where(static mount => !ContentFoldersViewModel.IsPersistedProjectRelativeVirtualMount(mount))
                 .Select(static mount => AssetPath.Create(mount.Name)));
         }
         else

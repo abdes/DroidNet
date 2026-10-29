@@ -179,7 +179,7 @@ internal sealed class InspectionTests : DroidNet.Tests.VisualUserInterfaceTests
 
     private static CookedOutputReport CreateInspectionReport(ProjectContext project, bool validate)
     {
-        var root = project.ProjectRoot.Combine(".cooked").Combine("Content").FullPath;
+        var root = project.ProjectRoot.Combine(".cooked").Combine("generations").Combine(Guid.NewGuid().ToString("N")).FullPath;
         var red = AssetPath.Parse("/Content/Materials/Red.omat");
         var main = AssetPath.Parse("/Content/Scenes/Main.oscene");
         var assets = new[]

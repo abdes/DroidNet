@@ -6,6 +6,7 @@ using System.Collections.Immutable;
 using System.Security.Cryptography;
 using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.ContentPipeline.Incremental;
+using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.Models;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World.Components;
@@ -31,7 +32,7 @@ internal sealed partial class CookSourceAnalyzer(
     IProjectCookScopeProvider scopes,
     CookProvenance? previous = null) : ICookSourceFactsProvider
 {
-    private readonly string root = Path.Combine(operation.Project.ProjectRoot.FullPath, ".build", "cook", operation.OperationId.ToString("N"), "analysis", Guid.NewGuid().ToString("N"));
+    private readonly string root = Path.Combine(CookPublicationPaths.Operation(operation.Project.ProjectRoot.FullPath, operation.OperationId), "analysis", Guid.NewGuid().ToString("N"));
 
     /// <inheritdoc />
     public async Task<CookSourceFrontier> ReadAsync(IReadOnlyList<ContentCookInput> inputs, CancellationToken cancellationToken)

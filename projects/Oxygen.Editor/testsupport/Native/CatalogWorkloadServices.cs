@@ -26,7 +26,7 @@ internal sealed partial class CatalogWorkloadServices : IDisposable
         var files = new NativeAtomicFileStore(new RealFileSystem());
         this.Runs = new ContentCookCoordinator(session, NullLogger<ContentCookCoordinator>.Instance);
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), processRunner ?? new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, this.compatibility);
-        this.Scopes = new ProjectCookScopeProvider(this.Storage);
+        this.Scopes = new ProjectCookScopeProvider();
         this.Publication = new(this.Runs, session, files, new ProjectManagerService(this.Storage, atomicFiles: files), this.EngineContent);
         this.Pipeline = new ContentPipelineService(session, this.Runs, this.Scopes, new SceneDescriptorGenerator(), new ContentImportManifestBuilder(), new ContentImportManifestValidator(), api, this.compatibility, files, this.Publication, this.EngineContent);
     }

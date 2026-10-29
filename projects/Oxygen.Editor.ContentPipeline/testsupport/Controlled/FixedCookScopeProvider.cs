@@ -10,5 +10,5 @@ namespace Oxygen.Editor.ContentPipeline.TestSupport;
 internal sealed class FixedCookScopeProvider(string projectRoot) : IProjectCookScopeProvider
 {
     public ProjectCookScope CreateScope(ProjectContext context)
-        => new(context.ProjectId, FileSystemPath.From(projectRoot), Path.Combine(projectRoot, ".cooked"));
+        => new(context.ProjectId, FileSystemPath.From(projectRoot));
 }

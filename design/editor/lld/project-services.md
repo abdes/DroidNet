@@ -2,6 +2,8 @@
 
 Status: `ED-M07 review-ready`
 
+Last Updated: 2026-10-29
+
 ## 1. Purpose
 
 Define the V0.1 project service layer: project metadata, project validation,
@@ -311,8 +313,9 @@ selection, and pipeline execution are owned by `content-pipeline.md` in ED-M07.
 Cook scope is a declarative input. It must not perform cooking.
 
 The browser resolves physical output through a retained publication snapshot.
-`ProjectCookScope.CookedOutputRoot` names the derived storage area; it does not
-map asset identities to selected generations. Catalog records and cooking status
+`ProjectCookScope` names the project only; every output path is derived from
+its root through `ProjectOutputFolders`, and none maps asset identities to
+selected generations. Catalog records and cooking status
 share the captured root bindings described in content-pipeline section 16.
 Authored identities remain logical, and browsing never cooks.
 
@@ -461,9 +464,11 @@ fields.
 
 ### Content Roots
 
-Authoring mounts are project facts. Cooked roots are derived policy:
+Authoring mounts are project facts. Output folders are the layout's rule
+([project layout](project-layout-and-templates.md#output-folders)):
 
-- default cooked root: `<ProjectRoot>/.cooked`.
+- the publication model lives in `<ProjectRoot>/.cooked`, the working files in
+  `<ProjectRoot>/.build`, each with one definition in `ProjectOutputFolders`.
 - content payload root and index structure are owned by content pipeline and
   asset primitives.
 
@@ -577,8 +582,8 @@ ED-M06 project-service gates:
 ED-M07 project-service gates:
 
 - content pipeline resolves cook inputs from `ProjectContext` authoring/local
-  mount facts and `ProjectCookScope.CookedOutputRoot`; it does not hardcode
-  project folders outside the accepted layout policy.
+  mount facts and builds output paths through `ProjectOutputFolders`; it does
+  not hardcode project folders.
 - `ProjectCookScopeProvider` remains a policy provider only. It never invokes
   import, cook, inspect, validation, or runtime mount operations.
 - project services do not persist cooked paths, generated descriptor paths, or

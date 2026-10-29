@@ -148,15 +148,6 @@ namespace {
       && *relative.begin() != ".." && relative != ".";
   }
 
-  auto RequireWithin(const std::filesystem::path& path,
-    const std::filesystem::path& root) -> void
-  {
-    if (!IsWithin(path, root)) {
-      throw std::invalid_argument("Model import path must stay inside "
-        + root.generic_string() + ": " + path.generic_string());
-    }
-  }
-
   auto Exists(const std::filesystem::path& path) -> bool
   {
     std::error_code error;
@@ -439,14 +430,16 @@ namespace {
     }
   }
 
-  auto GenerationDirectory(const std::filesystem::path& record_path,
+  //! The folder of a record's generations: its source identity, in the
+  //! generations folder the caller owns.
+  auto GenerationDirectory(const ModelImportGenerations& generations,
     const ModelImportRecordContent& content) -> std::filesystem::path
   {
-    const auto root = RootOfRecord(record_path, content.virtual_path);
-    const auto path = root / ".cooked" / ModelImportRecord::kRecordsFolder
-      / content.source_identity.ToString();
-    RequireWithin(path, root);
-    return path;
+    if (generations.root.empty()) {
+      throw std::invalid_argument(
+        "Model import generations need a generations folder");
+    }
+    return Absolute(generations.root) / content.source_identity.ToString();
   }
 
   struct Head final {
@@ -473,18 +466,19 @@ namespace {
   //! What an attempt must find unchanged when it publishes: the record and
   //! the selected generation, either of which a competing attempt changes.
   auto Baseline(const std::filesystem::path& record_path,
+    const ModelImportGenerations& generations,
     const ModelImportRecordContent& content) -> base::Sha256Digest
   {
-    const auto head = GenerationDirectory(record_path, content) / kHeadFileName;
+    const auto head = GenerationDirectory(generations, content) / kHeadFileName;
     return Digest(ReadText(record_path) + "\n"
       + (Exists(head) ? ReadText(head) : std::string {}));
   }
 
-  auto SelectedPath(const std::filesystem::path& record_path,
+  auto SelectedPath(const ModelImportGenerations& generations,
     const ModelImportRecordContent& content)
     -> std::optional<std::filesystem::path>
   {
-    const auto directory = GenerationDirectory(record_path, content);
+    const auto directory = GenerationDirectory(generations, content);
     const auto head = ReadHead(directory);
     if (!head) {
       return std::nullopt;
@@ -549,6 +543,7 @@ namespace {
 
 struct ModelImportRecord::State {
   std::filesystem::path record_path {};
+  ModelImportGenerations generations {};
   ModelImportRecordContent content;
   base::Sha256Digest baseline {};
   Uuid generation;
@@ -1112,11 +1107,16 @@ auto ModelImportRecord::SaveRecipeFile(const ModelImportRecordSave& save,
 }
 
 auto ModelImportRecord::Prepare(const std::filesystem::path& record_path,
-  const MountTable& mounts, std::vector<ImportDiagnostic> notes)
-  -> std::shared_ptr<ModelImportRecord>
+  const ModelImportGenerations& generations, const MountTable& mounts,
+  std::vector<ImportDiagnostic> notes) -> std::shared_ptr<ModelImportRecord>
 {
+  if (generations.root.empty()) {
+    throw std::invalid_argument(
+      "Model import generations need a generations folder");
+  }
   auto state = std::make_unique<State>();
   state->record_path = Absolute(record_path);
+  state->generations.root = Absolute(generations.root);
   state->notes = std::move(notes);
   const auto lock = RecordLock(state->record_path);
   state->content = Read(state->record_path, mounts);
@@ -1129,10 +1129,11 @@ auto ModelImportRecord::Prepare(const std::filesystem::path& record_path,
       + " is missing; importing the new file with the virtual path "
       + state->content.virtual_path + " rebinds it");
   }
-  state->baseline = Baseline(state->record_path, state->content);
-  state->previous = SelectedPath(state->record_path, state->content);
+  state->baseline
+    = Baseline(state->record_path, state->generations, state->content);
+  state->previous = SelectedPath(state->generations, state->content);
   state->generation = Uuid::Generate();
-  const auto root = GenerationDirectory(state->record_path, state->content)
+  const auto root = GenerationDirectory(state->generations, state->content)
     / state->generation.ToString();
   std::filesystem::create_directories(base::ToNativePath(root.parent_path()));
   if (!std::filesystem::create_directory(base::ToNativePath(root))) {
@@ -1200,18 +1201,19 @@ auto ModelImportRecord::Prepare(const std::filesystem::path& record_path,
 
 auto ModelImportRecord::ReclaimUnusedGenerations() const -> size_t
 {
-  return ReclaimUnusedGenerations(state_->record_path);
+  return ReclaimUnusedGenerations(state_->record_path, state_->generations);
 }
 
 auto ModelImportRecord::ReclaimUnusedGenerations(
-  const std::filesystem::path& record_path) -> size_t
+  const std::filesystem::path& record_path,
+  const ModelImportGenerations& generations) -> size_t
 {
   const auto path = Absolute(record_path);
   const auto record_lock = RecordLock(path);
   const auto content = ReadDocument(path).content;
   RequireUniqueRecord(path, content, RootOfRecord(path, content.virtual_path));
-  const auto selected = SelectedPath(path, content);
-  const auto directory = GenerationDirectory(path, content);
+  const auto selected = SelectedPath(generations, content);
+  const auto directory = GenerationDirectory(generations, content);
   if (!std::filesystem::exists(base::ToNativePath(directory))) {
     return 0U;
   }
@@ -1280,12 +1282,13 @@ auto ModelImportRecord::Notes() const -> std::span<const ImportDiagnostic>
 }
 
 auto ModelImportRecord::SelectedGeneration(
-  const std::filesystem::path& record_path)
+  const std::filesystem::path& record_path,
+  const ModelImportGenerations& generations)
   -> std::optional<std::filesystem::path>
 {
   const auto path = Absolute(record_path);
   const auto content = ReadDocument(path).content;
-  const auto directory = GenerationDirectory(path, content);
+  const auto directory = GenerationDirectory(generations, content);
   const auto head = ReadHead(directory);
   if (!head) {
     return std::nullopt;
@@ -1410,7 +1413,8 @@ auto ModelImportRecord::Publish(
     + "\n";
 
   const auto lock = RecordLock(state_->record_path);
-  if (Baseline(state_->record_path, state_->content) != state_->baseline) {
+  if (Baseline(state_->record_path, state_->generations, state_->content)
+    != state_->baseline) {
     throw std::runtime_error(
       "Model import settings or publication changed during import");
   }
@@ -1423,7 +1427,7 @@ auto ModelImportRecord::Publish(
   // The record first: a crash before the head leaves the previous generation
   // selected, and the next import derives the same IDs from the record.
   WriteText(state_->record_path, record_text);
-  WriteText(GenerationDirectory(state_->record_path, content) / kHeadFileName,
+  WriteText(GenerationDirectory(state_->generations, content) / kHeadFileName,
     head_text);
   state_->published = true;
   state_->generation_lock.reset();

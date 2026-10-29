@@ -242,7 +242,7 @@ public partial class ContentFoldersViewModel
             var parent = await this.FindAdapterByVirtualPathAsync(parentFolder).ConfigureAwait(true) as TreeItemAdapter;
             var location = parent is null ? null : parent switch
             {
-                AuthoringMountPointTreeItemAdapter mount when !IsPersistedProjectRelativeVirtualMount(mount.MountPoint) => mount.RootFolder,
+                AuthoringMountPointTreeItemAdapter mount => mount.RootFolder,
                 FolderTreeItemAdapter folder when IsUnderAuthoringMount(folder) => folder.Folder,
                 _ => null,
             };
@@ -283,7 +283,7 @@ public partial class ContentFoldersViewModel
     private static bool IsWritable(ITreeItem item)
         => item switch
         {
-            AuthoringMountPointTreeItemAdapter mount => !IsPersistedProjectRelativeVirtualMount(mount.MountPoint),
+            AuthoringMountPointTreeItemAdapter => true,
             FolderTreeItemAdapter folder => IsUnderAuthoringMount(folder),
             _ => false,
         };
@@ -294,8 +294,8 @@ public partial class ContentFoldersViewModel
         {
             switch (current)
             {
-                case AuthoringMountPointTreeItemAdapter mount:
-                    return !IsPersistedProjectRelativeVirtualMount(mount.MountPoint);
+                case AuthoringMountPointTreeItemAdapter:
+                    return true;
                 case VirtualFolderMountTreeItemAdapter:
                     return false;
             }

@@ -26,7 +26,7 @@ public sealed partial class CookPublicationService
 
     private static async Task ClaimDocumentsAsync(ProjectContext project, MaintenanceBatch batch, CancellationToken token)
     {
-        var parent = Path.Combine(project.ProjectRoot.FullPath, ".cooked", "publications");
+        var parent = CookPublicationPaths.Publications(project.ProjectRoot.FullPath);
         CookOutputLease.RejectReparsePoint(parent);
         if (!Directory.Exists(parent))
         {
@@ -90,7 +90,7 @@ public sealed partial class CookPublicationService
 
     private static void ClaimGenerations(ProjectContext project, MaintenanceBatch batch)
     {
-        foreach (var (id, path) in OwnedDirectories(Path.Combine(project.ProjectRoot.FullPath, ".cooked", "generations")))
+        foreach (var (id, path) in OwnedDirectories(CookPublicationPaths.Generations(project.ProjectRoot.FullPath)))
         {
             if (batch.RetainedGenerations.Contains(id))
             {
@@ -227,7 +227,7 @@ public sealed partial class CookPublicationService
         using var batch = new MaintenanceBatch();
         using (var gate = await CookOutputLease.AcquireWriteAsync(project.ProjectRoot, token).ConfigureAwait(false))
         {
-            var path = Path.Combine(project.ProjectRoot.FullPath, ".build", "cook", "maintenance.lock");
+            var path = Path.Combine(CookPublicationPaths.Operations(project.ProjectRoot.FullPath), "maintenance.lock");
             CookOutputLease.RejectReparsePoint(path);
             batch.Maintenance = WindowsCookFile.TryOpenExclusive(path, FileMode.OpenOrCreate, out _);
             if (batch.Maintenance is null)
@@ -254,7 +254,7 @@ public sealed partial class CookPublicationService
 
     private async Task ClaimOperationsAsync(ProjectContext project, CookOutputWriteLease gate, Guid? completedOperation, MaintenanceBatch batch, CancellationToken token)
     {
-        foreach (var (id, directory) in OwnedDirectories(Path.Combine(project.ProjectRoot.FullPath, ".build", "cook")))
+        foreach (var (id, directory) in OwnedDirectories(CookPublicationPaths.Operations(project.ProjectRoot.FullPath)))
         {
             token.ThrowIfCancellationRequested();
             await this.ClaimOperationAsync(project, gate, completedOperation, batch, (id, directory), token).ConfigureAwait(false);

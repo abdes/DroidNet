@@ -45,7 +45,7 @@ public sealed class ImportExecutionPathTests
         var authoringPath = Path.Combine(workspace.Root, source);
         Directory.CreateDirectory(Path.GetDirectoryName(authoringPath)!);
         await File.WriteAllTextAsync(authoringPath, "New incomplete authoring bytes", this.TestContext.CancellationToken).ConfigureAwait(false);
-        var publishedRoot = Path.Combine(workspace.Root, ".cooked", "Content");
+        var publishedRoot = Path.Combine(workspace.Root, ".cooked", "generations", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(publishedRoot);
         var previous = Path.Combine(publishedRoot, "previous-generation.txt");
         await File.WriteAllTextAsync(previous, "Previous publication", this.TestContext.CancellationToken).ConfigureAwait(false);

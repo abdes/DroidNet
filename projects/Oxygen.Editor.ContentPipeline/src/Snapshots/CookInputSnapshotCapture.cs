@@ -5,6 +5,7 @@
 using System.Collections.Immutable;
 using System.Security.Cryptography;
 using System.Text.Json;
+using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Snapshots;
@@ -25,7 +26,7 @@ public sealed partial class CookInputSnapshotCapture(IContentCookCoordinator coo
     {
         ArgumentNullException.ThrowIfNull(operation);
         ArgumentNullException.ThrowIfNull(discover);
-        var operationRoot = Path.Combine(operation.Project.ProjectRoot.FullPath, ".build", "cook", operation.OperationId.ToString("N"));
+        var operationRoot = CookPublicationPaths.Operation(operation.Project.ProjectRoot.FullPath, operation.OperationId);
         var inputRoot = Path.Combine(operationRoot, "inputs");
         EnsureNewDirectory(inputRoot);
 

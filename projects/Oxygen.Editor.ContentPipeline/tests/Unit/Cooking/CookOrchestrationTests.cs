@@ -364,29 +364,6 @@ public sealed class CookOrchestrationTests
         _ = report.Roots.Should().ContainSingle().Which.Inspection.CookedRoot.Should().Be(workspace.CookedRoot("Content"));
     }
 
-    /// <summary>Skips derived mounts when choosing the default inspection root.</summary>
-    /// <returns>The asynchronous test operation.</returns>
-    [TestMethod]
-    public async Task InspectCookedOutputAsync_WhenScopeIsNull_ShouldSkipLeadingDerivedAuthoringMount()
-    {
-        using var workspace = new CookWorkspace(
-            [
-                new ProjectMountPoint("Cooked", ".cooked"),
-                new ProjectMountPoint("Content", "Content"),
-            ]);
-        await workspace.SeedEmptyPublicationAsync("Content", CancellationToken.None).ConfigureAwait(false);
-        var api = new CapturingEngineContentPipelineApi(validation: new CookValidationResult(workspace.Root, Succeeded: true, Diagnostics: []), inspection: SucceededInspection(workspace))
-        {
-            SourceAnalysis = ControlledSourceAnalysis.AnalyzeAsync,
-        };
-        var service = CreateService(workspace, api, new CapturingSceneDescriptorGenerator(diagnostics: []));
-
-        var report = await service.InspectCookedOutputAsync(scopeUri: null, CancellationToken.None)
-            .ConfigureAwait(false);
-
-        _ = report.Roots.Should().ContainSingle().Which.Inspection.CookedRoot.Should().Be(workspace.CookedRoot("Content"));
-    }
-
     private sealed class InvalidManifestBuilder : IContentImportManifestBuilder
     {
         public ContentImportJob BuildModelJob(string sourceRelativePath, IReadOnlyList<string> dependsOn, string name, AssetPath identity) => new ContentImportManifestBuilder().BuildModelJob(sourceRelativePath, dependsOn, name, identity);

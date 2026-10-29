@@ -58,7 +58,7 @@ public partial class ContentFoldersViewModel
         }
 
         var project = session.Context;
-        if (!project.AuthoringMounts.Any(static mount => string.Equals(mount.RelativePath.Replace('\\', '/').Trim('/'), ".cooked", StringComparison.OrdinalIgnoreCase)))
+        if (!project.OutputFolderViews.Any(static view => string.Equals(view.Folder, ProjectOutputFolders.Cooked, StringComparison.Ordinal)))
         {
             return;
         }
@@ -153,7 +153,11 @@ public partial class ContentFoldersViewModel
             relative ??= GetRelativeMountPath(FileSystemPath.From(this.projectRoot!.ProjectRootFolder.Location), folder);
         }
 
-        if (relative is not null)
+        if (relative is not null && ProjectOutputFolders.Contains(relative))
+        {
+            projectInfo.OutputFolderViews.Add(new OutputFolderView(relative, child.IsExpanded));
+        }
+        else if (relative is not null)
         {
             projectInfo.AuthoringMounts.Add(new ProjectMountPoint(name, relative, child.IsExpanded));
         }
@@ -176,8 +180,7 @@ public partial class ContentFoldersViewModel
             }
 
             IReadOnlyList<string>? outputPaths = null;
-            if (isProjectRelative && string.Equals(backingPath.Replace('\\', '/').Trim('/'), ".cooked", StringComparison.OrdinalIgnoreCase)
-                && !this.selectionDisposed)
+            if (isProjectRelative && string.Equals(backingPath, ProjectOutputFolders.Cooked, StringComparison.Ordinal) && !this.selectionDisposed)
             {
                 try
                 {

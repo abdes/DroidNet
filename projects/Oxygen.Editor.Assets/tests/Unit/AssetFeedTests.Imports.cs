@@ -10,6 +10,7 @@ using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.ContentPipeline.Testing;
 using Oxygen.Editor.Models;
+using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
 using Oxygen.Editor.Assets.TestSupport;
@@ -27,7 +28,7 @@ public sealed partial class AssetFeedTests
         using var workspace = new AssetWorkspace();
         var source = await WriteModelSourceAsync(workspace, configured: false, this.TestContext.CancellationToken).ConfigureAwait(false);
         var reader = new DelegateStatusReader((_, _, _) => throw new InvalidOperationException("Unimported source has no cooking status to inspect."));
-        using var provider = AssetFeeds.Create(new TestProjectAssetCatalog([new(source)]), workspace.OpenSession(), new WorkspaceCookScopeProvider(workspace), cookStatus: reader);
+        using var provider = AssetFeeds.Create(new TestProjectAssetCatalog([new(source)]), workspace.OpenSession(), new ProjectCookScopeProvider(), cookStatus: reader);
         IReadOnlyList<AssetEntry> choices = [];
         provider.Assets(AssetRule.For(AssetKind.Material)).Subscribe(new Observer<IReadOnlyList<AssetEntry>>(value => choices = value), this.TestContext.CancellationToken);
         var row = await provider.ResolveAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -55,7 +56,7 @@ public sealed partial class AssetFeedTests
             _ = uris.Should().Contain(source);
             return Task.FromResult<IReadOnlyList<AssetCookStatus>>([state]);
         });
-        using var provider = AssetFeeds.Create(new TestProjectAssetCatalog([new(source)]), workspace.OpenSession(), new WorkspaceCookScopeProvider(workspace), cookStatus: reader);
+        using var provider = AssetFeeds.Create(new TestProjectAssetCatalog([new(source)]), workspace.OpenSession(), new ProjectCookScopeProvider(), cookStatus: reader);
         IReadOnlyList<AssetEntry> rows = [];
         IReadOnlyList<AssetEntry> choices = [];
         provider.Items.Subscribe(new Observer<IReadOnlyList<AssetEntry>>(value => rows = value), this.TestContext.CancellationToken);
@@ -86,7 +87,7 @@ public sealed partial class AssetFeedTests
         var source = await WriteModelSourceAsync(workspace, configured: true, this.TestContext.CancellationToken).ConfigureAwait(false);
         var projects = workspace.OpenSession();
         var project = projects.Context;
-        var ownedRoot = FileSystemPath.From(workspace.SourcePath(".cooked/Content"));
+        var ownedRoot = FileSystemPath.From(workspace.SourcePath(".cooked/generations/0123456789abcdef0123456789abcdef"));
         Directory.CreateDirectory(ownedRoot.FullPath);
         var publication = new FakeCookPublicationReader(project.ProjectId, project.ProjectRoot);
         publication.Publish([], new Dictionary<string, FileSystemPath> { ["Content"] = ownedRoot });
@@ -100,7 +101,7 @@ public sealed partial class AssetFeedTests
         var metadata = new CookedAssetMetadata(root, descriptor, Guid.NewGuid(), new(1, 2), 1, 6, new string('0', 64)) { VirtualPath = AssetPath.Parse(output.VirtualPath) };
         var records = new AssetRecord[] { new(source), new(output.CookedAssetUri) { Cooked = metadata } };
         var reader = new DelegateStatusReader((_, uris, _) => Task.FromResult<IReadOnlyList<AssetCookStatus>>(uris.Select(uri => state with { AssetUri = uri }).ToArray()));
-        using var provider = AssetFeeds.Create(new TestProjectAssetCatalog(records) { Publication = selected }, projects, new WorkspaceCookScopeProvider(workspace), cookStatus: reader);
+        using var provider = AssetFeeds.Create(new TestProjectAssetCatalog(records) { Publication = selected }, projects, new ProjectCookScopeProvider(), cookStatus: reader);
         var row = await provider.ResolveAsync(output.CookedAssetUri, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = row!.CanCook.Should().Be(!library);
         _ = row.CanReimport.Should().Be(!library);
@@ -133,7 +134,7 @@ public sealed partial class AssetFeedTests
         var runs = new Mock<ICookRunService>();
         IReadOnlyList<CookRunSnapshot> snapshots = [];
         _ = runs.SetupGet(value => value.Runs).Returns(() => snapshots);
-        using var provider = AssetFeeds.Create(new TestProjectAssetCatalog([new(source)]), projects, new WorkspaceCookScopeProvider(workspace), cookStatus: reader, cooks: runs.Object);
+        using var provider = AssetFeeds.Create(new TestProjectAssetCatalog([new(source)]), projects, new ProjectCookScopeProvider(), cookStatus: reader, cooks: runs.Object);
         IReadOnlyList<AssetEntry> rows = [];
         provider.Items.Subscribe(new Observer<IReadOnlyList<AssetEntry>>(value => rows = value), this.TestContext.CancellationToken);
         await provider.RefreshAsync(this.TestContext.CancellationToken).ConfigureAwait(false);

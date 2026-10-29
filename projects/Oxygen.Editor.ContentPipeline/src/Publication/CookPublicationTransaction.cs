@@ -37,7 +37,7 @@ internal sealed partial class CookPublicationTransaction
         this.projectManager = projectManager;
         this.journal = journal;
         this.journalVersion = journalVersion;
-        this.operationDirectory = Path.Combine(project.ProjectRoot.FullPath, ".build", "cook", journal.OperationId.ToString("N"));
+        this.operationDirectory = CookPublicationPaths.Operation(project.ProjectRoot.FullPath, journal.OperationId);
         this.checkpoint = checkpoint ?? (_ => Task.CompletedTask);
     }
 
