@@ -7,12 +7,12 @@
 #pragma once
 
 #include <cstdint>
-#include <expected>
 #include <memory>
 #include <optional>
 #include <stdexcept>
 #include <string>
 
+#include <Oxygen/Base/Result.h>
 #include <Oxygen/Core/Types/ByteUnits.h>
 #include <Oxygen/Graphics/Common/AllocationBudgetTag.h>
 #include <Oxygen/Graphics/Common/api_export.h>
@@ -86,7 +86,7 @@ public:
 private:
   //! Admit a request, or return the bytes still available.
   auto Admit(SizeBytes actual_bytes, AllocationCategory category)
-    -> std::expected<AllocationReservation, SizeBytes>;
+    -> Result<AllocationReservation, SizeBytes>;
 
   std::shared_ptr<detail::AllocationBudgetState> state_;
 };

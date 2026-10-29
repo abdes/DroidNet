@@ -6,13 +6,13 @@
 
 #include <algorithm>
 #include <cstdint>
-#include <expected>
 #include <memory>
 #include <mutex>
 #include <optional>
 #include <stdexcept>
 #include <utility>
 
+#include <Oxygen/Base/Result.h>
 #include <Oxygen/Core/Types/ByteUnits.h>
 #include <Oxygen/Graphics/Common/AllocationBudget.h>
 #include <Oxygen/Graphics/Common/AllocationBudgetTag.h>
@@ -123,9 +123,8 @@ auto AllocationBudget::Reserve(
   return std::move(*admitted);
 }
 
-auto AllocationBudget::Admit(
-  SizeBytes actual_bytes, AllocationCategory category)
-  -> std::expected<AllocationReservation, SizeBytes>
+auto AllocationBudget::Admit(SizeBytes actual_bytes,
+  AllocationCategory category) -> Result<AllocationReservation, SizeBytes>
 {
   const auto lock = std::scoped_lock(state_->mutex);
   auto available = state_->limits.total.get() - state_->allocated;
@@ -137,14 +136,14 @@ auto AllocationBudget::Admit(
     ++state_->rejected;
     state_->last_requested = actual_bytes;
     state_->last_available = SizeBytes { available };
-    return std::unexpected(SizeBytes { available });
+    return Err(SizeBytes { available });
   }
   state_->allocated += actual_bytes.get();
   if (category == AllocationCategory::kCompactIndices) {
     state_->compact_indices += actual_bytes.get();
   }
   state_->peak = std::max(state_->peak, state_->allocated);
-  return AllocationReservation { state_, actual_bytes, category };
+  return Ok(AllocationReservation { state_, actual_bytes, category });
 }
 
 auto AllocationBudget::Snapshot() const -> AllocationBudgetSnapshot
