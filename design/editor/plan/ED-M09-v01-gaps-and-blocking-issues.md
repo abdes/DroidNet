@@ -9,8 +9,8 @@ owner's order from section 3; the LLD gaps of section 2 start once their
 dependencies are closed. An item is `done` only when the done gate of section 6
 holds; its row then names the commit.
 
-**Next: item 17**, the engine mount contract of #81: it has no dependencies,
-and every later step of item 17 except 17.5 builds on it.
+**Next: item 17.1**, the recorded source identity of #81, on the mount table
+of item 17; items 17.3, 17.4 and 17.6 build on it.
 
 | Order | Item                                                                                           | Needs          | State | Commit    |
 | ----- | ---------------------------------------------------------------------------------------------- | -------------- | ----- | --------- |
@@ -33,7 +33,7 @@ and every later step of item 17 except 17.5 builds on it.
 | 16.1  | Procedural geometry bounds come from the generator, never the descriptor                       | 16             | done  | 9e00048d9 |
 | 16.2  | Imported tangent frames: reference MikkTSpace, unusable authored frames replaced               | 16             | done  | e43c7a5ea |
 | 16.3  | Texture Coordinates and Tangent Frame Check view modes in the editor viewport                  | 16             | done  | 3cf8098b8 |
-| 17    | #81 engine mount contract: mount table, `.mounts.json` hierarchy, mount rules                  | -              | open  | -         |
+| 17    | #81 engine mount contract: mount table, `.mounts.json` hierarchy, mount rules                  | -              | done  | e45f81c4b |
 | 17.1  | #81 recorded source identity: mount paths, loose cooked index 6 → 7                            | 17             | open  | -         |
 | 17.2  | #81 runtime and tools: source mounts replace script source roots                               | 17             | open  | -         |
 | 17.3  | #118 full paks pack only referenced resources; re-cooks retire superseded outputs              | 17.1           | open  | -         |
