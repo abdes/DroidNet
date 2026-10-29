@@ -264,6 +264,40 @@ public sealed class LooseCookedIndexTests
     }
 
     [TestMethod]
+    public void Read_AuxiliaryFileWithProducer_ShouldKeepItsSource()
+    {
+        var sidecar = new FileRecord(
+            Kind: FileKind.Auxiliary,
+            RelativePath: "Buffers/Hull.obuf",
+            Size: 64,
+            Sha256: System.Security.Cryptography.SHA256.HashData("sidecar"u8),
+            SourcePath: "/Content/Ship/Hull.buffers.json");
+        var doc = CreateSampleDocument() with { Files = [sidecar] };
+
+        using var ms = new MemoryStream();
+        Oxygen.Managed.Assets.Testing.LooseCookedIndexFixture.Write(ms, doc);
+        ms.Position = 0;
+
+        var file = LooseCookedIndex.Read(ms).Files.Should().ContainSingle().Subject;
+        _ = file.VirtualPath.Should().BeNull();
+        _ = file.SourcePath.Should().Be("/Content/Ship/Hull.buffers.json", "a re-cook of its producer retires the file");
+    }
+
+    [TestMethod]
+    public void Read_TableFileWithProducer_ShouldThrow()
+    {
+        var doc = CreateSampleDocument();
+        doc = doc with { Files = [doc.Files[0] with { SourcePath = "/Content/Ship/Ship.glb" }, doc.Files[1]] };
+
+        using var ms = new MemoryStream();
+        Oxygen.Managed.Assets.Testing.LooseCookedIndexFixture.Write(ms, doc);
+        ms.Position = 0;
+
+        Action read = () => _ = LooseCookedIndex.Read(ms);
+        _ = read.Should().Throw<InvalidDataException>();
+    }
+
+    [TestMethod]
     public void Read_AssetWithoutProducingSource_ShouldThrow()
     {
         using var ms = new MemoryStream();

@@ -66,6 +66,17 @@ public:
     const std::filesystem::path& cooked_root, std::string_view relpath,
     std::string_view virtual_path, const LooseCookedProducer& producer) -> void;
 
+  //! Register an auxiliary file record its producer produces.
+  OXGN_COOK_API auto RegisterExternalAuxiliaryFile(
+    const std::filesystem::path& cooked_root, std::string_view relpath,
+    const LooseCookedProducer& producer) -> void;
+
+  //! Retire the outputs a complete re-cook no longer writes.
+  /*! @see LooseCookedWriter::RetireUnwrittenOutputs */
+  OXGN_COOK_API auto RetireUnwrittenOutputs(
+    const std::filesystem::path& cooked_root, const LooseCookedRecook& recook)
+    -> void;
+
   //! Register an asset record in the shared index writer.
   OXGN_COOK_API auto RegisterExternalAssetDescriptor(
     const std::filesystem::path& cooked_root, const data::AssetKey& key,

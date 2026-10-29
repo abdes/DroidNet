@@ -10,7 +10,6 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
-#include <cstring>
 #include <filesystem>
 #include <initializer_list>
 #include <memory>
@@ -85,12 +84,17 @@ auto MakeSingleByteDigest(const uint8_t seed) -> base::Sha256Digest
   return digest;
 }
 
-auto BuildTextureRecord(const uint64_t data_offset, const uint32_t size_bytes)
-  -> core::TextureResourceDesc
+//! Where a texture's bytes are in its data file.
+struct TextureSlice final {
+  uint64_t data_offset = 0U;
+  uint32_t size_bytes = 0U;
+};
+
+auto BuildTextureRecord(const TextureSlice& slice) -> core::TextureResourceDesc
 {
   auto record = core::TextureResourceDesc {};
-  record.data_offset = data_offset;
-  record.size_bytes = size_bytes;
+  record.data_offset = slice.data_offset;
+  record.size_bytes = slice.size_bytes;
   record.texture_type = 1U;
   record.compression_type = 0U;
   record.width = 1U;
@@ -440,6 +444,19 @@ NOLINT_TEST_F(
     .descriptor_sha = {},
   };
   replace_asset.descriptor_sha.at(0) = kReplaceDescriptorSeed;
+  // The replaced asset binds texture 1; row 0 is the table's sentinel.
+  replace_asset.references = data::AssetReferences::Create(
+    {
+      data::ResourceBinding {
+        .kind = data::ResourceKind::kTexture,
+        .index = core::ResourceIndexT { 1U },
+      },
+    },
+    {})
+                               .value();
+  auto replace_textures = std::array<core::TextureResourceDesc, 2> {};
+  replace_textures.at(1).size_bytes = kReplaceTexturePayloadBytes;
+  const auto replace_texture_bytes = std::as_bytes(std::span(replace_textures));
 
   auto unchanged_asset = AssetSpec {
     .key = unchanged_key,
@@ -455,7 +472,8 @@ NOLINT_TEST_F(
     FileSpec {
       .kind = lc::FileKind::kTexturesTable,
       .relpath = "Resources/textures.table",
-      .payload = std::vector<std::byte>(sizeof(core::TextureResourceDesc)),
+      .payload = std::vector<std::byte>(
+        replace_texture_bytes.begin(), replace_texture_bytes.end()),
     },
     FileSpec {
       .kind = lc::FileKind::kTexturesData,
@@ -536,7 +554,8 @@ NOLINT_TEST_F(
       });
   ASSERT_NE(texture_table_it, tables.end());
   ASSERT_NE(buffer_table_it, tables.end());
-  EXPECT_EQ(texture_table_it->count, 1U);
+  // The bound texture and the null entry that reserves index zero.
+  EXPECT_EQ(texture_table_it->count, 2U);
   EXPECT_EQ(buffer_table_it->count, 0U);
 
   const auto closure = result.plan->PatchClosure();
@@ -623,24 +642,23 @@ NOLINT_TEST_F(PakPlanBuilderPatchTest,
   auto texture_b_payload_patch = std::vector<std::byte>(8U, std::byte { 0x22 });
   texture_b_payload_patch.at(0) = std::byte { 0x33 };
 
-  const auto texture_record_fallback = BuildTextureRecord(
-    0U, static_cast<uint32_t>(texture_fallback_payload.size()));
-  const auto texture_record_a
-    = BuildTextureRecord(texture_fallback_payload.size(),
-      static_cast<uint32_t>(texture_a_payload.size()));
-  const auto texture_record_b = BuildTextureRecord(
-    texture_fallback_payload.size() + texture_a_payload.size(),
-    static_cast<uint32_t>(texture_b_payload_base.size()));
-
-  auto textures_table_bytes
-    = std::vector<std::byte>(3U * sizeof(core::TextureResourceDesc));
-  std::memcpy(textures_table_bytes.data(), &texture_record_fallback,
-    sizeof(texture_record_fallback));
-  std::memcpy(textures_table_bytes.data() + sizeof(texture_record_fallback),
-    &texture_record_a, sizeof(texture_record_a));
-  std::memcpy(textures_table_bytes.data() + sizeof(texture_record_fallback)
-      + sizeof(texture_record_a),
-    &texture_record_b, sizeof(texture_record_b));
+  const auto texture_records = std::array {
+    BuildTextureRecord({
+      .data_offset = 0U,
+      .size_bytes = static_cast<uint32_t>(texture_fallback_payload.size()),
+    }),
+    BuildTextureRecord({
+      .data_offset = texture_fallback_payload.size(),
+      .size_bytes = static_cast<uint32_t>(texture_a_payload.size()),
+    }),
+    BuildTextureRecord({
+      .data_offset = texture_fallback_payload.size() + texture_a_payload.size(),
+      .size_bytes = static_cast<uint32_t>(texture_b_payload_base.size()),
+    }),
+  };
+  const auto texture_record_bytes = std::as_bytes(std::span(texture_records));
+  const auto textures_table_bytes = std::vector<std::byte>(
+    texture_record_bytes.begin(), texture_record_bytes.end());
 
   auto textures_data_base = texture_fallback_payload;
   textures_data_base.insert(textures_data_base.end(), texture_a_payload.begin(),

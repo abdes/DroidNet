@@ -274,8 +274,10 @@ remain valid through generation replacement.
 16. **Log-Structured Allocation (Append Semantics)**: Re-importing an asset
     allocates NEW space with a NEW index (append-like). Old data remains but is
     stale. Allocation is done by reserving explicit offsets and writing via
-    `WriteAt*` to avoid interleaving. The index file is always accurate. PAK
-    tool compacts later, remapping indices and trimming stale data.
+    `WriteAt*` to avoid interleaving. The index file is always accurate: a
+    re-cook retires the outputs its source no longer produces. The pak step
+    compacts the tables: its planner packs only the resources the assets bind
+    or loaders reach by key, and remaps their indices.
 
 ---
 
@@ -1546,7 +1548,7 @@ Fresh import:    T1→0, T2→1, T3→2
 Re-import T2:    T2'→3 (NEW data appended, NEW index)
                  Old data at offset 1 is STALE (not referenced)
 Index file:      T1→0, T2→3, T3→2 (ACCURATE, always points to fresh data)
-PAK later:       Compact container, remap indices, trim stale data
+Pak step:        Pack only reached resources, remap indices
 ```
 
 Counter-based index assignment is CORRECT because:
@@ -1554,7 +1556,7 @@ Counter-based index assignment is CORRECT because:
 - Each import session uses monotonic counter
 - Re-import appends new data with new indices
 - Index file is always written LAST with accurate mappings
-- Stale data is harmless until PAK compaction
+- Stale data stays in the loose root; the pak step leaves it out
 
 #### The Index File (`container.index.bin`)
 

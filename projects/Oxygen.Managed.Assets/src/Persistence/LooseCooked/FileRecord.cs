@@ -4,13 +4,13 @@
 
 namespace Oxygen.Managed.Assets.Persistence.LooseCooked;
 
-/// <summary>One cooked member file; only texture descriptors have a virtual path, and the source that produced them.</summary>
+/// <summary>One cooked member file; only texture descriptors have a virtual path, and only they and auxiliary files record the source that produced them.</summary>
 /// <param name="Kind">The file's role.</param>
 /// <param name="RelativePath">The file's path below the cooked root.</param>
 /// <param name="Size">The file's size in bytes.</param>
 /// <param name="Sha256">The file's SHA-256 digest.</param>
 /// <param name="VirtualPath">The virtual path of a texture descriptor.</param>
-/// <param name="SourcePath">The mount path of the source that produced a texture descriptor.</param>
+/// <param name="SourcePath">The mount path of the source that produced a texture descriptor or an auxiliary file.</param>
 public sealed record FileRecord(
     FileKind Kind,
     string RelativePath,

@@ -624,9 +624,17 @@ auto LooseCookedIndexImpl::ReadFileRecords(IndexLoadContext& context) -> void
         throw std::runtime_error(
           "Duplicate virtual path in loose cooked index file records");
       }
-    } else if (!virtual_path.empty() || !source_path.empty()) {
-      throw std::runtime_error("Only texture descriptor records may have a "
-                               "virtual path and a source");
+    } else if (!virtual_path.empty()) {
+      throw std::runtime_error(
+        "Only texture descriptor records may have a virtual path");
+    } else if (!source_path.empty()) {
+      // An auxiliary file, such as a buffer sidecar, may record its producer.
+      if (record.kind != FileKind::kAuxiliary) {
+        throw std::runtime_error(
+          "Only texture descriptor and auxiliary records "
+          "may have a source");
+      }
+      RequireCanonicalVirtualPath(source_path);
     }
 
     FileInfo info {

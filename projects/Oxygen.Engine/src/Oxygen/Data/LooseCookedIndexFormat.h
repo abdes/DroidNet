@@ -160,7 +160,8 @@ struct FileRecord {
   //! have one, every other record uses the empty string at offset 0.
   uint32_t virtual_path_offset = 0; // e.g. "/Content/Textures/Sky.otex"
   //! Offset into string table for the mount path of the source that produced
-  //! a texture descriptor; every other record uses the empty string.
+  //! a texture descriptor or an auxiliary file; every other record, and an
+  //! auxiliary file of no recorded producer, uses the empty string.
   uint32_t source_path_offset = 0; // e.g. "/Content/Ship/Ship.glb"
   std::array<uint8_t, kSha256Size> sha256 {};
 };

@@ -448,9 +448,16 @@ struct LooseCookedWriter::Impl final {
     if (kind == FileKind::kTextureDescriptor) {
       RequireCanonicalVirtualPath(virtual_path);
       RequireCanonicalVirtualPath(source_path);
-    } else if (!virtual_path.empty() || !source_path.empty()) {
-      throw std::runtime_error("RegisterExternalFile: only texture descriptors "
-                               "have virtual paths and sources");
+    } else if (!virtual_path.empty()) {
+      throw std::runtime_error(
+        "RegisterExternalFile: only texture descriptors have virtual paths");
+    } else if (!source_path.empty()) {
+      if (kind != FileKind::kAuxiliary) {
+        throw std::runtime_error("RegisterExternalFile: only texture "
+                                 "descriptors and auxiliary files have "
+                                 "sources");
+      }
+      RequireCanonicalVirtualPath(source_path);
     }
 
     const auto path_on_disk = cooked_root_ / std::filesystem::path(relpath);
@@ -486,6 +493,13 @@ struct LooseCookedWriter::Impl final {
   {
     RegisterExternalFile(FileKind::kTextureDescriptor, relpath, virtual_path,
       ResolveSource_(producer));
+  }
+
+  auto RegisterExternalAuxiliaryFile(
+    std::string_view relpath, const LooseCookedProducer& producer) -> void
+  {
+    RegisterExternalFile(
+      FileKind::kAuxiliary, relpath, {}, ResolveSource_(producer));
   }
 
   auto RegisterExternalAssetDescriptor(const data::AssetKey& key,
@@ -564,6 +578,21 @@ struct LooseCookedWriter::Impl final {
   {
     ValidateRelativePath(relpath);
     removed_auxiliary_files_.emplace(relpath);
+  }
+
+  auto RetireUnwrittenOutputs(const LooseCookedRecook& recook) -> void
+  {
+    if (!recook.source.starts_with('/')) {
+      throw std::runtime_error(
+        "The re-cooked source is not a mount path: '" + recook.source + "'");
+    }
+    RequireCanonicalVirtualPath(recook.identity);
+    ValidateRelativePath(recook.identity_relpath);
+    recooks_.push_back({
+      .source = FoldIdentity(recook.source),
+      .identity = FoldIdentity(recook.identity),
+      .identity_relpath = FoldIdentity(recook.identity_relpath),
+    });
   }
 
   [[nodiscard]] auto Finish() -> LooseCookedWriteResult
@@ -711,6 +740,8 @@ private:
       removed.push_back(relpath);
     }
 
+    RetireUnwrittenOutputs_(session_files, removed);
+
     // A descriptor still listed by a remaining asset stays on disk.
     std::erase_if(removed, [&](const std::string& relpath) -> bool {
       return std::ranges::any_of(assets_, [&](const auto& item) -> bool {
@@ -718,6 +749,75 @@ private:
       });
     });
     return removed;
+  }
+
+  //! Retires the outputs the index records for a re-cooked source that this
+  //! writer does not write. Requires the index file lock and the merged index.
+  auto RetireUnwrittenOutputs_(
+    const std::unordered_map<std::string, StoredFile>& session_files,
+    std::vector<std::string>& removed) -> void
+  {
+    if (recooks_.empty()) {
+      return;
+    }
+    // One source may back several identities, so a re-cook retires only what
+    // lies at or under its own identity.
+    const auto at_or_under
+      = [](const std::string& path, const std::string& root) -> bool {
+      return path == root
+        || (path.size() > root.size() && path.starts_with(root)
+          && path.at(root.size()) == '/');
+    };
+    const auto recooked
+      = [&](const std::string& source, const std::string& virtual_path,
+          const std::string& relpath) -> bool {
+      if (source.empty()) {
+        return false;
+      }
+      const auto folded_source = FoldIdentity(source);
+      return std::ranges::any_of(recooks_, [&](const auto& recook) -> bool {
+        return recook.source == folded_source
+          && (virtual_path.empty()
+              ? at_or_under(FoldIdentity(relpath), recook.identity_relpath)
+              : at_or_under(FoldIdentity(virtual_path), recook.identity));
+      });
+    };
+
+    auto retired_assets = std::vector<data::AssetKey> {};
+    for (const auto& [key, asset] : assets_) {
+      // A physics sidecar keeps its scene's producer but comes from a job of
+      // its own, which this re-cook did not run.
+      if (asset.asset_type == data::AssetType::kPhysicsScene) {
+        continue;
+      }
+      if (recooked(asset.source_path, asset.virtual_path, {})
+        && !written_virtual_paths_.contains(asset.virtual_path)) {
+        retired_assets.push_back(key);
+      }
+    }
+    for (const auto& key : retired_assets) {
+      const auto& asset = assets_.at(key);
+      LOG_F(INFO, "Retired cooked asset '{}' ({}): '{}' no longer produces it",
+        asset.virtual_path, asset.descriptor_relpath, asset.source_path);
+      removed.push_back(asset.descriptor_relpath);
+      ForgetAsset_(key);
+    }
+
+    auto retired_files = std::vector<std::string> {};
+    for (const auto& [relpath, file] : files_) {
+      const auto written = session_files.find(relpath);
+      if (IsPathKeyed(file.kind)
+        && recooked(file.source_path, file.virtual_path, relpath)
+        && (written == session_files.end() || !written->second.updated)) {
+        retired_files.push_back(relpath);
+      }
+    }
+    for (const auto& relpath : retired_files) {
+      LOG_F(INFO, "Retired cooked file '{}': '{}' no longer produces it",
+        relpath, files_.at(relpath).source_path);
+      ForgetFile_(relpath);
+      removed.push_back(relpath);
+    }
   }
 
   //! Deletes files the published index no longer lists, and the folders they
@@ -1130,6 +1230,8 @@ private:
   std::unordered_set<std::string> written_virtual_paths_;
   std::set<std::string> removed_virtual_paths_;
   std::set<std::string> removed_auxiliary_files_;
+  //! The complete re-cooks this writer publishes, folded for case.
+  std::vector<LooseCookedRecook> recooks_;
 };
 
 LooseCookedWriter::LooseCookedWriter(std::filesystem::path cooked_root)
@@ -1190,6 +1292,12 @@ auto LooseCookedWriter::RegisterExternalAssetDescriptor(
     descriptor_sha256);
 }
 
+auto LooseCookedWriter::RegisterExternalAuxiliaryFile(
+  std::string_view relpath, const LooseCookedProducer& producer) -> void
+{
+  impl_->RegisterExternalAuxiliaryFile(relpath, producer);
+}
+
 auto LooseCookedWriter::RemoveAssetDescriptor(std::string_view virtual_path)
   -> void
 {
@@ -1199,6 +1307,12 @@ auto LooseCookedWriter::RemoveAssetDescriptor(std::string_view virtual_path)
 auto LooseCookedWriter::RemoveAuxiliaryFile(std::string_view relpath) -> void
 {
   impl_->RemoveAuxiliaryFile(relpath);
+}
+
+auto LooseCookedWriter::RetireUnwrittenOutputs(const LooseCookedRecook& recook)
+  -> void
+{
+  impl_->RetireUnwrittenOutputs(recook);
 }
 
 auto LooseCookedWriter::Finish() -> LooseCookedWriteResult

@@ -145,6 +145,7 @@ oxygen_cooker_test(
     "Import/LooseCookedWriter_identity_functional_test.cpp"
     "Import/LooseCookedWriter_path_validation_functional_test.cpp"
     "Import/LooseCookedWriter_removal_functional_test.cpp"
+    "Import/LooseCookedWriter_retirement_functional_test.cpp"
     "Import/LooseCookedWriter_update_functional_test.cpp"
     "Import/LooseCookedWriterTestSupport.h"
     "Import/MaterialDescriptorImportRequestBuilder_functional_test.cpp"
@@ -276,6 +277,7 @@ oxygen_cooker_test(
     "Pak/PakBuilder_functional_test.cpp"
     "Pak/PakCatalogIo_functional_test.cpp"
     "Pak/PakManifestWriter_functional_test.cpp"
+    "Pak/PakPlanBuilder_compaction_functional_test.cpp"
     "Pak/PakPlanBuilder_functional_test.cpp"
     "Pak/PakPlanBuilder_patch_functional_test.cpp"
     "Pak/PakRepack_functional_test.cpp"
@@ -286,6 +288,14 @@ oxygen_cooker_test(
     "Pak/PakWriter_payload_layout_functional_test.cpp"
     "Pak/PakWriter_plan_contract_functional_test.cpp"
 )
+# Shared builds only: the cooker DLL does not export these internals.
+if(TARGET oxygen-cooker-test-visible-internals)
+  target_link_libraries(
+    Oxygen.Cooker.Pak.Functional.Tests
+    PRIVATE
+      oxygen-cooker-test-visible-internals
+  )
+endif()
 
 # -- Scenarios -----------------------------------------------------------------
 

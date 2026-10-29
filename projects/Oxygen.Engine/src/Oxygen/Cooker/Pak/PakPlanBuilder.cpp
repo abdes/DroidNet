@@ -15,6 +15,7 @@
 #include <ios>
 #include <iterator>
 #include <limits>
+#include <map>
 #include <memory>
 #include <optional>
 #include <ranges>
@@ -32,6 +33,7 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Content/PakFile.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/BufferDescriptorSidecar.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
 #include <Oxygen/Cooker/Loose/Types.h>
 #include <Oxygen/Cooker/Pak/PakBuildPhase.h>
@@ -43,6 +45,7 @@
 #include <Oxygen/Cooker/Pak/PakPlanPolicy.h>
 #include <Oxygen/Cooker/Pak/PakValidation.h>
 #include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Core/Types/DescriptorExtensions.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/CookedSource.h>
@@ -67,11 +70,8 @@ namespace data = oxygen::data;
 namespace serio = oxygen::serio;
 namespace core = oxygen::data::pak::core;
 namespace audio = oxygen::data::pak::audio;
-namespace geometry = oxygen::data::pak::geometry;
-namespace render = oxygen::data::pak::render;
 namespace script = oxygen::data::pak::scripting;
 namespace physics = oxygen::data::pak::physics;
-namespace world = oxygen::data::pak::world;
 
 constexpr uint32_t kRegionAlignment = 256U;
 constexpr uint32_t kTableAlignment = 16U;
@@ -122,10 +122,6 @@ struct TableCounts {
   uint64_t audio_count = 0;
   uint64_t script_resource_count = 0;
   uint64_t physics_count = 0;
-};
-
-struct SourceContribution final {
-  TableCounts table_counts {};
 };
 
 auto AddDiagnostic(std::vector<pak::PakDiagnostic>& diagnostics,
@@ -326,7 +322,7 @@ auto AppendResourcesFromTable(const SourceFileSlice& table_file,
   std::vector<PendingResource>& pending_resources,
   std::vector<pak::PakDiagnostic>& diagnostics,
   const std::string_view table_name, const ConfigureFn& configure,
-  const RecordSinkFn& on_record) -> uint32_t
+  const RecordSinkFn& on_record) -> void
 {
   const auto& table_path = table_file.path;
   const auto& data_path = data_file.path;
@@ -341,7 +337,7 @@ auto AppendResourcesFromTable(const SourceFileSlice& table_file,
           = std::string("pak.plan.") + std::string(table_name) + "_too_large",
           .label = table_name,
         })) {
-    return 0;
+    return;
   }
 
   for (size_t i = 0; i < records.size(); ++i) {
@@ -391,9 +387,7 @@ auto AppendResourcesFromTable(const SourceFileSlice& table_file,
       pak::PakBuildPhase::kPlanning, "pak.plan.resource_record_count_overflow",
       std::string(table_name) + " record count overflowed uint32 bounds.",
       table_path);
-    return 0;
   }
-  return static_cast<uint32_t>(records.size());
 }
 
 struct SourceResourceDigestState final {
@@ -639,22 +633,6 @@ auto RegionOrder(const std::string_view region_name) -> int
   return kUnknownRegionOrder;
 }
 
-auto AccumulateTableCountFromFile(const std::filesystem::path& table_path,
-  const uint64_t file_size, const uint64_t entry_size,
-  uint64_t& count_accumulator, std::vector<pak::PakDiagnostic>& diagnostics,
-  const std::string_view code) -> void
-{
-  if (entry_size == 0U || (file_size % entry_size) != 0U) {
-    AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
-      pak::PakBuildPhase::kPlanning, code,
-      "Resource table file size is not divisible by expected entry size.",
-      table_path);
-    return;
-  }
-
-  count_accumulator += file_size / entry_size;
-}
-
 auto ComputeDescriptorDigestFromFile(
   const std::filesystem::path& descriptor_path,
   std::vector<pak::PakDiagnostic>& diagnostics)
@@ -755,19 +733,6 @@ auto ReadSourceDescriptorBytes(
     "Failed to read asset descriptor bytes.");
 }
 
-auto IsValidDescriptorHeader(std::span<const std::byte> bytes,
-  const data::AssetType expected_type, const uint8_t expected_version) -> bool
-{
-  if (bytes.size() < sizeof(core::AssetHeader)) {
-    return false;
-  }
-
-  core::AssetHeader header {};
-  std::memcpy(std::addressof(header), bytes.data(), sizeof(header));
-  return header.asset_type == static_cast<uint8_t>(expected_type)
-    && header.version == expected_version;
-}
-
 auto ComputeDescriptorDigestFromPakEntry(const content::PakFile& pak_file,
   const core::AssetDirectoryEntry& entry,
   const std::filesystem::path& source_path,
@@ -862,8 +827,8 @@ auto BuildOutputCatalog(const pak::PakBuildRequest& request,
 }
 
 struct PhysicsScenePair final {
-  data::AssetKey scene_key {};
-  data::AssetKey sidecar_key {};
+  data::AssetKey scene_key;
+  data::AssetKey sidecar_key;
 };
 
 struct SourceTextureRef final {
@@ -897,8 +862,10 @@ struct PlanningState final {
   std::unordered_map<data::AssetKey, data::AssetType> dependency_types;
   std::vector<data::PakCatalogBase> layers;
   std::vector<PendingResource> pending_resources;
-  std::unordered_map<size_t, SourceContribution> source_contributions;
-  std::vector<size_t> included_source_orders;
+  //! Buffer descriptor sidecars by the source and source-local buffer index
+  //! they name.
+  std::unordered_map<size_t, std::unordered_map<uint32_t, std::string>>
+    buffer_sidecars;
   std::vector<size_t> planned_resource_source_orders;
   std::vector<std::vector<data::AssetKey>>
     planned_resource_dependent_asset_keys;
@@ -1112,6 +1079,32 @@ auto ProjectPakResourceFiles(SourceCollection& context) -> void
   }
 }
 
+//! Records the buffer a `.obuf` sidecar names, so that a pak dropping it can
+//! say which sidecar still names it.
+auto CollectBufferSidecar(PlanningState& state, const SourceCollection& context,
+  const lc::FileEntry& file) -> void
+{
+  auto& diagnostics = state.output.diagnostics;
+  const auto path = context.root / std::filesystem::path(file.relpath);
+  const auto bytes = ReadFileSliceBytes(
+    SourceFileSlice { .path = path, .size = file.size, .offset = 0U },
+    diagnostics, "pak.plan.buffer_sidecar_read_failed", "Buffer sidecar");
+  if (!bytes) {
+    return;
+  }
+  auto parsed = content::import::internal::ParsedBufferDescriptorSidecar {};
+  auto error = std::string {};
+  if (!content::import::internal::ParseBufferDescriptorSidecar(
+        *bytes, parsed, error)) {
+    AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
+      pak::PakBuildPhase::kPlanning, "pak.plan.buffer_sidecar_invalid",
+      "Buffer sidecar is invalid: " + error, path);
+    return;
+  }
+  state.buffer_sidecars[context.order].insert_or_assign(
+    parsed.resource_index.get(), file.relpath);
+}
+
 auto LoadSourceMetadata(PlanningState& state, SourceCollection& context) -> void
 {
   auto& source_root = context.root;
@@ -1140,6 +1133,9 @@ auto LoadSourceMetadata(PlanningState& state, SourceCollection& context) -> void
             .source_order = context.order,
             .texture_index = index,
           });
+      } else if (file.kind == lc::FileKind::kAuxiliary
+        && file.relpath.ends_with(data::kBufferDescriptorExtension)) {
+        CollectBufferSidecar(state, context, file);
       }
     }
     state.layers.push_back({
@@ -1304,7 +1300,6 @@ auto CollectSourceFiles(PlanningState& state, SourceCollection& context) -> void
   auto& file_offsets = context.file_offsets;
   auto& pak_file = context.pak_file;
   auto& resource_files = context.resources;
-  auto& source_contribution = state.source_contributions[context.order];
   auto& diagnostics = state.output.diagnostics;
 
   std::ranges::sort(source_files,
@@ -1366,10 +1361,6 @@ auto CollectSourceFiles(PlanningState& state, SourceCollection& context) -> void
         .size = file_size,
         .offset = file_offset,
       };
-      AccumulateTableCountFromFile(file_path, file_size,
-        sizeof(core::TextureResourceDesc),
-        source_contribution.table_counts.texture_count, diagnostics,
-        "pak.plan.texture_table_size_invalid");
       break;
     case data::loose_cooked::FileKind::kBuffersTable:
       resource_files.buffers_table = SourceFileSlice {
@@ -1377,10 +1368,6 @@ auto CollectSourceFiles(PlanningState& state, SourceCollection& context) -> void
         .size = file_size,
         .offset = file_offset,
       };
-      AccumulateTableCountFromFile(file_path, file_size,
-        sizeof(core::BufferResourceDesc),
-        source_contribution.table_counts.buffer_count, diagnostics,
-        "pak.plan.buffer_table_size_invalid");
       break;
     case data::loose_cooked::FileKind::kPhysicsTable:
       resource_files.physics_table = SourceFileSlice {
@@ -1388,10 +1375,6 @@ auto CollectSourceFiles(PlanningState& state, SourceCollection& context) -> void
         .size = file_size,
         .offset = file_offset,
       };
-      AccumulateTableCountFromFile(file_path, file_size,
-        sizeof(physics::PhysicsResourceDesc),
-        source_contribution.table_counts.physics_count, diagnostics,
-        "pak.plan.physics_table_size_invalid");
       break;
     case data::loose_cooked::FileKind::kScriptsTable:
       resource_files.scripts_table = SourceFileSlice {
@@ -1399,10 +1382,6 @@ auto CollectSourceFiles(PlanningState& state, SourceCollection& context) -> void
         .size = file_size,
         .offset = file_offset,
       };
-      AccumulateTableCountFromFile(file_path, file_size,
-        sizeof(script::ScriptResourceDesc),
-        source_contribution.table_counts.script_resource_count, diagnostics,
-        "pak.plan.scripts_table_size_invalid");
       break;
     case data::loose_cooked::FileKind::kAuxiliary:
     case data::loose_cooked::FileKind::kTextureDescriptor:
@@ -1420,7 +1399,6 @@ auto CollectPakAudioResources(PlanningState& state, SourceCollection& context)
   auto& pak_file = context.pak_file;
   auto& pak_footer = context.footer;
   auto& resource_files = context.resources;
-  auto& source_contribution = state.source_contributions[context.order];
   auto& diagnostics = state.output.diagnostics;
 
   if (pak_file && pak_footer.audio_table.count != 0U) {
@@ -1439,19 +1417,18 @@ auto CollectPakAudioResources(PlanningState& state, SourceCollection& context)
       .size = pak_footer.audio_region.size,
       .offset = pak_footer.audio_region.offset,
     };
-    source_contribution.table_counts.audio_count
-      = AppendResourcesFromTable<audio::AudioResourceDesc>(
-        *resource_files.audio_table, *resource_files.audio_data, "audio_region",
-        "audio", source_order, state.pending_resources, diagnostics,
-        "audio_table",
-        [](const audio::AudioResourceDesc& record,
-          PendingResource& pending) -> bool {
-          pending.alignment
-            = record.alignment == 0U ? kRegionAlignment : record.alignment;
-          return true;
-        },
-        [](uint32_t, const audio::AudioResourceDesc&,
-          PendingResource&) -> void { });
+    AppendResourcesFromTable<audio::AudioResourceDesc>(
+      *resource_files.audio_table, *resource_files.audio_data, "audio_region",
+      "audio", source_order, state.pending_resources, diagnostics,
+      "audio_table",
+      [](const audio::AudioResourceDesc& record,
+        PendingResource& pending) -> bool {
+        pending.alignment
+          = record.alignment == 0U ? kRegionAlignment : record.alignment;
+        return true;
+      },
+      [](uint32_t, const audio::AudioResourceDesc&, PendingResource&) -> void {
+      });
   }
 }
 
@@ -1580,12 +1557,9 @@ auto CollectPhysicsResources(PlanningState& state, SourceCollection& context)
       *resource_files.physics_table, *resource_files.physics_data,
       "physics_region", "physics", source_order, state.pending_resources,
       diagnostics, "physics_resource_table",
-      [&state, &diagnostics, source_order](
-        const physics::PhysicsResourceDesc& record,
+      [&diagnostics](const physics::PhysicsResourceDesc& record,
         PendingResource& pending) -> bool {
         if (pending.source_local_index == 0U) {
-          --state.source_contributions.at(source_order)
-              .table_counts.physics_count;
           if (!record.resource_asset_key.IsNil() || record.size_bytes != 0U) {
             AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
               pak::PakBuildPhase::kPlanning,
@@ -1638,7 +1612,7 @@ auto CollectPhysicsResources(PlanningState& state, SourceCollection& context)
 
 struct AssetDependencyDigest {
   oxygen::base::Sha256Digest digest {};
-  std::vector<size_t> resources {};
+  std::vector<size_t> resources;
 };
 
 //! `lower_layer_textures` holds the texture keys of the base and dependency
@@ -1899,8 +1873,6 @@ auto CollectSourceData(PlanningState& state) -> void
           "A numeric binding addresses a shadowed keyed physics resource.",
           resource.descriptor_path);
       }
-      --state.source_contributions.at(resource.source_order)
-          .table_counts.physics_count;
       return true;
     });
 }
@@ -2318,105 +2290,139 @@ auto ValidatePatchClassificationInvariants(PlanningState& state) -> void
   }
 }
 
-auto CollectIncludedSourceOrders(PlanningState& state) -> void
-{
-  state.included_source_orders.clear();
-  if (state.policy.mode == pak::PakPlanMode::kPatch) {
-    std::unordered_set<data::AssetKey> emitted;
-    for (const auto& asset : state.assets) {
-      state.included_source_orders.push_back(asset.source_order);
-      emitted.insert(asset.key);
-    }
-    for (const auto& resource : state.pending_resources) {
-      if (std::ranges::any_of(resource.dependent_asset_keys,
-            [&](const data::AssetKey& key) -> bool {
-              return emitted.contains(key);
-            })) {
-        state.included_source_orders.push_back(resource.source_order);
-      }
-    }
-  } else {
-    state.included_source_orders.reserve(state.source_contributions.size());
-    for (const auto& [source_order, _] : state.source_contributions) {
-      state.included_source_orders.push_back(source_order);
-    }
-  }
+using SourceTextureIndices
+  = std::unordered_map<size_t, std::unordered_set<uint32_t>>;
 
-  std::ranges::sort(state.included_source_orders);
-  state.included_source_orders.erase(
-    std::ranges::unique(state.included_source_orders).begin(),
-    state.included_source_orders.end());
+auto IsTextureIn(
+  const PendingResource& resource, const SourceTextureIndices& textures) -> bool
+{
+  if (resource.resource_kind != "texture" || !resource.source_local_index) {
+    return false;
+  }
+  const auto source = textures.find(resource.source_order);
+  return source != textures.end()
+    && source->second.contains(*resource.source_local_index);
 }
 
-auto RebuildPatchLocalContributions(PlanningState& state) -> void
+//! Whether a loader reaches the resource without an asset binding: a keyed
+//! texture, the winning keyed physics resource or an audio resource.
+auto IsReachableWithoutBinding(const PendingResource& resource,
+  const SourceTextureIndices& keyed_textures) -> bool
+{
+  if (resource.resource_kind == "audio") {
+    return true;
+  }
+  // Collection already removed the keyed physics resources that lose to a
+  // later source.
+  if (resource.resource_kind == "physics") {
+    return resource.resource_asset_key.has_value();
+  }
+  return IsTextureIn(resource, keyed_textures);
+}
+
+//! Reports the resources compaction drops: a buffer a live `.obuf` sidecar
+//! still names is a warning with its path, any other entry counts towards one
+//! information per source and kind.
+auto ReportDroppedResources(
+  PlanningState& state, std::span<const PendingResource> dropped) -> void
 {
   using pak::PakBuildPhase;
   using pak::PakDiagnosticSeverity;
 
-  CollectIncludedSourceOrders(state);
-  state.table_counts = {};
-
-  if (state.policy.mode != pak::PakPlanMode::kPatch) {
-    for (const auto source_order : state.included_source_orders) {
-      const auto contribution_it
-        = state.source_contributions.find(source_order);
-      if (!CheckStageInvariant(state,
-            contribution_it != state.source_contributions.end(),
-            "pak.plan.stage.patch.missing_source_contribution",
-            "Included source order has no source contribution record.")) {
-        continue;
-      }
-
-      const auto& contribution = contribution_it->second;
-      state.table_counts.texture_count
-        += contribution.table_counts.texture_count;
-      state.table_counts.buffer_count += contribution.table_counts.buffer_count;
-      state.table_counts.audio_count += contribution.table_counts.audio_count;
-      state.table_counts.script_resource_count
-        += contribution.table_counts.script_resource_count;
-      state.table_counts.physics_count
-        += contribution.table_counts.physics_count;
-    }
-    return;
-  }
-
-  std::unordered_set<size_t> descriptor_source_orders;
-  auto emitted_asset_keys = std::unordered_set<data::AssetKey> {};
-  emitted_asset_keys.reserve(state.assets.size());
-  for (const auto& asset : state.assets) {
-    emitted_asset_keys.insert(asset.key);
-    descriptor_source_orders.insert(asset.source_order);
-  }
-  auto explicitly_owned_resource_kinds_by_source
-    = std::unordered_map<size_t, std::unordered_set<std::string>> {};
-  for (const auto& resource : state.pending_resources) {
-    if (resource.dependent_asset_keys.empty()) {
-      continue;
-    }
-    explicitly_owned_resource_kinds_by_source[resource.source_order].insert(
-      resource.resource_kind);
-  }
-
-  std::erase_if(state.pending_resources,
-    [&descriptor_source_orders, &emitted_asset_keys,
-      &explicitly_owned_resource_kinds_by_source](
-      const PendingResource& resource) -> bool {
-      if (resource.dependent_asset_keys.empty()) {
-        if (!descriptor_source_orders.contains(resource.source_order)) {
-          return true;
+  auto& diagnostics = state.output.diagnostics;
+  auto counts = std::map<std::pair<size_t, std::string>, uint64_t> {};
+  for (const auto& resource : dropped) {
+    if (resource.resource_kind == "buffer" && resource.source_local_index) {
+      const auto sidecars = state.buffer_sidecars.find(resource.source_order);
+      if (sidecars != state.buffer_sidecars.end()) {
+        if (const auto sidecar
+          = sidecars->second.find(*resource.source_local_index);
+          sidecar != sidecars->second.end()) {
+          AddDiagnostic(diagnostics, PakDiagnosticSeverity::kWarning,
+            PakBuildPhase::kPlanning, "pak.plan.sidecar_buffer_dropped",
+            "No packed asset binds buffer "
+              + std::to_string(*resource.source_local_index)
+              + ", which the sidecar '" + sidecar->second
+              + "' still names; the pak drops it.",
+            ToCanonicalSourcePath(
+              state.request->sources.at(resource.source_order).path)
+              / std::filesystem::path(sidecar->second));
+          continue;
         }
-        const auto owned_kinds_it
-          = explicitly_owned_resource_kinds_by_source.find(
-            resource.source_order);
-        return owned_kinds_it != explicitly_owned_resource_kinds_by_source.end()
-          && owned_kinds_it->second.contains(resource.resource_kind);
       }
-      return !std::ranges::any_of(resource.dependent_asset_keys,
-        [&emitted_asset_keys](const data::AssetKey& key) -> bool {
-          return emitted_asset_keys.contains(key);
-        });
-    });
+    }
+    ++counts[{ resource.source_order, resource.resource_kind }];
+  }
+  for (const auto& [source, count] : counts) {
+    AddDiagnostic(diagnostics, PakDiagnosticSeverity::kInfo,
+      PakBuildPhase::kPlanning, "pak.plan.unreferenced_resources_dropped",
+      "Dropped " + std::to_string(count) + " unreferenced " + source.second
+        + " entries.",
+      ToCanonicalSourcePath(state.request->sources.at(source.first).path));
+  }
+}
 
+//! Selects the resources the pak holds, in full and patch mode alike: those an
+//! emitted asset binds, and those a loader reaches without a binding. A patch
+//! leaves a keyed texture its base or dependency paks hold to them, and a
+//! resource only unchanged assets bind to its base. Index zero of a texture,
+//! buffer or script table is a sentinel no binding names: a full pak keeps the
+//! first source's, which holds the fallback texture.
+auto SelectPackedResources(PlanningState& state) -> void
+{
+  const auto full = state.policy.mode != pak::PakPlanMode::kPatch;
+  auto emitted = std::unordered_set<data::AssetKey> {};
+  emitted.reserve(state.assets.size());
+  for (const auto& asset : state.assets) {
+    emitted.insert(asset.key);
+  }
+
+  auto keyed_textures = SourceTextureIndices {};
+  auto lower_layer_textures = SourceTextureIndices {};
+  for (const auto& [path, texture] : state.browse_textures) {
+    keyed_textures[texture.source_order].insert(texture.texture_index);
+    if (!full
+      && state.request->lower_layer_texture_keys.contains(
+        data::TextureKeyFromVirtualPath(path))) {
+      lower_layer_textures[texture.source_order].insert(texture.texture_index);
+    }
+  }
+
+  auto zero_rows = std::unordered_map<std::string, size_t> {};
+  for (const auto& resource : state.pending_resources) {
+    if (full && resource.source_local_index == 0U
+      && resource.resource_kind != "audio") {
+      const auto row
+        = zero_rows.try_emplace(resource.resource_kind, resource.source_order)
+            .first;
+      row->second = std::min(row->second, resource.source_order);
+    }
+  }
+
+  auto dropped = std::vector<PendingResource> {};
+  std::erase_if(
+    state.pending_resources, [&](const PendingResource& resource) -> bool {
+      const auto reachable
+        = IsReachableWithoutBinding(resource, keyed_textures);
+      if (std::ranges::any_of(resource.dependent_asset_keys,
+            [&emitted](const data::AssetKey& key) -> bool {
+              return emitted.contains(key);
+            })
+        || (reachable && !IsTextureIn(resource, lower_layer_textures))) {
+        return false;
+      }
+      if (resource.source_local_index == 0U) {
+        const auto row = zero_rows.find(resource.resource_kind);
+        return row == zero_rows.end() || row->second != resource.source_order;
+      }
+      if (!reachable && resource.dependent_asset_keys.empty()) {
+        dropped.push_back(resource);
+      }
+      return true;
+    });
+  ReportDroppedResources(state, dropped);
+
+  state.table_counts = {};
   for (const auto& resource : state.pending_resources) {
     if (resource.resource_kind == "texture") {
       ++state.table_counts.texture_count;
@@ -2429,21 +2435,6 @@ auto RebuildPatchLocalContributions(PlanningState& state) -> void
     } else if (resource.resource_kind == "physics") {
       ++state.table_counts.physics_count;
     }
-  }
-}
-
-auto ValidatePatchContributionInvariants(PlanningState& state) -> void
-{
-  if (state.policy.mode != pak::PakPlanMode::kPatch) {
-    return;
-  }
-
-  for (const auto& resource : state.pending_resources) {
-    EnforceStageInvariant(state,
-      std::ranges::find(state.included_source_orders, resource.source_order)
-        != state.included_source_orders.end(),
-      "pak.plan.stage.patch.resource_not_patch_local",
-      "Patch resource owner is missing from source contributions.");
   }
 }
 
@@ -2479,8 +2470,12 @@ using SourceIndexRemaps
   = std::unordered_map<size_t, std::unordered_map<uint32_t, uint32_t>>;
 using ResourceIndexRemaps = std::unordered_map<std::string, SourceIndexRemaps>;
 
-auto RelocateResourceBindings(
-  AggregatedAsset& asset, const ResourceIndexRemaps& remaps) -> void
+//! Moves each binding to its resource's index in the pak. Loaders reach
+//! resources only through bindings, so a binding to an unpacked resource fails
+//! the plan.
+auto RelocateResourceBindings(AggregatedAsset& asset,
+  const ResourceIndexRemaps& remaps,
+  std::vector<pak::PakDiagnostic>& diagnostics) -> void
 {
   std::vector<data::ResourceBinding> bindings(
     asset.references.Resources().begin(), asset.references.Resources().end());
@@ -2509,22 +2504,31 @@ auto RelocateResourceBindings(
     case data::ResourceKind::kExternalTexture:
       break;
     }
-    const auto domain = remaps.find(kind);
-    if (domain == remaps.end()) {
-      throw std::runtime_error(
-        "Asset binding resource kind has no planned table");
+    const auto target = [&] -> std::optional<uint32_t> {
+      const auto domain = remaps.find(kind);
+      if (domain == remaps.end()) {
+        return std::nullopt;
+      }
+      const auto source = domain->second.find(asset.source_order);
+      if (source == domain->second.end()) {
+        return std::nullopt;
+      }
+      const auto index = source->second.find(binding.index.get());
+      if (index == source->second.end()) {
+        return std::nullopt;
+      }
+      return index->second;
+    }();
+    if (!target) {
+      AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
+        pak::PakBuildPhase::kPlanning, "pak.plan.binding_target_unpacked",
+        "Asset " + data::to_string(asset.key) + " binds " + kind + " "
+          + std::to_string(binding.index.get())
+          + ", which the pak does not hold.",
+        asset.descriptor_path);
+      continue;
     }
-    const auto source = domain->second.find(asset.source_order);
-    if (source == domain->second.end()) {
-      throw std::runtime_error(
-        "Asset binding source has no planned resource remap");
-    }
-    const auto target = source->second.find(binding.index.get());
-    if (target == source->second.end()) {
-      throw std::runtime_error(
-        "Asset binding target was not included in packaging");
-    }
-    binding.index = core::ResourceIndexT { target->second };
+    binding.index = core::ResourceIndexT { *target };
   }
   auto relocated = data::AssetReferences::Create(std::move(bindings),
     std::vector<data::KeyReference>(
@@ -2695,7 +2699,7 @@ auto PlanFileLayout(PlanningState& state) -> void
   state.data_plan.asset_payload_sources.clear();
   state.data_plan.directory.entries.clear();
   for (auto& asset : state.assets) {
-    RelocateResourceBindings(asset, resource_remaps);
+    RelocateResourceBindings(asset, resource_remaps, state.output.diagnostics);
   }
   PlanBrowseTextures(state, resource_remaps);
   for (const auto& asset : state.assets) {
@@ -3115,12 +3119,9 @@ auto PakPlanBuilder::Build(const PakBuildRequest& request) const -> BuildResult
   RunStage(state, "ValidatePatchClassificationInvariants",
     "pak.plan.stage.patch_invariants_exception",
     [&state] -> void { ValidatePatchClassificationInvariants(state); });
-  RunStage(state, "RebuildPatchLocalContributions",
-    "pak.plan.stage.patch_local_rebuild_exception",
-    [&state] -> void { RebuildPatchLocalContributions(state); });
-  RunStage(state, "ValidatePatchContributionInvariants",
-    "pak.plan.stage.patch_local_invariants_exception",
-    [&state] -> void { ValidatePatchContributionInvariants(state); });
+  RunStage(state, "SelectPackedResources",
+    "pak.plan.stage.select_resources_exception",
+    [&state] -> void { SelectPackedResources(state); });
   RunStage(state, "FinalizeResourceTables",
     "pak.plan.stage.script_tables_exception",
     [&state] -> void { FinalizeResourceTables(state); });

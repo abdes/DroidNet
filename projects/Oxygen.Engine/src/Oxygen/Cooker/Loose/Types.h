@@ -38,8 +38,8 @@ struct FileEntry {
   base::Sha256Digest sha256 {};
   //! Virtual path of a texture descriptor; empty for every other file.
   std::string virtual_path;
-  //! Virtual path of the source that produced a texture descriptor; empty for
-  //! every other file.
+  //! Mount path of the source that produced a texture descriptor or an
+  //! auxiliary file; empty for every other file.
   std::string source_path;
 };
 

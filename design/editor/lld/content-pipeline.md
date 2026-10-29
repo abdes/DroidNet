@@ -3,7 +3,7 @@
 Status:
 `Canonical V0.1 contract; implementation and qualification tracked by ED-M08`
 
-Last Updated: 2026-10-28 18:00
+Last Updated: 2026-10-29 18:32
 
 **Navigation:** [purpose](#1-purpose),
 [surface identity and reimport](#20-canonical-surface-identity-and-reimport),
@@ -699,8 +699,13 @@ production API.
   sealing and publication.
 - For a partial asset/folder cook, seed staging from the previous published root
   and replace the selected assets and dependencies. Preserve unrelated entries.
-  Track generated subassets so reimport removes superseded outputs from that
-  source without deleting unrelated assets or changing stable IDs.
+  A reimport removes the superseded outputs of its source without deleting
+  unrelated assets or changing stable IDs: the engine's loose cooked writer
+  retires the asset descriptors, texture descriptors and buffer sidecars the
+  re-cook no longer writes, keyed by the recorded source mount path and limited
+  to the job's identity, since one source may back several identities. A
+  physics sidecar keeps its scene's producer and comes from its own job, so it
+  stays.
 - Run native inspect, complete-root validation, reference/dependency validation,
   and all required descriptor-field checks on staging. Unsupported required V0.1
   content is an error, not a successful result with omitted values.
@@ -721,7 +726,8 @@ JSON request in the operation folder (`ImportToolContentPipelineApi`), which
 calls the engine's `LooseCookedWriter.RemoveAssetDescriptor` and
 `RemoveAuxiliaryFile`: the writer publishes the index without them, then
 deletes their files. Resource table entries stay, as they do when a cook
-replaces an asset; only a rebuild of the root compacts the tables. The other
+replaces an asset; the pak step compacts the tables, packing only the
+resources its assets reach. The other
 products of the mount are reused. A product that used a removed one is cooked
 again, so a scene that lost its material reports it instead of keeping a
 reference to cooked content that is gone.

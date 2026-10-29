@@ -43,6 +43,7 @@
 #include <Oxygen/Cooker/Import/Internal/LooseCookedIndexRegistry.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableRegistry.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Cooker/Import/ModelImportState.h>
 #include <Oxygen/Cooker/Import/SourceMounts.h>
 #include <Oxygen/Cooker/Import/SurfaceProvenance.h>
@@ -875,8 +876,8 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
       report.outputs.reserve(report.outputs.size() + records.size());
       for (const auto& rec : records) {
         if (rec.virtual_path.empty()) {
-          index_registry_->RegisterExternalFile(
-            cooked_root_, FileKind::kAuxiliary, rec.relpath);
+          index_registry_->RegisterExternalAuxiliaryFile(
+            cooked_root_, rec.relpath, recorded_producer());
         } else {
           index_registry_->RegisterExternalTextureDescriptor(
             cooked_root_, rec.relpath, rec.virtual_path, recorded_producer());
@@ -889,6 +890,21 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
           |= !AppendOutputRecord(report.outputs, report.diagnostics,
             cooked_root_, rec.relpath, request_.source_path.string());
       }
+    }
+
+    // A job that completed without errors re-cooked its source in full under
+    // its identity, so what it no longer produces there retires. A sidecar
+    // completes one asset of its scene's source and re-cooks nothing of it.
+    if (auto identity_relpath = std::string {}; producer.completes.empty()
+      && !producer.source.empty() && !HasErrors()
+      && internal::TryVirtualPathToRelPath(
+        request_, request_.asset_virtual_path, identity_relpath)) {
+      index_registry_->RetireUnwrittenOutputs(cooked_root_,
+        LooseCookedRecook {
+          .source = producer.source,
+          .identity = request_.asset_virtual_path,
+          .identity_relpath = std::move(identity_relpath),
+        });
     }
 
     const auto publication

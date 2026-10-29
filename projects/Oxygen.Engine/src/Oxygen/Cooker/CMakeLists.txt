@@ -437,6 +437,7 @@ if(OXYGEN_BUILD_TESTS AND BUILD_SHARED_LIBS)
     STATIC
     "Import/Internal/SurfaceAllocation.cpp"
     "Import/Internal/ImportSourceSnapshot.cpp"
+    "Import/Internal/Utils/BufferDescriptorSidecar.cpp"
   )
   set_target_properties(
     oxygen-cooker-test-visible-internals

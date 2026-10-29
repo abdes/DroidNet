@@ -137,6 +137,42 @@ auto LooseCookedIndexRegistry::RegisterExternalTextureDescriptor(
     std::string(relpath), std::string(virtual_path), key);
 }
 
+auto LooseCookedIndexRegistry::RegisterExternalAuxiliaryFile(
+  const std::filesystem::path& cooked_root, std::string_view relpath,
+  const LooseCookedProducer& producer) -> void
+{
+  const auto key = NormalizeKey(cooked_root);
+  const auto state = GetEntry(cooked_root);
+  std::scoped_lock lock(state->mutex);
+  auto& entry = *state;
+  if (!entry.writer) {
+    entry.aborted = false;
+    entry.writer = std::make_unique<LooseCookedWriter>(cooked_root);
+  }
+
+  entry.writer->RegisterExternalAuxiliaryFile(relpath, producer);
+  DLOG_F(
+    INFO, "Auxiliary file '{}' registered for '{}'", std::string(relpath), key);
+}
+
+auto LooseCookedIndexRegistry::RetireUnwrittenOutputs(
+  const std::filesystem::path& cooked_root, const LooseCookedRecook& recook)
+  -> void
+{
+  const auto key = NormalizeKey(cooked_root);
+  const auto state = GetEntry(cooked_root);
+  std::scoped_lock lock(state->mutex);
+  auto& entry = *state;
+  if (!entry.writer) {
+    entry.aborted = false;
+    entry.writer = std::make_unique<LooseCookedWriter>(cooked_root);
+  }
+
+  entry.writer->RetireUnwrittenOutputs(recook);
+  DLOG_F(INFO, "Outputs '{}' no longer writes under '{}' retire from '{}'",
+    recook.source, recook.identity, key);
+}
+
 auto LooseCookedIndexRegistry::RegisterExternalAssetDescriptor(
   const std::filesystem::path& cooked_root, const data::AssetKey& key,
   const data::AssetType asset_type, std::string_view virtual_path,

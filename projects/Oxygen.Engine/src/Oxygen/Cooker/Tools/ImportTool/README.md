@@ -595,7 +595,8 @@ takes:
 Every listed entry must be in the index. The index is published first and the
 files are deleted after it, so the index never lists a missing file. Resource
 table entries that removed assets used stay in their tables, as they do when a
-cook replaces an asset; a rebuild of the root compacts them.
+cook replaces an asset; the pak step compacts them, packing only the resources
+its assets reach.
 
 ### `batch`
 

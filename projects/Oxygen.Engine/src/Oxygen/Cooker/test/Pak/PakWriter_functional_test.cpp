@@ -32,6 +32,7 @@
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/CookedSource.h>
 #include <Oxygen/Data/DescriptorStrings.h>
+#include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormatSerioLoaders.h> // IWYU pragma: keep
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_physics.h>
@@ -55,7 +56,7 @@ using paktest::MakePatternBytes;
 
 auto ReadFooter(const std::filesystem::path& path) -> core::PakFooter
 {
-  auto stream = serio::FileStream<>(path, std::ios::binary | std::ios::in);
+  auto stream = serio::FileStream<>(path, std::ios::in);
   const auto size_result = stream.Size();
   if (!size_result.has_value()) {
     throw std::runtime_error("cannot query size of " + path.string());
@@ -192,8 +193,8 @@ NOLINT_TEST_F(
     const auto descriptor_offset = static_cast<size_t>(entry.desc_offset);
     const auto descriptor_size = static_cast<size_t>(entry.desc_size);
     ASSERT_LE(descriptor_offset + descriptor_size, pak_bytes.size());
-    const auto payload = std::span<const std::byte>(
-      pak_bytes.data() + descriptor_offset, descriptor_size);
+    const auto payload = std::span<const std::byte>(pak_bytes).subspan(
+      descriptor_offset, descriptor_size);
 
     if (entry.asset_key == action_key) {
       EXPECT_EQ(static_cast<data::AssetType>(entry.asset_type),
@@ -312,8 +313,8 @@ NOLINT_TEST_F(
   const auto descriptor_size = static_cast<size_t>(entry.desc_size);
   ASSERT_LE(descriptor_offset + descriptor_size, pak_bytes.size());
 
-  const auto payload = std::span<const std::byte>(
-    pak_bytes.data() + descriptor_offset, descriptor_size);
+  const auto payload = std::span<const std::byte>(pak_bytes).subspan(
+    descriptor_offset, descriptor_size);
   ASSERT_EQ(payload.size(), physics_desc_bytes.size());
   EXPECT_TRUE(std::ranges::equal(payload, physics_desc_bytes));
 }
@@ -347,7 +348,8 @@ NOLINT_TEST_F(PakWriterTest, DeterministicModeProducesBitExactOutputs)
 }
 
 //! A loose texture descriptor's virtual path reaches the pak's browse index and
-//! resolves to the texture's index in the pak.
+//! resolves to the texture's index in the pak, which drops the unreferenced
+//! texture 1.
 NOLINT_TEST_F(PakWriterTest, TextureDescriptorPathsResolveInThePak)
 {
   using data::CookedSource;
@@ -362,7 +364,7 @@ NOLINT_TEST_F(PakWriterTest, TextureDescriptorPathsResolveInThePak)
   auto table = std::array<core::TextureResourceDesc, 3> {};
   for (uint32_t index = 1U; index < table.size(); ++index) {
     auto& record = table.at(index);
-    record.data_offset = (index - 1U) * kTextureBytes;
+    record.data_offset = static_cast<uint64_t>(index - 1U) * kTextureBytes;
     record.size_bytes = kTextureBytes;
     record.width = index;
     record.height = 1U;
@@ -384,7 +386,7 @@ NOLINT_TEST_F(PakWriterTest, TextureDescriptorPathsResolveInThePak)
     paktest::FileSpec {
       .kind = data::loose_cooked::FileKind::kTexturesData,
       .relpath = "Resources/textures.data",
-      .payload = MakePatternBytes(0x11U, 2U * kTextureBytes),
+      .payload = MakePatternBytes(0x11U, size_t { 2U } * kTextureBytes),
     },
     paktest::FileSpec {
       .kind = data::loose_cooked::FileKind::kTextureDescriptor,
@@ -412,7 +414,7 @@ NOLINT_TEST_F(PakWriterTest, TextureDescriptorPathsResolveInThePak)
   EXPECT_THAT(pak_file.BrowseTextures(), ::testing::SizeIs(1U));
   EXPECT_EQ(
     pak_file.ResolveTextureIndexByVirtualPath("/Content/Textures/Sky.otex"),
-    core::ResourceIndexT { 2U });
+    core::ResourceIndexT { 1U });
   EXPECT_FALSE(pak_file.ResolveTextureIndexByVirtualPath(
     "/Content/Textures/Missing.otex"));
 }

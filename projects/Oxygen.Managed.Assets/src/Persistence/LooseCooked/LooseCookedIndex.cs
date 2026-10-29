@@ -262,8 +262,9 @@ public static class LooseCookedIndex
                 throw new InvalidDataException("The cooked index contains an unknown or duplicate file role.");
             }
 
+            // An auxiliary file, such as a buffer sidecar, may record its producer.
             if ((file.Kind == FileKind.TextureDescriptor) != (file.VirtualPath is not null)
-                || (file.VirtualPath is not null) != (file.SourcePath is not null)
+                || (file.Kind == FileKind.TextureDescriptor) != (file.SourcePath is not null && file.Kind != FileKind.Auxiliary)
                 || (file.VirtualPath is not null && !virtualPaths.Add(file.VirtualPath)))
             {
                 throw new InvalidDataException($"The cooked index contains a missing, unexpected or duplicate file virtual path: {file.RelativePath}.");

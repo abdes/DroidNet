@@ -52,8 +52,8 @@ struct LooseCookedFileRecord final {
   base::Sha256Digest sha256 {};
   //! Virtual path of a texture descriptor; empty for every other file.
   std::string virtual_path;
-  //! Virtual path of the source that produced a texture descriptor; empty for
-  //! every other file.
+  //! Mount path of the source that produced a texture descriptor or an
+  //! auxiliary file; empty for every other file.
   std::string source_path;
 };
 
@@ -71,6 +71,22 @@ struct LooseCookedProducer final {
   //! Virtual path of the asset a sidecar completes; empty otherwise. When the
   //! index lists it, its producer produces the entry.
   std::string completes;
+};
+
+//! A complete re-cook of one source under one identity.
+/*!
+ One source may back several identities, as when a model is imported twice
+ under different names, so a re-cook covers only the outputs at or under its
+ own identity.
+*/
+struct LooseCookedRecook final {
+  //! Mount path of the re-cooked source, such as `/Content/Ship/Ship.glb`.
+  std::string source;
+  //! Virtual path of the job's identity, such as `/.cooked/Ship/Ship.glb`.
+  std::string identity;
+  //! Container-relative path of the identity, under which the job's
+  //! auxiliary files are.
+  std::string identity_relpath;
 };
 
 //! An index entry refused because its identity belongs to another source.
@@ -113,7 +129,15 @@ struct LooseCookedWriteResult final {
  identity another source produced, or one differing from an existing identity
  only in case, is refused with LooseCookedIdentityCollision. A source that
  goes away has its outputs removed first (RemoveAssetDescriptor,
- RemoveAuxiliaryFile), so a new source can then produce them.
+ RemoveAuxiliaryFile), so a new source can then produce them. A complete
+ re-cook of a source retires the outputs it no longer writes
+ (RetireUnwrittenOutputs), so the index lists only current outputs.
+
+ ### Resource tables
+
+ Resource tables are append-only, so a cook is safe while readers have the
+ root open: entries no asset uses any more stay in their tables. The pak step
+ compacts them; a full pak holds only the resources its assets reach.
 
  @note The on-disk schema is fixed by
    oxygen::data::loose_cooked::IndexHeader and related structs.
@@ -193,6 +217,19 @@ public:
   OXGN_COOK_API auto RegisterExternalFile(
     data::loose_cooked::FileKind kind, std::string_view relpath) -> void;
 
+  //! Register an externally-written auxiliary file its producer produces.
+  /*!
+   Re-registering the same path refreshes its record. A re-cook of the
+   producer retires the file once it no longer writes it.
+
+   @param relpath Container-relative path of the file, such as a `.obuf`
+     buffer sidecar.
+   @param producer The source that produces the file.
+   @throw std::runtime_error if the file does not exist or a path is invalid.
+  */
+  OXGN_COOK_API auto RegisterExternalAuxiliaryFile(
+    std::string_view relpath, const LooseCookedProducer& producer) -> void;
+
   //! Register an externally-written texture descriptor under its virtual path.
   /*!
    Runtimes and tools resolve the texture by `virtual_path`; its source
@@ -244,7 +281,7 @@ public:
    also removes an entry another writer published since this one opened the
    root. The descriptor file is deleted after the index no longer lists it.
    Resource table entries the asset used stay in their tables: other assets
-   may share them, and only a rebuild of the root compacts the tables.
+   may share them, and the pak step drops the ones no packed asset reaches.
 
    @param virtual_path Virtual path of the asset to remove.
 
@@ -263,6 +300,22 @@ public:
      it.
   */
   OXGN_COOK_API auto RemoveAuxiliaryFile(std::string_view relpath) -> void;
+
+  //! Retire the outputs a complete re-cook no longer writes.
+  /*!
+   When `Finish()` runs, the index stops listing, and the writer deletes, each
+   output the published index records for the re-cooked source that this
+   writer does not write: asset and texture descriptors at or under the
+   identity, and auxiliary files at or under its relative path. Paths and the
+   source compare ignoring case. A physics sidecar keeps its scene's producer
+   but comes from a job of its own, so it stays. Resource table entries stay in
+   their tables; the pak step drops the ones no packed asset reaches.
+
+   @throw std::runtime_error if the source is not a mount path or the identity
+     paths are invalid.
+  */
+  OXGN_COOK_API auto RetireUnwrittenOutputs(const LooseCookedRecook& recook)
+    -> void;
 
   //! Finalize and write the loose cooked index.
   /*!
