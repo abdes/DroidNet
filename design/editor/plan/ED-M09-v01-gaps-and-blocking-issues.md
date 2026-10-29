@@ -30,6 +30,9 @@ dependencies.
 | 14    | #77 slice 77.8: scene instances ([ED-M09.14](ED-M09.14-scene-instances.md))                    | 11, 12, 10     | done  | ED-M09.14 |
 | 15    | #28 + #29 GPU adapter selection and integrated-GPU budgets                                     | -              | done  | 81587defd |
 | 16    | #112 procedural mesh tangent frames follow `space::texture`                                    | -              | done  | 7ed47da07 |
+| 16.1  | Procedural geometry bounds come from the generator, never the descriptor                       | 16             | done  | 9e00048d9 |
+| 16.2  | Imported tangent frames: reference MikkTSpace, unusable authored frames replaced               | 16             | done  | e43c7a5ea |
+| 16.3  | Texture Coordinates and Tangent Frame Check view modes in the editor viewport                  | 16             | done  | 3cf8098b8 |
 | 17    | #118 full paks pack only referenced resources                                                  | -              | open  | -         |
 | 18    | #30 RenderDoc past v1.46 for count-buffer `ExecuteIndirect` captures                           | -              | open  | -         |
 | 19    | #109 per-view draw bounds and the viewport Show menu                                           | -              | open  | -         |
