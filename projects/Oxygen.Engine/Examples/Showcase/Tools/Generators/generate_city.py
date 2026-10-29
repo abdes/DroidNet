@@ -5,12 +5,15 @@ A foggy-morning city in metres (X east, Y north, Z up): a river with two
 bridges along the south, a street grid of kerbed blocks, a downtown core of
 podium towers, midtown offices, residential perimeter blocks around
 courtyards, a central park with a pond, a plaza, a tree-lined boulevard and a
-riverside promenade. Generation is deterministic; rerun after editing:
+riverside promenade. Generation is deterministic; rerun after editing, with
+the repository's Python environment:
 
-    python generate_city.py
+    python Tools/Generators/generate_city.py
 
-It rewrites the scene descriptor, the geometry and material descriptors and
-the import manifest in this directory.
+It rewrites the scene descriptor, the geometry and material descriptors in
+Content/Scenes/CityEnvironmentValidation and the example's import manifest,
+formatted by the repository's Prettier hook, so the files are exactly what is
+committed.
 """
 
 from __future__ import annotations
@@ -19,6 +22,8 @@ import argparse
 import json
 import math
 import random
+import subprocess
+import sys
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -927,6 +932,31 @@ def write_json(path: Path, document: dict) -> None:
     )
 
 
+def format_like_the_repository(paths: list[Path]) -> None:
+    """Formats `paths` with the repository's Prettier hook (pre-commit)."""
+    root = Path(
+        subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            cwd=PROJECT,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+    )
+    command = [
+        sys.executable,
+        "-m",
+        "pre_commit",
+        "run",
+        "prettier",
+        "--files",
+        *(str(path.relative_to(root)) for path in paths),
+    ]
+    # The hook exits 1 when it rewrote a file; a second run proves it is done.
+    subprocess.run(command, cwd=root, check=False, capture_output=True)
+    subprocess.run(command, cwd=root, check=True, capture_output=True)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -935,18 +965,19 @@ def main() -> None:
     for stale in HERE.glob("MatCity*.omat.json"):
         if stale.name.removesuffix(".omat.json") not in MATERIALS:
             stale.unlink()
+    written: list[Path] = []
     for name, params in MATERIALS.items():
-        write_json(HERE / f"{name}.omat.json", material_document(name, params))
+        written.append(HERE / f"{name}.omat.json")
+        write_json(written[-1], material_document(name, params))
     for name, (generator, params) in GEOMETRIES.items():
-        write_json(
-            HERE / f"{name}.ogeo.json", geometry_document(name, generator, params)
-        )
+        written.append(HERE / f"{name}.ogeo.json")
+        write_json(written[-1], geometry_document(name, generator, params))
     scene = scene_document()
-    write_json(HERE / f"{SCENE_NAME}.scene.json", scene)
-    write_json(
-        PROJECT / "Manifests" / f"{SCENE_NAME}.import-manifest.json",
-        manifest_document(),
-    )
+    written.append(HERE / f"{SCENE_NAME}.scene.json")
+    write_json(written[-1], scene)
+    written.append(PROJECT / "Manifests" / f"{SCENE_NAME}.import-manifest.json")
+    write_json(written[-1], manifest_document())
+    format_like_the_repository(written)
     print(f"{len(scene['nodes'])} nodes, {len(scene['renderables'])} renderables")
 
 
