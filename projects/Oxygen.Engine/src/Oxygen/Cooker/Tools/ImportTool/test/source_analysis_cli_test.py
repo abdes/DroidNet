@@ -24,6 +24,12 @@ SCENE_VERSION: int = json.loads(_SCENE_SCHEMA.read_text(encoding="utf-8"))[
 ]["version"]["const"]
 EMPTY_SCENE = json.dumps({"version": SCENE_VERSION, "name": "Empty", "nodes": []})
 
+# Every manifest declares the mount its sources lie in, and the identity root.
+MOUNTS = {
+    "mounts": [{"name": "Content", "path": "."}],
+    "layout": {"virtual_mount_root": "/.cooked"},
+}
+
 
 class SourceAnalysisCliTests(unittest.TestCase):
     def setUp(self):
@@ -33,7 +39,9 @@ class SourceAnalysisCliTests(unittest.TestCase):
 
     def manifest(self, jobs):
         path = self.root / "manifest.json"
-        path.write_text(json.dumps({"version": 1, "jobs": jobs}), encoding="utf-8")
+        path.write_text(
+            json.dumps({"version": 1, **MOUNTS, "jobs": jobs}), encoding="utf-8"
+        )
         return path
 
     def analyze(self, manifest, report):
@@ -175,7 +183,8 @@ class CapturedInputBatchCliTests(unittest.TestCase):
             json.dumps(
                 {
                     "version": 1,
-                    "output": str(self.root / "cooked"),
+                    "output": "cooked",
+                    **MOUNTS,
                     "jobs": jobs,
                 }
             ),
@@ -206,7 +215,9 @@ class CapturedInputBatchCliTests(unittest.TestCase):
 
     def analyze(self, jobs, report=None):
         manifest = self.root / "analysis-manifest.json"
-        manifest.write_text(json.dumps({"version": 1, "jobs": jobs}), encoding="utf-8")
+        manifest.write_text(
+            json.dumps({"version": 1, **MOUNTS, "jobs": jobs}), encoding="utf-8"
+        )
         captures = self.root / "captures.json"
         captures.write_text(
             json.dumps({"schema_version": 1, "inputs": self.inputs}), encoding="utf-8"

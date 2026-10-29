@@ -33,10 +33,12 @@
 
 #include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Base/Uuid.h>
 #include <Oxygen/Content/LoaderContext.h>
 #include <Oxygen/Content/Loaders/GeometryLoader.h>
+#include <Oxygen/Content/VirtualPath.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportManifest.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
@@ -47,6 +49,7 @@
 #include <Oxygen/Cooker/Import/ModelImportRecord.h>
 #include <Oxygen/Cooker/Import/ModelImportState.h>
 #include <Oxygen/Cooker/Import/SceneImportSettings.h>
+#include <Oxygen/Cooker/Import/SourceMounts.h>
 #include <Oxygen/Cooker/Import/SurfaceProvenance.h>
 #include <Oxygen/Cooker/Import/TextureImportSettings.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
@@ -160,15 +163,6 @@ namespace {
     return std::filesystem::is_regular_file(base::ToNativePath(path), error);
   }
 
-  auto SameFile(const std::filesystem::path& a, const std::filesystem::path& b)
-    -> bool
-  {
-    std::error_code error;
-    const auto same = std::filesystem::equivalent(
-      base::ToNativePath(a), base::ToNativePath(b), error);
-    return !error && same;
-  }
-
   //! The content root of a record: its folder's parent.
   auto ContentRootOf(const std::filesystem::path& record_path)
     -> std::filesystem::path
@@ -226,7 +220,7 @@ namespace {
     job.update({
       { "id", "model" },
       { "type", JobType(content.source) },
-      { "source", Absolute(content.source).generic_string() },
+      { "source", content.source_mount_path },
       { "virtual_path", content.virtual_path },
     });
     return job;
@@ -234,15 +228,23 @@ namespace {
 
   //! Validates the settings as the import manifest does, by parsing the
   //! record's job.
-  auto ValidateSettings(const ModelImportRecordContent& content) -> void
+  auto ValidateSettings(
+    const ModelImportRecordContent& content, const MountTable& mounts) -> void
   {
     const auto manifest = json {
       { "version", 1 },
       { "jobs", json::array({ MakeJobJson(content) }) },
     };
     std::ostringstream errors;
-    const auto parsed = ImportManifest::Parse(
-      manifest.dump(), content.source.parent_path(), std::nullopt, errors);
+    const auto parsed
+      = ImportManifest::Parse(manifest.dump(), content.source.parent_path(),
+        {
+          .project_root = {},
+          .mounts_file = {},
+          .owner = MountTableOwner::kProject,
+          .mount_table = make_observer(&mounts),
+        },
+        errors);
     if (!parsed || parsed->jobs.size() != 1U) {
       throw std::invalid_argument(
         "Invalid model import settings: " + errors.str());
@@ -364,12 +366,13 @@ namespace {
   //! Reads every record of `content_root`. A file that is not a valid record,
   //! damaged or of an older format, is no model's record: it is skipped, so it
   //! never stops importing the other models.
-  auto ScanRecords(const std::filesystem::path& content_root) -> RecordScan
+  auto ScanRecords(const std::filesystem::path& content_root,
+    const MountTable& mounts) -> RecordScan
   {
     auto scan = RecordScan {};
     for (const auto& path : RecordPaths(content_root)) {
       try {
-        scan.records.emplace_back(path, ModelImportRecord::Read(path));
+        scan.records.emplace_back(path, ModelImportRecord::Read(path, mounts));
       } catch (const std::exception& error) {
         scan.skipped.push_back({
           .severity = ImportSeverity::kWarning,
@@ -384,15 +387,23 @@ namespace {
     return scan;
   }
 
+  auto ReadUnlocatedContent(const std::filesystem::path& record_path)
+    -> ModelImportRecordContent;
+
   //! Refuses a second record with the source identity or the virtual path of
   //! `content`.
   auto RequireUniqueRecord(const std::filesystem::path& record_path,
     const ModelImportRecordContent& content) -> void
   {
     const auto path = Absolute(record_path);
-    for (const auto& [other_path, other] :
-      ScanRecords(ContentRootOf(path)).records) {
+    for (const auto& other_path : RecordPaths(ContentRootOf(path))) {
       if (other_path == path) {
+        continue;
+      }
+      auto other = ModelImportRecordContent {};
+      try {
+        other = ReadUnlocatedContent(other_path);
+      } catch (const std::exception&) {
         continue;
       }
       if (other.source_identity == content.source_identity) {
@@ -540,67 +551,135 @@ ModelImportRecord::ModelImportRecord(std::unique_ptr<State> state)
 
 ModelImportRecord::~ModelImportRecord() = default;
 
-auto ModelImportRecord::Read(const std::filesystem::path& record_path)
-  -> ModelImportRecordContent
-{
-  const auto path = Absolute(record_path);
-  const auto document = json::parse(ReadText(path));
-  nlohmann::json_schema::json_validator validator;
-  validator.set_root_schema(json::parse(kModelImportSchema));
-  internal::ValidateJsonSchema(
-    validator, document, "Model import record " + path.generic_string());
+namespace {
 
-  auto content = ModelImportRecordContent {};
-  content.source_identity
-    = Uuid::FromString(document.at("source_identity").get<std::string>())
-        .value();
-  if (IdentityOfName(path) != content.source_identity) {
-    throw std::invalid_argument("A model import record is named by its source "
-                                "identity: "
-      + path.generic_string() + " should be "
-      + content.source_identity.ToString() + std::string(kRecordSuffix));
-  }
-  const auto source
-    = std::filesystem::path(document.at("source").get<std::string>());
-  content.source
-    = Absolute(source.is_absolute() ? source : path.parent_path() / source);
-  content.virtual_path = document.at("virtual_path").get<std::string>();
-  content.settings_json = document.at("settings").dump();
-  content.surface_provenance = document.contains("surface_provenance")
-    ? SurfaceProvenance::Parse(
-        document.at("surface_provenance").dump(), content.source_identity)
-    : std::make_shared<const SurfaceProvenance>(content.source_identity);
+  //! A record read without locating its source: what reading the source's
+  //! identity and generations needs.
+  struct RecordDocument final {
+    ModelImportRecordContent content;
+    std::string source_text;
+  };
 
-  auto anchors = std::set<std::string> {};
-  for (const auto& entry : document.value("node_continuity", json::array())) {
-    auto& added = content.node_continuity.emplace_back(ModelNodeContinuity {
-      .anchor = entry.at("anchor").get<std::string>(),
-      .continues = entry.at("continues").get<std::string>(),
-    });
-    if (!anchors.insert(added.anchor).second) {
+  auto ReadDocument(const std::filesystem::path& record_path) -> RecordDocument
+  {
+    const auto path = Absolute(record_path);
+    const auto document = json::parse(ReadText(path));
+    nlohmann::json_schema::json_validator validator;
+    validator.set_root_schema(json::parse(kModelImportSchema));
+    internal::ValidateJsonSchema(
+      validator, document, "Model import record " + path.generic_string());
+
+    auto content = ModelImportRecordContent {};
+    content.source_identity
+      = Uuid::FromString(document.at("source_identity").get<std::string>())
+          .value();
+    if (IdentityOfName(path) != content.source_identity) {
       throw std::invalid_argument(
-        "Two node continuity entries have the anchor '" + added.anchor + "'");
+        "A model import record is named by its source "
+        "identity: "
+        + path.generic_string() + " should be "
+        + content.source_identity.ToString()
+        + std::string(ModelImportRecord::kRecordSuffix));
     }
+    auto source_text = document.at("source").get<std::string>();
+    content.virtual_path = document.at("virtual_path").get<std::string>();
+    content.settings_json = document.at("settings").dump();
+    content.surface_provenance = document.contains("surface_provenance")
+      ? SurfaceProvenance::Parse(
+          document.at("surface_provenance").dump(), content.source_identity)
+      : std::make_shared<const SurfaceProvenance>(content.source_identity);
+
+    auto anchors = std::set<std::string> {};
+    for (const auto& entry : document.value("node_continuity", json::array())) {
+      auto& added = content.node_continuity.emplace_back(ModelNodeContinuity {
+        .anchor = entry.at("anchor").get<std::string>(),
+        .continues = entry.at("continues").get<std::string>(),
+      });
+      if (!anchors.insert(added.anchor).second) {
+        throw std::invalid_argument(
+          "Two node continuity entries have the anchor '" + added.anchor + "'");
+      }
+    }
+    content.published_nodes = ReadNodes(document, "published_nodes");
+    content.new_nodes = ReadNodes(document, "new_nodes");
+    content.vanished_nodes = ReadNodes(document, "vanished_nodes");
+    if (document.contains("source_fingerprint")) {
+      content.source_fingerprint
+        = ReadFingerprint(document.at("source_fingerprint"));
+    }
+    return {
+      .content = std::move(content),
+      .source_text = std::move(source_text),
+    };
   }
-  content.published_nodes = ReadNodes(document, "published_nodes");
-  content.new_nodes = ReadNodes(document, "new_nodes");
-  content.vanished_nodes = ReadNodes(document, "vanished_nodes");
-  if (document.contains("source_fingerprint")) {
-    content.source_fingerprint
-      = ReadFingerprint(document.at("source_fingerprint"));
+
+  //! Locates a record's `source`: a mount path, or a path relative to the
+  //! record's folder.
+  auto LocateRecordSource(const std::filesystem::path& record_path,
+    const std::string& text, const MountTable& mounts) -> MountedSource
+  {
+    auto diagnostics = std::vector<ImportDiagnostic> {};
+    auto located = std::optional<MountedSource> {};
+    // A mount path, and an absolute path it refuses, go to the table; a
+    // relative path belongs to the record's folder.
+    if (const auto path = std::filesystem::path(text);
+      path.has_root_name() || path.has_root_directory()) {
+      located = mounts.LocateSource(
+        CommittedPath { .text = text, .field = "source" }, diagnostics);
+    } else {
+      located = mounts.MountPathOf(
+        Absolute(record_path).parent_path() / path, diagnostics);
+    }
+    if (!located.has_value()) {
+      throw std::invalid_argument(diagnostics.empty()
+          ? "Cannot locate the source '" + text + "'"
+          : "[" + diagnostics.front().code + "] "
+            + diagnostics.front().message);
+    }
+    return *located;
   }
-  ValidateSettings(content);
+
+  //! The mount path of a source a command names, as a record stores it.
+  auto MountPathOfSource(const std::filesystem::path& source,
+    const MountTable& mounts) -> MountedSource
+  {
+    auto diagnostics = std::vector<ImportDiagnostic> {};
+    auto located = mounts.MountPathOf(Absolute(source), diagnostics);
+    if (!located.has_value()) {
+      throw std::invalid_argument(
+        "[" + diagnostics.front().code + "] " + diagnostics.front().message);
+    }
+    return *located;
+  }
+
+  auto ReadUnlocatedContent(const std::filesystem::path& record_path)
+    -> ModelImportRecordContent
+  {
+    return ReadDocument(record_path).content;
+  }
+
+} // namespace
+
+auto ModelImportRecord::Read(const std::filesystem::path& record_path,
+  const MountTable& mounts) -> ModelImportRecordContent
+{
+  auto [content, source_text] = ReadDocument(record_path);
+  const auto located = LocateRecordSource(record_path, source_text, mounts);
+  content.source = located.file;
+  content.source_mount_path = located.mount_path;
+  ValidateSettings(content, mounts);
   return content;
 }
 
 auto ModelImportRecord::Serialize(const ModelImportRecordContent& content,
   const std::filesystem::path& record_path) -> std::string
 {
-  const auto path = Absolute(record_path);
-  const auto source = Absolute(content.source);
-  const auto source_text = IsWithin(source, ContentRootOf(path))
-    ? source.lexically_relative(path.parent_path()).generic_string()
-    : source.generic_string();
+  static_cast<void>(record_path);
+  if (content.source_mount_path.empty()) {
+    throw std::invalid_argument(
+      "A model import record stores its source as a mount path");
+  }
+  const auto& source_text = content.source_mount_path;
   auto continuity = ordered_json::array();
   for (const auto& entry : content.node_continuity) {
     continuity.push_back({
@@ -757,9 +836,15 @@ auto ModelImportRecord::PathFor(const std::filesystem::path& content_root,
 auto ModelImportRecord::LocateRecord(const ModelImportRecordQuery& query)
   -> ModelImportRecordLocation
 {
-  const auto& [content_root, source, virtual_path] = query;
+  const auto& [content_root, source, virtual_path, mounts] = query;
   const auto file = Absolute(source);
-  auto scan = ScanRecords(content_root);
+  const auto mount_path = MountPathOfSource(file, *mounts).mount_path;
+  const auto same_source
+    = [&mount_path](const ModelImportRecordContent& record) -> bool {
+    return content::FoldCase(record.source_mount_path)
+      == content::FoldCase(mount_path);
+  };
+  auto scan = ScanRecords(content_root, *mounts);
   const auto& records = scan.records;
   auto location = ModelImportRecordLocation {
     .record_path = {},
@@ -774,7 +859,7 @@ auto ModelImportRecord::LocateRecord(const ModelImportRecordQuery& query)
     }
     location.record_path = path;
     location.exists = true;
-    if (!SameFile(record.source, file)) {
+    if (!same_source(record)) {
       location.diagnostics.push_back(
         Diagnostic(ImportSeverity::kInfo, "import.source_rebound",
           "The model " + record.virtual_path + " now imports from "
@@ -787,7 +872,7 @@ auto ModelImportRecord::LocateRecord(const ModelImportRecordQuery& query)
 
   // 2. Another model from the same file.
   for (const auto& [path, record] : records) {
-    if (SameFile(record.source, file)) {
+    if (same_source(record)) {
       location.diagnostics.push_back(
         Diagnostic(ImportSeverity::kInfo, "import.source_has_model",
           "The file is already the source of the model " + record.virtual_path
@@ -887,7 +972,7 @@ auto ModelImportRecord::Save(const ModelImportRecordSave& save) -> void
   const auto exists = Exists(path);
   auto content = ModelImportRecordContent {};
   if (exists) {
-    content = Read(path);
+    content = Read(path, *save.mounts);
   } else {
     const auto identity = IdentityOfName(path);
     if (!identity) {
@@ -900,7 +985,9 @@ auto ModelImportRecord::Save(const ModelImportRecordSave& save) -> void
       = std::make_shared<const SurfaceProvenance>(*identity);
   }
   if (!save.source.empty()) {
-    content.source = Absolute(save.source);
+    const auto located = MountPathOfSource(save.source, *save.mounts);
+    content.source = located.file;
+    content.source_mount_path = located.mount_path;
   }
   if (!save.virtual_path.empty()) {
     content.virtual_path = save.virtual_path;
@@ -914,7 +1001,7 @@ auto ModelImportRecord::Save(const ModelImportRecordSave& save) -> void
     throw std::invalid_argument(
       "A new model import record needs a source and a virtual path");
   }
-  ValidateSettings(content);
+  ValidateSettings(content, *save.mounts);
   RequireUniqueRecord(path, content);
   const auto text = Serialize(content, path);
   if (!exists || ReadText(path) != text) {
@@ -938,8 +1025,14 @@ auto ModelImportRecord::SaveRecipeFile(const ModelImportRecordSave& save,
     }
   }
   std::ostringstream errors;
-  const auto manifest = ImportManifest::Parse(
-    recipe.dump(), path.parent_path(), std::nullopt, errors);
+  const auto manifest = ImportManifest::Parse(recipe.dump(), path.parent_path(),
+    {
+      .project_root = {},
+      .mounts_file = {},
+      .owner = MountTableOwner::kProject,
+      .mount_table = save.mounts,
+    },
+    errors);
   if (!manifest || manifest->jobs.size() != 1U
     || !manifest->jobs.front().depends_on.empty()) {
     throw std::invalid_argument(
@@ -963,6 +1056,7 @@ auto ModelImportRecord::SaveRecipeFile(const ModelImportRecordSave& save,
         .content_root = save.content_root,
         .source = scene.source_path,
         .virtual_path = scene.virtual_path,
+        .mounts = save.mounts,
       })
     : ModelImportRecordLocation {
         .record_path = Absolute(save.record_path),
@@ -975,18 +1069,20 @@ auto ModelImportRecord::SaveRecipeFile(const ModelImportRecordSave& save,
     .source = scene.source_path,
     .virtual_path = scene.virtual_path,
     .settings_json = settings.dump(),
+    .mounts = save.mounts,
   });
   return location;
 }
 
 auto ModelImportRecord::Prepare(const std::filesystem::path& record_path,
-  std::vector<ImportDiagnostic> notes) -> std::shared_ptr<ModelImportRecord>
+  const MountTable& mounts, std::vector<ImportDiagnostic> notes)
+  -> std::shared_ptr<ModelImportRecord>
 {
   auto state = std::make_unique<State>();
   state->record_path = Absolute(record_path);
   state->notes = std::move(notes);
   const auto lock = RecordLock(state->record_path);
-  state->content = Read(state->record_path);
+  state->content = Read(state->record_path, mounts);
   RequireUniqueRecord(state->record_path, state->content);
   if (!Exists(state->content.source)) {
     throw std::runtime_error("import.source_missing: the source "
@@ -1013,7 +1109,15 @@ auto ModelImportRecord::Prepare(const std::filesystem::path& record_path,
   }
   state->generation_lock.emplace(std::move(generation_lock).value());
 
-  // The same `model` job a manifest runs.
+  // The same `model` job a manifest runs, naming the record relative to the
+  // project root as a committed manifest does.
+  const auto record
+    = state->record_path.lexically_relative(Absolute(mounts.project_root));
+  if (record.empty()) {
+    throw std::invalid_argument("The model import record "
+      + state->record_path.generic_string() + " lies outside the project root "
+      + mounts.project_root.generic_string());
+  }
   const auto manifest = json {
     { "version", 1 },
     {
@@ -1022,14 +1126,24 @@ auto ModelImportRecord::Prepare(const std::filesystem::path& record_path,
         {
           { "id", "model" },
           { "type", "model" },
-          { "record", state->record_path.generic_string() },
+          {
+            "record",
+            record.generic_string(),
+          },
         },
       }),
     },
   };
   std::ostringstream errors;
-  auto parsed = ImportManifest::Parse(
-    manifest.dump(), state->record_path.parent_path(), std::nullopt, errors);
+  auto parsed
+    = ImportManifest::Parse(manifest.dump(), state->record_path.parent_path(),
+      {
+        .project_root = {},
+        .mounts_file = {},
+        .owner = MountTableOwner::kProject,
+        .mount_table = make_observer(&mounts),
+      },
+      errors);
   if (!parsed || parsed->jobs.size() != 1U) {
     throw std::invalid_argument(errors.str());
   }
@@ -1056,7 +1170,7 @@ auto ModelImportRecord::ReclaimUnusedGenerations(
 {
   const auto path = Absolute(record_path);
   const auto record_lock = RecordLock(path);
-  const auto content = Read(path);
+  const auto content = ReadDocument(path).content;
   RequireUniqueRecord(path, content);
   const auto selected = SelectedPath(path, content);
   const auto directory = GenerationDirectory(path, content);
@@ -1132,7 +1246,7 @@ auto ModelImportRecord::SelectedGeneration(
   -> std::optional<std::filesystem::path>
 {
   const auto path = Absolute(record_path);
-  const auto content = Read(path);
+  const auto content = ReadDocument(path).content;
   const auto directory = GenerationDirectory(path, content);
   const auto head = ReadHead(directory);
   if (!head) {

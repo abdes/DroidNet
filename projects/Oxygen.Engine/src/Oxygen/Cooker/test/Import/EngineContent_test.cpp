@@ -9,12 +9,16 @@
 #include <algorithm>
 #include <cstddef>
 #include <filesystem>
+#include <sstream>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include <nlohmann/json.hpp>
 
 #include <Oxygen/Cooker/Import/EngineContent.h>
+#include <Oxygen/Cooker/Import/ImportManifest.h>
+#include <Oxygen/Cooker/Import/SourceMounts.h>
 #include <Oxygen/Cooker/test/Support/JsonSchema.h>
 #include <Oxygen/Cooker/test/Support/TempDir.h>
 #include <Oxygen/Data/MaterialAsset.h>
@@ -26,6 +30,9 @@ namespace {
 
 using nlohmann::json;
 using oxygen::content::import::GetEngineShapes;
+using oxygen::content::import::ImportManifest;
+using oxygen::content::import::ImportManifestLoadOptions;
+using oxygen::content::import::MountTableOwner;
 using oxygen::content::import::WriteEngineContentSources;
 using oxygen::cooker::test::LoadJson;
 using oxygen::cooker::test::LoadSchema;
@@ -42,11 +49,21 @@ auto GeometrySchema() -> const json&
   return schema;
 }
 
+//! Loads the descriptor a job's mount path (`/Engine/<folder>/<file>`) names.
+auto LoadSource(const std::filesystem::path& directory, const json& job) -> json
+{
+  constexpr auto kPrefix = std::string_view { "/Engine/" };
+  const auto source = job.at("source").get<std::string>();
+  EXPECT_THAT(source, testing::StartsWith(std::string(kPrefix)));
+  return LoadJson(directory / source.substr(kPrefix.size()));
+}
+
 //! Checks one geometry job: its descriptor is schema-valid, procedural from the
 //! shape's generator, and uses the engine default material.
-auto CheckShapeJob(const json& job) -> void
+auto CheckShapeJob(const std::filesystem::path& directory, const json& job)
+  -> void
 {
-  const auto descriptor = LoadJson(job.at("source").get<std::string>());
+  const auto descriptor = LoadSource(directory, job);
   EXPECT_THAT(ValidateJson(GeometrySchema(), descriptor), testing::IsEmpty());
   const auto& lod = descriptor.at("lods").at(0);
   EXPECT_EQ(lod.at("procedural").at("generator"), job.at("name"));
@@ -68,21 +85,24 @@ auto CheckShapeJob(const json& job) -> void
 NOLINT_TEST_F(EngineContentTest, DefaultMaterialMatchesTheLiveMaterial)
 {
   // Arrange
-  const auto cooked_root = TempPath("cooked");
 
   // Act
-  const auto manifests = WriteEngineContentSources(TempDir(), cooked_root);
+  const auto manifests = WriteEngineContentSources(TempDir());
 
   // Assert
   const auto manifest = LoadJson(manifests.materials);
-  EXPECT_EQ(manifest.at("output"), cooked_root.generic_string());
+  EXPECT_FALSE(manifest.contains("output"));
+  EXPECT_EQ(
+    manifest.at("layout"), (json { { "virtual_mount_root", "/Engine" } }));
+  EXPECT_EQ(manifest.at("mounts"),
+    (json::array({ { { "name", "Engine" }, { "path", "." } } })));
   ASSERT_EQ(manifest.at("jobs").size(), 1U);
   const auto& job = manifest.at("jobs").at(0);
   EXPECT_EQ(job.at("type"), "material-descriptor");
   EXPECT_EQ(job.at("name"), "Default");
   EXPECT_EQ(job.at("virtual_path"), "/Engine/Generated/Materials/Default.omat");
   EXPECT_EQ(job.at("layout"), (json { { "virtual_mount_root", "/Engine" } }));
-  const auto descriptor = LoadJson(job.at("source").get<std::string>());
+  const auto descriptor = LoadSource(TempDir(), job);
   EXPECT_THAT(
     ValidateJson(
       LoadSchema("Import/Schemas/oxygen.material-descriptor.schema.json"),
@@ -102,15 +122,14 @@ NOLINT_TEST_F(EngineContentTest, DefaultMaterialMatchesTheLiveMaterial)
 NOLINT_TEST_F(EngineContentTest, EveryShapeCooksUnderItsEnginePath)
 {
   // Act
-  const auto manifests
-    = WriteEngineContentSources(TempDir(), TempPath("cooked"));
+  const auto manifests = WriteEngineContentSources(TempDir());
 
   // Assert
   const auto jobs = LoadJson(manifests.geometry).at("jobs");
   ASSERT_EQ(jobs.size(), GetEngineShapes().size());
   auto folders = std::vector<std::string> {};
   for (const auto& job : jobs) {
-    TRACE_GCHECK_F(CheckShapeJob(job), "shape job");
+    TRACE_GCHECK_F(CheckShapeJob(TempDir(), job), "shape job");
     folders.push_back(
       std::filesystem::path(job.at("virtual_path").get<std::string>())
         .parent_path()
@@ -119,6 +138,30 @@ NOLINT_TEST_F(EngineContentTest, EveryShapeCooksUnderItsEnginePath)
   EXPECT_EQ(std::ranges::count(folders, "/Engine/Internal"), 1);
   EXPECT_EQ(std::ranges::count(folders, "/Engine/Generated/BasicShapes"),
     static_cast<std::ptrdiff_t>(GetEngineShapes().size() - 1));
+}
+
+//! The manifests declare the `Engine` mount, which only the engine content
+//! build may do, and the directory's mounts file stops every file above it.
+NOLINT_TEST_F(EngineContentTest, ManifestsLoadOnlyAsTheEngineContentBuild)
+{
+  // Arrange
+  const auto manifests = WriteEngineContentSources(TempDir());
+  const auto mounts_file = LoadJson(TempDir() / ".mounts.json");
+
+  // Act
+  auto engine_errors = std::ostringstream {};
+  const auto engine = ImportManifest::Load(manifests.geometry,
+    ImportManifestLoadOptions { .owner = MountTableOwner::kEngineContent },
+    engine_errors);
+  auto project_errors = std::ostringstream {};
+  const auto project
+    = ImportManifest::Load(manifests.geometry, {}, project_errors);
+
+  // Assert
+  EXPECT_EQ(mounts_file, (json { { "version", 1 }, { "root", true } }));
+  EXPECT_TRUE(engine.has_value()) << engine_errors.str();
+  EXPECT_FALSE(project.has_value());
+  EXPECT_THAT(project_errors.str(), testing::HasSubstr("mount.name_invalid"));
 }
 
 } // namespace

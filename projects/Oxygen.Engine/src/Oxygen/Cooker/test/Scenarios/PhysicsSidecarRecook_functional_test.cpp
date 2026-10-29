@@ -38,6 +38,7 @@
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Cooker/test/Support/ImportHarness.h>
 #include <Oxygen/Cooker/test/Support/TempDir.h>
+#include <Oxygen/Cooker/test/Support/TestPaths.h>
 #include <Oxygen/Core/Meta/Physics/Backend.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/Format.h>
@@ -246,6 +247,8 @@ namespace {
     request.source_path = "inline://scene.oscene.json";
     request.job_name = std::string(scene_name);
     request.asset_virtual_path = std::string(kSceneVirtualPath);
+    request.source_mount_path
+      = oxygen::cooker::test::SourceMountPath(request.source_path);
     request.cooked_root = cooked_root;
     request.loose_cooked_layout.virtual_mount_root = "/.cooked";
     request.scene_descriptor = ImportRequest::SceneDescriptorPayload {
@@ -270,6 +273,8 @@ namespace {
     request.source_path = "inline://material.opmat.json";
     request.job_name = "ground.physics-material";
     request.asset_virtual_path = std::string(kMaterialVirtualPath);
+    request.source_mount_path
+      = oxygen::cooker::test::SourceMountPath(request.source_path);
     request.cooked_root = cooked_root;
     request.loose_cooked_layout.virtual_mount_root = "/.cooked";
     request.physics_material_descriptor
@@ -312,6 +317,8 @@ namespace {
     request.source_path = "inline://shape.ocshape.json";
     request.job_name = "chassis-compound";
     request.asset_virtual_path = std::string(kShapeVirtualPath);
+    request.source_mount_path
+      = oxygen::cooker::test::SourceMountPath(request.source_path);
     request.cooked_root = cooked_root;
     request.loose_cooked_layout.virtual_mount_root = "/.cooked";
     request.collision_shape_descriptor

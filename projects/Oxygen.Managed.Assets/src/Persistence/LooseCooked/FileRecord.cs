@@ -10,7 +10,7 @@ namespace Oxygen.Managed.Assets.Persistence.LooseCooked;
 /// <param name="Size">The file's size in bytes.</param>
 /// <param name="Sha256">The file's SHA-256 digest.</param>
 /// <param name="VirtualPath">The virtual path of a texture descriptor.</param>
-/// <param name="SourcePath">The virtual path of the source that produced a texture descriptor.</param>
+/// <param name="SourcePath">The mount path of the source that produced a texture descriptor.</param>
 public sealed record FileRecord(
     FileKind Kind,
     string RelativePath,

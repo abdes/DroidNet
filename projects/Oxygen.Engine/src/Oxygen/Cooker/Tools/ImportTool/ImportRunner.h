@@ -32,8 +32,10 @@ struct GlobalOptions;
   std::shared_ptr<ModelImportRecord> publication = {})
   -> std::expected<void, std::error_code>;
 
+struct SourceMountOptions;
+
 [[nodiscard]] auto RunSceneImportJob(const SceneImportSettings& settings,
-  ImportFormat format, const GlobalOptions& globals)
-  -> std::expected<void, std::error_code>;
+  ImportFormat format, const SourceMountOptions& mount_options,
+  const GlobalOptions& globals) -> std::expected<void, std::error_code>;
 
 } // namespace oxygen::content::import::tool

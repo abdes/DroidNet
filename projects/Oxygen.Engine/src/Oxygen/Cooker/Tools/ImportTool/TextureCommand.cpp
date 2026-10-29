@@ -16,6 +16,8 @@
 #include <utility>
 #include <vector>
 
+#include "SourceMountOptions.h"
+
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Clap/Command.h>
 #include <Oxygen/Clap/Fluent/CommandBuilder.h>
@@ -289,6 +291,7 @@ auto TextureCommand::BuildCommand() -> std::shared_ptr<clap::Command>
                   .Build();
 
   return CommandBuilder("texture")
+    .WithOptions(BuildSourceMountOptions(mount_options_))
     .About("Import a standalone texture image")
     .WithPositionalArguments(source_path)
     .WithOption(std::move(cooked_root))
@@ -333,12 +336,16 @@ auto TextureCommand::Execute() -> std::expected<void, std::error_code>
   auto writer = global_options_->writer;
 
   std::ostringstream err;
-  const auto request = internal::BuildTextureRequest(settings, err);
+  auto request = internal::BuildTextureRequest(settings, err);
   if (!request.has_value()) {
     const auto msg = err.str();
     if (!msg.empty()) {
       writer->Error(msg);
     }
+    return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+  }
+  const auto mounts = ResolveSourceMounts(mount_options_, writer);
+  if (!mounts.has_value() || !LocateRequestSource(*request, *mounts, writer)) {
     return std::unexpected(std::make_error_code(std::errc::invalid_argument));
   }
 

@@ -86,7 +86,6 @@ internal sealed partial class ScriptCookingTests : IDisposable
         _ = job.Compile.Should().BeTrue();
         _ = job.CompileMode.Should().Be("debug");
         _ = job.ScriptStorage.Should().Be("external");
-        _ = job.SourceRoot.Should().Be(Path.Combine(this.root, "Content").Replace('\\', '/'));
         _ = job.VirtualPath.Should().Be(MoveScript.VirtualPath, "the cooker places a script at its identity");
         _ = job.Layout.Should().Be(new ContentImportLayout("/Content"));
     }

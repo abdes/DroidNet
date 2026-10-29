@@ -23,6 +23,7 @@
 #include <Oxygen/Cooker/Import/PhysicsImportSettings.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/test/Support/TempDir.h>
+#include <Oxygen/Cooker/test/Support/TestPaths.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {
@@ -88,6 +89,8 @@ NOLINT_TEST_F(AsyncImportServiceRoutingTest,
   auto request = ImportRequest {};
   request.source_path = "unrecognized.asset";
   request.asset_virtual_path = "/.cooked/Materials/BadMat.omat";
+  request.source_mount_path
+    = oxygen::cooker::test::SourceMountPath(request.source_path);
   request.cooked_root
     = TempDir() / "oxygen_material_descriptor_routing_submit_test";
   std::filesystem::create_directories(*request.cooked_root);

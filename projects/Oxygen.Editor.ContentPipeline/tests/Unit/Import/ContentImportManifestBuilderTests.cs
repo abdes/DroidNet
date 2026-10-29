@@ -185,6 +185,32 @@ internal sealed partial class ContentImportManifestBuilderTests
         _ = sceneJob.DependsOn.Should().Equal(manifest.Jobs[0].Id, manifest.Jobs[1].Id);
     }
 
+    /// <summary>The manifest declares the project's source mounts and names no absolute path.</summary>
+    [TestMethod]
+    public void BuildManifestDeclaresTheProjectMountsWithoutAbsolutePaths()
+    {
+        using var workspace = new ManifestWorkspace();
+        var projectContext = workspace.Context;
+        var scope = new ContentCookScope(
+            projectContext,
+            new ProjectCookScope(projectContext.ProjectId, FileSystemPath.From(workspace.Root), Path.Combine(workspace.Root, ".cooked")),
+            [CreateMaterialInput(workspace, "Content/Materials/Red.omat.json")],
+            CookTargetKind.Asset)
+        { Output = workspace.Output };
+
+        var manifest = new ContentImportManifestBuilder().BuildManifest(scope);
+
+        _ = manifest.Mounts.Should().NotBeNull();
+        _ = manifest.Mounts!.Select(static mount => mount.Name).Should().Equal(projectContext.AuthoringMounts.Where(static mount => !ProjectOutputFolders.Contains(mount)).Select(static mount => mount.Name));
+        _ = manifest.Mounts.Should().Contain(new ContentImportMount("Content", "Content"));
+        var text = JsonSerializer.Serialize(manifest);
+        using var json = JsonDocument.Parse(text);
+        _ = json.RootElement.GetProperty("mounts").GetArrayLength().Should().Be(manifest.Mounts.Count);
+        _ = json.RootElement.TryGetProperty("output", out _).Should().BeFalse();
+        _ = json.RootElement.GetProperty("layout").GetProperty("virtual_mount_root").GetString().Should().Be("/Content");
+        _ = text.Should().NotContain(JsonSerializer.Serialize(workspace.Root)[1..^1], "every manifest path is relative");
+    }
+
     [TestMethod]
     public void BuildSceneManifestNormalizesBackslashSourcePaths()
     {

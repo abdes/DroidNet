@@ -74,6 +74,9 @@ public:
   struct ImportSettings {
     std::filesystem::path source_path {};
     std::filesystem::path cooked_root {};
+    //! The Content root: the source mount the source must lie in, so the
+    //! cooked index records it as `/Content/...`.
+    std::filesystem::path content_root {};
     ImportKind kind { ImportKind::kTexture2D };
     int output_format_idx { 0 };
     bool generate_mips { true };

@@ -252,6 +252,7 @@ public sealed partial class ContentPipelineService
         {
             Artifacts = artifacts,
             CapturedInputs = snapshot.CreateNativeInputs(),
+            Mounts = ContentImportManifestBuilder.CreateMounts(operation.Project),
         };
         var analysis = await this.engineContentPipelineApi.AnalyzeSourcesAsync(execution, cancellationToken).ConfigureAwait(false);
         if (!analysis.Complete)

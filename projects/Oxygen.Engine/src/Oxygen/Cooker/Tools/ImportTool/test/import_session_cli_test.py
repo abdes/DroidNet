@@ -1,7 +1,7 @@
 """Run an import manifest shaped like an editor import session through the CLI.
 
 An editor import session is an import manifest: one model job per file, in the
-dialog's order, with a source relative to the manifest, the model's identity,
+dialog's order, with a source relative to the manifest (inside the mount it declares), the model's identity,
 its name and only the settings the user set; the run's execution settings at
 the top when set; no output, as the command line names the cooked root.
 """
@@ -77,6 +77,7 @@ class ImportSessionCliTests(unittest.TestCase):
                         "texture": {"workers": 1},
                         "scene": {"queue_capacity": 4},
                     },
+                    "mounts": [{"name": "Content", "path": "."}],
                     "layout": {"virtual_mount_root": "/Content"},
                     "jobs": [
                         {

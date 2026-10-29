@@ -40,6 +40,7 @@
 #include <Oxygen/Cooker/Import/ImportProgress.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
+#include <Oxygen/Cooker/Import/SourceMounts.h>
 #include <Oxygen/Cooker/Import/TextureImportTypes.h>
 #include <Oxygen/Cooker/Import/TextureSourceAssembly.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
@@ -327,6 +328,36 @@ auto TextureLoadingService::SubmitImport(const ImportSettings& settings) -> bool
     = request.loose_cooked_layout.DescriptorVirtualPath(
       "Textures/" + settings.source_path.stem().string() + ".otex");
   request.options = std::move(options);
+
+  // The recorded source is the image's mount path below the Content root.
+  using oxygen::content::import::MountDeclaration;
+  const auto mounts = oxygen::content::import::ResolveMountTable({
+    .project_root = settings.content_root,
+    .declarations = { MountDeclaration {
+      .name = "Content",
+      .kind = oxygen::content::import::MountKind::kSource,
+      .path = ".",
+    } },
+    .form = oxygen::content::import::MountDeclarationForm::kCommittedFile,
+    .declared_in = "TexturedCube Content root",
+    .working_directory = settings.content_root,
+    .mounts_option = std::nullopt,
+    .owner = oxygen::content::import::MountTableOwner::kProject,
+  });
+  auto findings = std::vector<oxygen::content::import::ImportDiagnostic> {};
+  const auto located = settings.content_root.empty() || !mounts.IsValid()
+    ? std::nullopt
+    : mounts.MountPathOf(
+        std::filesystem::absolute(settings.source_path), findings);
+  if (!located.has_value()) {
+    LOG_F(WARNING,
+      "TextureLoadingService: SubmitImport failed - '{}' lies outside the "
+      "Content root '{}'",
+      settings.source_path.string(), settings.content_root.string());
+    import_status_.message = "The source must lie in the Content root";
+    return false;
+  }
+  request.source_mount_path = located->mount_path;
 
   import_status_.message = "Submitting import...";
 

@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Editor.Projects;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline;
@@ -36,7 +37,7 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
             Output: output.Path,
             Layout: new ContentImportLayout(AssetPath.Create(mountName).VirtualPath),
             Jobs: jobs)
-        { SourceKey = output.SourceKey };
+        { SourceKey = output.SourceKey, Mounts = CreateMounts(scope.Project) };
     }
 
     /// <inheritdoc />
@@ -101,7 +102,7 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
             Output: output.Path,
             Layout: new ContentImportLayout(AssetPath.Create(mountName).VirtualPath),
             Jobs: jobs)
-        { SourceKey = output.SourceKey };
+        { SourceKey = output.SourceKey, Mounts = CreateMounts(scope.Project) };
     }
 
     /// <inheritdoc />
@@ -140,6 +141,7 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
             // A source that cooks one asset names it, and the cooker places its descriptor there; an input source
             // names itself, and the cooker names its actions and contexts under it.
             VirtualPath = input.AssetUri.VirtualPath,
+            DerivedFrom = input.DerivedFrom,
         };
 
         // Scripts cook to debug bytecode that records their source, so the player runs the bytecode and reloads
@@ -150,7 +152,6 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
                 Compile = true,
                 CompileMode = "debug",
                 ScriptStorage = "external",
-                SourceRoot = GetScriptSourceRoot(input),
             }
             : job;
     }
@@ -205,7 +206,16 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
                 mountName,
                 ToProjectRelativePath(scope.InputRoot, descriptor.DescriptorPath),
                 FileSystemPath.From(descriptor.DescriptorPath),
-                ContentCookInputRole.GeneratedDescriptor)))];
+                ContentCookInputRole.GeneratedDescriptor)
+            {
+                DerivedFrom = DerivedFromOf(scope, descriptor.SceneAssetUri),
+            }))];
+
+    // The authored scene a generated descriptor derives from: the scope's own input of that scene.
+    private static string? DerivedFromOf(ContentCookScope scope, AssetPath scene)
+        => scope.Inputs.FirstOrDefault(input => input.AssetUri == scene && input.Role != ContentCookInputRole.GeneratedDescriptor) is { } authored
+            ? ToMountPath(scope.Project, authored.SourceRelativePath)
+            : scope.Inputs.FirstOrDefault(input => input.AssetUri == scene)?.DerivedFrom;
 
     private static string GetSingleMountName(ContentCookScope scope)
     {
@@ -219,20 +229,6 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
         return scope.Inputs.Any(input => !string.Equals(input.MountName, mountName, StringComparison.Ordinal))
             ? throw new InvalidOperationException("One content import manifest cannot span multiple authoring mounts.")
             : mountName;
-    }
-
-    // The authoring mount's folder: the player resolves a script's recorded source path against the project's
-    // authoring roots, so the path is recorded relative to the mount.
-    private static string GetScriptSourceRoot(ContentCookInput input)
-    {
-        var depth = input.AssetUri.RelativePath.Count(static character => character == '/');
-        var root = input.SourceAbsolutePath.Parent!.FullPath;
-        for (var level = 0; level < depth; level++)
-        {
-            root = Path.GetDirectoryName(root)!;
-        }
-
-        return root.Replace('\\', '/');
     }
 
     /// <summary>Gets the importers whose output makes up a source's products, by the names the ImportTool reports.</summary>
@@ -250,6 +246,44 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
             ContentCookAssetKind.Script => ["script"],
             _ => throw new ArgumentOutOfRangeException(nameof(input), input.Kind, "Unsupported manifest job asset kind."),
         };
+
+    /// <summary>
+    /// Gets the project's source mounts: its authoring mounts, without the pipeline's output folders; a project that
+    /// lists none has the default <c>Content</c> mount, as authoring targets do.
+    /// </summary>
+    /// <param name="project">The project.</param>
+    /// <returns>The mounts a manifest declares.</returns>
+    internal static List<ContentImportMount> CreateMounts(ProjectContext project)
+    {
+        IEnumerable<ProjectMountPoint> mounts = project.AuthoringMounts.Count == 0
+            ? [new ProjectMountPoint(Projects.Constants.ContentFolderName, Projects.Constants.ContentFolderName)]
+            : project.AuthoringMounts;
+        return [.. mounts.Where(static mount => !ProjectOutputFolders.Contains(mount))
+            .Select(static mount => new ContentImportMount(mount.Name, mount.RelativePath.Replace('\\', '/').Trim('/')))];
+    }
+
+    /// <summary>Gets the mount path of a project-relative source: its mount's name and its path below the mount's folder.</summary>
+    /// <param name="project">The project.</param>
+    /// <param name="sourceRelativePath">The project-relative source path.</param>
+    /// <returns>The mount path, such as <c>/Content/Scenes/Main.oscene.json</c>.</returns>
+    internal static string ToMountPath(ProjectContext project, string sourceRelativePath)
+    {
+        var source = sourceRelativePath.Replace('\\', '/');
+        foreach (var mount in CreateMounts(project))
+        {
+            if (mount.Path is "." or "")
+            {
+                return "/" + mount.Name + "/" + source;
+            }
+
+            if (source.StartsWith(mount.Path + "/", StringComparison.OrdinalIgnoreCase))
+            {
+                return "/" + mount.Name + source[mount.Path.Length..];
+            }
+        }
+
+        throw new InvalidOperationException($"The source '{sourceRelativePath}' lies in no authoring mount.");
+    }
 
     private static string GetJobType(ContentCookAssetKind kind)
         => kind switch

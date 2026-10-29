@@ -39,6 +39,7 @@ internal sealed partial class CookSourceAnalyzer
         {
             SourceAbsolutePath = FileSystemPath.From(source.Scene!.DescriptorPath),
             Role = ContentCookInputRole.GeneratedDescriptor,
+            DerivedFrom = ContentImportManifestBuilder.ToMountPath(operation.Project, source.Input.SourceRelativePath),
         }));
         var captured = await CookInputSnapshotCapture.CaptureGeneratedAsync(descriptors, cancellationToken).ConfigureAwait(false);
         return new(

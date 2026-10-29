@@ -12,6 +12,8 @@
 #include <system_error>
 #include <utility>
 
+#include "SourceMountOptions.h"
+
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Clap/Command.h>
 #include <Oxygen/Clap/Fluent/CommandBuilder.h>
@@ -88,13 +90,6 @@ auto GltfCommand::BuildCommand() -> std::shared_ptr<clap::Command>
                   .WithValue<std::string>()
                   .StoreTo(&options_.model_record_path)
                   .Build();
-  auto content_root = Option::WithKey("content-root")
-                        .Long("content-root")
-                        .About("Owned Content area for model import records "
-                               "and immutable generations")
-                        .WithValue<std::string>()
-                        .StoreTo(&options_.content_root)
-                        .Build();
 
   auto recipe
     = Option::WithKey("recipe")
@@ -262,6 +257,7 @@ auto GltfCommand::BuildCommand() -> std::shared_ptr<clap::Command>
         .Build();
 
   return CommandBuilder("gltf")
+    .WithOptions(BuildSourceMountOptions(mount_options_))
     .About("Import a standalone glTF/GLB scene")
     .WithPositionalArguments(source_path)
     .WithOption(std::move(cooked_root))
@@ -270,7 +266,6 @@ auto GltfCommand::BuildCommand() -> std::shared_ptr<clap::Command>
     .WithOption(std::move(report))
     .WithOption(std::move(record))
     .WithOption(std::move(recipe))
-    .WithOption(std::move(content_root))
     .WithOption(std::move(no_import_textures))
     .WithOption(std::move(no_import_materials))
     .WithOption(std::move(no_import_geometry))
@@ -311,7 +306,10 @@ auto GltfCommand::Execute() -> std::expected<void, std::error_code>
   settings.import_lights = !no_import_lights_;
   settings.import_cameras = !no_import_cameras_;
 
-  return RunSceneImportJob(settings, ImportFormat::kGltf, *global_options_);
+  settings.content_root = mount_options_.root;
+
+  return RunSceneImportJob(
+    settings, ImportFormat::kGltf, mount_options_, *global_options_);
 }
 
 } // namespace oxygen::content::import::tool

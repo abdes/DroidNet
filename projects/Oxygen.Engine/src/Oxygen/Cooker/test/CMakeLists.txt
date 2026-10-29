@@ -153,6 +153,7 @@ oxygen_cooker_test(
     "Import/ModelMaterialSource_functional_test.cpp"
     "Import/ModelTextureSource_functional_test.cpp"
     "Import/PhysicsMaterialDescriptorImportRequestBuilder_functional_test.cpp"
+    "Import/RecordedSource_functional_test.cpp"
     "Import/ResourceTableRegistry_functional_test.cpp"
     "Import/ModelImportRecord_functional_test.cpp"
     "Import/SceneDescriptorImportRequestBuilder_functional_test.cpp"

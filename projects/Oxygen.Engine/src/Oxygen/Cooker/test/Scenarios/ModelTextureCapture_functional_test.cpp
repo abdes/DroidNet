@@ -78,6 +78,8 @@ namespace {
       request.source_path = source_path;
       request.asset_virtual_path
         = oxygen::cooker::test::ModelVirtualPath(request.source_path);
+      request.source_mount_path
+        = oxygen::cooker::test::SourceMountPath(request.source_path);
       request.cooked_root
         = root / (placeholder ? "placeholder" : "error-index");
       request.options.texture_tuning.placeholder_on_failure = placeholder;
@@ -169,6 +171,8 @@ namespace {
     request.source_path = logical;
     request.asset_virtual_path
       = oxygen::cooker::test::ModelVirtualPath(request.source_path);
+    request.source_mount_path
+      = oxygen::cooker::test::SourceMountPath(request.source_path);
     request.cooked_root = root / "cooked";
     request.captured_inputs
       = std::make_shared<const CapturedInputSet>(std::span(entries));
@@ -200,6 +204,8 @@ namespace {
     request.source_path = logical;
     request.asset_virtual_path
       = oxygen::cooker::test::ModelVirtualPath(request.source_path);
+    request.source_mount_path
+      = oxygen::cooker::test::SourceMountPath(request.source_path);
     request.cooked_root = root / "cooked";
     request.captured_inputs
       = std::make_shared<const CapturedInputSet>(std::span(&entry, 1));

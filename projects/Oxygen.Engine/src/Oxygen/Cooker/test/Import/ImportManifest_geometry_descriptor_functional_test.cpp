@@ -56,11 +56,11 @@ NOLINT_TEST(ImportManifestGeometryDescriptorTest,
       ]
     })");
 
-  const auto cooked_root = (root / ".cooked").generic_string();
-  const auto manifest_json = std::string { R"({
+  const auto* const manifest_json = R"({
       "version": 1,
-      "output": ")" }
-    + cooked_root + R"(",
+      "mounts": [{ "name": "Content", "path": "." }],
+      "layout": { "virtual_mount_root": "/.cooked" },
+      "output": ".cooked",
       "defaults": {
         "geometry_descriptor": {
           "content_hashing": true,
@@ -81,8 +81,7 @@ NOLINT_TEST(ImportManifestGeometryDescriptorTest,
   WriteText(manifest_path, manifest_json);
 
   auto errors = std::ostringstream {};
-  const auto manifest
-    = ImportManifest::Load(manifest_path, std::nullopt, errors);
+  const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   ASSERT_HAS_VALUE(manifest)
     << "Expected manifest to contain a value" << errors.str();
   ASSERT_EQ(manifest->jobs.size(), 1U);
@@ -139,9 +138,9 @@ NOLINT_TEST(ImportManifestGeometryDescriptorTest,
   WriteText(manifest_path,
     R"({
       "version": 1,
-      "output": ")"
-      + (manifest_path.parent_path() / "geometry-cooked").generic_string()
-      + R"(",
+      "mounts": [{ "name": "Content", "path": "." }],
+      "layout": { "virtual_mount_root": "/.cooked" },
+      "output": "geometry-cooked",
       "jobs": [
         {
           "id": "shared.buffers",
@@ -159,8 +158,7 @@ NOLINT_TEST(ImportManifestGeometryDescriptorTest,
     })");
 
   auto errors = std::ostringstream {};
-  const auto manifest
-    = ImportManifest::Load(manifest_path, std::nullopt, errors);
+  const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   ASSERT_HAS_VALUE(manifest)
     << "Expected manifest to contain a value" << errors.str();
   ASSERT_EQ(manifest->jobs.size(), 2U);
@@ -188,6 +186,8 @@ NOLINT_TEST(ImportManifestGeometryDescriptorTest,
   WriteText(manifest_path,
     R"({
       "version": 1,
+      "mounts": [{ "name": "Content", "path": "." }],
+      "layout": { "virtual_mount_root": "/.cooked" },
       "jobs": [
         {
           "type": "geometry-descriptor",
@@ -198,8 +198,7 @@ NOLINT_TEST(ImportManifestGeometryDescriptorTest,
     })");
 
   auto errors = std::ostringstream {};
-  const auto manifest
-    = ImportManifest::Load(manifest_path, std::nullopt, errors);
+  const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   EXPECT_FALSE(manifest.has_value());
   EXPECT_THAT(
     errors.str(), ::testing::HasSubstr("manifest schema validation failed"));

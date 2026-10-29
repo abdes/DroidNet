@@ -64,7 +64,7 @@ struct LooseCookedFileRecord final {
  produced by that asset's source.
 */
 struct LooseCookedProducer final {
-  //! Virtual path of the producing source, such as `/Content/Ship/Ship.glb`.
+  //! Mount path of the producing source, such as `/Content/Ship/Ship.glb`.
   //! For a sidecar, the producer of the asset it completes when this index
   //! does not list that asset, as when it lives in another cooked root.
   std::string source;

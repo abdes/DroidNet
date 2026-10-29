@@ -9,7 +9,7 @@
 // spec name is how tools report it.
 OXDAT_FORMAT_VERSION(kPakVersion, pak, uint16_t, 10)
 OXDAT_FORMAT_VERSION(kPakCatalogVersion, pak_catalog, uint32_t, 3)
-OXDAT_FORMAT_VERSION(kLooseCookedIndexVersion, loose_cooked_index, uint16_t, 6)
+OXDAT_FORMAT_VERSION(kLooseCookedIndexVersion, loose_cooked_index, uint16_t, 7)
 OXDAT_ASSET_VERSION(kMaterialAssetVersion, kMaterial, material, 5)
 OXDAT_ASSET_VERSION(kGeometryAssetVersion, kGeometry, geometry, 6)
 OXDAT_ASSET_VERSION(kSceneAssetVersion, kScene, scene, 16)

@@ -5,6 +5,7 @@
 using System.Buffers.Binary;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ContentPipeline.TestSupport;
@@ -52,8 +53,48 @@ public sealed class ImportAdapterTests
         var manifestPath = runner.ManifestPath!;
         _ = manifestPath.Should().StartWith(Path.Combine(execution.OperationRoot, "manifests"));
         _ = runner.ManifestJson.Should().Contain("\"jobs\"");
-        _ = runner.ManifestJson.Should().NotContain("\"output\":null");
+        using (var written = JsonDocument.Parse(runner.ManifestJson!))
+        {
+            _ = written.RootElement.TryGetProperty("output", out _).Should().BeFalse("the cooked root is the --cooked-root argument, not a manifest field");
+        }
+
         _ = File.Exists(manifestPath).Should().BeFalse("the fallback adapter owns and cleans up its temporary manifest");
+    }
+
+    /// <summary>The cooked context roots of the jobs reach the ImportTool as repeated arguments, not as manifest fields.</summary>
+    /// <returns>The asynchronous test operation.</returns>
+    [TestMethod]
+    public async Task ImportAsync_ShouldPassCookedContextRootsAsArguments()
+    {
+        using var workspace = new ImportAdapterWorkspace();
+        var first = Path.Combine(workspace.Root, ".cooked", "Reference");
+        var second = Path.Combine(workspace.Root, ".cooked", "Other");
+        var baseManifest = CreateManifest(workspace);
+        var manifest = baseManifest with
+        {
+            Jobs = [.. baseManifest.Jobs.Select(job => job with { CookedContextRoots = [first, second] })],
+        };
+        var runner = new CapturingRunner(new ContentPipelineProcessResult(0, string.Empty, string.Empty));
+        var api = new ImportToolContentPipelineApi(
+            new FixedToolLocator(Path.Combine(workspace.Root, "Oxygen.Cooker.ImportTool.exe")),
+            runner,
+            NullLogger<ImportToolContentPipelineApi>.Instance,
+            workspace.Compatibility);
+
+        var result = await api.ImportAsync(CreateExecution(workspace, manifest), CancellationToken.None).ConfigureAwait(false);
+
+        _ = result.Succeeded.Should().BeTrue();
+        _ = runner.Request!.Arguments.Should().ContainInOrder(
+            "batch",
+            "--manifest",
+            runner.ManifestPath!,
+            "--root",
+            workspace.Root,
+            "--cooked-context-root",
+            first,
+            "--cooked-context-root",
+            second);
+        _ = runner.ManifestJson.Should().NotContain("cooked_context_roots");
     }
 
     /// <summary>Verifies the workflow can return Single Import Diagnostic.</summary>

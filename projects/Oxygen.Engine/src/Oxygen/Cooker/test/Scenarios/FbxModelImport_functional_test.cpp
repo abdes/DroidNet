@@ -54,6 +54,7 @@ NOLINT_TEST_F(AsyncFbxImporterFullTest, ImportsTexturedFbxScene)
   const auto temp_dir = MakeTempDir("async_fbx_textured");
   ImportRequest request {
     .source_path = source_path,
+    .source_mount_path = oxygen::cooker::test::SourceMountPath(source_path),
     .asset_virtual_path = oxygen::cooker::test::ModelVirtualPath(source_path),
     .additional_sources = {},
     .cooked_root = temp_dir,
@@ -119,6 +120,8 @@ NOLINT_TEST_F(
   request.source_path = source;
   request.asset_virtual_path
     = oxygen::cooker::test::ModelVirtualPath(request.source_path);
+  request.source_mount_path
+    = oxygen::cooker::test::SourceMountPath(request.source_path);
   request.cooked_root = root / "cooked";
 
   const auto result = RunImport(std::move(request));

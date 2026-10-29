@@ -56,7 +56,10 @@ internal sealed partial class CookSourceAnalyzer(
             operation.Project.ProjectRoot.FullPath,
             this.root,
             [.. prepared.Select(static source => source.Job)])
-        { Artifacts = artifacts };
+        {
+            Artifacts = artifacts,
+            Mounts = ContentImportManifestBuilder.CreateMounts(operation.Project),
+        };
         var report = await native.AnalyzeSourcesAsync(execution, cancellationToken).ConfigureAwait(false);
         this.AddReportDiagnostics(report, prepared, diagnostics);
 
@@ -234,7 +237,12 @@ internal sealed partial class CookSourceAnalyzer(
         var projection = await scenes.GenerateAsync(scene, scope, cancellationToken).ConfigureAwait(false);
         projection = projection with { Dependencies = [.. projection.Dependencies.Select(this.Rebase)] };
 
-        var projected = this.Rebase(input with { SourceAbsolutePath = FileSystemPath.From(projection.DescriptorPath), Role = ContentCookInputRole.GeneratedDescriptor });
+        var projected = this.Rebase(input with
+        {
+            SourceAbsolutePath = FileSystemPath.From(projection.DescriptorPath),
+            Role = ContentCookInputRole.GeneratedDescriptor,
+            DerivedFrom = ContentImportManifestBuilder.ToMountPath(operation.Project, input.SourceRelativePath),
+        });
         return new(input, recipes.BuildJob(projected, []), managed, projection);
     }
 

@@ -138,11 +138,17 @@ public sealed partial class ImportToolContentPipelineApi(
         }
     }
 
-    private static ContentPipelineProcessRequest CreateImportRequest(string toolPath, string output, string manifestPath, string inputRoot)
-        => new(
+    private static ContentPipelineProcessRequest CreateImportRequest(string toolPath, ContentImportManifest manifest, string manifestPath, string inputRoot)
+    {
+        // The context roots are the same for every job that has them, and the ImportTool applies them to the job types
+        // that read cooked context; they are not part of the manifest file.
+        var contextRoots = manifest.Jobs.SelectMany(static job => job.CookedContextRoots ?? []).Distinct(StringComparer.Ordinal)
+            .SelectMany(static root => new[] { "--cooked-context-root", root });
+        return new(
             toolPath,
-            ["--no-tui", "--no-color", "--cooked-root", output, "batch", "--manifest", manifestPath, "--root", inputRoot],
+            ["--no-tui", "--no-color", "--cooked-root", manifest.Output, "batch", "--manifest", manifestPath, "--root", inputRoot, .. contextRoots],
             inputRoot);
+    }
 
     private static async Task WriteCapturedInputsAsync(Import.NativeCapturedInputSet inputs, string path, CancellationToken cancellationToken)
     {
@@ -222,7 +228,7 @@ public sealed partial class ImportToolContentPipelineApi(
         var toolPath = this.GetCompatibleToolPath(artifacts);
         _ = Directory.CreateDirectory(Path.GetDirectoryName(manifestPath)!);
         await WriteManifestAsync(execution.Manifest, manifestPath, cancellationToken).ConfigureAwait(false);
-        var request = CreateImportRequest(toolPath, execution.Manifest.Output, manifestPath, execution.InputRoot) with
+        var request = CreateImportRequest(toolPath, execution.Manifest, manifestPath, execution.InputRoot) with
         {
             Output = CookRunContext.Current is { } progress ? new CookOutput(progress) : null,
         };

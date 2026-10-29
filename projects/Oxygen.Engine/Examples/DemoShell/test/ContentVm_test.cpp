@@ -27,6 +27,7 @@
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ModelImportRecord.h>
 #include <Oxygen/Cooker/Import/SceneImportSettings.h>
+#include <Oxygen/Cooker/Import/SourceMounts.h>
 #include <Oxygen/Core/EngineTag.h>
 #include <Oxygen/Testing/GTest.h>
 
@@ -114,6 +115,19 @@ namespace {
       recipe.source_path = source.string();
       recipe.virtual_path = "/.cooked/" + source.filename().generic_string();
       using content::import::ModelImportRecord;
+      const auto mounts = content::import::ResolveMountTable({
+        .project_root = root_,
+        .declarations = { content::import::MountDeclaration {
+          .name = "Content",
+          .kind = content::import::MountKind::kSource,
+          .path = ".",
+        } },
+        .form = content::import::MountDeclarationForm::kCommittedFile,
+        .declared_in = "test",
+        .working_directory = root_,
+        .mounts_option = std::nullopt,
+        .owner = content::import::MountTableOwner::kProject,
+      });
       record_ = ModelImportRecord::PathFor(root_, Uuid::Generate());
       ModelImportRecord::Save({
         .record_path = record_,
@@ -121,6 +135,7 @@ namespace {
         .source = source,
         .virtual_path = recipe.virtual_path,
         .settings_json = ModelImportRecord::MakeSettings(recipe),
+        .mounts = make_observer(&mounts),
       });
       std::promise<content::import::ImportReport> completed;
       auto future = completed.get_future();
@@ -128,9 +143,11 @@ namespace {
         content::import::AsyncImportService::Config { .thread_pool_size = 2 });
       const auto stop
         = ScopeGuard([&service] noexcept -> void { service.Stop(); });
-      ASSERT_TRUE(service.SubmitModelImport(ModelImportRecord::Prepare(record_),
-        [&completed](
-          auto, const auto& report) -> auto { completed.set_value(report); }));
+      ASSERT_TRUE(
+        service.SubmitModelImport(ModelImportRecord::Prepare(record_, mounts),
+          [&completed](auto, const auto& report) -> auto {
+            completed.set_value(report);
+          }));
       ASSERT_EQ(
         future.wait_for(std::chrono::seconds(15)), std::future_status::ready);
       const auto report = future.get();

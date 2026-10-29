@@ -26,7 +26,6 @@ public:
 
 private:
   std::string sources_path_;
-  std::string cooked_root_;
 };
 
 } // namespace oxygen::content::import::tool

@@ -17,6 +17,7 @@
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Uuid.h>
 #include <Oxygen/Cooker/Import/ImportManifest.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
@@ -25,6 +26,7 @@
 #include <Oxygen/Cooker/Import/ModelImportRecord.h>
 #include <Oxygen/Cooker/Import/ModelImportState.h>
 #include <Oxygen/Cooker/Import/SceneImportSettings.h>
+#include <Oxygen/Cooker/Import/SourceMounts.h>
 #include <Oxygen/Cooker/Import/SurfaceProvenance.h>
 #include <Oxygen/Cooker/test/Pak/PakTestSupport.h>
 #include <Oxygen/Core/Types/DescriptorExtensions.h>
@@ -44,6 +46,10 @@ using oxygen::content::import::ModelImportRecord;
 using oxygen::content::import::ModelImportRecordContent;
 using oxygen::content::import::ModelNodeContinuity;
 using oxygen::content::import::ModelPublishedNode;
+using oxygen::content::import::MountDeclaration;
+using oxygen::content::import::MountTable;
+using oxygen::content::import::MountTableRequest;
+using oxygen::content::import::ResolveMountTable;
 using oxygen::content::import::SceneImportSettings;
 using oxygen::content::import::SurfaceProvenance;
 using oxygen::content::import::internal::BuildSceneRequest;
@@ -57,6 +63,32 @@ auto Identity() -> Uuid { return Uuid::FromString(kSourceIdentity).value(); }
 class SceneImportRequestBuilderTest
   : public oxygen::content::pak::test::TempDirFixture {
 protected:
+  //! The project's mounts: `Content` on the temp root, where the sources,
+  //! records and manifests of these tests live.
+  auto Mounts() -> const MountTable&
+  {
+    if (mounts_.mounts.empty()) {
+      mounts_ = ResolveMountTable(MountTableRequest {
+        .project_root = Root(),
+        .declarations
+        = { MountDeclaration { .name = "Content", .path = std::string(".") } },
+        .declared_in = "import-manifest.json",
+        .working_directory = Root(),
+      });
+    }
+    return mounts_;
+  }
+
+  //! The manifest fields every manifest of these tests declares.
+  static auto ProjectFields(json document) -> json
+  {
+    document["mounts"]
+      = json::array({ { { "name", "Content" }, { "path", "." } } });
+    document["layout"] = { { "virtual_mount_root", "/.cooked" } };
+    document["output"] = "cooked";
+    return document;
+  }
+
   auto Settings() -> SceneImportSettings
   {
     auto settings = SceneImportSettings {};
@@ -78,9 +110,13 @@ protected:
       .source = Path(source),
       .virtual_path = std::string(virtual_path),
       .settings_json = settings.dump(),
+      .mounts = oxygen::make_observer(&Mounts()),
     });
     return path;
   }
+
+private:
+  MountTable mounts_;
 };
 
 //! Without a record, an import has an identity of its own, fresh on every
@@ -102,21 +138,44 @@ NOLINT_TEST_F(SceneImportRequestBuilderTest, WithoutARecordTheIdentityIsFresh)
   EXPECT_FALSE(first->model_import.has_value());
 }
 
-//! A job's source sits in the folder of what it cooks: the index records it as
-//! the producer of the job's entries.
-NOLINT_TEST_F(SceneImportRequestBuilderTest, TheSourceSitsBesideWhatItCooks)
+//! A job records its source as the mount path of the file, whatever folder the
+//! job's identity names.
+NOLINT_TEST_F(SceneImportRequestBuilderTest, TheSourceIsRecordedAsItsMountPath)
 {
-  auto request = oxygen::content::import::ImportRequest {};
-  request.source_path = Path("anywhere") / "Red.omat.json";
-  request.asset_virtual_path = "/Content/Materials/Red.omat";
-  EXPECT_EQ(request.SourceVirtualPath(), "/Content/Materials/Red.omat.json");
+  std::filesystem::create_directories(Path("Materials"));
+  {
+    std::ofstream output(Path("Materials/Red.omat.json"));
+    output << R"({ "name": "Red" })";
+    ASSERT_TRUE(output.good());
+  }
+  const auto manifest_path = Path("import-manifest.json");
+  {
+    std::ofstream output(manifest_path);
+    output << ProjectFields(
+      {
+        { "version", 1 },
+        {
+          "jobs",
+          json::array({
+            {
+              { "type", "material-descriptor" },
+              { "source", "Materials/Red.omat.json" },
+              { "virtual_path", "/.cooked/Look/Red.omat" },
+            },
+          }),
+        },
+      })
+                .dump();
+    ASSERT_TRUE(output.good());
+  }
 
-  request.source_path = Path("anywhere") / "Player.input.json";
-  request.asset_virtual_path = "/Content/Player.input";
-  EXPECT_EQ(request.SourceVirtualPath(), "/Content/Player.input.json");
+  std::ostringstream errors;
+  const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
+  ASSERT_HAS_VALUE(manifest) << errors.str();
+  const auto request = manifest->jobs.at(0).BuildRequest(errors);
 
-  request.asset_virtual_path.clear();
-  EXPECT_TRUE(request.SourceVirtualPath().empty());
+  ASSERT_HAS_VALUE(request) << errors.str();
+  EXPECT_EQ(request->source_mount_path, "/Content/Materials/Red.omat.json");
 }
 
 //! A model request carries the model's identity, which names its scene.
@@ -128,8 +187,6 @@ NOLINT_TEST_F(SceneImportRequestBuilderTest, CarriesTheModelIdentity)
   ASSERT_HAS_VALUE(request) << errors.str();
   EXPECT_EQ(request->asset_virtual_path, "/.cooked/model.gltf");
   EXPECT_EQ(request->GetSceneName(), "model");
-  EXPECT_EQ(request->SourceVirtualPath(), "/.cooked/model.gltf")
-    << "a model is its own source";
   EXPECT_EQ(request->ModelProductVirtualPath(
               request->GetSceneName(), oxygen::data::kSceneDescriptorExtension),
     "/.cooked/model.gltf/model.oscene");
@@ -205,9 +262,8 @@ NOLINT_TEST_F(SceneImportRequestBuilderTest, AModelJobRunsItsRecord)
   const auto fbx = SaveRecord("model.fbx", "/.cooked/model.fbx", fbx_identity);
   const auto manifest_path = Path("import-manifest.json");
   {
-    const auto document = json {
+    const auto document = ProjectFields({
       { "version", 1 },
-      { "output", Path("cooked").string() },
       {
         "jobs",
         json::array({
@@ -218,19 +274,18 @@ NOLINT_TEST_F(SceneImportRequestBuilderTest, AModelJobRunsItsRecord)
           {
             { "id", "the-fbx" },
             { "type", "model" },
-            { "record", fbx.generic_string() },
+            { "record", fbx.lexically_relative(Root()).generic_string() },
           },
         }),
       },
-    };
+    });
     std::ofstream output(manifest_path);
     output << document.dump();
     ASSERT_TRUE(output.good());
   }
 
   std::ostringstream errors;
-  const auto manifest
-    = ImportManifest::Load(manifest_path, std::nullopt, errors);
+  const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
 
   ASSERT_HAS_VALUE(manifest) << errors.str();
   ASSERT_EQ(manifest->jobs.size(), 2U);
@@ -275,15 +330,14 @@ NOLINT_TEST_F(SceneImportRequestBuilderTest, JobsCarryNoIdentityOfTheirOwn)
 {
   const auto record
     = SaveRecord("model.gltf", "/.cooked/model.gltf", Identity());
-  const auto refused = [](const json& job) -> std::string {
-    const auto document = json {
+  const auto refused = [this](const json& job) -> std::string {
+    const auto document = ProjectFields({
       { "version", 1 },
       { "jobs", json::array({ job }) },
-    };
+    });
     std::ostringstream errors;
-    EXPECT_FALSE(ImportManifest::Parse(
-      document.dump(), std::filesystem::current_path(), std::nullopt, errors)
-        .has_value())
+    EXPECT_FALSE(
+      ImportManifest::Parse(document.dump(), Root(), {}, errors).has_value())
       << job.dump();
     return errors.str();
   };
@@ -296,12 +350,12 @@ NOLINT_TEST_F(SceneImportRequestBuilderTest, JobsCarryNoIdentityOfTheirOwn)
   }));
   static_cast<void>(refused({
     { "type", "model" },
-    { "record", record.generic_string() },
+    { "record", record.lexically_relative(Root()).generic_string() },
     { "unit_policy", "preserve" },
   }));
   EXPECT_THAT(refused({
                 { "type", "model" },
-                { "record", Path("missing.import.json").generic_string() },
+                { "record", "missing.import.json" },
               }),
     testing::HasSubstr("import.model_record_invalid"));
 }
@@ -357,20 +411,28 @@ NOLINT_TEST_F(SceneImportRequestBuilderTest, ModelImportSettingsReachTheImport)
   const auto manifest_path = Path("settings-manifest.json");
   {
     std::ofstream output(manifest_path);
-    output << json {
-      { "version", 1 },
-      { "output", Path("cooked").string() },
+    output << ProjectFields(
       {
-        "jobs",
-        json::array({ { { "type", "model" }, { "record", record.string() } } }),
-      },
-    }.dump();
+        { "version", 1 },
+        {
+          "jobs",
+          json::array({
+            {
+              { "type", "model" },
+              {
+                "record",
+                record.lexically_relative(Root()).generic_string(),
+              },
+            },
+          }),
+        },
+      })
+                .dump();
     ASSERT_TRUE(output.good());
   }
 
   std::ostringstream errors;
-  const auto manifest
-    = ImportManifest::Load(manifest_path, std::nullopt, errors);
+  const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   ASSERT_HAS_VALUE(manifest) << errors.str();
   const auto request = manifest->jobs.at(0).BuildRequest(errors);
   ASSERT_HAS_VALUE(request) << errors.str();
@@ -473,22 +535,24 @@ NOLINT_TEST_F(
     const auto path = Path("refused-manifest.json");
     {
       std::ofstream output(path);
-      output << json {
-        { "version", 1 },
-        { "output", Path("cooked").string() },
-        {
-          "jobs",
-          json::array({ {
-            { "type", "fbx" },
-            { "source", Path("model.fbx").string() },
-            { "virtual_path", "/.cooked/model.fbx" },
-            { "geometry_defaults", defaults },
-          }, }),
-        },
-      }.dump();
+      output << ProjectFields({
+                                { "version", 1 },
+                                {
+                                  "jobs",
+                                  json::array({
+                                    {
+                                      { "type", "fbx" },
+                                      { "source", "model.fbx" },
+                                      { "virtual_path", "/.cooked/model.fbx" },
+                                      { "geometry_defaults", defaults },
+                                    },
+                                  }),
+                                },
+                              })
+                  .dump();
     }
     std::ostringstream errors;
-    return !ImportManifest::Load(path, std::nullopt, errors).has_value();
+    return !ImportManifest::Load(path, {}, errors).has_value();
   };
   EXPECT_TRUE(refused({ { "Body",
     { { "lod_policy",

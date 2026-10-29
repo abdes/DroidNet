@@ -134,10 +134,23 @@
     "defaults": {
       "$ref": "#/definitions/defaults_settings"
     },
+    "project_root": {
+      "description": "The project root, relative to this manifest's folder: relative mount folders, the project's .mounts.json and relative job sources belong to it. Default: this manifest's folder.",
+      "type": "string",
+      "minLength": 1
+    },
+    "mounts": {
+      "description": "The committed source mounts. A path is relative to the project root; a mount without one is a placeholder that a .mounts.json binds.",
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/mount_declaration"
+      }
+    },
     "layout": {
       "$ref": "#/definitions/layout_settings"
     },
     "output": {
+      "description": "The cooked root, relative to this manifest's folder.",
       "type": "string"
     },
     "jobs": {
@@ -151,7 +164,31 @@
     }
   },
   "required": ["jobs"],
+  "dependencies": {
+    "mounts": ["layout"]
+  },
   "definitions": {
+    "mount_declaration": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "The mount name: the first segment of every mount path in it. The mount table checks it (mount.name_invalid).",
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "enum": ["Source", "Cooked", "Pak"],
+          "default": "Source"
+        },
+        "path": {
+          "description": "The mount's folder (a .pak file for a Pak mount), relative to the project root.",
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": ["name"],
+      "additionalProperties": false
+    },
     "concurrency_item": {
       "type": "object",
       "properties": {
@@ -216,6 +253,7 @@
                 "depends_on",
                 "type",
                 "source",
+                "derived_from",
                 "sources",
                 "output",
                 "layout",
@@ -265,6 +303,7 @@
                 "depends_on",
                 "type",
                 "source",
+                "derived_from",
                 "output",
                 "layout",
                 "name",
@@ -289,6 +328,7 @@
                 "depends_on",
                 "type",
                 "source",
+                "derived_from",
                 "output",
                 "layout",
                 "name",
@@ -315,6 +355,7 @@
                 "depends_on",
                 "type",
                 "source",
+                "derived_from",
                 "output",
                 "layout",
                 "name",
@@ -340,6 +381,7 @@
                 "depends_on",
                 "type",
                 "source",
+                "derived_from",
                 "output",
                 "layout",
                 "name",
@@ -365,6 +407,7 @@
                 "depends_on",
                 "type",
                 "source",
+                "derived_from",
                 "output",
                 "layout",
                 "name",
@@ -391,6 +434,7 @@
                 "depends_on",
                 "type",
                 "source",
+                "derived_from",
                 "output",
                 "layout",
                 "name",
@@ -482,6 +526,7 @@
                 "depends_on",
                 "type",
                 "source",
+                "derived_from",
                 "bindings",
                 "target_scene_virtual_path",
                 "output",
@@ -509,6 +554,7 @@
                 "id",
                 "type",
                 "source",
+                "derived_from",
                 "virtual_path",
                 "depends_on",
                 "output",
@@ -849,11 +895,6 @@
         },
         "script_storage": {
           "$ref": "#/definitions/script_storage_mode"
-        },
-        "source_root": {
-          "type": "string",
-          "minLength": 1,
-          "description": "Authoring root for external script source paths, relative to this manifest."
         }
       },
       "additionalProperties": false
@@ -1047,6 +1088,11 @@
         },
         "source": {
           "type": "string"
+        },
+        "derived_from": {
+          "description": "For a source in an output folder (a derived file): the mount path of the authored source it derives from, recorded as the producer of what the job cooks.",
+          "type": "string",
+          "minLength": 1
         },
         "sources": {
           "type": "array",
@@ -1299,11 +1345,6 @@
         },
         "cooked_context_roots": {
           "$ref": "#/definitions/cooked_context_roots"
-        },
-        "source_root": {
-          "type": "string",
-          "minLength": 1,
-          "description": "Authoring root for external script source paths, relative to this manifest."
         },
         "source_key": {
           "$ref": "#/definitions/source_key"

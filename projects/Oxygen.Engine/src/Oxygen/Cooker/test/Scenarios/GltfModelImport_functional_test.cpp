@@ -266,6 +266,8 @@ protected:
     request.source_path = source_path;
     request.asset_virtual_path
       = oxygen::cooker::test::ModelVirtualPath(request.source_path);
+    request.source_mount_path
+      = oxygen::cooker::test::SourceMountPath(request.source_path);
     request.cooked_root = root / "cooked";
     return RunImport(std::move(request));
   }
@@ -324,6 +326,8 @@ protected:
         request.source_path = source_path;
         request.asset_virtual_path
           = oxygen::cooker::test::ModelVirtualPath(request.source_path);
+        request.source_mount_path
+          = oxygen::cooker::test::SourceMountPath(request.source_path);
         request.cooked_root = root / ("cooked_" + std::to_string(pass));
         request.options.coordinate.bake_transforms_into_meshes = false;
         request.options.node_pruning = pruning;
@@ -790,6 +794,8 @@ NOLINT_TEST_F(
     request.source_path = source_path;
     request.asset_virtual_path
       = oxygen::cooker::test::ModelVirtualPath(request.source_path);
+    request.source_mount_path
+      = oxygen::cooker::test::SourceMountPath(request.source_path);
     request.cooked_root = root / "cooked";
     request.options.gltf_omitted_light_range_m = fallback;
     const auto imported = RunImport(std::move(request));
@@ -871,6 +877,8 @@ NOLINT_TEST_F(AsyncGltfImporterFullTest,
   request.source_path = source_path;
   request.asset_virtual_path
     = oxygen::cooker::test::ModelVirtualPath(request.source_path);
+  request.source_mount_path
+    = oxygen::cooker::test::SourceMountPath(request.source_path);
   request.cooked_root = root / "cooked";
   const auto imported = RunImport(std::move(request));
   ASSERT_TRUE(imported.report.success);
@@ -982,6 +990,8 @@ NOLINT_TEST_F(AsyncGltfImporterFullTest, ImportedValuesCommitThroughTheSchema)
   request.source_path = source_path;
   request.asset_virtual_path
     = oxygen::cooker::test::ModelVirtualPath(request.source_path);
+  request.source_mount_path
+    = oxygen::cooker::test::SourceMountPath(request.source_path);
   request.cooked_root = root / "cooked";
   const auto imported = RunImport(std::move(request));
   ASSERT_TRUE(imported.report.success);
@@ -1100,6 +1110,7 @@ protected:
 
     ImportRequest request {
       .source_path = source_path,
+      .source_mount_path = oxygen::cooker::test::SourceMountPath(source_path),
       .asset_virtual_path = oxygen::cooker::test::ModelVirtualPath(source_path),
       .additional_sources = {},
       .cooked_root = temp_dir / "Cooked",
@@ -1286,6 +1297,7 @@ NOLINT_TEST_F(AsyncGltfImporterFullTest, AsyncBackendImportsFullTabuleiroScene)
   const auto temp_dir = MakeTempDir("async_gltf_tabuleiro");
   ImportRequest request {
     .source_path = source_path,
+    .source_mount_path = oxygen::cooker::test::SourceMountPath(source_path),
     .asset_virtual_path = oxygen::cooker::test::ModelVirtualPath(source_path),
     .additional_sources = {},
     .cooked_root = temp_dir,
@@ -1334,6 +1346,7 @@ NOLINT_TEST_F(
   const auto temp_dir = MakeTempDir("async_gltf_light_overrides");
   ImportRequest request {
     .source_path = source_path,
+    .source_mount_path = oxygen::cooker::test::SourceMountPath(source_path),
     .asset_virtual_path = oxygen::cooker::test::ModelVirtualPath(source_path),
     .additional_sources = {},
     .cooked_root = temp_dir,
@@ -1374,6 +1387,8 @@ NOLINT_TEST_F(AsyncGltfImporterFullTest, ModelsShareACookedRootByIdentity)
     ImportRequest request {};
     request.source_path = source_path;
     request.asset_virtual_path = identity;
+    request.source_mount_path
+      = oxygen::cooker::test::SourceMountPath(request.source_path);
     request.cooked_root = cooked_root;
     request.options.coordinate.bake_transforms_into_meshes = false;
     const auto imported = RunImport(std::move(request));
@@ -1421,6 +1436,8 @@ NOLINT_TEST_F(AsyncGltfImporterFullTest, ModelIdentityOfAnotherTypeIsRefused)
   request.source_path
     = TestModelsDirFromFile() / "static_textured_triangle.gltf";
   request.asset_virtual_path = "/.cooked/Triangle.fbx";
+  request.source_mount_path
+    = oxygen::cooker::test::SourceMountPath(request.source_path);
   request.cooked_root = MakeTempDir("async_gltf_wrong_identity");
   const auto imported = RunImport(std::move(request));
   EXPECT_FALSE(imported.report.success);
@@ -1451,6 +1468,8 @@ NOLINT_TEST_F(AsyncGltfImporterFullTest, MissingTextureIsFoundInTexturesFolder)
   request.source_path = source_path;
   request.asset_virtual_path
     = oxygen::cooker::test::ModelVirtualPath(request.source_path);
+  request.source_mount_path
+    = oxygen::cooker::test::SourceMountPath(request.source_path);
   request.cooked_root = root / "cooked";
 
   const auto imported = RunImport(std::move(request));
@@ -1543,6 +1562,8 @@ NOLINT_TEST_F(AsyncGltfImporterFullTest, UnbuildableMeshIsDroppedWithoutShift)
   request.source_path = source_path;
   request.asset_virtual_path
     = oxygen::cooker::test::ModelVirtualPath(request.source_path);
+  request.source_mount_path
+    = oxygen::cooker::test::SourceMountPath(request.source_path);
   request.cooked_root = root / "cooked";
   request.options.coordinate.bake_transforms_into_meshes = false;
 
@@ -1599,6 +1620,8 @@ protected:
     request.source_path = source_path;
     request.asset_virtual_path
       = oxygen::cooker::test::ModelVirtualPath(request.source_path);
+    request.source_mount_path
+      = oxygen::cooker::test::SourceMountPath(request.source_path);
     request.cooked_root = root / "cooked";
     request.options.gltf_scene = target.scene;
     return RunImport(std::move(request));

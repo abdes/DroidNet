@@ -26,6 +26,12 @@ namespace oxygen::cooker::test {
 [[nodiscard]] auto ModelVirtualPath(const std::filesystem::path& source)
   -> std::string;
 
+//! The recorded source these tests give a request: the file's name in the
+//! `Content` mount (`/Content/Tabuleiro.glb`). A request that cooks something
+//! needs one, or the import fails with `import.source_outside_mount`.
+[[nodiscard]] auto SourceMountPath(const std::filesystem::path& source)
+  -> std::string;
+
 //! A file under `Cooker/`, for example
 //! `"Import/Schemas/oxygen.input.schema.json"`. Throws if it is missing.
 [[nodiscard]] auto SchemaPath(std::string_view relative_to_cooker)

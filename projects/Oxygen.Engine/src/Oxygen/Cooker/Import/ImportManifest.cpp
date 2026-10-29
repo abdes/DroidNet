@@ -19,21 +19,27 @@
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <type_traits>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
+#include <fmt/base.h>
+#include <fmt/format.h>
 #include <nlohmann/json-schema.hpp>
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Base/Uuid.h>
+#include <Oxygen/Content/VirtualPath.h>
 #include <Oxygen/Cooker/Import/BufferContainerImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/BufferContainerImportSettings.h>
 #include <Oxygen/Cooker/Import/CollisionShapeDescriptorImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/CollisionShapeDescriptorImportSettings.h>
 #include <Oxygen/Cooker/Import/GeometryDescriptorImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/ImportConcurrency.h>
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportManifest.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
@@ -55,6 +61,7 @@
 #include <Oxygen/Cooker/Import/SceneImportSettings.h>
 #include <Oxygen/Cooker/Import/ScriptImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/ScriptImportSettings.h>
+#include <Oxygen/Cooker/Import/SourceMounts.h>
 #include <Oxygen/Cooker/Import/TextureDescriptorImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/TextureDescriptorImportSettings.h>
 #include <Oxygen/Cooker/Import/TextureImportSettings.h>
@@ -192,19 +199,240 @@ namespace {
     return (root / source_path).lexically_normal().string();
   }
 
-  //! The model import record a `model` job names, resolved as its sources
-  //! are: against the manifest's root.
-  auto ReadModelRecord(const json& job, const std::filesystem::path& root,
-    std::ostream& errors) -> std::shared_ptr<const ModelImportRecordContent>
+  auto PrintDiagnostics(const std::span<const ImportDiagnostic> diagnostics,
+    std::ostream& errors) -> void
+  {
+    for (const auto& diagnostic : diagnostics) {
+      switch (diagnostic.severity) {
+      case ImportSeverity::kError:
+        errors << "ERROR";
+        break;
+      case ImportSeverity::kWarning:
+        errors << "WARNING";
+        break;
+      case ImportSeverity::kInfo:
+        errors << "INFO";
+        break;
+      }
+      errors << " [" << diagnostic.code << "]: " << diagnostic.message;
+      if (!diagnostic.object_path.empty()) {
+        errors << " (at '" << diagnostic.object_path << "')";
+      }
+      errors << "\n";
+    }
+  }
+
+  //! Reports a one-fact mount code about a committed field.
+  auto ReportCode(const MountCode<std::string_view>& code,
+    const std::string_view text, const std::string_view field,
+    std::ostream& errors) -> void
+  {
+    errors << "ERROR [" << code.id << "]: "
+           << fmt::vformat(code.message.get(), fmt::make_format_args(text))
+           << " (at '" << field << "')\n";
+  }
+
+  //! Reports an absolute path in a committed field.
+  auto ReportAbsoluteCommitted(const std::string_view text,
+    const std::string_view field, std::ostream& errors) -> void
+  {
+    ReportCode(mount_codes::kAbsoluteCommitted, text, field, errors);
+  }
+
+  //! Checks that a folder field, or each folder of an array field, is
+  //! relative.
+  auto RequireRelativeFolders(const json& obj, const std::string_view key,
+    const std::string_view prefix, std::ostream& errors) -> bool
+  {
+    if (!obj.is_object() || !obj.contains(key)) {
+      return true;
+    }
+    const auto check
+      = [&errors](const json& value, const std::string& field) -> bool {
+      if (!value.is_string()) {
+        return true;
+      }
+      const auto& text = value.get_ref<const std::string&>();
+      const auto path = std::filesystem::path(text);
+      if (!path.has_root_name() && !path.has_root_directory()) {
+        return true;
+      }
+      ReportAbsoluteCommitted(text, field, errors);
+      return false;
+    };
+    const auto field
+      = prefix.empty() ? std::string(key) : fmt::format("{}.{}", prefix, key);
+    const auto& value = obj.at(key);
+    if (!value.is_array()) {
+      return check(value, field);
+    }
+    auto relative = true;
+    for (const auto& [index, item] : std::views::enumerate(value)) {
+      relative = check(item, fmt::format("{}[{}]", field, index)) && relative;
+    }
+    return relative;
+  }
+
+  //! Checks that the folders of a committed manifest (`project_root`, every
+  //! `output` and `cooked_context_roots`) are relative.
+  auto RequireRelativeFolders(const json& doc, std::ostream& errors) -> bool
+  {
+    auto relative = RequireRelativeFolders(doc, "project_root", {}, errors);
+    relative = RequireRelativeFolders(doc, "output", {}, errors) && relative;
+    const auto check_settings
+      = [&errors, &relative](const json& settings, const std::string& field) {
+          relative = RequireRelativeFolders(settings, "output", field, errors)
+            && relative;
+          relative = RequireRelativeFolders(
+                       settings, "cooked_context_roots", field, errors)
+            && relative;
+        };
+    if (doc.contains("defaults") && doc.at("defaults").is_object()) {
+      for (const auto& [name, settings] : doc.at("defaults").items()) {
+        check_settings(settings, "defaults." + name);
+      }
+    }
+    if (doc.contains("jobs") && doc.at("jobs").is_array()) {
+      for (const auto& [index, job] : std::views::enumerate(doc.at("jobs"))) {
+        check_settings(job, fmt::format("jobs[{}]", index));
+      }
+    }
+    return relative;
+  }
+
+  auto ReadMountKind(const std::string_view kind) -> MountKind
+  {
+    if (kind == to_string(MountKind::kCooked)) {
+      return MountKind::kCooked;
+    }
+    if (kind == to_string(MountKind::kPak)) {
+      return MountKind::kPak;
+    }
+    return MountKind::kSource;
+  }
+
+  //! The committed mount declaration of a manifest, its shape checked by the
+  //! schema.
+  auto ReadMountDeclarations(const json& doc) -> std::vector<MountDeclaration>
+  {
+    auto declarations = std::vector<MountDeclaration> {};
+    for (const auto& entry : doc.value("mounts", json::array())) {
+      auto& declaration = declarations.emplace_back(MountDeclaration {
+        .name = entry.at("name").get<std::string>(),
+        .kind = ReadMountKind(entry.value("kind", std::string {})),
+        .path = std::nullopt,
+      });
+      if (entry.contains("path")) {
+        declaration.path = entry.at("path").get<std::string>();
+      }
+    }
+    return declarations;
+  }
+
+  //! Locates a source a committed field names through the manifest's mounts.
+  auto LocateSource(const MountTable& mounts, const std::string& text,
+    const std::string_view field, std::ostream& errors)
+    -> std::optional<MountedSource>
+  {
+    auto diagnostics = std::vector<ImportDiagnostic> {};
+    auto located = mounts.LocateSource(
+      CommittedPath { .text = text, .field = field }, diagnostics);
+    PrintDiagnostics(diagnostics, errors);
+    return located;
+  }
+
+  //! A file a committed field names that need not lie in a mount: a mount
+  //! path, or a path relative to the project root.
+  auto LocateFile(const MountTable& mounts, const std::string& text,
+    const std::string_view field, std::ostream& errors)
+    -> std::optional<std::filesystem::path>
+  {
+    if (text.starts_with('/')) {
+      return LocateSource(mounts, text, field, errors)
+        .transform([](const MountedSource& source) -> std::filesystem::path {
+          return source.file;
+        });
+    }
+    const auto path = std::filesystem::path(text);
+    if (path.has_root_name() || path.has_root_directory()) {
+      ReportAbsoluteCommitted(text, field, errors);
+      return std::nullopt;
+    }
+    return (mounts.project_root / path).lexically_normal();
+  }
+
+  //! A job's source and its recorded source.
+  /*!
+   A job reads its `source`. Its recorded source is that file's mount path,
+   unless the file is derived: it lies in an output folder and the job names
+   the authored source it derives from in `derived_from`, a mount path in a
+   `Source` mount, as a source map names its original.
+  */
+  auto LocateJobSource(const MountTable& mounts, const json& job,
+    const std::string& job_field, std::ostream& errors)
+    -> std::optional<MountedSource>
+  {
+    const auto& source = job.at("source").get_ref<const std::string&>();
+    if (!job.contains("derived_from")) {
+      return LocateSource(mounts, source, job_field + ".source", errors);
+    }
+    const auto file = LocateFile(mounts, source, job_field + ".source", errors);
+    if (!file.has_value()) {
+      return std::nullopt;
+    }
+    const auto field = job_field + ".derived_from";
+    if (!mounts.IsInOutputFolder(*file)) {
+      ReportCode(mount_codes::kDerivedFromNotDerived, source, field, errors);
+      return std::nullopt;
+    }
+    const auto& derived = job.at("derived_from").get_ref<const std::string&>();
+    const auto path = std::filesystem::path(derived);
+    if (!derived.starts_with('/')) {
+      if (path.has_root_name() || path.has_root_directory()) {
+        ReportAbsoluteCommitted(derived, field, errors);
+      } else {
+        ReportCode(mount_codes::kDerivedFromInvalid, derived, field, errors);
+      }
+      return std::nullopt;
+    }
+    const auto mount = mounts.Find(derived.substr(1, derived.find('/', 1) - 1));
+    if (!mount || mount->kind != MountKind::kSource) {
+      ReportCode(mount_codes::kDerivedFromInvalid, derived, field, errors);
+      return std::nullopt;
+    }
+    const auto authored = LocateSource(mounts, derived, field, errors);
+    if (!authored.has_value()) {
+      return std::nullopt;
+    }
+    return MountedSource { .file = *file, .mount_path = authored->mount_path };
+  }
+
+  //! The folder of the mount a mount path names.
+  auto MountFolderOf(const MountTable& mounts, const std::string& mount_path)
+    -> std::filesystem::path
+  {
+    const auto name = mount_path.substr(1, mount_path.find('/', 1) - 1);
+    const auto mount = mounts.Find(name);
+    return mount ? mount->folder : std::filesystem::path {};
+  }
+
+  //! The model import record a `model` job names: a mount path, or a path
+  //! relative to the project root.
+  auto ReadModelRecord(const json& job, const MountTable& mounts,
+    const std::string_view field, std::ostream& errors)
+    -> std::shared_ptr<const ModelImportRecordContent>
   {
     const auto path
-      = ResolveSourcePath(root, job.at("record").get<std::string>());
+      = LocateFile(mounts, job.at("record").get<std::string>(), field, errors);
+    if (!path.has_value()) {
+      return {};
+    }
     try {
       return std::make_shared<const ModelImportRecordContent>(
-        ModelImportRecord::Read(path));
+        ModelImportRecord::Read(*path, mounts));
     } catch (const std::exception& error) {
       errors << "ERROR [import.model_record_invalid]: model import record '"
-             << path << "': " << error.what() << "\n";
+             << path->string() << "': " << error.what() << "\n";
       return {};
     }
   }
@@ -415,15 +643,15 @@ namespace {
   auto IsAllowedInputJobKey(const std::string_view key) -> bool
   {
     return key == "id" || key == "type" || key == "source"
-      || key == "virtual_path" || key == "depends_on" || key == "output"
-      || key == "layout" || key == "cooked_context_roots"
+      || key == "derived_from" || key == "virtual_path" || key == "depends_on"
+      || key == "output" || key == "layout" || key == "cooked_context_roots"
       || key == "source_key";
   }
 
   auto IsAllowedPhysicsSidecarJobKey(const std::string_view key) -> bool
   {
     return key == "id" || key == "depends_on" || key == "type"
-      || key == "source" || key == "bindings"
+      || key == "source" || key == "derived_from" || key == "bindings"
       || key == "target_scene_virtual_path" || key == "output" || key == "name"
       || key == "verbose" || key == "content_hashing"
       || key == "physics_backend" || key == "source_key";
@@ -871,11 +1099,8 @@ namespace {
     if (!ReadStringField(obj, "compile_mode", settings.compile_mode, errors)) {
       return false;
     }
-    if (!ReadStringField(
-          obj, "script_storage", settings.script_storage, errors)) {
-      return false;
-    }
-    return ReadStringField(obj, "source_root", settings.source_root, errors);
+    return ReadStringField(
+      obj, "script_storage", settings.script_storage, errors);
   }
 
   auto ApplyScriptingSidecarOverrides(const json& obj,
@@ -1213,738 +1438,880 @@ namespace {
 
 } // namespace
 
+namespace {
+
+  auto ParseManifest(std::string_view text,
+    const std::filesystem::path& manifest_directory,
+    const std::string& declared_in, const ImportManifestLoadOptions& options,
+    std::ostream& error_stream) -> std::optional<ImportManifest>;
+
+} // namespace
+
 auto ImportManifest::Load(const std::filesystem::path& manifest_path,
-  const std::optional<std::filesystem::path>& root_override,
-  std::ostream& error_stream) -> std::optional<ImportManifest>
+  const ImportManifestLoadOptions& options, std::ostream& error_stream)
+  -> std::optional<ImportManifest>
 {
   const auto json_data = ReadJsonFile(manifest_path, error_stream);
   if (!json_data.has_value()) {
     return std::nullopt;
   }
 
-  return Parse(json_data->dump(), manifest_path.parent_path(), root_override,
-    error_stream);
+  return ParseManifest(json_data->dump(), manifest_path.parent_path(),
+    manifest_path.string(), options, error_stream);
+}
+
+auto ImportManifest::LoadBatch(
+  const std::span<const std::filesystem::path> manifest_paths,
+  const ImportManifestLoadOptions& options, std::ostream& error_stream)
+  -> std::optional<ImportManifest>
+{
+  auto manifests = std::vector<ImportManifest> {};
+  for (const auto& path : manifest_paths) {
+    auto manifest = Load(path, options, error_stream);
+    if (!manifest.has_value()) {
+      return std::nullopt;
+    }
+    manifests.push_back(std::move(*manifest));
+  }
+  if (manifests.empty()) {
+    error_stream << "ERROR: a batch needs at least one manifest\n";
+    return std::nullopt;
+  }
+
+  auto tables = std::vector<MountTable> {};
+  tables.reserve(manifests.size());
+  for (const auto& manifest : manifests) {
+    tables.push_back(manifest.mounts);
+  }
+  const auto conflicts = CheckMountNameConflicts(tables);
+  PrintDiagnostics(conflicts, error_stream);
+  if (!conflicts.empty()) {
+    return std::nullopt;
+  }
+
+  auto batch = std::move(manifests.front());
+  const auto same_job
+    = [](const ImportManifestJob& a, const ImportManifestJob& b) -> bool {
+    return a.job_type == b.job_type && !a.source_mount_path.empty()
+      && content::FoldCase(a.source_mount_path)
+      == content::FoldCase(b.source_mount_path)
+      && a.virtual_path == b.virtual_path;
+  };
+  for (auto& manifest : manifests | std::views::drop(1)) {
+    auto aliases = std::unordered_map<std::string, std::string> {};
+    auto added = std::vector<ImportManifestJob> {};
+    for (auto& job : manifest.jobs) {
+      const auto kept = std::ranges::find_if(batch.jobs,
+        [&](const ImportManifestJob& other) { return same_job(other, job); });
+      if (kept != batch.jobs.end()) {
+        aliases.emplace(job.id, kept->id);
+        continue;
+      }
+      if (!job.id.empty()
+        && std::ranges::contains(batch.jobs, job.id, &ImportManifestJob::id)) {
+        error_stream << "ERROR [batch.job_id_duplicate]: job id '" << job.id
+                     << "' of '" << manifest.mounts.declared_in
+                     << "' names another job of the batch\n";
+        return std::nullopt;
+      }
+      added.push_back(std::move(job));
+    }
+    for (auto& job : added) {
+      for (auto& dependency : job.depends_on) {
+        if (const auto alias = aliases.find(dependency);
+          alias != aliases.end()) {
+          dependency = alias->second;
+        }
+      }
+      batch.jobs.push_back(std::move(job));
+    }
+  }
+  return batch;
 }
 
 auto ImportManifest::Parse(const std::string_view text,
   const std::filesystem::path& manifest_directory,
-  const std::optional<std::filesystem::path>& root_override,
-  std::ostream& error_stream) -> std::optional<ImportManifest>
+  const ImportManifestLoadOptions& options, std::ostream& error_stream)
+  -> std::optional<ImportManifest>
 {
-  std::optional<json> json_data;
-  try {
-    json_data = json::parse(text);
-  } catch (const std::exception& error) {
-    error_stream << "ERROR: invalid manifest JSON: " << error.what() << '\n';
-    return std::nullopt;
-  }
+  return ParseManifest(text, manifest_directory, manifest_directory.string(),
+    options, error_stream);
+}
 
-  if (ReportEarlyJobKeyWhitelistViolations(*json_data, error_stream)) {
-    return std::nullopt;
-  }
+namespace {
 
-  if (const auto error = SchemaValidator::Instance().Validate(*json_data);
-    error.has_value()) {
-    error_stream << "ERROR: manifest schema validation failed:\n" << *error;
-    if (!error->empty() && error->back() != '\n') {
-      error_stream << "\n";
-    }
-    return std::nullopt;
-  }
-
-  ImportManifest manifest {};
-  manifest.version = json_data->value("version", 1U);
-  if (!ReadSourceKey(*json_data, manifest.defaults.source_key, error_stream)) {
-    return std::nullopt;
-  }
-
-  if (!ReadOptionalUIntField(*json_data, "thread_pool_size",
-        manifest.thread_pool_size, error_stream)) {
-    return std::nullopt;
-  }
-  if (!ReadOptionalUIntField(*json_data, "max_in_flight_jobs",
-        manifest.max_in_flight_jobs, error_stream)) {
-    return std::nullopt;
-  }
-  if (!ReadOptionalUIntField(*json_data, "job_admission_capacity",
-        manifest.job_admission_capacity, error_stream)) {
-    return std::nullopt;
-  }
-  if (json_data->contains("concurrency")) {
-    if (!(*json_data).at("concurrency").is_object()) {
-      error_stream << "ERROR: concurrency must be an object\n";
-      return std::nullopt;
-    }
-    ImportConcurrency concurrency {};
-    if (!ApplyConcurrencyOverrides(
-          (*json_data).at("concurrency"), concurrency, error_stream)) {
-      return std::nullopt;
-    }
-    manifest.concurrency = concurrency;
-  }
-
-  if (manifest.version != 1U) {
-    error_stream << "ERROR: unsupported manifest version: " << manifest.version
-                 << "\n";
-    return std::nullopt;
-  }
-
-  if (json_data->contains("layout")) {
-    const auto& layout = (*json_data).at("layout");
-    if (!layout.is_object()) {
-      error_stream << "ERROR: layout must be an object\n";
-      return std::nullopt;
-    }
-    if (!ApplyLayoutOverrides(
-          layout, manifest.defaults.loose_cooked_layout, error_stream)) {
-      return std::nullopt;
-    }
-  }
-
-  const auto manifest_dir = std::filesystem::absolute(manifest_directory);
-
-  const auto root
-    = root_override.has_value() ? *root_override : manifest_directory;
-
-  auto manifest_output_root = std::string {};
-  if (!ReadStringField(
-        *json_data, "output", manifest_output_root, error_stream)) {
-    return std::nullopt;
-  }
-  if (!manifest_output_root.empty()) {
-    manifest.defaults.texture.cooked_root = manifest_output_root;
-    manifest.defaults.fbx.cooked_root = manifest_output_root;
-    manifest.defaults.gltf.cooked_root = manifest_output_root;
-    manifest.defaults.script.cooked_root = manifest_output_root;
-    manifest.defaults.scripting_sidecar.cooked_root = manifest_output_root;
-    manifest.defaults.physics_sidecar.cooked_root = manifest_output_root;
-    manifest.defaults.input.cooked_root = manifest_output_root;
-    manifest.defaults.buffer_container.cooked_root = manifest_output_root;
-    manifest.defaults.material_descriptor.cooked_root = manifest_output_root;
-    manifest.defaults.physics_material_descriptor.cooked_root
-      = manifest_output_root;
-    manifest.defaults.collision_shape_descriptor.cooked_root
-      = manifest_output_root;
-    manifest.defaults.geometry_descriptor.cooked_root = manifest_output_root;
-    manifest.defaults.scene_descriptor.cooked_root = manifest_output_root;
-  }
-
-  if (json_data->contains("defaults")) {
-    const auto& defaults = (*json_data).at("defaults");
-    if (!ReadSourceKey(defaults, manifest.defaults.source_key, error_stream)) {
-      return std::nullopt;
-    }
-    if (!defaults.is_object()) {
-      error_stream << "ERROR: defaults must be an object\n";
+  auto ParseManifest(const std::string_view text,
+    const std::filesystem::path& manifest_directory,
+    const std::string& declared_in, const ImportManifestLoadOptions& options,
+    std::ostream& error_stream) -> std::optional<ImportManifest>
+  {
+    std::optional<json> json_data;
+    try {
+      json_data = json::parse(text);
+    } catch (const std::exception& error) {
+      error_stream << "ERROR: invalid manifest JSON: " << error.what() << '\n';
       return std::nullopt;
     }
 
-    if (defaults.contains("texture")) {
-      const auto& texture_defaults = defaults.at("texture");
-      if (!texture_defaults.is_object()) {
-        error_stream << "ERROR: defaults.texture must be an object\n";
-        return std::nullopt;
-      }
-      if (!ApplyCommonOverrides(
-            texture_defaults, manifest.defaults.texture, error_stream)) {
-        return std::nullopt;
-      }
-      if (!ApplyImportOptions(texture_defaults,
-            manifest.defaults.texture.with_content_hashing, error_stream)) {
-        return std::nullopt;
-      }
-      if (!ApplyTextureOverrides(
-            texture_defaults, manifest.defaults.texture, error_stream)) {
-        return std::nullopt;
-      }
-    }
-
-    if (defaults.contains("scene")) {
-      const auto& scene_defaults = defaults.at("scene");
-      if (!scene_defaults.is_object()) {
-        error_stream << "ERROR: defaults.scene must be an object\n";
-        return std::nullopt;
-      }
-      if (!ApplyCommonSceneOverrides(
-            scene_defaults, manifest.defaults.fbx, error_stream)) {
-        return std::nullopt;
-      }
-      if (!ApplyCommonSceneOverrides(
-            scene_defaults, manifest.defaults.gltf, error_stream)) {
-        return std::nullopt;
-      }
-      if (!ApplySceneOverrides(
-            scene_defaults, manifest.defaults.fbx, error_stream)) {
-        return std::nullopt;
-      }
-      if (!ApplySceneOverrides(
-            scene_defaults, manifest.defaults.gltf, error_stream)) {
-        return std::nullopt;
-      }
-    }
-
-    if (defaults.contains("script")) {
-      const auto& script_defaults = defaults.at("script");
-      if (!script_defaults.is_object()) {
-        error_stream << "ERROR: defaults.script must be an object\n";
-        return std::nullopt;
-      }
-      if (!ApplyCommonScriptOverrides(
-            script_defaults, manifest.defaults.script, error_stream)) {
-        return std::nullopt;
-      }
-      if (!ApplyImportOptions(script_defaults,
-            manifest.defaults.script.with_content_hashing, error_stream)) {
-        return std::nullopt;
-      }
-      if (!ApplyScriptAssetOverrides(
-            script_defaults, manifest.defaults.script, error_stream)) {
-        return std::nullopt;
-      }
-    }
-
-    if (defaults.contains("scripting_sidecar")) {
-      const auto& sidecar_defaults = defaults.at("scripting_sidecar");
-      if (!sidecar_defaults.is_object()) {
-        error_stream << "ERROR: defaults.scripting_sidecar must be an object\n";
-        return std::nullopt;
-      }
-      if (!ApplyCommonScriptOverrides(sidecar_defaults,
-            manifest.defaults.scripting_sidecar, error_stream)) {
-        return std::nullopt;
-      }
-      if (!ApplyImportOptions(sidecar_defaults,
-            manifest.defaults.scripting_sidecar.with_content_hashing,
-            error_stream)) {
-        return std::nullopt;
-      }
-      if (!ApplyScriptingSidecarOverrides(sidecar_defaults,
-            manifest.defaults.scripting_sidecar, error_stream)) {
-        return std::nullopt;
-      }
-    }
-
-    if (defaults.contains("physics_sidecar")) {
-      const auto& sidecar_defaults = defaults.at("physics_sidecar");
-      if (!sidecar_defaults.is_object()) {
-        error_stream << "ERROR: defaults.physics_sidecar must be an object\n";
-        return std::nullopt;
-      }
-      if (!ApplyCommonScriptOverrides(sidecar_defaults,
-            manifest.defaults.physics_sidecar, error_stream)) {
-        return std::nullopt;
-      }
-      if (!ApplyImportOptions(sidecar_defaults,
-            manifest.defaults.physics_sidecar.with_content_hashing,
-            error_stream)) {
-        return std::nullopt;
-      }
-      if (!ApplyPhysicsSidecarOverrides(sidecar_defaults,
-            manifest.defaults.physics_sidecar, error_stream)) {
-        return std::nullopt;
-      }
-    }
-
-    if (defaults.contains("input")) {
-      const auto& input_defaults = defaults.at("input");
-      if (!input_defaults.is_object()) {
-        error_stream << "ERROR: defaults.input must be an object\n";
-        return std::nullopt;
-      }
-      if (!ApplyCommonInputOverrides(
-            input_defaults, manifest.defaults.input, error_stream)) {
-        return std::nullopt;
-      }
-    }
-
-    if (defaults.contains("layout")) {
-      const auto& layout_defaults = defaults.at("layout");
-      if (!layout_defaults.is_object()) {
-        error_stream << "ERROR: defaults.layout must be an object\n";
-        return std::nullopt;
-      }
-      if (!ApplyLayoutOverrides(layout_defaults,
-            manifest.defaults.loose_cooked_layout, error_stream)) {
-        return std::nullopt;
-      }
-    }
-
-    if (defaults.contains("material_descriptor")) {
-      const auto& material_defaults = defaults.at("material_descriptor");
-      if (!material_defaults.is_object()) {
-        error_stream
-          << "ERROR: defaults.material_descriptor must be an object\n";
-        return std::nullopt;
-      }
-      if (!ApplyCommonMaterialDescriptorOverrides(material_defaults,
-            manifest.defaults.material_descriptor, error_stream)) {
-        return std::nullopt;
-      }
-      if (!ApplyMaterialDescriptorOverrides(material_defaults,
-            manifest.defaults.material_descriptor, error_stream)) {
-        return std::nullopt;
-      }
-    }
-
-    if (defaults.contains("physics_material_descriptor")) {
-      const auto& material_defaults
-        = defaults.at("physics_material_descriptor");
-      if (!material_defaults.is_object()) {
-        error_stream
-          << "ERROR: defaults.physics_material_descriptor must be an object\n";
-        return std::nullopt;
-      }
-      if (!ApplyCommonPhysicsMaterialDescriptorOverrides(material_defaults,
-            manifest.defaults.physics_material_descriptor, error_stream)) {
-        return std::nullopt;
-      }
-      if (!ApplyPhysicsMaterialDescriptorOverrides(material_defaults,
-            manifest.defaults.physics_material_descriptor, error_stream)) {
-        return std::nullopt;
-      }
-    }
-
-    if (defaults.contains("collision_shape_descriptor")) {
-      const auto& shape_defaults = defaults.at("collision_shape_descriptor");
-      if (!shape_defaults.is_object()) {
-        error_stream
-          << "ERROR: defaults.collision_shape_descriptor must be an object\n";
-        return std::nullopt;
-      }
-      if (!ApplyCommonCollisionShapeDescriptorOverrides(shape_defaults,
-            manifest.defaults.collision_shape_descriptor, error_stream)) {
-        return std::nullopt;
-      }
-      if (!ApplyCollisionShapeDescriptorOverrides(shape_defaults,
-            manifest.defaults.collision_shape_descriptor, error_stream)) {
-        return std::nullopt;
-      }
-    }
-
-    if (defaults.contains("geometry_descriptor")) {
-      const auto& geometry_defaults = defaults.at("geometry_descriptor");
-      if (!geometry_defaults.is_object()) {
-        error_stream
-          << "ERROR: defaults.geometry_descriptor must be an object\n";
-        return std::nullopt;
-      }
-      if (!ApplyCommonGeometryDescriptorOverrides(geometry_defaults,
-            manifest.defaults.geometry_descriptor, error_stream)) {
-        return std::nullopt;
-      }
-      if (!ApplyGeometryDescriptorOverrides(geometry_defaults,
-            manifest.defaults.geometry_descriptor, error_stream)) {
-        return std::nullopt;
-      }
-    }
-
-    if (defaults.contains("scene_descriptor")) {
-      const auto& scene_descriptor_defaults = defaults.at("scene_descriptor");
-      if (!scene_descriptor_defaults.is_object()) {
-        error_stream << "ERROR: defaults.scene_descriptor must be an object\n";
-        return std::nullopt;
-      }
-      if (!ApplyCommonSceneDescriptorOverrides(scene_descriptor_defaults,
-            manifest.defaults.scene_descriptor, error_stream)) {
-        return std::nullopt;
-      }
-      if (!ApplySceneDescriptorOverrides(scene_descriptor_defaults,
-            manifest.defaults.scene_descriptor, error_stream)) {
-        return std::nullopt;
-      }
-    }
-
-    if (defaults.contains("buffer_container")) {
-      const auto& buffer_container_defaults = defaults.at("buffer_container");
-      if (!buffer_container_defaults.is_object()) {
-        error_stream << "ERROR: defaults.buffer_container must be an object\n";
-        return std::nullopt;
-      }
-      if (!ApplyCommonBufferContainerOverrides(buffer_container_defaults,
-            manifest.defaults.buffer_container, error_stream)) {
-        return std::nullopt;
-      }
-      if (!ApplyBufferContainerOverrides(buffer_container_defaults,
-            manifest.defaults.buffer_container, error_stream)) {
-        return std::nullopt;
-      }
-    }
-  }
-
-  ResolveCookedRootsRelativeToManifest(manifest_dir, manifest.defaults);
-  if (!manifest.defaults.script.source_root.empty()) {
-    manifest.defaults.script.source_root
-      = ResolveSourcePath(manifest_dir, manifest.defaults.script.source_root);
-  }
-
-  if (!json_data->contains("jobs") || !(*json_data).at("jobs").is_array()) {
-    error_stream << "ERROR: manifest.jobs must be an array\n";
-    return std::nullopt;
-  }
-
-  for (const auto& entry : (*json_data).at("jobs")) {
-    if (!entry.is_object()) {
-      error_stream << "ERROR: job entries must be objects\n";
+    if (ReportEarlyJobKeyWhitelistViolations(*json_data, error_stream)) {
       return std::nullopt;
     }
-    auto model_record = std::shared_ptr<const ModelImportRecordContent> {};
-    auto model_job = json {};
-    if (entry.value("type", std::string {}) == "model") {
-      model_record = ReadModelRecord(entry, root, error_stream);
-      if (!model_record) {
-        return std::nullopt;
-      }
-      model_job = MakeModelJob(entry, *model_record);
-    }
-    const auto& job = model_record ? model_job : entry;
 
-    ImportManifestJob manifest_job {};
-    manifest_job.source_key = manifest.defaults.source_key;
-    if (!ReadSourceKey(job, manifest_job.source_key, error_stream)) {
+    if (const auto error = SchemaValidator::Instance().Validate(*json_data);
+      error.has_value()) {
+      error_stream << "ERROR: manifest schema validation failed:\n" << *error;
+      if (!error->empty() && error->back() != '\n') {
+        error_stream << "\n";
+      }
       return std::nullopt;
     }
-    manifest_job.loose_cooked_layout = manifest.defaults.loose_cooked_layout;
-    if (job.contains("layout")) {
-      const auto& layout = job.at("layout");
+    if (!RequireRelativeFolders(*json_data, error_stream)) {
+      return std::nullopt;
+    }
+
+    ImportManifest manifest {};
+    manifest.version = json_data->value("version", 1U);
+    if (!ReadSourceKey(
+          *json_data, manifest.defaults.source_key, error_stream)) {
+      return std::nullopt;
+    }
+
+    if (!ReadOptionalUIntField(*json_data, "thread_pool_size",
+          manifest.thread_pool_size, error_stream)) {
+      return std::nullopt;
+    }
+    if (!ReadOptionalUIntField(*json_data, "max_in_flight_jobs",
+          manifest.max_in_flight_jobs, error_stream)) {
+      return std::nullopt;
+    }
+    if (!ReadOptionalUIntField(*json_data, "job_admission_capacity",
+          manifest.job_admission_capacity, error_stream)) {
+      return std::nullopt;
+    }
+    if (json_data->contains("concurrency")) {
+      if (!(*json_data).at("concurrency").is_object()) {
+        error_stream << "ERROR: concurrency must be an object\n";
+        return std::nullopt;
+      }
+      ImportConcurrency concurrency {};
+      if (!ApplyConcurrencyOverrides(
+            (*json_data).at("concurrency"), concurrency, error_stream)) {
+        return std::nullopt;
+      }
+      manifest.concurrency = concurrency;
+    }
+
+    if (manifest.version != 1U) {
+      error_stream << "ERROR: unsupported manifest version: "
+                   << manifest.version << "\n";
+      return std::nullopt;
+    }
+
+    if (json_data->contains("layout")) {
+      const auto& layout = (*json_data).at("layout");
       if (!layout.is_object()) {
-        error_stream << "ERROR: job.layout must be an object\n";
+        error_stream << "ERROR: layout must be an object\n";
         return std::nullopt;
       }
       if (!ApplyLayoutOverrides(
-            layout, manifest_job.loose_cooked_layout, error_stream)) {
-        return std::nullopt;
-      }
-    }
-    manifest_job.texture = manifest.defaults.texture;
-    manifest_job.fbx = manifest.defaults.fbx;
-    manifest_job.gltf = manifest.defaults.gltf;
-    manifest_job.script = manifest.defaults.script;
-    manifest_job.scripting_sidecar = manifest.defaults.scripting_sidecar;
-    manifest_job.physics_sidecar = manifest.defaults.physics_sidecar;
-    manifest_job.input = manifest.defaults.input;
-    manifest_job.buffer_container = manifest.defaults.buffer_container;
-    manifest_job.material_descriptor = manifest.defaults.material_descriptor;
-    manifest_job.physics_material_descriptor
-      = manifest.defaults.physics_material_descriptor;
-    manifest_job.collision_shape_descriptor
-      = manifest.defaults.collision_shape_descriptor;
-    manifest_job.geometry_descriptor = manifest.defaults.geometry_descriptor;
-    manifest_job.scene_descriptor = manifest.defaults.scene_descriptor;
-    manifest_job.fbx.texture_defaults = manifest.defaults.texture;
-    manifest_job.gltf.texture_defaults = manifest.defaults.texture;
-
-    if (!job.contains("type") || !job.at("type").is_string()) {
-      error_stream << "ERROR: job.type is required and must be a string\n";
-      return std::nullopt;
-    }
-    manifest_job.job_type = job.at("type").get<std::string>();
-    if (manifest_job.job_type.empty()) {
-      error_stream << "ERROR: job.type must not be empty\n";
-      return std::nullopt;
-    }
-
-    if (manifest_job.job_type != "input") {
-      if (!CollectJobDependencies(job, manifest_job.job_type, false,
-            manifest_job.id, manifest_job.depends_on, error_stream)) {
+            layout, manifest.defaults.loose_cooked_layout, error_stream)) {
         return std::nullopt;
       }
     }
 
-    if (manifest_job.job_type == "input") {
-      for (auto it = job.begin(); it != job.end(); ++it) {
-        if (!IsAllowedInputJobKey(it.key())) {
-          error_stream
-            << "ERROR [input.manifest.key_not_allowed]: key '" << it.key()
-            << "' is not allowed for input jobs; allowed keys are "
-               "'id', 'type', 'source', 'virtual_path', 'depends_on', "
-               "'output', 'layout', 'cooked_context_roots', 'source_key'\n";
+    const auto manifest_dir = std::filesystem::absolute(manifest_directory);
+
+    if (options.mount_table) {
+      manifest.mounts = *options.mount_table;
+    } else {
+      const auto project_root
+        = json_data->value("project_root", std::string {});
+      manifest.mounts = ResolveMountTable(MountTableRequest {
+        .project_root = options.project_root.value_or(
+          (manifest_dir / project_root).lexically_normal()),
+        .declarations = ReadMountDeclarations(*json_data),
+        .form = MountDeclarationForm::kCommittedFile,
+        .declared_in = declared_in,
+        .working_directory = std::filesystem::current_path(),
+        .mounts_option = options.mounts_file,
+        .owner = options.owner,
+      });
+      PrintDiagnostics(manifest.mounts.diagnostics, error_stream);
+      if (!manifest.mounts.IsValid()) {
+        return std::nullopt;
+      }
+    }
+    manifest.project_root = manifest.mounts.project_root;
+
+    auto manifest_output_root = std::string {};
+    if (!ReadStringField(
+          *json_data, "output", manifest_output_root, error_stream)) {
+      return std::nullopt;
+    }
+    if (!manifest_output_root.empty()) {
+      manifest.defaults.texture.cooked_root = manifest_output_root;
+      manifest.defaults.fbx.cooked_root = manifest_output_root;
+      manifest.defaults.gltf.cooked_root = manifest_output_root;
+      manifest.defaults.script.cooked_root = manifest_output_root;
+      manifest.defaults.scripting_sidecar.cooked_root = manifest_output_root;
+      manifest.defaults.physics_sidecar.cooked_root = manifest_output_root;
+      manifest.defaults.input.cooked_root = manifest_output_root;
+      manifest.defaults.buffer_container.cooked_root = manifest_output_root;
+      manifest.defaults.material_descriptor.cooked_root = manifest_output_root;
+      manifest.defaults.physics_material_descriptor.cooked_root
+        = manifest_output_root;
+      manifest.defaults.collision_shape_descriptor.cooked_root
+        = manifest_output_root;
+      manifest.defaults.geometry_descriptor.cooked_root = manifest_output_root;
+      manifest.defaults.scene_descriptor.cooked_root = manifest_output_root;
+    }
+
+    if (json_data->contains("defaults")) {
+      const auto& defaults = (*json_data).at("defaults");
+      if (!ReadSourceKey(
+            defaults, manifest.defaults.source_key, error_stream)) {
+        return std::nullopt;
+      }
+      if (!defaults.is_object()) {
+        error_stream << "ERROR: defaults must be an object\n";
+        return std::nullopt;
+      }
+
+      if (defaults.contains("texture")) {
+        const auto& texture_defaults = defaults.at("texture");
+        if (!texture_defaults.is_object()) {
+          error_stream << "ERROR: defaults.texture must be an object\n";
+          return std::nullopt;
+        }
+        if (!ApplyCommonOverrides(
+              texture_defaults, manifest.defaults.texture, error_stream)) {
+          return std::nullopt;
+        }
+        if (!ApplyImportOptions(texture_defaults,
+              manifest.defaults.texture.with_content_hashing, error_stream)) {
+          return std::nullopt;
+        }
+        if (!ApplyTextureOverrides(
+              texture_defaults, manifest.defaults.texture, error_stream)) {
           return std::nullopt;
         }
       }
+
+      if (defaults.contains("scene")) {
+        const auto& scene_defaults = defaults.at("scene");
+        if (!scene_defaults.is_object()) {
+          error_stream << "ERROR: defaults.scene must be an object\n";
+          return std::nullopt;
+        }
+        if (!ApplyCommonSceneOverrides(
+              scene_defaults, manifest.defaults.fbx, error_stream)) {
+          return std::nullopt;
+        }
+        if (!ApplyCommonSceneOverrides(
+              scene_defaults, manifest.defaults.gltf, error_stream)) {
+          return std::nullopt;
+        }
+        if (!ApplySceneOverrides(
+              scene_defaults, manifest.defaults.fbx, error_stream)) {
+          return std::nullopt;
+        }
+        if (!ApplySceneOverrides(
+              scene_defaults, manifest.defaults.gltf, error_stream)) {
+          return std::nullopt;
+        }
+      }
+
+      if (defaults.contains("script")) {
+        const auto& script_defaults = defaults.at("script");
+        if (!script_defaults.is_object()) {
+          error_stream << "ERROR: defaults.script must be an object\n";
+          return std::nullopt;
+        }
+        if (!ApplyCommonScriptOverrides(
+              script_defaults, manifest.defaults.script, error_stream)) {
+          return std::nullopt;
+        }
+        if (!ApplyImportOptions(script_defaults,
+              manifest.defaults.script.with_content_hashing, error_stream)) {
+          return std::nullopt;
+        }
+        if (!ApplyScriptAssetOverrides(
+              script_defaults, manifest.defaults.script, error_stream)) {
+          return std::nullopt;
+        }
+      }
+
+      if (defaults.contains("scripting_sidecar")) {
+        const auto& sidecar_defaults = defaults.at("scripting_sidecar");
+        if (!sidecar_defaults.is_object()) {
+          error_stream
+            << "ERROR: defaults.scripting_sidecar must be an object\n";
+          return std::nullopt;
+        }
+        if (!ApplyCommonScriptOverrides(sidecar_defaults,
+              manifest.defaults.scripting_sidecar, error_stream)) {
+          return std::nullopt;
+        }
+        if (!ApplyImportOptions(sidecar_defaults,
+              manifest.defaults.scripting_sidecar.with_content_hashing,
+              error_stream)) {
+          return std::nullopt;
+        }
+        if (!ApplyScriptingSidecarOverrides(sidecar_defaults,
+              manifest.defaults.scripting_sidecar, error_stream)) {
+          return std::nullopt;
+        }
+      }
+
+      if (defaults.contains("physics_sidecar")) {
+        const auto& sidecar_defaults = defaults.at("physics_sidecar");
+        if (!sidecar_defaults.is_object()) {
+          error_stream << "ERROR: defaults.physics_sidecar must be an object\n";
+          return std::nullopt;
+        }
+        if (!ApplyCommonScriptOverrides(sidecar_defaults,
+              manifest.defaults.physics_sidecar, error_stream)) {
+          return std::nullopt;
+        }
+        if (!ApplyImportOptions(sidecar_defaults,
+              manifest.defaults.physics_sidecar.with_content_hashing,
+              error_stream)) {
+          return std::nullopt;
+        }
+        if (!ApplyPhysicsSidecarOverrides(sidecar_defaults,
+              manifest.defaults.physics_sidecar, error_stream)) {
+          return std::nullopt;
+        }
+      }
+
+      if (defaults.contains("input")) {
+        const auto& input_defaults = defaults.at("input");
+        if (!input_defaults.is_object()) {
+          error_stream << "ERROR: defaults.input must be an object\n";
+          return std::nullopt;
+        }
+        if (!ApplyCommonInputOverrides(
+              input_defaults, manifest.defaults.input, error_stream)) {
+          return std::nullopt;
+        }
+      }
+
+      if (defaults.contains("layout")) {
+        const auto& layout_defaults = defaults.at("layout");
+        if (!layout_defaults.is_object()) {
+          error_stream << "ERROR: defaults.layout must be an object\n";
+          return std::nullopt;
+        }
+        if (!ApplyLayoutOverrides(layout_defaults,
+              manifest.defaults.loose_cooked_layout, error_stream)) {
+          return std::nullopt;
+        }
+      }
+
+      if (defaults.contains("material_descriptor")) {
+        const auto& material_defaults = defaults.at("material_descriptor");
+        if (!material_defaults.is_object()) {
+          error_stream
+            << "ERROR: defaults.material_descriptor must be an object\n";
+          return std::nullopt;
+        }
+        if (!ApplyCommonMaterialDescriptorOverrides(material_defaults,
+              manifest.defaults.material_descriptor, error_stream)) {
+          return std::nullopt;
+        }
+        if (!ApplyMaterialDescriptorOverrides(material_defaults,
+              manifest.defaults.material_descriptor, error_stream)) {
+          return std::nullopt;
+        }
+      }
+
+      if (defaults.contains("physics_material_descriptor")) {
+        const auto& material_defaults
+          = defaults.at("physics_material_descriptor");
+        if (!material_defaults.is_object()) {
+          error_stream << "ERROR: defaults.physics_material_descriptor must be "
+                          "an object\n";
+          return std::nullopt;
+        }
+        if (!ApplyCommonPhysicsMaterialDescriptorOverrides(material_defaults,
+              manifest.defaults.physics_material_descriptor, error_stream)) {
+          return std::nullopt;
+        }
+        if (!ApplyPhysicsMaterialDescriptorOverrides(material_defaults,
+              manifest.defaults.physics_material_descriptor, error_stream)) {
+          return std::nullopt;
+        }
+      }
+
+      if (defaults.contains("collision_shape_descriptor")) {
+        const auto& shape_defaults = defaults.at("collision_shape_descriptor");
+        if (!shape_defaults.is_object()) {
+          error_stream
+            << "ERROR: defaults.collision_shape_descriptor must be an object\n";
+          return std::nullopt;
+        }
+        if (!ApplyCommonCollisionShapeDescriptorOverrides(shape_defaults,
+              manifest.defaults.collision_shape_descriptor, error_stream)) {
+          return std::nullopt;
+        }
+        if (!ApplyCollisionShapeDescriptorOverrides(shape_defaults,
+              manifest.defaults.collision_shape_descriptor, error_stream)) {
+          return std::nullopt;
+        }
+      }
+
+      if (defaults.contains("geometry_descriptor")) {
+        const auto& geometry_defaults = defaults.at("geometry_descriptor");
+        if (!geometry_defaults.is_object()) {
+          error_stream
+            << "ERROR: defaults.geometry_descriptor must be an object\n";
+          return std::nullopt;
+        }
+        if (!ApplyCommonGeometryDescriptorOverrides(geometry_defaults,
+              manifest.defaults.geometry_descriptor, error_stream)) {
+          return std::nullopt;
+        }
+        if (!ApplyGeometryDescriptorOverrides(geometry_defaults,
+              manifest.defaults.geometry_descriptor, error_stream)) {
+          return std::nullopt;
+        }
+      }
+
+      if (defaults.contains("scene_descriptor")) {
+        const auto& scene_descriptor_defaults = defaults.at("scene_descriptor");
+        if (!scene_descriptor_defaults.is_object()) {
+          error_stream
+            << "ERROR: defaults.scene_descriptor must be an object\n";
+          return std::nullopt;
+        }
+        if (!ApplyCommonSceneDescriptorOverrides(scene_descriptor_defaults,
+              manifest.defaults.scene_descriptor, error_stream)) {
+          return std::nullopt;
+        }
+        if (!ApplySceneDescriptorOverrides(scene_descriptor_defaults,
+              manifest.defaults.scene_descriptor, error_stream)) {
+          return std::nullopt;
+        }
+      }
+
+      if (defaults.contains("buffer_container")) {
+        const auto& buffer_container_defaults = defaults.at("buffer_container");
+        if (!buffer_container_defaults.is_object()) {
+          error_stream
+            << "ERROR: defaults.buffer_container must be an object\n";
+          return std::nullopt;
+        }
+        if (!ApplyCommonBufferContainerOverrides(buffer_container_defaults,
+              manifest.defaults.buffer_container, error_stream)) {
+          return std::nullopt;
+        }
+        if (!ApplyBufferContainerOverrides(buffer_container_defaults,
+              manifest.defaults.buffer_container, error_stream)) {
+          return std::nullopt;
+        }
+      }
+    }
+
+    ResolveCookedRootsRelativeToManifest(manifest_dir, manifest.defaults);
+
+    if (!json_data->contains("jobs") || !(*json_data).at("jobs").is_array()) {
+      error_stream << "ERROR: manifest.jobs must be an array\n";
+      return std::nullopt;
+    }
+
+    for (const auto& entry : (*json_data).at("jobs")) {
+      if (!entry.is_object()) {
+        error_stream << "ERROR: job entries must be objects\n";
+        return std::nullopt;
+      }
+      auto model_record = std::shared_ptr<const ModelImportRecordContent> {};
+      auto model_job = json {};
+      if (entry.value("type", std::string {}) == "model") {
+        model_record = ReadModelRecord(entry, manifest.mounts,
+          fmt::format("jobs[{}].record", manifest.jobs.size()), error_stream);
+        if (!model_record) {
+          return std::nullopt;
+        }
+        model_job = MakeModelJob(entry, *model_record);
+      }
+      const auto& job = model_record ? model_job : entry;
+      const auto job_field = fmt::format("jobs[{}]", manifest.jobs.size());
+
+      ImportManifestJob manifest_job {};
+      manifest_job.source_key = manifest.defaults.source_key;
+      if (!ReadSourceKey(job, manifest_job.source_key, error_stream)) {
+        return std::nullopt;
+      }
+      manifest_job.loose_cooked_layout = manifest.defaults.loose_cooked_layout;
+      if (job.contains("layout")) {
+        const auto& layout = job.at("layout");
+        if (!layout.is_object()) {
+          error_stream << "ERROR: job.layout must be an object\n";
+          return std::nullopt;
+        }
+        if (!ApplyLayoutOverrides(
+              layout, manifest_job.loose_cooked_layout, error_stream)) {
+          return std::nullopt;
+        }
+      }
+      manifest_job.texture = manifest.defaults.texture;
+      manifest_job.fbx = manifest.defaults.fbx;
+      manifest_job.gltf = manifest.defaults.gltf;
+      manifest_job.script = manifest.defaults.script;
+      manifest_job.scripting_sidecar = manifest.defaults.scripting_sidecar;
+      manifest_job.physics_sidecar = manifest.defaults.physics_sidecar;
+      manifest_job.input = manifest.defaults.input;
+      manifest_job.buffer_container = manifest.defaults.buffer_container;
+      manifest_job.material_descriptor = manifest.defaults.material_descriptor;
+      manifest_job.physics_material_descriptor
+        = manifest.defaults.physics_material_descriptor;
+      manifest_job.collision_shape_descriptor
+        = manifest.defaults.collision_shape_descriptor;
+      manifest_job.geometry_descriptor = manifest.defaults.geometry_descriptor;
+      manifest_job.scene_descriptor = manifest.defaults.scene_descriptor;
+      manifest_job.fbx.texture_defaults = manifest.defaults.texture;
+      manifest_job.gltf.texture_defaults = manifest.defaults.texture;
+
+      if (!job.contains("type") || !job.at("type").is_string()) {
+        error_stream << "ERROR: job.type is required and must be a string\n";
+        return std::nullopt;
+      }
+      manifest_job.job_type = job.at("type").get<std::string>();
+      if (manifest_job.job_type.empty()) {
+        error_stream << "ERROR: job.type must not be empty\n";
+        return std::nullopt;
+      }
+
+      if (manifest_job.job_type != "input") {
+        if (!CollectJobDependencies(job, manifest_job.job_type, false,
+              manifest_job.id, manifest_job.depends_on, error_stream)) {
+          return std::nullopt;
+        }
+      }
+
+      if (manifest_job.job_type == "input") {
+        for (auto it = job.begin(); it != job.end(); ++it) {
+          if (!IsAllowedInputJobKey(it.key())) {
+            error_stream
+              << "ERROR [input.manifest.key_not_allowed]: key '" << it.key()
+              << "' is not allowed for input jobs; allowed keys are "
+                 "'id', 'type', 'source', 'virtual_path', 'depends_on', "
+                 "'output', 'layout', 'cooked_context_roots', 'source_key'\n";
+            return std::nullopt;
+          }
+        }
+        if (!ReadJobVirtualPath(job, manifest_job, error_stream)) {
+          return std::nullopt;
+        }
+
+        if (!job.contains("source") || !job.at("source").is_string()) {
+          error_stream << "ERROR: input job.source is required and must be a "
+                          "string\n";
+          return std::nullopt;
+        }
+        if (!job.contains("id") || !job.at("id").is_string()) {
+          error_stream << "ERROR [input.manifest.job_id_missing]: input job.id "
+                          "is required and must be a string\n";
+          return std::nullopt;
+        }
+
+        const auto located
+          = LocateJobSource(manifest.mounts, job, job_field, error_stream);
+        if (!located.has_value()) {
+          return std::nullopt;
+        }
+        manifest_job.source_mount_path = located->mount_path;
+        manifest_job.input.source_path = located->file.string();
+        if (!ApplyCommonInputOverrides(job, manifest_job.input, error_stream)) {
+          return std::nullopt;
+        }
+        if (!CollectJobDependencies(job, "input", true, manifest_job.id,
+              manifest_job.depends_on, error_stream)) {
+          return std::nullopt;
+        }
+
+        ResolveCookedRootsRelativeToManifest(manifest_dir, manifest_job);
+
+        manifest.jobs.push_back(std::move(manifest_job));
+        continue;
+      }
+
+      if (manifest_job.job_type == "physics-sidecar") {
+        for (auto it = job.begin(); it != job.end(); ++it) {
+          if (!IsAllowedPhysicsSidecarJobKey(it.key())) {
+            error_stream << "ERROR [physics.manifest.key_not_allowed]: key '"
+                         << it.key() << "' is not allowed for physics-sidecar "
+                         << "jobs\n";
+            return std::nullopt;
+          }
+        }
+      }
+
+      const auto has_source = job.contains("source");
+      const auto has_bindings = job.contains("bindings");
+      const auto is_script_sidecar_job
+        = manifest_job.job_type == "script-sidecar";
+      const auto is_physics_sidecar_job
+        = manifest_job.job_type == "physics-sidecar";
+      const auto is_sidecar_job
+        = is_script_sidecar_job || is_physics_sidecar_job;
+
+      if (has_bindings && !is_sidecar_job) {
+        error_stream << "ERROR: job.bindings is only valid for type "
+                        "'script-sidecar' or 'physics-sidecar'\n";
+        return std::nullopt;
+      }
+
+      if (!has_source && !has_bindings) {
+        if (is_script_sidecar_job) {
+          error_stream << "ERROR: script-sidecar job requires 'source' or "
+                          "'bindings'\n";
+        } else if (is_physics_sidecar_job) {
+          error_stream << "ERROR: physics-sidecar job requires 'source' or "
+                          "'bindings'\n";
+        } else {
+          error_stream
+            << "ERROR: job.source is required and must be a string\n";
+        }
+        return std::nullopt;
+      }
+
+      if (has_source && !job.at("source").is_string()) {
+        error_stream << "ERROR: job.source must be a string\n";
+        return std::nullopt;
+      }
+
+      if (is_sidecar_job && (has_source == has_bindings)) {
+        error_stream << "ERROR: "
+                     << (is_script_sidecar_job ? "script-sidecar"
+                                               : "physics-sidecar")
+                     << " job requires exactly one of 'source' or 'bindings'\n";
+        return std::nullopt;
+      }
+
       if (!ReadJobVirtualPath(job, manifest_job, error_stream)) {
         return std::nullopt;
       }
 
-      if (!job.contains("source") || !job.at("source").is_string()) {
-        error_stream << "ERROR: input job.source is required and must be a "
-                        "string\n";
-        return std::nullopt;
-      }
-      if (!job.contains("id") || !job.at("id").is_string()) {
-        error_stream << "ERROR [input.manifest.job_id_missing]: input job.id "
-                        "is required and must be a string\n";
+      const auto has_instance_bindings = job.contains("instance_bindings");
+      if (has_instance_bindings
+        && (!is_script_sidecar_job || !has_bindings
+          || !job.at("instance_bindings").is_array())) {
+        error_stream
+          << "ERROR: job.instance_bindings is only valid as an array "
+             "of a 'script-sidecar' job with inline bindings\n";
         return std::nullopt;
       }
 
-      manifest_job.input.source_path
-        = ResolveSourcePath(root, job.at("source").get<std::string>());
-      if (!ApplyCommonInputOverrides(job, manifest_job.input, error_stream)) {
+      if (has_bindings) {
+        if (is_script_sidecar_job && !job.at("bindings").is_array()) {
+          error_stream
+            << "ERROR: script-sidecar job.bindings must be an array\n";
+          return std::nullopt;
+        }
+        if (is_physics_sidecar_job && !job.at("bindings").is_object()) {
+          error_stream
+            << "ERROR: physics-sidecar job.bindings must be an object\n";
+          return std::nullopt;
+        }
+      }
+
+      if (has_source) {
+        const auto located
+          = LocateJobSource(manifest.mounts, job, job_field, error_stream);
+        if (!located.has_value()) {
+          return std::nullopt;
+        }
+        manifest_job.source_mount_path = located->mount_path;
+        // A script stores its external path relative to its source's mount.
+        manifest_job.script.source_root
+          = MountFolderOf(manifest.mounts, located->mount_path).string();
+        manifest_job.texture.source_path = located->file.string();
+        manifest_job.fbx.source_path = manifest_job.texture.source_path;
+        manifest_job.gltf.source_path = manifest_job.texture.source_path;
+        manifest_job.script.source_path = manifest_job.texture.source_path;
+        manifest_job.scripting_sidecar.source_path
+          = manifest_job.texture.source_path;
+        manifest_job.physics_sidecar.source_path
+          = manifest_job.texture.source_path;
+        manifest_job.buffer_container.descriptor_path
+          = manifest_job.texture.source_path;
+        manifest_job.material_descriptor.descriptor_path
+          = manifest_job.texture.source_path;
+        manifest_job.physics_material_descriptor.descriptor_path
+          = manifest_job.texture.source_path;
+        manifest_job.collision_shape_descriptor.descriptor_path
+          = manifest_job.texture.source_path;
+        manifest_job.geometry_descriptor.descriptor_path
+          = manifest_job.texture.source_path;
+        manifest_job.scene_descriptor.descriptor_path
+          = manifest_job.texture.source_path;
+      } else {
+        manifest_job.texture.source_path.clear();
+        manifest_job.fbx.source_path.clear();
+        manifest_job.gltf.source_path.clear();
+        manifest_job.script.source_path.clear();
+        manifest_job.scripting_sidecar.source_path.clear();
+        manifest_job.physics_sidecar.source_path.clear();
+        manifest_job.buffer_container.descriptor_path.clear();
+        manifest_job.material_descriptor.descriptor_path.clear();
+        manifest_job.physics_material_descriptor.descriptor_path.clear();
+        manifest_job.collision_shape_descriptor.descriptor_path.clear();
+        manifest_job.geometry_descriptor.descriptor_path.clear();
+        manifest_job.scene_descriptor.descriptor_path.clear();
+      }
+
+      if (has_bindings && is_script_sidecar_job) {
+        auto sidecar_doc = json::object();
+        sidecar_doc.update({ { "bindings", job.at("bindings") } });
+        if (has_instance_bindings) {
+          sidecar_doc.update(
+            { { "instance_bindings", job.at("instance_bindings") } });
+        }
+        manifest_job.scripting_sidecar.inline_bindings_json
+          = sidecar_doc.dump();
+        manifest_job.physics_sidecar.inline_bindings_json.clear();
+      } else if (has_bindings && is_physics_sidecar_job) {
+        auto sidecar_doc = json::object();
+        sidecar_doc.update({ { "bindings", job.at("bindings") } });
+        manifest_job.physics_sidecar.inline_bindings_json = sidecar_doc.dump();
+        manifest_job.scripting_sidecar.inline_bindings_json.clear();
+      } else {
+        manifest_job.scripting_sidecar.inline_bindings_json.clear();
+        manifest_job.physics_sidecar.inline_bindings_json.clear();
+      }
+
+      if (!ApplyCommonOverrides(job, manifest_job.texture, error_stream)) {
         return std::nullopt;
       }
-      if (!CollectJobDependencies(job, "input", true, manifest_job.id,
-            manifest_job.depends_on, error_stream)) {
+
+      if (!ApplyCommonSceneOverrides(job, manifest_job.fbx, error_stream)) {
+        return std::nullopt;
+      }
+
+      if (!ApplyCommonSceneOverrides(job, manifest_job.gltf, error_stream)) {
+        return std::nullopt;
+      }
+      if (!ApplyCommonScriptOverrides(job, manifest_job.script, error_stream)) {
+        return std::nullopt;
+      }
+      if (!ApplyCommonScriptOverrides(
+            job, manifest_job.scripting_sidecar, error_stream)) {
+        return std::nullopt;
+      }
+      if (!ApplyCommonScriptOverrides(
+            job, manifest_job.physics_sidecar, error_stream)) {
+        return std::nullopt;
+      }
+      if (!ApplyCommonMaterialDescriptorOverrides(
+            job, manifest_job.material_descriptor, error_stream)) {
+        return std::nullopt;
+      }
+      if (!ApplyCommonPhysicsMaterialDescriptorOverrides(
+            job, manifest_job.physics_material_descriptor, error_stream)) {
+        return std::nullopt;
+      }
+      if (!ApplyCommonCollisionShapeDescriptorOverrides(
+            job, manifest_job.collision_shape_descriptor, error_stream)) {
+        return std::nullopt;
+      }
+      if (!ApplyCommonBufferContainerOverrides(
+            job, manifest_job.buffer_container, error_stream)) {
+        return std::nullopt;
+      }
+      if (!ApplyCommonGeometryDescriptorOverrides(
+            job, manifest_job.geometry_descriptor, error_stream)) {
+        return std::nullopt;
+      }
+      if (!ApplyCommonSceneDescriptorOverrides(
+            job, manifest_job.scene_descriptor, error_stream)) {
+        return std::nullopt;
+      }
+
+      if (!ApplyImportOptions(
+            job, manifest_job.texture.with_content_hashing, error_stream)) {
+        return std::nullopt;
+      }
+      if (!ApplySceneOverrides(job, manifest_job.fbx, error_stream)) {
+        return std::nullopt;
+      }
+      if (!ApplySceneOverrides(job, manifest_job.gltf, error_stream)) {
+        return std::nullopt;
+      }
+      manifest_job.fbx.model_record = model_record;
+      manifest_job.gltf.model_record = model_record;
+      if (!ApplyImportOptions(
+            job, manifest_job.script.with_content_hashing, error_stream)) {
+        return std::nullopt;
+      }
+      if (!ApplyImportOptions(job,
+            manifest_job.scripting_sidecar.with_content_hashing,
+            error_stream)) {
+        return std::nullopt;
+      }
+      if (!ApplyImportOptions(job,
+            manifest_job.physics_sidecar.with_content_hashing, error_stream)) {
+        return std::nullopt;
+      }
+      if (!ApplyMaterialDescriptorOverrides(
+            job, manifest_job.material_descriptor, error_stream)) {
+        return std::nullopt;
+      }
+      if (!ApplyPhysicsMaterialDescriptorOverrides(
+            job, manifest_job.physics_material_descriptor, error_stream)) {
+        return std::nullopt;
+      }
+      if (!ApplyCollisionShapeDescriptorOverrides(
+            job, manifest_job.collision_shape_descriptor, error_stream)) {
+        return std::nullopt;
+      }
+      if (!ApplyBufferContainerOverrides(
+            job, manifest_job.buffer_container, error_stream)) {
+        return std::nullopt;
+      }
+      if (!ApplyGeometryDescriptorOverrides(
+            job, manifest_job.geometry_descriptor, error_stream)) {
+        return std::nullopt;
+      }
+      if (!ApplySceneDescriptorOverrides(
+            job, manifest_job.scene_descriptor, error_stream)) {
+        return std::nullopt;
+      }
+      if (!ApplyTextureOverrides(job, manifest_job.texture, error_stream)) {
+        return std::nullopt;
+      }
+      if (!ApplyScriptAssetOverrides(job, manifest_job.script, error_stream)) {
+        return std::nullopt;
+      }
+      for (auto& mapping : manifest_job.texture.sources) {
+        const auto located = LocateSource(
+          manifest.mounts, mapping.file, job_field + ".sources", error_stream);
+        if (!located.has_value()) {
+          return std::nullopt;
+        }
+        mapping.file = located->file.string();
+        if (manifest_job.source_mount_path.empty()) {
+          manifest_job.source_mount_path = located->mount_path;
+        }
+      }
+      if (!ApplyScriptingSidecarOverrides(
+            job, manifest_job.scripting_sidecar, error_stream)) {
+        return std::nullopt;
+      }
+      if (!ApplyPhysicsSidecarOverrides(
+            job, manifest_job.physics_sidecar, error_stream)) {
         return std::nullopt;
       }
 
       ResolveCookedRootsRelativeToManifest(manifest_dir, manifest_job);
 
       manifest.jobs.push_back(std::move(manifest_job));
-      continue;
     }
 
-    if (manifest_job.job_type == "physics-sidecar") {
-      for (auto it = job.begin(); it != job.end(); ++it) {
-        if (!IsAllowedPhysicsSidecarJobKey(it.key())) {
-          error_stream << "ERROR [physics.manifest.key_not_allowed]: key '"
-                       << it.key() << "' is not allowed for physics-sidecar "
-                       << "jobs\n";
-          return std::nullopt;
-        }
-      }
-    }
-
-    const auto has_source = job.contains("source");
-    const auto has_bindings = job.contains("bindings");
-    const auto is_script_sidecar_job
-      = manifest_job.job_type == "script-sidecar";
-    const auto is_physics_sidecar_job
-      = manifest_job.job_type == "physics-sidecar";
-    const auto is_sidecar_job = is_script_sidecar_job || is_physics_sidecar_job;
-
-    if (has_bindings && !is_sidecar_job) {
-      error_stream << "ERROR: job.bindings is only valid for type "
-                      "'script-sidecar' or 'physics-sidecar'\n";
-      return std::nullopt;
-    }
-
-    if (!has_source && !has_bindings) {
-      if (is_script_sidecar_job) {
-        error_stream << "ERROR: script-sidecar job requires 'source' or "
-                        "'bindings'\n";
-      } else if (is_physics_sidecar_job) {
-        error_stream << "ERROR: physics-sidecar job requires 'source' or "
-                        "'bindings'\n";
-      } else {
-        error_stream << "ERROR: job.source is required and must be a string\n";
-      }
-      return std::nullopt;
-    }
-
-    if (has_source && !job.at("source").is_string()) {
-      error_stream << "ERROR: job.source must be a string\n";
-      return std::nullopt;
-    }
-
-    if (is_sidecar_job && (has_source == has_bindings)) {
-      error_stream << "ERROR: "
-                   << (is_script_sidecar_job ? "script-sidecar"
-                                             : "physics-sidecar")
-                   << " job requires exactly one of 'source' or 'bindings'\n";
-      return std::nullopt;
-    }
-
-    if (!ReadJobVirtualPath(job, manifest_job, error_stream)) {
-      return std::nullopt;
-    }
-
-    const auto has_instance_bindings = job.contains("instance_bindings");
-    if (has_instance_bindings
-      && (!is_script_sidecar_job || !has_bindings
-        || !job.at("instance_bindings").is_array())) {
-      error_stream << "ERROR: job.instance_bindings is only valid as an array "
-                      "of a 'script-sidecar' job with inline bindings\n";
-      return std::nullopt;
-    }
-
-    if (has_bindings) {
-      if (is_script_sidecar_job && !job.at("bindings").is_array()) {
-        error_stream << "ERROR: script-sidecar job.bindings must be an array\n";
-        return std::nullopt;
-      }
-      if (is_physics_sidecar_job && !job.at("bindings").is_object()) {
-        error_stream
-          << "ERROR: physics-sidecar job.bindings must be an object\n";
-        return std::nullopt;
-      }
-    }
-
-    if (has_source) {
-      const auto source = job.at("source").get<std::string>();
-      manifest_job.texture.source_path = ResolveSourcePath(root, source);
-      manifest_job.fbx.source_path = manifest_job.texture.source_path;
-      manifest_job.gltf.source_path = manifest_job.texture.source_path;
-      manifest_job.script.source_path = manifest_job.texture.source_path;
-      manifest_job.scripting_sidecar.source_path
-        = manifest_job.texture.source_path;
-      manifest_job.physics_sidecar.source_path
-        = manifest_job.texture.source_path;
-      manifest_job.buffer_container.descriptor_path
-        = manifest_job.texture.source_path;
-      manifest_job.material_descriptor.descriptor_path
-        = manifest_job.texture.source_path;
-      manifest_job.physics_material_descriptor.descriptor_path
-        = manifest_job.texture.source_path;
-      manifest_job.collision_shape_descriptor.descriptor_path
-        = manifest_job.texture.source_path;
-      manifest_job.geometry_descriptor.descriptor_path
-        = manifest_job.texture.source_path;
-      manifest_job.scene_descriptor.descriptor_path
-        = manifest_job.texture.source_path;
-    } else {
-      manifest_job.texture.source_path.clear();
-      manifest_job.fbx.source_path.clear();
-      manifest_job.gltf.source_path.clear();
-      manifest_job.script.source_path.clear();
-      manifest_job.scripting_sidecar.source_path.clear();
-      manifest_job.physics_sidecar.source_path.clear();
-      manifest_job.buffer_container.descriptor_path.clear();
-      manifest_job.material_descriptor.descriptor_path.clear();
-      manifest_job.physics_material_descriptor.descriptor_path.clear();
-      manifest_job.collision_shape_descriptor.descriptor_path.clear();
-      manifest_job.geometry_descriptor.descriptor_path.clear();
-      manifest_job.scene_descriptor.descriptor_path.clear();
-    }
-
-    if (has_bindings && is_script_sidecar_job) {
-      auto sidecar_doc = json::object();
-      sidecar_doc.update({ { "bindings", job.at("bindings") } });
-      if (has_instance_bindings) {
-        sidecar_doc.update(
-          { { "instance_bindings", job.at("instance_bindings") } });
-      }
-      manifest_job.scripting_sidecar.inline_bindings_json = sidecar_doc.dump();
-      manifest_job.physics_sidecar.inline_bindings_json.clear();
-    } else if (has_bindings && is_physics_sidecar_job) {
-      auto sidecar_doc = json::object();
-      sidecar_doc.update({ { "bindings", job.at("bindings") } });
-      manifest_job.physics_sidecar.inline_bindings_json = sidecar_doc.dump();
-      manifest_job.scripting_sidecar.inline_bindings_json.clear();
-    } else {
-      manifest_job.scripting_sidecar.inline_bindings_json.clear();
-      manifest_job.physics_sidecar.inline_bindings_json.clear();
-    }
-
-    if (!ApplyCommonOverrides(job, manifest_job.texture, error_stream)) {
-      return std::nullopt;
-    }
-
-    if (!ApplyCommonSceneOverrides(job, manifest_job.fbx, error_stream)) {
-      return std::nullopt;
-    }
-
-    if (!ApplyCommonSceneOverrides(job, manifest_job.gltf, error_stream)) {
-      return std::nullopt;
-    }
-    if (!ApplyCommonScriptOverrides(job, manifest_job.script, error_stream)) {
-      return std::nullopt;
-    }
-    if (!ApplyCommonScriptOverrides(
-          job, manifest_job.scripting_sidecar, error_stream)) {
-      return std::nullopt;
-    }
-    if (!ApplyCommonScriptOverrides(
-          job, manifest_job.physics_sidecar, error_stream)) {
-      return std::nullopt;
-    }
-    if (!ApplyCommonMaterialDescriptorOverrides(
-          job, manifest_job.material_descriptor, error_stream)) {
-      return std::nullopt;
-    }
-    if (!ApplyCommonPhysicsMaterialDescriptorOverrides(
-          job, manifest_job.physics_material_descriptor, error_stream)) {
-      return std::nullopt;
-    }
-    if (!ApplyCommonCollisionShapeDescriptorOverrides(
-          job, manifest_job.collision_shape_descriptor, error_stream)) {
-      return std::nullopt;
-    }
-    if (!ApplyCommonBufferContainerOverrides(
-          job, manifest_job.buffer_container, error_stream)) {
-      return std::nullopt;
-    }
-    if (!ApplyCommonGeometryDescriptorOverrides(
-          job, manifest_job.geometry_descriptor, error_stream)) {
-      return std::nullopt;
-    }
-    if (!ApplyCommonSceneDescriptorOverrides(
-          job, manifest_job.scene_descriptor, error_stream)) {
-      return std::nullopt;
-    }
-
-    if (!ApplyImportOptions(
-          job, manifest_job.texture.with_content_hashing, error_stream)) {
-      return std::nullopt;
-    }
-    if (!ApplySceneOverrides(job, manifest_job.fbx, error_stream)) {
-      return std::nullopt;
-    }
-    if (!ApplySceneOverrides(job, manifest_job.gltf, error_stream)) {
-      return std::nullopt;
-    }
-    manifest_job.fbx.model_record = model_record;
-    manifest_job.gltf.model_record = model_record;
-    if (!ApplyImportOptions(
-          job, manifest_job.script.with_content_hashing, error_stream)) {
-      return std::nullopt;
-    }
-    if (!ApplyImportOptions(job,
-          manifest_job.scripting_sidecar.with_content_hashing, error_stream)) {
-      return std::nullopt;
-    }
-    if (!ApplyImportOptions(job,
-          manifest_job.physics_sidecar.with_content_hashing, error_stream)) {
-      return std::nullopt;
-    }
-    if (!ApplyMaterialDescriptorOverrides(
-          job, manifest_job.material_descriptor, error_stream)) {
-      return std::nullopt;
-    }
-    if (!ApplyPhysicsMaterialDescriptorOverrides(
-          job, manifest_job.physics_material_descriptor, error_stream)) {
-      return std::nullopt;
-    }
-    if (!ApplyCollisionShapeDescriptorOverrides(
-          job, manifest_job.collision_shape_descriptor, error_stream)) {
-      return std::nullopt;
-    }
-    if (!ApplyBufferContainerOverrides(
-          job, manifest_job.buffer_container, error_stream)) {
-      return std::nullopt;
-    }
-    if (!ApplyGeometryDescriptorOverrides(
-          job, manifest_job.geometry_descriptor, error_stream)) {
-      return std::nullopt;
-    }
-    if (!ApplySceneDescriptorOverrides(
-          job, manifest_job.scene_descriptor, error_stream)) {
-      return std::nullopt;
-    }
-    if (!ApplyTextureOverrides(job, manifest_job.texture, error_stream)) {
-      return std::nullopt;
-    }
-    if (!ApplyScriptAssetOverrides(job, manifest_job.script, error_stream)) {
-      return std::nullopt;
-    }
-    if (!manifest_job.script.source_root.empty()) {
-      manifest_job.script.source_root
-        = ResolveSourcePath(manifest_dir, manifest_job.script.source_root);
-    }
-    if (!ApplyScriptingSidecarOverrides(
-          job, manifest_job.scripting_sidecar, error_stream)) {
-      return std::nullopt;
-    }
-    if (!ApplyPhysicsSidecarOverrides(
-          job, manifest_job.physics_sidecar, error_stream)) {
-      return std::nullopt;
-    }
-
-    ResolveCookedRootsRelativeToManifest(manifest_dir, manifest_job);
-
-    manifest.jobs.push_back(std::move(manifest_job));
+    return manifest;
   }
 
-  return manifest;
-}
+} // namespace
 
 auto ImportManifestJob::SetCookedRoot(const std::string& cooked_root) -> void
 {
@@ -2023,6 +2390,7 @@ auto ImportManifestJob::BuildRequest(std::ostream& error_stream,
     request->asset_virtual_path = virtual_path;
     request->captured_inputs = captured_inputs;
     request->source_key = source_key;
+    request->source_mount_path = source_mount_path;
     if (!id.empty()) {
       request->orchestration = ImportRequest::OrchestrationMetadata {
         .job_id = id,

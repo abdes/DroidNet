@@ -28,6 +28,7 @@
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Cooker/test/Support/ImportHarness.h>
+#include <Oxygen/Cooker/test/Support/TestPaths.h>
 #include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Testing/GTest.h>
@@ -45,7 +46,7 @@ namespace {
   // the cooked output.
 #pragma pack(push, 1)
   struct BufferSidecarHeader final {
-    char magic[4] = { 'O', 'B', 'U', 'F' };
+    std::array<char, 4> magic = { 'O', 'B', 'U', 'F' };
     uint16_t version = 3;
     uint16_t reserved = 0;
     data::pak::core::ResourceIndexT resource_index
@@ -108,9 +109,9 @@ namespace {
     };
     for (uint32_t i = 0; i < header.view_count; ++i) {
       auto entry = BufferSidecarViewEntry {};
-      std::memcpy(&entry,
-        bytes.data() + sizeof(header) + (i * sizeof(BufferSidecarViewEntry)),
-        sizeof(entry));
+      const auto entry_bytes = std::span(bytes).subspan(
+        sizeof(header) + (i * sizeof(BufferSidecarViewEntry)), sizeof(entry));
+      std::memcpy(&entry, entry_bytes.data(), sizeof(entry));
       sidecar.views.push_back({
         .name = std::string { strings.Get(entry.name_offset) },
         .byte_offset = entry.byte_offset,
@@ -188,6 +189,8 @@ namespace {
 
     auto request = ImportRequest {};
     request.source_path = "inline://buffer-container";
+    request.source_mount_path
+      = oxygen::cooker::test::SourceMountPath(request.source_path);
     request.cooked_root = cooked_root;
     request.loose_cooked_layout.virtual_mount_root = "/.cooked";
     request.buffer_container = ImportRequest::BufferContainerPayload {
@@ -316,6 +319,8 @@ namespace {
 
     auto request = ImportRequest {};
     request.source_path = "inline://buffer-container";
+    request.source_mount_path
+      = oxygen::cooker::test::SourceMountPath(request.source_path);
     request.cooked_root = cooked_root;
     request.loose_cooked_layout.virtual_mount_root = "/.cooked";
     request.buffer_container = ImportRequest::BufferContainerPayload {

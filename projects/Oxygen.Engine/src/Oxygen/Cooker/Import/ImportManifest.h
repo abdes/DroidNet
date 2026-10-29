@@ -28,6 +28,7 @@
 #include <Oxygen/Cooker/Import/SceneDescriptorImportSettings.h>
 #include <Oxygen/Cooker/Import/SceneImportSettings.h>
 #include <Oxygen/Cooker/Import/ScriptImportSettings.h>
+#include <Oxygen/Cooker/Import/SourceMounts.h>
 #include <Oxygen/Cooker/Import/TextureImportSettings.h>
 #include <Oxygen/Cooker/api_export.h>
 #include <Oxygen/Data/SourceKey.h>
@@ -55,6 +56,10 @@ struct ImportManifestJob {
   SceneDescriptorImportSettings scene_descriptor;
   std::string id;
   std::vector<std::string> depends_on;
+
+  //! The recorded source: the mount path of the job's source, located through
+  //! the manifest's mount table; empty for a sidecar with inline bindings.
+  std::string source_mount_path;
 
   //! Identity of the asset a single-asset job cooks; empty for a container.
   /*!
@@ -93,8 +98,26 @@ struct ImportManifestDefaults {
   SceneDescriptorImportSettings scene_descriptor;
 };
 
+//! What a command line gives the loading of a manifest.
+struct ImportManifestLoadOptions final {
+  //! Replaces the manifest's `project_root` (`--root`).
+  std::optional<std::filesystem::path> project_root;
+  //! The mounts file applied above every `.mounts.json` (`--mounts`).
+  std::optional<std::filesystem::path> mounts_file;
+  //! Only the engine content build may declare the `Engine` mount.
+  MountTableOwner owner = MountTableOwner::kProject;
+  //! A resolved table that replaces the manifest's own `mounts`, as when a
+  //! model import record validates its job.
+  observer_ptr<const MountTable> mount_table;
+};
+
 struct ImportManifest {
   uint32_t version = 1;
+  //! The canonical project root: relative mount folders and the project's
+  //! `.mounts.json` belong to it, and relative job sources resolve against it.
+  std::filesystem::path project_root;
+  //! The mount table every source of the manifest is located through.
+  MountTable mounts;
   std::optional<uint32_t> thread_pool_size;
   std::optional<uint32_t> max_in_flight_jobs;
   std::optional<uint32_t> job_admission_capacity;
@@ -127,26 +150,47 @@ struct ImportManifest {
 
   //! Load a manifest from a JSON file.
   /*!
-   Parses the manifest, validates it against the schema, and returns a
-   populated ImportManifest object if successful.
+   Parses the manifest, validates it against the schema, builds its mount
+   table and locates every job's source through it.
+
+   The project root is `project_root`, relative to the manifest's folder (by
+   default that folder), unless `options.project_root` replaces it. Job sources
+   are mount paths (`/Content/...`) or paths relative to the project root that
+   lie in a `Source` mount; output and cooked context roots are relative to the
+   manifest's folder. Every path is relative: an absolute one fails with
+   `path.absolute_committed`, a source in no mount with
+   `import.source_outside_mount`.
 
    @param manifest_path Path to the JSON manifest file.
-     @param root_override Optional override for the root directory used to
-   resolve relative source paths. If unset, source paths are resolved relative
-       to the manifest file's parent directory. Relative output paths are
-       always resolved relative to the manifest file's parent directory.
+   @param options What the command line gives: the root, the mounts file.
    @param error_stream Stream for reporting parsing and validation errors.
    @return A populated ImportManifest on success, or std::nullopt on failure.
   */
   OXGN_COOK_NDAPI static auto Load(const std::filesystem::path& manifest_path,
-    const std::optional<std::filesystem::path>& root_override = std::nullopt,
+    const ImportManifestLoadOptions& options = {},
+    std::ostream& error_stream = std::cerr) -> std::optional<ImportManifest>;
+
+  //! Loads several manifests as one batch with one mount table.
+  /*!
+   Every manifest is loaded with `options`. Their mount tables may declare the
+   same mounts or different ones, never one name for two folders
+   (`mount.name_conflict`, before any job runs). The jobs are merged in order;
+   a job that cooks the same source to the same identity with the same type as
+   an earlier one is cooked once, and the dependencies on it follow the kept
+   job. Two different jobs with one id fail (`batch.job_id_duplicate`).
+
+   The first manifest gives the batch's scheduling settings.
+  */
+  OXGN_COOK_NDAPI static auto LoadBatch(
+    std::span<const std::filesystem::path> manifest_paths,
+    const ImportManifestLoadOptions& options = {},
     std::ostream& error_stream = std::cerr) -> std::optional<ImportManifest>;
 
   //! Parses the same native manifest schema with an explicit path base.
   OXGN_COOK_NDAPI static auto Parse(std::string_view text,
     const std::filesystem::path& manifest_directory,
-    const std::optional<std::filesystem::path>& root_override,
-    std::ostream& error_stream) -> std::optional<ImportManifest>;
+    const ImportManifestLoadOptions& options, std::ostream& error_stream)
+    -> std::optional<ImportManifest>;
 };
 
 } // namespace oxygen::content::import

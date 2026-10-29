@@ -116,6 +116,8 @@ inline auto MakeScriptRequest(const ScriptRequestSpec& spec) -> ImportRequest
   request.options.scripting.source_root = spec.cooked_root.parent_path();
   request.asset_virtual_path
     = CanonicalScriptVirtualPath(spec.source_path.stem().string());
+  request.source_mount_path
+    = oxygen::cooker::test::SourceMountPath(request.source_path);
   return request;
 }
 
@@ -431,6 +433,8 @@ protected:
     request.source_path = spec.source_path;
     request.asset_virtual_path
       = oxygen::cooker::test::ModelVirtualPath(spec.source_path);
+    request.source_mount_path
+      = oxygen::cooker::test::SourceMountPath(request.source_path);
     request.cooked_root = spec.cooked_root;
     request.surface_provenance = source_provenance_;
     request.model_import = oxygen::content::import::ModelImportInputs {};

@@ -95,7 +95,7 @@ class ModelImportRecordCliTests(unittest.TestCase):
                     "jobs": [
                         {
                             "type": "gltf",
-                            "source": source.relative_to(root).as_posix(),
+                            "source": "/Content/" + source.relative_to(root).as_posix(),
                             "virtual_path": "/.cooked/source.gltf",
                             "mip_policy": "full",
                             "mip_filter": "kaiser",
@@ -110,6 +110,8 @@ class ModelImportRecordCliTests(unittest.TestCase):
         content = root / ("deep-" + "a" * 100) / ("b" * 100) / "Content"
         identity = str(uuid.uuid7())
         record = content / "imports" / f"{identity}.import.json"
+        # The models lie beside the content root, in the one source mount.
+        mount = ["--mount", f"Content={root}"]
 
         apply_recipe = [
             "gltf",
@@ -117,8 +119,9 @@ class ModelImportRecordCliTests(unittest.TestCase):
             recipe,
             "--record",
             record,
-            "--content-root",
+            "--root",
             content,
+            *mount,
         ]
         self.run_cli(apply_recipe, succeeds=True)
         first = json.loads(record.read_text(encoding="utf-8"))
@@ -137,7 +140,7 @@ class ModelImportRecordCliTests(unittest.TestCase):
         head = generations / "head.json"
         first_head = json.loads(head.read_text(encoding="utf-8"))
 
-        self.run_cli(["gltf", "--record", record], succeeds=True)
+        self.run_cli(["gltf", "--record", record, *mount], succeeds=True)
         replayed = json.loads(record.read_text(encoding="utf-8"))
         replayed_head = json.loads(head.read_text(encoding="utf-8"))
         self.assertEqual(first["surface_provenance"], replayed["surface_provenance"])
@@ -164,13 +167,13 @@ class ModelImportRecordCliTests(unittest.TestCase):
         self.assertEqual(record.read_bytes(), original_record)
 
         buffer.write_bytes(POSITIONS[:-1])
-        self.run_cli(["gltf", "--record", record], succeeds=False)
+        self.run_cli(["gltf", "--record", record, *mount], succeeds=False)
         self.assertEqual(record.read_bytes(), original_record)
         buffer.write_bytes(POSITIONS)
 
         conflicts = [
-            ["gltf", "--record", record, "--normals", "generate"],
-            ["gltf", "--record", record, "--content-root", content],
+            ["gltf", "--record", record, *mount, "--normals", "generate"],
+            ["gltf", "--record", record, *mount, "--root", content],
             [*apply_recipe, "--name", "override"],
             [*apply_recipe, "--content-hashing", "false"],
             ["fbx", *apply_recipe[1:]],
@@ -197,8 +200,10 @@ class ModelImportRecordCliTests(unittest.TestCase):
                 [
                     "gltf",
                     model,
-                    "--content-root",
+                    "--root",
                     content,
+                    "--mount",
+                    f"Content={content}",
                     "--virtual-path",
                     virtual_path,
                     "--report",
@@ -239,7 +244,7 @@ class ModelImportRecordCliTests(unittest.TestCase):
         self.assertEqual(len(self.records(content)), 2)
 
         # A recipe without --record finds, or makes, the record of its job.
-        recipe_model = write_model(content / "Recipe")
+        write_model(content / "Recipe")
         recipe = self.root / "recipe.json"
         recipe.write_text(
             json.dumps(
@@ -248,7 +253,7 @@ class ModelImportRecordCliTests(unittest.TestCase):
                     "jobs": [
                         {
                             "type": "gltf",
-                            "source": recipe_model.as_posix(),
+                            "source": "/Content/Recipe/source.gltf",
                             "virtual_path": "/.cooked/Recipe/source.gltf",
                         }
                     ],
@@ -257,13 +262,25 @@ class ModelImportRecordCliTests(unittest.TestCase):
             encoding="utf-8",
         )
         self.run_cli(
-            ["gltf", "--recipe", recipe, "--content-root", content], succeeds=True
+            [
+                "gltf",
+                "--recipe",
+                recipe,
+                "--root",
+                content,
+                "--mount",
+                f"Content={content}",
+            ],
+            succeeds=True,
         )
         self.assertEqual(len(self.records(content)), 3)
 
         # A replay whose source is gone says so.
         shutil.rmtree(renamed_dir)
-        result = self.run_cli(["gltf", "--record", record], succeeds=False)
+        result = self.run_cli(
+            ["gltf", "--record", record, "--mount", f"Content={content}"],
+            succeeds=False,
+        )
         self.assertIn("import.source_missing", result.stdout + result.stderr)
 
 

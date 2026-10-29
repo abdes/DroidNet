@@ -17,7 +17,6 @@
 #include <string_view>
 #include <type_traits>
 #include <utility>
-#include <variant>
 #include <vector>
 
 #include <Oxygen/Content/LooseCookedIndex.h>
@@ -28,6 +27,7 @@
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Cooker/test/Support/ImportHarness.h>
 #include <Oxygen/Cooker/test/Support/TextureLibraryFixture.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Testing/GTest.h>
@@ -78,18 +78,24 @@ namespace {
 
   using oxygen::cooker::test::HasDiagnosticCode;
 
+  //! The identity a material request is submitted under.
+  struct MaterialIdentity final {
+    std::string_view asset_virtual_path
+      = "/.cooked/Materials/woodfloor007.omat";
+    std::string_view job_name = "woodfloor007";
+  };
+
   class MaterialDescriptorImportJobTest : public ImportServiceTest {
   protected:
     auto MakeRequest(const std::filesystem::path& cooked_root,
-      std::string descriptor_json,
-      std::string_view asset_virtual_path
-      = "/.cooked/Materials/woodfloor007.omat",
-      std::string_view job_name = "woodfloor007") -> ImportRequest
+      std::string descriptor_json, const MaterialIdentity& identity = {})
+      -> ImportRequest
     {
       auto request = ImportRequest {};
       request.source_path = "inline://woodfloor007.omat.json";
-      request.job_name = std::string(job_name);
-      request.asset_virtual_path = std::string(asset_virtual_path);
+      request.source_mount_path = "/Content/woodfloor007.omat.json";
+      request.job_name = std::string(identity.job_name);
+      request.asset_virtual_path = std::string(identity.asset_virtual_path);
       request.cooked_root = cooked_root;
       request.loose_cooked_layout.virtual_mount_root = "/.cooked";
       request.material_descriptor = ImportRequest::MaterialDescriptorPayload {
@@ -125,15 +131,17 @@ namespace {
   {
     const auto cooked_root = TempDir() / "identity_collision";
     std::filesystem::create_directories(cooked_root);
-    const auto from = [&](std::string_view file) -> ImportRequest {
+    const auto from = [&](std::string_view folder) -> ImportRequest {
       auto request = MakeRequest(cooked_root, R"({ "name": "woodfloor007" })");
-      request.source_path = TempDir() / file;
+      request.source_path = TempDir() / folder / "woodfloor007.omat.json";
+      request.source_mount_path
+        = "/Content/" + std::string(folder) + "/woodfloor007.omat.json";
       return request;
     };
 
-    const auto first = Import(from("woodfloor007.omat.json"));
-    const auto again = Import(from("woodfloor007.omat.json"));
-    const auto other = Import(from("Woodfloor007.omat.json"));
+    const auto first = Import(from("A"));
+    const auto again = Import(from("A"));
+    const auto other = Import(from("B"));
 
     ASSERT_HAS_VALUE(first);
     ASSERT_HAS_VALUE(again);
@@ -148,8 +156,7 @@ namespace {
       = index.FindAssetKeyByVirtualPath("/.cooked/Materials/woodfloor007.omat");
     ASSERT_HAS_VALUE(key);
     EXPECT_EQ(index.FindSourcePath(*key),
-      std::optional<std::string_view>(
-        "/.cooked/Materials/woodfloor007.omat.json"));
+      std::optional<std::string_view>("/Content/A/woodfloor007.omat.json"));
   }
 
   NOLINT_TEST_F(MaterialDescriptorImportJobTest,
@@ -164,7 +171,10 @@ namespace {
         "emissive_intensity": 9.7
       }
     })",
-      "/.cooked/Materials/HdrEmission.omat", "HdrEmission"));
+      {
+        .asset_virtual_path = "/.cooked/Materials/HdrEmission.omat",
+        .job_name = "HdrEmission",
+      }));
     ASSERT_HAS_VALUE(report);
     ASSERT_TRUE(report->success);
     const auto bytes
@@ -293,12 +303,14 @@ namespace {
     constexpr auto kGrid = std::string_view { "/Library/Textures/Grid.otex" };
     const auto library = TempDir() / "library";
     oxygen::cooker::test::WriteTextureLibrary(library, kGrid,
-      { .size_bytes = 4U,
+      {
+        .size_bytes = 4U,
         .width = 1U,
         .height = 1U,
         .depth = 1U,
         .array_layers = 1U,
-        .mip_levels = 1U });
+        .mip_levels = 1U,
+      });
     const auto pak
       = oxygen::cooker::test::PackLibrary(library, TempDir() / "library.pak");
     constexpr auto kDescriptor = R"({
@@ -314,8 +326,11 @@ namespace {
       const auto cooked_root
         = TempDir() / ("tiles_" + context.filename().string());
       std::filesystem::create_directories(cooked_root);
-      auto request = MakeRequest(
-        cooked_root, kDescriptor, "/.cooked/Materials/Tiles.omat", "Tiles");
+      auto request = MakeRequest(cooked_root, kDescriptor,
+        {
+          .asset_virtual_path = "/.cooked/Materials/Tiles.omat",
+          .job_name = "Tiles",
+        });
       request.cooked_context_roots = { context };
 
       // Act

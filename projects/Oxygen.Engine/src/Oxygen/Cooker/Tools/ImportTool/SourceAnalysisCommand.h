@@ -31,6 +31,7 @@ public:
 private:
   const GlobalOptions* global_options_ = nullptr;
   std::string manifest_path_;
+  std::string mounts_path_;
   std::string root_path_;
   std::string report_path_;
   std::string captured_inputs_path_;

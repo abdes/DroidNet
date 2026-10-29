@@ -434,6 +434,8 @@ NOLINT_TEST_F(ModelValuesTest, FbxGeneratesMissingNormalMapTangents)
   request.source_path = root / "static_normal_triangle.fbx";
   request.asset_virtual_path
     = oxygen::cooker::test::ModelVirtualPath(request.source_path);
+  request.source_mount_path
+    = oxygen::cooker::test::SourceMountPath(request.source_path);
   request.cooked_root = root / "cooked";
   request.options.coordinate.bake_transforms_into_meshes = false;
   request.options.tangent_policy
@@ -507,6 +509,8 @@ NOLINT_TEST_F(
         request.source_path = source;
         request.asset_virtual_path
           = oxygen::cooker::test::ModelVirtualPath(request.source_path);
+        request.source_mount_path
+          = oxygen::cooker::test::SourceMountPath(request.source_path);
         request.cooked_root = root / "cooked";
         request.options.coordinate.bake_transforms_into_meshes = false;
         request.options.coordinate.unit_normalization = oxygen::content::
@@ -599,6 +603,8 @@ NOLINT_TEST_F(ModelValuesTest, FbxCookPreservesUnitsHandednessAndValues)
         request.source_path = source;
         request.asset_virtual_path
           = oxygen::cooker::test::ModelVirtualPath(request.source_path);
+        request.source_mount_path
+          = oxygen::cooker::test::SourceMountPath(request.source_path);
         request.cooked_root = root / "cooked";
         request.options.coordinate.bake_transforms_into_meshes = false;
         ImportAndVerifyCleanCopy(std::move(request),
@@ -729,6 +735,8 @@ NOLINT_TEST_F(ModelValuesTest, GltfSettingsShapeTheCookedModel)
   auto request = oxygen::content::import::ImportRequest {};
   request.source_path = source;
   request.asset_virtual_path = oxygen::cooker::test::ModelVirtualPath(source);
+  request.source_mount_path
+    = oxygen::cooker::test::SourceMountPath(request.source_path);
   request.cooked_root = root / "cooked";
 
   // A first import, as the source analysis would, names the parts.
@@ -820,6 +828,8 @@ NOLINT_TEST_F(ModelValuesTest, GltfMaterialRemapBindsTheExistingMaterial)
     auto request = oxygen::content::import::ImportRequest {};
     request.source_path = source;
     request.asset_virtual_path = oxygen::cooker::test::ModelVirtualPath(source);
+    request.source_mount_path
+      = oxygen::cooker::test::SourceMountPath(request.source_path);
     request.cooked_root = root / "cooked";
     request.surface_provenance
       = std::make_shared<const oxygen::content::import::SurfaceProvenance>(
@@ -927,6 +937,8 @@ NOLINT_TEST_F(ModelValuesTest, GeneratedNormalsFollowTheSmoothingAngle)
     auto request = oxygen::content::import::ImportRequest {};
     request.source_path = source;
     request.asset_virtual_path = oxygen::cooker::test::ModelVirtualPath(source);
+    request.source_mount_path
+      = oxygen::cooker::test::SourceMountPath(request.source_path);
     request.cooked_root = root / "cooked";
     request.options.normal_policy = item.normals;
     request.options.normals_smoothing_angle_deg = item.angle;
@@ -981,6 +993,8 @@ NOLINT_TEST_F(ModelValuesTest, GltfWithoutNormalsGetsItsFaceNormals)
   auto request = oxygen::content::import::ImportRequest {};
   request.source_path = source;
   request.asset_virtual_path = oxygen::cooker::test::ModelVirtualPath(source);
+  request.source_mount_path
+    = oxygen::cooker::test::SourceMountPath(request.source_path);
   request.cooked_root = root / "cooked";
   const auto imported = RunImport(std::move(request));
   ASSERT_TRUE(imported.report.success);
@@ -1099,6 +1113,8 @@ NOLINT_TEST_F(ModelValuesTest, FbxSettingsShapeTheCookedModel)
     auto request = oxygen::content::import::ImportRequest {};
     request.source_path = source;
     request.asset_virtual_path = oxygen::cooker::test::ModelVirtualPath(source);
+    request.source_mount_path
+      = oxygen::cooker::test::SourceMountPath(request.source_path);
     request.cooked_root = root / "cooked";
     request.options.coordinate.up_axis = item.up_axis;
     request.options.import_lights = item.lights;

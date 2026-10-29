@@ -37,12 +37,19 @@ OXGN_COOK_NDAPI auto GetEngineShapes() noexcept -> std::span<const EngineShape>;
 
 //! Writes the engine content sources into `directory`: a material descriptor
 //! for the default material, a procedural geometry descriptor for every engine
-//! shape, and the import manifests that cook them into `cooked_root` under
-//! their `/Engine` virtual paths. Descriptor values, bounds and surfaces
-//! come from Oxygen.Data. Throws std::runtime_error when a shape's generator
-//! cannot produce its geometry or a file cannot be written.
+//! shape, and the import manifests that cook them under their `/Engine`
+//! virtual paths.
+/*!
+ The manifests hold no absolute path: they declare the `Engine` mount on
+ `directory`, their project root, and name every source by its mount path.
+ The cooked root is given to the cook (`--cooked-root`), and the batch runs as
+ the engine content build (`--engine-content`). A `.mounts.json` with
+ `"root": true` keeps every mounts file above `directory` from rebinding
+ `Engine`. Descriptor values, bounds and surfaces come from Oxygen.Data.
+ Throws std::runtime_error when a shape's generator cannot produce its
+ geometry or a file cannot be written.
+*/
 OXGN_COOK_NDAPI auto WriteEngineContentSources(
-  const std::filesystem::path& directory,
-  const std::filesystem::path& cooked_root) -> EngineContentManifests;
+  const std::filesystem::path& directory) -> EngineContentManifests;
 
 } // namespace oxygen::content::import

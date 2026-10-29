@@ -5,18 +5,23 @@
 //===----------------------------------------------------------------------===//
 
 #include <expected>
+#include <filesystem>
 #include <memory>
 #include <sstream>
 #include <string>
 #include <string_view>
 #include <system_error>
 #include <utility>
+#include <vector>
+
+#include "SourceMountOptions.h"
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Clap/Command.h>
 #include <Oxygen/Clap/Fluent/CommandBuilder.h>
 #include <Oxygen/Clap/Fluent/DSL.h>
 #include <Oxygen/Clap/Option.h>
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ScriptImportRequestBuilder.h>
 #include <Oxygen/Cooker/Tools/ImportTool/ImportRunner.h>
 #include <Oxygen/Cooker/Tools/ImportTool/MessageWriter.h>
@@ -49,15 +54,6 @@ auto ScriptCommand::BuildCommand() -> std::shared_ptr<clap::Command>
                        .WithValue<std::string>()
                        .StoreTo(&options_.cooked_root)
                        .Build();
-
-  auto source_root
-    = Option::WithKey("script-source-root")
-        .About(
-          "Authoring root for external scripts (matches runtime script roots)")
-        .Long("script-source-root")
-        .WithValue<std::string>()
-        .StoreTo(&options_.source_root)
-        .Build();
 
   auto virtual_path
     = Option::WithKey("virtual-path")
@@ -114,11 +110,11 @@ auto ScriptCommand::BuildCommand() -> std::shared_ptr<clap::Command>
                           .Build();
 
   return CommandBuilder("script")
+    .WithOptions(BuildSourceMountOptions(mount_options_))
     .About("Import a standalone script asset")
     .WithPositionalArguments(source_path)
     .WithOption(std::move(cooked_root))
     .WithOption(std::move(virtual_path))
-    .WithOption(std::move(source_root))
     .WithOption(std::move(job_name))
     .WithOption(std::move(report))
     .WithOption(std::move(compile_scripts))
@@ -139,13 +135,31 @@ auto ScriptCommand::Execute() -> std::expected<void, std::error_code>
     "Global message writer must be set by main");
   auto writer = global_options_->writer;
 
+  const auto mounts = ResolveSourceMounts(mount_options_, writer);
+  if (!mounts.has_value()) {
+    return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+  }
+  // An external script stores its path relative to its source's mount.
+  auto diagnostics = std::vector<ImportDiagnostic> {};
+  if (const auto located = mounts->MountPathOf(
+        std::filesystem::absolute(settings.source_path), diagnostics)) {
+    const auto& path = located->mount_path;
+    if (const auto mount
+      = mounts->Find(path.substr(1, path.find('/', 1) - 1))) {
+      settings.source_root = mount->folder.string();
+    }
+  }
+
   std::ostringstream err;
-  const auto request = internal::BuildScriptAssetRequest(settings, err);
+  auto request = internal::BuildScriptAssetRequest(settings, err);
   if (!request.has_value()) {
     const auto msg = err.str();
     if (!msg.empty()) {
       writer->Error(msg);
     }
+    return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+  }
+  if (!LocateRequestSource(*request, *mounts, writer)) {
     return std::unexpected(std::make_error_code(std::errc::invalid_argument));
   }
 

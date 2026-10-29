@@ -116,7 +116,7 @@ public sealed class SourceBundleDiscoveryTests
         _ = workspace.Write("Shared/data.bin", "new buffer");
         var inspector = new DelegateSourceAnalyzer(async (execution, token) =>
         {
-            var observed = await File.ReadAllTextAsync(execution.Jobs.Single().AttributedSource, token).ConfigureAwait(false);
+            var observed = await File.ReadAllTextAsync(Path.GetFullPath(execution.Jobs.Single().AttributedSource, execution.InputRoot), token).ConfigureAwait(false);
             if (string.Equals(observed, "old source", StringComparison.Ordinal))
             {
                 var facts = await SourceFactsAsync(execution, token, "data.bin").ConfigureAwait(false);
@@ -170,7 +170,7 @@ public sealed class SourceBundleDiscoveryTests
                     Diagnostics = [new()
                     {
                         OperationId = Guid.Empty, Domain = FailureDomain.AssetImport, Severity = DiagnosticSeverity.Error,
-                        Code = "import.unsupported", Message = "Unsupported source feature.", AffectedPath = execution.Jobs.Single().AttributedSource,
+                        Code = "import.unsupported", Message = "Unsupported source feature.", AffectedPath = Path.GetFullPath(execution.Jobs.Single().AttributedSource, execution.InputRoot),
                     }
                     ],
                 }],
@@ -247,7 +247,7 @@ public sealed class SourceBundleDiscoveryTests
     private static async Task<NativeSourceAnalysisReport> SourceFactsAsync(ContentSourceAnalysisExecution execution, CancellationToken token, params string[] dependencies)
     {
         var job = execution.Jobs.Single();
-        var paths = dependencies.Select(path => Path.GetFullPath(Path.Combine(execution.InputRoot, path))).Prepend(job.AttributedSource).ToArray();
+        var paths = dependencies.Select(path => Path.GetFullPath(Path.Combine(execution.InputRoot, path))).Prepend(Path.GetFullPath(job.AttributedSource, execution.InputRoot)).ToArray();
         var observations = ImmutableArray.CreateBuilder<NativeSourceObservation>();
         var diagnostics = ImmutableArray.CreateBuilder<DiagnosticRecord>();
         foreach (var path in paths)
@@ -274,7 +274,7 @@ public sealed class SourceBundleDiscoveryTests
         return new(diagnostics.Count == 0, [new(
             job.Id,
             job.Type,
-            job.AttributedSource,
+            Path.GetFullPath(job.AttributedSource, execution.InputRoot),
             diagnostics.Count == 0,
             [],
             [],

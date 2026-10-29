@@ -24,6 +24,12 @@ public sealed record ContentCookInput(
     FileSystemPath SourceAbsolutePath,
     ContentCookInputRole Role)
 {
+    /// <summary>
+    /// Gets, for a generated input, the mount path of the authored source it derives from (such as
+    /// <c>/Content/Scenes/Main.oscene.json</c>): the cooked index records it as the producer of what the input cooks.
+    /// </summary>
+    public string? DerivedFrom { get; init; }
+
     /// <summary>Tests, before cooking, whether this input will produce an asset.</summary>
     /// <remarks>An input file's actions and contexts are known only from the provenance of its last cook.</remarks>
     /// <param name="virtualPath">The native output identity.</param>

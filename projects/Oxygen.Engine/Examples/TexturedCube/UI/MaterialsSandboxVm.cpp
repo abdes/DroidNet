@@ -197,6 +197,7 @@ auto MaterialsSandboxVm::RequestImport() -> void
   TextureLoadingService::ImportSettings settings {
     .source_path = std::filesystem::path(import_state_.source_path.data()),
     .cooked_root = std::filesystem::path(import_state_.cooked_root.data()),
+    .content_root = content_root_,
     .kind
     = static_cast<TextureLoadingService::ImportKind>(import_state_.import_kind),
     .output_format_idx = import_state_.output_format_idx,

@@ -24,13 +24,16 @@ Supported import kinds:
 ```bash
 # Single script import (compiled + embedded)
 Oxygen.Cooker.ImportTool -o F:/projects/MyGame/.cooked script \
+  --mount Content=F:/projects/MyGame/Content \
   --compile \
   --compile-mode debug \
   --script-storage embedded \
-  Examples/Content/scene_core_script.lua
+  --virtual-path /Content/Scripts/scene_core_script.oscript \
+  F:/projects/MyGame/Content/Scripts/scene_core_script.lua
 
 # Batch import
-Oxygen.Cooker.ImportTool batch --manifest F:/projects/MyGame/import-manifest.json
+Oxygen.Cooker.ImportTool -o F:/projects/MyGame/.cooked batch \
+  --manifest F:/projects/MyGame/import-manifest.json
 ```
 
 ## Global Options
@@ -57,7 +60,9 @@ Oxygen.Cooker.ImportTool --concurrency "t:4/64,b:2/32,g:2/32,s:2/32" batch --man
 
 ## Output Root Resolution
 
-Cooked root must resolve to an absolute path.
+Cooked root must resolve to an absolute path. A manifest holds no absolute
+path: its `output` is relative to the manifest's folder, and the cooked root of
+a generated manifest is passed with `--cooked-root`.
 
 Single-job commands (`texture`, `fbx`, `gltf`, `input`, `script`,
 `script-sidecar`, `physics-sidecar`):
@@ -71,6 +76,20 @@ Batch (`--manifest`):
 2. `defaults.<type>.output`
 3. top-level manifest `output`
 4. global `-o`, `--cooked-root`
+
+## Source mounts
+
+A source is located through a mount table (see the
+[source mounts design](../../../../../design/proposals/source-mounts/README.md)).
+Single import commands take:
+
+- `--mount <Name>=<dir>` (repeatable): declares a source mount.
+- `--mounts <file>`: a mounts file applied above every `.mounts.json` found.
+- `--root <dir>`: the project root; default the working directory.
+
+The positional `source` must lie in a source mount, else the import fails with
+`import.source_outside_mount`. The loose cooked index records each output's
+source as its mount path, `/<Mount>/<path in mount>`.
 
 ## Command Reference
 
@@ -209,23 +228,23 @@ reads a `.glb`'s JSON chunk only, never its binary chunk.
 ### Model import records
 
 A model's import state lives in its model import record,
-`<content_root>/imports/<source_identity>.import.json`
+`<project_root>/imports/<source_identity>.import.json`
 (`oxygen.model-import.schema.json`), which the editor reads and writes too: the
-source, the model's virtual path, its settings, and what earlier imports
+source (a mount path), the model's virtual path, its settings, and what earlier imports
 established (source identity, surface provenance, node continuity, published
 nodes, source fingerprint). The source identity names the record and never
 changes; node and surface IDs derive from it, so they survive moving or
 renaming the model.
 
 ```powershell
-Oxygen.Cooker.ImportTool gltf model.glb --content-root H:/Game/Content --virtual-path /Content/model.glb
-Oxygen.Cooker.ImportTool fbx model.fbx --content-root H:/Game/Content --record H:/Game/Content/imports/<source_identity>.import.json
-Oxygen.Cooker.ImportTool fbx --record H:/Game/Content/imports/<source_identity>.import.json
-Oxygen.Cooker.ImportTool fbx --recipe model.recipe.json --record H:/Game/Content/imports/<source_identity>.import.json --content-root H:/Game/Content
+Oxygen.Cooker.ImportTool gltf model.glb --root H:/Game --virtual-path /Content/model.glb
+Oxygen.Cooker.ImportTool fbx model.fbx --root H:/Game --record H:/Game/imports/<source_identity>.import.json
+Oxygen.Cooker.ImportTool fbx --record H:/Game/imports/<source_identity>.import.json
+Oxygen.Cooker.ImportTool fbx --recipe model.recipe.json --record H:/Game/imports/<source_identity>.import.json --root H:/Game
 ```
 
-With `--content-root` and a source but no `--record`, the tool finds the
-record; the first step that matches decides:
+With `--root` and a source but no `--record`, the tool finds the record,
+matching sources by mount path; the first step that matches decides:
 
 | Step | Finds                                                                | Result                                                                                                                                     |
 | ---- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -243,14 +262,14 @@ them with `--output`.
 The publisher commits the import's surface provenance, published nodes and
 source fingerprint to the record together with the validated immutable
 generation, which it selects in
-`Content/.cooked/imports/<source_identity>/head.json`. Failed or interrupted
+`<project_root>/.cooked/imports/<source_identity>/head.json`. Failed or interrupted
 attempts leave the record and the selection unchanged. External raw sources are
 read only. The
 [pipeline owner](../../Docs/Import/async_import_pipeline_v2.md#model-import-publication)
 defines publication and lifetime.
 
 `--recipe` saves the settings of a single-job gltf or fbx manifest, without
-`defaults`, into the record. Relative sources resolve beside that manifest. The
+`defaults`, into the record. Its sources are mount paths or project-relative paths. The
 command validates format and conflicting options before changing the record.
 Recipe application and record replay accept reporting and execution options;
 content overrides require a direct source or an updated recipe. Worker budgets
@@ -259,7 +278,7 @@ belong to `--thread-pool-size`/`--concurrency`, outside records.
 Reclaim unused generations without another import:
 
 ```powershell
-Oxygen.Cooker.ImportTool reclaim --record H:/Game/Content/imports/<source_identity>.import.json
+Oxygen.Cooker.ImportTool reclaim --record H:/Game/imports/<source_identity>.import.json
 ```
 
 This uses the publisher's record lock and generation leases. It keeps the
@@ -273,8 +292,8 @@ import, recook, packaging and cleanup commands.
 
 A manifest job `{ "type": "model", "record": "imports/<source_identity>.import.json" }`
 runs a record as the gltf or fbx job its source names, with the record's
-settings, virtual path and identity. The record resolves as job sources do,
-against `--root` or beside the manifest. The job may add `id`, `depends_on`,
+settings, virtual path and identity. The record resolves as a mount path or
+a path relative to the project root. The job may add `id`, `depends_on`,
 `output`, `layout`, `cooked_context_roots` and `source_key`; settings stay in
 the record. Jobs carry no source identity or surface provenance of their own.
 
@@ -300,19 +319,14 @@ Options:
 - `--compile <true|false>`
 - `--compile-mode <debug|optimized>`
 - `--script-storage <embedded|external>`
-- `--script-source-root <directory>`: authored content root, required for
-  external storage
 
 Rules:
 
 - `compile=true` with `script-storage=external` embeds the bytecode and records
-  the source path: the runtime prefers the source when a script source root
-  contains it and runs the bytecode otherwise.
-- External source paths are stored relative to `--script-source-root`; the
-  source file must be inside that directory. In batch manifests, set
-  `source_root` on the script job or `defaults.script`. Relative roots resolve
-  from the manifest directory, independently of the input `--root` and cooked
-  output location.
+  the source path: the runtime prefers the source when its mount folder
+  holds it and runs the bytecode otherwise.
+- An external script's stored path is relative to the folder of its source's
+  mount.
 - In this tool, script compile is wired through Luau compiler callback.
 
 Script import writes script descriptors (`*.oscript`) and script payload tables:
@@ -592,11 +606,18 @@ from the execution results of prepared jobs.
 
 Required:
 
-- `-m`, `--manifest <path>`
+- `-m`, `--manifest <path>` (repeatable)
+
+Several manifests run as one batch with one mount table: `mount.name_conflict`
+is reported before any job runs, a job cooking the same source to the same
+identity is cooked once, and a repeated job id fails with
+`batch.job_id_duplicate`.
 
 Optional:
 
-- `--root <path>` (base for resolving relative `source` values)
+- `--root <path>` (the project root; replaces every manifest's `project_root`)
+- `--mounts <file>` (a mounts file applied above every `.mounts.json` found)
+- `--engine-content` (the manifests cook engine content)
 - `--dry-run`
 - `--report <path>`
 - `--cooked-context-root <path>` (repeatable): a loose cooked root or pak file
@@ -604,6 +625,8 @@ Optional:
   beneath the context roots the manifest names. Pass the engine content pak
   (`share/oxygen/engine.pak` in an SDK) to reference `/Engine` assets.
 - `--max-in-flight-jobs <n>`
+
+`analyze-sources` also takes `--mounts`.
 
 ### `versions`
 
@@ -621,7 +644,9 @@ Top-level fields:
 ```json
 {
   "version": 1,
-  "output": "F:/absolute/cooked/root",
+  "project_root": "..",
+  "mounts": [{ "name": "Content", "kind": "Source", "path": "Content" }],
+  "output": "../.cooked/tools/Content",
   "thread_pool_size": 8,
   "max_in_flight_jobs": 16,
   "job_admission_capacity": 64,
@@ -664,10 +689,25 @@ Execution settings are optional; the schema states each default.
 and `queue_capacity` to the values of `ImportConcurrency.h`. A pipeline may set
 one of the two and leave the other at its default.
 
+`project_root` is relative to the manifest's folder (default: the folder);
+`--root` replaces it. `mounts` lists the mounts: `name`, optional `kind`
+(`Source`, `Cooked` or `Pak`) and optional `path`, relative to the project root.
+A mount without `path` is a placeholder a `.mounts.json` binds. `mounts`
+requires the top-level `layout`. Every path is relative; an absolute path in any
+field is refused with `path.absolute_committed`.
+
 Job rules:
 
 - each job requires `type`
-- non-sidecar jobs require `source`
+- non-sidecar jobs require `source`: a mount path (`/Content/...`) or a path
+  relative to `project_root`. The same holds for a model job's `record` and a
+  texture's `sources[].file`
+- a job whose `source` lies in an output folder (a dot-named folder below the
+  project root) reads that derived file and names the authored source it
+  derives from in `derived_from`, a mount path in a `Source` mount; that
+  authored source is recorded as the producer. `derived_from` on a source
+  outside output folders fails with `import.derived_from_not_derived`, one that
+  is not a mount path in a `Source` mount with `import.derived_from_invalid`
 - a job that cooks one asset (`material-descriptor`, `geometry-descriptor`,
   `scene-descriptor`, `script`, `texture`, `texture-descriptor`,
   `physics-material-descriptor`, `collision-shape-descriptor`) requires
@@ -734,30 +774,33 @@ Batch example with one output shared at manifest level:
 ```json
 {
   "version": 1,
-  "output": "F:/projects/DroidNet/projects/Oxygen.Engine/.cooked",
+  "project_root": "..",
+  "mounts": [{ "name": "Content", "path": "Content" }],
+  "output": "../.cooked/Content",
+  "layout": { "virtual_mount_root": "/Content" },
   "jobs": [
     {
       "type": "gltf",
-      "source": "Examples/Content/backpack.glb",
-      "virtual_path": "/.cooked/backpack.glb",
+      "source": "/Content/backpack.glb",
+      "virtual_path": "/Content/backpack.glb",
       "name": "backpack_scene"
     },
     {
       "type": "script",
-      "source": "Examples/Content/backpack_rotate.lua",
-      "virtual_path": "/Descriptors/Scripts/backpack_rotate.oscript",
+      "source": "/Content/backpack_rotate.lua",
+      "virtual_path": "/Content/Scripts/backpack_rotate.oscript",
       "compile": true,
       "script_storage": "embedded",
       "name": "backpack_rotate"
     },
     {
       "type": "script-sidecar",
-      "target_scene_virtual_path": "/.cooked/backpack.glb/backpack.oscene",
+      "target_scene_virtual_path": "/Content/backpack.glb/backpack.oscene",
       "bindings": [
         {
           "node_index": 0,
           "slot_id": "main",
-          "script_virtual_path": "/Descriptors/Scripts/backpack_rotate.oscript",
+          "script_virtual_path": "/Content/Scripts/backpack_rotate.oscript",
           "execution_order": 0,
           "params": [{ "key": "speed", "type": "float", "value": 1.0 }]
         }
@@ -765,7 +808,7 @@ Batch example with one output shared at manifest level:
     },
     {
       "type": "physics-sidecar",
-      "target_scene_virtual_path": "/.cooked/backpack.glb/backpack.oscene",
+      "target_scene_virtual_path": "/Content/backpack.glb/backpack.oscene",
       "bindings": {
         "rigid_bodies": [
           {

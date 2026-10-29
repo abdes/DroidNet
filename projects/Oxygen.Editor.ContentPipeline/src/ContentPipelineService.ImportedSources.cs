@@ -165,7 +165,8 @@ public sealed partial class ContentPipelineService
                 1,
                 (scope.Output ?? throw new InvalidOperationException("The import has no generation owner.")).Path,
                 jobs[0].Layout ?? new ContentImportLayout(AssetPath.Create(models[0].AssetUri.Mount).VirtualPath),
-                jobs);
+                jobs)
+            { Mounts = ContentImportManifestBuilder.CreateMounts(scope.Project) };
             var result = await this.ExecuteManifestAsync(operationId, scope.TargetKind, scope with { Inputs = models }, manifest, [], cancellationToken).ConfigureAwait(false);
             results.Add(models.Aggregate(result, (checkedResult, input) => ValidateImportedIdentities(operationId, scope, input, checkedResult)));
         }

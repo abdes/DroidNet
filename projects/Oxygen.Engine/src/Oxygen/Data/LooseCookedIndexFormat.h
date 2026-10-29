@@ -119,8 +119,9 @@ struct AssetEntry {
   // Offsets are into the string table.
   uint32_t descriptor_relpath_offset = 0; // e.g. "assets/Materials/Dark.mat"
   uint32_t virtual_path_offset = 0; // e.g. "/Content/Materials/Dark.mat"
-  //! Virtual path of the producing source, e.g.
-  //! "/Content/Materials/Dark.omat.json".
+  //! Mount path of the producing source, `/<Mount>/<path in mount>`, e.g.
+  //! "/Content/Materials/Dark.omat.json"; never derived from the asset's
+  //! virtual path.
   uint32_t source_path_offset = 0;
 
   // Mandatory descriptor integrity; runtime hash verification is opt-in.
@@ -158,7 +159,7 @@ struct FileRecord {
   //! Offset into string table for the virtual path; only texture descriptors
   //! have one, every other record uses the empty string at offset 0.
   uint32_t virtual_path_offset = 0; // e.g. "/Content/Textures/Sky.otex"
-  //! Offset into string table for the virtual path of the source that produced
+  //! Offset into string table for the mount path of the source that produced
   //! a texture descriptor; every other record uses the empty string.
   uint32_t source_path_offset = 0; // e.g. "/Content/Ship/Ship.glb"
   std::array<uint8_t, kSha256Size> sha256 {};

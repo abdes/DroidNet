@@ -24,6 +24,7 @@
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
+#include <Oxygen/Cooker/test/Support/TestPaths.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/MeshType.h>
@@ -34,13 +35,20 @@ namespace oxygen::content::import::test {
 
 namespace {
 
-  auto MakeBufferContainerRequest(const std::filesystem::path& source_path,
-    const std::filesystem::path& cooked_root, const json& descriptor_doc)
-    -> ImportRequest
+  //! The buffer manifest to import and the root it is cooked into.
+  struct BufferContainerPaths final {
+    std::filesystem::path source;
+    std::filesystem::path cooked;
+  };
+
+  auto MakeBufferContainerRequest(const BufferContainerPaths& paths,
+    const json& descriptor_doc) -> ImportRequest
   {
     auto request = ImportRequest {};
-    request.source_path = source_path.lexically_normal();
-    request.cooked_root = cooked_root;
+    request.source_path = paths.source.lexically_normal();
+    request.source_mount_path
+      = oxygen::cooker::test::SourceMountPath(request.source_path);
+    request.cooked_root = paths.cooked;
     request.loose_cooked_layout.virtual_mount_root = "/.cooked";
     request.buffer_container = ImportRequest::BufferContainerPayload {
       .normalized_descriptor_json = descriptor_doc.dump(),
@@ -263,7 +271,8 @@ namespace {
   {
     const auto report = SubmitAndWait(service,
       MakeBufferContainerRequest(
-        sources.buffer_manifest_path, cooked_root, descriptor));
+        { .source = sources.buffer_manifest_path, .cooked = cooked_root },
+        descriptor));
     if (!report.has_value()) {
       return ImportReport {};
     }
@@ -668,7 +677,8 @@ NOLINT_TEST(GeometryDescriptorImportJobBuffersTest,
 
   const auto buffer_report = SubmitAndWait(service,
     MakeBufferContainerRequest(
-      buffer_manifest_path, context_cooked_root, buffer_descriptor));
+      { .source = buffer_manifest_path, .cooked = context_cooked_root },
+      buffer_descriptor));
   ASSERT_HAS_VALUE(buffer_report);
   ASSERT_TRUE(buffer_report->success);
 
@@ -768,12 +778,14 @@ NOLINT_TEST(GeometryDescriptorImportJobBuffersTest,
 
   const auto main_report = SubmitAndWait(service,
     MakeBufferContainerRequest(
-      buffer_manifest_path, cooked_root, buffer_descriptor));
+      { .source = buffer_manifest_path, .cooked = cooked_root },
+      buffer_descriptor));
   ASSERT_HAS_VALUE(main_report);
   ASSERT_TRUE(main_report->success);
   const auto context_report = SubmitAndWait(service,
     MakeBufferContainerRequest(
-      buffer_manifest_path, context_cooked_root, buffer_descriptor));
+      { .source = buffer_manifest_path, .cooked = context_cooked_root },
+      buffer_descriptor));
   ASSERT_HAS_VALUE(context_report);
   ASSERT_TRUE(context_report->success);
 

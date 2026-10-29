@@ -39,9 +39,11 @@ public sealed class SceneImportSourceDiscovery(IContentCookCoordinator coordinat
         try
         {
             CookRunContext.Report(new(Message: "Reading source content and dependencies."));
-            var execution = new ContentSourceAnalysisExecution(operation.OperationId, directory, scratch, [recipe with { Source = primary }])
+            // The source's folder is the analysis root and its one mount: a manifest names no absolute path.
+            var execution = new ContentSourceAnalysisExecution(operation.OperationId, directory, scratch, [recipe with { Source = Path.GetFileName(primary) }])
             {
                 Artifacts = artifacts,
+                Mounts = [new ContentImportMount("Source", ".")],
             };
             var report = await native.AnalyzeSourcesAsync(execution, cancellationToken).ConfigureAwait(false);
             coordinator.VerifyWriter(operation);

@@ -265,6 +265,17 @@ namespace {
       path_parts.end());
   }
 
+  //! True when a folder of `path` below `root` is dot-named. Both are
+  //! canonical.
+  auto InOutputFolder(const fs::path& path, const fs::path& root) -> bool
+  {
+    const auto segments = SegmentsBelow(path, root);
+    return segments.has_value()
+      && std::ranges::any_of(*segments, [](const fs::path& segment) -> bool {
+           return segment.string().starts_with('.');
+         });
+  }
+
   auto IsSameFolder(const fs::path& a, const fs::path& b) -> bool
   {
     return SegmentsBelow(a, b)
@@ -745,15 +756,7 @@ namespace {
 
     auto CheckOutputFolder(const Mount& mount) -> void
     {
-      const auto segments = SegmentsBelow(mount.folder, table_->project_root);
-      if (!segments.has_value()) {
-        return;
-      }
-      const auto in_output
-        = std::ranges::any_of(*segments, [](const fs::path& segment) -> bool {
-            return segment.string().starts_with('.');
-          });
-      if (in_output) {
+      if (InOutputFolder(mount.folder, table_->project_root)) {
         reporter_.Report(mount_codes::kFolderInOutput,
           Subject {
             .file = DescribeOrigin(mount),
@@ -850,6 +853,82 @@ auto MountTable::Find(const std::string_view name) const
   const auto it = std::ranges::find(mounts, name, &Mount::name);
   return it == mounts.end() ? observer_ptr<const Mount> {}
                             : make_observer(&*it);
+}
+
+auto MountTable::IsInOutputFolder(const fs::path& file) const -> bool
+{
+  const auto canonical
+    = Canonical(file.is_absolute() ? file : project_root / file);
+  return InOutputFolder(canonical.parent_path(), project_root);
+}
+
+auto MountTable::MountPathOf(const fs::path& file,
+  std::vector<ImportDiagnostic>& findings) const -> std::optional<MountedSource>
+{
+  const auto canonical
+    = Canonical(file.is_absolute() ? file : project_root / file);
+  for (const auto& mount : mounts) {
+    if (mount.kind != MountKind::kSource || mount.folder.empty()) {
+      continue;
+    }
+    const auto segments = SegmentsBelow(canonical, mount.folder);
+    if (!segments.has_value() || segments->empty()) {
+      continue;
+    }
+    auto mount_path = "/" + mount.name;
+    for (const auto& segment : *segments) {
+      mount_path += "/" + segment.generic_string();
+    }
+    return MountedSource { .file = canonical, .mount_path = mount_path };
+  }
+  Reporter { findings }.Report(mount_codes::kSourceOutsideMount,
+    Subject { .file = fs::path { declared_in }, .field = {}, .mount = {} },
+    canonical.generic_string());
+  return std::nullopt;
+}
+
+auto MountTable::LocateSource(const CommittedPath& committed,
+  std::vector<ImportDiagnostic>& findings) const -> std::optional<MountedSource>
+{
+  const auto reporter = Reporter { findings };
+  const auto subject = Subject {
+    .file = fs::path { declared_in },
+    .field = std::string { committed.field },
+    .mount = {},
+  };
+  // A mount path starts with one slash and no root name; any other rooted
+  // path is a machine's absolute path.
+  const auto text = ToPath(std::string { committed.text });
+  if (text.has_root_name()
+    || (text.has_root_directory() && !committed.text.starts_with('/'))) {
+    reporter.Report(mount_codes::kAbsoluteCommitted, subject, committed.text);
+    return std::nullopt;
+  }
+  if (!text.has_root_directory()) {
+    return MountPathOf(project_root / text, findings);
+  }
+
+  const auto parts = Components(text.relative_path());
+  const auto named = parts.empty() ? std::string {} : parts.front().string();
+  const auto mount
+    = std::ranges::find_if(mounts, [&named](const Mount& m) -> bool {
+        return FoldName(m.name) == FoldName(named);
+      });
+  if (mount == mounts.end() || mount->kind != MountKind::kSource
+    || parts.size() < 2) {
+    reporter.Report(mount_codes::kSourceOutsideMount, subject, committed.text);
+    return std::nullopt;
+  }
+  if (mount->state == MountState::kUnbound) {
+    reporter.Report(
+      mount_codes::kSourceMountUnbound, subject, committed.text, mount->name);
+    return std::nullopt;
+  }
+  auto file = mount->folder;
+  for (const auto& part : parts | std::views::drop(1)) {
+    file /= part;
+  }
+  return MountPathOf(file, findings);
 }
 
 auto IsValidMountName(const std::string_view name) -> bool

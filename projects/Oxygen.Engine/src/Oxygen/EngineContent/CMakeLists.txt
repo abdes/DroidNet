@@ -34,16 +34,17 @@ add_custom_command(
     "${OXYGEN_ENGINE_CONTENT_LAUNCHER}"
     "$<TARGET_FILE:oxygen-cooker-importtool>" --no-tui --no-color --quiet
     engine-content "${OXYGEN_ENGINE_CONTENT_WORK}/sources"
-    "${OXYGEN_ENGINE_CONTENT_WORK}/cooked"
   # Geometry references the default material, so materials cook first.
   COMMAND
     "${OXYGEN_ENGINE_CONTENT_LAUNCHER}"
-    "$<TARGET_FILE:oxygen-cooker-importtool>" --no-tui --no-color --quiet batch
+    "$<TARGET_FILE:oxygen-cooker-importtool>" --no-tui --no-color --quiet
+    --cooked-root "${OXYGEN_ENGINE_CONTENT_WORK}/cooked" batch --engine-content
     --manifest
     "${OXYGEN_ENGINE_CONTENT_WORK}/sources/materials.import-manifest.json"
   COMMAND
     "${OXYGEN_ENGINE_CONTENT_LAUNCHER}"
-    "$<TARGET_FILE:oxygen-cooker-importtool>" --no-tui --no-color --quiet batch
+    "$<TARGET_FILE:oxygen-cooker-importtool>" --no-tui --no-color --quiet
+    --cooked-root "${OXYGEN_ENGINE_CONTENT_WORK}/cooked" batch --engine-content
     --manifest
     "${OXYGEN_ENGINE_CONTENT_WORK}/sources/geometry.import-manifest.json"
   COMMAND

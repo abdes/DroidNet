@@ -7,16 +7,19 @@
 // Covers: Import/Internal/Jobs/PhysicsSidecarImportJob.cpp
 
 #include <filesystem>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
 
+#include <Oxygen/Content/LooseCookedIndex.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/SceneSource.h>
 #include <Oxygen/Cooker/Import/PhysicsImportSettings.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/test/Support/ImportHarness.h>
+#include <Oxygen/Cooker/test/Support/TestPaths.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace oxygen::content::import::test {
@@ -36,6 +39,8 @@ namespace {
     request.cooked_root = cooked_root;
     request.loose_cooked_layout.virtual_mount_root = "/.cooked";
     request.asset_virtual_path = "/.cooked/Scenes/DemoScene.oscene";
+    request.source_mount_path
+      = oxygen::cooker::test::SourceMountPath(request.source_path);
     request.scene_descriptor = ImportRequest::SceneDescriptorPayload {
       .normalized_descriptor_json = R"({"version":)"
         + std::to_string(internal::kSceneDescriptorVersion)
@@ -80,6 +85,14 @@ namespace {
       physics_report->diagnostics, "physics.sidecar.payload_parse_failed"));
     EXPECT_TRUE(std::filesystem::exists(
       cooked_root / std::filesystem::path("Scenes/DemoScene.opscene")));
+
+    // The sidecar's entries record the scene's source, not the sidecar's.
+    const auto index = lc::LooseCookedIndex::LoadFromRoot(cooked_root);
+    const auto key
+      = index.FindAssetKeyByVirtualPath("/.cooked/Scenes/DemoScene.opscene");
+    ASSERT_HAS_VALUE(key);
+    EXPECT_EQ(index.FindSourcePath(*key),
+      std::optional<std::string_view>("/Content/scene.oscene.json"));
   }
 
   NOLINT_TEST_F(PhysicsImportJobTest, InvalidTargetSceneVirtualPathFailsRequest)

@@ -43,6 +43,8 @@ NOLINT_TEST(ImportManifestSceneDescriptorTest,
       .dump());
   WriteText(path, R"({
     "version":1,"output":"out",
+    "mounts":[{"name":"Content","path":"."}],
+    "layout":{"virtual_mount_root":"/.cooked"},
     "defaults":{"scene_descriptor":{"cooked_context_roots":["Libraries/Low"]}},
     "jobs":[
       {"type":"scene-descriptor","source":"scene.json",
@@ -52,7 +54,7 @@ NOLINT_TEST(ImportManifestSceneDescriptorTest,
        "cooked_context_roots":["Libraries/High","out"]}
     ]})");
   auto errors = std::ostringstream {};
-  const auto manifest = ImportManifest::Load(path, std::nullopt, errors);
+  const auto manifest = ImportManifest::Load(path, {}, errors);
   ASSERT_HAS_VALUE(manifest)
     << "Expected manifest to contain a value" << errors.str();
   const auto inherited = manifest->jobs.at(0).BuildRequest(errors);
@@ -81,6 +83,8 @@ NOLINT_TEST(ImportManifestSceneDescriptorTest, BaseContextRootsPrecedeJobRoots)
       .dump());
   WriteText(path, R"({
     "version":1,"output":"out",
+    "mounts":[{"name":"Content","path":"."}],
+    "layout":{"virtual_mount_root":"/.cooked"},
     "jobs":[
       {"type":"scene-descriptor","source":"scene.json",
        "virtual_path":"/.cooked/Scenes/Plain.oscene"},
@@ -89,7 +93,7 @@ NOLINT_TEST(ImportManifestSceneDescriptorTest, BaseContextRootsPrecedeJobRoots)
        "cooked_context_roots":["Libraries/High"]}
     ]})");
   auto errors = std::ostringstream {};
-  auto manifest = ImportManifest::Load(path, std::nullopt, errors);
+  auto manifest = ImportManifest::Load(path, {}, errors);
   ASSERT_HAS_VALUE(manifest)
     << "Expected manifest to contain a value" << errors.str();
   const auto engine = temp.Path() / "engine.pak";
@@ -134,7 +138,7 @@ NOLINT_TEST(ImportManifestSceneDescriptorTest, RejectsInvalidContextRootValues)
     };
     WriteText(path, document.dump());
     auto errors = std::ostringstream {};
-    EXPECT_FALSE(ImportManifest::Load(path, std::nullopt, errors).has_value());
+    EXPECT_FALSE(ImportManifest::Load(path, {}, errors).has_value());
     EXPECT_FALSE(errors.str().empty());
   }
 }
@@ -161,11 +165,11 @@ NOLINT_TEST(ImportManifestSceneDescriptorTest,
     })")
       .dump());
 
-  const auto cooked_root = (root / ".cooked").generic_string();
-  const auto manifest_json = std::string { R"({
+  const auto* const manifest_json = R"({
       "version": 1,
-      "output": ")" }
-    + cooked_root + R"(",
+      "mounts": [{ "name": "Content", "path": "." }],
+      "layout": { "virtual_mount_root": "/.cooked" },
+      "output": ".cooked",
       "defaults": {
         "scene_descriptor": {
           "content_hashing": true,
@@ -185,8 +189,7 @@ NOLINT_TEST(ImportManifestSceneDescriptorTest,
   WriteText(manifest_path, manifest_json);
 
   auto errors = std::ostringstream {};
-  const auto manifest
-    = ImportManifest::Load(manifest_path, std::nullopt, errors);
+  const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   ASSERT_HAS_VALUE(manifest)
     << "Expected manifest to contain a value" << errors.str();
   ASSERT_EQ(manifest->jobs.size(), 1U);
@@ -229,8 +232,9 @@ NOLINT_TEST(ImportManifestSceneDescriptorTest,
   WriteText(manifest_path,
     R"({
       "version": 1,
-      "output": ")"
-      + (manifest_path.parent_path() / "scene-cooked").generic_string() + R"(",
+      "mounts": [{ "name": "Content", "path": "." }],
+      "layout": { "virtual_mount_root": "/.cooked" },
+      "output": "scene-cooked",
       "jobs": [
         {
           "id": "geo.cube",
@@ -249,8 +253,7 @@ NOLINT_TEST(ImportManifestSceneDescriptorTest,
     })");
 
   auto errors = std::ostringstream {};
-  const auto manifest
-    = ImportManifest::Load(manifest_path, std::nullopt, errors);
+  const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   ASSERT_HAS_VALUE(manifest)
     << "Expected manifest to contain a value" << errors.str();
   ASSERT_EQ(manifest->jobs.size(), 2U);
@@ -278,6 +281,8 @@ NOLINT_TEST(ImportManifestSceneDescriptorTest,
   WriteText(manifest_path,
     R"({
       "version": 1,
+      "mounts": [{ "name": "Content", "path": "." }],
+      "layout": { "virtual_mount_root": "/.cooked" },
       "jobs": [
         {
           "type": "scene-descriptor",
@@ -288,8 +293,7 @@ NOLINT_TEST(ImportManifestSceneDescriptorTest,
     })");
 
   auto errors = std::ostringstream {};
-  const auto manifest
-    = ImportManifest::Load(manifest_path, std::nullopt, errors);
+  const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   EXPECT_FALSE(manifest.has_value());
   EXPECT_THAT(
     errors.str(), ::testing::HasSubstr("manifest schema validation failed"));

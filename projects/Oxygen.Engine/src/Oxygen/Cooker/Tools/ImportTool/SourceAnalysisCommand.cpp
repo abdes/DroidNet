@@ -48,11 +48,18 @@ auto SourceAnalysisCommand::BuildCommand() -> std::shared_ptr<clap::Command>
                     .StoreTo(&manifest_path_)
                     .Build();
   auto root = clap::Option::WithKey("root")
-                .About("Root path for resolving relative sources")
+                .About("The project root, replacing the manifest's "
+                       "project_root")
                 .Long("root")
                 .WithValue<std::string>()
                 .StoreTo(&root_path_)
                 .Build();
+  auto mounts = clap::Option::WithKey("mounts")
+                  .About("A mounts file applied above every .mounts.json")
+                  .Long("mounts")
+                  .WithValue<std::string>()
+                  .StoreTo(&mounts_path_)
+                  .Build();
   auto report = clap::Option::WithKey("report")
                   .About("Destination JSON analysis report")
                   .Long("report")
@@ -71,6 +78,7 @@ auto SourceAnalysisCommand::BuildCommand() -> std::shared_ptr<clap::Command>
     .About("Discover native source dependencies and outputs without cooking")
     .WithOption(std::move(manifest))
     .WithOption(std::move(root))
+    .WithOption(std::move(mounts))
     .WithOption(std::move(report))
     .WithOption(std::move(captures));
 }
@@ -78,9 +86,13 @@ auto SourceAnalysisCommand::BuildCommand() -> std::shared_ptr<clap::Command>
 auto SourceAnalysisCommand::Execute() -> std::expected<void, std::error_code>
 {
   const auto manifest_path = std::filesystem::path(manifest_path_);
-  const auto root = root_path_.empty()
-    ? std::optional<std::filesystem::path> {}
-    : std::optional { std::filesystem::path(root_path_) };
+  auto options = ImportManifestLoadOptions {};
+  if (!root_path_.empty()) {
+    options.project_root = std::filesystem::path(root_path_);
+  }
+  if (!mounts_path_.empty()) {
+    options.mounts_file = std::filesystem::path(mounts_path_);
+  }
   const auto report_error = [this](const std::string_view message) -> void {
     if (!message.empty() && global_options_->writer != nullptr) {
       global_options_->writer->Error(message);
@@ -88,7 +100,7 @@ auto SourceAnalysisCommand::Execute() -> std::expected<void, std::error_code>
   };
   auto manifest_errors = std::ostringstream {};
   const auto manifest
-    = ImportManifest::Load(manifest_path, root, manifest_errors);
+    = ImportManifest::Load(manifest_path, options, manifest_errors);
   if (!manifest.has_value()) {
     report_error(manifest_errors.view());
     return std::unexpected(std::make_error_code(std::errc::invalid_argument));

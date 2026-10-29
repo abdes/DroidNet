@@ -44,6 +44,7 @@
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableRegistry.h>
 #include <Oxygen/Cooker/Import/ModelImportState.h>
+#include <Oxygen/Cooker/Import/SourceMounts.h>
 #include <Oxygen/Cooker/Import/SurfaceProvenance.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
@@ -56,6 +57,12 @@
 namespace oxygen::content::import {
 
 namespace {
+
+  //! Index entries refused because the job has no recorded source.
+  class LooseCookedSourceOutsideMount final : public std::runtime_error {
+  public:
+    using std::runtime_error::runtime_error;
+  };
 
   auto EnsureExternalFileExists(const std::filesystem::path& path) -> void
   {
@@ -620,7 +627,7 @@ auto ImportSession::Producer() const -> LooseCookedProducer
   } else if (request_.physics.has_value()) {
     target = request_.physics->target_scene_virtual_path;
   } else {
-    return { .source = request_.SourceVirtualPath(), .completes = {} };
+    return { .source = request_.source_mount_path, .completes = {} };
   }
 
   for (const auto& scene : request_.inflight_scene_contexts) {
@@ -833,14 +840,23 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
         cooked_root_, physics_table_rel, request_.source_path.string());
     }
 
+    // Only the entries the index records a producer for need one.
     const auto producer = Producer();
+    const auto recorded_producer = [&producer] -> const LooseCookedProducer& {
+      if (producer.source.empty() && producer.completes.empty()) {
+        throw LooseCookedSourceOutsideMount(
+          "no recorded source: the job's source lies in no source mount");
+      }
+      return producer;
+    };
     if (asset_emitter_.has_value()) {
       const auto& records = (*asset_emitter_)->Records();
       report.outputs.reserve(report.outputs.size() + records.size());
       for (const auto& rec : records) {
         index_registry_->RegisterExternalAssetDescriptor(cooked_root_, rec.key,
           rec.asset_type, rec.virtual_path, rec.descriptor_relpath,
-          rec.descriptor_size, rec.references, producer, rec.descriptor_sha256);
+          rec.descriptor_size, rec.references, recorded_producer(),
+          rec.descriptor_sha256);
         report.outputs.push_back({
           .path = rec.descriptor_relpath,
           .size_bytes = rec.descriptor_size,
@@ -863,7 +879,7 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
             cooked_root_, FileKind::kAuxiliary, rec.relpath);
         } else {
           index_registry_->RegisterExternalTextureDescriptor(
-            cooked_root_, rec.relpath, rec.virtual_path, producer);
+            cooked_root_, rec.relpath, rec.virtual_path, recorded_producer());
           report.products.push_back({
             .virtual_path = rec.virtual_path,
             .descriptor_relpath = rec.relpath,
@@ -995,6 +1011,16 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
       report.materials_written, report.geometry_written, report.scenes_written,
       report.scripts_written, report.scripting_components_written,
       report.script_slots_written, report.script_params_written);
+  } catch (const LooseCookedSourceOutsideMount& ex) {
+    report.success = false;
+    report.diagnostics.push_back({
+      .severity = ImportSeverity::kError,
+      .code = std::string { mount_codes::kSourceOutsideMount.id },
+      .message = ex.what(),
+      .source_path = request_.source_path.string(),
+      .object_path = {},
+    });
+    LOG_F(ERROR, "Refused index entries: {}", ex.what());
   } catch (const LooseCookedIdentityCollision& ex) {
     report.success = false;
     report.diagnostics.push_back({

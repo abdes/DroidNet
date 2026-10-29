@@ -1122,7 +1122,7 @@ file.
 **Why.** Node IDs (NGN2) and surface IDs are derived from the source identity
 kept in the model import record (`<content_root>/imports/*.import.json`,
 NGN14).
-Called with `--content-root` and a source but no `--record`, the ImportTool
+Called with `--root` and a source but no `--record`, the ImportTool
 finds the record only through a recipe whose `source` is the same file
 (`RetainedModelImport::RecordPath`, `Cooker/Import/RetainedModelImport.cpp:375-412`);
 otherwise it creates a record named by a hash of the source's absolute path,
@@ -1219,7 +1219,7 @@ settings) would otherwise be written twice.
 - **Place.** `<content_root>/imports/<source_identity>.import.json`. The
   editor's content root is the project root, so its records live in
   `<ProjectRoot>/imports/`, outside every authoring mount: the Content Explorer
-  never lists them. The ImportTool's is its `--content-root`. The source
+  never lists them. The ImportTool's is its `--root`, the project root. The source
   identity never changes, so a record is never renamed or moved: relocating a
   model rewrites the record's `source`.
 - **Schema.** `oxygen.model-import.schema.json` replaces both schemas:

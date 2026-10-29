@@ -31,11 +31,16 @@ public sealed class ModelSourceAnalyzer(IEngineContentPipelineApi native, IConte
         var file = Path.GetFileName(source);
         var name = Path.GetFileNameWithoutExtension(source);
         var mount = project.AuthoringMounts is [var firstMount, ..] ? firstMount.Name : AssetPath.Content.Mount;
-        var job = manifestBuilder.BuildModelJob(file, [], name, AssetPath.Create(mount, name + "/" + file)) with { Source = source };
+        var job = manifestBuilder.BuildModelJob(file, [], name, AssetPath.Create(mount, name + "/" + file));
         var scratch = Path.Combine(project.ProjectRoot.FullPath, ".build", "import-analysis", operationId.ToString("N"));
         try
         {
-            var report = await native.AnalyzeSourcesAsync(new(operationId, Path.GetDirectoryName(source)!, scratch, [job]), cancellationToken).ConfigureAwait(false);
+            // The source's folder is the analysis root and its one mount: a manifest names no absolute path.
+            var execution = new ContentSourceAnalysisExecution(operationId, Path.GetDirectoryName(source)!, scratch, [job])
+            {
+                Mounts = [new ContentImportMount("Source", ".")],
+            };
+            var report = await native.AnalyzeSourcesAsync(execution, cancellationToken).ConfigureAwait(false);
             var facts = report.Jobs.Single();
             return new(report.Complete && facts.Complete, facts.Model, facts.Diagnostics);
         }

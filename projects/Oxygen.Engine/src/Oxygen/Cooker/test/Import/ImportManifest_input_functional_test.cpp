@@ -31,6 +31,8 @@ NOLINT_TEST(ImportManifestInputTest, AcceptsInputJobWithDependencies)
   WriteText(manifest_path,
     R"({
       "version": 1,
+      "mounts": [{ "name": "Content", "path": "." }],
+      "layout": { "virtual_mount_root": "/.cooked" },
       "jobs": [
         {
           "id": "core.actions",
@@ -49,8 +51,7 @@ NOLINT_TEST(ImportManifestInputTest, AcceptsInputJobWithDependencies)
     })");
 
   std::ostringstream errors;
-  const auto manifest
-    = ImportManifest::Load(manifest_path, std::nullopt, errors);
+  const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   ASSERT_HAS_VALUE(manifest) << errors.str();
   ASSERT_EQ(manifest->jobs.size(), 2U);
 
@@ -73,6 +74,8 @@ NOLINT_TEST(ImportManifestInputTest, RejectsInputJobWithDisallowedKeys)
   WriteText(manifest_path,
     R"({
       "version": 1,
+      "mounts": [{ "name": "Content", "path": "." }],
+      "layout": { "virtual_mount_root": "/.cooked" },
       "jobs": [
         {
           "id": "core.actions",
@@ -85,8 +88,7 @@ NOLINT_TEST(ImportManifestInputTest, RejectsInputJobWithDisallowedKeys)
     })");
 
   std::ostringstream errors;
-  const auto manifest
-    = ImportManifest::Load(manifest_path, std::nullopt, errors);
+  const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   EXPECT_FALSE(manifest.has_value());
   EXPECT_THAT(
     errors.str(), ::testing::HasSubstr("input.manifest.key_not_allowed"));
@@ -98,19 +100,17 @@ NOLINT_TEST(ImportManifestInputTest, InputOutputPrecedenceIsConsistent)
   const auto manifest_path
     = temp.Path() / "input_output_precedence" / "import_manifest.json";
 
-  const auto top_level = temp.Path() / "out" / "top-level";
-  const auto default_input = temp.Path() / "out" / "default-input";
-  const auto job_input = temp.Path() / "out" / "job-input";
+  const auto job_input = manifest_path.parent_path() / "out" / "job-input";
 
   WriteText(manifest_path,
     R"({
       "version": 1,
-      "output": ")"
-      + top_level.generic_string() + R"(",
+      "mounts": [{ "name": "Content", "path": "." }],
+      "layout": { "virtual_mount_root": "/.cooked" },
+      "output": "out/top-level",
       "defaults": {
         "input": {
-          "output": ")"
-      + default_input.generic_string() + R"("
+          "output": "out/default-input"
         }
       },
       "jobs": [
@@ -119,15 +119,13 @@ NOLINT_TEST(ImportManifestInputTest, InputOutputPrecedenceIsConsistent)
           "type": "input",
           "source": "Content/Input/Core.input.json",
           "virtual_path": "/Content/Input/Core.input",
-          "output": ")"
-      + job_input.generic_string() + R"("
+          "output": "out/job-input"
         }
       ]
     })");
 
   std::ostringstream errors;
-  const auto manifest
-    = ImportManifest::Load(manifest_path, std::nullopt, errors);
+  const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   ASSERT_HAS_VALUE(manifest) << errors.str();
   ASSERT_EQ(manifest->jobs.size(), 1U);
 
@@ -144,18 +142,18 @@ NOLINT_TEST(ImportManifestInputTest, InputDefaultsOverrideTopLevelOutput)
   const auto manifest_path = temp.Path() / "input_defaults_override_top_level"
     / "import_manifest.json";
 
-  const auto top_level = temp.Path() / "out" / "top-level";
-  const auto default_input = temp.Path() / "out" / "default-input";
+  const auto default_input
+    = manifest_path.parent_path() / "out" / "default-input";
 
   WriteText(manifest_path,
     R"({
       "version": 1,
-      "output": ")"
-      + top_level.generic_string() + R"(",
+      "mounts": [{ "name": "Content", "path": "." }],
+      "layout": { "virtual_mount_root": "/.cooked" },
+      "output": "out/top-level",
       "defaults": {
         "input": {
-          "output": ")"
-      + default_input.generic_string() + R"("
+          "output": "out/default-input"
         }
       },
       "jobs": [
@@ -169,8 +167,7 @@ NOLINT_TEST(ImportManifestInputTest, InputDefaultsOverrideTopLevelOutput)
     })");
 
   std::ostringstream errors;
-  const auto manifest
-    = ImportManifest::Load(manifest_path, std::nullopt, errors);
+  const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   ASSERT_HAS_VALUE(manifest) << errors.str();
   ASSERT_EQ(manifest->jobs.size(), 1U);
 
@@ -187,13 +184,14 @@ NOLINT_TEST(ImportManifestInputTest, InputFallsBackToTopLevelOutput)
   const auto manifest_path
     = temp.Path() / "input_top_level_fallback" / "import_manifest.json";
 
-  const auto top_level = temp.Path() / "out" / "top-level";
+  const auto top_level = manifest_path.parent_path() / "out" / "top-level";
 
   WriteText(manifest_path,
     R"({
       "version": 1,
-      "output": ")"
-      + top_level.generic_string() + R"(",
+      "mounts": [{ "name": "Content", "path": "." }],
+      "layout": { "virtual_mount_root": "/.cooked" },
+      "output": "out/top-level",
       "jobs": [
         {
           "id": "core.actions",
@@ -205,8 +203,7 @@ NOLINT_TEST(ImportManifestInputTest, InputFallsBackToTopLevelOutput)
     })");
 
   std::ostringstream errors;
-  const auto manifest
-    = ImportManifest::Load(manifest_path, std::nullopt, errors);
+  const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   ASSERT_HAS_VALUE(manifest) << errors.str();
   ASSERT_EQ(manifest->jobs.size(), 1U);
 
@@ -230,6 +227,8 @@ NOLINT_TEST(
   WriteText(manifest_path,
     R"({
       "version": 1,
+      "mounts": [{ "name": "Content", "path": "." }],
+      "layout": { "virtual_mount_root": "/.cooked" },
       "output": ".cooked/top-level",
       "jobs": [
         {
@@ -242,8 +241,7 @@ NOLINT_TEST(
     })");
 
   std::ostringstream errors;
-  const auto manifest
-    = ImportManifest::Load(manifest_path, std::nullopt, errors);
+  const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   ASSERT_HAS_VALUE(manifest) << errors.str();
 
   std::ostringstream req_errors;
@@ -265,6 +263,8 @@ NOLINT_TEST(ImportManifestInputTest, ResolvesRelativeJobOutputAgainstManifest)
   WriteText(manifest_path,
     R"({
       "version": 1,
+      "mounts": [{ "name": "Content", "path": "." }],
+      "layout": { "virtual_mount_root": "/.cooked" },
       "output": ".cooked/top-level",
       "defaults": {
         "input": {
@@ -283,8 +283,7 @@ NOLINT_TEST(ImportManifestInputTest, ResolvesRelativeJobOutputAgainstManifest)
     })");
 
   std::ostringstream errors;
-  const auto manifest
-    = ImportManifest::Load(manifest_path, std::nullopt, errors);
+  const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   ASSERT_HAS_VALUE(manifest) << errors.str();
 
   std::ostringstream req_errors;
@@ -304,6 +303,7 @@ NOLINT_TEST(ImportManifestInputTest, CarriesInputSourceIdentity)
   WriteText(manifest_path,
     R"({
       "version": 1,
+      "mounts": [{ "name": "Content", "path": "." }],
       "layout": { "virtual_mount_root": "/Content" },
       "jobs": [
         {
@@ -316,8 +316,7 @@ NOLINT_TEST(ImportManifestInputTest, CarriesInputSourceIdentity)
     })");
 
   std::ostringstream errors;
-  const auto manifest
-    = ImportManifest::Load(manifest_path, std::nullopt, errors);
+  const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   ASSERT_HAS_VALUE(manifest) << errors.str();
 
   std::ostringstream req_errors;
@@ -333,26 +332,27 @@ NOLINT_TEST(ImportManifestInputTest, CarriesCookedContextRoots)
   const ScopedTempDir temp;
   const auto manifest_path
     = temp.Path() / "input_context_roots" / "import_manifest.json";
-  const auto library = (temp.Path() / "library").lexically_normal();
+  const auto library
+    = (manifest_path.parent_path() / "library").lexically_normal();
 
   WriteText(manifest_path,
     R"({
       "version": 1,
+      "mounts": [{ "name": "Content", "path": "." }],
+      "layout": { "virtual_mount_root": "/.cooked" },
       "jobs": [
         {
           "id": "player",
           "type": "input",
           "source": "Content/Input/Player.input.json",
           "virtual_path": "/Content/Input/Player.input",
-          "cooked_context_roots": [")"
-      + library.generic_string() + R"("]
+          "cooked_context_roots": ["library"]
         }
       ]
     })");
 
   std::ostringstream errors;
-  const auto manifest
-    = ImportManifest::Load(manifest_path, std::nullopt, errors);
+  const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   ASSERT_HAS_VALUE(manifest) << errors.str();
 
   std::ostringstream req_errors;
@@ -372,6 +372,8 @@ NOLINT_TEST(ImportManifestInputTest, RejectsInputJobWithoutVirtualPath)
   WriteText(manifest_path,
     R"({
       "version": 1,
+      "mounts": [{ "name": "Content", "path": "." }],
+      "layout": { "virtual_mount_root": "/.cooked" },
       "jobs": [
         {
           "id": "core.actions",
@@ -382,8 +384,7 @@ NOLINT_TEST(ImportManifestInputTest, RejectsInputJobWithoutVirtualPath)
     })");
 
   std::ostringstream errors;
-  const auto manifest
-    = ImportManifest::Load(manifest_path, std::nullopt, errors);
+  const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   EXPECT_FALSE(manifest.has_value());
   EXPECT_THAT(
     errors.str(), ::testing::HasSubstr("import.manifest.virtual_path_missing"));
@@ -398,6 +399,8 @@ NOLINT_TEST(ImportManifestInputTest, RejectsInputJobWithoutId)
   WriteText(manifest_path,
     R"({
       "version": 1,
+      "mounts": [{ "name": "Content", "path": "." }],
+      "layout": { "virtual_mount_root": "/.cooked" },
       "jobs": [
         {
           "type": "input",
@@ -408,8 +411,7 @@ NOLINT_TEST(ImportManifestInputTest, RejectsInputJobWithoutId)
     })");
 
   std::ostringstream errors;
-  const auto manifest
-    = ImportManifest::Load(manifest_path, std::nullopt, errors);
+  const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   EXPECT_FALSE(manifest.has_value());
   EXPECT_THAT(
     errors.str(), ::testing::HasSubstr("input.manifest.job_id_missing"));

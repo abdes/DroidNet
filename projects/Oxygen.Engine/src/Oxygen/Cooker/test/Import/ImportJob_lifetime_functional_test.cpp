@@ -36,6 +36,7 @@
 #include <Oxygen/Cooker/Import/Internal/LooseCookedIndexRegistry.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableRegistry.h>
 #include <Oxygen/Cooker/test/Support/TempDir.h>
+#include <Oxygen/Cooker/test/Support/TestPaths.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/DescriptorStrings.h>
@@ -271,6 +272,8 @@ NOLINT_TEST(ImportJobLifetimeTest, ExceptionPreservesDrainedSessionTelemetry)
   imp::ImportRequest request;
   request.source_path = root / "source.json";
   request.asset_virtual_path = "/.cooked/source.omat";
+  request.source_mount_path
+    = oxygen::cooker::test::SourceMountPath(request.source_path);
   request.cooked_root = root;
   imp::ImportReport result;
   auto job = FinalizedFailureJob(imp::detail::ImportJobParams {
@@ -319,6 +322,8 @@ NOLINT_TEST(
   imp::ImportRequest request;
   request.source_path = root / "source.json";
   request.asset_virtual_path = "/.cooked/source.omat";
+  request.source_mount_path
+    = oxygen::cooker::test::SourceMountPath(request.source_path);
   request.cooked_root = root;
   unsigned completions = 0;
   imp::ImportReport first_report;

@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <exception>
 #include <filesystem>
 #include <fstream>
 #include <future>
@@ -25,6 +26,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Base/Sha256.h>
@@ -40,6 +42,7 @@
 #include <Oxygen/Cooker/Import/ModelImportRecord.h>
 #include <Oxygen/Cooker/Import/ModelImportState.h>
 #include <Oxygen/Cooker/Import/SceneImportSettings.h>
+#include <Oxygen/Cooker/Import/SourceMounts.h>
 #include <Oxygen/Cooker/Import/SurfaceProvenance.h>
 #include <Oxygen/Cooker/test/Support/TempDir.h>
 #include <Oxygen/Core/Types/Format.h>
@@ -62,6 +65,13 @@ using oxygen::content::import::ModelImportRecord;
 using oxygen::content::import::ModelImportRecordLocation;
 using oxygen::content::import::ModelPublishedNode;
 using oxygen::content::import::ModelSourceFingerprint;
+using oxygen::content::import::MountDeclaration;
+using oxygen::content::import::MountDeclarationForm;
+using oxygen::content::import::MountKind;
+using oxygen::content::import::MountTable;
+using oxygen::content::import::MountTableOwner;
+using oxygen::content::import::MountTableRequest;
+using oxygen::content::import::ResolveMountTable;
 using oxygen::data::NodeId;
 
 constexpr std::string_view kVirtualPath = "/.cooked/source.gltf";
@@ -90,6 +100,16 @@ class ModelImportRecordTest : public oxygen::cooker::test::TempDirTest {
 protected:
   void SetUp() override
   {
+    mounts_ = ResolveMountTable(MountTableRequest {
+      .project_root = TempDir(),
+      .declarations = { MountDeclaration {
+        .name = "Content", .kind = MountKind::kSource, .path = ".", }, },
+      .form = MountDeclarationForm::kCommittedFile,
+      .declared_in = "test",
+      .working_directory = TempDir(),
+      .mounts_option = std::nullopt,
+      .owner = MountTableOwner::kProject,
+    });
     source_ = TempDir() / "Models" / "source.gltf";
     WriteModel(source_);
     identity_ = Uuid::Generate();
@@ -116,6 +136,7 @@ protected:
       .source = source,
       .virtual_path = std::string(virtual_path),
       .settings_json = ModelImportRecord::MakeSettings(settings_),
+      .mounts = oxygen::make_observer(&mounts_),
     });
   }
 
@@ -148,17 +169,18 @@ protected:
   }
 
   //! Publishes an import that read the record's source as it is now.
-  static auto PublishRead(const std::filesystem::path& record) -> ImportReport
+  auto PublishRead(const std::filesystem::path& record) -> ImportReport
   {
-    auto attempt = ModelImportRecord::Prepare(record);
+    auto attempt = ModelImportRecord::Prepare(record, mounts_);
     auto report = Candidate(*attempt);
     report.source_fingerprint
-      = Fingerprint(ModelImportRecord::Read(record).source);
+      = Fingerprint(ModelImportRecord::Read(record, mounts_).source);
     attempt->ValidateCandidate(report);
     attempt->Publish(report);
     return report;
   }
 
+  MountTable mounts_;
   std::filesystem::path source_;
   Uuid identity_;
   std::filesystem::path record_;
@@ -169,7 +191,7 @@ protected:
 //! itself inside the content root, and reads back what was saved.
 NOLINT_TEST_F(ModelImportRecordTest, RecordIsNamedByItsIdentityAndRoundTrips)
 {
-  const auto content = ModelImportRecord::Read(record_);
+  const auto content = ModelImportRecord::Read(record_, mounts_);
   const auto document = json::parse(std::ifstream(record_));
 
   EXPECT_EQ(record_.filename().string(),
@@ -178,15 +200,44 @@ NOLINT_TEST_F(ModelImportRecordTest, RecordIsNamedByItsIdentityAndRoundTrips)
   EXPECT_TRUE(std::filesystem::equivalent(content.source, source_));
   EXPECT_EQ(content.virtual_path, kVirtualPath);
   EXPECT_EQ(document.at("schema_version"), ModelImportRecord::kSchemaVersion);
-  EXPECT_EQ(document.at("source"), "../Models/source.gltf");
+  EXPECT_EQ(document.at("source"), "/Content/Models/source.gltf");
   EXPECT_EQ(document.at("settings").at("normals_policy"), "generate");
   EXPECT_FALSE(document.at("surface_provenance").contains("source_identity"));
   EXPECT_FALSE(document.contains("source_fingerprint"));
 
   const auto renamed = TempDir() / "imports" / "renamed.import.json";
   std::filesystem::copy_file(record_, renamed);
-  EXPECT_THROW(
-    static_cast<void>(ModelImportRecord::Read(renamed)), std::invalid_argument);
+  EXPECT_THROW(static_cast<void>(ModelImportRecord::Read(renamed, mounts_)),
+    std::invalid_argument);
+}
+
+//! A record stores its source as the mount path, whatever spelling it was saved
+//! with.
+NOLINT_TEST_F(ModelImportRecordTest, SaveStoresTheSourceAsItsMountPath)
+{
+  const auto document = json::parse(std::ifstream(record_));
+
+  EXPECT_EQ(document.at("source"), "/Content/Models/source.gltf");
+  EXPECT_EQ(ModelImportRecord::Read(record_, mounts_).source.filename(),
+    source_.filename());
+}
+
+//! A committed record never holds an absolute path.
+NOLINT_TEST_F(ModelImportRecordTest, ReadRefusesAnAbsoluteSource)
+{
+  auto document = json::parse(std::ifstream(record_));
+  document["source"] = source_.generic_string();
+  {
+    std::ofstream output(record_, std::ios::binary);
+    output << document.dump(2);
+  }
+
+  try {
+    static_cast<void>(ModelImportRecord::Read(record_, mounts_));
+    FAIL() << "Expected path.absolute_committed";
+  } catch (const std::exception& error) {
+    EXPECT_THAT(error.what(), testing::HasSubstr("path.absolute_committed"));
+  }
 }
 
 //! A record's settings hold no job structure: the record owns the source and
@@ -200,6 +251,7 @@ NOLINT_TEST_F(ModelImportRecordTest, SettingsHoldNoJobStructure)
                    .source = {},
                    .virtual_path = {},
                    .settings_json = json { { key, "x" } }.dump(),
+                   .mounts = oxygen::make_observer(&mounts_),
                  }),
       std::invalid_argument)
       << key;
@@ -229,12 +281,12 @@ NOLINT_TEST_F(
   {
     std::ofstream recipe(recipe_path);
     recipe << R"({"version":1,
-      "jobs":[{"type":"gltf","source":"source.gltf",
+      "jobs":[{"type":"gltf","source":"Models/source.gltf",
         "virtual_path":"/.cooked/source.gltf","normals_policy":"generate",
         "output_format":"bc7_srgb","data_format":"bc7","mip_policy":"full",
         "mip_filter":"kaiser","bc7_quality":"high"}]})";
   }
-  const auto before = ModelImportRecord::Prepare(record_);
+  const auto before = ModelImportRecord::Prepare(record_, mounts_);
   ModelImportRecord::SaveRecipeFile(
     {
       .record_path = record_,
@@ -242,9 +294,10 @@ NOLINT_TEST_F(
       .source = {},
       .virtual_path = {},
       .settings_json = std::nullopt,
+      .mounts = oxygen::make_observer(&mounts_),
     },
     recipe_path, ImportFormat::kGltf);
-  const auto after = ModelImportRecord::Prepare(record_);
+  const auto after = ModelImportRecord::Prepare(record_, mounts_);
   EXPECT_TRUE(
     std::filesystem::equivalent(after->Request().source_path, source_));
   EXPECT_EQ(after->Request().surface_provenance->SourceIdentity(),
@@ -261,7 +314,8 @@ NOLINT_TEST_F(ModelImportRecordTest, WrongRecipeFormatCannotMutateTheRecord)
   const auto recipe_path = TempDir() / "Models" / "recipe.json";
   {
     std::ofstream recipe(recipe_path);
-    recipe << R"({"version":1,"jobs":[{"type":"gltf","source":"source.gltf",
+    recipe
+      << R"({"version":1,"jobs":[{"type":"gltf","source":"Models/source.gltf",
       "virtual_path":"/.cooked/source.gltf"}]})";
   }
   const auto before = oxygen::base::ComputeFileSha256(record_);
@@ -272,6 +326,7 @@ NOLINT_TEST_F(ModelImportRecordTest, WrongRecipeFormatCannotMutateTheRecord)
                    .source = {},
                    .virtual_path = {},
                    .settings_json = std::nullopt,
+                   .mounts = oxygen::make_observer(&mounts_),
                  },
                  recipe_path, ImportFormat::kFbx),
     std::invalid_argument);
@@ -283,7 +338,7 @@ NOLINT_TEST_F(ModelImportRecordTest, MissingSourceOnReplayIsSourceMissing)
 {
   std::filesystem::remove(source_);
   try {
-    static_cast<void>(ModelImportRecord::Prepare(record_));
+    static_cast<void>(ModelImportRecord::Prepare(record_, mounts_));
     FAIL() << "Expected import.source_missing";
   } catch (const std::runtime_error& error) {
     EXPECT_THAT(error.what(), testing::HasSubstr("import.source_missing"));
@@ -294,7 +349,7 @@ NOLINT_TEST_F(ModelImportRecordTest, MissingSourceOnReplayIsSourceMissing)
 //! fingerprint with the generation, and changes nothing else.
 NOLINT_TEST_F(ModelImportRecordTest, PublishCommitsWhatTheImportEstablished)
 {
-  auto attempt = ModelImportRecord::Prepare(record_);
+  auto attempt = ModelImportRecord::Prepare(record_, mounts_);
   auto report = Candidate(*attempt);
   report.published_nodes = {
     ModelPublishedNode {
@@ -310,12 +365,13 @@ NOLINT_TEST_F(ModelImportRecordTest, PublishCommitsWhatTheImportEstablished)
     },
   };
   report.source_fingerprint = Fingerprint(source_);
-  const auto settings_before = ModelImportRecord::Read(record_).settings_json;
+  const auto settings_before
+    = ModelImportRecord::Read(record_, mounts_).settings_json;
 
   attempt->ValidateCandidate(report);
   attempt->Publish(report);
 
-  const auto content = ModelImportRecord::Read(record_);
+  const auto content = ModelImportRecord::Read(record_, mounts_);
   EXPECT_EQ(content.published_nodes, report.published_nodes);
   EXPECT_EQ(content.new_nodes, report.new_nodes);
   EXPECT_EQ(content.vanished_nodes, report.vanished_nodes);
@@ -331,7 +387,7 @@ NOLINT_TEST_F(ModelImportRecordTest, PublishCommitsWhatTheImportEstablished)
 NOLINT_TEST_F(
   ModelImportRecordTest, SelectsOnlyValidatedGenerationAndRetainsIdentity)
 {
-  auto attempt = ModelImportRecord::Prepare(record_);
+  auto attempt = ModelImportRecord::Prepare(record_, mounts_);
   EXPECT_FALSE(ModelImportRecord::SelectedGeneration(record_));
   auto report = Candidate(*attempt);
   EXPECT_THROW(attempt->Publish(report), std::invalid_argument);
@@ -339,7 +395,7 @@ NOLINT_TEST_F(
   attempt->Publish(report);
   EXPECT_EQ(ModelImportRecord::SelectedGeneration(record_), report.cooked_root);
   EXPECT_EQ(report.model_record_path, record_);
-  auto next = ModelImportRecord::Prepare(record_);
+  auto next = ModelImportRecord::Prepare(record_, mounts_);
   EXPECT_NE(next->Request().cooked_root, report.cooked_root);
   EXPECT_EQ(next->Request().surface_provenance->SourceIdentity(), identity_);
   EXPECT_NE(next->Request().source_key, attempt->Request().source_key);
@@ -348,8 +404,8 @@ NOLINT_TEST_F(
 NOLINT_TEST_F(
   ModelImportRecordTest, ConcurrentAttemptCannotOverwriteAcceptedGeneration)
 {
-  auto first = ModelImportRecord::Prepare(record_);
-  auto second = ModelImportRecord::Prepare(record_);
+  auto first = ModelImportRecord::Prepare(record_, mounts_);
+  auto second = ModelImportRecord::Prepare(record_, mounts_);
   auto accepted = Candidate(*first);
   auto stale = Candidate(*second);
   first->ValidateCandidate(accepted);
@@ -364,7 +420,7 @@ NOLINT_TEST_F(
 
 NOLINT_TEST_F(ModelImportRecordTest, SettingsChangeInvalidatesPendingCandidate)
 {
-  auto attempt = ModelImportRecord::Prepare(record_);
+  auto attempt = ModelImportRecord::Prepare(record_, mounts_);
   auto report = Candidate(*attempt);
   attempt->ValidateCandidate(report);
   settings_.normals_policy = "recalculate";
@@ -378,12 +434,12 @@ NOLINT_TEST_F(ModelImportRecordTest, SettingsChangeInvalidatesPendingCandidate)
 NOLINT_TEST_F(
   ModelImportRecordTest, FailedOrCancelledAttemptLeavesTheRecordUnchanged)
 {
-  auto first = ModelImportRecord::Prepare(record_);
+  auto first = ModelImportRecord::Prepare(record_, mounts_);
   auto accepted = Candidate(*first);
   first->ValidateCandidate(accepted);
   first->Publish(accepted);
   const auto before = oxygen::base::ComputeFileSha256(record_);
-  auto next = ModelImportRecord::Prepare(record_);
+  auto next = ModelImportRecord::Prepare(record_, mounts_);
   auto failed = Candidate(*next);
   failed.source_fingerprint = Fingerprint(source_);
   failed.success = false;
@@ -401,7 +457,7 @@ NOLINT_TEST_F(
 NOLINT_TEST_F(
   ModelImportRecordTest, OrdinarySubmissionCannotOverwriteMarkedGeneration)
 {
-  auto attempt = ModelImportRecord::Prepare(record_);
+  auto attempt = ModelImportRecord::Prepare(record_, mounts_);
   auto selected = Candidate(*attempt);
   attempt->ValidateCandidate(selected);
   attempt->Publish(selected);
@@ -426,7 +482,7 @@ NOLINT_TEST_F(
 
 NOLINT_TEST_F(ModelImportRecordTest, PreparedGenerationCannotBeSubmittedTwice)
 {
-  auto attempt = ModelImportRecord::Prepare(record_);
+  auto attempt = ModelImportRecord::Prepare(record_, mounts_);
   oxygen::content::import::AsyncImportService service(
     oxygen::content::import::AsyncImportService::Config {
       .thread_pool_size = 2,
@@ -443,14 +499,14 @@ NOLINT_TEST_F(
 {
   const auto report = PublishRead(record_);
   std::filesystem::remove_all(report.cooked_root.parent_path());
-  auto recook = ModelImportRecord::Prepare(record_);
+  auto recook = ModelImportRecord::Prepare(record_, mounts_);
   EXPECT_EQ(recook->Request().surface_provenance->SourceIdentity(), identity_);
 }
 
 NOLINT_TEST_F(
   ModelImportRecordTest, ReclamationKeepsSelectedAndLeasedGenerations)
 {
-  auto first = ModelImportRecord::Prepare(record_);
+  auto first = ModelImportRecord::Prepare(record_, mounts_);
   auto before = Candidate(*first);
   first->ValidateCandidate(before);
   first->Publish(before);
@@ -458,7 +514,7 @@ NOLINT_TEST_F(
     before.cooked_root / oxygen::data::loose_cooked::kGenerationLeaseFileName,
     oxygen::serio::FileLockMode::kShared);
   ASSERT_TRUE(reader);
-  auto next = ModelImportRecord::Prepare(record_);
+  auto next = ModelImportRecord::Prepare(record_, mounts_);
   auto after = Candidate(*next);
   next->ValidateCandidate(after);
   next->Publish(after);
@@ -472,7 +528,7 @@ NOLINT_TEST_F(
 
 NOLINT_TEST_F(ModelImportRecordTest, ReclamationWaitsForActiveAttemptLease)
 {
-  auto attempt = ModelImportRecord::Prepare(record_);
+  auto attempt = ModelImportRecord::Prepare(record_, mounts_);
   const auto& cooked_root = attempt->Request().cooked_root;
   if (!cooked_root) {
     FAIL() << "Expected a generation cooked root";
@@ -486,7 +542,7 @@ NOLINT_TEST_F(ModelImportRecordTest, ReclamationWaitsForActiveAttemptLease)
 
 NOLINT_TEST_F(ModelImportRecordTest, ChangedPublishedIndexRequiresRecook)
 {
-  auto attempt = ModelImportRecord::Prepare(record_);
+  auto attempt = ModelImportRecord::Prepare(record_, mounts_);
   auto report = Candidate(*attempt);
   attempt->ValidateCandidate(report);
   attempt->Publish(report);
@@ -504,7 +560,7 @@ NOLINT_TEST_F(ModelImportRecordTest, ChangedPublishedIndexRequiresRecook)
 //! it read.
 NOLINT_TEST_F(ModelImportRecordTest, NativeServicePublishesTheCompleteRecord)
 {
-  auto attempt = ModelImportRecord::Prepare(record_);
+  auto attempt = ModelImportRecord::Prepare(record_, mounts_);
   oxygen::content::import::AsyncImportService service(
     oxygen::content::import::AsyncImportService::Config {
       .thread_pool_size = 2,
@@ -522,7 +578,7 @@ NOLINT_TEST_F(ModelImportRecordTest, NativeServicePublishesTheCompleteRecord)
   const auto report = future.get();
   ASSERT_TRUE(report.success);
   EXPECT_EQ(ModelImportRecord::SelectedGeneration(record_), report.cooked_root);
-  const auto content = ModelImportRecord::Read(record_);
+  const auto content = ModelImportRecord::Read(record_, mounts_);
   ASSERT_EQ(content.published_nodes.size(), 1U);
   EXPECT_EQ(content.published_nodes.front().anchor, "Root");
   EXPECT_EQ(content.source_fingerprint, Fingerprint(source_));
@@ -532,7 +588,7 @@ NOLINT_TEST_F(ModelImportRecordTest, NativeServicePublishesTheCompleteRecord)
 //! in its report.
 NOLINT_TEST_F(ModelImportRecordTest, LookupNotesReachTheImportsDiagnostics)
 {
-  auto attempt = ModelImportRecord::Prepare(record_,
+  auto attempt = ModelImportRecord::Prepare(record_, mounts_,
     {
       ImportDiagnostic {
         .severity = ImportSeverity::kWarning,
@@ -566,11 +622,11 @@ NOLINT_TEST_F(ModelImportRecordTest, LookupNotesReachTheImportsDiagnostics)
 
 NOLINT_TEST_F(ModelImportRecordTest, CancellingOneImportDoesNotCancelAnother)
 {
-  auto cancelled_attempt = ModelImportRecord::Prepare(record_);
+  auto cancelled_attempt = ModelImportRecord::Prepare(record_, mounts_);
   const auto other_source = TempDir() / "Models" / "other.gltf";
   WriteModel(other_source);
   const auto other_record = NewRecord(other_source, "/.cooked/other.gltf");
-  auto other_attempt = ModelImportRecord::Prepare(other_record);
+  auto other_attempt = ModelImportRecord::Prepare(other_record, mounts_);
   oxygen::content::import::AsyncImportService service(
     oxygen::content::import::AsyncImportService::Config {
       .thread_pool_size = 2,
@@ -642,6 +698,7 @@ NOLINT_TEST_F(ModelImportRecordTest, LocateFindsTheModelsRecord)
     .content_root = TempDir(),
     .source = source_,
     .virtual_path = std::string(kVirtualPath),
+    .mounts = oxygen::make_observer(&mounts_),
   });
   EXPECT_EQ(location.record_path, record_);
   EXPECT_TRUE(location.exists);
@@ -664,6 +721,7 @@ NOLINT_TEST_F(ModelImportRecordTest, AnUnreadableRecordIsSkippedWithAWarning)
     .content_root = TempDir(),
     .source = source_,
     .virtual_path = std::string(kVirtualPath),
+    .mounts = oxygen::make_observer(&mounts_),
   });
 
   EXPECT_EQ(location.record_path, record_);
@@ -674,7 +732,8 @@ NOLINT_TEST_F(ModelImportRecordTest, AnUnreadableRecordIsSkippedWithAWarning)
   EXPECT_EQ(skipped.severity, ImportSeverity::kWarning);
   EXPECT_NE(skipped.message.find("Outdated.import.json"), std::string::npos);
   EXPECT_EQ(skipped.message.find("not-quoted"), std::string::npos);
-  EXPECT_NO_THROW(static_cast<void>(ModelImportRecord::Prepare(record_)));
+  EXPECT_NO_THROW(
+    static_cast<void>(ModelImportRecord::Prepare(record_, mounts_)));
 }
 
 //! A moved source imported with the model's virtual path keeps its identity:
@@ -689,12 +748,13 @@ NOLINT_TEST_F(ModelImportRecordTest, AMovedSourceWithItsVirtualPathIsRebound)
     .content_root = TempDir(),
     .source = moved,
     .virtual_path = std::string(kVirtualPath),
+    .mounts = oxygen::make_observer(&mounts_),
   });
   SaveRecord(location.record_path, moved, kVirtualPath);
 
   EXPECT_EQ(location.record_path, record_);
   EXPECT_THAT(Codes(location), testing::ElementsAre("import.source_rebound"));
-  const auto content = ModelImportRecord::Read(record_);
+  const auto content = ModelImportRecord::Read(record_, mounts_);
   EXPECT_TRUE(std::filesystem::equivalent(content.source, moved));
   EXPECT_EQ(content.source_identity, identity_);
 }
@@ -713,13 +773,14 @@ NOLINT_TEST_F(
     .content_root = TempDir(),
     .source = moved,
     .virtual_path = std::string("/.cooked/renamed.gltf"),
+    .mounts = oxygen::make_observer(&mounts_),
   });
   SaveRecord(location.record_path, moved, "/.cooked/renamed.gltf");
 
   EXPECT_EQ(location.record_path, record_);
   EXPECT_TRUE(location.exists);
   EXPECT_THAT(Codes(location), testing::ElementsAre("import.source_relocated"));
-  const auto content = ModelImportRecord::Read(record_);
+  const auto content = ModelImportRecord::Read(record_, mounts_);
   EXPECT_EQ(content.virtual_path, "/.cooked/renamed.gltf");
   EXPECT_EQ(content.source_identity, identity_);
 }
@@ -736,6 +797,7 @@ NOLINT_TEST_F(
     .content_root = TempDir(),
     .source = copy,
     .virtual_path = std::string(kVirtualPath),
+    .mounts = oxygen::make_observer(&mounts_),
   });
 
   EXPECT_EQ(location.record_path, record_);
@@ -755,6 +817,7 @@ NOLINT_TEST_F(ModelImportRecordTest, ACopyUnderANewVirtualPathIsANewModel)
     .content_root = TempDir(),
     .source = copy,
     .virtual_path = std::string("/.cooked/copy.gltf"),
+    .mounts = oxygen::make_observer(&mounts_),
   });
 
   EXPECT_FALSE(location.exists);
@@ -771,13 +834,14 @@ NOLINT_TEST_F(
     .content_root = TempDir(),
     .source = source_,
     .virtual_path = std::string("/.cooked/second.gltf"),
+    .mounts = oxygen::make_observer(&mounts_),
   });
   SaveRecord(location.record_path, source_, "/.cooked/second.gltf");
 
   EXPECT_FALSE(location.exists);
   EXPECT_THAT(Codes(location), testing::ElementsAre("import.source_has_model"));
   EXPECT_TRUE(std::filesystem::equivalent(
-    ModelImportRecord::Read(location.record_path).source, source_));
+    ModelImportRecord::Read(location.record_path, mounts_).source, source_));
 }
 
 //! Several records the bytes could belong to: none is taken.
@@ -797,6 +861,7 @@ NOLINT_TEST_F(ModelImportRecordTest, AnAmbiguousRelocationTakesNoRecord)
     .content_root = TempDir(),
     .source = moved,
     .virtual_path = std::string("/.cooked/moved.gltf"),
+    .mounts = oxygen::make_observer(&mounts_),
   });
 
   EXPECT_FALSE(location.exists);
@@ -818,6 +883,7 @@ NOLINT_TEST_F(ModelImportRecordTest, AChangedMovedSourceIsARelocationCandidate)
     .content_root = TempDir(),
     .source = moved,
     .virtual_path = std::string("/.cooked/props.gltf"),
+    .mounts = oxygen::make_observer(&mounts_),
   });
 
   EXPECT_FALSE(location.exists);

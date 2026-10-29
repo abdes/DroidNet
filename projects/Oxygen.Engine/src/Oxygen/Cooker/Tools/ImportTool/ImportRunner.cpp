@@ -45,6 +45,7 @@
 #include <Oxygen/Cooker/Tools/ImportTool/ImportRunner.h>
 #include <Oxygen/Cooker/Tools/ImportTool/MessageWriter.h>
 #include <Oxygen/Cooker/Tools/ImportTool/ReportJson.h>
+#include <Oxygen/Cooker/Tools/ImportTool/SourceMountOptions.h>
 #include <Oxygen/Cooker/Tools/ImportTool/UI/JobViewModel.h>
 #include <Oxygen/Cooker/Tools/ImportTool/UI/Screens/ImportScreen.h>
 
@@ -411,20 +412,33 @@ auto RunImportJob(const ImportRequest& request,
 }
 
 auto RunSceneImportJob(const SceneImportSettings& settings,
-  const ImportFormat format, const GlobalOptions& globals)
-  -> std::expected<void, std::error_code>
+  const ImportFormat format, const SourceMountOptions& mount_options,
+  const GlobalOptions& globals) -> std::expected<void, std::error_code>
 {
   try {
+    // A record belongs to its project: `<project_root>/imports/<record>`.
+    auto effective_mounts = mount_options;
+    if (effective_mounts.root.empty() && !settings.model_record_path.empty()) {
+      effective_mounts.root
+        = std::filesystem::absolute(settings.model_record_path)
+            .parent_path()
+            .parent_path()
+            .string();
+    }
+    const auto mounts = ResolveSourceMounts(effective_mounts, globals.writer);
+    if (!mounts.has_value()) {
+      return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+    }
     const auto apply_recipe = !settings.recipe_path.empty();
     const auto replay = settings.source_path.empty()
       && !settings.model_record_path.empty() && !apply_recipe;
     if (apply_recipe
       && (!settings.source_path.empty() || settings.content_root.empty())) {
       throw std::invalid_argument(
-        "--recipe requires --content-root, without a positional source");
+        "--recipe requires --root, without a positional source");
     }
     if (replay && !settings.content_root.empty()) {
-      throw std::invalid_argument("Record replay uses its saved Content root");
+      throw std::invalid_argument("Record replay uses its saved project root");
     }
     if (apply_recipe || replay) {
       if (!globals.parsed_options) {
@@ -464,10 +478,6 @@ auto RunSceneImportJob(const SceneImportSettings& settings,
             + option);
         }
       }
-      if (replay && globals.parsed_options->HasOption("content-root")) {
-        throw std::invalid_argument(
-          "Record replay uses its saved Content root");
-      }
     }
     auto record_path = std::filesystem::path(settings.model_record_path);
     auto notes = std::vector<ImportDiagnostic> {};
@@ -475,12 +485,13 @@ auto RunSceneImportJob(const SceneImportSettings& settings,
       && !settings.source_path.empty()) {
       if (settings.virtual_path.empty()) {
         throw std::invalid_argument(
-          "--content-root imports need --virtual-path, the model's identity");
+          "--root imports need --virtual-path, the model's identity");
       }
       auto location = ModelImportRecord::LocateRecord({
         .content_root = settings.content_root,
         .source = settings.source_path,
         .virtual_path = settings.virtual_path,
+        .mounts = make_observer(&*mounts),
       });
       record_path = std::move(location.record_path);
       notes = std::move(location.diagnostics);
@@ -493,6 +504,7 @@ auto RunSceneImportJob(const SceneImportSettings& settings,
           .source = {},
           .virtual_path = {},
           .settings_json = std::nullopt,
+          .mounts = make_observer(&*mounts),
         },
         settings.recipe_path, format);
       record_path = std::move(location.record_path);
@@ -501,7 +513,8 @@ auto RunSceneImportJob(const SceneImportSettings& settings,
     if (!record_path.empty()) {
       if (!settings.cooked_root.empty()) {
         throw std::invalid_argument(
-          "Record output is derived from Content; do not specify --output");
+          "Record output is derived from the project root; do not "
+          "specify --output");
       }
       if (!settings.source_path.empty()) {
         ImportRequest source;
@@ -512,7 +525,7 @@ auto RunSceneImportJob(const SceneImportSettings& settings,
         }
         if (settings.content_root.empty()) {
           throw std::invalid_argument("Creating or updating a model import "
-                                      "record requires --content-root");
+                                      "record requires --root");
         }
         ModelImportRecord::Save({
           .record_path = record_path,
@@ -520,10 +533,11 @@ auto RunSceneImportJob(const SceneImportSettings& settings,
           .source = settings.source_path,
           .virtual_path = settings.virtual_path,
           .settings_json = ModelImportRecord::MakeSettings(settings),
+          .mounts = make_observer(&*mounts),
         });
       }
       const auto publication
-        = ModelImportRecord::Prepare(record_path, std::move(notes));
+        = ModelImportRecord::Prepare(record_path, *mounts, std::move(notes));
       if (publication->Request().GetFormat() != format) {
         throw std::invalid_argument(
           "The record's source format does not match this command");
@@ -533,9 +547,12 @@ auto RunSceneImportJob(const SceneImportSettings& settings,
         globals.import_service, publication);
     }
     std::ostringstream errors;
-    const auto request = internal::BuildSceneRequest(settings, format, errors);
+    auto request = internal::BuildSceneRequest(settings, format, errors);
     if (!request) {
       globals.writer->Error(errors.str());
+      return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+    }
+    if (!LocateRequestSource(*request, *mounts, globals.writer)) {
       return std::unexpected(std::make_error_code(std::errc::invalid_argument));
     }
     return RunImportJob(*request, globals.writer, settings.report_path,

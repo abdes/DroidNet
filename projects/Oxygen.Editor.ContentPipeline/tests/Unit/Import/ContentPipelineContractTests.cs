@@ -77,12 +77,11 @@ internal sealed class ContentPipelineContractTests
         var json = JsonSerializer.Serialize(manifest);
 
         _ = json.Should().Contain("\"version\":1");
-        _ = json.Should().Contain("\"output\":");
+        _ = json.Should().NotContain("\"output\":", "the cooked root is an absolute folder, passed as --cooked-root");
         _ = json.Should().Contain("\"layout\":");
         _ = json.Should().Contain("\"virtual_mount_root\":\"/Content\"");
         _ = json.Should().Contain("\"jobs\":");
         _ = json.Should().Contain("\"depends_on\":[]");
-        _ = json.Should().NotContain("\"output\":null");
         _ = json.Should().NotContain("VirtualMountRoot");
         _ = json.Should().NotContain("DependsOn");
     }

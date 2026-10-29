@@ -34,22 +34,15 @@ auto EngineContentCommand::BuildCommand() -> std::shared_ptr<clap::Command>
                    .WithValue<std::string>()
                    .StoreTo(&sources_path_)
                    .Build();
-  auto cooked_root = clap::Option::Positional("cooked-root")
-                       .About("Loose cooked root the manifests cook into")
-                       .Required()
-                       .WithValue<std::string>()
-                       .StoreTo(&cooked_root_)
-                       .Build();
   return clap::CommandBuilder("engine-content")
     .About("Write the engine content sources under their /Engine paths")
-    .WithPositionalArguments(sources, cooked_root);
+    .WithPositionalArguments(sources);
 }
 
 auto EngineContentCommand::Execute() -> std::expected<void, std::error_code>
 {
   [[maybe_unused]] const auto manifests
-    = WriteEngineContentSources(std::filesystem::absolute(sources_path_),
-      std::filesystem::absolute(cooked_root_));
+    = WriteEngineContentSources(std::filesystem::absolute(sources_path_));
   return {};
 }
 

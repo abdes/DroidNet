@@ -24,7 +24,6 @@
 namespace {
 
 using nlohmann::json;
-using oxygen::content::import::EffectiveContentHashingEnabled;
 using oxygen::content::import::ImportManifest;
 using oxygen::cooker::test::kContentHashingDefault;
 using oxygen::cooker::test::ScopedTempDir;
@@ -48,11 +47,11 @@ NOLINT_TEST(ImportManifestCollisionShapeDescriptorTest,
       "virtual_path": "/.cooked/Physics/Shapes/floor_box.ocshape"
     })");
 
-  const auto cooked_root = (root / ".cooked").generic_string();
-  const auto manifest_json = std::string { R"({
+  const auto* const manifest_json = R"({
       "version": 1,
-      "output": ")" }
-    + cooked_root + R"(",
+      "mounts": [{ "name": "Content", "path": "." }],
+      "layout": { "virtual_mount_root": "/.cooked" },
+      "output": ".cooked",
       "defaults": {
         "collision_shape_descriptor": {
           "content_hashing": true,
@@ -72,8 +71,7 @@ NOLINT_TEST(ImportManifestCollisionShapeDescriptorTest,
   WriteText(manifest_path, manifest_json);
 
   auto errors = std::ostringstream {};
-  const auto manifest
-    = ImportManifest::Load(manifest_path, std::nullopt, errors);
+  const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   ASSERT_HAS_VALUE(manifest) << errors.str();
   ASSERT_EQ(manifest->jobs.size(), 1U);
 
@@ -117,9 +115,9 @@ NOLINT_TEST(ImportManifestCollisionShapeDescriptorTest,
   WriteText(manifest_path,
     R"({
       "version": 1,
-      "output": ")"
-      + (manifest_path.parent_path() / "physics-shape-cooked").generic_string()
-      + R"(",
+      "mounts": [{ "name": "Content", "path": "." }],
+      "layout": { "virtual_mount_root": "/.cooked" },
+      "output": "physics-shape-cooked",
       "jobs": [
         {
           "id": "physics.material.ground",
@@ -138,8 +136,7 @@ NOLINT_TEST(ImportManifestCollisionShapeDescriptorTest,
     })");
 
   auto errors = std::ostringstream {};
-  const auto manifest
-    = ImportManifest::Load(manifest_path, std::nullopt, errors);
+  const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   ASSERT_HAS_VALUE(manifest) << errors.str();
   ASSERT_EQ(manifest->jobs.size(), 2U);
   EXPECT_EQ(manifest->jobs.at(1).id, "physics.shape.floor");
@@ -165,6 +162,8 @@ NOLINT_TEST(ImportManifestCollisionShapeDescriptorTest,
   WriteText(manifest_path,
     R"({
       "version": 1,
+      "mounts": [{ "name": "Content", "path": "." }],
+      "layout": { "virtual_mount_root": "/.cooked" },
       "jobs": [
         {
           "type": "collision-shape-descriptor",
@@ -175,8 +174,7 @@ NOLINT_TEST(ImportManifestCollisionShapeDescriptorTest,
     })");
 
   auto errors = std::ostringstream {};
-  const auto manifest
-    = ImportManifest::Load(manifest_path, std::nullopt, errors);
+  const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   EXPECT_FALSE(manifest.has_value());
   EXPECT_THAT(
     errors.str(), ::testing::HasSubstr("manifest schema validation failed"));
@@ -202,9 +200,9 @@ NOLINT_TEST(ImportManifestCollisionShapeDescriptorTest,
   WriteText(manifest_path,
     R"({
       "version": 1,
-      "output": ")"
-      + (manifest_path.parent_path() / "physics-shape-cooked").generic_string()
-      + R"(",
+      "mounts": [{ "name": "Content", "path": "." }],
+      "layout": { "virtual_mount_root": "/.cooked" },
+      "output": "physics-shape-cooked",
       "jobs": [
         {
           "type": "collision-shape-descriptor",
@@ -215,8 +213,7 @@ NOLINT_TEST(ImportManifestCollisionShapeDescriptorTest,
     })");
 
   auto errors = std::ostringstream {};
-  const auto manifest
-    = ImportManifest::Load(manifest_path, std::nullopt, errors);
+  const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   ASSERT_HAS_VALUE(manifest) << errors.str();
   ASSERT_EQ(manifest->jobs.size(), 1U);
 

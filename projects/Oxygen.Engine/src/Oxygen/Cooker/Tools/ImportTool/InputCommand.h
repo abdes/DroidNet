@@ -12,6 +12,7 @@
 
 #include <Oxygen/Cooker/Tools/ImportTool/GlobalOptions.h>
 #include <Oxygen/Cooker/Tools/ImportTool/ImportCommand.h>
+#include <Oxygen/Cooker/Tools/ImportTool/SourceMountOptions.h>
 
 namespace oxygen::content::import::tool {
 
@@ -28,6 +29,7 @@ public:
 
 private:
   const GlobalOptions* global_options_ = nullptr;
+  SourceMountOptions mount_options_ {};
   struct Options final {
     std::string source_path;
     std::string virtual_path;

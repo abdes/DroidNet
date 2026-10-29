@@ -52,8 +52,8 @@ public sealed record ContentImportJob(
     public ContentImportLayout? Layout { get; init; }
 
     /// <summary>Gets the ordered resolver-only roots for scene and geometry descriptors.</summary>
-    [JsonPropertyName("cooked_context_roots")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    /// <remarks>Not part of the manifest file: the ImportTool receives them as <c>--cooked-context-root</c> arguments.</remarks>
+    [JsonIgnore]
     public IReadOnlyList<string>? CookedContextRoots { get; init; }
 
     /// <summary>Gets whether a script job compiles its source to bytecode.</summary>
@@ -71,11 +71,6 @@ public sealed record ContentImportJob(
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? ScriptStorage { get; init; }
 
-    /// <summary>Gets the authoring root that an external script's recorded source path is relative to.</summary>
-    [JsonPropertyName("source_root")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? SourceRoot { get; init; }
-
     /// <summary>Gets the scene a script sidecar attaches its slots to.</summary>
     [JsonPropertyName("target_scene_virtual_path")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -90,6 +85,14 @@ public sealed record ContentImportJob(
     [JsonPropertyName("instance_bindings")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<ScriptSidecarInstanceBinding>? InstanceBindings { get; init; }
+
+    /// <summary>
+    /// Gets, for a source in an output folder, the mount path of the authored source it derives from: the recorded
+    /// source of what the job cooks.
+    /// </summary>
+    [JsonPropertyName("derived_from")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? DerivedFrom { get; init; }
 
     /// <summary>Gets the source of the job that owns this one's output, for a job without its own source.</summary>
     [JsonIgnore]

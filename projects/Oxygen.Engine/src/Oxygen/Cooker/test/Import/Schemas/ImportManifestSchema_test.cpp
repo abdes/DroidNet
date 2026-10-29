@@ -138,4 +138,44 @@ INSTANTIATE_TEST_SUITE_P(Cases, ImportManifestExecutionSchemaTest,
     }),
   oxygen::cooker::test::SchemaCaseName);
 
+class ImportManifestMountsSchemaTest
+  : public ::testing::TestWithParam<SchemaCase> { };
+
+NOLINT_TEST_P(ImportManifestMountsSchemaTest, ValidatesMountDeclarations)
+{
+  oxygen::cooker::test::ExpectSchemaCase(Schema(), GetParam());
+}
+
+INSTANTIATE_TEST_SUITE_P(Cases, ImportManifestMountsSchemaTest,
+  ::testing::Values(
+    SchemaCase {
+      "AcceptsMountsWithLayout",
+      R"({"jobs":[],"mounts":[{"name":"Content","path":"."},
+        {"name":"Engine","kind":"Pak"},{"name":"Art"}],
+        "layout":{"virtual_mount_root":"/.cooked"}})",
+      true,
+      "",
+    },
+    SchemaCase {
+      "RejectsMountsWithoutLayout",
+      R"({"jobs":[],"mounts":[{"name":"Content","path":"."}]})",
+      false,
+      "layout",
+    },
+    SchemaCase {
+      "RejectsMountWithUnknownKey",
+      R"({"jobs":[],"mounts":[{"name":"Content","path":".","colour":"red"}],
+        "layout":{"virtual_mount_root":"/.cooked"}})",
+      false,
+      "colour",
+    },
+    SchemaCase {
+      "RejectsMountWithoutName",
+      R"({"jobs":[],"mounts":[{"path":"."}],
+        "layout":{"virtual_mount_root":"/.cooked"}})",
+      false,
+      "name",
+    }),
+  oxygen::cooker::test::SchemaCaseName);
+
 } // namespace

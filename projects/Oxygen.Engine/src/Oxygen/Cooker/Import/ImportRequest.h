@@ -125,7 +125,7 @@ struct ImportRequest final {
   struct InflightSceneContext final {
     data::AssetKey scene_key;
     std::string virtual_path;
-    //! Virtual path of the source that produces the scene.
+    //! Mount path of the source that produces the scene.
     std::string source_path;
     std::string descriptor_relpath;
     std::vector<std::byte> descriptor_bytes;
@@ -134,6 +134,17 @@ struct ImportRequest final {
 
   //! Source file (FBX, glTF, GLB, or primary texture).
   std::filesystem::path source_path;
+
+  //! The recorded source: the mount path of the file the job cooks, such as
+  //! `/Content/Materials/Red.omat.json`.
+  /*!
+   Whoever locates the source sets it from its mount table, as an import
+   manifest does for each job (`MountTable::LocateSource`). The loose cooked
+   index records it as the producer of every entry the job writes; a sidecar
+   records its scene's producer instead. A job that writes entries without it
+   fails with `import.source_outside_mount`.
+  */
+  std::string source_mount_path;
 
   //! Optional frozen source inputs; source_path retains its authored identity.
   std::shared_ptr<const CapturedInputSet> captured_inputs {};
@@ -315,18 +326,6 @@ struct ImportRequest final {
   */
   OXGN_COOK_NDAPI auto ModelProductVirtualPath(
     std::string_view name, std::string_view extension) const -> std::string;
-
-  //! The identity of the source the job cooks: its identity's folder and the
-  //! source file's name.
-  /*!
-   A source sits in the folder of what it cooks, so `Red.omat.json` cooking
-   `/Content/Materials/Red.omat` is `/Content/Materials/Red.omat.json`,
-   `Player.input.json` cooking `/Content/Player.input` is
-   `/Content/Player.input.json`, and a model is its own identity. The loose
-   cooked index records it as the producer of every entry the job writes.
-   Empty without an identity.
-  */
-  OXGN_COOK_NDAPI auto SourceVirtualPath() const -> std::string;
 
   //! The descriptor path of a texture job's identity, without emitting or
   //! reading files.

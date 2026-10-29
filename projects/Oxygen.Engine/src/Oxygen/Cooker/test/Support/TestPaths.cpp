@@ -56,6 +56,11 @@ auto ModelVirtualPath(const std::filesystem::path& source) -> std::string
   return "/.cooked/" + source.filename().generic_string();
 }
 
+auto SourceMountPath(const std::filesystem::path& source) -> std::string
+{
+  return "/Content/" + source.filename().generic_string();
+}
+
 auto SchemaPath(const std::string_view relative_to_cooker)
   -> std::filesystem::path
 {

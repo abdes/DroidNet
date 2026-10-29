@@ -12,6 +12,7 @@
 #include <Oxygen/Cooker/Import/SceneImportSettings.h>
 #include <Oxygen/Cooker/Tools/ImportTool/GlobalOptions.h>
 #include <Oxygen/Cooker/Tools/ImportTool/ImportCommand.h>
+#include <Oxygen/Cooker/Tools/ImportTool/SourceMountOptions.h>
 
 namespace oxygen::content::import::tool {
 
@@ -28,6 +29,7 @@ public:
 
 private:
   const GlobalOptions* global_options_ = nullptr;
+  SourceMountOptions mount_options_ {};
   SceneImportSettings options_ {};
   bool bake_transforms_ = false;
   bool no_import_textures_ = false;

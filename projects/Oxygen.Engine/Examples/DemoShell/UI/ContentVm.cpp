@@ -41,6 +41,7 @@
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/ModelImportRecord.h>
 #include <Oxygen/Cooker/Import/SceneImportSettings.h>
+#include <Oxygen/Cooker/Import/SourceMounts.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
@@ -298,6 +299,32 @@ auto ContentVm::Update() -> void
   }
 }
 
+//! The app's Content root as the one source mount of its model imports: a
+//! model's recorded source is its mount path, `/Content/...`.
+auto ContentMounts(const std::filesystem::path& content_root)
+  -> content::import::MountTable
+{
+  using content::import::MountDeclaration;
+  auto mounts = content::import::ResolveMountTable({
+    .project_root = content_root,
+    .declarations = { MountDeclaration {
+      .name = "Content",
+      .kind = content::import::MountKind::kSource,
+      .path = ".",
+    } },
+    .form = content::import::MountDeclarationForm::kCommittedFile,
+    .declared_in = "DemoShell Content root",
+    .working_directory = content_root,
+    .mounts_option = std::nullopt,
+    .owner = content::import::MountTableOwner::kProject,
+  });
+  if (!mounts.IsValid()) {
+    throw std::runtime_error("The Content root is not a valid source mount: "
+      + mounts.diagnostics.front().message);
+  }
+  return mounts;
+}
+
 auto ModelVirtualPath(const std::string_view mount_root,
   const std::filesystem::path& content_root,
   const std::filesystem::path& source) -> std::string
@@ -335,10 +362,12 @@ auto ContentVm::StartImport(const std::filesystem::path& source_path) -> void
     const auto content_root = file_browser_->GetContentRoots().content_root;
     model.virtual_path
       = ModelVirtualPath(layout.virtual_mount_root, content_root, source_path);
+    const auto mounts = ContentMounts(content_root);
     auto location = content::import::ModelImportRecord::LocateRecord({
       .content_root = content_root,
       .source = source_path,
       .virtual_path = model.virtual_path,
+      .mounts = make_observer(&mounts),
     });
     content::import::ModelImportRecord::Save({
       .record_path = location.record_path,
@@ -346,9 +375,10 @@ auto ContentVm::StartImport(const std::filesystem::path& source_path) -> void
       .source = source_path,
       .virtual_path = model.virtual_path,
       .settings_json = content::import::ModelImportRecord::MakeSettings(model),
+      .mounts = make_observer(&mounts),
     });
     auto publication = content::import::ModelImportRecord::Prepare(
-      location.record_path, std::move(location.diagnostics));
+      location.record_path, mounts, std::move(location.diagnostics));
     const auto job_id = import_service_->SubmitModelImport(
       std::move(publication),
       [this](content::import::ImportJobId id,

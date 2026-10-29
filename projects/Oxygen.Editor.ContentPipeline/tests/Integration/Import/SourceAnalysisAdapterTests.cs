@@ -32,13 +32,15 @@ public sealed class SourceAnalysisAdapterTests
         var artifacts = verified.Artifacts!;
         await using var lifetime = artifacts.ConfigureAwait(false);
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
-        var execution = AnalysisExecution(workspace) with { Artifacts = artifacts };
+        // The sources lie directly under the root, which the one mount covers.
+        IReadOnlyList<ContentImportMount> mounts = [new("Content", ".")];
+        var execution = AnalysisExecution(workspace) with { Artifacts = artifacts, Mounts = mounts };
         var analysis = await api.AnalyzeSourcesAsync(execution, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = analysis.Complete.Should().BeTrue();
         var captures = await CaptureAnalyzedSourcesAsync(execution, analysis, this.TestContext.CancellationToken).ConfigureAwait(false);
         var capturedAnalysis = await api.AnalyzeSourcesAsync(execution with { CapturedInputs = captures }, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = capturedAnalysis.Should().BeEquivalentTo(analysis);
-        var manifest = new ContentImportManifest(1, Path.Combine(execution.OperationRoot, "output"), new("/.cooked"), execution.Jobs);
+        var manifest = new ContentImportManifest(1, Path.Combine(execution.OperationRoot, "output"), new("/Content"), execution.Jobs) { Mounts = mounts };
         var import = new ContentImportExecution(execution.OperationId, execution.InputRoot, execution.OperationRoot, manifest)
         {
             Artifacts = artifacts,
@@ -49,7 +51,7 @@ public sealed class SourceAnalysisAdapterTests
         _ = imported.OutputsBySource.Should().HaveCount(2);
         foreach (var output in analysis.Jobs.SelectMany(static job => job.Outputs))
         {
-            _ = File.Exists(Path.Combine(manifest.Output, output.VirtualPath["/.cooked/".Length..])).Should().BeTrue();
+            _ = File.Exists(Path.Combine(manifest.Output, output.VirtualPath["/Content/".Length..])).Should().BeTrue();
         }
     }
 

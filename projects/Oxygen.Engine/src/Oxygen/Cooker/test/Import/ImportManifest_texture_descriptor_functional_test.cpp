@@ -40,7 +40,12 @@ NOLINT_TEST(ImportManifestTextureDescriptorTest,
   const auto job_key = oxygen::Uuid::Generate();
   const auto manifest_json = nlohmann::json {
     { "version", 1 },
-    { "output", (root / "first").generic_string() },
+    {
+      "mounts",
+      nlohmann::json::array({ { { "name", "Content" }, { "path", "." } } }),
+    },
+    { "layout", { { "virtual_mount_root", "/.cooked" } } },
+    { "output", "first" },
     { "source_key", top.ToString() },
     { "defaults", { { "source_key", defaults.ToString() } } },
     {
@@ -57,7 +62,7 @@ NOLINT_TEST(ImportManifestTextureDescriptorTest,
           { "source", "second.png" },
           { "virtual_path", "/.cooked/Textures/Second.otex" },
           { "id", "second" },
-          { "output", (root / "second").generic_string() },
+          { "output", "second" },
           { "source_key", job_key.ToString() },
         },
       }),
@@ -65,7 +70,7 @@ NOLINT_TEST(ImportManifestTextureDescriptorTest,
   };
   std::ostringstream errors;
   const auto manifest
-    = ImportManifest::Parse(manifest_json.dump(), root, std::nullopt, errors);
+    = ImportManifest::Parse(manifest_json.dump(), root, {}, errors);
   ASSERT_HAS_VALUE(manifest) << errors.str();
   const auto requests = manifest->BuildRequests(errors);
   ASSERT_EQ(requests.size(), 2U) << errors.str();
@@ -95,11 +100,11 @@ NOLINT_TEST(ImportManifestTextureDescriptorTest,
       }
     })");
 
-  const auto cooked_root = (root / ".cooked").generic_string();
-  const auto manifest_json = std::string { R"({
+  const auto* const manifest_json = R"({
       "version": 1,
-      "output": ")" }
-    + cooked_root + R"(",
+      "mounts": [{ "name": "Content", "path": "." }],
+      "layout": { "virtual_mount_root": "/.cooked" },
+      "output": ".cooked",
       "defaults": {
         "texture": {
           "intent": "albedo",
@@ -120,8 +125,7 @@ NOLINT_TEST(ImportManifestTextureDescriptorTest,
   WriteText(manifest_path, manifest_json);
 
   auto errors = std::ostringstream {};
-  const auto manifest
-    = ImportManifest::Load(manifest_path, std::nullopt, errors);
+  const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   ASSERT_HAS_VALUE(manifest) << errors.str();
   ASSERT_EQ(manifest->jobs.size(), 1U);
 
@@ -153,6 +157,8 @@ NOLINT_TEST(ImportManifestTextureDescriptorTest,
   WriteText(manifest_path,
     R"({
       "version": 1,
+      "mounts": [{ "name": "Content", "path": "." }],
+      "layout": { "virtual_mount_root": "/.cooked" },
       "jobs": [
         {
           "type": "texture-descriptor",
@@ -163,8 +169,7 @@ NOLINT_TEST(ImportManifestTextureDescriptorTest,
     })");
 
   auto errors = std::ostringstream {};
-  const auto manifest
-    = ImportManifest::Load(manifest_path, std::nullopt, errors);
+  const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   EXPECT_FALSE(manifest.has_value());
   EXPECT_THAT(
     errors.str(), ::testing::HasSubstr("manifest schema validation failed"));
@@ -189,6 +194,8 @@ NOLINT_TEST(ImportManifestTextureDescriptorTest,
   WriteText(manifest_path,
     R"({
       "version": 1,
+      "mounts": [{ "name": "Content", "path": "." }],
+      "layout": { "virtual_mount_root": "/.cooked" },
       "jobs": [
         {
           "type": "texture-descriptor",
@@ -199,8 +206,7 @@ NOLINT_TEST(ImportManifestTextureDescriptorTest,
     })");
 
   auto errors = std::ostringstream {};
-  const auto manifest
-    = ImportManifest::Load(manifest_path, std::nullopt, errors);
+  const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   ASSERT_HAS_VALUE(manifest) << errors.str();
   ASSERT_EQ(manifest->jobs.size(), 1U);
 

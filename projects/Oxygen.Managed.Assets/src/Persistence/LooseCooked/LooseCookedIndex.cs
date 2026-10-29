@@ -16,7 +16,7 @@ public static class LooseCookedIndex
     public const int AssetEntrySize = 85;
     public const int FileRecordSize = 54;
     public const int Sha256Size = 32;
-    public const ushort Version = 6;
+    public const ushort Version = 7;
 
     private static readonly byte[] HeaderMagic = Encoding.ASCII.GetBytes("OXLCIDX\0");
 

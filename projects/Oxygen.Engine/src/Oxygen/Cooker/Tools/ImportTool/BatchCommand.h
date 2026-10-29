@@ -48,9 +48,14 @@ private:
   const AsyncImportService::Config* service_config_override_ = nullptr;
   bool concurrency_override_set_ = false;
 
+  //! Loads the manifests of the run as one batch.
+  [[nodiscard]] auto LoadManifests() const -> std::optional<ImportManifest>;
+
   struct Options {
-    std::string manifest_path;
+    std::vector<std::filesystem::path> manifest_paths;
     std::string root_path;
+    std::string mounts_path;
+    bool engine_content = false;
     std::string captured_inputs_path;
     std::string report_path;
     std::vector<std::filesystem::path> cooked_context_roots;

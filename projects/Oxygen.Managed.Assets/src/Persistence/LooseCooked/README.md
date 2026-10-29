@@ -10,9 +10,9 @@ The reader checks section bounds, record sizes, required digests, member paths,
 unique identities and paired resource-table/data roles. Texture descriptor
 records carry the virtual path the texture is addressed by; asset and texture
 virtual paths share one namespace. Every asset and texture descriptor records
-the virtual path of the source that produced it (`SourcePath`), which is how the
-cooker tells a source re-cooking its own asset from another source claiming the
-same identity. `TextureDescriptorFile` reads a texture descriptor (`.otex`) into
+the mount path of the source that produced it (`SourcePath`,
+`/<Mount>/<path in mount>`), which is how the cooker tells a source re-cooking
+its own asset from another source claiming the same identity. `TextureDescriptorFile` reads a texture descriptor (`.otex`) into
 its `TextureResourceRecord`; the loose catalog lists each texture by its engine
 key (`AssetKey.FromVirtualPath`) with that record. The reader accepts only the
 current format; recook older content with current native tools.

@@ -18,11 +18,13 @@
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Uuid.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/ModelImportState.h>
+#include <Oxygen/Cooker/Import/SourceMounts.h>
 #include <Oxygen/Cooker/api_export.h>
 
 namespace oxygen::content::import {
@@ -38,6 +40,9 @@ struct SceneImportSettings;
 struct ModelImportRecordContent final {
   //! The primary source file, absolute.
   std::filesystem::path source;
+  //! The record's `source`: the primary source's mount path, such as
+  //! `/Content/SourceMedia/DCC/Ship.glb`.
+  std::string source_mount_path;
   //! The model's identity, under which its products are named.
   std::string virtual_path;
   //! The model import settings, a JSON object in the vocabulary of a gltf or
@@ -74,6 +79,8 @@ struct ModelImportRecordQuery final {
   std::filesystem::path content_root;
   std::filesystem::path source;
   std::string virtual_path;
+  //! The mount table the records' sources are located through; never null.
+  observer_ptr<const MountTable> mounts;
 };
 
 //! What `Save` writes into a model import record.
@@ -86,6 +93,8 @@ struct ModelImportRecordSave final {
   std::string virtual_path;
   //! Absent keeps the record's settings.
   std::optional<std::string> settings_json;
+  //! The mount table the source is located through; never null.
+  observer_ptr<const MountTable> mounts;
 };
 
 //! A model's import state, in one file: its model import record.
@@ -113,11 +122,16 @@ public:
 
   //! Reads and validates a record: its schema, settings, provenance and
   //! continuity, and that its file name is its source identity.
-  OXGN_COOK_NDAPI static auto Read(const std::filesystem::path& record_path)
-    -> ModelImportRecordContent;
+  /*!
+   `source` is a mount path, located through `mounts`, or a path relative to
+   the record's folder that lies in a `Source` mount. An absolute one fails
+   with `path.absolute_committed`, a source in no mount with
+   `import.source_outside_mount`.
+  */
+  OXGN_COOK_NDAPI static auto Read(const std::filesystem::path& record_path,
+    const MountTable& mounts) -> ModelImportRecordContent;
 
-  //! The record's JSON text; `source` is written relative to the record's
-  //! folder when it is inside the content root.
+  //! The record's JSON text; `source` is written as its mount path.
   OXGN_COOK_NDAPI static auto Serialize(const ModelImportRecordContent& content,
     const std::filesystem::path& record_path) -> std::string;
 
@@ -161,7 +175,8 @@ public:
   OXGN_COOK_API static auto Save(const ModelImportRecordSave& save) -> void;
 
   //! Saves the settings, source and virtual path of a single-job gltf or fbx
-  //! manifest. Relative sources resolve beside that manifest; validation
+  //! manifest. Its source is a mount path or a path relative to the project
+  //! root, located through `save.mounts`, as any manifest's; validation
   //! precedes any write. Without a record path, LocateRecord finds the record
   //! of the job's source and virtual path. Returns the record written.
   OXGN_COOK_API static auto SaveRecipeFile(const ModelImportRecordSave& save,
@@ -173,7 +188,7 @@ public:
   //! A missing source is `import.source_missing`. `notes` are the lookup's
   //! diagnostics, added to the attempt's report.
   OXGN_COOK_NDAPI static auto Prepare(const std::filesystem::path& record_path,
-    std::vector<ImportDiagnostic> notes = {})
+    const MountTable& mounts, std::vector<ImportDiagnostic> notes = {})
     -> std::shared_ptr<ModelImportRecord>;
 
   OXGN_COOK_API ~ModelImportRecord();

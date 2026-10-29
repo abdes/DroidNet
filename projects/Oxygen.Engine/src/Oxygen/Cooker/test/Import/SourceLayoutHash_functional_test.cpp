@@ -73,6 +73,8 @@ protected:
     request.source_path = source;
     request.asset_virtual_path
       = oxygen::cooker::test::ModelVirtualPath(request.source_path);
+    request.source_mount_path
+      = oxygen::cooker::test::SourceMountPath(request.source_path);
     request.cooked_root = MakeTempDir("source_witness_import_" + TestName()
       + "_" + std::to_string(capture_index_++));
     return request;
@@ -107,6 +109,8 @@ protected:
     request.source_path = source;
     request.asset_virtual_path
       = oxygen::cooker::test::ModelVirtualPath(request.source_path);
+    request.source_mount_path
+      = oxygen::cooker::test::SourceMountPath(request.source_path);
     request.cooked_root = MakeTempDir("source_witness_cook_" + TestName() + "_"
       + std::to_string(capture_index_++));
     request.options.coordinate = coordinates;
@@ -331,6 +335,8 @@ NOLINT_TEST_F(SourceLayoutWitnessTest, MovingTheModelKeepsItsSurfaceIds)
   auto request = ImportRequest {};
   request.source_path = FixturePath("gltf");
   request.asset_virtual_path = "/.cooked/Moved/Renamed.gltf";
+  request.source_mount_path
+    = oxygen::cooker::test::SourceMountPath(request.source_path);
   request.cooked_root = MakeTempDir("source_witness_moved");
   const auto moved = RunImport(std::move(request));
   ASSERT_TRUE(moved.report.success);

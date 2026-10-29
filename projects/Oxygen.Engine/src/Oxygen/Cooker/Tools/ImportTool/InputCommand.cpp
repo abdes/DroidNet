@@ -12,6 +12,8 @@
 #include <system_error>
 #include <utility>
 
+#include "SourceMountOptions.h"
+
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Clap/Command.h>
 #include <Oxygen/Clap/Fluent/CommandBuilder.h>
@@ -85,6 +87,7 @@ auto InputCommand::BuildCommand() -> std::shared_ptr<clap::Command>
         .Build();
 
   return CommandBuilder("input")
+    .WithOptions(BuildSourceMountOptions(mount_options_))
     .About("Import input authoring JSON")
     .WithPositionalArguments(source_path)
     .WithOption(std::move(virtual_path))
@@ -125,6 +128,10 @@ auto InputCommand::Execute() -> std::expected<void, std::error_code>
     request->job_name = options_.job_name;
   }
   request->options.with_content_hashing = options_.with_content_hashing;
+  const auto mounts = ResolveSourceMounts(mount_options_, writer);
+  if (!mounts.has_value() || !LocateRequestSource(*request, *mounts, writer)) {
+    return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+  }
 
   return RunImportJob(*request, writer, options_.report_path,
     global_options_->command_line, !global_options_->no_tui,

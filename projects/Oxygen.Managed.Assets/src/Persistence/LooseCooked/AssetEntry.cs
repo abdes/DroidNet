@@ -15,7 +15,7 @@ public sealed record AssetEntry(
     /// <summary>Gets the opaque native reference-block locator.</summary>
     public AssetReferenceTable References { get; init; }
 
-    /// <summary>Gets the virtual path of the source that produced the asset, such as
+    /// <summary>Gets the mount path of the source that produced the asset, such as
     /// <c>/Content/Materials/Red.omat.json</c>; a re-cook by another source is refused.</summary>
     public string? SourcePath { get; init; }
 }

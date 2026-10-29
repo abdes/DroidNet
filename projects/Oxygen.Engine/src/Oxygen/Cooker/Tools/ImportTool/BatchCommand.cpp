@@ -55,6 +55,7 @@
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/ImportSourceDocument.h>
 #include <Oxygen/Cooker/Import/ModelImportRecord.h>
+#include <Oxygen/Cooker/Import/SourceMounts.h>
 #include <Oxygen/Cooker/Tools/ImportTool/BatchCommand.h>
 #include <Oxygen/Cooker/Tools/ImportTool/MessageWriter.h>
 #include <Oxygen/Cooker/Tools/ImportTool/ReportJson.h>
@@ -761,20 +762,46 @@ auto BatchCommand::Name() const -> std::string_view { return "batch"; }
 
 auto BatchCommand::BuildCommand() -> std::shared_ptr<clap::Command>
 {
-  auto manifest = Option::WithKey("manifest")
-                    .About("Path to the import manifest JSON")
-                    .Short("m")
-                    .Long("manifest")
-                    .WithValue<std::string>()
-                    .StoreTo(&options_.manifest_path)
-                    .Build();
+  auto manifest
+    = Option::WithKey("manifest")
+        .About("Path to an import manifest JSON; repeat for several, cooked "
+               "as one batch with one mount table")
+        .Short("m")
+        .Long("manifest")
+        // A string, as every command's `manifest` option: options of one key
+        // share one value type.
+        .WithValue<std::string>()
+        .UserFriendlyName("PATH")
+        .Repeatable()
+        .CallOnEachValue([this](const std::string& path) -> void {
+          options_.manifest_paths.emplace_back(path);
+        })
+        .Build();
 
   auto root = Option::WithKey("root")
-                .About("Root path for resolving relative sources")
+                .About("The project root, replacing every manifest's "
+                       "project_root")
                 .Long("root")
                 .WithValue<std::string>()
                 .StoreTo(&options_.root_path)
                 .Build();
+
+  auto mounts = Option::WithKey("mounts")
+                  .About("A mounts file applied above every .mounts.json; "
+                         "with \"root\": true it is the only one read")
+                  .Long("mounts")
+                  .WithValue<std::string>()
+                  .StoreTo(&options_.mounts_path)
+                  .Build();
+
+  auto engine_content
+    = Option::WithKey("engine-content")
+        .About("Cook the engine content build, which declares the reserved "
+               "Engine mount")
+        .Long("engine-content")
+        .WithValue<bool>()
+        .StoreTo(&options_.engine_content)
+        .Build();
 
   auto dry_run = Option::WithKey("dry-run")
                    .About("Validate and print jobs without executing")
@@ -827,11 +854,41 @@ auto BatchCommand::BuildCommand() -> std::shared_ptr<clap::Command>
     .About("Run a batch import manifest")
     .WithOption(std::move(manifest))
     .WithOption(std::move(root))
+    .WithOption(std::move(mounts))
+    .WithOption(std::move(engine_content))
     .WithOption(std::move(captured_inputs))
     .WithOption(std::move(dry_run))
     .WithOption(std::move(report))
     .WithOption(std::move(cooked_context_root))
     .WithOption(std::move(max_in_flight));
+}
+
+auto BatchCommand::LoadManifests() const -> std::optional<ImportManifest>
+{
+  auto options = ImportManifestLoadOptions {
+    .project_root = {},
+    .mounts_file = {},
+    .owner = options_.engine_content ? MountTableOwner::kEngineContent
+                                     : MountTableOwner::kProject,
+    .mount_table = {},
+  };
+  if (!options_.root_path.empty()) {
+    options.project_root = std::filesystem::path(options_.root_path);
+  }
+  if (!options_.mounts_path.empty()) {
+    options.mounts_file = std::filesystem::path(options_.mounts_path);
+  }
+  std::ostringstream err;
+  auto manifest
+    = ImportManifest::LoadBatch(options_.manifest_paths, options, err);
+  if (const auto msg = err.str(); !msg.empty()) {
+    if (manifest.has_value()) {
+      global_options_->writer->Warning(msg);
+    } else {
+      global_options_->writer->Error(msg);
+    }
+  }
+  return manifest;
 }
 
 auto BatchCommand::PrepareImportServiceConfig()
@@ -841,28 +898,14 @@ auto BatchCommand::PrepareImportServiceConfig()
     "Global message writer must be set by main");
   auto writer = global_options_->writer;
 
-  if (options_.manifest_path.empty()) {
+  if (options_.manifest_paths.empty()) {
     writer->Error("ERROR: --manifest is required");
     return std::unexpected(std::make_error_code(std::errc::invalid_argument));
   }
 
-  std::optional<std::filesystem::path> root_override;
-  if (!options_.root_path.empty()) {
-    root_override = std::filesystem::path(options_.root_path);
-  }
-
-  std::optional<ImportManifest> manifest;
-  {
-    std::ostringstream err;
-    manifest = ImportManifest::Load(
-      std::filesystem::path(options_.manifest_path), root_override, err);
-    if (!manifest.has_value()) {
-      const auto msg = err.str();
-      if (!msg.empty()) {
-        writer->Error(msg);
-      }
-      return std::unexpected(std::make_error_code(std::errc::invalid_argument));
-    }
+  auto manifest = LoadManifests();
+  if (!manifest.has_value()) {
+    return std::unexpected(std::make_error_code(std::errc::invalid_argument));
   }
 
   prepared_manifest_ = manifest;
@@ -905,7 +948,7 @@ auto BatchCommand::Execute() -> std::expected<void, std::error_code>
     global_options_->import_service, "Import service must be set by main");
   auto import_service = global_options_->import_service;
 
-  if (options_.manifest_path.empty()) {
+  if (options_.manifest_paths.empty()) {
     writer->Error("ERROR: --manifest is required");
     return std::unexpected(std::make_error_code(std::errc::invalid_argument));
   }
@@ -915,19 +958,8 @@ auto BatchCommand::Execute() -> std::expected<void, std::error_code>
   if (prepared_manifest_.has_value()) {
     manifest = std::move(prepared_manifest_);
   } else {
-    std::optional<std::filesystem::path> root_override;
-    if (!options_.root_path.empty()) {
-      root_override = std::filesystem::path(options_.root_path);
-    }
-
-    std::ostringstream err;
-    manifest = ImportManifest::Load(
-      std::filesystem::path(options_.manifest_path), root_override, err);
+    manifest = LoadManifests();
     if (!manifest.has_value()) {
-      const auto msg = err.str();
-      if (!msg.empty()) {
-        writer->Error(msg);
-      }
       return std::unexpected(std::make_error_code(std::errc::invalid_argument));
     }
   }
@@ -1171,7 +1203,8 @@ auto BatchCommand::Execute() -> std::expected<void, std::error_code>
     std::vector<std::optional<ImportReport>> reports;
   };
   auto common_context = std::make_shared<SharedContext>();
-  common_context->state.manifest_path = options_.manifest_path;
+  common_context->state.manifest_path
+    = options_.manifest_paths.front().string();
   common_context->state.total = jobs.size();
   common_context->state.remaining = jobs.size();
   common_context->state.in_flight = 0;

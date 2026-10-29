@@ -160,6 +160,8 @@ protected:
     request.source_path = root / ("fixture." + extension);
     request.asset_virtual_path
       = oxygen::cooker::test::ModelVirtualPath(request.source_path);
+    request.source_mount_path
+      = oxygen::cooker::test::SourceMountPath(request.source_path);
     request.cooked_root = root / "cooked";
     request.options.coordinate.bake_transforms_into_meshes = bake;
     {

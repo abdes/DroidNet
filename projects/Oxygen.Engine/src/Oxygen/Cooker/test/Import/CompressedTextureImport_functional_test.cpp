@@ -87,6 +87,8 @@ namespace {
       request.loose_cooked_layout.virtual_mount_root = "/.cooked";
       request.asset_virtual_path = "/.cooked/Textures/"
         + std::filesystem::path(file).stem().string() + ".otex";
+      request.source_mount_path
+        = oxygen::cooker::test::SourceMountPath(request.source_path);
       return request;
     }
   };
@@ -119,6 +121,8 @@ namespace {
     auto request = ImportRequest {};
     request.source_path = source;
     request.asset_virtual_path = "/.cooked/model.gltf";
+    request.source_mount_path
+      = oxygen::cooker::test::SourceMountPath(request.source_path);
     request.cooked_root = CookedRoot();
     const auto identity = Uuid::FromString(kModelSurfaceIdentity);
     ASSERT_HAS_VALUE(identity);

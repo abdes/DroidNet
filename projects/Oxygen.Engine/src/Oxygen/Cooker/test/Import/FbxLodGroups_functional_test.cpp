@@ -8,6 +8,7 @@
 //   Import/Internal/Pipelines/MeshBuildPipeline.cpp
 
 #include <algorithm>
+#include <array>
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
@@ -37,7 +38,9 @@
 
 namespace {
 
-using namespace oxygen::content::import;
+using oxygen::content::import::ImportDiagnostic;
+using oxygen::content::import::ImportRequest;
+namespace test = oxygen::content::import::test;
 namespace data = oxygen::data;
 
 //! One cooked geometry: its LODs, default policy, surfaces and bounds.
@@ -136,6 +139,8 @@ protected:
     request.source_path = root / "model.fbx";
     request.asset_virtual_path
       = oxygen::cooker::test::ModelVirtualPath(request.source_path);
+    request.source_mount_path
+      = oxygen::cooker::test::SourceMountPath(request.source_path);
     request.cooked_root = root / "cooked";
     request.options.coordinate.bake_transforms_into_meshes = bake;
     {
@@ -175,7 +180,9 @@ protected:
       auto header = data::pak::geometry::GeometryAssetDesc {};
       {
         std::ifstream bytes(path, std::ios::binary);
-        bytes.read(reinterpret_cast<char*>(&header), sizeof(header));
+        auto raw = std::array<char, sizeof(header)> {};
+        bytes.read(raw.data(), static_cast<std::streamsize>(raw.size()));
+        std::memcpy(&header, raw.data(), raw.size());
       }
       oxygen::serio::FileStream<> stream(path, std::ios::in);
       oxygen::serio::Reader reader(stream);

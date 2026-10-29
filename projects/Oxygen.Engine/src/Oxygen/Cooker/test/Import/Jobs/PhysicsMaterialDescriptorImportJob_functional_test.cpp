@@ -23,6 +23,7 @@
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Cooker/test/Support/ImportHarness.h>
+#include <Oxygen/Cooker/test/Support/TestPaths.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Testing/GTest.h>
@@ -61,6 +62,8 @@ namespace {
     request.cooked_root = cooked_root;
     request.loose_cooked_layout.virtual_mount_root = "/.cooked";
     request.asset_virtual_path = "/.cooked/Physics/Materials/ground.opmat";
+    request.source_mount_path
+      = oxygen::cooker::test::SourceMountPath(request.source_path);
     request.physics_material_descriptor
       = ImportRequest::PhysicsMaterialDescriptorPayload {
           .normalized_descriptor_json = R"({
@@ -120,6 +123,8 @@ namespace {
     request.cooked_root = cooked_root;
     request.loose_cooked_layout.virtual_mount_root = "/.cooked";
     request.asset_virtual_path = "/.cooked/Physics/Materials/bad.opmat";
+    request.source_mount_path
+      = oxygen::cooker::test::SourceMountPath(request.source_path);
     request.physics_material_descriptor
       = ImportRequest::PhysicsMaterialDescriptorPayload {
           .normalized_descriptor_json = R"({
@@ -147,6 +152,8 @@ namespace {
     request.cooked_root = cooked_root;
     request.loose_cooked_layout.virtual_mount_root = "/.cooked";
     request.asset_virtual_path = virtual_path;
+    request.source_mount_path
+      = oxygen::cooker::test::SourceMountPath(request.source_path);
     request.physics_material_descriptor
       = ImportRequest::PhysicsMaterialDescriptorPayload {
           .normalized_descriptor_json = document.dump(),

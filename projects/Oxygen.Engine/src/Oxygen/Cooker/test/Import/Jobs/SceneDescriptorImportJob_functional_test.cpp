@@ -40,6 +40,7 @@
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Cooker/test/Support/ImportHarness.h>
+#include <Oxygen/Cooker/test/Support/TestPaths.h>
 #include <Oxygen/Cooker/test/Support/TextureLibraryFixture.h>
 #include <Oxygen/Core/Types/CameraAspectMode.h>
 #include <Oxygen/Core/Types/Format.h>
@@ -155,6 +156,8 @@ namespace {
       request.source_path = "inline://scene.oscene.json";
       request.asset_virtual_path = "/.cooked/Scenes/"
         + document.at("name").get<std::string>() + ".oscene";
+      request.source_mount_path
+        = oxygen::cooker::test::SourceMountPath(request.source_path);
       request.cooked_root = cooked_root;
       request.loose_cooked_layout.virtual_mount_root = "/.cooked";
       request.scene_descriptor = ImportRequest::SceneDescriptorPayload {

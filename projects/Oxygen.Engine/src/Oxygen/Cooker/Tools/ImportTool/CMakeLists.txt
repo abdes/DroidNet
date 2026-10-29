@@ -67,6 +67,8 @@ add_library(
   "SourceAnalysisCommand.h"
   "SourceInspectionCommand.cpp"
   "SourceInspectionCommand.h"
+  "SourceMountOptions.cpp"
+  "SourceMountOptions.h"
   "ScriptCommand.cpp"
   "ScriptCommand.h"
   "ScriptingSidecarCommand.cpp"

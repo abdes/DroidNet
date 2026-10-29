@@ -173,6 +173,8 @@ namespace {
     request.loose_cooked_layout.virtual_mount_root = "/.cooked";
     request.asset_virtual_path
       = "/.cooked/Materials/" + std::string(name) + ".omat";
+    request.source_mount_path
+      = oxygen::cooker::test::SourceMountPath(request.source_path);
     request.material_descriptor = ImportRequest::MaterialDescriptorPayload {
       .normalized_descriptor_json = json { { "name", name } }.dump(),
     };
@@ -187,6 +189,8 @@ namespace {
     request.cooked_root = scenario.cooked;
     request.loose_cooked_layout.virtual_mount_root = "/.cooked";
     request.asset_virtual_path = "/.cooked/Physics/Materials/ground.opmat";
+    request.source_mount_path
+      = oxygen::cooker::test::SourceMountPath(request.source_path);
     request.physics_material_descriptor
       = ImportRequest::PhysicsMaterialDescriptorPayload {
           .normalized_descriptor_json = R"({
@@ -211,6 +215,8 @@ namespace {
     request.cooked_root = cooked;
     request.loose_cooked_layout.virtual_mount_root = "/.cooked";
     request.asset_virtual_path = "/.cooked/Scenes/DemoScene.oscene";
+    request.source_mount_path
+      = oxygen::cooker::test::SourceMountPath(request.source_path);
     request.scene_descriptor = ImportRequest::SceneDescriptorPayload {
       .normalized_descriptor_json = R"({"version":)"
         + std::to_string(internal::kSceneDescriptorVersion)
@@ -235,6 +241,8 @@ namespace {
     request.options.scripting.source_root = cooked.parent_path();
     request.asset_virtual_path
       = DefaultMountRoot() + "/" + script.stem().string() + ".oscript";
+    request.source_mount_path
+      = oxygen::cooker::test::SourceMountPath(request.source_path);
     return request;
   }
 
@@ -246,6 +254,8 @@ namespace {
     request.source_path = "inline://scene.oscene.json";
     request.cooked_root = cooked;
     request.asset_virtual_path = DefaultMountRoot() + "/Part.oscene";
+    request.source_mount_path
+      = oxygen::cooker::test::SourceMountPath(request.source_path);
     request.scene_descriptor = ImportRequest::SceneDescriptorPayload {
       .normalized_descriptor_json = json {
         { "version", internal::kSceneDescriptorVersion },
@@ -289,6 +299,8 @@ namespace {
     request.source_path = oxygen::cooker::test::ModelPath(file);
     request.asset_virtual_path
       = oxygen::cooker::test::ModelVirtualPath(request.source_path);
+    request.source_mount_path
+      = oxygen::cooker::test::SourceMountPath(request.source_path);
     request.cooked_root = cooked;
     request.surface_provenance = std::make_shared<const SurfaceProvenance>(
       Uuid::FromString(kModelSurfaceIdentity).value());
@@ -396,6 +408,8 @@ namespace {
     request.cooked_root = cooked;
     request.loose_cooked_layout.virtual_mount_root = "/.cooked";
     request.asset_virtual_path = "/.cooked/Materials/HdrEmission.omat";
+    request.source_mount_path
+      = oxygen::cooker::test::SourceMountPath(request.source_path);
     request.material_descriptor = ImportRequest::MaterialDescriptorPayload {
       .normalized_descriptor_json = R"({
         "name": "HdrEmission",
@@ -417,6 +431,8 @@ namespace {
     request.cooked_root = cooked;
     request.loose_cooked_layout.virtual_mount_root = "/.cooked";
     request.asset_virtual_path = "/.cooked/Physics/Materials/ground.opmat";
+    request.source_mount_path
+      = oxygen::cooker::test::SourceMountPath(request.source_path);
     request.physics_material_descriptor
       = ImportRequest::PhysicsMaterialDescriptorPayload {
           .normalized_descriptor_json = R"({
@@ -458,6 +474,8 @@ namespace {
     request.cooked_root = cooked;
     request.loose_cooked_layout.virtual_mount_root = "/.cooked";
     request.asset_virtual_path = "/.cooked/Textures/checker.otex";
+    request.source_mount_path
+      = oxygen::cooker::test::SourceMountPath(request.source_path);
 
     ExpectGoldenOutput(std::move(request));
   }
@@ -517,6 +535,8 @@ namespace {
     request.cooked_root = cooked;
     request.loose_cooked_layout.virtual_mount_root = "/.cooked";
     request.asset_virtual_path = "/.cooked/Physics/Shapes/floor_box.ocshape";
+    request.source_mount_path
+      = oxygen::cooker::test::SourceMountPath(request.source_path);
     request.collision_shape_descriptor
       = ImportRequest::CollisionShapeDescriptorPayload {
           .normalized_descriptor_json = descriptor.dump(),
@@ -568,6 +588,8 @@ namespace {
     request.cooked_root = cooked;
     request.loose_cooked_layout.virtual_mount_root = "/.cooked";
     request.asset_virtual_path = "/.cooked/Geometry/ProceduralCube.ogeo";
+    request.source_mount_path
+      = oxygen::cooker::test::SourceMountPath(request.source_path);
     request.geometry_descriptor = ImportRequest::GeometryDescriptorPayload {
       .normalized_descriptor_json = descriptor.dump(),
     };
@@ -676,6 +698,8 @@ namespace {
     request.cooked_root = cooked;
     request.loose_cooked_layout.virtual_mount_root = "/.cooked";
     request.asset_virtual_path = "/.cooked/Input/Player.input";
+    request.source_mount_path
+      = oxygen::cooker::test::SourceMountPath(request.source_path);
     request.input.emplace();
 
     ExpectGoldenOutput(std::move(request));

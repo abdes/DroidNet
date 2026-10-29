@@ -26,6 +26,7 @@
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/SceneSource.h>
+#include <Oxygen/Cooker/test/Support/TestPaths.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat.h>
@@ -51,6 +52,8 @@ namespace {
       request.source_path = "inline://scene.oscene.json";
       request.asset_virtual_path
         = CanonicalSceneVirtualPath(descriptor.at("name").get<std::string>());
+      request.source_mount_path
+        = oxygen::cooker::test::SourceMountPath(request.source_path);
       request.cooked_root = cooked_root;
       request.scene_descriptor = ImportRequest::SceneDescriptorPayload {
         .normalized_descriptor_json = descriptor.dump(),

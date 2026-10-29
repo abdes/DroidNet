@@ -65,6 +65,8 @@ namespace {
       auto request = ImportRequest {};
       request.source_path = source;
       request.asset_virtual_path = "/.cooked/" + std::string(name);
+      request.source_mount_path
+        = oxygen::cooker::test::SourceMountPath(request.source_path);
       request.cooked_root = CookedRoot();
       request.surface_provenance
         = std::make_shared<const SurfaceProvenance>(*identity);

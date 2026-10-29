@@ -301,7 +301,11 @@ struct LooseCookedWriter::Impl final {
           + producer.completes);
       }
     }
-    RequireCanonicalVirtualPath(producer.source);
+    // A mount path names a real file; identity rules do not apply to it.
+    if (!producer.source.starts_with('/')) {
+      throw std::runtime_error(
+        "The recorded source is not a mount path: '" + producer.source + "'");
+    }
     return producer.source;
   }
 
@@ -332,7 +336,7 @@ struct LooseCookedWriter::Impl final {
         + "'");
     }
     if (const auto producer = FindProducer_(virtual_path);
-      producer.has_value() && *producer != source) {
+      producer.has_value() && FoldIdentity(*producer) != FoldIdentity(source)) {
       throw LooseCookedIdentityCollision(std::string(context) + ": '"
         + virtual_path + "' is produced by '" + *producer + "', not by '"
         + source + "'");

@@ -111,6 +111,30 @@ namespace mount_codes {
     .severity = ImportSeverity::kError,
     .message = "invalid mounts file: {}; the file binds nothing",
   };
+  inline constexpr auto kSourceOutsideMount = MountCode<std::string_view> {
+    .id = "import.source_outside_mount",
+    .severity = ImportSeverity::kError,
+    .message = "source '{}' lies in no source mount: a recorded source is "
+               "its mount path",
+  };
+  inline constexpr auto kSourceMountUnbound
+    = MountCode<std::string_view, std::string_view> {
+        .id = "import.mount_unbound",
+        .severity = ImportSeverity::kError,
+        .message = "source '{}' needs mount '{}', which no mounts file binds "
+                   "on this machine",
+      };
+  inline constexpr auto kDerivedFromNotDerived = MountCode<std::string_view> {
+    .id = "import.derived_from_not_derived",
+    .severity = ImportSeverity::kError,
+    .message = "source '{}' is not in an output folder: only a derived file "
+               "names the source it derives from",
+  };
+  inline constexpr auto kDerivedFromInvalid = MountCode<std::string_view> {
+    .id = "import.derived_from_invalid",
+    .severity = ImportSeverity::kError,
+    .message = "derived_from '{}' is not a mount path in a source mount",
+  };
 } // namespace mount_codes
 
 //! The file name of a mounts file, at the project root or above it.
@@ -268,6 +292,22 @@ struct Mount final {
   MountState state = MountState::kUnbound;
 };
 
+//! A path a committed file holds, and the field that holds it.
+struct CommittedPath final {
+  std::string_view text;
+  //! The field, such as `jobs[0].source`, named by diagnostics.
+  std::string_view field;
+};
+
+//! A source file located through a mount table.
+struct MountedSource final {
+  //! The canonical file.
+  std::filesystem::path file;
+  //! Its mount path, `/<Mount>/<path in mount>`: the source the loose cooked
+  //! index records for what it produces.
+  std::string mount_path;
+};
+
 //! A resolved mount table and every diagnostic its checks produced.
 struct MountTable final {
   //! The canonical project root.
@@ -283,6 +323,39 @@ struct MountTable final {
   //! The mount with exactly this name, or null.
   OXGN_COOK_NDAPI auto Find(std::string_view name) const
     -> observer_ptr<const Mount>;
+
+  /*!
+   Locates a file through the `Source` mounts: its mount path takes the
+   mount's name and the file's canonical spelling below the mount's folder, so
+   two spellings of one file give one mount path.
+
+   @param file The file: absolute, or relative to the project root.
+   @param findings Receives `import.source_outside_mount` when no `Source`
+     mount holds the file.
+   @return The located source, or nothing.
+  */
+  OXGN_COOK_NDAPI auto MountPathOf(const std::filesystem::path& file,
+    std::vector<ImportDiagnostic>& findings) const
+    -> std::optional<MountedSource>;
+
+  //! True when `file` lies in an output folder: a dot-named folder below the
+  //! project root.
+  OXGN_COOK_NDAPI auto IsInOutputFolder(const std::filesystem::path& file) const
+    -> bool;
+
+  /*!
+   Locates a source a committed file names: a mount path (`/Content/...`), or
+   a path relative to the project root that lies in a `Source` mount.
+
+   @param source The path and the field that holds it.
+   @param findings Receives `path.absolute_committed` for an absolute path,
+     `import.mount_unbound` for a mount with no folder and
+     `import.source_outside_mount` for a source in no `Source` mount.
+   @return The located source, or nothing.
+  */
+  OXGN_COOK_NDAPI auto LocateSource(
+    const CommittedPath& source, std::vector<ImportDiagnostic>& findings) const
+    -> std::optional<MountedSource>;
 };
 
 //! True when `name` follows the mount name rule of `oxygen.mounts.schema.json`.

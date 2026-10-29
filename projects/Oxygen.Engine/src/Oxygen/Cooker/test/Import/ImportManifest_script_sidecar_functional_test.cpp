@@ -24,27 +24,21 @@ using oxygen::content::import::ScriptingImportKind;
 using oxygen::cooker::test::ScopedTempDir;
 using oxygen::cooker::test::WriteText;
 
-auto JsonPath(const std::filesystem::path& path) -> std::string
-{
-  return path.lexically_normal().generic_string();
-}
-
 NOLINT_TEST(ImportManifestScriptSidecarTest, AcceptsInlineBindingsForSidecarJob)
 {
   const ScopedTempDir temp;
-  const auto cooked_root = temp.Path() / "oxygen_manifest_sidecar_root";
-  const auto cooked_root_json = JsonPath(cooked_root);
   const auto manifest_path
     = temp.Path() / "inline_bindings" / "import_manifest.json";
 
   WriteText(manifest_path,
     R"({
       "version": 1,
+      "mounts": [{ "name": "Content", "path": "." }],
+      "layout": { "virtual_mount_root": "/.cooked" },
       "jobs": [
         {
           "type": "script-sidecar",
-          "output": ")"
-      + cooked_root_json + R"(",
+          "output": "oxygen_manifest_sidecar_root",
           "target_scene_virtual_path": "/Scenes/TestScene.oscene",
           "bindings": [
             {
@@ -58,8 +52,7 @@ NOLINT_TEST(ImportManifestScriptSidecarTest, AcceptsInlineBindingsForSidecarJob)
     })");
 
   std::ostringstream errors;
-  const auto manifest
-    = ImportManifest::Load(manifest_path, std::nullopt, errors);
+  const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   ASSERT_HAS_VALUE(manifest) << errors.str();
   ASSERT_EQ(manifest->jobs.size(), 1U);
   EXPECT_TRUE(manifest->jobs.at(0).scripting_sidecar.source_path.empty());
@@ -79,16 +72,15 @@ NOLINT_TEST(ImportManifestScriptSidecarTest, AcceptsInlineBindingsForSidecarJob)
 NOLINT_TEST(ImportManifestScriptSidecarTest, ForwardsInlineInstanceBindings)
 {
   const ScopedTempDir temp;
-  const auto cooked_root_json
-    = JsonPath(temp.Path() / "oxygen_manifest_sidecar_root");
-  const auto job = [&cooked_root_json](const std::string& binding) {
+  const auto job = [](const std::string& binding) {
     return R"({
       "version": 1,
+      "mounts": [{ "name": "Content", "path": "." }],
+      "layout": { "virtual_mount_root": "/.cooked" },
       "jobs": [
         {
           "type": "script-sidecar",
-          "output": ")"
-      + cooked_root_json + R"(",
+          "output": "oxygen_manifest_sidecar_root",
           "target_scene_virtual_path": "/Scenes/TestScene.oscene",
           )"
       + binding + R"(,
@@ -110,10 +102,9 @@ NOLINT_TEST(ImportManifestScriptSidecarTest, ForwardsInlineInstanceBindings)
   WriteText(source_path, job(R"("source": "Scenes/TestScene.sidecar.json")"));
 
   std::ostringstream errors;
-  const auto manifest = ImportManifest::Load(inline_path, std::nullopt, errors);
+  const auto manifest = ImportManifest::Load(inline_path, {}, errors);
   std::ostringstream refused_errors;
-  const auto refused
-    = ImportManifest::Load(source_path, std::nullopt, refused_errors);
+  const auto refused = ImportManifest::Load(source_path, {}, refused_errors);
 
   ASSERT_HAS_VALUE(manifest) << errors.str();
   ASSERT_EQ(manifest->jobs.size(), 1U);
@@ -132,12 +123,12 @@ NOLINT_TEST(ImportManifestScriptSidecarTest,
   const ScopedTempDir temp;
   const auto manifest_path
     = temp.Path() / "sidecar_context_roots" / "import_manifest.json";
-  const auto output = manifest_path.parent_path() / "staging";
   WriteText(manifest_path,
     R"({
       "version": 1,
-      "output": ")"
-      + JsonPath(output) + R"(",
+      "mounts": [{ "name": "Content", "path": "." }],
+      "layout": { "virtual_mount_root": "/.cooked" },
+      "output": "staging",
       "jobs": [
         {
           "type": "script-sidecar",
@@ -155,8 +146,7 @@ NOLINT_TEST(ImportManifestScriptSidecarTest,
     })");
 
   std::ostringstream errors;
-  const auto manifest
-    = ImportManifest::Load(manifest_path, std::nullopt, errors);
+  const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   ASSERT_HAS_VALUE(manifest) << errors.str();
   std::ostringstream request_errors;
   const auto request = manifest->jobs.at(0).BuildRequest(request_errors);
@@ -177,13 +167,16 @@ NOLINT_TEST(ImportManifestScriptSidecarTest,
   WriteText(manifest_path,
     R"({
       "version": 1,
-      "output": ")"
-      + JsonPath(output) + R"(",
+      "mounts": [
+        { "name": "Authoring", "path": "Authoring" },
+        { "name": "Other", "path": "Other" }
+      ],
+      "layout": { "virtual_mount_root": "/.cooked" },
+      "output": "generated/cooked",
       "defaults": {
         "script": {
           "script_storage": "external",
-          "compile": false,
-          "source_root": "Authoring"
+          "compile": false
         }
       },
       "jobs": [
@@ -195,14 +188,12 @@ NOLINT_TEST(ImportManifestScriptSidecarTest,
         {
           "type": "script",
           "source": "Other/main.lua",
-          "source_root": "Other",
           "virtual_path": "/.cooked/Scripts/OtherMain.oscript"
         }
       ]
     })");
   std::ostringstream errors;
-  const auto manifest
-    = ImportManifest::Load(manifest_path, std::nullopt, errors);
+  const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   ASSERT_HAS_VALUE(manifest) << errors.str();
   ASSERT_EQ(manifest->jobs.size(), 2U);
   for (const auto& job : manifest->jobs) {
@@ -219,20 +210,19 @@ NOLINT_TEST(ImportManifestScriptSidecarTest,
   RejectsScriptSidecarJobWhenSourceAndBindingsBothSpecified)
 {
   const ScopedTempDir temp;
-  const auto cooked_root = temp.Path() / "oxygen_manifest_sidecar_root";
-  const auto cooked_root_json = JsonPath(cooked_root);
   const auto manifest_path
     = temp.Path() / "both_source_and_bindings" / "import_manifest.json";
 
   WriteText(manifest_path,
     R"({
       "version": 1,
+      "mounts": [{ "name": "Content", "path": "." }],
+      "layout": { "virtual_mount_root": "/.cooked" },
       "jobs": [
         {
           "type": "script-sidecar",
           "source": "scene.sidecar.json",
-          "output": ")"
-      + cooked_root_json + R"(",
+          "output": "oxygen_manifest_sidecar_root",
           "target_scene_virtual_path": "/Scenes/TestScene.oscene",
           "bindings": [
             {
@@ -246,8 +236,7 @@ NOLINT_TEST(ImportManifestScriptSidecarTest,
     })");
 
   std::ostringstream errors;
-  const auto manifest
-    = ImportManifest::Load(manifest_path, std::nullopt, errors);
+  const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   EXPECT_FALSE(manifest.has_value());
   EXPECT_FALSE(errors.str().empty());
 }
@@ -256,21 +245,20 @@ NOLINT_TEST(
   ImportManifestScriptSidecarTest, RejectsBindingsFieldForNonSidecarJobs)
 {
   const ScopedTempDir temp;
-  const auto cooked_root = temp.Path() / "oxygen_manifest_script_root";
-  const auto cooked_root_json = JsonPath(cooked_root);
   const auto manifest_path
     = temp.Path() / "bindings_non_sidecar" / "import_manifest.json";
 
   WriteText(manifest_path,
     R"({
       "version": 1,
+      "mounts": [{ "name": "Content", "path": "." }],
+      "layout": { "virtual_mount_root": "/.cooked" },
       "jobs": [
         {
           "type": "script",
           "source": "main.luau",
           "virtual_path": "/.cooked/Scripts/Main.oscript",
-          "output": ")"
-      + cooked_root_json + R"(",
+          "output": "oxygen_manifest_script_root",
           "bindings": [
             {
               "node_index": 0,
@@ -283,8 +271,7 @@ NOLINT_TEST(
     })");
 
   std::ostringstream errors;
-  const auto manifest
-    = ImportManifest::Load(manifest_path, std::nullopt, errors);
+  const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   EXPECT_FALSE(manifest.has_value());
   EXPECT_THAT(errors.str(),
     ::testing::HasSubstr("job.bindings is only valid for type "
@@ -295,16 +282,17 @@ NOLINT_TEST(ImportManifestScriptSidecarTest,
   TopLevelOutputAppliesToScriptAndSidecarJobsWhenNoOverridesExist)
 {
   const ScopedTempDir temp;
-  const auto cooked_root = temp.Path() / "oxygen_manifest_global_output";
-  const auto cooked_root_json = JsonPath(cooked_root);
+  const auto cooked_root = temp.Path() / "top_level_output_fallback"
+    / "oxygen_manifest_global_output";
   const auto manifest_path
     = temp.Path() / "top_level_output_fallback" / "import_manifest.json";
 
   WriteText(manifest_path,
     R"({
       "version": 1,
-      "output": ")"
-      + cooked_root_json + R"(",
+      "mounts": [{ "name": "Content", "path": "." }],
+      "layout": { "virtual_mount_root": "/.cooked" },
+      "output": "oxygen_manifest_global_output",
       "jobs": [
         {
           "type": "script",
@@ -326,8 +314,7 @@ NOLINT_TEST(ImportManifestScriptSidecarTest,
     })");
 
   std::ostringstream errors;
-  const auto manifest
-    = ImportManifest::Load(manifest_path, std::nullopt, errors);
+  const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   ASSERT_HAS_VALUE(manifest) << errors.str();
   ASSERT_EQ(manifest->jobs.size(), 2U);
 
@@ -352,20 +339,20 @@ NOLINT_TEST(ImportManifestScriptSidecarTest,
   DefaultsOutputOverridesTopLevelOutputForSidecarJobs)
 {
   const ScopedTempDir temp;
-  const auto top_level_output = temp.Path() / "oxygen_manifest_output_top";
-  const auto defaults_output = temp.Path() / "oxygen_manifest_output_defaults";
+  const auto defaults_output = temp.Path() / "defaults_over_top_level_output"
+    / "oxygen_manifest_output_defaults";
   const auto manifest_path
     = temp.Path() / "defaults_over_top_level_output" / "import_manifest.json";
 
   WriteText(manifest_path,
     R"({
       "version": 1,
-      "output": ")"
-      + JsonPath(top_level_output) + R"(",
+      "mounts": [{ "name": "Content", "path": "." }],
+      "layout": { "virtual_mount_root": "/.cooked" },
+      "output": "oxygen_manifest_output_top",
       "defaults": {
         "scripting_sidecar": {
-          "output": ")"
-      + JsonPath(defaults_output) + R"("
+          "output": "oxygen_manifest_output_defaults"
         }
       },
       "jobs": [
@@ -384,8 +371,7 @@ NOLINT_TEST(ImportManifestScriptSidecarTest,
     })");
 
   std::ostringstream errors;
-  const auto manifest
-    = ImportManifest::Load(manifest_path, std::nullopt, errors);
+  const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   ASSERT_HAS_VALUE(manifest) << errors.str();
   ASSERT_EQ(manifest->jobs.size(), 1U);
 
@@ -402,28 +388,26 @@ NOLINT_TEST(ImportManifestScriptSidecarTest,
   JobOutputOverridesDefaultsAndTopLevelForSidecarJobs)
 {
   const ScopedTempDir temp;
-  const auto top_level_output = temp.Path() / "oxygen_manifest_output_top2";
-  const auto defaults_output = temp.Path() / "oxygen_manifest_output_defaults2";
-  const auto job_output = temp.Path() / "oxygen_manifest_output_job2";
+  const auto job_output = temp.Path() / "job_overrides_defaults_output"
+    / "oxygen_manifest_output_job2";
   const auto manifest_path
     = temp.Path() / "job_overrides_defaults_output" / "import_manifest.json";
 
   WriteText(manifest_path,
     R"({
       "version": 1,
-      "output": ")"
-      + JsonPath(top_level_output) + R"(",
+      "mounts": [{ "name": "Content", "path": "." }],
+      "layout": { "virtual_mount_root": "/.cooked" },
+      "output": "oxygen_manifest_output_top2",
       "defaults": {
         "scripting_sidecar": {
-          "output": ")"
-      + JsonPath(defaults_output) + R"("
+          "output": "oxygen_manifest_output_defaults2"
         }
       },
       "jobs": [
         {
           "type": "script-sidecar",
-          "output": ")"
-      + JsonPath(job_output) + R"(",
+          "output": "oxygen_manifest_output_job2",
           "target_scene_virtual_path": "/Scenes/TestScene.oscene",
           "bindings": [
             {
@@ -437,8 +421,7 @@ NOLINT_TEST(ImportManifestScriptSidecarTest,
     })");
 
   std::ostringstream errors;
-  const auto manifest
-    = ImportManifest::Load(manifest_path, std::nullopt, errors);
+  const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   ASSERT_HAS_VALUE(manifest) << errors.str();
   ASSERT_EQ(manifest->jobs.size(), 1U);
 

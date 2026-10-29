@@ -392,13 +392,14 @@ override.
 ### 7.5 Loose index entry
 
 Each asset entry and texture descriptor record of `container.index.bin`
-(format 6) records, besides its virtual path, the source that produced it
+(format 7) records, besides its virtual path, the source that produced it
 (`source_path_offset`, read as `FindSourcePath`, `AssetEntry.SourcePath` and
-`FileRecord.SourcePath` in C#). The cooker derives it as the job's identity
-folder plus the source file's name (`ImportRequest::SourceVirtualPath`):
-`Red.omat.json` cooking `/Content/Materials/Red.omat` is
-`/Content/Materials/Red.omat.json`, and a model is its own identity. A table or
-data file kind has one path in a root.
+`FileRecord.SourcePath` in C#). It is the source's mount path, computed from
+the file's location by the manifest's mount table
+(`ImportRequest::source_mount_path`): `Red.omat.json` in the `Content` mount at
+`Materials/Red.omat.json` is `/Content/Materials/Red.omat.json`, and a model's
+textures and materials record the model file. A table or data file kind has one
+path in a root.
 
 ### 7.6 Identity and reference fields
 
@@ -512,7 +513,7 @@ code that reads the old form.
   recorded, same-source replacement, other-source and case-only refusal, sidecar
   producer, one path per file kind) and
   `MaterialDescriptorImportJobTest.AnotherSourceOfTheIdentityIsRefused`.
-- Managed.Assets `LooseCookedIndexTests` (format 6, producer required).
+- Managed.Assets `LooseCookedIndexTests` (format 7, producer required).
 - ContentPipeline: `ProducerCollisionTests`, `SourceCollisionsTests`,
   `AssetCookStatusTests.AProductReadsItsContainersStatus`, relocation tests
   (`RelocationRewritesReferenceFieldsAndLeavesText`,

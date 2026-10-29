@@ -17,6 +17,7 @@
 #include <nlohmann/json.hpp>
 
 #include <Oxygen/Cooker/Import/EngineContent.h>
+#include <Oxygen/Cooker/Import/SourceMounts.h>
 #include <Oxygen/Core/Types/DescriptorExtensions.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
@@ -51,6 +52,14 @@ constexpr auto kShapes = std::array {
 auto Layout() -> json { return { { "virtual_mount_root", kMount } }; }
 
 // A job's asset is `/Engine/<folder>/<name><extension>`, and is placed there.
+//! The mount path of a source in the generated sources folder.
+auto EngineSourcePath(
+  const std::string_view folder, const std::string_view file) -> std::string
+{
+  return std::string(kMount) + "/" + std::string(folder) + "/"
+    + std::string(file);
+}
+
 auto EngineVirtualPath(const std::string_view folder,
   const std::string_view name, const std::string_view extension) -> std::string
 {
@@ -141,11 +150,15 @@ auto WriteJson(const std::filesystem::path& path, const json& value) -> void
   }
 }
 
-auto Manifest(const std::filesystem::path& cooked_root, json jobs) -> json
+auto Manifest(json jobs) -> json
 {
   return {
     { "version", 1 },
-    { "output", cooked_root.generic_string() },
+    {
+      "mounts",
+      json::array({ { { "name", kMount.substr(1) }, { "path", "." } } }),
+    },
+    { "layout", Layout() },
     { "jobs", std::move(jobs) },
   };
 }
@@ -159,17 +172,18 @@ auto GetEngineShapes() noexcept -> std::span<const EngineShape>
   return kShapes;
 }
 
-// NOLINTNEXTLINE(bugprone-easily-swappable-parameters) - public API order
-auto WriteEngineContentSources(const std::filesystem::path& directory,
-  const std::filesystem::path& cooked_root) -> EngineContentManifests
+auto WriteEngineContentSources(const std::filesystem::path& directory)
+  -> EngineContentManifests
 {
-  const auto material_source = directory / kMaterials
-    / (std::string(kDefaultMaterialName) + ".omat.json");
-  WriteJson(material_source, DefaultMaterialDescriptor());
+  WriteJson(
+    directory / kMountsFileName, { { "version", 1 }, { "root", true } });
+  const auto material_file = std::string(kDefaultMaterialName) + ".omat.json";
+  WriteJson(
+    directory / kMaterials / material_file, DefaultMaterialDescriptor());
   auto material_jobs = json::array({
     {
       { "type", "material-descriptor" },
-      { "source", material_source.generic_string() },
+      { "source", EngineSourcePath(kMaterials, material_file) },
       {
         "virtual_path",
         EngineVirtualPath(kMaterials, kDefaultMaterialName,
@@ -182,12 +196,11 @@ auto WriteEngineContentSources(const std::filesystem::path& directory,
 
   auto geometry_jobs = json::array();
   for (const auto& shape : kShapes) {
-    const auto source
-      = directory / shape.folder / (std::string(shape.name) + ".ogeo.json");
-    WriteJson(source, GeometryDescriptor(shape));
+    const auto file = std::string(shape.name) + ".ogeo.json";
+    WriteJson(directory / shape.folder / file, GeometryDescriptor(shape));
     geometry_jobs.push_back({
       { "type", "geometry-descriptor" },
-      { "source", source.generic_string() },
+      { "source", EngineSourcePath(shape.folder, file) },
       {
         "virtual_path",
         EngineVirtualPath(
@@ -202,10 +215,8 @@ auto WriteEngineContentSources(const std::filesystem::path& directory,
     .materials = directory / "materials.import-manifest.json",
     .geometry = directory / "geometry.import-manifest.json",
   };
-  WriteJson(
-    manifests.materials, Manifest(cooked_root, std::move(material_jobs)));
-  WriteJson(
-    manifests.geometry, Manifest(cooked_root, std::move(geometry_jobs)));
+  WriteJson(manifests.materials, Manifest(std::move(material_jobs)));
+  WriteJson(manifests.geometry, Manifest(std::move(geometry_jobs)));
   return manifests;
 }
 

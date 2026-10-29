@@ -9,6 +9,7 @@ using Oxygen.Editor.Scripting;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
+using Oxygen.Managed.Assets.Persistence.LooseCooked;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Compatibility;
 using static Oxygen.Editor.ContentPipeline.TestSupport.CookScenario;
@@ -60,6 +61,15 @@ public sealed class ScriptCookTests
         _ = result.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, result.Diagnostics.Select(static issue => issue.Code + ": " + (issue.TechnicalMessage ?? issue.Message))));
         _ = File.Exists(workspace.CookedPath("Content/Player/move.oscript")).Should().BeTrue();
         _ = result.CookedAssets.Should().Contain(static asset => asset.SourceAssetUri == MoveScript);
+
+        // The scene cooks from its generated descriptor, but its recorded source is the authored scene.
+        var index = File.OpenRead(Path.Combine(workspace.CookedRoot("Content"), "container.index.bin"));
+        await using (index.ConfigureAwait(false))
+        {
+            var scene = LooseCookedIndex.Read(index).Assets.Single(static asset => string.Equals(asset.VirtualPath, SceneUri.VirtualPath, StringComparison.Ordinal));
+            _ = scene.SourcePath.Should().Be("/Content/Scenes/Main.oscene.json");
+        }
+
         var again = await service.CookCurrentSceneAsync(SceneUri, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = again.IsUpToDate.Should().BeTrue(string.Join("; ", again.Diagnostics.Select(static issue => issue.Code + ": " + (issue.TechnicalMessage ?? issue.Message))));
 

@@ -32,6 +32,7 @@
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Cooker/test/Support/ImportHarness.h>
 #include <Oxygen/Cooker/test/Support/TempDir.h>
+#include <Oxygen/Cooker/test/Support/TestPaths.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
 #include <Oxygen/Testing/GTest.h>
@@ -94,6 +95,8 @@ inline auto MakeGeometryRequest(const std::filesystem::path& source_path,
   auto request = ImportRequest {};
   request.asset_virtual_path = std::move(asset_virtual_path);
   request.source_path = source_path.lexically_normal();
+  request.source_mount_path
+    = oxygen::cooker::test::SourceMountPath(request.source_path);
   request.cooked_root = cooked_root;
   request.cooked_context_roots = std::move(cooked_context_roots);
   request.loose_cooked_layout.virtual_mount_root = "/.cooked";

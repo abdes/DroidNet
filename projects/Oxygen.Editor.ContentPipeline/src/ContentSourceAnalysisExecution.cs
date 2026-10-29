@@ -18,6 +18,9 @@ public sealed record ContentSourceAnalysisExecution(
     string OperationRoot,
     IReadOnlyList<ContentImportJob> Jobs)
 {
+    /// <summary>Gets the project's source mounts the job sources resolve in; null when the sources are not in a mount.</summary>
+    public IReadOnlyList<ContentImportMount>? Mounts { get; init; }
+
     /// <summary>Gets artifacts borrowed from the cook owner through worker drain.</summary>
     public NativeArtifactLease? Artifacts { get; init; }
 

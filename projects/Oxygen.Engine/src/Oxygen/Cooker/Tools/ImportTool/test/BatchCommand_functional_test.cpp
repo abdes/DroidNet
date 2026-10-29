@@ -147,6 +147,16 @@ protected:
     const std::optional<std::filesystem::path>& report_path = std::nullopt)
     -> std::expected<void, std::error_code>
   {
+    return RunBatchOf({ manifest_path }, cooked_root_override, report_path);
+  }
+
+  //! Runs one batch from every manifest, each given as its own `--manifest`.
+  auto RunBatchOf(const std::vector<std::filesystem::path>& manifest_paths,
+    const std::optional<std::filesystem::path>& cooked_root_override
+    = std::nullopt,
+    const std::optional<std::filesystem::path>& report_path = std::nullopt)
+    -> std::expected<void, std::error_code>
+  {
     options_.cooked_root = cooked_root_override.has_value()
       ? cooked_root_override->generic_string()
       : std::string {};
@@ -158,17 +168,20 @@ protected:
                        .WithCommand(subcommand)
                        .Build();
 
-    const auto manifest_arg = manifest_path.generic_string();
     const auto report_arg = report_path.has_value()
       ? report_path->generic_string()
       : std::string {};
-    std::vector<const char*> argv {
-      "tool",
-      "batch",
-      "--manifest",
-      manifest_arg.c_str(),
-    };
-    options_.command_line = "tool batch --manifest " + manifest_arg;
+    auto manifest_args = std::vector<std::string> {};
+    options_.command_line = "tool batch";
+    for (const auto& manifest_path : manifest_paths) {
+      manifest_args.push_back(manifest_path.generic_string());
+      options_.command_line += " --manifest " + manifest_args.back();
+    }
+    std::vector<const char*> argv { "tool", "batch" };
+    for (const auto& manifest_arg : manifest_args) {
+      argv.push_back("--manifest");
+      argv.push_back(manifest_arg.c_str());
+    }
     if (report_path.has_value()) {
       argv.push_back("--report");
       argv.push_back(report_arg.c_str());
@@ -203,6 +216,8 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
   WriteText(manifest_path, R"({
     "version": 1,
     "output": ".cooked",
+    "mounts": [{"name": "Content", "path": "."}],
+    "layout": {"virtual_mount_root": "/.cooked"},
     "jobs": [
       {"type":"material-descriptor","source":"Valid.material.json",
        "virtual_path":"/.cooked/Materials/Valid.omat"},
@@ -227,6 +242,7 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
   WriteText(root / "texture.json",
     R"({"source":"missing.png","virtual_path":"/Other/Meter.otex"})");
   WriteText(manifest_path, R"({"version":1,"output":"cooked",
+    "mounts":[{"name":"Content","path":"."}],
     "layout":{"virtual_mount_root":"/Content"},
     "jobs":[{"type":"texture-descriptor","source":"texture.json",
       "virtual_path":"/Other/Meter.otex"}]})");
@@ -256,7 +272,8 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, ReportListsEachSourcesProducts)
     "contexts":[{"name":"OnFoot","mappings":[
       {"action":"Jump","slot":"Space","trigger":"pressed"}]}]})");
   WriteText(manifest_path,
-    R"({"version":1,"output":")" + cooked_root.generic_string() + R"(",
+    R"({"version":1,"output":".cooked",
+    "mounts":[{"name":"Content","path":"."}],"layout":{"virtual_mount_root":"/.cooked"},
     "jobs":[{"type":"material-descriptor","source":"Wood.material.json",
       "virtual_path":"/.cooked/Wood.omat"},
       {"id":"input","type":"input","source":"Input/Player.input.json",
@@ -310,7 +327,6 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, ReportListsEachSourcesProducts)
 NOLINT_TEST_F(BatchCommandPhysicsDagTest, InputSourcesInOneFolderKeepTheirKeys)
 {
   const auto root = MakeScenarioDir("input_same_name");
-  const auto cooked_root = root / ".cooked";
   const auto manifest_path = root / "import-manifest.json";
   const auto report_path = root / "report.json";
   for (const auto* name : { "Player", "Vehicle" }) {
@@ -318,7 +334,8 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, InputSourcesInOneFolderKeepTheirKeys)
       "actions":[{"name":"Jump","type":"bool"}]})");
   }
   WriteText(manifest_path,
-    R"({"version":1,"output":")" + cooked_root.generic_string() + R"(",
+    R"({"version":1,"output":".cooked",
+    "mounts":[{"name":"Content","path":"."}],"layout":{"virtual_mount_root":"/.cooked"},
     "jobs":[
       {"id":"player","type":"input","source":"Input/Player.input.json",
         "virtual_path":"/.cooked/Input/Player.input"},
@@ -359,7 +376,8 @@ NOLINT_TEST_F(
     "contexts":[{"name":"OnFoot","mappings":[
       {"action":"/.cooked/Input/Common.input/Jump.oiact","slot":"Space"}]}]})");
   WriteText(manifest_path,
-    R"({"version":1,"output":")" + cooked_root.generic_string() + R"(",
+    R"({"version":1,"output":".cooked",
+    "mounts":[{"name":"Content","path":"."}],"layout":{"virtual_mount_root":"/.cooked"},
     "jobs":[
       {"id":"common","type":"input","source":"Input/Common.input.json",
         "virtual_path":"/.cooked/Input/Common.input"},
@@ -376,14 +394,14 @@ NOLINT_TEST_F(
 NOLINT_TEST_F(BatchCommandPhysicsDagTest, MappingToAMissingActionIsRefused)
 {
   const auto root = MakeScenarioDir("input_missing_action");
-  const auto cooked_root = root / ".cooked";
   const auto manifest_path = root / "import-manifest.json";
   WriteText(root / "Input" / "Player.input.json", R"({
     "contexts":[{"name":"OnFoot","mappings":[
       {"action":"/.cooked/Input/Common.input/Jump.oiact","slot":"Space"},
       {"action":"Dash","slot":"LeftShift"}]}]})");
   WriteText(manifest_path,
-    R"({"version":1,"output":")" + cooked_root.generic_string() + R"(",
+    R"({"version":1,"output":".cooked",
+    "mounts":[{"name":"Content","path":"."}],"layout":{"virtual_mount_root":"/.cooked"},
     "jobs":[
       {"id":"player","type":"input","source":"Input/Player.input.json",
         "virtual_path":"/.cooked/Input/Player.input"}]})");
@@ -403,7 +421,8 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
   const auto manifest_path = root / "import-manifest.json";
   WriteText(root / "Wood.material.json", R"({"name":"Wood"})");
   WriteText(manifest_path,
-    R"({"version":1,"output":")" + cooked_root.generic_string() + R"(",
+    R"({"version":1,"output":".cooked",
+    "mounts":[{"name":"Content","path":"."}],"layout":{"virtual_mount_root":"/.cooked"},
     "jobs":[{"type":"material-descriptor","source":"Wood.material.json"}]})");
 
   EXPECT_FALSE(RunBatch(manifest_path).has_value());
@@ -419,11 +438,12 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
   const auto root = MakeScenarioDir("conflicting_output_identities");
   const auto manifest_path = root / "import-manifest.json";
   std::ostringstream manifest;
-  manifest << R"({"version":1,"jobs":[
+  manifest
+    << R"({"version":1,"mounts":[{"name":"Content","path":"."}],"layout":{"virtual_mount_root":"/.cooked"},"jobs":[
     {"id":"first","type":"texture","source":"first.png","virtual_path":"/.cooked/first.otex","output":"first","source_key":")"
-           << oxygen::Uuid::Generate().ToString() << R"("},
+    << oxygen::Uuid::Generate().ToString() << R"("},
     {"id":"second","type":"texture","source":"second.png","virtual_path":"/.cooked/second.otex","output":"second","depends_on":["first"],"source_key":")"
-           << oxygen::Uuid::Generate().ToString() << R"("}]})";
+    << oxygen::Uuid::Generate().ToString() << R"("}]})";
   WriteText(manifest_path, manifest.str());
   const auto shared_root = root / "shared";
   EXPECT_FALSE(RunBatch(manifest_path, shared_root).has_value());
@@ -438,11 +458,12 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
   const auto root = MakeScenarioDir("case_alias_output_identities");
   const auto manifest_path = root / "import-manifest.json";
   std::ostringstream manifest;
-  manifest << R"({"version":1,"jobs":[
+  manifest
+    << R"({"version":1,"mounts":[{"name":"Content","path":"."}],"layout":{"virtual_mount_root":"/.cooked"},"jobs":[
     {"type":"texture","source":"first.png","virtual_path":"/.cooked/first.otex","output":"Cooked","source_key":")"
-           << oxygen::Uuid::Generate().ToString() << R"("},
+    << oxygen::Uuid::Generate().ToString() << R"("},
     {"type":"texture","source":"second.png","virtual_path":"/.cooked/second.otex","output":"cooked","source_key":")"
-           << oxygen::Uuid::Generate().ToString() << R"("}]})";
+    << oxygen::Uuid::Generate().ToString() << R"("}]})";
   WriteText(manifest_path, manifest.str());
   EXPECT_FALSE(RunBatch(manifest_path).has_value());
   EXPECT_THAT(Messages(), ::testing::HasSubstr("import.source_key_conflict"));
@@ -461,8 +482,9 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
   std::ostringstream manifest;
   // One admitted job at a time: every submission after the first meets a
   // saturated service and must be deferred, not dropped.
-  manifest << R"({"version":1,"output":")" << cooked_root.generic_string()
-           << R"(","max_in_flight_jobs":1,"job_admission_capacity":1,"jobs":[)";
+  manifest
+    << R"({"version":1,"output":".cooked",)"
+    << R"("mounts":[{"name":"Content","path":"."}],"layout":{"virtual_mount_root":"/.cooked"},"max_in_flight_jobs":1,"job_admission_capacity":1,"jobs":[)";
   constexpr size_t kMaterialCount = 8;
   for (size_t index = 0; index < kMaterialCount; ++index) {
     const auto name = std::string("M") + std::to_string(index);
@@ -496,14 +518,14 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
   PhysicsSidecarUnresolvedInferredRefsEmitDependencyUnresolvedDiagnostic)
 {
   const auto root = MakeScenarioDir("physics_unresolved_refs");
-  const auto cooked_root = root / ".cooked";
   const auto manifest_path = root / "import-manifest.json";
 
   WriteText(manifest_path,
-    std::string { R"({
+    R"({
       "version": 1,
-      "output": ")" }
-      + cooked_root.generic_string() + R"(",
+      "output": ".cooked",
+      "mounts": [{"name": "Content", "path": "."}],
+      "layout": {"virtual_mount_root": "/.cooked"},
       "jobs": [
         {
           "id": "physics.sidecar.main",
@@ -534,14 +556,14 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
   PhysicsSidecarDuplicateUnresolvedRefsEmitSingleDependencyUnresolvedDiagnostic)
 {
   const auto root = MakeScenarioDir("physics_unresolved_duplicate_refs");
-  const auto cooked_root = root / ".cooked";
   const auto manifest_path = root / "import-manifest.json";
 
   WriteText(manifest_path,
-    std::string { R"({
+    R"({
       "version": 1,
-      "output": ")" }
-      + cooked_root.generic_string() + R"(",
+      "output": ".cooked",
+      "mounts": [{"name": "Content", "path": "."}],
+      "layout": {"virtual_mount_root": "/.cooked"},
       "jobs": [
         {
           "id": "physics.sidecar.main",
@@ -577,7 +599,6 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
   CollisionShapeRefWithMultipleProducersEmitsDependencyAmbiguousDiagnostic)
 {
   const auto root = MakeScenarioDir("physics_ambiguous_ref");
-  const auto cooked_root = root / ".cooked";
   const auto manifest_path = root / "import-manifest.json";
   const auto descriptors_dir = root / "Physics";
   const auto mat_a = descriptors_dir / "shared_a.physics-material.json";
@@ -612,10 +633,11 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
     })");
 
   WriteText(manifest_path,
-    std::string { R"({
+    R"({
       "version": 1,
-      "output": ")" }
-      + cooked_root.generic_string() + R"(",
+      "output": ".cooked",
+      "mounts": [{"name": "Content", "path": "."}],
+      "layout": {"virtual_mount_root": "/.cooked"},
       "jobs": [
         {
           "id": "physics.material.shared_a",
@@ -650,7 +672,6 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
   PhysicsSidecarDuplicateAmbiguousRefsEmitSingleDependencyAmbiguousDiagnostic)
 {
   const auto root = MakeScenarioDir("physics_ambiguous_duplicate_refs");
-  const auto cooked_root = root / ".cooked";
   const auto manifest_path = root / "import-manifest.json";
   const auto descriptors_dir = root / "Physics";
   const auto mat_a = descriptors_dir / "shared_a.physics-material.json";
@@ -704,10 +725,11 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
     })");
 
   WriteText(manifest_path,
-    std::string { R"({
+    R"({
       "version": 1,
-      "output": ")" }
-      + cooked_root.generic_string() + R"(",
+      "output": ".cooked",
+      "mounts": [{"name": "Content", "path": "."}],
+      "layout": {"virtual_mount_root": "/.cooked"},
       "jobs": [
         {
           "id": "physics.material.shared_a",
@@ -773,7 +795,6 @@ NOLINT_TEST_F(
   BatchCommandPhysicsDagTest, PhysicsCycleUsesPhysicsCycleDiagnostic)
 {
   const auto root = MakeScenarioDir("physics_dep_cycle");
-  const auto cooked_root = root / ".cooked";
   const auto manifest_path = root / "import-manifest.json";
   const auto descriptors_dir = root / "Physics";
   const auto mat_a = descriptors_dir / "mat_a.physics-material.json";
@@ -799,10 +820,11 @@ NOLINT_TEST_F(
     })");
 
   WriteText(manifest_path,
-    std::string { R"({
+    R"({
       "version": 1,
-      "output": ")" }
-      + cooked_root.generic_string() + R"(",
+      "output": ".cooked",
+      "mounts": [{"name": "Content", "path": "."}],
+      "layout": {"virtual_mount_root": "/.cooked"},
       "jobs": [
         {
           "id": "mat.a",
@@ -833,7 +855,6 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
   PhysicsSidecarDependsOnSameRootAssetProducersToStabilizeIndices)
 {
   const auto root = MakeScenarioDir("physics_sidecar_same_root_fence");
-  const auto cooked_root = root / ".cooked";
   const auto manifest_path = root / "import-manifest.json";
   const auto scene_source = root / "Scenes" / "showcase_scene.gltf";
   const auto input_source = root / "Input" / "rotate.input.json";
@@ -844,10 +865,11 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
   WriteText(sidecar_source, R"({"bindings": {}})");
 
   WriteText(manifest_path,
-    std::string { R"({
+    R"({
       "version": 1,
-      "output": ")" }
-      + cooked_root.generic_string() + R"(",
+      "output": ".cooked",
+      "mounts": [{"name": "Content", "path": "."}],
+      "layout": {"virtual_mount_root": "/.cooked"},
       "jobs": [
         {
           "id": "scene.base",
@@ -883,7 +905,6 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
   PhysicsSidecarSourceWithoutTopLevelBindingsIsRejectedDuringInference)
 {
   const auto root = MakeScenarioDir("physics_sidecar_missing_bindings_root");
-  const auto cooked_root = root / ".cooked";
   const auto manifest_path = root / "import-manifest.json";
   const auto sidecar_source
     = root / "Scenes" / "missing_bindings.physics-sidecar.json";
@@ -891,10 +912,11 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
   WriteText(sidecar_source, R"({"rigid_bodies": []})");
 
   WriteText(manifest_path,
-    std::string { R"({
+    R"({
       "version": 1,
-      "output": ")" }
-      + cooked_root.generic_string() + R"(",
+      "output": ".cooked",
+      "mounts": [{"name": "Content", "path": "."}],
+      "layout": {"virtual_mount_root": "/.cooked"},
       "jobs": [
         {
           "id": "physics.sidecar.main",
@@ -917,14 +939,14 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
 NOLINT_TEST_F(BatchCommandPhysicsDagTest, NonPhysicsCycleStillUsesLegacyCode)
 {
   const auto root = MakeScenarioDir("input_dep_cycle");
-  const auto cooked_root = root / ".cooked";
   const auto manifest_path = root / "import-manifest.json";
 
   WriteText(manifest_path,
-    std::string { R"({
+    R"({
       "version": 1,
-      "output": ")" }
-      + cooked_root.generic_string() + R"(",
+      "output": ".cooked",
+      "mounts": [{"name": "Content", "path": "."}],
+      "layout": {"virtual_mount_root": "/.cooked"},
       "jobs": [
         {
           "id": "input.a",
@@ -954,14 +976,14 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
   SameCookedRootScriptSidecarsInjectSerializationFence)
 {
   const auto root = MakeScenarioDir("script_sidecar_same_root_fence");
-  const auto cooked_root = root / ".cooked";
   const auto manifest_path = root / "import-manifest.json";
 
   WriteText(manifest_path,
-    std::string { R"({
+    R"({
       "version": 1,
-      "output": ")" }
-      + cooked_root.generic_string() + R"(",
+      "output": ".cooked",
+      "mounts": [{"name": "Content", "path": "."}],
+      "layout": {"virtual_mount_root": "/.cooked"},
       "jobs": [
         {
           "id": "script.sidecar.a",
@@ -990,7 +1012,6 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
   DuplicateMissingDependencyIdEmitsSingleMissingTargetDiagnostic)
 {
   const auto root = MakeScenarioDir("physics_duplicate_missing_dep");
-  const auto cooked_root = root / ".cooked";
   const auto manifest_path = root / "import-manifest.json";
   const auto material_source = root / "Physics" / "mat.physics-material.json";
 
@@ -1005,10 +1026,11 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
     })");
 
   WriteText(manifest_path,
-    std::string { R"({
+    R"({
       "version": 1,
-      "output": ")" }
-      + cooked_root.generic_string() + R"(",
+      "output": ".cooked",
+      "mounts": [{"name": "Content", "path": "."}],
+      "layout": {"virtual_mount_root": "/.cooked"},
       "jobs": [
         {
           "id": "physics.material.main",
@@ -1033,7 +1055,6 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
   PhysicsDuplicateJobIdsUsePhysicsManifestDiagnosticNamespace)
 {
   const auto root = MakeScenarioDir("physics_duplicate_job_ids");
-  const auto cooked_root = root / ".cooked";
   const auto manifest_path = root / "import-manifest.json";
   const auto mat_a = root / "Physics" / "mat_a.physics-material.json";
   const auto mat_b = root / "Physics" / "mat_b.physics-material.json";
@@ -1058,10 +1079,11 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
     })");
 
   WriteText(manifest_path,
-    std::string { R"({
+    R"({
       "version": 1,
-      "output": ")" }
-      + cooked_root.generic_string() + R"(",
+      "output": ".cooked",
+      "mounts": [{"name": "Content", "path": "."}],
+      "layout": {"virtual_mount_root": "/.cooked"},
       "jobs": [
         {
           "id": "dup.id",
@@ -1086,6 +1108,76 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
     messages, ::testing::HasSubstr("physics.manifest.job_id_duplicate"));
   EXPECT_THAT(messages,
     ::testing::Not(::testing::HasSubstr("input.manifest.job_id_duplicate")));
+}
+
+//! Several `--manifest` options are one batch: the jobs of every manifest run
+//! and report together, through one mount table.
+NOLINT_TEST_F(BatchCommandPhysicsDagTest, TwoManifestsRunAsOneBatch)
+{
+  const auto root = MakeScenarioDir("two_manifests");
+  const auto first_path = root / "first.import-manifest.json";
+  const auto second_path = root / "second.import-manifest.json";
+  const auto report_path = root / "report.json";
+  WriteText(root / "Wood.material.json", R"({"name":"Wood"})");
+  WriteText(root / "Stone.material.json", R"({"name":"Stone"})");
+  const auto manifest
+    = [](const std::string_view id, const std::string_view source,
+        const std::string_view virtual_path) {
+        return std::string(R"({"version":1,"output":".cooked",
+      "mounts":[{"name":"Content","path":"."}],
+      "layout":{"virtual_mount_root":"/.cooked"},
+      "jobs":[{"id":")")
+          + std::string(id) + R"(","type":"material-descriptor","source":")"
+          + std::string(source) + R"(","virtual_path":")"
+          + std::string(virtual_path) + R"("}]})";
+      };
+  WriteText(
+    first_path, manifest("wood", "Wood.material.json", "/.cooked/Wood.omat"));
+  WriteText(second_path,
+    manifest("stone", "Stone.material.json", "/.cooked/Stone.omat"));
+
+  const auto result
+    = RunBatchOf({ first_path, second_path }, std::nullopt, report_path);
+
+  ASSERT_TRUE(result.has_value()) << Messages();
+  auto stream = std::ifstream(report_path);
+  ASSERT_TRUE(stream.is_open());
+  const auto report = nlohmann::json::parse(stream);
+  EXPECT_EQ(report.at("jobs").size(), 2U);
+  EXPECT_TRUE(std::filesystem::exists(root / ".cooked/Wood.omat"));
+  EXPECT_TRUE(std::filesystem::exists(root / ".cooked/Stone.omat"));
+}
+
+//! Two manifests that map one mount name to two folders cannot share a batch:
+//! the conflict is reported before any job runs.
+NOLINT_TEST_F(BatchCommandPhysicsDagTest, ManifestsMappingOneMountToTwoFolders)
+{
+  const auto root = MakeScenarioDir("mount_name_conflict");
+  const auto first_path = root / "first.import-manifest.json";
+  const auto second_path = root / "second.import-manifest.json";
+  WriteText(root / "A" / "Wood.material.json", R"({"name":"Wood"})");
+  WriteText(root / "B" / "Stone.material.json", R"({"name":"Stone"})");
+  const auto manifest
+    = [](const std::string_view folder, const std::string_view source,
+        const std::string_view virtual_path) {
+        return std::string(R"({"version":1,"output":".cooked",
+      "mounts":[{"name":"Content","path":")")
+          + std::string(folder) + R"("}],
+      "layout":{"virtual_mount_root":"/.cooked"},
+      "jobs":[{"type":"material-descriptor","source":"/Content/)"
+          + std::string(source) + R"(","virtual_path":")"
+          + std::string(virtual_path) + R"("}]})";
+      };
+  WriteText(
+    first_path, manifest("A", "Wood.material.json", "/.cooked/Wood.omat"));
+  WriteText(
+    second_path, manifest("B", "Stone.material.json", "/.cooked/Stone.omat"));
+
+  const auto result = RunBatchOf({ first_path, second_path });
+
+  EXPECT_FALSE(result.has_value());
+  EXPECT_THAT(Messages(), ::testing::HasSubstr("mount.name_conflict"));
+  EXPECT_FALSE(std::filesystem::exists(root / ".cooked"));
 }
 
 } // namespace

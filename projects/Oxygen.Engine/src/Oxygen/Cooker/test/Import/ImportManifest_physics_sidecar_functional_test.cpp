@@ -22,28 +22,22 @@ using oxygen::content::import::ImportManifest;
 using oxygen::cooker::test::ScopedTempDir;
 using oxygen::cooker::test::WriteText;
 
-auto JsonPath(const std::filesystem::path& path) -> std::string
-{
-  return path.lexically_normal().generic_string();
-}
-
 NOLINT_TEST(
   ImportManifestPhysicsSidecarTest, AcceptsInlineBindingsForPhysicsSidecarJob)
 {
   const ScopedTempDir temp;
-  const auto cooked_root = temp.Path() / "oxygen_manifest_physics_sidecar_root";
-  const auto cooked_root_json = JsonPath(cooked_root);
   const auto manifest_path
     = temp.Path() / "inline_bindings" / "import_manifest.json";
 
   WriteText(manifest_path,
     R"({
       "version": 1,
+      "mounts": [{ "name": "Content", "path": "." }],
+      "layout": { "virtual_mount_root": "/.cooked" },
       "jobs": [
         {
           "type": "physics-sidecar",
-          "output": ")"
-      + cooked_root_json + R"(",
+          "output": "oxygen_manifest_physics_sidecar_root",
           "target_scene_virtual_path": "/Scenes/TestScene.oscene",
           "bindings": {
             "rigid_bodies": [
@@ -59,8 +53,7 @@ NOLINT_TEST(
     })");
 
   auto errors = std::ostringstream {};
-  const auto manifest
-    = ImportManifest::Load(manifest_path, std::nullopt, errors);
+  const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   ASSERT_HAS_VALUE(manifest) << errors.str();
   ASSERT_EQ(manifest->jobs.size(), 1U);
 
@@ -79,20 +72,19 @@ NOLINT_TEST(ImportManifestPhysicsSidecarTest,
   RejectsPhysicsSidecarJobWhenSourceAndBindingsBothSpecified)
 {
   const ScopedTempDir temp;
-  const auto cooked_root = temp.Path() / "oxygen_manifest_physics_sidecar_root";
-  const auto cooked_root_json = JsonPath(cooked_root);
   const auto manifest_path
     = temp.Path() / "both_source_and_bindings" / "import_manifest.json";
 
   WriteText(manifest_path,
     R"({
       "version": 1,
+      "mounts": [{ "name": "Content", "path": "." }],
+      "layout": { "virtual_mount_root": "/.cooked" },
       "jobs": [
         {
           "type": "physics-sidecar",
           "source": "scene.physics-sidecar.json",
-          "output": ")"
-      + cooked_root_json + R"(",
+          "output": "oxygen_manifest_physics_sidecar_root",
           "target_scene_virtual_path": "/Scenes/TestScene.oscene",
           "bindings": {
             "rigid_bodies": []
@@ -102,8 +94,7 @@ NOLINT_TEST(ImportManifestPhysicsSidecarTest,
     })");
 
   auto errors = std::ostringstream {};
-  const auto manifest
-    = ImportManifest::Load(manifest_path, std::nullopt, errors);
+  const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   EXPECT_FALSE(manifest.has_value());
   EXPECT_THAT(errors.str(),
     ::testing::HasSubstr("physics-sidecar job requires exactly one of "
@@ -120,6 +111,8 @@ NOLINT_TEST(
   WriteText(manifest_path,
     R"({
       "version": 1,
+      "mounts": [{ "name": "Content", "path": "." }],
+      "layout": { "virtual_mount_root": "/.cooked" },
       "jobs": [
         {
           "type": "physics-sidecar",
@@ -131,8 +124,7 @@ NOLINT_TEST(
     })");
 
   auto errors = std::ostringstream {};
-  const auto manifest
-    = ImportManifest::Load(manifest_path, std::nullopt, errors);
+  const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   EXPECT_FALSE(manifest.has_value());
   EXPECT_THAT(
     errors.str(), ::testing::HasSubstr("physics.manifest.key_not_allowed"));
@@ -148,6 +140,8 @@ NOLINT_TEST(ImportManifestPhysicsSidecarTest,
   WriteText(manifest_path,
     R"({
       "version": 1,
+      "mounts": [{ "name": "Content", "path": "." }],
+      "layout": { "virtual_mount_root": "/.cooked" },
       "jobs": [
         {
           "id": "physics.main",
@@ -160,8 +154,7 @@ NOLINT_TEST(ImportManifestPhysicsSidecarTest,
     })");
 
   auto errors = std::ostringstream {};
-  const auto manifest
-    = ImportManifest::Load(manifest_path, std::nullopt, errors);
+  const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   ASSERT_HAS_VALUE(manifest) << errors.str();
   ASSERT_EQ(manifest->jobs.size(), 1U);
 
@@ -178,22 +171,20 @@ NOLINT_TEST(ImportManifestPhysicsSidecarTest,
   DefaultsOutputOverridesTopLevelOutputForPhysicsSidecarJobs)
 {
   const ScopedTempDir temp;
-  const auto top_level_output
-    = temp.Path() / "oxygen_manifest_output_top_physics";
-  const auto defaults_output
-    = temp.Path() / "oxygen_manifest_output_defaults_physics";
   const auto manifest_path
     = temp.Path() / "defaults_over_top_level_output" / "import_manifest.json";
+  const auto defaults_output
+    = manifest_path.parent_path() / "oxygen_manifest_output_defaults_physics";
 
   WriteText(manifest_path,
     R"({
       "version": 1,
-      "output": ")"
-      + JsonPath(top_level_output) + R"(",
+      "mounts": [{ "name": "Content", "path": "." }],
+      "layout": { "virtual_mount_root": "/.cooked" },
+      "output": "oxygen_manifest_output_top_physics",
       "defaults": {
         "physics_sidecar": {
-          "output": ")"
-      + JsonPath(defaults_output) + R"("
+          "output": "oxygen_manifest_output_defaults_physics"
         }
       },
       "jobs": [
@@ -206,8 +197,7 @@ NOLINT_TEST(ImportManifestPhysicsSidecarTest,
     })");
 
   auto errors = std::ostringstream {};
-  const auto manifest
-    = ImportManifest::Load(manifest_path, std::nullopt, errors);
+  const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   ASSERT_HAS_VALUE(manifest) << errors.str();
   ASSERT_EQ(manifest->jobs.size(), 1U);
 

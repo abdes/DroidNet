@@ -50,11 +50,11 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest,
       }
     })");
 
-  const auto cooked_root = (root / ".cooked").generic_string();
-  const auto manifest_json = std::string { R"({
+  const auto* const manifest_json = R"({
       "version": 1,
-      "output": ")" }
-    + cooked_root + R"(",
+      "mounts": [{ "name": "Content", "path": "." }],
+      "layout": { "virtual_mount_root": "/.cooked" },
+      "output": ".cooked",
       "defaults": {
         "material_descriptor": {
           "content_hashing": true,
@@ -74,8 +74,7 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest,
   WriteText(manifest_path, manifest_json);
 
   auto errors = std::ostringstream {};
-  const auto manifest
-    = ImportManifest::Load(manifest_path, std::nullopt, errors);
+  const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   ASSERT_HAS_VALUE(manifest) << errors.str();
   ASSERT_EQ(manifest->jobs.size(), 1U);
 
@@ -115,7 +114,9 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest,
   WriteText(manifest_path,
     R"({
       "version": 1,
+      "mounts": [{ "name": "Content", "path": "." }],
       "layout": {
+        "virtual_mount_root": "/.cooked",
         "resources_dir": "ResourcesTop"
       },
       "defaults": {
@@ -123,10 +124,7 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest,
           "resources_dir": "ResourcesDefault"
         }
       },
-      "output": ")"
-      + (manifest_path.parent_path() / "material-layout-cooked")
-        .generic_string()
-      + R"(",
+      "output": "material-layout-cooked",
       "jobs": [
         {
           "type": "material-descriptor",
@@ -137,8 +135,7 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest,
     })");
 
   auto errors = std::ostringstream {};
-  const auto manifest
-    = ImportManifest::Load(manifest_path, std::nullopt, errors);
+  const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   ASSERT_HAS_VALUE(manifest) << errors.str();
   ASSERT_EQ(manifest->jobs.size(), 1U);
   EXPECT_EQ(manifest->jobs.at(0).virtual_path, "/.cooked/Wood/Floor.omat");
@@ -168,9 +165,9 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest,
   WriteText(manifest_path,
     R"({
       "version": 1,
-      "output": ")"
-      + (manifest_path.parent_path() / "material-cooked").generic_string()
-      + R"(",
+      "mounts": [{ "name": "Content", "path": "." }],
+      "layout": { "virtual_mount_root": "/.cooked" },
+      "output": "material-cooked",
       "jobs": [
         {
           "id": "wood.color",
@@ -189,8 +186,7 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest,
     })");
 
   auto errors = std::ostringstream {};
-  const auto manifest
-    = ImportManifest::Load(manifest_path, std::nullopt, errors);
+  const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   ASSERT_HAS_VALUE(manifest) << errors.str();
   ASSERT_EQ(manifest->jobs.size(), 2U);
   EXPECT_EQ(manifest->jobs.at(1).id, "wood.material");
@@ -215,6 +211,8 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest,
   WriteText(manifest_path,
     R"({
       "version": 1,
+      "mounts": [{ "name": "Content", "path": "." }],
+      "layout": { "virtual_mount_root": "/.cooked" },
       "jobs": [
         {
           "type": "material-descriptor",
@@ -225,8 +223,7 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest,
     })");
 
   auto errors = std::ostringstream {};
-  const auto manifest
-    = ImportManifest::Load(manifest_path, std::nullopt, errors);
+  const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   EXPECT_FALSE(manifest.has_value());
   EXPECT_THAT(
     errors.str(), ::testing::HasSubstr("manifest schema validation failed"));
@@ -254,9 +251,9 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest,
   WriteText(manifest_path,
     R"({
       "version": 1,
-      "output": ")"
-      + (manifest_path.parent_path() / "material-cooked").generic_string()
-      + R"(",
+      "mounts": [{ "name": "Content", "path": "." }],
+      "layout": { "virtual_mount_root": "/.cooked" },
+      "output": "material-cooked",
       "jobs": [
         {
           "type": "material-descriptor",
@@ -267,8 +264,7 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest,
     })");
 
   auto errors = std::ostringstream {};
-  const auto manifest
-    = ImportManifest::Load(manifest_path, std::nullopt, errors);
+  const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   ASSERT_HAS_VALUE(manifest) << errors.str();
   ASSERT_EQ(manifest->jobs.size(), 1U);
 
@@ -291,7 +287,11 @@ NOLINT_TEST(
     path.parent_path() / "shared.material.json", R"({"name":"Shared"})");
   const json document = {
     { "version", 1 },
-    { "output", (path.parent_path() / ".cooked").generic_string() },
+    {
+      "mounts",
+      nlohmann::json::array({ { { "name", "Content" }, { "path", "." } } }),
+    },
+    { "output", ".cooked" },
     {
       "layout",
       {
@@ -334,7 +334,7 @@ NOLINT_TEST(
   };
   WriteText(path, document.dump());
   std::ostringstream errors;
-  const auto manifest = ImportManifest::Load(path, std::nullopt, errors);
+  const auto manifest = ImportManifest::Load(path, {}, errors);
   ASSERT_HAS_VALUE(manifest) << errors.str();
   const auto requests = manifest->BuildRequests(errors);
   ASSERT_EQ(requests.size(), 3U) << errors.str();
@@ -356,12 +356,20 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest, RejectsMalformedJobLayout)
 {
   const ScopedTempDir temp;
   const auto path = temp.Path() / "invalid_job_layout" / "import_manifest.json";
-  for (const auto& layout : { json("invalid"), json { { "resources_dir", 12 } },
-         json { { "materials_subdir", "Materials" } } }) {
+  for (const auto& layout : {
+         json("invalid"),
+         json { { "resources_dir", 12 } },
+         json { { "materials_subdir", "Materials" } },
+       }) {
     WriteText(path,
       json {
         { "version", 1 },
-        { "output", (path.parent_path() / ".cooked").generic_string() },
+        {
+          "mounts",
+          nlohmann::json::array({ { { "name", "Content" }, { "path", "." } } }),
+        },
+        { "layout", { { "virtual_mount_root", "/.cooked" } } },
+        { "output", ".cooked" },
         {
           "jobs",
           json::array({
@@ -376,7 +384,7 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest, RejectsMalformedJobLayout)
       }
         .dump());
     std::ostringstream errors;
-    EXPECT_FALSE(ImportManifest::Load(path, std::nullopt, errors).has_value());
+    EXPECT_FALSE(ImportManifest::Load(path, {}, errors).has_value());
     EXPECT_FALSE(errors.str().empty());
   }
 }
@@ -394,6 +402,8 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest, CarriesCookedContextRoots)
     R"({"name": "Tiles", "domain": "opaque"})");
   WriteText(manifest_path, R"({
       "version": 1,
+      "mounts": [{ "name": "Content", "path": "." }],
+      "layout": { "virtual_mount_root": "/.cooked" },
       "output": "out",
       "jobs": [
         {
@@ -405,7 +415,7 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest, CarriesCookedContextRoots)
       ]
     })");
   auto errors = std::ostringstream {};
-  auto manifest = ImportManifest::Load(manifest_path, std::nullopt, errors);
+  auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   ASSERT_HAS_VALUE(manifest) << errors.str();
   const auto engine = temp.Path() / "engine.pak";
 
@@ -431,6 +441,8 @@ NOLINT_TEST(
   WriteText(manifest_path,
     R"({
       "version": 1,
+      "mounts": [{ "name": "Content", "path": "." }],
+      "layout": { "virtual_mount_root": "/.cooked" },
       "jobs": [
         {
           "type": "material-descriptor",
@@ -440,8 +452,7 @@ NOLINT_TEST(
     })");
 
   auto errors = std::ostringstream {};
-  const auto manifest
-    = ImportManifest::Load(manifest_path, std::nullopt, errors);
+  const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   EXPECT_FALSE(manifest.has_value());
   EXPECT_THAT(
     errors.str(), ::testing::HasSubstr("import.manifest.virtual_path_missing"));
@@ -460,11 +471,19 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest, ModelJobRequiresItsIdentity)
       { "source", "Ship.src" },
     };
     WriteText(manifest_path,
-      json { { "version", 1 }, { "jobs", json::array({ job }) } }.dump());
+      json {
+        { "version", 1 },
+        {
+          "mounts",
+          json::array({ { { "name", "Content" }, { "path", "." } } }),
+        },
+        { "layout", { { "virtual_mount_root", "/.cooked" } } },
+        { "jobs", json::array({ job }) },
+      }
+        .dump());
     auto refused_errors = std::ostringstream {};
     EXPECT_FALSE(
-      ImportManifest::Load(manifest_path, std::nullopt, refused_errors)
-        .has_value())
+      ImportManifest::Load(manifest_path, {}, refused_errors).has_value())
       << type;
     EXPECT_THAT(refused_errors.str(),
       ::testing::HasSubstr("import.manifest.virtual_path_missing"))
@@ -472,10 +491,18 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest, ModelJobRequiresItsIdentity)
 
     job["virtual_path"] = "/.cooked/Vehicles/Ship.src";
     WriteText(manifest_path,
-      json { { "version", 1 }, { "jobs", json::array({ job }) } }.dump());
+      json {
+        { "version", 1 },
+        {
+          "mounts",
+          json::array({ { { "name", "Content" }, { "path", "." } } }),
+        },
+        { "layout", { { "virtual_mount_root", "/.cooked" } } },
+        { "jobs", json::array({ job }) },
+      }
+        .dump());
     auto errors = std::ostringstream {};
-    const auto manifest
-      = ImportManifest::Load(manifest_path, std::nullopt, errors);
+    const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
     ASSERT_HAS_VALUE(manifest) << type << errors.str();
     EXPECT_EQ(manifest->jobs.at(0).virtual_path, "/.cooked/Vehicles/Ship.src");
   }

@@ -43,6 +43,7 @@
 #include <Oxygen/Cooker/Loose/Types.h>
 #include <Oxygen/Cooker/test/Support/DescriptorFixtures.h>
 #include <Oxygen/Cooker/test/Support/TempDir.h>
+#include <Oxygen/Cooker/test/Support/TestPaths.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
@@ -112,6 +113,8 @@ protected:
       .cooked_root = TempDir() / "cooked",
     };
     request.asset_virtual_path = "/.cooked/" + source_name;
+    request.source_mount_path
+      = oxygen::cooker::test::SourceMountPath(request.source_path);
     return request;
   }
 

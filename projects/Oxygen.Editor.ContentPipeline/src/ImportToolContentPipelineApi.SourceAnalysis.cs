@@ -97,7 +97,16 @@ public sealed partial class ImportToolContentPipelineApi
         var manifest = File.Create(manifestPath);
         await using (manifest.ConfigureAwait(false))
         {
-            await JsonSerializer.SerializeAsync(manifest, new { version = 1, jobs = execution.Jobs }, ManifestJsonOptions, cancellationToken).ConfigureAwait(false);
+            var document = new Dictionary<string, object> { ["version"] = 1, ["jobs"] = execution.Jobs };
+            if (execution.Mounts is { Count: > 0 } mounts)
+            {
+                // The schema requires the layout whenever mounts are declared: the jobs' mount names it.
+                document["mounts"] = mounts;
+                document["layout"] = execution.Jobs.Select(static job => job.Layout).FirstOrDefault(static layout => layout is not null)
+                    ?? new ContentImportLayout("/" + mounts[0].Name);
+            }
+
+            await JsonSerializer.SerializeAsync(manifest, document, ManifestJsonOptions, cancellationToken).ConfigureAwait(false);
         }
 
         var request = new ContentPipelineProcessRequest(

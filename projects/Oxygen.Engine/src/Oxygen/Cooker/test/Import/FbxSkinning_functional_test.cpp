@@ -43,6 +43,8 @@ namespace {
       = oxygen::cooker::test::ModelPath("skinned_character.fbx");
     request.asset_virtual_path
       = oxygen::cooker::test::ModelVirtualPath(request.source_path);
+    request.source_mount_path
+      = oxygen::cooker::test::SourceMountPath(request.source_path);
     request.cooked_root = MakeTempDir("fbx_skinning") / "cooked";
 
     const auto imported = RunImport(std::move(request));

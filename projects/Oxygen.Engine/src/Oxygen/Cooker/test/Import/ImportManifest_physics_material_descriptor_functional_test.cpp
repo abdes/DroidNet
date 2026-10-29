@@ -24,7 +24,6 @@
 namespace {
 
 using nlohmann::json;
-using oxygen::content::import::EffectiveContentHashingEnabled;
 using oxygen::content::import::ImportManifest;
 using oxygen::cooker::test::kContentHashingDefault;
 using oxygen::cooker::test::ScopedTempDir;
@@ -51,11 +50,11 @@ NOLINT_TEST(ImportManifestPhysicsMaterialDescriptorTest,
       "virtual_path": "/.cooked/Physics/Materials/ground.opmat"
     })");
 
-  const auto cooked_root = (root / ".cooked").generic_string();
-  const auto manifest_json = std::string { R"({
+  const auto* const manifest_json = R"({
       "version": 1,
-      "output": ")" }
-    + cooked_root + R"(",
+      "mounts": [{ "name": "Content", "path": "." }],
+      "layout": { "virtual_mount_root": "/.cooked" },
+      "output": ".cooked",
       "defaults": {
         "physics_material_descriptor": {
           "content_hashing": true,
@@ -75,8 +74,7 @@ NOLINT_TEST(ImportManifestPhysicsMaterialDescriptorTest,
   WriteText(manifest_path, manifest_json);
 
   auto errors = std::ostringstream {};
-  const auto manifest
-    = ImportManifest::Load(manifest_path, std::nullopt, errors);
+  const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   ASSERT_HAS_VALUE(manifest) << errors.str();
   ASSERT_EQ(manifest->jobs.size(), 1U);
 
@@ -122,10 +120,9 @@ NOLINT_TEST(ImportManifestPhysicsMaterialDescriptorTest,
   WriteText(manifest_path,
     R"({
       "version": 1,
-      "output": ")"
-      + (manifest_path.parent_path() / "physics-material-cooked")
-        .generic_string()
-      + R"(",
+      "mounts": [{ "name": "Content", "path": "." }],
+      "layout": { "virtual_mount_root": "/.cooked" },
+      "output": "physics-material-cooked",
       "jobs": [
         {
           "id": "buffers.shared",
@@ -143,8 +140,7 @@ NOLINT_TEST(ImportManifestPhysicsMaterialDescriptorTest,
     })");
 
   auto errors = std::ostringstream {};
-  const auto manifest
-    = ImportManifest::Load(manifest_path, std::nullopt, errors);
+  const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   ASSERT_HAS_VALUE(manifest) << errors.str();
   ASSERT_EQ(manifest->jobs.size(), 2U);
   EXPECT_EQ(manifest->jobs.at(1).id, "physics.material.ground");
@@ -169,6 +165,8 @@ NOLINT_TEST(ImportManifestPhysicsMaterialDescriptorTest,
   WriteText(manifest_path,
     R"({
       "version": 1,
+      "mounts": [{ "name": "Content", "path": "." }],
+      "layout": { "virtual_mount_root": "/.cooked" },
       "jobs": [
         {
           "type": "physics-material-descriptor",
@@ -179,8 +177,7 @@ NOLINT_TEST(ImportManifestPhysicsMaterialDescriptorTest,
     })");
 
   auto errors = std::ostringstream {};
-  const auto manifest
-    = ImportManifest::Load(manifest_path, std::nullopt, errors);
+  const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   EXPECT_FALSE(manifest.has_value());
   EXPECT_THAT(
     errors.str(), ::testing::HasSubstr("manifest schema validation failed"));
@@ -204,10 +201,9 @@ NOLINT_TEST(ImportManifestPhysicsMaterialDescriptorTest,
   WriteText(manifest_path,
     R"({
       "version": 1,
-      "output": ")"
-      + (manifest_path.parent_path() / "physics-material-cooked")
-        .generic_string()
-      + R"(",
+      "mounts": [{ "name": "Content", "path": "." }],
+      "layout": { "virtual_mount_root": "/.cooked" },
+      "output": "physics-material-cooked",
       "jobs": [
         {
           "type": "physics-material-descriptor",
@@ -218,8 +214,7 @@ NOLINT_TEST(ImportManifestPhysicsMaterialDescriptorTest,
     })");
 
   auto errors = std::ostringstream {};
-  const auto manifest
-    = ImportManifest::Load(manifest_path, std::nullopt, errors);
+  const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   ASSERT_HAS_VALUE(manifest) << errors.str();
   ASSERT_EQ(manifest->jobs.size(), 1U);
 
@@ -240,6 +235,8 @@ NOLINT_TEST(ImportManifestPhysicsMaterialDescriptorTest,
   WriteText(manifest_path,
     R"({
       "version": 1,
+      "mounts": [{ "name": "Content", "path": "." }],
+      "layout": { "virtual_mount_root": "/.cooked" },
       "jobs": [
         {
           "type": "physics-resource-descriptor",
@@ -249,8 +246,7 @@ NOLINT_TEST(ImportManifestPhysicsMaterialDescriptorTest,
     })");
 
   auto errors = std::ostringstream {};
-  const auto manifest
-    = ImportManifest::Load(manifest_path, std::nullopt, errors);
+  const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   EXPECT_FALSE(manifest.has_value());
   EXPECT_THAT(
     errors.str(), ::testing::HasSubstr("manifest schema validation failed"));
